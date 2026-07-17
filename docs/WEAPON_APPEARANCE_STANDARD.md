@@ -580,6 +580,65 @@ UI adapters, and deletion of superseded writers after each migrated family.
 Until those land and the applicable co-op matrix passes, #660 remains
 `diagnostics-armed` with `coop-required`.
 
+### Second migration slice: exact world identity and bounded replay
+
+CWV v0.1.438-dev migrates the first world-render family without claiming the
+whole umbrella. The empirical boundary is the overlap of current implementations
+for open #396 (positive CWV item identity), open #416/#483 (transition/per-hand
+recovery), open #474/#579 (husk/hot-join continuity), and the user-verified
+closures #475 (native protection) and #495 (vanilla wire safety). Those paths
+existed separately. The old identity
+side channel carried only `item_key`; native clear deleted the cache, hot join
+did not target identity to the joining peer, and hand selection still fell back
+to base+career before per-hand spawn knew the peer/slot.
+
+The migrated contract is:
+
+1. The owner resolves provider, exact CWV item, vanilla base, selected skin,
+   and right/left model paths into one local descriptor. Its fingerprint is
+   semantic and excludes the backend UUID, allowing another peer to prove the
+   same result from its own registries.
+2. VMF transports only `{provider,item_key,base_item_key,skin_key,fingerprint}`.
+   It never transports unit paths and never indexes a vanilla `NetworkLookup`
+   with a modded identifier. A peer without CWV receives only the existing
+   vanilla base equipment/skin fallback.
+3. The receiver reconstructs the descriptor locally. Provider absence, unknown
+   skin, schema drift, base mismatch, or fingerprint mismatch records an
+   explicit unavailable state and clears stale exact identity. Explicit native
+   slots record `native`; neither state may fall through to base+career.
+4. Owner/bot `create_equipment`, synchronous husk hand selection, per-hand husk
+   spawn re-key, and husk transform lookup consume the same descriptor. Initial
+   game-object/mission spawn, equip/resync, parity recovery, and targeted hot
+   join publish at most the two weapon slots. Duplicate fingerprints coalesce;
+   accepting the same record cannot re-wield twice, and no identity RPC is sent
+   from `update`.
+
+Post-edge evidence is bounded `[cwv:660]`: it records lifecycle, adapter,
+fingerprint, and exact right/left model identity at owner/bot spawn and husk
+hand selection. This is stronger than setter-success bookkeeping but still
+requires paired in-game observation.
+
+If this world slice fails, use these three evidence-driven fallback paths:
+
+1. If identity arrives after vanilla wield, retain the local descriptor ledger
+   and move only the one-shot `inventory:wield(slot)` reconciliation to the
+   first proven peer-ready callback. Do not add polling or a second resolver.
+2. If a provider's local skin row cannot reproduce the fingerprint, add a
+   provider adapter that resolves that provider's stable local key into the
+   same descriptor fields. Preserve the unavailable/native state until the
+   provider proves residency; do not send raw unit paths.
+3. If a source-backed engine edge bypasses all four migrated world adapters,
+   add one named lifecycle adapter with a failing fixture and coalesce it by
+   descriptor fingerprint. If a safe local reconstruction is impossible,
+   deliberately keep the vanilla base model for that edge.
+
+This slice deliberately excludes materials/glow, transforms as descriptor
+fields, Combat Style templates, preview/UI surfaces beyond v0.1.437, icons,
+names/flavor, Hold-Tab, lobby/score, and Cosmetics/WOC provider adoption. The
+legacy skin/base+career resolver remains only when no explicit semantic state
+has arrived; deleting it requires the applicable co-op matrix and older-version
+fallback review.
+
 ---
 
 ## §8 DoD gate — `G-APPEARANCE`

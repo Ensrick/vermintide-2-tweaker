@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.438-dev"
+local MOD_VERSION = "0.1.439-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -54,6 +54,7 @@ local _cwv_wield_hook_registration_count = 0
 local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
+_om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
 _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
 _om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_family")
@@ -5201,10 +5202,19 @@ _cwv_husk_fx_guard_installed = true
 -- SimpleHuskInventoryExtension hook is on `start_weapon_fx` (above) — this is
 -- the sole hook on (SimpleHuskInventoryExtension, _wield_slot) in CWV.
 mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, world, equipment, slot_name, unit_1p, unit_3p)
+	-- #660: BackendUtils.get_item_units runs synchronously inside vanilla wield,
+	-- before the per-hand spawn hooks know which peer/slot they belong to. Keep a
+	-- strictly scoped context so the upstream hand-selection adapter can consume
+	-- the same exact remote descriptor as the later mesh/transform adapters.
+	_om._appearance_husk_wield_context = {
+		owner_unit_3p = self and self._unit,
+		slot_name = slot_name,
+	}
 	if _om.combat_styles and _om.combat_styles.begin_husk_wield then
 		_om.combat_styles:begin_husk_wield(self, slot_name)
 	end
 	local ok, err = pcall(func, self, world, equipment, slot_name, unit_1p, unit_3p)
+	_om._appearance_husk_wield_context = nil
 	if _om.combat_styles and _om.combat_styles.end_husk_wield then
 		_om.combat_styles:end_husk_wield()
 	end
@@ -11908,6 +11918,48 @@ local function _resolve_cwv_def(item_data, skin, resolved_unit_name)
 	return nil
 end
 
+-- #660 canonical world identity. Owner, bot, and remote adapters may differ in
+-- how they obtain the item key, but once a CWV definition is known they resolve
+-- the same exact item/model/skin descriptor here. Unknown selected skins fail
+-- closed; no caller reconstructs a default model behind that stronger identity.
+_om._cwv_resolve_world_descriptor = function(item_data, explicit_skin, resolved_unit_name,
+		identity_key, instance_id)
+	local backend_id = item_data and (item_data.backend_id
+		or (item_data.mod_data and item_data.mod_data.backend_id))
+	local cwv_key = identity_key or _om._cwv_key_for_item(backend_id, item_data)
+	local def = cwv_key and _find_def(cwv_key)
+	if not def then
+		local transform_def = _resolve_cwv_def(item_data, explicit_skin, resolved_unit_name)
+		if transform_def and transform_def.item_key and not transform_def.skin_only then
+			def = transform_def
+			cwv_key = transform_def.item_key
+		end
+	end
+	if not (def and cwv_key and not def.skin_only) then return nil, nil, "not_cwv" end
+	local base = def.base_weapon and rawget(ItemMasterList, def.base_weapon)
+	if type(base) ~= "table" then return nil, def, "base_missing" end
+	local skin = explicit_skin
+	if skin == "n/a" or skin == "" then skin = nil end
+	local descriptor, reason = _om.exact_appearance.resolve_spawn_descriptor({
+		provider = "cwv",
+		instance_id = instance_id or backend_id,
+		variant = def,
+		base = base,
+		base_item_key = def.base_weapon,
+		fallback_item_key = def.base_weapon,
+		explicit_skin = skin,
+		backend_id = skin and nil or backend_id,
+		weapon_skins = WeaponSkins and WeaponSkins.skins,
+		skin_from_backend = function(bid)
+			local backend = Managers and Managers.backend
+			local iface = backend and backend:get_interface("items")
+			local value = iface and iface.get_skin and iface:get_skin(bid)
+			return value ~= "n/a" and value or nil
+		end,
+	})
+	return descriptor, def, reason
+end
+
 _om._cwv_resolve_crowbill_transform = function(skin, resolved_unit_name, variant_key)
 	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], "skin" end
 	if resolved_unit_name and _crowbill_transform_by_unit[resolved_unit_name] then
@@ -12130,6 +12182,31 @@ do
 		local resolved_skin = result.skin or skin
 		if resolved_skin ~= nil and resolved_skin ~= "" then return false end
 		local base_name = item_data and item_data.name
+		local ctx = _om._appearance_husk_wield_context
+		local exact, exact_state
+		if ctx and _om._husk_identity_descriptor then
+			exact, exact_state = _om._husk_identity_descriptor(
+				ctx.owner_unit_3p, ctx.slot_name, base_name)
+		end
+		if exact_state == "exact" and exact then
+			if type(exact.right_hand_unit) == "string" then
+				result.right_hand_unit = exact.right_hand_unit
+			end
+			if type(exact.left_hand_unit) == "string" then
+				result.left_hand_unit = exact.left_hand_unit
+			else
+				result.left_hand_unit = nil
+			end
+			_husk_log_once("660_preselect:" .. tostring(exact.fingerprint),
+				"[cwv:660] lifecycle=husk_wield adapter=hand_selection descriptor=%s right=%s left=%s",
+				tostring(exact.fingerprint), tostring(exact.right_hand_unit),
+				tostring(exact.left_hand_unit))
+			return true, _find_def(exact.variant_key), exact
+		elseif exact_state and exact_state ~= "none" then
+			-- Explicit native, unavailable-provider, or stale-slot evidence is
+			-- stronger than the legacy base+career guess. Preserve vanilla units.
+			return false
+		end
 		local def, reason = _om._husk_resolve_display_def(base_name, career_name, nil)
 		if not def or reason ~= "base_career" then return false end
 
@@ -12191,8 +12268,19 @@ do
 		if not base_name then return end
 		local skin = item_units.skin
 		local career = _husk_career_name(owner_unit_3p)
-		local def = _om._husk_identity_def and _om._husk_identity_def(owner_unit_3p, slot_name, base_name)
+		local exact, identity_state
+		if _om._husk_identity_descriptor then
+			exact, identity_state = _om._husk_identity_descriptor(owner_unit_3p, slot_name, base_name)
+		end
+		if identity_state and identity_state ~= "none" and identity_state ~= "exact" then
+			-- A sender explicitly proved this slot native, or its exact provider
+			-- descriptor is unavailable locally. Never replace that evidence with
+			-- the ambiguous base+career heuristic.
+			return
+		end
+		local def = exact and _find_def(exact.variant_key)
 		local reason = def and "identity" or nil
+		if exact and exact.skin then skin = exact.skin end
 		if not def then def, reason = _om._husk_resolve_display_def(base_name, career, skin) end
 		if not def then
 			-- Decision diagnostics (#474/#475), scoped to bases a cwv variant
@@ -12224,7 +12312,9 @@ do
 		end
 		local field = (hand == "right") and "right_hand_unit" or "left_hand_unit"
 		local override
-		if (reason == "skin" or reason == "identity") and WeaponSkins and WeaponSkins.skins then
+		if reason == "identity" and exact then
+			override = exact[field]
+		elseif reason == "skin" and WeaponSkins and WeaponSkins.skins then
 			local skin_tmpl = rawget(WeaponSkins.skins, skin)
 			local skin_unit = skin_tmpl and skin_tmpl[field]
 			if type(skin_unit) == "string" and skin_unit ~= "" then override = skin_unit end
@@ -12380,8 +12470,16 @@ do
 		if style_decision == false then return end
 		local resolved_unit_name = item_units and item_units[
 			hand == "right" and "right_hand_unit" or "left_hand_unit"]
-		local def = style_decision or (_om._husk_identity_def
-			and _om._husk_identity_def(owner_unit_3p, slot_name, item_data and item_data.name)
+		local exact, identity_state
+		if _om._husk_identity_descriptor then
+			exact, identity_state = _om._husk_identity_descriptor(
+				owner_unit_3p, slot_name, item_data and item_data.name)
+		end
+		if identity_state and identity_state ~= "none" and identity_state ~= "exact" then
+			return
+		end
+		if exact and exact.skin then skin = exact.skin end
+		local def = style_decision or (exact and _find_def(exact.variant_key)
 			or _resolve_cwv_def(item_data, skin, resolved_unit_name))
 		if not def and skin == nil then
 			-- #392/#397 fallback, #475-hardened: base+career positive signal for
@@ -12559,19 +12657,16 @@ if BackendUtils then
 		-- Anything that resolves no cwv key passes through.
 		local cwv_key = _om._cwv_key_for_item(backend_id, item_data)
 		if not cwv_key then return result end
-		local def = _find_def(cwv_key)
-		if not def then return result end
+		local descriptor = _om._cwv_resolve_world_descriptor and
+			_om._cwv_resolve_world_descriptor(item_data, result.skin or skin,
+				result.right_hand_unit, cwv_key, backend_id)
+		if not descriptor then return result end
 
-		-- A skin was applied during the resolution (curated cwv item or
-		-- user-selected illusion). The skin's per-hand units are already
-		-- in `result`; don't trample them. `result.skin` is set by
-		-- vanilla at backend_utils.lua:205 when a skin took effect.
-		if result.skin and result.skin ~= "" then return result end
-
-		-- No skin → vanilla fell back to item_data.right_hand_unit, which
-		-- may be the base entry's path. Force the cwv override.
-		if def.right_hand_unit then result.right_hand_unit = def.right_hand_unit end
-		if def.left_hand_unit  then result.left_hand_unit  = def.left_hand_unit  end
+		-- The same descriptor now owns owner/bot world spawn and preview unit
+		-- identity. A selected skin composes with a sibling exact offhand; an
+		-- unskinned CWV instance replaces the inherited vanilla base units.
+		_om.exact_appearance.apply_item_units(descriptor, result,
+			result.skin ~= nil and result.skin ~= "")
 		return result
 	end)
 end
@@ -12691,93 +12786,108 @@ do
 	-- same-mod channel; the ordinary vanilla RPC remains authoritative for slot,
 	-- skin, units, and wield timing. The side channel is absence-safe for non-CWV
 	-- peers and bounded to equip/resync/parity edges (never per-frame).
-	local _IDENTITY_SCHEMA = 1
-	local _remote_identity = {}
-	local _identity_last_sent = {}
-	_om._cwv_remote_identity = _remote_identity
-	mod._cwv_identity_surfaces = { network = true }
+	local _IDENTITY_SCHEMA = _om.appearance_lifecycle_policy.SCHEMA
+	mod._cwv_identity_surfaces = {
+		network = true,
+		owner_spawn = true,
+		bot_spawn = true,
+		remote_husk = true,
+		husk_wield = true,
+	}
+
+	local lifecycle = _om.appearance_lifecycle_policy.new({
+		resolve_local = function(slot_data, slot_name)
+			local item_data = slot_data and slot_data.item_data
+			local base_name = item_data and item_data.name
+			if not item_data then return nil, base_name end
+			local backend_id = item_data.backend_id
+				or (item_data.mod_data and item_data.mod_data.backend_id)
+			local key = _om._cwv_key_for_item(backend_id, item_data)
+			if not key then return nil, base_name end
+			local skin = slot_data.skin
+			local descriptor = _om._cwv_resolve_world_descriptor(item_data, skin,
+				nil, key, backend_id)
+			return descriptor, base_name
+		end,
+		resolve_remote = function(payload, sender_peer_id)
+			local def = type(payload.item_key) == "string" and _find_def(payload.item_key)
+			if not def or def.skin_only or def.base_weapon ~= payload.base_item_key then
+				return nil, "item_or_base"
+			end
+			local skin = payload.skin_key ~= "" and payload.skin_key or nil
+			local descriptor, _, reason = _om._cwv_resolve_world_descriptor(
+				{ name = def.base_weapon }, skin, nil, def.item_key,
+				tostring(sender_peer_id) .. ":" .. tostring(payload.slot))
+			return descriptor, reason
+		end,
+		send = function(recipient, schema, payload, edge)
+			local ok = pcall(mod.network_send, mod, "cwv_item_identity",
+				recipient, schema, payload)
+			if ok then
+				pcall(printf,
+					"[cwv:660] lifecycle=%s adapter=identity_send recipient=%s slot=%s descriptor=%s",
+					tostring(edge), tostring(recipient), tostring(payload.slot),
+					tostring(payload.fingerprint ~= "" and payload.fingerprint or "native"))
+			end
+			return ok
+		end,
+	})
+	_om._appearance_lifecycle = lifecycle
 
 	_om._cwv_identity_payloads = function(slots)
 		local payloads = {}
-		if type(slots) ~= "table" then return payloads end
-		for slot_name, slot_data in pairs(slots) do
-			if slot_name == "slot_melee" or slot_name == "slot_ranged" then
-				local item_data = slot_data and slot_data.item_data
-				local key = item_data and _om._cwv_key_for_item(item_data.backend_id, item_data)
-				local def = key and _find_def(key)
-				payloads[#payloads + 1] = {
-					slot = slot_name,
-					item_key = (def and not def.skin_only) and key or "",
-				}
-			end
+		for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
+			local payload = lifecycle:payload_for(slot_name,
+				type(slots) == "table" and slots[slot_name] or nil)
+			if payload then payloads[#payloads + 1] = payload end
 		end
 		return payloads
 	end
 
 	_om._cwv_accept_identity = function(sender_peer_id, schema, payload)
-		if schema ~= _IDENTITY_SCHEMA or type(sender_peer_id) ~= "string"
-				or type(payload) ~= "table" then return false, "invalid" end
-		local slot_name = payload.slot
-		if slot_name ~= "slot_melee" and slot_name ~= "slot_ranged" then
-			return false, "slot"
-		end
-		local key = payload.item_key
-		if key ~= "" then
-			local def = type(key) == "string" and _find_def(key)
-			if not def or def.skin_only then return false, "item" end
-		end
-		local by_slot = _remote_identity[sender_peer_id]
-		if not by_slot then
-			by_slot = {}
-			_remote_identity[sender_peer_id] = by_slot
-		end
-		local previous = by_slot[slot_name]
-		by_slot[slot_name] = key ~= "" and key or nil
-		return previous ~= by_slot[slot_name], "ok"
+		return lifecycle:accept(sender_peer_id, schema, payload)
+	end
+
+	_om._cwv_identity_descriptor_for_peer = function(peer_id, slot_name, base_name)
+		return lifecycle:descriptor(peer_id, slot_name, base_name)
 	end
 
 	_om._cwv_identity_def_for_peer = function(peer_id, slot_name, base_name)
-		local key = peer_id and _remote_identity[peer_id]
-		key = key and key[slot_name]
-		local def = key and _find_def(key)
-		if not def or def.skin_only or def.base_weapon ~= base_name then return nil end
-		return def
+		local descriptor, state = lifecycle:descriptor(peer_id, slot_name, base_name)
+		local def = descriptor and _find_def(descriptor.variant_key)
+		return def, state
 	end
 
-	_om._husk_identity_def = function(owner_unit_3p, slot_name, base_name)
-		if not owner_unit_3p then return nil end
+	_om._husk_identity_descriptor = function(owner_unit_3p, slot_name, base_name)
+		if not owner_unit_3p then return nil, "none" end
 		local player
 		pcall(function() player = Managers.player:owner(owner_unit_3p) end)
 		local peer_id = player and (player.peer_id or (player.network_id and player:network_id()))
-		return _om._cwv_identity_def_for_peer(peer_id, slot_name, base_name)
+		return lifecycle:descriptor(peer_id, slot_name, base_name)
 	end
 
-	local function _send_identity_slots(slots, context, force)
-		local payloads = _om._cwv_identity_payloads(slots)
-		local sent = 0
-		for _, payload in ipairs(payloads) do
-			local signature = payload.item_key
-			if force or _identity_last_sent[payload.slot] ~= signature then
-				local ok = pcall(mod.network_send, mod,
-					"cwv_item_identity", "all", _IDENTITY_SCHEMA, payload)
-				if ok then
-					_identity_last_sent[payload.slot] = signature
-					sent = sent + 1
-				end
-			end
-		end
+	_om._husk_identity_def = function(owner_unit_3p, slot_name, base_name)
+		local descriptor, state = _om._husk_identity_descriptor(owner_unit_3p, slot_name, base_name)
+		return descriptor and _find_def(descriptor.variant_key) or nil, state
+	end
+
+	local function _send_identity_slots(slots, context, force, recipient)
+		local sent = lifecycle:publish(slots, context, recipient or "others", force)
 		if sent > 0 then
-			pcall(printf, "[cwv:396] item identity sent: context=%s slots=%d", tostring(context), sent)
+			pcall(printf, "[cwv:396/660] exact identity replay: context=%s recipient=%s slots=%d",
+				tostring(context), tostring(recipient or "others"), sent)
 		end
 		return sent
 	end
 	_om._cwv_send_identity_slots = _send_identity_slots
 
 	mod:network_register("cwv_item_identity", function(sender_peer_id, schema, payload)
-		local changed = _om._cwv_accept_identity(sender_peer_id, schema, payload)
+		local changed, descriptor, reason = _om._cwv_accept_identity(sender_peer_id, schema, payload)
 		if not changed then return end
-		pcall(printf, "[cwv:396] item identity received: peer=%s slot=%s key=%s",
-			tostring(sender_peer_id), tostring(payload.slot), tostring(payload.item_key))
+		pcall(printf, "[cwv:396/660] exact identity received: peer=%s slot=%s key=%s descriptor=%s state=%s",
+			tostring(sender_peer_id), tostring(payload and payload.slot),
+			tostring(payload and payload.item_key),
+			tostring(descriptor and descriptor.fingerprint or "vanilla"), tostring(reason))
 		-- If vanilla equipment arrived first, rebuild the currently wielded husk
 		-- once. If identity arrived first, the following vanilla wield RPC is the
 		-- rebuild. Either ordering converges without polling.
@@ -12787,7 +12897,8 @@ do
 		if unit and Unit.alive(unit) then
 			local inventory
 			pcall(function() inventory = ScriptUnit.extension(unit, "inventory_system") end)
-			if inventory and inventory.wielded_slot == payload.slot and type(inventory.wield) == "function" then
+			if inventory and payload and inventory.wielded_slot == payload.slot
+					and type(inventory.wield) == "function" then
 				pcall(inventory.wield, inventory, payload.slot)
 			end
 		end
@@ -13015,6 +13126,7 @@ do
 	end)
 	mod._cwv_skin_wire_surfaces.game_object_initialized = true
 	mod._cwv_identity_surfaces.game_object_initialized = true
+	mod._cwv_identity_surfaces.mission_transition = true
 
 	mod:hook("SimpleInventoryExtension", "_spawn_resynced_loadout", function(func, self, equipment_to_spawn, skip_wield)
 		if equipment_to_spawn and equipment_to_spawn.slot_id then
@@ -13041,6 +13153,10 @@ do
 		if not slots then
 			return func(peer_id, unit, equipment, additional_items)
 		end
+		-- #660: target the exact semantic descriptor to the joining CWV peer
+		-- before vanilla's base-id equipment replay. VMF drops this channel for a
+		-- peer without CWV; vanilla still receives only the safe base item/skin.
+		_send_identity_slots(slots, "hot_join_sync", true, peer_id)
 		-- force=true: the joining peer's parity is unknowable here by construction.
 		local r1, r2, r3, r4 = _wire_null_skins(slots, function()
 			return func(peer_id, unit, equipment, additional_items)
@@ -13051,6 +13167,7 @@ do
 		return r1, r2, r3, r4
 	end)
 	mod._cwv_skin_wire_surfaces.hot_join_sync = true
+	mod._cwv_identity_surfaces.hot_join_sync = true
 
 	local pp = mod._cwv_peer_parity
 	if pp and type(pp.register_gated_feature) == "function" then
@@ -13183,9 +13300,36 @@ end
 
 local _crowbill_transform_miss_seen = {}
 local _crowbill_transform_miss_total = 0
+_om._appearance_world_seen = setmetatable({}, { __mode = "k" })
 mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
 	local result = func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
 	if not result then return result end
+
+	local backend_id = item_data and (item_data.backend_id
+		or (item_data.mod_data and item_data.mod_data.backend_id))
+	local cwv_key = _om._cwv_key_for_item(backend_id, item_data)
+	local descriptor
+	if cwv_key then
+		local reason
+		descriptor, _, reason = _om._cwv_resolve_world_descriptor(item_data,
+			result.skin, result.right_hand_unit_name, cwv_key, backend_id)
+		if not descriptor then
+			pcall(printf,
+				"[cwv:660] lifecycle=world_spawn adapter=%s descriptor=DECLINED key=%s skin=%s reason=%s",
+				is_bot and "bot" or "owner", tostring(cwv_key),
+				tostring(result.skin), tostring(reason))
+			return result
+		end
+		local observed_unit = result.right_unit_3p or result.left_unit_3p
+		if observed_unit and not _om._appearance_world_seen[observed_unit] then
+			_om._appearance_world_seen[observed_unit] = descriptor.fingerprint
+			pcall(printf,
+				"[cwv:660] lifecycle=world_spawn adapter=%s slot=%s descriptor=%s right=%s left=%s",
+				is_bot and "bot" or "owner", tostring(slot_name),
+				tostring(descriptor.fingerprint), tostring(descriptor.right_hand_unit),
+				tostring(descriptor.left_hand_unit))
+		end
+	end
 
 	local def = _resolve_cwv_def(item_data, result.skin, result.right_hand_unit_name)
 	if not def then
@@ -14636,7 +14780,8 @@ _rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
 	end
 
 	local surfaces = mod._cwv_identity_surfaces
-	for _, name in ipairs({ "network", "game_object_initialized", "spawn_resynced_loadout", "parity_replay" }) do
+	for _, name in ipairs({ "network", "game_object_initialized", "spawn_resynced_loadout",
+			"hot_join_sync", "parity_replay" }) do
 		if not (surfaces and surfaces[name]) then return "missing CWV identity surface: " .. name end
 	end
 	local plan = _om._cwv_identity_payloads
@@ -14655,7 +14800,7 @@ _rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
 			or not by_slot.slot_ranged or by_slot.slot_ranged.item_key ~= "" then
 		return "identity planner did not preserve CWV owner and native clear payloads"
 	end
-	local changed = accept("rt396-peer", 1, by_slot.slot_melee)
+	local changed = accept("rt396-peer", _om.appearance_lifecycle_policy.SCHEMA, by_slot.slot_melee)
 	local resolved = resolve("rt396-peer", "slot_melee", "es_bastard_sword")
 	if changed ~= true or resolved ~= owner then
 		return "receiver did not resolve the explicit Imperial Longsword marker over its vanilla base"
@@ -14663,7 +14808,10 @@ _rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
 	if resolve("rt396-peer", "slot_melee", "es_handgun") ~= nil then
 		return "identity marker crossed its authored base-weapon boundary"
 	end
-	accept("rt396-peer", 1, { slot = "slot_melee", item_key = "" })
+	local native = by_slot.slot_ranged
+	native.slot = "slot_melee"
+	native.base_item_key = "es_bastard_sword"
+	accept("rt396-peer", _om.appearance_lifecycle_policy.SCHEMA, native)
 	if resolve("rt396-peer", "slot_melee", "es_bastard_sword") ~= nil then
 		return "native-slot clear left stale CWV identity behind"
 	end
@@ -14691,6 +14839,47 @@ _rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
 	preview("es_bastard_sword", "cwv_es_longsword_001", skin_key, info)
 	if info.spawn_data[1].unit_name ~= illusion.right_hand_unit .. "_3p" then
 		return "inventory character preview replaced the selected Helmgart mesh"
+	end
+end)
+
+_rt_register("issue660_world_identity_lifecycle_replay", function()
+	local lifecycle = _om._appearance_lifecycle
+	local plan = _om._cwv_identity_payloads
+	local accept = _om._cwv_accept_identity
+	local resolve = _om._cwv_identity_descriptor_for_peer
+	if not lifecycle or type(plan) ~= "function" or type(accept) ~= "function"
+			or type(resolve) ~= "function" then
+		return "#660 exact world-identity lifecycle is not installed"
+	end
+	local payload = plan({
+		slot_melee = {
+			item_data = { name = "es_bastard_sword", cwv_key = "cwv_es_longsword" },
+		},
+	})[1]
+	if not payload or payload.base_item_key ~= "es_bastard_sword"
+			or payload.item_key ~= "cwv_es_longsword"
+			or type(payload.fingerprint) ~= "string" or payload.fingerprint == "" then
+		return "#660 owner descriptor payload omitted exact item/base/model fingerprint"
+	end
+	local changed, descriptor, reason = accept("rt660-peer",
+		_om.appearance_lifecycle_policy.SCHEMA, payload)
+	if not changed or not descriptor or reason ~= "exact"
+			or descriptor.fingerprint ~= payload.fingerprint then
+		return "#660 receiver did not reconstruct the sender's exact local descriptor"
+	end
+	local changed_again = accept("rt660-peer",
+		_om.appearance_lifecycle_policy.SCHEMA, payload)
+	if changed_again then return "#660 duplicate descriptor caused a second lifecycle replay" end
+	local bad = {}
+	for k, v in pairs(payload) do bad[k] = v end
+	bad.fingerprint = payload.fingerprint .. "-provider-drift"
+	local declined = accept("rt660-peer", _om.appearance_lifecycle_policy.SCHEMA, bad)
+	local missing, state = resolve("rt660-peer", "slot_melee", "es_bastard_sword")
+	if not declined or missing ~= nil or state ~= "unavailable" then
+		return "#660 provider/fingerprint drift did not fail closed and clear stale exact identity"
+	end
+	if resolve("rt660-peer", "slot_melee", "different_base") ~= nil then
+		return "#660 remote descriptor crossed its vanilla base boundary"
 	end
 end)
 

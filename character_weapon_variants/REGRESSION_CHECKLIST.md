@@ -17,6 +17,17 @@ Last updated: 2026-07-17.
 
 ---
 
+## #660 Exact world identity and lifecycle replay slice
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.438-dev (owner/bot/remote-husk world slice; umbrella remains open) |
+| Repro | Equip one skinned and one skinless CWV instance before another player joins. Observe owner 3P, bot, and remote husk in the Keep; enter a mission without re-equipping; swap to a native item sharing the same base and back; repeat as a hot join and with one peer lacking CWV. |
+| Expected post-fix | Owner, bot, and same-mod remote husk resolve the same exact item/base/skin/right/left fingerprint at spawn, wield, mission transition, and hot join. Explicit native or locally unavailable provider state preserves vanilla instead of falling through to base+career. Duplicate fingerprints do not rebuild twice. A peer lacking CWV receives no modded vanilla lookup ID and remains connected. Materials, glow, icons/names, score/Tab, and non-CWV provider adoption are not claimed by this slice. |
+| Detection | Offline `test_cwv_appearance_lifecycle.lua` proves the two-slot bound, coalescing, targeted replay, exact local reconstruction, native suppression, provider/schema/base drift, and vanilla-wire safety; `test_cwv_remote_identity.lua` locks the live routes. `/cwv_regression_test` passes `issue396_imperial_longsword_identity_and_remote_husk` and `issue660_world_identity_lifecycle_replay`. Paired logs correlate bounded `[cwv:660] lifecycle=... adapter=... descriptor=...` rows; no identity send originates in `mod.update`. |
+
+---
+
 ## #423 Cloned damage profiles never reach an incompatible host
 
 | Field | Check |

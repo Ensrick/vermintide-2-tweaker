@@ -1,5 +1,44 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.439-dev - 2026-07-17 - #660 exact world identity and lifecycle replay [diagnostics-armed]
+
+- Extended the preview descriptor into a provider-qualified exact world
+  identity: CWV item key, vanilla base key, selected skin, resolved right/left
+  models, and one semantic fingerprint. Owner and bot equipment spawn now
+  consume that descriptor instead of independently falling back to def fields.
+- Replaced the item-key-only remote cache with a schema-2 lifecycle ledger.
+  Receivers reconstruct models from their own local registries and require an
+  identical fingerprint. Unit paths are never transported, and CWV item/skin
+  strings never enter vanilla `NetworkLookup`.
+- Added explicit native/unavailable states. A native slot or a missing provider
+  can no longer fall through to the ambiguous base+career heuristic and inherit
+  another CWV model. Fingerprint, schema, or base mismatch clears stale exact
+  state and preserves vanilla presentation.
+- Added one-shot descriptor publication at initial game-object/mission spawn,
+  equip/resync, parity recovery, and targeted hot join. The husk wield context,
+  hand preselection, per-hand spawn re-key, and transform adapter consume the
+  same cached descriptor. Duplicate fingerprints do not trigger another husk
+  rebuild; there is no per-frame identity RPC.
+- Added pure Lua coverage for two-slot bounds, duplicate coalescing, targeted
+  replay, exact local reconstruction, explicit-native suppression, provider/
+  schema/base drift, and vanilla-wire safety. This remains a bounded CWV world
+  slice of #660; materials, glow, icons, names, score/Tab, and provider adoption
+  outside CWV remain open.
+
+**Verification (two players; confirm `[cwv:LOAD] v0.1.439-dev` first):**
+
+1. Equip a skinned CWV weapon and a skinless CWV weapon before the second player
+   joins. Verify owner 3P, a bot where applicable, and the remote husk in the
+   Keep, then enter a mission without re-equipping.
+2. Swap each slot to a native weapon sharing a CWV base, then back. The native
+   weapon must never inherit the CWV model or transform; the CWV weapon must
+   recover once without requiring a second swap.
+3. Hot join once with CWV on both peers and once with a peer lacking CWV. The
+   same-mod observer should log the sender's descriptor fingerprint; the mixed
+   peer receives only vanilla equipment IDs and stays connected.
+4. Run `/cwv_regression_test`; `issue396_imperial_longsword_identity_and_remote_husk`
+   and `issue660_world_identity_lifecycle_replay` must pass. Attach both logs.
+
 ## 0.1.438-dev - 2026-07-17 - #484 crafted Old Musket canonical identity [verify-fix-coop]
 
 - Root-caused the crafted-only failure against closed fixes #390, #397, #409,

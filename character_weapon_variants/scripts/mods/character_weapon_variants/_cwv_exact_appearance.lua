@@ -89,12 +89,25 @@ local function unit_from(row, field)
 end
 
 local function descriptor_fingerprint(descriptor)
-    return table.concat({
+    local identity = table.concat({
+        descriptor.provider or "-",
         descriptor.variant_key or "-",
+        descriptor.base_item_key or "-",
         descriptor.skin or "-",
         descriptor.right_hand_unit or "-",
         descriptor.left_hand_unit or "-",
     }, "|")
+    -- VMF mod messages share Stingray's small string envelope. Never put the
+    -- raw unit-path tuple on the wire: two independent bounded arithmetic
+    -- hashes keep the correlation token fixed at 19 bytes under Lua 5.1
+    -- without bit libraries. This is drift detection, not authentication.
+    local h1, h2 = 5381, 52711
+    for i = 1, #identity do
+        local byte = identity:byte(i)
+        h1 = (h1 * 65599 + byte) % 2147483647
+        h2 = (h2 * 131071 + byte) % 2147483629
+    end
+    return string.format("a1:%08x%08x", h1, h2)
 end
 
 -- One immutable-by-convention unit descriptor for both preview spawn APIs.
@@ -124,7 +137,13 @@ function M.resolve_spawn_descriptor(args)
     end
 
     local descriptor = {
+        provider = nonempty(args.provider) or "cwv",
+        instance_id = nonempty(args.instance_id),
         variant_key = nonempty(variant.item_key),
+        base_item_key = nonempty(args.base_item_key)
+            or nonempty(variant.base_weapon),
+        fallback_item_key = nonempty(args.fallback_item_key)
+            or nonempty(variant.base_weapon),
         skin = exact and exact.skin or nil,
         source = exact and "skin" or "variant",
         right_hand_unit = exact and exact.right_hand_unit

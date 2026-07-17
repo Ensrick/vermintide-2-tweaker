@@ -60,8 +60,9 @@ return function(H, repo_root)
                 left_hand_unit = "base_left",
             },
         }))
-        H.equal(descriptor.fingerprint,
-            "cwv_test|-|variant_right|variant_left")
+        H.equal(descriptor.fingerprint:sub(1, 3), "a1:")
+        H.equal(#descriptor.fingerprint, 19)
+        local fingerprint = descriptor.fingerprint
 
         local inventory = {
             { right_hand = true, unit_name = "anything_right_3p" },
@@ -84,8 +85,7 @@ return function(H, repo_root)
         H.equal(browser[1].unit_name, "variant_left_3p")
         H.equal(browser[2].unit_name, "variant_right_3p")
         H.equal(browser[3].unit_name, "unrelated_3p")
-        H.equal(descriptor.fingerprint,
-            "cwv_test|-|variant_right|variant_left",
+        H.equal(descriptor.fingerprint, fingerprint,
             "surface adapters mutated the canonical descriptor")
     end)
 
