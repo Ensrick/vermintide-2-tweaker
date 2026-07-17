@@ -216,6 +216,39 @@ return function(H, repo_root)
         }), "es_1h_sword")
     end)
 
+    H.test("CIM #628 normalization consumes the canonical identity ladder", function()
+        local shapes = {
+            {
+                bid = "48400000-0000-4000-8000-000000000484",
+                input = {
+                    key = "es_handgun",
+                    CustomData = { cim_acquisition_key = "cwv_es_musket_old" },
+                },
+                expected = "cwv_es_musket_old",
+            },
+            {
+                bid = "opaque",
+                input = {
+                    key = "es_bastard_sword",
+                    data = { cwv_key = "cwv_es_longsword" },
+                },
+                expected = "cwv_es_longsword",
+            },
+            {
+                bid = "cwv_dr_dawi_mace_100",
+                input = { key = "dr_1h_hammer" },
+                expected = "cwv_dr_dawi_mace",
+            },
+        }
+        for i = 1, #shapes do
+            local shape = shapes[i]
+            H.equal(contract.canonical_item_key(shape.input, shape.bid), shape.expected)
+            local record, err = contract.normalize_record(shape.bid, shape.input)
+            H.equal(err, nil)
+            H.equal(record.item_key, shape.expected)
+        end
+    end)
+
     H.test("CIM #628 base-keyed CWV instance stays salvage-eligible", function()
         local row = master("cwv_variant")
         local record = assert(contract.normalize_record("cwv_es_longsword_100", {

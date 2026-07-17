@@ -6,7 +6,7 @@ Workshop 3733366851). The engine contact surface (every hooked vanilla
 doc is the code-layout map. Stable `crafting_in_modded/` is its read-only public
 twin - all in-flight work happens here (repo `CLAUDE.md` dev/stable split).
 
-## Module map (v0.8.89-dev, Phase 2 regression split)
+## Module map (v0.8.90-dev, Phase 2 regression split)
 
 `crafting_in_modded_dev.lua` is still the primary file (~6,165 lines) - this is an
 IN-PROGRESS decomposition (PROJECT_STANDARDS 2.2a), not a finished one. Phase 1
@@ -29,7 +29,7 @@ new module needs only its manifest dofile line + a row here.
 | `_cim_regression_checks.lua` | The 74-check late `/cim_regression_test` block, in its frozen registration order. Loaded once at the end of the entry after production hooks/helpers exist. Receives narrow function/state accessors for entry locals that are reassigned; checks still consume the established flat `mod._cim_*` runtime API. |
 | `modded_rarities.lua` | Custom "modded" rarity registration (Colors/UISettings/RaritySettings/NetworkLookup table contacts), `_G.Localize` supply, deus weapon-pool scrub, Jewellery->Accessories relabel. Pre-existing. |
 | `standard_forge.lua` | The standard Keep crafting bench: material-clean craft/salvage/reroll synth into the backend mirror, the EAC choke-point `craft`/`_get_valid_recipe`/`enqueue` hooks, CraftPage requirement forcing, jewelry-slot pin, and manifest owner for the salvage-button extension. Pre-existing. |
-| `_cim_synthetic_item_contract.lua` | Pure #628 ownership boundary shared by Athanor, standard forge, SaveWeapon import, persistence/restore, inventory, and salvage. Validates eligible CWV/WOC provider definitions before UI; normalizes one schema-versioned exact CIM instance; builds its mirror payload; preserves vanilla salvage exclusions; partitions exact-owned ids for the #277 deletion transaction. Provider definitions remain provider-owned and blacksmith selectors never become acquired instances. |
+| `_cim_synthetic_item_contract.lua` | Pure #628 ownership boundary shared by Athanor, standard forge, SaveWeapon import, persistence/restore, inventory, and salvage. Validates eligible CWV/WOC provider definitions before UI; resolves one canonical acquisition identity and makes normalization consume that same resolver; normalizes one schema-versioned exact CIM instance; builds its mirror payload; preserves vanilla salvage exclusions; partitions exact-owned ids for the #277 deletion transaction. Provider definitions remain provider-owned and blacksmith selectors never become acquired instances. |
 | `_cim_external_trait_policy.lua` | Pure #655 optional-provider boundary. Reserves exact external trait keys to their owner, validates exact provider capabilities, partitions unavailable traits into parked persistence, and inserts eligible traits into the Adventure pool idempotently. |
 | `_cim_salvage_modded_button.lua` + `_cim_salvage_autofill_core.lua` | Issue #618 desktop/console salvage definition extension and input/animation hooks. Reuses vanilla's bounded rarity-fill paths; the pure core derives the fifth and sixth positions from vanilla's own rare-to-exotic spacing and is engine-free tested. The fifth control uses CIM's dedicated `store_tag_icon_weapon_modded` crossed-swords texture; `icon_bg_modded` remains item-card presentation only. |
 | `_cim_trait_slot_policy.lua` | Pure #414 mapping of vanilla's three melee and six ranged Chaos Wastes trait categories to exact `slot_type`; shared by standard rerolls and the Athanor picker. |

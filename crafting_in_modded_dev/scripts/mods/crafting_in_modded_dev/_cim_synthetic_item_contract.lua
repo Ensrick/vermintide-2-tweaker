@@ -110,13 +110,18 @@ function M.validate_provider(item_key, master)
     return #problems == 0, problems, provider
 end
 
+-- Forward-declared so normalization and every downstream consumer share the
+-- same identity ladder. The implementation is assigned below after the
+-- provider/record helpers, but module callers cannot run until dofile returns.
+local _canonical_item_key
+
 function M.normalize_record(backend_id, input, master)
     if type(backend_id) ~= "string" or backend_id == "" then
         return nil, "backend_id"
     end
     if type(input) ~= "table" then return nil, "record" end
 
-    local item_key = input.item_key or input.ItemId or input.key
+    local item_key = _canonical_item_key(input, backend_id)
     if type(item_key) ~= "string" or item_key == "" then
         return nil, "item_key"
     end
@@ -198,20 +203,21 @@ end
 -- character_weapon_variants.lua:10318-10330). A variant-keyed salvage record then
 -- failed the `item_key` check and the crafted weapon never appeared in Salvage.
 -- Resolution priority (highest first):
---   1. `cim_acquisition_key` / `cwv_key` -- the exact craft key on a
+--   1. `item_key` / `cim_acquisition_key` / `cwv_key` -- the exact craft key on a
 --      synthetic selector row, reconstructed wrapper, or its CustomData.
 --      Direct, nested-data, and mod-data shapes are equivalent.
 --   2. `cwv_<key>_NNN` backend-id band -- legacy CWV blacksmith instances that
 --      encoded the variant only in the backend id.
 --   3. `ItemId` / `key` / `data.key` -- ordinary vanilla identity.
-function M.canonical_item_key(item)
+_canonical_item_key = function(item, backend_id_override)
     if type(item) ~= "table" then return nil end
     local data = type(item.data) == "table" and item.data or nil
     local custom = type(item.CustomData) == "table" and item.CustomData
         or (data and type(data.CustomData) == "table" and data.CustomData)
     local mod_data = type(item.mod_data) == "table" and item.mod_data
         or (data and type(data.mod_data) == "table" and data.mod_data)
-    local exact = item.cim_acquisition_key
+    local exact = item.item_key
+        or item.cim_acquisition_key
         or (data and data.cim_acquisition_key)
         or (custom and custom.cim_acquisition_key)
         or item.cwv_key
@@ -221,7 +227,7 @@ function M.canonical_item_key(item)
     if type(exact) == "string" and exact ~= "" then
         return exact
     end
-    local backend_id = item.backend_id or item.ItemInstanceId
+    local backend_id = item.backend_id or item.ItemInstanceId or backend_id_override
     if type(backend_id) == "string" then
         local cwv_key = backend_id:match("^(cwv_.-)_%d%d%d$")
         if cwv_key then return cwv_key end
@@ -229,6 +235,8 @@ function M.canonical_item_key(item)
     local key = item.ItemId or item.key or (data and data.key)
     return type(key) == "string" and key or nil
 end
+
+M.canonical_item_key = _canonical_item_key
 
 local function instance_key(item)
     return item and M.canonical_item_key(item)
