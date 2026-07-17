@@ -107,6 +107,195 @@ function Invoke-NativeCapture {
     return [pscustomobject]@{ ExitCode = $code; Lines = $lines }
 }
 
+function Test-ShipPathEqual {
+    param([string]$Left, [string]$Right)
+    if ([string]::IsNullOrWhiteSpace($Left) -or [string]::IsNullOrWhiteSpace($Right)) { return $false }
+    $leftFull = [System.IO.Path]::GetFullPath($Left).TrimEnd('\', '/')
+    $rightFull = [System.IO.Path]::GetFullPath($Right).TrimEnd('\', '/')
+    return [string]::Equals($leftFull, $rightFull, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+# Return the primary checkout that owns the shared git common directory. This
+# is dependency discovery only: source is never read or built from this root.
+# A linked worktree's common directory is <primary>\.git.
+function Get-ShipPrimaryWorktreeRoot {
+    param([string]$RepoRoot)
+    $probe = Invoke-NativeCapture { & git -C $RepoRoot rev-parse --path-format=absolute --git-common-dir }
+    if ($probe.ExitCode -ne 0 -or $probe.Lines.Count -eq 0) { return $null }
+    $common = ([string]$probe.Lines[-1]).Trim()
+    if ([string]::IsNullOrWhiteSpace($common)) { return $null }
+    $common = [System.IO.Path]::GetFullPath($common).TrimEnd('\', '/')
+    if ([System.IO.Path]::GetFileName($common) -ine '.git') { return $null }
+    $candidate = Split-Path $common -Parent
+    if (-not (Test-Path -LiteralPath $candidate -PathType Container)) { return $null }
+    return $candidate
+}
+
+function Get-ShipConfiguredProjectRoot {
+    param([string]$SettingsPath)
+    if (-not (Test-Path -LiteralPath $SettingsPath -PathType Leaf)) { return $null }
+    try {
+        $settings = [System.IO.File]::ReadAllText($SettingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    }
+    catch {
+        throw "VMBLauncher settings are not valid JSON: $SettingsPath ($($_.Exception.Message))"
+    }
+    if ($null -eq $settings -or [string]::IsNullOrWhiteSpace([string]$settings.ProjectRoot)) { return $null }
+    return [System.IO.Path]::GetFullPath([string]$settings.ProjectRoot)
+}
+
+function Resolve-ShipLauncherPath {
+    param(
+        [string]$RepoRoot,
+        [string]$ExplicitPath,
+        [string]$ConfiguredProjectRoot,
+        [string]$PrimaryWorktreeRoot
+    )
+
+    $relative = 'tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe'
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        $explicitFull = [System.IO.Path]::GetFullPath($ExplicitPath)
+        if (-not (Test-Path -LiteralPath $explicitFull -PathType Leaf)) {
+            throw "VT2_SHIP_VMB_LAUNCHER points to a missing file: $explicitFull"
+        }
+        if ((Get-Item -LiteralPath $explicitFull).Length -le 0) {
+            throw "VT2_SHIP_VMB_LAUNCHER points to an empty file: $explicitFull"
+        }
+        return [pscustomobject]@{ Path = $explicitFull; Source = 'VT2_SHIP_VMB_LAUNCHER' }
+    }
+
+    $candidates = @(
+        [pscustomobject]@{ Path = (Join-Path $RepoRoot $relative); Source = 'invoking worktree' },
+        [pscustomobject]@{ Path = $(if ($ConfiguredProjectRoot) { Join-Path $ConfiguredProjectRoot $relative } else { $null }); Source = 'VMBLauncher configured ProjectRoot' },
+        [pscustomobject]@{ Path = $(if ($PrimaryWorktreeRoot) { Join-Path $PrimaryWorktreeRoot $relative } else { $null }); Source = 'primary git worktree' }
+    )
+    $seen = @{}
+    $attempted = @()
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace([string]$candidate.Path)) { continue }
+        $full = [System.IO.Path]::GetFullPath([string]$candidate.Path)
+        $key = $full.ToLowerInvariant()
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $attempted += $full
+        if ((Test-Path -LiteralPath $full -PathType Leaf) -and (Get-Item -LiteralPath $full).Length -gt 0) {
+            return [pscustomobject]@{ Path = $full; Source = $candidate.Source }
+        }
+    }
+    throw ("VMBLauncher.exe was not found in any approved machine-local location: " +
+           ($attempted -join '; ') +
+           ". Set VT2_SHIP_VMB_LAUNCHER to the published executable or publish it in the primary/configured worktree.")
+}
+
+function Test-ShipVmbRcForRoot {
+    param([string]$VmbRcPath, [string]$RepoRoot)
+    if (-not (Test-Path -LiteralPath $VmbRcPath -PathType Leaf)) {
+        return [pscustomobject]@{ Ok = $false; Message = "missing .vmbrc: $VmbRcPath" }
+    }
+    try {
+        $config = [System.IO.File]::ReadAllText($VmbRcPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    }
+    catch {
+        return [pscustomobject]@{ Ok = $false; Message = "invalid JSON in $VmbRcPath ($($_.Exception.Message))" }
+    }
+    $modsDirRaw = if ($null -ne $config) { [string]$config.mods_dir } else { '' }
+    if ([string]::IsNullOrWhiteSpace($modsDirRaw)) {
+        return [pscustomobject]@{ Ok = $false; Message = "$VmbRcPath has no non-empty mods_dir" }
+    }
+    $resolvedModsDir = if ([System.IO.Path]::IsPathRooted($modsDirRaw)) {
+        [System.IO.Path]::GetFullPath($modsDirRaw)
+    } else {
+        [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $modsDirRaw))
+    }
+    if (-not (Test-ShipPathEqual $resolvedModsDir $RepoRoot)) {
+        return [pscustomobject]@{
+            Ok = $false
+            Message = "unsafe mods_dir '$modsDirRaw' resolves to '$resolvedModsDir', not invoking root '$RepoRoot'"
+        }
+    }
+    return [pscustomobject]@{ Ok = $true; Message = "mods_dir resolves to invoking root" }
+}
+
+function Resolve-ShipVmbRcPath {
+    param(
+        [string]$RepoRoot,
+        [string]$ExplicitPath,
+        [string]$ConfiguredProjectRoot,
+        [string]$PrimaryWorktreeRoot
+    )
+
+    $localPath = Join-Path $RepoRoot '.vmbrc'
+    if (Test-Path -LiteralPath $localPath -PathType Leaf) {
+        $check = Test-ShipVmbRcForRoot -VmbRcPath $localPath -RepoRoot $RepoRoot
+        if (-not $check.Ok) { throw "Invoking worktree .vmbrc is unusable: $($check.Message)" }
+        return [pscustomobject]@{ Path = $localPath; Source = 'invoking worktree'; NeedsStaging = $false }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        $explicitFull = [System.IO.Path]::GetFullPath($ExplicitPath)
+        $check = Test-ShipVmbRcForRoot -VmbRcPath $explicitFull -RepoRoot $RepoRoot
+        if (-not $check.Ok) { throw "VT2_SHIP_VMBRC is unusable: $($check.Message)" }
+        return [pscustomobject]@{ Path = $explicitFull; Source = 'VT2_SHIP_VMBRC'; NeedsStaging = $true }
+    }
+
+    $candidates = @(
+        [pscustomobject]@{ Path = $(if ($ConfiguredProjectRoot) { Join-Path $ConfiguredProjectRoot '.vmbrc' } else { $null }); Source = 'VMBLauncher configured ProjectRoot' },
+        [pscustomobject]@{ Path = $(if ($PrimaryWorktreeRoot) { Join-Path $PrimaryWorktreeRoot '.vmbrc' } else { $null }); Source = 'primary git worktree' },
+        [pscustomobject]@{ Path = (Join-Path $RepoRoot '.vmbrc.example'); Source = 'tracked portable template' }
+    )
+    $seen = @{}
+    $rejected = @()
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace([string]$candidate.Path)) { continue }
+        $full = [System.IO.Path]::GetFullPath([string]$candidate.Path)
+        $key = $full.ToLowerInvariant()
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $check = Test-ShipVmbRcForRoot -VmbRcPath $full -RepoRoot $RepoRoot
+        if ($check.Ok) {
+            return [pscustomobject]@{ Path = $full; Source = $candidate.Source; NeedsStaging = $true }
+        }
+        $rejected += $check.Message
+    }
+    throw ("No approved .vmbrc can bind mods_dir to the invoking worktree. " + ($rejected -join '; ') +
+           ". Set VT2_SHIP_VMBRC to a valid config whose mods_dir resolves to this checkout.")
+}
+
+# VMB requires the exact filename <ProjectRoot>\.vmbrc. For a clean linked
+# worktree, stage only the machine-local config bytes for the launcher window,
+# then remove them in finally. Existing local config is never overwritten.
+function Invoke-WithShipVmbRc {
+    param(
+        [string]$RepoRoot,
+        [pscustomobject]$Resolution,
+        [scriptblock]$Action
+    )
+    $target = Join-Path $RepoRoot '.vmbrc'
+    if (-not $Resolution.NeedsStaging) {
+        & $Action
+        return
+    }
+    if (Test-Path -LiteralPath $target) {
+        throw "Refusing to overwrite existing worktree config: $target"
+    }
+    $created = $false
+    try {
+        [System.IO.File]::WriteAllBytes($target, [System.IO.File]::ReadAllBytes($Resolution.Path))
+        $created = $true
+        $check = Test-ShipVmbRcForRoot -VmbRcPath $target -RepoRoot $RepoRoot
+        if (-not $check.Ok) { throw "Staged .vmbrc validation failed: $($check.Message)" }
+        & $Action
+    }
+    finally {
+        if ($created -and (Test-Path -LiteralPath $target)) {
+            Remove-Item -LiteralPath $target
+            if (Test-Path -LiteralPath $target) {
+                throw "CRITICAL: could not remove transient worktree config: $target"
+            }
+        }
+    }
+}
+
 # Run one action with VMBLauncher's machine-global ProjectRoot bound to the
 # repository that owns this copy of ship.ps1 (issue #647). Multiple git
 # worktrees share %APPDATA%\VMBLauncher\settings.json; trusting its last GUI
@@ -567,6 +756,95 @@ finally {
         }
     }
 
+    # Clean linked worktrees do not contain the ignored launcher checkout or
+    # .vmbrc. Dependency fallback may supply only those machine-local bytes;
+    # mods_dir and the later launcher identity probe must still bind source to
+    # the invoking worktree. Every temporary file must be cleaned on failure.
+    $dependencyDir = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-ship-deps-" + [guid]::NewGuid().ToString('N'))
+    $fixtureRepo = Join-Path $dependencyDir 'invoking'
+    $fixtureConfigured = Join-Path $dependencyDir 'configured'
+    [System.IO.Directory]::CreateDirectory($fixtureRepo) | Out-Null
+    [System.IO.Directory]::CreateDirectory($fixtureConfigured) | Out-Null
+    try {
+        $missingLauncherRejected = $false
+        try {
+            Resolve-ShipLauncherPath -RepoRoot $fixtureRepo -ExplicitPath '' -ConfiguredProjectRoot $null -PrimaryWorktreeRoot $null | Out-Null
+        }
+        catch { $missingLauncherRejected = ($_.Exception.Message -match 'not found') }
+        Assert $missingLauncherRejected "clean worktree fails closed when no approved launcher exists"
+
+        $launcherRelative = 'tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe'
+        $configuredLauncher = Join-Path $fixtureConfigured $launcherRelative
+        [System.IO.Directory]::CreateDirectory((Split-Path $configuredLauncher -Parent)) | Out-Null
+        [System.IO.File]::WriteAllBytes($configuredLauncher, [byte[]](1, 2, 3))
+        $launcherFound = Resolve-ShipLauncherPath -RepoRoot $fixtureRepo -ExplicitPath '' -ConfiguredProjectRoot $fixtureConfigured -PrimaryWorktreeRoot $null
+        Assert ((Test-ShipPathEqual $launcherFound.Path $configuredLauncher) -and $launcherFound.Source -eq 'VMBLauncher configured ProjectRoot') "configured worktree supplies launcher bytes without supplying source"
+
+        $badExplicitLauncherRejected = $false
+        try {
+            Resolve-ShipLauncherPath -RepoRoot $fixtureRepo -ExplicitPath (Join-Path $dependencyDir 'missing.exe') -ConfiguredProjectRoot $fixtureConfigured -PrimaryWorktreeRoot $null | Out-Null
+        }
+        catch { $badExplicitLauncherRejected = ($_.Exception.Message -match 'VT2_SHIP_VMB_LAUNCHER') }
+        Assert $badExplicitLauncherRejected "invalid explicit launcher fails instead of silently falling back"
+
+        $missingRcRejected = $false
+        try {
+            Resolve-ShipVmbRcPath -RepoRoot $fixtureRepo -ExplicitPath '' -ConfiguredProjectRoot $null -PrimaryWorktreeRoot $null | Out-Null
+        }
+        catch { $missingRcRejected = ($_.Exception.Message -match 'No approved .vmbrc') }
+        Assert $missingRcRejected "clean worktree fails closed when no approved .vmbrc exists"
+
+        $wrongRc = Join-Path $fixtureConfigured '.vmbrc'
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($wrongRc, '{ "mods_dir": "mods" }', $utf8NoBom)
+        $wrongRootRejected = $false
+        try {
+            Resolve-ShipVmbRcPath -RepoRoot $fixtureRepo -ExplicitPath $wrongRc -ConfiguredProjectRoot $null -PrimaryWorktreeRoot $null | Out-Null
+        }
+        catch { $wrongRootRejected = ($_.Exception.Message -match 'not invoking root') }
+        Assert $wrongRootRejected "candidate .vmbrc that redirects to another source root is rejected"
+
+        [System.IO.File]::WriteAllText($wrongRc, "{`r`n  `"mods_dir`": `".`",`r`n  `"sentinel`": `"preserve bytes`"`r`n}`r`n", $utf8NoBom)
+        $rcResolution = Resolve-ShipVmbRcPath -RepoRoot $fixtureRepo -ExplicitPath '' -ConfiguredProjectRoot $fixtureConfigured -PrimaryWorktreeRoot $null
+        Assert ($rcResolution.NeedsStaging -and $rcResolution.Source -eq 'VMBLauncher configured ProjectRoot') "configured .vmbrc is selected only for transient staging"
+
+        $stagedMarker = Join-Path $dependencyDir 'staged-seen.txt'
+        Invoke-WithShipVmbRc -RepoRoot $fixtureRepo -Resolution $rcResolution -Action {
+            if (Test-Path -LiteralPath (Join-Path $fixtureRepo '.vmbrc') -PathType Leaf) {
+                [System.IO.File]::WriteAllText($stagedMarker, 'yes', $utf8NoBom)
+            }
+        }
+        Assert (Test-Path -LiteralPath $stagedMarker -PathType Leaf) "transient .vmbrc exists during launcher action"
+        Assert (-not (Test-Path -LiteralPath (Join-Path $fixtureRepo '.vmbrc'))) "transient .vmbrc is removed after successful action"
+
+        $stageFailurePropagated = $false
+        try {
+            Invoke-WithShipVmbRc -RepoRoot $fixtureRepo -Resolution $rcResolution -Action { throw 'planted launcher failure' }
+        }
+        catch { $stageFailurePropagated = ($_.Exception.Message -match 'planted launcher failure') }
+        Assert $stageFailurePropagated "transient-config wrapper propagates launcher failure"
+        Assert (-not (Test-Path -LiteralPath (Join-Path $fixtureRepo '.vmbrc'))) "transient .vmbrc is removed after failed action"
+
+        $localRc = Join-Path $fixtureRepo '.vmbrc'
+        $localRcText = "{`r`n  `"mods_dir`": `".`",`r`n  `"local`": true`r`n}`r`n"
+        [System.IO.File]::WriteAllText($localRc, $localRcText, $utf8NoBom)
+        $localBytesBefore = [System.IO.File]::ReadAllBytes($localRc)
+        $localResolution = Resolve-ShipVmbRcPath -RepoRoot $fixtureRepo -ExplicitPath $wrongRc -ConfiguredProjectRoot $fixtureConfigured -PrimaryWorktreeRoot $null
+        Invoke-WithShipVmbRc -RepoRoot $fixtureRepo -Resolution $localResolution -Action { }
+        $localBytesAfter = [System.IO.File]::ReadAllBytes($localRc)
+        Assert (-not $localResolution.NeedsStaging) "existing invoking-worktree .vmbrc wins over fallback candidates"
+        Assert (([System.BitConverter]::ToString($localBytesBefore)) -eq ([System.BitConverter]::ToString($localBytesAfter))) "existing invoking-worktree .vmbrc remains byte-exact"
+    }
+    finally {
+        if (Test-Path $dependencyDir) {
+            Get-ChildItem -LiteralPath $dependencyDir -Recurse -File | ForEach-Object { Remove-Item -LiteralPath $_.FullName }
+            Get-ChildItem -LiteralPath $dependencyDir -Recurse -Directory |
+                Sort-Object { $_.FullName.Length } -Descending |
+                ForEach-Object { Remove-Item -LiteralPath $_.FullName }
+            Remove-Item -LiteralPath $dependencyDir
+        }
+    }
+
     # Issue #591: this is an ordering invariant, not merely a documentation
     # promise. Both offline gates must execute before the launcher can perform
     # its first build/deploy/upload action.
@@ -659,10 +937,28 @@ if (($stableSplitDirs -contains $Mod) -and (Test-Path $promoGate)) {
     }
 }
 
-$launcher = Join-Path $repoRoot 'tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe'
-if (-not (Test-Path $launcher)) {
-    Fail "VMBLauncher not found at $launcher. Build it first: tools\vmb-launcher\publish.ps1 -SkipOpen"
+$launcherSettings = Join-Path $env:APPDATA 'VMBLauncher\settings.json'
+if (-not (Test-Path -LiteralPath $launcherSettings -PathType Leaf)) {
+    Fail "VMBLauncher settings not found: $launcherSettings"
 }
+try {
+    $configuredProjectRoot = Get-ShipConfiguredProjectRoot -SettingsPath $launcherSettings
+    $primaryWorktreeRoot = Get-ShipPrimaryWorktreeRoot -RepoRoot $repoRoot
+    $launcherResolution = Resolve-ShipLauncherPath `
+        -RepoRoot $repoRoot `
+        -ExplicitPath $env:VT2_SHIP_VMB_LAUNCHER `
+        -ConfiguredProjectRoot $configuredProjectRoot `
+        -PrimaryWorktreeRoot $primaryWorktreeRoot
+    $vmbRcResolution = Resolve-ShipVmbRcPath `
+        -RepoRoot $repoRoot `
+        -ExplicitPath $env:VT2_SHIP_VMBRC `
+        -ConfiguredProjectRoot $configuredProjectRoot `
+        -PrimaryWorktreeRoot $primaryWorktreeRoot
+}
+catch {
+    Fail $_.Exception.Message
+}
+$launcher = $launcherResolution.Path
 
 # ---------------------------------------------------------------------------
 # Headless red gate (issues #590/#591): exercise the same fast, host-runnable
@@ -709,6 +1005,8 @@ $workshopLog  = 'C:\Program Files (x86)\Steam\logs\workshop_log.txt'
 Write-Host ""
 Write-Host "==> Shipping $Mod  (v$modVersion, published_id $publishedId)" -ForegroundColor Cyan
 Write-Host "    repo root : $repoRoot"
+Write-Host "    launcher  : $launcher ($($launcherResolution.Source))"
+Write-Host "    .vmbrc    : $($vmbRcResolution.Path) ($($vmbRcResolution.Source))"
 Write-Host "    deploy dir: $deployDir"
 if ($AllowPublic) { Write-Host "    --allow-public : ON (public Workshop item)" -ForegroundColor Yellow }
 if ($NoRemote)    { Write-Host "    --no-remote    : ON (skipping PC-B push)" }
@@ -719,60 +1017,63 @@ if ($NoRemote)    { Write-Host "    --no-remote    : ON (skipping PC-B push)" }
 $launcherArgs = @('all', $Mod)
 if ($AllowPublic) { $launcherArgs += '--allow-public' }
 if ($NoRemote)    { $launcherArgs += '--no-remote' }
+$launcherArgs += @('--config', $launcherSettings)
 
 Write-Host ""
 Write-Host "==> VMBLauncher $($launcherArgs -join ' ')" -ForegroundColor Cyan
 # Do NOT pipe the launcher's pipeline output through Select-Object/head -- that
 # trips the PowerShell broken-pipe quirk that reports $LASTEXITCODE = -1 on a
 # clean exit. VMBLauncher keeps its established `all` semantics; the wrapper
-# only binds and validates the shared ProjectRoot before allowing it to run.
-$launcherSettings = Join-Path $env:APPDATA 'VMBLauncher\settings.json'
+# only stages validated machine-local tooling, binds the shared ProjectRoot,
+# and validates source identity before allowing it to run.
 try {
-    Invoke-WithBoundLauncherProjectRoot -SettingsPath $launcherSettings -ProjectRoot $repoRoot -Action {
-        # Ask the launcher which mod it resolved while the temporary binding is
-        # active. Abort before `all` (therefore before deploy/upload) if root,
-        # version, source commit, or Workshop identity differs from Step 1.
-        $info = Invoke-NativeCapture { & $launcher info $Mod --no-banner }
-        if ($info.ExitCode -ne 0) {
-            throw "VMBLauncher identity probe failed (exit $($info.ExitCode)): $($info.Lines -join ' | ')"
-        }
-        $resolvedModDir = $null
-        foreach ($line in $info.Lines) {
-            if ($line -match '^Mod folder:\s*(.+?)\s*$') { $resolvedModDir = $matches[1]; break }
-        }
-        if (-not $resolvedModDir) {
-            throw "VMBLauncher identity probe did not report 'Mod folder': $($info.Lines -join ' | ')"
-        }
+    Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
+        Invoke-WithBoundLauncherProjectRoot -SettingsPath $launcherSettings -ProjectRoot $repoRoot -Action {
+            # Ask the launcher which mod it resolved while the temporary binding is
+            # active. Abort before `all` (therefore before deploy/upload) if root,
+            # version, source commit, or Workshop identity differs from Step 1.
+            $info = Invoke-NativeCapture { & $launcher info $Mod --no-banner --config $launcherSettings }
+            if ($info.ExitCode -ne 0) {
+                throw "VMBLauncher identity probe failed (exit $($info.ExitCode)): $($info.Lines -join ' | ')"
+            }
+            $resolvedModDir = $null
+            foreach ($line in $info.Lines) {
+                if ($line -match '^Mod folder:\s*(.+?)\s*$') { $resolvedModDir = $matches[1]; break }
+            }
+            if (-not $resolvedModDir) {
+                throw "VMBLauncher identity probe did not report 'Mod folder': $($info.Lines -join ' | ')"
+            }
 
-        $resolvedLuaPath = Join-Path $resolvedModDir "scripts\mods\$Mod\$Mod.lua"
-        $resolvedCfgPath = Join-Path $resolvedModDir 'itemV2.cfg'
-        if (-not (Test-Path -LiteralPath $resolvedLuaPath) -or -not (Test-Path -LiteralPath $resolvedCfgPath)) {
-            throw "VMBLauncher resolved incomplete source at '$resolvedModDir'."
-        }
-        $resolvedLua = [System.IO.File]::ReadAllText($resolvedLuaPath, [System.Text.Encoding]::UTF8)
-        $resolvedVersion = if ($resolvedLua -match 'MOD_VERSION\s*=\s*"([^"]+)"') { $matches[1] } else { '(unknown)' }
-        $resolvedCfg = [System.IO.File]::ReadAllText($resolvedCfgPath, [System.Text.Encoding]::UTF8)
-        $resolvedPublishedId = if ($resolvedCfg -match 'published_id\s*=\s*(\d+)L') { $matches[1] } else { '(unknown)' }
-        $resolvedRoot = Split-Path $resolvedModDir -Parent
-        $resolvedCommitProbe = Invoke-NativeCapture { & git -C $resolvedRoot rev-parse HEAD }
-        $resolvedCommit = if ($resolvedCommitProbe.ExitCode -eq 0 -and $resolvedCommitProbe.Lines.Count -gt 0) {
-            ([string]$resolvedCommitProbe.Lines[-1]).Trim()
-        } else { '(unknown)' }
+            $resolvedLuaPath = Join-Path $resolvedModDir "scripts\mods\$Mod\$Mod.lua"
+            $resolvedCfgPath = Join-Path $resolvedModDir 'itemV2.cfg'
+            if (-not (Test-Path -LiteralPath $resolvedLuaPath) -or -not (Test-Path -LiteralPath $resolvedCfgPath)) {
+                throw "VMBLauncher resolved incomplete source at '$resolvedModDir'."
+            }
+            $resolvedLua = [System.IO.File]::ReadAllText($resolvedLuaPath, [System.Text.Encoding]::UTF8)
+            $resolvedVersion = if ($resolvedLua -match 'MOD_VERSION\s*=\s*"([^"]+)"') { $matches[1] } else { '(unknown)' }
+            $resolvedCfg = [System.IO.File]::ReadAllText($resolvedCfgPath, [System.Text.Encoding]::UTF8)
+            $resolvedPublishedId = if ($resolvedCfg -match 'published_id\s*=\s*(\d+)L') { $matches[1] } else { '(unknown)' }
+            $resolvedRoot = Split-Path $resolvedModDir -Parent
+            $resolvedCommitProbe = Invoke-NativeCapture { & git -C $resolvedRoot rev-parse HEAD }
+            $resolvedCommit = if ($resolvedCommitProbe.ExitCode -eq 0 -and $resolvedCommitProbe.Lines.Count -gt 0) {
+                ([string]$resolvedCommitProbe.Lines[-1]).Trim()
+            } else { '(unknown)' }
 
-        $identity = Test-ShipIdentityValues `
-            -ExpectedModDir $modDir -ResolvedModDir $resolvedModDir `
-            -ExpectedVersion $modVersion -ResolvedVersion $resolvedVersion `
-            -ExpectedCommit $sourceCommit -ResolvedCommit $resolvedCommit `
-            -ExpectedPublishedId $publishedId -ResolvedPublishedId $resolvedPublishedId
-        if (-not $identity.Ok) {
-            throw "Ship identity invariant FAILED: $($identity.Message). No build/deploy/upload was attempted."
-        }
-        Write-Host "  OK -- ProjectRoot, MOD_VERSION, source commit, and published_id match the invoking checkout." -ForegroundColor Green
+            $identity = Test-ShipIdentityValues `
+                -ExpectedModDir $modDir -ResolvedModDir $resolvedModDir `
+                -ExpectedVersion $modVersion -ResolvedVersion $resolvedVersion `
+                -ExpectedCommit $sourceCommit -ResolvedCommit $resolvedCommit `
+                -ExpectedPublishedId $publishedId -ResolvedPublishedId $resolvedPublishedId
+            if (-not $identity.Ok) {
+                throw "Ship identity invariant FAILED: $($identity.Message). No build/deploy/upload was attempted."
+            }
+            Write-Host "  OK -- ProjectRoot, MOD_VERSION, source commit, and published_id match the invoking checkout." -ForegroundColor Green
 
-        & $launcher @launcherArgs
-        $launcherExit = $LASTEXITCODE
-        if ($launcherExit -ne 0) {
-            throw "VMBLauncher 'all $Mod' exited $launcherExit (build/deploy/upload failed -- see output above)."
+            & $launcher @launcherArgs
+            $launcherExit = $LASTEXITCODE
+            if ($launcherExit -ne 0) {
+                throw "VMBLauncher 'all $Mod' exited $launcherExit (build/deploy/upload failed -- see output above)."
+            }
         }
     }
 }

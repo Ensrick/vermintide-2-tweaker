@@ -42,6 +42,35 @@ Do not commit `.vmbrc`. Confirm before committing:
 git check-ignore .vmbrc
 ```
 
+### Shipping from a clean linked worktree
+
+Git linked worktrees intentionally omit both ignored dependencies: `.vmbrc`
+and the separately maintained `tools/vmb-launcher/` checkout. The canonical
+`tools/ship/ship.ps1` wrapper resolves those machine-local dependencies without
+changing which checkout supplies mod source.
+
+Launcher resolution is deterministic: `VT2_SHIP_VMB_LAUNCHER` when explicitly
+set, then the invoking worktree, the ProjectRoot recorded in VMBLauncher
+settings, and the primary git worktree. An explicitly configured missing or
+empty launcher is a hard failure; the wrapper does not silently ignore a bad
+override. The launcher is invoked with the exact `--config` path that the
+wrapper temporarily binds.
+
+If the invoking worktree already has `.vmbrc`, that file wins and is never
+overwritten. Otherwise the wrapper checks `VT2_SHIP_VMBRC`, the configured
+ProjectRoot, the primary git worktree, and finally the invoking checkout's
+tracked `.vmbrc.example`. Before accepting any candidate, it parses the JSON
+and proves that `mods_dir`, interpreted from the invoking worktree, resolves to
+the invoking worktree itself. A config that points at `mods`, another checkout,
+or an absolute foreign source root fails before VMBLauncher runs. The accepted
+bytes are written only to the required `<ProjectRoot>/.vmbrc` name for the
+launcher action and removed in `finally` after both success and failure.
+
+These fallbacks supply tooling and configuration only. The pre-existing ship
+identity gate still requires VMBLauncher `info` to resolve the invoking mod
+directory and match its git commit, `MOD_VERSION`, and `published_id` before
+`all` can build, deploy, or upload.
+
 ## VMBLauncher settings
 
 VMBLauncher stores machine-specific paths and deployment targets outside this
