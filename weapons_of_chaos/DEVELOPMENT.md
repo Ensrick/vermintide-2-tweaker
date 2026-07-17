@@ -279,6 +279,18 @@ verbatim; only the mesh source differs.
   Use the shared `WeaponAppearance.apply` atomic-pose path and require its full
   channel report; never infer complete delivery from any one successful setter.
 
+- **Deep-cloned weapon templates inherit career actions by value, not by
+  identity.** Vanilla decorates each already-parsed weapon template with the
+  canonical `ActionTemplates[action_name]` rows before WOC registration
+  (`scripts/settings/equipment/weapons.lua:241-267`). A deep clone therefore
+  contains structurally equivalent but non-canonical action tables. The shared
+  career-action owner correctly treats arbitrary non-identical rows as provider
+  conflicts. Before claiming rows on a private WOC template, reconcile only a
+  row whose donor value is the exact canonical action requested by
+  `_lib_career_weapon_actions.collect`; never replace an unproven conflict.
+  Issue #690 was the regression where v0.1.27 skipped this boundary and aborted
+  registration before `ItemMasterList`/MIL insertion.
+
 - **Lua module packaging.** Every literal
   `mod:dofile("scripts/mods/weapons_of_chaos/<module>")` target must also appear
   in `resource_packages/weapons_of_chaos/weapons_of_chaos.package`. Loose-source

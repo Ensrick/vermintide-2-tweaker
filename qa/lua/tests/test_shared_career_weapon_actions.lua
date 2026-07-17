@@ -136,6 +136,36 @@ return function(H, repo_root)
 		H.deep_equal(report.conflicting_names, { "action_career_dr_3" })
 	end)
 
+	H.test("WOC #690 reconciles deep-cloned native actions before claiming them", function()
+		local moveset = dofile(repo_root
+			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset.lua")
+		local canonical = action_templates.action_career_dr_3
+		local donor = { actions = { action_career_dr_3 = canonical } }
+		-- Simulate `table.clone(donor, true)`: structurally identical, but the
+		-- executable career-action row no longer has canonical table identity.
+		local private = {
+			actions = {
+				action_career_dr_3 = { name = canonical.name },
+			},
+		}
+		local before = integration.install(private, { "dr_ranger" },
+			career_settings, action_templates, "weapons_of_chaos")
+		H.equal(before.ok, false)
+		H.deep_equal(before.conflicting_names, { "action_career_dr_3" })
+
+		local required = integration.collect({ "dr_ranger" },
+			career_settings, action_templates)
+		local restored = moveset.restore_inherited_career_action_identity(
+			private, donor, required)
+		H.equal(restored.ok, true)
+		H.deep_equal(restored.restored_names, { "action_career_dr_3" })
+		local after = integration.install(private, { "dr_ranger" },
+			career_settings, action_templates, "weapons_of_chaos")
+		H.equal(after.ok, true)
+		H.equal(after.claimed, 1)
+		H.equal(private.actions.action_career_dr_3, canonical)
+	end)
+
 	H.test("CWV reconciles every authored career after late item registration", function()
 		local cwv = dofile(repo_root
 			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_career_weapon_actions.lua")

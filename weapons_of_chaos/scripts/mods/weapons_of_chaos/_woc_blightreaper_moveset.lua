@@ -187,6 +187,38 @@ function M.item_has_trait(item, trait_key)
 	return false
 end
 
+-- `Weapons` templates are already decorated with canonical career-action rows
+-- by vanilla (`weapons.lua`) before WOC clones the Elf Sword donor. A deep
+-- clone necessarily creates new tables for those rows, but the shared career
+-- action registry deliberately uses table identity to reject real provider
+-- conflicts. Restore identity only when the donor row is the exact canonical
+-- action requested by the registry. Anything else remains a hard conflict.
+function M.restore_inherited_career_action_identity(template, source, required)
+	local report = { ok = false, restored_names = {}, conflicting_names = {} }
+	if type(template) ~= "table" or type(template.actions) ~= "table"
+			or type(source) ~= "table" or type(source.actions) ~= "table"
+			or type(required) ~= "table" or type(required.names) ~= "table"
+			or type(required.actions) ~= "table" then
+		report.skipped = "career_action_tables_unavailable"
+		return report
+	end
+	for _, action_name in ipairs(required.names) do
+		local existing = template.actions[action_name]
+		local canonical = required.actions[action_name]
+		if existing ~= nil and existing ~= canonical then
+			if source.actions[action_name] == canonical then
+				template.actions[action_name] = canonical
+				report.restored_names[#report.restored_names + 1] = action_name
+			else
+				report.conflicting_names[#report.conflicting_names + 1] = action_name
+			end
+		end
+	end
+	report.restored = #report.restored_names
+	report.ok = #report.conflicting_names == 0
+	return report
+end
+
 function M.install(weapons, clone)
 	local report = { installed = false, attacks = 0, skipped = nil }
 	if type(weapons) ~= "table" or type(clone) ~= "function" then

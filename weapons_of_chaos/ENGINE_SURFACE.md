@@ -119,6 +119,19 @@ vanilla-keyed even though its backend instance id and presentation are WOC-owned
 Runtime check `issue509_registered_blightreaper_wire_contract` asserts this
 against the live backend mirror rather than relying only on static source.
 
+Before MIL insertion, WOC builds its private combat template by deep-cloning
+`we_one_hand_sword_template_1`. Vanilla has already attached canonical career
+ability rows to that donor (`scripts/settings/equipment/weapons.lua:241-267`).
+Deep cloning changes those rows' table identity, while
+`_lib_career_weapon_actions` intentionally uses identity to detect conflicting
+providers. WOC therefore restores an inherited row to the canonical
+`ActionTemplates` object only when the donor itself is that exact object, then
+claims it through the shared owner. Any other mismatch remains a hard deferred
+registration gate. `issue690_blightreaper_registration_gate_contract` checks
+the reconciliation, ownership, final gate state, and master-list row live.
+Deferred registration is retried only at `StateInGameRunning.on_enter`; each
+distinct gate is logged once through `printf` under a 12-line session budget.
+
 MIL then unconditionally writes `backend_item.rarity` and
 `backend_item.CustomData.rarity` to `default`. WOC deliberately repairs the
 actual stored row to `cursed` after registration and stamps
