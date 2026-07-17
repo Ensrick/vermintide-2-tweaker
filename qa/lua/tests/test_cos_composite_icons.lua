@@ -112,4 +112,31 @@ Harness.test("#650 UIUtils publishes descriptors without leaking mace-only icons
     Harness.truthy(source:find("_cos_refresh_composite_descriptor%(item, record%)"))
     Harness.equal(source:find("inventory_icon%s*=%s*composite%.inventory_icon"), nil)
 end)
+
+Harness.test("#650 grid passes are decorated before UIWidget pass_data initialization", function()
+    local path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
+    local file = assert(io.open(path, "rb"))
+    local source = file:read("*a")
+    file:close()
+
+    local hook_start = assert(source:find('mod:hook("UIWidget", "init"', 1, true))
+    local vanilla_init = assert(source:find("return func(widget_definition, ui_renderer)",
+        hook_start, true))
+    local composite_enrich = assert(source:find(
+        "_enrich_item_grid_composite_icons(widget_definition)", hook_start, true))
+    local badge_enrich = assert(source:find(
+        "_enrich_item_grid_glow_badges(widget_definition)", hook_start, true))
+    Harness.truthy(composite_enrich < vanilla_init)
+    Harness.truthy(badge_enrich < vanilla_init)
+    Harness.truthy(source:find(
+        "widget.element and widget.element.pass_data ~= nil then return false end",
+        1, true))
+
+    local item_grid_hook = assert(source:find(
+        'mod:hook_safe("ItemGridUI", "init"', 1, true))
+    local item_grid_hook_end = assert(source:find("end)", item_grid_hook, true))
+    local item_grid_block = source:sub(item_grid_hook, item_grid_hook_end)
+    Harness.equal(item_grid_block:find("_enrich_item_grid", 1, true), nil)
+end)
 end

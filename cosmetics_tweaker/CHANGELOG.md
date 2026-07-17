@@ -1,5 +1,29 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.134-dev - 2026-07-16 - #650 item-grid pass-data crash guard [verify-fix]
+
+### Fixed
+
+- Opening the gamepad inventory no longer lets the layered-icon adapter insert
+  render passes after `UIWidget.init` has already built its positional
+  `pass_data` array. That mismatch shifted the native `item_tooltip` pass onto
+  a nil data entry and crashed in `ui_passes.lua`.
+- Composite-icon and glow-badge grid passes now decorate the widget definition
+  in a `UIWidget.init` pre-hook. A live-widget guard rejects any later mutation,
+  while `ItemGridUI.init` is refresh-only.
+
+### Regression coverage
+
+- Offline coverage pins both grid decorators before vanilla widget
+  initialization, requires the live-widget `pass_data` guard, and rejects any
+  ItemGrid post-init enrichment path.
+
+### Verification
+
+Open Equipment with a controller/gamepad UI and select the melee inventory.
+The item grid must render without a crash, and mapped Mace + Shield cards must
+retain their layered primary/shield icon. Tracking: GitHub issue #650.
+
 ## 0.9.133-dev - 2026-07-16 - #650 layered Mace + Shield icon proof [verify-fix]
 
 ### Added

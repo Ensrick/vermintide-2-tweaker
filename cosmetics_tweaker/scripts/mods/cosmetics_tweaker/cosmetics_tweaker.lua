@@ -83,7 +83,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.133-dev"
+local MOD_VERSION = "0.9.134-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -895,12 +895,17 @@ local function _refresh_illusion_glow_badges(self)
     end
 end
 
-local function _enrich_item_grid_glow_badges(self)
-    local widget = self and self._widget
-    if not widget or widget._ct_glow_badges_enriched or not _glow_badge_texture_available() then return end
+local function _enrich_item_grid_glow_badges(widget)
+    if not widget or widget._ct_glow_badges_enriched
+            or not _glow_badge_texture_available() then return false end
+    -- UIWidget.init builds element.pass_data as a positional twin of passes.
+    -- Never mutate a live widget: inserting even an immediate texture pass
+    -- shifts stateful native pass data (notably item_tooltip) onto the wrong pass.
+    if widget.element and widget.element.pass_data ~= nil then return false end
     local passes = widget.element and widget.element.passes
     local content, style = widget.content, widget.style
-    if type(passes) ~= "table" or type(content) ~= "table" or type(style) ~= "table" then return end
+    if type(passes) ~= "table" or type(content) ~= "table"
+            or type(style) ~= "table" then return false end
     widget._ct_glow_badges_enriched = true
     for row = 1, content.rows or 0 do
         for column = 1, content.columns or 0 do
@@ -926,7 +931,7 @@ local function _enrich_item_grid_glow_badges(self)
             end
         end
     end
-    _glow_badge_grids[self] = true
+    return true
 end
 
 -- #650 inventory/equipment proof adapter. ItemGridUI owns both surfaces, so a
@@ -935,13 +940,15 @@ end
 -- native rarity/background -> primary -> offhand -> glow -> native frame.
 -- Crafting and Hold-Tab deliberately remain native until they can provide the
 -- same exact backend identity and renderer-local material proof.
-local function _enrich_item_grid_composite_icons(self)
-    local widget = self and self._widget
-    if not widget or widget._ct_composite_icons_enriched then return end
+local function _enrich_item_grid_composite_icons(widget)
+    if not widget or widget._ct_composite_icons_enriched then return false end
+    -- #650 crash invariant: definition enrichment must finish before
+    -- UIWidget.init creates the parallel pass_data array.
+    if widget.element and widget.element.pass_data ~= nil then return false end
     local passes = widget.element and widget.element.passes
     local content, style = widget.content, widget.style
     if type(passes) ~= "table" or type(content) ~= "table"
-            or type(style) ~= "table" then return end
+            or type(style) ~= "table" then return false end
 
     local insertions = {}
     for row = 1, content.rows or 0 do
@@ -1002,14 +1009,14 @@ local function _enrich_item_grid_composite_icons(self)
         content[glow_name] = nil
     end
     widget._ct_composite_icons_enriched = true
-    _composite_icon_grids[self] = true
+    return #insertions > 0
 end
 
 local function _refresh_item_grid_composite_icons(self)
-    _enrich_item_grid_composite_icons(self)
     local widget = self and self._widget
     local content, style = widget and widget.content, widget and widget.style
     if not content or not style then return end
+    _composite_icon_grids[self] = true
     self._ct_composite_icon_cells = self._ct_composite_icon_cells or {}
     for row = 1, content.rows or 0 do
         for column = 1, content.columns or 0 do
@@ -1048,10 +1055,10 @@ local function _refresh_item_grid_composite_icons(self)
 end
 
 local function _refresh_item_grid_glow_badges(self)
-    _enrich_item_grid_glow_badges(self)
     local widget = self and self._widget
     local content, style = widget and widget.content, widget and widget.style
     if not content or not style then return end
+    _glow_badge_grids[self] = true
     for row = 1, content.rows or 0 do
         for column = 1, content.columns or 0 do
             local suffix = "_" .. row .. "_" .. column
@@ -1068,9 +1075,23 @@ local function _refresh_item_grid_glow_badges(self)
     _refresh_item_grid_composite_icons(self)
 end
 
+-- Both layered-grid features add render passes. They must decorate the widget
+-- definition inside this pre-hook, before vanilla UIWidget.init constructs the
+-- positional element.pass_data array (ui_widget.lua:17-38). Doing this from the
+-- ItemGridUI.init post-hook caused the v0.9.133-dev item_tooltip nil crash.
+mod:hook("UIWidget", "init", function(func, widget_definition, ui_renderer)
+    local glow_added = _enrich_item_grid_glow_badges(widget_definition)
+    local composite_added = _enrich_item_grid_composite_icons(widget_definition)
+    if composite_added then
+        printf("[cosmetics:650] layered item-grid passes initialized before pass_data")
+    elseif glow_added then
+        printf("[cosmetics:377] glow-badge item-grid passes initialized before pass_data")
+    end
+    return func(widget_definition, ui_renderer)
+end)
+
 mod:hook_safe("ItemGridUI", "init", function(self)
-    _enrich_item_grid_glow_badges(self)
-    _refresh_item_grid_composite_icons(self)
+    _refresh_item_grid_glow_badges(self)
 end)
 mod:hook_safe("ItemGridUI", "add_item_to_slot_index", function(self)
     _refresh_item_grid_glow_badges(self)
