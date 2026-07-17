@@ -1,9 +1,9 @@
 -- _woc_wire_policy.lua — sender-side item identity substitution for WOC items.
 --
 -- WOC backend items may inherit a vanilla base key locally, but their Cursed
--- rarity is also a mod-appended network id. This policy preserves ordinary
--- vanilla items by identity and emits a shallow vanilla key + promo rarity
--- shadow for every marked WOC relic.
+-- rarity and display-only properties are also mod-owned values. This policy
+-- preserves ordinary vanilla items by identity and emits a vanilla key + promo
+-- rarity shadow with no WOC-only properties/traits for every marked WOC relic.
 --
 -- Owned by: weapons_of_chaos.lua. Consumed via: mod:dofile and offline QA.
 
@@ -35,6 +35,13 @@ function M.safe_item(item, base_key, base_resolvable, wire_rarity)
 	shadow.key = base_key
 	shadow.ItemId = base_key
 	shadow.rarity = wire_rarity or "promo"
+	-- LoadoutUtils.properties_to_rpc_params indexes every entry through the
+	-- receiver-local NetworkLookup.properties/traits tables. WOC relic bonuses
+	-- are baked into the private combat template; their item rows are display
+	-- only and have no safe vanilla wire identity. Strip them from this transient
+	-- shadow rather than registering or transmitting mod-only lookup keys.
+	shadow.properties = nil
+	shadow.traits = nil
 	return shadow
 end
 

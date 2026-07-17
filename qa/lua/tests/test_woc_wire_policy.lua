@@ -9,14 +9,23 @@ return function(H, repo_root)
 	end)
 
 	H.test("WOC wire policy substitutes explicit mod keys without mutation", function()
-		local live = { key = "woc_blightreaper", ItemId = "woc_blightreaper", power_level = 600, rarity = "cursed" }
+		local live = {
+			key = "woc_blightreaper", ItemId = "woc_blightreaper",
+			power_level = 600, rarity = "cursed",
+			properties = { woc_power_vs_order = 1, woc_intrinsic_crit = 1 },
+			traits = { "woc_future_trait" },
+		}
 		local shadow = policy.safe_item(live, "es_1h_sword", true)
 		H.truthy(shadow and shadow ~= live)
 		H.equal(shadow.key, "es_1h_sword")
 		H.equal(shadow.ItemId, "es_1h_sword")
 		H.equal(shadow.power_level, 600)
 		H.equal(shadow.rarity, "promo")
+		H.equal(shadow.properties, nil)
+		H.equal(shadow.traits, nil)
 		H.equal(live.rarity, "cursed")
+		H.equal(live.properties.woc_power_vs_order, 1)
+		H.equal(live.traits[1], "woc_future_trait")
 		H.equal(live.key, "woc_blightreaper")
 		H.equal(live.ItemId, "woc_blightreaper")
 	end)
@@ -25,12 +34,15 @@ return function(H, repo_root)
 		local live = {
 			key = "es_1h_sword", ItemId = "es_1h_sword", rarity = "cursed",
 			woc_unique_relic = true,
+			properties = { woc_power_vs_order = 1 },
 		}
 		local shadow = policy.safe_item(live, "es_1h_sword", true, "promo")
 		H.truthy(shadow ~= live)
 		H.equal(shadow.key, "es_1h_sword")
 		H.equal(shadow.rarity, "promo")
+		H.equal(shadow.properties, nil)
 		H.equal(live.rarity, "cursed")
+		H.equal(live.properties.woc_power_vs_order, 1)
 	end)
 
 	H.test("WOC wire policy fails closed without a resolvable vanilla base", function()

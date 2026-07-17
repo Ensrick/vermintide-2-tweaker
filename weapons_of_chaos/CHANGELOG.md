@@ -1,5 +1,25 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.22-dev (2026-07-16) - #654 Blightreaper property wire crash
+
+- Fixed the reproduced `NetworkLookup.properties` crash when the Blightreaper
+  resynchronized. The existing vanilla-key/promo wire shadow was a shallow copy
+  and retained `woc_power_vs_order` plus the intrinsic-critical display row;
+  vanilla tried to encode those WOC-only keys in
+  `LoadoutUtils.properties_to_rpc_params` and fatally rejected them.
+- WOC relic shadows now remove all item properties and traits before vanilla
+  loadout synchronization. Their combat bonuses remain baked into the private
+  template and their rows remain visible on the untouched local item.
+- Hardened the missing-policy fallback so a marker-owned WOC relic with an
+  inherited vanilla key fails closed instead of bypassing the explicit `woc_`
+  prefix check.
+- Added offline and live regression coverage for vanilla item/rarity fallback,
+  property/trait removal, and live-item immutability.
+
+Verification: equip the Blightreaper, swap away and back, transition into an
+Adventure mission, and repeat once with a peer who does not have WOC. Neither
+peer may crash; the local item still displays both intrinsic property rows.
+
 ## 0.1.21-dev (2026-07-16) - Blightreaper combat completion and resident Shyish spirits [verify-fix-coop]
 
 - Fixed the empirically observed Shyish failure. The latest test log repeatedly

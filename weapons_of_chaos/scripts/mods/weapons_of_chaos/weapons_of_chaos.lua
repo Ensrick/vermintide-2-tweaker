@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.21-dev"
+local MOD_VERSION = "0.1.22-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -181,7 +181,14 @@ if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" t
 	_wire_policy = {
 		safe_item = function(item)
 			local key = item and item.key
-			if type(key) == "string" and key:sub(1, 4) == "woc_" then
+			local custom = item and item.CustomData
+			local data = item and item.data
+			local is_woc = type(key) == "string" and key:sub(1, 4) == "woc_"
+				or item and item.woc_unique_relic == true
+				or type(data) == "table" and data.woc_unique_relic == true
+				or type(custom) == "table"
+					and (custom.woc_unique_relic == true or custom.woc_unique_relic == "true")
+			if is_woc then
 				return nil
 			end
 			return item
@@ -1312,7 +1319,11 @@ _rt_register("wire_woc_never_leaves_woc_key", function()
 	if not (rawget(_G, "LoadoutUtils") and type(LoadoutUtils.sync_loadout_slot) == "function") then
 		return "LoadoutUtils.sync_loadout_slot missing -- wire hook cannot install"
 	end
-	local fake = { key = "woc_test", ItemId = "woc_test", power_level = 600, rarity = "cursed" }
+	local fake = {
+		key = "woc_test", ItemId = "woc_test", power_level = 600,
+		rarity = "cursed", properties = { woc_power_vs_order = 1 },
+		traits = { "woc_future_trait" },
+	}
 	local out = _wire_safe_item(fake)
 	-- The native base + lookup are boot data, so a live game must produce the
 	-- exact vanilla-keyed shadow. nil remains reserved for a genuinely broken
@@ -1327,8 +1338,15 @@ _rt_register("wire_woc_never_leaves_woc_key", function()
 	if out.rarity ~= _relic_policy.WIRE_RARITY or fake.rarity ~= _relic_policy.RARITY then
 		return "Cursed rarity did not degrade to promo on the shadow only"
 	end
+	if out.properties ~= nil or out.traits ~= nil then
+		return "WOC-only properties/traits remained on the wire shadow"
+	end
 	if fake.key ~= "woc_test" or fake.ItemId ~= "woc_test" then
 		return "live item was mutated -- shadow must be a copy"
+	end
+	if not (fake.properties and fake.properties.woc_power_vs_order == 1)
+			or not (fake.traits and fake.traits[1] == "woc_future_trait") then
+		return "live WOC properties/traits were mutated by wire substitution"
 	end
 end)
 
@@ -1364,6 +1382,9 @@ _rt_register("issue509_registered_blightreaper_wire_contract", function()
 	if type(wire) ~= "table" or wire == live or wire.key ~= BASE_WEAPON
 			or wire.rarity ~= _relic_policy.WIRE_RARITY then
 		return "Cursed live Blightreaper did not produce a vanilla promo wire shadow"
+	end
+	if wire.properties ~= nil or wire.traits ~= nil then
+		return "Blightreaper wire shadow retained mod-only properties/traits"
 	end
 	if live.rarity ~= _relic_policy.RARITY then
 		return "wire substitution mutated the local Cursed rarity"

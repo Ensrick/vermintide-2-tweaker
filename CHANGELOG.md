@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-16 - Blightreaper property wire crash
+
+Weapons of Chaos v0.1.22-dev fixes issue #654 by stripping WOC-only properties
+and traits from the transient vanilla loadout shadow. The live relic remains
+unchanged, while `woc_power_vs_order` can no longer reach
+`NetworkLookup.properties` during local, broadcast, or hot-join synchronization.
+
 ## 2026-07-16 - Blightreaper combat completion and Shyish residency
 
 Weapons of Chaos v0.1.21-dev adds the requested four-light chain and post-heavy

@@ -135,7 +135,11 @@ it disagree, and the client's decode hits the strict `__index`
 [src: `network_lookup.lua:2362`] -> CTD (issue 278 class). The `sync_loadout_slot`
 hook (table above) is the defense-in-depth boundary: every marker-owned
 Blightreaper row is substituted with a `BASE_WEAPON` + `promo` shadow before
-encode. `WOC` applies no skin; the local `cursed` rarity never crosses this RPC
+encode. The shadow also clears `properties` and `traits`: both intrinsic rows
+are WOC-local presentation over bonuses baked into the combat template, and
+`LoadoutUtils.properties_to_rpc_params` would otherwise strict-index their keys
+through a peer-local `NetworkLookup.properties` table (#654). `WOC` applies no
+skin; the local `cursed` rarity never crosses this RPC
 (`docs/engine/03` §31; project `project_vt2_cross_peer_wire_safety`).
 
 ### Held-mesh derivation and preview residency (owner: `docs/engine/06`)
