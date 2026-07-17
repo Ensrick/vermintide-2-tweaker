@@ -50,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.89-dev"
+local MOD_VERSION = "0.8.90-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -710,6 +710,36 @@ _rt_register("issue628_identity_resolvers_unified", function()
     end
     if contract.canonical_item_key(shapes[1]) ~= "cwv_es_longsword" then
         return "base-keyed CWV instance did not resolve to its variant"
+    end
+    local normalized_shapes = {
+        {
+            bid = "48400000-0000-4000-8000-000000000484",
+            input = { key = "es_handgun", CustomData = {
+                cim_acquisition_key = "cwv_es_musket_old",
+            } },
+            expected = "cwv_es_musket_old",
+        },
+        {
+            bid = "opaque",
+            input = { key = "es_bastard_sword", data = {
+                cwv_key = "cwv_es_longsword",
+            } },
+            expected = "cwv_es_longsword",
+        },
+        {
+            bid = "cwv_dr_dawi_mace_100",
+            input = { key = "dr_1h_hammer" },
+            expected = "cwv_dr_dawi_mace",
+        },
+    }
+    for i = 1, #normalized_shapes do
+        local shape = normalized_shapes[i]
+        local record, err = contract.normalize_record(shape.bid, shape.input)
+        if not record or record.item_key ~= shape.expected then
+            return "normalization/identity drift: expected=" .. shape.expected
+                .. " actual=" .. tostring(record and record.item_key)
+                .. " error=" .. tostring(err)
+        end
     end
 end)
 
