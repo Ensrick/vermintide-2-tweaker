@@ -22,6 +22,22 @@ and reverts everything. This matches how the Athanor handles property/trait edit
 ]]
 
 local mod = get_mod("cim")
+mod:dofile("scripts/mods/crafting_in_modded/_cim_salvage_modded_button")
+local template_selector = mod:dofile("scripts/mods/crafting_in_modded/_cim_template_selector")
+local template_catalog = mod:dofile("scripts/mods/crafting_in_modded/_cim_template_catalog")
+mod._cim_template_selector = template_selector
+mod._cim_template_catalog = template_catalog
+
+-- issue 628: unify synthetic identity. The salvage filter and this acquisition
+-- selector must classify a synthetic (CIM-crafted / CWV-definition) item the
+-- same way, or a crafted CWV weapon whose live `.key` is its inherited base
+-- weapon appears in one screen but not the other. The contract owns the one
+-- canonical resolver; hand it to the selector (contract loads first, entry
+-- line 263 < standard_forge line 291).
+local _contract = mod._cim_synthetic_item_contract
+if _contract and _contract.canonical_item_key then
+    template_selector.set_canonical_key_resolver(_contract.canonical_item_key)
+end
 
 -- ============================================================
 -- Lifecycle: track when the standard forge UI is open
@@ -219,19 +235,32 @@ mod:hook("HeroWindowItemCustomization", "_update_property_option", function(func
     end
 end)
 
+local function _pack_results(...)
+    return { n = select("#", ...), ... }
+end
+
 for _, klass in ipairs({ "HeroWindowItemCustomization", "HeroWindowCrafting", "HeroWindowCraftingConsole" }) do
     local class_for_dump = klass
-    mod:hook_safe(klass, "on_enter", function(self)
+    -- #524: this MUST be a wrapping pre-hook. Both vanilla crafting windows
+    -- call `_change_recipe_page` from inside on_enter, and that page asks the
+    -- backend for `can_craft_with` rows immediately. A hook_safe callback runs
+    -- only after the original returns, which made every synthetic Blacksmith
+    -- selector miss the initial page build (all 34 CWV definitions existed,
+    -- but none could appear). Activate and rebuild before vanilla enters; keep
+    -- diagnostics after it so their widget inspection still sees complete UI.
+    mod:hook(klass, "on_enter", function(func, self, ...)
         mod._cim_standard_forge_active = true
         if mod._cim_rebuild_template_cache then
             mod._cim_rebuild_template_cache()
         end
+        local results = _pack_results(func(self, ...))
         -- Debug autodump (no-op unless debug_mode setting is ON). Single
-        -- consolidated callback per (class, method) — VMF silently drops a
-        -- sibling hook_safe registration. See feedback_vmf_hook_safe_no_chain.
+        -- consolidated callback per (class, method) -- VMF silently drops a
+        -- sibling hook registration. See feedback_vmf_hook_safe_no_chain.
         if mod._cim_autodump_forge_open then
             pcall(mod._cim_autodump_forge_open, class_for_dump, self)
         end
+        return unpack(results, 1, results.n)
     end)
     mod:hook_safe(klass, "on_exit", function(self)
         mod._cim_standard_forge_active = false
@@ -507,19 +536,25 @@ end
 -- entry that points to the salvaged backend_id.
 synth.salvage = function(self, item_backend_ids)
     local mirror = self._backend_mirror
-    local unregistered = 0
-    for i, bid in ipairs(item_backend_ids) do
-        mirror:remove_item(bid)
-        if mod._cim_unregister_craft then
-            mod._cim_unregister_craft(bid)
-            unregistered = unregistered + 1
-        end
-        if mod._cim_clear_modded_loadout_for_bid then
-            mod._cim_clear_modded_loadout_for_bid(bid)
-        end
+    local contract = mod._cim_synthetic_item_contract
+    local records = {}
+    for i = 1, #item_backend_ids do
+        local bid = item_backend_ids[i]
+        records[bid] = mod._cim_get_craft and mod._cim_get_craft(bid) or nil
     end
-    mod:echo("[cim] Salvaged " .. tostring(#item_backend_ids) .. " item(s)" ..
-             (unregistered > 0 and (" (" .. unregistered .. " modded crafts unregistered)") or ""))
+    local owned, foreign = contract.partition_exact_ids(item_backend_ids, records)
+
+    -- CIM-owned rows use the same exact-instance transaction as /forge_delete:
+    -- mirror removal + forged_weapons persistence + every CIM loadout/skin
+    -- reference are cleared once. Ordinary rows remain session-local only; no
+    -- PlayFab/official-backend request is made anywhere in this synth.
+    local deleted = 0
+    if #owned > 0 and mod._cim277_delete_owned_ids then
+        deleted = mod._cim277_delete_owned_ids(owned) or 0
+    end
+    for i = 1, #foreign do mirror:remove_item(foreign[i]) end
+    mod:info("[cim:628] salvage local-only selected=%d owned=%d deleted=%d foreign=%d",
+        #item_backend_ids, #owned, deleted, #foreign)
     return {}
 end
 
@@ -631,6 +666,67 @@ local function _resolve_weapon_input(item_interface, item_backend_ids)
     return nil, nil
 end
 
+-- =========================================================================
+-- Forge freedom toggles (v0.8.44-dev): two VMF checkboxes widen what the forge
+-- will roll / offer onto a craft.
+--   * allow_cw_traits          — surface the Chaos Wastes / deus "boon" traits
+--                                 (crafting_disabled) the base forge drops.
+--   * allow_any_trait_property — pool EVERY trait and property across all slot
+--                                 types onto any item. Supersedes allow_cw_traits.
+-- Both are read LIVE at roll time (never cached) so weapon_tweaker's runtime
+-- WeaponTraits/WeaponProperties mutation is always reflected — same contract as
+-- the CONTRACT-WITH-WEAPON_TWEAKER note on _reroll_traits below.
+-- =========================================================================
+
+-- Union of every property combo (`.exotic` tier) across all property tables.
+-- Each combo is an array of property keys, appended verbatim (a duplicate combo
+-- only biases the shuffle slightly; harmless).
+local function _cim_all_property_combos()
+    local WP = rawget(_G, "WeaponProperties")
+    local combinations = WP and WP.combinations
+    if type(combinations) ~= "table" then return nil end
+    local out = {}
+    for _, tbl in pairs(combinations) do
+        local exotic = type(tbl) == "table" and tbl.exotic
+        if type(exotic) == "table" then
+            for _, combo in ipairs(exotic) do
+                out[#out + 1] = combo
+            end
+        end
+    end
+    return out
+end
+
+-- Property-combo pool to roll from for `master`. allow_any_trait_property ON →
+-- every property, any slot type; otherwise the item's own `.exotic` pool
+-- (unchanged behavior). Properties are unaffected by allow_cw_traits.
+local function _cim_property_pool_for(master)
+    if mod:get("allow_any_trait_property") then
+        local all = _cim_all_property_combos()
+        if all and #all > 0 then return all end
+    end
+    local WP = rawget(_G, "WeaponProperties")
+    local prop_table = master and master.property_table_name
+    return WP and WP.combinations and prop_table and WP.combinations[prop_table]
+           and WP.combinations[prop_table].exotic
+end
+
+-- Deduped list of every individual property KEY across all property combos
+-- (combos hold 1-2 keys each). Used by the Athanor freedom injection, which
+-- wants one bubble-row per distinct property, not per combo.
+local function _cim_all_property_keys()
+    local combos = _cim_all_property_combos()
+    if not combos then return {} end
+    local seen, out = {}, {}
+    for _, combo in ipairs(combos) do
+        for _, k in ipairs(combo) do
+            if k and not seen[k] then seen[k] = true; out[#out + 1] = k end
+        end
+    end
+    return out
+end
+mod._cim_all_property_keys = _cim_all_property_keys  -- Athanor injection + RT
+
 -- ---- reroll_weapon_properties / reroll_jewellery_properties ----
 local function _reroll_properties(self, item_backend_ids)
     local mirror = self._backend_mirror
@@ -643,12 +739,10 @@ local function _reroll_properties(self, item_backend_ids)
 
     local master_key = item.key or item.ItemId
     local master = master_key and rawget(ItemMasterList, master_key)
-    local prop_table = master and master.property_table_name
-    local WP = rawget(_G, "WeaponProperties")
-    local pool = WP and WP.combinations and prop_table and WP.combinations[prop_table]
-                 and WP.combinations[prop_table].exotic
+    local pool = _cim_property_pool_for(master)
     if not pool or #pool == 0 then
-        mod:echo("[cim] Reroll: no property combos for " .. tostring(prop_table))
+        mod:echo("[cim] Reroll: no property combos for "
+                 .. tostring(master and master.property_table_name))
         return {}
     end
 
@@ -718,6 +812,97 @@ local function _craftable_trait_pool(pool)
     return out
 end
 
+-- Chaos Wastes / deus "boon" trait entries eligible for one exact weapon slot.
+-- Vanilla encodes eligibility in the owning combination category, not on the
+-- trait row itself. Shared boons remain shared because vanilla lists them in
+-- both a melee and ranged category. Built live so wt mutations are reflected.
+local function _cim_cw_trait_entries(slot_type)
+    local WT = rawget(_G, "WeaponTraits")
+    local combinations = WT and WT.combinations
+    local traits = WT and WT.traits
+    local policy = mod._cim_trait_slot_policy
+    if type(combinations) ~= "table" or type(traits) ~= "table"
+        or type(policy) ~= "table" or type(policy.category_matches_slot) ~= "function" then
+        return {}
+    end
+    local seen, out = {}, {}
+    for cat, pool in pairs(combinations) do
+        if policy.category_matches_slot(cat, slot_type) and type(pool) == "table" then
+            for _, entry in ipairs(pool) do
+                local k = entry and entry[1]
+                if k and not seen[k] then
+                    local tdata = traits[k]
+                    if tdata then
+                        seen[k] = true
+                        out[#out + 1] = { k }
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
+-- Union of every trait combo across all trait tables (deduped by trait key).
+local function _cim_all_trait_entries()
+    local WT = rawget(_G, "WeaponTraits")
+    local combinations = WT and WT.combinations
+    if type(combinations) ~= "table" then return {} end
+    local seen, out = {}, {}
+    for _, pool in pairs(combinations) do
+        if type(pool) == "table" then
+            for _, entry in ipairs(pool) do
+                local k = entry and entry[1]
+                if k and not seen[k] then
+                    seen[k] = true
+                    out[#out + 1] = { k }
+                end
+            end
+        end
+    end
+    return out
+end
+
+-- Trait pool to roll from for `master`, honoring both toggles:
+--   allow_any_trait_property → every trait, any slot type (widest).
+--   allow_cw_traits          → own pool + CW traits for the exact slot family.
+--   (neither)                → the item's own pool, boon-filtered (base behavior).
+local function _cim_trait_pool_for(master)
+    local WT = rawget(_G, "WeaponTraits")
+    local combinations = WT and WT.combinations
+    if type(combinations) ~= "table" then return nil end
+
+    if mod:get("allow_any_trait_property") then
+        local all = _cim_all_trait_entries()
+        if #all > 0 then return all end
+    end
+
+    local trait_table = master and master.trait_table_name
+    local base = trait_table and combinations[trait_table]
+    if not base then return nil end
+
+    if mod:get("allow_cw_traits") then
+        local seen, out = {}, {}
+        local function _add(list)
+            for _, entry in ipairs(list) do
+                local k = entry and entry[1]
+                if k and not seen[k] then seen[k] = true; out[#out + 1] = entry end
+            end
+        end
+        _add(base)                                      -- own pool (boons kept)
+        _add(_cim_cw_trait_entries(master.slot_type))   -- exact-slot CW traits
+        return out
+    end
+
+    return _craftable_trait_pool(base)  -- default: boon-filtered, unchanged
+end
+
+-- Exposed for /cim_regression_test (freedom-toggle pool invariants).
+mod._cim_cw_trait_entries   = _cim_cw_trait_entries
+mod._cim_all_trait_entries  = _cim_all_trait_entries
+mod._cim_trait_pool_for     = _cim_trait_pool_for
+mod._cim_property_pool_for  = _cim_property_pool_for
+
 local function _reroll_traits(self, item_backend_ids)
     local mirror = self._backend_mirror
     local item_interface = Managers.backend:get_interface("items")
@@ -730,14 +915,12 @@ local function _reroll_traits(self, item_backend_ids)
 
     local master_key = item.key or item.ItemId
     local master = master_key and rawget(ItemMasterList, master_key)
-    local trait_table = master and master.trait_table_name
-    local WT = rawget(_G, "WeaponTraits")
-    local pool = WT and WT.combinations and trait_table and WT.combinations[trait_table]
+    local pool = _cim_trait_pool_for(master)
     if not pool or #pool == 0 then
-        mod:echo("[cim] Reroll: no trait pool for " .. tostring(trait_table))
+        mod:echo("[cim] Reroll: no trait pool for "
+                 .. tostring(master and master.trait_table_name))
         return {}
     end
-    pool = _craftable_trait_pool(pool)  -- mirror official: drop crafting_disabled deus/boon traits
 
     local saved = mod._cim_get_craft and mod._cim_get_craft(weapon_bid)
     local picked_idx, new_seen = _shuffle_pick(saved and saved.rerolled_trait_indices, #pool)
@@ -756,6 +939,7 @@ local function _reroll_traits(self, item_backend_ids)
     if saved then
         saved.traits = new_traits
         saved.trait = trait_key
+        saved.external_traits = {}
         saved.rerolled_trait_indices = new_seen
         if mod._cim_persist_crafts then mod._cim_persist_crafts() end
     end
@@ -779,6 +963,40 @@ local function _local_career_name()
     if not profile then return nil end
     local career = profile.careers[player:career_index()]
     return career and career.name
+end
+
+-- issue 390: a craft whose input key is a character_weapon_variants (CWV)
+-- variant needs a backend_id that CWV's render-rescue hooks recognize.
+-- CWV's clone inherits the BASE weapon's `name`, so the vanilla equip path
+-- (`item_name = item_data.name` -> `ItemMasterList[item_name]`, e.g.
+-- world_hero_previewer.lua:674) re-resolves item_data to the BASE entry and
+-- returns the base mesh + inherited attachments (Nordland -> Bretonnian
+-- sword, rapier keeps the Saltzpyre pistol). CWV compensates via a set of
+-- hooks keyed on the `cwv_<key>_NNN` backend_id pattern (get_item_units units
+-- override, _resolve_cwv_def grip transforms, illusion-picker filter). A bare
+-- `Application.guid()` backend_id matches none of them, so the crafted copy is
+-- left rendering the base weapon. We detect CWV keys and mint a matching
+-- backend_id below. See the CHANGELOG 0.8.52-dev entry.
+local function _is_cwv_craft_key(item_key)
+    if type(item_key) ~= "string" or item_key:sub(1, 4) ~= "cwv_" then return false end
+    local entry = rawget(ItemMasterList, item_key)
+    return entry ~= nil and entry.cwv_variant == true
+end
+
+-- Mint a `cwv_<key>_NNN` backend_id in the 100..999 instance band. CWV's own
+-- items live at _001.._00N (N = def.instances, currently max 2), so starting
+-- at 100 never collides with a native CWV registration. Uniqueness across
+-- cim crafts (incl. restored ones) is guaranteed by scanning the persisted
+-- craft table. Returns nil if the band is exhausted (caller falls back to a
+-- guid; the cim-side units rescue below still fixes the mesh).
+local function _mint_cwv_backend_id(item_key)
+    for i = 100, 999 do
+        local bid = string.format("%s_%03d", item_key, i)
+        if not (mod._cim_get_craft and mod._cim_get_craft(bid)) then
+            return bid
+        end
+    end
+    return nil
 end
 
 local function _make_craft_synth(allowed_slots)
@@ -868,15 +1086,11 @@ local function _make_craft_synth(allowed_slots)
         if mod:get("prefill_random_properties") then
             local master = rawget(ItemMasterList, item_key)
             if master then
-                local prop_table = master.property_table_name
-                local trait_table = master.trait_table_name
-                local WP = rawget(_G, "WeaponProperties")
-                local WT = rawget(_G, "WeaponTraits")
-
-                if WP and WP.combinations and prop_table and WP.combinations[prop_table]
-                   and WP.combinations[prop_table].exotic then
-                    local pool = WP.combinations[prop_table].exotic
-                    local combo = pool[math.random(1, #pool)]
+                -- Same freedom-toggle-aware pools the reroll path uses, so a
+                -- prefilled craft honors allow_cw_traits / allow_any_trait_property.
+                local prop_pool = _cim_property_pool_for(master)
+                if prop_pool and #prop_pool > 0 then
+                    local combo = prop_pool[math.random(1, #prop_pool)]
                     if combo then
                         for _, pkey in ipairs(combo) do
                             rolled_props[pkey] = _safe_property_value(pkey)
@@ -884,9 +1098,9 @@ local function _make_craft_synth(allowed_slots)
                     end
                 end
 
-                if WT and WT.combinations and trait_table and WT.combinations[trait_table] then
-                    local pool = _craftable_trait_pool(WT.combinations[trait_table])
-                    local pick = pool[math.random(1, #pool)]
+                local trait_pool = _cim_trait_pool_for(master)
+                if trait_pool and #trait_pool > 0 then
+                    local pick = trait_pool[math.random(1, #trait_pool)]
                     local tkey = pick and pick[1]
                     if tkey then rolled_traits[#rolled_traits + 1] = tkey end
                 end
@@ -895,21 +1109,37 @@ local function _make_craft_synth(allowed_slots)
 
         local power_level = _cim_base_power()
         local cjson_mod = rawget(_G, "cjson")
-        local custom_data = {
-            power_level = tostring(power_level),
-            rarity = "modded",
-        }
-        if cjson_mod then
-            custom_data.properties = cjson_mod.encode(rolled_props)
-            custom_data.traits = cjson_mod.encode(rolled_traits)
-        end
 
-        local backend_id = Application.guid()
-        local item = {
-            ItemId = item_key,
-            ItemInstanceId = backend_id,
-            CustomData = custom_data,
-        }
+        -- issue 390: CWV variant crafts get a `cwv_<key>_NNN` backend_id so the
+        -- CWV render-rescue hooks recognize them; everything else keeps a fresh
+        -- guid. Falls back to a guid if the instance band is exhausted.
+        local backend_id
+        if _is_cwv_craft_key(item_key) then
+            backend_id = _mint_cwv_backend_id(item_key)
+        end
+        backend_id = backend_id or Application.guid()
+        local contract = mod._cim_synthetic_item_contract
+        local master = rawget(ItemMasterList, item_key)
+        local record, record_err = contract and contract.normalize_record(backend_id, {
+            item_key = item_key,
+            properties = rolled_props,
+            traits = rolled_traits,
+            power_level = power_level,
+            rarity = "modded",
+            via_mirror = true,
+        }, master)
+        if not record then
+            printf("[cim:628] craft rejected bid=%s key=%s reason=%s",
+                tostring(backend_id), tostring(item_key), tostring(record_err))
+            return nil
+        end
+        local encoder = cjson_mod and cjson_mod.encode
+        local item, payload_err = contract.build_mirror_payload(record, master, encoder)
+        if not item then
+            printf("[cim:628] craft payload rejected bid=%s key=%s reason=%s",
+                tostring(backend_id), tostring(item_key), tostring(payload_err))
+            return nil
+        end
 
         local ok, err = pcall(self._backend_mirror.add_item, self._backend_mirror, backend_id, item)
         if not ok then
@@ -934,14 +1164,7 @@ local function _make_craft_synth(allowed_slots)
         -- Persist so the item survives a game restart. Same save layer as the
         -- Athanor — registered with `via_mirror = true` so `_athanor_inject_all`
         -- re-creates it via backend_mirror:add_item on next session.
-        local weapon_data = {
-            item_key = item_key,
-            properties = rolled_props,
-            traits = rolled_traits,
-            power_level = power_level,
-            rarity = "modded",
-            via_mirror = true,
-        }
+        local weapon_data = record
         if mod._cim_register_craft then
             mod._cim_register_craft(backend_id, weapon_data)
         end
@@ -961,6 +1184,26 @@ local function _make_craft_synth(allowed_slots)
                 career_name, item_key, backend_id, weapon_data, true, nil)
         end
 
+        -- issue 390: trace the CWV crafted copy's resolved units. The CWV entry
+        -- carries the variant mesh (and nils the inherited left-hand attachment
+        -- via no_left_hand); the BASE entry the vanilla equip path re-resolves
+        -- to via `item_data.name` carries the wrong mesh + attachments. Logging
+        -- both makes the divergence (and whether the rescue must bridge it)
+        -- visible. Always-on in dev; fires only on a craft action.
+        if _is_cwv_craft_key(item_key) then
+            do
+                local cwv_entry = rawget(ItemMasterList, item_key)
+                local base_entry = cwv_entry and cwv_entry.name and rawget(ItemMasterList, cwv_entry.name)
+                printf("[cim:390] crafted CWV key=%s bid=%s base_name=%s | cwv rhu=%s lhu=%s | BASE rhu=%s lhu=%s",
+                    tostring(item_key), tostring(backend_id),
+                    tostring(cwv_entry and cwv_entry.name),
+                    tostring(cwv_entry and cwv_entry.right_hand_unit),
+                    tostring(cwv_entry and cwv_entry.left_hand_unit),
+                    tostring(base_entry and base_entry.right_hand_unit),
+                    tostring(base_entry and base_entry.left_hand_unit))
+            end
+        end
+
         return { { backend_id, [3] = 1 } }
     end
 end
@@ -977,6 +1220,13 @@ synth.craft_jewellery   = _make_craft_synth({ trinket = true, ring = true, neckl
 synth.craft_necklace = _make_craft_synth({ necklace = true })
 synth.craft_charm    = _make_craft_synth({ ring = true })
 synth.craft_trinket  = _make_craft_synth({ trinket = true })
+
+-- Issue 407: expose the synth-name set so /cim_regression_test can verify every
+-- recipe the console craft-item resolver derives (craft_weapon / craft_necklace /
+-- craft_charm / craft_trinket) actually has a live synth registered. A boolean
+-- snapshot, not the closures, so the test can't accidentally invoke a synth.
+mod._cim407_synth_names_for_rt = {}
+for _name in pairs(synth) do mod._cim407_synth_names_for_rt[_name] = true end
 
 -- ============================================================
 -- Direct-craft chat commands (feedback #6)
@@ -1045,46 +1295,63 @@ end)
 -- _CRAFTABLE_SLOT_TYPES is declared at the top of the file (near _is_active)
 -- so `_make_craft_synth`'s closure can reference it without a forward-ref bug.
 local _template_cache = {}
+local _template_cache_report = { total = 0, cwv = 0, eligible = 0, suppressed = 0, career = nil }
 
 local function _build_template_cache()
-    _template_cache = {}
-    if not ItemMasterList then return end
     local career_name = _local_career_name()
-    if not career_name then return end
+    if not ItemMasterList or not career_name then
+        _template_cache = {}
+        _template_cache_report = { total = 0, cwv = 0, eligible = 0, suppressed = 0, career = career_name }
+        return
+    end
 
-    -- Templates inherit the player's chosen base power level so the craft
-    -- preview ("X power" widget) shows what the resulting item will actually
-    -- be (feedback #9). Pre-v0.7.24 this was hardcoded 5, which produced
-    -- "5 power" in the preview while the craft result was 300.
-    local base_power = _cim_base_power()
+    -- Blacksmith selectors are always 5-power definition tokens. The actual
+    -- craft result still receives the configured base power in _make_craft_synth.
+    local base_power = 5
     local real_names = _cim_real_display_names()
-    for key, data in pairs(ItemMasterList) do
-        if type(data) == "table"
-            and data.slot_type and _CRAFTABLE_SLOT_TYPES[data.slot_type]
-            and data.can_wield and table.contains(data.can_wield, career_name)
-            and data.item_type ~= "weapon_skin"
-            and data.rarity ~= "magic" and data.rarity ~= "promo"
-            and not _item_requires_unowned_dlc(key)
-            and not _cim_versus_shadowed(data, real_names) then
-            local bid = "cim_template_" .. key
-            _template_cache[bid] = {
-                backend_id = bid,
-                key = key,
-                ItemId = key,
-                ItemInstanceId = bid,
-                rarity = "default",
-                data = data,
-                properties = {},
-                traits = {},
-                power_level = base_power,
-                CustomData = {
-                    power_level = tostring(base_power),
-                    rarity = "default",
-                    properties = "{}",
-                    traits = "[]",
-                },
-            }
-        end
+    local report
+    _template_cache, report = template_catalog.build({
+        item_master_list = ItemMasterList,
+        career_name = career_name,
+        craftable_slot_types = _CRAFTABLE_SLOT_TYPES,
+        base_power = base_power,
+        requires_unowned_dlc = _item_requires_unowned_dlc,
+        versus_shadowed = _cim_versus_shadowed,
+        validate_provider = function(item_key, master)
+            local contract = mod._cim_synthetic_item_contract
+            if not contract then return false, { "contract" } end
+            local ok, problems = contract.validate_provider(item_key, master)
+            return ok, problems
+        end,
+        real_names = real_names,
+    })
+    _template_cache_report = {
+        total = report.total,
+        cwv = report.cwv,
+        eligible = report.eligible,
+        suppressed = report.suppressed,
+        career = career_name,
+    }
+    printf("[cim:524] acquisition_templates eligible=%d families=%d suppressed=%d cwv=%d career=%s",
+        report.eligible, report.total, report.suppressed, report.cwv, tostring(career_name))
+    local collision_limit = math.min(#report.collisions, 12)
+    for i = 1, collision_limit do
+        local collision = report.collisions[i]
+        printf("[cim:524] dedupe family=%s keep=%s drop=%s",
+            tostring(collision.family), tostring(collision.kept), tostring(collision.dropped))
+    end
+    if #report.collisions > collision_limit then
+        printf("[cim:524] dedupe_more count=%d", #report.collisions - collision_limit)
+    end
+    local rejected_limit = math.min(#report.rejected_providers, 24)
+    for i = 1, rejected_limit do
+        local rejected = report.rejected_providers[i]
+        printf("[cim:628] provider rejected before UI key=%s missing=%s",
+            tostring(rejected.key), table.concat(rejected.problems, ","))
+    end
+    if #report.rejected_providers > rejected_limit then
+        printf("[cim:628] provider_rejected_more count=%d",
+            #report.rejected_providers - rejected_limit)
     end
 end
 
@@ -1092,13 +1359,35 @@ mod._cim_template_lookup = function(backend_id)
     return _template_cache[backend_id]
 end
 
+mod._cim_template_cache_report = function()
+    return _template_cache_report
+end
+
 -- Exposed for the consolidated `on_enter` hook above to invoke at call time.
 mod._cim_rebuild_template_cache = _build_template_cache
 
 -- Called from the shared `get_filtered_items` hook in crafting_in_modded.lua
 -- once it's finished its modded-only filtering pass. Returns the same items
--- table with synthetic templates appended for any item_type not already
--- represented by a real default-rarity entry.
+-- table with a synthetic template appended for every craftable weapon KEY not
+-- already represented by a real entry.
+--
+-- issue 390: this used to dedup on `item_type`, appending only ONE template
+-- per item_type in non-deterministic pairs() order. CWV variant families share
+-- a single item_type across members (Recruit / Black Guard / base longsword all
+-- `cwv_imperial_longsword`), so only one random member was craftable. Keying on
+-- the item `key` makes every distinct variant individually craftable and
+-- deterministic. skin_only CWV defs (e.g. cwv_es_longsword_nordland) are never
+-- registered in ItemMasterList by CWV, so _build_template_cache never mints a
+-- template for them -- they stay correctly non-craftable (get the look via the
+-- real family member + the Nordland illusion in the cosmetic picker).
+mod._cim390_inject_key_keyed = true
+-- #592: CWV contributes definitions, never owned blacksmith items. Therefore
+-- CIM's one key-keyed synthetic template is the sole acquisition selector.
+mod._cim592_cwv_registration_only = true
+-- #524: the render-seam probe is wired into the inject seam below. The armed
+-- regression check asserts both this flag and the diag module stay present, so
+-- the rendered-list evidence can't be silently stripped while #524 is open.
+mod._cim524_render_probe_wired = true
 mod._cim_inject_templates = function(items, filter)
     if not _is_active() then return items end
     if type(filter) ~= "string" or not filter:find("can_craft_with", 1, true) then
@@ -1106,20 +1395,21 @@ mod._cim_inject_templates = function(items, filter)
     end
     if not next(_template_cache) then _build_template_cache() end
 
-    local seen_item_types = {}
-    for _, it in ipairs(items) do
-        local t = it and it.data and it.data.item_type
-        if t then seen_item_types[t] = true end
+    local pre_inject = type(items) == "table" and #items or 0
+    local result = template_selector.inject(items, _template_cache)
+    -- #524 render-seam probe: dump the FINAL rendered list (what the user sees),
+    -- classified per row + grouped for hard/soft duplicates. The catalog probe
+    -- above ([cim:524] acquisition_templates) only sees CIM's synthetic list, not
+    -- this injected result. Bounded + throttled inside the module; pcall so a
+    -- diagnostic can never break the picker.
+    if mod._cim_diag_524 then
+        pcall(mod._cim_diag_524.dump, result, {
+            career = _local_career_name(),
+            pre_inject = pre_inject,
+            picker = "native_craft_item",
+        })
     end
-
-    for _, tpl in pairs(_template_cache) do
-        local t = tpl.data and tpl.data.item_type
-        if t and not seen_item_types[t] then
-            items[#items + 1] = tpl
-            seen_item_types[t] = true
-        end
-    end
-    return items
+    return result
 end
 
 -- The Craft Item recipe's synth (`_make_craft_synth`) looks up the input via
@@ -1130,6 +1420,47 @@ mod:hook("BackendInterfaceItemPlayfab", "get_item_from_id", function(func, self,
     if tpl then return tpl end
     return func(self, backend_id)
 end)
+
+-- ============================================================
+-- issue 390: units rescue for cim-crafted CWV variants
+-- ============================================================
+-- The vanilla equip/preview path re-resolves item_data from `item_data.name`
+-- (backend_utils / world_hero_previewer:674), which for a CWV clone is the
+-- BASE weapon name -> ItemMasterList[base] -> base mesh + inherited
+-- attachments. CWV's own get_item_units override forces the variant units back
+-- in, but it only fires for backend_ids matching `cwv_<key>_NNN`. We now mint
+-- exactly that pattern (_make_craft_synth), so CWV's hook can rescue our crafts
+-- once its match pattern is widened past the literal `_001`. This hook is the
+-- cim-side safety net that forces the variant units regardless, so the MESH is
+-- correct even before that CWV-side widen lands. Grip/scale transforms still
+-- come from CWV's create_equipment hook (which also keys on the backend_id
+-- pattern) -- those need the widened pattern to apply.
+--
+-- Pre-flight grep confirmed cim does not otherwise hook (BackendUtils,
+-- get_item_units); it only CALLS it. VMF chains this cim hook after CWV's own
+-- (different mod), so we see (and, idempotently, re-affirm) CWV's result.
+if rawget(_G, "BackendUtils") then
+    mod:hook(BackendUtils, "get_item_units", function(func, item_data, backend_id, skin, career_name)
+        local result = func(item_data, backend_id, skin, career_name)
+        if type(result) ~= "table" or type(backend_id) ~= "string" then return result end
+        local craft = mod._cim_get_craft and mod._cim_get_craft(backend_id)
+        local ckey = craft and craft.item_key
+        if type(ckey) ~= "string" or ckey:sub(1, 4) ~= "cwv_" then return result end
+        -- A skin/illusion took effect during resolution -> its per-hand units
+        -- already won; don't trample the user's chosen look.
+        if result.skin and result.skin ~= "" then return result end
+        local cwv_entry = rawget(ItemMasterList, ckey)
+        if not cwv_entry then return result end
+        -- Force the variant's own per-hand meshes. Matches CWV's own rescue
+        -- (character_weapon_variants.lua get_item_units hook): a nil left unit
+        -- (no_left_hand variants like the rapier) correctly drops the inherited
+        -- base attachment.
+        result.right_hand_unit = cwv_entry.right_hand_unit
+        result.left_hand_unit = cwv_entry.left_hand_unit
+        return result
+    end)
+    mod._cim390_units_rescue_installed = true
+end
 
 -- Diagnostic: list every recently-added (post-load) inventory item so we can
 -- see whether crafted items landed in the mirror but failed to surface in the UI.
@@ -1165,7 +1496,51 @@ end)
 -- craft() short-circuit: replace PlayFab roundtrip with local synth
 -- ============================================================
 
+-- Issue 407: map a dropped item's slot_type to the cim synth recipe used when
+-- the console "Craft Item" page supplies no recipe_override. Vanilla
+-- craft_page_craft_item_console.lua:80-84 picks craft_weapon for melee/ranged
+-- and craft_jewellery for jewelry; cim substitutes its per-slot jewelry synths
+-- (craft_necklace / craft_charm / craft_trinket) so the jewelry slot is honored
+-- exactly as the setup_recipe_requirements pin does. Exposed on `mod` for the
+-- /cim_regression_test check (console_craft_item_nil_recipe_resolves).
+mod._cim407_craft_item_recipe_for_slot = function(slot)
+    if slot == "melee" or slot == "ranged" then return "craft_weapon" end
+    if slot == "necklace" then return "craft_necklace" end
+    if slot == "ring"     then return "craft_charm"    end
+    if slot == "trinket"  then return "craft_trinket"  end
+    return nil
+end
+
+local function _immutable_relic_input(item_backend_ids)
+    local contract = mod._cim_synthetic_item_contract
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    if type(contract) ~= "table" or type(contract.is_immutable_relic) ~= "function"
+            or not items then return nil end
+    for i = 1, #(item_backend_ids or {}) do
+        local item
+        pcall(function() item = items:get_item_from_id(item_backend_ids[i]) end)
+        if contract.is_immutable_relic(item) then return item_backend_ids[i] end
+    end
+    return nil
+end
+
+local function _immutable_relic_noop(self, backend_id)
+    printf("[cim:637] immutable WOC relic rejected from craft transaction bid=%s",
+        tostring(backend_id))
+    self._last_id = (self._last_id or 0) + 1
+    self._craft_requests[self._last_id] = {}
+    return self._last_id, { name = "cim_noop" }
+end
+
 mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career_name, item_backend_ids, recipe_override)
+    -- Provider-level WOC marker closes every mutation path in one place:
+    -- ordinary craft pages, customization, illusion swap, salvage, rerolls,
+    -- upgrades, and any future recipe dispatched through this interface.
+    local immutable_backend_id = _immutable_relic_input(item_backend_ids)
+    if immutable_backend_id then
+        return _immutable_relic_noop(self, immutable_backend_id)
+    end
+
     -- Illusion-swap intercept FIRST: applies regardless of whether the
     -- standard crafting UI is open. Defined in illusion_swap.lua and
     -- wired here so we only register ONE craft hook (VMF rejects rehooks
@@ -1218,6 +1593,37 @@ mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career
     -- diagnosis — captures career, recipe, list length, first 3 item BIDs.
     if mod._cim_autodump_craft_attempt then
         pcall(mod._cim_autodump_craft_attempt, career_name, item_backend_ids, recipe_override)
+    end
+    if not recipe_override then
+        -- Console/gamepad "Craft Item" page passes NO recipe: vanilla
+        -- craft_page_craft_item_console.lua:325 calls `parent:craft(items)` with
+        -- recipe_override=nil and relies on backend auto-detection
+        -- (backend_interface_crafting_base.lua:42-50 iterates every recipe). The
+        -- PC page instead passes `self._recipe_name` explicitly
+        -- (craft_page_craft_item.lua:322) — which is why crafting only breaks on
+        -- the console UI. cim CANNOT fall through to vanilla `func` here (it would
+        -- enqueue the EAC-gated PlayFab request and kick the player), so we
+        -- re-derive the craft-item recipe from the dropped item's slot_type via
+        -- mod._cim407_craft_item_recipe_for_slot (mirrors vanilla
+        -- setup_recipe_requirements at craft_page_craft_item_console.lua:80-84,
+        -- substituting cim's per-slot jewelry synths for craft_jewellery — the
+        -- same pin setup_recipe_requirements applies at standard_forge.lua:330-333).
+        -- Issue 407.
+        -- Resolve the dropped item's slot_type. get_item_masterlist_data
+        -- internally calls self:get_item_from_id (item_playfab.lua:351), which is
+        -- the method cim hooks to surface `cim_template_*` entries from
+        -- _template_cache — so this resolves a synthetic template bid to its
+        -- data.slot_type, exactly as the craft_attempt autodump does.
+        local bid1       = item_backend_ids and item_backend_ids[1]
+        local item_iface = bid1 and Managers.backend and Managers.backend:get_interface("items")
+        local item_data  = item_iface and item_iface:get_item_masterlist_data(bid1)
+        local slot       = item_data and item_data.slot_type
+        local derived    = slot and mod._cim407_craft_item_recipe_for_slot(slot)
+        if derived and synth[derived] then
+            recipe_override = derived
+            pcall(printf, "[cim:407] console craft-item: nil recipe resolved -> %s (bid=%s slot=%s)",
+                tostring(derived), tostring(bid1), tostring(slot))
+        end
     end
     if not recipe_override then
         return _silent_drop(string.format(
