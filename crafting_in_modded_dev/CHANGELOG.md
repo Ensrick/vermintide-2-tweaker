@@ -1,5 +1,23 @@
 # Crafting in Modded Changelog
 
+## 0.8.88-dev (2026-07-17): #484 persist crafted provider identity [verify-fix-coop]
+
+- Preserved `cim_acquisition_key`, `cim_provider`, and the CWV `cwv_key` in the
+  one synthetic mirror payload. Reconstructed backend/menu wrappers can now
+  recover the exact crafted definition even when their visible `.key` remains
+  the provider's vanilla fallback (`es_handgun` for the Old Musket).
+- Expanded the shared canonical resolver across direct fields, nested item
+  data, mod data, and CustomData. The legacy MIL injection path stamps the same
+  contract instead of creating an identity-poor exception.
+- Added offline and `/cim_regression_test` coverage for a base-shaped Old Musket
+  with a UUID instance id, including Athanor/standard selector parity.
+
+**Verification:** confirm CIM `v0.8.88-dev`, craft a new Old Musket in the
+Athanor and standard forge, restart once, and verify both retain exact identity
+in inventory, preview, equip, mission transition, salvage, and the CWV co-op
+test described in CWV `v0.1.438-dev`. `issue484_crafted_old_musket_identity`
+must pass in `/cim_regression_test`.
+
 ## 0.8.87-dev (2026-07-16): #655 optional WOC poison trait provider [verify-fix-coop]
 
 - Added an exact optional-provider capability boundary for WOC's reusable

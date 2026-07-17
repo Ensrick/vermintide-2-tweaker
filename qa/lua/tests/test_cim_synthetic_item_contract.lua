@@ -120,6 +120,9 @@ return function(H, repo_root)
         H.equal(payload.ItemInstanceId, record.backend_id)
         H.equal(payload.CustomData.rarity, "modded")
         H.equal(payload.CustomData.properties, "encoded")
+        H.equal(payload.CustomData.cim_acquisition_key, record.item_key)
+        H.equal(payload.CustomData.cim_provider, "cwv")
+        H.equal(payload.CustomData.cwv_key, record.item_key)
         H.equal(normalized.backend_id, record.backend_id)
     end)
 
@@ -196,6 +199,17 @@ return function(H, repo_root)
         H.equal(contract.canonical_item_key({
             cim_acquisition_key = "cwv_dr_dawi_dual_maces", key = "dr_dual_hammers",
         }), "cwv_dr_dawi_dual_maces")
+        -- A reconstructed UUID mirror may expose only base weapon fields plus
+        -- the exact CIM CustomData stamp. This is the #484 Old Musket shape.
+        H.equal(contract.canonical_item_key({
+            ItemInstanceId = "48400000-0000-4000-8000-000000000484",
+            key = "es_handgun",
+            data = { key = "es_handgun" },
+            CustomData = {
+                cim_acquisition_key = "cwv_es_musket_old",
+                cwv_key = "cwv_es_musket_old",
+            },
+        }), "cwv_es_musket_old")
         -- Ordinary vanilla identity is unchanged.
         H.equal(contract.canonical_item_key({
             ItemId = "es_1h_sword", key = "es_1h_sword",

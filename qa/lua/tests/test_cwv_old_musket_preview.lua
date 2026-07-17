@@ -43,6 +43,35 @@ return function(H, repo_root)
         H.equal(descriptor.item_key, Musket.ITEM_KEY)
     end)
 
+    H.test("CWV #484 resolves reconstructed UUID mirrors through exact CIM identity", function()
+        local item = {
+            ItemInstanceId = "48400000-0000-4000-8000-000000000484",
+            key = "es_handgun",
+            data = { key = "es_handgun" },
+            CustomData = {
+                cim_acquisition_key = Musket.ITEM_KEY,
+                cwv_key = Musket.ITEM_KEY,
+            },
+        }
+        local descriptor = Musket.resolve(item, "ranged")
+        H.truthy(descriptor)
+        H.equal(descriptor.item_key, Musket.ITEM_KEY)
+
+        -- The shared CWV resolver can also pass the canonical identity
+        -- explicitly when a preview wrapper has dropped CustomData.
+        descriptor = Musket.resolve({
+            ItemInstanceId = item.ItemInstanceId,
+            key = "es_handgun",
+        }, "melee", nil, Musket.ITEM_KEY)
+        H.truthy(descriptor)
+        H.equal(descriptor.mode, "melee")
+
+        H.equal(Musket.resolve({
+            ItemInstanceId = item.ItemInstanceId,
+            key = "es_handgun",
+        }, "ranged"), nil)
+    end)
+
     H.test("CWV #474 falls back safely when a custom preview resource is absent", function()
         local descriptor = Musket.resolve({ key = Musket.ITEM_KEY }, "ranged")
         local can_get = registry({ ["unit:" .. Musket.UNIT_3P] = false })

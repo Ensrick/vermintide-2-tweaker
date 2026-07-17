@@ -26,12 +26,23 @@ M.TEXTURES = {
 -- Shape consumed by the generic mod-unit preview bridge.
 M.MODELS = { { right_hand_unit = M.UNIT } }
 
-local function item_identity(item)
+local function item_identity(item, canonical_key)
 	if type(item) ~= "table" then return nil, nil end
 	local data = type(item.data) == "table" and item.data or {}
-	local key = data.cwv_key or item.cwv_key or item.key or data.key
+	local custom = type(item.CustomData) == "table" and item.CustomData
+		or (type(data.CustomData) == "table" and data.CustomData)
+	local mod_data = type(item.mod_data) == "table" and item.mod_data
+		or (type(data.mod_data) == "table" and data.mod_data)
+	local key = canonical_key
+		or item.cim_acquisition_key or data.cim_acquisition_key
+		or (custom and custom.cim_acquisition_key)
+		or data.cwv_key or item.cwv_key or (mod_data and mod_data.cwv_key)
+		or (custom and custom.cwv_key)
+		or item.key or item.ItemId or data.key or data.ItemId
 	local skin = item.skin or data.skin
-	local bid = item.backend_id or item.ItemId
+	local bid = item.backend_id or item.ItemInstanceId
+		or data.backend_id or data.ItemInstanceId
+		or (mod_data and mod_data.backend_id)
 	if key == M.ITEM_KEY or skin == M.SKIN_KEY then return M.ITEM_KEY, skin end
 	if type(bid) == "string" and bid:match("^cwv_es_musket_old_") then
 		return M.ITEM_KEY, skin
@@ -39,8 +50,8 @@ local function item_identity(item)
 	return nil, skin
 end
 
-function M.matches_item(item)
-	return item_identity(item) == M.ITEM_KEY
+function M.matches_item(item, canonical_key)
+	return item_identity(item, canonical_key) == M.ITEM_KEY
 end
 
 function M.preview_package_alias(package_name)
@@ -73,8 +84,8 @@ end
 -- Athanor because both are LootItemUnitPreviewer consumers.  Runtime transform
 -- triplets are injected by the owner so this pure policy does not depend on
 -- Stingray vector/quaternion types.
-function M.resolve(item, mode, transform)
-	local key, skin = item_identity(item)
+function M.resolve(item, mode, transform, canonical_key)
+	local key, skin = item_identity(item, canonical_key)
 	if key ~= M.ITEM_KEY then return nil end
 	return {
 		item_key = key,

@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.437-dev"
+local MOD_VERSION = "0.1.438-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -3472,8 +3472,12 @@ local function _toggle_musket_stance_and_rewield(player_unit)
 	-- Both share this helper (stance flag is per-item via mod_data so no
 	-- collision); the get_item_template hook below routes to the correct
 	-- template family. v0.1.301: extended to cover old musket templates.
-	local is_musket     = (item_data.template == "musket_template" or item_data.template == "musket_template_melee")
-	local is_old_musket = (item_data.template == "old_musket_template" or item_data.template == "old_musket_template_melee")
+	local canonical_key = _om._cwv_key_for_item
+		and _om._cwv_key_for_item(item_data.backend_id, item_data)
+	local is_musket     = canonical_key == "cwv_es_musket"
+		or (item_data.template == "musket_template" or item_data.template == "musket_template_melee")
+	local is_old_musket = canonical_key == "cwv_es_musket_old"
+		or (item_data.template == "old_musket_template" or item_data.template == "old_musket_template_melee")
 	if not (is_musket or is_old_musket) then
 		local bid = item_data.backend_id
 		if not bid or not bid:match("^cwv_es_musket_") then return end
@@ -4385,7 +4389,13 @@ mod:hook("BackendUtils", "get_item_template", function(func, item_data, backend_
 	-- template pairs depending on which family.
 	local is_old_musket = false
 	local is_musket     = false
-	if item_data.template == "old_musket_template" or item_data.template == "old_musket_template_melee" then
+	local canonical_key = _om._cwv_key_for_item
+		and _om._cwv_key_for_item(item_data.backend_id or backend_id, item_data)
+	if canonical_key == "cwv_es_musket_old" then
+		is_old_musket = true
+	elseif canonical_key == "cwv_es_musket" then
+		is_musket = true
+	elseif item_data.template == "old_musket_template" or item_data.template == "old_musket_template_melee" then
 		is_old_musket = true
 	elseif item_data.template == "musket_template" or item_data.template == "musket_template_melee" then
 		is_musket = true
@@ -4459,6 +4469,12 @@ local _CWV_CROSS_SLOT_PREFIXES = {
 local function _is_cwv_musket_item(item)
 	if not item then return false end
 	local data = item.data or item.master_item or item
+	local bid = item.backend_id or item.ItemInstanceId
+		or (data and (data.backend_id or data.ItemInstanceId))
+	local canonical_key = _om._cwv_key_for_item and _om._cwv_key_for_item(bid, item)
+	if canonical_key == "cwv_es_musket" or canonical_key == "cwv_es_musket_old" then
+		return true
+	end
 	local function _check(key)
 		if type(key) ~= "string" then return false end
 		for _, prefix in ipairs(_CWV_CROSS_SLOT_PREFIXES) do
@@ -5402,8 +5418,13 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- cwv_es_musket_old backend_id. Helpers defined globally below (search
 	-- "_apply_old_musket_textures", "_track_old_musket_unit",
 	-- "_spawn_old_musket_fx_proxy").
-	local _bid_for_tex = item_data and item_data.backend_id
-	if _bid_for_tex and type(_bid_for_tex) == "string" and _bid_for_tex:match("^cwv_es_musket_old") then
+	local _bid_for_tex = item_data and (item_data.backend_id or item_data.ItemInstanceId)
+	local _spawn_cwv_key = item_data and _om._cwv_key_for_item
+		and _om._cwv_key_for_item(_bid_for_tex, item_data)
+	local _spawn_is_old_musket = _spawn_cwv_key == "cwv_es_musket_old"
+		or item_template == Weapons.old_musket_template
+		or item_template == Weapons.old_musket_template_melee
+	if _spawn_is_old_musket then
 		-- v0.1.295: distinguish ranged vs melee mode for 1P transform tuning.
 		-- The user wants different pos/rot/scale per stance.
 		local _mode = (item_template == Weapons.musket_template_melee
@@ -5453,8 +5474,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 
 	-- v0.1.278: skip bayonet attach for cwv_es_musket_old — the custom mesh
 	-- already has a fixed bayonet baked into the model.
-	local _bid_pre = item_data and item_data.backend_id
-	local _is_old_musket = _bid_pre and type(_bid_pre) == "string" and _bid_pre:match("^cwv_es_musket_old")
+	local _is_old_musket = _spawn_is_old_musket
 
 	if not _is_old_musket then
 		-- pcall outer: bayonet failure should never break the equip itself.
@@ -6047,15 +6067,23 @@ end
 _om._old_musket_preview_descriptor = function(item)
 	local mode = "ranged"
 	local data = item and item.data
+	local mod_data = item and (item.mod_data or (data and data.mod_data))
+	local backend_id = item and (item.backend_id or item.ItemInstanceId
+		or (data and (data.backend_id or data.ItemInstanceId))
+		or (mod_data and mod_data.backend_id))
+	local canonical_key = _om._cwv_key_for_item
+		and _om._cwv_key_for_item(backend_id, item)
 	if data and data.mod_data and data.mod_data.cwv_musket_stance == "melee" then
 		mode = "melee"
-	elseif item and item.backend_id and _om._old_musket_modes_by_backend then
-		mode = _om._old_musket_modes_by_backend[item.backend_id] or mode
+	elseif mod_data and mod_data.cwv_musket_stance == "melee" then
+		mode = "melee"
+	elseif backend_id and _om._old_musket_modes_by_backend then
+		mode = _om._old_musket_modes_by_backend[backend_id] or mode
 	end
 	local pos, rot, scale = _om._old_musket_transform_components("3p", mode)
 	return _om.old_musket_preview.resolve(item, mode, {
 		position = pos, rotation = rot, scale = scale,
-	})
+	}, canonical_key)
 end
 mod._cwv_resolve_preview_descriptor = _om._old_musket_preview_descriptor
 
@@ -6085,10 +6113,26 @@ do
 	_om._old_musket_modes_by_backend = modes_by_backend
 
 	local function old_bid(item_data)
-		local bid = item_data and (item_data.backend_id
+		local bid = item_data and (item_data.backend_id or item_data.ItemInstanceId
 			or (item_data.mod_data and item_data.mod_data.backend_id))
-		return type(bid) == "string" and bid:match("^cwv_es_musket_old") and bid or nil
+		local key = item_data and _om._cwv_key_for_item
+			and _om._cwv_key_for_item(bid, item_data)
+		if key ~= "cwv_es_musket_old" then
+			local template = item_data and item_data.template
+			if template ~= "old_musket_template" and template ~= "old_musket_template_melee" then
+				return nil
+			end
+		end
+		return type(bid) == "string" and bid ~= "" and bid or nil
 	end
+
+	local function valid_bid(bid)
+		return type(bid) == "string" and bid ~= "" and #bid <= 128
+	end
+	-- Runtime-regression handles for #484. These are pure identity checks; they
+	-- do not send traffic or mutate presentation state.
+	_om._old_musket_bid_for_item = old_bid
+	_om._old_musket_valid_bid = valid_bid
 
 	local function diag_once(key, fmt, ...)
 		if diag_seen[key] or diag_count >= DIAG_MAX then return end
@@ -6204,8 +6248,7 @@ do
 					return
 				end
 				if op == "fire" then
-					if mode ~= "player_combat_weapon_rifle_fire" or type(bid) ~= "string"
-							or not bid:match("^cwv_es_musket_old") then return end
+					if mode ~= "player_combat_weapon_rifle_fire" or not valid_bid(bid) then return end
 					local pm = Managers and Managers.player
 					local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
 					player = ok and player or nil
@@ -6220,8 +6263,7 @@ do
 					return
 				end
 				if op ~= "state" or (mode ~= "melee" and mode ~= "ranged")
-						or type(slot_name) ~= "string" or type(bid) ~= "string"
-						or not bid:match("^cwv_es_musket_old") then return end
+						or type(slot_name) ~= "string" or not valid_bid(bid) then return end
 				local peer_slots = modes_by_peer[sender_peer_id] or {}
 				modes_by_peer[sender_peer_id], peer_slots[slot_name], modes_by_backend[bid] = peer_slots, mode, mode
 				local pm = Managers and Managers.player
@@ -10220,10 +10262,10 @@ end
 -- drift on what counts as "a cwv instance":
 --   1. backend_id pattern `cwv_<key>_NNN` -- CWV's own _001/_002 instances and
 --      cim standard-forge crafts (issue 390). Cheap, no backend round-trip.
---   2. item_data.cwv_key -- the field _build_entry stamps on the IML clone.
---      Covers instances whose backend_id is NOT cwv-shaped: cim's Athanor
---      mints Application.guid() UUIDs (crafting_in_modded_dev.lua:4644), which
---      rung 1 can never match (the #482 crafted-CWV transform loss).
+--   2. exact CIM/CWV stamps -- direct, nested-data, mod-data, or CustomData
+--      `cim_acquisition_key` / `cwv_key`. Covers instances whose backend_id is
+--      NOT cwv-shaped: CIM's Athanor mints Application.guid() UUIDs, which rung
+--      1 can never match (the #482/#484 crafted-CWV identity loss).
 --   3. backend items lookup by bid -> item.data.cwv_key -- for callers that
 --      only carry the bid (the previewer's _item_info_by_slot holds just
 --      {name, backend_id, skin_name, ...}, world_hero_previewer.lua:776).
@@ -10235,12 +10277,29 @@ _om._cwv_key_for_item = function(backend_id, item_data)
 		local key = backend_id:match("^(cwv_.-)_%d%d%d$")
 		if key then return _remember_cwv_identity(backend_id, key) or key end
 	end
-	if item_data and type(item_data.cwv_key) == "string" then
-		return _remember_cwv_identity(backend_id, item_data.cwv_key)
+	if item_data then
+		local data = type(item_data.data) == "table" and item_data.data or nil
+		local custom = type(item_data.CustomData) == "table" and item_data.CustomData
+			or (data and type(data.CustomData) == "table" and data.CustomData)
+		local mod_data = type(item_data.mod_data) == "table" and item_data.mod_data
+			or (data and type(data.mod_data) == "table" and data.mod_data)
+		local stamped = item_data.cim_acquisition_key
+			or (data and data.cim_acquisition_key)
+			or (custom and custom.cim_acquisition_key)
+			or item_data.cwv_key
+			or (data and data.cwv_key)
+			or (mod_data and mod_data.cwv_key)
+			or (custom and custom.cwv_key)
+		if type(stamped) == "string" then
+			local remembered = _remember_cwv_identity(backend_id, stamped, "canonical_stamp")
+			if remembered then return remembered end
+		end
 	end
 	if item_data then
 		local exact = _registered_cwv_key(item_data.key)
 			or _registered_cwv_key(item_data.ItemId)
+			or (item_data.data and (_registered_cwv_key(item_data.data.key)
+				or _registered_cwv_key(item_data.data.ItemId)))
 		if exact then
 			return _remember_cwv_identity(backend_id, exact, "item_data_exact_key")
 		end
@@ -10253,8 +10312,19 @@ _om._cwv_key_for_item = function(backend_id, item_data)
 		end)
 		if ok and item then
 			local data = item.data
-			if data and type(data.cwv_key) == "string" then
-				return _remember_cwv_identity(backend_id, data.cwv_key)
+			local custom = type(item.CustomData) == "table" and item.CustomData
+				or (data and type(data.CustomData) == "table" and data.CustomData)
+			local mod_data = type(item.mod_data) == "table" and item.mod_data
+				or (data and type(data.mod_data) == "table" and data.mod_data)
+			local stamped = item.cim_acquisition_key
+				or (data and data.cim_acquisition_key)
+				or (custom and custom.cim_acquisition_key)
+				or item.cwv_key or (data and data.cwv_key)
+				or (mod_data and mod_data.cwv_key)
+				or (custom and custom.cwv_key)
+			if type(stamped) == "string" then
+				local remembered = _remember_cwv_identity(backend_id, stamped, "backend_canonical_stamp")
+				if remembered then return remembered end
 			end
 			local exact = _registered_cwv_key(item.key)
 				or _registered_cwv_key(item.ItemId)
@@ -15117,6 +15187,45 @@ _rt_register("cwv_key_resolution_uuid_safe", function()
     if ladder("not-a-registered-bid-482", { name = "dr_2h_axe" }) ~= nil then
         return "#482 ladder false-positive: non-cwv item resolved a cwv key"
     end
+end)
+
+_rt_register("issue484_crafted_old_musket_identity", function()
+	local bid = "48400000-0000-4000-8000-000000000484"
+	local item = {
+		backend_id = bid,
+		key = "es_handgun",
+		template = "handgun_template_1",
+		CustomData = {
+			cim_acquisition_key = "cwv_es_musket_old",
+			cwv_key = "cwv_es_musket_old",
+		},
+	}
+	if _om._cwv_key_for_item(bid, item) ~= "cwv_es_musket_old" then
+		return "canonical resolver lost the CIM UUID Old Musket stamp"
+	end
+	if type(_om._old_musket_bid_for_item) ~= "function"
+			or _om._old_musket_bid_for_item(item) ~= bid then
+		return "Old Musket stance channel rejected a canonical UUID instance"
+	end
+	if type(_om._old_musket_valid_bid) ~= "function"
+			or not _om._old_musket_valid_bid(bid)
+			or _om._old_musket_valid_bid(string.rep("x", 129)) then
+		return "Old Musket opaque-id wire bound is missing"
+	end
+	local descriptor = _om.old_musket_preview.resolve({
+		ItemInstanceId = bid,
+		key = "es_handgun",
+	}, "ranged", {}, _om._cwv_key_for_item(bid, item))
+	if not descriptor or descriptor.item_key ~= "cwv_es_musket_old"
+			or descriptor.unit ~= _om.old_musket_preview.UNIT then
+		return "canonical UUID did not reach the authored Old Musket preview descriptor"
+	end
+	local payloads = _om._cwv_identity_payloads({
+		slot_ranged = { item_data = item },
+	})
+	if not payloads[1] or payloads[1].item_key ~= "cwv_es_musket_old" then
+		return "canonical UUID did not reach the bounded husk identity channel"
+	end
 end)
 
 _rt_register("cwv_inherits_base_name", function()

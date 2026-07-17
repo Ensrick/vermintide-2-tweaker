@@ -162,7 +162,18 @@ function M.build_mirror_payload(record, master, json_encode)
     local custom_data = {
         power_level = tostring(normalized.power_level),
         rarity = normalized.rarity,
+        -- #484: ItemId is exact when CIM creates the mirror row, but CWV's
+        -- provider clone deliberately keeps the inherited vanilla `.key` and
+        -- `.name`.  Some backend/menu rebuilds therefore hand consumers only
+        -- the base es_handgun shape plus this CustomData table.  Keep the exact
+        -- acquisition identity in the payload instead of asking every surface
+        -- to infer it from a backend-id naming convention.
+        cim_acquisition_key = normalized.item_key,
+        cim_provider = normalized.provider,
     }
+    if normalized.provider == "cwv" then
+        custom_data.cwv_key = normalized.item_key
+    end
     if type(json_encode) == "function" then
         custom_data.properties = json_encode(normalized.properties)
         custom_data.traits = json_encode(normalized.traits)
@@ -187,19 +198,28 @@ end
 -- character_weapon_variants.lua:10318-10330). A variant-keyed salvage record then
 -- failed the `item_key` check and the crafted weapon never appeared in Salvage.
 -- Resolution priority (highest first):
---   1. `cim_acquisition_key` -- the exact craft key on a synthetic selector row.
---   2. `data.cwv_key` -- the self-identifying variant marker.
---   3. `cwv_<key>_NNN` backend-id band -- legacy CWV blacksmith instances that
+--   1. `cim_acquisition_key` / `cwv_key` -- the exact craft key on a
+--      synthetic selector row, reconstructed wrapper, or its CustomData.
+--      Direct, nested-data, and mod-data shapes are equivalent.
+--   2. `cwv_<key>_NNN` backend-id band -- legacy CWV blacksmith instances that
 --      encoded the variant only in the backend id.
---   4. `ItemId` / `key` / `data.key` -- ordinary vanilla identity.
+--   3. `ItemId` / `key` / `data.key` -- ordinary vanilla identity.
 function M.canonical_item_key(item)
     if type(item) ~= "table" then return nil end
-    if type(item.cim_acquisition_key) == "string" then
-        return item.cim_acquisition_key
-    end
     local data = type(item.data) == "table" and item.data or nil
-    if data and type(data.cwv_key) == "string" then
-        return data.cwv_key
+    local custom = type(item.CustomData) == "table" and item.CustomData
+        or (data and type(data.CustomData) == "table" and data.CustomData)
+    local mod_data = type(item.mod_data) == "table" and item.mod_data
+        or (data and type(data.mod_data) == "table" and data.mod_data)
+    local exact = item.cim_acquisition_key
+        or (data and data.cim_acquisition_key)
+        or (custom and custom.cim_acquisition_key)
+        or item.cwv_key
+        or (data and data.cwv_key)
+        or (mod_data and mod_data.cwv_key)
+        or (custom and custom.cwv_key)
+    if type(exact) == "string" and exact ~= "" then
+        return exact
     end
     local backend_id = item.backend_id or item.ItemInstanceId
     if type(backend_id) == "string" then

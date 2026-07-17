@@ -1,5 +1,41 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.438-dev - 2026-07-17 - #484 crafted Old Musket canonical identity [verify-fix-coop]
+
+- Root-caused the crafted-only failure against closed fixes #390, #397, #409,
+  #617, and the later #628 synthetic-item contract. The generic CWV resolver
+  already knew UUID-backed crafted instances, but Old Musket spawn, preview,
+  bayonet suppression, and stance-network paths still independently required a
+  `cwv_es_musket_old_*` backend-id prefix. CIM Athanor UUIDs cannot satisfy that
+  prefix, so one item became an Old Musket in one surface and a base handgun in
+  another.
+- Routed the Old Musket template, owner 1P/3P presentation, inventory/Athanor
+  descriptor, legacy-bayonet suppression, cross-slot recognition, and stance
+  state through the shared canonical key ladder. Opaque UUIDs are accepted on
+  the bounded same-mod stance channel only after the sender proved Old Musket
+  identity; payload length remains capped and traffic stays transition-only.
+- Extended the canonical ladder to read CIM's direct, nested, and CustomData
+  identity stamps. The preview policy accepts the same explicit canonical key,
+  while vanilla handguns without a positive signal still fail closed.
+- Added offline and in-game regression coverage for UUID mirror reconstruction,
+  descriptor routing, husk identity payloads, bounded stance ids, and removal
+  of the two prefix-only presentation gates that caused the regression.
+
+**Verification (confirm `[cwv:LOAD] v0.1.438-dev` and CIM `v0.8.88-dev` first):**
+
+1. Craft a fresh Old Musket in CIM's Athanor and equip it in each supported
+   slot. Owner 1P, owner 3P, inventory character preview, and Athanor preview
+   must use the authored musket mesh, textures, saved pose, and no floating
+   sword bayonet.
+2. Enter a mission, toggle ranged/melee stance, swap away/back, and return to
+   the Keep. The authored presentation and stance must survive every boundary.
+3. With a second CWV+CIM player present before equip, repeat the transition and
+   stance toggle. The remote husk must show the Old Musket, not `es_handgun`,
+   and must follow the stance change. A vanilla handgun is the negative control.
+4. Run `/cwv_regression_test`; `issue484_crafted_old_musket_identity`,
+   `cwv_key_resolution_uuid_safe`, and
+   `issue474_old_musket_presentation_surface_coverage` must pass.
+
 ## 0.1.437-dev - 2026-07-17 - #660 canonical preview-unit descriptor [diagnostics-armed]
 
 - Replaced the separate #237 inventory-mannequin and #419 illusion/Athanor

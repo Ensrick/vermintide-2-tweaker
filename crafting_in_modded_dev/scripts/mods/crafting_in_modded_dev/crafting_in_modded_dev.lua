@@ -50,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.87-dev"
+local MOD_VERSION = "0.8.88-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -692,6 +692,11 @@ _rt_register("issue628_identity_resolvers_unified", function()
         { ItemId = "cwv_dr_dawi_mace", key = "cwv_dr_dawi_mace",
           data = { cwv_key = "cwv_dr_dawi_mace", slot_type = "melee" } },
         { cim_acquisition_key = "cwv_dr_dawi_dual_maces", key = "dr_dual_hammers" },
+        { ItemInstanceId = "48400000-0000-4000-8000-000000000484",
+          key = "es_handgun", CustomData = {
+              cim_acquisition_key = "cwv_es_musket_old",
+              cwv_key = "cwv_es_musket_old",
+          } },
         { ItemId = "es_1h_sword", key = "es_1h_sword" },
     }
     for i = 1, #shapes do
@@ -705,6 +710,43 @@ _rt_register("issue628_identity_resolvers_unified", function()
     end
     if contract.canonical_item_key(shapes[1]) ~= "cwv_es_longsword" then
         return "base-keyed CWV instance did not resolve to its variant"
+    end
+end)
+
+_rt_register("issue484_crafted_old_musket_identity", function()
+    local contract = mod._cim_synthetic_item_contract
+    if type(contract) ~= "table" then return "synthetic item contract missing" end
+    local master = ItemMasterList and rawget(ItemMasterList, "cwv_es_musket_old") or {
+        cwv_variant = true,
+        slot_type = "ranged",
+        can_wield = { "es_mercenary" },
+        template = "old_musket_template",
+        item_type = "cwv_es_musket_old",
+        inventory_icon = "es_handgun_01",
+    }
+    local bid = "48400000-0000-4000-8000-000000000484"
+    local record = contract.normalize_record(bid, {
+        item_key = "cwv_es_musket_old", rarity = "modded",
+    }, master)
+    if not record then return "Old Musket synthetic record rejected" end
+    local payload = contract.build_mirror_payload(record, master, function() return "{}" end)
+    local custom = payload and payload.CustomData
+    if not custom or custom.cim_acquisition_key ~= "cwv_es_musket_old"
+            or custom.cwv_key ~= "cwv_es_musket_old" then
+        return "mirror payload dropped the exact Old Musket identity"
+    end
+    local reconstructed = {
+        ItemInstanceId = bid,
+        key = "es_handgun",
+        data = { key = "es_handgun" },
+        CustomData = custom,
+    }
+    if contract.canonical_item_key(reconstructed) ~= "cwv_es_musket_old" then
+        return "base-shaped reconstructed UUID did not recover Old Musket identity"
+    end
+    local selector = mod._cim_template_selector
+    if not selector or selector.canonical_key(reconstructed) ~= "cwv_es_musket_old" then
+        return "Athanor/forge selector drifted from the Old Musket identity contract"
     end
 end)
 
@@ -757,14 +799,20 @@ local function _forge_create_item(weapon_data, backend_id)
     local rarity = weapon_data.rarity or "exotic"
 
     local entry = table.clone(master, true)
+    entry.cim_acquisition_key = item_key
     entry.mod_data = {
         backend_id = backend_id,
         ItemInstanceId = backend_id,
+        cim_acquisition_key = item_key,
+        cwv_key = weapon_data.provider == "cwv" and item_key or nil,
         CustomData = {
             traits = custom_traits,
             power_level = tostring(power_level),
             properties = custom_props,
             rarity = rarity,
+            cim_acquisition_key = item_key,
+            cim_provider = weapon_data.provider,
+            cwv_key = weapon_data.provider == "cwv" and item_key or nil,
         },
         rarity = rarity,
         traits = traits_table,
