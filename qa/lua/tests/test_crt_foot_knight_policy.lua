@@ -105,6 +105,64 @@ return function(H, repo_root)
         H.equal(Policy.all_other_allies_dead({ true, false, true }), false)
     end)
 
+    H.test("CRT #663 two Foot Knight aura sources share one stable result", function()
+        local record = { sources = {}, claim_count = 0 }
+
+        local count, action, changed = Policy.set_aura_claim(
+            record, "foot_knight_a", "unit_a", true)
+        H.equal(count, 1)
+        H.equal(action, "add")
+        H.equal(changed, true)
+
+        count, action, changed = Policy.set_aura_claim(
+            record, "foot_knight_b", "unit_b", true)
+        H.equal(count, 2)
+        H.equal(action, nil)
+        H.equal(changed, true)
+
+        count, action, changed = Policy.set_aura_claim(
+            record, "foot_knight_a", nil, false)
+        H.equal(count, 1)
+        H.equal(action, nil)
+        H.equal(changed, true)
+
+        count, action, changed = Policy.set_aura_claim(
+            record, "foot_knight_b", "unit_b", true)
+        H.equal(count, 1)
+        H.equal(action, nil)
+        H.equal(changed, false)
+
+        count, action, changed = Policy.set_aura_claim(
+            record, "foot_knight_b", nil, false)
+        H.equal(count, 0)
+        H.equal(action, "remove")
+        H.equal(changed, true)
+    end)
+
+    H.test("CRT #663 production owns every source-blind Foot Knight aura driver", function()
+        local foot_path = repo_root
+            .. "/career_tweaker/scripts/mods/career_tweaker/_crt_foot_knight.lua"
+        local foot_file = assert(io.open(foot_path, "rb"))
+        local source = foot_file:read("*a")
+        foot_file:close()
+
+        for _, template_name in ipairs({
+            "markus_knight_passive",
+            "markus_knight_improved_passive_defence_aura",
+            "markus_knight_passive_block_cost_aura",
+            "markus_knight_passive_range",
+            "markus_knight_guard_defence",
+            "markus_knight_guard",
+        }) do
+            H.truthy(source:find('{ template = "' .. template_name .. '"', 1, true),
+                "missing source-owned driver " .. template_name)
+        end
+        H.truthy(source:find("policy.set_aura_claim", 1, true))
+        H.truthy(source:find("server_buff_id", 1, true))
+        H.equal(source:find('mod:hook(BuffSystem', 1, true), nil)
+        H.equal(source:find('network:register', 1, true), nil)
+    end)
+
     H.test("CRT #619 production composes the singleton damage hook", function()
         local path = repo_root
             .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_armor_overcharge.lua"

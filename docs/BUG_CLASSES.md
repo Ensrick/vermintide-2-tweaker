@@ -2112,3 +2112,38 @@ whose activated ability declares `action_name`.
 - Test all ten current actions, the Waywatcher alternate, existing-row identity,
   missing providers, setting reapply, and disable cleanup. WOC 0.1.26-dev, WT
   0.12.268-beta, and WT-dev 0.12.269-dev are the reference consumers.
+
+## 60. Non-stacking aura drivers remove another source's buff
+
+**First confirmed:** 2026-07-17 (Career Tweaker issue #663).
+**Lives in:** repeated aura sources whose update/remove code searches the target
+by `buff_to_add` template instead of retaining per-source ownership.
+
+### Symptoms
+- Two players with the same aura make one buff-bar entry flicker or repeatedly
+  disappear and return.
+- One source is inside range while another is outside, and the effect churns at
+  the aura update frequency.
+- A single source is stable, so solo testing misses the bug.
+
+### Diagnosis pattern
+1. Read the driver update and removal functions. Vanilla
+   `activate_buff_on_distance`, `markus_knight_proximity_buff_update`, and
+   `remove_aura_buff` resolve any matching target buff and never compare its
+   `attacker_unit` (`buff_function_templates.lua:2759-2810, :3343-3395,
+   :3153-3183`).
+2. Confirm the add path is server-controlled and records the source. BuffSystem
+   stores `attacker_unit` beside each server id (`buff_system.lua:262-270`).
+3. Distinguish gameplay churn from a HUD-only merge problem by counting actual
+   add/remove transitions; never log every update tick.
+
+### Fix template
+- Give every driver an explicit claim set keyed by target, and coordinate one
+  aggregate non-stacking result per `(template, target)`.
+- Add the server buff on the first claim, do nothing when intermediate claims
+  enter or leave, and remove it only on the final release. Driver teardown
+  releases only its own claims.
+- Keep existing vanilla buff names and RPC formats. Do not make the effect stack
+  merely to distinguish sources. Test two sources, one source leaving, the
+  final source leaving, driver removal, and repeated idempotent updates. Career
+  Tweaker `_crt_foot_knight.lua` is the reference implementation.

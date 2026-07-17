@@ -44,6 +44,24 @@ local _tick_accumulator = 0
 local _original_teamwork_range
 local _owned_secondary_slot_types = setmetatable({}, { __mode = "k" })
 local _last_secondary_slot_diagnostic
+local _aura_records = {}
+local _aura_patch_originals = {}
+local _aura_seen_units = setmetatable({}, { __mode = "k" })
+local _aura_generation = 0
+
+local AURA_UPDATE_PROXIMITY = "crt_fk_source_stable_proximity_aura"
+local AURA_UPDATE_DISTANCE = "crt_fk_source_stable_distance_aura"
+local AURA_UPDATE_CLOSEST = "crt_fk_source_stable_closest_aura"
+local AURA_REMOVE = "crt_fk_source_stable_aura_remove"
+
+local AURA_PATCHES = {
+    { template = "markus_knight_passive", update = AURA_UPDATE_PROXIMITY },
+    { template = "markus_knight_improved_passive_defence_aura", update = AURA_UPDATE_DISTANCE },
+    { template = "markus_knight_passive_block_cost_aura", update = AURA_UPDATE_DISTANCE },
+    { template = "markus_knight_passive_range", update = AURA_UPDATE_DISTANCE },
+    { template = "markus_knight_guard_defence", update = AURA_UPDATE_CLOSEST },
+    { template = "markus_knight_guard", update = AURA_UPDATE_CLOSEST },
+}
 
 local function _register_local_template(name, body)
     if not BuffTemplates or rawget(BuffTemplates, name) ~= nil then return end
@@ -133,6 +151,325 @@ local function _register_templates()
         },
         _crt_local_only = true,
     })
+end
+
+local function _aura_record_map(buff_to_add)
+    local records = _aura_records[buff_to_add]
+    if not records then
+        records = setmetatable({}, { __mode = "k" })
+        _aura_records[buff_to_add] = records
+    end
+    return records
+end
+
+local function _aura_transition_log(action, owner_unit, target_unit, buff_to_add,
+                                    server_buff_id, claim_count, reason)
+    pcall(printf,
+        "[crt:663] aura %s source=%s target=%s template=%s server_buff_id=%s claims=%d reason=%s",
+        tostring(action), tostring(owner_unit), tostring(target_unit),
+        tostring(buff_to_add), tostring(server_buff_id), tonumber(claim_count) or 0,
+        tostring(reason))
+end
+
+local function _buff_system()
+    local entity = Managers.state and Managers.state.entity
+    return entity and entity:system("buff_system")
+end
+
+local function _set_aura_claim(owner_unit, driver_buff, target_unit, wants_claim, reason)
+    local template = driver_buff and driver_buff.template
+    local buff_to_add = template and template.buff_to_add
+    if type(buff_to_add) ~= "string" or not target_unit then return false end
+
+    local records = _aura_record_map(buff_to_add)
+    local record = records[target_unit]
+    if not record then
+        record = { sources = setmetatable({}, { __mode = "k" }), claim_count = 0 }
+        records[target_unit] = record
+    end
+
+    local count, action, changed = policy.set_aura_claim(
+        record, driver_buff, owner_unit, wants_claim)
+    if not changed then return true end
+
+    if action == "add" then
+        local buff_extension = Unit.alive(target_unit)
+            and ScriptUnit.has_extension(target_unit, "buff_system")
+        local existing = buff_extension
+            and buff_extension:get_non_stacking_buff(buff_to_add)
+        local existing_id = existing and existing.server_id
+        if existing_id then
+            record.server_buff_id = existing_id
+            _aura_transition_log("adopt", owner_unit, target_unit, buff_to_add,
+                existing_id, count, reason)
+            return true
+        end
+
+        local system = _buff_system()
+        local server_buff_id = system and system:add_buff(
+            target_unit, buff_to_add, owner_unit, true)
+        if not server_buff_id then
+            policy.set_aura_claim(record, driver_buff, nil, false)
+            if record.claim_count == 0 then records[target_unit] = nil end
+            return false
+        end
+        record.server_buff_id = server_buff_id
+        local applied = buff_extension
+            and buff_extension:get_non_stacking_buff(buff_to_add)
+        if applied then applied.server_id = server_buff_id end
+        _aura_transition_log("add", owner_unit, target_unit, buff_to_add,
+            server_buff_id, count, reason)
+    elseif action == "remove" then
+        local system = _buff_system()
+        local server_buff_id = record.server_buff_id
+        if system and server_buff_id then
+            system:remove_server_controlled_buff(target_unit, server_buff_id)
+        end
+        records[target_unit] = nil
+        _aura_transition_log("remove", owner_unit, target_unit, buff_to_add,
+            server_buff_id, count, reason)
+    else
+        _aura_transition_log(wants_claim and "claim" or "release",
+            owner_unit, target_unit, buff_to_add, record.server_buff_id,
+            count, reason)
+    end
+
+    return true
+end
+
+local function _set_driver_target(owner_unit, driver_buff, target_unit, wanted, reason)
+    local targets = driver_buff._crt_aura_targets
+    if not targets then
+        targets = setmetatable({}, { __mode = "k" })
+        driver_buff._crt_aura_targets = targets
+    end
+    local claimed = targets[target_unit] == true
+    if wanted and not claimed then
+        if _set_aura_claim(owner_unit, driver_buff, target_unit, true, reason) then
+            targets[target_unit] = true
+        end
+    elseif not wanted and claimed then
+        _set_aura_claim(owner_unit, driver_buff, target_unit, false, reason)
+        targets[target_unit] = nil
+    end
+end
+
+local function _release_driver_targets(owner_unit, driver_buff, reason)
+    local targets = driver_buff and driver_buff._crt_aura_targets
+    if not targets then return end
+    while true do
+        local target_unit = next(targets)
+        if not target_unit then break end
+        _set_driver_target(owner_unit, driver_buff, target_unit, false, reason)
+    end
+end
+
+local function _begin_aura_sweep()
+    _aura_generation = _aura_generation + 1
+    return _aura_generation
+end
+
+local function _finish_aura_sweep(owner_unit, driver_buff, generation, reason)
+    local targets = driver_buff._crt_aura_targets
+    if not targets then return end
+    while true do
+        local stale_target
+        for target_unit in pairs(targets) do
+            if _aura_seen_units[target_unit] ~= generation then
+                stale_target = target_unit
+                break
+            end
+        end
+        if not stale_target then break end
+        _set_driver_target(owner_unit, driver_buff, stale_target, false, reason)
+    end
+end
+
+local function _source_stable_distance_aura(owner_unit, buff)
+    if not (Managers.state and Managers.state.network
+            and Managers.state.network.is_server) then return end
+    local side_manager = Managers.state.side
+    local side = side_manager and side_manager.side_by_unit
+        and side_manager.side_by_unit[owner_unit]
+    local owner_position = POSITION_LOOKUP and POSITION_LOOKUP[owner_unit]
+    local units = side and side.PLAYER_AND_BOT_UNITS
+    if not units or not owner_position then
+        _release_driver_targets(owner_unit, buff, "driver_unready")
+        return
+    end
+
+    local generation = _begin_aura_sweep()
+    local range_squared = (buff.range or 0) * (buff.range or 0)
+    local disregard_self = buff.template.disregard_self
+    for i = 1, #units do
+        local target_unit = units[i]
+        _aura_seen_units[target_unit] = generation
+        local target_position = Unit.alive(target_unit) and POSITION_LOOKUP[target_unit]
+        local in_range = target_position
+            and (not disregard_self or target_unit ~= owner_unit)
+            and Vector3.distance_squared(owner_position, target_position) < range_squared
+        _set_driver_target(owner_unit, buff, target_unit, in_range == true, "distance")
+    end
+    _finish_aura_sweep(owner_unit, buff, generation, "left_side")
+end
+
+local function _source_stable_proximity_aura(owner_unit, buff)
+    if not (Managers.state and Managers.state.network
+            and Managers.state.network.is_server) then return end
+    local side_manager = Managers.state.side
+    local side = side_manager and side_manager.side_by_unit
+        and side_manager.side_by_unit[owner_unit]
+    local owner_position = POSITION_LOOKUP and POSITION_LOOKUP[owner_unit]
+    local units = side and side.PLAYER_AND_BOT_UNITS
+    local talent_extension = ScriptUnit.has_extension(owner_unit, "talent_system")
+    if not units or not owner_position or not talent_extension then
+        _release_driver_targets(owner_unit, buff, "driver_unready")
+        return
+    end
+
+    local blocked = talent_extension:has_talent("markus_knight_guard")
+        or talent_extension:has_talent("markus_knight_passive_block_cost_aura")
+    local generation = _begin_aura_sweep()
+    local range_squared = (buff.range or 0) * (buff.range or 0)
+    for i = 1, #units do
+        local target_unit = units[i]
+        _aura_seen_units[target_unit] = generation
+        local target_position = Unit.alive(target_unit) and POSITION_LOOKUP[target_unit]
+        local in_range = not blocked and target_position
+            and Vector3.distance_squared(owner_position, target_position) < range_squared
+        _set_driver_target(owner_unit, buff, target_unit, in_range == true, "proximity")
+    end
+    _finish_aura_sweep(owner_unit, buff, generation, "left_side")
+end
+
+local function _source_stable_closest_aura(owner_unit, buff)
+    if not (Managers.state and Managers.state.network
+            and Managers.state.network.is_server) then return end
+    local side_manager = Managers.state.side
+    local side = side_manager and side_manager.side_by_unit
+        and side_manager.side_by_unit[owner_unit]
+    local owner_position = POSITION_LOOKUP and POSITION_LOOKUP[owner_unit]
+    local units = side and side.PLAYER_AND_BOT_UNITS
+    if not units or not owner_position then
+        _release_driver_targets(owner_unit, buff, "driver_unready")
+        return
+    end
+
+    local closest_unit
+    local closest_distance = math.huge
+    local range_squared = (buff.range or 0) * (buff.range or 0)
+    for i = 1, #units do
+        local target_unit = units[i]
+        local target_position = target_unit ~= owner_unit and Unit.alive(target_unit)
+            and POSITION_LOOKUP[target_unit]
+        if target_position then
+            local distance = Vector3.distance_squared(owner_position, target_position)
+            if distance < range_squared and distance < closest_distance then
+                closest_unit = target_unit
+                closest_distance = distance
+            end
+        end
+    end
+
+    if closest_unit then
+        _set_driver_target(owner_unit, buff, closest_unit, true, "closest")
+    end
+    local targets = buff._crt_aura_targets
+    if targets then
+        while true do
+            local stale_target
+            for target_unit in pairs(targets) do
+                if target_unit ~= closest_unit then
+                    stale_target = target_unit
+                    break
+                end
+            end
+            if not stale_target then break end
+            _set_driver_target(owner_unit, buff, stale_target, false, "closest_changed")
+        end
+    end
+end
+
+local function _source_stable_aura_remove(owner_unit, buff)
+    if Managers.state and Managers.state.network and Managers.state.network.is_server then
+        _release_driver_targets(owner_unit, buff, "driver_removed")
+    end
+end
+
+local function _register_aura_functions()
+    local registry = BuffFunctionTemplates and BuffFunctionTemplates.functions
+    if not registry then return false end
+    registry[AURA_UPDATE_PROXIMITY] = _source_stable_proximity_aura
+    registry[AURA_UPDATE_DISTANCE] = _source_stable_distance_aura
+    registry[AURA_UPDATE_CLOSEST] = _source_stable_closest_aura
+    registry[AURA_REMOVE] = _source_stable_aura_remove
+    return true
+end
+
+local function _install_aura_coordinator()
+    if not _register_aura_functions() or not BuffTemplates then return end
+    local installed = 0
+    for i = 1, #AURA_PATCHES do
+        local patch = AURA_PATCHES[i]
+        local outer = rawget(BuffTemplates, patch.template)
+        local driver = outer and outer.buffs and outer.buffs[1]
+        if driver then
+            if not _aura_patch_originals[patch.template] then
+                _aura_patch_originals[patch.template] = {
+                    update_func = driver.update_func,
+                    remove_buff_func = driver.remove_buff_func,
+                    had_remove = driver.remove_buff_func ~= nil,
+                }
+            end
+            driver.update_func = patch.update
+            driver.remove_buff_func = AURA_REMOVE
+            installed = installed + 1
+        end
+    end
+    if installed > 0 and not M._aura_install_logged then
+        M._aura_install_logged = true
+        pcall(printf, "[crt:663] source-stable Foot Knight aura coordinator installed drivers=%d", installed)
+    end
+end
+
+local function _flush_aura_records(reason)
+    local system = Managers.state and Managers.state.network
+        and Managers.state.network.is_server and _buff_system()
+    for _, records in pairs(_aura_records) do
+        for target_unit, record in pairs(records) do
+            if system and record.server_buff_id and Unit.alive(target_unit) then
+                pcall(system.remove_server_controlled_buff, system,
+                    target_unit, record.server_buff_id)
+            end
+            for source in pairs(record.sources or {}) do
+                if type(source) == "table" then source._crt_aura_targets = nil end
+            end
+        end
+    end
+    _aura_records = {}
+    if reason then
+        pcall(printf, "[crt:663] aura coordinator reset reason=%s", tostring(reason))
+    end
+end
+
+local function _uninstall_aura_coordinator()
+    _flush_aura_records("mod_disabled")
+    for i = 1, #AURA_PATCHES do
+        local patch = AURA_PATCHES[i]
+        local original = _aura_patch_originals[patch.template]
+        local outer = BuffTemplates and rawget(BuffTemplates, patch.template)
+        local driver = outer and outer.buffs and outer.buffs[1]
+        if driver and original then
+            driver.update_func = original.update_func
+            if original.had_remove then
+                driver.remove_buff_func = original.remove_buff_func
+            else
+                driver.remove_buff_func = nil
+            end
+        end
+    end
+    _aura_patch_originals = {}
+    M._aura_install_logged = false
 end
 
 local function _is_foot_knight(player)
@@ -433,6 +770,7 @@ local function _reconcile_secondary_slots(enabled)
 end
 
 function M.apply_settings()
+    _install_aura_coordinator()
     local template = BuffTemplates and rawget(BuffTemplates, "markus_knight_damage_taken_ally_proximity")
     local driver = template and template.buffs and template.buffs[1]
     if driver then
@@ -444,6 +782,7 @@ function M.apply_settings()
 end
 
 function M.restore()
+    _uninstall_aura_coordinator()
     _restore_all_live_ranges()
     if _original_teamwork_range ~= nil and BuffTemplates then
         local template = rawget(BuffTemplates, "markus_knight_damage_taken_ally_proximity")
@@ -473,6 +812,7 @@ function M.reset_mission_state()
     -- StateIngame can be entered again with a still-live unit. Remove every
     -- buff we own before forgetting its id so the following tick cannot stack
     -- a duplicate. This also resets Final March's once-per-mission latch.
+    _flush_aura_records("mission_reset")
     _restore_all_live_ranges()
     for unit, state in pairs(_states) do
         local buff_extension = Unit.alive(unit) and ScriptUnit.has_extension(unit, "buff_system")
@@ -511,6 +851,13 @@ end
 
 M.policy = policy
 M.buff_icons = BUFF_ICONS
+M.aura_contract = {
+    patches = AURA_PATCHES,
+    update_proximity = AURA_UPDATE_PROXIMITY,
+    update_distance = AURA_UPDATE_DISTANCE,
+    update_closest = AURA_UPDATE_CLOSEST,
+    remove = AURA_REMOVE,
+}
 M.setting_ids = {
     SETTING_UNINTERRUPTIBLE,
     SETTING_AURA_RANGE,
