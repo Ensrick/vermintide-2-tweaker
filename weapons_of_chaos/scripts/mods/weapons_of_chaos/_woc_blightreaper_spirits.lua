@@ -10,6 +10,11 @@ local M = {}
 -- Source: scripts/settings/mutators/mutator_death.lua:7-21, 31-115, 205-224.
 M.UNIT = "units/fx/vfx_animation_death_spirit_02"
 M.UNIT_TEMPLATE = "position_synched_dummy_unit"
+-- Hash-verified installed bundle `64E79277358D543D` contains UNIT and is the
+-- real DLC package declared by DLCSettings.mutators_batch_04. Unlike a unit
+-- path, this is a valid PackageManager package name.
+M.PACKAGE = "resource_packages/dlcs/mutators_batch_04"
+M.PACKAGE_REFERENCE = "woc_blightreaper_spirits"
 M.RELEASE_SOUND = "Play_winds_death_gameplay_spirit_release"
 M.LOOP_SOUND = "Play_winds_death_gameplay_spirit_loop"
 M.EXPLODE_SOUND = "Play_winds_death_gameplay_spirit_explode"
@@ -27,6 +32,15 @@ M.HIT_DISTANCE = 1
 M.SPAWN_OFFSET_Z = 1
 M.MAX_ACTIVE = 32
 M.POISON_ATTRIBUTION_TTL = 4
+
+function M.package_contract(dlc_settings)
+	local settings = type(dlc_settings) == "table"
+		and dlc_settings.mutators_batch_04
+	if type(settings) ~= "table" or settings.package_name ~= M.PACKAGE then
+		return nil, "dlc_package_contract_missing"
+	end
+	return M.PACKAGE, "source_backed"
+end
 
 function M.kill_is_attributable(wielding_relic, damage_type,
 		poison_owner_matches, poison_age)

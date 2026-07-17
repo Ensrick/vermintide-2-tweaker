@@ -351,6 +351,28 @@ The canonical held transform is uniform XYZ scale `{0.9, 0.9, 0.9}`, Euler XYZ
 rotation `{-90, -90, -90}`, and offset `{0, 0, -0.3}`, applied at spawn through
 the shared appearance primitive on both 1P/3P gameplay and preview consumers.
 
+### Blightreaper combat and Shyish residency (2026-07-16, issues #632/#643)
+
+The private template retains Kerillian Sword's authored graph at 75% speed, but
+its light chain is now two donor lights, Empire Sword's complete authored
+vertical sweep as light three, then Kerillian's complete stab sweep as light
+four. Every heavy's light-chain exit is retargeted to that overhead/stab pair.
+Greataxe light/heavy profiles provide the requested armor behavior; the existing
+Greataxe impact events remain unchanged. A flat `0.15` critical chance is baked
+into every sweep rather than expressed through a rerollable vanilla property.
+The two inventory property rows are display-only no-op buffs; in particular,
+`+50% Power vs. Order` must never acquire a `stat_buff` or proc.
+
+The 2026-07-16 game log proved the Shyish listener and attribution ran, but each
+kill logged `native Shyish unit not resident; spawn skipped`. The SDK cannot
+compile that native unit directly, but the source-declared real package
+`resource_packages/dlcs/mutators_batch_04` hashes to installed bundle
+`64E79277358D543D`, which was verified to contain the unit and its FX
+dependencies. WOC acquires that package under one lifetime reference. Never
+pass the unit path itself to `Managers.package:load`. The existing
+`Application.can_get` guard remains useful defense against a failed request or
+stale build.
+
 ### Blightreaper audio boundary (2026-07-16, issue #633)
 
 The inspect whisper and ambient trophy loop have different residency contracts.
@@ -371,3 +393,12 @@ attached to the local 3P weapon through `WwiseUtils.trigger_unit_event`. Promote
 ambient playback only after logs prove residency in representative missions and
 a source-backed package contract supports same-WOC peers without exposing an
 unknown event/resource to peers that lack WOC.
+
+The custom WOC unit does not contain the vanilla weapon flow graph, so native
+`sfx_swing_charge` / `sfx_swing_started` flow calls are silent. Binary-string
+inspection of the native Executioner Sword unit identified the exact resident
+events `rare_sword_2h_charge_swing_execution` and `sword_2h_swing`. WOC plays
+those one-shots at the corresponding ActionMeleeStart and ActionSweep seams for
+the positively tracked local 1P Blightreaper. The private template declares
+`wwise/two_handed_swords`; Greataxe impact events remain independently owned by
+the sweep definitions.

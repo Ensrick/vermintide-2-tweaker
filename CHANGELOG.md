@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-16 - Blightreaper combat completion and Shyish residency
+
+Weapons of Chaos v0.1.21-dev adds the requested four-light chain and post-heavy
+overhead/stab finishers, intrinsic +15% critical chance, armor-capable Greataxe
+profiles, exact display-only `+50% Power vs. Order`, and the Executioner Sword
+audio dependency while preserving Greataxe impacts. It also fixes the log-proven
+Shyish failure by acquiring its verified source-declared DLC package under a
+bounded lifetime reference; offline tests cover the resource boundary and
+combat contracts.
+
 ## 2026-07-16 - Blightreaper Shyish spirits and axe presentation
 
 Weapons of Chaos v0.1.20-dev / issue #632 adds the missing host-authoritative

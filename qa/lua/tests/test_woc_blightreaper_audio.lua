@@ -57,6 +57,23 @@ return function(H, repo_root)
 		H.equal(Audio.AMBIENT_EVENT, "emitter_trophy_evil_sword")
 		H.equal(Audio.AMBIENT_EVENT_ID, 0x83e93b19)
 		H.equal(Audio.AMBIENT_BANK, "wwise/level_hub")
+		H.equal(Audio.SWING_EVENT, "sword_2h_swing")
+		H.equal(Audio.CHARGE_EVENT, "rare_sword_2h_charge_swing_execution")
+		H.equal(Audio.SWING_BANK, "wwise/two_handed_swords")
+	end)
+
+	H.test("WOC #633 plays exact Executioner charge and swing only for Blightreaper", function()
+		local runtime, calls, player = fixture()
+		local unit_1p, unit_3p = {}, {}
+		runtime.observe_spawn(unit_3p, unit_1p, {}, player)
+		local action = { world = {}, weapon_unit = unit_1p }
+		H.truthy(runtime.play_swing(action, "charge"))
+		H.truthy(runtime.play_swing(action, "release"))
+		H.equal(calls.trigger[1].event, Audio.CHARGE_EVENT)
+		H.equal(calls.trigger[2].event, Audio.SWING_EVENT)
+		H.equal(calls.trigger[1].unit, unit_1p)
+		H.equal(runtime.play_swing({ world = {}, weapon_unit = {} }, "release"), false)
+		H.equal(#calls.trigger, 2)
 	end)
 
 	H.test("WOC #633 inspect is local 1P and single-owner", function()
@@ -172,6 +189,8 @@ return function(H, repo_root)
 			'mod:hook("ActionInspect", "client_owner_start_action"',
 			'mod:hook("ActionInspect", "finish"',
 			'mod:hook("GearUtils", "destroy_equipment"',
+			'mod:hook("ActionMeleeStart", "client_owner_start_action"',
+			'mod:hook("ActionSweep", "client_owner_start_action"',
 		}
 		for _, needle in ipairs(needles) do
 			local count, position = 0, 1

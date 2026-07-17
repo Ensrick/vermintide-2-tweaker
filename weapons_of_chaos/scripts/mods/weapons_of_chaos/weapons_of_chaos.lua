@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.20-dev"
+local MOD_VERSION = "0.1.21-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -157,6 +157,7 @@ local _audio = type(_audio_lib) == "table" and type(_audio_lib.new) == "function
 		observe_spawn = function() end,
 		start_inspect = function() end,
 		finish_inspect = function() end,
+		play_swing = function() end,
 		stop_equipment = function() end,
 		stop_all = function() end,
 		update = function() end,
@@ -197,6 +198,26 @@ local INVENTORY_ICON = _inventory_icons.ICON
 local _start_spirit_runtime = function() end
 local _stop_spirit_runtime = function() end
 local _mark_blight_poison = function() end
+local _spirit_package_requested = false
+local function _ensure_spirit_package()
+	if _spirit_package_requested then return true end
+	local package_name, reason = _spirits.package_contract(rawget(_G, "DLCSettings"))
+	local packages = Managers and Managers.package
+	if not package_name or not packages or type(packages.load) ~= "function" then
+		printf("[WOC:643] Shyish package unavailable: %s", tostring(reason or "package_manager_missing"))
+		return false
+	end
+	local ok, err = pcall(packages.load, packages, package_name,
+		_spirits.PACKAGE_REFERENCE, nil, true, true)
+	if not ok then
+		printf("[WOC:643] Shyish package request failed: %s", tostring(err))
+		return false
+	end
+	_spirit_package_requested = true
+	mod:info("[WOC:643] requested source-backed Shyish package %s", package_name)
+	return true
+end
+_ensure_spirit_package()
 
 -- Package lookup aliases are forward-only. WOC-capable peers retain the
 -- authored unit locally; peers without WOC continue decoding the vanilla sword
@@ -244,6 +265,8 @@ local _display_names = {
 	[ITEM_KEY .. "_description"] = mod:localize("woc_blightreaper_description"),
 	[ITEM_KEY]                   = mod:localize("woc_blightreaper_name"),  -- item_type label
 	[_cursed.DISPLAY_KEY]        = "Cursed",
+	woc_intrinsic_crit_property  = mod:localize("woc_intrinsic_crit_property"),
+	woc_power_vs_order_property  = mod:localize("woc_power_vs_order_property"),
 }
 
 mod:hook(_G, "Localize", function(func, key)
@@ -292,13 +315,16 @@ local function _build_entry(base, backend_id)
 		CustomData = {
 			traits      = "[]",
 			power_level = tostring(_power.NORMAL_POWER),
-			properties  = "{}",
+			properties  = '{"woc_intrinsic_crit":1,"woc_power_vs_order":1}',
 			rarity      = _relic_policy.RARITY,
 		},
 		rarity      = _relic_policy.RARITY,
 		traits      = {},
 		power_level = _power.NORMAL_POWER,
-		properties  = {},
+		properties  = {
+			woc_intrinsic_crit = 1,
+			woc_power_vs_order = 1,
+		},
 	}
 	-- No skin pre-applied: the item renders from entry.right_hand_unit. WOC
 	-- trophy weapons are unique immutable relics, not craft/customize templates.
@@ -356,6 +382,12 @@ end
 
 local function _install_blightreaper_moveset()
 	if _moveset_report and _moveset_report.installed then return true end
+	local rows_ok, rows_reason = _moveset.install_intrinsic_property_rows(
+		rawget(_G, "WeaponProperties"), rawget(_G, "BuffTemplates"))
+	if not rows_ok then
+		printf("[WOC:632] Blightreaper property rows unavailable: %s", tostring(rows_reason))
+		return false
+	end
 	local poison_ok, poison_reason = _install_blightreaper_poison()
 	if not poison_ok then
 		printf("[WOC:632] Blightreaper poison unavailable: %s", tostring(poison_reason))
@@ -368,7 +400,7 @@ local function _install_blightreaper_moveset()
 			tostring(_moveset_report.skipped))
 		return false
 	end
-	mod:info("[WOC:632] private Kerillian Sword template ready (attacks=%d poison=%s speed=75%%)",
+	mod:info("[WOC:632] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true)",
 		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE)
 	return true
 end
@@ -720,6 +752,36 @@ _rt_register("issue632_blightreaper_cursed_combat_contract", function()
 	if not (template.buffs and template.buffs[_moveset.POISON_BUFF_TEMPLATE]) then
 		return "native Hagbane poison equipment buff is not attached"
 	end
+	local actions = template.actions and template.actions.action_one
+	if not (actions and actions.light_attack_last and actions.light_attack_stab
+			and actions.default_stab) then
+		return "overhead-third/stab-fourth light chain is incomplete"
+	end
+	if actions.light_attack_last.anim_event ~= "attack_swing_down" then
+		return "third light is not the authored overhead"
+	end
+	for name, action in pairs(actions) do
+		if type(action) == "table" and action.kind == "sweep" then
+			if action.additional_critical_strike_chance ~= _moveset.INTRINSIC_CRIT_CHANCE then
+				return "intrinsic 15% critical chance drifted on " .. tostring(name)
+			end
+			if name:find("^light_attack") and action.damage_profile ~= _moveset.LIGHT_DAMAGE_PROFILE then
+				return "greataxe-light damage profile drifted on " .. tostring(name)
+			end
+			if name:find("^heavy_attack") and action.damage_profile ~= _moveset.HEAVY_DAMAGE_PROFILE then
+				return "armor-piercing heavy profile drifted on " .. tostring(name)
+			end
+		end
+	end
+	local has_executioner_audio = false
+	for _, dependency in ipairs(template.wwise_dep_right_hand or {}) do
+		if dependency == _moveset.EXECUTIONER_WWISE_DEP then has_executioner_audio = true end
+	end
+	if not has_executioner_audio then return "Executioner Sword audio dependency is absent" end
+	if not (entry.properties and entry.properties[_moveset.CRIT_PROPERTY] == 1
+			and entry.properties[_moveset.ORDER_PROPERTY] == 1) then
+		return "intrinsic and cosmetic property rows are absent"
+	end
 	local procs = rawget(_G, "ProcFunctions")
 	if type(procs) ~= "table" or type(procs[_moveset.POISON_PROC]) ~= "function" then
 		return "client-safe Hagbane poison proc is unavailable"
@@ -1005,6 +1067,7 @@ function mod:_woc_on_blightreaper_kill(killing_blow, breed, killed_unit)
 end
 
 _start_spirit_runtime = function()
+	_ensure_spirit_package()
 	local network = Managers and Managers.state and Managers.state.network
 	local events = Managers and Managers.state and Managers.state.event
 	if not (network and network.is_server and events) then return end
@@ -1158,6 +1221,23 @@ mod:hook("ActionInspect", "finish", function(func, self, reason, ...)
 	_audio.finish_inspect(self, reason or "inspect-finish")
 	return func(self, reason, ...)
 end)
+
+-- The custom Blightreaper unit has no inherited weapon flow graph. Recreate
+-- the exact two Executioner Sword flow outcomes at the same native action
+-- seams that emit `sfx_swing_charge` and `sfx_swing_started`.
+mod:hook("ActionMeleeStart", "client_owner_start_action",
+	function(func, self, new_action, ...)
+		local result = func(self, new_action, ...)
+		_audio.play_swing(self, "charge")
+		return result
+	end)
+
+mod:hook("ActionSweep", "client_owner_start_action",
+	function(func, self, new_action, ...)
+		local result = func(self, new_action, ...)
+		_audio.play_swing(self, "release")
+		return result
+	end)
 
 -- Equipment destruction is an independent edge from ActionInspect.finish on
 -- level transitions and forced inventory teardown. Merge here as the sole WOC
@@ -1343,19 +1423,16 @@ _rt_register("no_unit_path_package_force_load", function()
 	-- Keep-entry C-fatal dead end (DEVELOPMENT.md crash post-mortem + file header):
 	-- Managers.package:load on a UNIT path (not a real .package name) hard-crashes
 	-- on keep entry via the engine resource_package() C-fatal, bypassing pcall. WOC
-	-- force-loads NOTHING; the held mesh is an always-resident base unit. Lock it:
-	-- no raw package force-load call in this file. Needle split so this check never
-	-- self-matches; no-op when source unreadable. When a real loadable enemy
-	-- .package ships, update this to allow a verified package-NAME load while still
-	-- forbidding a unit-PATH load.
+	-- The Shyish fix loads one hash-verified real package NAME from DLCSettings;
+	-- the unit path itself must remain structurally unable to reach load().
 	local ok, info = pcall(debug.getinfo, _rt_register, "S")
 	if not ok or type(info) ~= "table" or not info.source then return end
 	local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
 	local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
 	if not txt then return end
-	local load_needle = "Managers.package" .. ":load("
-	if txt:find(load_needle, 1, true) then
-		return "a package force-load reappeared -- verify it targets a real .package NAME, not a unit path (keep-entry C-fatal, DEVELOPMENT.md)"
+	local unsafe_needle = "load(_spirits.UNIT"
+	if txt:find(unsafe_needle, 1, true) then
+		return "Shyish unit path reached PackageManager load -- keep-entry C-fatal"
 	end
 end)
 
@@ -1419,6 +1496,11 @@ _rt_register("issue633_blightreaper_audio_contract", function()
 	if _audio_lib.AMBIENT_EVENT ~= "emitter_trophy_evil_sword"
 			or _audio_lib.AMBIENT_BANK ~= "wwise/level_hub" then
 		return "keep-trophy ambient event/bank evidence drifted"
+	end
+	if _audio_lib.SWING_EVENT ~= "sword_2h_swing"
+			or _audio_lib.CHARGE_EVENT ~= "rare_sword_2h_charge_swing_execution"
+			or _audio_lib.SWING_BANK ~= _moveset.EXECUTIONER_WWISE_DEP then
+		return "Executioner Sword swing/charge audio evidence drifted"
 	end
 	local package_manager = Managers and Managers.package
 	if package_manager and type(package_manager.has_loaded) == "function" then

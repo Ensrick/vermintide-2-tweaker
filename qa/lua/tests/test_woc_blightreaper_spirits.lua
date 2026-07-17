@@ -5,6 +5,14 @@ return function(H, repo_root)
 	H.test("WOC Blightreaper spirits preserve native rank-one Shyish policy", function()
 		H.equal(spirits.UNIT, "units/fx/vfx_animation_death_spirit_02")
 		H.equal(spirits.UNIT_TEMPLATE, "position_synched_dummy_unit")
+		H.equal(spirits.PACKAGE, "resource_packages/dlcs/mutators_batch_04")
+		H.equal(spirits.PACKAGE_REFERENCE, "woc_blightreaper_spirits")
+		local package, reason = spirits.package_contract({
+			mutators_batch_04 = { package_name = spirits.PACKAGE },
+		})
+		H.equal(package, spirits.PACKAGE)
+		H.equal(reason, "source_backed")
+		H.equal(spirits.package_contract({}), nil)
 		H.equal(spirits.CONVERT_AMOUNT, 5)
 		H.equal(spirits.DELAY_TIME, 3)
 		H.equal(spirits.CHASE_SPEED, 1)
@@ -67,5 +75,17 @@ return function(H, repo_root)
 		local _, update_count = source:gsub("mod%.update%s*=%s*function", "")
 		H.equal(update_count, 1, "WOC audio and spirit work must share one update callback")
 		H.equal(source:find('network_register("woc_blightreaper_spirit', 1, true), nil)
+
+		local package_path = repo_root
+			.. "/weapons_of_chaos/resource_packages/weapons_of_chaos/weapons_of_chaos.package"
+		local package_file = assert(io.open(package_path, "rb"))
+		local package_source = package_file:read("*a")
+		package_file:close()
+		H.equal(package_source:find('"' .. spirits.UNIT .. '"', 1, true), nil,
+			"unavailable native source unit must not break WOC compilation")
+		H.truthy(source:find('_spirits.package_contract(rawget(_G, "DLCSettings"))',
+			1, true), "production must resolve the source-backed real package")
+		H.equal(source:find('load(_spirits.UNIT', 1, true), nil,
+			"native spirit must not be force-loaded as a package")
 	end)
 end

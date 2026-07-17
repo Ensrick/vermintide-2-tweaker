@@ -18,6 +18,10 @@ local M = {
 	AMBIENT_BANK = "wwise/level_hub",
 	PROBE_MAX_SECONDS = 8,
 	PROBE_MAX_RUNS = 3,
+	SWING_EVENT = "sword_2h_swing",
+	CHARGE_EVENT = "rare_sword_2h_charge_swing_execution",
+	SWING_BANK = "wwise/two_handed_swords",
+	SWING_SOURCE_UNIT = "units/weapons/player/wpn_emp_sword_exe_01_t1/wpn_emp_sword_exe_01_t1",
 }
 
 local function default_api()
@@ -170,6 +174,31 @@ function M.new(injected)
 			M.INSPECT_EVENT, M.INSPECT_BANK, package_reason,
 			M.INSPECT_MAX_SECONDS)
 		return true, "started"
+	end
+
+	-- Blightreaper's authored custom unit has no vanilla weapon-flow graph, so
+	-- ActionSweep's `sfx_swing_started` flow event is silent. These are the exact
+	-- two Wwise event strings recovered from the native Executioner Sword unit.
+	-- Play them only for the positively tracked local 1P WOC unit; impacts remain
+	-- the Greataxe events owned by the combat template.
+	function runtime.play_swing(action, phase)
+		local weapon_unit = action and action.weapon_unit
+		if not tracked_1p[weapon_unit] then return false, "not-blightreaper" end
+		local event = phase == "charge" and M.CHARGE_EVENT
+			or phase == "release" and M.SWING_EVENT
+		if not event then return false, "unknown-phase" end
+		local trigger = type(wwise_utils) == "table" and wwise_utils.trigger_unit_event
+		if type(trigger) ~= "function" or not alive(weapon_unit) then
+			return false, "trigger-unavailable"
+		end
+		local ok, playing_id = pcall(trigger, action.world, event, weapon_unit, 0)
+		if not ok or type(playing_id) ~= "number" or playing_id == 0 then
+			log_once("swing:" .. phase,
+				"[WOC:633] Executioner swing SKIP phase=%s event=%s bank=%s chat=false",
+				phase, event, M.SWING_BANK)
+			return false, "event-not-resident"
+		end
+		return true, "played"
 	end
 
 	function runtime.finish_inspect(action, reason)

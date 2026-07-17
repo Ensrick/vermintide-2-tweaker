@@ -16,6 +16,7 @@ return function(H, repo_root)
 	local function donor_template()
 		return {
 			name = moveset.SOURCE_TEMPLATE,
+			wwise_dep_right_hand = { "wwise/one_handed_swords" },
 			actions = {
 				action_one = {
 					default = {
@@ -24,11 +25,38 @@ return function(H, repo_root)
 						anim_time_scale = 2,
 						damage_profile = "light_slashing_smiter",
 						lookup_data = { item_template_name = "donor" },
+						allowed_chain_actions = {},
+					},
+					default_left = {
+						kind = "melee_start",
+						anim_event = "attack_swing_charge_left",
+						allowed_chain_actions = {
+							{ action = "action_one", input = "action_one_release",
+								sub_action = "light_attack_last" },
+							{ action = "action_one", input = "action_one_hold",
+								sub_action = "heavy_attack_left" },
+						},
 					},
 					light_attack = {
 						kind = "sweep",
 						anim_event = "attack_swing_heavy",
 						damage_profile = "light_slashing_smiter",
+						allowed_chain_actions = {},
+					},
+					light_attack_last = {
+						kind = "sweep",
+						anim_event = "attack_swing_stab",
+						damage_profile = "light_slashing_smiter_stab_swords",
+						allowed_chain_actions = {},
+					},
+					heavy_attack_left = {
+						kind = "sweep",
+						anim_event = "attack_swing_heavy_right",
+						damage_profile = "heavy_slashing_smiter",
+						allowed_chain_actions = {
+							{ action = "action_one", input = "action_one",
+								sub_action = "default" },
+						},
 					},
 					block = {
 						kind = "block",
@@ -46,10 +74,36 @@ return function(H, repo_root)
 		}
 	end
 
+	local function overhead_template()
+		return {
+			actions = {
+				action_one = {
+					light_attack_last = {
+						kind = "sweep",
+						anim_event = "attack_swing_down",
+						damage_profile = "sword_1h_light_smiter_vertical",
+						baked_sweep = { { 0.1, 1, 2, 3 } },
+						allowed_chain_actions = {
+							{ action = "action_one", input = "action_one",
+								sub_action = "default" },
+						},
+					},
+				},
+			},
+		}
+	end
+
+	local function donor_weapons(donor)
+		return {
+			[moveset.SOURCE_TEMPLATE] = donor or donor_template(),
+			[moveset.OVERHEAD_SOURCE_TEMPLATE] = overhead_template(),
+		}
+	end
+
 	H.test("WOC Blightreaper deep-clones elf Sword without damage-profile mutation", function()
 		local donor = donor_template()
 		local snapshot = deep_clone(donor)
-		local weapons = { [moveset.SOURCE_TEMPLATE] = donor }
+		local weapons = donor_weapons(donor)
 		local clone_was_deep = false
 		local report = moveset.install(weapons, function(value, deep)
 			clone_was_deep = deep
@@ -58,7 +112,7 @@ return function(H, repo_root)
 		local installed = weapons[moveset.TEMPLATE]
 
 		H.truthy(report.installed)
-		H.equal(report.attacks, 2)
+		H.equal(report.attacks, 7)
 		H.equal(clone_was_deep, true)
 		H.truthy(installed ~= donor)
 		H.deep_equal(donor, snapshot, "donor template changed")
@@ -81,7 +135,29 @@ return function(H, repo_root)
 		H.equal(installed.actions.action_one.default.damage_profile,
 			"light_slashing_smiter")
 		H.equal(installed.actions.action_one.light_attack.damage_profile,
-			"light_slashing_smiter")
+			moveset.LIGHT_DAMAGE_PROFILE)
+		H.equal(installed.actions.action_one.light_attack_last.anim_event,
+			"attack_swing_down")
+		H.equal(installed.actions.action_one.light_attack_last.damage_profile,
+			moveset.LIGHT_DAMAGE_PROFILE)
+		H.equal(installed.actions.action_one.light_attack_stab.damage_profile,
+			moveset.LIGHT_DAMAGE_PROFILE)
+		H.equal(installed.actions.action_one.heavy_attack_left.damage_profile,
+			moveset.HEAVY_DAMAGE_PROFILE)
+		H.equal(installed.actions.action_one.light_attack.additional_critical_strike_chance,
+			moveset.INTRINSIC_CRIT_CHANCE)
+		H.equal(installed.actions.action_one.heavy_attack_left.additional_critical_strike_chance,
+			moveset.INTRINSIC_CRIT_CHANCE)
+		H.equal(installed.actions.action_one.default_stab.allowed_chain_actions[1].sub_action,
+			"light_attack_stab")
+		H.equal(installed.actions.action_one.light_attack_last.allowed_chain_actions[1].sub_action,
+			"default_stab")
+		H.equal(installed.actions.action_one.heavy_attack_left.allowed_chain_actions[1].sub_action,
+			"default_left")
+		H.deep_equal(installed.actions.action_one.light_attack_last.baked_sweep,
+			{ { 0.1, 1, 2, 3 } })
+		H.deep_equal(installed.wwise_dep_right_hand,
+			{ "wwise/one_handed_swords", moveset.EXECUTIONER_WWISE_DEP })
 		H.deep_equal(installed.actions.action_two.push.damage_profile,
 			{ internal = "must_not_be_cloned_or_rewritten" })
 
@@ -120,10 +196,8 @@ return function(H, repo_root)
 
 	H.test("WOC Blightreaper install is idempotent and fails closed", function()
 		local existing = { sentinel = true }
-		local weapons = {
-			[moveset.SOURCE_TEMPLATE] = donor_template(),
-			[moveset.TEMPLATE] = existing,
-		}
+		local weapons = donor_weapons()
+		weapons[moveset.TEMPLATE] = existing
 		local report = moveset.install(weapons, deep_clone)
 		H.truthy(report.installed)
 		H.truthy(report.existing)
@@ -135,6 +209,23 @@ return function(H, repo_root)
 		H.equal(moveset.install({ [moveset.SOURCE_TEMPLATE] = {} }, function()
 			return nil
 		end).skipped, "clone_failed")
+	end)
+
+	H.test("WOC Blightreaper intrinsic property rows are display-only", function()
+		local properties = { properties = {} }
+		local buffs = {}
+		local ok, reason = moveset.install_intrinsic_property_rows(properties, buffs)
+		H.equal(ok, true)
+		H.equal(reason, "installed")
+		H.equal(properties.properties[moveset.CRIT_PROPERTY].display_name,
+			"woc_intrinsic_crit_property")
+		H.equal(properties.properties[moveset.ORDER_PROPERTY].display_name,
+			"woc_power_vs_order_property")
+		H.equal(buffs[moveset.CRIT_PROPERTY_BUFF].buffs[1].name,
+			moveset.CRIT_PROPERTY_BUFF)
+		H.equal(buffs[moveset.CRIT_PROPERTY_BUFF].buffs[1].stat_buff, nil)
+		H.equal(buffs[moveset.ORDER_PROPERTY_BUFF].buffs[1].stat_buff, nil)
+		H.equal(moveset.install_intrinsic_property_rows(nil, buffs), false)
 	end)
 
 	H.test("WOC Blightreaper has exactly six non-elf third-person remaps", function()

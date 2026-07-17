@@ -10,7 +10,13 @@ return {
 		en = "Blightreaper",
 	},
 	woc_blightreaper_description = {
-		en = "A grim trophy from the Bogenhafen keep, hefted as a one-handed blade. Plague follows its edge.",
+		en = "A grim trophy from the Bogenhafen keep. Its cursed edge carries plague, bites through armour, and draws the death wind behind every kill.",
+	},
+	woc_intrinsic_crit_property = {
+		en = "+15% Critical Strike Chance",
+	},
+	woc_power_vs_order_property = {
+		en = "+50% Power vs. Order",
 	},
 
 	-- Settings
@@ -18,6 +24,6 @@ return {
 		en = "[verify-fix] Enable Blightreaper",
 	},
 	enable_blightreaper_tooltip = {
-		en = "Adds the Blightreaper: a Cursed 600-power relic using Kerillian's Sword combat style at 75%% speed and Hagbane poison. It becomes 900 power and cannot be tempered in Chaos Wastes. Any career can equip it. Takes effect after you restart the game.",
+		en = "Adds the Blightreaper: a Cursed 600-power relic using a four-light Sword combat style at 75%% speed, intrinsic +15%% critical chance, armour-capable attacks, Hagbane poison, and kill-spawned Shyish spirits. It becomes 900 power and cannot be tempered in Chaos Wastes. Any career can equip it. Takes effect after you restart the game.",
 	},
 }

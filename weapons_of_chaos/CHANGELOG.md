@@ -1,5 +1,42 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.21-dev (2026-07-16) - Blightreaper combat completion and resident Shyish spirits [verify-fix-coop]
+
+- Fixed the empirically observed Shyish failure. The latest test log repeatedly
+  recorded `[WOC:632] native Shyish unit not resident; spawn skipped`; the WOC
+  runtime now acquires the source-declared real package
+  `resource_packages/dlcs/mutators_batch_04`, whose installed bundle hash
+  `64E79277358D543D` was verified to contain the unit. Runtime remains
+  host-authoritative and bounded to 32 spirits, with no unit-path load or
+  per-frame RPC.
+- Changed the light chain to two ordinary Sword lights, the authored Empire Sword
+  overhead as light three, and Kerillian Sword's stab as light four. Releasing a
+  light after any heavy now enters overhead, then stab.
+- Applied the Greataxe light damage profile to every light and its heavy profile to
+  every heavy, retaining the existing Greataxe impact sounds/effects. Every sweep
+  receives an intrinsic, non-rerollable `+15%` critical chance.
+- Added the exact display-only property `+50% Power vs. Order`; it is backed by a
+  no-op buff row and therefore cannot alter damage. Added a matching display row
+  for the intrinsic critical chance.
+- Recovered the Executioner Sword unit's exact `sword_2h_swing` and
+  `rare_sword_2h_charge_swing_execution` events and play them at the native
+  ActionSweep/ActionMeleeStart seams for the positively identified local WOC
+  unit. Its Wwise bank is added to the private template, while the working
+  Greataxe impact events remain unchanged. Playback still requires in-game
+  verification.
+- Preserved the canonical first-/third-person transform: `0.9` XYZ scale,
+  `-90/-90/-90` rotation, and `-0.3` Z offset.
+- Added offline coverage for the four-light chain, post-heavy routing, authored
+  overhead sweep, light/heavy profiles, intrinsic crit, no-op property rows,
+  audio dependency, and the real-package Shyish residency contract.
+
+Verification: confirm `[WOC] v0.1.21-dev loaded`. With two WOC-enabled players,
+test all four lights and each heavy-to-overhead-to-stab transition; verify light
+and heavy armor behavior, property text, swing/impact audio, poison, and a direct
+and poison kill from both host and client. Every qualifying kill must create a
+visible spirit that reaches its owner and converts green health to temporary
+health. Run `/woc_regression_test` and require zero failures.
+
 ## 0.1.20-dev (2026-07-16) - #632 Blightreaper Shyish spirits and axe audio [verify-fix-coop]
 
 - Added the missing host-authoritative kill listener. Direct Blightreaper kills
