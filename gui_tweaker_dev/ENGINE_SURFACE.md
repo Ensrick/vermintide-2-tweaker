@@ -16,7 +16,7 @@ line by line, as were `IngameUI.setup_views` / the DLC `ui_views` seam and
 grep-verified when written).
 
 **Dev/stable relationship.** This documents `gui_tweaker_dev` (`gut_dev`,
-MOD_VERSION `0.2.255-dev`, friends-only Workshop 3751024698), the ACTIVE working
+MOD_VERSION `0.2.284-dev`, friends-only Workshop 3751024698), the ACTIVE working
 stream. `gui_tweaker/` (`gut`, public-alpha Workshop 3732144878) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gut_dev`
@@ -31,6 +31,23 @@ features, plus a large forked slice of the HideBuffs "UI Tweaks" mod under `hb/`
 Its engine contact clusters into five surfaces - camera/viewport lifecycle, the
 backend loadout mirror, HUD composition + drag, the HideBuffs fork, and view/window
 injection - each with its own subsystem note below.
+
+### Mod Tweaker module ownership
+
+The two presentation owners keep lifecycle and engine-facing view attachment in
+`_mod_tweaker_view.lua` and `_mod_tweaker_state.lua`. Their input, numeric/search
+editing, pointer dispatch, hover/tooltips, and renderer passes live in the sibling
+`*_interaction.lua` modules and are installed exactly once through explicit
+dependency tables. `_gut_mod_tweaker_contracts.lua` owns the runtime contract
+registrations formerly embedded in the root entry, while
+`_gut_ui_tweaks_integration.lua` owns the absorbed HideBuffs/UI Tweaks bootstrap
+and returns only its temporal and synchronization lifecycle adapters. None of the
+four extracted module families may register an engine hook, command, or mod
+lifecycle callback. Stable uses the same boundaries; only the documented dev
+Dialogue dependency is additional. Both package manifests already include
+`scripts/mods/<id>/*`, so the extracted root modules are bundled without an
+individual manifest row. Offline `test_gut_module_extraction.lua` enforces these
+ownership, parity, and package contracts.
 
 ## Hook table
 

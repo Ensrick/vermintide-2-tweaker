@@ -1,5 +1,11 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.278 (2026-07-17) — GUI hard-limit recovery
+
+- Extracted the standalone and HeroView Mod Tweaker input/draw surfaces behind explicit install APIs, without changing their interaction behavior or hook ownership.
+- Extracted Mod Tweaker runtime contracts and the absorbed UI Tweaks integration from the main entry point while preserving stable/dev parity and intentional dev-only Dialogue behavior.
+- Added offline contracts for single module ownership, duplicate class methods, lifecycle neutrality, dependency parity, and root-package coverage.
+
 ## 0.2.277 (2026-07-17) — #611 advanced-option master presentation
 
 - Gear/advanced-option parent rows now use the established warm-tan menu accent, clearly separating bulk/master controls from their individual child settings.

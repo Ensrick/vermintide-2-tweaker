@@ -7,13 +7,13 @@ return function(H, repo_root)
     end
 
     local mission = read("gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_inventory.lua")
-    local entry = read("gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua")
+    local contracts = read("gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_contracts.lua")
     local cosmetics = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
 
     H.test("GUT #89 allows Cosmetics-only mission customization", function()
         H.truthy(mission:find('return in_keep or (get_mod("cosmetics_tweaker") ~= nil)', 1, true))
         H.truthy(mission:find("mod._gut89_customize_allowed = _gut_customize_allowed", 1, true))
-        H.truthy(entry:find('issue89_cosmetics_only_customize_mount', 1, true))
+        H.truthy(contracts:find('issue89_cosmetics_only_customize_mount', 1, true))
     end)
 
     H.test("GUT #89 owns both no-CIM level-free mount surfaces", function()

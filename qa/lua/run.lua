@@ -227,6 +227,7 @@ local suites = {
     "test_gut_localization_orphan_cleanup",
     "test_gut_career_hud_holder",
     "test_gut_cosmetics_mission_mount",
+    "test_gut_module_extraction",
     "test_character_dialogue",
 }
 

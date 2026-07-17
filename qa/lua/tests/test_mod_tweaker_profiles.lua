@@ -50,9 +50,12 @@ return function(H, repo_root)
         end
     end)
     H.test("standalone search and profile transactions coexist", function()
-        local file = assert(io.open(repo_root
-            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua", "rb"))
+        local root = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
+        local file = assert(io.open(root .. "_mod_tweaker_view.lua", "rb"))
         local source = file:read("*a")
+        file:close()
+        file = assert(io.open(root .. "_mod_tweaker_view_interaction.lua", "rb"))
+        source = source .. file:read("*a")
         file:close()
         H.truthy(string.find(source, "_mod_tweaker_search", 1, true))
         H.truthy(string.find(source, "_mod_tweaker_profiles", 1, true))

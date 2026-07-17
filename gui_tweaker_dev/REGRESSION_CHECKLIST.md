@@ -1,5 +1,13 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Mod Tweaker module extraction / file-size gate
+
+- [ ] Standalone and HeroView Mod Tweaker open, draw, accept mouse/controller input, edit numeric values, search, switch profiles, Apply, and Default exactly as before.
+- [ ] Dialogue rows in dev still recycle, play/pause, report progress, and stop on view cleanup; stable contains no Dialogue dependency.
+- [ ] Each owner loads and installs its interaction/contracts module once; no extracted module owns an engine hook, command, or lifecycle callback.
+- [ ] `qa/check_file_sizes.ps1` reports no hard-limit error for the six GUI owner files; do not update `qa/baselines/file_sizes.json` for this split.
+- [ ] `test_gut_module_extraction.lua`, the complete offline Lua suite, Quick QA, and both GUI mod-lint runs pass.
+
 ## Character Dialogue media controls (#605)
 
 - [ ] Every visible dialogue row has one fixed media button, not separate Play and Pause buttons.

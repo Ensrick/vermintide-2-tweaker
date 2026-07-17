@@ -98,9 +98,9 @@ return function(H, repo_root)
         H.equal(math.floor((-4 * 95 / 128) + 0.5), -3,
             "scaled icon y must retain the native inventory optical alignment")
 
-        local view_path = repo_root
-            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua"
-        local view_file = assert(io.open(view_path, "rb"))
+        local view_root = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
+        local view_file = assert(io.open(view_root .. "_mod_tweaker_view_interaction.lua", "rb"))
         local view_source = view_file:read("*a")
         view_file:close()
         H.truthy(view_source:find('sc.search_focused = focused', 1, true))

@@ -151,8 +151,10 @@ return function(Harness, repo_root)
     end)
 
     Harness.test("cd Mod Tweaker integration is grouped virtual media UI", function()
-        local view_path = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua"
+        local view_path = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_interaction.lua"
         local f = assert(io.open(view_path, "rb")); local source = f:read("*a"); f:close()
+        view_path = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua"
+        f = assert(io.open(view_path, "rb")); source = source .. f:read("*a"); f:close()
         local ui_path = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue.lua"
         f = assert(io.open(ui_path, "rb")); local ui = f:read("*a"); f:close()
         Harness.truthy(source:find("DialogueUI%.build"), "virtual browser build missing")

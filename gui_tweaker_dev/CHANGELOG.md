@@ -1,5 +1,11 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.284-dev (2026-07-17) -- GUI hard-limit recovery
+
+- Extracted both Mod Tweaker presentation interaction surfaces into explicit owner-installed modules, preserving search, profile, numeric-editor, and Dialogue media behavior.
+- Extracted runtime contracts and UI Tweaks bridge contracts from the main entry point without adding hooks, commands, or lifecycle callbacks to the new modules.
+- Added offline structure/parity/package contracts; the six GUI offenders no longer exceed the 2,500-effective-line hard limit.
+
 ## 0.2.283-dev (2026-07-17) -- #611 advanced-option master presentation [untested]
 
 - Gear/advanced-option parent rows now use the established warm-tan menu accent, clearly separating bulk/master controls from their individual child settings.
