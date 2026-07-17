@@ -72,7 +72,7 @@
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'; needle='allowed_to_take_health_pickup'; literal=$true; polarity='present'; issueRef='#261'; note='FIX 10 greedy-pickup post-pass gate.' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'; needle='max_pickup_range'; literal=$true; polarity='present'; issueRef='#261'; note='FIX 10 pickup follow-range gate reference.' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'; needle='max_pickup_dist_sq'; literal=$true; polarity='present'; issueRef='#261'; note='FIX 10 pickup follow-range gate reference.' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_improved_bot_combat.lua'; needle='CHASE_MAX_DIST_SQ'; literal=$true; polarity='present'; issueRef='#261'; note='improved-combat chase-distance cap.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_improved_bot_combat.lua'; needle='_distance_sq("gt_ibc_special_chase_distance", math.sqrt(50))'; literal=$true; polarity='present'; issueRef='#261'; note='improved-combat chase-distance cap is sourced from the live bounded setting.' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_improved_bot_combat.lua'; needle='_enemy_path_allowed'; literal=$true; polarity='present'; issueRef='#261'; note='improved-combat enemy-path gate.' }
 
     # -- item 6b: #364 reserves only Bardin's exact Survival Ale pickup identity.
@@ -129,7 +129,7 @@
     @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua'; needle='enable_weapon_ui_hooks ='; literal=$true; polarity='present'; issueRef='#218'; note='hidden default-true UI hook flag still has a label; it is runtime-read despite having no widget.' }
     @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua'; needle='enable_weapon_animation_redirects ='; literal=$true; polarity='present'; issueRef='#218'; note='hidden default-true animation redirect flag still has a label; it is runtime-read despite having no widget.' }
     @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap_data.lua'; needle='for source, target in pairs(_3p_remap_billhook_to_polearm) do'; literal=$true; polarity='present'; issueRef='#290'; note='Billhook bake merges the complete receiver safety map before overlaying picks.' }
-    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua'; needle='[wt:290] weapon=wh_2h_billhook'; literal=$true; polarity='present'; issueRef='#290'; note='bounded automatic diagnostic identifies the next actual Kruber Billhook attack.' }
+    @{ mod='wt_dev'; file='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_anim_remap.lua'; needle='[wt:290] weapon=wh_2h_billhook'; literal=$true; polarity='present'; issueRef='#290'; note='friends-only bounded automatic diagnostic identifies the next actual Kruber Billhook attack.' }
     @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'; needle='mod._wt.build_3p_template_remaps = mod:dofile("scripts/mods/weapon_tweaker/_wt_anim_remap_data")'; literal=$true; polarity='present'; issueRef='#2'; note='the manifest loads the split template catalog builder exactly once before the event-hot dispatch module.' }
 
     # ============================ ct_dev ============================
@@ -152,7 +152,7 @@
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_map.lua'; needle='_kick_preview_pkg_load'; literal=$true; polarity='present'; issueRef='#336'; note='async preview-package load kick.' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_map.lua'; needle='has_loaded(PREVIEW_PKG, MM_PKG_REF)'; literal=$true; polarity='present'; issueRef='#336'; note='def-swap gated on has_loaded (ungated mount = C-fatal, v0.2.190 lesson).' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_map.lua'; needle='level_name = PREVIEW_LEVEL'; literal=$true; polarity='present'; issueRef='#336'; note='tier-2 def mounts the preview level (backdrop present).' }
-    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'; needle='_skipped_cutscene_system == self and name == "fx_fade"'; literal=$true; polarity='present'; issueRef='#140'; note='post-skip fx_fade swallow guard (stray black fade on A Parting of the Waves).' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'; needle='_post_skip_guard_active(self) and name == "fx_fade"'; literal=$true; polarity='present'; issueRef='#140'; note='post-skip fx_fade swallow guard (stray black fade on A Parting of the Waves).' }
 
     # -- #517: retail exposes no arbitrary file-read channel. Keep the useful
     #    settings export, but never resurrect the nonfunctional read/apply half.
@@ -170,8 +170,8 @@
     #    click-to-nearest-measured-boundary wiring and native scaled metrics.
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions.lua'; needle='pcall(UIFontByResolution, value_style)'; literal=$true; polarity='present'; issueRef='#575'; note='numeric caret measures with the native resolution-scaled font contract.' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions.lua'; needle='scaled_size, value_style.font_type'; literal=$true; polarity='present'; issueRef='#575'; note='UIRenderer.text_size receives the authored font identity; material-only proxy widths drift.' }
-    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua'; needle='pcall(defs.numeric_caret_index'; literal=$true; polarity='present'; minCount=2; issueRef='#575'; note='standalone presentation wires measured placement at initial and active-field clicks.' }
-    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state.lua'; needle='pcall(defs.numeric_caret_index'; literal=$true; polarity='present'; minCount=2; issueRef='#575'; note='state presentation wires measured placement at initial and active-field clicks.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_interaction.lua'; needle='pcall(defs.numeric_caret_index'; literal=$true; polarity='present'; minCount=2; issueRef='#575'; note='standalone interaction owner wires measured placement at initial and active-field clicks.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state_interaction.lua'; needle='pcall(defs.numeric_caret_index'; literal=$true; polarity='present'; minCount=2; issueRef='#575'; note='state interaction owner wires measured placement at initial and active-field clicks.' }
 
     # -- #574: exact variant persistence plus bounded hot-join convergence.
     #    Behavioral runtime checks exercise matching; these source gates retain
@@ -197,7 +197,7 @@
     # ============================ WOC ============================
     # Source: weapons_of_chaos/CHANGELOG.md 0.1.10-dev (issue 511).
     @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'; needle='mod:hook(LoadoutUtils, "sync_loadout_slot"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#422'; note='wire-safety sender hook is a SINGLETON (VMF drops a 2nd; non-WOC peers CTD if 0).' }
-    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'; needle='key:sub(1, 4) ~= "woc_"'; literal=$true; polarity='present'; issueRef='#422'; note='wire guard keys off an unconditional woc_ prefix, not a mod:get toggle.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_wire_policy.lua'; needle='key:sub(1, 4) == "woc_"'; literal=$true; polarity='present'; issueRef='#422'; note='wire-policy owner keys off an unconditional woc_ prefix, not a mod:get toggle.' }
     @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'; needle='Managers.package:load('; literal=$true; polarity='absent'; issueRef='#509'; note='WOC force-loads NOTHING: a raw package force-load on a unit path is a keep-entry C-fatal.' }
 
     # ============================ dcp ============================
