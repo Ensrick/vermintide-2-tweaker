@@ -135,6 +135,15 @@ The two-row picker on the weapon customization screen lets the user pick a shiel
 
 ### Dual-weapon ownership contract (#583)
 
+Remote equipment is a special identity boundary: vanilla husks carry the base
+item key, even when CWV has already reconstructed an exact per-peer descriptor.
+Never validate a received CWV hand against the base weapon's cosmetic pool.
+`_cos_cwv_peer_identity.lua` may select an exact CWV item type only from CWV's
+schema-matched, fingerprint-validated descriptor and only when that type is in
+Cosmetics' registered independent-dual catalog. Every other state retains the
+base item type and the restrictive compatibility result. Do not infer family
+identity from the received unit path and do not add a second network channel.
+
 Dual weapons reuse the same per-backend/per-hand substrate without pretending
 the offhand is a shield. Vanilla's normal illusion row is the sole owner of the
 main/right hand. Cosmetics adds one left/offhand row sourced from that family's

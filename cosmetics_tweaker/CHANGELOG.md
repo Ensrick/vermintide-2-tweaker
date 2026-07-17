@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.140-dev - 2026-07-17 - CWV dual-offhand remote identity (#583/#660) [verify-fix-coop]
+
+- Fixed the exact failure recorded in `console-2026-07-17-04.34.02-36c165bb-5404-48cb-9b75-d8301c460b79.log`: Rain's Dual Axes offhand reached the host, but the husk validator compared its Saltzpyre axe unit with Bardin's vanilla `dr_dual_axes` pool and logged `SKIP(incompatible-hand-mesh)`.
+- Cosmetics now consumes CWV's already fingerprint-validated per-peer/per-slot appearance descriptor and validates the offhand against `cwv_es_dual_axes` (or the corresponding exact CWV dual family). Missing providers, schema drift, stale bases, non-exact identity, and unregistered variants retain the vanilla family and fail closed.
+- No new RPC, unit-path payload, per-frame work, or family inference was added. The existing bounded direct-mesh transport, package gate, and husk rebuild remain authoritative.
+
+**Co-op verify:** customize the left/offhand of CWV Dual Axes on the client, Apply, and have the host observe it without another edit. The host log must show `decision=APPLIED-vanilla-mesh item_type=cwv_es_dual_axes identity=exact`, not `SKIP(incompatible-hand-mesh)`. Repeat with a second CWV dual family, transition, hot join, and reverse roles. A native Dual Axes control must continue to validate only against its native pool.
+
 ## 0.9.139-dev - 2026-07-17 - persisted offhand peer-ready replay (#233/#267) [verify-fix-coop]
 
 - Kept the startup/state-change LA replay armed until the local inventory has a realized melee or ranged weapon slot. Previously the replay flag was consumed as soon as the player unit became alive, even when equipment was not ready, so a persisted pre-launch shield never entered the authoritative peer store and remained invisible to a joining client until a live cosmetic edit.

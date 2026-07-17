@@ -154,13 +154,13 @@ Last updated: 2026-07-16.
 | Field | Value |
 |-------|-------|
 | Symptom | Warrior Priest Dual Skullsplitters and CWV dual weapons could not retain an offhand cosmetic independently from the paired main illusion. |
-| Root cause | The native registry excluded `wh_dual_hammer`, CWV's generated skin tables were unavailable at Cosmetics load order, direct unit choices had no durable record, and the UI treated both custom rows as hand owners instead of leaving main-hand ownership with vanilla row 1. |
+| Root cause | The native registry excluded `wh_dual_hammer`, CWV's generated skin tables were unavailable at Cosmetics load order, direct unit choices had no durable record, and the UI treated both custom rows as hand owners instead of leaving main-hand ownership with vanilla row 1. The remaining remote failure used the husk's vanilla base item type for compatibility after CWV's exact identity had already arrived, rejecting a valid CWV axe as `SKIP(incompatible-hand-mesh)`. |
 | Mod(s) | cosmetics_tweaker; character_weapon_variants when installed |
-| Fix version(s) | cosmetics_tweaker v0.9.97-dev |
+| Fix version(s) | cosmetics_tweaker v0.9.97-dev (picker/persistence); v0.9.140-dev + character_weapon_variants v0.1.444-dev (exact remote-family validation) |
 | Category | INTEGRATION / MULTIPLAYER |
 | Repro | Customize native Dual Skullsplitters or any CWV dual family, choose a row-1 main illusion and a distinct offhand, Apply, restart/transition, and observe from another peer. |
 | Expected post-fix | Row 1 owns main/right and the inventory icon; one added row owns left/offhand visuals only; Follow Main clears only the offhand override. Choices persist by backend item and hand, render in preview/1P/local3P/remote husk, and converge on transition/hot join. Invalid stored or received units fail closed to the main illusion. |
-| Detection | `/cos_regression_test` passes `independent_dual_offhands_583`, `cos_la_offhand_persistence_roundtrip`, and `issue483_cwv_sword_mace_individualized_cosmetics`. Direct peer replay remains one last-choice queue entry per `(backend_id, hand)`, uses the existing RPC schema, and is replayed by the bounded acknowledged state pull. |
+| Detection | `/cos_regression_test` passes `independent_dual_offhands_583`, `cos_la_offhand_persistence_roundtrip`, and `issue483_cwv_sword_mace_individualized_cosmetics`; offline `test_cos_cwv_remote_identity` rejects missing/stale/foreign/unregistered providers. Direct peer replay remains one last-choice queue entry per `(backend_id, hand)`, uses the existing RPC schema, and is replayed by the bounded acknowledged state pull. A valid CWV remote hand logs `APPLIED-vanilla-mesh ... item_type=<exact cwv key> identity=exact`. |
 | Tracking | GitHub issue #583. |
 
 ### independent-offhand-names -- weapon and shield component localization

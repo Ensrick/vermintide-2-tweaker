@@ -25,6 +25,7 @@ function M.install(mod, rt_register, deps)
     local _custom_skin_keys = deps.custom_skin_keys
     local OFFHAND_PRELOAD_LIFECYCLE = deps.offhand_preload_lifecycle
     local MH_EMBED = deps.mh_embed
+    local CWV_PEER_IDENTITY = deps.cwv_peer_identity
 
 -- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
@@ -1072,6 +1073,38 @@ _rt_register("independent_dual_offhands_583", function()
             or type(mod._store_offhand_mesh_recv) ~= "function"
             or type(mod._offhand_mesh_by_peer) ~= "table" then
         return "bounded direct-unit peer replay path incomplete"
+    end
+    if type(CWV_PEER_IDENTITY) ~= "table"
+            or type(CWV_PEER_IDENTITY.resolve_item_type) ~= "function" then
+        return "CWV exact remote-family bridge missing"
+    end
+    local resolved, identity_state = CWV_PEER_IDENTITY.resolve_item_type({
+        base_item_type = "dr_dual_axes",
+        wearer_peer = "rt-peer",
+        slot_name = "slot_melee",
+        base_item_key = "dr_dual_wield_axes",
+        allowed_item_types = { cwv_es_dual_axes = true },
+        provider = {
+            schema = CWV_PEER_IDENTITY.SCHEMA,
+            resolve_peer = function()
+                return {
+                    provider = "cwv",
+                    variant_key = "cwv_es_dual_axes",
+                    base_item_key = "dr_dual_wield_axes",
+                }, "exact"
+            end,
+        },
+    })
+    if resolved ~= "cwv_es_dual_axes" or identity_state ~= "exact" then
+        return "CWV exact remote identity did not select its registered hand pool"
+    end
+    resolved = CWV_PEER_IDENTITY.resolve_item_type({
+        base_item_type = "dr_dual_axes",
+        base_item_key = "dr_dual_wield_axes",
+        allowed_item_types = { cwv_es_dual_axes = true },
+    })
+    if resolved ~= "dr_dual_axes" then
+        return "missing CWV identity did not fail closed to the vanilla family"
     end
 end)
 

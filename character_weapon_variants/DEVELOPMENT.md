@@ -1085,6 +1085,13 @@ Three distinct ways the bayonet can render where it shouldn't:
 
 ## Husk rendering path
 
+Sibling renderers that need the exact CWV family may consume
+`mod._cwv_peer_appearance.resolve_peer(peer_id, slot_name, base_item_key)`.
+It is a read-only-by-convention view of the same schema-2, fingerprint-validated
+descriptor used by CWV's husk renderer; it does not send or infer identity.
+Consumers must require state `exact`, validate their own local family catalog,
+and retain a vanilla-safe fallback for every unavailable or stale state.
+
 The single most misdiagnosed CWV surface. A variant that looks and behaves
 perfectly for the LOCAL wielder and their BOTS can be invisible, wrong-mesh,
 wrong-scale, or carry an extra ammo mesh on a REMOTE player's screen (a

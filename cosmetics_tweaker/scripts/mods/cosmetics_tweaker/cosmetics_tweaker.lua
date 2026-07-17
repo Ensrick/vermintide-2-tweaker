@@ -48,6 +48,7 @@ local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local CUSTOM_HATS = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_custom_hats")
 local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set")
 local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
+mod._cos_cwv_peer_identity = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_peer_identity")
 local OFFHAND_NAMES = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_names")
 local ITEM_PRESENTATION = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_item_presentation")
 local COMPOSITE_ICON_CATALOG = mod:dofile(
@@ -84,7 +85,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.139-dev"
+local MOD_VERSION = "0.9.140-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -4643,6 +4644,15 @@ if BackendUtils then
                             local base = rawget(ItemMasterList, item_data.matching_item_key)
                             recv_item_type = base and base.item_type or recv_item_type
                         end
+                        -- #583: use CWV's fingerprint-validated peer identity;
+                        -- absent/mismatched identity retains the vanilla family.
+                        local identity_state = "base"
+                        if mod._cos_cwv_peer_identity then
+                            recv_item_type, identity_state =
+                                mod._cos_cwv_peer_identity.resolve_husk(recv_item_type,
+                                    get_mod("character_weapon_variants"), _current_husk_wield,
+                                    item_data, mod._independent_dual_item_types)
+                        end
                         local compatible = mod._dual_offhand_unit_allowed(
                             recv_item_type, hand_field, unit_path)
                         local ready = compatible and _override_package_ready(unit_path)
@@ -4659,12 +4669,13 @@ if BackendUtils then
                         if PROBE then
                             PROBE.emit("cos:sync",
                                 "husk_vanilla/" .. tostring(_current_husk_wield.wearer_peer) .. "/" .. tostring(template) .. "/" .. tostring(hand_field),
-                                string.format("peer=husk wearer=%s template=%s hand=%s unit=%s decision=%s",
+                                string.format("peer=husk wearer=%s template=%s hand=%s unit=%s decision=%s item_type=%s identity=%s",
                                     tostring(_current_husk_wield.wearer_peer), tostring(template),
                                     tostring(hand_field), tostring(unit_path),
                                     (compatible and ready) and "APPLIED-vanilla-mesh"
                                         or (compatible and "SKIP(package-not-resident)"
-                                            or "SKIP(incompatible-hand-mesh)")))
+                                            or "SKIP(incompatible-hand-mesh)"),
+                                    tostring(recv_item_type), tostring(identity_state)))
                         end
                     end
                 end
@@ -10418,6 +10429,7 @@ _cos_runtime_checks.install(mod, _rt_register, {
     dbg = _dbg, dbg_alert = _dbg_alert, ui_dump = UI_DUMP,
     custom_skin_keys = _custom_skin_keys,
     offhand_preload_lifecycle = OFFHAND_PRELOAD_LIFECYCLE, mh_embed = MH_EMBED,
+    cwv_peer_identity = mod._cos_cwv_peer_identity,
 })
 -- ============================================================
 -- Moonfire Bow cosmetic AOE puff (moved from weapon_tweaker 2026-06-29)
