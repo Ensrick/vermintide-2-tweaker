@@ -28,14 +28,12 @@ return function(H, repo_root)
         for _, key in ipairs({
             "we_1h_sword", "es_1h_sword", "wh_1h_falchion", "bw_1h_crowbill",
         }) do
-            H.equal(status.decorate_tag("dr_ranger", key, true),
-                "[working → Bardin 1H event map]")
-            H.equal(status.decorate_tag("dr_ranger", key, false), "[working]")
+            H.equal(status.state("dr_ranger", key), "working")
+            H.equal(status.redirect_target("dr_ranger", key), "Bardin 1H event map")
             H.equal(status.model_substitute("dr_ranger", key), nil)
         end
-        H.equal(status.tag("dr_ranger", "es_handgun"), "[working]")
+        H.equal(status.state("dr_ranger", "es_handgun"), "working")
         H.equal(status.redirect_target("dr_ranger", "es_handgun"), nil)
-        H.equal(status.decorate_tag("dr_ranger", "es_handgun", true), "[working]")
     end)
 
     H.test("WT #110 Bardin diagnostics are automatic and bounded", function()

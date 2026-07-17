@@ -151,11 +151,10 @@ Run-Check "run_selftests"      { & (Join-Path $here "run_selftests.ps1")      -Q
 # run, including hosted CI. See CHECKS row 60g / issue #683.
 Run-Check "vmb_launcher_path_host_matrix" { & (Join-Path $here "run_vmb_launcher_path_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 Run-Check "check_localization" { & (Join-Path $here "check_localization.ps1") -Quiet:$Quiet }
-# check_loc_tags is advisory-only (dev status-tag doctrine, issue #301): it
-# surfaces stable-tag leaks, unknown-vocab tags, and mutex combos, but must
-# NEVER fail the gate (it exists to flag a pre-existing leak in stable cim).
-# Pinned Advisory so no exit code it returns ever blocks. See qa/CHECKS.md row 19e.
-Run-Check "check_loc_tags"     { & (Join-Path $here "check_loc_tags.ps1")     -Quiet:$Quiet } -Policy 'Advisory'
+# Player-facing lifecycle/issue metadata is forbidden in every active stream.
+# This is a blocking repository-wide gate; GitHub labels/changelogs remain the
+# source of truth for verification state. See LOCALIZATION_STANDARD section 13.
+Run-Check "check_loc_tags"     { & (Join-Path $here "check_loc_tags.ps1")     -Quiet:$Quiet }
 # check_issue_status_labels is advisory-only (GitHub issue status-label doctrine,
 # PROJECT_STANDARDS.md § 11): it warns when the latest CHANGELOG entry references
 # an open issue that carries neither verify-fix nor diagnostics-armed (a shipped
@@ -163,14 +162,6 @@ Run-Check "check_loc_tags"     { & (Join-Path $here "check_loc_tags.ps1")     -Q
 # returns ever blocks; it also self-exits 0 when gh is offline/unauthenticated.
 # See qa/CHECKS.md row 19f.
 Run-Check "check_issue_status_labels" { & (Join-Path $here "check_issue_status_labels.ps1") -Quiet:$Quiet } -Policy 'Advisory'
-# check_issue_tag_sync is advisory-only (issue #326 part 2): the whole-surface
-# loc-tag <-> GitHub-label sync guard. Warns on stale [Issue N] tags (closed /
-# non-existent issues, LOCALIZATION_STANDARD § 13.4), [verify-fix]/[diag] tags
-# whose issue lacks the matching status label, and vice versa. Complements
-# check_issue_status_labels (which only reads each mod's TOP CHANGELOG entry).
-# Pinned Advisory; self-exits 0 when gh is offline/unauthenticated.
-# See qa/CHECKS.md row 19g.
-Run-Check "check_issue_tag_sync" { & (Join-Path $here "check_issue_tag_sync.ps1") -Quiet:$Quiet } -Policy 'Advisory'
 Run-Check "check_file_sizes"   { & (Join-Path $here "check_file_sizes.ps1")   -Quiet:$Quiet }
 Run-Check "check_command_collisions" { & (Join-Path $here "check_command_collisions.ps1") -Quiet:$Quiet }
 Run-Check "check_decisions_wired" { & (Join-Path $here "check_decisions_wired.ps1") -Quiet:$Quiet }

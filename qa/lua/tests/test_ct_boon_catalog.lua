@@ -84,7 +84,7 @@ return function(H, repo_root)
             "Disable Boons: Modded Boons", 1, true))
         H.equal(loc.start_boon_mod_boons_group.en:find("New Scaling Boons", 1, true), nil)
         H.truthy(loc.start_boon_ct_kill_heal.en:find("Khaine's Communion", 1, true))
-        H.truthy(loc.start_boon_ct_kill_heal.en:find("[Issue 406]", 1, true))
+        H.equal(loc.start_boon_ct_kill_heal.en:find("[Issue", 1, true), nil)
     end)
 
     H.test("CT #406 uses one canonical power-up registration path", function()

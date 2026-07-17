@@ -18,6 +18,7 @@ local disabled_sections = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_
 local tab_labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_labels")
 local ordering = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_ordering")
 local DialogueUI = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")
+local label_policy = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_label_policy")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -225,9 +226,11 @@ local function _vmf_label(node, mod_obj)
     local key = inner or t
     if mod_obj and mod_obj.localize then
         local ok, s = pcall(mod_obj.localize, mod_obj, key)
-        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then return s end
+        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then
+            return label_policy.clean(s)
+        end
     end
-    return key
+    return label_policy.clean(key)
 end
 
 -- (#207) The node's tooltip DESCRIPTION (the hover-popup body). In VMF widget data the

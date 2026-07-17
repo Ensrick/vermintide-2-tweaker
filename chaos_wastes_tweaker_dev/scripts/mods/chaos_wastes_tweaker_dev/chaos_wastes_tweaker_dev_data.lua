@@ -440,7 +440,7 @@ local data = {
             -- #505 Single Mission Loader (host-only). Widget tree built in
             -- _ct_dev_mission_catalog.build_menu_group(); the keybind resolves
             -- mod.ct_dev_load_selected_mission. recursive_sort() places it by its
-            -- localized "[untested] Dev: ..." title among the top-level groups.
+            -- localized developer-tool title among the top-level groups.
             -- ============================================================
             DevMission.build_menu_group(),
             -- ============================================================
@@ -742,8 +742,8 @@ local data = {
                             {
                                 setting_id = "reworks_boons_existing_group",
                                 type = "group",
-                                -- A->Z by display label ([untested] status tag ignored for
-                                -- sort). The Miracle of Isha mutex cluster (isha_choice) keeps
+                                -- A->Z by display label. The Miracle of Isha mutex cluster
+                                -- (isha_choice) keeps
                                 -- its "    (A) / (B)" 4-space-indent labels and stays adjacent
                                 -- in letter order (enforced in on_setting_changed via
                                 -- chaos_wastes_tweaker_mutex); the leading indent sorts it first.

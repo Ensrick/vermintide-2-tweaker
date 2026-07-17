@@ -362,31 +362,6 @@ mod:command("ct_regression_test", "Run regression smoke checks for past bugs", f
 end)
 pcall(printf, "[regression-test-command] registered as /ct_regression_test")
 
--- #345: keep the CT dev option-title status surface aligned with the live
--- issue labels. This runtime contract complements the offline source test:
--- VMF must actually resolve the authored rows to the expected visible prefix.
-_rt_register("issue345_ct_localization_status_sync", function()
-    local expected = {
-        inject_adventure_maps = "[diag] [Issue 52 & 251] ",
-        progressive_difficulty = "[untested] ",
-        finale_dominant_god = "[diag] [Issue 135] ",
-        respawn_on_chest_complete = "[verify-fix] [Issue 299] ",
-        disable_boon_ct_meta_ammo = "[verify-fix] [diag] [Issue 256 & 249] ",
-        start_boon_ct_meta_ammo = "[verify-fix] [diag] [Issue 256 & 249] ",
-        enable_boon_vauls_anvil = "[verify-fix] [Issue 144] ",
-        start_boon_ct_boon_vauls_anvil = "[verify-fix] [Issue 144] ",
-    }
-    for key, prefix in pairs(expected) do
-        local text = mod:localize(key)
-        if type(text) ~= "string" or text:sub(1, #prefix) ~= prefix then
-            return string.format("#345 status drift: %s resolved to %s", key, tostring(text))
-        end
-    end
-    if mod:localize("starting_boons_group") ~= "Starting Boons" then
-        return "#345 status drift: navigation-only starting_boons_group is tagged"
-    end
-end)
-
 -- Mutex cluster framework (v0.7.85 — replaces the Miracle of Isha dropdown
 -- with a (A)/(B) checkbox cluster). See chaos_wastes_tweaker_mutex.lua's
 -- doc-block and LOCALIZATION_STANDARD.md § 10 at repo root. New clusters

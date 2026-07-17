@@ -25,10 +25,10 @@ return function(H, repo_root)
 
     H.test("WT #112 promotes proven 1H rows and removes stale Dual Hammers", function()
         for _, career in ipairs(careers) do
-            H.equal(status.tag(career, "es_1h_mace"), "[working]")
-            H.equal(status.tag(career, "es_1h_sword"), "[working]")
-            H.equal(status.tag(career, "we_1h_axe"), "[working]")
-            H.equal(status.redirect_target(career, "we_1h_axe"), "[Saltzpyre 1H Axe]")
+            H.equal(status.state(career, "es_1h_mace"), "working")
+            H.equal(status.state(career, "es_1h_sword"), "working")
+            H.equal(status.state(career, "we_1h_axe"), "working")
+            H.equal(status.redirect_target(career, "we_1h_axe"), "Saltzpyre 1H Axe")
             H.equal(status.needs_anims(career, "dr_dual_wield_hammers"), false)
         end
         local present = {}
@@ -42,7 +42,7 @@ return function(H, repo_root)
         local by_key = {}
         for _, row in ipairs(rows) do
             by_key[row.weapon_key] = row
-            if row.status ~= "[working]" then
+            if row.state ~= "working" then
                 if row.redirect then targets = targets + 1 else no_target = no_target + 1 end
             end
         end
@@ -50,11 +50,11 @@ return function(H, repo_root)
         H.equal(no_target, 2)
         H.equal(by_key.bw_ghost_scythe.picker_visible, true)
         H.equal(by_key.we_spear.picker_visible, true)
-        H.equal(by_key.we_1h_spears_shield.redirect, "[Dual Axe & Falchion]")
-        H.equal(by_key.we_deus_01.redirect, "[Saltzpyre Crossbow]")
+        H.equal(by_key.we_1h_spears_shield.redirect, "Dual Axe & Falchion")
+        H.equal(by_key.we_deus_01.redirect, "Saltzpyre Crossbow")
         H.equal(by_key.we_deus_01.model_substitute, "Crossbow")
         for _, key in ipairs({ "we_shortbow", "we_shortbow_hagbane" }) do
-            H.equal(by_key[key].status, "[needs animations]")
+            H.equal(by_key[key].state, "needs_animations")
             H.equal(by_key[key].redirect, nil)
             H.equal(by_key[key].model_substitute, nil)
             H.equal(by_key[key].picker_visible, false)

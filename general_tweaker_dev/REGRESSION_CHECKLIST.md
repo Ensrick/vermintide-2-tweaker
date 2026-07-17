@@ -96,8 +96,7 @@ Last updated: 2026-07-17.
 - [ ] Closed issue references #65, #255, #261, #293, #295, #297, #448, #468, #492, #515, and #529 do not appear in General Tweaker's visible setting labels.
 - [ ] Bot Behavior Improvements shows only `[verify-fix] [Issue 139, 142, 469 & 488]`; Follow snap-back distance shows only `[verify-fix] [Issue 139]` and no stale diagnostic marker.
 - [ ] AOE immunity (#469), all heal-allies controls (#523), Improved Bot Combat (#298), and keep-dummy collision (#304) show `[verify-fix]` with their issue number.
-- [ ] `qa/check_issue_tag_sync.ps1` reports no findings for the corrected General Tweaker keys.
-- [ ] `/gt_regression_test` passes `issue345_gt_loc_status_sync`.
+- [ ] `qa/check_loc_tags.ps1` reports no player-facing lifecycle metadata.
 
 ## Improved Bot Combat advanced controls (#298)
 

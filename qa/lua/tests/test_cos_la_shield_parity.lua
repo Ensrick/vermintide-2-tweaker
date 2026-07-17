@@ -94,7 +94,9 @@ return function(Harness, repo_root)
             "selection must retain pool provenance")
         Harness.truthy(source:find('variant_kind    = la_opt.variant_kind', 1, true),
             "selection must retain mesh ownership kind")
-        Harness.truthy(source:find('_offhand_paint_mesh_ok(u, sel.la_armoury_key)', 1, true),
+        Harness.truthy(source:find('_offhand_paint_mesh_ok(u, sel.la_armoury_key,', 1, true),
             "every render paint path must consume the exact mesh gate")
+        Harness.truthy(source:find('proven_unit_paths and proven_unit_paths[unit_index]', 1, true),
+            "loot previews must pass their exact queued hand path to the mesh gate")
     end)
 end

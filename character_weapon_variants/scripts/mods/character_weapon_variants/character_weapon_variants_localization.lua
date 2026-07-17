@@ -4,10 +4,10 @@ local loc = {
 		en = "Adds new weapon variants that combine models from different characters into lore-friendly weapons.",
 	},
 	cwv_dev_options = { en = "Dev Options" },
-	enable_cwv_dev_anim_picker = { en = "[verify-fix-coop] 3P Animation Picker" },
+	enable_cwv_dev_anim_picker = { en = "3P Animation Picker" },
 	enable_cwv_dev_anim_picker_tooltip = { en = "Shows live third-person animation controls for CWV weapons. Picks are saved and apply to the selected receiver only. First-person animations are never changed." },
 	mace_sword_tweak = {
-		en = "[working] Mace and Sword Name and Cosmetic Tweak",
+		en = "Mace and Sword Name and Cosmetic Tweak",
 	},
 	mace_sword_tweak_description = {
 		en = "When on, renames Kruber's vanilla Mace and Sword to 'Cudgel and Short Sword' and shrinks the off-hand sword to match the Shortsword. This only changes the vanilla weapon; the separate Sword and Mace variant added by this mod is left untouched.",
@@ -15,7 +15,7 @@ local loc = {
 	cwv_interaction_ammunition_javelin = {
 		en = "Tuskgor Javelin",  -- pickup popup text when looking at a stuck javelin
 	},
-	cwv_cycle_combat_style_hotkey = { en = "[diagnostics-armed] [Issue 645] Cycle Combat Style" },
+	cwv_cycle_combat_style_hotkey = { en = "Cycle Combat Style" },
 	cwv_cycle_combat_style_hotkey_tooltip = { en = "Cycles the wielded supported weapon's saved Combat Style. The style belongs to that exact weapon instance and changes only when no attack is active. Greatswords cycle Greatsword, Imperial Longsword, Bretonnian, and Kerillian; Greathammers cycle Kruber and Warrior Priest; Tuskgor Spear cycles Hunter and Infantry; Kruber and Elven Spear and Shield cycle each other's style when the corresponding DLC is owned." },
 	cwv_cycle_combat_style_controller = { en = "Switch Combat Style" },
 
@@ -37,9 +37,9 @@ local loc = {
 	-- ============================================================
 	-- cwv_es_crossbow variant (v0.1.347-dev)
 	-- ============================================================
-	enable_cwv_es_crossbow         = { en = "[working] Kruber: Crossbow (Saltzpyre's, rifle anims)" },
+	enable_cwv_es_crossbow         = { en = "Kruber: Crossbow (Saltzpyre's, rifle anims)" },
 	enable_cwv_es_crossbow_tooltip = { en = "When on, adds a version of Saltzpyre's crossbow that Kruber can wield, animated like his handgun in the third-person view. It is on by default." },
-	enable_cwv_mace_hammer_identity = { en = "[verify-fix] Distinguish Maces and Hammers" },
+	enable_cwv_mace_hammer_identity = { en = "Distinguish Maces and Hammers" },
 	enable_cwv_mace_hammer_identity_tooltip = { en = "On by default. One-handed maces, mace and shield, and Dual Maces attack 5%% faster. One-handed hammers, hammer and shield, and Dual Hammers deal 12.5%% more direct damage but have 25%% less cleave. Stagger, ordinary pushes, blocks, wield actions, two-handed hammers, Hammer and Tome, Maul, and mixed Mace and Sword weapons are unchanged." },
 	enable_cwv_vanilla_crowbill_hammer_mode = { en = "Sienna Crowbill Hammer Mode" },
 	enable_cwv_vanilla_crowbill_hammer_mode_tooltip = { en = "Also lets Sienna's original Crowbill use Weapon Special to turn between its pick and hammer faces. Imperial and Dawi Crowbills always have this ability." },

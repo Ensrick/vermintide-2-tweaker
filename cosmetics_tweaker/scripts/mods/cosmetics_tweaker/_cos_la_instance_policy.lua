@@ -7,6 +7,75 @@ local function _backend_id(item)
     return type(item) == "table" and (item.backend_id or item.ItemInstanceId) or nil
 end
 
+-- A preview may omit backend_id while vanilla rebuilds it from a pending
+-- weapon_skin row.  The customization screen's exact item is a valid fallback
+-- only when both sides prove the same normalized weapon family.  An explicit
+-- item identity always wins; unrelated/no-family previews fail closed.
+function M.resolve_preview_backend_id(exact_backend_id, preview_item_type,
+        active_backend_id, active_item_type)
+    if exact_backend_id ~= nil and exact_backend_id ~= "" then
+        return exact_backend_id, "exact"
+    end
+    if type(preview_item_type) == "string" and preview_item_type ~= ""
+        and preview_item_type == active_item_type
+        and active_backend_id ~= nil and active_backend_id ~= "" then
+        return active_backend_id, "same-family-fallback"
+    end
+    return nil, "unowned"
+end
+
+local function _selection_key(record)
+    if type(record) ~= "table" then return nil, nil end
+    local authored = record.la_armoury_key or record.armoury_key
+    if type(authored) == "string" and authored ~= "" then
+        return "authored", authored
+    end
+    local unit = record.unit or record.intended_unit or record.unit_path
+    if type(unit) == "string" and unit ~= "" then return "unit", unit end
+    return nil, nil
+end
+
+-- Selection records may be restored from persistence, so table identity is not
+-- stable.  Ownership is instead the exact authored key or unit path present in
+-- the current item's hand pool.  Ambiguous records and missing pools fail closed.
+function M.selection_owned(selection, pool)
+    local kind, key = _selection_key(selection)
+    if not kind or type(pool) ~= "table" then return false end
+    for _, candidate in ipairs(pool) do
+        local candidate_kind, candidate_key = _selection_key(candidate)
+        if candidate_kind == kind and candidate_key == key then return true end
+    end
+    return false
+end
+
+function M.resolve_preview_selection(selections_by_backend_id, backend_id,
+        hand_field, pool)
+    if type(selections_by_backend_id) ~= "table"
+        or backend_id == nil or backend_id == "" then
+        return nil, "unowned-item"
+    end
+    local hands = selections_by_backend_id[backend_id]
+    local selection = type(hands) == "table" and hands[hand_field] or nil
+    if selection == nil then return nil, "none" end
+    if not M.selection_owned(selection, pool) then
+        return nil, "foreign-selection"
+    end
+    return selection, "owned"
+end
+
+-- LootItemUnitPreviewer has a stronger truth source than Unit.get_data:
+-- spawn_data[i].unit_name is the exact path returned by BackendUtils and queued
+-- for that hand.  Authored paints may proceed only on a declared 1P/3P mesh.
+function M.preview_target_matches(proven_unit_path, variant)
+    if type(proven_unit_path) ~= "string" or proven_unit_path == ""
+        or type(variant) ~= "table" or type(variant.new_units) ~= "table" then
+        return false
+    end
+    return proven_unit_path == variant.new_units[1]
+        or (variant.new_units[2] ~= nil
+            and proven_unit_path == variant.new_units[2])
+end
+
 local function _icon_for(armoury_key, vanilla_skin, skin_list)
     local variant = type(skin_list) == "table" and skin_list[armoury_key] or nil
     local icons = type(variant) == "table" and variant.icons or nil

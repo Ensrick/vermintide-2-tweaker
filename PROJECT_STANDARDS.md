@@ -1235,8 +1235,8 @@ differently).
 **Stage 1 - Superseded.** The replacement exists and is named. Add the §7.5
 SUPERSEDED banner (the word SUPERSEDED must appear in the first 10 lines -
 `qa/check_stale_docs.ps1` keys on it) pointing at the new owner. Content stays
-readable in place. For a settings toggle, the analogue is the dev status tag /
-CHANGELOG entry naming what replaces it; for a cross-mod API, the provider keeps
+readable in place. For a settings toggle, the analogue is a CHANGELOG/GitHub
+entry naming what replaces it; for a cross-mod API, the provider keeps
 the old entry point returning inert values so consumers that guard (the
 `(get_mod('bt') or {}):is_br_active()` pattern) degrade without crashing.
 
@@ -1755,17 +1755,15 @@ lifecycle labels, and removes stale `coop-required` outside armed diagnostics. E
 decision is printed so a mixed entry (fix + probe in one) can
 be corrected by hand; loc-sweep entries, closed issues, and non-existent numbers are
 skipped. Explicit `[docs]` / `[tooling]` entries are also skipped because their issues
-are verified and closed autonomously. Two advisory QA guards back it up:
-`qa/check_issue_status_labels.ps1` (top
-CHANGELOG entry vs labels) and `qa/check_issue_tag_sync.ps1` (whole loc-tag surface vs
-labels, both directions — see `qa/CHECKS.md` rows 19f/19g).
+are verified and closed autonomously. The advisory `qa/check_issue_status_labels.ps1`
+guard backs this up by comparing top CHANGELOG references with GitHub lifecycle labels.
 
-**Dev localization tags move with the issue (issue #301).** Opening or closing an issue
-that touches a dev-build feature means updating that feature's option-title status tag in
-the SAME pass — e.g. add `[Issue N]` when you open, drop it (→ `[working]`/`[untested]`) when
-you close, add `[verify-fix]`/`[diag]` when you ship a candidate fix or arm diagnostics. Full
-tag vocabulary and rules: `docs/LOCALIZATION_STANDARD.md` § 13 "Dev status tags"; the QA scan is
-`qa/check_loc_tags.ps1`.
+**Player-facing localization is not an issue tracker.** Stable, beta, and dev streams
+all omit issue/lifecycle prefixes such as `[Issue N]`, `[working]`, `[untested]`,
+`[verify-fix]`, `[diag]`, and `(Experimental)`. Keep that state in GitHub labels,
+issues, changelogs, and logs. Functional qualifiers describing ownership or behavior
+remain valid. The blocking guard is `qa/check_loc_tags.ps1`; full rules are in
+`docs/LOCALIZATION_STANDARD.md` § 13.
 
 ### What used to live here
 A status roadmap (`✅ DONE / ⚠ PARTIAL / ❌ TODO` tables across "High ROI",

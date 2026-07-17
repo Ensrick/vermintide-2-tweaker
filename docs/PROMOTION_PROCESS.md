@@ -62,7 +62,8 @@ copy the one hunk) and never promotes anything else.
 1. Implement + bump + CHANGELOG + regression-test in `*_dev/` (dev ships first, no-ask).
 2. Apply the **same hunk** to the stable dir; bump stable to the user-named clean version
    (strip `-dev`); write the stable CHANGELOG entry **citing the issue number**; keep the
-   dev-only scaffolding out (status tags, always-on diagnostics, dev-only files).
+   dev-only scaffolding out (always-on diagnostics and dev-only files). Lifecycle
+   tags are forbidden in both source streams before promotion (#694).
 3. `promotion-status.ps1 -Mod <stable>` -> the issue should now show OK (cited).
 4. A clean stable upload needs a **fresh, per-build ship signal from the user naming the version**
    (treated like `git push --force`). Then `ship.ps1 -Mod <stable>`, adding
@@ -104,11 +105,12 @@ content). Reference: memory `reference_cim_dev_to_stable_promotion`.
 - **Preserve stable identity**: `published_id`, `visibility` in the stable `itemV2.cfg`
   are user-dictated and never inferred from version/dir/stream.
 - **Cross-mod `get_mod(...)` refs target STABLE ids** (`cim`, `gt`, ...), never `*_dev`.
-- **Strip dev-only artifacts on promotion**: dev status tags (`[untested]` etc.), always-on
-  diagnostics (inert in stable), dev-only files (e.g. `_diag_probe.lua`).
+- **Keep dev-only artifacts out on promotion**: always-on diagnostics (inert in stable)
+  and dev-only files (e.g. `_diag_probe.lua`). Player-facing lifecycle/status tags
+  are already forbidden in every stream by `qa/check_loc_tags.ps1` (#694).
 - **The promotion RED GATE enforces the checklist** (issue #327): `ship.ps1` runs
   `qa/check_promotion.ps1` BLOCKING for the five stable split dirs — hard fail on
-  (a) any sanctioned status tag in the stable localization, (b) a pre-release
+  (a) any forbidden lifecycle/status tag in the stable localization (defense in depth), (b) a pre-release
   suffix on the stable MOD_VERSION (override with `VT2_SUFFIX_OK=1` when the USER
   named a suffixed stable version, issue #328 ruling), (c) MOD_VERSION not equal
   to the top stable CHANGELOG entry, or that entry not increasing over the previous

@@ -1643,6 +1643,14 @@ Related coverage: Cosmetics runtime `glow_picker_apply_transaction_574` and
 source invariants for exact identity, explicit Apply, acknowledged state pull,
 and no-network-retry convergence.
 
+For independent components, exact item persistence alone is insufficient. Each
+preview adapter must prove the saved record belongs to the current item's hand
+pool and that the unit it will paint is the authored target. In
+`LootItemUnitPreviewer`, queued `spawn_data[i].unit_name` is stronger evidence
+than runtime unit metadata; an unreadable `Unit.get_data("unit_name")` must fail
+closed rather than authorize a paint. An independent row-2 owner also suppresses
+whole-skin fallback paint on that component (#481).
+
 ## 44. Wire-safe substitute is mechanically incompatible
 
 **First seen:** 2026-07-13 (CWV issue #296; fixed v0.1.400-dev)
@@ -1790,6 +1798,10 @@ Athanor, lobby, score, owner, bot, and husk surfaces.
   substitute.
 - Make every surface adapt that descriptor to its renderer/spawn API. A surface
   may not re-derive identity, illusion, or transform policy.
+- Pair each returned preview unit with the exact recipe entry that spawned it.
+  Do not infer ownership from a shared pivot, slot name, or unreadable runtime
+  metadata; multiple previewers can legitimately reuse identical coordinates in
+  separate viewport worlds (#481).
 - Treat item-card text as component-owned presentation: a selected offhand or
   shield supplies its own name and description, while the primary supplies
   only its side of a composed title. Never retain primary flavor text after an

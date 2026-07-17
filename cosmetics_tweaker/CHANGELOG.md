@@ -1,15 +1,23 @@
 # Cosmetics Tweaker — Changelog
 
-## 0.9.143-dev - 2026-07-17 - issue 695 guards compacted to file-size baseline [verify-fix]
+## 0.9.144-dev - 2026-07-17 - combined issue 695 + #481 reconciliation build [verify-fix]
 
-- Identical runtime behavior to 0.9.142-dev; the two issue 695 guards were compacted so cosmetics_tweaker.lua returns to its frozen 10,042-line qa baseline (check_file_sizes blocked PR 708 at 10,050).
+- Reconciliation reship: two different builds were uploaded as 0.9.143-dev within minutes of each other (18:54 with the #481 preview fix, 18:56 without it, from two parallel sessions). This build carries both the issue 695 warning-flood guards and the #481 exact Athanor offhand preview ownership, under an unambiguous version.
 
-## 0.9.142-dev - 2026-07-17 - pre-login backend warning flood fix (issue 695) [verify-fix]
+**Test (issue 695 half):** start into the modded realm, wait for the character screen, then check the newest console log: `Requesting unknown interface` must be absent (previously ~5,400 lines between mod load and backend ready).
 
-- Silenced two per-frame `BackendManagerPlayFab:get_interface: Requesting unknown interface items` warning sources during the pre-login window: the offhand-selection restore retry (`_la_restore_offhand_selections`) and the 10s-deferred LA_PERSIST instance prune, both driven from `mod.update`. Each now probes `Managers.backend._interfaces` directly and only calls `get_interface` once the interface exists.
-- No behavior change: both paths already tolerated the nil return and retried next frame; only the engine warning per call (backend_manager_playfab.lua:203, ~2 lines per frame for ~35s = ~3,400 log lines per session) is eliminated.
+## 0.9.143-dev - 2026-07-17 - exact Athanor offhand preview ownership (#481)
 
-**Test:** start the game into the modded realm, wait for the character screen, then check the newest console log: `Requesting unknown interface items` must be absent (previously ~3,400 lines between mod load and `[backend_ready]`).
+- Closed the fail-open preview path recorded in `console-2026-07-17-17.50.57-10bc42ac-d630-48e0-95d8-f5de4cdc727c.log`: `LootItemUnitPreviewer` had an exact queued hand-unit path, but unreadable runtime `unit_name` metadata was treated as a mesh match and allowed an authored shield paint onto an unproven target.
+- Pending-illusion backend fallback now requires the same normalized weapon family. Exact backend IDs still win, husks never consume the local customization fallback, and an offhand record must be present in that exact item type's current hand pool.
+- The returned preview units now consume their corresponding `spawn_data[i].unit_name` evidence. LA and Purpure/Azure paints fail closed when the declared authored 1P/3P mesh does not match, and an exact independent row-2 component prevents a second whole-skin provider from repainting the same shield.
+- Preserved the Athanor overview's legitimate melee and ranged previewers; no previewer destruction, new hook, RPC, polling loop, or guessed viewport ownership was added.
+- Added Lua 5.1 and runtime regressions for exact LA/Purpure item isolation, same-family fallback, pool ownership, provider arbitration, and mismatched/missing preview targets.
+
+## 0.9.142-dev - 2026-07-17 - pre-login backend warning flood fix (issue 695)
+
+- Preserved the already-uploaded public source delta from the `vt2-cim-promo` ship worktree: offhand-selection restore and delayed instance prune probe `Managers.backend._interfaces.items` before calling `get_interface("items")`.
+- Both paths already retried while the backend was unavailable; this only prevents the pre-login miss path from emitting the same unknown-interface warning every frame.
 
 ## 0.9.141-dev - 2026-07-17 - independent component flavor text (#641) [diagnostics-armed]
 

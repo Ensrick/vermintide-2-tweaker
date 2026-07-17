@@ -65,7 +65,7 @@
      native owner (see the BAKED section in `KRUBER_3P_ANIM_DECISIONS.md`,
      v0.12.149-dev). Then REMOVE the weapon_key from `_NEEDS_ANIMS.kruber` and add
      it to `_CONFIRMED.kruber` (`wt_port_status.lua`) so the picker drops it and
-     the Availability tag reads `[working]` (v0.12.204-dev #301: lowercased).
+     the internal coverage state reads `working`; player-facing Availability labels remain plain (#694).
    Model substitutes (column b) are a separate wiring pass — see
    "Model-substitute queue" at the bottom.
 
