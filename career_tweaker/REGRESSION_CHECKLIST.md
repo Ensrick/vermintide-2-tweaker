@@ -24,6 +24,17 @@ Last updated: 2026-07-17.
 | Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` check `issue619_foot_knight_contract`; transition-only `[crt:619] secondary-slot` diagnostic; solo walk in CHANGELOG 0.4.2-beta. |
 
 ---
+## Foot Knight multi-source aura ownership (#663)
+
+| Field | Value |
+|-------|-------|
+| Symptom | Two Foot Knights make a shared aura icon disappear/reappear because vanilla update/remove functions resolve any target buff with the same template. |
+| Ownership | Each driver owns only its target claims. One aggregate vanilla server buff exists per template/target; the first claim adds or adopts it and only the final release removes it. |
+| Network | Uses existing vanilla buff names and `BuffSystem` RPCs. No custom lookup name, custom RPC, or per-tick send is introduced. |
+| Lifecycle | Driver removal releases its own claims. Mission reset flushes aggregate server ids. Mod disable restores every exact vanilla update/remove function, including nil absence. |
+| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` check `issue663_foot_knight_aura_source_ownership`; bounded transition prefix `[crt:663]`; two-human walk in CHANGELOG 0.4.2-beta. |
+
+---
 ## Ranger Veteran ale action speed (#367)
 
 | Field | Value |

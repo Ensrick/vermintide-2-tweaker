@@ -127,6 +127,31 @@ function M.all_other_allies_dead(dead_flags)
     return true
 end
 
+-- Source-scoped claim transition for a non-stacking aura result. Multiple
+-- drivers may claim the same target, but the runtime materializes only the
+-- first aggregate claim and removes it only after the final source leaves.
+-- `source_key` is deliberately opaque so production can use the live driver
+-- buff table while engine-free tests use strings.
+function M.set_aura_claim(record, source_key, source_value, wants_claim)
+    if type(record) ~= "table" or source_key == nil then return 0, nil, false end
+    record.sources = record.sources or {}
+    local had_claim = record.sources[source_key] ~= nil
+
+    if wants_claim and not had_claim then
+        local before = tonumber(record.claim_count) or 0
+        record.sources[source_key] = source_value or true
+        record.claim_count = before + 1
+        return record.claim_count, before == 0 and "add" or nil, true
+    elseif not wants_claim and had_claim then
+        local before = tonumber(record.claim_count) or 1
+        record.sources[source_key] = nil
+        record.claim_count = math.max(0, before - 1)
+        return record.claim_count, record.claim_count == 0 and "remove" or nil, true
+    end
+
+    return tonumber(record.claim_count) or 0, nil, false
+end
+
 function M.enemy_multiplier(rock_shield_active, teamwork_great_active, nearby_allies, breed)
     if type(breed) ~= "table" then return 1 end
 

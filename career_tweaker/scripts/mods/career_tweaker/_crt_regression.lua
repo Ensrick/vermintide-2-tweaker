@@ -150,6 +150,52 @@ _rt_register("dbg_helpers_two_channel", function()
     if not ok then return "_dbg_alert raised" end
 end)
 
+_rt_register("issue663_foot_knight_aura_source_ownership", function()
+    local feature = mod._crt and mod._crt.foot_knight
+    local contract = feature and feature.aura_contract
+    local policy = feature and feature.policy
+    if type(contract) ~= "table" or type(contract.patches) ~= "table"
+       or #contract.patches ~= 6 then
+        return "Foot Knight source-stable aura patch catalog missing"
+    end
+    if type(policy) ~= "table" or type(policy.set_aura_claim) ~= "function" then
+        return "Foot Knight aura claim policy missing"
+    end
+
+    local functions = BuffFunctionTemplates and BuffFunctionTemplates.functions
+    for _, name in ipairs({
+        contract.update_proximity,
+        contract.update_distance,
+        contract.update_closest,
+        contract.remove,
+    }) do
+        if type(functions and functions[name]) ~= "function" then
+            return "Foot Knight aura function missing: " .. tostring(name)
+        end
+    end
+
+    for _, patch in ipairs(contract.patches) do
+        local template = BuffTemplates and rawget(BuffTemplates, patch.template)
+        local driver = template and template.buffs and template.buffs[1]
+        if not driver or driver.update_func ~= patch.update
+           or driver.remove_buff_func ~= contract.remove then
+            return "Foot Knight aura driver is source-blind: " .. tostring(patch.template)
+        end
+    end
+
+    local record = { sources = {}, claim_count = 0 }
+    local _, first_action = policy.set_aura_claim(record, "fk_a", "unit_a", true)
+    local count, second_action = policy.set_aura_claim(record, "fk_b", "unit_b", true)
+    local after_first_leave, first_leave_action = policy.set_aura_claim(
+        record, "fk_a", nil, false)
+    local final_count, final_action = policy.set_aura_claim(record, "fk_b", nil, false)
+    if first_action ~= "add" or count ~= 2 or second_action ~= nil
+       or after_first_leave ~= 1 or first_leave_action ~= nil
+       or final_count ~= 0 or final_action ~= "remove" then
+        return "two-source aggregate aura transition contract failed"
+    end
+end)
+
 
 _rt_register("localization_format_safe", function()
     -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at

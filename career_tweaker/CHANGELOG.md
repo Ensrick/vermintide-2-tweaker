@@ -1,5 +1,15 @@
 # Career Tweaker Changelog
 
+## 0.4.3-beta - 2026-07-17 - #663 stable multi-Foot-Knight auras [verify-fix-coop]
+
+- Replaced six source-blind Foot Knight aura drivers with one source-scoped claim coordinator. Vanilla searched the target by buff template alone, so one Foot Knight could remove or suppress the server-controlled instance supplied by another Foot Knight.
+- Preserved the intended non-stacking result: the first source creates or adopts one vanilla aura buff, intermediate sources add only ownership claims, and only the final source leaving removes the server buff. No custom buff name, lookup entry, RPC, or per-tick network traffic was added.
+- Covered all six live Foot Knight base, distance, and closest-ally aura driver templates that use the source-blind vanilla functions. Live range changes from the existing rework still flow through each driver instance.
+- Added bounded transition logging with source, target, template, server buff id, claim count, and reason. Routine aura update ticks stay silent.
+- Added engine-free two-source/idempotence coverage, source-structure coverage, runtime regression `issue663_foot_knight_aura_source_ownership`, engine documentation, and BUG_CLASSES class 60.
+
+**Co-op verify:** with two human Foot Knights in one mission, stand together and then move one Foot Knight across the aura boundary while watching the buff bar. The shared Foot Knight aura icon must remain stable while either source is in range and disappear once after the final source leaves. Run `/crt_regression_test` and require `PASS: issue663_foot_knight_aura_source_ownership`; the log may show bounded `[crt:663] aura` transitions but no every-tick churn.
+
 ## 0.4.2-beta - 2026-07-17 - #619 Foot Knight live descriptions and secondary slot [verify-fix]
 
 - Corrected Rock of Reikland's rendered description key from the unused `_desc` lookup to the talent's authored `markus_knight_passive_block_cost_aura_desc_2`, and added the authored `markus_knight_damage_taken_ally_proximity_desc_2` lookup for That's Bloody Teamwork!.

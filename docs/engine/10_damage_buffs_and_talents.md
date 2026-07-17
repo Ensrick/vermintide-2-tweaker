@@ -324,6 +324,26 @@ A "green heal" boon must use a whitelisted type; ct picked `health_regen`
   bt's BR list carried 3 such method registrations for exactly this reason
   (`buff_tweaker_registrations.lua:34-38`).
 
+### 4.9 Aura removal is source-blind unless the driver owns its ids - BUG_CLASSES 58
+
+Vanilla's generic distance aura asks the target extension for any instance of
+`buff_to_add`, then removes that instance's server id when one driver sees the
+target outside its range (`buff_function_templates.lua:2788-2806`). Foot
+Knight's base aura repeats that shape (`buff_function_templates.lua:3374-3392`),
+and `remove_aura_buff` removes the first matching template from every hero
+without checking `attacker_unit` (`buff_function_templates.lua:3153-3179`).
+`BuffSystem` already retains `attacker_unit` per server-controlled id
+(`buff_system.lua:262-270`), and each live buff retains it too
+(`buff_extension.lua:301-320`). Therefore two sources of the same non-stacking
+aura can suppress or remove one another even though the wire has enough source
+identity to distinguish them.
+
+The stable non-stacking model is a source-scoped claim set feeding one aggregate
+server-controlled buff per `(buff_to_add, target)`. The first claim creates (or
+adopts) the result, intermediate source changes do no add/remove work, and only
+the last release removes it. Driver teardown must release exactly that driver's
+claims. Career Tweaker's `_crt_foot_knight.lua` is the reference for issue #663.
+
 ---
 
 ## 5. Implications for our mods - where we fight the engine
