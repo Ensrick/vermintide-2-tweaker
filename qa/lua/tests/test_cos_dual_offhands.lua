@@ -15,7 +15,7 @@ return function(H, repo_root)
 
     local cos = read(cos_path)
     local persist = read(persist_path)
-    local cwv = read(cwv_path)
+    local cwv = require("cwv_source").combined(repo_root)
 
     H.test("native Dual Skullsplitters use row one plus one independent offhand", function()
         H.truthy(cos:find("wh_dual_hammer = {", 1, true))

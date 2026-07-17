@@ -1,0 +1,1267 @@
+-- Regression checks are installed at the entry module's original registration point.
+return function(mod, ctx)
+local MOD_VERSION = ctx.mod_version
+local _om = ctx.om
+local _dbg = ctx.dbg
+local _rt_register = ctx.rt_register
+local _variant_definitions = ctx.variant_definitions
+local _registered_keys = ctx.registered_keys
+local _display_names = ctx.display_names
+local _find_def = ctx.find_def
+local _build_entry = ctx.build_entry
+local _auto_register_all = ctx.auto_register_all
+local _cross_access_action_remap = ctx.cross_access_action_remap
+local _cwv_wield_hook_registration_count = ctx.wield_hook_registration_count
+
+_rt_register("cwv_unit_bearing_variants_registered", function()
+    -- Issue #417: a variant that overrides a hand unit must resolve a def on every
+    -- def-keyed render path, or its mesh swaps (via _find_def) while transform and
+    -- texture silently bail at the nil-def guard. The registration gate now keys on
+    -- unit-override presence; assert the invariant so a future gate edit can't drop
+    -- it and reintroduce the per-item force_register crutch (the musket, #409).
+    if type(mod._cwv_transform_registered) ~= "function" then
+        return "mod._cwv_transform_registered missing -- #417 invariant unguardable"
+    end
+    local defs = _om._variant_defs
+    if type(defs) ~= "table" then
+        return "_om._variant_defs not exposed -- cannot assert the #417 registration invariant"
+    end
+    local missing = {}
+    for _, def in ipairs(defs) do
+        local ru, lu = def.right_hand_unit, def.left_hand_unit
+        local has_unit = (type(ru) == "string" and ru ~= "") or (type(lu) == "string" and lu ~= "")
+        if has_unit and not mod._cwv_transform_registered(def.item_key) then
+            missing[#missing + 1] = tostring(def.item_key)
+        end
+    end
+    if #missing > 0 then
+        return "unit-bearing variants NOT in _transform_map (#417 reg-gate fork): " .. table.concat(missing, ", ")
+    end
+end)
+
+_rt_register("issue597_greataxe_replaces_poleaxe", function()
+	local greataxe = _om.greataxe
+	local function same_triplet(a, b)
+		return type(a) == "table" and type(b) == "table"
+			and a[1] == b[1] and a[2] == b[2] and a[3] == b[3]
+	end
+	if _find_def("cwv_es_poleaxe") then return "retired Poleaxe definition still registered" end
+	local def = _find_def(greataxe.ITEM_KEY)
+	if not def or def.base_weapon ~= greataxe.BASE_WEAPON then
+		return "Greataxe definition/base contract missing"
+	end
+	if #(def.careers or {}) ~= 4 then return "Greataxe must default to four Kruber careers" end
+	local model = greataxe.default_model()
+	if not model
+			or not same_triplet(model.right_hand_scale_3p, { 0.5, 0.5, 0.5 })
+			or not same_triplet(model.right_hand_offset_3p, { -0.010, 0.153, -0.309 })
+			or not same_triplet(model.right_hand_rotation_3p, { -90, 180, -90 }) then
+		return "Greataxe Model 01 reviewed transform drifted"
+	end
+	local base_skin_transform = _skin_transform_map[greataxe.ITEM_KEY .. "_skin"]
+	if not base_skin_transform
+			or not same_triplet(base_skin_transform.right_hand_scale_3p, model.right_hand_scale_3p)
+			or not same_triplet(base_skin_transform.right_hand_offset_3p, model.right_hand_offset_3p)
+			or not same_triplet(base_skin_transform.right_hand_rotation_3p, model.right_hand_rotation_3p) then
+		return "Greataxe Model 01 generated base skin lost its exact transform"
+	end
+	for index = 2, #greataxe.MODELS do
+		local control = _skin_transform_map[greataxe.MODELS[index].key]
+		if not control or control.right_hand_scale_3p or control.right_hand_offset_3p
+				or control.right_hand_rotation_3p then
+			return "Greataxe Model 01 transform leaked to Model " .. tostring(index)
+		end
+	end
+	local source = Weapons and Weapons.two_handed_axes_template_1
+	local clone = Weapons and Weapons[greataxe.TEMPLATE_KEY]
+	if not source or not clone then return "Greataxe source/clone template missing" end
+	local walked = 0
+	for action_name, source_group in pairs(source.actions or {}) do
+		local clone_group = clone.actions and clone.actions[action_name]
+		if type(source_group) == "table" and type(clone_group) == "table" then
+			for sub_name, source_action in pairs(source_group) do
+				local clone_action = clone_group[sub_name]
+				if type(source_action) == "table" and type(clone_action) == "table" then
+					walked = walked + 1
+					if clone_action.damage_profile ~= source_action.damage_profile
+							or clone_action.anim_time_scale ~= source_action.anim_time_scale then
+						return string.format("Greataxe gameplay drift at %s.%s", action_name, sub_name)
+					end
+				end
+			end
+		end
+	end
+	if walked == 0 then return "Greataxe gameplay comparison was vacuous" end
+	for source_event, target_event in pairs(greataxe.ANIM_REMAP_3P) do
+		for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
+			if _om._cross_access_target_event(greataxe.ITEM_KEY, career, source_event) ~= target_event then
+				return string.format("Greataxe 3P remap drift: %s/%s", career, source_event)
+			end
+		end
+	end
+end)
+
+_rt_register("cwv_issue596_infantry_spear_contract", function()
+	local infantry = _om.infantry_spear
+	local def = _find_def(infantry.ITEM_KEY)
+	if def ~= nil then
+		return "standalone Infantry Spear remains in variant definitions"
+	end
+	if rawget(ItemMasterList, infantry.ITEM_KEY) ~= nil then
+		return "standalone Infantry Spear leaked into ItemMasterList"
+	end
+	if rawget(ItemMasterList, infantry.ITEM_KEY .. "_skin") ~= nil then
+		return "retired Infantry Spear skin leaked into ItemMasterList"
+	end
+	if #(infantry.DEFAULT_CAREERS or {}) ~= 3 or infantry.DEFAULT_CAREERS[1] ~= "es_mercenary"
+			or infantry.DEFAULT_CAREERS[2] ~= "es_huntsman"
+			or infantry.DEFAULT_CAREERS[3] ~= "es_knight" then
+		return "Infantry style authored careers drifted (must exclude Grail Knight)"
+	end
+	local tuskgor = rawget(ItemMasterList, "es_2h_heavy_spear")
+	if not (tuskgor and table.contains(tuskgor.can_wield or {}, "es_knight")) then
+		return "Tuskgor Spear is not CWV-default-on for Foot Knight"
+	end
+	local source = Weapons and Weapons.two_handed_spears_elf_template_1
+	local tuned = Weapons and Weapons[infantry.TEMPLATE_KEY]
+	if not source or not tuned then return "Infantry Spear source/tuned template missing" end
+	local checked_timing, checked_profiles = 0, 0
+	for action_name, source_group in pairs(source.actions or {}) do
+		local tuned_group = tuned.actions and tuned.actions[action_name]
+		if type(source_group) == "table" and type(tuned_group) == "table" then
+			for sub_name, source_action in pairs(source_group) do
+				local tuned_action = tuned_group[sub_name]
+				if type(source_action) == "table" and type(tuned_action) == "table" then
+					local expected = infantry.scaled_attack_time(
+						source_action.kind, source_action.anim_time_scale)
+					if source_action.kind == "melee_start" or source_action.kind == "sweep" then
+						checked_timing = checked_timing + 1
+						if type(tuned_action.anim_time_scale) ~= "number"
+								or math.abs(tuned_action.anim_time_scale - expected) > 0.000001 then
+							return string.format("Infantry Spear timing drift at %s.%s", action_name, sub_name)
+						end
+					end
+					if source_action.damage_profile then
+						checked_profiles = checked_profiles + 1
+						local key = tuned_action.damage_profile
+						if type(key) ~= "string" or key:find("cwv_infantry_spear_", 1, true) ~= 1
+								or _om._cwv_damage_profile_wire_source[key] ~= source_action.damage_profile then
+							return string.format("Infantry Spear profile drift at %s.%s", action_name, sub_name)
+						end
+					end
+				end
+			end
+		end
+	end
+	if checked_timing == 0 or checked_profiles == 0 then
+		return "Infantry Spear contract walk was vacuous"
+	end
+end)
+
+_rt_register("cwv_husk_override_ref_shared", function()
+    -- Issue #418: the residency producer and the preview/browser swap consumer must
+    -- key on ONE constant, and the swap guard must be the shared helper -- a
+    -- duplicated ref literal silently degraded every swap to the base mesh.
+    if _om.HUSK_OVERRIDE_REF ~= "cwv_husk_override_units" then
+        return "_om.HUSK_OVERRIDE_REF missing/changed -- producer/consumer ref may have drifted (#418)"
+    end
+    if type(_om._resident_override_3p) ~= "function" then
+        return "_om._resident_override_3p missing -- shared preview/browser swap guard lost (#418)"
+    end
+end)
+
+_rt_register("cwv_husk_base_career_rekey", function()
+    -- Phase C (#392/#394/#396/#397/#401), restructured by #474/#475: the husk
+    -- base+career fallback resolves a SKINLESS cross-char variant echo on remote
+    -- screens. SAFETY INVARIANT (Invariant 1): the RESOLVER must decline every
+    -- (base, career) pair the career can CURRENTLY wield -- the map itself now
+    -- holds unfiltered claims and the can_wield check runs lazily at wield time
+    -- (#475: the old boot-time exclusion snapshot predated weapon_tweaker's
+    -- can_wield expansion, so a wt-freedom native wield got re-keyed to a cwv
+    -- variant). This walks every claimed pair through the REAL resolver.
+    if type(_om._husk_def_by_base_career) ~= "table" then
+        return "_om._husk_def_by_base_career not exposed -- husk base+career fallback missing (Phase C)"
+    end
+    if type(_om._husk_rekey_units) ~= "function" then
+        return "_om._husk_rekey_units missing -- husk mesh re-key lost (issues 396/401)"
+    end
+    if type(_om._husk_resolve_display_def) ~= "function" or type(_om._husk_pair_native_now) ~= "function" then
+        return "_om._husk_resolve_display_def/_husk_pair_native_now missing -- shared husk decision point lost (#474/#475)"
+    end
+    for base, slot in pairs(_om._husk_def_by_base_career) do
+        local master = rawget(ItemMasterList, base)
+        local cw = type(master) == "table" and master.can_wield
+        if type(cw) == "table" then
+            for career in pairs(slot) do
+                for _, native in ipairs(cw) do
+                    if native == career then
+                        local def = _om._husk_resolve_display_def(base, career, nil)
+                        if def ~= nil then
+                            return string.format(
+                                "husk resolver re-keys CURRENTLY-NATIVE pair base=%s career=%s -- would mis-apply a variant to a native weapon on husks (#475 Invariant 1)",
+                                tostring(base), tostring(career))
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+_rt_register("cwv_husk_skin_primary_resolution", function()
+    -- (#474) Skin-key resolution is the PRIMARY husk display signal and must
+    -- cover BOTH cwv skin namespaces:
+    --   * base variant skins "<item_key>_skin" (e.g. cwv_es_musket_old_skin)
+    --   * pairing/illusion skins "<item_key>_<tail>" via lazy longest-prefix
+    -- A cwv wire skin must re-key even when the (base,career) pair is natively
+    -- wieldable -- that suppression was #474's mechanism 1.
+    if type(_om._husk_skin_def) ~= "function" then
+        return "_om._husk_skin_def missing -- skin-primary husk resolution lost (#474)"
+    end
+    local defs = _om._variant_defs
+    if type(defs) ~= "table" then
+        return "_om._variant_defs not exposed -- cannot enumerate skin namespaces (#474)"
+    end
+    -- Namespace 1: every non-no_skin def's base skin must resolve to ITS def.
+    for _, def in ipairs(defs) do
+        if type(def.item_key) == "string" and not def.no_skin then
+            local got = _om._husk_skin_def(def.item_key .. "_skin")
+            if got ~= def then
+                return string.format("base variant skin %s_skin resolves to %s, expected its own def (#474)",
+                    tostring(def.item_key), tostring(got and got.item_key))
+            end
+        end
+    end
+    -- Namespace 2: the pairing-skin longest-prefix arm (canonical #475-session
+    -- example key; lazy resolution must pick the LS&S def, not the plain
+    -- longsword def that shares the prefix).
+    local pairing = _om._husk_skin_def("cwv_es_longsword_shield_wpn_emp_shield_03_runed_01__nordland")
+    if not (pairing and pairing.item_key == "cwv_es_longsword_shield") then
+        return string.format("pairing skin longest-prefix resolution broken: got %s, expected cwv_es_longsword_shield (#474)",
+            tostring(pairing and pairing.item_key))
+    end
+    -- End-to-end: a cwv skin must resolve through the shared decision point
+    -- REGARDLESS of native wieldability (es_handgun+es_mercenary is native).
+    local def, reason = _om._husk_resolve_display_def("es_handgun", "es_mercenary", "cwv_es_musket_old_skin")
+    if not (def and def.item_key == "cwv_es_musket_old" and reason == "skin") then
+        return string.format("skin-primary end-to-end broken: def=%s reason=%s for the Old Musket wire shape (#474)",
+            tostring(def and def.item_key), tostring(reason))
+    end
+end)
+
+_rt_register("cwv_husk_native_never_rekeyed", function()
+    -- (#475 Invariant 1) A native item must NEVER be re-keyed:
+    --   * vanilla/LA skin present -> decline, whatever the (base,career) map says
+    --     (the #475 wire shape: native Bret LS&S + vanilla skin on a wt-freedom
+    --     mercenary host got re-keyed to the cwv Imperial LS&S on the client);
+    --   * skinless echo whose pair is CURRENTLY wieldable -> decline (ambiguous
+    --     between a wt-freedom native wield and a variant echo -> show base).
+    if type(_om._husk_resolve_display_def) ~= "function" then
+        return "_om._husk_resolve_display_def missing (#474/#475)"
+    end
+    local def, reason = _om._husk_resolve_display_def("es_sword_shield_breton", "es_mercenary", "es_sword_shield_breton_skin_01")
+    if def ~= nil or reason ~= "skin_foreign" then
+        return string.format("vanilla-skinned native item resolved to def=%s reason=%s -- #475 regression (must decline as skin_foreign)",
+            tostring(def and def.item_key), tostring(reason))
+    end
+    -- Skinless + currently-native pair: vanilla es_handgun.can_wield contains
+    -- es_mercenary, so the lazy native check must decline the Old Musket's
+    -- claim on that pair (only cwv_es_musket_old claims it; the first musket
+    -- variant is retired/commented out, so no ambiguity dedupe applies here).
+    local def2 = _om._husk_resolve_display_def("es_handgun", "es_mercenary", nil)
+    if def2 ~= nil then
+        return string.format("skinless echo of a currently-wieldable pair resolved to %s -- #475 lazy can_wield regression",
+            tostring(def2.item_key))
+    end
+    -- The custom-bundle residency arm must accept exactly the Old Musket custom
+    -- mesh (mod-bundled, always resident) and reject arbitrary paths.
+    if type(_om._husk_custom_bundle_unit) ~= "function"
+            or not _om._husk_custom_bundle_unit("units/cwv_es_musket_custom/cwv_es_musket_custom")
+            or _om._husk_custom_bundle_unit("units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1") then
+        return "_om._husk_custom_bundle_unit missing or mis-scoped -- Old Musket husk re-key residency arm broken (#474)"
+    end
+end)
+
+_rt_register("cwv_husk_nonresident_spawn_deferred", function()
+    -- Issue #478: a resolved CWV variant husk must NEVER let vanilla
+    -- spawn_inventory_unit spawn a NON-RESIDENT unit. A Deus-only base (e.g.
+    -- dr_deus_01's Trollhammer left-mount) is not resident outside Chaos Wastes,
+    -- so a hand the variant does not override (the Outrider's no_left_hand) left
+    -- that base mesh in item_units and vanilla errored (gear_utils.lua:189 nil
+    -- "_3p" concat once the husk guard skipped it -> entity_manager2.lua:114 "table
+    -- index is nil" -> invisible wield; async C-assert risk, BUG_CLASSES 28). The
+    -- fix: _husk_rekey_units returns a SUPPRESS flag the spawn hook uses to skip the
+    -- vanilla call (residency-gated defer). Lock the predicate, the suppress
+    -- contract, and the native-scope guard.
+    if type(_om._husk_unit_spawnable) ~= "function" then
+        return "_om._husk_unit_spawnable missing -- #478 crash-floor residency predicate lost"
+    end
+    if type(_om._husk_rekey_units) ~= "function" then
+        return "_om._husk_rekey_units missing -- husk re-key/suppress contract lost (#478)"
+    end
+	if type(_om._husk_preselect_units) ~= "function" then
+		return "_om._husk_preselect_units missing -- #478 handedness still runs after vanilla's spawn branch"
+	end
+	-- PRE-HAND-SELECTION: vanilla's dr_deus_01 result offers only its native
+	-- left mount. A skinless Kruber echo must become the Outrider's right-mounted
+	-- blunderbuss and clear the left field BEFORE vanilla decides which hand calls
+	-- to make. This is the whole-weapon-invisible root from the paired client log.
+	local outrider = _find_def("cwv_es_outrider_grenade_launcher")
+	local base_units = {
+		left_hand_unit = "units/weapons/player/wpn_dr_deus_01/wpn_dr_deus_01",
+	}
+	local changed, pre_def = _om._husk_preselect_units(base_units,
+		{ name = "dr_deus_01" }, nil, nil, "es_mercenary")
+	if not changed or pre_def ~= outrider then
+		return "skinless dr_deus_01+es_mercenary did not resolve to Outrider before hand selection (#478)"
+	end
+	if base_units.right_hand_unit ~= outrider.right_hand_unit or base_units.left_hand_unit ~= nil then
+		return "Outrider preselection did not schedule right blunderbuss + clear native Trollhammer left hand (#478)"
+	end
+	-- Scope: explicit backend identity and any skin belong to the normal owner /
+	-- skin resolution paths and must never be rewritten by this fallback.
+	local backend_guard = { left_hand_unit = "native-left" }
+	if _om._husk_preselect_units(backend_guard, { name = "dr_deus_01" }, "some_backend_id", nil, "es_mercenary")
+			or backend_guard.left_hand_unit ~= "native-left" or backend_guard.right_hand_unit ~= nil then
+		return "Outrider preselection overreached into a backend-identified item (#478)"
+	end
+	local embedded_backend_guard = { left_hand_unit = "native-left" }
+	if _om._husk_preselect_units(embedded_backend_guard,
+			{ name = "dr_deus_01", backend_id = "embedded_backend_id" }, nil, nil, "es_mercenary")
+			or embedded_backend_guard.left_hand_unit ~= "native-left"
+			or embedded_backend_guard.right_hand_unit ~= nil then
+		return "Outrider preselection ignored item_data.backend_id (#478 owner-scope regression)"
+	end
+	local skin_guard = { left_hand_unit = "native-left" }
+	if _om._husk_preselect_units(skin_guard, { name = "dr_deus_01" }, nil, "dr_deus_01_skin_01", "es_mercenary")
+			or skin_guard.left_hand_unit ~= "native-left" or skin_guard.right_hand_unit ~= nil then
+		return "Outrider preselection overreached into a skinned item (#478/#475 Invariant 1)"
+	end
+    -- Predicate: a non-existent unit path is never resident under any reference.
+    if _om._husk_unit_spawnable("units/weapons/player/__cwv_rt_nonresident_478__/__cwv_rt_nonresident_478__") ~= false then
+        return "_husk_unit_spawnable returned true for a non-existent unit -- crash-floor would let a non-resident spawn through (#478)"
+    end
+    -- Predicate: a cwv mod-bundled custom mesh is always resident while loaded.
+    if _om._husk_unit_spawnable("units/cwv_es_musket_custom/cwv_es_musket_custom") ~= true then
+        return "_husk_unit_spawnable rejected the mod-bundled Old Musket mesh -- custom-bundle arm broken (#478)"
+    end
+    -- End-to-end SUPPRESS: the Outrider (base dr_deus_01) resolved by its wire
+    -- skin, carrying ONLY a guaranteed-non-resident left-mount leftover, must
+    -- return suppress=true so the spawn hook skips vanilla's left spawn. Synthetic
+    -- leftover path keeps this deterministic whether or not the tester is in Chaos
+    -- Wastes (the real Trollhammer mesh is resident there). Left hand: the Outrider
+    -- has no_left_hand, so no override is written and the leftover survives.
+    local iu_defer = {
+        skin = "cwv_es_outrider_grenade_launcher_skin",
+        left_hand_unit = "units/weapons/player/__cwv_rt_nonresident_478__/__cwv_rt_nonresident_478__",
+    }
+    if not _om._husk_rekey_units("left", { name = "dr_deus_01" }, iu_defer, nil) then
+        return "resolved Outrider husk did NOT suppress a non-resident left-mount spawn -- #478 crash-floor broken"
+    end
+    -- Scope: with NO cwv def resolved (unknown base, no skin, no career), the
+    -- re-key must NOT suppress -- a genuine native husk wield is never touched even
+    -- when its leftover is non-resident (#475 Invariant 1 scope, no #478 overreach).
+    if _om._husk_rekey_units("left", { name = "__cwv_rt_no_such_base__" },
+            { left_hand_unit = "units/weapons/player/__cwv_rt_nonresident_478__/__cwv_rt_nonresident_478__" }, nil) then
+        return "re-key suppressed a spawn with NO resolved cwv def -- #478 overreach into native wields (#475 Invariant 1)"
+    end
+end)
+
+_rt_register("cwv_wire_safe_skin_installed", function()
+    -- (issue 278 weapon_skin_id axis / issue 371 / issue 495) Every cwv-registered
+    -- NetworkLookup.weapon_skins key must be null-able on the wire so a non-cwv peer
+    -- never cold-decodes it from rpc_add_equipment (strict __index CTD). Asserts the
+    -- wire-safety machinery is installed on ALL THREE live-slot senders and that the
+    -- predicate covers every cwv key actually sitting in NetworkLookup.weapon_skins.
+    if _om._skin_wire_hook_installed ~= true then
+        return "weapon_skin_id wire-safety hooks not installed (issue 278 non-cwv-peer CTD regression)"
+    end
+    local surfaces = mod._cwv_skin_wire_surfaces
+    if type(surfaces) ~= "table" then
+        return "mod._cwv_skin_wire_surfaces flag table missing (issue 495 senders unhooked?)"
+    end
+    for _, key in ipairs({ "game_object_initialized", "spawn_resynced_loadout", "hot_join_sync" }) do
+        if not surfaces[key] then
+            return "skin-axis wire-null not registered on sender surface: " .. key .. " (issue 495)"
+        end
+    end
+    if type(_om._skin_keys) ~= "table" or next(_om._skin_keys) == nil then
+        return "no cwv skin keys tracked -- wire-safety would null nothing (registration/tracking broke)"
+    end
+    -- Every tracked key must actually be a registered weapon_skins entry, else the
+    -- null-on-wire substitution is guarding a phantom -- and EVERY cwv_ key in the
+    -- live lookup must satisfy the wire predicate (a registration site that forgot
+    -- both registries is caught by the prefix arm; a non-cwv_-prefixed cwv key
+    -- would be a real leak and fails here).
+    local NL = rawget(_G, "NetworkLookup")
+    local ws = NL and NL.weapon_skins
+    local pred = _om._wire_skin_predicate
+    if type(pred) ~= "function" then
+        return "_om._wire_skin_predicate missing (issue 495)"
+    end
+    if type(ws) == "table" then
+        for skin_key in pairs(_om._skin_keys) do
+            if rawget(ws, skin_key) == nil then
+                return string.format("tracked cwv skin key %s absent from NetworkLookup.weapon_skins", tostring(skin_key))
+            end
+        end
+        for k in pairs(ws) do
+            if type(k) == "string" and k:sub(1, 4) == "cwv_" and not pred(k) then
+                return string.format("cwv weapon_skins key %s not covered by the wire predicate (issue 495 leak)", tostring(k))
+            end
+        end
+    end
+end)
+
+_rt_register("cwv_wire_skin_parity_gate", function()
+    -- (issue 495) Behavioral contract of the shared null helper:
+    --   * parity CONFIRMED + broadcast sender -> skin RIDES (issue 474 husk display);
+    --   * parity confirmed + hot-join replay (force) -> nulled anyway (join-handshake
+    --     race, issue 425 lesson) and restored after the send;
+    --   * parity UNCONFIRMED -> nulled and restored.
+    local helper = _om._wire_null_skins
+    if type(helper) ~= "function" then return "_om._wire_null_skins helper missing" end
+    local real_pp = mod._cwv_peer_parity
+    local function drive(parity_up, force)
+        mod._cwv_peer_parity = { all_peers_have = function() return parity_up end }
+        local slot = { skin = "cwv___rt495_fake_skin" }
+        local at_send
+        local ok, err = pcall(helper, { slot }, function() at_send = slot.skin end, "rt495", force)
+        mod._cwv_peer_parity = real_pp
+        if not ok then return nil, nil, "helper raised: " .. tostring(err) end
+        return at_send, slot.skin, nil
+    end
+    local at_send, after, err = drive(true, false)
+    if err then return err end
+    if at_send ~= "cwv___rt495_fake_skin" then
+        return "parity-confirmed broadcast nulled the skin -- issue 474 husk display would regress to base"
+    end
+    at_send, after, err = drive(true, true)
+    if err then return err end
+    if at_send ~= nil then
+        return "hot-join replay (force) kept the skin under confirmed parity -- join-handshake race reopened (issue 425 lesson)"
+    end
+    if after ~= "cwv___rt495_fake_skin" then
+        return "skin not restored after the forced null (owner spawn would lose the illusion)"
+    end
+    at_send, after, err = drive(false, false)
+    if err then return err end
+    if at_send ~= nil then
+        return "parity-unconfirmed broadcast kept the skin -- issue 278/495 CTD shape live"
+    end
+    if after ~= "cwv___rt495_fake_skin" then
+        return "skin not restored after the parity-unconfirmed null"
+    end
+end)
+
+_rt_register("cwv_wire_safe_thrown_variant_installed", function()
+    -- (issue 424 / issue 371, BUG_CLASSES 31) The Tuskgor Javelin thrown axes
+    -- (impact pickup names + the bomb's in-flight boar-spear husk /
+    -- projectile_units) append cwv-only NetworkLookup indices that ride vanilla
+    -- projectile/pickup spawn RPCs. Assert BOTH sender-side substitution hooks
+    -- are installed AND that the pickup helper retains gameplay only with
+    -- positive peer parity, while unconfirmed parity coerces every tracked
+    -- modded index to a real vanilla one.
+    if _om._tj_pickup_wire_hook_installed ~= true then
+        return "thrown-pickup wire-safety senders not installed (issue 424 non-cwv-peer CTD regression)"
+    end
+    if _om._projectile_wire_hook_installed ~= true then
+        return "in-flight projectile wire-safety hook not installed (issue 424 boar-spear husk CTD regression)"
+    end
+    if type(_om._wire_safe_pickup_name) ~= "function" then
+        return "_om._wire_safe_pickup_name helper missing"
+    end
+    if type(_om._tj_pickup_wire_map) ~= "table" or next(_om._tj_pickup_wire_map) == nil then
+        return "no cwv thrown pickups tracked -- wire-safety would coerce nothing"
+    end
+    local NL = rawget(_G, "NetworkLookup")
+    local pn = NL and NL.pickup_names
+    -- Drive every tracked cwv pickup key through the helper: it must coerce to
+    -- its declared vanilla target, and that target must be a non-cwv key present
+    -- in NetworkLookup.pickup_names on every peer.
+    for cwv_key, vanilla_key in pairs(_om._tj_pickup_wire_map) do
+        local safe = _om._wire_safe_pickup_name(cwv_key, false)
+        if safe ~= vanilla_key then
+            return string.format("pickup %s did not coerce to its vanilla target (got %s)",
+                tostring(cwv_key), tostring(safe))
+        end
+        if type(safe) ~= "string" or safe:sub(1, 4) == "cwv_" then
+            return string.format("pickup substitute %s is not a vanilla key", tostring(safe))
+        end
+        if type(pn) == "table" and rawget(pn, safe) == nil then
+            return string.format("pickup substitute %s absent from NetworkLookup.pickup_names", tostring(safe))
+        end
+        if _om._wire_safe_pickup_name(cwv_key, true) ~= nil then
+            return string.format("pickup %s was substituted despite confirmed peer parity", tostring(cwv_key))
+        end
+    end
+    -- Negative control: a genuine vanilla pickup must pass through unchanged (nil),
+    -- so the coercion can only ever touch the tracked cwv keys.
+    if _om._wire_safe_pickup_name("ammo_throwing_axe_01_t1", false) ~= nil then
+        return "wire-safe helper coerced a vanilla pickup name (should only map cwv keys)"
+    end
+    -- In-flight projectile axis: a fake projectile_units carrying the cwv
+    -- boar-spear unit must NEVER survive the helper (its husk would reach the wire).
+    if type(_om._wire_safe_projectile_units) == "function" then
+        local coerced = _om._wire_safe_projectile_units({ projectile_unit_name = _om._TJ_INFLIGHT_MODDED_UNIT })
+        if coerced and coerced.projectile_unit_name == _om._TJ_INFLIGHT_MODDED_UNIT then
+            return "in-flight projectile helper let the cwv boar-spear husk survive to the wire path"
+        end
+        -- And a vanilla projectile_units must pass through untouched.
+        local vanilla_in = { projectile_unit_name = "units/weapons/player/wpn_we_javelin_01/prj_we_javelin_01_3ps" }
+        if _om._wire_safe_projectile_units(vanilla_in) ~= vanilla_in then
+            return "in-flight projectile helper mutated a vanilla projectile (should pass through)"
+        end
+    end
+end)
+
+_rt_register("cwv_wire_safe_damage_profile_gate", function()
+    -- (issue 423 / issue 371, BUG_CLASSES 31, GAMEPLAY axis) cwv clones append
+    -- damage_profile keys to NetworkLookup.damage_profiles as modded indices that
+    -- ride the client->server rpc_attack_hit (weapon_system.lua:182). A non-cwv
+    -- HOST strict-decodes (weapon_system.lua:243) -> CTD. The send-gate degrades a
+    -- modded index to its vanilla SOURCE id when peer parity is unconfirmed, and
+    -- lets it ride under confirmed parity. Assert the hook is installed, NO tracked
+    -- cwv profile can ever survive to the wire when parity is unconfirmed, and the
+    -- gate decision honors parity + is_server (stubbed beacon like the skin gate).
+    if _om._dp_wire_hook_installed ~= true then
+        return "send_rpc_attack_hit wire-safety gate not installed (issue 423 non-cwv host CTD regression)"
+    end
+    local resolve = _om._wire_safe_damage_profile_id
+    local decide  = _om._wire_dp_for_send
+    if type(resolve) ~= "function" or type(decide) ~= "function" then
+        return "wire-safe damage-profile helpers missing"
+    end
+    local NL = rawget(_G, "NetworkLookup")
+    local dp = NL and NL.damage_profiles
+    if type(dp) ~= "table" then return "NetworkLookup.damage_profiles absent" end
+
+    -- (1) Crash-safety over EVERY cwv-registered profile: the resolver must coerce
+    -- each modded index to a REAL vanilla index present on every peer.
+    local checked = 0
+    for k, v in pairs(dp) do
+        if type(k) == "string" and k:sub(1, 4) == "cwv_" and type(v) == "number" then
+            local safe = resolve(v)
+            if type(safe) ~= "number" then
+                return string.format("cwv profile %s did not resolve to a vanilla id (would ride to a non-cwv host)", k)
+            end
+            local safe_name = rawget(dp, safe)
+            if type(safe_name) ~= "string" or safe_name:sub(1, 4) == "cwv_" then
+                return string.format("cwv profile %s resolved to a non-vanilla id %s (%s)", k, tostring(safe), tostring(safe_name))
+            end
+            checked = checked + 1
+        end
+    end
+    if checked == 0 then
+        return "no cwv damage profiles registered -- wire-safety would coerce nothing (registration regressed?)"
+    end
+
+    -- (2) Negative control: a genuine vanilla profile id passes through untouched.
+    local van_id = _om._cwv_wire_fallback_profile_id
+    if type(van_id) == "number" and resolve(van_id) ~= nil then
+        return "wire-safe resolver coerced a vanilla profile id (should only touch cwv keys)"
+    end
+
+    -- (3) Behavioral gate with a stubbed beacon (mirrors cwv_wire_skin_parity_gate):
+    -- pick any tracked cwv profile whose source differs, then drive the decision.
+    local cwv_id, src_id
+    for k, v in pairs(dp) do
+        if type(k) == "string" and k:sub(1, 4) == "cwv_" and type(v) == "number" then
+            local s = resolve(v)
+            if type(s) == "number" and s ~= v then cwv_id, src_id = v, s; break end
+        end
+    end
+    if cwv_id then
+        local real_pp = mod._cwv_peer_parity
+        mod._cwv_peer_parity = { all_peers_have = function() return false end }
+        local unconfirmed_client = decide(false, cwv_id)
+        local host_authoritative = decide(true,  cwv_id)
+        mod._cwv_peer_parity = { all_peers_have = function() return true end }
+        local confirmed_client = decide(false, cwv_id)
+        mod._cwv_peer_parity = real_pp
+        if unconfirmed_client ~= src_id then
+            return "parity-unconfirmed client did not degrade the cwv profile to its vanilla source (issue 423 CTD shape live)"
+        end
+        if confirmed_client ~= cwv_id then
+            return "parity-confirmed client degraded the cwv profile (variant damage would regress under full cwv parity)"
+        end
+        if host_authoritative ~= cwv_id then
+            return "is_server path substituted (host is authoritative; rpc_attack_hit runs in-process, no foreign decode)"
+        end
+    end
+
+    -- (4) Terminal fail-safe: an untracked future cwv profile first degrades to
+    -- vanilla `default`; if even that vanilla row cannot be proven it is dropped,
+    -- never returned as the original custom id (`safe or id` was the old leak).
+    local policy = _om.damage_profile_wire
+    if type(policy) ~= "table" or type(policy.for_send) ~= "function" then
+        return "engine-free damage-profile wire policy missing"
+    end
+    local fixture = {
+        [1] = "default", default = 1,
+        [9] = "cwv___rt423_unmapped", cwv___rt423_unmapped = 9,
+    }
+    local fallback_id, fallback_disposition = policy.for_send(false, false, fixture, {}, 9)
+    if fallback_id ~= 1 or fallback_disposition ~= "fallback" then
+        return "unmapped cwv profile did not degrade to the boot-stable vanilla default"
+    end
+    fixture[1], fixture.default = nil, nil
+    local dropped_id, dropped_disposition = policy.for_send(false, false, fixture, {}, 9)
+    if dropped_id ~= nil or dropped_disposition ~= "drop" then
+        return "unmapped cwv profile failed open after every vanilla fallback was removed"
+    end
+end)
+
+-- ----------------------------------------------------------------------------
+-- Peer-parity beacon regression checks (issue 371 / issue 424 / BUG_CLASSES 31)
+-- ----------------------------------------------------------------------------
+_rt_register("cwv_peer_parity_lib_loaded", function()
+    -- The COPIED shared lib (master tools/shared_lib/_lib_peer_parity.lua) built
+    -- an instance and exposed the contract API.
+    local pp = mod._cwv_peer_parity
+    if type(pp) ~= "table" then return "mod._cwv_peer_parity not built (lib load or factory failed)" end
+    for _, m in ipairs({ "install", "register_gated_feature", "all_peers_have",
+                         "tick", "feature_count", "applied_state", "is_installed" }) do
+        if type(pp[m]) ~= "function" then return "beacon missing method: " .. m end
+    end
+end)
+
+_rt_register("cwv_peer_parity_beacon_registered", function()
+    -- The beacon's VMF mod-to-mod channel is registered (presence handshake).
+    -- If VMF's network API is present (it is in-game), is_installed must be true.
+    local pp = mod._cwv_peer_parity
+    if type(pp) ~= "table" then return "beacon absent" end
+    if type(mod.network_register) == "function" and not pp:is_installed() then
+        return "beacon channel not registered despite VMF network_register present"
+    end
+end)
+
+_rt_register("cwv_peer_parity_gated_feature_registered", function()
+    -- At least one gated feature is registered (the Tuskgor Javelin bomb pool).
+    local pp = mod._cwv_peer_parity
+    if type(pp) ~= "table" then return "beacon absent" end
+    if pp:feature_count() < 1 then
+        return "gated-feature registry empty -- bomb pool injection was not registered behind the beacon"
+    end
+end)
+
+_rt_register("cwv_peer_parity_failsafe_posture", function()
+    -- Chosen posture: features are INERT until all peers are POSITIVELY confirmed.
+    local pp = mod._cwv_peer_parity
+    if type(pp) ~= "table" then return "beacon absent" end
+    -- Immutable record of the init state (fail-safe = disabled at t0).
+    if pp._initial_applied ~= "disabled" then
+        return "beacon did not initialise to the fail-safe (disabled) state"
+    end
+    if pp.FAILSAFE_POSTURE ~= "feature_inert_until_confirmed" then
+        return "beacon failsafe posture marker changed unexpectedly"
+    end
+    -- Pure classifier: solo (no peers) is trivially all-present; a present but
+    -- un-acked peer must fail-safe to NOT-all-present; an acked peer counts.
+    local c = pp.__classify
+    if type(c) ~= "function" then return "beacon classifier (__classify) missing" end
+    if c({}, {}) ~= true then return "solo (no other peers) must classify all-present" end
+    if c({ p1 = true }, {}) ~= false then
+        return "a present-but-unacked peer must fail-safe to NOT-all-present"
+    end
+    if c({ p1 = true }, { p1 = true }) ~= true then return "an acked peer must count as present" end
+    if c({ p1 = true, p2 = true }, { p1 = true }) ~= false then
+        return "a partially-acked lobby must classify NOT-all-present"
+    end
+    -- all_peers_have must never throw (pcall-wrapped internally -> false on error).
+    local ok = pcall(function() return pp:all_peers_have() end)
+    if not ok then return "all_peers_have threw (must fail-safe to false, never error)" end
+end)
+
+_rt_register("cwv_peer_parity_registration_unconditional", function()
+    -- Class-31 invariant: the NetworkLookup / AllPickups / ItemMasterList
+    -- REGISTRATION for the bomb pickup is never peer-gated; only the pool
+    -- INJECTION (spawn/world axis) gates. The source marker records that split,
+    -- and the gated feature's id is the POOL, not the registration.
+    if _om._TJB_REGISTRATION_UNGATED_MARKER ~= "cwv-tjb-networklookup-registration-never-peer-gated" then
+        return "registration-parity marker missing/altered -- registration must stay ungated (class 31)"
+    end
+end)
+
+_rt_register("issue343_smoke_bomb_diagnostics", function()
+    local probe = mod._cwv_smoke_bomb_probe
+    if type(probe) ~= "table" or type(probe.classify) ~= "function"
+            or type(probe.collect_snapshot) ~= "function" or type(probe.run) ~= "function"
+            or type(probe.auto_run) ~= "function" then
+        return "issue #343 smoke-bomb probe module did not load"
+    end
+    if probe.MAX_RUNS ~= 3 then
+        return "issue #343 probe cap changed from three explicit runs"
+    end
+    local result = probe.classify({
+        grenade_template = true, grenade_projectile = true,
+        ranger_template = true, ranger_item = true, smoke_explosion = true,
+        ranger_area_buff = true, buff_area_position_contract = true,
+        pool_count = 3, pool_sum = 1,
+    })
+    if not (result.base_ready and result.area_ready and result.pool_healthy)
+            or result.exact_z_scale_ready ~= false
+            or result.registration_quarantined ~= true then
+        return "issue #343 diagnostic truth table failed"
+    end
+end)
+
+_rt_register("dbg_helpers_two_channel", function()
+    if type(_dbg) ~= "function" then return "_dbg helper missing" end
+    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    local ok = pcall(_dbg, "smoke test")
+    if not ok then return "_dbg raised" end
+    ok = pcall(_dbg_alert, "smoke test")
+    if not ok then return "_dbg_alert raised" end
+end)
+
+
+_rt_register("localization_format_safe", function()
+    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
+    -- runtime. VMF's tooltip render path calls string.format on the loc value;
+    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
+    -- shows as a red error tooltip in the VMF settings UI. Static check is
+    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
+    -- ship even if the static check is skipped. RULE: any literal % in a loc
+    -- string must be doubled to %%.
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/character_weapon_variants/character_weapon_variants_localization")
+    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    for k, v in pairs(loc) do
+        if type(v) == "table" and type(v.en) == "string" then
+            local fmt_ok, fmt_err = pcall(string.format, v.en)
+            if not fmt_ok then
+                return string.format(
+                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
+                    k, tostring(fmt_err))
+            end
+        end
+    end
+end)
+_rt_register("mace_sword_rename_prefix_match", function()
+    -- audit 2026-06-07 (F15, v0.1.349-dev): guard the mace+sword rename prefix
+    -- match against off-by-one death. The prior `key:sub(1, 30) ==
+    -- "es_dual_wield_hammer_sword_skin"` compared 30 chars against a 31-char
+    -- literal, so it was ALWAYS false and the rename never fired for any
+    -- skinned mace+sword. Behavioral assertion: a representative skin key MUST
+    -- match the prefix, and a non-matching key MUST NOT.
+    local has_prefix = mod._cwv_has_prefix
+    local prefix = mod._cwv_mace_sword_skin_prefix
+    if type(has_prefix) ~= "function" then
+        return "_cwv_has_prefix helper missing"
+    end
+    if prefix ~= "es_dual_wield_hammer_sword_skin" then
+        return string.format("unexpected mace+sword skin prefix: %q", tostring(prefix))
+    end
+    -- Representative key the player's inventory/cosmetics UI actually passes to
+    -- Localize when a non-default illusion is applied (skin_02 + _name suffix).
+    local rep_key = "es_dual_wield_hammer_sword_skin_02_name"
+    if not has_prefix(rep_key, prefix) then
+        return string.format(
+            "prefix match FAILED for representative key %q (off-by-one regression: sub() length must equal #prefix=%d)",
+            rep_key, #prefix)
+    end
+    -- Negative control: an unrelated key must NOT match.
+    if has_prefix("es_dual_wield_hammer_falchion_skin_01_name", prefix) then
+        return "prefix match spuriously succeeded for a non-mace+sword key"
+    end
+end)
+
+_rt_register("weapon_appearance_module_present", function()
+    -- Phase 1 (issue 409 + the rotation abstraction): the single WeaponAppearance
+    -- module must own scale/offset/position/rotation and be reachable, and its
+    -- rotation normalizer must accept {x,y,z} euler DEGREES, a QuaternionBox, and
+    -- nil — so every render path shares ONE rotation math path instead of the four
+    -- bespoke quaternion blocks this replaces.
+    local WA = mod._cwv_weapon_appearance
+    if type(WA) ~= "table" then return "mod._cwv_weapon_appearance (WeaponAppearance) missing" end
+    for _, m in ipairs({ "apply", "apply_scale", "apply_offset", "apply_position", "apply_rotation" }) do
+        if type(WA[m]) ~= "function" then return "WeaponAppearance." .. m .. " missing" end
+    end
+    local to_q = mod._wa_to_quaternion_for_rt
+    if type(to_q) ~= "function" then return "rotation normalizer not exposed" end
+    if to_q(nil) ~= nil then return "nil rotation must normalize to nil (leave native)" end
+    if to_q({ 90, 0, 0 }) == nil then return "euler {90,0,0} did not normalize to a quaternion" end
+    local ok_qb, qb = pcall(QuaternionBox, Quaternion.identity())
+    if ok_qb and to_q(qb) == nil then return "QuaternionBox did not normalize to a quaternion" end
+    if to_q({ "not", "numbers" }) ~= nil then return "non-numeric table must normalize to nil, not crash" end
+end)
+
+_rt_register("musket_old_force_registered", function()
+    -- Issue 409: cwv_es_musket_old carries no generic scale/offset (native mesh),
+    -- so before force_register it never entered _transform_map -> the preview /
+    -- illusion-browser resolvers returned nil and bailed BEFORE its pose+texture
+    -- block. force_register must put it in the map so the resolver-driven paths
+    -- reach its apply. Regression: if the gate stops honoring force_register, the
+    -- inventory preview mis-poses the musket again.
+    local check = mod._cwv_transform_registered
+    if type(check) ~= "function" then return "mod._cwv_transform_registered helper missing" end
+    if not check("cwv_es_musket_old") then
+        return "#409 regression: cwv_es_musket_old NOT registered in _transform_map (force_register gate broke)"
+    end
+end)
+
+_rt_register("issue617_old_musket_preview_texture_consumer", function()
+	if type(_om._apply_old_musket_textures) ~= "function" then
+		return "Old Musket per-unit texture helper missing"
+	end
+	local resources_ready = _om._old_musket_texture_resources_ready
+	if type(resources_ready) ~= "function" then
+		return "Old Musket C-call resource preflight missing"
+	end
+	local seen = {}
+	local ready, detail = resources_ready(function(kind, path)
+		seen[path] = kind
+		return true
+	end)
+	local seen_count = 0
+	for _, kind in pairs(seen) do
+		if kind ~= "texture" then return "resource preflight queried a non-texture" end
+		seen_count = seen_count + 1
+	end
+	if not ready or detail ~= nil or seen_count ~= 3 then
+		return "resource preflight must prove all three authored textures"
+	end
+	local denied, missing = resources_ready(function(_, path)
+		return not path:find("_albedo", 1, true)
+	end)
+	if denied or not missing or not missing:find("_albedo", 1, true) then
+		return "resource preflight must fail closed on one missing texture"
+	end
+	local plan = _om._old_musket_preview_texture_targets
+	if type(plan) ~= "function" then
+		return "Old Musket LootItemUnitPreviewer target planner missing"
+	end
+	local custom_3p, vanilla_fallback, custom_base = {}, {}, {}
+	local def = {
+		item_key = "cwv_es_musket_old",
+		right_hand_unit = "units/cwv_es_musket_custom/cwv_es_musket_custom",
+	}
+	local targets = plan(def,
+		{ custom_3p, vanilla_fallback, custom_base },
+		{
+			{ unit_name = def.right_hand_unit .. "_3p" },
+			{ unit_name = "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p" },
+			{ unit_name = def.right_hand_unit },
+		})
+	if #targets ~= 2 or targets[1] ~= custom_3p or targets[2] ~= custom_base then
+		return "preview target planner must paint both custom paths and reject vanilla fallback"
+	end
+	if #plan({ item_key = "es_handgun", right_hand_unit = def.right_hand_unit },
+			{ custom_3p }, { { unit_name = def.right_hand_unit .. "_3p" } }) ~= 0 then
+		return "preview target planner painted a non-Old-Musket item"
+	end
+end)
+
+_rt_register("preview_meshswap_guards", function()
+    -- Issue 237 (WEAPON_APPEARANCE_STANDARD §4.1): the inventory-preview
+    -- unit-resolution layer rewrites spawn_data entry.unit_name to the cwv
+    -- variant's authored mesh. The GUARDS are load-bearing: a non-cwv backend_id
+    -- or a user-selected illusion (non-empty skin) must leave spawn_data
+    -- untouched, and the helper must be reachable. The positive rewrite depends
+    -- on runtime package residency, so it is covered by the in-game verify.
+    local apply = mod._cwv_preview_meshswap_apply
+    if type(apply) ~= "function" then return "mod._cwv_preview_meshswap_apply missing" end
+    local function _mk() return { spawn_data = { { right_hand = true, unit_name = "BASE_3p" } } } end
+    local a = _mk(); apply("es_sword_shield", "es_sword_shield_001", nil, a)
+    if a.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: non-cwv backend_id must not rewrite" end
+    local b = _mk(); apply("es_sword_shield", "cwv_we_sword_shield_001", "some_skin", b)
+    if b.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: user-selected illusion (skin) must win, no rewrite" end
+    local c = _mk(); c.skin_name = "stored_preview_skin"
+    apply("es_sword_shield", "cwv_we_sword_shield_001", nil, c)
+    if c.spawn_data[1].unit_name ~= "BASE_3p" then
+        return "#579 guard: info.skin_name must win when copied preview callback drops skin arg"
+    end
+end)
+
+_rt_register("browser_meshswap_guards", function()
+    -- Issue #419 (WEAPON_APPEARANCE_STANDARD §3 path 4): the illusion-browser
+    -- spawn_units pre-pass rewrites spawn_data unit_name to the cwv variant's
+    -- authored mesh when the upstream BackendUtils.get_item_units resolution
+    -- missed (the browser rebinds item_data to the BASE IML entry, so the #482
+    -- stamp rung is dead there; a UUID-bid crafted instance can fall through).
+    -- The GUARDS are load-bearing: an applied illusion (item.skin) must win,
+    -- and a non-cwv item must pass untouched. The positive rewrite depends on
+    -- runtime package residency, so it is covered by the in-game verify.
+    local apply = mod._cwv_browser_meshswap_apply
+    if type(apply) ~= "function" then return "mod._cwv_browser_meshswap_apply missing" end
+    local UNTOUCHED = "units/weapons/player/wpn_rt419/wpn_rt419_3p"
+    local sd = { { unit_name = UNTOUCHED } }
+    apply({ backend_id = "es_sword_shield_rt419", data = { name = "es_sword_shield" } }, sd)
+    if sd[1].unit_name ~= UNTOUCHED then return "#419 guard: non-cwv item must not rewrite" end
+    sd = { { unit_name = UNTOUCHED } }
+    apply({ backend_id = "cwv_es_greataxe_001", skin = "some_skin", data = nil }, sd)
+    if sd[1].unit_name ~= UNTOUCHED then return "#419 guard: applied illusion (skin) must win, no rewrite" end
+end)
+
+_rt_register("issue660_preview_descriptor_adapter_parity", function()
+    local policy = _om.exact_appearance
+    if type(policy) ~= "table" or type(policy.resolve_spawn_descriptor) ~= "function"
+            or type(policy.apply_spawn_descriptor) ~= "function" then
+        return "#660 canonical preview descriptor/adapter API missing"
+    end
+    local descriptor, reason = policy.resolve_spawn_descriptor({
+        variant = {
+            item_key = "cwv_rt660",
+            right_hand_unit = "variant_right",
+            left_hand_unit = "variant_left",
+        },
+        base = {
+            right_hand_unit = "base_right",
+            left_hand_unit = "base_left",
+        },
+    })
+    if not descriptor then return "#660 descriptor failed: " .. tostring(reason) end
+    local fingerprint = descriptor.fingerprint
+    local inventory = {
+        { right_hand = true, unit_name = "base_right_3p" },
+        { left_hand = true, unit_name = "base_left_3p" },
+    }
+    local browser = {
+        { unit_name = "base_left_3p" },
+        { unit_name = "base_right_3p" },
+    }
+    local resolve = function(unit) return unit .. "_3p" end
+    local a = policy.apply_spawn_descriptor(descriptor, inventory, resolve, "hand_flags")
+    local b = policy.apply_spawn_descriptor(descriptor, browser, resolve, "base_identity")
+    if a ~= 2 or b ~= 2
+            or inventory[1].unit_name ~= "variant_right_3p"
+            or inventory[2].unit_name ~= "variant_left_3p"
+            or browser[1].unit_name ~= "variant_left_3p"
+            or browser[2].unit_name ~= "variant_right_3p" then
+        return "#660 preview adapters did not converge on the descriptor's exact hand units"
+    end
+    if descriptor.fingerprint ~= fingerprint then
+        return "#660 preview adapter mutated the canonical descriptor"
+    end
+end)
+
+_rt_register("give_refuses_skin_only", function()
+    -- Issue #538: /cwv_give must REFUSE skin_only (illusion-only) variants. Giving
+    -- one builds a backend_id and mirrors the def into ItemMasterList, resurrecting
+    -- the issue-390 crafts-as-wrong-item class for that key. Two locks:
+    --  (1) the guard predicate exists and discriminates on def.skin_only (io is nil
+    --      in the retail sandbox, so a source self-grep check is impossible -- this
+    --      predicate is the testable seam the give command shares), and
+    --  (2) the standing invariant it protects: no skin_only variant is ever present
+    --      in _registered_keys. _auto_register_all excludes them (:9665) and the
+    --      give guard is the only other registration entry point.
+    local pred = _om._give_refuses_skin_only
+    if type(pred) ~= "function" then return "_om._give_refuses_skin_only guard missing (#538)" end
+    if pred({ skin_only = true }) ~= true then return "#538 guard: skin_only def must be refused" end
+    if pred({ skin_only = nil }) ~= false then return "#538 guard: real (non-skin_only) def must be allowed" end
+    if pred(nil) ~= false then return "#538 guard: nil def must not raise" end
+    local leaked = {}
+    for _, d in ipairs(_variant_definitions) do
+        if d.skin_only and _registered_keys[d.item_key] then
+            leaked[#leaked + 1] = d.item_key
+        end
+    end
+    if #leaked > 0 then
+        return "#538: skin_only variant(s) leaked into the ownable registry: " .. table.concat(leaked, ", ")
+    end
+end)
+
+_rt_register("issue592_registration_not_acquisition", function()
+	local ownership = mod._cwv_acquisition
+	if type(ownership) ~= "table" then return "#592 acquisition helper missing" end
+	local legacy = ownership.legacy_auto_grant_ids(_variant_definitions)
+	if not legacy.cwv_es_musket_old_001 or not legacy.cwv_es_musket_old_002 then
+		return "#592 historical multi-instance migration ledger incomplete"
+	end
+	if ownership.should_remove("cwv_es_musket_old_001", legacy, function() return false end) ~= true then
+		return "#592 exact historical auto-grant was not removable"
+	end
+	if ownership.should_remove("cwv_es_musket_old_001", legacy, function() return true end) ~= false then
+		return "#592 exact CIM-owned craft was not preserved"
+	end
+	if ownership.should_remove("cwv_es_musket_old_100", legacy, function() return false end) ~= false then
+		return "#592 CIM craft range was captured by migration"
+	end
+	for _, def in ipairs(_variant_definitions) do
+		if not def.skin_only and _registered_keys[def.item_key] then
+			local row = ItemMasterList and rawget(ItemMasterList, def.item_key)
+			if not row or row.cwv_definition ~= true or row.mod_data ~= nil then
+				return "#592 definition acquired backend identity: " .. tostring(def.item_key)
+			end
+		end
+	end
+end)
+
+_rt_register("cwv_crowbill_family_registration_contract", function()
+	local family = mod._cwv_crowbill_family
+	local hammer = mod._cwv_crowbill_hammer_mode
+	if type(family) ~= "table" or type(hammer) ~= "table" then
+		return "Crowbill family or hammer-mode policy missing"
+	end
+	if hammer.SOURCE_TEMPLATE_KEY ~= family.SOURCE_TEMPLATE
+			or hammer.HAMMER_CLEAVE_MULT ~= family.HAMMER_MODE.attack_cleave_multiplier
+			or hammer.HAMMER_DAMAGE_MULT ~= family.HAMMER_MODE.direct_damage_multiplier
+			or hammer.MODEL_FLIP_DEGREES ~= family.HAMMER_MODE.rotation_degrees then
+		return "Crowbill registration and hammer-mode constants drifted"
+	end
+	for _, variant in ipairs(family.VARIANTS) do
+		local entry = ItemMasterList and rawget(ItemMasterList, variant.key)
+		if type(entry) ~= "table" or entry.cwv_variant ~= true
+				or entry.cwv_definition ~= true or entry.mod_data ~= nil then
+			return variant.key .. " is not a registration-only CIM definition"
+		end
+		if entry.template ~= family.SOURCE_TEMPLATE
+				or entry.item_type ~= variant.key
+				or entry.skin_combination_table ~= variant.key .. "_skins"
+				or entry.crowbill_mode_family ~= family.HAMMER_MODE_FAMILY then
+			return variant.key .. " registration contract drifted"
+		end
+	end
+end)
+
+_rt_register("issue604_imperial_crowbill_model05_transform", function()
+	local family = mod._cwv_crowbill_family
+	if type(family) ~= "table" or type(family.MODELS) ~= "table" then
+		return "#604 Crowbill model manifest missing"
+	end
+	local function same_triplet(actual, expected)
+		return type(actual) == "table"
+			and actual[1] == expected[1] and actual[2] == expected[2]
+			and actual[3] == expected[3]
+	end
+	local target
+	for _, model in ipairs(family.MODELS) do
+		if model.key == "cwv_es_imperial_crowbill_skin_05" then target = model; break end
+	end
+	if not target
+			or not same_triplet(target.right_hand_scale, { 0.45, 0.45, 0.45 })
+			or not same_triplet(target.right_hand_offset, { 0, -0.03, -0.20 })
+			or not same_triplet(target.right_hand_rotation, { -90, -90, -90 }) then
+		return "#604 Imperial Crowbill Model 05 reviewed transform drifted"
+	end
+	local applied = _skin_transform_map[target.key]
+	if not applied
+			or not same_triplet(applied.right_hand_scale, target.right_hand_scale)
+			or not same_triplet(applied.right_hand_offset, target.right_hand_offset)
+			or not same_triplet(applied.right_hand_rotation, target.right_hand_rotation)
+			or applied.right_hand_scale_1p or applied.right_hand_offset_1p
+			or applied.right_hand_rotation_1p or applied.right_hand_scale_3p
+			or applied.right_hand_offset_3p or applied.right_hand_rotation_3p then
+		return "#604 Model 05 transform is not on the canonical all-surface map"
+	end
+	for _, model in ipairs(family.MODELS) do
+		if model.key ~= target.key and model.key ~= "cwv_dr_dawi_crowbill_skin" then
+			local control = _skin_transform_map[model.key]
+			if not control or control.right_hand_scale
+					or control.right_hand_offset or control.right_hand_rotation then
+				return "#604 Model 05 transform leaked to " .. tostring(model.key)
+			end
+		end
+	end
+end)
+
+_rt_register("issue604_dawi_crowbill_model01_transform", function()
+	local family = mod._cwv_crowbill_family
+	if type(family) ~= "table" or type(family.MODELS) ~= "table" then
+		return "#604 Crowbill model manifest missing"
+	end
+	local function same_triplet(actual, expected)
+		return type(actual) == "table"
+			and actual[1] == expected[1] and actual[2] == expected[2]
+			and actual[3] == expected[3]
+	end
+	local target
+	for _, model in ipairs(family.MODELS) do
+		if model.key == "cwv_dr_dawi_crowbill_skin" then target = model; break end
+	end
+	if not target
+			or not same_triplet(target.right_hand_scale_multiplier_3p, { 0.5, 0.5, 0.5 })
+			or not same_triplet(target.right_hand_rotation_3p, { -90, -90, -90 })
+			or target.right_hand_offset
+			or target.right_hand_scale or target.right_hand_rotation
+			or target.right_hand_scale_1p or target.right_hand_rotation_1p then
+		return "#604 Dawi Crowbill Model 01 reviewed transform drifted"
+	end
+	local applied = _skin_transform_map[target.key]
+	if not applied
+			or not same_triplet(applied.right_hand_scale_multiplier_3p,
+				target.right_hand_scale_multiplier_3p)
+			or not same_triplet(applied.right_hand_rotation_3p, target.right_hand_rotation_3p)
+			or applied.right_hand_offset
+			or applied.right_hand_scale or applied.right_hand_rotation
+			or applied.right_hand_scale_1p or applied.right_hand_rotation_1p then
+		return "#604 Dawi Model 01 transform is not isolated to the canonical 3P map"
+	end
+	local unit_def = _crowbill_transform_by_unit[target.right_hand_unit]
+	local unit_3p_def = _crowbill_transform_by_unit[target.right_hand_unit .. "_3p"]
+	if unit_def ~= applied or unit_3p_def ~= applied then
+		return "#604 Dawi exact unit-path resolver is not bound to Model 01"
+	end
+	if _transform_map[target.variant_key] ~= applied then
+		return "#604 skinless Dawi default variant does not resolve Model 01 transform"
+	end
+	if type(_om._cwv_resolve_crowbill_transform) ~= "function"
+			or type(_om._cwv_crowbill_transform_delivery) ~= "table" then
+		return "#604 Crowbill runtime delivery/diagnostic seam missing"
+	end
+end)
+
+_rt_register("issue604_preview_alias_teardown_contract", function()
+	local bridge = _om.mod_unit_preview
+	local family = _om.crowbill_family
+	if type(bridge) ~= "table" or type(bridge.reconcile_for_unload) ~= "function"
+			or type(bridge.claim_teardown) ~= "function" then
+		return "Crowbill preview teardown policy missing"
+	end
+	local custom = family.MODELS[1].right_hand_unit .. "_3p"
+	local alias = family.PREVIEW_PACKAGE_ALIAS
+	local previewer = {
+		_loaded_packages = { [custom] = true },
+		_packages_to_load = { [custom] = false },
+	}
+	local acquired = 0
+	local report = bridge.reconcile_for_unload(previewer, family.preview_package_alias,
+		function(candidate)
+			acquired = acquired + 1
+			return candidate == alias
+		end)
+	if acquired ~= 1 or report.repaired ~= 1 or report.mapped ~= 1
+			or rawget(previewer._loaded_packages, custom) ~= nil
+			or previewer._loaded_packages[alias] ~= true
+			or previewer._packages_to_load[alias] ~= false then
+		return "Crowbill preview lease repair is not balanced"
+	end
+	if bridge.claim_teardown(previewer) ~= true or bridge.claim_teardown(previewer) ~= false then
+		return "Crowbill preview teardown is not idempotent"
+	end
+end)
+
+_rt_register("cwv_crowbill_hammer_runtime_contract", function()
+	local runtime = mod._cwv_crowbill_runtime
+	local policy = mod._cwv_crowbill_hammer_mode
+	if type(runtime) ~= "table" or runtime._installed ~= true then
+		return "Crowbill hammer runtime not installed"
+	end
+	local source = Weapons and Weapons[policy.SOURCE_TEMPLATE_KEY]
+	local pick = Weapons and Weapons[runtime.PICK_TEMPLATE_KEY]
+	local hammer = Weapons and Weapons[policy.HAMMER_TEMPLATE_KEY]
+	if type(source) ~= "table" or type(pick) ~= "table" or type(hammer) ~= "table" then
+		return "Crowbill source/pick/hammer templates not all registered"
+	end
+	if source.actions and source.actions.action_three ~= nil then
+		return "vanilla Crowbill source template was mutated with Weapon Special"
+	end
+	local pick_special = pick.actions and pick.actions.action_three
+		and pick.actions.action_three.default
+	local hammer_special = hammer.actions and hammer.actions.action_three
+		and hammer.actions.action_three.default
+	if type(pick_special) ~= "table" or type(hammer_special) ~= "table"
+			or type(pick_special.enter_function) ~= "function"
+			or type(hammer_special.enter_function) ~= "function" then
+		return "Weapon Special toggle missing from one Crowbill mode"
+	end
+	if pick_special.lookup_data.item_template_name ~= runtime.PICK_TEMPLATE_KEY
+			or hammer_special.lookup_data.item_template_name ~= policy.HAMMER_TEMPLATE_KEY then
+		return "Crowbill Weapon Special lookup_data drifted"
+	end
+	for action_name, class in pairs(policy.DIRECT_ACTIONS) do
+		local pick_action = pick.actions.action_one[action_name]
+		local hammer_action = hammer.actions.action_one[action_name]
+		if not pick_action or not hammer_action
+				or pick_action.damage_profile == hammer_action.damage_profile then
+			return "Crowbill mode profile missing: " .. tostring(action_name)
+		end
+		if pick_action.anim_time_scale ~= hammer_action.anim_time_scale
+				or pick_action.total_time ~= hammer_action.total_time then
+			return "Crowbill timing drifted: " .. tostring(action_name) .. "/" .. tostring(class)
+		end
+		if _om._cwv_damage_profile_wire_source[hammer_action.damage_profile]
+				~= pick_action.damage_profile then
+			return "Crowbill mixed-peer damage fallback missing: " .. tostring(action_name)
+		end
+	end
+	if type(runtime.resolve_template) ~= "function"
+			or type(runtime.request_states) ~= "function"
+			or type(runtime.on_local_wield) ~= "function"
+			or type(runtime.on_husk_wield) ~= "function" then
+		return "Crowbill runtime lifecycle surface incomplete"
+	end
+end)
+
+_rt_register("cwv_parity_applied_state_committed_before_callbacks", function()
+    -- Issue 506: the shared peer-parity lib must commit _applied BEFORE it fires
+    -- the gated-feature callbacks, so a callback reading inst:applied_state()
+    -- observes the transition it is part of. cwv's own gated callbacks
+    -- (_inject_pool / _eject_pool) do not read applied_state today, so cwv was
+    -- never bitten -- but cwv ships a copy of the lib, so lock the master
+    -- ordering here too (a future cwv gated feature could rely on it). Build a
+    -- THROWAWAY instance (never install()d -> no VMF channel, no mod.update
+    -- wrap), register a probe whose on_enable records applied_state(), drive a
+    -- solo enable, and assert it saw "enabled". Skip (not fail) if the transition
+    -- cannot be driven here (a populated lobby holds the probe disabled).
+    local ok, factory = pcall(mod.dofile, mod, "scripts/mods/character_weapon_variants/_lib_peer_parity")
+    if not ok or type(factory) ~= "function" then return "peer-parity lib not loadable" end
+    local inst = factory(mod, {
+        channel           = "cwv_rt_probe_parity",
+        echo_prefix       = "[cwv-rt]",
+        poll_interval     = 0,
+        announce_interval = 1e12,   -- suppress the probe's network announce
+    })
+    if type(inst) ~= "table" then return "parity factory did not return an instance" end
+    local seen_state
+    inst:register_gated_feature("__cwv_rt_order_probe__", {
+        on_enable = function() seen_state = inst:applied_state() end,
+    })
+    pcall(function() inst:tick(10) end)   -- solo enables on the first tick (settle 0)
+    if seen_state == nil then return end  -- enable did not fire in this env; skip
+    if seen_state ~= "enabled" then
+        return string.format(
+            "applied_state() inside on_enable was %q, expected \"enabled\" -- shared lib fired callbacks before committing _applied (issue 506 regression)",
+            tostring(seen_state))
+    end
+end)
+
+_rt_register("issue567_skin_reverse_index_valid", function()
+    -- The three persisted skins from issue #567 must satisfy BOTH layers of
+    -- vanilla's contract: live IML/WeaponSkins ownership and, whenever vanilla's
+    -- lazy reverse-index has been rebuilt, a cache row pointing at that owner.
+    local validate = mod._cwv567_validate_skin_association
+    if type(validate) ~= "function" then return "#567 association validator missing" end
+    local expected = {
+        cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1 = "cwv_es_sword_and_mace",
+        cwv_es_dual_maces_es_1h_mace_skin_02_runed_01 = "cwv_es_dual_maces",
+        cwv_es_axe_shield_wpn_emp_shield_03__axe_02_t2 = "cwv_es_axe_shield",
+    }
+    for skin_key, owner_key in pairs(expected) do
+        local valid, owner_or_err = validate(skin_key)
+        if not valid then return skin_key .. ": " .. tostring(owner_or_err) end
+        if owner_or_err ~= owner_key then
+            return string.format("%s owner=%s expected=%s", skin_key, tostring(owner_or_err), owner_key)
+        end
+        local cache = WeaponSkins and WeaponSkins._matching_weapon_skin_item_keys
+        if type(cache) == "table" then
+            local row = cache[skin_key]
+            if type(row) ~= "table" then return skin_key .. ": missing from rebuilt vanilla reverse-index" end
+            if row.item_key ~= owner_key .. "_skin" then
+                return string.format("%s reverse-index item_key=%s expected=%s_skin",
+                    skin_key, tostring(row.item_key), owner_key)
+            end
+        end
+    end
+    if type(_om._exact_pair_skin_predicate) ~= "function" then
+        return "#567 exact-pair protocol predicate missing"
+    end
+    local exact = "cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1"
+    if not _om._exact_pair_skin_predicate(exact) then
+        return "#567 exact Sword+Mace skin is outside replay protocol"
+    end
+    local skin = WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[exact]
+    if not skin
+        or not tostring(skin.right_hand_unit):find("wpn_emp_sword_02_t1", 1, true)
+        or not tostring(skin.left_hand_unit):find("wpn_emp_mace_03_t1", 1, true) then
+        return "#567 exact skin lost sword-right/mace-left authored hand order"
+    end
+end)
+
+mod._cwv_dev_anim_picker.install()
+
+mod:info("Character Weapon Variants v%s loaded", MOD_VERSION)
+
+mod:info("[mem-probe] cwv boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CWV) / 1024)
+
+end

@@ -18,11 +18,7 @@ return function(H, repo_root)
     end)
 
     H.test("CWV source gates recovered javelin pickup on peer parity", function()
-        local path = repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
-        local file = assert(io.open(path, "rb"))
-        local source = file:read("*a")
-        file:close()
+        local source = require("cwv_source").combined(repo_root)
         H.truthy(source:find("mod._cwv_javelin_pickup.wire_fallback", 1, true))
         H.truthy(source:find("_wire_safe_pickup_name(cwv_key, true)", 1, true))
         H.truthy(source:find("_wire_safe_pickup_name(cwv_key, false)", 1, true))

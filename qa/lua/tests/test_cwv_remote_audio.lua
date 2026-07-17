@@ -1,9 +1,5 @@
 return function(H, repo_root)
-    local path = repo_root
-        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
-    local file = assert(io.open(path, "rb"))
-    local source = file:read("*a")
-    file:close()
+    local source = require("cwv_source").combined(repo_root)
 
     H.test("CWV cross-access remap owns the pre-RPC 3P animation seam", function()
         H.truthy(source:find('mod:hook("WeaponUnitExtension", "_play_3p_anim"', 1, true))

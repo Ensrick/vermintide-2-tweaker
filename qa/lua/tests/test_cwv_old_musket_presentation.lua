@@ -1,9 +1,5 @@
 return function(H, repo_root)
-    local path = repo_root
-        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
-    local file = assert(io.open(path, "rb"))
-    local source = file:read("*a")
-    file:close()
+    local source = require("cwv_source").combined(repo_root)
 
     H.test("Old Musket mode uses one event-driven state channel", function()
         local start = assert(source:find('local CHANNEL, SCHEMA = "cwv_old_musket_mode_v1", 1', 1, true))

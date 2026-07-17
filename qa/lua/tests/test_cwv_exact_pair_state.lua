@@ -80,7 +80,7 @@ return function(H, repo_root)
     end)
 
     H.test("CWV #567 exact state is wired into every reconstruction surface", function()
-        local source = read(main_path)
+        local source = require("cwv_source").combined(repo_root)
         for _, marker in ipairs({
             '_exact_pair_publish_inventory(self, "wield")',
             '_exact_pair_publish_inventory(self, "game_object_initialized")',

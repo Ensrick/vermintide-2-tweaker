@@ -1,5 +1,31 @@
 # Character Weapon Variants — Development Guide
 
+## Entry-module boundaries
+
+`character_weapon_variants.lua` is the ordered orchestration root. The
+following private modules are loaded exactly once at the point their code
+formerly occupied; moving a load call is a hook-order change and requires an
+explicit engine-surface review:
+
+- `_cwv_variant_catalog.lua` owns definition data and receives the already
+  loaded Greataxe, Dawi Mace, and Crowbill policy modules. It owns no hooks,
+  commands, inventory acquisition, or lifecycle callbacks.
+- `_cwv_cross_access.lua` owns the one consolidated
+  `SimpleInventoryExtension.wield` observer and the pre-RPC
+  `WeaponUnitExtension._play_3p_anim` substitution. Never register either
+  surface a second time; VMF duplicate hooks replace rather than chain.
+- `_cwv_commands_lifecycle.lua` owns diagnostic commands and the final
+  `on_game_state_changed`, `on_enabled`, `on_disabled`, and `on_unload`
+  callbacks. Appearance replay, dual-weapon package leases, Crowbill state,
+  and mace/hammer restoration must continue to compose there.
+- `_cwv_regression_identity.lua` and `_cwv_regression_render.lua` install the
+  in-game regression checks in their original order. The split boundary is
+  organizational only; check names remain one public command surface.
+
+Offline source-contract tests that need the historical composed surface must
+use `qa/lua/cwv_source.lua`. Tests concerned specifically with entry size or
+load order should read the entry file directly.
+
 ## Registration and acquisition contract
 
 CWV owns weapon definitions: `ItemMasterList` rows, templates, skins, packages,

@@ -149,7 +149,7 @@ return function(H, repo_root)
     end)
 
     H.test("CWV #660 world lifecycle adapters are bounded and vanilla-wire safe", function()
-        local source = read(main_path)
+        local source = require("cwv_source").combined(repo_root)
         for _, marker in ipairs({
             '_om.appearance_lifecycle_policy = mod:dofile',
             '_om._cwv_resolve_world_descriptor = function',

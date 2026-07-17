@@ -49,11 +49,7 @@ return function(H, repo_root)
     end)
 
     H.test("CWV issue 317 picker owns only the pre-RPC resolver seam", function()
-        local main_path = repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
-        local file = assert(io.open(main_path, "rb"))
-        local source = file:read("*a")
-        file:close()
+        local source = require("cwv_source").combined(repo_root)
         H.truthy(source:find("mod._cwv_dev_anim_picker.resolve(item_key, career, source_event)", 1, true))
         H.truthy(source:find('mod:hook("WeaponUnitExtension", "_play_3p_anim"', 1, true))
         local picker_file = assert(io.open(path, "rb"))

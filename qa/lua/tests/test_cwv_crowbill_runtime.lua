@@ -61,8 +61,7 @@ return function(H, repo_root)
 	end)
 
 	H.test("CWV #604 main composes one template resolver and lifecycle owner", function()
-		local source = read(repo_root
-			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		local source = require("cwv_source").combined(repo_root)
 		for _, marker in ipairs({
 			'_cwv_crowbill_runtime")',
 			"_om.crowbill_runtime.install(mod, _om)",

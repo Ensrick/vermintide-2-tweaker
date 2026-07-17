@@ -715,7 +715,7 @@ return function(H, repo_root)
 			file:close()
 			return source
 		end
-		local main = read("character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		local main = require("cwv_source").combined(repo_root)
 		local module = read("character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua")
 		H.truthy(main:find('_rt_register("issue620_per_instance_combat_styles"', 1, true))
 		H.truthy(main:find("_om.combat_styles:resolve_template(item_data, backend_id)", 1, true))

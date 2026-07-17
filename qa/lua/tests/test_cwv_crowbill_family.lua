@@ -119,8 +119,7 @@ return function(H, repo_root)
                 H.equal(control.right_hand_rotation, nil)
             end
         end
-        local main = read(repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        local main = require("cwv_source").combined(repo_root)
         H.truthy(main:find("issue604_imperial_crowbill_model05_transform", 1, true))
         H.truthy(main:find("for _, model in ipairs(_om.crowbill_family.usable_models()) do", 1, true))
         H.truthy(main:find("_crowbill_transform_by_unit[model.right_hand_unit]", 1, true))
@@ -137,8 +136,7 @@ return function(H, repo_root)
 		H.equal(target.right_hand_scale, nil)
 		H.equal(target.right_hand_rotation, nil)
 		H.equal(target.right_hand_rotation_1p, nil)
-        local main = read(repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        local main = require("cwv_source").combined(repo_root)
         H.truthy(main:find("issue604_dawi_crowbill_model01_transform", 1, true))
         H.truthy(main:find("transform delivered surface=", 1, true))
 		H.truthy(main:find("baseline_scale=", 1, true))
@@ -178,8 +176,7 @@ return function(H, repo_root)
     end)
 
     H.test("CWV Crowbills are CIM definitions not automatic grants", function()
-        local main = read(repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        local main = require("cwv_source").combined(repo_root)
         for _, variant in ipairs(family.VARIANTS) do
             H.truthy(main:find('item_key        = "' .. variant.key .. '"', 1, true))
             H.truthy(main:find(variant.key .. "_skins", 1, true))

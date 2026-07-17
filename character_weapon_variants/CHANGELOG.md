@@ -1,5 +1,23 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.440-dev - 2026-07-17 - entry-module decomposition
+
+- Reduced the CWV entry module below its frozen 11,617-line baseline by moving
+  the policy-backed variant catalog, consolidated cross-access animation owner,
+  commands/final lifecycle callbacks, and regression registrations into
+  cohesive private modules loaded at their original install points.
+- Preserved the single `SimpleInventoryExtension.wield` owner and pre-RPC
+  `WeaponUnitExtension._play_3p_anim` hook, including the exact registration
+  counter used by the in-game regression suite.
+- Added Lua 5.1 source-contract coverage for module load count/order, final
+  lifecycle ownership, all 68 regression registrations, catalog boundaries,
+  and the frozen file-size gate. Existing CWV source tests now inspect the
+  composed entry-module surface instead of assuming all behavior is one file.
+
+**DoD:** behavior-preserving architecture change; no weapon definition,
+appearance identity, lifecycle replay, transport payload, or acquisition
+contract changed. Lua suite, mod lint, and file-size QA must pass before merge.
+
 ## 0.1.439-dev - 2026-07-17 - #660 exact world identity and lifecycle replay [diagnostics-armed]
 
 - Extended the preview descriptor into a provider-qualified exact world

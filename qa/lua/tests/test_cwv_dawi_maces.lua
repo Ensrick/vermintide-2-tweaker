@@ -94,15 +94,13 @@ return function(H, repo_root)
 			H.equal(mace_templates[variant.template], true,
 				variant.template .. " must remain in the canonical mace family")
 		end
-		local source = read(repo_root
-			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		local source = require("cwv_source").combined(repo_root)
 		H.equal(source:find("cwv_dawi_mace_template", 1, true), nil)
 		H.equal(source:find("cwv_dawi_mace_shield_template", 1, true), nil)
 	end)
 
 	H.test("CWV #602 registers exact CIM and Cosmetics skin contracts", function()
-		local source = read(repo_root
-			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		local source = require("cwv_source").combined(repo_root)
 		for _, variant in ipairs(policy.VARIANTS) do
 			H.truthy(source:find('item_key        = "' .. variant.key .. '"', 1, true))
 			H.truthy(source:find(variant.key .. '_skins', 1, true))

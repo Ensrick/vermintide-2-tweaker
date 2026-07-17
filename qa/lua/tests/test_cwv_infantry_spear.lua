@@ -33,9 +33,7 @@ return function(H, repo_root)
     end)
 
     H.test("CWV #596 Infantry Spear production wiring clones only direct hit profiles", function()
-        local path = repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
-        local source = read(path)
+        local source = require("cwv_source").combined(repo_root)
         H.truthy(source:find('Weapons.two_handed_spears_elf_template_1', 1, true))
         H.truthy(source:find('sub_action.damage_profile = _clone_damage_profile(', 1, true))
         H.truthy(source:find('"cwv_infantry_spear_"', 1, true))
@@ -46,8 +44,7 @@ return function(H, repo_root)
 
     H.test("CWV #620 moves shield-free spear meshes onto native Tuskgor Spear", function()
         H.equal(#policy.SPEAR_SHIELD_SKINS, 7)
-        local source = read(repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        local source = require("cwv_source").combined(repo_root)
         H.truthy(source:find('right_hand_unit = source.right_hand_unit', 1, true))
         H.truthy(source:find('local target_item = "es_2h_heavy_spear"', 1, true))
         H.truthy(source:find('local target_combo = "es_2h_heavy_spear_skins"', 1, true))

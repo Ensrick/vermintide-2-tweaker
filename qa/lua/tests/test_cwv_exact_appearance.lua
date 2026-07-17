@@ -170,7 +170,7 @@ return function(H, repo_root)
     end)
 
     H.test("CWV #579 adapters route unit and preview recipes through canonical policy", function()
-        local source = read(main_path)
+        local source = require("cwv_source").combined(repo_root)
         for _, marker in ipairs({
             "_om.exact_appearance.resolve({",
             "_om.exact_appearance.apply_item_units(exact, result, true)",

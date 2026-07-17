@@ -6,8 +6,7 @@ return function(H, repo_root)
         return source
     end
 
-    local main = read(repo_root
-        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+    local main = require("cwv_source").combined(repo_root)
     local data = read(repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants_data.lua")
     local atlas = read(repo_root

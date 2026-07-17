@@ -134,8 +134,7 @@ return function(H, repo_root)
 	end)
 
 	H.test("CWV #599 composes with the canonical lifecycle callback owners", function()
-		local source = read(repo_root
-			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		local source = require("cwv_source").combined(repo_root)
 		H.equal(count(source, "mod.on_enabled = function()"), 1)
 		H.equal(count(source, "mod.on_disabled = function()"), 1)
 		H.equal(count(source, "mod.on_unload = function()"), 1)
