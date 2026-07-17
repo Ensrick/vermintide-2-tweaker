@@ -9,6 +9,54 @@ return function(H, repo_root)
         la_blue = { icons = { skin_b = "icon_blue" } },
     }
 
+    H.test("Athanor preview fallback requires exact normalized weapon family", function()
+        H.equal(policy.resolve_preview_backend_id("la_item", "es_sword_shield",
+            "purpure_item", "es_sword_shield_breton"), "la_item")
+        H.equal(policy.resolve_preview_backend_id(nil, "es_sword_shield",
+            "la_item", "es_sword_shield"), "la_item")
+        H.equal(policy.resolve_preview_backend_id(nil, "es_sword_shield_breton",
+            "la_item", "es_sword_shield"), nil)
+        H.equal(policy.resolve_preview_backend_id(nil, nil,
+            "la_item", "es_sword_shield"), nil)
+    end)
+
+    H.test("LA and Purpure offhands remain owned by their exact item and pool", function()
+        local la = { la_armoury_key = "Kruber_empire_shield_basic1" }
+        local purpure = { la_armoury_key = "cos_gk_purpure_azure_shield_variant" }
+        local selections = {
+            la_item = { left_hand_unit = la },
+            purpure_item = { left_hand_unit = purpure },
+        }
+        local la_pool = { { la_armoury_key = "Kruber_empire_shield_basic1" } }
+        local purpure_pool = {
+            { la_armoury_key = "cos_gk_purpure_azure_shield_variant" },
+        }
+        H.equal(policy.resolve_preview_selection(selections, "la_item",
+            "left_hand_unit", la_pool), la)
+        H.equal(policy.resolve_preview_selection(selections, "purpure_item",
+            "left_hand_unit", purpure_pool), purpure)
+        H.equal(policy.resolve_preview_selection(selections, "la_item",
+            "left_hand_unit", purpure_pool), nil)
+        H.equal(policy.resolve_preview_selection(selections, "purpure_item",
+            "left_hand_unit", la_pool), nil)
+        H.equal(policy.resolve_preview_selection(selections, "missing_item",
+            "left_hand_unit", la_pool), nil)
+    end)
+
+    H.test("Athanor authored paint requires exact spawn-data target", function()
+        local la = { new_units = { "units/la_shield", "units/la_shield_3p" } }
+        local purpure = {
+            new_units = { "units/purpure_shield", "units/purpure_shield_3p" },
+        }
+        H.truthy(policy.preview_target_matches("units/la_shield_3p", la))
+        H.truthy(policy.preview_target_matches("units/purpure_shield_3p", purpure))
+        H.equal(policy.preview_target_matches("units/purpure_shield_3p", la), false)
+        H.equal(policy.preview_target_matches("units/la_shield_3p", purpure), false)
+        H.equal(policy.preview_target_matches(nil, la), false)
+        H.equal(policy.preview_target_matches("<no-unit_name>", la), false)
+        H.equal(policy.preview_target_matches("units/la_shield", {}), false)
+    end)
+
     H.test("persisted row-one LA icon is exact-backend-instance only", function()
         local item = { backend_id = "item_one", skin = "skin_a" }
         H.equal(policy.resolve_inventory_icon(item, "clone_a", nil,

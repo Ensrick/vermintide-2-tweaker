@@ -85,7 +85,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.141-dev"
+local MOD_VERSION = "0.9.143-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2391,6 +2391,7 @@ local _local_la_equips = setmetatable({}, { __mode = "k" })
 -- backend_id == nil. Cleared on customization-screen exit so it doesn't leak
 -- across screens.
 local _active_customization_backend_id = nil
+mod._active_customization_item_type = nil
 
 -- v0.9.41-dev (#150): set true ONLY while inside our GearUtils.create_equipment
 -- wrap — i.e. when the LIVE in-keep / in-mission player body is (re)spawning its
@@ -2622,6 +2623,7 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
         tostring(_active_customization_backend_id),
         tostring(mod._pending_la_emit_on_exit and "queued" or "none"))
     _active_customization_backend_id = nil
+    mod._active_customization_item_type = nil
     -- M1.4: also close the glow picker so it doesn't linger on top of the
     -- next screen. GlowPicker is required at the top of this file so it's
     -- safe to call directly here.
@@ -2959,8 +2961,12 @@ mod._la_restore_offhand_selections = function()
         end
     end
     if needs_la and type(la_pools) ~= "table" then return end
-    local backend_items = Managers and Managers.backend
-        and Managers.backend:get_interface("items")
+    -- Issue 695: retried per frame from mod.update until restore completes, so
+    -- probe _interfaces before get_interface - the miss path warns per call
+    -- (backend_manager_playfab.lua:203) and floods the pre-login log.
+    local backend_mgr = Managers and Managers.backend
+    local backend_items = backend_mgr and backend_mgr._interfaces
+        and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
     if needs_mesh and not (backend_items and backend_items.get_item_from_id) then return end
     if get_mod("character_weapon_variants") and mod._discover_cwv_dual_offhand_pools
             and mod._discover_cwv_dual_offhand_pools() < 7 then
@@ -3470,6 +3476,11 @@ local function _get_weapon_key_from_item(item)
     -- that doesn't exist in IML; ItemMasterList.__index crashifies on
     -- unknown keys.
     local data = item.data or (item.key and ItemMasterList and rawget(ItemMasterList, item.key))
+    if data and data.item_type == "weapon_skin" and data.matching_item_key
+            and ItemMasterList then
+        local base = rawget(ItemMasterList, data.matching_item_key)
+        if base and base.item_type then return base.item_type end
+    end
     if data and data.item_type then return data.item_type end
     return item.key
 end
@@ -3615,8 +3626,10 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
     -- v0.8.55-dev: stash for the BackendUtils.get_item_units hook fallback.
     -- See note on `_active_customization_backend_id` declaration.
     _active_customization_backend_id = item and item.backend_id or nil
-    _trace("SCREEN setup_illusions item=%s set active_customization_bid=%s",
-        tostring(item and item.key), tostring(_active_customization_backend_id))
+    mod._active_customization_item_type = _get_weapon_key_from_item(item)
+    _trace("SCREEN setup_illusions item=%s set active_customization_bid=%s item_type=%s",
+        tostring(item and item.key), tostring(_active_customization_backend_id),
+        tostring(mod._active_customization_item_type))
 
     if not item then _dbg("[offhand] no item, bailing"); return end
     local item_data = item.data or (item.key and ItemMasterList and rawget(ItemMasterList, item.key))
@@ -4705,7 +4718,22 @@ if BackendUtils then
         -- the engine hadn't preloaded → "Unit not found" crash in
         -- world.spawn_unit. Documented in CHANGELOG v0.7.101-dev.
         local resolved_skin = skin
-        local effective_backend_id = backend_id or (item_data and item_data.backend_id)
+        local item_type = item_data and item_data.item_type
+        if item_type == "weapon_skin" and item_data.matching_item_key then
+            local weapon_data = rawget(ItemMasterList, item_data.matching_item_key)
+            if weapon_data then
+                item_type = weapon_data.item_type
+            end
+        end
+        if not item_type then return result end
+        local active_preview_bid = not _current_husk_wield
+            and _active_customization_backend_id or nil
+        local active_preview_item_type = not _current_husk_wield
+            and mod._active_customization_item_type or nil
+        local effective_backend_id, preview_identity =
+            mod._la_instance_policy.resolve_preview_backend_id(
+                backend_id or (item_data and item_data.backend_id), item_type,
+                active_preview_bid, active_preview_item_type)
         -- v0.8.55-dev: customization-screen preview-cycle path passes nil
         -- for both `backend_id` AND item_data.backend_id (preview item is
         -- the pending skin's IML entry, no backend stamped). Fall back to
@@ -4726,7 +4754,10 @@ if BackendUtils then
         -- screen — _current_husk_wield being SET means we're inside a husk's
         -- wield, NOT a customization preview, so skip the fallback.
         if not effective_backend_id and not _current_husk_wield then
-            effective_backend_id = _active_customization_backend_id
+            _trace("RESOLVE preview identity rejected item_type=%s active_bid=%s active_item_type=%s state=%s",
+                tostring(item_type), tostring(_active_customization_backend_id),
+                tostring(mod._active_customization_item_type),
+                tostring(preview_identity))
         end
         if not resolved_skin and effective_backend_id and Managers and Managers.backend then
             local backend_items = Managers.backend:get_interface("items")
@@ -4743,15 +4774,6 @@ if BackendUtils then
         -- onto the base weapon (same item_type) in inventory and other
         -- spawns. See user report 2026-05-01.
         if not resolved_skin or resolved_skin == "" then return result end
-
-        local item_type = item_data and item_data.item_type
-        if item_type == "weapon_skin" and item_data.matching_item_key then
-            local weapon_data = rawget(ItemMasterList, item_data.matching_item_key)
-            if weapon_data then
-                item_type = weapon_data.item_type
-            end
-        end
-        if not item_type then return result end
 
         -- v0.8.32: read selection by backend_id (per-weapon-instance), not
         -- by item_type. effective_backend_id resolved earlier in this hook
@@ -4797,9 +4819,13 @@ if BackendUtils then
             and not (_deus_yield and _in_create_equipment)
             and effective_backend_id
             and _offhand_selection[effective_backend_id]
+        local selected_hand_pools = _get_offhand_options(item_type)
         if type(sel) == "table" then
             for hand_field, opt in pairs(sel) do
-                if type(opt) == "table" then
+                local selected_pool = selected_hand_pools
+                    and selected_hand_pools[hand_field]
+                if type(opt) == "table"
+                    and mod._la_instance_policy.selection_owned(opt, selected_pool) then
                     local override_unit = opt.unit or opt.intended_unit
                     -- v0.9.45-dev (BUG 1/2): variant-aware resolution for kind=
                     -- "unit" LA shields. For those picks resolve the override mesh
@@ -4859,6 +4885,10 @@ if BackendUtils then
                         _dbg("[offhand] SKIP override %s/%s -> %s (package not ready)",
                             tostring(item_type), tostring(hand_field), tostring(resolved_unit))
                     end
+                elseif type(opt) == "table" then
+                    _trace("RESOLVE selection rejected bid=%s item_type=%s hand=%s reason=foreign-selection",
+                        tostring(effective_backend_id), tostring(item_type),
+                        tostring(hand_field))
                 end
             end
         end
@@ -4994,11 +5024,16 @@ end
 -- or 3P member. This applies to both custom-unit variants and texture variants
 -- which select a particular vanilla mesh. Pure-paint texture variants have no
 -- declared unit and are kept safe by the authored-family pool policy.
--- Units whose mesh cannot be read retain the legacy permissive behavior.
--- Reuses _unit_mesh_name (pcall-safe). Called only on the "ingame" path.
-local function _offhand_paint_mesh_ok(u, armoury_key)
+-- Loot previewers pass the exact queued spawn_data unit path.  That evidence
+-- takes precedence over runtime unit metadata and fails closed if it is absent
+-- or mismatched. Other established render paths retain their runtime check.
+local function _offhand_paint_mesh_ok(u, armoury_key, proven_unit_path)
     local variant = _resolve_authored_offhand_variant(armoury_key)
     if not variant then return true end
+    if proven_unit_path ~= nil and variant.new_units then
+        return mod._la_instance_policy.preview_target_matches(
+            proven_unit_path, variant)
+    end
     local actual = _unit_mesh_name(u)
     if actual == "<no-unit_name>" or actual == "<not-unit>" then return true end
     -- #373: an exact magic->base receiver mapping means this live magic unit
@@ -5024,14 +5059,15 @@ local function _apply_authored_offhand_to_unit(world, unit, armoury_key,
         world, unit, armoury_key, vanilla_skin, context)
 end
 
-local function _apply_la_offhand_to_units(world, item_data, units, has_skin, backend_id_arg, context)
-    if not LA_BRIDGE.registered then _dbg("[LA paint] skip: authored bridge not registered"); return end
-    if not world or not item_data then _dbg("[LA paint] skip: world/item_data nil"); return end
-    if not has_skin then _dbg("[LA paint] skip: has_skin=false"); return end
+local function _apply_la_offhand_to_units(world, item_data, units, has_skin,
+        backend_id_arg, context, proven_unit_paths)
+    if not LA_BRIDGE.registered then _dbg("[LA paint] skip: authored bridge not registered"); return false end
+    if not world or not item_data then _dbg("[LA paint] skip: world/item_data nil"); return false end
+    if not has_skin then _dbg("[LA paint] skip: has_skin=false"); return false end
     -- v0.8.32: read selection by backend_id. Resolve from arg first, then
     -- from item_data.backend_id (vanilla stamps this on equipment resync).
     local bid = backend_id_arg or (item_data and item_data.backend_id)
-    if not bid then _dbg("[LA paint] skip: no backend_id"); return end
+    if not bid then _dbg("[LA paint] skip: no backend_id"); return false end
     -- v0.9.41-dev (#150): suppress the browse-time LA texture paint on the LIVE
     -- in-keep / in-mission body while the customization screen is open for this
     -- item. Mirrors the get_item_units mesh-override suppression: only the loot
@@ -5042,19 +5078,19 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin, bac
     if context == "ingame" and _active_customization_backend_id ~= nil
         and bid == _active_customization_backend_id then
         _dbg("[LA paint] suppress ingame browse-paint for bid=%s (customization screen open)", tostring(bid))
-        return
+        return false
     end
     -- #518: deus run - the rolled rarity/upgrade skin owns the live body's
     -- weapon visuals; skip the in-game LA offhand paint. Preview contexts
     -- (loot_previewer / hero_previewer render the KEEP instance) stay live.
     if context == "ingame" and mod._la_deus_weapon_yield() then
         _dbg("[LA paint] skip: deus run - CW upgrade cosmetics win (#518) bid=%s", tostring(bid))
-        return
+        return false
     end
     _migrate_legacy_offhand_selection(bid)
     local per_hand_sel = _offhand_selection[bid]
     if type(per_hand_sel) ~= "table" then
-        _dbg("[LA paint] skip: no _offhand_selection for backend_id=%s", tostring(bid)); return
+        _dbg("[LA paint] skip: no _offhand_selection for backend_id=%s", tostring(bid)); return false
     end
     -- v0.9.9.4-dev: caller passes the units it has spawned. LA paints are
     -- texture-only and idempotent across all matching unit meshes — we
@@ -5064,11 +5100,17 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin, bac
     -- multi-mount weapons with LA picks on both hands the paint runs once
     -- per hand selection on whichever units the caller supplied.
     local painted = false
+    local component_claimed = false
+    local item_type = _resolve_item_type(item_data)
+    local hand_pools = item_type and _get_offhand_options(item_type)
     for hand_field, sel in pairs(per_hand_sel) do
-        if type(sel) == "table" and sel.la_armoury_key then
+        local pool = hand_pools and hand_pools[hand_field]
+        if type(sel) == "table" then component_claimed = true end
+        if type(sel) == "table" and sel.la_armoury_key
+            and mod._la_instance_policy.selection_owned(sel, pool) then
             _dbg("[LA paint] painting %s (%s) on %d units (backend_id=%s)",
                 tostring(sel.la_armoury_key), hand_field, #units, tostring(bid))
-            for _, u in ipairs(units) do
+            for unit_index, u in ipairs(units) do
                 if u and _is_unit(u) then
                     -- v0.9.45-dev (BUG 1/2): on the LIVE in-keep / in-mission body
                     -- ("ingame") the kind="unit" mesh override can be skipped
@@ -5089,13 +5131,14 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin, bac
                     -- mesh-match check stops the warp without regressing the correct
                     -- case: when the previewer DID spawn the LA mesh the gate passes
                     -- (mesh matches) and the paint proceeds; when the mesh is
-                    -- unreadable (<no-unit_name>) the gate is permissive (returns
-                    -- true) so existing preview behavior is unchanged. The husk path
-                    -- ("network_husk") still always mesh-swaps first, so it is NOT
-                    -- gated. Non-fatal (mesh read is pcall-guarded in
-                    -- _unit_mesh_name); kind="texture" picks are never gated.
+                    -- unreadable (<no-unit_name>), LootItemUnitPreviewer supplies its
+                    -- exact queued spawn_data path and the gate fails closed on an
+                    -- absent/mismatched target. The husk path ("network_husk") still
+                    -- always mesh-swaps first, so it is NOT gated. Non-fatal (mesh
+                    -- read is pcall-guarded in _unit_mesh_name).
                     if context ~= "network_husk"
-                        and not _offhand_paint_mesh_ok(u, sel.la_armoury_key) then
+                        and not _offhand_paint_mesh_ok(u, sel.la_armoury_key,
+                            proven_unit_paths and proven_unit_paths[unit_index]) then
                         _dbg("[LA paint]   SKIP unit=%s key=%s ctx=%s — mesh is NOT the swapped LA mesh; refusing to warp heraldry onto mismatched shield",
                             tostring(u), tostring(sel.la_armoury_key), tostring(context))
                         -- _trace_paint routes through mod:info (visible with
@@ -5128,9 +5171,13 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin, bac
                 end
             end
             painted = true
+        elseif type(sel) == "table" and sel.la_armoury_key then
+            _trace("PAINT selection rejected bid=%s item_type=%s hand=%s ctx=%s reason=foreign-selection",
+                tostring(bid), tostring(item_type), tostring(hand_field),
+                tostring(context))
         end
     end
-    if not painted then return end
+    return component_claimed, painted
 end
 
 -- In-game keep / mission body
@@ -5858,6 +5905,8 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
     local item = self._item
     if not item then return units end
     local item_data = item.data
+    local left_path  = spawn_data and spawn_data[1] and spawn_data[1].unit_name or nil
+    local right_path = spawn_data and spawn_data[2] and spawn_data[2].unit_name or nil
 
     -- LA offhand paint: spawn order is left (shield) = index 1, right (weapon) = index 2.
     -- Use the freshly-returned `units` array, not self._spawned_units (not yet assigned).
@@ -5872,10 +5921,18 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
             -- is nil. Fall back to the customization screen's active backend_id
             -- so the LA paint follows the row-2 offhand selection while user
             -- cycles row-1 main-hand illusions.
-            local effective_bid = item.backend_id or _active_customization_backend_id
-            _apply_la_offhand_to_units(world, item_data, { units[1] }, true, effective_bid, "loot_previewer")
+            local preview_item_type = _resolve_item_type(item_data)
+            local effective_bid = mod._la_instance_policy.resolve_preview_backend_id(
+                item.backend_id or (item_data and item_data.backend_id),
+                preview_item_type,
+                _active_customization_backend_id,
+                mod._active_customization_item_type)
+            local component_claimed = _apply_la_offhand_to_units(world, item_data,
+                { units[1] }, true, effective_bid, "loot_previewer", { left_path })
             local skin_key = item.skin or (item_data.item_type == "weapon_skin" and item_data.name)
-            if skin_key == GK_SET.SHIELD_SKIN_KEY then
+            if not component_claimed and skin_key == GK_SET.SHIELD_SKIN_KEY
+                and _offhand_paint_mesh_ok(units[1],
+                    GK_SET.SHIELD_VARIANT_KEY, left_path) then
                 GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, units[1], "loot_previewer")
             end
         end
@@ -5892,8 +5949,6 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
     -- "Three Rendering Paths" documents this contract.
     -- No cwv_variant gate needed: a cwv item's spawn_data unit_name is always
     -- the variant's own model, never the base weapon's path.
-    local left_path  = spawn_data and spawn_data[1] and spawn_data[1].unit_name or nil
-    local right_path = spawn_data and spawn_data[2] and spawn_data[2].unit_name or nil
     mod._cos.apply_unit_path_scale_hand(units[2], nil, right_path, "right")
     mod._cos.apply_unit_path_scale_hand(units[1], nil, left_path,  "left")
     mod._cos.apply_glow_override({ units[1], units[2] })
@@ -9795,8 +9850,12 @@ mod.update = function(dt)
             and LA_PERSIST.prune_missing_items then
         mod._la_persist_prune_at = mod._la_persist_prune_at or (os.clock() + 10)
         if os.clock() >= mod._la_persist_prune_at then
-            local backend_items = Managers and Managers.backend
-                and Managers.backend:get_interface("items")
+            -- Issue 695: retried per frame once armed; probe _interfaces before
+            -- get_interface so the pre-ready miss path can't warn every frame.
+            local backend_mgr = Managers and Managers.backend
+            local backend_items = backend_mgr and backend_mgr._interfaces
+                and backend_mgr._interfaces.items
+                and backend_mgr:get_interface("items")
             if backend_items and backend_items.get_item_from_id then
                 local removed = LA_PERSIST.prune_missing_items(function(backend_id)
                     local ok, item = pcall(backend_items.get_item_from_id,
@@ -10439,6 +10498,7 @@ _cos_runtime_checks.install(mod, _rt_register, {
     custom_skin_keys = _custom_skin_keys,
     offhand_preload_lifecycle = OFFHAND_PRELOAD_LIFECYCLE, mh_embed = MH_EMBED,
     cwv_peer_identity = mod._cos_cwv_peer_identity,
+    la_instance_policy = mod._la_instance_policy,
 })
 -- ============================================================
 -- Moonfire Bow cosmetic AOE puff (moved from weapon_tweaker 2026-06-29)

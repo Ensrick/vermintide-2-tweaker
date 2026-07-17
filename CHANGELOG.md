@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-17 - Exact Athanor shield preview ownership
+
+Tweaker: Cosmetics v0.9.143-dev hardens issue #481 at the existing
+`BackendUtils.get_item_units` and `LootItemUnitPreviewer.spawn_units` seams.
+The latest log proved the Loremaster and Purpure/Azure choices were persisted
+under different exact backend items, but also showed an unreadable runtime mesh
+being accepted despite a mismatched target. Preview fallback now requires the
+same normalized weapon family, saved components must belong to the exact hand
+pool, and the queued `spawn_data` unit path is the fail-closed paint authority.
+The two intentional Athanor overview previewers remain intact. Offline Lua 5.1
+and runtime checks cover cross-item isolation without adding hooks or transport.
+This source also preserves the already-uploaded v0.9.142-dev issue #695 backend
+readiness guards from the separate public ship worktree; its generated bundle
+was not copied or modified here.
+
 ## 2026-07-17 - Clean-worktree launcher provenance handoff
 
 Issue #683 centralizes VMBLauncher dependency discovery for the canonical ship
