@@ -1,5 +1,35 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.435-dev - 2026-07-16 - #423 damage-profile wire gate fails closed [verify-fix-coop]
+
+- Hardened the existing client-to-host `rpc_attack_hit` gate so negative or
+  unknown CWV parity has no path that can return the original `cwv_*`
+  `NetworkLookup.damage_profiles` index. The prior `safe or id` fallback could
+  fail open if a future profile lacked a recorded vanilla donor and the
+  opportunistic fallback capture was unavailable.
+- Moved the decision into the engine-free `_cwv_damage_profile_wire.lua`
+  policy. Mixed/unknown lobbies now use the exact recorded vanilla donor, then
+  the boot-stable vanilla `default` profile. If neither can be proven, the one
+  unsafe hit is suppressed and logged once instead of risking the host process.
+  Vanilla profiles still pass unchanged.
+- Positive all-peer CWV parity and the authoritative in-process server path
+  retain the authored CWV profile and its tuned damage. No setting can bypass
+  the wire-safety decision.
+- Added six offline cases for donor substitution, positive parity, server
+  authority, vanilla pass-through, unknown-profile fallback, and the terminal
+  suppress path. Extended runtime `cwv_wire_safe_damage_profile_gate` coverage
+  so an unmapped synthetic CWV id can never survive the negative-parity policy.
+
+**Verification (two players; confirm `[cwv:LOAD] v0.1.435-dev` first):**
+
+1. A player without CWV hosts. A CWV client joins and lands melee and ranged
+   hits with Imperial Longsword and Old Musket. The host must remain connected;
+   the client log records one bounded `[cwv:423] wire dmg-profile sub` line per
+   encountered cloned profile.
+2. Repeat with both players on CWV. The substitution line must be absent and
+   the tuned CWV damage must remain active.
+3. Run `/cwv_regression_test`; `cwv_wire_safe_damage_profile_gate` must PASS.
+
 ## 0.1.434-dev - 2026-07-16 - #644/#648 Greatsword style deduplication [verify-fix-coop]
 
 - Removed Imperial Longsword from the native Greatsword's public cycle because

@@ -6,6 +6,17 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-16.
 
+## #423 Cloned damage profiles never reach an incompatible host
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.380-dev; hardened v0.1.435-dev |
+| Repro | A non-CWV player hosts. A CWV client lands melee and ranged hits with Imperial Longsword and Old Musket. Repeat with both peers on CWV. |
+| Expected post-fix | Mixed or unknown parity sends only the recorded vanilla donor id, then vanilla `default` as a fallback; if neither is provable the unsafe hit is suppressed. A `cwv_*` damage-profile index never reaches the non-CWV host. Positive CWV parity and the authoritative server path retain tuned CWV damage. |
+| Detection | Offline `test_cwv_damage_profile_wire.lua` passes all six policy cases; `/cwv_regression_test` passes `cwv_wire_safe_damage_profile_gate`; mixed-lobby substitutions emit one bounded `[cwv:423]` row per profile and the host remains connected. |
+
+---
+
 ## #620 Per-instance Combat Styles
 
 | Field | Check |

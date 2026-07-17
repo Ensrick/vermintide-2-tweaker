@@ -102,6 +102,7 @@ local suites = {
     "test_cwv_anim_picker",
     "test_cwv_acquisition",
     "test_cwv_javelin_pickup",
+    "test_cwv_damage_profile_wire",
     "test_cwv_exact_pair_state",
     "test_cwv_exact_appearance",
     "test_cwv_dual_icons",

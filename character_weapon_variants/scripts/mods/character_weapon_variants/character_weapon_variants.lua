@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.434-dev"
+local MOD_VERSION = "0.1.435-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -69,6 +69,7 @@ mod._cwv_crowbill_family = _om.crowbill_family
 mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode
 mod._cwv_crowbill_presentation = _om.crowbill_presentation
 mod._cwv_crowbill_runtime = _om.crowbill_runtime
+_om.damage_profile_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_damage_profile_wire")
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
@@ -13098,37 +13099,36 @@ do
     local function _wire_safe_damage_profile_id(id)
         local NL = rawget(_G, "NetworkLookup")
         local dp = NL and NL.damage_profiles
-        if type(dp) ~= "table" then return nil end
-        local name = rawget(dp, id)
-        if type(name) ~= "string" or name:sub(1, 4) ~= "cwv_" then
-            return nil   -- vanilla / unknown-non-cwv id: leave untouched
-        end
-        local source_name = _om._cwv_damage_profile_wire_source[name]
-        if type(source_name) == "string" and source_name:sub(1, 4) ~= "cwv_" then
-            local sid = rawget(dp, source_name)
-            if type(sid) == "number" then return sid end
-        end
-        -- Unmapped cwv profile (feature-gated creator / future drift): coerce to a
-        -- captured vanilla fallback so a modded index can NEVER ride to a non-cwv
-        -- host (a P0 host CTD is worse than degraded damage). nil only if no cwv
-        -- profile was ever recorded (then there is nothing that could leak).
-        return _om._cwv_wire_fallback_profile_id
+        local safe, disposition = _om.damage_profile_wire.resolve_unconfirmed(
+            dp, _om._cwv_damage_profile_wire_source, id)
+        if disposition == "vanilla" then return nil end -- legacy test helper contract
+        return safe
     end
     _om._wire_safe_damage_profile_id = _wire_safe_damage_profile_id
 
     -- Pure gate decision (testable without a WeaponSystem instance): the
     -- damage_profile_id that should actually be sent for this hit.
     local function _wire_dp_for_send(is_server, id)
-        if is_server then return id end                -- host authoritative, in-process
-        if _om._wire_parity_live() then return id end  -- every peer has cwv
-        local safe = _wire_safe_damage_profile_id(id)
-        return safe or id
+        local NL = rawget(_G, "NetworkLookup")
+        local dp = NL and NL.damage_profiles
+        return _om.damage_profile_wire.for_send(is_server, _om._wire_parity_live(),
+            dp, _om._cwv_damage_profile_wire_source, id)
     end
     _om._wire_dp_for_send = _wire_dp_for_send
 
     local _dp_sub_logged = {}   -- once per profile id; no per-hit spam
     mod:hook("WeaponSystem", "send_rpc_attack_hit", function(func, self, damage_source_id, attacker_unit_id, hit_unit_id, hit_zone_id, hit_position, attack_direction, damage_profile_id, ...)
-        local send_id = _wire_dp_for_send(self.is_server, damage_profile_id)
+        local send_id, disposition = _wire_dp_for_send(self.is_server, damage_profile_id)
+        if disposition == "drop" then
+            if not _dp_sub_logged[damage_profile_id] then
+                _dp_sub_logged[damage_profile_id] = true
+                local dp = rawget(_G, "NetworkLookup")
+                dp = dp and dp.damage_profiles
+                pcall(printf, "[cwv:423] blocked unsafe hit: profile=%s(%s) peer parity unconfirmed and no vanilla fallback resolved",
+                    tostring(dp and rawget(dp, damage_profile_id)), tostring(damage_profile_id))
+            end
+            return nil
+        end
         if send_id ~= damage_profile_id then
             if not _dp_sub_logged[damage_profile_id] then
                 _dp_sub_logged[damage_profile_id] = true
@@ -16167,6 +16167,27 @@ _rt_register("cwv_wire_safe_damage_profile_gate", function()
         if host_authoritative ~= cwv_id then
             return "is_server path substituted (host is authoritative; rpc_attack_hit runs in-process, no foreign decode)"
         end
+    end
+
+    -- (4) Terminal fail-safe: an untracked future cwv profile first degrades to
+    -- vanilla `default`; if even that vanilla row cannot be proven it is dropped,
+    -- never returned as the original custom id (`safe or id` was the old leak).
+    local policy = _om.damage_profile_wire
+    if type(policy) ~= "table" or type(policy.for_send) ~= "function" then
+        return "engine-free damage-profile wire policy missing"
+    end
+    local fixture = {
+        [1] = "default", default = 1,
+        [9] = "cwv___rt423_unmapped", cwv___rt423_unmapped = 9,
+    }
+    local fallback_id, fallback_disposition = policy.for_send(false, false, fixture, {}, 9)
+    if fallback_id ~= 1 or fallback_disposition ~= "fallback" then
+        return "unmapped cwv profile did not degrade to the boot-stable vanilla default"
+    end
+    fixture[1], fixture.default = nil, nil
+    local dropped_id, dropped_disposition = policy.for_send(false, false, fixture, {}, 9)
+    if dropped_id ~= nil or dropped_disposition ~= "drop" then
+        return "unmapped cwv profile failed open after every vanilla fallback was removed"
     end
 end)
 

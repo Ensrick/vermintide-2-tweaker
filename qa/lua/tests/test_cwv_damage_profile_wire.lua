@@ -1,0 +1,68 @@
+return function(H, repo_root)
+	local policy = dofile(repo_root
+		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_damage_profile_wire.lua")
+
+	local function lookup(include_default)
+		local out = {
+			[1] = "light_slashing_linesman",
+			light_slashing_linesman = 1,
+			[8] = "cwv_il_light_slashing_linesman",
+			cwv_il_light_slashing_linesman = 8,
+			[9] = "cwv_future_unmapped",
+			cwv_future_unmapped = 9,
+		}
+		if include_default ~= false then
+			out[2] = "default"
+			out.default = 2
+		end
+		return out
+	end
+
+	local sources = {
+		cwv_il_light_slashing_linesman = "light_slashing_linesman",
+	}
+
+	H.test("CWV #423 substitutes the exact vanilla donor when parity is unknown", function()
+		local id, disposition = policy.for_send(false, false, lookup(), sources, 8)
+		H.equal(id, 1)
+		H.equal(disposition, "source")
+	end)
+
+	H.test("CWV #423 preserves authored profile only under positive parity or server authority", function()
+		local parity_id, parity_disposition = policy.for_send(false, true, lookup(), sources, 8)
+		local server_id, server_disposition = policy.for_send(true, false, lookup(), sources, 8)
+		H.equal(parity_id, 8)
+		H.equal(parity_disposition, "parity")
+		H.equal(server_id, 8)
+		H.equal(server_disposition, "server")
+	end)
+
+	H.test("CWV #423 untracked custom profiles fall back to boot-stable vanilla default", function()
+		local id, disposition = policy.for_send(false, false, lookup(), sources, 9)
+		H.equal(id, 2)
+		H.equal(disposition, "fallback")
+	end)
+
+	H.test("CWV #423 never returns a custom id when no vanilla fallback can be proven", function()
+		local id, disposition = policy.for_send(false, false, lookup(false), sources, 9)
+		H.equal(id, nil)
+		H.equal(disposition, "drop")
+	end)
+
+	H.test("CWV #423 leaves vanilla profiles unchanged in mixed lobbies", function()
+		local id, disposition = policy.for_send(false, false, lookup(), sources, 1)
+		H.equal(id, 1)
+		H.equal(disposition, "vanilla")
+	end)
+
+	H.test("CWV #423 source hook has no fail-open custom-id fallback", function()
+		local path = repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+		local file = assert(io.open(path, "rb"))
+		local source = file:read("*a")
+		file:close()
+		H.truthy(source:find("damage_profile_wire.for_send", 1, true))
+		H.truthy(source:find('disposition == "drop"', 1, true))
+		H.equal(source:find("return safe or id", 1, true), nil)
+	end)
+end
