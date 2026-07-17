@@ -1,5 +1,12 @@
 # Verminious Dreams Lighting — Changelog
 
+## v1.0.17-dev - 2026-07-17 - #428 canonical copied debug helper [tooling]
+
+- Replaced the entry file's behavior-identical `_dbg` / `_dbg_alert` definitions
+  with the standalone bundled copy of `tools/shared_lib/_lib_debug.lua`.
+- Registered VDL dev as an exact-copy consumer and added executable ownership
+  tests, preserving gated `mod:debug` and guarded log-only `printf` alerts.
+
 ## v1.0.16-dev - 2026-07-13 - #427 _dbg_alert log-only via engine printf [untested]
 
 - `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `verminious_dreams_lighting_dev.lua` only.
