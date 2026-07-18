@@ -43,10 +43,14 @@ function Find-DataFiles {
 }
 
 function Get-ModDirForFile([string]$filePath) {
-    # File is at <repo>/<mod>/scripts/mods/<mod>/<mod>_localization.lua
-    # Walk up 3 levels to <mod>
+    # File is at <repo>/<mod>/scripts/mods/<mod>[/<subdir>...]/<file>.lua.
+    # Walk up to the "mods" path component, then two more (mods -> scripts ->
+    # <mod>). The old fixed 3-level walk broke on nested module dirs: the
+    # gui_tweaker hb/ fork's hb_data.lua resolved to a phantom mod named
+    # "scripts" and produced a spurious no-localization-file warning.
     $dir = Split-Path $filePath -Parent
-    for ($i = 0; $i -lt 3; $i++) { $dir = Split-Path $dir -Parent }
+    while ($dir -and (Split-Path $dir -Leaf) -ne "mods") { $dir = Split-Path $dir -Parent }
+    if ($dir) { $dir = Split-Path (Split-Path $dir -Parent) -Parent }
     return $dir
 }
 
@@ -59,7 +63,11 @@ function Parse-LocFile([string]$path) {
     $result = @{}
 
     # Pattern 1: key = { en = "value" }
-    $regex1 = '(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
+    # (?:\s|--[^\r\n]*)* between { and en: entries may carry full-line or inline
+    # Lua comments before the en field (gut_dev reorg annotations did; the old
+    # whitespace-only gap silently dropped those keys and raised false MISSING
+    # warnings for keys that exist).
+    $regex1 = '(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{(?:\s|--[^\r\n]*)*en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
     foreach ($m in [regex]::Matches($text, $regex1)) {
         $result[$m.Groups[1].Value] = $m.Groups[2].Value
     }
@@ -71,7 +79,8 @@ function Parse-LocFile([string]$path) {
     }
 
     # Pattern 3: loc.<key> = { en = "value" }   -- chaos_wastes_tweaker assignment style
-    $regex3 = '(?m)^\s*loc\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
+    # Same comment tolerance as Pattern 1.
+    $regex3 = '(?m)^\s*loc\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{(?:\s|--[^\r\n]*)*en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
     foreach ($m in [regex]::Matches($text, $regex3)) {
         $result[$m.Groups[1].Value] = $m.Groups[2].Value
     }
@@ -84,10 +93,13 @@ function Parse-DataFile([string]$path) {
     $text = Read-FileUtf8 $path
     $refs = @{}
     # Match: setting_id = "foo", tooltip = "foo_tooltip", category_id = "foo"
+    # (?!\s*\.\.) drops dynamically-constructed keys ("et_diff_" .. key,
+    # "mut_" .. id): the literal is only a prefix, not a loc key, and flagging
+    # it produced standing false MISSING warnings for et and event_tweaker.
     $patterns = @(
-        'setting_id\s*=\s*"([^"]+)"',
-        'tooltip\s*=\s*"([^"]+)"',
-        'category_id\s*=\s*"([^"]+)"'
+        'setting_id\s*=\s*"([^"]+)"(?!\s*\.\.)',
+        'tooltip\s*=\s*"([^"]+)"(?!\s*\.\.)',
+        'category_id\s*=\s*"([^"]+)"(?!\s*\.\.)'
     )
     foreach ($p in $patterns) {
         foreach ($m in [regex]::Matches($text, $p)) {
