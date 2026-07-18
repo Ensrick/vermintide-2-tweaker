@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.275-dev (2026-07-17) - #661 reconciliation build: both parallel fixes [verify-fix]
+
+- Runtime-parity mirror of weapon_tweaker 0.12.274-beta: carries BOTH parallel #661 changes - the shared library's private-clone action ownership (below) and the inject-site clone-identity restore in `_inject_career_actions` (canonical `ActionTemplates` identity restored on mismatched career-action rows before install; residual conflicts report `conflict:<action>@<template>`). Two different builds were briefly uploaded as the prior version pair by parallel sessions; this version is unambiguous.
+
+**Solo verify:** as 0.12.274-beta.
+
 ## 0.12.274-dev (2026-07-17) - #661 private-clone action ownership [verify-fix]
 
 - Mirrored beta 0.12.273's provider-neutral clone-preparation contract while

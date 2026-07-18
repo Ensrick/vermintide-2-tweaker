@@ -28,6 +28,10 @@ Registration must remain ready and no career-action conflict may appear.
 - Added structural coverage for owner 1P/3P, bot/husk, character and item
   previews, replacement units across mission transitions, root-write rejection,
   and retained-state repair. In-game and two-peer verification remain required.
+> **Version-collision note (2026-07-17 20:03Z):** a parallel session uploaded a
+> Workshop bundle labeled `0.1.29-dev` that was only a version-stamped reship of
+> `0.1.28-dev` (no render-node fix). It predates this entry's code. The `0.1.30-dev`
+> upload supersedes it; treat any log echoing `0.1.29-dev` as ambiguous.
 
 ## 0.1.28-dev (2026-07-17) - #690 Blightreaper registration regression
 
