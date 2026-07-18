@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.29-dev"
+local MOD_VERSION = "0.1.30-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -554,24 +554,15 @@ local function _install_blightreaper_moveset()
 	if not _moveset_report.installed then
 		return false, "moveset", _moveset_report.skipped
 	end
-	local required = _career_weapon_actions.collect(
-		_careers, rawget(_G, "CareerSettings"), rawget(_G, "ActionTemplates"))
-	if not required.ok then
-		_moveset_report.installed = false
-		return false, "career_action_providers", string.format(
-			"reason=%s missing_actions=%s missing_careers=%s",
-			tostring(required.skipped or "incomplete"),
-			table.concat(required.missing_actions or {}, ","),
-			table.concat(required.missing_careers or {}, ","))
-	end
-	local identity = _moveset.restore_inherited_career_action_identity(
-		Weapons[TEMPLATE], Weapons[_moveset.SOURCE_TEMPLATE], required)
+	local identity = _career_weapon_actions.prepare_inherited_clone(
+		Weapons[TEMPLATE], Weapons[_moveset.SOURCE_TEMPLATE],
+		rawget(_G, "ActionTemplates"),
+		tostring(TEMPLATE) .. "<-" .. tostring(_moveset.SOURCE_TEMPLATE))
 	_moveset_report.career_action_identity = identity
 	if not identity.ok then
 		_moveset_report.installed = false
-		return false, "career_action_identity", string.format(
-			"reason=%s conflicts=%s", tostring(identity.skipped or "provider_conflict"),
-			table.concat(identity.conflicting_names or {}, ","))
+		return false, "career_action_identity",
+			tostring(identity.skipped or "clone_prepare_failed")
 	end
 	local abilities = _career_weapon_actions.install(
 		Weapons[TEMPLATE], _careers, rawget(_G, "CareerSettings"),
@@ -586,10 +577,10 @@ local function _install_blightreaper_moveset()
 			table.concat(abilities.missing_actions or {}, ","),
 			table.concat(abilities.missing_careers or {}, ","))
 	end
-	mod:info("[WOC:690] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true career_actions=%d/%d restored_inherited=%d)",
+	mod:info("[WOC:690] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true career_actions=%d/%d restored_inherited=%d discarded_claims=%d)",
 		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE,
 		abilities.installed + abilities.existing, abilities.required,
-		identity.restored or 0)
+		identity.restored or 0, identity.discarded_claims or 0)
 	return true
 end
 

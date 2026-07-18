@@ -1,6 +1,17 @@
 return function(H, repo_root)
 	local integration = dofile(repo_root
 		.. "/tools/shared_lib/_lib_career_weapon_actions.lua")
+	local function deep_clone(value, seen)
+		if type(value) ~= "table" then return value end
+		seen = seen or {}
+		if seen[value] then return seen[value] end
+		local copy = {}
+		seen[value] = copy
+		for key, child in pairs(value) do
+			copy[deep_clone(key, seen)] = deep_clone(child, seen)
+		end
+		return copy
+	end
 
 	local careers = {
 		"dr_ranger", "we_waywatcher", "wh_bountyhunter", "bw_scholar",
@@ -136,34 +147,69 @@ return function(H, repo_root)
 		H.deep_equal(report.conflicting_names, { "action_career_dr_3" })
 	end)
 
-	H.test("WOC #690 reconciles deep-cloned native actions before claiming them", function()
-		local moveset = dofile(repo_root
-			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset.lua")
+	H.test("private clones discard donor claims and restore canonical actions", function()
 		local canonical = action_templates.action_career_dr_3
-		local donor = { actions = { action_career_dr_3 = canonical } }
-		-- Simulate `table.clone(donor, true)`: structurally identical, but the
-		-- executable career-action row no longer has canonical table identity.
-		local private = {
-			actions = {
-				action_career_dr_3 = { name = canonical.name },
-			},
-		}
+		local donor = { actions = {} }
+		integration.install(donor, { "dr_ranger" }, career_settings,
+			action_templates, "weapon_tweaker")
+		-- A real deep clone copies the executable row and the donor's private
+		-- ownership registry by value. Neither belongs to the new template.
+		local private = deep_clone(donor)
 		local before = integration.install(private, { "dr_ranger" },
-			career_settings, action_templates, "weapons_of_chaos")
+			career_settings, action_templates, "character_weapon_variants")
 		H.equal(before.ok, false)
 		H.deep_equal(before.conflicting_names, { "action_career_dr_3" })
 
-		local required = integration.collect({ "dr_ranger" },
-			career_settings, action_templates)
-		local restored = moveset.restore_inherited_career_action_identity(
-			private, donor, required)
+		local restored = integration.prepare_inherited_clone(
+			private, donor, action_templates, "private<-donor")
 		H.equal(restored.ok, true)
 		H.deep_equal(restored.restored_names, { "action_career_dr_3" })
+		H.equal(restored.discarded_claims, 1)
 		local after = integration.install(private, { "dr_ranger" },
-			career_settings, action_templates, "weapons_of_chaos")
+			career_settings, action_templates, "character_weapon_variants")
 		H.equal(after.ok, true)
 		H.equal(after.claimed, 1)
 		H.equal(private.actions.action_career_dr_3, canonical)
+		local second = integration.install(private, { "dr_ranger" },
+			career_settings, action_templates, "weapon_tweaker")
+		H.equal(second.ok, true)
+		H.equal(second.claimed, 1)
+		local released = integration.release(private, "character_weapon_variants")
+		H.deep_equal(released.retained_names, { "action_career_dr_3" })
+		H.equal(private.actions.action_career_dr_3, canonical)
+	end)
+
+	H.test("clone preparation is idempotent and preserves later replacements", function()
+		local canonical = action_templates.action_career_dr_3
+		local donor = { actions = { action_career_dr_3 = canonical } }
+		local private = deep_clone(donor)
+		local first = integration.prepare_inherited_clone(
+			private, donor, action_templates, "private<-donor")
+		H.equal(first.ok, true)
+		local replacement = { name = "foreign_replacement" }
+		private.actions.action_career_dr_3 = replacement
+		local repeated = integration.prepare_inherited_clone(
+			private, donor, action_templates, "private<-donor")
+		H.equal(repeated.already_prepared, true)
+		H.equal(private.actions.action_career_dr_3, replacement)
+		local report = integration.install(private, { "dr_ranger" },
+			career_settings, action_templates, "weapon_tweaker")
+		H.equal(report.ok, false)
+		H.deep_equal(report.conflicting_names, { "action_career_dr_3" })
+	end)
+
+	H.test("clone preparation rejects unproven donor action identity", function()
+		local foreign = { name = "foreign_donor" }
+		local donor = { actions = { action_career_dr_3 = foreign } }
+		local private = deep_clone(donor)
+		local prepared = integration.prepare_inherited_clone(
+			private, donor, action_templates, "private<-foreign")
+		H.equal(prepared.ok, true)
+		H.deep_equal(prepared.restored_names, {})
+		local report = integration.install(private, { "dr_ranger" },
+			career_settings, action_templates, "character_weapon_variants")
+		H.equal(report.ok, false)
+		H.deep_equal(report.conflicting_names, { "action_career_dr_3" })
 	end)
 
 	H.test("CWV reconciles every authored career after late item registration", function()
@@ -190,6 +236,36 @@ return function(H, repo_root)
 			action_templates.action_career_we_3_piercing)
 	end)
 
+	H.test("CWV prepares deep-cloned provider templates before ownership", function()
+		local cwv = dofile(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_career_weapon_actions.lua")
+		local donor = { actions = {} }
+		integration.install(donor, { "dr_ranger" }, career_settings,
+			action_templates, "weapon_tweaker")
+		local private = deep_clone(donor)
+		local items = {
+			donor_item = { template = "donor_template" },
+			cwv_private = {
+				template = "private_template",
+				can_wield = { "dr_ranger" },
+			},
+		}
+		local pending = {
+			{ def = { item_key = "cwv_private", base_weapon = "donor_item" } },
+		}
+		local report = cwv.install(pending, items, {
+			donor_template = donor,
+			private_template = private,
+		}, career_settings, action_templates, integration,
+			"character_weapon_variants")
+		H.equal(report.ok, true)
+		H.equal(report.prepared_templates, 1)
+		H.equal(report.restored_actions, 1)
+		H.equal(report.discarded_inherited_claims, 1)
+		H.equal(private.actions.action_career_dr_3,
+			action_templates.action_career_dr_3)
+	end)
+
 	H.test("WT stable, dev, and WOC consume the provider-neutral integration", function()
 		local function read(relative)
 			local file = assert(io.open(repo_root .. "/" .. relative, "rb"))
@@ -202,11 +278,14 @@ return function(H, repo_root)
 		local wt_backend = read("weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_backend.lua")
 		local wt_dev_backend = read("weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_backend.lua")
 		local cwv = read("character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		local cwv_actions = read("character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_career_weapon_actions.lua")
 		local woc = read("weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua")
 		H.truthy(wt:find("_career_weapon_actions.install", 1, true))
 		H.truthy(wt_dev:find("_career_weapon_actions.install", 1, true))
 		H.truthy(cwv:find("_cwv_career_weapon_actions.install", 1, true))
 		H.truthy(woc:find("_career_weapon_actions.install", 1, true))
+		H.truthy(cwv_actions:find("prepare_inherited_clone", 1, true))
+		H.truthy(woc:find("prepare_inherited_clone", 1, true))
 		H.equal(wt:find("activated_ability and cs.activated_ability[1]", 1, true), nil)
 		H.equal(wt_dev:find("activated_ability and cs.activated_ability[1]", 1, true), nil)
 		H.equal(cwv:find("ability = ability and ability[1]", 1, true), nil)

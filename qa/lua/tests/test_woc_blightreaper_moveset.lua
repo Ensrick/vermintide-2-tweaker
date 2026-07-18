@@ -1,6 +1,8 @@
 return function(H, repo_root)
 	local moveset = dofile(repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset.lua")
+	local career_actions = dofile(repo_root
+		.. "/tools/shared_lib/_lib_career_weapon_actions.lua")
 
 	local function deep_clone(value)
 		if type(value) ~= "table" then
@@ -222,30 +224,25 @@ return function(H, repo_root)
 			},
 		}
 		local template = deep_clone(source)
-		local required = {
-			names = { "action_career_es_1", "action_career_dr_1",
-				"action_career_we_1" },
-			actions = {
+		local action_templates = {
 				action_career_es_1 = canonical,
 				action_career_dr_1 = { name = "action_career_dr_1" },
 				action_career_we_1 = { name = "action_career_we_1" },
-			},
 		}
 		local cloned_dr = template.actions.action_career_dr_1
-		local report = moveset.restore_inherited_career_action_identity(
-			template, source, required)
-		H.equal(report.ok, false)
+		local report = career_actions.prepare_inherited_clone(
+			template, source, action_templates, "woc_private<-elf_sword")
+		H.equal(report.ok, true)
 		H.deep_equal(report.restored_names, { "action_career_es_1" })
-		H.deep_equal(report.conflicting_names, { "action_career_dr_1" })
 		H.equal(template.actions.action_career_es_1, canonical)
 		H.equal(template.actions.action_career_dr_1, cloned_dr,
 			"a genuine donor/provider mismatch must not be overwritten")
 		H.equal(template.actions.action_career_we_1, nil)
 
-		report = moveset.restore_inherited_career_action_identity(
-			template, source, nil)
+		report = career_actions.prepare_inherited_clone(
+			template, source, nil, "invalid")
 		H.equal(report.ok, false)
-		H.equal(report.skipped, "career_action_tables_unavailable")
+		H.equal(report.skipped, "clone_provenance_unavailable")
 	end)
 
 	H.test("WOC Blightreaper intrinsic property rows are display-only", function()

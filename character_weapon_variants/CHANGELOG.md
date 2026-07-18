@@ -1,5 +1,22 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.445-dev - 2026-07-17 - cloned career-action ownership (#661) [verify-fix]
+
+- Prepared each distinct private weapon template from its declared base weapon
+  before CWV claims career actions. Deep-cloned donor action rows now regain
+  canonical `ActionTemplates` identity, and copied WT/CWV/WOC donor claims are
+  discarded instead of being mistaken for ownership of the new template.
+- Preparation is exact-source and idempotent. Only a donor row that is still
+  the canonical action can be restored; a later or unproven replacement
+  remains a hard conflict.
+- Added log-visible bounded counts and engine-free coverage for the observed
+  Bardin/Kruber conflict, multi-provider release, repeated preparation, late
+  item registration, and foreign replacement.
+
+**Solo verify:** Confirm `[cwv:661] ... ready` reports no conflicts, then use
+the affected Bardin and Kruber abilities with a CWV weapon before and after a
+weapon swap. `/cwv_regression_test` must report no career-action failure.
+
 ## 0.1.444-dev - 2026-07-17 - sibling-renderer exact identity contract (#583/#660) [verify-fix-coop]
 
 - Exposed CWV's existing fingerprint-validated remote appearance descriptor through a read-only sibling-renderer contract. Tweaker: Cosmetics uses the exact variant key to validate independently selected dual offhands after vanilla husk equipment reduces the item to its base key.

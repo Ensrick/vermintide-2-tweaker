@@ -1,5 +1,20 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.30-dev (2026-07-17) - #661 shared clone-action preparation [verify-fix]
+
+- Replaced Blightreaper's one-off inherited-action repair with the shared
+  WT/CWV/WOC clone-preparation primitive. It now also removes claim metadata
+  copied from the Elf Sword donor before WOC claims the private template.
+- Kept #690's exact provenance rule: only a donor row with canonical
+  `ActionTemplates` identity is restored. Unknown provider rows still abort
+  registration rather than being overwritten.
+- Added offline coverage for copied claims, repeated preparation, provider
+  release order, and foreign replacement.
+
+**Solo verify:** Equip Blightreaper on Bardin and Kruber, use both career
+abilities before and after swapping weapons, then run `/woc_regression_test`.
+Registration must remain ready and no career-action conflict may appear.
+
 ## 0.1.29-dev (2026-07-18) - #712 authored render-node transform
 
 - Corrected the stale node-0 diagnosis with two live-session proofs: the

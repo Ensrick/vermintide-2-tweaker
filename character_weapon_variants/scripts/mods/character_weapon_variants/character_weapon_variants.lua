@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.444-dev"
+local MOD_VERSION = "0.1.445-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -9427,8 +9427,11 @@ local function _auto_register_all()
 			mod:error("[cwv:661] incomplete career-action integration: %s",
 				table.concat(action_report, ","))
 		else
-			mod:info("[cwv:661] career-action integration ready templates=%d",
-				action_report.template_count)
+			printf("[cwv:661] career-action integration ready templates=%d prepared=%d restored=%d discarded_claims=%d",
+				action_report.template_count,
+				action_report.prepared_templates or 0,
+				action_report.restored_actions or 0,
+				action_report.discarded_inherited_claims or 0)
 		end
 
 		-- Issue #567 root fix. The vanilla reverse-index is a lazy snapshot, not a

@@ -60,6 +60,19 @@ exact backend ID exists in CIM's persisted craft table. Migration code may
 remove only the finite historical auto-grant IDs derived from authored
 `instances` counts; broad prefix or numeric-range deletion is forbidden.
 
+Private template clones also require an explicit career-action ownership
+boundary. Vanilla writes canonical career actions onto parsed weapon templates
+before CWV registers (`scripts/settings/equipment/weapons.lua:238-267`), and a
+deep clone copies those action tables plus any WT/CWV/WOC claim metadata by
+value. `_cwv_career_weapon_actions` resolves each completed variant's declared
+`base_weapon`, prepares each distinct private template exactly once through
+`_lib_career_weapon_actions.prepare_inherited_clone`, then installs all authored
+career rows. Preparation removes copied donor claims and canonicalizes only
+rows whose donor still has exact `ActionTemplates` identity; it never overwrites
+an unproven or later foreign replacement. Keep this catalog-wide pass after
+`ItemMasterList` registration. Do not restore per-weapon
+`activated_ability[1]` copies in constructors. Issue #661 owns the invariant.
+
 > **Before declaring a variant complete: walk
 > `DEFINITION_OF_DONE.md`.** Universal + trait-gated checklists, plus
 > the `**DoD:**` footer that every variant CHANGELOG entry must end

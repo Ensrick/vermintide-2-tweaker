@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-17 - Cross-provider career-action clone ownership
+
+Issue #661's live `action_career_dr_3` / `action_career_es_4` conflicts came
+from private weapon templates deep-cloning both canonical action rows and the
+donor template's WT/CWV/WOC claim metadata. The shared career-action library
+now owns one exact-source, idempotent clone-preparation boundary: copied claims
+are discarded, donor-proven canonical rows regain `ActionTemplates` identity,
+and later foreign replacements remain conflicts. CWV 0.1.445-dev applies the
+boundary to every completed private template; WOC 0.1.30-dev reuses it for
+Blightreaper; WT beta 0.12.273 and WT dev 0.12.274 carry the exact shared
+consumer copy. Lua 5.1 coverage exercises provider load order, repeated
+reconciliation, late registration, release, and rollback. In-game verification
+is still required; nothing was deployed by this draft change.
+
 ## 2026-07-17 - Exact Athanor shield preview ownership
 
 Tweaker: Cosmetics v0.9.143-dev hardens issue #481 at the existing
