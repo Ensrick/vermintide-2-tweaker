@@ -22,6 +22,7 @@ return function(H, repo_root)
     local entry = read("character_weapon_variants.lua")
     local catalog = read("_cwv_variant_catalog.lua")
     local cross_access = read("_cwv_cross_access.lua")
+    local husk = read("_cwv_husk_path.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
     local render = read("_cwv_regression_render.lua")
@@ -29,17 +30,18 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 11791 = 2026-07-18 wave recount (husk-path postcondition/ledger +
-        -- skin-wire sender #4 landed concurrently; each recomputed against a
-        -- snapshot the other then grew). The ceiling only ratchets DOWN as
+        -- 11084 = 2026-07-18 OOP W5 husk-path extraction: the 740-line husk
+        -- display/transform/ledger/postcondition `do...end` block moved verbatim
+        -- to _cwv_husk_path.lua (was 11791). The ceiling only ratchets DOWN as
         -- the ct_dev/cwv decomposition (OOP W5) extracts modules.
-        H.truthy(lines <= 11791, "entry line count exceeded frozen 11791-line baseline")
+        H.truthy(lines <= 11084, "entry line count exceeded frozen 11084-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
         local modules = {
             "_cwv_variant_catalog",
             "_cwv_cross_access",
+            "_cwv_husk_path",
             "_cwv_commands_lifecycle",
             "_cwv_regression_identity",
             "_cwv_regression_render",
@@ -49,10 +51,12 @@ return function(H, repo_root)
         end
 
         local cross_at = assert(entry:find("_cwv_cross_access", 1, true))
+        local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
         local render_at = assert(entry:find("_cwv_regression_render", 1, true))
-        H.truthy(cross_at < lifecycle_at)
+        H.truthy(cross_at < husk_at)
+        H.truthy(husk_at < lifecycle_at)
         H.truthy(lifecycle_at < identity_at)
         H.truthy(identity_at < render_at)
     end)
@@ -116,5 +120,48 @@ return function(H, repo_root)
         H.truthy(catalog:find("_om.dawi_maces.NATIVE_ONE_HANDED", 1, true))
         H.truthy(catalog:find("_om.crowbill_family.SOURCE_ITEM", 1, true))
         H.truthy(catalog:find("definitions = _variant_definitions", 1, true))
+    end)
+
+    H.test("CWV husk-path machinery lives once in its module, reached from entry hooks", function()
+        -- OOP W5 husk-path extraction: the husk display / transform / ledger /
+        -- postcondition helpers (#474/#475/#478/#399/#397/#394/#604/#395/#660)
+        -- moved verbatim to _cwv_husk_path. Each _om._husk_* definition must live
+        -- exactly ONCE, in the module; the entry keeps only the deferred hook call
+        -- sites (GearUtils.spawn_inventory_unit / BackendUtils.get_item_units).
+        local exports = {
+            "_om._husk_rekey_units = function",
+            "_om._husk_strip_cwv_ammo = function",
+            "_om._husk_apply_cwv_transform = function",
+            "_om._husk_preselect_units = function",
+            "_om._husk_resolve_display_def = function",
+            "_om._husk_record_override_unit = function",
+            "_om._husk_postcondition_log = function",
+            "_om._no_ammo_careers_by_base =",
+            "_om._husk_unit_ledger = setmetatable",
+        }
+        for _, marker in ipairs(exports) do
+            H.equal(count_plain(husk, marker), 1, "module owns " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer defines " .. marker)
+        end
+
+        -- Entry still reaches the moved helpers via the retained hook call sites.
+        H.truthy(entry:find("_om._husk_rekey_units(hand, item_data", 1, true))
+        H.truthy(entry:find("_om._husk_apply_cwv_transform(hand, item_data", 1, true))
+        H.truthy(entry:find("_om._husk_preselect_units(result, item_data", 1, true))
+
+        -- Module received its entry file-local dependencies as explicit context.
+        H.truthy(husk:find("local _variant_definitions = ctx.variant_definitions", 1, true))
+        H.truthy(husk:find("local _find_def = ctx.find_def", 1, true))
+        H.truthy(husk:find("local _is_unit = ctx.is_unit", 1, true))
+        H.truthy(husk:find("local _apply_cwv_hand_transform = ctx.apply_cwv_hand_transform", 1, true))
+        H.truthy(husk:find("local _triplet_text = ctx.triplet_text", 1, true))
+
+        -- FRESH coop-unverified printf markers survived the move byte-identical;
+        -- the in-game #395/#399/#660 verification depends on these exact lines.
+        H.truthy(husk:find("[cwv husk-ammo-strip] stripped inherited ammo 3P unit", 1, true))
+        H.truthy(husk:find("[cwv:660] lifecycle=husk_wield adapter=hand_selection", 1, true))
+        H.truthy(husk:find("[cwv husk-transform] applied hand=%s def=%s source=%s", 1, true))
+        H.equal(count_plain(entry, "[cwv husk-ammo-strip] stripped inherited ammo 3P unit"), 0,
+            "husk-ammo-strip marker no longer in entry")
     end)
 end

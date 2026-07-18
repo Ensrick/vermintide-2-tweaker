@@ -22,7 +22,11 @@ return function(H, repo_root)
     H.test("CT boon split stays below the frozen entry-file baseline", function()
         local source = read(base .. "chaos_wastes_tweaker_dev.lua")
         local _, lines = source:gsub("\n", "\n")
-        H.truthy(lines + 1 < 13938, "CT entry file regrew to its frozen baseline")
+        -- 12040 = 2026-07-18 ratchet after the OOP W5 regression-suite extraction
+        -- (_ct_regression.lua) shrank the entry. This physical-line ceiling only
+        -- moves DOWN; the tighter non-empty ceiling lives in
+        -- test_ct_entry_decomposition.lua.
+        H.truthy(lines + 1 < 12040, "CT entry file regrew to its frozen baseline")
     end)
 
     H.test("CT boon split loads each explicit owner once in dependency order", function()

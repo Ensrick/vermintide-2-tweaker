@@ -67,9 +67,11 @@ return function(H, repo_root)
     end)
 
     H.test("CT #358 has offline and runtime regression wiring", function()
-        local main = read(main_path)
         local module_source = read(module_path)
-        H.truthy(main:find("issue358_manann_tempest_cooldown_display", 1, true))
+        -- The runtime regression check moved to _ct_regression.lua (OOP W5 suite
+        -- extraction); it is registered from there via mod._ct_rt_register.
+        H.truthy(read(base .. "_ct_regression.lua"):find(
+            "issue358_manann_tempest_cooldown_display", 1, true))
         H.equal(module_source:find("NetworkLookup.buff_templates[", 1, true), nil)
         H.truthy(module_source:find("function M.regression_check_manann", 1, true))
     end)

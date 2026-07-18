@@ -85,7 +85,9 @@ return function(H, repo_root)
     end)
 
     H.test("issue 399 husk ammo strip is descriptor-primary, not an item_key guess", function()
-        local source = read(main_path)
+        -- The husk machinery moved to _cwv_husk_path.lua (OOP W5); the hook call
+        -- site stays in the entry -- assert against combined entry + modules.
+        local source = require("cwv_source").combined(repo_root)
         for _, marker in ipairs({
             "_om._husk_strip_cwv_ammo = function(item_data, owner_unit_3p, ammo_unit_3p, slot_name)",
             "(1) exact identity descriptor -- authoritative when present.",
@@ -99,7 +101,7 @@ return function(H, repo_root)
     end)
 
     H.test("issue 395 husk stale override-unit ledger drains on re-spawn", function()
-        local source = read(main_path)
+        local source = require("cwv_source").combined(repo_root)
         for _, marker in ipairs({
             '_om._husk_unit_ledger = setmetatable({}, { __mode = "k" })',
             "_om._husk_record_override_unit = function(owner_unit_3p, slot_name, hand, unit)",
@@ -111,7 +113,7 @@ return function(H, repo_root)
     end)
 
     H.test("issue 660 husk postcondition reads retained state back from the engine", function()
-        local source = read(main_path)
+        local source = require("cwv_source").combined(repo_root)
         for _, marker in ipairs({
             "_om._husk_postcondition_log = function(owner_unit_3p, slot_name, hand, def, def_source, unit, unit_name)",
             "local v = Unit.local_scale(unit, 0)",

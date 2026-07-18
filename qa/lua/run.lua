@@ -183,6 +183,7 @@ local suites = {
     "test_peer_parity_transition",
     "test_ct_boon_catalog",
     "test_ct_boon_split",
+    "test_ct_entry_decomposition",
     "test_ct_pool_floor_citadel_487",
     "test_ct_umbrella_policy",
     "test_ct_cot_early_reward",
