@@ -1,5 +1,17 @@
 # Enemy Tweaker Changelog
 
+## 0.7.52-dev (2026-07-18): #640 deleted lingering-damage source guard [verify-fix]
+
+- Published the already-merged lifetime guard under a new unambiguous version;
+  the previous `0.7.51-dev` Workshop artifact did not contain the final source.
+- Every personal-handicap `Unit.get_data` and player-owner lookup now requires a
+  living unit. Deleted Globadier sources retained by poison areas fail closed
+  instead of reaching Stingray's native assertion.
+- Neutral Auto/off and at-or-below-host factors bypass source classification;
+  active handicaps preserve vanilla damage if no living hostile source exists.
+- Offline coverage includes nil, live, deleted, and lingering-Globadier inputs;
+  `/et_regression_test` owns `issue640_personal_handicap_unit_lifetime`.
+
 ## 0.7.51-dev (2026-07-15): #640 deleted lingering-damage source guard [not deployed]
 
 - Guarded every personal-handicap `Unit.get_data` and player-owner lookup with `Unit.alive`. Crash session `404228a8-e78a-4431-b59b-58a74079edfe` retained a deleted Globadier as a poison area's `source_attacker_unit`; Stingray's native assertion bypassed the old `pcall`.

@@ -1,5 +1,16 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.26-dev (2026-07-18) -- #609 release/source reconciliation [verify-fix]
+
+- Published the already-merged safe network-teardown lifecycle from
+  `0.1.25-dev` under a new unambiguous version because that earlier Workshop
+  artifact predates the final source integration.
+- Corrected the Workshop description's stale embedded `0.1.13` version.
+
+**Verify:** Enter the keep, then return to the title screen normally. The newest
+console log must contain no DCP `Network backend has not been set` callstack.
+Run `/dcp_regression_test`; `local_player_safe_network_lifecycle_609` must pass.
+
 ## 0.1.25-dev (2026-07-14) -- #609 safe network-teardown lifecycle [verify-fix]
 
 - Routed both local hat/skin portrait lookups through vanilla's `PlayerManager.local_player_safe()`. DCP's title-screen state callback now keeps its last known/backend fallback behavior without calling `Network.peer_id()` after teardown.
