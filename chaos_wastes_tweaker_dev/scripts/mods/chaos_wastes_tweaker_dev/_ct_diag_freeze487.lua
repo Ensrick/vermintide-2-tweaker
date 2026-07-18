@@ -21,8 +21,16 @@ WHAT IT INSTRUMENTS
     path, so a TRAVEL/SIGNATURE pool with fewer DISTINCT keys than the longest
     same-type path has nodes cannot be solved; the solver then burns its whole
     iteration budget (a multi-second stall = perceived freeze) and returns nil.
+    PROVEN cause (#487, 2026-07-13 host log): the failure is not budget exhaustion
+    but a THROW. The baked journeys (citadel/cave/ice/ruin) assign labeled nodes a
+    level by indexing `shuffled_levels_for_labels[type][node_label]`
+    (deus_populate_graph.lua:460); that list is the pool's distinct keys, so a pool
+    with fewer distinct keys than the node's label leaves node.level nil and :462
+    `levels_available[nil].paths` throws -> graph nil -> freeze. Max TRAVEL label is
+    6 (citadel), so a floored pool needs 6 distinct keys, not 4.
+
     ct's own `_adventure_pool.inject_duplicate_aliases` is the safety net for
-    this (mints `<key>_dupN` distinct keys up to POOL_SAFETY_THRESHOLD=4 by cloning
+    this (mints `<key>_dupN` distinct keys up to POOL_SAFETY_THRESHOLD=6 by cloning
     the user's ENABLED missions, so an underflowed run REPEATS them). A pool the
     user empties of ALL enabled missions has nothing to clone; `_adventure_pool`'s
     zero-enabled fallback (fall_back_zero_enabled_pools) restores that pool's vanilla
@@ -124,10 +132,14 @@ function M.pool_snapshot(journey_name)
         else
             parts[#parts + 1] = string.format("%s=%d(dup=%d)", pool_type, total, dups)
             -- SHOP is not path-uniqueness-constrained, so only flag TRAVEL/SIGNATURE.
+            -- UNDERFLOW threshold is 6 = POOL_SAFETY_THRESHOLD (the max labeled node
+            -- index the baked journeys use for TRAVEL; deus_populate_graph.lua:460).
+            -- A pool with < 6 distinct keys can leave a high-labeled node unassigned
+            -- (nil level -> :462 index-nil throw), which is the #487 freeze.
             if pool_type ~= "SHOP" then
                 if total == 0 then
                     empty[#empty + 1] = pool_type
-                elseif total < 4 then
+                elseif total < 6 then
                     underflow[#underflow + 1] = pool_type
                 end
             end

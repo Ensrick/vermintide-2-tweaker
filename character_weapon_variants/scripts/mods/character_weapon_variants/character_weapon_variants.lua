@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.446-dev"
+local MOD_VERSION = "0.1.447-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -72,6 +72,7 @@ mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode
 mod._cwv_crowbill_presentation = _om.crowbill_presentation
 mod._cwv_crowbill_runtime = _om.crowbill_runtime
 _om.damage_profile_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_damage_profile_wire")
+_om.cosmetic_skin_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_cosmetic_skin_wire")
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
@@ -3893,7 +3894,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 		-- issue 399: strip the inherited ammo (Trollhammer torpedo) that the
 		-- husk attaches for a no_ammo_unit variant (the husk resolves the BASE
 		-- item_data, so no_ammo_unit on the CWV entry never reaches it).
-		if _om._husk_strip_cwv_ammo and _om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p) then
+		if _om._husk_strip_cwv_ammo and _om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name) then
 			v_a3p = nil
 		end
 		-- issues 397/394: apply the CWV scale/offset transform to the husk 3P
@@ -10894,24 +10895,66 @@ do
 
 	-- Returns true if it stripped a torpedo/ammo unit (caller then nils its
 	-- returned ammo_unit_3p so the husk equipment stops tracking it).
-	_om._husk_strip_cwv_ammo = function(item_data, owner_unit_3p, ammo_unit_3p)
+	--
+	-- issue 399 (DESCRIPTOR-PRIMARY, restructured for #660): the strip is a
+	-- CWV-POSITIVE identity decision, resolved through the SAME evidence the mesh
+	-- re-key and transform husk adapters use so the ammo concern can never
+	-- disagree with them (WEAPON_APPEARANCE_STANDARD §2 -- one source of truth per
+	-- render path). Order:
+	--   1. EXACT identity descriptor (#660, strongest): a proven CWV instance's
+	--      def decides -- strip iff `def.no_ammo_unit`, never otherwise. An
+	--      explicitly-native / unavailable-provider / stale-slot state DECLINES
+	--      (never touch a genuine vanilla ammo weapon -- #475 Invariant 1).
+	--   2. SKINLESS base+career fallback: the (base_weapon, career) positive
+	--      signal (a career that cannot natively wield the ammo base can only be a
+	--      CWV variant). This is descriptor evidence, NOT a bare `item_key` guess.
+	-- A bare base-key match alone is never sufficient (a real dwarf Trollhammer
+	-- shares the base name on the husk).
+	_om._husk_strip_cwv_ammo = function(item_data, owner_unit_3p, ammo_unit_3p, slot_name)
 		if not (item_data and ammo_unit_3p) then return false end
 		local base_name = item_data.name
-		local careers = base_name and _no_ammo_careers_by_base[base_name]
-		if not careers then return false end
-		local career = _husk_career_name(owner_unit_3p)
-		if not (career and careers[career]) then
-			-- The base IS a no_ammo variant's base (careers table present), but
-			-- the wielder's career isn't in the strip set. Two possibilities: a
-			-- genuine native wielder of the real ammo weapon (correct no-strip),
-			-- or a husk career-lookup miss (career=nil) that WOULD have stripped.
-			-- Log once per (base, career) so a miss is visible in the paired log
-			-- instead of silently leaving the inherited torpedo attached.
-			_husk_log_once("ammo_career_miss:" .. tostring(base_name) .. ":" .. tostring(career),
-				"[cwv husk-ammo-strip] SKIP: base=%s is a no_ammo variant base but career=%s not in strip set -- native wielder OR husk career-lookup miss (issue 399 diag)",
-				tostring(base_name), tostring(career))
+		local why, career
+
+		-- (1) exact identity descriptor -- authoritative when present.
+		local exact, identity_state
+		if _om._husk_identity_descriptor then
+			exact, identity_state = _om._husk_identity_descriptor(owner_unit_3p, slot_name, base_name)
+		end
+		if identity_state and identity_state ~= "none" and identity_state ~= "exact" then
+			-- Sender proved this slot native, or its exact descriptor is
+			-- unavailable locally: never strip on the ambiguous base+career guess.
 			return false
 		end
+		if exact then
+			local edef = _find_def(exact.variant_key)
+			if edef then
+				-- Proven CWV instance: its def decides. A non-`no_ammo_unit` variant
+				-- KEEPS its ammo -- the descriptor overrules base+career; do not strip.
+				if edef.no_ammo_unit then why = "descriptor" else return false end
+			end
+			-- edef nil: exact key is unknown locally (schema drift). Fall through to
+			-- base+career, mirroring the mesh re-key adapter so the two never disagree.
+		end
+		if not why then
+			-- (2) skinless base+career fallback.
+			local careers = base_name and _no_ammo_careers_by_base[base_name]
+			if not careers then return false end
+			career = _husk_career_name(owner_unit_3p)
+			if not (career and careers[career]) then
+				-- The base IS a no_ammo variant's base (careers table present), but
+				-- the wielder's career isn't in the strip set. Two possibilities: a
+				-- genuine native wielder of the real ammo weapon (correct no-strip),
+				-- or a husk career-lookup miss (career=nil) that WOULD have stripped.
+				-- Log once per (base, career) so a miss is visible in the paired log
+				-- instead of silently leaving the inherited torpedo attached.
+				_husk_log_once("ammo_career_miss:" .. tostring(base_name) .. ":" .. tostring(career),
+					"[cwv husk-ammo-strip] SKIP: base=%s is a no_ammo variant base but career=%s not in strip set -- native wielder OR husk career-lookup miss (issue 399 diag)",
+					tostring(base_name), tostring(career))
+				return false
+			end
+			why = "base_career"
+		end
+
 		local alive = false
 		pcall(function() alive = Unit.alive(ammo_unit_3p) and true or false end)
 		if alive then
@@ -10920,9 +10963,96 @@ do
 				pcall(function() Managers.state.unit_spawner:mark_for_deletion(ammo_unit_3p) end)
 			end
 		end
-		printf("[cwv husk-ammo-strip] stripped inherited ammo 3P unit (base=%s career=%s) -- issue 399",
-			tostring(base_name), tostring(career))
+		printf("[cwv husk-ammo-strip] stripped inherited ammo 3P unit (base=%s career=%s via=%s) -- issue 399",
+			tostring(base_name), tostring(career), tostring(why))
 		return true
+	end
+
+	-- ============================================================
+	-- issue 395: stale husk override-unit ledger + supersession drain
+	-- ============================================================
+	-- A weapon slot renders exactly ONE 3P unit per hand, so when a husk RE-SPAWNS
+	-- a slot's hand (re-equip, loadout resync, or a mission-transition respawn) the
+	-- previously spawned override unit for that same (owner, slot, hand) is
+	-- definitively superseded. Vanilla `GearUtils.destroy_equipment` normally
+	-- frees it, but a custom-template variant -- the `no_left_hand` Rapier
+	-- (item key cwv_es_rapier) is the reported #395 case -- can leave the
+	-- prior cross-character override alive, so it "bleeds into" the newly-equipped
+	-- weapon on the remote view. We record every CWV-resolved husk override unit
+	-- per (owner, slot, hand) and, on the next record for that key, release the
+	-- prior unit if it is STILL ALIVE (a leak). mark_for_deletion + hide mirrors
+	-- the ammo-strip discipline above.
+	--
+	-- SAFETY: the ledger is weak-keyed by the husk OWNER unit, so a despawned husk
+	-- (mission transition, disconnect) drops its whole ledger and vanilla teardown
+	-- frees those units -- no cross-mission reference is retained. Recording is
+	-- bounded to CWV-RESOLVED defs (called only from the husk transform apply after
+	-- a positive identity), so a native weapon's unit is never tracked or touched
+	-- (#475 Invariant 1). The per-hand supersession NEVER fires on a wield-toggle
+	-- (melee<->ranged holsters via visibility, not respawn -- no new spawn record),
+	-- so a holstered weapon is never drained.
+	_om._husk_unit_ledger = setmetatable({}, { __mode = "k" })
+	_om._husk_record_override_unit = function(owner_unit_3p, slot_name, hand, unit)
+		if not (owner_unit_3p and slot_name and hand and unit) then return false end
+		local by_slot = _om._husk_unit_ledger[owner_unit_3p]
+		if not by_slot then by_slot = {}; _om._husk_unit_ledger[owner_unit_3p] = by_slot end
+		local hands = by_slot[slot_name]
+		if not hands then hands = {}; by_slot[slot_name] = hands end
+		local field = (hand == "left") and "left" or "right"
+		local prev = hands[field]
+		hands[field] = unit
+		if not prev or prev == unit then return false end
+		local alive = false
+		pcall(function() alive = Unit.alive(prev) and true or false end)
+		if not alive then return false end
+		pcall(Unit.set_unit_visibility, prev, false)
+		if Managers and Managers.state and Managers.state.unit_spawner then
+			pcall(function() Managers.state.unit_spawner:mark_for_deletion(prev) end)
+		end
+		_husk_log_once("395_drain:" .. tostring(slot_name) .. ":" .. field,
+			"[cwv:395] husk stale override unit released: slot=%s hand=%s -- superseded 3P unit was still alive on re-spawn (no_left_hand Rapier leak floor); hidden + marked for deletion",
+			tostring(slot_name), field)
+		return true
+	end
+
+	-- issue 660 POSTCONDITION PROOF for the husk apply. Setter-success ("applied=y")
+	-- is NOT retained-state evidence: a `set_local_*` call can succeed while the
+	-- engine keeps the native pose (#660 documented false-positive). After the husk
+	-- apply resolves a CWV def, read the RETAINED transform BACK from the engine
+	-- (Unit.local_scale/position/rotation at node 0) plus the resolved unit
+	-- identity, and emit ONE bounded line. Guarded by Unit.alive + Unit.has_node;
+	-- throttled once per (slot, hand, def, retained-fingerprint) so a stable render
+	-- logs exactly once and any drift surfaces as a NEW fingerprint. This is the
+	-- husk twin of the owner-side [cwv:604] delivery proof.
+	_om._husk_postcondition_log = function(owner_unit_3p, slot_name, hand, def, def_source, unit, unit_name)
+		if not (unit and def) then return end
+		local alive = false
+		pcall(function() alive = Unit.alive(unit) and true or false end)
+		if not alive then return end
+		local has0 = false
+		pcall(function() has0 = Unit.has_node(unit, 0) and true or false end)
+		if not has0 then return end
+		local s, p, r = "nil", "nil", "nil"
+		pcall(function()
+			local v = Unit.local_scale(unit, 0)
+			if v then s = _triplet_text({ Vector3.to_elements(v) }) end
+		end)
+		pcall(function()
+			local v = Unit.local_position(unit, 0)
+			if v then p = _triplet_text({ Vector3.to_elements(v) }) end
+		end)
+		pcall(function()
+			local q = Unit.local_rotation(unit, 0)
+			if q then
+				local x, y, z, w = Quaternion.to_elements(q)
+				r = string.format("%.3f,%.3f,%.3f,%.3f", x or 0, y or 0, z or 0, w or 0)
+			end
+		end)
+		local fp = s .. "|" .. p .. "|" .. r
+		_husk_log_once("huskpath:" .. tostring(slot_name) .. ":" .. tostring(hand) .. ":" .. tostring(def.item_key) .. ":" .. fp,
+			"[cwv:huskpath] slot=%s hand=%s def=%s source=%s unit=%s retained_scale=(%s) retained_pos=(%s) retained_rot=(%s)",
+			tostring(slot_name), tostring(hand), tostring(def.item_key or def.item_type),
+			tostring(def_source), tostring(unit_name), s, p, r)
 	end
 
 	-- issue 279 (2ND repro, 2026-07-12). The v0.1.365 entry-clear + the issue-399
@@ -11049,6 +11179,12 @@ do
 			end
 			return
 		end
+		-- issue 395: record this CWV-resolved husk override unit for the slot so a
+		-- superseded prior unit (a #395 leaked Rapier override) is drained on the
+		-- next re-spawn of the same (owner, slot, hand).
+		if _om._husk_record_override_unit then
+			_om._husk_record_override_unit(owner_unit_3p, slot_name, hand, weapon_unit_3p)
+		end
 		local plan = _om._cwv_husk_transform_apply_plan(hand, def, def_source)
 		local scale = plan and plan.scale
 		local offset = plan and plan.offset
@@ -11059,6 +11195,13 @@ do
 			printf("[cwv husk-transform] applied hand=%s def=%s source=%s scale=%s offset=%s -- issues 397/394/604",
 				tostring(hand), tostring(def.item_key or def.item_type),
 				tostring(plan.source), scale and "y" or "n", offset and "y" or "n")
+		end
+		-- issue 660 postcondition: read the RETAINED transform back from the engine
+		-- (not the setter return) and emit one bounded [cwv:huskpath] line proving
+		-- the resolved unit identity + what the engine actually kept.
+		if _om._husk_postcondition_log then
+			_om._husk_postcondition_log(owner_unit_3p, slot_name, hand, def,
+				plan and plan.source or def_source, weapon_unit_3p, resolved_unit_name)
 		end
 		-- #604 remote husks consume the same absolute presentation resolver as
 		-- owners and previews.  The render identity is bounded owner+slot state;
@@ -11286,12 +11429,12 @@ end
 -- do-block: cwv's main chunk sits at the Lua 5.1 200-local ceiling -- these
 -- helpers must not cost enduring top-level slots.
 do
+	-- Single source of truth for the cwv-skin predicate: the same pure module
+	-- that drives the update_cosmetic_slot sender null (below). Behavior is
+	-- identical to the pre-v0.1.447 inline form (base key set / custom key set /
+	-- cwv_ prefix) -- see _cwv_cosmetic_skin_wire.is_cwv_skin.
 	local function _wire_skin(skin)
-		if type(skin) ~= "string" then return false end
-		local sk = _om._skin_keys
-		if sk and sk[skin] then return true end
-		if _custom_skin_keys[skin] then return true end
-		return skin:sub(1, 4) == "cwv_"
+		return _om.cosmetic_skin_wire.is_cwv_skin(skin, _om._skin_keys, _custom_skin_keys)
 	end
 	_om._wire_skin_predicate = _wire_skin   -- exported for /cwv_regression_test
 
@@ -11694,6 +11837,43 @@ do
 	end)
 	mod._cwv_skin_wire_surfaces.hot_join_sync = true
 	mod._cwv_identity_surfaces.hot_join_sync = true
+
+	-- #423 FOURTH sender (profile-sync / scoreboard channel). The three hooks
+	-- above cover only rpc_add_equipment. CosmeticUtils.update_cosmetic_slot is a
+	-- SEPARATE skin sender: SimpleInventoryExtension.add_equipment
+	-- (simple_inventory_extension.lua:880) calls it on every (re)equip with
+	-- slot_equipment_data.skin; vanilla encodes weapon_skins[skin] and
+	-- player:set_data(slot.."_skin", id) into GameSession player-sync data
+	-- broadcast to EVERY peer (cosmetic_utils.lua:244-250). A peer WITHOUT cwv
+	-- decodes it on the scoreboard / playerlist read path (get_weapon_skin_name,
+	-- cosmetic_utils.lua:168-178) and fatals -- the 2026-07-18 crash was
+	-- weapon_skins index 924 (cwv_es_musket_old_skin) via
+	-- rpc_sync_players_session_score at mission end. Husk rendering never reads
+	-- this field, so the null is UNCONDITIONAL (never parity-gated) -- mirrors
+	-- cosmetics' ct_* null at cosmetics_tweaker.lua:6200 (issue 421). CosmeticUtils
+	-- is a plain table -> table-form hook + nil guard (CLAUDE.md "Hooking").
+	-- cosmetics/cim hook the same function from THEIR mod ids; VMF chains those.
+	if CosmeticUtils then
+		mod:hook(CosmeticUtils, "update_cosmetic_slot", function(func, player, slot, item_name, skin_name)
+			local safe, subbed = _om.cosmetic_skin_wire.wire_safe_skin(
+				skin_name, _om._skin_keys, _custom_skin_keys)
+			if subbed then
+				local lk = "update_cosmetic_slot|" .. tostring(skin_name)
+				if not _null_logged[lk] then   -- once per skin; no equip-spam
+					_null_logged[lk] = true
+					-- Log the LOCAL weapon_skins index so this apply-site line
+					-- correlates with the [gut:272] pre-crash probe, which reports the
+					-- divergent numeric index ("weapon_skins does not contain key: 924").
+					local nl = rawget(_G, "NetworkLookup")
+					local idx = nl and nl.weapon_skins and rawget(nl.weapon_skins, skin_name)
+					pcall(printf, "[cwv:423] wire skin null (update_cosmetic_slot %s): %s (local weapon_skins idx=%s) -> n/a",
+						tostring(slot), tostring(skin_name), tostring(idx))
+				end
+			end
+			return func(player, slot, item_name, safe)
+		end)
+		mod._cwv_skin_wire_surfaces.update_cosmetic_slot = true
+	end
 
 	local pp = mod._cwv_peer_parity
 	if pp and type(pp.register_gated_feature) == "function" then

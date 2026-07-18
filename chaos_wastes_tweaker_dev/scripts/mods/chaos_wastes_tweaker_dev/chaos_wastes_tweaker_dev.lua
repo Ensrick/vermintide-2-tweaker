@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.292-dev"
+local MOD_VERSION = "0.7.293-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -542,8 +542,8 @@ _rt_register("pool_floor_underflow_duplicates_487", function()
         return "1 enabled must be 'duplicate' (repeat enabled), got " .. tostring(cpf(1))
     end
     local thr = AdventurePool.POOL_SAFETY_THRESHOLD
-    if type(thr) ~= "number" or thr < 4 then
-        return "POOL_SAFETY_THRESHOLD must be a number >= 4 (prevent_same_level_choice bound), got " .. tostring(thr)
+    if type(thr) ~= "number" or thr < 6 then
+        return "POOL_SAFETY_THRESHOLD must be a number >= 6 (baked-journey max node_label bound, #487; TRAVEL labels reach 6 in journey_citadel), got " .. tostring(thr)
     end
     if cpf(thr - 1) ~= "duplicate" then return "threshold-1 must still be 'duplicate'" end
     if cpf(thr) ~= "ok" then return "threshold enabled must be 'ok' (no over-duplication)" end

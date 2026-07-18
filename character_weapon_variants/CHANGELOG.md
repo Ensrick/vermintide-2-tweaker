@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.447-dev (2026-07-18) - husk-path cluster + score-wire fix [verify-fix-coop]
+
+- #737 score-sync CTD fix: `CosmeticUtils.update_cosmetic_slot` was the fourth (and only unhooked) vanilla sender able to carry a live modded weapon_skins INDEX onto the wire - the 2026-07-18 scoreboard crash (index 924 absent on a diverged peer). New `_cwv_cosmetic_skin_wire.lua` nulls any cwv skin to "n/a" unconditionally on that sender; apply-site log correlates with the [gut:272] probe.
+- #399 husk ammo-strip is now descriptor-primary (same evidence as the mesh/transform husk adapters; falls back to base+career only without an exact descriptor) - crafted no-skin copies no longer show a torpedo on the remote view.
+- #395 stale husk override units: new weak-keyed per-(owner,slot,hand) ledger supersedes leaked units on re-spawn (the Rapier bleed) - hidden + marked for deletion; native weapons never touched.
+- #660 postcondition-first: husk transform applies now read the RETAINED engine state back and log one bounded `[cwv:huskpath]` line with the retained fingerprint - setter-success logging is gone from this path.
+- Guards: Unit.alive/has_node on new reads; hook count unchanged (no new hooks); singleton invariants + 12 new suite tests.
+
+**Coop verify (2 players, both directions):** crafted Outrider launcher shows no torpedo on the remote view ([cwv husk-ammo-strip] via=descriptor); Poleaxe grip retained on the husk ([cwv:huskpath] retained_pos non-identity); Imperial Longsword renders remotely; Rapier swap leaves no stale husk unit ([cwv:395] line on a caught leak); Old Musket wearer + a NO-cwv peer reach the end scoreboard without a client CTD ([cwv:423] wire skin null ... idx -> n/a on the wearer).
+
 ## 0.1.446-dev - 2026-07-17 - custom Outrider launcher mesh (#627) [verify-fix]
 
 - Replaced the `cwv_es_outrider_grenade_launcher` blunderbuss placeholder visual

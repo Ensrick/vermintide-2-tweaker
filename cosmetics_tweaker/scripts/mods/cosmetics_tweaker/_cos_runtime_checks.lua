@@ -69,6 +69,40 @@ _rt_register("cos_la_reconcile_and_pull_wired", function()
     end
 end)
 
+-- #660 S3: the bounded appearance-replay reconciler (cold-join cluster
+-- #233/#149/#203) must stay wired at its three edges and its pure coalescing
+-- policy must not regress to per-frame re-apply. Losing it strands persisted
+-- LA shields/hats/skins on a cold-joined husk until the wearer edits again.
+_rt_register("cos_replay_reconciler_wired", function()
+    if type(mod._cos_replay) ~= "table" then return "mod._cos_replay missing" end
+    if type(mod._cos_replay.on_edge) ~= "function" then return "mod._cos_replay.on_edge missing" end
+    if type(mod._cos_replay.apply) ~= "function" then return "mod._cos_replay.apply missing" end
+    local P = mod._cos_replay.policy
+    if type(P) ~= "table" or type(P.reconcile_edge) ~= "function"
+        or type(P.build_records) ~= "function" or type(P.new_replay_state) ~= "function"
+        or type(P.invalidate_all) ~= "function" then
+        return "replay policy API incomplete"
+    end
+    -- Pure coalescing self-check (touches no engine state): apply once, then a
+    -- repeated generation must coalesce (never per-frame), then an invalidation
+    -- must re-apply the same generation (husk-recreating transition).
+    local st = P.new_replay_state()
+    local recs = { { peer = "rt_peer", slot = "slot_ranged",
+        record = { kind = "offhand", armoury_key = "rt_key", hand_field = "left_hand_unit" } } }
+    local calls = 0
+    local apply = function() calls = calls + 1; return "applied" end
+    local r1 = P.reconcile_edge(st, "rt", recs, apply)
+    local r2 = P.reconcile_edge(st, "rt", recs, apply)
+    if not (r1.applied == 1 and r2.applied == 0 and r2.coalesced == 1 and calls == 1) then
+        return "replay reconciler did not coalesce a repeated generation"
+    end
+    P.invalidate_all(st)
+    local r3 = P.reconcile_edge(st, "rt", recs, apply)
+    if not (r3.applied == 1 and calls == 2) then
+        return "replay reconciler did not re-apply after invalidation"
+    end
+end)
+
 -- #518: the yield boundary is GAME MODE, not mechanism alone. The deus
 -- mechanism owns Pilgrimage Chamber (inn_deus), route/shrine map (map_deus),
 -- and expedition missions (deus). LA stays live in the first two and yields

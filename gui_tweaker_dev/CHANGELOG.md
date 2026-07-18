@@ -1,5 +1,12 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.288-dev (2026-07-18) - loadout exit-snapshot backstop (#353/#354/#287) [verify-fix]
+
+- Cross-session persistence was captured on equip EVENTS only; state mutated after the last capture (or through a path that never fires it) was lost on quit - the #354 intermittency. New engine-free exit-snapshot core (non-destructive diff: nil live value never clears; only diverged+resolvable slots overwrite) reconciles the live loadout into the existing store at three exit edges: StateIngame exit, StateTitleScreen enter, mod unload. Same serializer as the equip path (byte-identity tested), official cloud data untouched, zero new hooks.
+- Diagnostic: `[gut:persist] edge=<name> diverged=<n> written=<bool>` per edge. 8 new suite tests + rt-check native_loadouts_exit_snapshot_backstop.
+
+**Solo verify:** equip a WT weapon or LA hat, quit WITHOUT re-equipping, relaunch: item still on the selected loadout; a `written=true` log line on exit is the backstop catching what eager capture missed. Repeat a few runs to hit the #354 timing.
+
 ## 0.2.287-dev (2026-07-17) -- #630 DX12 fence diagnostics
 
 - Added automatic, bounded lifecycle evidence around both Mod Tweaker

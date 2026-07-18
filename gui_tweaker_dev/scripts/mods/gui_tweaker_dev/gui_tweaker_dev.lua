@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.287-dev"
+local MOD_VERSION = "0.2.288-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1902,6 +1902,32 @@ local _gut_native_loadouts = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_nativ
 if type(_gut_native_loadouts) == "table" and type(_gut_native_loadouts.rt_checks) == "table" then
     for _, c in ipairs(_gut_native_loadouts.rt_checks) do
         _rt_register(c.name, c.fn)
+    end
+end
+
+-- Exit-time loadout/cosmetic persistence backstop (#354/#353/#287/#175). Re-read the live
+-- selected loadout and reconcile it into the modded store at bounded exit edges, so state
+-- mutated through a path that missed the equip-time capture (LA-cloned cosmetic dispatch, a
+-- WT cross-character weapon whose apply lands outside a captured equip) is not lost on quit.
+-- exit_snapshot is idempotent (a clean state writes nothing) and inert outside the modded
+-- Adventure realm; full rationale + isolation in _gut_native_loadouts.lua. These are VMF
+-- lifecycle callbacks CHAINED off the previous handler -- NOT engine hooks -- so there is no
+-- (Class, method) collision (NON-NEGOTIABLE 8). Every edge is pcall-guarded.
+if type(_gut_native_loadouts) == "table" and type(_gut_native_loadouts.exit_snapshot) == "function" then
+    local _snap = function(edge) pcall(_gut_native_loadouts.exit_snapshot, edge) end
+    local _prev_ogsc = mod.on_game_state_changed
+    mod.on_game_state_changed = function(status, state_name)
+        if _prev_ogsc then _prev_ogsc(status, state_name) end
+        if status == "exit" and state_name == "StateIngame" then
+            _snap("ingame_exit")            -- leaving the keep/mission; backend still warm
+        elseif status == "enter" and state_name == "StateTitleScreen" then
+            _snap("title_enter")            -- returned to the title screen (quit-to-menu)
+        end
+    end
+    local _prev_unload = mod.on_unload
+    mod.on_unload = function(...)
+        if _prev_unload then _prev_unload(...) end
+        _snap("unload")                     -- game shutdown / mod unload
     end
 end
 

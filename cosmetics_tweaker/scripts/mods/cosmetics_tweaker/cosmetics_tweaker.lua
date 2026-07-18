@@ -87,7 +87,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.148-dev"
+local MOD_VERSION = "0.9.149-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -601,6 +601,21 @@ mod.on_game_state_changed = function(status, state_name)
     -- on every state callback; the last one (StateIngame/enter) sets the ~10s window
     -- from load-done.
     mod._la_reapply_remote_until = os.clock() + 10
+
+    -- #660 S3: fire the bounded appearance-replay reconciler at the mission /
+    -- lobby transition edge. Every StateIngame enter destroys and respawns the
+    -- remote husks, so invalidate the coalescing scope: the freshly spawned
+    -- husks re-apply the surviving persisted stores through the same proven
+    -- machinery, coalesced so nothing re-fires per frame. The edge is named
+    -- lobby-return in the keep and session-ready in a mission (identical
+    -- behaviour; the name is only for the bounded [cos:replay] diagnostic).
+    -- Records that defer here (husks still spawning) drain on the per-husk
+    -- SimpleHuskInventoryExtension.init peer-ready edge, not by polling.
+    if status == "enter" and state_name == "StateIngame" and mod._cos_replay then
+        local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+        mod._cos_replay.on_edge(in_keep and "lobby-return" or "session-ready",
+            { invalidate_all = true })
+    end
 
     -- v0.9.13-dev: snapshot LA state on every game-state change. Gated on the
     -- debug_dumps toggle. Fires on inn entry, mission entry, mission exit —
@@ -7121,6 +7136,24 @@ mod:hook_safe("SimpleHuskInventoryExtension", "init", function(self, extension_i
         local ok, err = pcall(mod._la_spawn_monitor, unit)
         if not ok then _dbg_alert("[la-spawn-monitor] pcall err: %s", tostring(err)) end
     end
+    -- #660 S3: a remote wearer's husk inventory is now constructed -> peer-ready
+    -- replay edge. This is the per-husk "husk became available" signal that
+    -- drains what session-ready/peer-ready deferred. The apply gate still
+    -- defers until the husk unit is alive + skeleton-ready, and the surviving
+    -- persisted stores are the source, never the live menu selection. When the
+    -- wearer peer is not yet resolvable, fire without a peer scope: the
+    -- preceding transition already invalidated all, so only not-yet-applied
+    -- records do work (coalesced).
+    if mod._cos_replay then
+        local wearer_peer
+        local pm = Managers and Managers.player
+        if pm and pm.owner then
+            local owner = pm:owner(unit)
+            wearer_peer = owner and owner.peer_id or nil
+        end
+        mod._cos_replay.on_edge("peer-ready",
+            wearer_peer and { only_peer = wearer_peer, invalidate_peer = wearer_peer } or nil)
+    end
 end)
 
 -- v0.9.13-dev: mission-start state snapshot. Gated on debug_dumps. Fires
@@ -7888,6 +7921,98 @@ mod._la_reconcile = function(wearer_peer, slot_name, tag, allow_pulse)
     return applied
 end
 
+-- ===========================================================================
+-- #660 S3 slice: bounded appearance REPLAY reconciler (cold-join cluster
+-- #233/#149/#203; pattern in #416/#476/#401). The emit/apply path already
+-- works - a LIVE customization change repairs a stale husk immediately - so
+-- the only thing missing was a bounded EDGE that re-drives the SAME apply from
+-- the SURVIVING persisted stores when a peer's husk first becomes available
+-- (peer-ready), when the mission world enters (session-ready), and on lobby
+-- return. This is a thin WHEN coordinator: the coalescing state machine +
+-- record extraction are engine-free in _cos_la_replay_policy (so the
+-- regression suite pins the exact edge semantics), and HOW is the proven
+-- mod._la_reconcile / mod._la_native_pulse machinery. Everything it drives
+-- already rides the mod's own VMF channel (cos_la_apply family) - no vanilla
+-- wire is touched here. Attached to `mod` (Lua 5.1 200-local ceiling).
+mod._cos_replay_state = mod._cos_replay_state or LA_REPLAY_POLICY.new_replay_state()
+mod._cos_replay = mod._cos_replay or {}
+mod._cos_replay.policy = LA_REPLAY_POLICY -- exposed for the runtime self-check
+
+-- Per-record apply. Reuses the proven machinery and maps its result to the
+-- reconciler's three-state status so coalescing/deferral stays in the pure
+-- policy:
+--   "applied" - engine re-drove the render for a spawned, ready wearer
+--   "defer"   - wearer/husk not ready (Unit.alive gate; has_node enforced
+--               deeper in the apply helpers) - retry on the NEXT edge
+--   "skip"    - terminal (store entry gone / deus-yield) - never retry
+mod._cos_replay.apply = function(peer, slot, record)
+    if type(record) ~= "table" then return "skip" end
+    local wu = _wearer_unit_for_peer(peer)
+    -- Peer-readiness gate (BUG_CLASSES husk-skeleton-readiness): never write to
+    -- a husk that is not alive; defer to the next bounded edge, do NOT poll.
+    if not (wu and Unit.alive(wu)) then return "defer" end
+    if record.offhand_unit ~= nil then
+        -- #416 vanilla offhand mesh: the surviving store is the source of
+        -- truth; a re-wield pulse re-drives the husk get_item_units branch
+        -- which reads it. Native-pulse is per-owner cooldown-guarded, so
+        -- coalescing plus that cooldown keep this bounded (no flicker loop).
+        if mod._la_native_pulse then mod._la_native_pulse(wu, "replay") end
+        return "applied"
+    end
+    -- LA armoury entry: the single reconcile entry point (paint + gated mesh
+    -- pulse, safe pulse context). Translate its (applied, reason) to a status.
+    local applied, reason = mod._la_reconcile(peer, slot, "replay", true)
+    if applied then return "applied" end
+    if reason == "no-entry" or reason == "deus-yield" then return "skip" end
+    return "defer"
+end
+
+-- Fire one bounded replay edge. opts.invalidate_all (husk-recreating
+-- transition) or opts.invalidate_peer (a single joining peer) reset the
+-- coalescing scope so freshly spawned husks re-apply the surviving state;
+-- opts.only_peer scopes the record set. Emits one bounded printf per peer that
+-- did work (<=4 peers), or a single summary line when the edge was a no-op -
+-- never per item.
+mod._cos_replay.on_edge = function(edge_name, opts)
+    opts = opts or {}
+    local state = mod._cos_replay_state
+    if not state then return end
+    -- #267 follow-up: a client whose hot-join state pull exhausted all 8
+    -- attempts (host never acked - see tonight's 30x/10x session) re-arms it
+    -- here so late-join replay gets another window at this bounded edge, rather
+    -- than giving up for the session. Client-only; the host owns the store.
+    if mod._la_state_pull_exhausted and not _is_local_server() then
+        mod._la_state_pull_exhausted = nil
+        mod._la_state_pull_pending = { attempts = 0, next_at = 0 }
+        if printf then printf("[cos:replay] edge=%s state-pull re-armed after prior exhaustion",
+            tostring(edge_name)) end
+    end
+    if opts.invalidate_all then
+        LA_REPLAY_POLICY.invalidate_all(state)
+    elseif opts.invalidate_peer ~= nil then
+        LA_REPLAY_POLICY.invalidate(state, opts.invalidate_peer)
+    end
+    local records = LA_REPLAY_POLICY.build_records(
+        _la_equips_by_peer, mod._offhand_mesh_by_peer, { only_peer = opts.only_peer })
+    local result = LA_REPLAY_POLICY.reconcile_edge(
+        state, edge_name, records, mod._cos_replay.apply)
+    if printf then
+        local emitted = false
+        for peer, n in pairs(result.per_peer) do
+            if (tonumber(n) or 0) > 0 then
+                printf("[cos:replay] edge=%s peer=%s applied=%d",
+                    tostring(edge_name), tostring(peer), n)
+                emitted = true
+            end
+        end
+        if not emitted then
+            printf("[cos:replay] edge=%s peer=none applied=0 (deferred=%d coalesced=%d)",
+                tostring(edge_name), result.deferred, result.coalesced)
+        end
+    end
+    return result
+end
+
 -- HOST: receives equip requests from clients, validates, records into
 -- `_la_equips_by_peer`, broadcasts the authoritative cos_la_apply to ALL.
 mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version, payload)
@@ -8013,8 +8138,24 @@ mod:network_register("cos_la_state_req", function(sender_peer_id, schema_version
             tostring(sender_peer_id), tostring(schema_version), COS_RPC_SCHEMA) end
         return
     end
-    if not _is_local_server() then return end
-    if not sender_peer_id then return end
+    -- #267 follow-up (tonight's 3-player session: clients retried the pull 30x /
+    -- 10x and NEVER got a reply). Both early returns were silent, so the
+    -- responder-side cause was invisible in the client-only logs. Log them: a
+    -- non-server that still receives the req (host election flux / a peer that
+    -- resolved the wrong host) and a missing sender are the two ways the host
+    -- can legitimately decline to answer. If neither fires and the reply count
+    -- below is still 0, the store was genuinely empty (not a lost reply).
+    if not _is_local_server() then
+        if printf then printf("[la-state] STATE-PULL DROP req from=%s reason=not-local-server (is_server=%s host=%s self=%s)",
+            tostring(sender_peer_id),
+            tostring(Managers and Managers.player and Managers.player.is_server),
+            tostring(_host_peer_id()), tostring(_local_peer_id_quick())) end
+        return
+    end
+    if not sender_peer_id then
+        if printf then printf("[la-state] STATE-PULL DROP reason=no-sender-peer") end
+        return
+    end
     local n = 0
     for wearer_peer, slots in pairs(_la_equips_by_peer) do
         if type(slots) == "table" then
@@ -8134,6 +8275,14 @@ if rawget(_G, "PlayerManager") then
             mod._la_peer_purge_at[peer_id] = nil
             if printf then printf("[la-state] PEER-PURGE canceled peer=%s (re-added - transition, not a disconnect)",
                 tostring(peer_id)) end
+        end
+        -- #660 S3: a peer appeared -> peer-ready replay edge, scoped to that
+        -- peer. Its husk unit is usually not spawned yet, so most records defer
+        -- here and drain on the husk-ready (SimpleHuskInventoryExtension.init)
+        -- edge; invalidating just this peer keeps the coalescing scope tight.
+        if peer_id and mod._cos_replay then
+            mod._cos_replay.on_edge("peer-ready",
+                { only_peer = peer_id, invalidate_peer = peer_id })
         end
     end)
 end
@@ -8730,11 +8879,23 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
     local pm = Managers and Managers.player
     local wearer_player = mod._cos_husk_identity.player_for_unit(pm, husk_unit)
     local wearer_peer = wearer_player and wearer_player.peer_id
-    local wearer_is_player_controlled =
-        mod._cos_husk_identity.player_controlled(wearer_player)
-    if wearer_peer and wearer_is_player_controlled ~= true then
-        if printf then printf("[cos:698] HUSK identity SKIP wearer=%s reason=non-human-owner-alias",
-            tostring(wearer_peer)) end
+    -- #698 regression fix: do NOT gate on is_player_controlled alone. On a host
+    -- peer the human (local_player_id 1) and its bots (2..4) share ONE peer id,
+    -- so a bot husk's wield legitimately resolves wearer_peer=<host peer> and is
+    -- correctly skipped - but if the human's controlled flag is transiently nil
+    -- during spawn/sync, the old gate ALSO skipped the human, and the log
+    -- (peer-only) made a routine bot skip read as the human being dropped
+    -- (tonight's 3-player session: 29x "wearer=<host peer>"). wearer_is_human is
+    -- local_player_id-aware: a bot never owns local_player_id 1, so this never
+    -- mis-accepts a bot, and it rescues the human under a nil controlled flag.
+    local wearer_is_human, human_reason =
+        mod._cos_husk_identity.wearer_is_human(wearer_player)
+    local wearer_lpid = mod._cos_husk_identity.local_player_id(wearer_player)
+    if wearer_peer and not wearer_is_human then
+        if printf then printf("[cos:698] HUSK identity SKIP wearer=%s local_player_id=%s controlled=%s reason=%s (host bots share the wearer peer; local_player_id~=1 => bot)",
+            tostring(wearer_peer), tostring(wearer_lpid),
+            tostring(mod._cos_husk_identity.player_controlled(wearer_player)),
+            tostring(human_reason)) end
         wearer_peer = nil
     elseif wearer_peer then
         local removed, reason, removed_slots = mod._cos_husk_identity.invalidate_for_career(
@@ -9840,9 +10001,16 @@ mod.update = function(dt)
                 end
                 if pull_host then
                     if st.attempts >= 8 then
-                        if printf then printf("[la-state] STATE-PULL GAVE UP after %d unacked attempts (host=%s)",
+                        if printf then printf("[la-state] STATE-PULL GAVE UP after %d unacked attempts (host=%s) - re-arm queued for next replay edge",
                             st.attempts, tostring(pull_host)) end
                         mod._la_state_pull_pending = nil
+                        -- #267 follow-up: exhaustion is no longer terminal for
+                        -- the session. The next bounded replay edge (peer-ready /
+                        -- session-ready / lobby-return) re-arms the pull so a
+                        -- cold-joiner that lost the whole 8-attempt window still
+                        -- gets another chance instead of running the rest of the
+                        -- session with no replayed store.
+                        mod._la_state_pull_exhausted = true
                     else
                         st.attempts = st.attempts + 1
                         st.next_at = now_p + 5
