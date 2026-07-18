@@ -4,7 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-17.
+Last updated: 2026-07-18.
+
+## #742 Old Musket remote material-binding crash guard
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.451-dev candidate |
+| Repro | Two-player lobby. Equip Old Musket before the other player joins, hot join in both directions, swap away/back, and cross a Keep-to-mission transition. Repeat with both peers on CWV and one observer without CWV. |
+| Expected post-fix | The same-mod remote husk receives the authored Old Musket texture when its spawned unit has real material bindings. Texture residency alone never authorizes the native write. A missing mesh/material or `#ID[00000000]` binding fails closed for the whole unit, retains the donor appearance, emits one bounded diagnostic, and never access-violates. #491's mixed-peer vanilla package/identity fallback remains unchanged. |
+| Detection | Offline `test_cwv_texture_residency.lua` covers bound, missing, empty, null, multi-mesh, and throwing cases; `Old Musket texture C-call fails closed` proves ordering before `Unit.set_texture_for_materials`; `/cwv_regression_test` passes `issue742_old_musket_texture_material_preflight`. Paired logs must contain no `[MeshObject] Failed looking up material` followed by the Old Musket texture path and no address-`0x8` access violation. A skip, if any, is one `[cwv:742] Old Musket paint SKIP reason=unit-material-unready ...` row. |
+
+---
 
 ## #660 Executable G-APPEARANCE census
 
@@ -64,8 +75,8 @@ Last updated: 2026-07-17.
 |---|---|
 | Fix version(s) | CWV v0.1.421-dev |
 | Repro | Open CIM's Athanor and click its item-selector icon while Old Musket is the first/default item. Switch to another rifle and back. |
-| Expected post-fix | The selector stays open, Old Musket has its authored textures, the comparison rifle keeps its own textures, and no texture/material access violation occurs. |
-| Detection | `/cwv_regression_test` passes `issue617_old_musket_preview_texture_consumer`; offline `Old Musket texture C-call fails closed` passes; the live log records `targets=1 applied=1` and no `Old Musket paint SKIP`. |
+| Expected post-fix | The selector stays open, Old Musket has its authored textures, the comparison rifle keeps its own textures, and no texture/material access violation occurs. Preview parent binding is followed by the same real-material census used by world/husk consumers (#742). |
+| Detection | `/cwv_regression_test` passes `issue617_old_musket_preview_texture_consumer` and `issue742_old_musket_texture_material_preflight`; offline `Old Musket texture C-call fails closed` passes; the live log records `targets=1 applied=1` and no `Old Musket paint SKIP`. |
 
 ---
 
