@@ -1,5 +1,32 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.452-dev (2026-07-18) - acknowledged hot-join identity replay (#660) [diagnostics-armed]
+
+- Added a bounded acknowledgement handshake to the existing schema-2
+  `cwv_item_identity` channel. A hot-joining same-mod peer now acknowledges an
+  exact slot fingerprint only after reconstructing and accepting that descriptor
+  locally; the owner retries the same descriptor at most once per 0.5 seconds,
+  for at most eight attempts, until that matching acknowledgement arrives.
+- The retry ledger is keyed by peer, slot, and semantic fingerprint. Stale or
+  mismatched acknowledgements cannot clear a newer identity, native slots do not
+  enter the retry path, and old/mixed-version peers time out without receiving a
+  modded vanilla lookup id or causing unbounded traffic.
+- This addresses the initial hot-join readiness gap proven in the paired #660
+  logs. It does not claim to fix the separate #474 remote Old Musket animation
+  failure: those logs already prove the stance payload arrived after identity
+  convergence, so that downstream renderer/animation boundary remains under
+  diagnostics.
+- Extended engine-free lifecycle and source-contract coverage for successful
+  acknowledgement, wrong-peer/slot/fingerprint rejection, retry cadence, retry
+  exhaustion, native suppression, and the eight-attempt upper bound.
+
+**Co-op diagnostics:** Equip a CWV weapon before the second CWV player hot-joins.
+Without swapping, the observer should reconstruct the authored model and emit a
+matching identity acknowledgement; the owner must stop retrying that slot. Repeat
+with roles reversed and across a mission transition. Logs may show no more than
+eight sends for one unchanged peer/slot/fingerprint and must show no continuing
+retry after acknowledgement. Old Musket stance/animation remains owned by #474.
+
 ## 0.1.451-dev (2026-07-18) - Old Musket remote-material crash guard (#742) [verify-fix-coop]
 
 - Fixed the native access violation when a remote player's Old Musket was

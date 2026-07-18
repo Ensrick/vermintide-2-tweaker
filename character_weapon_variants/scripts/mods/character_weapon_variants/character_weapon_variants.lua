@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.451-dev"
+local MOD_VERSION = "0.1.452-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -10638,6 +10638,21 @@ do
 			end
 			return
 		end
+		-- #660 cold-join delivery acknowledgement. A targeted send from inside
+		-- GearUtils.hot_join_sync can be accepted by the sender before the joining
+		-- peer's VMF handler is ready. The sender retries only the two semantic
+		-- identity slots on a bounded cadence until this ACK proves receipt.
+		if type(payload) == "table"
+				and payload.slot == _om.appearance_lifecycle_policy.ACK_SLOT then
+			local accepted = lifecycle:accept_ack(sender_peer_id, schema, payload)
+			if accepted then
+				pcall(printf,
+					"[cwv:660] lifecycle=hot_join_retry adapter=identity_ack peer=%s slot=%s descriptor=%s pending=%d",
+					tostring(sender_peer_id), tostring(payload.ack_slot),
+					tostring(payload.fingerprint), lifecycle:pending_delivery_count())
+			end
+			return
+		end
 		local changed, descriptor, reason = _om._cwv_accept_identity(sender_peer_id, schema, payload)
 		-- #474: apply stance BEFORE the changed-gate. A stance toggle changes
 		-- musket_mode while the identity signature stays identical, so the
@@ -10647,6 +10662,16 @@ do
 				and _om._old_musket_accept_mode then
 			_om._old_musket_accept_mode(sender_peer_id, payload.slot,
 				payload.musket_mode, nil, "identity_channel")
+		end
+		-- ACK both a first delivery and a duplicate retry. `descriptor` is non-nil
+		-- only after this peer reconstructed the exact local resources, so the ACK
+		-- never falsely confirms an unavailable/fingerprint-mismatched appearance.
+		if descriptor then
+			local ack = lifecycle:ack_payload(payload)
+			if ack then
+				pcall(mod.network_send, mod, "cwv_item_identity",
+					sender_peer_id, _IDENTITY_SCHEMA, ack)
+			end
 		end
 		if not changed then return end
 		pcall(printf, "[cwv:396/660] exact identity received: peer=%s slot=%s key=%s descriptor=%s state=%s",
@@ -10937,7 +10962,19 @@ do
 		-- #660: target the exact semantic descriptor to the joining CWV peer
 		-- before vanilla's base-id equipment replay. VMF drops this channel for a
 		-- peer without CWV; vanilla still receives only the safe base item/skin.
+		-- Track exact slots BEFORE the first attempt so a very fast receiver ACK
+		-- cannot race ahead of the pending ledger. The 2026-07-18 paired logs prove
+		-- this first attempt may be dropped mid-handshake; the bounded retry below
+		-- closes that readiness gap without weakening the vanilla fallback.
+		local tracked = lifecycle:track_delivery(peer_id, slots, "hot_join_retry")
 		_send_identity_slots(slots, "hot_join_sync", true, peer_id)
+		if tracked > 0 then
+			pcall(printf,
+				"[cwv:660] lifecycle=hot_join_sync adapter=identity_delivery_tracked peer=%s slots=%d interval=%.1fs max_attempts=%d",
+				tostring(peer_id), tracked,
+				_om.appearance_lifecycle_policy.RETRY_INTERVAL,
+				_om.appearance_lifecycle_policy.MAX_RETRY_ATTEMPTS)
+		end
 		-- force=true: the joining peer's parity is unknowable here by construction.
 		local r1, r2, r3, r4 = _wire_null_skins(slots, function()
 			return func(peer_id, unit, equipment, additional_items)
@@ -11006,6 +11043,17 @@ do
 		if previous_update then previous_update(dt) end
 		if _om._cwv_durable_crowbill_owner then
 			_om._cwv_durable_crowbill_owner:step()
+		end
+		local identity_sent, identity_expired = lifecycle:step_deliveries(dt)
+		if identity_sent > 0 then
+			pcall(printf,
+				"[cwv:660] lifecycle=hot_join_retry adapter=identity_send attempts=%d pending=%d",
+				identity_sent, lifecycle:pending_delivery_count())
+		end
+		if identity_expired > 0 then
+			pcall(printf,
+				"[cwv:660] lifecycle=hot_join_retry adapter=identity_timeout expired=%d pending=%d",
+				identity_expired, lifecycle:pending_delivery_count())
 		end
 		local pending = _om._cwv_skin_replay_pending
 		if not pending then return end

@@ -1,6 +1,8 @@
 local mod = get_mod("crt")
 mod._crt.dance_of_blades = mod:dofile("scripts/mods/career_tweaker/_crt_dance_of_blades")
 local foot_knight_policy = mod:dofile("scripts/mods/career_tweaker/_crt_foot_knight_policy")
+local wire_policy = mod._crt.wire_policy
+local wire_runtime = mod:dofile("scripts/mods/career_tweaker/_crt_wire_runtime")
 
 -- ============================================================
 -- crt_* buff name pre-registration (UNCONDITIONAL)
@@ -22,14 +24,8 @@ local foot_knight_policy = mod:dofile("scripts/mods/career_tweaker/_crt_foot_kni
 -- writes a fresh stub back so the NetworkLookup entry still resolves to a
 -- valid (no-op) buff template even when the toggle is OFF.
 --
--- Cross-peer behavior with this fix:
---   * Host toggle ON, client toggle OFF: both have stub-or-real bodies
---     present + identical NetworkLookup indices. Host sends add_buff(N).
---     Client resolves N -> name -> stub body -> apply iterates `buffs={}`
---     and no-ops. No crash.
---   * Host + client both ON: both have real bodies. Normal behavior.
---   * Host + client both OFF: nothing ever sends add_buff for these names.
---     The registrations sit inert.
+-- Stub-or-real bodies preserve the same names and indices on every CRT peer;
+-- toggles change behavior only, never the lookup catalog.
 --
 -- Burned ct v0.7.59 + v0.7.60 with this same bug class against DeusPowerUp
 -- registrations; the `crt_*` talent rework code shipped the same flawed
@@ -157,11 +153,8 @@ end
 --      "enabled"; the beacon's on_enable/on_disable callbacks re-run apply so
 --      the talent tables degrade to vanilla for the lobby state and re-apply
 --      when parity returns.
--- Plus the hot-join replay filter (mod:hook BuffSystem.hot_join_sync at the end
--- of this file): the server replays every server-controlled buff to a joining
--- peer BEFORE any parity ack can exist, so crt_* entries are hidden from that
--- one replay pass (wire-safe by construction; a crt joiner re-syncs via the
--- driver's remove/re-add cycle when parity re-establishes).
+-- `_career_tweaker_balance_hooks.lua` also filters server-controlled CRT buffs
+-- from the pre-ack hot-join replay; drivers resync after parity returns.
 
 -- Live parity read for the wire guards. Fail-safe: beacon missing or erroring
 -- counts as "not safe" and blocks the modded send (solo still passes -- the
@@ -198,6 +191,7 @@ local function _crt_log_wire_block(site)
     _crt_wire_block_logged[site] = true
     pcall(printf, "[crt:425] wire guard: blocked modded buff send at %s (a lobby peer lacks crt); vanilla behavior for this session state", tostring(site))
 end
+
 local function _crt_log_wire_clear()
     if next(_crt_wire_block_logged) == nil then return end
     _crt_wire_block_logged = {}
@@ -210,6 +204,8 @@ end
 local function _crt_ensure_wire_safe_funcs()
     local PF = rawget(_G, "ProcFunctions")
     if PF then
+        wire_runtime.ensure_timed_proc(PF, wire_policy, _crt_wire_parity_live,
+            _crt_log_wire_block, _crt_log_wire_clear)
         if PF.crt_wire_safe_add_buff == nil then
             -- Same contract as vanilla ProcFunctions.add_buff; consulted per
             -- call by name so live buffs obey the gate too.
@@ -2357,15 +2353,17 @@ local BALANCE_MODS = {
     -- refresh_durations true. Rework:
     --   * Patch movespeed multiplier 1.35 → 1.2 (+20%) and duration 15 → 20s
     --   * Register two new buff templates for AS and power (also +20%, 20s)
-    --   * Register two on-kill proc templates that add those buffs
+    --   * Register two on-kill proc templates that add those buffs through the
+    --     native LocalAndServer timed-sync path (#776)
     --   * Append the new procs to the talent's buffs list
     -- Talent name: `markus_questing_knight_ability_buff_on_kill` (lvl 30).
     rework_es_questingknight_virtue_of_impetuous_buffed = {
         character = "markus",
         career    = "es_questingknight",
-        -- issue 425: the two on-kill procs push crt_* names onto rpc_add_buff;
-        -- gated on peer parity + wire-safe proc wrapper. (The movespeed field
-        -- patches ride a VANILLA buff name and stay wire-safe on their own.)
+        -- Issues 425/776: the two on-kill procs synchronize crt_* timed buffs;
+        -- exact catalog parity gates the send and their dedicated wrapper uses
+        -- add_buff_synced(LocalAndServer), never server-controlled rpc_add_buff.
+        -- (The movespeed patch rides a vanilla buff name.)
         network_unsafe = true,
         patches   = {
             { buff = "markus_questing_knight_ability_buff_on_kill_movement_speed", field = "multiplier", value = 1.2 },
@@ -2377,9 +2375,10 @@ local BALANCE_MODS = {
             -- AS buff
             if BuffTemplates.crt_questingknight_impetuous_as == nil or BuffTemplates.crt_questingknight_impetuous_as._crt_pending then
                 BuffTemplates.crt_questingknight_impetuous_as = {
+                    _crt_sync_type = wire_policy.TIMED_SYNC_TYPE,
                     buffs = {
-                        { stat_buff = "attack_speed", multiplier = 0.2, duration = 20, max_stacks = 1,
-                          refresh_durations = true, name = "crt_questingknight_impetuous_as" },
+                        wire_policy.make_timed_stat_buff(
+                            "crt_questingknight_impetuous_as", "attack_speed", 0.2),
                     },
                 }
                 saved.imp_created_as = true
@@ -2387,9 +2386,10 @@ local BALANCE_MODS = {
             -- Power buff
             if BuffTemplates.crt_questingknight_impetuous_power == nil or BuffTemplates.crt_questingknight_impetuous_power._crt_pending then
                 BuffTemplates.crt_questingknight_impetuous_power = {
+                    _crt_sync_type = wire_policy.TIMED_SYNC_TYPE,
                     buffs = {
-                        { stat_buff = "power_level", multiplier = 0.2, duration = 20, max_stacks = 1,
-                          refresh_durations = true, name = "crt_questingknight_impetuous_power" },
+                        wire_policy.make_timed_stat_buff(
+                            "crt_questingknight_impetuous_power", "power_level", 0.2),
                     },
                 }
                 saved.imp_created_power = true
@@ -2398,7 +2398,7 @@ local BALANCE_MODS = {
             if BuffTemplates.crt_questingknight_impetuous_as_proc == nil or BuffTemplates.crt_questingknight_impetuous_as_proc._crt_pending then
                 BuffTemplates.crt_questingknight_impetuous_as_proc = {
                     buffs = {
-                        { buff_func = "crt_wire_safe_add_buff", buff_to_add = "crt_questingknight_impetuous_as",
+                        { buff_func = "crt_wire_safe_add_timed_buff", buff_to_add = "crt_questingknight_impetuous_as",
                           event = "on_kill", name = "crt_questingknight_impetuous_as_proc" },
                     },
                 }
@@ -2408,7 +2408,7 @@ local BALANCE_MODS = {
             if BuffTemplates.crt_questingknight_impetuous_power_proc == nil or BuffTemplates.crt_questingknight_impetuous_power_proc._crt_pending then
                 BuffTemplates.crt_questingknight_impetuous_power_proc = {
                     buffs = {
-                        { buff_func = "crt_wire_safe_add_buff", buff_to_add = "crt_questingknight_impetuous_power",
+                        { buff_func = "crt_wire_safe_add_timed_buff", buff_to_add = "crt_questingknight_impetuous_power",
                           event = "on_kill", name = "crt_questingknight_impetuous_power_proc" },
                     },
                 }

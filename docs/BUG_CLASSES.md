@@ -2348,3 +2348,50 @@ across preview worlds, owner units, or remote husks.
   after an earlier valid mesh, throwing introspection, preview, remote husk,
   transition, hot join, and a mixed-mod fallback. CWV
   `_cwv_old_musket_preview.lua` is the reference policy.
+
+## 64. Mod presence does not prove numeric NetworkLookup identity
+
+**First confirmed:** 2026-07-18 (Career Tweaker issue #776; incomplete issue
+#425 contract).
+**Lives in:** gameplay features that send mod-registered names as numeric
+`NetworkLookup.*` IDs through vanilla RPCs.
+
+### Symptoms
+- Every peer has the mod and answers the same presence/schema beacon, yet a
+  vanilla RPC resolves the incoming integer to a different local template.
+- A receiver may crash on a contract that the sender's real buff never violated.
+  In #776, local ID 1574 resolved to timed
+  `crt_questingknight_impetuous_as`, while positive host server IDs 12, 13,
+  and 9 triggered `Cannot use duration for server controlled buffs!`.
+- `ProcFunctions.add_buff` could not be the direct origin because it always
+  transmits server ID 0 (`proc_functions.lua:1956-1972`).
+
+### Diagnosis pattern
+1. Record the numeric lookup ID, decoded local name, server-controlled ID, and
+   sender peer from the receiver before vanilla mutation.
+2. Compare BOTH lookup directions (`name -> number` and `number -> name`) on
+   every peer. Same mod version, registered-name set, or RPC schema is not proof.
+3. Trace the alleged producer's wire call. If its protocol cannot emit the
+   observed field (as with positive IDs above), classify the event as a catalog
+   collision rather than changing the innocent template to fit it.
+4. Check the receiver's native contract. `BuffSystem._add_buff_helper_function`
+   rejects duration on every sub-buff when `server_buff_id > 0`
+   (`buff_system.lua:248-260`).
+
+### Fix template
+- Build a deterministic identity from every owned network name plus its ACTUAL
+  live numeric assignment, validating forward and reverse maps. Exchange that
+  compact identity on the mod's VMF channel and gate every custom emission on
+  an exact match; missing/mismatched identity is immediately inert.
+- Add an unconditional receiver floor that owns only locally resolved mod names.
+  Drop mismatch/collision traffic before vanilla, preserve unrelated traffic
+  unchanged, and bound diagnostics once per reason/template.
+- Keep the hot-join sender filter: replay occurs before any peer ack can exist.
+- Route legal timed effects through the native synced path appropriate to their
+  authority. For CRT's owner+server Impetuous effects, use
+  `BuffSyncType.LocalAndServer` (`buff_system.lua:803-812,849-879`; vanilla
+  example `morris_buff_settings.lua:4618-4627`), with no unsafe fallback.
+- Test shifted numeric assignments, missing identity, exact identity, unrelated
+  names, observed collision IDs, positive-server-duration rejection, bounded
+  logs, hot join, refresh, and expiry. CRT `_crt_wire_policy.lua` and
+  `test_crt_wire_contract.lua` are the reference implementation.
