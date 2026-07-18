@@ -1,5 +1,26 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.27-dev (2026-07-18) -- #435 score rows use recorded cosmetics [verify-fix-coop]
+
+- The attached client log had Dynamic Cosmetic Portraits disabled and no
+  `[dcp:LOAD]` rows; its only Mercenary was a host-owned bot. The previous score
+  hook forced bot rows to vanilla because a bot shares its owner's peer id.
+- Score portraits now resolve skin first, then hat, from each score record's
+  own `hero_skin` and `hat`. Vanilla creates those fields per human or bot and
+  clients retain them while applying the host's score values.
+- Added a material-residency gate, bounded bot/remote score evidence, a pure
+  record resolver, and engine-free coverage for skin priority, bot identity,
+  missing cosmetics, and malformed records. The #609 safe teardown path remains
+  unchanged.
+
+**Verify (co-op):** Both peers enable v0.1.27-dev. Host a non-Kruber career
+with a tracked Mercenary hat saved and a Kruber bot; both score screens must
+match the bot's HUD portrait. Then have the host play Mercenary with that hat;
+the client score screen must show the host's custom portrait. Both logs must
+contain `[dcp:LOAD] v0.1.27-dev` and bounded `[dcp:435] surface=score` rows.
+Run `/dcp_regression_test`; both `portrait_override_player_scoped` and
+`local_player_safe_network_lifecycle_609` must pass.
+
 ## 0.1.26-dev (2026-07-18) -- #609 release/source reconciliation [verify-fix]
 
 - Published the already-merged safe network-teardown lifecycle from
