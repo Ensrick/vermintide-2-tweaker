@@ -45,6 +45,8 @@ local _DORMANT_EXPORTS = {
     add_particles         = function() end,
     attach_anim_extension = function() end,
     release_packages      = function() end,   -- #282: no-op when dormant
+    reconcile_packages    = function() end,   -- #282: no-op when dormant
+    pending_release_paths = function() return {} end,
     loaded_packages       = {},               -- #282: empty registry when dormant
     dormant               = true,
 }
@@ -171,29 +173,44 @@ end
 -- keeps our references attributable (dump_reference_counter) and immune to
 -- collisions with vanilla's / LA's "global" refs on the same packages.
 --
--- Release point: release_packages() drops the single per-path reference. It
--- is called from cosmetics_tweaker.lua's mod.on_game_state_changed on the
--- ("exit","StateIngame") notification (which fires BEFORE StateIngame.on_exit
--- destroys the units, state_ingame.lua:1924-1929, and the level world, :1939)
--- and from mod.on_unload. Releasing while units may still use the material is
--- engine-safe: unload() only releases the resource once NO reference under
--- ANY name remains, and even then a still-in-use package is routed through
--- the delayed-unload queue instead of freed live (package_manager.lua:213-224,
--- `can_unload` gate, flushed in its update()) - the engine's own safe path.
--- The wiring lives
--- in cosmetics_tweaker.lua because this file is dofile'd at its line 22,
--- BEFORE mod.on_game_state_changed / mod.on_unload are defined - wrapping
--- them here would be silently overwritten by the later definitions.
+-- Release point (v0.9.148-dev): the single StateIngame.on_exit hook_safe in
+-- cosmetics_tweaker.lua runs AFTER vanilla has destroyed player machines,
+-- units, entity systems, the level and world. The older game-state notification
+-- runs BEFORE that teardown and repeatedly put the custom outfit package into
+-- PackageManager's delayed queue. Boot shutdown has no package-update frame
+-- between StateIngame.on_exit and PackageManager.destroy, so the delayed handle
+-- survived into destruction (#282 comments 5009229761 / 5009325026). The
+-- lifecycle ledger below retains `release_pending` until the engine queue
+-- actually clears, rather than treating an unload request as completion.
 local MH_PKG_REF = "cosmetics_tweaker_mh"
-local _mh_loaded_packages = {}
+local MH_LIFECYCLE = mod:dofile("scripts/mods/cosmetics_tweaker/_mh_package_lifecycle")
+local _mh_lifecycle
 local _mh_skip_logged = {}
+
+local function _mh_lifecycle_event(event, path, reason, detail)
+    if event == "first_load" then
+        pcall(printf, "[cos:282] first-load ref=%s: %s", MH_PKG_REF, tostring(path))
+    elseif event == "release_complete" then
+        pcall(printf, "[cos:282] release-complete (%s): %s", tostring(reason), tostring(path))
+    elseif event == "release_delayed" then
+        pcall(printf, "[cos:282] release-DELAYED (%s): %s", tostring(reason), tostring(path))
+    elseif event == "load_failed" then
+        mod:warning("[mh_embed] package load FAILED for %s: %s", tostring(path), tostring(detail))
+    elseif event == "release_failed" then
+        pcall(printf, "[cos:282] unload FAILED (%s) for %s: %s",
+            tostring(reason), tostring(path), tostring(detail))
+    end
+end
+
+_mh_lifecycle = MH_LIFECYCLE.new(manager_package, MH_PKG_REF, _mh_lifecycle_event)
+local _mh_loaded_packages = _mh_lifecycle.registry
 
 local function _safe_load_package(path)
     if not _has_package(path) then
         mod:warning("[mh_embed] Skipping package load — not in resources: %s", tostring(path))
         return
     end
-    if _mh_loaded_packages[path] then
+    if _mh_loaded_packages[path] == "held" then
         -- Once per path per hold: the dedupe-skip line proves the registry fired
         -- without spamming a line on every wield/visibility toggle for the rest
         -- of the session.
@@ -203,26 +220,11 @@ local function _safe_load_package(path)
         end
         return
     end
-    local ok, err = pcall(manager_package.load, manager_package, path, MH_PKG_REF)
-    if ok then
-        _mh_loaded_packages[path] = true
-        pcall(printf, "[cos:282] first-load ref=%s: %s", MH_PKG_REF, tostring(path))
-    else
-        mod:warning("[mh_embed] package load FAILED for %s: %s", tostring(path), tostring(err))
-    end
+    _mh_lifecycle:load(path)
 end
 
 local function release_packages(reason)
-    for path in pairs(_mh_loaded_packages) do
-        _mh_loaded_packages[path] = nil
-        local ok, err = pcall(manager_package.unload, manager_package, path, MH_PKG_REF)
-        if ok then
-            pcall(printf, "[cos:282] unload (%s): %s", tostring(reason), tostring(path))
-        else
-            pcall(printf, "[cos:282] unload FAILED (%s) for %s: %s",
-                tostring(reason), tostring(path), tostring(err))
-        end
-    end
+    return _mh_lifecycle:release_all(reason)
 end
 
 -- ============================================================
@@ -475,13 +477,14 @@ end
 mod:info("[mh_embed] hooks installed (4) — embedded Material-Hijack (patched) active. create_equipment + _spawn_item_unit folded into cosmetics_tweaker's existing hooks (v0.9.5 de-dupe).")
 
 -- v0.9.5: module exports for cosmetics_tweaker.lua to call from its own hooks.
--- v0.9.76-dev (#282): release_packages (called from mod.on_game_state_changed
--- StateIngame exit + mod.on_unload) and the loaded_packages registry (read by
--- the /cos_regression_test mh_package_single_reference check).
+-- v0.9.148-dev (#282): release/reconcile exports and the held/pending registry
+-- are consumed by the post-StateIngame hook and runtime regression check.
 return {
     replace_textures      = replace_textures,
     add_particles         = add_particles,
     attach_anim_extension = attach_anim_extension,
     release_packages      = release_packages,
+    reconcile_packages    = function(reason) return _mh_lifecycle:reconcile(reason) end,
+    pending_release_paths = function() return _mh_lifecycle:pending_paths() end,
     loaded_packages       = _mh_loaded_packages,
 }

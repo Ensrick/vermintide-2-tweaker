@@ -440,11 +440,11 @@ Last updated: 2026-07-16.
 | Symptom | Shutdown: ~20 `Package still referenced, NOT unloaded` lines then crashify `'#ID[...]' not unloaded, this can potentially cause an deadlock` on BOTH peers; in-mission `Locking a resource that is about to be unloaded!` at map transitions. 92 loads of one `_3p` package in a single host session. |
 | Root cause | `_safe_load_package` called `Managers.package:load(path, "global")` on every replace_textures/add_particles event. `PackageManager.load` increments a per-(package, reference_name) count on EVERY call (package_manager.lua:26-27); nothing ever called unload. Same shape (slower): LootItemUnitPreviewer parent-package refs taken per browser open, never released. |
 | Mod(s) | cosmetics_tweaker (issue 282 cosmetics-owned slice; wt/cwv audit still open) |
-| Fix version(s) | cosmetics_tweaker v0.9.76-dev (dedupe registry + mod-owned ref `cosmetics_tweaker_mh` + release on StateIngame exit / mod unload / previewer destroy) |
+| Fix version(s) | cosmetics_tweaker v0.9.76-dev (dedupe registry); v0.9.148-dev (post-StateIngame teardown release + completion ledger) |
 | Category | UNIT + MANUAL |
 | Repro | 1. Equip a hijacked-material weapon (e.g. CWV custom musket). 2. Wield it repeatedly (10+ swaps). 3. Exit to keep, quit the game. 4. Without fix: repeated `[PackageManager] Load` refs and the shutdown crashify block. |
-| Expected post-fix | ONE `[cos:282] first-load` line per package per level, `[cos:282] dedupe-skip` on later wields, `[cos:282] unload` at keep/mission exit; no crashify `not unloaded` block at shutdown. |
-| Detection | (a) `/cos_regression_test` — `mh_package_single_reference` must pass. (b) Console log greps above. |
+| Expected post-fix | ONE `[cos:282] first-load` line per package per level, `[cos:282] dedupe-skip` on later wields, then `[cos:282] release-complete (StateIngame.on_exit post ...)` and `postcondition-ok`. After 3+ mission/keep cycles, quitting immediately must leave no `cosmetics_tweaker_mh` entry in `Delayed Unload` or `We have delayed packages during destroy`. |
+| Detection | (a) `/cos_regression_test` — `mh_package_single_reference` must pass and reports any retained delayed-ledger entry. (b) Console must contain `postcondition-ok` before manager destruction and no `[cos:282] POSTCONDITION FAILED`. (c) Offline lifecycle tests cover repeated transitions, immediate shutdown with no intervening update, and delayed completion reconciliation. |
 | Tracking | GitHub issue #282 (stays open for wt/cwv). |
 
 
