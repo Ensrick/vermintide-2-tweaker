@@ -1,5 +1,13 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.289-dev (2026-07-18) -- #700 in-mission mission-vote client popup [verify-fix-coop]
+
+- **Symptom:** selecting a new mission from GUT's in-mission map starts a team vote, but clients receive no accept/decline HUD. Their undecided vote becomes the template's timeout "no", so the selection never advances in co-op.
+- **Root cause:** AdventureMechanism reuses vanilla `game_settings_vote`; the vote template and `NetworkLookup.voting_types` entry already exist on every peer, disproving a modded-key registration failure. Vanilla deliberately sets `game_settings_vote.ingame_vote = false` (`vote_templates.lua:306-319`) because it normally runs in the keep. `IngameVotingUI.update` draws only when `VoteManager.is_ingame_vote()` returns true (`ingame_voting_ui.lua:267-301`), so closing the mid-mission Start Game view leaves clients with no voting surface.
+- **Fix (`_gut_mission_map.lua`):** singleton server/client vote-start wrappers shallow-copy the active vote template and set `ingame_vote=true` only for `game_settings_vote` in a live Adventure mission. That satisfies both the HUD draw gate and VoteManager's separate keyboard/gamepad input gate. Keep votes and unrelated vote types delegate unchanged; the shared `VoteTemplates` entry, RPC payload, and NetworkLookup table are untouched. One bounded `[gut:700]` line proves each peer promoted the active vote.
+- **Verification:** `/verify_gut_mission_vote` reports the live hook/policy state. `/gut_regression_test` adds `issue700_mission_vote_client_popup`; offline `test_gut_mission_vote_policy.lua` covers the live-mission positive case and keep/mechanism/unrelated-vote negatives.
+- **Co-op check:** host + client, both on v0.2.289-dev, enter an Adventure mission; host selects a mission from the in-mission map. The client should see the vanilla accept/decline HUD immediately, accept it, and the selected mission should start without the 30-second timeout.
+
 ## 0.2.288-dev (2026-07-18) - loadout exit-snapshot backstop (#353/#354/#287) [verify-fix]
 
 - Cross-session persistence was captured on equip EVENTS only; state mutated after the last capture (or through a path that never fires it) was lost on quit - the #354 intermittency. New engine-free exit-snapshot core (non-destructive diff: nil live value never clears; only diverged+resolvable slots overwrite) reconciles the live loadout into the existing store at three exit edges: StateIngame exit, StateTitleScreen enter, mod unload. Same serializer as the equip path (byte-identity tested), official cloud data untouched, zero new hooks.

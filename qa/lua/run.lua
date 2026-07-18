@@ -167,6 +167,7 @@ local suites = {
     "test_gut_native_loadout_policy",
     "test_gut_loadout_slot_policy",
     "test_gut_mission_completion_policy",
+    "test_gut_mission_vote_policy",
     "test_gut_wt_loadout_trace",
     "test_gut_exit_snapshot",
     "test_gt_dummy_collision_policy",
