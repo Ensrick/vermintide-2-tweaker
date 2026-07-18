@@ -1,5 +1,24 @@
 # Weapon Tweaker Changelog
 
+## 0.12.277-beta (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix-coop]
+
+- Added the user-tuned additive third-person grip correction for Kruber using
+  Saltzpyre's regular Crossbow: `+0.100` Y and `+0.025` Z on its left-hand unit.
+- Kept the transform receiver-scoped and renderer-local across owner, bot,
+  remote husk, and inventory-preview creation paths. Native Saltzpyre, first
+  person, Volley Crossbow, shared attachment tables, and network payloads are
+  unchanged.
+- Added one bounded post-write engine-position readback per tracked Crossbow,
+  focused offline/runtime coverage, and a structural appearance contract.
+
+**Co-op verify:** Confirm `[wt:LOAD] v0.12.277-beta` on both peers. On Kruber,
+equip Saltzpyre's regular Crossbow and check owner third person plus inventory
+preview while the observer checks the remote husk. Fire/reload, swap away and
+back, transition into a mission, and hot-join once. The Crossbow must retain
+the corrected grip everywhere, `[wt:701] retained` must show retained and
+target positions, and `/wt_regression_test` must pass
+`issue701_kruber_crossbow_left_grip_offset`.
+
 ## 0.12.276-beta (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
 
 - CWV's Infantry Combat Style reports its deep-cloned effective template as

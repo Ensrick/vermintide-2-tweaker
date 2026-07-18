@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.278-dev (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix-coop]
+
+- Runtime-parity mirror of Weapon Tweaker `0.12.277-beta`: Kruber's regular
+  Saltzpyre Crossbow receives the exact additive left-unit third-person grip
+  correction `+0.100` Y / `+0.025` Z.
+- Owner, bot, remote-husk, and inventory-preview renderers consume the same
+  receiver-scoped baked descriptor; first person, native Saltzpyre, Volley
+  Crossbow, shared attachment tables, and network payloads remain unchanged.
+- Added bounded retained-position readback and mirrored runtime regression
+  coverage; the dev Hold-Pose tuner remains a local transient overlay.
+
+**Co-op verify:** Confirm `[wt:LOAD] v0.12.278-dev` on both peers, then follow
+the `0.12.277-beta` verification above. `/wt_regression_test` must pass
+`issue701_kruber_crossbow_left_grip_offset`.
+
 ## 0.12.277-dev (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
 
 - Runtime-parity mirror of Weapon Tweaker `0.12.276-beta`: CWV's Infantry
