@@ -34,6 +34,7 @@ per-frame re-apply. Single source of truth — never split the value across file
 | Necromancer Ghost Scythe (`bw_ghost_scythe`) | Kruber (`es_`) | `{0, 0, 0.6}` | #2 durable | renders as Greathammer; `es_`-only; corrected in v0.12.153-dev; husk fan-out v0.12.229-dev |
 | Elven 2H Axe / Glaive (`we_2h_axe`, `two_handed_axes_template_2`) | Kruber (`es_`) | `{0, 0, 0.285}` | #2 durable | renders as Greathammer; `es_`-only; +0.285 Z; v0.12.152-dev. Grip offset is independent of the anim bake — the Glaive's 3P anim is NOT yet baked (still in the dev picker). |
 | Empire Handgun (`es_handgun`) | Saltzpyre (`wh_`) | `{0, -0.17, -0.05}` | #2 durable | Restores the receiver-scoped correction lost after the unsafe shared-linking-table bake was removed in v0.12.136; standard Saltzpyre careers only; v0.12.249-dev. |
+| Saltzpyre Crossbow (`wh_crossbow`) | Kruber (`es_`) | `{0, 0.100, 0.025, hand="left"}` | #2 durable | User-tuned #701 value; the template is left-only, so owner, bot, husk, and inventory preview all resolve the same left 3P unit. Native Saltzpyre is excluded by the `es_` receiver gate. |
 
 The small static nudges (`we_1h_sword`/`bw_sword`/`es_1h_sword` +0.05, the wh hammers
 +0.15, the `es_2h_sword`/`wh_2h_sword` −0.085) use path #1 only and are not listed
@@ -117,12 +118,20 @@ in-game.
   created, and transient Hold-Pose sliders remain local-player-only.
 - **SINGLE SOURCE OF TRUTH.** The offset value lives only in
   `_weapon_grip_offsets`. `_DURABLE_GRIP_OFFSETS` carries no values, just keys.
+- **RETAINED EVIDENCE.** `_wt_grip_offset_policy.log_issue701_retained_once`
+  reads `Unit.local_position` back after the durable write and emits one bounded
+  `[wt:701] retained ...` line per tracked Crossbow unit. Setter success alone
+  is not verification (`PROJECT_STANDARDS.md` section 5.1c).
 
 ---
 
 ## How to add / change an offset
 
 1. Set the value in `_weapon_grip_offsets[weapon_key] = { <career_prefix>_ = {x, y, z[, hand="right"|"left"]} }`.
+   A left-only template reaches the inventory preview through
+   `_wt_grip_offset_policy.preview_slot_field`; paired templates deliberately
+   retain the historical right-hand fallback because `_spawn_item_unit` exposes
+   no hand argument.
 2. If the offset is large enough that it doesn't visually hold in-game (anything
    that gets stomped — generally anything beyond a tiny nudge), ALSO add
    `<weapon_key> = true` to `_DURABLE_GRIP_OFFSETS`.
