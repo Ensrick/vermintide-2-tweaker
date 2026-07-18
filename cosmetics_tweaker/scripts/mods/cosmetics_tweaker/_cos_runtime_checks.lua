@@ -6,6 +6,7 @@ function M.install(mod, rt_register, deps)
     local _rt_register = rt_register
     local LA_PERSIST = deps.la_persist
     local SCORE_IDENTITY = deps.score_identity
+    local HUSK_IDENTITY = deps.husk_identity
     local COS_RPC_SCHEMA = deps.rpc_schema
     local COMPOSITE_ICONS = deps.composite_icons
     local CUSTOM_HATS = deps.custom_hats
@@ -175,6 +176,39 @@ _rt_register("cos_la_score_screen_apply_wired", function()
         or SCORE_IDENTITY.should_purge_mismatch(nil)
         or not SCORE_IDENTITY.should_purge_mismatch(true) then
         return "spawn mismatch purge boundary does not distinguish human from bot owner alias"
+    end
+end)
+
+-- #698: peer-addressed appearance state must carry the exact human career.
+-- A human career change invalidates stale material/mesh state before husk
+-- wield; a bot sharing the host peer must neither consume nor purge it.
+_rt_register("issue698_husk_career_identity", function()
+    if type(HUSK_IDENTITY) ~= "table"
+        or type(HUSK_IDENTITY.new_entry) ~= "function"
+        or type(HUSK_IDENTITY.entry_matches_career) ~= "function"
+        or type(HUSK_IDENTITY.invalidate_for_career) ~= "function"
+    then
+        return "career-scoped husk identity policy missing"
+    end
+    local gk = HUSK_IDENTITY.new_entry("armor", "rt_gk", "rt_base", nil,
+        "es_questingknight")
+    local store = { rt_peer = { slot_skin = gk } }
+    local bot_removed, bot_reason = HUSK_IDENTITY.invalidate_for_career(
+        store, "rt_peer", "es_knight", false)
+    if bot_removed ~= 0 or bot_reason ~= "non-human-owner-alias"
+        or store.rt_peer.slot_skin ~= gk then
+        return "bot owner alias invalidated human appearance state"
+    end
+    local removed, reason = HUSK_IDENTITY.invalidate_for_career(
+        store, "rt_peer", "es_knight", true)
+    if removed ~= 1 or reason ~= "career-invalidated" or store.rt_peer ~= nil then
+        return "human career change retained stale Grail Knight appearance state"
+    end
+    local current = HUSK_IDENTITY.new_entry("armor", "rt_fk", "rt_base", nil,
+        "es_knight")
+    if not HUSK_IDENTITY.entry_matches_career(current, "es_knight")
+        or HUSK_IDENTITY.entry_matches_career(current, "es_questingknight") then
+        return "career match policy is not exact"
     end
 end)
 

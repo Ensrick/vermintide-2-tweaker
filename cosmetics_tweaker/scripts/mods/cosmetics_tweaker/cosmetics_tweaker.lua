@@ -70,6 +70,7 @@ mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_ins
 -- dofile time; the deferred template scrub runs from mod.update via LA_OKRI.tick.
 local LA_OKRI = mod:dofile("scripts/mods/cosmetics_tweaker/_la_okri")
 local SCORE_IDENTITY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_score_identity")
+mod._cos_husk_identity = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_husk_identity")
 local OFFHAND_PRELOAD_LIFECYCLE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_preload_lifecycle")
 mod._cos_weapon_pose_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_weapon_pose_policy")
 local WEAPON_POSES = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_weapon_poses")
@@ -85,7 +86,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.144-dev"
+local MOD_VERSION = "0.9.145-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -95,8 +96,9 @@ local MOD_VERSION = "0.9.144-dev"
 -- field). ADDITIVE optional fields (v0.9.69's revert flag; v0.9.82's #416
 -- offhand_unit vanilla-mesh field) and ADDITIVE RPC names (v0.9.70's
 -- cos_la_state_req) do NOT bump -- old peers drop/ignore them harmlessly.
--- Initial = 1.
-local COS_RPC_SCHEMA = 1
+-- Schema 2 makes wearer_career mandatory for LA state, so schema-1 peers and
+-- their unstamped records are deliberately dropped instead of guessed.
+local COS_RPC_SCHEMA = 2
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic). Namespaced
 -- under the mod table (v0.9.75-dev) so it no longer leaks into _G; read once at the
 -- boot readout near the end of this file.
@@ -4493,6 +4495,18 @@ if BackendUtils then
             local template = item_data and item_data.template
             local equips = _la_equips_by_peer and _la_equips_by_peer[_current_husk_wield.wearer_peer]
             local entry = equips and template and equips[template]
+            if entry then
+                local career_ok, career_reason =
+                    mod._cos_husk_identity.entry_matches_career(
+                        entry, _current_husk_wield.career_name)
+                if not career_ok then
+                    if printf then printf("[cos:698] HUSK mesh SKIP wearer=%s template=%s recorded=%s active=%s reason=%s",
+                        tostring(_current_husk_wield.wearer_peer), tostring(template),
+                        tostring(entry.wearer_career),
+                        tostring(_current_husk_wield.career_name), tostring(career_reason)) end
+                    entry = nil
+                end
+            end
             _dbg("[husk-mesh-swap probe] wearer=%s slot=%s template=%s cache_has_wearer=%s cache_has_entry=%s entry_kind=%s entry_key=%s",
                 tostring(_current_husk_wield.wearer_peer),
                 tostring(_current_husk_wield.slot_name),
@@ -6555,6 +6569,11 @@ local function _local_player_peer_id()
     return lp and lp.peer_id
 end
 
+mod._la_career_for_unit = function(unit)
+    return mod._cos_husk_identity.career_for_unit(
+        unit, ScriptUnit, Managers, LA_PERSIST)
+end
+
 -- v0.9.0-dev: emit dedup. CosmeticUtils.update_cosmetic_slot, PUAE
 -- .game_object_initialized, PUAE.spawn_resynced_loadout, and
 -- AttachmentUtils.hot_join_sync all call _send_la_apply for the same
@@ -6586,11 +6605,19 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
     end
     wearer_peer = wearer_peer or _local_player_peer_id()
     if not wearer_peer then return end
+    local wearer_career = mod._la_career_for_unit(unit)
+    if not wearer_career then
+        if printf then printf("[cos:698] EMIT SKIP wearer=%s slot=%s kind=%s reason=career-unproven",
+            tostring(wearer_peer), tostring(slot_name), tostring(kind)) end
+        return
+    end
 
     -- v0.9.9.4-dev: dedup key includes hand_field so the same shield/weapon
     -- equipped under different hand picks doesn't suppress legitimate
     -- second-hand emits within the 0.5s window.
-    local dedup_key = wearer_peer .. "|" .. tostring(slot_name) .. "|" .. tostring(kind) .. "|" .. tostring(armoury_key) .. "|" .. tostring(hand_field)
+    local dedup_key = wearer_peer .. "|" .. tostring(wearer_career) .. "|"
+        .. tostring(slot_name) .. "|" .. tostring(kind) .. "|"
+        .. tostring(armoury_key) .. "|" .. tostring(hand_field)
     local now = os.clock()
     local prev = _last_emit_at[dedup_key]
     if prev and (now - prev) < _EMIT_DEDUP_WINDOW then
@@ -6602,10 +6629,8 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
         -- Record + broadcast directly. Host's own broadcast loops back to
         -- itself via "all"; the cos_la_apply receiver applies locally.
         _la_equips_by_peer[wearer_peer] = _la_equips_by_peer[wearer_peer] or {}
-        _la_equips_by_peer[wearer_peer][slot_name] = {
-            kind = kind, armoury_key = armoury_key, vanilla_key = vanilla_key,
-            hand_field = hand_field,
-        }
+        _la_equips_by_peer[wearer_peer][slot_name] = mod._cos_husk_identity.new_entry(
+            kind, armoury_key, vanilla_key, hand_field, wearer_career)
         _dbg("[cos_la_apply emit] HOST wearer=%s slot=%s kind=%s key=%s hand=%s",
             tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field))
         _trace("SYNC emit HOST->all wearer=%s slot=%s kind=%s armoury=%s hand=%s",
@@ -6622,6 +6647,7 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
             armoury_key    = armoury_key,
             vanilla_key    = vanilla_key,
             hand_field     = hand_field,
+            wearer_career  = wearer_career,
         })
         return
     end
@@ -6655,6 +6681,7 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
             armoury_key  = armoury_key,
             vanilla_key  = vanilla_key,
             hand_field   = hand_field,
+            wearer_career = wearer_career,
             queued_at    = os.clock(),
         }
         _dbg("[cos_la_apply emit] CLIENT->req DEFERRED+queued (no host peer_id yet) wearer=%s slot=%s key=%s queue_size=%d",
@@ -6682,6 +6709,7 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
         armoury_key  = armoury_key,
         vanilla_key  = vanilla_key,
         hand_field   = hand_field,
+        wearer_career = wearer_career,
     })
 end
 
@@ -6740,10 +6768,9 @@ local function _drain_deferred_la_emits()
                     end
                 else
                     _la_equips_by_peer[entry.wearer_peer] = _la_equips_by_peer[entry.wearer_peer] or {}
-                    _la_equips_by_peer[entry.wearer_peer][entry.slot_name] = {
-                        kind = entry.kind, armoury_key = entry.armoury_key, vanilla_key = entry.vanilla_key,
-                        hand_field = entry.hand_field,
-                    }
+                    _la_equips_by_peer[entry.wearer_peer][entry.slot_name] =
+                        mod._cos_husk_identity.new_entry(entry.kind, entry.armoury_key,
+                            entry.vanilla_key, entry.hand_field, entry.wearer_career)
                 end
                 mod:network_send("cos_la_apply", "all", COS_RPC_SCHEMA, {
                     wearer_peer_id = entry.wearer_peer,
@@ -6753,6 +6780,7 @@ local function _drain_deferred_la_emits()
                     armoury_key    = entry.armoury_key,
                     vanilla_key    = entry.vanilla_key,
                     hand_field     = entry.hand_field,
+                    wearer_career  = entry.wearer_career,
                 })
                 _dbg("[cos_la_apply drain] HOST broadcast wearer=%s slot=%s key=%s (was queued %.1fs)",
                     tostring(entry.wearer_peer), tostring(entry.slot_name),
@@ -6768,6 +6796,7 @@ local function _drain_deferred_la_emits()
                     armoury_key  = entry.armoury_key,
                     vanilla_key  = entry.vanilla_key,
                     hand_field   = entry.hand_field,
+                    wearer_career = entry.wearer_career,
                 })
                 _dbg("[cos_la_apply drain] CLIENT->req sent wearer=%s slot=%s key=%s host=%s (was queued %.1fs)",
                     tostring(entry.wearer_peer), tostring(entry.slot_name),
@@ -7055,98 +7084,16 @@ local function _purge_stale_peer_slot(cache, wearer_peer, slot_name)
 end
 mod._purge_stale_peer_slot = _purge_stale_peer_slot
 
-local function _resolve_owner_char(owner_unit, player)
-    if not owner_unit then return nil end
-    -- Prefer the unit's actual attached slot_hat — most accurate.
-    local ext = ScriptUnit and ScriptUnit.has_extension
-        and ScriptUnit.has_extension(owner_unit, "attachment_system")
-    local slot_hat = ext and ext._attachments and ext._attachments.slots
-        and ext._attachments.slots.slot_hat
-    local item_unit = slot_hat and slot_hat.item_data and slot_hat.item_data.unit
-    if item_unit then
-        return string.match(item_unit, "^units/beings/player/([^/]+)/"), "slot_hat"
-    end
-    -- Fallback: SPProfiles base (e.g. "empire_soldier"). Coarser — only catches
-    -- cross-character mismatches, not cross-career within the same character.
-    if player then
-        local profile_index = player.profile_index
-        if type(profile_index) == "function" then
-            local ok, idx = pcall(profile_index, player); if ok then profile_index = idx end
-        end
-        local profile = profile_index and rawget(_G, "SPProfiles") and SPProfiles[profile_index]
-        return profile and profile.unit_name, "profile_base"
-    end
-    return nil, "unresolved"
-end
-
-mod._la_spawn_monitor = function(unit)
-    if not (unit and Unit.alive(unit)) then return end
-    if not (LA_BRIDGE and LA_BRIDGE.registered) then return end
-    local pm = Managers and Managers.player
-    if not (pm and pm.owner) then return end
-    local owner = pm:owner(unit)
-    if not owner then return end
-    local wearer_peer = owner.peer_id
-    if not wearer_peer then return end
-    local is_player_controlled
-    if type(owner.is_player_controlled) == "function" then
-        local ok_controlled, controlled = pcall(owner.is_player_controlled, owner)
-        if ok_controlled then is_player_controlled = controlled end
-    end
-    local equips = _la_equips_by_peer and _la_equips_by_peer[wearer_peer]
-    if not equips then
-        _dbg("[la-spawn-monitor] unit=%s wearer=%s local_id=%s career=%s — no cached LA equips",
-            tostring(unit), tostring(wearer_peer),
-            tostring(owner.local_player_id and owner:local_player_id() or "?"),
-            tostring(LA_PERSIST and LA_PERSIST._career_name_for_player(owner)))
-        return
-    end
-    local owner_char, source = _resolve_owner_char(unit, owner)
-    local career = LA_PERSIST and LA_PERSIST._career_name_for_player(owner)
-    local entry_keys = {}
-    for k in pairs(equips) do entry_keys[#entry_keys+1] = k end
-    table.sort(entry_keys)
-    _dbg("[la-spawn-monitor] unit=%s wearer=%s career=%s owner_char=%s (via %s) cached_slots={%s}",
-        tostring(unit), tostring(wearer_peer), tostring(career),
-        tostring(owner_char), tostring(source), table.concat(entry_keys, ","))
-    -- Check the cached slot_hat specifically (the issue #14 failure mode).
-    local hat_entry = equips.slot_hat
-    if not (hat_entry and hat_entry.armoury_key) then return end
-    local variant = _resolve_la_variant(hat_entry.armoury_key)
-    local la_unit_path = variant and variant.new_units and variant.new_units[1]
-    if not la_unit_path then return end
-    local profile_base = (source == "profile_base") and owner_char or nil
-    local owner_char_path
-    if source == "slot_hat" then
-        local ext = ScriptUnit and ScriptUnit.has_extension(unit, "attachment_system")
-        local s = ext and ext._attachments and ext._attachments.slots and ext._attachments.slots.slot_hat
-        owner_char_path = s and s.item_data and s.item_data.unit
-    end
-    local ok, reason = _la_chars_compatible(owner_char_path, la_unit_path, profile_base)
-    if not ok then
-        -- ALWAYS log (this is the regression detector, not a debug dump).
-        mod:warning("[la-spawn-monitor] CROSS-SKELETON MISMATCH wearer=%s career=%s cached_armoury=%s la_path=%s — %s. v0.9.11 guard SHOULD bail the apply, but if you see vanilla logic patching this anyway it's a regression of issue #14.",
-            tostring(wearer_peer), tostring(career),
-            tostring(hat_entry.armoury_key), tostring(la_unit_path), tostring(reason))
-        -- #513: only a HUMAN mismatch proves that this peer's stored hat is
-        -- stale after a career switch. Bots share their host's peer_id, so a
-        -- bot mismatch is expected ownership aliasing; purging here erased
-        -- the host's valid hat and made the host score preview lose its LA
-        -- paint while a client retained a later broadcast. The apply guard
-        -- above still blocks the cross-skeleton attach in both cases.
-        if SCORE_IDENTITY.should_purge_mismatch(is_player_controlled) then
-            _purge_stale_peer_slot(_la_equips_by_peer, wearer_peer, "slot_hat")
-        elseif printf then
-            mod._cos513_bot_alias_seen = mod._cos513_bot_alias_seen or {}
-            local alias_token = tostring(wearer_peer) .. "|" .. tostring(career)
-            if not mod._cos513_bot_alias_seen[alias_token] then
-                mod._cos513_bot_alias_seen[alias_token] = true
-                printf("[la-state] BOT-OWNER-ALIAS retained peer=%s career=%s slot=slot_hat player_controlled=%s",
-                    tostring(wearer_peer), tostring(career), tostring(is_player_controlled))
-            end
-        end
-    end
-end
+mod._la_spawn_monitor = mod._cos_husk_identity.make_spawn_monitor({
+    bridge = LA_BRIDGE, store = _la_equips_by_peer, persistence = LA_PERSIST,
+    score_identity = SCORE_IDENTITY, script_unit = ScriptUnit, unit_api = Unit,
+    managers = function() return Managers end,
+    profiles = function() return rawget(_G, "SPProfiles") end,
+    resolve_variant = _resolve_la_variant, chars_compatible = _la_chars_compatible,
+    purge = _purge_stale_peer_slot, debug = _dbg,
+    warning = function(...) mod:warning(...) end,
+    print = function(...) if printf then printf(...) end end,
+})
 
 -- Wire-up note: SimpleInventoryExtension.extensions_ready is already hooked
 -- inside `_la_persistence.lua` for the auto-restore queue. VMF's hook_safe
@@ -7901,6 +7848,16 @@ mod._la_reconcile = function(wearer_peer, slot_name, tag, allow_pulse)
     end
     local wu = _wearer_unit_for_peer(wearer_peer)
     if not wu then return false, "wearer-not-spawned" end
+    local active_career = mod._la_career_for_unit(wu)
+    local career_ok, career_reason = mod._cos_husk_identity.entry_matches_career(
+        eq, active_career)
+    if not career_ok then
+        _purge_stale_peer_slot(_la_equips_by_peer, wearer_peer, slot_name)
+        if printf then printf("[cos:698] RECONCILE SKIP wearer=%s slot=%s kind=%s recorded=%s active=%s reason=%s",
+            tostring(wearer_peer), tostring(slot_name), tostring(eq.kind),
+            tostring(eq.wearer_career), tostring(active_career), tostring(career_reason)) end
+        return false, career_reason
+    end
     local applied = _apply_la_on_unit(wu, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key)
     if applied and (eq.kind == "offhand" or eq.kind == "illusion") then
         if allow_pulse then
@@ -7946,6 +7903,7 @@ mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version
     local kind        = payload.kind
     local armoury_key = payload.armoury_key
     local vanilla_key = payload.vanilla_key
+    local wearer_career = payload.wearer_career
     -- v0.9.9.4-dev: hand_field is new; older clients omit it. Default to
     -- "left_hand_unit" for offhand/illusion (legacy behavior) so peers on
     -- pre-v0.9.9.4 versions still sync correctly.
@@ -7992,6 +7950,15 @@ mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version
         return
     end
     if not (slot_name and kind and armoury_key) then return end
+    local sender_unit = _wearer_unit_for_peer(sender_peer_id)
+    local sender_live_career = sender_unit and mod._la_career_for_unit(sender_unit)
+    local career_ok, career_reason = mod._cos_husk_identity.transport_career_valid(
+        wearer_career, sender_live_career)
+    if not career_ok then
+        if printf then printf("[cos:698] REQ SKIP wearer=%s slot=%s reason=%s",
+            tostring(sender_peer_id), tostring(slot_name), tostring(career_reason)) end
+        return
+    end
     -- v0.9.3.2-hotfix: accept armoury_keys present in EITHER our bridge index
     -- OR LA's own SKIN_LIST directly. The bridge's register_all only registers
     -- swap_hand == "hat" or "armor" variants — shields and weapons (swap_hand
@@ -8014,10 +7981,8 @@ mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version
         return
     end
     _la_equips_by_peer[sender_peer_id] = _la_equips_by_peer[sender_peer_id] or {}
-    _la_equips_by_peer[sender_peer_id][slot_name] = {
-        kind = kind, armoury_key = armoury_key, vanilla_key = vanilla_key,
-        hand_field = hand_field,
-    }
+    _la_equips_by_peer[sender_peer_id][slot_name] = mod._cos_husk_identity.new_entry(
+        kind, armoury_key, vanilla_key, hand_field, wearer_career)
     mod:network_send("cos_la_apply", "all", COS_RPC_SCHEMA, {
         wearer_peer_id = sender_peer_id,
         slot           = slot_name,
@@ -8025,6 +7990,7 @@ mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version
         armoury_key    = armoury_key,
         vanilla_key    = vanilla_key,
         hand_field     = hand_field,
+        wearer_career  = wearer_career,
     })
 end)
 
@@ -8057,6 +8023,7 @@ mod:network_register("cos_la_state_req", function(sender_peer_id, schema_version
                         armoury_key    = entry.armoury_key,
                         vanilla_key    = entry.vanilla_key,
                         hand_field     = entry.hand_field,
+                        wearer_career  = entry.wearer_career,
                     })
                     n = n + 1
                 end
@@ -8223,6 +8190,7 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
     local kind         = payload.kind
     local armoury_key  = payload.armoury_key
     local vanilla_key  = payload.vanilla_key
+    local wearer_career = payload.wearer_career
     -- v0.9.9.4-dev: tolerate older peers that don't send hand_field;
     -- treat as left_hand_unit for offhand/illusion (legacy default).
     local hand_field   = payload.hand_field
@@ -8250,6 +8218,15 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
         return
     end
     if not (wearer and slot_name and kind and armoury_key) then return end
+    local wearer_unit = _wearer_unit_for_peer(wearer)
+    local active_career = wearer_unit and mod._la_career_for_unit(wearer_unit)
+    local career_ok, career_reason = mod._cos_husk_identity.transport_career_valid(
+        wearer_career, active_career)
+    if not career_ok then
+        if printf then printf("[cos:698] RECV SKIP wearer=%s slot=%s reason=%s",
+            tostring(wearer), tostring(slot_name), tostring(career_reason)) end
+        return
+    end
 
     -- v0.9.0.7-hotfix: MIRROR THE CACHE WRITE ON CLIENTS.
     -- Previously only the HOST's `cos_la_apply_req` register handler (see
@@ -8267,10 +8244,8 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
     -- host too, but the write is idempotent (entry already there from
     -- the cos_la_apply_req handler).
     _la_equips_by_peer[wearer] = _la_equips_by_peer[wearer] or {}
-    _la_equips_by_peer[wearer][slot_name] = {
-        kind = kind, armoury_key = armoury_key, vanilla_key = vanilla_key,
-        hand_field = hand_field,
-    }
+    _la_equips_by_peer[wearer][slot_name] = mod._cos_husk_identity.new_entry(
+        kind, armoury_key, vanilla_key, hand_field, wearer_career)
     -- v0.9.82-dev (#416): mutual exclusion -- an LA armoury pick supersedes any
     -- parallel vanilla mesh on the SAME (wearer, slot, hand) so the husk vanilla
     -- branch can't shadow the LA mesh (the switch vanilla->LA case).
@@ -8748,14 +8723,22 @@ end
 mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, world, equipment, slot_name, unit_1p, unit_3p)
     -- Resolve which peer owns this husk extension.
     local husk_unit = self and self._unit
-    local wearer_peer = nil
     local pm = Managers and Managers.player
-    if pm and pm._players and husk_unit then
-        for _, p in pairs(pm._players) do
-            if p.player_unit == husk_unit then
-                wearer_peer = p.peer_id
-                break
-            end
+    local wearer_player = mod._cos_husk_identity.player_for_unit(pm, husk_unit)
+    local wearer_peer = wearer_player and wearer_player.peer_id
+    local wearer_is_player_controlled =
+        mod._cos_husk_identity.player_controlled(wearer_player)
+    if wearer_peer and wearer_is_player_controlled ~= true then
+        if printf then printf("[cos:698] HUSK identity SKIP wearer=%s reason=non-human-owner-alias",
+            tostring(wearer_peer)) end
+        wearer_peer = nil
+    elseif wearer_peer then
+        local removed, reason, removed_slots = mod._cos_husk_identity.invalidate_for_career(
+            _la_equips_by_peer, wearer_peer, self and self._career_name, true)
+        if removed > 0 and printf then
+            printf("[cos:698] HUSK career-change invalidated wearer=%s active=%s slots=%s reason=%s",
+                tostring(wearer_peer), tostring(self and self._career_name),
+                table.concat(removed_slots, ","), tostring(reason))
         end
     end
     -- v0.9.0.8-hotfix: diagnostic log.
@@ -8782,7 +8765,12 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
         tostring(wearer_peer), tostring(slot_name), tostring(husk_unit))
     -- Set context (stack-style).
     local prev = _current_husk_wield
-    _current_husk_wield = { wearer_peer = wearer_peer, husk_unit = husk_unit, slot_name = slot_name }
+    _current_husk_wield = {
+        wearer_peer = wearer_peer,
+        husk_unit = husk_unit,
+        slot_name = slot_name,
+        career_name = self and self._career_name,
+    }
     -- v0.9.2.1: ALWAYS delegate to vanilla. The v0.9.2 pre-flight bail
     -- (skipping the vanilla call when can_get reported a missing unit)
     -- left `self.wielded_slot` nil, which made vanilla's subsequent
@@ -8936,8 +8924,16 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
             local wielded_template = item_data and item_data.template
             for stored_key, entry in pairs(equips) do
                 if entry and entry.kind and entry.armoury_key then
+                    local career_ok, career_reason =
+                        mod._cos_husk_identity.entry_matches_career(
+                            entry, self and self._career_name)
                     local should_apply = false
-                    if entry.kind == "hat" and stored_key == "slot_hat" then
+                    if not career_ok then
+                        if printf then printf("[cos:698] HUSK repaint SKIP wearer=%s stored_key=%s kind=%s recorded=%s active=%s reason=%s",
+                            tostring(wearer_peer), tostring(stored_key), tostring(entry.kind),
+                            tostring(entry.wearer_career), tostring(self and self._career_name),
+                            tostring(career_reason)) end
+                    elseif entry.kind == "hat" and stored_key == "slot_hat" then
                         should_apply = (slot_name == "slot_hat")
                     elseif entry.kind == "armor" and stored_key == "slot_skin" then
                         should_apply = true
@@ -9015,24 +9011,20 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
     if not pm or not husk_unit then
         return func(self, slot_name, item_data)
     end
-    -- Resolve wearer peer (mirror the husk-wield-wrap lookup pattern).
-    local wearer_peer = nil
-    if pm.owner then
-        local owner = pm:owner(husk_unit)
-        wearer_peer = owner and owner.peer_id or nil
-    end
-    if not wearer_peer and pm._players then
-        for _, p in pairs(pm._players) do
-            if p.player_unit == husk_unit then
-                wearer_peer = p.peer_id
-                break
-            end
-        end
-    end
+    local wearer_player = mod._cos_husk_identity.player_for_unit(pm, husk_unit)
+    local wearer_peer = wearer_player and wearer_player.peer_id
     local cached = wearer_peer and _la_equips_by_peer
         and _la_equips_by_peer[wearer_peer]
         and _la_equips_by_peer[wearer_peer][slot_name]
     if not cached or cached.kind ~= "hat" or not cached.armoury_key then
+        return func(self, slot_name, item_data)
+    end
+    local career_ok, career_reason, active_career =
+        mod._cos_husk_identity.validate_live_entry(
+            cached, husk_unit, ScriptUnit, Managers, LA_PERSIST)
+    if not career_ok then
+        if printf then printf("[cos:698] HUSK hat SKIP wearer=%s active=%s reason=%s",
+            tostring(wearer_peer), tostring(active_career), tostring(career_reason)) end
         return func(self, slot_name, item_data)
     end
     local la = get_mod("Loremasters-Armoury")
@@ -9414,6 +9406,7 @@ if AttachmentUtils then
                                 armoury_key    = entry.armoury_key,
                                 vanilla_key    = entry.vanilla_key,
                                 hand_field     = entry.hand_field,
+                                wearer_career  = entry.wearer_career,
                             })
                             n = n + 1
                         end
@@ -10408,6 +10401,7 @@ end)
 local _cos_runtime_checks = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_runtime_checks")
 _cos_runtime_checks.install(mod, _rt_register, {
     la_persist = LA_PERSIST, score_identity = SCORE_IDENTITY,
+    husk_identity = mod._cos_husk_identity,
     rpc_schema = COS_RPC_SCHEMA, composite_icons = COMPOSITE_ICONS,
     custom_hats = CUSTOM_HATS, la_bridge = LA_BRIDGE, gk_set = GK_SET,
     glow_picker = GlowPicker, weapon_poses = WEAPON_POSES,

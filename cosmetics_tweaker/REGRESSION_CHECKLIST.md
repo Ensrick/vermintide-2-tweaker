@@ -304,6 +304,22 @@ Last updated: 2026-07-16.
 | Detection | (a) `/cos_regression_test` passes the `la_chars_compatible_*` checks and `cos_la_score_screen_apply_wired`. (b) A bot mismatch must be paired with `BOT-OWNER-ALIAS retained`; no bot receives a mesh swap. (c) Manual: equip an LA hat on GK, start a mission with a WP bot, and confirm GK keeps the LA hat while WP remains vanilla through the score lineup. |
 | Tracking | GitHub issue #14. |
 
+### issue698-career-scoped-husk-material — stale Grail Knight armor cannot repaint Foot Knight
+
+**[MULTIPLAYER]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | After a remote human switches from Grail Knight to Foot Knight on the same peer, the observer's new Foot Knight husk is repainted with the prior Grail Knight armor. |
+| Root cause | `_la_equips_by_peer` retained a peer-only `slot_skin` record across the career change, and the husk wield loop treated every armor entry as applicable without proving current career identity. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.145-dev |
+| Category | INTEGRATION |
+| Repro | Two Cosmetics-matched players: equip a distinctive Grail Knight armor, join the same lobby, switch that human to Foot Knight, and observe from the other peer through spawn/wield and one level transition. Keep a host-owned bot present as an owner-alias control. |
+| Expected post-fix | Every stored/replayed entry is career-stamped. The Foot Knight never receives the old Grail Knight material; a confirmed human career change clears stale/unstamped slots before wield. A bot sharing the host peer neither consumes nor clears human state. |
+| Detection | Offline `test_cos_husk_identity.lua` passes all three #698 tests; `/cos_regression_test` passes `issue698_husk_career_identity`; co-op log may contain `[cos:698] HUSK career-change invalidated` and must contain no later stale GK repaint on the Foot Knight. |
+| Tracking | GitHub issue #698. |
+
 
 ---
 

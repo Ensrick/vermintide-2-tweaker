@@ -27,7 +27,7 @@ $CANONICAL_SURFACES = @(
 )
 $CANONICAL_REPLAY_EDGES = @(
     'instance_load', 'initial_spawn', 'equip', 'wield',
-    'customization_change', 'style_change', 'mission_transition', 'respawn',
+    'customization_change', 'style_change', 'career_change', 'mission_transition', 'respawn',
     'hot_join', 'peer_ready', 'parity_ready', 'rejoin',
     'preview_open', 'preview_reopen', 'lobby_score_create',
     'mod_disable_restore'

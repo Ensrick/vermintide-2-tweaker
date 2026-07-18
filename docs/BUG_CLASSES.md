@@ -2221,3 +2221,42 @@ by `buff_to_add` template instead of retaining per-source ownership.
   merely to distinguish sources. Test two sources, one source leaving, the
   final source leaving, driver removal, and repeated idempotent updates. Career
   Tweaker `_crt_foot_knight.lua` is the reference implementation.
+
+## 61. Peer-addressed appearance state survives a human career change
+
+**First confirmed:** 2026-07-17 (Cosmetics Tweaker issue #698).
+**Lives in:** material, mesh, glow, pose, or presentation caches addressed only
+by network peer and replayed onto a newly spawned remote husk.
+
+### Symptoms
+- A remote player switches career without leaving the lobby and their new body
+  receives armor, a hat, or another appearance choice from the prior career.
+- The stale repaint can occur after the correct vanilla body has already spawned,
+  making the failure look like a material race rather than an identity leak.
+- A host-owned bot can make a peer-only fix worse because bots share their
+  network owner's peer id.
+
+### Diagnosis pattern
+1. Treat `peer_id` as a transport address, not wearer identity. Compare the
+   cached record's creation career with the live render unit's inventory
+   `_career_name`; `RemotePlayer.career_name` resolves the synchronized
+   profile/career tuple, while `SimpleHuskInventoryExtension.init` stamps the
+   same career on the render-side inventory.
+2. Audit every replay edge, not only the original apply: deferred sends,
+   authoritative rebroadcast, pull-on-ready, hot join, transition reconcile,
+   husk pre-spawn mesh substitution, and post-wield material paint.
+3. Prove that a mismatched unit is the player-controlled human before purging.
+   A bot mismatch is only an owner-peer alias and must not erase human state.
+
+### Fix template
+- Stamp every peer-store entry and required RPC payload with the exact wearer
+  career; bump the RPC schema when introducing that required field so legacy
+  unstamped records fail closed.
+- Before a human husk wield/spawn, invalidate mismatched and unstamped entries.
+  Require the same exact career at mesh substitution and material reconcile.
+- Reject bots from consuming the human peer store and never let their career
+  mismatch purge it. Test one human career swap, one same-career control, one
+  shared-peer bot, transition, hot join, and missing legacy identity.
+- Register career change as a canonical appearance replay edge. Cosmetics
+  Tweaker `_cos_husk_identity.lua` and `test_cos_husk_identity.lua` are the
+  reference policy and regression fixture.

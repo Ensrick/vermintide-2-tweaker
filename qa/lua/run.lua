@@ -157,6 +157,7 @@ local suites = {
     "test_dcp_portrait_materials",
     "test_dcp_player_scope_probe",
     "test_cos_score_identity",
+    "test_cos_husk_identity",
     "test_cos_custom_hats",
     "test_cos_grail_knight_set",
     "test_gut_inventory_preview_lighting",
