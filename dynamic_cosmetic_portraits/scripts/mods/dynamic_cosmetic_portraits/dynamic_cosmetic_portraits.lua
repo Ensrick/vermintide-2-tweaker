@@ -13,7 +13,7 @@ end
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.26-dev"
+local MOD_VERSION = "0.1.27-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -1182,7 +1182,7 @@ _rt_register("portrait_override_player_scoped", function()
         -- safe LOCAL-player accessor, not a players() scan.
         { '_local_player_safe(' .. 'pm)',
           "local override detection must key off the LOCAL player, not a players() scan" },
-        -- 0.1.26-dev: score tiles resolve from the record's own synced
+        -- 0.1.27-dev: score tiles resolve from the record's own synced
         -- cosmetics (scoreboard_helper hero_skin/hat), never a peer lookup --
         -- player_from_peer_id cannot resolve bots (they share the host peer id).
         { 'rec.hero_' .. 'skin',
