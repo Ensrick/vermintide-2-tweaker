@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.445-dev"
+local MOD_VERSION = "0.1.446-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -61,6 +61,7 @@ _om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_cr
 _om.crowbill_hammer_mode = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_hammer_mode")
 _om.crowbill_presentation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_presentation")
 _om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_runtime")
+_om.launcher_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_launcher_family")
 _om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
 _om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inventory_icons")
 -- Public read-only-by-convention contract for sibling renderers. Consumers
@@ -75,7 +76,7 @@ _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
 mod._cwv_preview_descriptor = _om.old_musket_preview
-_om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview })
+_om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.launcher_family })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
 _om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
@@ -4376,6 +4377,8 @@ do
 		if crowbill_aliases > 0 then
 			mod:info("[cwv:604] installed %d Crowbill inventory-package wire aliases", crowbill_aliases)
 		end
+		-- Issue #627: wire-safe forward-alias for the custom Outrider launcher unit.
+		_om.launcher_family.install_network_package_aliases(nl_inventory)
 	end
 end
 
