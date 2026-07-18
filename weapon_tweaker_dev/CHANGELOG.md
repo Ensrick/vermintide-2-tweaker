@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.274-dev (2026-07-17) - #661 private-clone action ownership [verify-fix]
+
+- Mirrored beta 0.12.273's provider-neutral clone-preparation contract while
+  preserving the friends-only tuning overlay and `wt_dev` namespace.
+- Private providers can now discard copied donor claims and canonicalize only
+  source-proven inherited career actions before WT claims the same row.
+- Repeated preparation is inert; unproven or later foreign replacements remain
+  conflicts and provider release remains exact-owner safe.
+
+**Solo verify:** With CWV enabled, wield a CWV weapon on Bardin and Kruber and
+use each career ability before and after swapping weapons. `/wt_regression_test`
+must pass without `conflict:action_career_dr_3` or
+`conflict:action_career_es_4`.
+
 ## 0.12.273-dev (2026-07-17) - #661 career-action reconciliation [verify-fix]
 
 - Reconciled every career action after the deferred post-CWV availability pass, including alternate ability rows.

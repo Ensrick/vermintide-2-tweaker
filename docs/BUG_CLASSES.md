@@ -2141,6 +2141,8 @@ whose activated ability declares `action_name`.
 - Several otherwise unrelated weapons fail for the same career.
 - Copying only `activated_ability[1]` appears to work until a career selects an
   alternate row (Waywatcher's piercing action is the current two-row case).
+- Cross-mod startup reports `conflict:action_career_*` even though each
+  provider selected the same canonical action name.
 
 ### Diagnosis pattern
 1. Read `CharacterStateHelper._get_chain_action_data`; vanilla iterates
@@ -2153,6 +2155,10 @@ whose activated ability declares `action_name`.
 3. Verify each named `ActionTemplates` row exists and is present by identity on
    every enabled private/cross-career template. Ability-class careers do not
    need a fabricated weapon action.
+4. At every deep-clone boundary, inspect the private claim metadata as well as
+   `template.actions`. A deep clone can copy the donor's owner registry and
+   canonical action rows by value, producing false ownership and new table
+   identities even though the declared donor remains canonical.
 
 ### Fix template
 - Use `tools/shared_lib/_lib_career_weapon_actions.lua`; collect every declared
@@ -2169,11 +2175,17 @@ whose activated ability declares `action_name`.
   integration. Do not hand-copy `activated_ability[1]` in individual weapon
   constructors: that misses alternate rows and lets the next private template
   bypass the contract.
+- Before the first claim on a declared private clone, call the shared
+  `prepare_inherited_clone` boundary with an exact source token. It discards
+  copied donor claims and restores only rows whose donor is still the exact
+  canonical `ActionTemplates` value. Repeated preparation is a no-op, so a
+  later foreign replacement remains a hard conflict instead of being clobbered.
 - Missing career settings/action providers are integration failures: emit a
   bounded runtime error and fail the offline matrix. Never silently skip them.
 - Test all ten current actions, the Waywatcher alternate, existing-row identity,
-  missing providers, setting reapply, and disable cleanup. WOC 0.1.26-dev, WT
-  0.12.268-beta, and WT-dev 0.12.269-dev are the reference consumers.
+  missing providers, clone-claim contamination, repeated preparation, foreign
+  replacement, setting reapply, and disable cleanup. Issue #661 owns the
+  WT/CWV/WOC cross-provider regression.
 
 ## 60. Non-stacking aura drivers remove another source's buff
 
