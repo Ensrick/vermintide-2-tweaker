@@ -1,5 +1,30 @@
 # Crafting in Modded Changelog
 
+## 0.8.93-dev (2026-07-18): #703 CWV rows no longer render locked in the Athanor picker
+
+- The Athanor weapon list's lock badge is a vanilla OWNERSHIP gate: vanilla
+  `_sync_backend_loadout` resolves each row through
+  `backend_interface_items:get_item_from_key(item_key)` and stamps
+  `content.locked = not backend_id` (`hero_window_weave_forge_weapons.lua:555`
+  + `:565`), which draws the `hero_icon_locked` pass and saturates the icon.
+  CWV entries are registration-only definitions with no owned backend instance
+  (issue 592), so the lookup could never succeed and every CWV row drew a false
+  padlock - while selecting and crafting kept working because CIM already
+  overrides `_present_item` / `_on_list_index_selected`.
+- Fix rides the existing consolidated `_sync_backend_loadout` hook (no new hook
+  registration): rows vanilla just locked are re-classified through the issue
+  628 contract's `provider_for` ladder and cleared only when the key resolves
+  to provider=cwv. Vanilla and non-cwv provider rows keep their vanilla lock
+  state, so genuinely unavailable vanilla items stay locked.
+- Added `/cim_regression_test` check `issue703_athanor_cwv_rows_unlocked`
+  pinning the classifier boundary (cwv-prefixed true; vanilla, woc, and
+  empty/nil keys false) and the contract dependency.
+
+**Verification:** open the Athanor weapon picker on a career with CWV variants
+(e.g. Kruber melee): CWV rows show no padlock and no desaturated icon; a vanilla
+weapon you own no instance of still shows its lock. Run `/cim_regression_test`
+and require `issue703_athanor_cwv_rows_unlocked` PASS.
+
 ## 0.8.92-dev (2026-07-17): #83 dynamic Athanor material closure
 
 - Closed the post-construction gap in CIM's in-mission forge safety. Vanilla
