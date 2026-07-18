@@ -966,6 +966,17 @@ full pipeline is:
    The merged source is PART of the ship, not an optional follow-up. Branch
    protection applies to administrators and must not be bypassed for routine work.
 
+**Atomic source/root-bundle gate (issue #724).** A PR that changes an active
+mod's runtime source, `itemV2.cfg`, or newest CHANGELOG release identity must
+also change that mod's exact root `.mod_bundle`, identified by the canonical
+`RootBundle` field in `tools/mod-inventory.psd1`. A common VMF bundle or custom
+asset sidecar cannot stand in for the root. `qa/check_release_bundle_atomicity.ps1`
+enforces this in pre-commit, Quick/full QA, and hosted PR QA. Docs/tests-only and
+bundle-only reconciliation changes remain valid. The existing `VT2-Promotion`
+sanction permits only stable metadata-only promotion diffs; it never exempts a
+runtime source delta. This closes the PR #759/#765/#766/#767/#769 class where
+source/version/config merged first and its compiled artifact followed later.
+
 Do NOT downgrade a `-dev` update to deploy-only "to be safe". For a mod the
 user is subscribed to, Steam re-syncs the Workshop bundle over any local
 deploy, so the upload is the ONLY path that reaches the user's game; and
@@ -1892,6 +1903,7 @@ see what was open on a given date.
 | `check_stale_docs.ps1` | `qa/` | audit/review markdowns >14 days without SUPERSEDED banner | `.\qa\check_stale_docs.ps1 [-Fix]` |
 | `run_selftests.ps1` | `qa/` | regression in any QA check's own parsing/decision logic + ship.ps1 step-6 labeling logic (runs every script's `-SelfTest`; blocking) | `.\qa\run_selftests.ps1` |
 | `check_lua_unit_tests.ps1` | `qa/` + `qa/lua/` | deterministic pure-Lua transformations under a pinned offline Lua 5.1.5 runtime; harness self-test includes a planted failure | `.\qa\check_lua_unit_tests.ps1 [-SelfTest]` |
+| `check_release_bundle_atomicity.ps1` | `qa/` + `qa/fixtures/release_bundle_atomicity/` | runtime/version/config/newest-release diff without the owning exact root bundle (#724) | `.\qa\check_release_bundle_atomicity.ps1 [-Staged] [-Range <range>] [-SelfTest]` |
 | `run_all.ps1` | `qa/` | all of the above | `.\qa\run_all.ps1 [-Quick] [-SkipLua]` |
 | GitHub Action | `.github/workflows/qa.yml` | runs `run_all.ps1` (full policy engine) + an all-mods `lint-mod.ps1` step + the blocking `tools/github/check-lifecycle-cardinality.ps1` tracker guard (issue #750) on push + PR | automatic |
 
