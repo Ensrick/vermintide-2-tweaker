@@ -203,6 +203,13 @@ score/team presentation, and baked transforms remain untouched.
 - **New (career, weapon) unlock or can_wield / career-ability behavior** → `_wt_availability.lua`; the (career, weapon) pair itself goes in `wt_unlock_data.lua`.
 - **New regression check** → `_rt_register("name", fn)` inline in the entry next to the code it probes (the alias is live); the harness itself is frozen.
 - **New per-template 3P remap catalog row** → `_wt_anim_remap_data.lua`; keep the returned table declarative and engine-free.
+- **New effective clone template from CWV** → if it inherits a donor action
+  graph, alias both its `_wt_anim_remap_data.lua` receiver map and
+  `wt_wield_patches.lua` row to the donor table **by identity**. WT resolves by
+  the effective template name supplied at wield time; copying a table permits
+  later donor safety fixes to drift, while omitting the clone key falls through
+  to raw donor events on the receiver skeleton (#732). Preserve native
+  `prefix = false` branches and cover owner plus husk state with one contract.
 - **New bounded weapon-behavior scalar** → a pure `_wt_<feature>.lua` planner/runtime module, wired into the entry lifecycle like `_wt_bolt_staff_overcharge.lua`; snapshot and restore the exact pre-WT value.
 - **New cross-career weapon FX presentation** → an engine-free target-policy sibling plus a focused `_wt_<feature>.lua` runtime module; separate owner-local and synchronized observer surfaces from source before choosing hooks.
 - **New 3P redirect / shared remap table / resolver, or a change to the `Unit.animation_event` funnel or the wield-state hooks** → `_wt_anim_remap.lua` (keep its hot tables file-local upvalues; export via `mod._wt` only for non-hot-path cross-module reads).

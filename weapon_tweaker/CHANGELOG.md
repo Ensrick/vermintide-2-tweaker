@@ -1,5 +1,25 @@
 # Weapon Tweaker Changelog
 
+## 0.12.276-beta (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
+
+- CWV's Infantry Combat Style reports its deep-cloned effective template as
+  `cwv_infantry_spear_template`, while WT's receiver-safe Saltzpyre 3P remap
+  and wield contracts were keyed only by the elf-spear donor template. The
+  first light therefore reached Saltzpyre's animation graph as
+  `attack_swing_down_left_axe` and faulted in `Unit.animation_event`.
+- The effective clone now shares the donor's remap and wield tables by identity,
+  preserving all three standard Saltzpyre billhook-vocabulary routes and the
+  native Kerillian no-remap branch without duplicating data.
+- Offline and `/wt_regression_test` coverage lock table identity, the first-light
+  target `attack_swing_stab`, and WHC/Bounty Hunter/Zealot wield routing.
+
+**Solo verify:** Confirm `[wt:LOAD] v0.12.276-beta`. On Witch Hunter Captain,
+Bounty Hunter, or Zealot, equip Tuskgor Spear, select Infantry Combat Style,
+then perform the first light and the complete light/heavy/block/push chains.
+The game must not crash and `/wt_regression_test` must pass
+`issue732_cwv_infantry_spear_saltzpyre_remap`. One player is sufficient for
+the reported owner-side crash.
+
 ## 0.12.275-beta (2026-07-18) - #724 release/source reconciliation [tooling]
 
 - Rebuilt the public beta from the current merged source so its tracked bundle,

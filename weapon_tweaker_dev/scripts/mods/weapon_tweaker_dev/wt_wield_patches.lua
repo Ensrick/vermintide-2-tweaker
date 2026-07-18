@@ -254,4 +254,12 @@ M.bulk = {
     wh_deus_01_template_1 = { es_mercenary = "to_repeating_handgun", es_huntsman = "to_repeating_handgun", es_knight = "to_repeating_handgun", es_questingknight = "to_repeating_handgun", we_waywatcher = "to_repeating_crossbow_elf", we_maidenguard = "to_repeating_crossbow_elf", we_shade = "to_repeating_crossbow_elf", we_thornsister = "to_repeating_crossbow_elf" },
 }
 
+-- #732: the CWV Infantry spear is a clone of the elf spear action template.
+-- Keep its receiver-side 3P wield vocabulary on the same table object as the
+-- donor so either mod load order receives the identical Saltzpyre contract.
+local infantry_spear_donor = rawget(M.patches, "two_handed_spears_elf_template_1")
+if type(infantry_spear_donor) == "table" then
+    rawset(M.patches, "cwv_infantry_spear_template", infantry_spear_donor)
+end
+
 return M

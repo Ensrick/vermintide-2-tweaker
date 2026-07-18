@@ -168,6 +168,20 @@ only rows keyed by those effective events. Bakes must merge into the receiver ma
 contract must enumerate `anim_event_3p or anim_event` for every donor action against either an
 explicit remap or the receiver template's native vocabulary.
 
+CWV Combat Styles add a second identity boundary: WT stores the effective
+template name returned by CWV in per-unit wield state before resolving this
+catalog. If the style deep-clones a donor action graph under a new template
+name, that clone must share the donor's receiver-remap and 3P-wield tables by
+identity. Otherwise the clone can emit a source action's `anim_event_3p` without
+the donor's receiver-safe translation. Issue #732 demonstrated the C-API
+failure: `light_attack_stab_1` from `two_handed_spears_elf_template_1` authors
+`attack_swing_down_left_axe` [src:
+`scripts/settings/equipment/weapon_templates/spears_wood_elf.lua:882-888`];
+on Saltzpyre the unaliased `cwv_infantry_spear_template` reached
+`Unit.animation_event(owner_unit, event_3p)` [src:
+`scripts/unit_extensions/weapons/weapon_unit_extension.lua:644-652`] instead of
+the donor contract's `attack_swing_stab` target.
+
 ### `wield_anim_career_3p` is the render lever + the cross-character port pipeline
 
 The in-mission wield STANCE and the keep-previewer stance both read
