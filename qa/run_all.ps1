@@ -129,6 +129,12 @@ Run-Check "check_retired_big_rebalance"        { & (Join-Path $here "check_retir
 # attempting to regenerate or infer from an incomplete CI ref inventory.
 Run-Check "check_branch_reconciliation_census" { & (Join-Path $here "check_branch_reconciliation_census.ps1") -Quiet:$Quiet }
 Run-Check "check_in_progress"                 { & (Join-Path $here "check_in_progress.ps1")                 -Quiet:$Quiet } -Policy 'Advisory'
+# check_pipeline_state is advisory-only: the pipeline-state ladder (source ->
+# CHANGELOG -> bundle -> upload) surfaces stranded fixes ([not deployed] entries,
+# uploaded-but-user-on-older-version). It ALWAYS exits 0 and reads workshop_log.txt
+# when present (marks the upload column n/a in CI where it is absent), so it can
+# never fail the gate - pinned Advisory like check_in_progress. See CHECKS.md row 61.
+Run-Check "check_pipeline_state"              { & (Join-Path $here "check_pipeline_state.ps1")              -Quiet:$Quiet } -Policy 'Advisory'
 # Pure Lua transformations run under the pinned, offline Lua 5.1 host runtime.
 # Keep this before the Quick return: it is deliberately part of both fast local
 # feedback and the full CI gate (issue #544).

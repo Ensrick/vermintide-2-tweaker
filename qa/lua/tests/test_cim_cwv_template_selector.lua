@@ -28,6 +28,7 @@ return function(H, repo_root)
             backend_id = "cwv_es_longsword_001",
             rarity = "default",
             key = "es_bastard_sword",
+            data = { slot_type = "melee", item_type = "es_bastard_sword" },
         }
         local synth = selector("cwv_es_longsword")
         local rows = { legacy, synth, synth }
@@ -103,18 +104,39 @@ return function(H, repo_root)
         H.equal(#rows, 2)
     end)
 
-    H.test("repeated crafts and repeated injection keep exactly one selector", function()
+    H.test("crafted instances fail closed out of the acquisition picker", function()
         local synth = selector("cwv_es_longsword")
+        synth.data = {
+            cwv_definition = true, cwv_key = "cwv_es_longsword",
+            slot_type = "melee", item_type = "cwv_es_longsword",
+        }
         local rows = {
-            { backend_id = "cwv_es_longsword_100", rarity = "modded", data = { cwv_key = "cwv_es_longsword" } },
-            { backend_id = "cwv_es_longsword_101", rarity = "modded", data = { cwv_key = "cwv_es_longsword" } },
+            { backend_id = "cwv_es_longsword_100", rarity = "modded",
+                data = { slot_type = "melee", cwv_key = "cwv_es_longsword" } },
+            { backend_id = "cwv_es_longsword_101", CustomData = { rarity = "modded" },
+                data = { slot_type = "melee", cwv_key = "cwv_es_longsword" } },
         }
         Selector.inject(rows, { synth })
         Selector.inject(rows, { synth })
-        H.equal(#rows, 3)
-        H.equal(rows[1].backend_id, "cwv_es_longsword_100")
-        H.equal(rows[2].backend_id, "cwv_es_longsword_101")
-        H.equal(rows[3], synth)
+        H.equal(#rows, 1)
+        H.equal(rows[1], synth)
+    end)
+
+    H.test("crafted accessories do not consume authored icon selectors", function()
+        local first = selector("necklace")
+        first.data = { slot_type = "necklace", item_type = "necklace" }
+        first.cim_acquisition_family = "accessory:necklace:necklace"
+        local second = selector("necklace_02")
+        second.data = { slot_type = "necklace", item_type = "necklace" }
+        second.cim_acquisition_family = "accessory:necklace:necklace_02"
+        local rows = {
+            { backend_id = "crafted-necklace", rarity = "modded",
+                data = { slot_type = "necklace", item_type = "necklace" } },
+        }
+        Selector.inject(rows, { first = first, second = second })
+        H.equal(#rows, 2)
+        H.equal(rows[1], first)
+        H.equal(rows[2], second)
     end)
 
     H.test("selector append order is deterministic and key bounded", function()
@@ -140,6 +162,35 @@ return function(H, repo_root)
         H.equal(Selector.canonical_key({
             backend_id = "cwv_es_longsword_001", key = "es_bastard_sword",
         }), "cwv_es_longsword")
+    end)
+
+    H.test("identity contract owns key and picker row role", function()
+        local calls = { key = 0, role = 0 }
+        Selector.set_identity_contract({
+            canonical_item_key = function(item)
+                calls.key = calls.key + 1
+                return item.exact
+            end,
+            craft_picker_role = function(item)
+                calls.role = calls.role + 1
+                return item.role
+            end,
+        })
+        local real = {
+            exact = "cwv_exact", role = "selector", rarity = "default",
+            data = { slot_type = "melee", cwv_key = "cwv_exact" },
+        }
+        local crafted = {
+            exact = "cwv_exact", role = "instance", rarity = "default",
+            data = { slot_type = "melee", cwv_key = "cwv_exact" },
+        }
+        local rows = { crafted, real }
+        Selector.inject(rows, {})
+        H.equal(#rows, 1)
+        H.equal(rows[1], real)
+        H.truthy(calls.key > 0)
+        H.truthy(calls.role > 0)
+        Selector.set_identity_contract(nil)
     end)
 
     H.test("production wires the pure policy and explicit selector identity", function()

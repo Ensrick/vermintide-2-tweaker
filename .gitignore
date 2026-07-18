@@ -65,6 +65,12 @@ __pycache__/
 .in_progress/*.md
 !.in_progress/README.md
 
+# Ship/version claim locks (see tools/ship/CLAIMS.md). The directory README is
+# tracked so the on-disk format is discoverable; the .claim lock files are
+# ephemeral per-session version-allocation state and must not be committed.
+.ship_claims/*.claim
+!.ship_claims/README.md
+
 # REVIEW (2026-05-01):
 # - bundleV2/ is INTENTIONALLY tracked (so other devs / git bisect can see the built bundle
 #   that was deployed at each commit). Confirm with maintainer; if accidentally tracked, add

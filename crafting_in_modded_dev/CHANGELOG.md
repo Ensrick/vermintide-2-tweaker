@@ -1,5 +1,52 @@
 # Crafting in Modded Changelog
 
+## 0.8.94-dev (2026-07-18): #404 ranged Athanor properties preview centering
+
+- Replaced the non-diagnostic root-node position probe with a source-backed
+  correction at the owning `HeroWindowWeaveProperties._create_item_previewer`
+  boundary. The July 18 log confirmed ranged previews still spawned at
+  `x=-0.8`; the sibling native forge weapon browser authors centered `x=0`.
+- CIM now uses that exact native centered x only for ranged weapons in the
+  properties editor, while preserving the properties surface's y/z, vanilla
+  melee placement, ordinary Weave behavior, and every non-CIM preview.
+- The correction updates both the live link unit and the previewer's boxed
+  start position, so zoom cannot restore the old far-left placement. It runs
+  once per preview construction and sends no network traffic.
+- Added engine-free and `/cim_regression_test` coverage for slot scoping,
+  caller-owned position immutability, malformed input, hook ownership, active
+  surface gating, and zoom durability. The runtime seam lives in its own module
+  so the already-baselined CIM entry does not grow.
+
+**Verification:** confirm `[cim:LOAD] v0.8.94-dev`, open CIM's Athanor, select a
+ranged weapon and enter its properties/traits editor. The weapon should be
+centered rather than far-left; a single `[cim:404] ranged properties preview
+centered` line should name the selected item. Repeat with a melee weapon and
+confirm its established placement is unchanged.
+
+## 0.8.93-dev (2026-07-18): exact acquisition-row ownership (#524) [verify-fix]
+
+- Traced the native source contract: `can_craft_with` admits only default-rarity
+  weapon/accessory definition rows. CIM's final selector reconciler ignored
+  Modded rows for family ownership but still returned them, so any upstream
+  mirror/hook leak became the reported crafted 300-power row beside its
+  five-power Blacksmith selector.
+- The shared synthetic-item contract now owns both exact item identity and the
+  row's acquisition role (`selector`, exact crafted `instance`, or unrelated).
+  The final native Craft Item seam fails closed by removing instance rows before
+  family reconciliation; inventory, salvage, exact persistence, and Cosmetics
+  #702 offhand state remain per-instance and untouched.
+- Added engine-free and runtime regressions for top-level and nested Modded
+  rarity, repeated exact CWV crafts, authored accessory icon selectors, and
+  injected contract ownership. The bounded `[cim:524]` final-list probe remains
+  armed until in-game verification.
+
+**Verification:** in the native Keep **Craft Item** picker, craft the same CWV
+weapon twice, close and reopen the picker, and confirm exactly one five-power
+Blacksmith selector remains and no 300-power crafted instance appears. Repeat
+with two distinct accessory icon selectors; both selector icons remain while
+crafted accessories stay out of the picker. Run `/cim_regression_test` and
+require every `issue524_*` check to pass.
+
 ## 0.8.92-dev (2026-07-17): #83 dynamic Athanor material closure
 
 - Closed the post-construction gap in CIM's in-mission forge safety. Vanilla
