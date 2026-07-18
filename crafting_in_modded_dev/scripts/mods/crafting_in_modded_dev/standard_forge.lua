@@ -35,7 +35,9 @@ mod._cim_template_catalog = template_catalog
 -- canonical resolver; hand it to the selector (contract loads first, entry
 -- line 263 < standard_forge line 291).
 local _contract = mod._cim_synthetic_item_contract
-if _contract and _contract.canonical_item_key then
+if _contract and _contract.canonical_item_key and _contract.craft_picker_role then
+    template_selector.set_identity_contract(_contract)
+elseif _contract and _contract.canonical_item_key then
     template_selector.set_canonical_key_resolver(_contract.canonical_item_key)
 end
 
