@@ -1,5 +1,13 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.31-dev (2026-07-18) - #724 release/source reconciliation [tooling]
+
+- Rebuilt the friends-only development artifact from the current merged source
+  so its tracked bundle, Workshop artifact, and GitHub release manifest all
+  carry the #660 appearance census added after `0.1.30-dev` was published.
+- The census is bounded, observation-only tooling. This entry makes no new
+  player-facing behavior claim and does not change #660's verification state.
+
 ## 0.1.30-dev (2026-07-17) - #661 shared clone-action preparation [verify-fix]
 
 - Replaced Blightreaper's one-off inherited-action repair with the shared

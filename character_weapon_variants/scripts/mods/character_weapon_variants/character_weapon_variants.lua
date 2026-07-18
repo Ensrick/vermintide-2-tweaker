@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.448-dev"
+local MOD_VERSION = "0.1.449-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -64,8 +64,7 @@ _om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_c
 _om.launcher_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_launcher_family")
 _om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
 _om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inventory_icons")
--- Public read-only-by-convention contract for sibling renderers. Consumers
--- should call resolve(icon, renderer) instead of guessing atlas residency.
+-- Public sibling-renderer contract: call resolve(icon, renderer), never guess atlas residency.
 mod._cwv_inventory_icons = _om.inventory_icons
 mod._cwv_crowbill_family = _om.crowbill_family
 mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode
@@ -73,11 +72,12 @@ mod._cwv_crowbill_presentation = _om.crowbill_presentation
 mod._cwv_crowbill_runtime = _om.crowbill_runtime
 _om.damage_profile_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_damage_profile_wire")
 _om.cosmetic_skin_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_cosmetic_skin_wire")
+_om.profile_package_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_profile_package_wire")
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
 mod._cwv_preview_descriptor = _om.old_musket_preview
-_om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.launcher_family })
+_om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.launcher_family, _om.profile_package_wire })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
 _om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
@@ -10591,13 +10591,13 @@ if BackendUtils then
 			return result
 		end
 
-		-- Backend_id pattern `cwv_<key>_NNN` (NNN = any 3 digits: CWV's own
-		-- _001/_002 instances, plus cim-crafted copies 100-999, cim_dev issue
-		-- 390), then the #482 ladder fallbacks (item_data.cwv_key stamp /
+		-- Backend_id pattern `cwv_<key>_NNN` covers CWV and cim-crafted instances
+		-- (issue 390), then the #482 ladder fallbacks (item_data.cwv_key stamp /
 		-- backend lookup) for crafted instances with UUID backend_ids.
 		-- Anything that resolves no cwv key passes through.
 		local cwv_key = _om._cwv_key_for_item(backend_id, item_data)
 		if not cwv_key then return result end
+		_om.profile_package_wire.mark_runtime(result, cwv_key, (_find_def(cwv_key) or {}).base_weapon)
 		local descriptor = _om._cwv_resolve_world_descriptor and
 			_om._cwv_resolve_world_descriptor(item_data, result.skin or skin,
 				result.right_hand_unit, cwv_key, backend_id)
