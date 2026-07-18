@@ -1,6 +1,11 @@
 # Cosmetics Tweaker — Changelog
 
-## 0.9.149-dev (2026-07-18) - cold-join replay reconciler (#660 S3) [verify-fix-coop]
+## 0.9.150-dev - 2026-07-18 - husk hat LA paint foreign-key guard (#697) [verify-fix-coop]
+
+- #697: the husk-side hat create step (`PlayerHuskAttachmentExtension.create_attachment` wrap) fetched the LA mod handle unconditionally, so cosmetics-authored variants (GK Purpure/Azure hat, custom hats) fell through to `la.apply_new_skin_from_texture` with a key LA does not own - LA's `funcs.lua:65` indexes `SKIN_LIST[key]` and nil-derefs, logging `[husk-hat-create] paint err` on every such husk hat spawn (17 hits across the 2026-07-17/18 logs, all `cos_gk_purpure_azure_hat_variant`). Visual result was unaffected (GK_SET's own applier had already painted); the LA call was a misdirected no-op that errored.
+- The hook now derives `(variant, la)` through the shared `_resolve_la_variant` resolver - identical to the `_apply_la_on_unit` hat branch - so `la` is non-nil only when the armoury key actually resolved from LA's `SKIN_LIST`. Cosmetics-side variants skip the LA painter with a debug marker (`LA paint n/a ... cosmetics-side variant`); genuine LA hats paint exactly as before. Net-zero line delta in the frozen main file.
+
+**Coop verify (2 players):** wearer equips the GK Purpure/Azure hat, second player observes the wearer's husk: hat must render with the Purpure/Azure texture, and the newest log must contain NO `[husk-hat-create] paint err` lines. Then wearer swaps to a genuine LA hat (e.g. Pureheart): observer must still see the LA texture on the husk (`[husk-hat-create] paint <key> ... ok=true`).
 
 - #233/#149/#203 family: ONE bounded replay reconciler now re-applies persisted LA appearance at peer-ready (remote player added / husk init), session-ready (StateIngame enter), and lobby-return edges - coalesced per (peer, slot, hand, generation), never per-frame, reusing the proven live-change apply path. This closes the "cosmetics only appear after I change something" class.
 - #738: the husk identity human-gate is now local_player_id-aware (bot never owns slot 1), and skip lines print local_player_id/controlled - the 2026-07-18 "alias skip" ambiguity (host bots reading as the human) cannot recur.
