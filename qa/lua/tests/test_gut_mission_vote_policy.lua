@@ -19,6 +19,28 @@ return function(H, repo_root)
             "kick_player", "adventure", "military", false), false)
     end)
 
+    H.test("GUT issue 700 promoted template localizes its HUD title without mutating vanilla", function()
+        local original = {
+            text = "game_settings_vote",
+            ingame_vote = false,
+            priority = 110,
+        }
+        local promoted = Policy.promote_template(original)
+
+        H.equal(original.ingame_vote, false)
+        H.equal(original.modify_title_text, nil)
+        H.equal(promoted.ingame_vote, true)
+        H.equal(promoted.text, "game_settings_vote")
+        H.equal(promoted.priority, 110)
+        H.equal(type(promoted.modify_title_text), "function")
+        H.equal(promoted.modify_title_text("Start Game"), "Start Game")
+
+        local authored = function(title) return title .. "!" end
+        local preserved = Policy.promote_template({ modify_title_text = authored })
+        H.equal(preserved.modify_title_text, authored)
+        H.equal(Policy.promote_template(nil), nil)
+    end)
+
     H.test("GUT issue 700 keeps the bridge and runtime check wired", function()
         local module_path = repo_root
             .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_map.lua"
@@ -30,8 +52,8 @@ return function(H, repo_root)
             "VoteManager server vote-start hook missing")
         H.truthy(source:find('mod:hook("VoteManager", "_start_vote_base"', 1, true),
             "VoteManager client vote-start hook missing")
-        H.truthy(source:find("template.ingame_vote = true", 1, true),
-            "per-vote input/HUD promotion missing")
+        H.truthy(source:find("VotePolicy.promote_template(active_template)", 1, true),
+            "per-vote input/HUD/title promotion missing")
         H.truthy(source:find('type(active_template) == "table"', 1, true),
             "malformed active-template guard missing")
         H.truthy(source:find("local function _pack_returns(...)", 1, true),

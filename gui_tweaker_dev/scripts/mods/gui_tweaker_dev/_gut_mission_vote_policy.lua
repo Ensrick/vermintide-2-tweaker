@@ -8,6 +8,32 @@
 
 local Policy = {}
 
+-- IngameVotingUI only calls Localize(vote_template.text) when a title modifier
+-- exists. game_settings_vote has no modifier because its normal keep UI
+-- localizes the title itself, so promoting that template verbatim exposes the
+-- internal key ("game_settings_vote") in the in-mission HUD.
+function Policy.localized_title_passthrough(localized_title)
+    return localized_title
+end
+
+function Policy.promote_template(template)
+    if type(template) ~= "table" then
+        return nil
+    end
+
+    local promoted = {}
+    for key, value in pairs(template) do
+        promoted[key] = value
+    end
+
+    promoted.ingame_vote = true
+    if type(promoted.modify_title_text) ~= "function" then
+        promoted.modify_title_text = Policy.localized_title_passthrough
+    end
+
+    return promoted
+end
+
 function Policy.needs_ingame_hud(vote_name, mechanism, level_key, is_in_inn)
     return vote_name == "game_settings_vote"
         and mechanism == "adventure"
