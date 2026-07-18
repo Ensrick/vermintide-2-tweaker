@@ -56,7 +56,9 @@ return function(H, repo_root)
         -- after extraction the module holds 68 and the entry retains 33 (the ~30
         -- scattered checks, the inline starting-coins check, and the commented
         -- stubs). No check was lost or duplicated: 68 + 33 == 101.
-        H.equal(count_plain(regression, "_rt_register("), 68)
+        -- +1 in the module at 0.7.295-dev: skull52_object_set_census_armed (issue 52),
+        -- a NEW check, not a moved one - so the conserved total is now 69 + 33 == 102.
+        H.equal(count_plain(regression, "_rt_register("), 69)
         H.equal(count_plain(entry, "_rt_register("), 33)
         -- The shared _RT_CHECKS registrar stays defined and exposed in the entry;
         -- the module registers through the exposed handle, never a second registry.

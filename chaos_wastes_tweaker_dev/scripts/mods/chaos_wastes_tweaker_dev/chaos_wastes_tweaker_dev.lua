@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.294-dev"
+local MOD_VERSION = "0.7.295-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -444,6 +444,12 @@ mod._ct_freeze487 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_f
 -- header for why this seam (spawn-path-independent ground truth) is not covered
 -- by the existing [ct-probe]/[ct-spawn-tally] count probes.
 mod._ct_chest132 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132")
+
+-- issue 52 object-set census. Its only caller is the GameModeHelper.get_object_sets
+-- hook below, so it must load before that block; see the module header for the
+-- premise correction (Tower of Treachery skulls are level-flow interactables, not the
+-- dlc_portals `gargoyle_head` pickup) and the adventure-vs-deus diff method.
+mod._ct_diag_skull52 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_skull52")
 
 -- #505 Single Mission Loader. Registers /ct_load_mission + friends and the
 -- ct_dev_load_selected_mission menu keybind target. No hooks - it forces a run via
@@ -5754,36 +5760,23 @@ do
     if _gmh and type(_gmh.get_object_sets) == "function" then
         mod:hook(_gmh, "get_object_sets", function(func, level_name, game_mode_key)
             local object_sets, spawned_object_sets = func(level_name, game_mode_key)
+
+            -- issue 52 census ([ct:skull52]), REARMED v0.7.295-dev. Called BEFORE the #156
+            -- mutation below so it records the RAW engine decision, and deliberately NOT
+            -- deus-gated: the skull-bearing set is identified by diffing an adventure run
+            -- against an injected deus run. Premise correction (the skulls are level-flow
+            -- interactables, not the dlc_portals `gargoyle_head` pickup) and every source
+            -- citation live in _ct_diag_skull52.lua. Kept in a side module to avoid growing
+            -- this near-limit main chunk.
+            if mod._ct_diag_skull52 then
+                mod._ct_diag_skull52.census(object_sets, spawned_object_sets,
+                    level_name, game_mode_key, adventure_base_from_level_key)
+            end
+
             if game_mode_key == "deus"
                 and type(object_sets) == "table"
                 and type(spawned_object_sets) == "table"
             then
-                -- #52 DIAGNOSTIC ([ct:skull52]): census every object set for each
-                -- get_object_sets call during an injected-adventure load (main world AND
-                -- hero sublevels). Tower of Treachery (dlc_wizards_tower) gargoyle-skull
-                -- collectibles are the `gargoyle_head` level_event pickup, which that
-                -- level's pickup_settings does NOT list, so they are object-set / flow
-                -- spawned via placed pickup-spawner units; #156's 'adventure' enable may
-                -- be targeting the wrong set. This lists every set + whether it will spawn
-                -- under deus so we can identify the skull-bearing set. printf = visible with
-                -- mod-logging OFF. Gate on the CURRENT injected level key (looser than the
-                -- #156 level_name match, so sublevel calls are captured).
-                local lth = Managers and Managers.level_transition_handler
-                local cur_key = lth and lth.get_current_level_keys and lth:get_current_level_keys()
-                if type(cur_key) == "string" and adventure_base_from_level_key(cur_key) then
-                    local spawned_lookup = {}
-                    for _, s in ipairs(spawned_object_sets) do spawned_lookup[s] = true end
-                    local names = {}
-                    for set_name in pairs(object_sets) do names[#names + 1] = set_name end
-                    table.sort(names)
-                    pcall(printf, "[ct:skull52] key=%s level_name=%s object_sets=%d spawned=%d",
-                        tostring(cur_key), tostring(level_name), #names, #spawned_object_sets)
-                    for _, set_name in ipairs(names) do
-                        pcall(printf, "[ct:skull52]   set=%s spawned=%s",
-                            tostring(set_name), tostring(spawned_lookup[set_name] == true))
-                    end
-                end
-
                 -- #156 fix (behavior unchanged): enable the 'adventure' object set on the
                 -- injected MAIN adventure level if present and not already spawning.
                 if object_sets.adventure and not table.contains(spawned_object_sets, "adventure") then
@@ -5798,8 +5791,13 @@ do
             end
             return object_sets, spawned_object_sets
         end)
+        -- issue 52: arming beacon. The census CALL lives inside this hook closure, so the
+        -- module being loaded is not by itself proof the probe can fire; this flag is the
+        -- regression surface (io is nil in the retail sandbox, so no source self-grep).
+        mod._ct_skull52_probe_armed = true
     else
-        pcall(printf, "[ct:objset] GameModeHelper.get_object_sets not hookable at load — #156 candidate fix INACTIVE")
+        mod._ct_skull52_probe_armed = false
+        pcall(printf, "[ct:objset] GameModeHelper.get_object_sets not hookable at load — #156 candidate fix INACTIVE and [ct:skull52] census DEAD (issue 52)")
     end
 end
 

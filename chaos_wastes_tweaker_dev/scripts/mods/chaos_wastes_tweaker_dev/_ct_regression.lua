@@ -1640,4 +1640,24 @@ _rt_register("chunk_sends_paced_not_bursted", function()
         return "PACED-SEND REGRESSION: _ct_chunk_send_queue FIFO table missing — paced send queue dismantled"
     end
 end)
+
+-- issue 52: the [ct:skull52] census needs BOTH halves alive - the _ct_diag_skull52
+-- module (which emits) and the GameModeHelper.get_object_sets hook (which calls it).
+-- Either one missing blinds the probe, so check both; a source self-grep is NOT usable
+-- here (io is nil in the retail sandbox).
+_rt_register("skull52_object_set_census_armed", function()
+    if type(mod._ct_diag_skull52) ~= "table" or type(mod._ct_diag_skull52.census) ~= "function" then
+        return "issue 52 REGRESSION: _ct_diag_skull52.census missing — the census module was "
+            .. "stripped or failed to dofile; [ct:skull52] can never emit"
+    end
+    if mod._ct_skull52_probe_armed == nil then
+        return "issue 52 REGRESSION: mod._ct_skull52_probe_armed never assigned — the "
+            .. "GameModeHelper.get_object_sets do-block was removed, so nothing calls the census "
+            .. "and the #156 'adventure' object-set enable is gone too"
+    end
+    if mod._ct_skull52_probe_armed ~= true then
+        return "issue 52: GameModeHelper.get_object_sets was not hookable at load — [ct:skull52] "
+            .. "census is DEAD, so a Tower of Treachery run cannot produce object-set evidence"
+    end
+end)
 end
