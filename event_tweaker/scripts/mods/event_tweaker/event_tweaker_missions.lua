@@ -2,8 +2,8 @@
 --
 -- This module is require'd by both the early VMF data file and the runtime
 -- mission-menu adapter, so it must stay engine-free: no get_mod, Managers, or
--- global table writes. The runtime module supplies the current LevelSettings,
--- AreaSettings, ActSettings, and NetworkLookup tables explicitly.
+-- direct global reads. The runtime module supplies the current LevelSettings,
+-- AreaSettings, ActSettings, and campaign tables explicitly.
 
 local M = {}
 
@@ -31,10 +31,6 @@ local function _contains(list, value)
     return false
 end
 
-local function _lookup_has(lookup, key)
-    return type(lookup) == "table" and rawget(lookup, key) ~= nil
-end
-
 function M.any_enabled(get)
     for i = 1, #M.ALLOWLIST do
         if get(M.ALLOWLIST[i].setting_id) == true then return true end
@@ -53,11 +49,31 @@ function M.enabled_ids(get)
     return ids
 end
 
--- Fail closed before advertising a mission. The selected level crosses the
--- vanilla mission/act lookup wire and LevelTransitionHandler later loads every
--- package listed on LevelSettings[level_key]; none of those contracts are safe
--- to synthesize from a menu hook.
-function M.validate_contract(level_settings, area_settings, act_settings, network_lookup)
+-- Returns true when a LevelSettings entry is complete enough to advertise and
+-- register: keyed to itself, in the celebrate act, with a non-empty package
+-- list for LevelTransitionHandler to load (level_transition_handler.lua:518-572).
+local function _level_ok(level, id)
+    return type(level) == "table"
+        and level.level_id == id
+        and level.act == M.ACT_KEY
+        and type(level.packages) == "table"
+        and #level.packages > 0
+end
+
+-- Visibility gate (issue 626 fix): fail closed before advertising a mission,
+-- but require ONLY the tables the menus actually read. Area selection reads
+-- AreaSettings (start_game_window_area_selection.lua:91-95); mission selection
+-- reads LevelSettings + ActSettings (with arithmetic on act sorting,
+-- start_game_window_mission_selection.lua:108-134,156-160) and the acts listed
+-- on the selected area. The previous gate also demanded four NetworkLookup
+-- tables (level_keys / mission_ids / act_keys / unlockable_level_keys) that no
+-- menu reads, so a lookup mismatch blocked both hooks with only a printf:
+-- exactly "toggle on, nothing shows". NetworkLookup is deliberately neither
+-- consulted nor mutated here: the vanilla wire tables already carry both
+-- levels from boot (network_lookup.lua:1239-1248, built from LevelSettings),
+-- and modded NetworkLookup keys on vanilla RPCs CTD non-mod peers
+-- (issue 278, issue 371).
+function M.validate_contract(level_settings, area_settings, act_settings)
     local problems = {}
     local area = type(area_settings) == "table" and rawget(area_settings, M.AREA_KEY)
     local act = type(act_settings) == "table" and rawget(act_settings, M.ACT_KEY)
@@ -69,15 +85,8 @@ function M.validate_contract(level_settings, area_settings, act_settings, networ
     end
     if type(act) ~= "table" then
         problems[#problems + 1] = "ActSettings.act_celebrate missing"
-    end
-
-    local level_keys = type(network_lookup) == "table" and network_lookup.level_keys
-    local mission_ids = type(network_lookup) == "table" and network_lookup.mission_ids
-    local act_keys = type(network_lookup) == "table" and network_lookup.act_keys
-    local unlockable_keys = type(network_lookup) == "table" and network_lookup.unlockable_level_keys
-
-    if not _lookup_has(act_keys, M.ACT_KEY) then
-        problems[#problems + 1] = "NetworkLookup.act_keys lacks act_celebrate"
+    elseif type(act.sorting) ~= "number" then
+        problems[#problems + 1] = "ActSettings.act_celebrate.sorting not a number"
     end
 
     for i = 1, #M.ALLOWLIST do
@@ -96,23 +105,56 @@ function M.validate_contract(level_settings, area_settings, act_settings, networ
                 problems[#problems + 1] = "LevelSettings." .. id .. ".packages empty"
             end
         end
-        if not _lookup_has(level_keys, id) then
-            problems[#problems + 1] = "NetworkLookup.level_keys lacks " .. id
-        end
-        if not _lookup_has(mission_ids, id) then
-            problems[#problems + 1] = "NetworkLookup.mission_ids lacks " .. id
-        end
-        if not _lookup_has(unlockable_keys, id) then
-            problems[#problems + 1] = "NetworkLookup.unlockable_level_keys lacks " .. id
-        end
     end
 
     return #problems == 0, problems
 end
 
+-- Idempotent campaign-table registration fallback (issue 626). Vanilla's boot
+-- pass already registers every valid celebrate level into UnlockableLevels,
+-- GameActs, and MapPresentationActs (level_unlock_settings.lua:100-135), so on
+-- a healthy install this appends nothing. It repairs only an install where
+-- that pass genuinely missed an allowlisted level, mirroring the vanilla
+-- registration shape. Per-peer safety: these are LOCAL campaign/presentation
+-- tables; the wire tables (NetworkLookup.level_keys / mission_ids / act_keys /
+-- unlockable_level_keys) were built from LevelSettings / GameActs /
+-- UnlockableLevels at BOOT (network_lookup.lua:1239-1259), before any mod
+-- loads, so appends here can never extend or reorder a NetworkLookup table.
+-- The caller must run this unconditionally at mod load (never toggle-gated),
+-- so every Event Tweaker peer applies the identical append at the same time.
+function M.ensure_campaign_registration(level_settings, unlockable_levels, game_acts, map_presentation_acts)
+    local appended = {}
+    for i = 1, #M.ALLOWLIST do
+        local id = M.ALLOWLIST[i].id
+        local level = type(level_settings) == "table" and rawget(level_settings, id)
+        -- Only a well-formed stock definition may be registered; a missing or
+        -- malformed LevelSettings entry stays fail-closed at the visibility gate.
+        if _level_ok(level, id) then
+            if type(unlockable_levels) == "table" and not _contains(unlockable_levels, id) then
+                unlockable_levels[#unlockable_levels + 1] = id
+                appended[#appended + 1] = "UnlockableLevels+" .. id
+            end
+            if type(game_acts) == "table" then
+                if type(game_acts[M.ACT_KEY]) ~= "table" then
+                    game_acts[M.ACT_KEY] = {}
+                end
+                if not _contains(game_acts[M.ACT_KEY], id) then
+                    game_acts[M.ACT_KEY][#game_acts[M.ACT_KEY] + 1] = id
+                    appended[#appended + 1] = "GameActs." .. M.ACT_KEY .. "+" .. id
+                end
+            end
+            if type(map_presentation_acts) == "table" and not _contains(map_presentation_acts, M.ACT_KEY) then
+                map_presentation_acts[#map_presentation_acts + 1] = M.ACT_KEY
+                appended[#appended + 1] = "MapPresentationActs+" .. M.ACT_KEY
+            end
+        end
+    end
+    return appended
+end
+
 -- Return a new outer map and replace only act_celebrate. Every unrelated act
--- table is retained by identity, which is the no-global-campaign-mutation
--- invariant this feature is built around.
+-- table is retained by identity: the menu adapter never rewrites another
+-- act's level list, and the view-local map never leaks back into globals.
 function M.filter_levels_by_act(levels_by_act, level_settings, get)
     local filtered = {}
     for act_key, levels in pairs(levels_by_act or {}) do

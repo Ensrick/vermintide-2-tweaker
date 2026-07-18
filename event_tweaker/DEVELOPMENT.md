@@ -21,8 +21,15 @@ And one bounded mission-menu feature:
    and `dlc_celebrate_crawl` in Own Game. It temporarily exposes the stock
    `celebrate` area while vanilla builds the area widgets, then replaces only the
    menu instance's `act_celebrate` level list from a closed two-entry allowlist.
-   It does not add either level to Quick Play or mutate the global campaign,
-   unlock, presentation, or network lookup tables.
+   The visibility gate requires only the tables the menus read (AreaSettings /
+   ActSettings / LevelSettings). A load-time idempotent fallback appends a level
+   vanilla's boot pass genuinely missed to the local `UnlockableLevels` /
+   `GameActs` / `MapPresentationActs` tables (vanilla shape,
+   `level_unlock_settings.lua:100-135`); on a healthy install it appends
+   nothing. It does not add either level to Quick Play and NEVER touches
+   `NetworkLookup` (wire tables are boot-built from `LevelSettings`,
+   `network_lookup.lua:1239-1259`; modded keys on vanilla RPCs CTD non-mod
+   peers, issue 278 / issue 371).
 
 ## "Other Mutators" — dynamic discovery (ported from Deed Mutators Selector)
 
@@ -172,9 +179,13 @@ Four menu hooks cover desktop/controller area and mission-selection views. The
 area wrapper temporarily clears only `AreaSettings.celebrate.exclude_from_area_selection`
 and restores it even when vanilla raises. The mission wrapper replaces only the
 view instance's `_levels_by_act.act_celebrate` list from the two-entry allowlist;
-unrelated act tables retain identity. It validates the existing level, package,
-act, area, and network-lookup contract before advertising either mission, logs
-`[event-missions:626]`, exposes `/event_mission_probe`, and registers
+unrelated act tables retain identity. The visibility gate validates only the
+menu-read tables (area/act/level settings, NOT NetworkLookup - the old
+NetworkLookup preconditions were the issue 626 "toggle on, nothing shows"
+defect). At mod load it unconditionally runs the idempotent
+`ensure_campaign_registration` fallback for `UnlockableLevels` / `GameActs` /
+`MapPresentationActs`, logs `[event-missions:626]`, exposes
+`/event_mission_probe` (contract= plus campaign=), and registers
 `issue626_event_mission_allowlist_contract`. VMF owns hook disable/re-enable, and
 each view rebuilds from vanilla state on re-entry, so there is no persistent
 mission state or lifecycle callback to restore.
@@ -271,7 +282,12 @@ area views skip `exclude_from_area_selection` areas (`start_game_window_area_sel
 `LevelTransitionHandler._load_level_packages` loads its stock `LevelSettings.packages`
 and unloads them by the same level-key reference (`level_transition_handler.lua:
 518-572`). Event Tweaker therefore changes only the temporary/view-local menu
-boundary and leaves package loading and campaign/network ownership to vanilla.
+boundary and leaves package loading and network ownership to vanilla. The one
+campaign-side concession (v0.4.36-dev): if vanilla's boot registration pass
+genuinely missed an allowlisted level, the load-time idempotent fallback appends
+it to `UnlockableLevels` / `GameActs.act_celebrate` / `MapPresentationActs` in
+the exact vanilla shape - local tables only, appended after the boot-time
+`NetworkLookup` builds, so the wire tables are provably untouched.
 
 ### Feast comparison and clean-room provenance
 
@@ -288,8 +304,10 @@ adds legacy fallbacks to `GameActs`, `UnlockableLevels`,
 custom menu-video package, and guards its one-time writes with persistent state.
 The independent Event Tweaker implementation instead follows the current
 decompile contract above: a closed allowlist, a temporary area bit around vanilla
-widget construction, a view-local act list, fail-closed contract diagnostics, no
-custom assets/packages, and no global campaign or network mutation.
+widget construction, a view-local act list, fail-closed menu-read contract
+diagnostics, no custom assets/packages, no network mutation, and a bounded
+idempotent campaign fallback (three local tables, vanilla shape, no-op on a
+healthy install) instead of the reference mod's persistent broad writes.
 
 The curated catalog and presets live in the shared require'd module `event_tweaker_catalog.lua` (v0.4.26-dev; previously two hand-synced copies with a "keep in sync" warning):
 
