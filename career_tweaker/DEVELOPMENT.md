@@ -51,12 +51,14 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 
 | File | Responsibility | Public surface (via `mod._crt` unless noted) | Manifest position |
 |------|----------------|----------------------------------------------|-------------------|
-| `career_tweaker.lua` | Entry/manifest + lifecycle. MOD_VERSION, boot banner/fingerprint, the dofile manifest, the mutex cluster declare, Character-XP-level override + Unlock-All-Careers hooks, `mod.update`, `on_game_state_changed` / `on_setting_changed` / `on_disabled`, `ct_status`, the issue-425 beacon, and the public-beta exclusion markers. | owns `mod._crt`, `mod._crt.MOD_VERSION`, `mod._crt.dbg` / `dbg_alert`, `mod._crt.balance`, `mod._crt_peer_parity` | — (the entry) |
+| `career_tweaker.lua` | Entry/manifest + lifecycle. MOD_VERSION, boot banner/fingerprint, the dofile manifest, the mutex cluster declare, Character-XP-level override + Unlock-All-Careers hooks, `mod.update`, `on_game_state_changed` / `on_setting_changed` / `on_disabled`, `ct_status`, the issue-425/#776 exact-catalog beacon, and the public-beta exclusion markers. | owns `mod._crt`, `mod._crt.MOD_VERSION`, `mod._crt.dbg` / `dbg_alert`, `mod._crt.balance`, `mod._crt_peer_parity`, `wire_catalog_identity` | — (the entry) |
 | `career_tweaker_data.lua` | VMF widget tree (the settings UI). | returns the widget table | before script (VMF) |
 | `career_tweaker_localization.lua` | Localized strings. | returns the loc table | before data (VMF) |
 | `_crt_damage_classification.lua` | Pure #334/#472 damage-category policy: chip/AOE, self-DoT, and Focused Spirit's Ratling extension. Engine-free and unit-tested. | returns `{ is_chip_or_aoe, is_self_dot, focused_spirit_ignores }`, published as `mod._crt.damage_classification` | first script module, before balance |
-| `career_tweaker_balance.lua` | The BALANCE_MODS rework catalog + apply/restore engine, crt_* buff pre-registration, and issue-425 parity/wire-safe proc wrappers. It loads the hook module once after constructing the catalogue. | returns `{ apply, restore, active_count, parity_gate_ok, wire_parity_live, network_unsafe_ids, BALANCE_MODS }`; sets `mod._crt_registered_buff_names`, `mod._crt_mod_registered_buff_names` | after damage classification (entry captures `balance`) |
-| `_career_tweaker_balance_hooks.lua` | Hook-only boundary extracted from the balance catalogue: per-career `no_random_crits`, Hellborg crit penalty, centralized rework-description `Localize`, and the issue-425 hot-join replay filter. It owns no catalogue or apply/restore state. | installs four existing hooks; preserves `mod._crt_hellborgs_crit_hook_installed` | dofile'd exactly once by `career_tweaker_balance.lua` |
+| `_crt_wire_policy.lua` | Pure #776 exact name+numeric-index fingerprint, `rpc_add_buff` receiver decision, and one-stack timed-effect policy. Engine-free and unit-tested. | `mod._crt.wire_policy`; returns catalog identity, duration validator, timed-buff builder/refresh semantics | after damage classification, before balance |
+| `_crt_wire_runtime.lua` | #776 engine adapter for parity-gated `LocalAndServer` timed buff emission. | `ensure_timed_proc`; owns the sole `add_buff_synced` call and bounded route logs | loaded by `career_tweaker_balance.lua`; no hooks |
+| `career_tweaker_balance.lua` | The BALANCE_MODS rework catalog + apply/restore engine, crt_* buff pre-registration, and issue-425/#776 parity/wire-safe proc wrappers. It loads the hook module once after constructing the catalogue. | returns `{ apply, restore, active_count, parity_gate_ok, wire_parity_live, network_unsafe_ids, BALANCE_MODS }`; sets `mod._crt_registered_buff_names`, `mod._crt_mod_registered_buff_names` | after the pure policies (entry captures `balance`) |
+| `_career_tweaker_balance_hooks.lua` | Hook-only boundary extracted from the balance catalogue: per-career `no_random_crits`, Hellborg crit penalty, centralized rework-description `Localize`, the #776 `rpc_add_buff` receiver floor, and the issue-425 hot-join replay filter. It owns no catalogue or apply/restore state. | installs five hooks; preserves `mod._crt_hellborgs_crit_hook_installed`; sets `_crt_rpc_add_buff_floor_installed` | dofile'd exactly once by `career_tweaker_balance.lua` |
 | Big Rebalance (retired) | The unreachable port was deleted in 0.3.70-dev (#433). Recover historical source from git only as part of a new registration/parity design. | none | absent |
 | `career_tweaker_tourney.lua` | Tourney Balance Testing port (`trn_*` toggles). Same `{apply,restore,active_count}` contract. | returns the contract table | after balance |
 | `_crt_foot_knight_policy.lua` | Engine-free #619 capability, enemy-category, Final March, and secondary-slot composition policy. Shield/great-weapon behavior is template-capability based so compatible WT/CWV templates inherit it. | returns `{ is_shield_type, is_non_polearm_great_type, plan_secondary_slot, all_other_allies_dead, enemy_multiplier }`; published as `mod._crt.foot_knight.policy` | loaded by `_crt_foot_knight.lua` |
@@ -64,11 +66,11 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `career_tweaker_armor_overcharge.lua` | Seven armor/overcharge/Focused-Spirit controls using one `DamageUtils.apply_buffs_to_damage` hook and one consolidated `PlayerUnitHealthExtension.add_damage` hook. Owns Focused Spirit's proc wrapper and one-frame cooldown re-arm; the stacking template fields remain in balance's reversible lifecycle. | installs its own hooks; exports `mod._crt_focused_spirit_tick(dt)` | after tourney |
 | `career_tweaker_oe_cooldown.lua` | Outcast Engineer cooldown-reduction benefit. Driven per-frame from the entry's `mod.update`. | `mod._crt_oe_cdr_tick(dt)`, `mod._crt_oe_cdr_clear` | after armor |
 | `career_tweaker_mutex.lua` | Mutex cluster framework ("pick one of N" checkbox groups), enforced from `on_setting_changed`. | returns `{ declare, enforce, active, snapshot }` | after oe |
-| `_crt_talent_selection.lua` | Dormant pure snapshot/equality policy retained for a future casting/transposition redesign. | returns `{ snapshot, equal }` if loaded independently | **not loaded in 0.4.0-beta** |
-| `_crt_talent_swap.lua` | Dormant historical talent-tree + ability/passive swap engine. Saved `talent_swap_*` values remain in VMF storage, but the beta exposes no widgets and never loads this module. | none in the beta | **not loaded in 0.4.0-beta** |
+| `_crt_talent_selection.lua` | Dormant pure snapshot/equality policy retained for a future casting/transposition redesign. | returns `{ snapshot, equal }` if loaded independently | **not loaded in the beta line** |
+| `_crt_talent_swap.lua` | Dormant historical talent-tree + ability/passive swap engine. Saved `talent_swap_*` values remain in VMF storage, but the beta exposes no widgets and never loads this module. | none in the beta | **not loaded in the beta line** |
 | `_crt_diagnostics.lua` | Read-only talent/buff diagnostics: `/crt_dump_talents`, the reusable dump body, the per-session auto-dump harness + retry pump. | `mod.crt_dump_career_talents` (mod method), `mod._crt_auto_dump_check`, `mod._crt_dump_retry_tick(dt)`, `mod._crt_start_dump_retry` | after talent |
-| `_crt_bardin_disabler_probe.lua` | Dormant #440 comparison probe retained for a future diagnostic build. | none in the beta | **not loaded in 0.4.0-beta** |
-| `_crt_umbrella_audit_policy.lua` | Dormant #221 ownership-census policy retained for future development. | none in the beta | **not loaded in 0.4.0-beta** |
+| `_crt_bardin_disabler_probe.lua` | Dormant #440 comparison probe retained for a future diagnostic build. | none in the beta | **not loaded in the beta line** |
+| `_crt_umbrella_audit_policy.lua` | Dormant #221 ownership-census policy retained for future development. | none in the beta | **not loaded in the beta line** |
 | `_lib_peer_parity.lua` | COPIED single-source shared lib (master: `tools/shared_lib/_lib_peer_parity.lua`). The issue-371 peer-parity beacon factory. Do NOT diverge from master. | returns a factory function | dofile'd inside the beacon block |
 | `_crt_regression.lua` | The `/crt_regression_test` harness + all check bodies, in frozen registration order. | `mod._crt.rt_register` (for future phases) | LAST |
 
@@ -147,10 +149,11 @@ even though its assertion now targets 0.75 seconds.
   values are preserved but unread. The prefix remains reserved by the blocking
   retirement gate; revival starts from git history under a new architecture.
 
-## Issue-425 wire safety (why it stays in balance)
+## Issue-425/#776 wire safety (why emission stays in balance)
 
-The cross-peer wire-safety subsystem (a non-crt peer CTDs on `rpc_add_buff`
-decode of a modded buff index) is deliberately NOT split out. The
+The cross-peer wire-safety subsystem (a missing or differently-indexed peer can
+CTD on `rpc_add_buff` decode of a modded buff index) keeps its emission guards
+in balance. The
 `network_unsafe = true` tags live on individual BALANCE_MODS rework definitions
 throughout the file, and `_crt_parity_gate_ok` / `_crt_wire_parity_live` are
 consumed by the core `apply_balance_mods` engine (which owns the data) as well as
@@ -160,3 +163,15 @@ the wrappers live elsewhere, forcing bidirectional `mod._crt` plumbing that
 increases coupling. Full mechanic + the five-gate model:
 `chaos_wastes_tweaker_dev/ENGINE_SURFACE.md` (issue 426 beacon) and the crt
 `REGRESSION_CHECKLIST.md` "crt-networked-rework-peer-parity" row.
+
+Issue #776 proved that presence is not catalog parity: three client crashes all
+decoded host numeric id `1574` as timed Impetuous AS while carrying positive
+server ids, even though the Impetuous proc itself only used the server-id-zero
+path. The entry therefore fingerprints every registered CRT name together with
+its live numeric lookup id. The shared beacon accepts only an exact identity.
+CRT supplies that identity through `_crt_wire_runtime.wrap_parity_transport`;
+the copied shared library itself remains byte-identical for every consumer.
+The hook module owns the complementary receiver floor because an unrelated old
+host can emit a colliding id before/without a safe CRT sender path. Never remove
+either layer, replace the exact identity with version-only presence, or fall
+back from timed `LocalAndServer` sync to generic `ProcFunctions.add_buff`.
