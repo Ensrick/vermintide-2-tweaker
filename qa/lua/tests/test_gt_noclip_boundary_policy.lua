@@ -28,7 +28,7 @@ return function(H, repo_root)
 
         H.truthy(source:find('mod:hook("HealthSystem", "suicide"', 1, true))
         H.truthy(source:find('mod:hook("PlayerUnitHealthExtension", "entered_kill_volume"', 1, true))
-        H.truthy(source:find('mod:hook("NetworkTransmit", "send_rpc_server"', 1, true))
+        H.truthy(source:find('mod._gt_noclip_server_rpc_guard = function', 1, true))
         H.equal(source:find('mod:hook("PlayerUnitHealthExtension", "die"', 1, true), nil)
     end)
 end

@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.247-dev"
+local MOD_VERSION = "0.2.248-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1531,6 +1531,7 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_kick_idle")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_motd")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_modded_manifest")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_failed_join_reveal")
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_network_transmit_guard")
 -- Floating Damage Numbers migrated to gui_tweaker (gut) 2026-06-29; its old
 -- dofile/feed lines are gone and gt's damage hooks are pure godmode again.
 
