@@ -61,6 +61,7 @@ local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
 local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
+local OFFHAND_COMMIT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy")
 local LA_REPLAY_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_policy")
 mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_instance_policy")
 -- v0.9.49-dev (issue #186): disable Loremaster's Armoury's Okri's-Challenges /
@@ -2651,86 +2652,8 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
     -- slot, so this drains exactly ONE final selection per backend_id —
     -- the one the user left selected when navigating away.
     if mod._pending_la_emit_on_exit then
-        local n = 0
-        for _, entry in pairs(mod._pending_la_emit_on_exit) do
-            if entry then
-                -- #702: Apply commits the owner preference before any render or
-                -- network work. Inventory customization can have an exact
-                -- backend id while the keep player unit is absent/dead during a
-                -- transition; that must defer peer delivery, not silently drop
-                -- the durable per-instance/per-hand write.
-                local committed, commit_kind = false, "persistence-unavailable"
-                if LA_PERSIST and LA_PERSIST.commit_offhand_entry then
-                    committed, commit_kind = LA_PERSIST.commit_offhand_entry(entry)
-                end
-                local live_owner = entry.player_unit and Unit.alive(entry.player_unit)
-                local emitted = false
-                if entry.offhand_unit ~= nil then
-                    -- v0.9.82-dev (#416): committed VANILLA offhand mesh pick. Emit
-                    -- under BOTH key namespaces (weapon_key + template) the husk
-                    -- get_item_units lookup can key on; "" is the CLEAR sentinel that
-                    -- reverts peers to the base offhand (and drops any stale LA entry).
-                    if live_owner and mod._send_offhand_mesh then
-                        mod:info("[cos-la-sync] EMIT-OFFHAND-MESH-ON-EXIT weapon=%s template=%s hand=%s unit=%s",
-                            tostring(entry.weapon_key), tostring(entry.template_key),
-                            tostring(entry.hand_field), tostring(entry.offhand_unit))
-                        mod._send_offhand_mesh(entry.player_unit, entry.weapon_key,
-                            entry.hand_field, entry.offhand_unit)
-                        if entry.template_key and entry.template_key ~= entry.weapon_key then
-                            mod._send_offhand_mesh(entry.player_unit, entry.template_key,
-                                entry.hand_field, entry.offhand_unit)
-                        end
-                        emitted = true
-                    end
-                elseif entry.revert then
-                    -- v0.9.69-dev (#265 Slice 1): committed vanilla pick over a
-                    -- synced LA entry -> broadcast the revert for BOTH key
-                    -- namespaces the apply flow writes (weapon_key + template).
-                    if live_owner and mod._send_la_revert then
-                        mod:info("[cos-la-sync] EMIT-REVERT-ON-EXIT weapon=%s template=%s hand=%s vanilla=%s",
-                            tostring(entry.weapon_key), tostring(entry.template_key),
-                            tostring(entry.hand_field), tostring(entry.vanilla_key))
-                        mod._send_la_revert(entry.player_unit, entry.weapon_key, "offhand",
-                            entry.vanilla_key, entry.hand_field)
-                        if entry.template_key and entry.template_key ~= entry.weapon_key then
-                            mod._send_la_revert(entry.player_unit, entry.template_key, "offhand",
-                                entry.vanilla_key, entry.hand_field)
-                        end
-                        emitted = true
-                    end
-                else
-                -- v0.9.61-dev (#203): [cos-la-sync] the authoritative offhand key
-                -- actually broadcast on screen exit. Pair with the receiver's
-                -- [cos-la-sync] RECV line (same armoury_key) in the HOST's log to
-                -- confirm the host cached it; a mismatch vs the wearer's rendered
-                -- shield is the #203 divergence.
-                if live_owner and _send_la_apply then
-                    mod:info("[cos-la-sync] EMIT-ON-EXIT weapon=%s template=%s hand=%s armoury=%s vanilla=%s",
-                        tostring(entry.weapon_key), tostring(entry.template_key),
-                        tostring(entry.hand_field), tostring(entry.armoury_key), tostring(entry.vanilla_key))
-                    _send_la_apply(entry.player_unit, entry.weapon_key, "offhand",
-                        entry.armoury_key, entry.vanilla_key, entry.hand_field)
-                    if entry.template_key and entry.template_key ~= entry.weapon_key then
-                        _send_la_apply(entry.player_unit, entry.template_key, "offhand",
-                            entry.armoury_key, entry.vanilla_key, entry.hand_field)
-                    end
-                    emitted = true
-                end
-                end
-                if committed then n = n + 1 end
-                if committed and not emitted then
-                    -- Existing bounded self-replay sends the saved exact state
-                    -- once an owner unit/equipment exists. No retry RPC loop.
-                    mod._la_self_rebroadcast_pending = true
-                end
-                if printf then
-                    printf("[cos:702] OFFHAND-COMMIT bid=%s hand=%s action=%s persisted=%s peer_emit=%s",
-                        tostring(entry.backend_id), tostring(entry.hand_field),
-                        tostring(commit_kind), tostring(committed),
-                        emitted and "sent" or "deferred")
-                end
-            end
-        end
+        local n = OFFHAND_COMMIT.drain(mod, mod._pending_la_emit_on_exit,
+            LA_PERSIST, _send_la_apply, function(unit) return Unit.alive(unit) end)
         if n > 0 then
             _dbg("[ct offhand] drained %d deferred LA emit(s) on screen exit", n)
             -- v0.9.3.8: pulse-wield to force fresh weapon-unit spawn.

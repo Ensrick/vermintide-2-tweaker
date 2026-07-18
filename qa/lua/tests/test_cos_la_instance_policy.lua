@@ -253,8 +253,11 @@ return function(H, repo_root)
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
         local persist_path = repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_persistence.lua"
+        local commit_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy.lua"
         local f = assert(io.open(main_path, "rb")); local main = f:read("*a"); f:close()
         f = assert(io.open(persist_path, "rb")); local persist = f:read("*a"); f:close()
+        f = assert(io.open(commit_path, "rb")); local commit = f:read("*a"); f:close()
         H.truthy(main:find('mod:hook(UIUtils, "get_ui_information_from_item"', 1, true))
         H.truthy(main:find('_SHIELD_ICON_OWNER_ITEM_TYPES[item_type]', 1, true))
         H.truthy(main:find('inventory_icon = selected_inventory_icon', 1, true))
@@ -263,9 +266,10 @@ return function(H, repo_root)
         H.truthy(persist:find("M.prune_missing_items", 1, true))
         H.truthy(main:find("INSTANCE-PRUNE", 1, true))
         H.truthy(persist:find("M.commit_offhand_entry = function(entry)", 1, true))
-        H.truthy(main:find("LA_PERSIST.commit_offhand_entry(entry)", 1, true))
+        H.truthy(commit:find("persistence.commit_offhand_entry(entry)", 1, true))
+        H.truthy(main:find("OFFHAND_COMMIT.drain", 1, true))
         H.equal(main:find("if entry and entry.player_unit and Unit.alive(entry.player_unit) then", 1, true), nil)
-        H.truthy(main:find("mod._la_self_rebroadcast_pending = true", 1, true))
+        H.truthy(commit:find("mod._la_self_rebroadcast_pending = true", 1, true))
         H.truthy(main:find('local cim = get_mod("cim_dev") or get_mod("cim")', 1, true))
         H.truthy(main:find("mod._la_offhand_restore_done = deferred == 0", 1, true))
     end)
