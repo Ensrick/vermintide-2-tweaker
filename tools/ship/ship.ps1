@@ -56,6 +56,7 @@ param(
     [switch]$AllowPublic,
     [switch]$NoRemote,
     [switch]$SkipGitHub,
+    [switch]$NoClaim,
     [switch]$SelfTest
 )
 
@@ -822,6 +823,21 @@ finally {
     Assert ($lintPos -ge 0) "ship source invokes target-mod lint (issue #591)"
     Assert ($launcherPos -ge 0 -and $quickPos -lt $launcherPos -and $lintPos -lt $launcherPos) "both headless gates precede launcher build/deploy/upload"
 
+    # Parallel-session collision guard: the ship/version claim gate must be
+    # present, must precede the launcher, and must expose the -NoClaim escape
+    # hatch. The banner marker is concatenated so it appears literally only once
+    # (in the gate banner), not here.
+    $claimGateMarker = 'SHIP/VERSION ' + 'CLAIM GATE'
+    $claimGatePos = $selfTxt.IndexOf($claimGateMarker)
+    # LastIndexOf: compare against the MAIN-BODY launcher call, not the earlier
+    # IndexOf-literal in this self-test block (the launcher marker occurs twice).
+    $launcherMainPos = $selfTxt.LastIndexOf('& $launcher @launcherArgs')
+    Assert ($claimGatePos -ge 0) "ship source contains the ship/version claim gate (parallel-session collision guard)"
+    Assert ($claimGatePos -ge 0 -and $launcherMainPos -ge 0 -and $claimGatePos -lt $launcherMainPos) "claim gate precedes launcher build/deploy/upload"
+    Assert ($selfTxt.IndexOf('-Verify -ExpectedVersion $modVersion') -ge 0) "claim gate verifies the claim against the source MOD_VERSION"
+    Assert ($selfTxt.IndexOf('-Mod $Mod -Release -Quiet') -ge 0) "ship auto-releases the claim on success"
+    Assert ($selfTxt -match '(?m)^\s*\[switch\]\$NoClaim\b') "ship exposes the -NoClaim solo-session escape hatch"
+
     Write-Host ""
     if ($script:__stpass) {
         Write-Host "[ship.ps1 -SelfTest] OK -- ship helper contracts intact." -ForegroundColor Green
@@ -877,6 +893,48 @@ if (Test-Path $luaPath) {
     $luaTxt = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
     if ($luaTxt -match 'MOD_VERSION\s*=\s*"([^"]+)"') { $modVersion = $matches[1] }
     if ($luaTxt -match '\[(\w+):LOAD\]')              { $loadTag = $matches[1] }
+}
+
+# ---------------------------------------------------------------------------
+# SHIP/VERSION CLAIM GATE (parallel-session collision guard). Full rationale +
+# usage: tools/ship/CLAIMS.md. Runs BEFORE the QA gates and before any
+# build/deploy/upload so a missing/mismatched claim fails fast and cheap.
+#
+# Parallel Claude sessions on this machine repeatedly allocated the SAME next
+# MOD_VERSION and uploaded competing bundles (cosmetics 0.9.143 + 0.9.145, wt
+# 0.12.273-beta, wt_dev 0.12.274-dev), each forcing a reconciliation build.
+# claim.ps1 is an atomic per-mod lock that also records the allocated version;
+# this gate refuses to ship unless a LIVE claim exists whose version EQUALS the
+# source MOD_VERSION about to ship. The claim is auto-released on ship success.
+#
+# -NoClaim skips the gate (loud warning) for a solo session or an urgent fix, so
+# rolling this out can never brick a ship. A MISSING claim.ps1 (tooling absent)
+# also fails open with a warning; only the coordination STATE fails closed.
+# ---------------------------------------------------------------------------
+if ($NoClaim) {
+    Write-Host ""
+    Write-Host "  !! -NoClaim: skipping the ship/version claim gate. Safe ONLY in a solo" -ForegroundColor Yellow
+    Write-Host "     session -- parallel sessions can collide on MOD_VERSION and upload" -ForegroundColor Yellow
+    Write-Host "     competing bundles (see tools/ship/CLAIMS.md)." -ForegroundColor Yellow
+}
+else {
+    $claimScript = Join-Path $PSScriptRoot 'claim.ps1'
+    if (-not (Test-Path -LiteralPath $claimScript)) {
+        Write-Host ""
+        Write-Host "  !! claim.ps1 not found at $claimScript -- cannot enforce the ship/version" -ForegroundColor Yellow
+        Write-Host "     claim gate; proceeding UNGUARDED. Reinstall tools/ship/claim.ps1." -ForegroundColor Yellow
+    }
+    else {
+        & $claimScript -Mod $Mod -Verify -ExpectedVersion $modVersion -Quiet
+        $claimExit = $LASTEXITCODE
+        switch ($claimExit) {
+            0 { Write-Host "  OK -- live ship claim for $Mod matches v$modVersion." -ForegroundColor Green }
+            3 { Fail "No live ship claim for '$Mod'. Run:  .\tools\ship\claim.ps1 -Mod $Mod  (it allocates the next version -- set MOD_VERSION to the value it prints, then re-ship). Solo session: re-run ship.ps1 with -NoClaim. See tools/ship/CLAIMS.md." }
+            4 { Fail "Ship claim for '$Mod' does not match the source MOD_VERSION ($modVersion). Another session likely allocated a different version. Reconcile: .\tools\ship\claim.ps1 -Mod $Mod -Release  then re-claim and re-bump. See tools/ship/CLAIMS.md." }
+            5 { Fail "Ship claim for '$Mod' is STALE (older than 2h). Re-claim with .\tools\ship\claim.ps1 -Mod $Mod (a fresh claimant breaks a stale claim), set MOD_VERSION to the printed value, then re-ship. See tools/ship/CLAIMS.md." }
+            default { Fail "Ship claim verification failed (claim.ps1 exit $claimExit). See tools/ship/CLAIMS.md; -NoClaim overrides in a solo session." }
+        }
+    }
 }
 
 $commitProbe = Invoke-NativeCapture { & git -C $repoRoot rev-parse HEAD }
@@ -1366,5 +1424,24 @@ Write-Host "    Confirm the running build via the NEWEST log under" -ForegroundC
 Write-Host "       %APPDATA%\Fatshark\Vermintide 2\console_logs\" -ForegroundColor Yellow
 Write-Host ("    look for:  [{0}:LOAD] v{1}" -f $loadTag, $modVersion) -ForegroundColor Yellow
 Write-Host $bar -ForegroundColor Yellow
+
+# ---------------------------------------------------------------------------
+# Release the ship/version claim: the upload + deploy verified, so v$modVersion
+# is spent and the mod is free for the next session to claim (tools/ship/CLAIMS.md).
+# ---------------------------------------------------------------------------
+if (-not $NoClaim) {
+    $claimScript = Join-Path $PSScriptRoot 'claim.ps1'
+    if (Test-Path -LiteralPath $claimScript) {
+        & $claimScript -Mod $Mod -Release -Quiet
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host ""
+            Write-Host ("  Ship claim for {0} released." -f $Mod) -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host ""
+            Write-Host ("  NOTE: could not auto-release the ship claim for {0}; free it with .\tools\ship\claim.ps1 -Mod {0} -Release." -f $Mod) -ForegroundColor Yellow
+        }
+    }
+}
 
 exit 0
