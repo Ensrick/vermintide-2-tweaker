@@ -1,5 +1,29 @@
 # Weapon Tweaker Changelog
 
+## 0.12.278-beta (2026-07-18) - #2 entry-point decomposition: `_wt_weapon_overrides.lua` [tooling]
+
+- Pure structural split, no behavior change. The three toggleable
+  template-mutating weapon reworks moved verbatim out of `weapon_tweaker.lua`
+  into a new `_wt_weapon_overrides.lua` module: the Authentic Brace of Pistols
+  flintlock rework (`wt_authentic_pistol` profile clone, widened spread clones,
+  halved ammo, no aim mode or rapid fire), the issue 348 Kruber Empire 1h sword
+  push-attack combo revert, and the Warrior Priest punch buff
+  (`wt_priest_punch_buffed` profile clone).
+- Helper bodies, cloned-profile values, `printf` strings, toggle names, and the
+  public `mod.wt_apply_priest_punch_buff` / `mod._wt431_brace_repoint` fields are
+  byte-identical to their pre-split form. No hook or command was added, removed,
+  or reordered. The module stays immediately before the issue 431 parity beacon,
+  which still sees all three registration sites populated before it loads.
+- The entry point drops from 4186 to 3652 counted lines, restoring the headroom
+  that made even a two-line edit a hard file-size gate failure.
+
+**Solo verify:** Confirm `[wt:LOAD] v0.12.278-beta`. Turn on Authentic Brace of
+Pistols and restart: the brace must fire single armor-piercing shots at 12 total
+ammo with no aim mode. Turn on the Warrior Priest punch buff and confirm the
+Reckoner greathammer special still staggers and damages as before. Toggle the
+Kruber 1h sword push-attack revert and confirm the push attack chains into the
+horizontal first light. `/wt_regression_test` must pass with no new failures.
+
 ## 0.12.276-beta (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
 
 - CWV's Infantry Combat Style reports its deep-cloned effective template as

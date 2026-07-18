@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.279-dev (2026-07-18) - #2 entry-point decomposition: `_wt_weapon_overrides.lua` [tooling]
+
+- Runtime-parity mirror of Weapon Tweaker `0.12.278-beta`: the Authentic Brace of
+  Pistols rework, the issue 348 Kruber 1h sword push-attack revert, and the
+  Warrior Priest punch buff moved verbatim out of the entry point into a new
+  `_wt_weapon_overrides.lua` module.
+- Pure structural split. Helper bodies, cloned-profile values, `printf` strings,
+  toggle names, and the public `mod.wt_apply_priest_punch_buff` /
+  `mod._wt431_brace_repoint` fields are byte-identical to their pre-split form,
+  and both damage profiles still register unconditionally at load so peer
+  `NetworkLookup` indices stay aligned.
+- The dev entry point drops from 4338 to 3804 counted lines, restoring the
+  headroom that made even a two-line edit a hard file-size gate failure.
+
+**Solo verify:** Confirm `[wt:LOAD] v0.12.279-dev`, then follow the
+`0.12.278-beta` verification above.
+
 ## 0.12.277-dev (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
 
 - Runtime-parity mirror of Weapon Tweaker `0.12.276-beta`: CWV's Infantry
