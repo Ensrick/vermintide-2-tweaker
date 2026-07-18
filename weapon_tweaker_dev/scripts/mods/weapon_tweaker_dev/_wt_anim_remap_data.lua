@@ -1903,6 +1903,11 @@ do
         parry_pose                 = "parry_pose",
         push_stab                  = "attack_swing_left_diagonal",
     }
+    -- CWV's Infantry combat style runs es_2h_heavy_spear under a verbatim clone of
+    -- the elf spear template. The clone name is what reaches _resolve_template_remap,
+    -- so without this alias no wh_ remap installs and the elf stab fires unauthored
+    -- on Saltzpyre's billhook skeleton - an engine fatal pcall cannot catch (#732).
+    R.cwv_infantry_spear_template = R.two_handed_spears_elf_template_1
     R.two_handed_swords_executioner_template_1 = R.two_handed_swords_executioner_template_1 or {}
     R.two_handed_swords_executioner_template_1.es_ = R.two_handed_swords_executioner_template_1.es_ or false
     R.two_handed_swords_executioner_template_1.we_ = {

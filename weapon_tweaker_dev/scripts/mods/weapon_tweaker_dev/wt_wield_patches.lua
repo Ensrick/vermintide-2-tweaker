@@ -54,6 +54,17 @@ M.patches = {
         es_knight         = "to_polearm",
         es_questingknight = "to_polearm",
     },
+    -- CWV's Infantry combat style clones the elf spear template under a new name;
+    -- the wield picker keys on that clone name, so it needs its own row (#732).
+    cwv_infantry_spear_template = {
+        wh_captain        = "to_2h_billhook",
+        wh_bountyhunter   = "to_2h_billhook",
+        wh_zealot         = "to_2h_billhook",
+        es_mercenary      = "to_polearm",
+        es_huntsman       = "to_polearm",
+        es_knight         = "to_polearm",
+        es_questingknight = "to_polearm",
+    },
     -- Kruber's halberd (es_halberd), vanilla wield_anim = "to_polearm".
     two_handed_halberds_template_1 = {
         es_mercenary      = "to_polearm",
