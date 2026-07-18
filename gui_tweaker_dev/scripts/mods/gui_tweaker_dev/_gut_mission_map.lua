@@ -117,6 +117,11 @@ local VotePolicy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_mission_vote_po
 -- (VoteManager.is_ingame_vote, vote_manager.lua:282) and the independent input gate
 -- (VoteManager.update, vote_manager.lua:334) without mutating VoteTemplates, changing
 -- the RPC payload, appending a NetworkLookup key, or altering keep voting.
+-- IngameVotingUI.start_vote localizes `template.text` only through the
+-- `modify_title_text` branch (ingame_voting_ui.lua:116-121), unlike the keep's
+-- MissionVotingUI. The promoted copy therefore supplies an identity title modifier
+-- when vanilla supplied none, so the HUD receives the localized title instead of
+-- displaying the internal `game_settings_vote` key.
 --
 -- TRANSITION (verified): Managers.ui:handle_transition("start_game_view_force",
 -- { menu_state_name = "play", use_fade = true }).
@@ -210,13 +215,12 @@ local function _promote_active_mission_vote(self)
     if VotePolicy.needs_ingame_hud(vote_name, mechanism, level_key, is_in_inn)
         and type(active_template) == "table"
         and active_template.ingame_vote ~= true then
-        local template = {}
-        for key, value in pairs(active_template) do
-            template[key] = value
+        local template = VotePolicy.promote_template(active_template)
+        if not template then
+            return
         end
-        template.ingame_vote = true
         active.template = template
-        _pf("[gut:700] mission vote promoted to IngameVotingUI: vote=%s mechanism=%s level=%s peer=%s",
+        _pf("[gut:700] mission vote promoted to localized IngameVotingUI: vote=%s mechanism=%s level=%s peer=%s",
             tostring(vote_name), tostring(mechanism), tostring(level_key), tostring(Network.peer_id()))
     end
 end
@@ -261,6 +265,15 @@ if type(rt_register) == "function" then
         end
         if not VotePolicy.needs_ingame_hud("game_settings_vote", "adventure", "military", false) then
             return "live Adventure game-settings vote was not promoted"
+        end
+        local promoted = VotePolicy.promote_template({
+            text = "game_settings_vote",
+            ingame_vote = false,
+        })
+        if not promoted or promoted.ingame_vote ~= true
+            or type(promoted.modify_title_text) ~= "function"
+            or promoted.modify_title_text("Start Game") ~= "Start Game" then
+            return "promoted vote title does not traverse the HUD localization path"
         end
         if VotePolicy.needs_ingame_hud("game_settings_vote", "adventure", "inn_level", true) then
             return "keep game-settings vote was incorrectly promoted"
