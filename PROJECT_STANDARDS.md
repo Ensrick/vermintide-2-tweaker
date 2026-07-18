@@ -745,6 +745,37 @@ complete. It never means a renderer, transition, retained engine state, or
 peer observer passed in-game; those remain subject to G-APPEARANCE's live and
 co-op verification matrix.
 
+### 5.1c Retained-state verification (binding, issue #660)
+
+Any fix that touches rendering, transform, material, glow, or pose state MUST
+log the RETAINED engine state read BACK from the engine after the edge it
+mutates, never the success of the setter call. A `set_local_scale` /
+`set_local_position` / material-override call can return cleanly while the
+retained state the renderer actually reads stays unchanged, so setter-success
+("applied=y") is worthless as verification evidence: it proves a call happened,
+not that anything changed.
+
+This is the #660 false-positive class. `weapons_of_chaos` logged an apply target
+of `{0,0,-0.3}` while the retained transform stayed identity, and that setter-
+success line read as a pass while the render was in fact untouched. The
+reference implementation is the `[cwv:huskpath]` postcondition pattern in
+`character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua`
+(`_om._husk_postcondition_log`): after the apply resolves a def it reads
+`retained_scale` / `retained_pos` / `retained_rot` back off the engine and logs
+those, throttled once per (slot, hand, def, retained-fingerprint). Copy that
+shape at any new appearance apply site: read back, log the readback, never the
+setter return.
+
+A `verify-fix` / `verify-fix-coop` label on an appearance issue additionally
+requires the census row context per `docs/APPEARANCE_UNIFICATION_PLAN.md` § 4:
+the family's census row must be green across cells, and the test-method comment
+(§11 test-method prerequisite) must name the cells exercised. A setter-success
+log or a single-surface check does NOT earn the label.
+
+Cross-ref: §5.1a (apply-site log line), §5.1b (appearance contracts census),
+§11 Labels (verify-* prerequisites), `docs/WEAPON_APPEARANCE_STANDARD.md` (the
+canonical render-path contract).
+
 ### 5.2 Manual smoke test expectation
 For changes affecting load-bearing systems (cosmetics, weapon hooks, attachment
 system, network RPCs), the user is expected to do at least one in-game test
@@ -1376,6 +1407,34 @@ Before writing `if not X then return end` in a hook, answer in a comment:
 
 If you can't answer 1-4, DON'T add the guard.
 
+### 8.7 Session hygiene: close out before ending (binding, 2026-07-18)
+
+A session ends CLEAN or it does not end. Three closeouts are mandatory before
+handing off; each traces to a state left dirty overnight that cost the next
+session's start.
+
+1. **Git operations resolved.** Never leave a conflicted cherry-pick, rebase, or
+   merge in the tree overnight. A 15-file conflicted cherry-pick left mid-flight
+   blocked the entire 2026-07-17 session start: no real work could begin until it
+   was unwound. If a merge or cherry-pick cannot be completed cleanly, abort it
+   (`git cherry-pick --abort`, `git rebase --abort`, `git merge --abort`) and
+   re-open the remaining work as a GitHub issue per §11, rather than parking the
+   index in a conflicted state a later session inherits blind.
+2. **VMBLauncher `ProjectRoot` restored to the monorepo.** After any worktree
+   retarget, point `ProjectRoot` back at the monorepo root. Never leave it pinned
+   to a worktree whose branch has already merged: the `vt2-cim-promo` pin was
+   left live after its branch merged, and only `ship.ps1`'s provenance gate
+   caught it before a stale-tree ship went out. The provenance gate is the
+   backstop, not the plan; restore the root yourself as part of closing the
+   worktree.
+3. **Absorbed remote branches deleted.** Once a branch's PR merges, delete the
+   remote branch in the same pass. 57 merged-but-undeleted branches accumulated;
+   the dead branches bury the handful a session actually needs to reason about
+   and make the branch inventory untrustworthy.
+
+Cross-ref: §6.5 / §6.6 (ship pipeline + protected-`master` landing), `CLAUDE.md`
+NON-NEGOTIABLES (worktree / VMBLauncher discipline).
+
 ---
 
 ## 9. Anti-patterns (observed in this repo's history — do not repeat)
@@ -1765,6 +1824,32 @@ issues, changelogs, and logs. Functional qualifiers describing ownership or beha
 remain valid. The blocking guard is `qa/check_loc_tags.ps1`; full rules are in
 `docs/LOCALIZATION_STANDARD.md` § 13.
 
+### Umbrella issues and label-cleanup integrity (binding, 2026-07-18)
+
+**Umbrella doctrine.** The THIRD issue that traces to a shared root cause
+REQUIRES an umbrella issue carrying a sub-issue list; the two prior singletons
+become sub-items on it. From that point, a new symptom report of that known root
+is filed as a comment or sub-item ON THE UMBRELLA, not as a fresh standalone
+issue. Umbrella issues carry the `architecture` label (an informational modifier
+alongside the `regression` / `audit` / `blocked` set above) so the root-cause
+clusters are filterable.
+
+Why it is not optional: 138 of 321 open issues traced to the single #660 root,
+and #487 silently blocked ten downstream issues until it was promoted to an
+umbrella and the dependents were linked to it. Without the umbrella, a root cause
+hides as N unrelated-looking tickets and the same fix gets re-investigated from N
+different symptoms.
+
+**Lifecycle-label integrity.** Exactly ONE lifecycle label per open issue (the
+Labels status set above: `not-started` / `verify-fix` / `verify-fix-coop` /
+`diagnostics-armed` / `Fixed`). The ship.ps1 status-label mechanization (issue
+#326) already enforces one-lifecycle on ship; manual edits must not reintroduce a
+second. Any batch label-cleanup session MUST log what it removed and why, in an
+issue comment on each affected issue. Silent stripping is banned: correct
+`verify-fix` labels were silently removed twice, on 2026-07-17 and 2026-07-18,
+dropping fixes off the user's test queue with no trace of who did it or why. A
+cleanup that cannot explain a removal in a comment must not make the removal.
+
 ### What used to live here
 A status roadmap (`✅ DONE / ⚠ PARTIAL / ❌ TODO` tables across "High ROI",
 "Medium ROI", "Lower ROI", "Architectural", "Per-mod" subsections) was
@@ -1789,6 +1874,44 @@ see what was open on a given date.
 | GitHub Action | `.github/workflows/qa.yml` | runs `run_all.ps1` (full policy engine) + an all-mods `lint-mod.ps1` step on push + PR | automatic |
 
 Full check-to-bug-class map: [`qa/CHECKS.md`](qa/CHECKS.md).
+
+---
+
+## 11b. Zero-warning policy (binding, 2026-07-18)
+
+A QA warning is a bug with a deadline, not a permanent fixture. Within ONE WEEK
+of first appearing, every warning surfaced by the §11a tooling must reach one of
+three terminal states:
+
+- **(a) Fixed** - the flagged source is corrected and the warning clears.
+- **(b) Baselined** - the warning is entered into the check's baseline with a
+  tracking issue number recorded IN the baseline entry (the `qa/baselines/`
+  pattern, e.g. `file_sizes.json` per issue #429). A baseline with no issue
+  number is not a baseline, it is a swept warning.
+- **(c) Checker-defect** - the warning is traced to a bug in the checker itself,
+  and the CHECKER is fixed so the false warning stops emitting.
+
+**Standing warnings are forbidden.** A warning block that never clears trains
+every session to scroll past it, so the day a real warning appears inside it,
+nobody reads it. Tonight's evidence is decisive: all seven standing warnings
+turned out to be checker defects, not real problems - the localization parser
+(three separate false positives), the decisions-wired-career over-derivation
+check, and luacheck missing `printf` from its globals list. Every one had been
+scrolled past for weeks while masking exactly nothing that needed a human.
+
+The §8.5a gate-semantics rule still holds (warnings report, errors block, so a
+warning never wedges a ship); this policy governs what happens to a warning
+AFTER it reports. Warnings do not block the commit, but they DO carry a one-week
+clock, and "still there next week" is itself the failure.
+
+**Corollary: every pre-crash probe needs a consumer.** A runtime probe that
+detects a pre-crash condition must feed a consumer - issue auto-annotation, or a
+named session-start check - not just a log line nobody reads. The `[gut:272]`
+probe flagged the #737 score-CTD divergence four minutes before the crash, and
+nothing was consuming its output, so the whole warning window bought us nothing.
+An unconsumed probe is the runtime twin of a standing warning: signal with no
+reader. (Sibling of §2.2b tier (c): a probe that outlives its issue is dead
+log-noise; a probe whose output nothing reads is dead on arrival.)
 
 ---
 
@@ -1878,6 +2001,9 @@ rules; old pain that's been solved may justify deleting rules. Both are fine.
 ## 14. Quick reference card
 
 ```
+AT SESSION START:
+  - check_pipeline_state.ps1 (pipeline + worktree state clean before touching anything)
+
 BEFORE coding a fix:
   - Read crash log / repro evidence
   - Read current source (not stale audit line numbers)
@@ -1892,6 +2018,7 @@ WHEN coding:
   - Comment: why, not what; cite when fixing a bug
 
 BEFORE shipping:
+  - claim.ps1 (claim the mod first - every ship, before build)
   - MOD_VERSION bumped
   - CHANGELOG entry written
   - No forward-ref bugs (visually verify; future: luacheck)
@@ -1902,6 +2029,9 @@ BEFORE shipping:
 AFTER shipping:
   - workshop_log.txt shows "Uploaded new content" for the item
   - git add / commit / push the source (the commit is part of the ship, sec. 6.6)
+
+BEFORE a verify session:
+  - generate_playtest.ps1 (generate the in-game playtest checklist)
 
 WHEN BLOCKED:
   - Memory + CHANGELOG grep for the literal symptom
@@ -1989,7 +2119,7 @@ Per the chest-of-trials root-cause analysis (`DORMANT_BOON_RARITY` indexed by cl
 
 ---
 
-*Last updated: 2026-07-16 - reconciled cfg-owned visibility, suffix-owned ship approval, enabled-remote deployment, GitHub-only current status, and empirical issue fallback comments. Prior update 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
+*Last updated: 2026-07-18 - added §11b zero-warning policy (fix/baseline/checker-defect within one week + pre-crash-probe-needs-a-consumer corollary), §11 umbrella doctrine + lifecycle-label-cleanup integrity, §8.7 session hygiene (git/worktree/branch closeout), §5.1c retained-state verification (read-back not setter-success), and three §14 card rows (claim.ps1 / check_pipeline_state.ps1 / generate_playtest.ps1). Prior update 2026-07-16 - reconciled cfg-owned visibility, suffix-owned ship approval, enabled-remote deployment, GitHub-only current status, and empirical issue fallback comments. Prior update 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
 pre-authorized for the full pipeline + git commit/push; stable promotions need a
 fresh per-build signal), sec. 8.5a gate semantics (errors block, warnings
 report), sec. 14 card gained the approval axis + AFTER-shipping steps.

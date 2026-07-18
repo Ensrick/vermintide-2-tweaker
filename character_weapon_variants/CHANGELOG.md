@@ -1,5 +1,26 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.449-dev (2026-07-18) - mixed-lobby fallback package parity (#491) [verify-fix-coop]
+
+- Fixed the remaining non-CWV peer crash when a CWV wearer spawns or wields a
+  pairing weapon. The loadout and equipment RPCs already substituted the
+  variant's vanilla `base_weapon`, but `ProfileSynchronizer` still advertised
+  the variant's different third-person unit packages. Remote package collection
+  now borrows the same vanilla base identity, so an unmodded peer loads the
+  fallback units before `rpc_add_equipment` / `rpc_wield_equipment` can spawn
+  them. Owner first-person packages and CWV rendering remain unchanged.
+- Added an engine-free policy and regression coverage for the reported Sword
+  and Mace -> vanilla Mace and Sword fallback, career unit overrides, local 1P
+  preservation, native pass-through, and missing-base fail-closed behavior.
+
+**Coop verify:** CWV host equips Sword and Mace; a client with CWV disabled joins
+in the Keep, enters a mission, observes a swap away/back, and hot-joins once.
+Repeat with owner/client roles reversed. Require `[cwv:491] profile package
+shadow: cwv_es_sword_and_mace -> es_dual_wield_hammer_sword`, no
+`World.spawn_unit returned nil`, and no missing `slot_data` fatal. The non-CWV
+observer should see vanilla Mace and Sword; a CWV observer should retain the
+curated pairing through the existing appearance channel.
+
 ## 0.1.448-dev (2026-07-18) - OOP W5: husk-path module extraction [untested]
 
 - Structural only, zero behavior change: the husk render path (mesh re-key, hand preselect, ammo-strip, transform apply, stale-unit ledger, [cwv:huskpath] postcondition - 0.1.447's fresh code included) moved verbatim into `_cwv_husk_path.lua` (15 _om._husk_* exports, printf markers byte-identical); entry shrinks 11,791 -> 11,084. The three husk hooks stay in the entry (the spawn_inventory_unit hook is fused with Old Musket code; keeping the trio together preserves install timing). Guard test extended; 1,024-test suite, strict lint (69 hooks unchanged), bundle build green.

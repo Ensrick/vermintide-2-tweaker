@@ -4,11 +4,20 @@ local mod = get_mod("event_tweaker")
 --
 -- The Feast of Grimnir reference mod proves that current event levels become
 -- selectable when the stock `celebrate` area is visible. Event Tweaker keeps
--- the useful boundary and discards the legacy broad writes: no GameActs,
--- UnlockableLevels, UnlockableLevelsByGameMode, MapPresentationActs, or
--- NetworkLookup mutation. The area flag is changed only for the duration of
--- vanilla's widget build, then restored even if that build raises. Mission
+-- the useful boundary: the area flag is changed only for the duration of
+-- vanilla's widget build, then restored even if that build raises, and mission
 -- lists are rebuilt on each view entry from the exact two-entry allowlist.
+-- The visibility gate requires ONLY the tables the menus read (AreaSettings /
+-- ActSettings / LevelSettings); the issue 626 defect was gating on four
+-- NetworkLookup tables the menus never read, which fail-closed the whole
+-- feature into "toggle on, nothing shows". If vanilla's boot registration
+-- genuinely missed a level, the load-time fallback below idempotently appends
+-- it to the LOCAL campaign tables (UnlockableLevels / GameActs /
+-- MapPresentationActs) the way vanilla registers it
+-- (level_unlock_settings.lua:100-135). NetworkLookup is NEVER touched: the
+-- wire tables were built from LevelSettings at boot
+-- (network_lookup.lua:1239-1248) and modded NetworkLookup keys on vanilla
+-- RPCs CTD non-mod peers (issue 278, issue 371).
 -- VMF automatically disables these four hooks with the mod, so reload,
 -- disable/re-enable, controller/desktop re-entry, and other mods' area state do
 -- not need persistent snapshots or cleanup callbacks.
@@ -21,7 +30,27 @@ local function _get(setting_id)
 end
 
 local function _contract()
-    return Missions.validate_contract(LevelSettings, AreaSettings, ActSettings, NetworkLookup)
+    return Missions.validate_contract(LevelSettings, AreaSettings, ActSettings)
+end
+
+-- Campaign registration fallback: runs unconditionally at mod load (never
+-- toggle-gated), so every Event Tweaker peer applies the identical idempotent
+-- append at the identical time. On a healthy install this is a no-op.
+local _campaign_appended = Missions.ensure_campaign_registration(
+    rawget(_G, "LevelSettings"),
+    rawget(_G, "UnlockableLevels"),
+    rawget(_G, "GameActs"),
+    rawget(_G, "MapPresentationActs"))
+
+local function _campaign_status()
+    if #_campaign_appended == 0 then
+        return "vanilla"
+    end
+    return table.concat(_campaign_appended, ",")
+end
+
+if #_campaign_appended > 0 then
+    pcall(printf, "[event-missions:626] campaign fallback appended: %s", _campaign_status())
 end
 
 local _last_contract_error
@@ -92,8 +121,8 @@ mod:command("event_mission_probe", "Inspect the issue-626 event-mission availabi
     local ok, problems = _contract()
     local ids = Missions.enabled_ids(_get)
     local detail = ok and "OK" or table.concat(problems, "; ")
-    mod:echo("[event missions] selected={%s} contract=%s", table.concat(ids, ","), detail)
-    pcall(printf, "[event-missions:626] probe selected=[%s] contract=%s", table.concat(ids, ","), detail)
+    mod:echo("[event missions] selected={%s} contract=%s campaign=%s", table.concat(ids, ","), detail, _campaign_status())
+    pcall(printf, "[event-missions:626] probe selected=[%s] contract=%s campaign=%s", table.concat(ids, ","), detail, _campaign_status())
 end)
 
 ET.rt_register("issue626_event_mission_allowlist_contract", function()
@@ -104,4 +133,18 @@ ET.rt_register("issue626_event_mission_allowlist_contract", function()
     end
     local ok, problems = _contract()
     if not ok then return table.concat(problems, "; ") end
+    -- Post-fallback invariant: both allowlisted levels must sit in the local
+    -- campaign tables (vanilla-registered or appended at load).
+    local unlockable = rawget(_G, "UnlockableLevels")
+    local game_acts = rawget(_G, "GameActs")
+    for i = 1, #Missions.ALLOWLIST do
+        local id = Missions.ALLOWLIST[i].id
+        if type(unlockable) ~= "table" or not table.find(unlockable, id) then
+            return "UnlockableLevels lacks " .. id
+        end
+        local act_levels = type(game_acts) == "table" and game_acts[Missions.ACT_KEY]
+        if type(act_levels) ~= "table" or not table.find(act_levels, id) then
+            return "GameActs." .. Missions.ACT_KEY .. " lacks " .. id
+        end
+    end
 end)
