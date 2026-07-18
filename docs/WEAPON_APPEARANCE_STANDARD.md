@@ -680,7 +680,7 @@ The canonical surface vocabulary is owner 1P, owner 3P, bot 3P, remote husk
 3P, inventory preview, cosmetic preview, Athanor preview, ordinary crafting
 preview, lobby preview, score screen, and Hold-Tab. The canonical replay-edge
 vocabulary is instance load, initial spawn, equip, wield, customization change,
-style change, mission transition, respawn, hot join, peer ready, parity ready,
+style change, career change, mission transition, respawn, hot join, peer ready, parity ready,
 rejoin, preview open, preview reopen, lobby/score creation, and mod-disable
 restore. These lists are duplicated deliberately as immutable minima in the
 checker: changing the manifest alone cannot shrink the contract universe.

@@ -6,6 +6,7 @@ function M.install(mod, rt_register, deps)
     local _rt_register = rt_register
     local LA_PERSIST = deps.la_persist
     local SCORE_IDENTITY = deps.score_identity
+    local HUSK_IDENTITY = deps.husk_identity
     local COS_RPC_SCHEMA = deps.rpc_schema
     local COMPOSITE_ICONS = deps.composite_icons
     local CUSTOM_HATS = deps.custom_hats
@@ -62,7 +63,8 @@ _rt_register("cos_la_reconcile_and_pull_wired", function()
     end
     if not (LA_PERSIST and type(LA_PERSIST.save_offhand) == "function"
         and type(LA_PERSIST.clear_offhand) == "function"
-        and type(LA_PERSIST.get_saved_offhands) == "function") then
+        and type(LA_PERSIST.get_saved_offhands) == "function"
+        and type(LA_PERSIST.commit_offhand_entry) == "function") then
         return "LA_PERSIST offhand API incomplete"
     end
 end)
@@ -178,6 +180,39 @@ _rt_register("cos_la_score_screen_apply_wired", function()
     end
 end)
 
+-- #698: peer-addressed appearance state must carry the exact human career.
+-- A human career change invalidates stale material/mesh state before husk
+-- wield; a bot sharing the host peer must neither consume nor purge it.
+_rt_register("issue698_husk_career_identity", function()
+    if type(HUSK_IDENTITY) ~= "table"
+        or type(HUSK_IDENTITY.new_entry) ~= "function"
+        or type(HUSK_IDENTITY.entry_matches_career) ~= "function"
+        or type(HUSK_IDENTITY.invalidate_for_career) ~= "function"
+    then
+        return "career-scoped husk identity policy missing"
+    end
+    local gk = HUSK_IDENTITY.new_entry("armor", "rt_gk", "rt_base", nil,
+        "es_questingknight")
+    local store = { rt_peer = { slot_skin = gk } }
+    local bot_removed, bot_reason = HUSK_IDENTITY.invalidate_for_career(
+        store, "rt_peer", "es_knight", false)
+    if bot_removed ~= 0 or bot_reason ~= "non-human-owner-alias"
+        or store.rt_peer.slot_skin ~= gk then
+        return "bot owner alias invalidated human appearance state"
+    end
+    local removed, reason = HUSK_IDENTITY.invalidate_for_career(
+        store, "rt_peer", "es_knight", true)
+    if removed ~= 1 or reason ~= "career-invalidated" or store.rt_peer ~= nil then
+        return "human career change retained stale Grail Knight appearance state"
+    end
+    local current = HUSK_IDENTITY.new_entry("armor", "rt_fk", "rt_base", nil,
+        "es_knight")
+    if not HUSK_IDENTITY.entry_matches_career(current, "es_knight")
+        or HUSK_IDENTITY.entry_matches_career(current, "es_questingknight") then
+        return "career match policy is not exact"
+    end
+end)
+
 -- #264: reconcile must treat a missing store entry as TERMINAL ("no-entry"),
 -- not retryable - otherwise a reverted cosmetic is re-imposed by stale
 -- pending-queue entries. Pure store-lookup path; no engine calls.
@@ -230,7 +265,8 @@ end)
 -- (save -> read back -> clear -> gone). Uses a fake backend_id; leaves no
 -- residue in la_persisted_equips.
 _rt_register("cos_la_offhand_persistence_roundtrip", function()
-    if not (LA_PERSIST and LA_PERSIST.save_offhand) then return "offhand API missing" end
+    if not (LA_PERSIST and LA_PERSIST.save_offhand
+            and LA_PERSIST.commit_offhand_entry) then return "offhand API missing" end
     local bid, hand = "rt_fake_bid_0001", "left_hand_unit"
     LA_PERSIST.save_offhand(bid, hand, "rt_key", "rt_vanilla")
     local saved = LA_PERSIST.get_saved_offhands()
@@ -243,10 +279,18 @@ _rt_register("cos_la_offhand_persistence_roundtrip", function()
     saved = LA_PERSIST.get_saved_offhands()
     if saved and saved[bid] then return "cleared offhand still present" end
 
-    LA_PERSIST.save_offhand(bid, hand, nil, nil, "units/rt/dual_left")
+    local committed = LA_PERSIST.commit_offhand_entry({
+        backend_id = bid,
+        hand_field = hand,
+        offhand_unit = "units/rt/dual_left",
+        skin_key = "rt_dual_skin",
+        player_unit = nil,
+    })
+    if not committed then return "exact offhand commit rejected without a player unit" end
     saved = LA_PERSIST.get_saved_offhands()
     rec = saved and saved[bid] and saved[bid][hand]
     if not (rec and rec.unit_path == "units/rt/dual_left"
+            and rec.vanilla_key == "rt_dual_skin"
             and rec.armoury_key == nil) then
         LA_PERSIST.clear_offhand(bid, hand)
         return "saved native/CWV hand mesh did not read back"

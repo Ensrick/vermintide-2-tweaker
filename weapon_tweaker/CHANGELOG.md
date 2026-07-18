@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.274-beta (2026-07-17) - #661 reconciliation build: both parallel fixes [verify-fix]
+
+- Reconciliation reship: two different builds were briefly uploaded as `0.12.273-beta` by parallel sessions. This unambiguous version carries BOTH #661 changes: the shared library's private-clone action ownership (below) AND the inject-site clone-identity restore - `_inject_career_actions` restores canonical `ActionTemplates` identity on any mismatched career-action row before installing (CWV deep-clones donor templates; vanilla installs career rows by identity, `weapons.lua:263`; no repo mod authors custom `action_career_*` rows). Residual conflicts now report `conflict:<action>@<template>`.
+
+**Solo verify:** confirm `[wt:LOAD] v0.12.274-beta`, enter the keep with CWV enabled, open loadouts and swap weapons several times: zero `[wt:career-actions]` lines; career abilities still fire on CWV variants (Dawi maces, Bret Longsword styles).
+
 ## 0.12.273-beta (2026-07-17) - #661 private-clone action ownership [verify-fix]
 
 - Updated the bundled provider-neutral career-action library so private weapon

@@ -16,7 +16,7 @@ line by line, as were `IngameUI.setup_views` / the DLC `ui_views` seam and
 grep-verified when written).
 
 **Dev/stable relationship.** This documents `gui_tweaker_dev` (`gut_dev`,
-MOD_VERSION `0.2.286-dev`, friends-only Workshop 3751024698), the ACTIVE working
+MOD_VERSION `0.2.287-dev`, friends-only Workshop 3751024698), the ACTIVE working
 stream. `gui_tweaker/` (`gut`, public-alpha Workshop 3732144878) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gut_dev`
@@ -161,7 +161,7 @@ A renamespaced fork of the HideBuffs "UI Tweaks" mod (`get_mod("HideBuffs")` -> 
 | `HeroWindowIngameView._update_presentation` [safe] `gui_tweaker_dev.lua:1412` | Lays out the modern keep/ESC menu button column (`offset[2] = -(60*index-1)`, panel `total_height+90`) [src: `hero_window_ingame_view.lua:490-515`] | Compact the column when gut's own Mod Tweaker button pushes it past ~8 to 10 buttons and overflows off-screen (#93, always-on) | The legacy `IngameView` is only the bare in-MISSION menu and has no `set_background_height`/logo - 8 versions of hooking it never fired; the modern menu is this class. No-op below the overflow threshold |
 | `OptionsView.build_settings_list` [hook] `_gut_video_profiles.lua` | Builds each native options-tab widget list from its definition | Prepend five-slot graphics profile controls only to `video_settings_list` | Consolidated singleton for #292; source `options_view.lua:1029-1147`; unsupported Video values are skipped. Every non-Video definition is forwarded by identity and untouched. CKC has no vanilla Options integration (#528). |
 
-`_mod_tweaker_view.lua` is a `class()` view borrowing the IngameUI renderer; it creates a modal input service `create_input_service("gut_mod_tweaker","IngameMenuKeymaps","IngameMenuFilters")` and maps keyboard/mouse/gamepad to it (`:64-69`). The bare pcall there is a backlog P2 (swallows a `create_input_service` failure - the view opens dead with no log).
+`_mod_tweaker_view.lua` is a `class()` view borrowing the IngameUI renderer; it creates a modal input service `create_input_service("gut_mod_tweaker","IngameMenuKeymaps","IngameMenuFilters")` and maps keyboard/mouse/gamepad to it (`:64-69`). The bare pcall there is a backlog P2 (swallows a `create_input_service` failure - the view opens dead with no log). Issue #630's `_gut_dx12_fence630.lua` is an observation-only owner around this existing pass: it edge-logs view entry/exit, selected tab, `Window.has_focus()`, and balanced draw calls with a 48-line process cap. It creates no renderer/world/unit/package, skips no frame, and changes no focus behavior. The captured 2026-07-15 dump spent 15.791 seconds in `RI::wait_for_fence` / `D3D12RenderDevice::end_frame` after `[Window] Window => inactive`; absent a Lua exception or an identified ownership imbalance, a focus workaround would be speculative.
 
 ### Surface 5b - In-mission keep menus + Bestiary/Armory + probes (owner: `docs/engine/09`, `/06`; `_gut_mission_*.lua`, `_ba_*.lua`, the `_gut_*_probe.lua` set)
 

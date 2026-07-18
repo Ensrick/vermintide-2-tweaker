@@ -60,13 +60,13 @@ return function(H, repo_root)
             offhand_names = {}, shield_pools_by_item_type = {}, dbg = function() end,
             dbg_alert = function() end, ui_dump = {}, custom_skin_keys = {},
             offhand_preload_lifecycle = {}, mh_embed = {},
-            la_instance_policy = {},
+            la_instance_policy = {}, husk_identity = {},
         }
         local module = assert(loadfile(base .. "_cos_runtime_checks.lua"))()
         module.install(mod, function(name, fn)
             checks[#checks + 1] = { name = name, fn = fn }
         end, deps)
-        H.equal(#checks, 51)
+        H.equal(#checks, 52)
         H.equal(checks[1].name, "cos_la_reconcile_and_pull_wired")
         H.equal(checks[#checks].name, "mh_package_single_reference")
         H.equal(#commands, 1)

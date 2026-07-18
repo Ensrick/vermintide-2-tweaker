@@ -191,13 +191,73 @@ return function(H, repo_root)
         _G.get_mod = old_get_mod
     end)
 
+    H.test("Apply commits dual components without a live render owner", function()
+        local old_get_mod = _G.get_mod
+        local setting = { schema = 1, careers = {}, illusions = {}, offhands = {} }
+        local fake_mod = {
+            get = function(_, key) return key == "la_persisted_equips" and setting or nil end,
+            set = function(_, key, value) if key == "la_persisted_equips" then setting = value end end,
+            info = function() end,
+            hook_safe = function() end,
+        }
+        _G.get_mod = function() return fake_mod end
+        local persist = dofile(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_persistence.lua")
+
+        local ok_a, action_a = persist.commit_offhand_entry({
+            backend_id = "dual_instance_a",
+            hand_field = "left_hand_unit",
+            offhand_unit = "units/axe_blue",
+            skin_key = "axe_blue_skin",
+            player_unit = nil,
+        })
+        local ok_b = persist.commit_offhand_entry({
+            backend_id = "dual_instance_b",
+            hand_field = "left_hand_unit",
+            offhand_unit = "units/axe_red",
+            skin_key = "axe_red_skin",
+            player_unit = false,
+        })
+        H.equal(ok_a, true)
+        H.equal(action_a, "save-mesh")
+        H.equal(ok_b, true)
+        H.equal(persist.get_saved_offhands_for("dual_instance_a").left_hand_unit.unit_path,
+            "units/axe_blue")
+        H.equal(persist.get_saved_offhands_for("dual_instance_a").left_hand_unit.vanilla_key,
+            "axe_blue_skin")
+        H.equal(persist.get_saved_offhands_for("dual_instance_b").left_hand_unit.unit_path,
+            "units/axe_red")
+
+        H.equal(persist.commit_offhand_entry({
+            hand_field = "left_hand_unit", offhand_unit = "units/wrong",
+        }), false)
+        H.equal(persist.commit_offhand_entry({
+            backend_id = "dual_instance_a", hand_field = "body", offhand_unit = "units/wrong",
+        }), false)
+
+        local cleared, clear_action = persist.commit_offhand_entry({
+            backend_id = "dual_instance_a",
+            hand_field = "left_hand_unit",
+            offhand_unit = "",
+        })
+        H.equal(cleared, true)
+        H.equal(clear_action, "clear-follow-main")
+        H.equal(persist.get_saved_offhands_for("dual_instance_a"), nil)
+        H.equal(persist.get_saved_offhands_for("dual_instance_b").left_hand_unit.unit_path,
+            "units/axe_red")
+        _G.get_mod = old_get_mod
+    end)
+
     H.test("source keeps icon override local and prunes missing item records", function()
         local main_path = repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
         local persist_path = repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_persistence.lua"
+        local commit_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy.lua"
         local f = assert(io.open(main_path, "rb")); local main = f:read("*a"); f:close()
         f = assert(io.open(persist_path, "rb")); local persist = f:read("*a"); f:close()
+        f = assert(io.open(commit_path, "rb")); local commit = f:read("*a"); f:close()
         H.truthy(main:find('mod:hook(UIUtils, "get_ui_information_from_item"', 1, true))
         H.truthy(main:find('_SHIELD_ICON_OWNER_ITEM_TYPES[item_type]', 1, true))
         H.truthy(main:find('inventory_icon = selected_inventory_icon', 1, true))
@@ -205,5 +265,12 @@ return function(H, repo_root)
         H.equal(main:find("WeaponSkins.skins[skin]['inventory_icon'] =", 1, true), nil)
         H.truthy(persist:find("M.prune_missing_items", 1, true))
         H.truthy(main:find("INSTANCE-PRUNE", 1, true))
+        H.truthy(persist:find("M.commit_offhand_entry = function(entry)", 1, true))
+        H.truthy(commit:find("persistence.commit_offhand_entry(entry)", 1, true))
+        H.truthy(main:find("OFFHAND_COMMIT.drain", 1, true))
+        H.equal(main:find("if entry and entry.player_unit and Unit.alive(entry.player_unit) then", 1, true), nil)
+        H.truthy(commit:find("mod._la_self_rebroadcast_pending = true", 1, true))
+        H.truthy(main:find('local cim = get_mod("cim_dev") or get_mod("cim")', 1, true))
+        H.truthy(main:find("mod._la_offhand_restore_done = deferred == 0", 1, true))
     end)
 end

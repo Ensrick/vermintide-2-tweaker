@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.286-dev"
+local MOD_VERSION = "0.2.287-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1323,6 +1323,15 @@ mod:hook_safe("IngameViewLayoutLogic", "setup_button_layout", function(self, lay
     for i = 1, #entries do ts[#ts + 1] = tostring(entries[i].transition) end
     mod:debug("[mt:esc] setup_button_layout -> %d buttons: [%s]", #entries, table.concat(ts, ", "))
 end)
+
+-- #630: automatic, bounded lifecycle evidence around Mod Tweaker's borrowed
+-- renderer pass. This is diagnostics only; the DX12 fence dump does not support
+-- changing renderer or focus behavior yet. Both presentation modules consume
+-- this one probe so their counters cannot drift.
+local _gut_dx12_fence630 = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dx12_fence630")
+mod._gut_dx12_fence630 = _gut_dx12_fence630.new({
+    emit = function(line) printf("%s", line) end,
+})
 
 -- Build + attach the Mod Tweaker view into an IngameUI instance's `views` table.
 -- Idempotent. Used by BOTH the setup_views hook (early attempt) and the

@@ -114,7 +114,10 @@ why per-hand cosmetic picks that vanilla can't encode (independent left/right il
 #416 vanilla offhand meshes and #483 individualized CWV dual-weapon mounts) ride the mod channel and carry plain STRINGS (unit paths),
 never `NetworkLookup` indices. #416 added the additive `offhand_unit` field (a unit path,
 or `""` = clear) + the parallel `mod._offhand_mesh_by_peer` store; a non-mod peer simply
-sees the base offhand (acceptable degrade, never a crash). See LA_SYNC §6.9.
+sees the base offhand (acceptable degrade, never a crash). Schema 2 requires every
+LA material/mesh state record to carry `wearer_career`; receivers and the husk wield
+path compare it with the live inventory extension before replay, and legacy unstamped
+state fails closed (#698). See LA_SYNC §6.9.
 
 | Class.method (kind) | Vanilla behavior | Why cosmetics hooks it | Trap / invariant |
 |---|---|---|---|
