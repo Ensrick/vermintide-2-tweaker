@@ -533,9 +533,10 @@ end
 -- branch rendered without chat spam or a manual command.
 local _scope_probe = mod:dofile("scripts/mods/dynamic_cosmetic_portraits/_dcp_player_scope_probe")
 local _scope_probe_state = _scope_probe.new(24)
+local _score_record = mod:dofile("scripts/mods/dynamic_cosmetic_portraits/_dcp_score_record")
 local function _scope_subject(player)
-    -- (#435) The score-screen seam resolves from score RECORDS, not Player
-    -- objects; it passes a pre-built subject string ("bot:6", "remote:1", ...).
+    -- Score rows resolve from their own record rather than a Player object;
+    -- callers pass the already-bounded record subject string here (#435).
     if type(player) == "string" then return player end
     if not player then return "unknown" end
     local kind = player.local_player and "local" or (player.bot_player and "bot" or "remote")
@@ -1092,32 +1093,19 @@ end)
 -- (#435) End-of-round score screen. _setup_player_scores resolves each row's
 -- portrait from the global career_settings entry at widget-build time
 -- (end_view_state_score.lua:504-514). Post-correct every non-local
--- es_mercenary row from the score RECORD's own synced cosmetics: vanilla
--- bakes each subject's resolved slot_skin / slot_hat into the record itself
--- (hero_skin item_name string at scoreboard_helper.lua:370/:404, hat
--- {item_name} table at :371/:408), captured per subject INCLUDING BOTS
--- (get_current_players walks human_and_bot_players,
--- scoreboard_helper.lua:438). Clients rebuild these records locally -- the
--- host sync only overwrites the score NUMBERS
--- (game_mechanism_manager.lua:1054-1105) -- so the cosmetic fields are valid
--- on every peer, and AdventureMechanism supplies no overriding record shape
--- (no get_players_session_score in adventure_mechanism.lua). This replaces
--- the 0.1.19-dev player_from_peer_id(peer_id, 1) lookup, which could not
--- resolve bots (they share the host's peer id) and therefore forced every
--- bot score tile to vanilla while HUD/Tab showed the same bot's custom
--- portrait -- reported in coop (#435, 2026-07-18 session) as "the host's
--- merc tile reverted to default mercenary" on the scoreboard. Score tiles
--- now match HUD/Tab: every subject shows its own worn cosmetics. Untracked
--- keys -- including the vanilla sync-unavailable default fills
--- skin_es_mercenary / mercenary_hat_0000 (career_settings.lua:468 + :504) --
--- fall through to the vanilla original. The LOCAL human's own tile is left
--- alone (the baked global value IS their resolution). Runs once per
--- score-screen build. self.peer_id is the LOCAL peer (context.peer_id <-
--- Network.peer_id(), state_ingame.lua:181/260).
+-- es_mercenary row from that score record's own cosmetics. Vanilla records
+-- each subject's resolved slot_skin and slot_hat, including bots
+-- (scoreboard_helper.lua:348-405), and clients rebuild those records locally
+-- before replacing only the score numbers received from the host
+-- (game_mechanism_manager.lua:1054-1100). This avoids the old peer lookup:
+-- bots share the host peer id and cannot be resolved through local player id
+-- 1. Untracked/default cosmetic keys fall through to the vanilla portrait.
+-- Runs once per score-screen build. self.peer_id is the local peer
+-- (end_view_state_score.lua:23-36).
 mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, players_session_scores)
     if not _original_portrait_image then return end  -- swap never activated; nothing can have leaked
-    -- Custom material names before residency are a Material-not-found crash;
-    -- without readiness the swap never activated, so baked rows are vanilla.
+    -- A custom Gui material before residency is a Material-not-found crash.
+    -- If readiness failed, no custom score correction is safe to draw.
     if not _check_portrait_materials_ready() then return end
     local records = self._players_by_widget_index
     local widgets = self._hero_widgets
@@ -1131,22 +1119,10 @@ mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, player
         if content and rec and rec.profile_index == 5 and rec.career_index == 1 then
             local is_local_human = rec.is_player_controlled and rec.peer_id == my_peer_id
             if not is_local_human then
-                -- Skin overrides hat -- same priority as _sync_portrait_settings.
-                local set = nil
-                local skin_key = rec.hero_skin
-                if type(skin_key) == "string" then
-                    set = _skin_portrait_map[skin_key]
-                end
-                if not set then
-                    local hat_key = type(rec.hat) == "table" and rec.hat.item_name
-                    if type(hat_key) == "string" then
-                        set = _hat_portrait_map[hat_key]
-                    end
-                end
+                local set = _score_record.resolve_portrait_set(
+                    rec, _skin_portrait_map, _hat_portrait_map)
                 local resolved = (set and set.hud) or _original_portrait_image
-                local kind = (not rec.is_player_controlled) and "bot" or "remote"
-                _scope_evidence("score", kind .. ":" .. tostring(rec.local_player_id or "?"),
-                    resolved, set ~= nil)
+                _scope_evidence("score", _score_record.subject(rec), resolved, set ~= nil)
                 if content.portrait ~= resolved then
                     content.portrait = resolved
                 end
@@ -1178,15 +1154,10 @@ _rt_register("portrait_override_player_scoped", function()
           "Tab player-list per-player seam hook missing (leak on player list)" },
         { 'mod:hook_safe("EndViewStateScore", ' .. '"_setup_player_scores"',
           "end-of-round score per-player seam hook missing (leak on score screen)" },
-        -- #609 renamed the accessor: the local override must key off vanilla's
-        -- safe LOCAL-player accessor, not a players() scan.
         { '_local_player_safe(' .. 'pm)',
           "local override detection must key off the LOCAL player, not a players() scan" },
-        -- 0.1.27-dev: score tiles resolve from the record's own synced
-        -- cosmetics (scoreboard_helper hero_skin/hat), never a peer lookup --
-        -- player_from_peer_id cannot resolve bots (they share the host peer id).
-        { 'rec.hero_' .. 'skin',
-          "score-screen resolution must read the record's own synced cosmetics (hero_skin/hat)" },
+        { '_score_record.resolve_' .. 'portrait_set(',
+          "score rows must resolve from their own hero_skin/hat record" },
     }
     for _, n in ipairs(needles) do
         if not txt:find(n[1], 1, true) then return n[2] end

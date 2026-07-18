@@ -1,14 +1,25 @@
 # Changelog — Dynamic Cosmetic Portraits
 
-## 0.1.27-dev (2026-07-18) -- #435 score tiles resolve from score-record cosmetics [verify-fix-coop]
+## 0.1.27-dev (2026-07-18) -- #435 score rows use recorded cosmetics [verify-fix-coop]
 
-- Root-caused the 2026-07-18 coop report ("client didn't see host's portrait on the scoreboard"). The attached client log shows DCP was NOT running on the client (`mods[35] ... enabled="false"`, no `[dcp:LOAD]`), and the only Mercenary in the scored mission was the host-owned Kruber BOT -- whose score tile the 0.1.19-dev code forced to vanilla on every machine because `player_from_peer_id(peer_id, 1)` cannot resolve bots (they share the host's peer id).
-- Score-screen rows now resolve from the score RECORD's own synced cosmetics: vanilla bakes each subject's resolved `slot_skin`/`slot_hat` into the record (`scoreboard_helper.lua:370-371/:404/:408`), including bots, and clients rebuild the records locally (host sync only overwrites score numbers, `game_mechanism_manager.lua:1054-1105`). Bot score tiles therefore now match HUD/Tab (own worn loadout) instead of forcing vanilla -- this supersedes the 0.1.19-dev "bot score tile must be vanilla" criterion, which existed only because of the disproven cannot-disambiguate premise. Vanilla default fills (`skin_es_mercenary`, `mercenary_hat_0000`) are untracked keys, so sync-unavailable rows still fall through to the vanilla portrait.
-- Added a materials-ready gate to the score hook (custom material name before residency is a Material-not-found crash; without readiness nothing can have leaked).
-- `[dcp:435]` score evidence rows now carry `bot:<local_player_id>`/`remote:<local_player_id>` subjects derived from the record.
-- Fixed the stale `portrait_override_player_scoped` source needle (`pm:local_player()` matched nothing after the issue 609 rename to `_local_player_safe`; false FAIL under modding tools/CI) and added a needle locking the record-based score resolution.
+- The attached client log had Dynamic Cosmetic Portraits disabled and no
+  `[dcp:LOAD]` rows; its only Mercenary was a host-owned bot. The previous score
+  hook forced bot rows to vanilla because a bot shares its owner's peer id.
+- Score portraits now resolve skin first, then hat, from each score record's
+  own `hero_skin` and `hat`. Vanilla creates those fields per human or bot and
+  clients retain them while applying the host's score values.
+- Added a material-residency gate, bounded bot/remote score evidence, a pure
+  record resolver, and engine-free coverage for skin priority, bot identity,
+  missing cosmetics, and malformed records. The #609 safe teardown path remains
+  unchanged.
 
-**Verify (coop, BOTH peers must run this build -- the 2026-07-18 session's client log shows DCP disabled on the client; enable it there first):** Host a NON-Kruber career with a tracked merc hat saved (e.g. Estalian Conquistador) + Kruber bot, client on any career. On BOTH screens the bot's end-of-round score tile must now show the custom portrait (matching its in-mission HUD frame). Then host plays Mercenary with the tracked hat: the client's scoreboard must show the host's custom portrait. Attach both logs; each machine must print `[dcp:LOAD] v0.1.27-dev` and bounded `[dcp:435] surface=score` rows.
+**Verify (co-op):** Both peers enable v0.1.27-dev. Host a non-Kruber career
+with a tracked Mercenary hat saved and a Kruber bot; both score screens must
+match the bot's HUD portrait. Then have the host play Mercenary with that hat;
+the client score screen must show the host's custom portrait. Both logs must
+contain `[dcp:LOAD] v0.1.27-dev` and bounded `[dcp:435] surface=score` rows.
+Run `/dcp_regression_test`; both `portrait_override_player_scoped` and
+`local_player_safe_network_lifecycle_609` must pass.
 
 ## 0.1.26-dev (2026-07-18) -- #609 release/source reconciliation [verify-fix]
 
