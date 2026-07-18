@@ -1,5 +1,15 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.247-dev (2026-07-18) -- #659 extension-ready keep-pet reconciliation [diagnostics-armed]
+
+- The failed 2026-07-18 verification ran GT Dev `v0.2.245-dev`; the live Necromancer extension reached vanilla `warm_up_skeletons`, but GT emitted no `[gt:659]` lifecycle decision. The offline truth-table passing therefore did not prove that the live initialized extension consumed the policy.
+- Reused one idempotent, engine-free reconciliation policy at two distinct vanilla lifecycle edges: `_on_talents_changed`, where the hub flag is written, and `extensions_ready`, after the passive extension has finished initialization. This is the issue's pre-recorded fallback 2 and preserves later talent refreshes without duplicate hooks on either method.
+- Replaced mutation-only evidence with at most four phase/before/after records per passive extension. Direct Lua coverage now exercises human reconciliation, bot gating, missing owners, idempotence, and singleton hook ownership.
+
+### Solo diagnostic verify
+
+Enter the keep as Necromancer with **Allow Bots in Keep** disabled. Before using Raise Dead, the log must contain `[gt:659] phase=talents_changed` and/or `phase=extensions_ready` with `owner=human` and `after=false`. Then use Raise Dead. If skeletons still do not spawn, that evidence falsifies the hub-ban hypothesis and the next diagnostic belongs at the action/spawn entry rather than another lifecycle hook.
+
 ## v0.2.246-dev (2026-07-18) -- #693 client Creature Spawner [verify-fix-coop]
 
 - Release reconciliation: aligned the Workshop descriptor title with the already-merged `MOD_VERSION` before the atomic `0.2.246-dev` bundle build. The source-only merge was never uploaded.

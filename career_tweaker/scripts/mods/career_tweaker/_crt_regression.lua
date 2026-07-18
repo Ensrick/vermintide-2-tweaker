@@ -30,6 +30,7 @@ local MOD_VERSION               = mod._crt.MOD_VERSION
 local _dbg                      = mod._crt.dbg
 local _dbg_alert                = mod._crt.dbg_alert
 local balance                   = mod._crt.balance
+local wire_policy               = mod._crt.wire_policy
 
 -- /regression_test scaffold.
 local _RT_CHECKS = {}
@@ -195,7 +196,6 @@ _rt_register("issue663_foot_knight_aura_source_ownership", function()
         return "two-source aggregate aura transition contract failed"
     end
 end)
-
 
 _rt_register("localization_format_safe", function()
     -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
@@ -412,6 +412,9 @@ _rt_register("crt_wire_safe_wrappers_registered", function()
     if type(PF) ~= "table" then return "ProcFunctions not loaded (run in-keep)" end
     if type(PF.crt_wire_safe_add_buff) ~= "function" then
         return "ProcFunctions.crt_wire_safe_add_buff missing"
+    end
+    if type(PF.crt_wire_safe_add_timed_buff) ~= "function" then
+        return "ProcFunctions.crt_wire_safe_add_timed_buff missing"
     end
     if type(PF.crt_wire_safe_add_buff_on_special_kill) ~= "function" then
         return "ProcFunctions.crt_wire_safe_add_buff_on_special_kill missing"
@@ -1013,6 +1016,71 @@ _rt_register("issue619_foot_knight_contract", function()
            or not block_driver or block_driver.range ~= 20
            or not rock_driver or rock_driver.range ~= 20 then
             return "enabled Protective Presence/Rock ranges are not 10m/20m"
+        end
+    end
+end)
+
+-- New checks append after the frozen historical sequence above.
+_rt_register("crt_wire_catalog_identity_exact_776", function()
+    if type(wire_policy) ~= "table" or type(wire_policy.build_wire_identity) ~= "function" then
+        return "issue-776 wire policy unavailable"
+    end
+    local lookup = rawget(_G, "NetworkLookup")
+    local identity, err, names = wire_policy.build_wire_identity(
+        mod._crt_mod_registered_buff_names,
+        lookup and lookup.buff_templates)
+    if not identity then return "wire identity unavailable: " .. tostring(err) end
+    if identity ~= mod._crt.wire_catalog_identity then
+        return string.format("wire identity drift: startup=%s live=%s",
+            tostring(mod._crt.wire_catalog_identity), tostring(identity))
+    end
+    if #names ~= mod._crt.wire_catalog_count then
+        return string.format("wire catalog count drift: startup=%s live=%s",
+            tostring(mod._crt.wire_catalog_count), tostring(#names))
+    end
+    local pp = mod._crt_peer_parity
+    if type(pp) ~= "table" or mod._crt_wire_transport_identity ~= identity then
+        return "peer-parity beacon is not bound to the exact live wire identity"
+    end
+end)
+
+_rt_register("crt_rpc_add_buff_receiver_floor_776", function()
+    if mod._crt_rpc_add_buff_floor_installed ~= true then
+        return "BuffSystem.rpc_add_buff receiver floor did not install"
+    end
+end)
+
+_rt_register("crt_impetuous_timed_sync_contract_776", function()
+    if type(wire_policy) ~= "table" then return "wire policy missing" end
+    local setting = "rework_es_questingknight_virtue_of_impetuous_buffed"
+    local gate_live = balance and type(balance.parity_gate_ok) == "function"
+        and balance.parity_gate_ok()
+    if not (mod:get(setting) and gate_live) then return end
+
+    local BT = rawget(_G, "BuffTemplates")
+    if type(BT) ~= "table" then return "BuffTemplates unavailable" end
+    local pairs_to_check = {
+        { "crt_questingknight_impetuous_as", "crt_questingknight_impetuous_as_proc" },
+        { "crt_questingknight_impetuous_power", "crt_questingknight_impetuous_power_proc" },
+    }
+    for i = 1, #pairs_to_check do
+        local timed_name, proc_name = pairs_to_check[i][1], pairs_to_check[i][2]
+        local timed = rawget(BT, timed_name)
+        local sub = timed and timed.buffs and timed.buffs[1]
+        if type(sub) ~= "table" or sub.duration ~= wire_policy.TIMED_DURATION_SECONDS
+                or sub.max_stacks ~= wire_policy.TIMED_MAX_STACKS
+                or sub.refresh_durations ~= true then
+            return timed_name .. " lost its one-stack 20-second refresh contract"
+        end
+        if timed._crt_sync_type ~= wire_policy.TIMED_SYNC_TYPE then
+            return timed_name .. " is not marked for LocalAndServer timed sync"
+        end
+        local proc = rawget(BT, proc_name)
+        local proc_sub = proc and proc.buffs and proc.buffs[1]
+        if type(proc_sub) ~= "table"
+                or proc_sub.buff_func ~= "crt_wire_safe_add_timed_buff"
+                or proc_sub.buff_to_add ~= timed_name then
+            return proc_name .. " bypasses the parity-gated timed-sync wrapper"
         end
     end
 end)

@@ -11,6 +11,8 @@ return function(H, repo_root)
         H.truthy(source:find('_send_identity_slots(equipment and equipment.slots, "parity_replay",', 1, true))
         H.truthy(source:find('identity_force == true)', 1, true))
         H.equal(source:find('_send_identity_slots(equipment and equipment.slots, "parity_replay", true)', 1, true), nil)
+        -- The update loop may drive the pure bounded delivery ledger, but must
+        -- never directly force-publish slot identity per frame.
         H.equal(source:find('_send_identity_slots(', source:find('mod.update = function', 1, true) or 1, true), nil)
     end)
 
@@ -20,6 +22,9 @@ return function(H, repo_root)
         H.truthy(source:find("local skin_unit = skin_tmpl and skin_tmpl[field]", 1, true))
         H.truthy(source:find('_om._cwv_resolve_world_descriptor(item_data, skin', 1, true))
         H.truthy(source:find('_send_identity_slots(slots, "hot_join_sync", true, peer_id)', 1, true))
+        H.truthy(source:find('lifecycle:track_delivery(peer_id, slots, "hot_join_retry")', 1, true))
+        H.truthy(source:find('lifecycle:step_deliveries(dt)', 1, true))
+        H.truthy(source:find('payload.slot == _om.appearance_lifecycle_policy.ACK_SLOT', 1, true))
     end)
 
     H.test("Imperial Longsword owner and Helmgart illusion names stay distinct", function()
