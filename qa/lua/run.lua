@@ -183,6 +183,7 @@ local suites = {
     "test_gt_teleport_loop_policy",
     "test_cos_glow_lifecycle",
     "test_cos_glow_badge_policy",
+    "test_cos_glow_instance_policy",
     "test_cos_cwv_dawi_mace_contract",
     "test_cos_wire",
     "test_peer_parity_transition",

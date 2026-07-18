@@ -30,7 +30,9 @@ and where to extend.
 | Editor shows the illusion's NATIVE glow when no override (never magenta) | ✅ (v0.9.125-dev, issue 610) |
 | Opening/closing/switching never paints or persists | ✅ (v0.9.125-dev, issue 610) |
 | Restore to Default (clear override, reapply native, drop badge) | ✅ (v0.9.125-dev, issue 610) |
-| Toggle the per-item glow off entirely | ❌ (M3) |
+| Toggle the per-item glow off entirely | 🧪 persistence + renderer wired, no authoring UI (#48) |
+| Override never bleeds across instances of one illusion family | ✅ (v0.9.151-dev, issue 48) |
+| Override never survives an illusion swap on the same instance | ✅ (v0.9.151-dev, issue 48) |
 | Hide vanilla glow-cousin items from cosmetic menu | ❌ (M3) |
 | Cross-slot inheritance (main weapon glow → compatible runed Bretonnian shield) | 🧪 v0.9.137 candidate (#650) |
 | Host-authoritative coop broadcast of active per-item glow | ✅ |
@@ -75,6 +77,7 @@ All paths relative to `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/`.
 | --- | --- |
 | `_glow_picker.lua` | The popup UI. Scenegraph, slider widget factory, in-memory state, persistence helpers (`_load_per_item_glow` / `_save_per_item_glow`), live-preview wiring. |
 | `_cos_glow.lua` | Glow apply pipeline, peer-state reads, runtime-map consumption, and local/remote repaint helpers. |
+| `_cos_glow_instance_policy.lua` | **Issue 48.** Single owner of exact-instance identity (`identity_key`), runtime rebinding (`resolve_runtime`), remote matching (`remote_match`), and the durable disable round trip (`carry_disabled` / `is_disabled`). Pure policy: no game globals, no VMF, no rendering. Both the picker and the renderer `mod:dofile` it so they cannot drift apart. Covered by `qa/lua/tests/test_cos_glow_instance_policy.lua`. |
 | `cosmetics_tweaker.lua` | Equipment/preview hooks plus the host-authoritative `cos_glow_apply_req` / `cos_glow_apply` transport. |
 | `cosmetics_tweaker_data.lua` | Existing global glow VMF settings (master toggle, presets, per-channel dropdowns). These are the "old" UI; the popup is the per-item UI that supersedes them. |
 
@@ -233,9 +236,18 @@ change badges, and Apply refreshes each live grid once.
 
 ### b. Toggle off
 
-The picker exposes an explicit per-item disabled state. The renderer writes
-zero emissive values for that item and does not fall through to the legacy
-global override.
+**Corrected v0.9.151-dev (issue 48).** This section previously claimed the
+picker exposes a per-item disabled state; it does not, and that contradicted
+the section 1 table. Ground truth:
+
+* The RENDERER consumer exists — `_cos_glow.lua` writes zero emissive values for
+  a `disabled` item and does not fall through to the legacy global override.
+  The badge policy and composite icon builder also honour it.
+* The durable state now round-trips: `_shape_display_state` carries `disabled`
+  through shape/commit via `INSTANCE_POLICY.carry_disabled`, so a saved OFF is
+  no longer rewritten into a colour by the next Apply.
+* There is still NO picker control that authors it. Until that widget lands,
+  `disabled` is reachable only from an already-saved blob, not from a click.
 
 ### c. Cross-slot inheritance
 
@@ -275,7 +287,20 @@ host-authoritative glow RPC and hot-join cache. Backend ids are deliberately
 not used as remote identity because they are owner-local. The existing active
 identity carries the illusion skin and the payload adds the wielded slot. Each
 receiver binds the same render identity to freshly spawned husk
-units and fails closed unless it matches before painting. Switching weapons,
+units and fails closed unless it matches before painting.
+
+**v0.9.151-dev (issue 48) tightening.** Matching moved to
+`_cos_glow_instance_policy.remote_match`. Previously the skin gate was skipped
+entirely when no skin was resolvable, so an unconstrained payload matched every
+glow-capable unit on that wearer — a family-wide bleed. The receiver now fails
+closed to resident vanilla when it cannot resolve a skin, and an empty skin
+segment (`...|skin:`, the no-illusion case) stays a real constraint instead of
+degrading into a wildcard. Slot/name/template remain refinements: a declared
+constraint binds whenever the receiver holds that field, and absent local
+evidence is treated as unproven rather than contradicted. Making those gates
+strict as well requires every `_bind_glow_unit` call site to supply full slot
+and item context; that is deliberately deferred. No payload shape change and no
+new RPC. Switching weapons,
 leaving a lobby, changing network role, and rebuilding a hero preview all
 rehydrate the owner-authoritative per-instance store and repaint the new units;
 opening the picker is not required.
