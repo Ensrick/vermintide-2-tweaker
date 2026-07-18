@@ -38,6 +38,8 @@ $targets = @(
 )
 $shipPs1 = Join-Path $repoRoot 'tools\ship\ship.ps1'
 if (Test-Path $shipPs1) { $targets += $shipPs1 }
+$claimPs1 = Join-Path $repoRoot 'tools\ship\claim.ps1'
+if (Test-Path $claimPs1) { $targets += $claimPs1 }
 $protectMasterPs1 = Join-Path $repoRoot 'tools\github\protect-master.ps1'
 if (Test-Path $protectMasterPs1) { $targets += $protectMasterPs1 }
 $openIssueAuditPs1 = Join-Path $repoRoot 'tools\github\audit-open-issues.ps1'

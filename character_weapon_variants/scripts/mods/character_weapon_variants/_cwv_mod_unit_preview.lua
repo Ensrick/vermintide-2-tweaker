@@ -107,8 +107,15 @@ function M.install(policy)
 	-- collector's package identities. The item/spawn unit data stays custom.
 	assert(WeaponUtils and type(WeaponUtils.get_weapon_packages) == "function",
 		"CWV Greataxe package bridge requires WeaponUtils.get_weapon_packages")
-	mod:hook(WeaponUtils, "get_weapon_packages", function(func, ...)
-		local package_names = func(...)
+	mod:hook(WeaponUtils, "get_weapon_packages", function(func, item_template,
+			item_units, first_person, career_name)
+		for _, one_policy in ipairs(policies) do
+			if type(one_policy.select_package_inputs) == "function" then
+				item_template, item_units = one_policy.select_package_inputs(
+					item_template, item_units, first_person, career_name)
+			end
+		end
+		local package_names = func(item_template, item_units, first_person, career_name)
 		for _, one_policy in ipairs(policies) do
 			alias_collected(one_policy, package_names)
 		end

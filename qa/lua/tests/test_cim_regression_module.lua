@@ -66,7 +66,7 @@ return function(H, repo_root)
         H.equal(names[#names], "issue562_auto_equip_contract")
         H.truthy(seen.issue83_dynamic_forge_widget_material_closure,
             "issue 83 dynamic-widget closure check missing")
-        H.equal(#names, 75, "regression registration set changed")
+        H.equal(#names, 76, "regression registration set changed")
         local ok, result = pcall(checks[1])
         H.truthy(ok, "registered checks did not close over the supplied mod object")
         H.equal(type(result), "string")

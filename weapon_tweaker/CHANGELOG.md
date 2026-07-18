@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.275-beta (2026-07-18) - #724 release/source reconciliation [tooling]
+
+- Rebuilt the public beta from the current merged source so its tracked bundle,
+  Workshop artifact, and GitHub release manifest all carry the #660 appearance
+  census added after `0.12.274-beta` was published.
+- The census is bounded, observation-only tooling. This entry makes no new
+  player-facing behavior claim and does not change #660's verification state.
+
 ## 0.12.274-beta (2026-07-17) - #661 reconciliation build: both parallel fixes [verify-fix]
 
 - Reconciliation reship: two different builds were briefly uploaded as `0.12.273-beta` by parallel sessions. This unambiguous version carries BOTH #661 changes: the shared library's private-clone action ownership (below) AND the inject-site clone-identity restore - `_inject_career_actions` restores canonical `ActionTemplates` identity on any mismatched career-action row before installing (CWV deep-clones donor templates; vanilla installs career rows by identity, `weapons.lua:263`; no repo mod authors custom `action_career_*` rows). Residual conflicts now report `conflict:<action>@<template>`.
