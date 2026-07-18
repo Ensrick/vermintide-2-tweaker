@@ -4,9 +4,9 @@
   "generated": "2026-07-18",
   "files": {
     "career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua": 3890,
-    "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua": 12831,
+    "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua": 11338,
     "chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua": 12761,
-    "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua": 11791,
+    "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua": 11084,
     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua": 10191,
     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua": 5750,
     "crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua": 5748,

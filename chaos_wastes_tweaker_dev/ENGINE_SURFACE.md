@@ -29,8 +29,11 @@ cited `ct_dev` module comments + `DEVELOPMENT.md` + `CHANGELOG.md`, which cite t
 decompile in turn.
 
 `ct` is the deepest mod into the Deus (Chaos Wastes) run layer. Its dev entry is
-13,629 physical lines, with the boon runtime split into `_ct_boon_balance.lua`,
-`_ct_boon_registry.lua`, and `_ct_meta_trait_boons.lua` plus its existing sibling
+~12,040 physical lines, with the boon runtime split into `_ct_boon_balance.lua`,
+`_ct_boon_registry.lua`, and `_ct_meta_trait_boons.lua`, and the bulk of the
+`/ct_regression_test` check suite extracted verbatim into `_ct_regression.lua`
+(a pure `return function(mod, ctx)` installer, dofiled once at the suite's
+original position so append order is preserved), plus its existing sibling
 modules. It reshapes CW
 economy, the boon/power-up pool, curses/mutators, altars/chests, weapon
 generation, and injects vanilla Adventure missions into the CW graph. Its engine

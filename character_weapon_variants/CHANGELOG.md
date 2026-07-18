@@ -1,5 +1,11 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.448-dev (2026-07-18) - OOP W5: husk-path module extraction [untested]
+
+- Structural only, zero behavior change: the husk render path (mesh re-key, hand preselect, ammo-strip, transform apply, stale-unit ledger, [cwv:huskpath] postcondition - 0.1.447's fresh code included) moved verbatim into `_cwv_husk_path.lua` (15 _om._husk_* exports, printf markers byte-identical); entry shrinks 11,791 -> 11,084. The three husk hooks stay in the entry (the spawn_inventory_unit hook is fused with Old Musket code; keeping the trio together preserves install timing). Guard test extended; 1,024-test suite, strict lint (69 hooks unchanged), bundle build green.
+
+**Verify:** the 0.1.447-dev coop matrix applies unchanged - same [cwv:huskpath]/[cwv:395]/[cwv:423] log lines must fire; `/cwv_regression_test` all PASS.
+
 ## 0.1.447-dev (2026-07-18) - husk-path cluster + score-wire fix [verify-fix-coop]
 
 - #737 score-sync CTD fix: `CosmeticUtils.update_cosmetic_slot` was the fourth (and only unhooked) vanilla sender able to carry a live modded weapon_skins INDEX onto the wire - the 2026-07-18 scoreboard crash (index 924 absent on a diverged peer). New `_cwv_cosmetic_skin_wire.lua` nulls any cwv skin to "n/a" unconditionally on that sender; apply-site log correlates with the [gut:272] probe.

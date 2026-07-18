@@ -91,8 +91,10 @@ return function(H, repo_root)
 	end)
 
 	H.test("Crowbill runtime routes all reconstruction seams through one owner", function()
-		local main = read(repo_root
-			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		-- Combined CWV source: the husk-transform / remote-identity runtime routes
+		-- moved to _cwv_husk_path.lua in the OOP W5 split, so assert against the
+		-- entry + modules rather than the entry file alone.
+		local main = require("cwv_source").combined(repo_root)
 		for _, marker in ipairs({
 			'"owner_1p", right_rot_1p',
 			'is_bot and "bot" or "owner_3p"',

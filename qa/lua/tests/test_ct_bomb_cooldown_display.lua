@@ -142,6 +142,9 @@ return function(H, repo_root)
         local module_source = read(module_path)
         H.equal(module_source:find("NetworkLookup.buff_templates[", 1, true), nil)
         H.truthy(module_source:find("external_optional_duration = interval", 1, true))
-        H.truthy(main:find("issue357_bomb_bubble_cooldown_display", 1, true))
+        -- The runtime regression check moved to _ct_regression.lua (OOP W5 suite
+        -- extraction); it is registered from there via mod._ct_rt_register.
+        H.truthy(read(base .. "_ct_regression.lua"):find(
+            "issue357_bomb_bubble_cooldown_display", 1, true))
     end)
 end

@@ -1,5 +1,11 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.294-dev (2026-07-18) - OOP W5: regression-suite extraction [untested]
+
+- Structural only, zero behavior change: the contiguous /ct_regression_test suite (68 registrations) moved verbatim into `_ct_regression.lua`; entry shrinks 12,831 -> 11,338 (size-gate metric). Print order preserved except `starting_coins_value_matches_setting`, which stays inline (mutable upvalue read) and slides to the suite tail - documented in the guard test. New `test_ct_entry_decomposition` pins the manifest; 1,024-test suite, strict lint (115 hooks unchanged), and a bundle build all green.
+
+**Verify:** load the keep, run `/ct_regression_test` - all checks PASS with the same names as 0.7.293; the #487 citadel method from 0.7.293 still stands.
+
 ## 0.7.293-dev (2026-07-18) - #487 citadel-finale freeze root fix [verify-fix]
 
 - Symptom: host-side "initializing Chaos Wastes" freeze at the journey_citadel (Belakor) finale round-end, requiring alt-F4 (#487; blocked #465/#460/#470/#406).
