@@ -8,6 +8,8 @@ return function(H, repo_root)
 
     local picker = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua")
     local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+    local instance_policy = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy.lua")
 
     H.test("Cosmetics local-player lookups are safe across network teardown", function()
         local lifecycle_sources = table.concat({
@@ -27,7 +29,12 @@ return function(H, repo_root)
     end)
 
     H.test("Cosmetics glow persistence is exact-item plus illusion and explicit-Apply", function()
-        H.truthy(picker:find('return string.format("backend:%s|skin:%s", tostring(backend_id), tostring(skin or ""))', 1, true))
+        -- #48: the exact-instance key builder moved into the shared policy
+        -- module so the picker and the renderer cannot drift apart. The
+        -- invariant is unchanged; assert it against its new owner and assert
+        -- that the picker delegates rather than re-deriving.
+        H.truthy(instance_policy:find('return string.format("backend:%s|skin:%s", tostring(backend_id), tostring(skin or ""))', 1, true))
+        H.truthy(picker:find("return INSTANCE_POLICY.identity_key(backend_id, slot_data)", 1, true))
         H.truthy(picker:find("if not GlowPicker._open or not GlowPicker._dirty then return false end", 1, true))
         H.truthy(picker:find("_save_per_item_glow(all_data)", 1, true))
         H.truthy(picker:find("GlowPicker._dirty = false", 1, true))
