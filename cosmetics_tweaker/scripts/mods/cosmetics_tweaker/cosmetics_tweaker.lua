@@ -87,7 +87,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.149-dev"
+local MOD_VERSION = "0.9.150-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -9192,11 +9192,9 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
             tostring(wearer_peer), tostring(active_career), tostring(career_reason)) end
         return func(self, slot_name, item_data)
     end
-    local la = get_mod("Loremasters-Armoury")
-    local variant = GK_SET and GK_SET.resolve_variant(cached.armoury_key)
-        or CUSTOM_HATS and CUSTOM_HATS.resolve_variant
-        and CUSTOM_HATS.resolve_variant(cached.armoury_key)
-        or (la and la.SKIN_LIST and la.SKIN_LIST[cached.armoury_key])
+    -- #697: (variant, la) via the shared resolver - `la` is non-nil ONLY when
+    -- the key resolved from LA's own SKIN_LIST (mirrors _apply_la_on_unit).
+    local variant, la = _resolve_la_variant(cached.armoury_key)
     local la_unit = variant and variant.new_units and variant.new_units[1]
     -- #612: the late husk attachment uses the exact Laurel donor; only its
     -- spawned material instances are changed below.
@@ -9355,10 +9353,10 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
     if GK_SET and GK_SET.resolve_variant(cached.armoury_key) and spawned_hat then
         GK_SET.apply_variant_to_unit(cached.armoury_key, spawned_hat, "remote_husk")
     end
-    -- Paint the LA texture onto the just-spawned hat unit. Mirror the
-    -- cos_la_apply hat-branch paint logic at cosmetics_tweaker.lua:~3775.
-    if not CUSTOM_HATS.is_custom_identity(cached.armoury_key)
-        and la and type(la.apply_new_skin_from_texture) == "function" then
+    -- Paint the LA texture onto the just-spawned hat unit (mirrors the
+    -- _apply_la_on_unit hat branch). #697: la=nil for cosmetics-side variants
+    -- (GK_SET/CUSTOM_HATS paint above; LA funcs.lua:65 nil-derefs foreign keys).
+    if la and type(la.apply_new_skin_from_texture) == "function" then
         local world = _level_world()
         local slot_data = self._attachments and self._attachments.slots and self._attachments.slots[slot_name]
         local hat_unit = slot_data and slot_data.unit
@@ -9372,6 +9370,8 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
                 _dbg_alert("[husk-hat-create] paint err: %s", tostring(paint_err))
             end
         end
+    elseif not la then
+        _dbg("[husk-hat-create] LA paint n/a for %s (cosmetics-side variant, #697)", tostring(cached.armoury_key))
     end
 end)
 

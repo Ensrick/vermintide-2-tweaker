@@ -41,6 +41,8 @@ win, fail, restart, killbots, die, suicide, down, respawn, fix_sound, bottoggle,
 no_bots, bots_in_keep,
 -- Spawners:
 spawncreature, nextcreature, prevcreature, destroycreatures, savecreature, selectedcreatures,
+--   (creature spawner is host-executed; a client's spawncreature/destroycreatures sends a
+--    gt_cs_request RPC the host performs and acks, #693 - host must also run gt)
 spawnitem, nextitem, previtem,
 -- Saved positions (per-map teleport, #306):
 save_position_1 .. save_position_10, recall_position_1 .. recall_position_10,
