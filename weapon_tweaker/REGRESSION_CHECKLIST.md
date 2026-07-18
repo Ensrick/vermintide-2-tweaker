@@ -73,6 +73,18 @@
 
 ---
 
+## #732 - CWV Infantry spear on Saltzpyre first-light crash
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.276-beta / 0.12.277-dev |
+| Automated | Offline `test_wt_cwv_effective_template` proves the effective clone shares the donor remap and wield tables in both streams. `/wt_regression_test`: `issue732_cwv_infantry_spear_saltzpyre_remap`. |
+| Solo crash path | On WHC, Bounty Hunter, or Zealot, equip Tuskgor Spear, select Infantry Combat Style, and perform the first light. `attack_swing_down_left_axe` must resolve to `attack_swing_stab`; no `Unit.animation_event` fault. |
+| Chain coverage | Exercise complete light, heavy, block, push, weapon-swap, and re-wield chains. All three standard Saltzpyre careers retain the `to_2h_billhook` receiver vocabulary. |
+| Boundaries | Native Kerillian remains on the donor's deliberate no-remap branch. First-person actions, CWV balance, sound-bank residency, and Warrior Priest are unchanged. |
+
+---
+
 ## #112 - Saltzpyre Kruber shield rotation
 
 | Field | Check |

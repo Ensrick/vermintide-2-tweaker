@@ -75,4 +75,29 @@ return function(H, repo_root)
             H.equal(source:find('item_data.name == "es_sword_shield_breton"', 1, true), nil)
         end
     end)
+
+    H.test("CWV Infantry spear shares elf-spear Saltzpyre remap and wield contracts", function()
+        local streams = {
+            "/weapon_tweaker/scripts/mods/weapon_tweaker/",
+            "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/",
+        }
+        for _, stream in ipairs(streams) do
+            local build = dofile(repo_root .. stream .. "_wt_anim_remap_data.lua")
+            local remaps = build({}, {}, {})
+            local donor = remaps.two_handed_spears_elf_template_1
+            local clone = remaps.cwv_infantry_spear_template
+            H.truthy(type(donor) == "table")
+            H.equal(clone, donor)
+            H.equal(clone.wh_.attack_swing_down_left_axe, "attack_swing_stab")
+            H.equal(clone.we_, false)
+
+            local wield = dofile(repo_root .. stream .. "wt_wield_patches.lua").patches
+            local donor_wield = wield.two_handed_spears_elf_template_1
+            local clone_wield = wield.cwv_infantry_spear_template
+            H.equal(clone_wield, donor_wield)
+            for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+                H.equal(clone_wield[career], "to_2h_billhook")
+            end
+        end
+    end)
 end

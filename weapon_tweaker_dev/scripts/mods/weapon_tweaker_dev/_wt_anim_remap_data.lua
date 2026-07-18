@@ -1950,6 +1950,16 @@ do
     }
 end
 
+-- #732: CWV's Infantry Combat Style deep-clones the elf spear actions under
+-- this effective template name.  WT resolves remaps by the effective name, so
+-- share the donor table by identity: fixes to the elf-spear receiver contract
+-- cannot drift away from the clone, and the donor's native `we_ = false`
+-- branch remains intact.
+local infantry_spear_donor = rawget(_3p_template_remaps, "two_handed_spears_elf_template_1")
+if type(infantry_spear_donor) == "table" then
+    rawset(_3p_template_remaps, "cwv_infantry_spear_template", infantry_spear_donor)
+end
+
 
 return _3p_template_remaps
 end
