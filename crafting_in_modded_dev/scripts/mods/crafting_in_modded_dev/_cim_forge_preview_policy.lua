@@ -29,4 +29,25 @@ function M.authored_mode(descriptor, resource_mode, can_get)
     return nil, reason or "unavailable"
 end
 
+-- HeroWindowWeaveProperties uses {-0.85, 3, 0} for every item while the
+-- sibling native HeroWindowWeaveForgeWeapons browser centers its preview at
+-- x=0.  Keep the properties layout's authored depth/height, but use the
+-- native centered x position for ranged weapons whose long meshes otherwise
+-- sit at the far-left edge.  Returning nil leaves every other slot on the
+-- untouched vanilla path.
+function M.properties_preview_position(slot_type, native_position)
+    if slot_type ~= "ranged" or type(native_position) ~= "table"
+            or type(native_position[1]) ~= "number"
+            or type(native_position[2]) ~= "number"
+            or type(native_position[3]) ~= "number" then
+        return nil
+    end
+
+    return {
+        0,
+        native_position[2],
+        native_position[3],
+    }
+end
+
 return M
