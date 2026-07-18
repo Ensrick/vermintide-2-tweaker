@@ -1,5 +1,47 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.451-dev (2026-07-18) - Old Musket remote-material crash guard (#742) [verify-fix-coop]
+
+- Fixed the native access violation when a remote player's Old Musket was
+  spawned or wielded during hot join. Both attached logs prove that all three
+  custom textures were resident, but the spawned unit's material lookup failed
+  immediately before `Unit.set_texture_for_materials` dereferenced address
+  `0x8`; Lua `pcall` cannot contain that engine fault.
+- The shared Old Musket painter now requires two independent proofs before its
+  native write: all authored texture resources must be resident, and every mesh
+  on the actual spawned unit must expose at least one real, non-null material
+  handle. Introspection is read-only and pcall-contained. Any absent API, mesh,
+  material, or Stingray `#ID[00000000]` sentinel skips the entire paint
+  transaction, leaves the donor appearance intact, and emits one bounded
+  `[cwv:742] ... SKIP` diagnostic instead of risking a crash.
+- This composes with #474's new Old Musket stance/fire identity wire and remains
+  separate from #491's mixed-lobby package shadow: no package list, RPC,
+  peer-parity, stance, fire, or fallback identity behavior changed here. The
+  only active bespoke CWV texture writer is the Old Musket; unrelated appearance
+  consumers were audited but not broadened.
+- Added an engine-free material-residency policy suite covering fully bound,
+  missing, empty, null-sentinel, multi-mesh atomic, and throwing-introspection
+  cases. `/cwv_regression_test` adds
+  `issue742_old_musket_texture_material_preflight`, while the source contract
+  proves the census executes before the native paint loop.
+
+**Coop verify:** With CWV enabled on both players, equip Old Musket, join/hot
+join in both directions, swap away/back, toggle bayonet stance, fire, then enter
+a mission. Repeat once with the observer lacking CWV to retain #491 coverage.
+Require no crash and no material-warning -> custom-texture -> access-violation
+sequence; the same-mod observer should see the authored texture, stance change,
+and hear the shot. If the engine still reports one unresolved material, it must
+be followed by one fail-closed `[cwv:742] ... SKIP`, the donor appearance must
+remain visible, and play must continue. Run `/cwv_regression_test` and require
+the #742 and #474 checks PASS.
+
+**DoD:** Universal walkthrough complete. Trait gates: G-APPEARANCE and
+G-CUSTOM-ILLUSION (per-unit material consumer), G-CROSS-CHAR (remote husk spawn),
+and G-CALL-FATAL (native write cannot be pcall-contained). Owner 1P/3P,
+inventory, Athanor, remote husk, transition, hot join, same-mod, mixed-mod, and
+failure fallback are covered by the shared painter plus offline/runtime tests;
+live two-peer visual/crash confirmation remains the explicit verification step.
+
 ## 0.1.450-dev (2026-07-18) - #474 Old Musket stance/fire ride the delivering wire [verify-fix-coop]
 
 - **Stance + shot report re-homed onto `cwv_item_identity`** (#474). The paired 2026-07-18 logs (host v0.1.445, client v0.1.444) prove `cwv_old_musket_mode_v1` NEVER delivered: 4 state-tx and 2 fire-tx across both peers, zero rx either direction, while `cwv_item_identity` and `cwv_combat_style_v1` (same shape, same mod, same minute) delivered. VMF-layer cause undetermined; the mode channel stays registered as belt-and-suspenders and both wires now route into ONE shared acceptor pair (`_om._old_musket_accept_mode` / `_om._old_musket_play_remote_fire`).

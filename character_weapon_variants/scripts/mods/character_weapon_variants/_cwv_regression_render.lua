@@ -852,6 +852,35 @@ _rt_register("issue617_old_musket_preview_texture_consumer", function()
 	end
 end)
 
+_rt_register("issue742_old_musket_texture_material_preflight", function()
+	local policy = _om.old_musket_preview
+	local census = policy and policy.unit_materials_ready
+	if type(census) ~= "function" then
+		return "Old Musket unit-material preflight policy missing"
+	end
+	local meshes = {
+		{ "#ID[12345678]" },
+		{ "#ID[abcdef01]" },
+	}
+	local unit_api = {
+		num_meshes = function() return #meshes end,
+		mesh = function(_, index) return meshes[index + 1] end,
+	}
+	local mesh_api = {
+		num_materials = function(mesh) return #mesh end,
+		material = function(mesh, index) return mesh[index + 1] end,
+	}
+	local ready, count = census({}, unit_api, mesh_api)
+	if not ready or count ~= 2 then
+		return "material preflight rejected a fully bound two-mesh unit"
+	end
+	meshes[2][1] = "#ID[00000000]"
+	local denied, reason = census({}, unit_api, mesh_api)
+	if denied or reason ~= "material-null-1-0" then
+		return "material preflight must reject a null binding on any mesh"
+	end
+end)
+
 _rt_register("preview_meshswap_guards", function()
     -- Issue 237 (WEAPON_APPEARANCE_STANDARD §4.1): the inventory-preview
     -- unit-resolution layer rewrites spawn_data entry.unit_name to the cwv

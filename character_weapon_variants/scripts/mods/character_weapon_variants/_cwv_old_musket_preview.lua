@@ -125,4 +125,97 @@ function M.resource_mode(descriptor, can_get)
 	return nil, "fallback_missing"
 end
 
+function M.texture_resources_ready(can_get)
+	if type(can_get) ~= "function" then return false, "Application.can_get unavailable" end
+	for _, binding in ipairs(M.TEXTURES) do
+		local ok, available = pcall(can_get, "texture", binding.texture)
+		if not ok or available ~= true then return false, binding.texture end
+	end
+	return true
+end
+
+function M.prepare_preview_material(unit, application_api, unit_api)
+	application_api = application_api or Application
+	unit_api = unit_api or Unit
+	if not unit_api or type(unit_api.set_all_materials) ~= "function" then
+		return false, "Unit.set_all_materials unavailable"
+	end
+	local can_get = application_api and application_api.can_get
+	if type(can_get) ~= "function" then return false, "Application.can_get unavailable" end
+	local ok_get, available = pcall(can_get, "material", M.PREVIEW_MATERIAL)
+	if not ok_get or available ~= true then return false, M.PREVIEW_MATERIAL end
+	local ok_set = pcall(unit_api.set_all_materials, unit, M.PREVIEW_MATERIAL)
+	if not ok_set then return false, "Unit.set_all_materials rejected preview unit" end
+	return true
+end
+
+-- Texture residency is necessary but not sufficient. The remote husk in #742
+-- had all three textures resident while the spawned Old Musket unit still held
+-- an unresolved material. Refuse the C write unless every mesh has real handles.
+function M.unit_materials_ready(unit, unit_api, mesh_api)
+	unit_api = unit_api or Unit
+	mesh_api = mesh_api or Mesh
+	if not unit then return false, "unit-missing" end
+	if not unit_api or type(unit_api.num_meshes) ~= "function"
+			or type(unit_api.mesh) ~= "function" then
+		return false, "unit-mesh-api-unavailable"
+	end
+	if not mesh_api or type(mesh_api.num_materials) ~= "function"
+			or type(mesh_api.material) ~= "function" then
+		return false, "mesh-material-api-unavailable"
+	end
+	local ok_mesh_count, mesh_count = pcall(unit_api.num_meshes, unit)
+	if not ok_mesh_count or type(mesh_count) ~= "number" or mesh_count < 1 then
+		return false, "unit-has-no-meshes"
+	end
+	local material_count = 0
+	for mesh_index = 0, mesh_count - 1 do
+		local ok_mesh, mesh = pcall(unit_api.mesh, unit, mesh_index)
+		if not ok_mesh or not mesh then return false, "mesh-unresolved-" .. tostring(mesh_index) end
+		local ok_count, count = pcall(mesh_api.num_materials, mesh)
+		if not ok_count or type(count) ~= "number" or count < 1 then
+			return false, "mesh-has-no-materials-" .. tostring(mesh_index)
+		end
+		for material_index = 0, count - 1 do
+			local ok_material, material = pcall(mesh_api.material, mesh, material_index)
+			if not ok_material or not material then
+				return false, string.format("material-unresolved-%d-%d", mesh_index, material_index)
+			end
+			local ok_string, material_id = pcall(tostring, material)
+			if not ok_string or not material_id or material_id:find("00000000", 1, true) then
+				return false, string.format("material-null-%d-%d", mesh_index, material_index)
+			end
+			material_count = material_count + 1
+		end
+	end
+	return material_count > 0, material_count > 0 and material_count or "unit-has-no-materials"
+end
+
+local paint_diag_seen = {}
+local function paint_diag_once(reason, detail)
+	if paint_diag_seen[reason] then return end
+	paint_diag_seen[reason] = true
+	pcall(printf, "[cwv:742] Old Musket paint SKIP reason=%s detail=%s chat=false",
+		tostring(reason), tostring(detail))
+end
+
+-- Unit.set_texture_for_materials is a native call whose 0x8 access violation
+-- bypasses pcall. Every precondition below is mandatory and the paint is atomic.
+function M.apply_textures(unit, preview_world)
+	if not unit or not Unit.alive(unit)
+			or type(Unit.set_texture_for_materials) ~= "function" then return false, 0 end
+	local ready, detail = M.texture_resources_ready(Application and Application.can_get)
+	if not ready then paint_diag_once("texture-resource-missing", detail); return false, 0 end
+	if preview_world then
+		ready, detail = M.prepare_preview_material(unit)
+		if not ready then paint_diag_once("preview-material-unbound", detail); return false, 0 end
+	end
+	ready, detail = M.unit_materials_ready(unit)
+	if not ready then paint_diag_once("unit-material-unready", detail); return false, 0 end
+	for _, binding in ipairs(M.TEXTURES) do
+		Unit.set_texture_for_materials(unit, binding.slot, binding.texture)
+	end
+	return true, #M.TEXTURES
+end
+
 return M

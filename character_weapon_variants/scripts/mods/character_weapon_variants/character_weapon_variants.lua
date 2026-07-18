@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.450-dev"
+local MOD_VERSION = "0.1.451-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -4465,72 +4465,11 @@ _om._track_old_musket_unit = function(unit, perspective, mode)
 	end
 end
 
-local _OLD_MUSKET_TEXTURE_BINDINGS = {}
-for _, binding in ipairs(_om.old_musket_preview.TEXTURES) do
-	_OLD_MUSKET_TEXTURE_BINDINGS[#_OLD_MUSKET_TEXTURE_BINDINGS + 1] = {
-		binding.slot, binding.texture,
-	}
-end
-local _OLD_MUSKET_PREVIEW_MATERIAL_3P = _om.old_musket_preview.PREVIEW_MATERIAL
-local _old_musket_paint_diag_seen = {}
-
-local function _old_musket_paint_diag_once(reason, detail)
-	if _old_musket_paint_diag_seen[reason] then return end
-	_old_musket_paint_diag_seen[reason] = true
-	pcall(printf, "[cwv:617] Old Musket paint SKIP reason=%s detail=%s chat=false",
-		tostring(reason), tostring(detail))
-end
-
--- #617 crash hardening. Unit.set_texture_for_materials is a Stingray C call:
--- a missing texture or invalid preview-world material can access-violate before
--- Lua pcall regains control. Prove every resource first; absence degrades to an
--- unpainted preview and a bounded engine diagnostic, never an unsafe call.
-_om._old_musket_texture_resources_ready = function(can_get)
-	if type(can_get) ~= "function" then return false, "Application.can_get unavailable" end
-	for _, binding in ipairs(_OLD_MUSKET_TEXTURE_BINDINGS) do
-		local ok, available = pcall(can_get, "texture", binding[2])
-		if not ok or available ~= true then return false, binding[2] end
-	end
-	return true
-end
-
-_om._prepare_old_musket_preview_material = function(unit)
-	if type(Unit.set_all_materials) ~= "function" then
-		return false, "Unit.set_all_materials unavailable"
-	end
-	local can_get = Application and Application.can_get
-	if type(can_get) ~= "function" then return false, "Application.can_get unavailable" end
-	local ok_get, available = pcall(can_get, "material", _OLD_MUSKET_PREVIEW_MATERIAL_3P)
-	if not ok_get or available ~= true then return false, _OLD_MUSKET_PREVIEW_MATERIAL_3P end
-	local ok_set = pcall(Unit.set_all_materials, unit, _OLD_MUSKET_PREVIEW_MATERIAL_3P)
-	if not ok_set then return false, "Unit.set_all_materials rejected preview unit" end
-	return true
-end
-
-_om._apply_old_musket_textures = function(unit, preview_world)
-	if not unit or not Unit.alive(unit)
-			or type(Unit.set_texture_for_materials) ~= "function" then return false, 0 end
-	local resources_ready, missing = _om._old_musket_texture_resources_ready(
-		Application and Application.can_get)
-	if not resources_ready then
-		_old_musket_paint_diag_once("texture-resource-missing", missing)
-		return false, 0
-	end
-	if preview_world then
-		local material_ready, reason = _om._prepare_old_musket_preview_material(unit)
-		if not material_ready then
-			_old_musket_paint_diag_once("preview-material-unbound", reason)
-			return false, 0
-		end
-	end
-	-- Vanilla's per-unit primitive (gear_utils.lua:150) avoids mutating the
-	-- shared compiled handgun material. The preconditions above are mandatory;
-	-- wrapping only this C call in pcall cannot catch its 0x8 access violation.
-	for _, binding in ipairs(_OLD_MUSKET_TEXTURE_BINDINGS) do
-		Unit.set_texture_for_materials(unit, binding[1], binding[2])
-	end
-	return true, #_OLD_MUSKET_TEXTURE_BINDINGS
-end
+-- #617/#742: the dedicated policy owns every preflight and native texture write.
+_om._old_musket_texture_resources_ready = _om.old_musket_preview.texture_resources_ready
+_om._prepare_old_musket_preview_material = _om.old_musket_preview.prepare_preview_material
+_om._old_musket_unit_materials_ready = _om.old_musket_preview.unit_materials_ready
+_om._apply_old_musket_textures = _om.old_musket_preview.apply_textures
 
 -- #617: LootItemUnitPreviewer powers both the ordinary illusion browser and
 -- CIM's Athanor craft preview. It is not a HeroPreviewer, so the inventory-
