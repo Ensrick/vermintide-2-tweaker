@@ -1,5 +1,11 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.144-dev - 2026-07-17 - combined #695 + #481 reconciliation build [verify-fix]
+
+- Reconciliation reship: two different builds were briefly uploaded as `0.9.143-dev` by parallel sessions. This unambiguous version carries both #695's startup backend-readiness guards and #481's exact Athanor offhand-preview ownership.
+
+**Test:** verify the #481 Athanor shield-isolation checklist, then start a fresh modded session and confirm the console contains no `Requesting unknown interface` startup flood.
+
 ## 0.9.143-dev - 2026-07-17 - exact Athanor offhand preview ownership (#481)
 
 - Closed the fail-open preview path recorded in `console-2026-07-17-17.50.57-10bc42ac-d630-48e0-95d8-f5de4cdc727c.log`: `LootItemUnitPreviewer` had an exact queued hand-unit path, but unreadable runtime `unit_name` metadata was treated as a mesh match and allowed an authored shield paint onto an unproven target.
