@@ -146,4 +146,12 @@ return function(H, repo_root)
         H.truthy(source:find("return func(self, item_id, chip_type, price, callback_fn, ...)", 1, true))
         H.equal(source:find('enqueue_api_request("PurchaseItem"', 1, true), nil)
     end)
+
+    H.test("Emporium overlay waits for peddler registration without warning probes", function()
+        local file = assert(io.open(root .. "modded_progression.lua", "rb"))
+        local source = file:read("*a"); file:close()
+        H.truthy(source:find("backend._interfaces", 1, true))
+        H.truthy(source:find("interfaces.peddler", 1, true))
+        H.equal(source:find('pcall(backend.get_interface, backend, "peddler")', 1, true), nil)
+    end)
 end

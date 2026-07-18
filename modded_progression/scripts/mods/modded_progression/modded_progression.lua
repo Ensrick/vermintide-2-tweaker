@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.28-dev"
+local MOD_VERSION = "0.2.29-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -597,8 +597,11 @@ local function _mp577_sync_overlay(peddler)
     end
     if not peddler then
         local backend = Managers and Managers.backend
-        local ok, interface = backend and pcall(backend.get_interface, backend, "peddler")
-        peddler = ok and interface
+        -- #695: this path runs every frame. BackendManagerPlayFab warns for
+        -- get_interface misses, so prove the interface exists before calling it.
+        local interfaces = backend and backend._interfaces
+        peddler = interfaces and interfaces.peddler
+            and backend:get_interface("peddler") or nil
     end
     local mirror = peddler and peddler._backend_mirror
     if not _mp577_mirror_ready(mirror) then return false, "mirror_not_ready" end
