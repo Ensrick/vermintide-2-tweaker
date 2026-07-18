@@ -1,5 +1,14 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.290-dev (2026-07-18) -- #717 keep Mod Tweaker gear rows lost their tan accent [verify-fix]
+
+- **Symptom:** in the Mod Tweaker menu most entries render plain white/grey while some keep their intended color (user report, 2026-07-17 evening). The white rows are the gear-parent rows - every "Enable All ..." Weapon Availability master (issue 611) plus every advanced-options parent - in the KEEP Mod Tweaker; group headers (orange) and tabs/buttons (tan/gold) keep their colors.
+- **Root cause:** twin-parity break, not the issue-694 tag strip. Commit 7d31174 (issue 611 gear-style masters) added the warm-tan gear-parent accent `{255,160,146,101}` only to the mission twin (`_mod_tweaker_view.lua:_append_row`); the keep twin (`_mod_tweaker_state.lua:_append_row`) never got it, so the same rows render default `font_default` there. The same commit rebuilt the Equipment tab so masters ARE the bulk of its rows, which turned a one-liner divergence into "most entries are white". No entry color ever rode on the stripped lifecycle tags: repo-wide grep at 9f0c11e~1 shows zero `{#color(...)}` markup and no tag-to-color code path in gut history.
+- **Fix:** ported the identical accent block (enabled gear parents tan, disabled VMF rows stay grey, `_advanced_parent_accent` marker) into the keep twin's `_append_row`. Build-time style write on the existing label style - no new widget pass, no per-frame driver.
+- **Surviving color classes (catalogued for the issue):** group headers / section titles `font_title` orange (shared `_mod_tweaker_definitions.lua`), tabs and Apply/Default/profile buttons via per-frame drivers in both interaction twins, disabled rows grey 128 in both twins. All intact; only the keep gear accent was missing.
+- **Regression guard:** new `qa/lua/tests/test_gut_gear_accent_parity.lua` asserts BOTH twins carry the accent block (marker + exact color + disabled guard).
+- **Verify (keep):** open the Mod Tweaker from the keep, Equipment tab, expand a character then Melee/Ranged: every "ENABLE ALL <CHARACTER> ..." master row and every gear-bearing row should now read in the same warm tan as the tabs; disabled rows stay grey. Cross-check the same rows from the in-mission ESC Mod Tweaker - identical colors in both.
+
 ## 0.2.289-dev (2026-07-18) -- #700 in-mission mission-vote client popup [verify-fix-coop]
 
 - **Symptom:** selecting a new mission from GUT's in-mission map starts a team vote, but clients receive no accept/decline HUD. Their undecided vote becomes the template's timeout "no", so the selection never advances in co-op.

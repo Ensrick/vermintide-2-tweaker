@@ -59,6 +59,7 @@ local suites = {
     "test_mod_tweaker_profiles",
     "test_mod_tweaker_tab_labels",
     "test_gut_label_policy",
+    "test_gut_gear_accent_parity",
     "test_gut_dx12_fence630",
     "test_mod_tweaker_ordering",
     "test_mod_tweaker_disabled_sections",
