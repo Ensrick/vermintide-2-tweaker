@@ -53,7 +53,15 @@ $ReceiverCareers = [ordered]@{
     "Kruber"    = @("es_mercenary", "es_huntsman", "es_knight", "es_questingknight")
     "Bardin"    = @("dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer")
     "Kerillian" = @("we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister")
-    "Saltzpyre" = @("wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest")
+    # Saltzpyre's ONLY receiver section in the doc is "## Receiver: Saltzpyre
+    # (non-WP)" (CROSS_CHARACTER_PORT_DECISIONS.md:395-399), whose every batch is
+    # decided for the three non-WP careers ONLY ("x 3 careers" throughout). Warrior
+    # Priest (wh_priest) is treated as its own receiver ("## Receiver: Warrior
+    # Priest", doc:624) and is handled via $WarriorPriestCareers below. Including
+    # wh_priest here double-counted it and fired ~34 false PARTIALs demanding a
+    # wh_priest wiring the doc never decided (and which its FORBIDDEN-ranged rule
+    # would bar). Keep the general Saltzpyre receiver non-WP-only.
+    "Saltzpyre" = @("wh_captain", "wh_bountyhunter", "wh_zealot")
     "Sienna"    = @("bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer")
 }
 # Warrior Priest is a Saltzpyre career (wh_priest) but the doc treats it as its

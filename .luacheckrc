@@ -33,6 +33,7 @@ read_globals = {
     "new_mod",
 
     -- Stingray engine + plugins
+    "printf",
     "Application", "World", "Unit", "Mesh", "Material", "Light", "Actor",
     "ScriptUnit", "ScriptApplication", "ScriptWorld", "Script", "ScriptBackendItem",
     "Vector3", "Vector3Box", "Vector2", "Quaternion", "QuaternionBox",
