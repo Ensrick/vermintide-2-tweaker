@@ -7,7 +7,7 @@ subsystem the engine docs own - it names the seam, cites the vanilla behavior,
 and links out. Decompile paths are relative to
 `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`; `crt` line numbers are
 `career_tweaker.lua` unless a module file is named. `§N` = a `docs/BUG_CLASSES.md`
-class; `#N` / "issue N" = a GitHub issue. Grep-verified 2026-07-12 against the
+class; `#N` / "issue N" = a GitHub issue. Grep-verified 2026-07-18 against the
 decompile.
 
 `crt` does two things to the engine: it makes a character's level/career-unlock
@@ -16,13 +16,13 @@ reworks careers' talents, abilities and passives at runtime (the balance
 catalog). The balance job puts mod-registered buff names onto vanilla NETWORKED
 buff paths, which is the mod's one wire-safety exposure (issue 425 / issue 371).
 The historical talent/ability casting-transposition engine is dormant in
-0.4.0-beta: its widget group is absent and its module is never loaded.
+the beta line: its widget group is absent and its module is never loaded.
 
 ## Hook table
 
-32 authored registrations (`tools/mod-lint/lint-mod.ps1 -Mod career_tweaker`
-PASS = one hook per (Class, method) mod-wide), of which 23 are loaded by
-0.4.0-beta. The nine hooks in the dormant swap and #440 probe modules remain
+34 authored registrations (`tools/mod-lint/lint-mod.ps1 -Mod career_tweaker`
+PASS = one hook per (Class, method) mod-wide), of which 25 are loaded by
+the beta line. The nine hooks in the dormant swap and #440 probe modules remain
 source for later redesign/diagnostics but do not execute.
 `[hook]` = full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` =
 `mod:hook_safe` (post-callback, no override); `[tbl]` = table-form hook
@@ -75,9 +75,10 @@ issue-425 peer-parity beacon (`_lib_peer_parity.lua`) adds NO hooks - it POLLS
 | `DamageUtils.apply_buffs_to_damage` [hook,tbl] `career_tweaker_armor_overcharge.lua` | The single chokepoint for gromril consumption and Unchained overcharge-on-damage conversion [src: `scripts/helpers/damage_utils.lua:2134`; gromril `:2335-2345`, overcharge `:2196-2224`] | Temporarily shim the victim's `be.has_buff_type` (hide the gromril marker) or `be.apply_buffs_to_value` (no-op `damage_taken_to_overcharge`) for exempt hits, then restore | Table-form (`DamageUtils` plain table). Host-authoritative. `pcall` + unconditional restore of both shims even if `func` raises; capture all 3 returns (`docs/VMF_RECIPES.md` §2). Fast early-out when all five overcharge/armor toggles are off |
 | `PlayerUnitHealthExtension.add_damage` [hook,tbl] `career_tweaker_armor_overcharge.lua` | Applies damage to a player and fires `on_damage_taken` with only attacker, amount, and damage type [src: `scripts/unit_extensions/default_player_unit/player_unit_health_extension.lua:702-703`]. The full method still has `damage_source_name`, required to distinguish Ratling projectiles (`projectile_system.lua:947,994`; Ratling passes its breed name in `bt_ratling_gunner_shoot_action.lua:603`). | Preserve Necromancer Cursed Armor on #334 chip ticks and publish a synchronous full-context record so Focused Spirit can ignore DoT/gas/warpfire/Ratling damage. Under #472's opt-in rework, its proc removes one stack and refreshes the vanilla ten-second cooldown. | One consolidated full 18-parameter hook; no second registration. Both transient context fields are save/restored after `pcall`. Focused Spirit reuses vanilla buff names, so no NetworkLookup/RPC schema expansion. |
 | `PlayerUnitHealthExtension.add_heal` [hook] `_crt_flagellation.lua` | Applies permanent or temporary healing, caps it to maximum health, and replicates the realized heal [src: `player_unit_health_extension.lua:842-899`] | #447 measures THP realized during an exact Zealot level-5 proc window and converts half as much green health for Flagellation | Server-only conversion through vanilla `convert_to_temp` (`:1187-1207`). Four native proc wrappers supply the synchronous attribution boundary; generic `heal_from_proc` is insufficient. No custom buff/RPC/lookup |
-| `BuffSystem.hot_join_sync` [hook] `career_tweaker_balance.lua:4102` | Replays EVERY `server_controlled_buffs` entry to a joining peer via `rpc_add_buff`, encoding `NetworkLookup.buff_templates[name]` [src: `scripts/entity_system/systems/buff/buff_system.lua:66`, encode at `:87`; `rpc_add_buff` decode `:417`] | Sender-side, UNCONDITIONAL: hide `crt_*` (and mod-registered-name) entries from the ONE replay pass so a non-crt joiner never decodes a modded index and fatals (`:4102`, issue 425) | Wire safety is never toggle-gated (memory `reference_vt2_wire_safety_never_toggle_gated`; `docs/engine/03` §31). The replay fires during the join handshake BEFORE any parity ack can exist, so no roster gate can win that race - filter is the only fix. `pcall` the wrapped sync, restore stashed entries unconditionally, rethrow to preserve vanilla failure semantics |
+| `BuffSystem.rpc_add_buff` [hook] `_career_tweaker_balance_hooks.lua` | Decodes the incoming numeric buff ID through the receiver's `NetworkLookup.buff_templates` and passes it to `_add_buff_helper_function` [src: `scripts/entity_system/systems/buff/buff_system.lua:417-434`; decode `:430`]. A positive server-controlled ID forbids duration on every sub-buff [src: `buff_system.lua:248-260`] | Issue #776 receiver floor, UNCONDITIONAL: when the local ID resolves to a CRT-owned name, require the sender's exact catalog identity; also reject a positive server ID resolving to a timed CRT template before vanilla fasserts | Own only locally resolved CRT names; unrelated vanilla/foreign names pass through byte-for-byte. Drop before `func`, log once per reason/template, and never attempt a fallback RPC. This floor contains catalog collisions even when sender-side code is old or unrelated |
+| `BuffSystem.hot_join_sync` [hook] `_career_tweaker_balance_hooks.lua` | Replays EVERY `server_controlled_buffs` entry to a joining peer via `rpc_add_buff`, encoding `NetworkLookup.buff_templates[name]` [src: `scripts/entity_system/systems/buff/buff_system.lua:66`, encode at `:87`; `rpc_add_buff` decode `:417`] | Sender-side, UNCONDITIONAL: hide `crt_*` (and mod-registered-name) entries from the ONE replay pass so a non-crt joiner never decodes a modded index and fatals (issue 425) | Wire safety is never toggle-gated (`docs/engine/03` §31). The replay fires during the join handshake BEFORE any parity ack can exist, so no roster gate can win that race - filter is the only fix. `pcall` the wrapped sync, restore stashed entries unconditionally, rethrow to preserve vanilla failure semantics |
 
-### Disabler/dodge diagnostics (dormant in 0.4.0-beta)
+### Disabler/dodge diagnostics (dormant in the beta line)
 
 | Class.method (kind) | Vanilla behavior | Why crt hooks it | Trap / invariant |
 |---|---|---|---|
@@ -143,18 +144,35 @@ crt has no entry at that index, so `BuffSystem.rpc_add_buff` fatals on the stric
 crt client's send is relayed by a non-crt host to every client; a crt host broadcasts
 to every non-crt client). This is a GAMEPLAY axis (`docs/engine/03` wire-safety
 doctrine): the substitute would change what happens, so it cannot be substituted like
-a cosmetic - the feature must go INERT until every peer has crt. That gate is the
-`_lib_peer_parity.lua` beacon (issue 371): a VMF-channel presence handshake
-(`crt_peer_parity_present`, schema 1) whose ABSENCE of a reply proves a peer lacks
-crt. It POLLS `Managers.player:human_players()` rather than hooking
+a cosmetic - the feature must go INERT until every peer has crt. Issue #776 proved
+that presence and a matching payload schema are insufficient: three client logs
+decoded local ID 1574 as timed `crt_questingknight_impetuous_as`, but received
+positive server IDs 12, 13, and 9. `ProcFunctions.add_buff` sends server ID 0
+[src: `scripts/settings/buff/proc_functions.lua:1956-1972`], so these were numeric
+catalog collisions, not the Impetuous proc originating those messages.
+
+The gate is therefore the `_lib_peer_parity.lua` beacon plus CRT's transport
+adapter in `_crt_wire_runtime.lua` (issues 371/425/776): a VMF-channel
+exact-catalog handshake (`crt_peer_parity_present`, schema 2). Its
+identity hashes every CRT-registered buff name together with the ACTUAL forward
+and reverse numeric assignment in the live `NetworkLookup.buff_templates`. A missing
+reply, missing identity, or any different name/index pair is negative evidence and
+disables networked reworks immediately. The beacon payload is a VMF-serialized string
+[src: VMF `modules/core/network.lua:186-196`], so it never adds a vanilla lookup.
+It POLLS `Managers.player:human_players()` rather than hooking
 `add_remote_player`/`remove_player`, deliberately - the lib is COPIED into the host
 mod, so its hooks would register under crt's id and VMF would drop them if crt already
 hooked those methods (`docs/engine/03`; the lib header spells this out). Fail-safe:
 inert until positively confirmed; solo counts as parity; any tick error forces
 features OFF. The one case the roster gate CANNOT cover is `hot_join_sync`, whose
-replay fires before any ack exists - handled by the unconditional sender-side filter
-(last hook row). The user's saved setting is never overwritten; a held rework just
-stays at vanilla for that apply pass and re-applies when parity re-establishes.
+replay fires before any ack exists - handled by the unconditional sender-side filter.
+The receiver floor is the independent last line of defense for stale/foreign senders
+whose numeric ID lands on a local CRT name. Impetuous Knight's two 20-second,
+max-one-stack timed effects use the native
+`BuffSystem:add_buff_synced(..., BuffSyncType.LocalAndServer)` path (the same pattern
+as `morris_buff_settings.lua:4618-4627`), never a positive server-controlled ID.
+The user's saved setting is never overwritten; a held rework stays vanilla until
+exact parity re-establishes.
 
 ## What the engine will NOT let us do (dead ends, already paid for)
 
@@ -193,6 +211,10 @@ re-discover these.
   for cosmetic axes, inert-gate for gameplay axes, sender-side filter for the hot-join
   race), never a menu toggle (issue 425 / issue 371; memory
   `reference_vt2_wire_safety_never_toggle_gated`).
+- **Presence parity does not prove numeric `NetworkLookup` parity.** Issue #776's
+  peers all answered the old schema-1 beacon, yet ID 1574 meant different buffs.
+  Exact name+numeric fingerprints are required before any CRT emission, and a
+  receiver floor must still reject CRT-resolving collisions before vanilla runs.
 - **Career-select / talent tiles bake `content.locked` ONCE at populate.** Flipping a
   level_override / unlock-all setting while the window is open leaves the tiles stale;
   there is no vanilla "refresh" event, so crt tracks the live window instance via
@@ -203,7 +225,7 @@ re-discover these.
 
 Follows `docs/engine/README.md` maintenance rules: if a crt hook moves, a guard is
 added, or a cited vanilla line drifts after a game patch, edit the affected row in
-the SAME commit. Line numbers are against the 2026-07-12 decompile - match crash
+the SAME commit. Line numbers are against the 2026-07-18 decompile - match crash
 logs by function name, not line. Several UI `on_enter`/`on_exit` targets carry
 `[unverified]` exact lines (the class + method are grep-confirmed present; only the
 line inside was not pinned this pass) - replace the tag with a citation when next

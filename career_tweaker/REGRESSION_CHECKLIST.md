@@ -104,6 +104,23 @@ Last updated: 2026-07-17.
 
 ---
 
+### crt-exact-buff-catalog-parity — Positive server ID collides with timed CRT buff (issue 776)
+
+**[MULTIPLAYER]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Client crashes in `BuffSystem.rpc_add_buff` with `Cannot use duration for server controlled buffs!`; the three attached logs received positive server IDs 12, 13, and 9 while local lookup ID 1574 resolved to `crt_questingknight_impetuous_as`. |
+| Root cause | Issue #425's schema-1 handshake proved only CRT presence. It did not prove that every peer assigned the same numeric `NetworkLookup.buff_templates` ID to every CRT name, so an unrelated host buff could decode locally as a timed CRT template. |
+| Mod(s) | career_tweaker |
+| Fix version(s) | Candidate: crt v0.4.6-beta |
+| Category | INTEGRATION |
+| Repro | Two-player lobby with the previously colliding catalogs. Trigger the host-side buff activity captured in the #776 logs while the client runs CRT, then repeat with GK Impetuous Knight kills and a hot join. Include unrelated host numeric IDs 12, 13, and 9 as collision controls. |
+| Expected post-fix | Networked CRT reworks stay vanilla until every peer proves the exact CRT name+numeric fingerprint. A CRT-resolving mismatch is dropped before vanilla; exact peers use native `LocalAndServer` timed sync, refresh one 20-second stack, and expire normally. No crash and no unbounded logging. |
+| Detection | `/crt_regression_test` passes `crt_wire_catalog_identity_exact_776`, `crt_rpc_add_buff_receiver_floor_776`, and `crt_impetuous_timed_sync_contract_776`; offline `test_crt_wire_contract.lua` and `test_peer_parity_transition.lua` pass. In logs, at most one `[crt:776] rpc_add_buff dropped` row appears per reason/template. |
+
+---
+
 ### gated-registration-divergence — Toggle-gated mod-load registration produces different network indices across peers
 
 **[MULTIPLAYER]**
