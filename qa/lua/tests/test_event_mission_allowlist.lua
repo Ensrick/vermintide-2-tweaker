@@ -6,6 +6,9 @@ return function(H, repo_root)
             dlc_dwarf_fest = {
                 level_id = "dlc_dwarf_fest", act = "act_celebrate",
                 packages = { "resource_packages/levels/dlcs/dwarf_fest/dlc_dwarf_fest" },
+                display_name = "level_name_dlc_dwarf_fest",
+                description_text = "nco_dal_loading_screen_a_01",
+                level_image = "level_image_dlc_dwarf_fest",
             },
             dlc_celebrate_crawl = {
                 level_id = "dlc_celebrate_crawl", act = "act_celebrate",
@@ -15,7 +18,22 @@ return function(H, repo_root)
                 level_id = "control_level", act = "act_1", packages = { "control" },
             },
         }
-        local areas = { celebrate = { acts = { "act_celebrate" }, exclude_from_area_selection = true } }
+        local areas = {
+            celebrate = {
+                acts = { "act_celebrate" }, exclude_from_area_selection = true,
+                sort_order = 0, display_name = "area_selection_bogenhafen_name",
+                description_text = "area_selection_bogenhafen_description",
+                level_image = "area_icon_bogenhafen",
+            },
+            dwarf_fest = {
+                exclude_from_area_selection = true,
+                display_name = "level_name_dlc_dwarf_fest",
+                description_text = "event_description_dwarf_fest",
+                level_image = "area_icon_dwarf_fest",
+            },
+            helmgart = { exclude_from_area_selection = false, sort_order = 1 },
+            control_area = { exclude_from_area_selection = false, sort_order = 7 },
+        }
         local acts = { act_celebrate = { sorting = 2 } }
         return levels, areas, acts
     end
@@ -57,6 +75,51 @@ return function(H, repo_root)
         local ok, problems = Missions.validate_contract(levels, areas, acts)
         H.equal(ok, true)
         H.equal(#problems, 0)
+    end)
+
+    H.test("Event mission area temporarily presents Feast instead of Bogenhafen", function()
+        local levels, areas = fixtures()
+        local celebrate = areas.celebrate
+        local snapshot, proof = Missions.apply_area_presentation(levels, areas)
+        H.truthy(snapshot)
+        H.equal(celebrate.exclude_from_area_selection, false)
+        H.equal(celebrate.display_name, "level_name_dlc_dwarf_fest")
+        H.equal(celebrate.description_text, "event_description_dwarf_fest")
+        H.equal(celebrate.long_description_text, "nco_dal_loading_screen_a_01")
+        H.equal(celebrate.level_image, "area_icon_dwarf_fest")
+        H.equal(proof.sort_order, 8)
+        H.equal(proof.visible_count, 3)
+    end)
+
+    H.test("Event mission area presentation restores the exact stock container", function()
+        local levels, areas = fixtures()
+        local celebrate = areas.celebrate
+        local original = {
+            exclude = celebrate.exclude_from_area_selection,
+            sort = celebrate.sort_order,
+            name = celebrate.display_name,
+            desc = celebrate.description_text,
+            image = celebrate.level_image,
+        }
+        local snapshot = Missions.apply_area_presentation(levels, areas)
+        H.equal(Missions.restore_area_presentation(snapshot), true)
+        H.equal(celebrate.exclude_from_area_selection, original.exclude)
+        H.equal(celebrate.sort_order, original.sort)
+        H.equal(celebrate.display_name, original.name)
+        H.equal(celebrate.description_text, original.desc)
+        H.equal(celebrate.level_image, original.image)
+        H.equal(celebrate.long_description_text, nil)
+    end)
+
+    H.test("Event mission area presentation fails closed without resident Feast fields", function()
+        local levels, areas = fixtures()
+        areas.dwarf_fest.level_image = nil
+        levels.dlc_dwarf_fest.level_image = nil
+        local snapshot, problem = Missions.apply_area_presentation(levels, areas)
+        H.equal(snapshot, nil)
+        H.equal(problem, "stock Feast presentation incomplete")
+        H.equal(areas.celebrate.exclude_from_area_selection, true)
+        H.equal(areas.celebrate.display_name, "area_selection_bogenhafen_name")
     end)
 
     H.test("Event mission contract fails closed on missing menu-read tables", function()

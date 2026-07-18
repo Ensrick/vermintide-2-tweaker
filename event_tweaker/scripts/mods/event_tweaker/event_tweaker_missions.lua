@@ -10,6 +10,15 @@ local M = {}
 M.AREA_KEY = "celebrate"
 M.ACT_KEY = "act_celebrate"
 
+local PRESENTATION_KEYS = {
+    "exclude_from_area_selection",
+    "sort_order",
+    "display_name",
+    "description_text",
+    "long_description_text",
+    "level_image",
+}
+
 -- Deliberately closed. A future event level must be source-audited and added
 -- here before Event Tweaker will expose it; sharing act_celebrate is not enough.
 M.ALLOWLIST = {
@@ -47,6 +56,82 @@ function M.enabled_ids(get)
         end
     end
     return ids
+end
+
+-- `AreaSettings.celebrate` is a dormant container, not a finished menu tile:
+-- vanilla leaves it named and illustrated as Bogenhafen with sort_order 0.
+-- Reuse the resident Feast presentation already carried by the stock
+-- dwarf_fest area / level while vanilla constructs the area widgets, then let
+-- the runtime adapter restore every field. No custom asset is introduced and
+-- no global campaign identity changes.
+function M.apply_area_presentation(level_settings, area_settings)
+    local target = type(area_settings) == "table" and rawget(area_settings, M.AREA_KEY)
+    local feast_area = type(area_settings) == "table" and rawget(area_settings, "dwarf_fest")
+    local feast_level = type(level_settings) == "table" and rawget(level_settings, "dlc_dwarf_fest")
+    if type(target) ~= "table" or type(feast_level) ~= "table" then
+        return nil, "stock Feast presentation unavailable"
+    end
+
+    local display_name = type(feast_area) == "table" and feast_area.display_name
+        or feast_level.display_name
+    local description_text = type(feast_area) == "table" and feast_area.description_text
+        or feast_level.description_text
+    local level_image = type(feast_area) == "table" and feast_area.level_image
+        or feast_level.level_image
+    if type(display_name) ~= "string" or display_name == ""
+        or type(description_text) ~= "string" or description_text == ""
+        or type(level_image) ~= "string" or level_image == "" then
+        return nil, "stock Feast presentation incomplete"
+    end
+
+    local snapshot = { target = target, present = {}, values = {} }
+    for i = 1, #PRESENTATION_KEYS do
+        local key = PRESENTATION_KEYS[i]
+        snapshot.present[key] = rawget(target, key) ~= nil
+        snapshot.values[key] = target[key]
+    end
+
+    local highest = 0
+    for key, area in pairs(area_settings) do
+        if key ~= M.AREA_KEY and type(area) == "table"
+            and area.exclude_from_area_selection ~= true
+            and type(area.sort_order) == "number"
+            and area.sort_order > highest then
+            highest = area.sort_order
+        end
+    end
+
+    target.exclude_from_area_selection = false
+    target.sort_order = highest + 1
+    target.display_name = display_name
+    target.description_text = description_text
+    target.long_description_text = feast_level.description_text
+    target.level_image = level_image
+
+    local visible = 0
+    for _, area in pairs(area_settings) do
+        if type(area) == "table" and area.exclude_from_area_selection ~= true then
+            visible = visible + 1
+        end
+    end
+    return snapshot, {
+        display_name = target.display_name,
+        sort_order = target.sort_order,
+        visible_count = visible,
+    }
+end
+
+function M.restore_area_presentation(snapshot)
+    if type(snapshot) ~= "table" or type(snapshot.target) ~= "table" then return false end
+    for i = 1, #PRESENTATION_KEYS do
+        local key = PRESENTATION_KEYS[i]
+        if snapshot.present[key] then
+            snapshot.target[key] = snapshot.values[key]
+        else
+            snapshot.target[key] = nil
+        end
+    end
+    return true
 end
 
 -- Returns true when a LevelSettings entry is complete enough to advertise and

@@ -1,5 +1,12 @@
 # Tweaker: Events — Changelog
 
+## 0.4.38-dev (2026-07-18) - issue #626 event-area presentation reconciliation [diagnostics-armed]
+
+- The failed `v0.4.36-dev` log proves the shipped bundle loaded and all four intended menu hooks installed. At 18:54:29 the console Own Game area-selection class was entered, but no mission-selection marker followed. Vanilla source explains the visible failure: `AreaSettings.celebrate` is only a dormant container and still advertises Bogenhafen's name, description, icon, and `sort_order = 0`; the working Feast mod replaces those presentation fields before making the area visible. Event Tweaker exposed the container without making it recognizable, so the user never selected `act_celebrate` and the mission hook never ran.
+- While vanilla builds desktop/controller area widgets, Event Tweaker now temporarily reuses the resident stock Feast name, description, and icon and sorts that tile after the other visible areas. Every field, including formerly absent fields, is restored exactly after the call or Lua error. The campaign identity remains `celebrate` / `act_celebrate`; no custom assets, package ownership, Quick Play pool, or wire tables are changed.
+- Added one signature-deduplicated `[event-missions:626] area applied` proof with surface, selected IDs, widget assignment, visible count, sort order, and label. `/event_mission_probe` now includes bounded area/mission hook counts and the last area proof, distinguishing a hidden tile, widget-cap omission, and failure to enter the mission view without per-frame logging.
+- `MOD_VERSION` `0.4.36-dev` -> `0.4.38-dev`.
+
 ## 0.4.36-dev (2026-07-18) - issue #626 fix: narrowed mission visibility gate [untested]
 
 - Fixed the "toggle on, nothing shows" defect: the mission visibility contract fail-closed on four `NetworkLookup` tables (`level_keys`, `mission_ids`, `act_keys`, `unlockable_level_keys`) that the Own Game menus never read, so any lookup mismatch silently blocked all four menu hooks with only a `[event-missions:626] blocked:` printf. `validate_contract` now requires ONLY the tables the menus actually read: `AreaSettings.celebrate` with `act_celebrate` in its acts (`start_game_window_area_selection.lua:91-95`), `ActSettings.act_celebrate` with numeric `sorting` (`start_game_window_mission_selection.lua:156-160`), and each allowlisted `LevelSettings` entry with matching `level_id`/`act` and a non-empty package list.

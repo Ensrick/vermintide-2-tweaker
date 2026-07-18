@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-15 (v0.4.33-dev issue 626 dormant-event mission boundary).
+Last updated: 2026-07-18 (issue 626 dormant-event area presentation reconciliation).
 
 ---
 ## Multiplayer / Network Sync
@@ -94,7 +94,7 @@ Last updated: 2026-07-15 (v0.4.33-dev issue 626 dormant-event mission boundary).
 | Category | INTEGRATION |
 | Repro | 1. Host enables both Dormant Event Missions and has a client join. 2. Open Own Game: the built-in event area contains exactly `dlc_dwarf_fest` and `dlc_celebrate_crawl`. 3. Start each mission once and confirm both peers load. 4. Return to Own Game and confirm a normal Helmgart control mission/act is unchanged. 5. Disable/re-enable Event Tweaker and reopen the views; repeat one controller-path entry if available. |
 | Expected post-fix | Exactly the two enabled allowlisted missions appear; individually disabled entries do not. No unrelated/future level is admitted, Quick Play/global campaign pools remain untouched, both peers load through vanilla level transition, and view re-entry/mod re-enable does not leave stale area state. |
-| Detection | Offline: `test_event_mission_allowlist` covers both enabled missions, individual selection, untouched control-act identity, closed contents, fail-closed menu-read contract validation (NetworkLookup deliberately not consulted), and the idempotent campaign registration fallback (vanilla no-op, append-once, malformed-level refusal). Runtime: `/event_mission_probe` reports `contract=OK` plus `campaign=vanilla` (or the appended entries); `/event_tweaker_regression_test` passes `issue626_event_mission_allowlist_contract` (contract + both levels present in `UnlockableLevels`/`GameActs.act_celebrate`); engine log emits `[event-missions:626] menu applied` with exactly the selected IDs. Source: `_evt_missions.lua` contains four unique menu hooks and no `NetworkLookup` writes; `event_tweaker_missions.lua` contains the exact two-entry allowlist. |
+| Detection | Offline: `test_event_mission_allowlist` covers both enabled missions, individual selection, untouched control-act identity, closed contents, fail-closed menu-read contract validation (NetworkLookup deliberately not consulted), exact temporary Feast presentation/restoration, and the idempotent campaign registration fallback (vanilla no-op, append-once, malformed-level refusal). Runtime: `/event_mission_probe` reports `contract=OK`, `campaign=vanilla` (or the appended entries), bounded area/mission hook counts, and the last area proof; `/event_tweaker_regression_test` passes `issue626_event_mission_allowlist_contract` (contract + both levels present in `UnlockableLevels`/`GameActs.act_celebrate`); engine log emits signature-deduplicated `[event-missions:626] area applied` and `menu applied` lines with exactly the selected IDs. Source: `_evt_missions.lua` contains four unique menu hooks and no `NetworkLookup` writes; `event_tweaker_missions.lua` contains the exact two-entry allowlist. |
 
 
 ---

@@ -54,6 +54,10 @@ if #_campaign_appended > 0 then
 end
 
 local _last_contract_error
+local _area_hook_calls = 0
+local _mission_hook_calls = 0
+local _last_area_signature
+local _last_area_proof = "not-called"
 local function _report_contract_failure(problems)
     local detail = table.concat(problems or {}, "; ")
     if detail ~= _last_contract_error then
@@ -62,7 +66,25 @@ local function _report_contract_failure(problems)
     end
 end
 
-local function _with_celebrate_area_exposed(func, self)
+local function _has_assigned_area_widget(self)
+    local function is_target(widget)
+        return type(widget) == "table" and type(widget.content) == "table"
+            and widget.content.area_name == Missions.AREA_KEY
+    end
+    if type(self) ~= "table" then return false end
+    if type(self._widgets_by_name) == "table" and is_target(self._widgets_by_name.main_campaign) then
+        return true
+    end
+    if type(self._area_widgets) == "table" then
+        for _, widget in pairs(self._area_widgets) do
+            if is_target(widget) then return true end
+        end
+    end
+    return false
+end
+
+local function _with_celebrate_area_exposed(func, self, surface)
+    _area_hook_calls = _area_hook_calls + 1
     if not Missions.any_enabled(_get) then return func(self) end
 
     local ok, problems = _contract()
@@ -71,19 +93,36 @@ local function _with_celebrate_area_exposed(func, self)
         return func(self)
     end
 
-    local area = AreaSettings[Missions.AREA_KEY]
-    local previous = area.exclude_from_area_selection
-    area.exclude_from_area_selection = false
+    local snapshot, proof = Missions.apply_area_presentation(LevelSettings, AreaSettings)
+    if not snapshot then
+        _report_contract_failure({ proof })
+        return func(self)
+    end
 
     -- Both vanilla methods have the source-verified `(self)` signature and no
     -- return value. pcall exists only so the temporary global bit is restored
     -- on a Lua error; the original error is then propagated.
     local call_ok, call_error = pcall(func, self)
-    area.exclude_from_area_selection = previous
+    local assigned = _has_assigned_area_widget(self)
+    Missions.restore_area_presentation(snapshot)
+    local ids = Missions.enabled_ids(_get)
+    local signature = table.concat({
+        tostring(surface), table.concat(ids, ","), tostring(assigned),
+        tostring(proof.visible_count), tostring(proof.sort_order), tostring(proof.display_name),
+    }, "|")
+    _last_area_proof = signature
+    if signature ~= _last_area_signature then
+        _last_area_signature = signature
+        pcall(printf,
+            "[event-missions:626] area applied: surface=%s missions=[%s] widget_assigned=%s visible=%s sort=%s label=%s",
+            tostring(surface), table.concat(ids, ","), tostring(assigned),
+            tostring(proof.visible_count), tostring(proof.sort_order), tostring(proof.display_name))
+    end
     if not call_ok then error(call_error) end
 end
 
 local function _replace_celebrate_levels(func, self, ...)
+    _mission_hook_calls = _mission_hook_calls + 1
     func(self, ...)
     if not Missions.any_enabled(_get) then return end
 
@@ -102,11 +141,11 @@ end
 -- Hook pre-flight (2026-07-15): event_tweaker had no hooks on either area-
 -- selection or mission-selection class/method pair before issue 626.
 mod:hook("StartGameWindowAreaSelection", "_setup_area_widgets", function(func, self)
-    return _with_celebrate_area_exposed(func, self)
+    return _with_celebrate_area_exposed(func, self, "desktop")
 end)
 
 mod:hook("StartGameWindowAreaSelectionConsoleV2", "_setup_area_widgets", function(func, self)
-    return _with_celebrate_area_exposed(func, self)
+    return _with_celebrate_area_exposed(func, self, "console")
 end)
 
 mod:hook("StartGameWindowMissionSelection", "_setup_level_acts", function(func, self, ...)
@@ -121,8 +160,12 @@ mod:command("event_mission_probe", "Inspect the issue-626 event-mission availabi
     local ok, problems = _contract()
     local ids = Missions.enabled_ids(_get)
     local detail = ok and "OK" or table.concat(problems, "; ")
-    mod:echo("[event missions] selected={%s} contract=%s campaign=%s", table.concat(ids, ","), detail, _campaign_status())
-    pcall(printf, "[event-missions:626] probe selected=[%s] contract=%s campaign=%s", table.concat(ids, ","), detail, _campaign_status())
+    mod:echo("[event missions] selected={%s} contract=%s campaign=%s area_hooks=%d mission_hooks=%d",
+        table.concat(ids, ","), detail, _campaign_status(), _area_hook_calls, _mission_hook_calls)
+    pcall(printf,
+        "[event-missions:626] probe selected=[%s] contract=%s campaign=%s area_hooks=%d mission_hooks=%d last_area=%s",
+        table.concat(ids, ","), detail, _campaign_status(), _area_hook_calls, _mission_hook_calls,
+        _last_area_proof)
 end)
 
 ET.rt_register("issue626_event_mission_allowlist_contract", function()
