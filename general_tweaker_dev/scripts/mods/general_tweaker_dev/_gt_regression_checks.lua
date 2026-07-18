@@ -551,14 +551,29 @@ function M.install(mod, _rt_register, deps)
         -- Keep. Bot Necromancers retain the roster-toggle gate. A false vanilla
         -- forbidden flag (mission behavior) is never mutated.
         local policy = mod._gt_necro_should_clear_keep_ban
+        local reconcile = mod._gt_necro_reconcile_keep_ban
         if type(policy) ~= "function" then return "necromancer keep-pet policy helper missing" end
+        if type(reconcile) ~= "function" then return "necromancer keep-pet reconciler missing" end
         if policy(false, false, true) ~= true then return "human keep owner blocked with bots setting off" end
         if policy(false, true, true) ~= true then return "human keep owner blocked with bots setting on" end
         if policy(true, true, true) ~= true then return "bot keep owner blocked while Bots in Keep is on" end
         if policy(true, false, true) ~= false then return "bot keep owner allowed while Bots in Keep is off" end
         if policy(false, true, false) ~= false then return "mission/non-hub state would be mutated" end
+        local human = { _player = { bot_player = false }, _pets_forbidden_in_level = true }
+        local changed, before, after, owner = reconcile(human, false)
+        if changed ~= true or before ~= true or after ~= false or owner ~= "human" then
+            return "human initialized extension was not reconciled"
+        end
+        local bot = { _player = { bot_player = true }, _pets_forbidden_in_level = true }
+        changed, before, after, owner = reconcile(bot, false)
+        if changed ~= false or before ~= true or after ~= true or owner ~= "bot" then
+            return "bot extension ignored the Bots in Keep gate"
+        end
         if GT_NECRO_KEEP_PETS_MARKER_v0_2_242 ~= "gt-necro-human-and-bot-keep-pets" then
             return "necromancer human/bot keep-pet marker absent"
+        end
+        if GT_NECRO_KEEP_PETS_LIFECYCLE_MARKER_659 ~= "gt-necro-extension-ready-reconcile" then
+            return "necromancer extension-ready lifecycle marker absent"
         end
     end)
 
