@@ -6,7 +6,7 @@
 
 **Test:** #698 co-op checklist below, plus solo: idle in the keep 2+ minutes and confirm at most one line of each unlock marker in the newest log.
 
-## 0.9.146-dev - 2026-07-18 - exact dual-illusion persistence lifecycle (#702)
+## 0.9.147-dev - 2026-07-18 - exact dual-illusion persistence lifecycle (#702)
 
 - Dual/offhand Apply now commits its durable owner record by exact backend item and hand before any live-model or peer delivery work. The previous save was nested under `player_unit` liveness and the LA sender's availability, so a valid inventory Apply could update the session preview while silently omitting the disk write.
 - Selection queuing no longer requires a live keep player unit. When delivery is temporarily unavailable, the existing bounded self-rebroadcast path carries the already-persisted state after the owner equipment exists.
