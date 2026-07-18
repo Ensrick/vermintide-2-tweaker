@@ -1,6 +1,6 @@
 ﻿# General Tweaker Changelog
 
-## Unreleased -- #659 extension-ready keep-pet reconciliation [diagnostics-armed]
+## v0.2.247-dev (2026-07-18) -- #659 extension-ready keep-pet reconciliation [diagnostics-armed]
 
 - The failed 2026-07-18 verification ran GT Dev `v0.2.245-dev`; the live Necromancer extension reached vanilla `warm_up_skeletons`, but GT emitted no `[gt:659]` lifecycle decision. The offline truth-table passing therefore did not prove that the live initialized extension consumed the policy.
 - Reused one idempotent, engine-free reconciliation policy at two distinct vanilla lifecycle edges: `_on_talents_changed`, where the hub flag is written, and `extensions_ready`, after the passive extension has finished initialization. This is the issue's pre-recorded fallback 2 and preserves later talent refreshes without duplicate hooks on either method.
