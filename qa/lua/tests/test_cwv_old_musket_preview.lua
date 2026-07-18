@@ -117,6 +117,84 @@ return function(H, repo_root)
         H.equal(Cim.authored_mode({}, function() error("bad companion") end, registry()), nil)
     end)
 
+    H.test("CIM #404 centers only ranged properties previews", function()
+        local native = { -0.85, 3, 0.05 }
+        local ranged = Cim.properties_preview_position("ranged", native)
+        H.equal(ranged[1], 0)
+        H.equal(ranged[2], 3)
+        H.equal(ranged[3], 0.05)
+        H.equal(native[1], -0.85)
+        H.equal(Cim.properties_preview_position("melee", native), nil)
+        H.equal(Cim.properties_preview_position("ranged", nil), nil)
+        H.equal(Cim.properties_preview_position("ranged", {}), nil)
+    end)
+
+    H.test("CIM #404 runtime installs one active-only zoom-durable correction", function()
+        local Runtime = dofile(repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
+        local hook
+        local set_position
+        local logged = 0
+        local active = true
+        local ok, reason = Runtime.install({
+            mod = {
+                hook = function(_, class_name, method_name, callback)
+                    H.equal(class_name, "HeroWindowWeaveProperties")
+                    H.equal(method_name, "_create_item_previewer")
+                    H.equal(hook, nil, "runtime registered more than one hook")
+                    hook = callback
+                end,
+            },
+            policy = Cim,
+            is_active = function() return active end,
+            unit_api = {
+                alive = function() return true end,
+                world_position = function() return 10 end,
+                set_local_position = function(_, _, position) set_position = position end,
+            },
+            vector3 = function(x, y, z) return x + y + z end,
+            vector3_box = function(value) return { value = value } end,
+            printf = function() logged = logged + 1 end,
+        })
+        H.equal(ok, true)
+        H.equal(reason, nil)
+        H.equal(type(hook), "function")
+
+        local previewer = hook(function()
+            return { _spawn_position = { -0.85, 3, 0.05 }, _link_unit = {} }
+        end, {}, {}, { data = { key = "es_longbow", slot_type = "ranged" } })
+        H.equal(previewer._spawn_position[1], 0)
+        H.equal(set_position, 10.85)
+        H.equal(previewer._unit_start_position_boxed.value, 10.85)
+        H.equal(logged, 1)
+
+        active = false
+        set_position = nil
+        hook(function()
+            return { _spawn_position = { -0.85, 3, 0 }, _link_unit = {} }
+        end, {}, {}, { data = { key = "es_longbow", slot_type = "ranged" } })
+        H.equal(set_position, nil)
+
+        H.equal(Runtime.install({}), false)
+    end)
+
+    H.test("CIM #404 production correction is construction-only and zoom durable", function()
+        local root = repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
+        local entry_file = assert(io.open(root .. "crafting_in_modded_dev.lua", "rb"))
+        local entry = entry_file:read("*a")
+        entry_file:close()
+        local runtime_file = assert(io.open(root .. "_cim_forge_preview.lua", "rb"))
+        local runtime = runtime_file:read("*a")
+        runtime_file:close()
+        H.truthy(entry:find('mod:dofile(\n    "scripts/mods/crafting_in_modded_dev/_cim_forge_preview")', 1, true))
+        H.truthy(entry:find("_FORGE_PREVIEW.install_runtime(", 1, true))
+        H.truthy(runtime:find('deps.mod:hook("HeroWindowWeaveProperties", "_create_item_previewer"', 1, true))
+        H.truthy(runtime:find("deps.policy.properties_preview_position", 1, true))
+        H.truthy(runtime:find("previewer._unit_start_position_boxed = deps.vector3_box(adjusted)", 1, true))
+        H.truthy(runtime:find("if not deps.is_active() or not previewer then return previewer end", 1, true))
+    end)
+
     H.test("CWV #474 installs Old Musket in the generic preview lease bridge", function()
         local path = repo_root
             .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
