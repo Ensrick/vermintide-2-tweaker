@@ -54,7 +54,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.94-dev"
+local MOD_VERSION = "0.8.95-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -4740,6 +4740,7 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
 end)
 
 -- Keep the level/power fields blank — vanilla `_sync_backend_loadout` repopulates them every refresh.
+-- _cim703_consolidated_sync_backend_loadout_hook: single hook on this (Class, method); #703 CWV lock-clear rides this body.
 mod:hook("HeroWindowWeaveForgeWeapons", "_sync_backend_loadout", function(func, self)
     func(self)
     if not _custom_forge_active then return end
@@ -4751,6 +4752,8 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_sync_backend_loadout", function(func, 
             c.level_title = ""
             c.power_text = ""
             c.power_title = ""
+            -- #703: only rows vanilla just locked, and only cwv-provider keys.
+            if c.locked and mod._cim_synthetic_item_contract.is_cwv_provider_key(c.key) then c.locked = false end
         end
     end
 end)

@@ -322,4 +322,23 @@ function M.partition_exact_ids(ids, records)
     return owned, foreign
 end
 
+-- #703: the Athanor list's lock badge is a vanilla OWNERSHIP gate, not an unlock
+-- gate. `_sync_backend_loadout` resolves each row via
+-- `backend_interface_items:get_item_from_key(item_key)` and stamps
+-- `content.locked = not backend_id` (hero_window_weave_forge_weapons.lua:555 +
+-- :565), which draws the `hero_icon_locked` pass (definitions :776-778) and
+-- saturates the icon (`_animate_list_widget` :1424-1425). CWV rows are
+-- registration-only definitions with no owned backend instance (issue 592), so
+-- that lookup can never succeed and every CWV row rendered a false padlock even
+-- though selecting and crafting worked. Classify through this contract's
+-- provider ladder so provider=cwv rows are unlocked by definition while vanilla
+-- and any other provider keep their vanilla lock state.
+function M.is_cwv_provider_key(key)
+    if type(key) ~= "string" or key == "" then return false end
+    if type(M.provider_for) ~= "function" then return false end
+    local iml = rawget(_G, "ItemMasterList")
+    local master = iml and rawget(iml, key) or nil
+    return M.provider_for(key, master) == "cwv"
+end
+
 return M
