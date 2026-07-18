@@ -30,6 +30,8 @@ local profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles"
 local disabled_sections = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_disabled_sections")
 local tab_labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_labels")
 local label_policy = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_label_policy")
+local dx12_diag_module = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dx12_fence630")
+local dx12_diag = mod._gut_dx12_fence630
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -934,6 +936,7 @@ HeroViewStateModTweaker.on_enter = function (self, params)
     if mod._gut_mt_repin_la then pcall(mod._gut_mt_repin_la, self, "substate_on_enter") end
 
     self:_rebuild()
+    if dx12_diag then dx12_diag:enter(dx12_diag_module.runtime_info(self, "hero_substate")) end
     self:_dump_state("substate_on_enter"); self:_dump_scrollbar("substate_on_enter"); _wwise_probe()
     -- Native menu-open feedback — the exact event both vanilla OptionsView.on_enter
     -- (options_view.lua:1615) and the VMF options view fire when the settings menu
@@ -948,7 +951,9 @@ HeroViewStateModTweaker.update = function (self, dt, t)
     local input_service = self:input_service()
     if not input_service then return end
 
+    if dx12_diag then dx12_diag:before_draw(dx12_diag_module.runtime_info(self, "hero_substate")) end
     self:_draw(dt, input_service)
+    if dx12_diag then dx12_diag:after_draw() end
 
     self._draw_frames = (self._draw_frames or 0) + 1
     if self._draw_frames % 120 == 1 then
@@ -1041,6 +1046,7 @@ HeroViewStateModTweaker.close_menu = function (self, ignore_sound)
 end
 
 HeroViewStateModTweaker.on_exit = function (self)
+    if dx12_diag then dx12_diag:leave("on_exit", self) end
     -- Auto-save: if any setting changed while open, emit the TOML to the log so the
     -- companion watcher writes gut_mod_settings.toml (the mod can't write directly).
     -- PRESERVED from the standalone view's on_exit — exiting the sub-state must still

@@ -2260,3 +2260,43 @@ by network peer and replayed onto a newly spawned remote husk.
 - Register career change as a canonical appearance replay edge. Cosmetics
   Tweaker `_cos_husk_identity.lua` and `test_cos_husk_identity.lua` are the
   reference policy and regression fixture.
+## 62. Native DX12 fence timeout after a UI/focus transition
+
+**First confirmed:** 2026-07-15 (Tweaker: GUI issue #630).
+**Lives in:** native D3D12 end-of-frame synchronization after a mod UI pass;
+the renderer-thread stall can occur without a Lua exception.
+
+### Symptoms
+- The game freezes after opening or changing a settings view, then crashifies
+  after `WaitForSingleObject` exceeds 15 seconds.
+- The dump resolves through `D3D12RenderDevice::end_frame` and
+  `RI::wait_for_fence`; `Application::update` accounts for the same interval.
+- Lua memory is healthy and the log has no Lua or missing-material exception.
+- A window active/inactive transition may be the final observable engine edge,
+  but timing alone does not prove that focus caused the stall.
+
+### Diagnosis pattern
+1. Preserve the matching console log and dump. Do not classify a native fence
+   wait as Lua heap exhaustion, a missing GUI material, or a package-residency
+   failure without those distinct signatures.
+2. Establish ownership from source. For #630, Mod Tweaker borrows IngameUI's
+   long-lived renderer and uses one `UIRenderer.begin_pass`/`end_pass`; WT's
+   hold-pose tuner creates no preview world, unit, renderer, or package.
+3. Add bounded edge evidence outside the pass: presentation entry/exit,
+   renderer identity, selected tab, `Window.has_focus()`, and draw begin/end
+   balance. A balanced Lua return before the dump points below the mod's pass;
+   an unmatched begin identifies a mod lifecycle boundary.
+4. Reproduce the same focus sequence in a vanilla view as a control. A shared
+   signature shifts investigation toward the driver/engine path; a Mod Tweaker-
+   only signature keeps the borrowed-pass owner in scope.
+
+### Fix template
+- Do not skip drawing while unfocused, recreate the borrowed renderer, or force
+  a focus state based only on temporal correlation. Those changes mask evidence
+  and can create a second renderer owner.
+- Keep diagnostics automatic, issue-prefixed, edge-triggered, and hard-capped.
+  Remove them when the issue closes.
+- Change behavior only after the next trace identifies an imbalance or a
+  source-backed engine contract. Cover balanced, unmatched, focus-edge, tab-
+  edge, both-presentation, and output-bound behavior offline. GUT
+  `_gut_dx12_fence630.lua` is the diagnostic reference.
