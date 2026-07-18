@@ -58,12 +58,15 @@ local function _clone(value)
     return copy
 end
 
+-- #48: exact-instance identity, runtime-rebind, and remote-match policy live in
+-- one pure module so the picker and the renderer cannot drift apart. Pure and
+-- stateless, so a per-consumer dofile instance is safe.
+local INSTANCE_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy")
+
 -- Backend ids identify the inventory instance; the skin suffix keeps a glow
 -- choice attached to the exact illusion variant when an item's illusion changes.
 local function _identity_key(backend_id, slot_data)
-    if backend_id == nil then return nil end
-    local skin = type(slot_data) == "table" and slot_data.skin or nil
-    return string.format("backend:%s|skin:%s", tostring(backend_id), tostring(skin or ""))
+    return INSTANCE_POLICY.identity_key(backend_id, slot_data)
 end
 GlowPicker.identity_key = _identity_key
 
@@ -992,16 +995,23 @@ local function _display_component(src, dr, dg, db, di)
         intensity = (t and tonumber(t.intensity)) or di,
     }
 end
+-- #48: an explicit per-item OFF is durable state, not a colour. Carry it across
+-- the shape round trip so a saved disable is not silently rewritten into a
+-- colour by the next Apply. The renderer, badge policy, and composite icon
+-- builder all already consume `disabled`.
 local function _shape_display_state(base, family)
     base = type(base) == "table" and base or {}
+    local shaped
     if family == "magic" then
-        return {
+        shaped = {
             lower = _display_component(base.lower, 255, 255, 255, 0),
             upper = _display_component(base.upper, 255, 255, 255, 0),
             dots  = _display_component(base.dots,  255, 255, 255, 0),
         }
+    else
+        shaped = { rune = _display_component(base.rune, 255, 255, 255, 0) }
     end
-    return { rune = _display_component(base.rune, 255, 255, 255, 0) }
+    return INSTANCE_POLICY.carry_disabled(shaped, base)
 end
 
 -- v0.9.6 M2: persistence helpers. Single VMF setting `glow_per_item`
@@ -1066,11 +1076,22 @@ end
 
 -- Called by the equipment spawn path so an applied value is restored after a
 -- restart before the picker is opened again.
+--
+-- #48: a persisted MISS must clear the runtime entry, not just bail. The
+-- runtime map is keyed by bare backend id while persistence is keyed by
+-- backend id AND skin, so an early return left the previous illusion's
+-- override painting after an illusion swap on the same instance.
 function GlowPicker.restore_runtime_for(backend_id, slot_data)
     local state, identity = _persisted_state_for(backend_id, slot_data)
-    if not state or backend_id == nil then return nil end
+    local decision = INSTANCE_POLICY.resolve_runtime(state, backend_id, identity)
+    if decision.action == "ignore" then return nil end
     mod._per_item_glow_runtime = mod._per_item_glow_runtime or {}
     mod._per_item_glow_identity_runtime = mod._per_item_glow_identity_runtime or {}
+    if decision.action == "clear" then
+        mod._per_item_glow_runtime[backend_id] = nil
+        mod._per_item_glow_identity_runtime[backend_id] = nil
+        return nil
+    end
     mod._per_item_glow_runtime[backend_id] = state
     mod._per_item_glow_identity_runtime[backend_id] = identity
     return state, identity
