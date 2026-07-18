@@ -111,6 +111,7 @@ local suites = {
     "test_cwv_javelin_pickup",
     "test_cwv_damage_profile_wire",
     "test_cwv_cosmetic_skin_wire",
+    "test_cwv_profile_package_wire",
     "test_cwv_exact_pair_state",
     "test_cwv_exact_appearance",
     "test_cwv_appearance_lifecycle",
