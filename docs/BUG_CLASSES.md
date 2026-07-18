@@ -2309,3 +2309,42 @@ the renderer-thread stall can occur without a Lua exception.
   source-backed engine contract. Cover balanced, unmatched, focus-edge, tab-
   edge, both-presentation, and output-bound behavior offline. GUT
   `_gut_dx12_fence630.lua` is the diagnostic reference.
+
+## 63. Texture resource is resident but the spawned unit material is unresolved
+
+**First confirmed:** 2026-07-18 (CWV issues #617 and #742).
+**Lives in:** custom meshes painted through `Unit.set_texture_for_materials`
+across preview worlds, owner units, or remote husks.
+
+### Symptoms
+- `Application.can_get("texture", path)` returns true for every authored texture,
+  yet `Unit.set_texture_for_materials` access-violates at address `0x8`.
+- The immediately preceding engine warning says it failed to look up a material
+  in the spawned unit, followed by a custom texture path in the Script Error.
+- One render surface works while a preview world, transition, or remote husk
+  crashes because each owns a separate material-binding lifecycle.
+
+### Diagnosis pattern
+1. Separate texture-resource residency from unit-material binding. The former
+   does not prove the latter and must never be used as the sole native-call gate.
+2. Census the actual spawned unit with pcall-wrapped `Unit.num_meshes`,
+   `Unit.mesh`, `Mesh.num_materials`, and `Mesh.material`. Treat an absent mesh,
+   zero materials, a missing handle, or `#ID[00000000]` as unsafe.
+3. Never use `Material.num_parameters`, `parameter_name`, or `parameter_type` as
+   diagnostics; those have their own pcall-bypassing resource-manager fault.
+4. Audit every caller of the shared painter. #742 occurred in
+   `SimpleHuskInventoryExtension._wield_slot` after #617 had fixed only the
+   `LootItemUnitPreviewer` parent-material binding.
+
+### Fix template
+- Require both resource proof and a real-material census immediately before the
+  native write. Preview-only parent rebinding, when source-backed, happens before
+  the census; world/husk paths must not blindly inherit that mutation.
+- Fail closed for the entire unit, retain its donor appearance, and log one
+  bounded reason. Do not partially paint earlier meshes or retry per frame.
+- Keep package/RPC remediation separate. #491 fixes remote package collection;
+  it does not prove a spawned material handle.
+- Test one fully bound unit, zero/missing/null materials, a later mesh failing
+  after an earlier valid mesh, throwing introspection, preview, remote husk,
+  transition, hot join, and a mixed-mod fallback. CWV
+  `_cwv_old_musket_preview.lua` is the reference policy.
