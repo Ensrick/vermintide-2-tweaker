@@ -52,7 +52,12 @@ function Invoke-GitLines([string[]]$GitArgs) {
     try {
         $output = @(& git @GitArgs 2>$null)
         if ($LASTEXITCODE -ne 0) { return $null }
-        return $output
+        # Preserve a successful empty result as an empty String[] instead of
+        # allowing PowerShell's pipeline unrolling to collapse it to $null.
+        # Get-DiffContext uses $null exclusively for an indeterminate/failed
+        # git command, while an empty worktree diff must fall through to the
+        # latest committed diff.
+        return ,([string[]]$output)
     } catch {
         return $null
     }
@@ -234,6 +239,8 @@ function Invoke-SelfTest {
     if ((Get-TopReleaseVersion "# x`n## v1.2.3-dev (date)`n") -ne '1.2.3-dev') { throw 'top release parser lost optional v prefix' }
     if (Test-RuntimePath 'DEVELOPMENT.md') { throw 'markdown doc classified as runtime' }
     if (-not (Test-RuntimePath 'scripts/mods/example_mod/example_mod.lua')) { throw 'Lua source not classified as runtime' }
+    $emptyGit = Invoke-GitLines @('diff', 'HEAD', '--name-only', '--', '__release_atomicity_fixture_path_that_does_not_exist__')
+    if ($null -eq $emptyGit -or $emptyGit.Count -ne 0) { throw 'successful empty git output collapsed into indeterminate state' }
     Write-Host "[check_release_bundle_atomicity -SelfTest] PASS $passed fixture cases" -ForegroundColor Green
     return 0
 }
