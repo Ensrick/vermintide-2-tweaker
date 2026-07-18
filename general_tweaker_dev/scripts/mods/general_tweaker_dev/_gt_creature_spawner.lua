@@ -3,8 +3,13 @@ local mod = get_mod("gt_dev")
 -- _gt_creature_spawner.lua — Creature Spawner
 --
 -- Ported from Aussiemon's CreatureSpawner (Workshop 1395132559, MIT). Spawn any
--- breed at the crosshair (host-only), with a large suite of keep-navigation /
--- boss-init / package-loader crash guards so spawning works in the Keep too.
+-- breed at the crosshair, with a large suite of keep-navigation / boss-init /
+-- package-loader crash guards so spawning works in the Keep too. Spawning is
+-- host-authoritative (only the host drains the ConflictDirector spawn queue -
+-- state_ingame.lua:950-958 runs conflict:update on the server and
+-- update_client on clients), so a CLIENT sends a schema-tagged VMF request
+-- (`gt_cs_request`) that the host executes; the host acks the result back over
+-- `gt_cs_ack` (#693). Schema constant `mod.GT_CS_RPC_SCHEMA` lives in main.
 -- Extracted verbatim from the main file (Phase 4); pure reorganization, no
 -- behavior change. All identifiers are namespaced `_gt_cs_*` / `gt_cs_*`.
 --
@@ -196,6 +201,14 @@ local _gt_cs_grudge_keys = {
     "frenzy",
 }
 
+-- Set-form lookup for validating grudge keys arriving over the client
+-- request channel (#693) — never feed unvetted wire strings into
+-- TerrorEventUtils.
+local _gt_cs_grudge_key_set = {}
+for _, key in ipairs(_gt_cs_grudge_keys) do
+    _gt_cs_grudge_key_set[key] = true
+end
+
 -- Runtime selection state. `_gt_cs_breed_name_index` mirrors upstream's
 -- `mod.breed_name_index`; tracks the active position in the currently-selected
 -- unit list. `_gt_cs_buff_cap_limit_exceeded` mirrors upstream's same-named
@@ -345,9 +358,17 @@ end
 -- dofiles. Internal CS hooks keep using the file-local for speed.
 mod._gt_cs_is_in_level = _gt_cs_is_in_level
 
--- Returns (is_ready, conflict_director) — same shape as upstream's
--- `mod:get_status`. Refuses on non-host because every spawn primitive
--- below asserts on `Managers.player.is_server`.
+-- Returns (is_host_ready, conflict_director, is_client_ready) — extends
+-- upstream's `mod:get_status` shape for issue 693. The spawn primitives only
+-- run on the host (the client's ConflictDirector never drains its spawn
+-- queue), so the first return keeps the pre-693 host-gate semantics and every
+-- old `if not is_ready then return end` caller behaves identically. The NEW
+-- third return is true when the game is ready but this peer is a client, so
+-- callers can route to the client->host request channel below instead of
+-- silently swallowing the press (the pre-693 bug: a client got NO feedback
+-- and NO spawn). conflict_director is now returned for clients too — breed
+-- cycling only touches the local `_debug_breed` field, which is safe and
+-- meaningful on any peer.
 local function _gt_cs_get_status(suppress_messages)
     local player_manager = Managers.player
     if not player_manager then
@@ -366,7 +387,7 @@ local function _gt_cs_get_status(suppress_messages)
     if player_manager.is_server then
         return true, conflict_director
     end
-    return false
+    return false, conflict_director, true
 end
 
 -- Recursive table copy (deepcopy). Same implementation upstream uses
@@ -477,19 +498,36 @@ local function _gt_cs_previous_spawn_breed()
     end
 end
 
--- Spawn the currently-selected breed at the crosshair raycast. 1:1 with
--- upstream's `spawn_debug_breed_at_cursor`. Grudge-mark handling supports
--- both RANDOM and MANUAL modes; the latter walks `_gt_cs_grudge_keys` and
--- looks up `gt_cs_grudge_<key>` checkboxes to assemble the enhancement
--- table.
-local function _gt_cs_spawn_at_cursor()
-    local conflict_director = Managers.state.conflict
-    if not conflict_director then return end
-    local local_player = Managers.player:local_player()
-    if not local_player then return end
+-- Build the grudge-mark spec from THIS peer's own settings. Shared by the
+-- host's local spawn path and the client request path (#693), so the player
+-- who pressed the key is the one whose grudge configuration applies.
+-- Returns nil | { mode = "RANDOM", count = n } | { mode = "MANUAL", keys = {...} }.
+local function _gt_cs_resolve_grudge_spec()
+    local grudge_mark_setting = mod:get("gt_cs_grudge")
+    if grudge_mark_setting == "RANDOM" then
+        return { mode = "RANDOM", count = mod:get("gt_cs_grudge_random_modifier_count") or 1 }
+    elseif grudge_mark_setting == "MANUAL" then
+        local keys = {}
+        for _, key in ipairs(_gt_cs_grudge_keys) do
+            if mod:get("gt_cs_grudge_" .. key) then
+                keys[#keys + 1] = key
+            end
+        end
+        return { mode = "MANUAL", keys = keys }
+    end
+    return nil
+end
 
+-- HOST-ONLY spawn executor, split out of the old spawn_debug_breed_at_cursor
+-- body (#693) so it serves BOTH the host's own hotkey/command path and a
+-- client's request RPC. Behavior is 1:1 with the pre-split body; the only
+-- change is that the player-facing lines are RETURNED (in emit order) instead
+-- of echoed, so the RPC path can relay them to the requesting client.
+-- Returns (ok, messages_array).
+local function _gt_cs_execute_spawn(conflict_director, breed_name, final_position, final_rotation, grudge_spec)
+    local messages = {}
     local ai_warning_set = false
-    local breed_name = conflict_director._debug_breed or ""
+    breed_name = breed_name or ""
     if _gt_cs_ai_blacklist[breed_name] then
         if _gt_cs_is_in_keep() then
             mod:set("gt_cs_keep_ai", false)
@@ -499,34 +537,25 @@ local function _gt_cs_spawn_at_cursor()
         ai_warning_set = true
     end
 
-    local final_rotation
-    local final_position = _gt_cs_position_at_cursor(local_player)
-    local local_player_unit = local_player.player_unit
-    if Unit.alive(local_player_unit) then
-        final_rotation = Quaternion.multiply(Unit.local_rotation(local_player_unit, 0), Quaternion(Vector3(0, 0, 1), math.pi))
-    else
-        final_rotation = Quaternion(0, 0, 0, 0)
-    end
-
-    local breed = _gt_cs_deepcopy(Breeds[breed_name])
+    local breed = Breeds and _gt_cs_deepcopy(rawget(Breeds, breed_name))
+    local ok = false
     if breed then
         breed.debug_spawn_optional_data = breed.debug_spawn_optional_data or {}
         breed.debug_spawn_optional_data.ignore_breed_limits = true
         breed.debug_spawn_optional_data.enhancements = nil
 
-        local grudge_mark_setting = mod:get("gt_cs_grudge")
-        if grudge_mark_setting then
+        if grudge_spec then
             if not _gt_cs_buff_cap_limit_exceeded then
-                if grudge_mark_setting == "RANDOM" then
-                    local num_enhancements = mod:get("gt_cs_grudge_random_modifier_count") or 1
+                if grudge_spec.mode == "RANDOM" then
+                    local num_enhancements = grudge_spec.count or 1
                     if TerrorEventUtils and TerrorEventUtils.add_enhancements_to_spawn_data then
                         breed.debug_spawn_optional_data = TerrorEventUtils.add_enhancements_to_spawn_data(
                             breed.debug_spawn_optional_data, num_enhancements, breed_name)
                     end
-                elseif grudge_mark_setting == "MANUAL" then
+                elseif grudge_spec.mode == "MANUAL" then
                     local enhancement_list = {}
-                    for _, key in ipairs(_gt_cs_grudge_keys) do
-                        if mod:get("gt_cs_grudge_" .. key) then
+                    for _, key in ipairs(grudge_spec.keys or {}) do
+                        if _gt_cs_grudge_key_set[key] then
                             enhancement_list[key] = true
                         end
                     end
@@ -547,62 +576,302 @@ local function _gt_cs_spawn_at_cursor()
                     end
                 end
                 if grudgeString ~= "" then
-                    mod:echo("Applying " .. grudgeString .. " modifiers...")
+                    messages[#messages + 1] = "Applying " .. grudgeString .. " modifiers..."
                 end
             else
-                mod:echo("Too many active grudge-mark modifiers!")
+                messages[#messages + 1] = "Too many active grudge-mark modifiers!"
             end
         end
 
         conflict_director:spawn_queued_unit(breed, Vector3Box(final_position), QuaternionBox(final_rotation),
             breed.debug_spawn_category or "debug_spawn", nil, nil, breed.debug_spawn_optional_data)
-        mod:echo("[Spawn]: Created " .. tostring(conflict_director._debug_breed) .. ".")
+        messages[#messages + 1] = "[Spawn]: Created " .. tostring(breed_name) .. "."
+        ok = true
     else
-        mod:echo("[Spawn]: " .. tostring(conflict_director._debug_breed) .. " is not available.")
+        messages[#messages + 1] = "[Spawn]: " .. tostring(breed_name) .. " is not available."
     end
 
     if ai_warning_set then
-        mod:echo("[WARNING]: Enabling " .. breed_name .. " AI will likely cause crashes!")
+        messages[#messages + 1] = "[WARNING]: Enabling " .. breed_name .. " AI will likely cause crashes!"
+    end
+    return ok, messages
+end
+
+-- Spawn the currently-selected breed at the crosshair raycast. 1:1 with
+-- upstream's `spawn_debug_breed_at_cursor` (position/rotation math unchanged);
+-- the spawn body itself lives in _gt_cs_execute_spawn above (#693).
+local function _gt_cs_spawn_at_cursor()
+    local conflict_director = Managers.state.conflict
+    if not conflict_director then return end
+    local local_player = Managers.player:local_player()
+    if not local_player then return end
+
+    local final_rotation
+    local final_position = _gt_cs_position_at_cursor(local_player)
+    local local_player_unit = local_player.player_unit
+    if Unit.alive(local_player_unit) then
+        final_rotation = Quaternion.multiply(Unit.local_rotation(local_player_unit, 0), Quaternion(Vector3(0, 0, 1), math.pi))
+    else
+        final_rotation = Quaternion(0, 0, 0, 0)
+    end
+
+    local breed_name = conflict_director._debug_breed or ""
+    local _, messages = _gt_cs_execute_spawn(conflict_director, breed_name,
+        final_position, final_rotation, _gt_cs_resolve_grudge_spec())
+    for i = 1, #messages do
+        mod:echo(messages[i])
     end
 end
+
+-- ============================================================
+-- Client -> host request channel (#693)
+-- ============================================================
+-- Enemy spawning is host-authoritative: only the server drains the
+-- ConflictDirector spawn queue (state_ingame.lua:950-958 runs
+-- `conflict:update` on the host and `update_client` on clients;
+-- `spawn_queued_unit` only enqueues, conflict_director.lua:1732-1791), so a
+-- client-side spawn call queues into a queue that never drains. A client
+-- therefore REQUESTS the action and the host performs it - the same shape as
+-- the shipped `gt_level_control` / `gt_respawn_request` channels in
+-- _gt_level_control.lua.
+--
+-- WIRE SAFETY (issue 278/371 class - why this can NEVER crash a vanilla
+-- peer): `mod:network_send` rides the VANILLA `rpc_mod_user_data` RPC
+-- (ModManager.network_send, mod_manager.lua:595-605). The receiving side
+-- (mod_manager.lua:607-621) dispatches only into a callback the peer itself
+-- registered for the port; a peer without VMF/gt registered nothing, so the
+-- payload is dropped inside vanilla code. No modded NetworkLookup key, no
+-- custom vanilla RPC. When the HOST lacks the mod the request degrades
+-- silently on the wire (VMF only delivers to handshaken VMF peers) and the
+-- client-side message below tells the player the host must run the mod.
+local _GT_CS_RPC = "gt_cs_request"   -- client -> host: (schema, verb, breed, px, py, pz, dx, dy, dz, grudge)
+local _GT_CS_ACK_RPC = "gt_cs_ack"   -- host -> requesting client: (schema, message)
+
+-- Resolve the host's real peer id (VMF_RECIPES section 3: the literal
+-- "server" recipient is silently dropped, and Managers.state.network has no
+-- direct server_peer_id field - it lives on .network_client/.network_server).
+local function _gt_cs_host_peer_id()
+    if Managers.mechanism and Managers.mechanism.server_peer_id then
+        local host = Managers.mechanism:server_peer_id()
+        if host then return host end
+    end
+    local nm = Managers.state and Managers.state.network
+    return nm and ((nm.network_client and nm.network_client.server_peer_id)
+        or (nm.network_server and nm.network_server.server_peer_id)) or nil
+end
+
+-- Fixed-arity send so no positional arg is ever nil on the wire. Pings VMF
+-- first (VMF_RECIPES section 3a: host bot churn can drop the host from
+-- `_vmf_users`; the "run it again" hint in the caller message covers the
+-- async pong window, same as _gt_level_control).
+local function _gt_cs_client_send(verb, breed_name, px, py, pz, dx, dy, dz, grudge_str)
+    local vmf = get_mod("VMF")
+    if vmf and vmf.ping_vmf_users then pcall(vmf.ping_vmf_users) end
+    local host = _gt_cs_host_peer_id()
+    if not host then
+        mod:echo("[Spawn]: Couldn't resolve the host peer.")
+        return false
+    end
+    pcall(function()
+        mod:network_send(_GT_CS_RPC, host, mod.GT_CS_RPC_SCHEMA, verb,
+            breed_name, px, py, pz, dx, dy, dz, grudge_str)
+    end)
+    return true
+end
+
+-- CLIENT: request a spawn of `breed_name` (nil = currently-selected breed) at
+-- this client's own crosshair, facing this client. Position and facing are
+-- computed locally (the raycast + camera are per-peer) and shipped as plain
+-- numbers; the host rebuilds the rotation via Quaternion.look, the vanilla
+-- direction->rotation path (conflict_director.lua:3394).
+local function _gt_cs_client_request_spawn(breed_name)
+    local local_player = Managers.player and Managers.player:local_player()
+    if not local_player then return end
+    local conflict_director = Managers.state and Managers.state.conflict
+    breed_name = breed_name
+        or (conflict_director and conflict_director._debug_breed)
+        or mod:get("gt_cs_selected_unit") or ""
+    if breed_name == "" then
+        mod:echo("[Spawn]: No creature selected. Cycle with the next/previous keys first.")
+        return
+    end
+    local position = _gt_cs_position_at_cursor(local_player)
+    -- The host-local path faces the spawn toward the spawner by flipping the
+    -- player's rotation 180 degrees; the flipped FORWARD is what we ship.
+    local direction
+    local player_unit = local_player.player_unit
+    if Unit.alive(player_unit) then
+        direction = -Quaternion.forward(Unit.local_rotation(player_unit, 0))
+    else
+        direction = Vector3(0, 1, 0)
+    end
+    local grudge_str = ""
+    local spec = _gt_cs_resolve_grudge_spec()
+    if spec and spec.mode == "RANDOM" then
+        grudge_str = "RANDOM:" .. tostring(spec.count or 1)
+    elseif spec and spec.mode == "MANUAL" then
+        grudge_str = "MANUAL:" .. table.concat(spec.keys or {}, ",")
+    end
+    if _gt_cs_client_send("spawn", breed_name, position.x, position.y, position.z,
+            direction.x, direction.y, direction.z, grudge_str) then
+        mod:echo("[Spawn]: Requested " .. tostring(breed_name)
+            .. " from the host (needs this mod on the host; run it again if nothing happens).")
+    end
+end
+
+-- Wire-format decode of the client's grudge configuration; mirrors the
+-- encode in _gt_cs_client_request_spawn. Unknown/garbled input decodes to
+-- nil (= no grudge marks), never an error.
+local function _gt_cs_parse_grudge_str(grudge_str)
+    local rand_count = string.match(grudge_str, "^RANDOM:(%d+)$")
+    if rand_count then
+        return { mode = "RANDOM", count = tonumber(rand_count) }
+    end
+    local manual_csv = string.match(grudge_str, "^MANUAL:(.*)$")
+    if manual_csv then
+        local keys = {}
+        for key in string.gmatch(manual_csv, "[^,]+") do
+            keys[#keys + 1] = key
+        end
+        return { mode = "MANUAL", keys = keys }
+    end
+    return nil
+end
+
+-- HOST: relay the result line(s) back to the requesting client so they get
+-- the same feedback the host would see. Capped well under the 500-char RPC
+-- payload limit (VMF_RECIPES section 4).
+local function _gt_cs_ack(peer_id, message)
+    message = tostring(message or "")
+    if #message > 300 then message = string.sub(message, 1, 300) end
+    pcall(function()
+        mod:network_send(_GT_CS_ACK_RPC, peer_id, mod.GT_CS_RPC_SCHEMA, message)
+    end)
+end
+
+-- HOST receiver: a client's spawn/destroy request. Schema-gated per
+-- VMF_RECIPES section 10; every wire value is re-validated here (breed must
+-- exist AND be spawnable on the host, numbers via tonumber, grudge keys
+-- against the closed key set) - the client is a hint source, never trusted.
+mod:network_register(_GT_CS_RPC, function(sender_peer_id, schema, verb, breed_name, px, py, pz, dx, dy, dz, grudge_str)
+    if sender_peer_id == nil or schema ~= mod.GT_CS_RPC_SCHEMA then
+        -- Engine printf, not mod:info: a schema mismatch means a peer on an
+        -- incompatible gt_dev build was silently dropped - visible with
+        -- mod-logging OFF.
+        if rawget(_G, "printf") then
+            printf("[gt_cs:693] %s schema mismatch from peer=%s: got v%s, expect v%s. Dropping.",
+                _GT_CS_RPC, tostring(sender_peer_id), tostring(schema), tostring(mod.GT_CS_RPC_SCHEMA))
+        end
+        return
+    end
+    local pm = Managers.player
+    if not (pm and pm.is_server) then return end
+    local conflict_director = Managers.state and Managers.state.conflict
+    if not conflict_director then return end
+    verb = tostring(verb)
+    if verb == "destroy" then
+        conflict_director:destroy_all_units()
+        _gt_cs_buff_cap_limit_exceeded = false
+        if rawget(_G, "printf") then
+            printf("[gt_cs:693] client destroy request from=%s executed", tostring(sender_peer_id))
+        end
+        _gt_cs_ack(sender_peer_id, "Removed all enemies (host).")
+        return
+    end
+    if verb ~= "spawn" then return end
+    breed_name = tostring(breed_name or "")
+    px, py, pz = tonumber(px), tonumber(py), tonumber(pz)
+    dx, dy, dz = tonumber(dx), tonumber(dy), tonumber(dz)
+    if not (px and py and pz) then return end
+    local breed = Breeds and rawget(Breeds, breed_name)
+    if not (breed and _gt_cs_is_spawnable(breed)) then
+        _gt_cs_ack(sender_peer_id, tostring(breed_name) .. " is not available on the host.")
+        return
+    end
+    local direction = Vector3(dx or 0, dy or 1, dz or 0)
+    if Vector3.length(direction) < 0.01 then
+        direction = Vector3(0, 1, 0)
+    end
+    local rotation = Quaternion.look(direction, Vector3.up())
+    local grudge_spec = _gt_cs_parse_grudge_str(tostring(grudge_str or ""))
+    local ok, messages = _gt_cs_execute_spawn(conflict_director, breed_name,
+        Vector3(px, py, pz), rotation, grudge_spec)
+    if rawget(_G, "printf") then
+        printf("[gt_cs:693] client spawn request from=%s breed=%s ok=%s",
+            tostring(sender_peer_id), breed_name, tostring(ok))
+    end
+    _gt_cs_ack(sender_peer_id, table.concat(messages, " "))
+end)
+
+-- CLIENT receiver: the host's acknowledgement. Only the current host's acks
+-- are accepted (mirrors the AI-takeover result gate).
+mod:network_register(_GT_CS_ACK_RPC, function(sender_peer_id, schema, message)
+    if schema ~= mod.GT_CS_RPC_SCHEMA or type(message) ~= "string" then return end
+    if sender_peer_id ~= _gt_cs_host_peer_id() then return end
+    mod:echo("[Spawn]: " .. message)
+end)
+
+-- Load-time wiring flag + regression marker for /gt_regression_test (#693).
+-- Runtime-checkable only - no io/source self-grep in the retail sandbox.
+GT_CS_CLIENT_REQUEST_MARKER_v0_2_246 = "gt-cs-client-spawn-request-i693"
+mod._gt693_cs_client_request_wired = true
 
 -- ----- COMMAND/HOTKEY HANDLERS (all bound to mod.* so VMF function_call
 -- ----- keybinds can find them) -------------------------------------------
 
 mod.gt_cs_spawn = function()
-    local is_ready, conflict_director = _gt_cs_get_status()
-    if not is_ready then return end
-    _gt_cs_spawn_at_cursor()
+    local is_ready, conflict_director, is_client = _gt_cs_get_status()
+    if is_ready then
+        _gt_cs_spawn_at_cursor()
+    elseif is_client then
+        -- #693: spawning is host-authoritative - request it from the host.
+        _gt_cs_client_request_spawn(nil)
+    end
 end
 
+-- Breed cycling / save slots / the selection report only touch LOCAL state
+-- (`conflict_director._debug_breed` + this peer's own gt_cs_* settings), so
+-- since #693 they run on clients too - a client must be able to pick the
+-- breed its spawn request names.
 mod.gt_cs_next = function()
-    local is_ready, conflict_director = _gt_cs_get_status()
-    if not is_ready then return end
+    local is_ready, conflict_director, is_client = _gt_cs_get_status()
+    if not (is_ready or is_client) then return end
     _gt_cs_next_spawn_breed()
     mod:echo("[Spawn]: >> " .. tostring(conflict_director._debug_breed) .. ".")
 end
 
 mod.gt_cs_prev = function()
-    local is_ready, conflict_director = _gt_cs_get_status()
-    if not is_ready then return end
+    local is_ready, conflict_director, is_client = _gt_cs_get_status()
+    if not (is_ready or is_client) then return end
     _gt_cs_previous_spawn_breed()
     mod:echo("[Spawn]: >> " .. tostring(conflict_director._debug_breed) .. ".")
 end
 
 mod.gt_cs_destroy = function()
-    local is_ready, conflict_director = _gt_cs_get_status()
-    if not is_ready then return end
-    conflict_director:destroy_all_units()
-    _gt_cs_buff_cap_limit_exceeded = false
-    mod:echo("[Spawn]: Removed all enemies.")
+    local is_ready, conflict_director, is_client = _gt_cs_get_status()
+    if is_ready then
+        conflict_director:destroy_all_units()
+        _gt_cs_buff_cap_limit_exceeded = false
+        mod:echo("[Spawn]: Removed all enemies.")
+    elseif is_client then
+        -- #693: destroy_all_units is host-side - request it from the host.
+        if _gt_cs_client_send("destroy", "", 0, 0, 0, 0, 1, 0, "") then
+            mod:echo("[Spawn]: Destroy requested from the host (needs this mod on the host; run it again if nothing happens).")
+        end
+    end
 end
 
 local function _gt_cs_spawn_from_slot(slot_setting_id)
-    local is_ready, conflict_director = _gt_cs_get_status()
-    if not is_ready then return end
+    local is_ready, conflict_director, is_client = _gt_cs_get_status()
+    if not (is_ready or is_client) then return end
     local saved_breed = mod:get(slot_setting_id)
     if not saved_breed or saved_breed == "" then
         mod:echo("[Spawn]: Save slot is empty.")
+        return
+    end
+    if is_client then
+        -- #693: name the saved breed directly in the host request.
+        _gt_cs_client_request_spawn(saved_breed)
         return
     end
     local original = conflict_director._debug_breed
@@ -618,8 +887,8 @@ mod.gt_cs_spawn_slot_3 = function() _gt_cs_spawn_from_slot("gt_cs_saved_unit_thr
 -- /savecreature <1-3> — saves currently-selected breed to a slot.
 -- Accepts numeric or word form ("one"/"two"/"three") to match upstream.
 local function _gt_cs_handle_save_unit_slot(...)
-    local is_ready, conflict_director = _gt_cs_get_status()
-    if not is_ready then return end
+    local is_ready, conflict_director, is_client = _gt_cs_get_status()
+    if not (is_ready or is_client) then return end
     local args = { ... }
     local slot = ""
     for _, value in ipairs(args) do
@@ -649,8 +918,8 @@ local function _gt_cs_handle_save_unit_slot(...)
 end
 
 local function _gt_cs_handle_unit_slots_report()
-    local is_ready, conflict_director = _gt_cs_get_status()
-    if not is_ready then return end
+    local is_ready, conflict_director, is_client = _gt_cs_get_status()
+    if not (is_ready or is_client) then return end
     mod:echo("Selected unit: " .. tostring(conflict_director._debug_breed or "None"))
     mod:echo("Saved unit slot one: "   .. tostring(mod:get("gt_cs_saved_unit_one")   or "None"))
     mod:echo("Saved unit slot two: "   .. tostring(mod:get("gt_cs_saved_unit_two")   or "None"))
@@ -1116,7 +1385,7 @@ end
 mod:command("spawncreature",  "Spawn the currently-selected creature at the cursor",                function() mod.gt_cs_spawn() end)
 mod:command("nextcreature",   "Cycle to the next creature in the active list",                     function() mod.gt_cs_next() end)
 mod:command("prevcreature",   "Cycle to the previous creature in the active list",                 function() mod.gt_cs_prev() end)
-mod:command("destroycreatures", "Destroy every currently-spawned creature (host-only)",           function() mod.gt_cs_destroy() end)
+mod:command("destroycreatures", "Destroy every currently-spawned creature (a client asks the host)", function() mod.gt_cs_destroy() end)
 mod:command("savecreature",   "Save current creature to a slot (1-3)",                             function(...) _gt_cs_handle_save_unit_slot(...) end)
 mod:command("selectedcreatures", "Report current selection and the three save slots",            function() _gt_cs_handle_unit_slots_report() end)
 
@@ -1125,26 +1394,29 @@ mod:command("selectedcreatures", "Report current selection and the three save sl
 -- rule). Exposed as mod._gt_cs_* fields so the main dispatchers resolve them
 -- at call time — this module dofiles AFTER the main chunk, so by the time
 -- either dispatcher fires at runtime both fields are set.
+-- #693: both callbacks now run on clients too (`is_ready or is_client`) -
+-- they only mutate the LOCAL selection (`conflict_director._debug_breed` +
+-- this peer's own settings), which the client request channel reads.
 mod._gt_cs_on_setting_changed = function(setting_id)
     if setting_id == "gt_cs_unit_list" then
-        local is_ready, conflict_director = _gt_cs_get_status()
-        if not is_ready then return end
+        local is_ready, conflict_director, is_client = _gt_cs_get_status()
+        if not (is_ready or is_client) then return end
         local list = _gt_cs_active_list()
         _gt_cs_breed_name_index = 1
         conflict_director._debug_breed = list[1] or "skaven_dummy_slave"
         mod:set("gt_cs_selected_unit", conflict_director._debug_breed, false)
         mod:echo("[Spawn]: >> " .. tostring(conflict_director._debug_breed) .. ".")
     elseif setting_id == "gt_cs_selected_unit" then
-        local is_ready, conflict_director = _gt_cs_get_status()
-        if not is_ready then return end
+        local is_ready, conflict_director, is_client = _gt_cs_get_status()
+        if not (is_ready or is_client) then return end
         conflict_director._debug_breed = mod:get("gt_cs_selected_unit")
         mod:echo("[Spawn]: >> " .. tostring(conflict_director._debug_breed) .. ".")
     end
 end
 
 mod._gt_cs_on_game_state_changed = function(status, state_name)
-    local is_ready, conflict_director = _gt_cs_get_status(true)
-    if not is_ready then return end
+    local is_ready, conflict_director, is_client = _gt_cs_get_status(true)
+    if not (is_ready or is_client) then return end
     if not mod:get("gt_cs_selected_unit") or mod:get("gt_cs_selected_unit") == "" then
         local list = _gt_cs_active_list()
         conflict_director._debug_breed = list[1] or "skaven_dummy_slave"
@@ -1159,3 +1431,30 @@ end
 -- CreatureSpawner builds once at mod load). The lists are rebuilt lazily in
 -- _gt_cs_active_list() so breeds registered AFTER this module loads (DLC
 -- late registration, enemy_tweaker's et_* clones, other mods) are included.
+
+-- ============================================================
+-- /gt_regression_test checks (#693)
+-- ============================================================
+-- Mirrors the gt_lobby/gt_ai/gt_draw schema checks: the `gt_cs_request` +
+-- `gt_cs_ack` sender and receiver both read mod.GT_CS_RPC_SCHEMA; if it goes
+-- missing the receiver gate compares against nil and would accept anything.
+mod._gt_rt_register("gt_cs_rpc_schema_present", function()
+    if type(mod.GT_CS_RPC_SCHEMA) ~= "number" then
+        return "mod.GT_CS_RPC_SCHEMA not defined as number"
+    end
+    if mod.GT_CS_RPC_SCHEMA < 1 then
+        return "mod.GT_CS_RPC_SCHEMA < 1"
+    end
+end)
+
+-- Issue 693: the client->host request channel (both network events + the
+-- client request helpers) must be wired at load. Runtime-only flag check -
+-- io is nil in the VMF sandbox, so no source self-grep.
+mod._gt_rt_register("gt693_cs_client_request_wired", function()
+    if mod._gt693_cs_client_request_wired ~= true then
+        return "creature-spawner client request channel not wired (issue 693: _gt_creature_spawner.lua)"
+    end
+    if GT_CS_CLIENT_REQUEST_MARKER_v0_2_246 ~= "gt-cs-client-spawn-request-i693" then
+        return "client-request marker absent - was the issue-693 fix reverted?"
+    end
+end)
