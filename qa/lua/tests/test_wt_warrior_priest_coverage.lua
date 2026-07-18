@@ -34,7 +34,8 @@ return function(H, repo_root)
         H.equal(counts.picker_visible, 0)
         H.equal(counts.hidden_needs_animations, 0)
         H.equal(rows[1].weapon_key, "es_1h_flail")
-        H.equal(rows[1].redirect, "[Warrior Priest flail event map]")
+        H.equal(rows[1].state, "working")
+        H.equal(rows[1].redirect, "Warrior Priest flail event map")
         H.equal(rows[1].model_substitute, nil)
         H.equal(rows[1].picker_visible, false)
     end)
@@ -44,7 +45,7 @@ return function(H, repo_root)
             "wh_1h_hammer", "wh_2h_hammer", "wh_dual_hammer",
             "wh_flail_shield", "wh_hammer_book", "wh_hammer_shield",
         }) do
-            H.equal(status.tag("wh_priest", key), "[working]")
+            H.equal(status.state("wh_priest", key), "working")
             H.equal(status.needs_anims("wh_priest", key), false)
             H.equal(status.model_substitute("wh_priest", key), nil)
         end

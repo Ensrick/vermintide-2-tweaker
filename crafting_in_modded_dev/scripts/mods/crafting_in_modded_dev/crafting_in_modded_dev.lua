@@ -50,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.91-dev"
+local MOD_VERSION = "0.8.92-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -286,6 +286,8 @@ if not _ok_sf then mod:error("Failed to load standard_forge: %s", tostring(_err_
 -- resolved material. Unknown/unavailable custom icons fall back fail-closed.
 mod._cim_athanor_icon_policy = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_athanor_icon_policy")
+mod._cim83_forge_widget_policy = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_forge_widget_material_policy")
 
 function mod._cim_resolve_provider_inventory_icon(icon_id, renderer_name)
     local ok, provider = pcall(get_mod, "character_weapon_variants")

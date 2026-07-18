@@ -7,11 +7,23 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-16.
 
 ---
+## Athanor exact offhand preview ownership (#481)
+
+| Field | Value |
+|---|---|
+| Identity | An explicit backend ID wins. A pending-illusion preview with no ID may borrow the active customization item only when both normalized weapon families match; husks never borrow it. |
+| Component | The saved hand record must match an authored key or unit path in that exact item type's current hand pool. LA and Purpure/Azure records cannot resolve through one another's item/pool. |
+| Target | `LootItemUnitPreviewer.spawn_units` pairs each returned unit with `spawn_data[i].unit_name`. Missing or mismatched evidence blocks authored paint even when runtime `unit_name` metadata is unreadable. |
+| Arbitration | An exact row-2 component owns the shield. The whole-skin Purpure/Azure fallback runs only when no independent component is selected, so two providers never paint one preview target. |
+| Scope | Preserve the overview's intentional melee/ranged previewers; do not destroy previews based on equal world-space pivots because each viewport owns a separate world. No new hook, RPC, or polling owner. |
+| Detection | Offline `test_cos_la_instance_policy.lua` and `test_cos_la_shield_parity.lua`; `/cos_regression_test` passes `issue481_athanor_exact_offhand_target`. |
+
+---
 ## Phase 4b runtime-owner boundaries
 
 | Field | Value |
 |---|---|
-| Registry | `_cos_runtime_checks.lua` installs exactly 50 late checks in historical order, from `cos_la_reconcile_and_pull_wired` through `mh_package_single_reference`, plus one `/verify_gk_set` command. The entry retains the registry runner and injects private dependencies explicitly. |
+| Registry | `_cos_runtime_checks.lua` installs exactly 51 late checks in historical order, from `cos_la_reconcile_and_pull_wired` through `mh_package_single_reference`, plus one `/verify_gk_set` command. The entry retains the registry runner and injects private dependencies explicitly. |
 | Commands | `_cos_glow_probe.lua` owns six wielded-material probe commands and both bounded tick functions; `_cos_la_commands.lua` owns six LA diagnostic commands. Neither module owns a hook, RPC, or lifecycle callback. |
 | API | The later manual picker continues to consume the same `_wielded_units_for_probe` function through the glow module export. No command name, runtime-check name, registration order, or `mod._*` tick name changes. |
 | Detection | Offline `test_cos_runtime_modules.lua` executes all three installers under Lua 5.1, pins counts/order/exports, and proves the entry loads each owner once. Full suite tests concatenate `_cos_runtime_checks.lua` when asserting moved runtime signatures. |
@@ -291,6 +303,22 @@ Last updated: 2026-07-16.
 | Expected post-fix | LA hat stays on the host's GK body. WP body wears its vanilla WP hat. The mismatch guard logs and skips the cross-skeleton patch. A host-owned bot may produce `CROSS-SKELETON MISMATCH` plus `BOT-OWNER-ALIAS retained`; that is expected evidence that the host store was preserved, not a failed attach. |
 | Detection | (a) `/cos_regression_test` passes the `la_chars_compatible_*` checks and `cos_la_score_screen_apply_wired`. (b) A bot mismatch must be paired with `BOT-OWNER-ALIAS retained`; no bot receives a mesh swap. (c) Manual: equip an LA hat on GK, start a mission with a WP bot, and confirm GK keeps the LA hat while WP remains vanilla through the score lineup. |
 | Tracking | GitHub issue #14. |
+
+### issue698-career-scoped-husk-material — stale Grail Knight armor cannot repaint Foot Knight
+
+**[MULTIPLAYER]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | After a remote human switches from Grail Knight to Foot Knight on the same peer, the observer's new Foot Knight husk is repainted with the prior Grail Knight armor. |
+| Root cause | `_la_equips_by_peer` retained a peer-only `slot_skin` record across the career change, and the husk wield loop treated every armor entry as applicable without proving current career identity. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.145-dev |
+| Category | INTEGRATION |
+| Repro | Two Cosmetics-matched players: equip a distinctive Grail Knight armor, join the same lobby, switch that human to Foot Knight, and observe from the other peer through spawn/wield and one level transition. Keep a host-owned bot present as an owner-alias control. |
+| Expected post-fix | Every stored/replayed entry is career-stamped. The Foot Knight never receives the old Grail Knight material; a confirmed human career change clears stale/unstamped slots before wield. A bot sharing the host peer neither consumes nor clears human state. |
+| Detection | Offline `test_cos_husk_identity.lua` passes all three #698 tests; `/cos_regression_test` passes `issue698_husk_career_identity`; co-op log may contain `[cos:698] HUSK career-change invalidated` and must contain no later stale GK repaint on the Foot Knight. |
+| Tracking | GitHub issue #698. |
 
 
 ---

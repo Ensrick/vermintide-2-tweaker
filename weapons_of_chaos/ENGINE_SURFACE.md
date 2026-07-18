@@ -75,7 +75,7 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 | Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
 |---|---|---|---|
 | `BackendUtils.get_item_units` [hook,tbl] | Produces the per-hand unit table consumed before gameplay and preview spawn recipes; inherited item names can resolve the base definition | For an exact relic backend identity, overwrite the result with the authored right-hand unit before every consumer branches | Canonical keep/mission/preview replay owner. Blightreaper is immutable, so no skin supersedes it. Non-relic results pass through by identity. |
-| `GearUtils.spawn_inventory_unit` [hook,tbl] | Spawns explicit 3P and optional 1P units, links target node 0, and returns `(weapon_3p, ammo_3p, weapon_1p, ammo_1p)` [src: `scripts/unit_extensions/default_player_unit/inventory/gear_utils.lua:155-308`; node mapping `scripts/settings/attachment_node_linking.lua:2726-2753`] | Re-key positively identified WOC husks, log requested/returned unit identity, then apply the same canonical `0.9` XYZ scale, `{-90,-90,-90}` rotation, and `{0,0,-0.3}` offset to returned 1P and 3P owner/bot/husk units as one atomic node-0 local pose | Capture and return all four values; never bail from vanilla. `GearUtils.restore_scene_graph` proves the linked-node `Unit.set_local_pose` primitive [src: `gear_utils.lua:321-327`]. Separate setters partially no-op on this authored root (#613); require every channel in the shared WA report. Same-WOC identity is bounded to loadout-sync edges, not per frame. |
+| `GearUtils.spawn_inventory_unit` [hook,tbl] | Spawns explicit 3P and optional 1P units, links attachment node 0, and returns `(weapon_3p, ammo_3p, weapon_1p, ammo_1p)` [src: `scripts/unit_extensions/default_player_unit/inventory/gear_utils.lua:155-308`; node mapping `scripts/settings/attachment_node_linking.lua:2726-2753`] | Re-key positively identified WOC husks, log requested/returned unit identity, resolve the exact named `blightreaper` render node, then apply the same canonical `0.9` XYZ scale, `{-90,-90,-90}` rotation, and `{0,0,-0.3}` offset to returned 1P and 3P owner/bot/husk units as one atomic local pose | Capture and return all four values; never bail from vanilla. Live #712 evidence shows the complete pose is rejected on linked node 0 while both authored units resolve their visible renderable as node 2. Leave the attachment root game-owned, never hard-code the observed child index, and require every channel plus node/error detail in the shared WA report. Same-WOC identity is bounded to loadout-sync edges, not per frame. |
 | `WeaponUtils.get_weapon_packages` [hook,tbl] | Collects weapon unit paths for package preparation | Replace only WOC unit package identities with resident vanilla lease aliases | Spawn data remains WOC-owned; numeric reverse network lookup remains vanilla. |
 | `HeroPreviewer._load_packages` / `MenuWorldPreviewer._load_packages` [hook] | Loads character-preview equipment packages | Borrow the vanilla lease and fall back only when `Application.can_get("unit", custom)` fails | Both classes are required because VT2 copy-inherits methods before mods load. |
 | `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` [hook] | Spawns and links inventory, lobby, and score/end-screen equipment | Apply the canonical transform to the exact spawned WOC unit | Weak per-unit guard bounds duplicate traversal; no per-frame writes. |
@@ -118,6 +118,19 @@ override those `mod_data` fields, so the actual Blightreaper backend row is
 vanilla-keyed even though its backend instance id and presentation are WOC-owned.
 Runtime check `issue509_registered_blightreaper_wire_contract` asserts this
 against the live backend mirror rather than relying only on static source.
+
+Before MIL insertion, WOC builds its private combat template by deep-cloning
+`we_one_hand_sword_template_1`. Vanilla has already attached canonical career
+ability rows to that donor (`scripts/settings/equipment/weapons.lua:241-267`).
+Deep cloning changes those rows' table identity, while
+`_lib_career_weapon_actions` intentionally uses identity to detect conflicting
+providers. WOC therefore restores an inherited row to the canonical
+`ActionTemplates` object only when the donor itself is that exact object, then
+claims it through the shared owner. Any other mismatch remains a hard deferred
+registration gate. `issue690_blightreaper_registration_gate_contract` checks
+the reconciliation, ownership, final gate state, and master-list row live.
+Deferred registration is retried only at `StateInGameRunning.on_enter`; each
+distinct gate is logged once through `printf` under a 12-line session budget.
 
 MIL then unconditionally writes `backend_item.rarity` and
 `backend_item.CustomData.rarity` to `default`. WOC deliberately repairs the

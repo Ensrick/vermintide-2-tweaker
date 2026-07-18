@@ -6,6 +6,7 @@ local M = {}
 -- copies of this library still coordinate.  Keep it off `template.actions`:
 -- the engine treats every key in that table as an executable action row.
 local CLAIMS_KEY = "__vt2_tweaker_career_action_claims"
+local CLONE_SOURCE_KEY = "__vt2_tweaker_career_action_clone_source"
 
 local function claims_for(template)
 	local claims = rawget(template, CLAIMS_KEY)
@@ -49,6 +50,63 @@ function M.collect(careers, career_settings, action_templates)
 		end
 	end
 	report.ok = #report.missing_actions == 0 and #report.missing_careers == 0
+	return report
+end
+
+-- Prepare one declared private-template clone before any provider claims it.
+-- A deep clone copies both canonical career-action rows and our private claim
+-- registry by value.  The copied rows no longer have ActionTemplates identity,
+-- while copied claims falsely describe ownership of the donor template.  Only
+-- restore rows whose donor is still the exact canonical provider; arbitrary
+-- replacements remain conflicts.  The source token makes this idempotent
+-- across lifecycle reconciliation and mod hot reloads.
+function M.prepare_inherited_clone(template, source, action_templates, source_token)
+	local report = {
+		ok = false,
+		restored_names = {},
+		discarded_claims = 0,
+	}
+	if type(template) ~= "table" or type(template.actions) ~= "table"
+			or type(source) ~= "table" or type(source.actions) ~= "table"
+			or type(action_templates) ~= "table"
+			or type(source_token) ~= "string" or source_token == "" then
+		report.skipped = "clone_provenance_unavailable"
+		return report
+	end
+	if template == source then
+		report.ok = true
+		report.skipped = "shared_template"
+		return report
+	end
+	if rawget(template, CLONE_SOURCE_KEY) == source_token then
+		report.ok = true
+		report.already_prepared = true
+		return report
+	end
+
+	local inherited_claims = rawget(template, CLAIMS_KEY)
+	if type(inherited_claims) == "table" then
+		for _ in pairs(inherited_claims) do
+			report.discarded_claims = report.discarded_claims + 1
+		end
+		rawset(template, CLAIMS_KEY, nil)
+	end
+
+	for action_name, source_action in pairs(source.actions) do
+		local canonical = type(action_name) == "string"
+			and action_name:sub(1, 14) == "action_career_"
+			and action_templates[action_name]
+		local existing = template.actions[action_name]
+		if type(canonical) == "table" and source_action == canonical
+				and existing ~= nil and existing ~= canonical then
+			template.actions[action_name] = canonical
+			report.restored_names[#report.restored_names + 1] = action_name
+		end
+	end
+	table.sort(report.restored_names)
+	report.restored = #report.restored_names
+	rawset(template, CLONE_SOURCE_KEY, source_token)
+	report.ok = true
 	return report
 end
 

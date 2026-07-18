@@ -83,8 +83,7 @@ Last updated: 2026-07-16.
 - [ ] Third-Person Camera (#209) and Allow crafting bench in mission (#80) display `[verify-fix]` with their issue number.
 - [ ] Toggle Skip Cutscenes (#126) and Use non-modded loadouts (#287) do not display `[diag]` unless diagnostics are armed again on GitHub.
 - [ ] Enable In-Mission Inventory Access names open #87 only; closed crash #193 and its crash tag are absent.
-- [ ] `pwsh -NoProfile -File qa/check_issue_tag_sync.ps1` no longer reports these five GUT rows.
-- [ ] `/gut_regression_test` passes `issue345_gut_loc_status_sync`.
+- [ ] `pwsh -NoProfile -File qa/check_loc_tags.ps1` reports no player-facing lifecycle metadata.
 
 ## Original temporary-health talent names (#352)
 

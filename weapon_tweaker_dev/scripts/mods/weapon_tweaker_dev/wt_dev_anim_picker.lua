@@ -1528,7 +1528,7 @@ function M.loc_keys()
     for _, entry in ipairs(_CATALOG) do
         -- Group label: "<character> <weapon type> rendered on Kruber body  [<set>]".
         -- The [set] bracket is the established animation-set name (NOT a status
-        -- tag — status tags moved to the Weapon Availability menu).
+        -- state; lifecycle metadata is logged internally, never put in menu labels).
         keys[_sid_group(entry.port_id)] = {
             en = entry.label .. "  [" .. (_RECV[entry.char_key].set_label[entry.set] or entry.set) .. "]",
         }

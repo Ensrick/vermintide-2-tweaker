@@ -14,6 +14,8 @@
 #                                               # ONLY the named mods (folder name or ModId);
 #                                               # sibling assets + manifest entries stay exactly
 #                                               # as last published. This is what ship.ps1 passes.
+#   .\publish-release.ps1 -LauncherPath <exe> -LauncherSource <source> -LauncherApprovalAnchor <path>
+#                                               # exact approved dependency handoff from ship.ps1
 #
 # Two modes (issues #436/#493):
 #   * FULL (no -Mods)  - legacy behavior, unchanged: build + stage every inventory mod, write a
@@ -27,23 +29,28 @@
 #     asset_filename against ONE release). Filtered mode therefore needs network even with
 #     -DryRun (it must read the existing manifest), and needs at least one prior full release.
 #
-# Requires: gh CLI authenticated to github.com (Ensrick); VMBLauncher.exe present at the
-# canonical path. Does NOT upload to Steam Workshop — that's still VMBLauncher's job.
+# Requires: gh CLI authenticated to github.com (Ensrick); VMBLauncher.exe in an approved
+# invoking/configured/primary/env location. Does NOT upload to Steam Workshop - that is
+# still VMBLauncher's job.
 
 [CmdletBinding()]
 param(
     [string]$Tag,
     [switch]$SkipBuild,
     [switch]$DryRun,
-    [string[]]$Mods
+    [string[]]$Mods,
+    [string]$LauncherPath,
+    [string]$LauncherSource,
+    [string]$LauncherApprovalAnchor
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$launcher = Join-Path $repoRoot 'tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe'
-if (-not (Test-Path $launcher)) {
-    throw "VMBLauncher not found at $launcher. Build it first via tools/vmb-launcher/publish.ps1 -SkipOpen"
+$launcherPathHelpers = Join-Path $repoRoot 'tools\vmb-launcher-path.ps1'
+if (-not (Test-Path -LiteralPath $launcherPathHelpers -PathType Leaf)) {
+    throw "Shared VMBLauncher path helpers not found at $launcherPathHelpers."
 }
+. $launcherPathHelpers
 $manifestHelpers = Join-Path $PSScriptRoot 'release-manifest.ps1'
 if (-not (Test-Path -LiteralPath $manifestHelpers)) {
     throw "Release-manifest helpers not found at $manifestHelpers."
@@ -54,8 +61,21 @@ if (-not (Test-Path -LiteralPath $githubReleaseHelpers)) {
     throw "GitHub release helpers not found at $githubReleaseHelpers."
 }
 . $githubReleaseHelpers
+$launcherSettings = Join-Path $env:APPDATA 'VMBLauncher\settings.json'
+$configuredProjectRoot = Get-VmbLauncherConfiguredProjectRoot -SettingsPath $launcherSettings
+$primaryWorktreeRoot = Get-VmbLauncherPrimaryWorktreeRoot -RepoRoot $repoRoot
+$launcherResolution = Resolve-ApprovedVmbLauncherPath `
+    -RepoRoot $repoRoot `
+    -RequestedPath $LauncherPath `
+    -RequestedSource $LauncherSource `
+    -RequestedApprovalAnchor $LauncherApprovalAnchor `
+    -ConfiguredProjectRoot $configuredProjectRoot `
+    -PrimaryWorktreeRoot $primaryWorktreeRoot `
+    -EnvironmentPath $env:VT2_SHIP_VMB_LAUNCHER
+$launcher = $launcherResolution.Path
 $sourceCommit = Get-ReleaseSourceCommit -RepoRoot $repoRoot
 $builderVersion = Get-VmbLauncherVersion -LauncherPath $launcher
+Write-Host "VMBLauncher dependency: $launcher ($($launcherResolution.Source), version $builderVersion)" -ForegroundColor DarkGray
 
 $ghRepo = 'Ensrick/vermintide-2-tweaker'
 

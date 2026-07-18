@@ -303,14 +303,14 @@ end
 -- classes, distinguished by setting_id prefix so the caller's per-map status-tagging
 -- loop (localization.lua) can skip the structural ones:
 --   * STRUCTURAL (skip per-map tag): `enable_group_<id>` master labels (carry a
---     baked [untested] tag - the #457 revamp is new) and `advanced_<id>_group`
+--     title and `advanced_<id>_group`
 --     collapsible labels ("Choose Missions").
---   * PER-MAP (get the [untested]/[working] tag): `enable_adventure_<key>` /
+--   * PER-MAP: `enable_adventure_<key>` /
 --     `enable_cw_<key>` individual mission labels.
 function _M.build_loc_entries()
     local entries = {}
     -- CW scenarios: master + advanced collapsible + per-scenario labels.
-    entries[_M.GROUP_MASTER_PREFIX .. _M.CW_GROUP_ID] = { en = "[untested] Chaos Wastes Missions" }
+    entries[_M.GROUP_MASTER_PREFIX .. _M.CW_GROUP_ID] = { en = "Chaos Wastes Missions" }
     entries["advanced_" .. _M.CW_GROUP_ID .. "_group"] = { en = "Choose Missions" }
     for _, scen in ipairs(_M.CW_SCENARIOS) do
         entries[_M.CW_SETTING_PREFIX .. scen.key] = { en = scen.name }
@@ -318,7 +318,7 @@ function _M.build_loc_entries()
     -- Campaign / DLC groups: one master each; multi-mission groups add an advanced
     -- collapsible + per-mission labels.
     for _, group in ipairs(_M.MISSION_GROUPS) do
-        entries[_M.GROUP_MASTER_PREFIX .. group.id] = { en = "[untested] " .. group.display_name }
+        entries[_M.GROUP_MASTER_PREFIX .. group.id] = { en = group.display_name }
         if not _M.GROUP_IS_SINGLE[group.id] then
             entries["advanced_" .. group.id .. "_group"] = { en = "Choose Missions" }
         end
@@ -327,7 +327,7 @@ function _M.build_loc_entries()
         end
     end
     -- Event missions: master + advanced collapsible + per-mission labels.
-    entries[_M.GROUP_MASTER_PREFIX .. _M.EVENT_GROUP_ID] = { en = "[untested] Event Missions" }
+    entries[_M.GROUP_MASTER_PREFIX .. _M.EVENT_GROUP_ID] = { en = "Event Missions" }
     entries["advanced_" .. _M.EVENT_GROUP_ID .. "_group"] = { en = "Choose Missions" }
     for _, m in ipairs(_M.EVENT_MISSIONS) do
         entries[_M.ADVENTURE_SETTING_PREFIX .. m.key] = { en = m.name }

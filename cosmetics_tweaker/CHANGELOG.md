@@ -1,5 +1,33 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.145-dev - 2026-07-17 - career-scoped remote appearance identity (#698) [verify-fix-coop]
+
+- Fixed the host-side Grail Knight armor repaint recorded after a remote player changed to Foot Knight: `_la_equips_by_peer` was keyed only by Steam peer, while the husk armor replay accepted every cached `slot_skin` without proving that the record belonged to the husk's current career.
+- Every LA material/mesh record now carries the exact human wearer's career from the live inventory/player identity. Host requests, authoritative broadcasts, deferred sends, acknowledged state pulls, hot-join replay, receivers, reconcile, and husk wield all preserve or validate that field. The shared RPC schema is now 2 so legacy unstamped state is dropped instead of guessed.
+- A confirmed human career change removes mismatched and legacy unstamped records before vanilla husk wield/spawn. A bot sharing its owner's peer id is explicitly barred from consuming or purging that human store, preserving the #513 owner-alias boundary.
+- Added a pure career-identity policy, runtime regression, and offline host/client/husk tests. The executable appearance contract now treats career change as a mandatory replay edge and records the exact #698 material scope without claiming in-game verification.
+
+**Co-op verify:** equip the Purpure/Azure Grail Knight outfit, join another Cosmetics-matched peer, then switch that same remote peer to Foot Knight without restarting the lobby. The observer must see Foot Knight's own armor through spawn, wield, keep/mission transition, and hot join. Logs may show `[cos:698] HUSK career-change invalidated ...`, but must not show a later Grail Knight `HUSK wield-repaint` on the Foot Knight. Repeat with a host-owned bot present; the bot must stay native and must not erase the human's current cosmetic state.
+
+## 0.9.144-dev - 2026-07-17 - combined #695 + #481 reconciliation build [verify-fix]
+
+- Reconciliation reship: two different builds were briefly uploaded as `0.9.143-dev` by parallel sessions. This unambiguous version carries both #695's startup backend-readiness guards and #481's exact Athanor offhand-preview ownership.
+
+**Test:** verify the #481 Athanor shield-isolation checklist, then start a fresh modded session and confirm the console contains no `Requesting unknown interface` startup flood.
+
+## 0.9.143-dev - 2026-07-17 - exact Athanor offhand preview ownership (#481)
+
+- Closed the fail-open preview path recorded in `console-2026-07-17-17.50.57-10bc42ac-d630-48e0-95d8-f5de4cdc727c.log`: `LootItemUnitPreviewer` had an exact queued hand-unit path, but unreadable runtime `unit_name` metadata was treated as a mesh match and allowed an authored shield paint onto an unproven target.
+- Pending-illusion backend fallback now requires the same normalized weapon family. Exact backend IDs still win, husks never consume the local customization fallback, and an offhand record must be present in that exact item type's current hand pool.
+- The returned preview units now consume their corresponding `spawn_data[i].unit_name` evidence. LA and Purpure/Azure paints fail closed when the declared authored 1P/3P mesh does not match, and an exact independent row-2 component prevents a second whole-skin provider from repainting the same shield.
+- Preserved the Athanor overview's legitimate melee and ranged previewers; no previewer destruction, new hook, RPC, polling loop, or guessed viewport ownership was added.
+- Added Lua 5.1 and runtime regressions for exact LA/Purpure item isolation, same-family fallback, pool ownership, provider arbitration, and mismatched/missing preview targets.
+
+## 0.9.142-dev - 2026-07-17 - pre-login backend warning flood fix (issue 695)
+
+- Preserved the already-uploaded public source delta from the `vt2-cim-promo` ship worktree: offhand-selection restore and delayed instance prune probe `Managers.backend._interfaces.items` before calling `get_interface("items")`.
+- Both paths already retried while the backend was unavailable; this only prevents the pre-login miss path from emitting the same unknown-interface warning every frame.
+
 ## 0.9.141-dev - 2026-07-17 - independent component flavor text (#641) [diagnostics-armed]
 
 - Extended the shared item-card component descriptor from icon/name to icon/name/description, so an independently selected shield or offhand no longer inherits the primary weapon's flavor text.

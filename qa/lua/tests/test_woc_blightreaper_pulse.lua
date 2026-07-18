@@ -21,6 +21,12 @@ return function(H, repo_root)
 		local api = {
 			unit = {
 				alive = function(value) return value == unit end,
+				has_node = function(value, name)
+					return value == unit and name == policy.TRANSFORM_NODE_NAME
+				end,
+				node = function(value, name)
+					return value == unit and name == policy.TRANSFORM_NODE_NAME and 2 or nil
+				end,
 				set_all_materials = function(value, material)
 					calls.materials[#calls.materials + 1] = { value, material }
 				end,
@@ -46,7 +52,10 @@ return function(H, repo_root)
 				calls.transform_specs[#calls.transform_specs + 1] = spec
 				calls.transform_perspectives[#calls.transform_perspectives + 1] = perspective
 				calls.transform_surfaces[#calls.transform_surfaces + 1] = surface
-				return value == unit and spec == policy.TRANSFORM
+				return value == unit and spec.node == 2
+					and spec.scale == policy.TRANSFORM.scale
+					and spec.offset == policy.TRANSFORM.offset
+					and spec.rotation == policy.TRANSFORM.rotation
 			end,
 		}
 		return pulse.new(policy, transform, api), unit, calls
@@ -96,7 +105,7 @@ return function(H, repo_root)
 			H.truthy(ok, perspective)
 			H.equal(reason, "applied")
 			H.equal(calls.transforms, 1)
-			H.equal(calls.transform_specs[1], policy.TRANSFORM)
+			H.equal(calls.transform_specs[1].node, 2)
 			H.equal(calls.transform_perspectives[1], perspective)
 			H.equal(calls.transform_surfaces[1], "perspective-contract")
 			H.deep_equal(calls.transform_specs[1].scale, { 0.9, 0.9, 0.9 })
@@ -130,6 +139,10 @@ return function(H, repo_root)
 		local runtime = pulse.new(policy, owner, {
 			unit = {
 				alive = function(value) return value == owner_unit end,
+				has_node = function(value, name)
+					return value == owner_unit and name == policy.TRANSFORM_NODE_NAME
+				end,
+				node = function() return 2 end,
 				set_all_materials = function() end,
 				set_texture_for_materials = function() end,
 			},
@@ -143,6 +156,55 @@ return function(H, repo_root)
 		H.equal(owner:count(), 1)
 		H.deep_equal(state.position, { 0, 0, -0.3 })
 		H.deep_equal(state.scale, { 0.9, 0.9, 0.9 })
+	end)
+
+	H.test("WOC #712 fails closed when the authored render node is unavailable", function()
+		local runtime, unit, calls = fixture()
+		-- Replace the fixture with an API that positively lacks the named node.
+		runtime = pulse.new(policy, {
+			apply = function() calls.transforms = calls.transforms + 1; return true end,
+		}, {
+			unit = {
+				alive = function(value) return value == unit end,
+				has_node = function() return false end,
+				node = function() return 2 end,
+				set_all_materials = function() end,
+				set_texture_for_materials = function() end,
+			},
+			application = { can_get = function() return true end },
+			script_unit = { set_material_variable = function() end },
+		})
+		local ok, reason = runtime.apply(unit, policy.TRANSFORM, "3p", "test")
+		H.equal(ok, false)
+		H.equal(reason, "transform-node-missing")
+		H.equal(calls.transforms, 0)
+	end)
+
+	H.test("WOC #712 resolves named render node across gameplay and preview surfaces", function()
+		for _, row in ipairs({
+			{ "1p", "owner-spawn" },
+			{ "3p", "owner-spawn" },
+			{ "3p", "husk-spawn" },
+			{ "3p", "character-preview" },
+			{ "1p", "item-preview" },
+		}) do
+			local runtime, unit, calls = fixture()
+			H.truthy(runtime.apply(unit, policy.TRANSFORM, row[1], row[2]))
+			H.equal(calls.transforms, 1)
+			H.equal(calls.transform_specs[1].node, 2)
+			H.equal(calls.transform_perspectives[1], row[1])
+			H.equal(calls.transform_surfaces[1], row[2])
+		end
+	end)
+
+	H.test("WOC #712 replays transform for replacement units after mission transition", function()
+		local before, first_unit, first_calls = fixture()
+		H.truthy(before.apply(first_unit, policy.TRANSFORM, "3p", "owner-spawn"))
+		local after, replacement_unit, replacement_calls = fixture()
+		H.truthy(after.apply(replacement_unit, policy.TRANSFORM, "3p", "owner-spawn"))
+		H.equal(first_calls.transforms, 1)
+		H.equal(replacement_calls.transforms, 1)
+		H.equal(replacement_calls.transform_specs[1].node, 2)
 	end)
 
 	H.test("WOC #613 fails closed before C material writes", function()

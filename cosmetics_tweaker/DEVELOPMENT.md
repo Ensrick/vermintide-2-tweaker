@@ -42,7 +42,7 @@ exactly once from the manifest.
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
 | `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest, the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks, the `/cos_regression_test` registry/command lifecycle, and everything not yet extracted: render-path hooks, per-peer glow broadcast RPCs, LA-bridge/husk integration, offhand/customization UI, the #377 editor/badge presentation, and #282 MH release lifecycle. |
-| `_cos_runtime_checks.lua` | Registers the 50 late runtime checks in historical order plus the single `/verify_gk_set` command. Receives every entry-private table/helper through one explicit dependency table; closures remain lazy so live state is inspected only when the registry runs. It owns no hooks, RPCs, or lifecycle callback. |
+| `_cos_runtime_checks.lua` | Registers the 52 late runtime checks in historical order plus the single `/verify_gk_set` command. Receives every entry-private table/helper through one explicit dependency table; closures remain lazy so live state is inspected only when the registry runs. It owns no hooks, RPCs, or lifecycle callback. |
 | `_cos_glow_probe.lua` | Owns `/glow_dump`, `/glow_probe`, `/glow_scan`, `/glow_scan_stop`, `/glow_restore`, `/la_shield_glow_probe`, both bounded scan tick functions, and the exported `wielded_units_for_probe` helper consumed by the later manual picker command. It receives only player-safety, unit-liveness, and log-flush helpers. |
 | `_cos_la_commands.lua` | Owns the read-only LA diagnostic commands `/la_dump`, `/la_trace`, `/la_force`, `/la_attach`, `/la_loadout`, and `/la_hats`. Captures the already-loaded bridge plus career/log helpers; no hook or lifecycle ownership. |
 | `_cos_diagnostics.lua` | Read-only dump/probe chat commands (`/flush_log`, `/dump_glows`, `/dump_skin_rarities`, `/dump_all_names`, `/check_vmf`, `/probe_hat`, `/probe_cosmetics`). Reads `mod._cos.flush_log`; no exports. |
@@ -56,6 +56,8 @@ exactly once from the manifest.
 | `_cos_wire.lua` | Phase 4a #421 weapon-skin wire boundary. Captures `mod._cos.custom_skin_keys` after `_cos_illusions`, exports the established `mod._cos_wire_null_custom_skins` helper and `mod._cos_skin_wire_surfaces` registry, and owns the three vanilla `rpc_add_equipment` sender hooks (`SimpleInventoryExtension.game_object_initialized`, `SimpleInventoryExtension._spawn_resynced_loadout`, `GearUtils.hot_join_sync`). The custom-key null is unconditional, scoped to the vanilla continuation, and restores local slot state afterward. |
 | `_cos_offhand_preload_lifecycle.lua` | Pure generation-scoped ownership/readiness ledger for #565 async offhand packages. It has no engine or mod dependencies so shared-handle callbacks retained after unload can be reproduced offline. The entry owns all PackageManager calls and bounded diagnostics. |
 | `_cos_offhand_names.lua` | Pure #641 component display-name policy: independent offhand-weapon/shield keys, deterministic source fallback, primary-first label composition, presentation-only decoration, and deduplicated inventory rows. |
+| `_cos_la_instance_policy.lua` | Pure exact-item presentation policy for LA/Cosmetics offhands. Owns backend fallback qualification, hand-pool ownership, and `spawn_data` target validation for Athanor/illusion previews; missing identity or mesh evidence fails closed. |
+| `_cos_husk_identity.lua` | #698 career-scoped remote appearance policy plus the dependency-injected spawn-monitor owner. Creates career-stamped peer-store entries, requires exact active-career agreement, invalidates stale human records on career change, and preserves host-owned bots that merely alias the human's peer id. It owns no hooks, RPCs, or direct engine globals. |
 | `_cos_weapon_pose_policy.lua` / `_cos_weapon_poses.lua` | #485 pure authored-pose catalog plus the local modded-realm SocialWheelUI adapter. Replaces only the gathered pose rows; never grants backend ownership or mutates ItemMasterList. Missing-parent fallback is bounded diagnostics pending compatibility proof. |
 | `_la_shield_parity.lua` | Pure #266 availability policy: the single complete Kruber native/CWV shield item-type catalogue and its weapon-agnostic fan-out helper. `_la_bridge.lua` consumes it; it owns no render or engine surface. |
 
@@ -80,6 +82,11 @@ their internals alone.
 - **New `/cos_regression_test` registration** → `_cos_runtime_checks.lua`. Add its
   dependency to the install table if it needs entry-private state; never make the
   module dofile another owner or eagerly snapshot runtime state.
+- **New preview consumer of an independently selected shield/offhand** → resolve
+  exact backend identity and current hand-pool ownership through
+  `_cos_la_instance_policy.lua`, then pass the preview engine's queued unit path
+  to its adapter. Never accept unreadable runtime unit metadata as proof and
+  never repaint a row-2-owned component through a second whole-skin provider.
 - **New custom illusion / weapon-skin or LA-shield injection** →
   `_cos_illusions.lua`. Register the key into `mod._cos.custom_skin_keys` so the
   wire-safety senders null it on the wire.
@@ -288,6 +295,10 @@ Any stored `_offhand_selection` whose mesh no longer matches the rendered shield
 ### Weapon identity before LA paint
 
 Every offhand or weapon-illusion replay must prove that the stored entry belongs to the currently wielded item before touching a hand unit. Resolve the active slot from `inventory._equipment.wielded_slot`; `inventory.wielded_slot` is only a compatibility fallback for the husk extension and is absent on the local-owner extension. Match offhand entries by the wielded item's template/name/key/item type. Only the illusion path may additionally match a cosmetic slot key. An unresolved or different wielded item is a restrictive skip, never permission to paint: the pending queue or next-wield reconcile retries the matching weapon. `/cos_regression_test` check `cos_la_weapon_identity_gate_local_wearer` locks this #514 invariant.
+
+### Career identity before peer-store replay
+
+`peer_id` is a transport address, not a durable wearer identity: the same human can change careers without changing peers, and host-owned bots can share that peer. Every `_la_equips_by_peer` material/mesh entry therefore carries `wearer_career`. Resolve it from the live inventory extension's `_career_name` first, with the exact Player API only as an owner-side fallback. A remote human husk may consume the record only when its stamped career exactly equals `SimpleHuskInventoryExtension._career_name`; missing or mismatched identity fails closed and a confirmed career change invalidates stale slots before wield. A non-player-controlled bot never consumes or purges the human peer store. Keep this field on apply requests, authoritative apply broadcasts, deferred sends, pull-on-ready replies, and hot-join replay; changing that required shape requires an RPC schema bump. `/cos_regression_test` check `issue698_husk_career_identity` and `test_cos_husk_identity.lua` lock the #698 boundary.
 
 ## Known limitations
 - LA `kind="unit"` variants (custom-mesh Empire basic shields, the elf `_mesh` variants, etc.) are not exposed — needs LA-package-load integration to register their meshes for on-demand spawning.

@@ -24,7 +24,7 @@ exact-hand contract remain unchanged.
 
 - Source page: `https://sketchfab.com/3d-models/tower-mace-7cc646d8e8084a5fb2961855bca284e8`
 - Author/profile: iceboxX708, `https://sketchfab.com/iceboxX708`
-- Source page publication date: 2019-07-19
+- Source page publication date: 19 July 2019
 - Downloaded outer archive SHA-256:
   `7929EADFF79A10BF6C5FC8C568EEE8F3E6F367C8DA2713274D3392FC4F4ADF2D`
 - Selected nested source archive (`source/model.zip`) SHA-256:

@@ -1658,8 +1658,8 @@ end
 -- `unlock_<career>_<weapon>` checkboxes by their player-facing English label.
 -- Resolve that label from the raw localization DATA published before VMF menu
 -- registration (#197 / LOCALIZATION_STANDARD section 12), never via
--- `mod:localize`, and strip every leading dev-status tag so `[working] Kruber:
--- Halberd` sorts under K. The setting id is the deterministic tie-break/fallback.
+-- `mod:localize`; player-facing labels never carry lifecycle status tags, so
+-- `Kruber: Halberd` sorts under K. The setting id is the deterministic fallback.
 --
 -- Mixed leaf groups are handled too: only unlock rows are gathered/sorted and
 -- written back into their original unlock-row slots, so an unrelated child can

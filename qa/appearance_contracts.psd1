@@ -24,6 +24,7 @@
         'wield'
         'customization_change'
         'style_change'
+        'career_change'
         'mission_transition'
         'respawn'
         'hot_join'
@@ -80,6 +81,7 @@
                         wield = @{ Disposition = 'covered'; Evidence = 'husk wield consumes the accepted exact descriptor through the world adapter' }
                         customization_change = @{ Disposition = 'deferred'; Reason = 'customization changes still publish through provider-specific state paths' }
                         style_change = @{ Disposition = 'deferred'; Reason = 'Combat Style identity and effective template are outside the migrated unit-identity descriptor' }
+                        career_change = @{ Disposition = 'deferred'; Reason = 'career generation invalidation is not yet owned by the provider-neutral CWV exact-unit lifecycle' }
                         mission_transition = @{ Disposition = 'covered'; Evidence = 'gameplay-state enter request/replay' }
                         respawn = @{ Disposition = 'deferred'; Reason = 'paired runtime respawn evidence is still required by open #660' }
                         hot_join = @{ Disposition = 'covered'; Evidence = 'targeted joining-peer descriptor replay' }
@@ -147,6 +149,7 @@
                         wield = @{ Disposition = 'not-applicable'; Reason = 'item text resolves synchronously when a card is requested' }
                         customization_change = @{ Disposition = 'covered'; Evidence = 'component hover and saved exact-instance option both use the canonical descriptor' }
                         style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style does not own cosmetic component text' }
+                        career_change = @{ Disposition = 'not-applicable'; Reason = 'item-card text resolves synchronously from the requested exact instance and retains no career state' }
                         mission_transition = @{ Disposition = 'not-applicable'; Reason = 'local item text resolves from persisted identity on demand' }
                         respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not retain item-card text state' }
                         hot_join = @{ Disposition = 'covered'; Evidence = 'peer presentation resolves only from existing parity-gated component caches' }
@@ -179,6 +182,141 @@
                             )
                             Surfaces = @('inventory_preview', 'cosmetic_preview', 'hold_tab')
                             ReplayEdges = @('hot_join', 'parity_ready')
+                        }
+                    )
+                }
+            )
+        }
+        @{
+            Id = 'woc.issue712.blightreaper-transform'
+            Issue = 712
+            Claim = 'structural-only'
+            Owners = @(
+                'tools/shared_lib/_lib_weapon_appearance.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_appearance_policy.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_durable_transform.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_mod_unit_preview.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'covered'; Evidence = 'GearUtils return adapter resolves the authored 1P render node' }
+                        owner_3p = @{ Disposition = 'covered'; Evidence = 'GearUtils return adapter resolves the authored local 3P render node' }
+                        bot_3p = @{ Disposition = 'covered'; Evidence = 'the positively identified non-1P GearUtils recipe consumes the same descriptor' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'husk GearUtils return adapter consumes the same descriptor without transform RPC' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'HeroPreviewer character-preview adapter consumes the same descriptor' }
+                        cosmetic_preview = @{ Disposition = 'covered'; Evidence = 'LootItemUnitPreviewer item-preview adapter consumes the same descriptor' }
+                        athanor_preview = @{ Disposition = 'covered'; Evidence = 'Athanor reuses the LootItemUnitPreviewer item-preview adapter' }
+                        crafting_preview = @{ Disposition = 'covered'; Evidence = 'crafting item previews reuse the LootItemUnitPreviewer adapter' }
+                        lobby_preview = @{ Disposition = 'covered'; Evidence = 'MenuWorldPreviewer character-preview adapter consumes the same descriptor' }
+                        score_screen = @{ Disposition = 'covered'; Evidence = 'score/end character preview reuses the HeroPreviewer/MenuWorldPreviewer adapter' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons, not a weapon unit transform' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the immutable transform descriptor has no per-instance persisted state' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'each GearUtils return is adapted before the caller receives it' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'equip creates a fresh GearUtils recipe and applies the descriptor' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'wielded owner and husk units are weak-tracked for measured pose drift' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'the immutable relic has no selectable cosmetic transform' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'Blightreaper has no combat-style transform variants' }
+                        career_change = @{ Disposition = 'not-applicable'; Reason = 'the immutable relic transform is independent of the wearer career' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'replacement units consume the descriptor independently after transition' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'replacement GearUtils units consume the descriptor independently after respawn' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'new remote husk spawn consumes the local render descriptor' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the transform is local presentation with no peer-ready payload' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the transform is local presentation with no parity payload' }
+                        rejoin = @{ Disposition = 'covered'; Evidence = 'a re-created husk consumes a new local render descriptor' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each preview-spawn recipe resolves the named render node' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'a replacement preview unit has an independent weak application guard' }
+                        lobby_score_create = @{ Disposition = 'covered'; Evidence = 'character-preview creation resolves the named render node on each unit' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live restoration of already-spawned imported units on mod disable is not proven' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_woc_blightreaper_pulse.lua'
+                            Names = @(
+                                'WOC #712 resolves named render node across gameplay and preview surfaces'
+                            )
+                            Surfaces = @(
+                                'owner_1p', 'owner_3p', 'bot_3p', 'remote_husk_3p',
+                                'inventory_preview', 'cosmetic_preview', 'athanor_preview',
+                                'crafting_preview', 'lobby_preview', 'score_screen'
+                            )
+                            ReplayEdges = @(
+                                'initial_spawn', 'equip', 'wield', 'hot_join', 'rejoin',
+                                'preview_open', 'preview_reopen', 'lobby_score_create'
+                            )
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_woc_blightreaper_pulse.lua'
+                            Names = @(
+                                'WOC #712 replays transform for replacement units after mission transition'
+                            )
+                            Surfaces = @('owner_3p')
+                            ReplayEdges = @('mission_transition', 'respawn')
+                        }
+                    )
+                }
+            )
+        }
+        @{
+            Id = 'cosmetics.issue698.career-scoped-husk-material'
+            Issue = 698
+            Claim = 'structural-only'
+            Owners = @(
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_husk_identity.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'material'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'deferred'; Reason = 'the career-scoped peer-store boundary is shared, but owner first-person material convergence is not the #698 claim' }
+                        owner_3p = @{ Disposition = 'deferred'; Reason = 'the career-scoped peer-store boundary is shared, but owner third-person material convergence is not the #698 claim' }
+                        bot_3p = @{ Disposition = 'covered'; Evidence = 'non-human peer aliases cannot consume or invalidate the human peer appearance store' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'every stored and transported material record carries an exact wearer career checked before husk mesh or material replay' }
+                        inventory_preview = @{ Disposition = 'not-applicable'; Reason = 'inventory preview does not consume the live remote-husk peer store' }
+                        cosmetic_preview = @{ Disposition = 'not-applicable'; Reason = 'cosmetic preview does not consume the live remote-husk peer store' }
+                        athanor_preview = @{ Disposition = 'not-applicable'; Reason = 'Athanor preview does not consume the live remote-husk peer store' }
+                        crafting_preview = @{ Disposition = 'not-applicable'; Reason = 'ordinary crafting preview does not consume the live remote-husk peer store' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'generic lobby preview uses separate wearer reconstruction and is not governed by the husk career boundary' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'score-screen identity is governed by the separate #513 exact score-row boundary' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab does not render live wearer materials' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'deferred'; Reason = 'persisted local selection loading is owned by the LA persistence layer before publication' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'husk pre-wield invalidation runs before vanilla spawn and post-wield material replay' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'host and client apply paths stamp and validate the exact wearer career' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'SimpleHuskInventoryExtension._wield_slot rejects unproven bot aliases and mismatched career records' }
+                        customization_change = @{ Disposition = 'covered'; Evidence = 'the canonical LA emit path requires and transports the live wearer career with each changed selection' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style does not change the wearer career identity owned by this contract' }
+                        career_change = @{ Disposition = 'covered'; Evidence = 'a confirmed human career change removes all mismatched and legacy unstamped peer records before husk rendering' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'state-pull and bounded transition reconcile preserve and revalidate the stamped career' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'every new husk wield repeats exact human and career validation before replay' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'targeted hot-join replay includes the stored wearer career and the receiver validates it' }
+                        peer_ready = @{ Disposition = 'covered'; Evidence = 'acknowledged pull-on-ready reply includes the stored wearer career and fails closed for legacy records' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'this material RPC uses mod-channel schema parity rather than the CWV content-parity lifecycle' }
+                        rejoin = @{ Disposition = 'deferred'; Reason = 'full disconnect-generation teardown and rejoin remains governed by the existing deferred peer purge lifecycle' }
+                        preview_open = @{ Disposition = 'not-applicable'; Reason = 'preview opening does not consume the live remote-husk peer store' }
+                        preview_reopen = @{ Disposition = 'not-applicable'; Reason = 'preview reopening does not consume the live remote-husk peer store' }
+                        lobby_score_create = @{ Disposition = 'deferred'; Reason = 'lobby and score creation use separate wearer identity adapters' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'mod disable restoration is outside the live husk career replay boundary' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cos_husk_identity.lua'
+                            Names = @(
+                                'Cosmetics #698 career-scoped entries fail closed and preserve bot owners'
+                                'Cosmetics #698 career change invalidates remote material replay'
+                                'Cosmetics #698 spawn monitor invalidates humans without consuming bot aliases'
+                                'Cosmetics #698 host client and husk paths carry one career identity'
+                            )
+                            Surfaces = @('bot_3p', 'remote_husk_3p')
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'customization_change', 'career_change', 'mission_transition', 'respawn', 'hot_join', 'peer_ready')
                         }
                     )
                 }

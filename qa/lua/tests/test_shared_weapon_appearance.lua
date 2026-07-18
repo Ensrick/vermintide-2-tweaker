@@ -45,6 +45,9 @@ return function(H, repo_root)
                 end,
             }
             function api.unit.set_local_pose(unit, node, pose)
+                if options.reject_node_zero and node == 0 then
+                    error("linked root rejected pose")
+                end
                 unit.position = pose.position
                 unit.scale = pose.scale
                 unit.rotation = pose.rotation
@@ -114,6 +117,27 @@ return function(H, repo_root)
         H.equal(#calls, 1)
         H.deep_equal(unit.position, { 0, 0, -0.3 })
         H.deep_equal(unit.scale, { 0.9, 0.9, 0.9 })
+    end)
+
+    H.test("shared WeaponAppearance targets a proven render node when the linked root rejects pose", function()
+        local WA, unit, calls = fixture({ reject_node_zero = true })
+        local root_ok, root_report = WA.apply(unit, {
+            scale = { 0.9, 0.9, 0.9 }, position = { 0, 0, -0.3 },
+            rotation = { -90, -90, -90 },
+        })
+        H.equal(root_ok, false)
+        H.equal(root_report.transform_node, 0)
+        H.truthy(type(root_report.transform_error) == "string")
+        H.truthy(#root_report.transform_error <= 160)
+        local mesh_ok, mesh_report = WA.apply(unit, {
+            node = 2, scale = { 0.9, 0.9, 0.9 }, position = { 0, 0, -0.3 },
+            rotation = { -90, -90, -90 },
+        })
+        H.equal(mesh_ok, true)
+        H.equal(mesh_report.transform_node, 2)
+        H.equal(mesh_report.transform_error, nil)
+        H.equal(calls[#calls][1], "pose")
+        H.equal(calls[#calls][2], 2)
     end)
 
     H.test("shared WeaponAppearance normalizes Euler and boxed rotations", function()

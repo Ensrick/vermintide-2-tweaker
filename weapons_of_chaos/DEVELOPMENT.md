@@ -270,14 +270,33 @@ verbatim; only the mesh source differs.
   The authored Blightreaper is an explicit exception: its reviewed canonical
   transform applies to its separate 1P and 3P units as one presentation policy.
 
-- **Linked roots require one complete local pose.** Vanilla links the wielded
-  weapon's target node `0` (`gear_utils.lua:293-308`; one-handed mapping at
+- **Attachment roots and authored render nodes have separate ownership.**
+  Vanilla links the wielded weapon's target node `0`
+  (`gear_utils.lua:293-308`; one-handed mapping at
   `attachment_node_linking.lua:2726-2753`) and restores a saved linked transform
   with `Unit.set_local_pose` (`gear_utils.lua:321-327`). Blightreaper
   `0.1.24-dev` proved the separate-setter dead end: its immediate read retained
   rotation while position and scale remained native on owner 1P/3P and husks.
-  Use the shared `WeaponAppearance.apply` atomic-pose path and require its full
-  channel report; never infer complete delivery from any one successful setter.
+  WOC `0.1.28-dev` then proved that the complete node-0 pose can itself be
+  rejected on both authored perspectives and character previews. Resolve the
+  imported unit's exact named `blightreaper` render node, apply one complete
+  pose there through `WeaponAppearance.apply`, and require its full
+  channel/node/error report. Never guess a node index or infer complete
+  delivery from any one successful setter.
+
+- **Deep-cloned weapon templates inherit career actions by value, not by
+  identity, and can inherit provider claims.** Vanilla decorates each
+  already-parsed weapon template with the
+  canonical `ActionTemplates[action_name]` rows before WOC registration
+  (`scripts/settings/equipment/weapons.lua:241-267`). A deep clone therefore
+  contains structurally equivalent but non-canonical action tables and may copy
+  the donor template's private WT/CWV/WOC ownership registry. Before the first
+  claim, `_lib_career_weapon_actions.prepare_inherited_clone` discards those
+  donor claims and restores only a row whose donor value is the exact canonical
+  `ActionTemplates` value. Its exact source token makes repeats no-ops, so a
+  later foreign replacement remains a hard conflict. Issue #690 first exposed
+  the action-identity half; issue #661 generalized the claim boundary across
+  WOC, CWV, and WT.
 
 - **Lua module packaging.** Every literal
   `mod:dofile("scripts/mods/weapons_of_chaos/<module>")` target must also appear

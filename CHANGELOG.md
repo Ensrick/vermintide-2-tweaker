@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-07-17 - Cross-provider career-action clone ownership
+
+Issue #661's live `action_career_dr_3` / `action_career_es_4` conflicts came
+from private weapon templates deep-cloning both canonical action rows and the
+donor template's WT/CWV/WOC claim metadata. The shared career-action library
+now owns one exact-source, idempotent clone-preparation boundary: copied claims
+are discarded, donor-proven canonical rows regain `ActionTemplates` identity,
+and later foreign replacements remain conflicts. CWV 0.1.445-dev applies the
+boundary to every completed private template; WOC 0.1.30-dev reuses it for
+Blightreaper; WT beta 0.12.273 and WT dev 0.12.274 carry the exact shared
+consumer copy. Lua 5.1 coverage exercises provider load order, repeated
+reconciliation, late registration, release, and rollback. In-game verification
+is still required; nothing was deployed by this draft change.
+
+## 2026-07-17 - Exact Athanor shield preview ownership
+
+Tweaker: Cosmetics v0.9.143-dev hardens issue #481 at the existing
+`BackendUtils.get_item_units` and `LootItemUnitPreviewer.spawn_units` seams.
+The latest log proved the Loremaster and Purpure/Azure choices were persisted
+under different exact backend items, but also showed an unreadable runtime mesh
+being accepted despite a mismatched target. Preview fallback now requires the
+same normalized weapon family, saved components must belong to the exact hand
+pool, and the queued `spawn_data` unit path is the fail-closed paint authority.
+The two intentional Athanor overview previewers remain intact. Offline Lua 5.1
+and runtime checks cover cross-item isolation without adding hooks or transport.
+This source also preserves the already-uploaded v0.9.142-dev issue #695 backend
+readiness guards from the separate public ship worktree; its generated bundle
+was not copied or modified here.
+
+## 2026-07-17 - Clean-worktree launcher provenance handoff
+
+Issue #683 centralizes VMBLauncher dependency discovery for the canonical ship
+and GitHub-release phases. `ship.ps1` now passes its exact approved executable
+path, provenance source, and approval anchor to `publish-release.ps1`; the
+release phase revalidates that immutable snapshot before recording the
+executable's real version. Direct
+release publishing uses the same invoking/configured/primary/environment
+candidate set and fails closed when no approved launcher exists. Offline
+PowerShell 5.1 and 7 fixtures cover clean external dependencies, invalid paths,
+provenance mismatch, missing candidates, and ship-to-release wiring. Full QA
+now runs that contract as an explicit blocking matrix under both PowerShell 7
+and Windows PowerShell 5.1, so hosted QA cannot pass without exercising the
+release-host compatibility boundary. Nothing was built, deployed, uploaded,
+or published by this tooling-only change.
+
 ## 2026-07-17 - Exact CWV identity for independent remote offhands
 
 Tweaker: Cosmetics v0.9.140-dev and CWV v0.1.444-dev re-derive the missing

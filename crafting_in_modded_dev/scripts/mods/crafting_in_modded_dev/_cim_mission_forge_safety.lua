@@ -142,6 +142,87 @@ mod:hook("HeroWindowWeaveProperties", "_create_viewport_definition", function(fu
     return _swap_forge_env(func(self))
 end)
 
+-- ============================================================
+-- Mid-mission forge: dynamic list-widget material closure (#83)
+-- ============================================================
+-- `HeroWindowWeaveForgeWeapons._setup_weapon_stats` creates a fresh local
+-- widget array every time the selected item changes, then assigns it to
+-- `self._scrollbars.stats.list_widgets`. These widgets do not exist when the
+-- create_ui_elements guard below prunes the static arrays. The shipped crash
+-- (session 10bc42ac-d630-48e0-95d8-f5de4cdc727c) was one such late widget:
+-- its rotated_texture pass tried to draw raw `icon_block_arch_masked` on the
+-- mission ui_top_renderer, whose Gui did not own that material.
+--
+-- Renderer-proof every texture-bearing pass in every dynamic scrollbar list
+-- immediately after the vanilla producer finishes. Unsafe passes receive an
+-- always-false content check; text/hotspots and renderer-proven textures remain
+-- byte-unchanged. This is producer-boundary protection, not a broad _draw or
+-- UIRenderer hook. The Keep path is untouched.
+function mod._cim83_sanitize_dynamic_forge_widgets(window, in_keep)
+    if in_keep or type(window) ~= "table" then return nil end
+    local policy = mod._cim83_forge_widget_policy
+    local icon_policy = mod._cim_athanor_icon_policy
+    local scrollbars = window._scrollbars
+    local renderer = window._ui_top_renderer
+    if type(policy) ~= "table" or type(policy.sanitize_widgets) ~= "function"
+            or type(icon_policy) ~= "table"
+            or type(icon_policy.renderer_has_texture) ~= "function"
+            or type(scrollbars) ~= "table" then
+        return nil
+    end
+
+    local combined = { widgets_scanned = 0, texture_passes = 0, verified = 0,
+        suppressed = 0, materials = {} }
+    local material_seen = {}
+    local function has_texture(texture, flags)
+        local target = renderer
+        if flags and flags.retained and type(renderer) == "table"
+                and renderer.gui_retained ~= nil then
+            target = { gui = renderer.gui_retained }
+        end
+        return icon_policy.renderer_has_texture(
+            target, texture, UIAtlasHelper, Gui, flags)
+    end
+
+    for _, scrollbar in pairs(scrollbars) do
+        local widgets = type(scrollbar) == "table" and scrollbar.list_widgets
+        if type(widgets) == "table" then
+            local report = policy.sanitize_widgets(widgets, has_texture)
+            combined.widgets_scanned = combined.widgets_scanned + report.widgets_scanned
+            combined.texture_passes = combined.texture_passes + report.texture_passes
+            combined.verified = combined.verified + report.verified
+            combined.suppressed = combined.suppressed + report.suppressed
+            for i = 1, #report.materials do
+                local name = report.materials[i]
+                if not material_seen[name] then
+                    material_seen[name] = true
+                    combined.materials[#combined.materials + 1] = name
+                end
+            end
+        end
+    end
+
+    if combined.suppressed > 0 and printf then
+        window._cim83_reported_materials = window._cim83_reported_materials or {}
+        for i = 1, #combined.materials do
+            local texture = combined.materials[i]
+            if not window._cim83_reported_materials[texture] then
+                window._cim83_reported_materials[texture] = true
+                printf("[cim:83] suppressed non-resident dynamic forge material: %s",
+                    tostring(texture))
+            end
+        end
+    end
+    return combined
+end
+
+mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_stats", function(func, self, ...)
+    return mod._cim83_forge_widget_policy.call_then(
+        function(...) return func(self, ...) end,
+        function() mod._cim83_sanitize_dynamic_forge_widgets(self, _is_in_keep()) end,
+        ...)
+end)
+
 -- Diagnostics only (#83 re-enable). The ONE remaining ShadingEnvironment
 -- write on the weave-forge surface is set_fullscreen_effect_enable_state:
 -- set_scalar("fullscreen_blur_*") + apply on the BASE ui world's env

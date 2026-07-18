@@ -45,12 +45,43 @@ function M.new(policy, transform_appearance, injected)
 		return ok and ready == true
 	end
 
+	local function resolved_transform(unit, transform)
+		if type(transform) ~= "table" then return nil, "transform-unavailable" end
+		local node_name = policy and policy.TRANSFORM_NODE_NAME
+		if type(node_name) ~= "string" or type(unit_api.has_node) ~= "function"
+				or type(unit_api.node) ~= "function" then
+			return nil, "transform-node-api-unavailable"
+		end
+		local has_ok, has_node = pcall(unit_api.has_node, unit, node_name)
+		if not has_ok or has_node ~= true then
+			return nil, "transform-node-missing"
+		end
+		local node_ok, node = pcall(unit_api.node, unit, node_name)
+		if not node_ok or type(node) ~= "number" then
+			return nil, "transform-node-unresolved"
+		end
+		return {
+			node = node,
+			scale = transform.scale,
+			offset = transform.offset,
+			position = transform.position,
+			rotation = transform.rotation,
+		}
+	end
+
 	function runtime.apply(unit, transform, perspective, surface)
 		if not alive(unit) then return false, "unit-unavailable" end
 		if applied[unit] then return true, "already-applied" end
 		local descriptor = policy and policy.pulse_descriptor
 			and policy.pulse_descriptor(perspective)
 		if type(descriptor) ~= "table" then return false, "descriptor-unavailable" end
+		local transform_spec, transform_reason = resolved_transform(unit, transform)
+		if not transform_spec then
+			diagnostic_once("transform-node:" .. tostring(transform_reason),
+				"[WOC:712] transform SKIP reason=%s node_name=%s chat=false",
+				tostring(transform_reason), tostring(policy and policy.TRANSFORM_NODE_NAME))
+			return false, transform_reason
+		end
 
 		if not resource_ready("material", descriptor.material) then
 			diagnostic_once("material:" .. tostring(descriptor.material),
@@ -89,7 +120,7 @@ function M.new(policy, transform_appearance, injected)
 
 		local transformed = transform_appearance
 			and transform_appearance.apply
-			and transform_appearance:apply(unit, transform, perspective, surface)
+			and transform_appearance:apply(unit, transform_spec, perspective, surface)
 		if transformed ~= true then return false, "transform-rejected" end
 
 		applied[unit] = true

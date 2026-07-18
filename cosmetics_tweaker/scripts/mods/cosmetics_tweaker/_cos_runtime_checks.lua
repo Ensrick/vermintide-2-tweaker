@@ -6,6 +6,7 @@ function M.install(mod, rt_register, deps)
     local _rt_register = rt_register
     local LA_PERSIST = deps.la_persist
     local SCORE_IDENTITY = deps.score_identity
+    local HUSK_IDENTITY = deps.husk_identity
     local COS_RPC_SCHEMA = deps.rpc_schema
     local COMPOSITE_ICONS = deps.composite_icons
     local CUSTOM_HATS = deps.custom_hats
@@ -27,6 +28,7 @@ function M.install(mod, rt_register, deps)
     local OFFHAND_PRELOAD_LIFECYCLE = deps.offhand_preload_lifecycle
     local MH_EMBED = deps.mh_embed
     local CWV_PEER_IDENTITY = deps.cwv_peer_identity
+    local LA_INSTANCE_POLICY = deps.la_instance_policy
 
 -- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
@@ -174,6 +176,39 @@ _rt_register("cos_la_score_screen_apply_wired", function()
         or SCORE_IDENTITY.should_purge_mismatch(nil)
         or not SCORE_IDENTITY.should_purge_mismatch(true) then
         return "spawn mismatch purge boundary does not distinguish human from bot owner alias"
+    end
+end)
+
+-- #698: peer-addressed appearance state must carry the exact human career.
+-- A human career change invalidates stale material/mesh state before husk
+-- wield; a bot sharing the host peer must neither consume nor purge it.
+_rt_register("issue698_husk_career_identity", function()
+    if type(HUSK_IDENTITY) ~= "table"
+        or type(HUSK_IDENTITY.new_entry) ~= "function"
+        or type(HUSK_IDENTITY.entry_matches_career) ~= "function"
+        or type(HUSK_IDENTITY.invalidate_for_career) ~= "function"
+    then
+        return "career-scoped husk identity policy missing"
+    end
+    local gk = HUSK_IDENTITY.new_entry("armor", "rt_gk", "rt_base", nil,
+        "es_questingknight")
+    local store = { rt_peer = { slot_skin = gk } }
+    local bot_removed, bot_reason = HUSK_IDENTITY.invalidate_for_career(
+        store, "rt_peer", "es_knight", false)
+    if bot_removed ~= 0 or bot_reason ~= "non-human-owner-alias"
+        or store.rt_peer.slot_skin ~= gk then
+        return "bot owner alias invalidated human appearance state"
+    end
+    local removed, reason = HUSK_IDENTITY.invalidate_for_career(
+        store, "rt_peer", "es_knight", true)
+    if removed ~= 1 or reason ~= "career-invalidated" or store.rt_peer ~= nil then
+        return "human career change retained stale Grail Knight appearance state"
+    end
+    local current = HUSK_IDENTITY.new_entry("armor", "rt_fk", "rt_base", nil,
+        "es_knight")
+    if not HUSK_IDENTITY.entry_matches_career(current, "es_knight")
+        or HUSK_IDENTITY.entry_matches_career(current, "es_questingknight") then
+        return "career match policy is not exact"
     end
 end)
 
@@ -444,6 +479,38 @@ local function _issue629_grail_knight_set_contract()
     end
 end
 _rt_register("issue629_grail_knight_set_contract", _issue629_grail_knight_set_contract)
+
+_rt_register("issue481_athanor_exact_offhand_target", function()
+    if type(LA_INSTANCE_POLICY) ~= "table"
+        or type(LA_INSTANCE_POLICY.resolve_preview_backend_id) ~= "function"
+        or type(LA_INSTANCE_POLICY.resolve_preview_selection) ~= "function"
+        or type(LA_INSTANCE_POLICY.preview_target_matches) ~= "function" then
+        return "exact Athanor offhand policy unavailable"
+    end
+    local la_key = "Kruber_empire_shield_basic1"
+    local gk_key = "cos_gk_purpure_azure_shield_variant"
+    local records = {
+        la_bid = { left_hand_unit = { la_armoury_key = la_key } },
+        gk_bid = { left_hand_unit = { la_armoury_key = gk_key } },
+    }
+    local la_pool = { { la_armoury_key = la_key } }
+    local gk_pool = { { la_armoury_key = gk_key } }
+    if LA_INSTANCE_POLICY.resolve_preview_backend_id(nil, "es_sword_shield",
+            "gk_bid", "es_sword_shield_breton") ~= nil then
+        return "unrelated active customization item crossed preview families"
+    end
+    if not LA_INSTANCE_POLICY.resolve_preview_selection(records, "la_bid",
+            "left_hand_unit", la_pool)
+        or LA_INSTANCE_POLICY.resolve_preview_selection(records, "la_bid",
+            "left_hand_unit", gk_pool) ~= nil then
+        return "exact LA/Purpure selection ownership drifted"
+    end
+    local la_variant = { new_units = { "la_1p", "la_3p" } }
+    if not LA_INSTANCE_POLICY.preview_target_matches("la_3p", la_variant)
+        or LA_INSTANCE_POLICY.preview_target_matches("gk_3p", la_variant) then
+        return "spawn-data target validation drifted"
+    end
+end)
 
 mod:command("verify_gk_set", "Verify the #629 Grail Knight cosmetic-set resource and registration contract", function()
     local err = _issue629_grail_knight_set_contract()

@@ -252,6 +252,14 @@ Both previewers spawn from a mutable, precomputed recipe (`spawn_data` /
 `units_to_spawn`), so the swap is **data mutation, not despawn/respawn**
 (weapon_tweaker's proven preview-swap pattern):
 
+The recipe remains the presentation authority after spawn. Pair each returned
+hand unit with its exact recipe entry (`spawn_data[i].unit_name`) before applying
+an authored material. Runtime `unit_name` metadata may be absent; absence is not
+permission to paint. A saved independent component must also be present in the
+exact item family's current hand pool, and it owns the target over a whole-skin
+fallback provider. Equal preview coordinates do not establish a shared target
+because sibling viewport worlds may intentionally reuse them (Cosmetics #481).
+
 1. Resolve the variant `def` by `backend_id` (`^(cwv_.-)_%d%d%d$`) via
    `_find_def` — a direct walk of `_variant_definitions`, so it resolves EVERY
    variant including those with no transform (registration-independent; see
@@ -672,7 +680,7 @@ The canonical surface vocabulary is owner 1P, owner 3P, bot 3P, remote husk
 3P, inventory preview, cosmetic preview, Athanor preview, ordinary crafting
 preview, lobby preview, score screen, and Hold-Tab. The canonical replay-edge
 vocabulary is instance load, initial spawn, equip, wield, customization change,
-style change, mission transition, respawn, hot join, peer ready, parity ready,
+style change, career change, mission transition, respawn, hot join, peer ready, parity ready,
 rejoin, preview open, preview reopen, lobby/score creation, and mod-disable
 restore. These lists are duplicated deliberately as immutable minima in the
 checker: changing the manifest alone cannot shrink the contract universe.

@@ -4,8 +4,9 @@
 # that baseline plus an explicit tuning/diagnostic overlay. Every inline dev
 # overlay is bounded by paired WT_DEV_OVERLAY markers; after those blocks plus
 # stream namespace/version identity are removed, all common files must be exact.
-# The public tree is separately scanned so dev widgets,
-# commands, status tags, and files cannot leak back into the beta.
+# The public tree is separately scanned so dev widgets, commands, and files
+# cannot leak back into the beta. The repo-wide #694 localization gate owns
+# lifecycle-tag rejection for both streams.
 
 [CmdletBinding()]
 param(
@@ -132,7 +133,6 @@ function Test-WtPublicSurface {
         @{ Name = 'dev port-status owner'; Pattern = '\bwt_port_status\b' },
         @{ Name = 'issue-specific live probe'; Pattern = '\b_wt290_diag\b|\[wt:290\]|\b_wt316_zoom_probe\b|\[wt:316\]|\b_wt_longbow_zoom_probe\b' },
         @{ Name = 'dev-only command'; Pattern = 'mod:command\(\s*"(?:animlog|force1p|force3p|wt_coverage|wt_audit_[^"]+)"' },
-        @{ Name = 'dev status tag'; Pattern = '\[(?:working|untested|verify-fix(?:-coop)?|diag|diagnostics-armed|needs animations|needs offsets|confirmed working|Issue\s+\d+(?:\s*&\s*\d+)?)\]' },
         @{ Name = 'dev menu label'; Pattern = 'Dev:\s' }
     )
     foreach ($rule in $forbidden) {

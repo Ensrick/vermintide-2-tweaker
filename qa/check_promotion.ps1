@@ -1,18 +1,17 @@
 # check_promotion.ps1 - BLOCKING dev-to-stable promotion gate (issue #327).
 #
-# Doctrine: docs/PROMOTION_PROCESS.md + LOCALIZATION_STANDARD.md section 13.5.
+# Doctrine: docs/PROMOTION_PROCESS.md + LOCALIZATION_STANDARD.md section 13.
 # Both 2026-07-04-era promotions each leaked a different checklist step to
 # PUBLIC subscribers (stable cim shipped 7 [untested] loc tags; stable ct went
 # out suffixed 0.7.130-beta without a named clean version). The advisory scans
-# (check_loc_tags.ps1) had warned for weeks without forcing the fix - promotion
-# needs a RED gate. ship.ps1 invokes this check BLOCKING whenever the shipped
-# mod is one of the five STABLE split dirs.
+# promotion needs a defense-in-depth RED gate. The repo-wide #694 check now blocks
+# this metadata in every stream; ship.ps1 also invokes this check for STABLE dirs.
 #
 # Checks (all hard failures):
-#   (a) TAG LEAK      - any sanctioned dev status tag (section 13.1 vocabulary)
+#   (a) TAG LEAK      - any forbidden lifecycle/status tag (section 13.1 vocabulary)
 #                       leading an authored en-string in the stable dir's
-#                       *_localization.lua. Stable never carries dev tags
-#                       (section 13.5 strip step; CLAUDE.md non-negotiable 11).
+#                       *_localization.lua. No active stream carries these tags
+#                       (CLAUDE.md non-negotiable 11).
 #   (b) SUFFIX        - stable MOD_VERSION carries a pre-release suffix.
 #                       OVERRIDE: a user-NAMED suffixed public version is
 #                       legitimate (issue #328 ruling, e.g. ct 0.7.130-beta
@@ -47,7 +46,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $PSScriptRoot }
 
-# The five unsuffixed _dev siblings (section 13.5 enumeration; keep in sync with
+# The five unsuffixed _dev siblings (keep in sync with
 # tools/promote/promote.ps1 and qa/check_loc_tags.ps1).
 $StableSplitDirs = @(
     'chaos_wastes_tweaker'

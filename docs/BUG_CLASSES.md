@@ -1067,6 +1067,12 @@ cosmetics_tweaker v0.9.66-dev (`_create_preview_widget` re-point + `_update_envi
 1. Grep the material name against `scripts/ui/views/ingame_ui_settings.lua` - the ingame `ui_renderer_function` / `ui_top_renderer_function` append whole material groups only inside `if is_in_inn then` (`:594-601` AreaSettings videos in ui_renderer_function, `:681-688` in ui_top_renderer_function; the same blocks add achievement atlas, inn singles, lock test, pose cosmetics, tutorial videos, DLC `ui_materials_in_inn`).
 2. If not there, grep DLC `*_ui_settings.lua` for `ui_materials_in_inn` (e.g. `store_ui_settings.lua:85`).
 3. Find the draw site (widget texture pass or `UIRenderer.draw_video`) and audit whether the widget can be skipped cleanly - every vanilla consumer of the widget field must nil-guard.
+4. Inventory every producer feeding the draw loop, not only
+   `create_ui_elements`. Scrollbar `list_widgets` and other local arrays may be
+   replaced after the static UI build. Issue #83's
+   `icon_block_arch_masked` widget was created by `_setup_weapon_stats` two
+   seconds before the fatal and never existed in the arrays covered by the
+   earlier static prune.
 
 ### Fix template
 Two layers, both idempotent (reference `_gut_gui_material_guard.lua`):
@@ -1084,8 +1090,16 @@ Two layers, both idempotent (reference `_gut_gui_material_guard.lua`):
 ```
 Layer 1 alone is not a fix (residency varies per mission - the pose atlas usually self-skips); layer 2 alone loses content the renderer could legally show (the store atlas IS resident and injects fine). Ship both.
 
+For dynamic list factories, put the guard immediately after the producer and
+prove each texture-bearing pass against the exact renderer that consumes that
+list. Disable only an unsafe pass; preserve its text/hotspot/safe-texture
+siblings. `UIWidget.init` clones content/style but retains the pass array, so
+mutation must clone-on-write or it can suppress sibling instances and later
+Keep widgets that share the definition. A broad `_draw`/`UIRenderer` `pcall` is
+too late and too wide.
+
 ### Reference fix
-gut_dev `_gut_gui_material_guard.lua` (pose atlas + store atlas + area videos in the one consolidated `UIRenderer.create` hook) + `_gut_mission_map.lua` video-widget skip guards, commit 1b2cea8 (v0.2.206-dev). Related but distinct: class 22 (shading-env VARIATION AV - env resident, variation name absent); `memory: reference_vt2_create_screen_gui_missing_material_crash` (create_screen_gui C-fatal at Gui CREATE time, pre-filter the material list).
+gut_dev `_gut_gui_material_guard.lua` (pose atlas + store atlas + area videos in the one consolidated `UIRenderer.create` hook) + `_gut_mission_map.lua` video-widget skip guards, commit 1b2cea8 (v0.2.206-dev). CIM `_cim_forge_widget_material_policy.lua` + `_setup_weapon_stats` producer hook (issue #83, v0.8.92-dev) is the dynamic-list reference. Related but distinct: class 22 (shading-env VARIATION AV - env resident, variation name absent); `memory: reference_vt2_create_screen_gui_missing_material_crash` (create_screen_gui C-fatal at Gui CREATE time, pre-filter the material list).
 
 ## 24. PlayerManager.remove_player fires on LEVEL TRANSITIONS, not just disconnects (peer-keyed caches wiped every map change)
 
@@ -1629,6 +1643,14 @@ Related coverage: Cosmetics runtime `glow_picker_apply_transaction_574` and
 source invariants for exact identity, explicit Apply, acknowledged state pull,
 and no-network-retry convergence.
 
+For independent components, exact item persistence alone is insufficient. Each
+preview adapter must prove the saved record belongs to the current item's hand
+pool and that the unit it will paint is the authored target. In
+`LootItemUnitPreviewer`, queued `spawn_data[i].unit_name` is stronger evidence
+than runtime unit metadata; an unreadable `Unit.get_data("unit_name")` must fail
+closed rather than authorize a paint. An independent row-2 owner also suppresses
+whole-skin fallback paint on that component (#481).
+
 ## 44. Wire-safe substitute is mechanically incompatible
 
 **First seen:** 2026-07-13 (CWV issue #296; fixed v0.1.400-dev)
@@ -1776,6 +1798,10 @@ Athanor, lobby, score, owner, bot, and husk surfaces.
   substitute.
 - Make every surface adapt that descriptor to its renderer/spawn API. A surface
   may not re-derive identity, illusion, or transform policy.
+- Pair each returned preview unit with the exact recipe entry that spawned it.
+  Do not infer ownership from a shared pivot, slot name, or unreadable runtime
+  metadata; multiple previewers can legitimately reuse identical coordinates in
+  separate viewport worlds (#481).
 - Treat item-card text as component-owned presentation: a selected offhand or
   shield supplies its own name and description, while the primary supplies
   only its side of a composed title. Never retain primary flavor text after an
@@ -1900,6 +1926,9 @@ worktrees share `%APPDATA%\VMBLauncher\settings.json`.
   `ProjectRoot` still named another checkout.
 - Local post-ship checks can compare against the invoking checkout even though
   VMBLauncher built and uploaded files from the configured checkout.
+- A clean-worktree ship builds/uploads successfully, then its GitHub-release
+  phase fails because that phase hardcodes an ignored launcher path inside the
+  invoking worktree instead of consuming the already-approved dependency.
 
 ### Fix template
 - At the wrapper boundary, temporarily bind the launcher's ProjectRoot to the
@@ -1911,9 +1940,17 @@ worktrees share `%APPDATA%\VMBLauncher\settings.json`.
 - Preserve the machine-global settings bytes and restore them in `finally` on
   success and failure. Hold a named OS mutex across binding, the launcher
   action, and restoration so concurrent ships cannot swap the root underneath
-  each other. Test two distinct worktree roots, every identity field, action
-  failure, mutex cleanup, and byte-exact restoration. Issue #647 owns the
-  wrapper gate.
+  each other.
+- Resolve launcher bytes once through a shared approved-candidate policy, pass
+  the exact path, provenance source, and approval anchor into every later
+  phase, and revalidate that immutable snapshot before reading version
+  metadata. Do not reread mutable global settings during the handoff. A direct
+  sub-tool may perform the same bounded fallback, but an explicit unapproved
+  path or source mismatch must fail closed.
+- Test two distinct worktree roots, every identity field, action failure, mutex
+  cleanup, byte-exact restoration, clean external dependency handoff, invalid
+  explicit paths, and provenance mismatch. Issues #647 and #683 own the wrapper
+  and cross-phase gates.
 
 ## 54. Late registry extension misses boot-time derived definitions
 
@@ -2063,9 +2100,11 @@ linked weapon node only at spawn.
 1. Log every channel before, immediately after, and at the next update. In the
    #613 log, both owner perspectives and husks kept Z `0` / scale `1` while the
    quaternion reached the target.
-2. Confirm the linked node from source. One-handed gear targets node `0`
-   (`attachment_node_linking.lua:2726-2753`); changing nodes is not supported by
-   this signature.
+2. Distinguish the game-owned attachment root from authored render children.
+   One-handed gear links node `0` (`attachment_node_linking.lua:2726-2753`),
+   but that proves attachment ownership, not that an imported unit accepts an
+   authored geometry pose on the same node. Resolve a child only from observed
+   unit-node identity; never guess an index.
 3. Follow vanilla's complete-pose contract. `GearUtils.link_units` saves
    `Unit.local_pose` (`gear_utils.lua:300-305`) and
    `restore_scene_graph` restores it through one `Unit.set_local_pose`
@@ -2073,13 +2112,21 @@ linked weapon node only at spawn.
 
 ### Fix template
 - Compose rotation, position, and scale into one
-  `Matrix4x4.from_quaternion_position_scale` and write node 0 atomically with
-  `Unit.set_local_pose` through the shared WeaponAppearance helper.
+  `Matrix4x4.from_quaternion_position_scale` and write the proven target node
+  atomically through the shared WeaponAppearance helper. Leave attachment node
+  `0` under GearUtils ownership when live readback proves that root rejects the
+  complete pose; WOC issue #712 resolves its named `blightreaper` render child.
 - Return success only when every requested channel succeeds. Preserve a
-  per-channel/mode report for diagnostics; never OR setter results.
+  per-channel/mode/node/error report for diagnostics; never OR setter results.
 - Keep class 57's retained-state comparison for later animation drift. Test the
-  atomic path and a fallback where one channel raises. WOC `0.1.25-dev` is the
-  reference implementation.
+  atomic path, rejected attachment-root path, named-child path, and a fallback
+  where one channel raises. WOC `0.1.29-dev` is the current reference.
+
+**Refined 2026-07-18:** WOC `0.1.28-dev` live logs showed the atomic node-0
+write itself returning false on owner 1P/3P and character previews while the
+same units positively resolved their authored renderable as node `2`. This
+supersedes the earlier assumption that vanilla's scene-graph restoration made
+node 0 a universally writable authored-transform target.
 
 ## 59. Private/cross-career weapon template omits career ability actions
 
@@ -2094,6 +2141,8 @@ whose activated ability declares `action_name`.
 - Several otherwise unrelated weapons fail for the same career.
 - Copying only `activated_ability[1]` appears to work until a career selects an
   alternate row (Waywatcher's piercing action is the current two-row case).
+- Cross-mod startup reports `conflict:action_career_*` even though each
+  provider selected the same canonical action name.
 
 ### Diagnosis pattern
 1. Read `CharacterStateHelper._get_chain_action_data`; vanilla iterates
@@ -2106,6 +2155,10 @@ whose activated ability declares `action_name`.
 3. Verify each named `ActionTemplates` row exists and is present by identity on
    every enabled private/cross-career template. Ability-class careers do not
    need a fabricated weapon action.
+4. At every deep-clone boundary, inspect the private claim metadata as well as
+   `template.actions`. A deep clone can copy the donor's owner registry and
+   canonical action rows by value, producing false ownership and new table
+   identities even though the declared donor remains canonical.
 
 ### Fix template
 - Use `tools/shared_lib/_lib_career_weapon_actions.lua`; collect every declared
@@ -2122,11 +2175,17 @@ whose activated ability declares `action_name`.
   integration. Do not hand-copy `activated_ability[1]` in individual weapon
   constructors: that misses alternate rows and lets the next private template
   bypass the contract.
+- Before the first claim on a declared private clone, call the shared
+  `prepare_inherited_clone` boundary with an exact source token. It discards
+  copied donor claims and restores only rows whose donor is still the exact
+  canonical `ActionTemplates` value. Repeated preparation is a no-op, so a
+  later foreign replacement remains a hard conflict instead of being clobbered.
 - Missing career settings/action providers are integration failures: emit a
   bounded runtime error and fail the offline matrix. Never silently skip them.
 - Test all ten current actions, the Waywatcher alternate, existing-row identity,
-  missing providers, setting reapply, and disable cleanup. WOC 0.1.26-dev, WT
-  0.12.268-beta, and WT-dev 0.12.269-dev are the reference consumers.
+  missing providers, clone-claim contamination, repeated preparation, foreign
+  replacement, setting reapply, and disable cleanup. Issue #661 owns the
+  WT/CWV/WOC cross-provider regression.
 
 ## 60. Non-stacking aura drivers remove another source's buff
 
@@ -2162,3 +2221,42 @@ by `buff_to_add` template instead of retaining per-source ownership.
   merely to distinguish sources. Test two sources, one source leaving, the
   final source leaving, driver removal, and repeated idempotent updates. Career
   Tweaker `_crt_foot_knight.lua` is the reference implementation.
+
+## 61. Peer-addressed appearance state survives a human career change
+
+**First confirmed:** 2026-07-17 (Cosmetics Tweaker issue #698).
+**Lives in:** material, mesh, glow, pose, or presentation caches addressed only
+by network peer and replayed onto a newly spawned remote husk.
+
+### Symptoms
+- A remote player switches career without leaving the lobby and their new body
+  receives armor, a hat, or another appearance choice from the prior career.
+- The stale repaint can occur after the correct vanilla body has already spawned,
+  making the failure look like a material race rather than an identity leak.
+- A host-owned bot can make a peer-only fix worse because bots share their
+  network owner's peer id.
+
+### Diagnosis pattern
+1. Treat `peer_id` as a transport address, not wearer identity. Compare the
+   cached record's creation career with the live render unit's inventory
+   `_career_name`; `RemotePlayer.career_name` resolves the synchronized
+   profile/career tuple, while `SimpleHuskInventoryExtension.init` stamps the
+   same career on the render-side inventory.
+2. Audit every replay edge, not only the original apply: deferred sends,
+   authoritative rebroadcast, pull-on-ready, hot join, transition reconcile,
+   husk pre-spawn mesh substitution, and post-wield material paint.
+3. Prove that a mismatched unit is the player-controlled human before purging.
+   A bot mismatch is only an owner-peer alias and must not erase human state.
+
+### Fix template
+- Stamp every peer-store entry and required RPC payload with the exact wearer
+  career; bump the RPC schema when introducing that required field so legacy
+  unstamped records fail closed.
+- Before a human husk wield/spawn, invalidate mismatched and unstamped entries.
+  Require the same exact career at mesh substitution and material reconcile.
+- Reject bots from consuming the human peer store and never let their career
+  mismatch purge it. Test one human career swap, one same-career control, one
+  shared-peer bot, transition, hot join, and missing legacy identity.
+- Register career change as a canonical appearance replay edge. Cosmetics
+  Tweaker `_cos_husk_identity.lua` and `test_cos_husk_identity.lua` are the
+  reference policy and regression fixture.

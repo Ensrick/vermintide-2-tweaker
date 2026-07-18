@@ -1,5 +1,52 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.30-dev (2026-07-17) - #661 shared clone-action preparation [verify-fix]
+
+- Replaced Blightreaper's one-off inherited-action repair with the shared
+  WT/CWV/WOC clone-preparation primitive. It now also removes claim metadata
+  copied from the Elf Sword donor before WOC claims the private template.
+- Kept #690's exact provenance rule: only a donor row with canonical
+  `ActionTemplates` identity is restored. Unknown provider rows still abort
+  registration rather than being overwritten.
+- Added offline coverage for copied claims, repeated preparation, provider
+  release order, and foreign replacement.
+
+**Solo verify:** Equip Blightreaper on Bardin and Kruber, use both career
+abilities before and after swapping weapons, then run `/woc_regression_test`.
+Registration must remain ready and no career-action conflict may appear.
+
+## 0.1.29-dev (2026-07-18) - #712 authored render-node transform
+
+- Corrected the stale node-0 diagnosis with two live-session proofs: the
+  requested `{-90,-90,-90}` rotation, `-0.3` Z offset, and `0.9` scale reached
+  WOC, but Stingray rejected the atomic write on the linked attachment root.
+- Resolve the exact imported `blightreaper` render node on each 1P, 3P, husk,
+  and preview unit and apply the canonical pose there. GearUtils retains sole
+  ownership of attachment node 0.
+- Extended the shared WeaponAppearance descriptor with an explicit transform
+  node and bounded write-error reporting. Missing named nodes fail closed.
+- Added structural coverage for owner 1P/3P, bot/husk, character and item
+  previews, replacement units across mission transitions, root-write rejection,
+  and retained-state repair. In-game and two-peer verification remain required.
+
+## 0.1.28-dev (2026-07-17) - #690 Blightreaper registration regression
+
+- Reconciled only deep-cloned career-action rows that can be proven to inherit
+  the donor's canonical `ActionTemplates` identity. The v0.1.27 shared
+  ownership guard now distinguishes those safe inherited rows from genuine
+  provider conflicts instead of aborting Blightreaper registration.
+- Added one-per-distinct-gate, 12-line-budget `printf` diagnostics for deferred
+  registration. Retries remain limited to the existing keep/mission entry
+  lifecycle boundary; no frame/update retry was added.
+- Added offline integration coverage for the exact clone/identity failure and
+  a live `issue690_blightreaper_registration_gate_contract` check.
+
+**Solo verify:** start with Blightreaper enabled and More Items Library above
+WOC. The log must contain `[WOC] registered Blightreaper`, CIM must not report a
+missing `ItemMasterList` row, and `/woc_regression_test` must report
+`issue690_blightreaper_registration_gate_contract` PASS with zero failures.
+This fix is offline-verified only until that in-game evidence is attached.
+
 ## 0.1.27-dev (2026-07-17) - #661 shared career-action ownership [verify-fix]
 
 - Registered Blightreaper career actions through the shared WT/CWV/WOC claim contract so another provider cannot remove a still-required ability row.
