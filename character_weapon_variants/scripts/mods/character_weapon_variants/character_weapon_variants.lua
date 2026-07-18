@@ -3744,6 +3744,34 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
 	if _om.combat_styles and _om.combat_styles.on_husk_wield then
 		_om.combat_styles:on_husk_wield(self, slot_name)
 	end
+	-- #474: vanilla has just replayed the network-safe es_handgun wield event.
+	-- If exact/skin-positive identity proves this is the Old Musket, replace that
+	-- body stance once with the selected receiver-native Musket event. This must
+	-- remain post-vanilla: doing it in GearUtils.spawn_inventory_unit is
+	-- immediately clobbered by SimpleHuskInventoryExtension._wield_slot.
+	if _om._old_musket_apply_husk_stance then
+		local owner_unit = (self and self._unit) or unit_3p
+		local slot = equipment and equipment.slots and equipment.slots[slot_name]
+		local item_data = slot and slot.item_data
+		local base_name = item_data and item_data.name
+		local def, identity_state
+		if _om._husk_identity_def then
+			def, identity_state = _om._husk_identity_def(
+				owner_unit, slot_name, base_name)
+		end
+		if not def and (identity_state == nil or identity_state == "none")
+				and _om._husk_resolve_display_def then
+			def = _om._husk_resolve_display_def(base_name,
+				self and self._career_name, slot and slot.skin)
+		end
+		if def and def.item_key == "cwv_es_musket_old" then
+			local mode = _om._old_musket_mode_for_owner
+				and _om._old_musket_mode_for_owner(owner_unit, slot_name)
+				or "ranged"
+			_om._old_musket_apply_husk_stance(owner_unit, slot_name,
+				equipment and equipment.right_hand_wielded_unit_3p, mode, "husk_wield_post")
+		end
+	end
 end)
 _cwv_husk_wield_diag_installed = true
 

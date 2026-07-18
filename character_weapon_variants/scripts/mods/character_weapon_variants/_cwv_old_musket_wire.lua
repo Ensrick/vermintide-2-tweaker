@@ -14,7 +14,8 @@
 -- _old_musket_mode_for_local_slot, _old_musket_record_and_publish,
 -- _old_musket_publish_local_loadout, _old_musket_request_states,
 -- _old_musket_publish_fire, _old_musket_accept_mode,
--- _old_musket_play_remote_fire, _old_musket_mode_channel/_schema.
+-- _old_musket_play_remote_fire, _old_musket_resolve_husk_wield_event,
+-- _old_musket_apply_husk_stance, _old_musket_mode_channel/_schema.
 --
 -- Load-time deps: none beyond (mod, ctx.om). Runtime deps resolved lazily via
 -- _om: _cwv_key_for_item, _cwv_send_identity_slots, appearance_lifecycle_policy,
@@ -24,6 +25,7 @@ return function(mod, ctx)
 local _om = ctx.om
 	local CHANNEL, SCHEMA = "cwv_old_musket_mode_v1", 1
 	local modes_by_owner = setmetatable({}, { __mode = "k" })
+	local stance_by_owner = setmetatable({}, { __mode = "k" })
 	local modes_by_peer = {}
 	local modes_by_backend = {}
 	local diag_seen, diag_count, DIAG_MAX = {}, 0, 48
@@ -72,8 +74,66 @@ local _om = ctx.om
 		local ok, inv = pcall(ScriptUnit.extension, owner_unit, "inventory_system")
 		if not ok or not inv or not inv.equipment then return nil end
 		local equipment = inv:equipment()
-		return equipment and equipment.wielded_slot, equipment
+		return equipment and equipment.wielded_slot, equipment, inv
 	end
+
+	-- Mirror SimpleHuskInventoryExtension._wield_slot's career-aware resolver
+	-- (vanilla source lines 637/709-724) against the selected Old Musket
+	-- template. The wire item deliberately remains es_handgun for lookup safety,
+	-- so vanilla always resolves `to_handgun`; melee mode must replay the
+	-- receiver-native polearm wield after vanilla returns.
+	local function resolve_husk_wield_event(mode, career_name)
+		if mode ~= "melee" and mode ~= "ranged" then return nil, "invalid_mode" end
+		local weapons = rawget(_G, "Weapons")
+		local template = weapons and (mode == "melee"
+			and weapons.old_musket_template_melee or weapons.old_musket_template)
+		if type(template) ~= "table" then return nil, "template_unavailable" end
+		local wield = template.wield_anim
+		local by_career = template.wield_anim_career
+		if type(by_career) == "table" then wield = by_career[career_name] or wield end
+		local wield_3p = template.wield_anim_3p
+		local by_career_3p = template.wield_anim_career_3p
+		if type(by_career_3p) == "table" then
+			wield_3p = by_career_3p[career_name] or wield_3p
+		end
+		return wield_3p or wield, wield_3p and "3p" or "fallback"
+	end
+	_om._old_musket_resolve_husk_wield_event = resolve_husk_wield_event
+
+	local function apply_husk_stance(owner_unit, slot_name, weapon_unit, mode, surface)
+		if not owner_unit or not Unit.alive(owner_unit)
+				or not weapon_unit or not Unit.alive(weapon_unit) then
+			return false, "unit_unavailable"
+		end
+		local _, _, inventory = owner_slot(owner_unit)
+		local career_name = inventory and inventory._career_name
+		local event_name, event_source = resolve_husk_wield_event(mode, career_name)
+		if not event_name then return false, event_source end
+		local slots = stance_by_owner[owner_unit]
+		if not slots then slots = {}; stance_by_owner[owner_unit] = slots end
+		local prior = slots[slot_name]
+		if prior and prior.weapon_unit == weapon_unit and prior.mode == mode
+				and prior.event_name == event_name then
+			return true, "deduped"
+		end
+		-- Match vanilla's post-spawn body transition. Both events are compiled
+		-- vanilla animation names; no custom NetworkLookup entry is introduced.
+		local flow_ok = pcall(Unit.flow_event, owner_unit, "lua_wield")
+		local anim_ok = pcall(Unit.animation_event, owner_unit, event_name)
+		if not anim_ok then return false, "animation_rejected" end
+		slots[slot_name] = {
+			weapon_unit = weapon_unit,
+			mode = mode,
+			event_name = event_name,
+		}
+		diag_once("stance:" .. tostring(owner_unit) .. ":" .. tostring(slot_name)
+				.. ":" .. tostring(weapon_unit) .. ":" .. mode,
+			"husk stance dispatched_unverified owner=%s slot=%s surface=%s mode=%s career=%s anim=%s source=%s flow=%s",
+			tostring(owner_unit), tostring(slot_name), tostring(surface), mode,
+			tostring(career_name), tostring(event_name), tostring(event_source), tostring(flow_ok))
+		return true, "dispatched_unverified"
+	end
+	_om._old_musket_apply_husk_stance = apply_husk_stance
 
 	local function apply_owner(owner_unit, slot_name, mode, surface)
 		local wielded_slot, equipment = owner_slot(owner_unit)
@@ -83,6 +143,7 @@ local _om = ctx.om
 		_om._track_old_musket_unit(unit, "3p", mode)
 		_om._apply_old_musket_textures(unit)
 		_om._apply_old_musket_transform(unit, "3p", mode)
+		apply_husk_stance(owner_unit, slot_name, unit, mode, surface)
 		local pos, _, scale = _om._old_musket_transform_components("3p", mode)
 		diag_once("apply:" .. tostring(owner_unit) .. ":" .. slot_name .. ":" .. mode .. ":" .. surface,
 			"presentation owner=%s slot=%s surface=%s mode=%s final_pos=(%.3f,%.3f,%.3f) final_scale=(%.3f,%.3f,%.3f)",
@@ -217,7 +278,7 @@ local _om = ctx.om
 		modes_by_peer[sender_peer_id], peer_slots[slot_name] = peer_slots, mode
 		if bid and valid_bid(bid) then modes_by_backend[bid] = mode end
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
+		local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id)
 		player = ok and player or nil
 		local owner_unit = player and player.player_unit
 		if owner_unit then
@@ -235,7 +296,7 @@ local _om = ctx.om
 	local function play_remote_fire(sender_peer_id, event_name, source)
 		if event_name ~= "player_combat_weapon_rifle_fire" then return false end
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
+		local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id)
 		player = ok and player or nil
 		local owner_unit = player and player.player_unit
 		local world = rawget(_G, "Application") and Application.main_world()
