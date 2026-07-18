@@ -1,5 +1,19 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.29-dev (2026-07-18) - #712 authored render-node transform
+
+- Corrected the stale node-0 diagnosis with two live-session proofs: the
+  requested `{-90,-90,-90}` rotation, `-0.3` Z offset, and `0.9` scale reached
+  WOC, but Stingray rejected the atomic write on the linked attachment root.
+- Resolve the exact imported `blightreaper` render node on each 1P, 3P, husk,
+  and preview unit and apply the canonical pose there. GearUtils retains sole
+  ownership of attachment node 0.
+- Extended the shared WeaponAppearance descriptor with an explicit transform
+  node and bounded write-error reporting. Missing named nodes fail closed.
+- Added structural coverage for owner 1P/3P, bot/husk, character and item
+  previews, replacement units across mission transitions, root-write rejection,
+  and retained-state repair. In-game and two-peer verification remain required.
+
 ## 0.1.28-dev (2026-07-17) - #690 Blightreaper registration regression
 
 - Reconciled only deep-cloned career-action rows that can be proven to inherit

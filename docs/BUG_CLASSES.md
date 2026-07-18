@@ -2100,9 +2100,11 @@ linked weapon node only at spawn.
 1. Log every channel before, immediately after, and at the next update. In the
    #613 log, both owner perspectives and husks kept Z `0` / scale `1` while the
    quaternion reached the target.
-2. Confirm the linked node from source. One-handed gear targets node `0`
-   (`attachment_node_linking.lua:2726-2753`); changing nodes is not supported by
-   this signature.
+2. Distinguish the game-owned attachment root from authored render children.
+   One-handed gear links node `0` (`attachment_node_linking.lua:2726-2753`),
+   but that proves attachment ownership, not that an imported unit accepts an
+   authored geometry pose on the same node. Resolve a child only from observed
+   unit-node identity; never guess an index.
 3. Follow vanilla's complete-pose contract. `GearUtils.link_units` saves
    `Unit.local_pose` (`gear_utils.lua:300-305`) and
    `restore_scene_graph` restores it through one `Unit.set_local_pose`
@@ -2110,13 +2112,21 @@ linked weapon node only at spawn.
 
 ### Fix template
 - Compose rotation, position, and scale into one
-  `Matrix4x4.from_quaternion_position_scale` and write node 0 atomically with
-  `Unit.set_local_pose` through the shared WeaponAppearance helper.
+  `Matrix4x4.from_quaternion_position_scale` and write the proven target node
+  atomically through the shared WeaponAppearance helper. Leave attachment node
+  `0` under GearUtils ownership when live readback proves that root rejects the
+  complete pose; WOC issue #712 resolves its named `blightreaper` render child.
 - Return success only when every requested channel succeeds. Preserve a
-  per-channel/mode report for diagnostics; never OR setter results.
+  per-channel/mode/node/error report for diagnostics; never OR setter results.
 - Keep class 57's retained-state comparison for later animation drift. Test the
-  atomic path and a fallback where one channel raises. WOC `0.1.25-dev` is the
-  reference implementation.
+  atomic path, rejected attachment-root path, named-child path, and a fallback
+  where one channel raises. WOC `0.1.29-dev` is the current reference.
+
+**Refined 2026-07-18:** WOC `0.1.28-dev` live logs showed the atomic node-0
+write itself returning false on owner 1P/3P and character previews while the
+same units positively resolved their authored renderable as node `2`. This
+supersedes the earlier assumption that vanilla's scene-graph restoration made
+node 0 a universally writable authored-transform target.
 
 ## 59. Private/cross-career weapon template omits career ability actions
 

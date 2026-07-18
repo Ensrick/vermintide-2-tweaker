@@ -25,6 +25,11 @@ local function _triplet(value)
         and type(value[3]) == "number"
 end
 
+local function _bounded_error(value)
+    local text = tostring(value or "unknown-error"):gsub("[%c]+", " ")
+    return #text > 160 and text:sub(1, 160) or text
+end
+
 function M.new(injected)
     local api = injected or _default_api()
     local unit_api = api.unit
@@ -68,9 +73,32 @@ function M.new(injected)
     -- rotation before a unit exists. It performs no engine write.
     WA.to_quaternion = quaternion_value
 
-    local function read_channel(method, unit)
+    local function transform_node(spec_or_node)
+        local node = type(spec_or_node) == "table" and spec_or_node.node
+            or spec_or_node
+        if type(node) == "number" and node >= 0 and node == math.floor(node) then
+            return node
+        end
+        return 0
+    end
+
+    local function offset_was_applied(unit, node)
+        local nodes = offset_applied[unit]
+        return type(nodes) == "table" and nodes[node] == true
+    end
+
+    local function mark_offset_applied(unit, node)
+        local nodes = offset_applied[unit]
+        if type(nodes) ~= "table" then
+            nodes = {}
+            offset_applied[unit] = nodes
+        end
+        nodes[node] = true
+    end
+
+    local function read_channel(method, unit, node)
         if type(method) ~= "function" then return nil end
-        local ok, value = pcall(method, unit, 0)
+        local ok, value = pcall(method, unit, node)
         return ok and value or nil
     end
 
@@ -81,89 +109,102 @@ function M.new(injected)
     local function apply_atomic_pose(unit, spec)
         if type(matrix4x4) ~= "table"
                 or type(matrix4x4.from_quaternion_position_scale) ~= "function"
-                or type(unit_api.set_local_pose) ~= "function" then return nil end
+                or type(unit_api.set_local_pose) ~= "function" then
+            return nil, "atomic-api-unavailable"
+        end
+
+        local node = transform_node(spec)
 
         local position
         if spec.position ~= nil then
             position = vector(spec.position)
-            if not position then return false end
+            if not position then return false, "invalid-position" end
         else
-            position = read_channel(unit_api.local_position, unit)
+            position = read_channel(unit_api.local_position, unit, node)
         end
         local offset_pending = spec.position == nil and spec.offset ~= nil
-            and not offset_applied[unit]
+            and not offset_was_applied(unit, node)
         if offset_pending then
             if not _triplet(spec.offset) or not position
                     or type(vector_to_elements) ~= "function"
-                    or type(vector_new) ~= "function" then return false end
+                    or type(vector_new) ~= "function" then
+                return false, "invalid-offset"
+            end
             local ok, x, y, z = pcall(vector_to_elements, position)
-            if not ok then return false end
+            if not ok then return false, "offset-read-rejected" end
             ok, position = pcall(vector_new,
                 x + spec.offset[1], y + spec.offset[2], z + spec.offset[3])
-            if not ok then return false end
+            if not ok then return false, "offset-build-rejected" end
         end
 
         local scale
         if spec.scale ~= nil then
             scale = vector(spec.scale)
-            if not scale then return false end
+            if not scale then return false, "invalid-scale" end
         else
-            scale = read_channel(unit_api.local_scale, unit)
+            scale = read_channel(unit_api.local_scale, unit, node)
         end
         local rotation
         if spec.rotation ~= nil then
             rotation = quaternion_value(spec.rotation)
-            if not rotation then return false end
+            if not rotation then return false, "invalid-rotation" end
         else
-            rotation = read_channel(unit_api.local_rotation, unit)
+            rotation = read_channel(unit_api.local_rotation, unit, node)
         end
-        if not position or not scale or not rotation then return false end
+        if not position or not scale or not rotation then
+            return false, "pose-read-rejected"
+        end
 
         local ok, pose = pcall(
             matrix4x4.from_quaternion_position_scale, rotation, position, scale)
-        if not ok or pose == nil then return false end
-        ok = pcall(unit_api.set_local_pose, unit, 0, pose)
-        if ok and offset_pending then offset_applied[unit] = true end
-        return ok
+        if not ok or pose == nil then return false, "pose-build-rejected" end
+        local write_ok, write_error = pcall(unit_api.set_local_pose, unit, node, pose)
+        if write_ok and offset_pending then mark_offset_applied(unit, node) end
+        if write_ok then return true, nil end
+        return false, _bounded_error(write_error)
     end
 
-    function WA.apply_scale(unit, value)
+    function WA.apply_scale(unit, value, node)
+        node = transform_node(node)
         local resolved = vector(value)
         if not resolved or not alive(unit)
                 or type(unit_api.set_local_scale) ~= "function" then return false end
-        return pcall(unit_api.set_local_scale, unit, 0, resolved)
+        return pcall(unit_api.set_local_scale, unit, node, resolved)
     end
 
-    function WA.apply_offset(unit, value)
-        if not _triplet(value) or not alive(unit) or offset_applied[unit]
+    function WA.apply_offset(unit, value, node)
+        node = transform_node(node)
+        if not _triplet(value) or not alive(unit) or offset_was_applied(unit, node)
                 or type(unit_api.local_position) ~= "function"
                 or type(unit_api.set_local_position) ~= "function"
                 or type(vector_to_elements) ~= "function"
                 or type(vector_new) ~= "function" then return false end
-        local ok, current = pcall(unit_api.local_position, unit, 0)
+        local ok, current = pcall(unit_api.local_position, unit, node)
         if not ok then return false end
         local elements_ok, x, y, z = pcall(vector_to_elements, current)
         if not elements_ok then return false end
         local target_ok, target = pcall(
             vector_new, x + value[1], y + value[2], z + value[3])
         if not target_ok then return false end
-        local applied = pcall(unit_api.set_local_position, unit, 0, target)
-        if applied then offset_applied[unit] = true end
+        local applied = pcall(unit_api.set_local_position, unit, node, target)
+        if applied then mark_offset_applied(unit, node) end
         return applied
     end
 
-    function WA.apply_position(unit, value)
+    function WA.apply_position(unit, value, node)
+        node = transform_node(node)
         local resolved = vector(value)
         if not resolved or not alive(unit)
                 or type(unit_api.set_local_position) ~= "function" then return false end
-        return pcall(unit_api.set_local_position, unit, 0, resolved)
+        return pcall(unit_api.set_local_position, unit, node, resolved)
     end
 
-    function WA.apply_rotation(unit, value)
+    function WA.apply_rotation(unit, value, node)
+        node = transform_node(node)
         local resolved = quaternion_value(value)
         if not resolved or not alive(unit)
                 or type(unit_api.set_local_rotation) ~= "function" then return false end
-        return pcall(unit_api.set_local_rotation, unit, 0, resolved)
+        return pcall(unit_api.set_local_rotation, unit, node, resolved)
     end
 
     -- `textures` accepts either `{ slot = path }` or an ordered array of
@@ -203,6 +244,7 @@ function M.new(injected)
             transform_mode = "none",
         }
         if type(spec) ~= "table" or not alive(unit) then return report end
+        report.transform_node = transform_node(spec)
 
         local has_transform = spec.scale ~= nil or spec.position ~= nil
             or spec.offset ~= nil or spec.rotation ~= nil
@@ -214,28 +256,30 @@ function M.new(injected)
             if spec.rotation ~= nil then requested[#requested + 1] = "rotation" end
             report.requested = report.requested + #requested
 
-            local atomic = apply_atomic_pose(unit, spec)
+            local atomic, atomic_error = apply_atomic_pose(unit, spec)
             if atomic ~= nil then
                 report.transform_mode = "atomic-local-pose"
+                report.transform_error = atomic_error
                 for _, channel in ipairs(requested) do
                     report.channels[channel] = atomic
                 end
             else
                 report.transform_mode = "per-channel-fallback"
+                local node = report.transform_node
                 if spec.scale ~= nil then
-                    report.channels.scale = WA.apply_scale(unit, spec.scale)
+                    report.channels.scale = WA.apply_scale(unit, spec.scale, node)
                 end
                 if spec.position ~= nil then
-                    report.channels.position = WA.apply_position(unit, spec.position)
+                    report.channels.position = WA.apply_position(unit, spec.position, node)
                 elseif spec.offset ~= nil then
                     -- A previously applied offset is an idempotent success for a
                     -- complete descriptor even though the direct primitive keeps
                     -- its historical false-on-second-call return contract.
-                    report.channels.offset = offset_applied[unit] == true
-                        or WA.apply_offset(unit, spec.offset)
+                    report.channels.offset = offset_was_applied(unit, node)
+                        or WA.apply_offset(unit, spec.offset, node)
                 end
                 if spec.rotation ~= nil then
-                    report.channels.rotation = WA.apply_rotation(unit, spec.rotation)
+                    report.channels.rotation = WA.apply_rotation(unit, spec.rotation, node)
                 end
             end
         end

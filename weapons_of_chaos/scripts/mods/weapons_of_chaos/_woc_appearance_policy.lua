@@ -15,14 +15,18 @@ M.VANILLA_3P = M.VANILLA_1P .. "_3p"
 M.DONOR_MATERIAL_1P = M.VANILLA_1P
 M.DONOR_MATERIAL_3P = M.VANILLA_3P
 M.TEXTURE_ROOT = "textures/woc_blightreaper/"
+-- The imported unit's attachment root is owned by GearUtils linking. Live
+-- issue #712 evidence resolves the visible authored render node by this exact
+-- name on both 1P and 3P units (node index 2 in the observed bundles).
+M.TRANSFORM_NODE_NAME = "blightreaper"
 M.PULSE_VARIABLES = {
 	{ name = "rune_emissive_color", value = { 5, 4.4, 0 } },
 	{ name = "intensity", value = 1.746000051498413 },
 	{ name = "pulse", value = { 1, 0.5 } },
 }
--- Canonical linked-root pose. The durable owner resolves the offset against the
--- linked baseline and writes scale/position/rotation atomically through the
--- shared WeaponAppearance helper.
+-- Canonical authored-mesh pose. The durable owner resolves the offset against
+-- that render node's baseline and writes scale/position/rotation atomically
+-- without mutating the game-owned attachment root.
 M.TRANSFORM = {
 	scale = { 0.9, 0.9, 0.9 },
 	offset = { 0, 0, -0.3 },
