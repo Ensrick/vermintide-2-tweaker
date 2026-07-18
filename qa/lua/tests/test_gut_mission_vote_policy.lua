@@ -32,6 +32,14 @@ return function(H, repo_root)
             "VoteManager client vote-start hook missing")
         H.truthy(source:find("template.ingame_vote = true", 1, true),
             "per-vote input/HUD promotion missing")
+        H.truthy(source:find('type(active_template) == "table"', 1, true),
+            "malformed active-template guard missing")
+        H.truthy(source:find("local function _pack_returns(...)", 1, true),
+            "full-wrapper return packing missing")
+        local _, forwarded_return_count = source:gsub(
+            "return unpack%(returns, 1, returns%.n%)", "")
+        H.equal(forwarded_return_count, 2,
+            "both full wrappers must preserve the complete return tuple")
         H.truthy(source:find("issue700_mission_vote_client_popup", 1, true),
             "runtime regression registration missing")
         H.truthy(source:find("verify_gut_mission_vote", 1, true),

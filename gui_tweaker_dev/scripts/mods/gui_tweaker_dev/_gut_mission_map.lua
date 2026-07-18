@@ -205,11 +205,13 @@ end
 local function _promote_active_mission_vote(self)
     local active, mechanism, level_key, is_in_inn = _active_vote_context(self)
     local vote_name = active and active.name or nil
+    local active_template = active and active.template or nil
 
     if VotePolicy.needs_ingame_hud(vote_name, mechanism, level_key, is_in_inn)
-        and active.template.ingame_vote ~= true then
+        and type(active_template) == "table"
+        and active_template.ingame_vote ~= true then
         local template = {}
-        for key, value in pairs(active.template) do
+        for key, value in pairs(active_template) do
             template[key] = value
         end
         template.ingame_vote = true
@@ -219,16 +221,25 @@ local function _promote_active_mission_vote(self)
     end
 end
 
+-- Full wrappers must transparently preserve the entire return tuple for other hooks
+-- in the chain (including trailing nils), even though the currently audited vanilla
+-- implementations have no explicit return value.
+local function _pack_returns(...)
+    return { n = select("#", ...), ... }
+end
+
 local _gut_consolidated_server_vote_start_hook = true
 mod:hook("VoteManager", "_server_start_vote", function(func, self, name, ignore_peer_list, data)
-    func(self, name, ignore_peer_list, data)
+    local returns = _pack_returns(func(self, name, ignore_peer_list, data))
     _promote_active_mission_vote(self)
+    return unpack(returns, 1, returns.n)
 end)
 
 local _gut_consolidated_client_vote_start_hook = true
 mod:hook("VoteManager", "_start_vote_base", function(func, self, peer_id, vote_type_id, sync_data, voters)
-    func(self, peer_id, vote_type_id, sync_data, voters)
+    local returns = _pack_returns(func(self, peer_id, vote_type_id, sync_data, voters))
     _promote_active_mission_vote(self)
+    return unpack(returns, 1, returns.n)
 end)
 
 mod._gut700_mission_vote_policy = VotePolicy
@@ -274,7 +285,7 @@ mod:command("verify_gut_mission_vote", "Verify the in-mission mission-vote HUD b
         and not VotePolicy.needs_ingame_hud(
             "game_settings_vote", "adventure", "inn_level", true)
     local active_ready = not active or active.name ~= "game_settings_vote"
-        or active.template.ingame_vote == true
+        or (type(active.template) == "table" and active.template.ingame_vote == true)
     local pass = mod._gut700_vote_popup_hooks_installed == true and policy_ok and active_ready
     local line = string.format(
         "[gut:700] verify hooks=%s policy=%s active_vote=%s active_promoted=%s mechanism=%s level=%s result=%s",
