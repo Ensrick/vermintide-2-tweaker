@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.245-dev"
+local MOD_VERSION = "0.2.246-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -48,6 +48,18 @@ mod.GT_AI_RPC_SCHEMA = 2
 -- Bump ONLY when the `gt_draw_leash` payload shape changes. Initial value is 1;
 -- never define lower.
 mod.GT_DRAW_RPC_SCHEMA = 1
+
+-- Creature-spawner client-request RPC schema versioning (VMF_RECIPES.md § 10,
+-- issue 693). The `gt_cs_request` client->host spawn/destroy request and the
+-- `gt_cs_ack` host->client acknowledgement (sender + receiver both in
+-- _gt_creature_spawner.lua) prepend this as the FIRST positional arg of every
+-- send and validate it as the first arg of the receiver. VMF network messages
+-- reach only peers running gt_dev, so the payload never touches a vanilla peer
+-- (zero wire-safety exposure); a peer on a different gt_dev build fails the
+-- match and the host drops the request gracefully -- no spawn, no crash. Bump
+-- ONLY when the `gt_cs_request`/`gt_cs_ack` payload shape changes. Initial
+-- value is 1; never define lower.
+mod.GT_CS_RPC_SCHEMA = 1
 
 -- Copied shared debug helper (master: tools/shared_lib/_lib_debug.lua). The
 -- bundled copy keeps gt_dev standalone while exact-drift QA prevents a local
