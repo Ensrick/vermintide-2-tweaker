@@ -191,11 +191,12 @@ local function _appearance_diag(format, ...)
 	_appearance_diag_budget = _appearance_diag_budget - 1
 	pcall(printf, format, ...)
 end
-local function _unit_snapshot(unit)
+local function _unit_snapshot(unit, node)
 	if not unit or not Unit.alive(unit) then return nil end
-	local ok_pos, position = pcall(Unit.local_position, unit, 0)
-	local ok_scale, scale = pcall(Unit.local_scale, unit, 0)
-	local ok_rot, rotation = pcall(Unit.local_rotation, unit, 0)
+	node = type(node) == "number" and node or 0
+	local ok_pos, position = pcall(Unit.local_position, unit, node)
+	local ok_scale, scale = pcall(Unit.local_scale, unit, node)
+	local ok_rot, rotation = pcall(Unit.local_rotation, unit, node)
 	if not ok_pos or not ok_scale or not ok_rot then return nil end
 	local ok_pe, px, py, pz = pcall(Vector3.to_elements, position)
 	local ok_se, sx, sy, sz = pcall(Vector3.to_elements, scale)
@@ -224,8 +225,9 @@ end
 local function _write_report_text(report)
 	if type(report) ~= "table" then return "unavailable" end
 	local channels = report.channels or {}
-	return string.format("mode=%s ok=%s scale=%s position=%s offset=%s rotation=%s",
+	return string.format("mode=%s ok=%s node=%s error=%s scale=%s position=%s offset=%s rotation=%s",
 		tostring(report.transform_mode), tostring(report.ok),
+		tostring(report.transform_node), tostring(report.transform_error),
 		tostring(channels.scale), tostring(channels.position),
 		tostring(channels.offset), tostring(channels.rotation))
 end
@@ -262,10 +264,11 @@ local _transform_owner = _durable_transform_lib.new({
 		if _transform_diag_budget <= 0 then return end
 		_transform_diag_budget = _transform_diag_budget - 1
 		pcall(printf,
-			"[WOC:613] transform proof kind=%s surface=%s perspective=%s before=%s after=%s target=%s write={%s} durable=true node=0",
+			"[WOC:712] transform proof kind=%s surface=%s perspective=%s before=%s after=%s target=%s write={%s} durable=true node=%s node_name=%s",
 			tostring(kind), tostring(record.surface), tostring(record.perspective),
 			_pose_text(before), _pose_text(after), _pose_text(record.target),
-			_write_report_text(record.write_report))
+			_write_report_text(record.write_report), tostring(record.node),
+			tostring(_appearance.TRANSFORM_NODE_NAME))
 	end,
 })
 local _wa = _pulse_lib.new(_appearance, _transform_owner)
@@ -551,24 +554,15 @@ local function _install_blightreaper_moveset()
 	if not _moveset_report.installed then
 		return false, "moveset", _moveset_report.skipped
 	end
-	local required = _career_weapon_actions.collect(
-		_careers, rawget(_G, "CareerSettings"), rawget(_G, "ActionTemplates"))
-	if not required.ok then
-		_moveset_report.installed = false
-		return false, "career_action_providers", string.format(
-			"reason=%s missing_actions=%s missing_careers=%s",
-			tostring(required.skipped or "incomplete"),
-			table.concat(required.missing_actions or {}, ","),
-			table.concat(required.missing_careers or {}, ","))
-	end
-	local identity = _moveset.restore_inherited_career_action_identity(
-		Weapons[TEMPLATE], Weapons[_moveset.SOURCE_TEMPLATE], required)
+	local identity = _career_weapon_actions.prepare_inherited_clone(
+		Weapons[TEMPLATE], Weapons[_moveset.SOURCE_TEMPLATE],
+		rawget(_G, "ActionTemplates"),
+		tostring(TEMPLATE) .. "<-" .. tostring(_moveset.SOURCE_TEMPLATE))
 	_moveset_report.career_action_identity = identity
 	if not identity.ok then
 		_moveset_report.installed = false
-		return false, "career_action_identity", string.format(
-			"reason=%s conflicts=%s", tostring(identity.skipped or "provider_conflict"),
-			table.concat(identity.conflicting_names or {}, ","))
+		return false, "career_action_identity",
+			tostring(identity.skipped or "clone_prepare_failed")
 	end
 	local abilities = _career_weapon_actions.install(
 		Weapons[TEMPLATE], _careers, rawget(_G, "CareerSettings"),
@@ -583,10 +577,10 @@ local function _install_blightreaper_moveset()
 			table.concat(abilities.missing_actions or {}, ","),
 			table.concat(abilities.missing_careers or {}, ","))
 	end
-	mod:info("[WOC:690] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true career_actions=%d/%d restored_inherited=%d)",
+	mod:info("[WOC:690] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true career_actions=%d/%d restored_inherited=%d discarded_claims=%d)",
 		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE,
 		abilities.installed + abilities.existing, abilities.required,
-		identity.restored or 0)
+		identity.restored or 0, identity.discarded_claims or 0)
 	return true
 end
 
@@ -1450,7 +1444,7 @@ end
 -- Resolve the exact immutable backend relic at the canonical unit-table
 -- producer so keep/mission, owner/husk, and preview consumers all receive the
 -- authored WOC unit before their spawn recipes branch. The durable owner then
--- applies and retains the atomic linked-root pose on the returned units.
+-- applies and retains the atomic authored-render-node pose on returned units.
 if rawget(_G, "BackendUtils") and BackendUtils.get_item_units then
 	mod:hook(BackendUtils, "get_item_units",
 		function(func, item_data, backend_id, skin, career_name)
@@ -1829,8 +1823,10 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 		return "canonical scale/rotation/offset contract drifted"
 	end
 	local durable = _durable_transform_lib.CONTRACT
-	if not durable or durable.target_node ~= 0
-			or durable.position ~= "linked_baseline_plus_offset"
+	if not durable or durable.attachment_node ~= 0
+			or durable.target_node ~= "authored_render_node"
+			or durable.target_node_name ~= _appearance.TRANSFORM_NODE_NAME
+			or durable.position ~= "render_baseline_plus_offset"
 			or durable.scale ~= "absolute"
 			or durable.rotation ~= "absolute_euler_xyz"
 			or durable.write_mode ~= "atomic_local_pose"
