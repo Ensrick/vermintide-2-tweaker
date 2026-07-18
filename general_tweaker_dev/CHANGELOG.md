@@ -1,5 +1,16 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.246-dev (2026-07-18) -- #693 client Creature Spawner [verify-fix-coop]
+
+- Clients can now use the Creature Spawner. Spawning is host-authoritative (only the host drains the ConflictDirector spawn queue, `state_ingame.lua:950-958`), and the old host gate silently swallowed every client spawn/destroy press with no feedback. A client now sends a schema-tagged request over the mod's own VMF network channel (`gt_cs_request`, `mod.GT_CS_RPC_SCHEMA` v1); the host validates the breed against its live `Breeds` table and performs the spawn at the client's crosshair position, facing the client, with the client's own grudge-mark configuration. `gt_cs_ack` relays the host's result line back to the requesting client.
+- Breed cycling, the unit-list dropdown, save slots, and `/selectedcreatures` now work locally on a client instead of no-oping; `/savecreature` slots feed the client's spawn requests.
+- Wire safety: VMF `network_send` rides the vanilla `rpc_mod_user_data` mod-manager RPC (`mod_manager.lua:595-621`); a receiving peer dispatches only into callbacks it registered itself, so vanilla peers and peers without gt drop the payload inside vanilla code - no modded `NetworkLookup` keys, no custom vanilla RPCs (the issue 278/371 crash class is untouched). When the host lacks the mod, the request degrades silently and the client-side message says the host must run the mod.
+- Added `/gt_regression_test` checks `gt_cs_rpc_schema_present` and `gt693_cs_client_request_wired`.
+
+### Co-op verify
+
+Both peers on gt_dev. CLIENT: cycle breeds (next/previous keys or the dropdown; the selection line must echo), aim, and press Spawn Creature - the enemy must appear at the CLIENT's crosshair and the client chat must show the host's "[Spawn]: Created ..." ack; Destroy Spawned Creatures must clear enemies and ack "Removed all enemies (host)". HOST: spawn/destroy/cycling must behave exactly as before, and the host log must show one `[gt_cs:693] client spawn request from=... ok=true` line per client spawn. Regression: a client whose host does NOT run the mod must see only the "needs this mod on the host" line, with no crash on any peer.
+
 ## v0.2.245-dev (2026-07-17) -- runtime module boundaries (#2) [tooling]
 
 - Extracted the runtime regression catalogue from the entry point without changing registration order or command ownership.

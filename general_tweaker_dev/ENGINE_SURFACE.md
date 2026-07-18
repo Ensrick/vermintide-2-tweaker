@@ -23,7 +23,8 @@ is engineered to survive the dev->stable promotion `sed`, so every always-on
 diagnostic disables itself in the stable clone.
 
 `gt` is a **broad utility bundle**, not a deep render mod: ~30 `_gt_*` feature
-modules covering bot-AI gap fixes, a host-side creature spawner, in-world debug
+modules covering bot-AI gap fixes, a host-executed creature spawner (clients
+request over the mod's `gt_cs_request` RPC, #693), in-world debug
 draw, host-side lobby moderation, godmode/noclip/cheat toggles, and combat/QoL
 tweaks. Unlike `cwv`/`wt`/`cosmetics` it barely touches the item/mesh/wire path;
 its engine contact clusters into four surfaces - the bot behaviour tree, the
@@ -106,6 +107,7 @@ resolved after main, most wrapped in `if <Class> then`.
 | `BTLootRatFleeAction.enter/run/leave` / `NavigationGroupManager.a_star_cached_between_positions` / `LocomotionUtils.pos_on_mesh` / `GwNavQueries.inside_position_from_outside_position` / `BTSkulkAroundAction.get_new_skulk_goal` [hook,tbl] `:966-995` | Loot-rat flee, A* pathfind, navmesh snap/query, skulk goal | Keep-nav crash suite: short-circuit each in the keep (no navmesh exists there) and return the safe sentinel | The five-hook crash chain documented upstream; each returns vanilla's expected shape (`false`/`"running"`/`nil`) |
 | `BuffSystem.add_buff` [hook,tbl] `:1038` / `EnemyPackageLoader.request_breed` [hook,tbl] `:1063` | Add buff (allocates a server-controlled buff id) / request a breed package | Server buff-cap detector (back off grudge-mark modifiers near `NetworkConstants.server_controlled_buff_id.max`); force `ignore_breed_limits=true` so debug spawns load packages on demand | Guarded on `NetworkConstants.server_controlled_buff_id` |
 | `AiUtils.update_aggro` / `AiBreedSnippets.reward_boss_kill_loot` / `ProjectileEtherealSkullLocomotionExtension.init` / `BTEnterHooks.warlord_defensive_on_enter` / `BTSpawnAllies.*` / `Utility.get_action_utility` [hook,tbl] `:662-737,:1007` | Aggro/loot/summon/spawn-allies/utility ticks that assume mission-only blackboard state | Defensive init + POSITION_LOOKUP nil-guards so a keep-spawned or homeless unit does not fatal on a nil field | `reward_boss_kill_loot` gates its `POSITION_LOOKUP[unit].z` read in a `pcall`; `Utility.get_action_utility` instantiates missing `utility_actions[name]` data |
+| `gt_cs_request` / `gt_cs_ack` [rpc] `_gt_creature_spawner.lua` | - | Client->host creature spawn/destroy requests, run host-authoritative (only the host drains the CD spawn queue, `state_ingame.lua:950-958`); host re-validates breed/numbers/grudge keys and acks the result line back to the requester (#693) | Schema-tagged `mod.GT_CS_RPC_SCHEMA`; sent to the mechanism-resolved host peer (literal `"server"` is a no-op, `docs/VMF_RECIPES.md` §3); degrades silently when the host lacks gt |
 
 ### Surface 2b - Boss spawn-anywhere + first-tick BT health nil-guards (`_gt_creature_spawner.lua`)
 
@@ -370,13 +372,14 @@ hooking classes:
   in registration order; it re-registers on every game-state transition because
   `Managers.state.event` is rebuilt each transition.
 
-The three mod-to-mod RPC channels (`gt_lobby_motd_show`, `gt_ai_toggle_request`,
-`gt_level_control`/`gt_respawn_request`) are all keyed by mod-id, so dev and
-stable are automatically isolated - a session must pin every peer to the SAME
-stream or the lobby/MOTD/slot surface cannot talk (repo `CLAUDE.md` "per-mod-id
-RPC channels" caveat). MOTD and AI tag `mod.GT_LOBBY_RPC_SCHEMA` /
-`mod.GT_AI_RPC_SCHEMA` as the first positional arg and drop schema mismatches
-(`docs/VMF_RECIPES.md` §10).
+The mod-to-mod RPC channels (`gt_lobby_motd_show`, `gt_ai_toggle_request`,
+`gt_level_control`/`gt_respawn_request`, `gt_cs_request`/`gt_cs_ack`) are all
+keyed by mod-id, so dev and stable are automatically isolated - a session must
+pin every peer to the SAME stream or the lobby/MOTD/slot/creature-spawner
+surface cannot talk (repo `CLAUDE.md` "per-mod-id RPC channels" caveat). MOTD,
+AI, and the creature spawner tag `mod.GT_LOBBY_RPC_SCHEMA` /
+`mod.GT_AI_RPC_SCHEMA` / `mod.GT_CS_RPC_SCHEMA` as the first positional arg
+and drop schema mismatches (`docs/VMF_RECIPES.md` §10).
 
 ### Godmode is networked damage-suppression, not a health flag (owner: `docs/engine/10`)
 
