@@ -118,6 +118,72 @@
             )
         }
         @{
+            Id = 'wt.issue701.kruber-crossbow-left-transform'
+            Issue = 701
+            Claim = 'structural-only'
+            Owners = @(
+                'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_grip_offset_policy.lua'
+                'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua'
+                'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = '#701 is an explicitly third-person receiver-skeleton correction' }
+                        owner_3p = @{ Disposition = 'covered'; Evidence = 'GearUtils create-equipment adapter tracks the left-only Crossbow unit for durable reapply' }
+                        bot_3p = @{ Disposition = 'covered'; Evidence = 'the same create-equipment adapter records bot role and the identical baked descriptor' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'SimpleHuskInventoryExtension wield adapter tracks the renderer-local left unit without transform RPC' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'left-only template policy routes MenuWorldPreviewer spawn to left_unit_3p' }
+                        cosmetic_preview = @{ Disposition = 'deferred'; Reason = 'LootItemUnitPreviewer has no proven WT baked-transform adapter for this family' }
+                        athanor_preview = @{ Disposition = 'deferred'; Reason = 'Athanor preview has no proven WT baked-transform adapter for this family' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'ordinary crafting preview has no proven WT baked-transform adapter for this family' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'the concrete lobby preview constructor consuming this hook has not been source-proven for #701' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'the concrete score preview constructor consuming this hook has not been source-proven for #701' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons rather than a linked weapon transform' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the baked transform is keyed by item and receiver career, not persisted per instance' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'owner and bot create-equipment registration captures canonical position before one-shot apply' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'each equipment creation resolves the same item-and-career descriptor' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'durable writer gates on the live wielded slot and husk wield registers its renderer-local unit' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'illusion customization does not own the source-baked item-and-career transform descriptor' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = '#701 targets the regular Crossbow item independently of combat-style state' }
+                        career_change = @{ Disposition = 'deferred'; Reason = 'career-transition recreation is structurally plausible but has no focused #701 adapter evidence' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'mission equipment recreation re-enters the owner/bot create-equipment adapter' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'respawn equipment recreation re-enters create-equipment and captures a new weak-key unit row' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'remote husk wield registration consumes vanilla replicated base item identity on join' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the renderer-local baked table creates no custom peer-ready transport' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the renderer-local baked table creates no custom parity channel or payload' }
+                        rejoin = @{ Disposition = 'deferred'; Reason = 'full leave-and-rejoin lifecycle still requires live two-player evidence' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'the left-only preview field is resolved synchronously for each spawned preview unit' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'a reopened preview spawns a fresh unit and reruns the same pure hand policy' }
+                        lobby_score_create = @{ Disposition = 'deferred'; Reason = 'lobby and score constructor coverage is not proven for this transform family' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live disable restoration of an already-linked durable unit has no focused #701 evidence' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_wt_crossbow_offset.lua'
+                            Names = @(
+                                'WT #701 crossbow transform is exact left-only durable and receiver-scoped'
+                                'WT #701 world adapters retain owner bot husk and preview fan-out'
+                            )
+                            Surfaces = @('owner_3p', 'bot_3p', 'remote_husk_3p')
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'mission_transition', 'respawn', 'hot_join')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_wt_crossbow_offset.lua'
+                            Names = @(
+                                'WT #701 preview hand routing preserves paired and right-hand controls'
+                            )
+                            Surfaces = @('inventory_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cosmetics.issue641.component-item-text'
             Issue = 641
             Claim = 'structural-only'
