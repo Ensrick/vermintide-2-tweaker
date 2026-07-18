@@ -18,6 +18,10 @@ Major sections (search by name to jump):
 local mod = get_mod("cim_dev")
 local _FORGE_PREVIEW_POLICY = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_forge_preview_policy")
+mod._cim_forge_preview_policy = _FORGE_PREVIEW_POLICY
+local _FORGE_PREVIEW = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_forge_preview")
+mod._cim_forge_preview = _FORGE_PREVIEW
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- ============================================================
@@ -50,7 +54,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.93-dev"
+local MOD_VERSION = "0.8.94-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -2454,20 +2458,13 @@ mod:hook("LootItemUnitPreviewer", "_load_item_units", function(func, self, item)
     return units_to_spawn
 end)
 
--- ============================================================
--- (#404 / #481) DIAGNOSTIC: measure the forge weapon-preview placement
--- ============================================================
--- Ranged weapons render pushed far LEFT in the Athanor 3D preview. Root (issue
--- 404, source-confirmed): HeroWindowWeaveProperties / HeroWindowWeaveForgeWeapons
--- ._create_item_previewer place the spin pivot (the link unit) at a UNIFORM
--- preview_position ({-0.85,3,0}; hero_window_weave_properties.lua:2954). Each hand
--- unit then links at item_template.<hand>_hand_attachment_node_linking.third_person
--- .display (loot_item_unit_previewer.lua:292/310) — a node authored for the 3P
--- character hand. A long two-handed ranged mesh sits far from that node, so it
--- orbits WIDE of the spin pivot and reads as far-left. The corrective preview shift
--- is PER-WEAPON (each mesh's hand-node translation differs), so it can only be
--- measured at runtime — per the no-VMF-UI-guessing rule we MEASURE here instead of
--- shipping a guessed preview_position offset.
+-- #404: center only CIM ranged properties previews; policy and hook are split.
+local _forge_preview_ok, _forge_preview_reason = _FORGE_PREVIEW.install_runtime(
+    mod, _FORGE_PREVIEW_POLICY, function() return _custom_forge_active end)
+if not _forge_preview_ok then
+    printf("[cim:404] ranged preview correction unavailable: %s",
+        tostring(_forge_preview_reason))
+end
 --
 -- (#481) _cim481_forge_preview_probe: LA-skinned shields show the SAME class of
 -- defect (mesh sits left of where the vanilla shield sits) plus a first-open miss,
