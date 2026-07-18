@@ -1,3 +1,9 @@
+<!-- checker-consumed: verified-current 2026-07-18 -->
+<!-- ^ Read by qa/check_decisions_wired.ps1. This doc is trusted as ground truth
+     for which cross-character ports are live work. Re-verify the rows against
+     wt_unlock_data.lua + the _data.lua checkboxes + the _localization.lua keys,
+     then bump the date. The checker warns (advisory) once this is >30 days old. -->
+
 # Cross-Character Port Decisions — weapon_tweaker
 
 > **Spec change (Issue #368, 2026-07-05):** entries below that mark a weapon "CWV-managed

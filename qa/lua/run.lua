@@ -232,6 +232,7 @@ local suites = {
     "test_gt_network_readiness",
     "test_gt_offline_twitch",
     "test_gt_lobby_failnotify_hardening",
+    "test_gt_appearance_parity",
     "test_gt_improved_bot_combat_controls",
     "test_gt_bot_hazard_resistance",
     "test_gt_ai_takeover",

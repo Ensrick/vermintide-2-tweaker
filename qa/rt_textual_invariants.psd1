@@ -215,5 +215,72 @@
     @{ mod='dcp'; file='dynamic_cosmetic_portraits/tools/add_portrait.ps1'; needle='vanilla_hud_alpha_mask_86x108.png'; literal=$true; polarity='present'; issueRef='#526'; note='add_portrait.ps1 must reference the canonical vanilla hud silhouette mask.' }
     @{ mod='dcp'; file='dynamic_cosmetic_portraits/tools/add_portrait.ps1'; needle='silhouette conformance'; literal=$true; polarity='present'; issueRef='#526'; note='the HUD silhouette conformance gate (opaque-outside-mask => throw) must stay in the pipeline.' }
 
+    # =========================================================================
+    #  SOURCE-ANCHOR BUG_CLASSES executable twins (added 2026-07-18)
+    #  Each needle below locks the concrete hook edge / API / helper named in a
+    #  docs/BUG_CLASSES.md fix template, for a class that its own text records as
+    #  having BURNED TWICE OR MORE. If the documented pattern disappears from the
+    #  cited source file, the needle FAILS (blocking), so a guard doc and its live
+    #  source can never silently diverge. Section numbers reference
+    #  docs/BUG_CLASSES.md; issueRef 'BC<n>' marks a class with no single GH issue.
+    # =========================================================================
+
+    # -- BUG_CLASSES 35: force-loaded weapon _3p package release edge. The MH
+    #    skin-package release MUST live on the POST-teardown StateIngame.on_exit
+    #    hook_safe (NOT the pre-teardown on_game_state_changed notification) and be a
+    #    singleton for that (Class, method) pair. Burned: cosmetics v0.9.76-dev fix ->
+    #    regressed 2026-07-18 (pre-teardown edge) -> re-fixed v0.9.148-dev. Dropping
+    #    or duplicating it re-opens the #282 shutdown "not unloaded" deadlock.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook_safe("StateIngame", "on_exit"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#282'; note='BUG_CLASSES 35: MH package release is the single POST-teardown StateIngame.on_exit hook_safe; a pre-teardown edge or a 2nd hook re-opens the shutdown deadlock.' }
+    # -- BUG_CLASSES 35: the force-load reference name must be mod-owned
+    #    ("cosmetics_tweaker_mh"), never the shared "global" ref no consumer can
+    #    safely unload.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; needle='MH_PKG_REF = "cosmetics_tweaker_mh"'; literal=$true; polarity='present'; issueRef='#282'; note='BUG_CLASSES 35: MH package load/unload uses a mod-owned reference name, not the shared "global" refcount.' }
+
+    # -- BUG_CLASSES 3: Lua 5.1 unpack nil-hole truncation. safe_hook MUST pass an
+    #    explicit j to unpack so nil holes survive. Burned wt v0.12.77 -> .78
+    #    (unpack(results, 2) with no j, still broken) -> .79 (unpack(results, 2, n)).
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/_safe_hook.lua'; needle='return unpack(results, 2, n)'; literal=$true; polarity='present'; issueRef='#36'; note='BUG_CLASSES 3: safe_hook returns unpack(results, 2, n) with the explicit j; dropping n reintroduces the non-deterministic #table truncation.' }
+
+    # -- BUG_CLASSES 19: hooked networked fn drops a trailing sync param -> RPC loop.
+    #    The AnimationSystem.anim_event_with_variable_float hook MUST name skip_sync in
+    #    BOTH its signature AND the func() forward, or husk replays re-broadcast and
+    #    every player's 3P anim loops in a 2+ human game. Burned wt v0.12.128 -> .132.
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'; needle='variable_value, skip_sync)'; literal=$true; polarity='present'; minCount=2; issueRef='BC19'; note='BUG_CLASSES 19: skip_sync threaded through the anim_event_with_variable_float hook signature AND the func() forward (>=2 occurrences); dropping either re-arms the anim-event RPC feedback loop. Memory reference_vmf_hook_drops_skip_sync_rpc_loop.' }
+
+    # -- BUG_CLASSES 27: husk resolves the BASE item_data. Husk fixes must live on the
+    #    husk-reachable paths - the SimpleHuskInventoryExtension.start_weapon_fx crash
+    #    floor (issue 280) and the GearUtils.spawn_inventory_unit block gated on
+    #    `not owner_unit_1p`. An owner-only (create_equipment) fix never reaches a husk.
+    @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'; needle='mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"'; literal=$true; polarity='present'; issueRef='#280'; note='BUG_CLASSES 27: durable husk start_weapon_fx nil-slot crash floor (non-source-character client CTD).' }
+    @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'; needle='if not owner_unit_1p then'; literal=$true; polarity='present'; issueRef='#392'; note='BUG_CLASSES 27: the spawn_inventory_unit husk branch is gated on the no-1P-rig discriminator; removing it strands every husk-side transform/strip fix.' }
+
+    # -- BUG_CLASSES 29: client-side buff proc calls the server-only heal_network. The
+    #    Fires-from-Ash THP heal MUST sit behind the Managers.player.is_server gate or
+    #    a client hard-CTDs on the "Only server can heal" fassert. Burned crt (#405)
+    #    and ct (#406) the same day. The regex requires the gate to immediately
+    #    precede the heal call.
+    @{ mod='crt'; file='career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua'; needle='is_server\) then return end\s+if DamageUtils and DamageUtils\.heal_network'; literal=$false; polarity='present'; issueRef='#405'; note='BUG_CLASSES 29: heal_network stays behind the Managers.player.is_server gate; ungating CTDs clients on the server-only heal fassert.' }
+
+    # -- BUG_CLASSES 23: keep-only Gui material drawn mid-mission. The inject-when-
+    #    resident guard is ONE consolidated UIRenderer.create hook. Burned pose atlas
+    #    (155), store atlas (363), area videos (336). A 2nd hook on the pair is dropped
+    #    by VMF (class 1), so it must stay a singleton.
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_gui_material_guard.lua'; needle='mod:hook("UIRenderer", "create"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#336'; note='BUG_CLASSES 23: the keep-only-material inject-when-resident guard is the single consolidated UIRenderer.create hook (one per mod; VMF drops a 2nd).' }
+
+    # -- BUG_CLASSES 31: cross-peer wire crash-safety coupled to a feature toggle. The
+    #    modded->vanilla rarity coercion MUST be a PURE helper taking ONLY rarity
+    #    (structurally ungateable), called unconditionally on the send path. Burned as
+    #    the #278 recurrence when a refactor bundled the safety behind a toggle.
+    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'; needle='local function _cim_wire_safe_rarity(rarity)'; literal=$true; polarity='present'; issueRef='#278'; note='BUG_CLASSES 31: the wire-safe rarity helper takes ONLY rarity (no toggle arg), so it cannot be feature-gated; a 2nd param re-exposes the non-mod-peer CTD.' }
+    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'; needle='if rarity == "modded" then return "unique" end'; literal=$true; polarity='present'; issueRef='#278'; note='BUG_CLASSES 31: the "modded"->"unique" coercion must stay on the sender path; without it a non-mod peer nil-derefs RaritySettings on a vanilla RPC.' }
+
+    # -- BUG_CLASSES 24: PlayerManager.remove_player fires on LEVEL TRANSITIONS. A
+    #    per-peer store must NOT purge synchronously in remove_player; the deferred
+    #    purge is canceled by the add_remote_player hook_safe (transitions re-add within
+    #    seconds, disconnects never do). Losing the cancel wipes every peer's cosmetic
+    #    store on every keep<->mission change. Recurs via classes 43 and 61.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook_safe(PlayerManager, "add_remote_player"'; literal=$true; polarity='present'; issueRef='BC24'; note='BUG_CLASSES 24: the add_remote_player hook_safe cancels the deferred peer purge; without it, remove_player-on-transition wipes the per-peer LA store every map change.' }
+
   )
 }

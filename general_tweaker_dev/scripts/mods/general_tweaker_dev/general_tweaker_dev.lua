@@ -1519,6 +1519,7 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_kick_idle")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_motd")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_modded_manifest")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_failed_join_reveal")
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_appearance_parity")
 -- Floating Damage Numbers migrated to gui_tweaker (gut) 2026-06-29; its old
 -- dofile/feed lines are gone and gt's damage hooks are pure godmode again.
 

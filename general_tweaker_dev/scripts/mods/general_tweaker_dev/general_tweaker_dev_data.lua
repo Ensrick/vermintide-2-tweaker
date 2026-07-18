@@ -1125,6 +1125,20 @@ local _data = {
                                 default_value = true,
                                 tooltip       = "gt_lobby_manifest_failnotify_enabled_tooltip",
                             },
+                            -- Issue #737: the reveal + watchdog only fire when a
+                            -- join FAILS or hangs. A mod mismatch that touches
+                            -- only appearance (weapon skins / item keys) lets the
+                            -- join SUCCEED, then desyncs the NetworkLookup index
+                            -- spaces mid-session (score-screen CTD + husk/preview
+                            -- failures). This posts one chat line after a
+                            -- successful join when an appearance mod is enabled on
+                            -- only one side, or runs a different stream/version.
+                            {
+                                setting_id    = "gt_lobby_appearance_parity_enabled",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_lobby_appearance_parity_enabled_tooltip",
+                            },
                             -- Issue #378: the failnotify above only fires when a
                             -- join RESOLVES to incorrect_hash. Most mod mismatches
                             -- HANG instead (network_hash ignores the mod set), so
