@@ -9,6 +9,10 @@ on:
 
 permissions:
   contents: read
+  # issues:read only - the lifecycle-cardinality guard lists open issues with
+  # the default GITHUB_TOKEN. Never grant write here (issue #750 is about
+  # unlogged label edits; CI must stay read-only).
+  issues: read
 
 concurrency:
   group: qa-${{ github.workflow }}-${{ github.ref }}
@@ -20,7 +24,8 @@ concurrency:
 # workflow — decides what blocks. luacheck and check_stale_docs are Advisory;
 # check_file_sizes and check_name_integrity block only on regressions past their
 # frozen baselines in qa/baselines/. lint-mod runs as its own blocking step
-# (duplicate-hook gate, CLAUDE.md NON-NEG #8), which run_all does not include.
+# (duplicate-hook gate, CLAUDE.md NON-NEG #8), which run_all does not include,
+# as does the tracker lifecycle-cardinality guard (issue #750).
 # Windows + pwsh because the whole suite is PowerShell-native (backslash path
 # matching, the committed tools/luacheck/luacheck.exe, backslash-relative
 # signatures). Issue #429.
@@ -68,3 +73,20 @@ jobs:
           if ($code -ge 2) { Write-Host "::error::lint-mod found duplicate-hook error(s) (exit $code)"; exit 1 }
           if ($code -eq 1) { Write-Host "lint-mod reported non-blocking warnings (exit 1)." }
           exit 0
+
+      - name: check-lifecycle-cardinality.ps1 (tracker lifecycle guard, issue 750)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # BLOCKING by deliberate design (issue #750): an out-of-repo strip sweep
+        # left 10 open issues with zero lifecycle labels, and the advisory
+        # check_issue_status_labels.ps1 warning did not stop it. This step FAILS
+        # when any OPEN issue's lifecycle-label cardinality != 1, printing the
+        # offending numbers and their current lifecycle labels. Read-only: needs
+        # only the issues:read permission above; ONE gh list call, no per-issue
+        # calls, never edits labels. No skip label - a red run is fixed by
+        # repairing the tracker (ship.ps1 Get-LifecycleEditPlan), not the gate.
+        run: |
+          ./tools/github/check-lifecycle-cardinality.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./tools/github/check-lifecycle-cardinality.ps1
