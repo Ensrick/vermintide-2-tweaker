@@ -156,6 +156,27 @@ _rt_register("forge_preview_accepts_resident_3p_unit", function()
     end
 end)
 
+_rt_register("issue404_ranged_properties_preview_centered", function()
+    local policy = mod._cim_forge_preview_policy
+    local fn = policy and policy.properties_preview_position
+    if type(fn) ~= "function" then
+        return "#404 ranged properties preview policy is missing"
+    end
+
+    local native = { -0.85, 3, 0 }
+    local ranged = fn("ranged", native)
+    if type(ranged) ~= "table" or ranged[1] ~= 0
+            or ranged[2] ~= 3 or ranged[3] ~= 0 then
+        return "#404 ranged preview no longer composes the native centered x with properties y/z"
+    end
+    if native[1] ~= -0.85 then
+        return "#404 preview policy mutated the caller-owned native position"
+    end
+    if fn("melee", native) ~= nil then
+        return "#404 preview policy must leave melee on the vanilla path"
+    end
+end)
+
 _rt_register("forge_preview_la_diagnostics_armed", function()
     -- (#481, round 2) The user's 0.8.58 retest showed two residual defects on
     -- LA-skinned shields in the Athanor: (1) shield ABSENT on the first forge

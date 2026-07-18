@@ -1239,6 +1239,21 @@ function HeroViewStateModTweaker:_append_row(row, err, wtype, category, setting_
     if row then
         self._rows[#self._rows + 1] = row
         if has_gear then
+            -- Advanced-option parents are navigation/selection headers as well
+            -- as settings. Give every enabled gear parent the same warm-tan
+            -- accent as the menu chrome so a select-all master is visually
+            -- distinct from the individual rows inside its drill view (#611).
+            -- Keep disabled VMF rows grey instead of falsely advertising them.
+            -- (#717) Twin-parity fix: 7d31174 added this accent ONLY to the
+            -- mission twin (_mod_tweaker_view.lua), so every gear-parent row in
+            -- the keep Mod Tweaker rendered plain font_default while the same
+            -- rows in-mission were tan. Both twins now color identically.
+            local accent = not row._disabled_in_vmf and row.style
+                and row.style.label and row.style.label.text_color
+            if accent then
+                accent[1], accent[2], accent[3], accent[4] = 255, 160, 146, 101
+            end
+            row._advanced_parent_accent = true
             -- Shrink the parent's full-width whole-row hotspot so it stops BEFORE the
             -- gear column — otherwise a click on the gear ALSO lands on the parent row's
             -- hotspot (they overlap) and would e.g. toggle a parent checkbox while

@@ -68,7 +68,7 @@ return function(H, repo_root)
             "issue 83 dynamic-widget closure check missing")
         H.truthy(seen.issue703_athanor_cwv_rows_unlocked,
             "issue 703 Athanor CWV false-lock check missing")
-        H.equal(#names, 76, "regression registration set changed")
+        H.equal(#names, 77, "regression registration set changed")
         local ok, result = pcall(checks[1])
         H.truthy(ok, "registered checks did not close over the supplied mod object")
         H.equal(type(result), "string")
