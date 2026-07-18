@@ -5,6 +5,8 @@ return function(H, repo_root)
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_persistence.lua"
     local cwv_path = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    local cim_path = repo_root
+        .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/illusion_swap.lua"
 
     local function read(path)
         local file = assert(io.open(path, "rb"))
@@ -15,6 +17,7 @@ return function(H, repo_root)
 
     local cos = read(cos_path)
     local persist = read(persist_path)
+    local cim = read(cim_path)
     local cwv = require("cwv_source").combined(repo_root)
 
     H.test("native Dual Skullsplitters use row one plus one independent offhand", function()
@@ -52,7 +55,17 @@ return function(H, repo_root)
         H.truthy(cos:find("candidate.unit == rec.unit_path", 1, true))
         H.truthy(cos:find("mod._dual_offhand_unit_allowed", 1, true))
         H.truthy(cos:find('if hand_field ~= "left_hand_unit" then return false end', 1, true))
-        H.truthy(cos:find("LA_PERSIST.clear_offhand(entry.backend_id, entry.hand_field)", 1, true))
+        H.truthy(persist:find("M.commit_offhand_entry = function(entry)", 1, true))
+        H.truthy(cos:find("LA_PERSIST.commit_offhand_entry(entry)", 1, true))
+        H.truthy(cos:find("mod._la_offhand_restore_done = deferred == 0", 1, true))
+    end)
+
+    H.test("dual primary and offhand persistence share exact instance identity", function()
+        H.truthy(cim:find("mod._cim563_commit_explicit_skin_choice = function(backend_id", 1, true))
+        H.truthy(cim:find("mod._cim_get_craft(backend_id)", 1, true))
+        H.truthy(cim:find("next_saved[backend_id] = skin_key", 1, true))
+        H.truthy(persist:find("_state.offhands[backend_id][hand_field]", 1, true))
+        H.truthy(cos:find("LA_PERSIST.commit_offhand_entry(entry)", 1, true))
     end)
 
     H.test("dual offhand render and peer replay reuse bounded existing surfaces", function()

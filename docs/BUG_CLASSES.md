@@ -1630,6 +1630,14 @@ illusion. The wire payload must omit owner-local backend IDs and instead carry a
 wearer, active slot, illusion context, and validated glow components. Receivers
 cache by wearer and fail closed unless the spawned unit matches that context.
 
+The durable commit must also be independent of render/network liveness. A valid
+inventory Apply can carry an exact backend item and hand while `player_unit` is
+temporarily absent during a keep or mission transition. Persist that exact owner
+record first, then conditionally deliver it to the live model/peers; use bounded
+lifecycle replay for unavailable consumers. Provider-owned exact instances that
+are known but not yet injected into the backend mirror are deferred, not consumed
+as a successful one-shot restore (#702).
+
 Treat equipment creation, local wield, asynchronous hero preview, remote husk
 wield, initial join, and hot join as separate render consumers. Reuse an
 acknowledged post-ingame state pull for convergence, then retry only local paint

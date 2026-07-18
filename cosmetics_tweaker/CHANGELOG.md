@@ -6,6 +6,14 @@
 
 **Test:** #698 co-op checklist below, plus solo: idle in the keep 2+ minutes and confirm at most one line of each unlock marker in the newest log.
 
+## 0.9.146-dev - 2026-07-18 - exact dual-illusion persistence lifecycle (#702)
+
+- Dual/offhand Apply now commits its durable owner record by exact backend item and hand before any live-model or peer delivery work. The previous save was nested under `player_unit` liveness and the LA sender's availability, so a valid inventory Apply could update the session preview while silently omitting the disk write.
+- Selection queuing no longer requires a live keep player unit. When delivery is temporarily unavailable, the existing bounded self-rebroadcast path carries the already-persisted state after the owner equipment exists.
+- Restart restore no longer consumes a CIM-owned exact instance before CIM/CWV finishes registering it. Exact pending instances retry every 0.5 seconds for at most 15 seconds; candidate resolution accepts only the saved hand, unit, and component skin (with a unique-unit legacy fallback), then fails closed to the native appearance.
+- Engine-free coverage proves two same-family inventory instances remain isolated, Apply persists with no render owner, Follow Main clears only the selected exact hand, invalid identities fail closed, and source wiring retains the existing preview/mission/network replay surfaces.
+- In-game check: customize the offhand of one dual weapon, press Apply, fully restart the game, and confirm that exact inventory instance keeps both its primary illusion and independently selected offhand while a second copy remains unchanged.
+
 ## 0.9.145-dev - 2026-07-17 - career-scoped remote appearance identity (#698) [verify-fix-coop]
 
 - Fixed the host-side Grail Knight armor repaint recorded after a remote player changed to Foot Knight: `_la_equips_by_peer` was keyed only by Steam peer, while the husk armor replay accepted every cached `slot_skin` without proving that the record belonged to the husk's current career.
