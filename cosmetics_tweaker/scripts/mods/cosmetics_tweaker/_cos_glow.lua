@@ -42,6 +42,10 @@ local mod = get_mod("cosmetics_tweaker")
 -- it byte-unchanged.
 local _is_unit = mod._cos.is_unit
 
+-- #48: exact-instance glow policy, shared with _glow_picker.lua. Pure and
+-- stateless, so a per-consumer dofile instance is safe.
+local GLOW_INSTANCE_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy")
+
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md section 3.6). Byte-identical
 -- copies of the entry's _dbg / _dbg_alert so the moved glow functions keep calling
 -- them unchanged. `_dbg` = confirmation (file only); `_dbg_alert` = unexpected,
@@ -223,21 +227,14 @@ local function _bind_glow_unit(unit, backend_id, skin, slot_name, item_name, ite
     }
 end
 
+-- #48: delegated to the shared per-instance policy. The previous inline form
+-- skipped the skin gate entirely when no skin was resolvable, so an all-nil
+-- payload matched EVERY glow-capable unit on that wearer -- the family-wide
+-- bleed this issue exists to prevent. The policy now fails closed to resident
+-- vanilla instead, per the conditional-presentation rule in
+-- docs/WEAPON_APPEARANCE_STANDARD.md.
 local function _remote_glow_context_matches(ctx, peer_state)
-    if type(ctx) ~= "table" then return false end
-    local expected_skin = peer_state.active_per_item_glow_skin
-    if expected_skin == nil then
-        local identity = peer_state.active_per_item_glow_identity
-        expected_skin = type(identity) == "string" and identity:match("|skin:(.*)$") or nil
-    end
-    if expected_skin ~= nil and tostring(ctx.skin or "") ~= tostring(expected_skin) then return false end
-    local expected_slot = peer_state.active_per_item_glow_slot
-    if expected_slot and ctx.slot_name and expected_slot ~= ctx.slot_name then return false end
-    local expected_name = peer_state.active_per_item_glow_item_name
-    if expected_name and ctx.item_name and expected_name ~= ctx.item_name then return false end
-    local expected_template = peer_state.active_per_item_glow_item_template
-    if expected_template and ctx.item_template and expected_template ~= ctx.item_template then return false end
-    return true
+    return GLOW_INSTANCE_POLICY.remote_match(ctx, peer_state)
 end
 
 local function _remote_glow_matches(unit, peer_state)
