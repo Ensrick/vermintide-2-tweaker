@@ -20,6 +20,7 @@ function M.install(mod, _rt_register, deps)
     local _wt_master_toggles = deps.master_toggles
     local _WIELD_PATCHES_MODULE = deps.wield_patches_module
     local _is_sp_crossbow_presentation_item = deps.is_sp_crossbow_presentation_item
+    local _wt_grip_offset_policy = deps.grip_offset_policy
     local weapon_backend = deps.weapon_backend
 
     -- ============================================================
@@ -246,9 +247,37 @@ function M.install(mod, _rt_register, deps)
         local native = plan("es_handgun", "es_huntsman")
         assert(native.offset == nil and native.durable,
             "Kruber's native Empire Handgun must not receive Saltzpyre's offset")
-        local control = plan("wh_crossbow", "wh_captain")
+        local control = plan("wh_crossbow_repeater", "wh_captain")
         assert(control.offset == nil and control.durable == false,
             "unmodified Saltzpyre ranged control must remain untouched")
+    end)
+
+    _rt_register("issue701_kruber_crossbow_left_grip_offset", function()
+        local plan = mod._wt587_baked_transform_plan
+        local policy = _wt_grip_offset_policy
+        assert(type(plan) == "function" and policy and policy.contract,
+            "crossbow transform policy missing")
+        for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
+            local crossbow = plan("wh_crossbow", career)
+            assert(crossbow.durable and crossbow.offset
+                and crossbow.offset[1] == 0
+                and crossbow.offset[2] == 0.100
+                and crossbow.offset[3] == 0.025
+                and crossbow.offset.hand == "left",
+                "Kruber crossbow left-hand durable offset drifted on " .. career)
+        end
+        local native = plan("wh_crossbow", "wh_captain")
+        assert(native.offset == nil, "Saltzpyre's native Crossbow grip changed")
+        local control = plan("wh_crossbow_repeater", "es_knight")
+        assert(control.offset == nil and control.durable == false,
+            "Kruber Volley Crossbow control must remain unmodified")
+        assert(policy.preview_slot_field({ left_hand_unit = "" }) == "left_unit_3p"
+            and policy.preview_slot_field({ right_hand_unit = "" }) == "right_unit_3p"
+            and policy.preview_slot_field({ left_hand_unit = "", right_hand_unit = "" }) == "right_unit_3p",
+            "preview hand routing no longer distinguishes left-only Crossbow safely")
+        assert(policy.contract.retained_evidence == "post_write_engine_readback"
+            and policy.contract.first_person == "unchanged",
+            "#701 retained-state/first-person contract drifted")
     end)
 
     _rt_register("issue112_saltzpyre_kruber_shield_baked_rotation", function()
