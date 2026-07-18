@@ -752,9 +752,9 @@ _rt_register("issue703_athanor_cwv_rows_unlocked", function()
     -- every CWV row drew a false padlock. The consolidated hook clears the lock
     -- for provider=cwv keys only; this check pins the classifier's boundary so
     -- vanilla/other-provider locks can never be swept up with it.
-    local classify = mod._cim703_is_cwv_provider_key
+    local classify = (mod._cim_synthetic_item_contract or {}).is_cwv_provider_key
     if type(classify) ~= "function" then
-        return "#703 CWV lock-clear classifier (_cim703_is_cwv_provider_key) not exposed"
+        return "#703 CWV lock-clear classifier (contract.is_cwv_provider_key) not exposed"
     end
     if classify("cwv_rt_unregistered_variant") ~= true then
         return "#703 cwv-prefixed key no longer classified as provider=cwv (rows re-lock)"

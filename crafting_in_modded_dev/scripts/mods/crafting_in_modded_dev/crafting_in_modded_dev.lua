@@ -4739,30 +4739,8 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
     end
 end)
 
--- #703: the Athanor list's lock badge is a vanilla OWNERSHIP gate, not an
--- unlock gate. `_sync_backend_loadout` resolves each row via
--- `backend_interface_items:get_item_from_key(item_key)` and stamps
--- `content.locked = not backend_id` (hero_window_weave_forge_weapons.lua:555 +
--- :565), which draws the `hero_icon_locked` pass (definitions :776-778) and
--- saturates the icon (`_animate_list_widget` :1424-1425). CWV rows are
--- registration-only definitions with no owned backend instance (#592), so that
--- lookup can never succeed and every CWV row rendered a false padlock even
--- though selecting/crafting worked. Classify through the issue 628 contract's
--- provider ladder and treat provider=cwv rows as unlocked by definition.
--- Vanilla (and any non-cwv provider) rows keep their vanilla lock state, so
--- genuinely unavailable vanilla items stay locked.
-mod._cim703_is_cwv_provider_key = function(key)
-    if type(key) ~= "string" or key == "" then return false end
-    local contract = mod._cim_synthetic_item_contract
-    if not contract or type(contract.provider_for) ~= "function" then return false end
-    local iml = rawget(_G, "ItemMasterList")
-    local master = iml and rawget(iml, key) or nil
-    return contract.provider_for(key, master) == "cwv"
-end
-
 -- Keep the level/power fields blank — vanilla `_sync_backend_loadout` repopulates them every refresh.
--- _cim703_consolidated_sync_backend_loadout_hook: single hook on this
--- (Class, method); the #703 CWV lock-clear rides the same body.
+-- _cim703_consolidated_sync_backend_loadout_hook: single hook on this (Class, method); #703 CWV lock-clear rides this body.
 mod:hook("HeroWindowWeaveForgeWeapons", "_sync_backend_loadout", function(func, self)
     func(self)
     if not _custom_forge_active then return end
@@ -4775,9 +4753,7 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_sync_backend_loadout", function(func, 
             c.power_text = ""
             c.power_title = ""
             -- #703: only rows vanilla just locked, and only cwv-provider keys.
-            if c.locked and mod._cim703_is_cwv_provider_key(c.key) then
-                c.locked = false
-            end
+            if c.locked and mod._cim_synthetic_item_contract.is_cwv_provider_key(c.key) then c.locked = false end
         end
     end
 end)
