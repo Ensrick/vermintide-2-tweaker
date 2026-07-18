@@ -1,5 +1,12 @@
 # Modded Progression — Changelog
 
+## 0.2.29-dev (2026-07-17) - #695 pre-login peddler warning flood fix [verify-fix]
+
+- Stopped `_mp577_sync_overlay` from calling `BackendManagerPlayFab:get_interface("peddler")` every frame before that interface exists. The sync now proves `Managers.backend._interfaces.peddler` is present before using the public getter.
+- Behavior is unchanged after readiness: the overlay still retries until the peddler mirror exists, and official-realm behavior remains native.
+
+**Test:** start in the modded realm, reach the keep, and inspect the newest console log. `Requesting unknown interface peddler` must be absent; before this fix it appeared roughly 2,000 times during startup.
+
 ## 0.2.28-dev (2026-07-14) - #607 source-backed loot diagnostics [diagnostics-armed]
 
 - Added passive, official-realm-only observation of ordinary mission chest/vault backend callback results. Each returned payload records the chest family, hero, game mode, item keys/rarities/power, property/trait/skin presence, unlock-kind counts, consumption result, and matching runtime rarity-table row.
