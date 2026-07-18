@@ -82,6 +82,117 @@ return function(H, repo_root)
         H.equal(sent[5][4], "hot_join")
     end)
 
+    H.test("CWV #660 hot-join identity retry is acknowledged and bounded", function()
+        local sent = {}
+        local d = descriptor(nil)
+        local lifecycle = Policy.new({
+            resolve_local = function(slot)
+                return slot and slot.exact or nil, slot and slot.base or nil
+            end,
+            resolve_remote = function() return descriptor(nil) end,
+            send = function(recipient, schema, payload, edge)
+                sent[#sent + 1] = { recipient, schema, payload.slot, edge }
+                return true
+            end,
+        })
+        local slots = {
+            slot_melee = { exact = d, base = "vanilla_base" },
+            slot_ranged = { base = "vanilla_ranged" },
+        }
+
+        H.equal(lifecycle:track_delivery("peer-join", slots, "hot_join_retry"), 1)
+        H.equal(lifecycle:pending_delivery_count(), 1)
+        H.equal(lifecycle:step_deliveries(Policy.RETRY_INTERVAL - 0.01), 0)
+        H.equal(lifecycle:step_deliveries(0.01), 1)
+        H.equal(#sent, 1)
+        H.equal(sent[1][1], "peer-join")
+        H.equal(sent[1][3], "slot_melee")
+
+        local payload = assert(lifecycle:payload_for("slot_melee", slots.slot_melee))
+        local ack = assert(lifecycle:ack_payload(payload))
+        H.equal(ack.slot, Policy.ACK_SLOT)
+        H.equal(lifecycle:accept_ack("wrong-peer", Policy.SCHEMA, ack), false)
+        H.equal(lifecycle:accept_ack("peer-join", Policy.SCHEMA, ack), true)
+        H.equal(lifecycle:accept_ack("peer-join", Policy.SCHEMA, ack), false)
+        H.equal(lifecycle:pending_delivery_count(), 0)
+        H.equal(lifecycle:step_deliveries(Policy.RETRY_INTERVAL), 0)
+        H.equal(#sent, 1, "an acknowledged descriptor must not be retried")
+
+        H.equal(lifecycle:track_delivery("peer-no-mod", slots, "hot_join_retry"), 1)
+        for _ = 1, Policy.MAX_RETRY_ATTEMPTS do
+            H.equal(lifecycle:step_deliveries(Policy.RETRY_INTERVAL), 1)
+        end
+        local final_sent, expired = lifecycle:step_deliveries(Policy.RETRY_INTERVAL)
+        H.equal(final_sent, 0)
+        H.equal(expired, 1)
+        H.equal(lifecycle:pending_delivery_count(), 0)
+        H.equal(#sent, 1 + Policy.MAX_RETRY_ATTEMPTS,
+            "a peer without CWV must receive only the strict retry cap")
+    end)
+
+    H.test("CWV #660 delayed receiver readiness converges exactly once", function()
+        local owner = descriptor("selected_skin", "skin_right", "skin_left")
+        local sender, receiver
+        local ready = false
+        local attempts = 0
+        local accepts = 0
+
+        receiver = Policy.new({
+            resolve_local = function() return nil, nil end,
+            resolve_remote = function()
+                return descriptor("selected_skin", "skin_right", "skin_left")
+            end,
+            send = function() return true end,
+        })
+        sender = Policy.new({
+            resolve_local = function(slot)
+                return slot and slot.exact or nil, slot and slot.base or nil
+            end,
+            resolve_remote = function() return nil, "unused" end,
+            send = function(recipient, schema, payload)
+                attempts = attempts + 1
+                if ready then
+                    local changed, exact = receiver:accept("owner-peer", schema, payload)
+                    if changed and exact then accepts = accepts + 1 end
+                    local ack = receiver:ack_payload(payload)
+                    if ack then sender:accept_ack(recipient, schema, ack) end
+                end
+                -- This mirrors VMF accepting the sender call even when the
+                -- joining peer's handler is not ready and delivery is lost.
+                return true
+            end,
+        })
+        local slots = {
+            slot_melee = { exact = owner, base = "vanilla_base" },
+        }
+
+        H.equal(sender:track_delivery("joining-peer", slots, "hot_join_retry"), 1)
+        for _ = 1, 49 do
+            H.equal(sender:step_deliveries(0.01), 0,
+                "per-frame stepping must not create per-frame traffic")
+        end
+        H.equal(attempts, 0)
+        H.equal(sender:step_deliveries(0.01), 1)
+        H.equal(attempts, 1, "first locally accepted send is dropped")
+        H.equal(sender:pending_delivery_count(), 1)
+
+        ready = true
+        H.equal(sender:step_deliveries(Policy.RETRY_INTERVAL), 1)
+        H.equal(attempts, 2)
+        H.equal(accepts, 1)
+        H.equal(sender:pending_delivery_count(), 0)
+        local exact, state = receiver:descriptor(
+            "owner-peer", "slot_melee", "vanilla_base")
+        H.equal(state, "exact")
+        H.equal(exact.fingerprint, owner.fingerprint)
+
+        local payload = assert(sender:payload_for("slot_melee", slots.slot_melee))
+        H.equal(receiver:accept("owner-peer", Policy.SCHEMA, payload), false,
+            "duplicate delivery must be idempotent")
+        H.equal(sender:step_deliveries(Policy.RETRY_INTERVAL), 0)
+        H.equal(attempts, 2, "ACK must stop every later retry")
+    end)
+
     H.test("CWV #660 receiver reconstructs locally and replays once per fingerprint", function()
         local d = descriptor("selected_skin", "skin_right", "skin_left")
         local lifecycle = Policy.new({
@@ -196,6 +307,9 @@ return function(H, repo_root)
             '_om._appearance_husk_wield_context = {',
             '_om._husk_identity_descriptor',
             '_send_identity_slots(slots, "hot_join_sync", true, peer_id)',
+            'lifecycle:track_delivery(peer_id, slots, "hot_join_retry")',
+            'lifecycle:step_deliveries(dt)',
+            'payload.slot == _om.appearance_lifecycle_policy.ACK_SLOT',
             'lifecycle=world_spawn adapter=%s',
             'issue660_world_identity_lifecycle_replay',
         }) do

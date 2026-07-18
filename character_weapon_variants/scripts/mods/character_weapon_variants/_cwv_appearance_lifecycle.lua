@@ -5,7 +5,12 @@
 -- Unit paths never cross the wire and no modded identifier enters a vanilla
 -- NetworkLookup.  Receivers reconstruct from their own resident registries and
 -- fail closed when the same descriptor cannot be proven locally.
-local M = { SCHEMA = 2 }
+local M = {
+    SCHEMA = 2,
+    ACK_SLOT = "cwv_identity_ack",
+    RETRY_INTERVAL = 0.5,
+    MAX_RETRY_ATTEMPTS = 8,
+}
 
 local SLOT_ORDER = { "slot_melee", "slot_ranged" }
 
@@ -31,6 +36,7 @@ function M.new(opts)
     local self = {
         _sent = {},
         _remote = {},
+        _deliveries = {},
     }
 
     function self:payload_for(slot_name, slot_data)
@@ -87,6 +93,91 @@ function M.new(opts)
             end
         end
         return sent
+    end
+
+    -- GearUtils.hot_join_sync runs before the joining peer's VMF mod channel is
+    -- necessarily ready. A successful local network_send therefore proves only
+    -- that the sender accepted the message, not that the receiver handled it.
+    -- Retain only exact CWV identities for a short, attempt-bounded retry window;
+    -- native fallback records already travel safely on the vanilla equipment
+    -- wire and do not need a delivery protocol.
+    function self:track_delivery(recipient, slots, edge)
+        if not nonempty(recipient) or type(slots) ~= "table" then return 0 end
+        local tracked = 0
+        for _, slot_name in ipairs(SLOT_ORDER) do
+            local payload = self:payload_for(slot_name, slots[slot_name])
+            if payload and nonempty(payload.item_key)
+                    and nonempty(payload.fingerprint) then
+                local route = recipient .. "|" .. slot_name
+                self._deliveries[route] = {
+                    recipient = recipient,
+                    slot = slot_name,
+                    fingerprint = payload.fingerprint,
+                    payload = payload,
+                    edge = edge or "hot_join_retry",
+                    elapsed = 0,
+                    attempts = 0,
+                }
+                tracked = tracked + 1
+            end
+        end
+        return tracked
+    end
+
+    function self:ack_payload(payload)
+        if type(payload) ~= "table" or not valid_slot(payload.slot)
+                or not nonempty(payload.item_key)
+                or not nonempty(payload.fingerprint) then
+            return nil
+        end
+        return {
+            slot = M.ACK_SLOT,
+            ack_slot = payload.slot,
+            fingerprint = payload.fingerprint,
+        }
+    end
+
+    function self:accept_ack(peer_id, schema, payload)
+        if schema ~= M.SCHEMA or not nonempty(peer_id)
+                or type(payload) ~= "table" or payload.slot ~= M.ACK_SLOT
+                or not valid_slot(payload.ack_slot)
+                or not nonempty(payload.fingerprint) then
+            return false
+        end
+        local route = peer_id .. "|" .. payload.ack_slot
+        local pending = self._deliveries[route]
+        if not pending or pending.fingerprint ~= payload.fingerprint then
+            return false
+        end
+        self._deliveries[route] = nil
+        return true
+    end
+
+    function self:step_deliveries(dt)
+        local sent, expired = 0, 0
+        dt = type(dt) == "number" and math.max(dt, 0) or 0
+        for route, pending in pairs(self._deliveries) do
+            pending.elapsed = pending.elapsed + dt
+            if pending.attempts >= M.MAX_RETRY_ATTEMPTS then
+                self._deliveries[route] = nil
+                expired = expired + 1
+            elseif pending.elapsed >= M.RETRY_INTERVAL then
+                -- Do not catch up with a burst after a long frame hitch. One
+                -- update can emit at most one retry per pending slot.
+                pending.elapsed = 0
+                pending.attempts = pending.attempts + 1
+                local ok = opts.send(pending.recipient, M.SCHEMA,
+                    pending.payload, pending.edge)
+                if ok then sent = sent + 1 end
+            end
+        end
+        return sent, expired
+    end
+
+    function self:pending_delivery_count()
+        local count = 0
+        for _ in pairs(self._deliveries) do count = count + 1 end
+        return count
     end
 
     function self:accept(peer_id, schema, payload)
@@ -156,6 +247,14 @@ function M.new(opts)
 
     function self:clear_peer(peer_id)
         self._remote[peer_id] = nil
+        if nonempty(peer_id) then
+            local prefix = peer_id .. "|"
+            for route in pairs(self._deliveries) do
+                if route:sub(1, #prefix) == prefix then
+                    self._deliveries[route] = nil
+                end
+            end
+        end
     end
 
     return self
