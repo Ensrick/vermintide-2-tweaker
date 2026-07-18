@@ -747,6 +747,12 @@ do
 		-- pre-handshake fallback.
 		if def.item_key == "cwv_es_musket_old" and hand == "right"
 				and item_units and item_units.right_hand_unit == def.right_hand_unit then
+			-- #474 (2026-07-18): the stance cache is keyed by the slot the item
+			-- SITS in (the owner publishes it that way), so the lookup must use
+			-- slot_name of the unit being presented. The husk's
+			-- equipment.wielded_slot lags the wield RPC (paired log: presentation
+			-- printed slot=slot_melee during a slot_ranged wield) and is logged
+			-- only as context.
 			local wielded_slot = nil
 			if owner_unit_3p and Unit.alive(owner_unit_3p) then
 				local ok_inv, inv = pcall(ScriptUnit.extension, owner_unit_3p, "inventory_system")
@@ -754,12 +760,12 @@ do
 				wielded_slot = eq and eq.wielded_slot
 			end
 			local mode = _om._old_musket_mode_for_owner
-				and _om._old_musket_mode_for_owner(owner_unit_3p, wielded_slot) or "ranged"
+				and _om._old_musket_mode_for_owner(owner_unit_3p, slot_name) or "ranged"
 			pcall(_om._apply_old_musket_textures, weapon_unit_3p)
 			pcall(_om._track_old_musket_unit, weapon_unit_3p, "3p", mode)
 			pcall(_om._apply_old_musket_transform, weapon_unit_3p, "3p", mode)
-			pcall(printf, "[cwv:474] husk old-musket presentation: textures + 3p %s pose applied (slot=%s hand=%s skin=%s)",
-				tostring(mode), tostring(wielded_slot), tostring(hand), tostring(skin))
+			pcall(printf, "[cwv:474] husk old-musket presentation: textures + 3p %s pose applied (slot=%s wielded=%s hand=%s skin=%s)",
+				tostring(mode), tostring(slot_name), tostring(wielded_slot), tostring(hand), tostring(skin))
 		end
 	end
 end
