@@ -5,7 +5,12 @@ return function(H, repo_root)
         H.truthy(source:find('mod:network_register("cwv_item_identity"', 1, true))
         H.truthy(source:find('_send_identity_slots(slots, "game_object_initialized", true)', 1, true))
         H.truthy(source:find('"spawn_resynced_loadout", false)', 1, true))
-        H.truthy(source:find('_send_identity_slots(equipment and equipment.slots, "parity_replay", true)', 1, true))
+        -- #474 (2026-07-18): the parity replay forces identity only on the
+        -- parity-enable edge; the bounded transition poll dedupes instead of
+        -- force-resending every 0.5s.
+        H.truthy(source:find('_send_identity_slots(equipment and equipment.slots, "parity_replay",', 1, true))
+        H.truthy(source:find('identity_force == true)', 1, true))
+        H.equal(source:find('_send_identity_slots(equipment and equipment.slots, "parity_replay", true)', 1, true), nil)
         H.equal(source:find('_send_identity_slots(', source:find('mod.update = function', 1, true) or 1, true), nil)
     end)
 

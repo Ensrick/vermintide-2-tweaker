@@ -660,6 +660,17 @@ _rt_register("issue474_old_musket_hot_join_identity_and_remote_fire", function()
 			or type(_om._old_musket_modes_by_backend) ~= "table" then
 		return "Old Musket explicit presentation-state contract is incomplete"
 	end
+	-- #474 (2026-07-18): stance + shot report additionally ride the delivering
+	-- cwv_item_identity channel; the dedicated mode channel never delivered in
+	-- the paired live logs. These are the identity-channel consumers.
+	if type(_om._old_musket_accept_mode) ~= "function"
+			or type(_om._old_musket_play_remote_fire) ~= "function"
+			or type(_om._old_musket_mode_for_local_slot) ~= "function" then
+		return "identity-channel stance/fire consumers are missing"
+	end
+	if _om._old_musket_play_remote_fire("rt474_no_such_peer", "not_the_rifle_event", "rt") ~= false then
+		return "remote fire acceptor must reject a non-rifle event"
+	end
 	for _, perspective in ipairs({ "1p", "3p" }) do
 		for _, mode in ipairs({ "ranged", "melee" }) do
 			local pos, rot, scale = _om._old_musket_transform_components(perspective, mode)
@@ -949,10 +960,17 @@ _rt_register("issue484_crafted_old_musket_identity", function()
 			or descriptor.unit ~= _om.old_musket_preview.UNIT then
 		return "canonical UUID did not reach the authored Old Musket preview descriptor"
 	end
+	-- payload_for now emits an explicit native record for the EMPTY melee slot
+	-- (appearance fix wave 1), so the crafted payload must be selected by slot,
+	-- never by array position.
 	local payloads = _om._cwv_identity_payloads({
 		slot_ranged = { item_data = item },
 	})
-	if not payloads[1] or payloads[1].item_key ~= "cwv_es_musket_old" then
+	local ranged_payload
+	for _, payload in ipairs(payloads) do
+		if payload.slot == "slot_ranged" then ranged_payload = payload end
+	end
+	if not ranged_payload or ranged_payload.item_key ~= "cwv_es_musket_old" then
 		return "canonical UUID did not reach the bounded husk identity channel"
 	end
 end)
