@@ -6,7 +6,7 @@ Workshop 3733366851). The engine contact surface (every hooked vanilla
 doc is the code-layout map. Stable `crafting_in_modded/` is its read-only public
 twin - all in-flight work happens here (repo `CLAUDE.md` dev/stable split).
 
-## Module map (v0.8.92-dev, Phase 2 regression split)
+## Module map (v0.8.93-dev, Phase 2 regression split)
 
 `crafting_in_modded_dev.lua` is still the primary file (~6,165 lines) - this is an
 IN-PROGRESS decomposition (PROJECT_STANDARDS 2.2a), not a finished one. Phase 1
@@ -34,7 +34,7 @@ new module needs only its manifest dofile line + a row here.
 | `_cim_salvage_modded_button.lua` + `_cim_salvage_autofill_core.lua` | Issue #618 desktop/console salvage definition extension and input/animation hooks. Reuses vanilla's bounded rarity-fill paths; the pure core derives the fifth and sixth positions from vanilla's own rare-to-exotic spacing and is engine-free tested. The fifth control uses CIM's dedicated `store_tag_icon_weapon_modded` crossed-swords texture; `icon_bg_modded` remains item-card presentation only. |
 | `_cim_trait_slot_policy.lua` | Pure #414 mapping of vanilla's three melee and six ranged Chaos Wastes trait categories to exact `slot_type`; shared by standard rerolls and the Athanor picker. |
 | `_cim_property_value_policy.lua` | Pure #244 symmetric conversion between absolute Athanor/Weave bubble values and normalized two-endpoint Adventure property storage. |
-| `_cim_template_catalog.lua` + `_cim_template_selector.lua` | Pure #524 standard Craft Item selector policy. Ordinary helper aliases collapse by stable `slot_type + item_type`; provider `cim_craft_family` is an explicit override; authored CWV keys remain exact and distinct. The catalog chooses a deterministic real row and the selector compacts/reconciles session rows by the same family identity. |
+| `_cim_template_catalog.lua` + `_cim_template_selector.lua` | Pure #524 standard Craft Item selector policy. Ordinary helper aliases collapse by stable `slot_type + item_type`; provider `cim_craft_family` is an explicit override; authored CWV keys remain exact and distinct. The catalog chooses a deterministic real row and the selector compacts/reconciles session rows by the same family identity. `_cim_synthetic_item_contract.lua` supplies exact key plus selector/instance role, and the final picker seam rejects crafted instances without deleting or merging their persistent inventory records. |
 | `_cim_keep_forge_interaction.lua` | Issue #624 data-registry adapter for `InteractionDefinitions.forge_access.client.can_interact`. Restores the native world-object interaction only for `eac-untrusted` sessions in a live hub, stores the original predicate once for reload safety, and leaves the native stop/prompt/controller flow untouched. |
 | `_cim_athanor_icon_policy.lua` | Pure #617 fail-closed resource policy for Athanor selector icons. Resolves the atlas material variant required by the widget's exact masked/saturated flags, proves it against the live top Gui, and substitutes only renderer-proven provider/base/vanilla fallbacks without mutating ItemMasterList. |
 | `_cim_forge_widget_material_policy.lua` | Pure #83 dynamic-widget closure. Walks post-construction scrollbar widgets, renderer-proofs every texture-bearing pass, and clone-on-write disables only an unsafe pass so shared definitions, safe siblings, and later Keep instances remain unchanged. |

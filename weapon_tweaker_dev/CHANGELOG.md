@@ -1,10 +1,18 @@
 # Weapon Tweaker Changelog
 
-## 0.12.276-dev (2026-07-18) - #701 Kruber crossbow left-hand offsets [verify-fix]
+## 0.12.277-dev (2026-07-18) - #701 Kruber crossbow left-hand offsets [verify-fix]
 
-- Runtime-parity mirror of weapon_tweaker 0.12.275-beta: `wh_crossbow` (Saltzpyre Crossbow) on `es_` (Kruber) careers now carries the recorded LEFT-hand additive offset Y +0.100, Z +0.025 on the DURABLE per-frame re-apply path, hand-scoped `hand="left"` (the crossbow's only 3P unit; guards the issue 735 paired-unit class). Preview parity fix: the MenuWorldPreviewer fake slot is keyed `left_unit_3p` for templates declaring only a left-hand unit so `hand="left"` offsets show in the keep preview. Spec from issue 109's census comment.
+- Runtime-parity mirror of weapon_tweaker 0.12.276-beta: `wh_crossbow` (Saltzpyre Crossbow) on `es_` (Kruber) careers now carries the recorded LEFT-hand additive offset Y +0.100, Z +0.025 on the DURABLE per-frame re-apply path, hand-scoped `hand="left"` (the crossbow's only 3P unit; guards the issue 735 paired-unit class). Preview parity fix: the MenuWorldPreviewer fake slot is keyed `left_unit_3p` for templates declaring only a left-hand unit so `hand="left"` offsets show in the keep preview. Spec from issue 109's census comment.
 
-**Solo verify:** as 0.12.275-beta.
+**Solo verify:** as 0.12.276-beta.
+
+## 0.12.276-dev (2026-07-18) - #724 release/source reconciliation [tooling]
+
+- Rebuilt the friends-only development stream from the current merged source
+  so its tracked bundle, Workshop artifact, and GitHub release manifest all
+  carry the #660 appearance census added after `0.12.275-dev` was published.
+- The census is bounded, observation-only tooling. This entry makes no new
+  player-facing behavior claim and does not change #660's verification state.
 
 ## 0.12.275-dev (2026-07-17) - #661 reconciliation build: both parallel fixes [verify-fix]
 

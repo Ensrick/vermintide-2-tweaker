@@ -1,11 +1,19 @@
 # Weapon Tweaker Changelog
 
-## 0.12.275-beta (2026-07-18) - #701 Kruber crossbow left-hand offsets [verify-fix]
+## 0.12.276-beta (2026-07-18) - #701 Kruber crossbow left-hand offsets [verify-fix]
 
 - Baked the recorded Kruber crossbow grip offset: `wh_crossbow` (Saltzpyre Crossbow) on `es_` (Kruber) careers now carries the LEFT-hand additive offset Y +0.100, Z +0.025 (spec recorded in issue 109's census comment, 2026-07-16 session). Applied through the DURABLE per-frame re-apply path (`_DURABLE_GRIP_OFFSETS` + `mod._reapply_durable_grip_offsets`, driven from `mod.update`) - a one-shot create_equipment write is stomped every anim tick (OFFSETS.md). Owner, bot, and remote-husk renderers all re-apply. `hand="left"` scopes the write to the crossbow's only 3P unit (the template declares a left-hand unit only) and guards the issue 735 paired-unit bleed class. Saltzpyre's native `wh_*` careers find no prefix and are untouched. 3P-only; 1P untouched.
 - Preview parity: `MenuWorldPreviewer._spawn_item_unit`'s fake slot is now keyed `left_unit_3p` for weapon templates that declare ONLY a left-hand unit, so `hand="left"` offsets show in the keep inventory preview too (they previously skipped it silently - the faked `right_unit_3p` field never matched the hand filter). Paired and right-hand weapons keep the historical key; hand-agnostic entries are unaffected (the offset helper iterates both fields).
 
-**Solo verify:** confirm `[wt:LOAD] v0.12.275-beta`. On a Kruber career (Mercenary or Huntsman; repeat once on GK if handy) equip the regular Saltzpyre Crossbow: (1) keep inventory preview shows the shifted left-hand grip, (2) in-mission 3P (third-person camera or a second client watching the husk) shows the same grip and it HOLDS - no snap-back after a shot/reload (durable re-apply), (3) weapon swap away and back re-applies it, (4) Saltzpyre's own crossbow grip is unchanged.
+**Solo verify:** confirm `[wt:LOAD] v0.12.276-beta`. On a Kruber career (Mercenary or Huntsman; repeat once on GK if handy) equip the regular Saltzpyre Crossbow: (1) keep inventory preview shows the shifted left-hand grip, (2) in-mission 3P (third-person camera or a second client watching the husk) shows the same grip and it HOLDS - no snap-back after a shot/reload (durable re-apply), (3) weapon swap away and back re-applies it, (4) Saltzpyre's own crossbow grip is unchanged.
+
+## 0.12.275-beta (2026-07-18) - #724 release/source reconciliation [tooling]
+
+- Rebuilt the public beta from the current merged source so its tracked bundle,
+  Workshop artifact, and GitHub release manifest all carry the #660 appearance
+  census added after `0.12.274-beta` was published.
+- The census is bounded, observation-only tooling. This entry makes no new
+  player-facing behavior claim and does not change #660's verification state.
 
 ## 0.12.274-beta (2026-07-17) - #661 reconciliation build: both parallel fixes [verify-fix]
 

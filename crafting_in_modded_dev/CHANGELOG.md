@@ -1,5 +1,29 @@
 # Crafting in Modded Changelog
 
+## 0.8.93-dev (2026-07-18): exact acquisition-row ownership (#524) [verify-fix]
+
+- Traced the native source contract: `can_craft_with` admits only default-rarity
+  weapon/accessory definition rows. CIM's final selector reconciler ignored
+  Modded rows for family ownership but still returned them, so any upstream
+  mirror/hook leak became the reported crafted 300-power row beside its
+  five-power Blacksmith selector.
+- The shared synthetic-item contract now owns both exact item identity and the
+  row's acquisition role (`selector`, exact crafted `instance`, or unrelated).
+  The final native Craft Item seam fails closed by removing instance rows before
+  family reconciliation; inventory, salvage, exact persistence, and Cosmetics
+  #702 offhand state remain per-instance and untouched.
+- Added engine-free and runtime regressions for top-level and nested Modded
+  rarity, repeated exact CWV crafts, authored accessory icon selectors, and
+  injected contract ownership. The bounded `[cim:524]` final-list probe remains
+  armed until in-game verification.
+
+**Verification:** in the native Keep **Craft Item** picker, craft the same CWV
+weapon twice, close and reopen the picker, and confirm exactly one five-power
+Blacksmith selector remains and no 300-power crafted instance appears. Repeat
+with two distinct accessory icon selectors; both selector icons remain while
+crafted accessories stay out of the picker. Run `/cim_regression_test` and
+require every `issue524_*` check to pass.
+
 ## 0.8.92-dev (2026-07-17): #83 dynamic Athanor material closure
 
 - Closed the post-construction gap in CIM's in-mission forge safety. Vanilla
