@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.276-dev (2026-07-18) - #701 Kruber crossbow left-hand offsets [verify-fix]
+
+- Runtime-parity mirror of weapon_tweaker 0.12.275-beta: `wh_crossbow` (Saltzpyre Crossbow) on `es_` (Kruber) careers now carries the recorded LEFT-hand additive offset Y +0.100, Z +0.025 on the DURABLE per-frame re-apply path, hand-scoped `hand="left"` (the crossbow's only 3P unit; guards the issue 735 paired-unit class). Preview parity fix: the MenuWorldPreviewer fake slot is keyed `left_unit_3p` for templates declaring only a left-hand unit so `hand="left"` offsets show in the keep preview. Spec from issue 109's census comment.
+
+**Solo verify:** as 0.12.275-beta.
+
 ## 0.12.275-dev (2026-07-17) - #661 reconciliation build: both parallel fixes [verify-fix]
 
 - Runtime-parity mirror of weapon_tweaker 0.12.274-beta: carries BOTH parallel #661 changes - the shared library's private-clone action ownership (below) and the inject-site clone-identity restore in `_inject_career_actions` (canonical `ActionTemplates` identity restored on mismatched career-action rows before install; residual conflicts report `conflict:<action>@<template>`). Two different builds were briefly uploaded as the prior version pair by parallel sessions; this version is unambiguous.

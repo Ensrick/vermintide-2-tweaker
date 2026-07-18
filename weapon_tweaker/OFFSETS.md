@@ -34,6 +34,7 @@ per-frame re-apply. Single source of truth — never split the value across file
 | Necromancer Ghost Scythe (`bw_ghost_scythe`) | Kruber (`es_`) | `{0, 0, 0.6}` | #2 durable | renders as Greathammer; `es_`-only; corrected in v0.12.153-dev; husk fan-out v0.12.229-dev |
 | Elven 2H Axe / Glaive (`we_2h_axe`, `two_handed_axes_template_2`) | Kruber (`es_`) | `{0, 0, 0.285}` | #2 durable | renders as Greathammer; `es_`-only; +0.285 Z; v0.12.152-dev. Grip offset is independent of the anim bake — the Glaive's 3P anim is NOT yet baked (still in the dev picker). |
 | Empire Handgun (`es_handgun`) | Saltzpyre (`wh_`) | `{0, -0.17, -0.05}` | #2 durable | Restores the receiver-scoped correction lost after the unsafe shared-linking-table bake was removed in v0.12.136; standard Saltzpyre careers only; v0.12.249-dev. |
+| Saltzpyre Crossbow (`wh_crossbow`) | Kruber (`es_`) | `{0, 0.100, 0.025, hand="left"}` | #2 durable | User-recorded LEFT-hand offset (#701, spec in issue 109 census). `hand="left"` = the crossbow's only 3P unit (template declares left_hand_unit only, linked j_leftweaponattach); explicit scoping guards the issue 735 paired-unit class. v0.12.275-beta. |
 
 The small static nudges (`we_1h_sword`/`bw_sword`/`es_1h_sword` +0.05, the wh hammers
 +0.15, the `es_2h_sword`/`wh_2h_sword` −0.085) use path #1 only and are not listed
@@ -123,6 +124,12 @@ in-game.
 ## How to add / change an offset
 
 1. Set the value in `_weapon_grip_offsets[weapon_key] = { <career_prefix>_ = {x, y, z[, hand="right"|"left"]} }`.
+   `hand="left"` entries DO reach the inventory preview: since v0.12.275-beta the
+   `MenuWorldPreviewer._spawn_item_unit` fake slot is keyed `left_unit_3p` when the
+   weapon template declares ONLY a `left_hand_unit` (crossbow class). Paired
+   weapons (both hands declared) still present as `right_unit_3p` per unit - the
+   previewer has no hand indicator, so a hand-scoped entry on a PAIRED weapon
+   will not preview-match; verify those in-game.
 2. If the offset is large enough that it doesn't visually hold in-game (anything
    that gets stomped — generally anything beyond a tiny nudge), ALSO add
    `<weapon_key> = true` to `_DURABLE_GRIP_OFFSETS`.

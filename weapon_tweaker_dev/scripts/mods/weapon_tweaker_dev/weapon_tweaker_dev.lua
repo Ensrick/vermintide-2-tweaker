@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.275-dev"
+local MOD_VERSION = "0.12.276-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -569,6 +569,20 @@ local _weapon_grip_offsets = {
     -- durable because animation ticks were the user-observed source of the lost
     -- offset. Position-only application composes with #569 rotation and scale.
     es_handgun = { wh_ = {0, -0.17, -0.05} },
+    -- Saltzpyre Crossbow (wh_crossbow) on Kruber (es_): the user-recorded
+    -- LEFT-hand additive offset Y +0.100, Z +0.025 (#701; recorded in the
+    -- issue 109 census from the 2026-07-16 session). hand="left" scopes the
+    -- write to the crossbow's only 3P unit: the crossbow template declares a
+    -- left_hand_unit ONLY (crossbows.lua:258-259) and its 3P wielded linking
+    -- attaches j_leftweaponattach -> weapon node 0
+    -- (attachment_node_linking.lua:4220-4225), so no right_unit_3p ever
+    -- spawns. The explicit hand scoping also guards the issue 735 burn class
+    -- (a hand-agnostic transform bleeding onto the second unit of a paired
+    -- weapon). es_ ONLY (Kruber); Saltzpyre's native wh_* careers find no
+    -- prefix -> offset nil -> native crossbow grip untouched. DURABLE (see
+    -- _DURABLE_GRIP_OFFSETS): a one-shot create_equipment write is stomped
+    -- every anim tick in-game. 3P-only by construction.
+    wh_crossbow = { es_ = {0, 0.100, 0.025, hand = "left"} },
     -- NOTE: this table is the SINGLE SOURCE OF TRUTH for every 3P grip nudge
     -- (preview AND in-game read it). Two application paths consume it:
     --   * SMALL static nudges (the 0.05-0.15 entries above): a one-shot additive
@@ -664,6 +678,7 @@ local _DURABLE_GRIP_OFFSETS = {
     bw_deus_01                 = true,  -- Sienna Coruscation Staff on Kruber (+0.6 Z, es_-only)
     es_bastard_sword           = true,  -- Bretonnian Longsword on Saltzpyre (+0.08 Z, wh_-only)
     es_handgun                 = true,  -- Empire Handgun on Saltzpyre (-0.17 Y, -0.05 Z, wh_-only)
+    wh_crossbow                = true,  -- Saltzpyre Crossbow on Kruber (+0.100 Y, +0.025 Z, LEFT hand, es_-only, #701)
 }
 
 -- Resolve the career-prefix-matched offset entry for (weapon_key, career_name)
@@ -3878,7 +3893,25 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
                         or (self._profile and self._profile.name)
     if not career_name then return r1, r2, r3 end
 
-    local fake_slot = { right_unit_3p = unit }
+    -- #701: key the fake slot by the template's declared hand so hand-scoped
+    -- grip offsets (offset.hand = "left") reach the preview. _spawn_item_unit
+    -- fires once per unit with NO hand indicator, so the historical blanket
+    -- right_unit_3p key made every hand="left" entry silently skip the preview
+    -- (its unit filter never matched). A weapon template that declares ONLY a
+    -- left_hand_unit (the crossbow, crossbows.lua:258-259) spawns exactly one
+    -- 3P unit and it is the LEFT one, so presenting it as left_unit_3p is
+    -- unambiguous. Templates declaring both hands (paired weapons) or only a
+    -- right hand keep the right_unit_3p key: per-unit calls cannot tell weapon
+    -- from shield here (issue 735 class), and hand-agnostic entries apply to
+    -- whichever single field exists anyway, so their behavior is unchanged
+    -- (_offset_weapon_units iterates both fields; _scale/_wt569 are field-
+    -- agnostic - the #569 row's `hand` label is log-only).
+    local fake_slot
+    if item_template and item_template.left_hand_unit and not item_template.right_hand_unit then
+        fake_slot = { left_unit_3p = unit }
+    else
+        fake_slot = { right_unit_3p = unit }
+    end
     _scale_weapon_units(fake_slot, weapon_key, career_name)
     _offset_weapon_units(fake_slot, weapon_key, career_name)
     _wt569_track_3p_units(fake_slot, weapon_key, career_name, item_template,
