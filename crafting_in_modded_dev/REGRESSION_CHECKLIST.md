@@ -53,12 +53,12 @@ Last updated: 2026-07-15.
 | Field | Value |
 |---|---|
 | Symptom | Each crafted CWV weapon appears to add another base/blacksmith choice, every CWV selector is absent on initial entry, or native preview/Versus aliases appear beside the same weapon family. |
-| Root cause | CWV clones require exact authored identity, but ordinary ItemMasterList helper rows require family identity. The 0.8.76 exact-key catalog restored CWV rows but also admitted ordinary `_preview`/Versus aliases as separate selectors. |
-| Fix version(s) | cim_dev 0.8.72-dev (bounded identity), 0.8.76-dev (pre-enter availability), 0.8.79-dev (craft-family alias dedupe) |
+| Root cause | CWV clones require exact authored identity, but ordinary ItemMasterList helper rows require family identity. The 0.8.76 exact-key catalog restored CWV rows but also admitted ordinary `_preview`/Versus aliases as separate selectors. The final selector later ignored crafted Modded rows for family ownership but still returned them if an upstream mirror/hook leaked them past vanilla `can_craft_with`. |
+| Fix version(s) | cim_dev 0.8.72-dev (bounded identity), 0.8.76-dev (pre-enter availability), 0.8.79-dev (craft-family alias dedupe), 0.8.93-dev (shared picker-role contract + final instance exclusion) |
 | Category | SOLO |
 | Repro | Open the standard Craft Item page directly and inspect Dual Axes, Crowbill, Greataxe, and native Tuskgor Spear; craft Imperial Longsword twice, then leave and reopen the grid. |
 | Expected post-fix | Every ordinary weapon family has one deterministic selector; every authored CWV key remains distinct, including veteran/stat variants; Modded-rarity crafts appear only in ordinary inventory. |
-| Detection | Offline `test_cim_cwv_template_selector.lua` and `test_cim_cwv_template_catalog.lua` pass; `/cim_regression_test` passes all three `issue524_*` checks. `[cim:524]` reports bounded kept/dropped alias identities. |
+| Detection | Offline `test_cim_cwv_template_selector.lua`, `test_cim_cwv_template_catalog.lua`, and `test_cim_synthetic_item_contract.lua` pass; `/cim_regression_test` passes every `issue524_*` check. `[cim:524]` reports the bounded final rendered list and any remaining hard/soft duplicate identities. |
 
 ---
 

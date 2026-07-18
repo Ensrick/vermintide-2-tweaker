@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.30-dev"
+local MOD_VERSION = "0.1.31-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
