@@ -16,6 +16,25 @@ function M.install(api)
     local _rt_src_read = assert(api.src_read, "Mod Tweaker contracts require src_read")
     local math = math
 
+_rt_register("issue630_dx12_fence_probe", function()
+    local module = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dx12_fence630")
+    if type(module) ~= "table" or type(module.new) ~= "function"
+        or type(module.runtime_info) ~= "function" then
+        return "#630 diagnostics module contract is unavailable"
+    end
+    local probe = mod._gut_dx12_fence630
+    if type(probe) ~= "table" then return "#630 runtime probe was not installed" end
+    for _, name in ipairs({ "enter", "before_draw", "after_draw", "leave", "snapshot" }) do
+        if type(probe[name]) ~= "function" then
+            return string.format("#630 runtime probe missing %s", name)
+        end
+    end
+    local snapshot = probe:snapshot()
+    if snapshot.line_cap ~= module.DEFAULT_LINE_CAP then
+        return "#630 diagnostics line cap drifted"
+    end
+end)
+
 _rt_register("mod_tweaker_esc_entry_hook", function()
     local logic_class = rawget(_G, "IngameViewLayoutLogic")
     if not logic_class then return "IngameViewLayoutLogic global not present" end

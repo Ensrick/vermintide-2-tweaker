@@ -63,7 +63,8 @@ _rt_register("cos_la_reconcile_and_pull_wired", function()
     end
     if not (LA_PERSIST and type(LA_PERSIST.save_offhand) == "function"
         and type(LA_PERSIST.clear_offhand) == "function"
-        and type(LA_PERSIST.get_saved_offhands) == "function") then
+        and type(LA_PERSIST.get_saved_offhands) == "function"
+        and type(LA_PERSIST.commit_offhand_entry) == "function") then
         return "LA_PERSIST offhand API incomplete"
     end
 end)
@@ -264,7 +265,8 @@ end)
 -- (save -> read back -> clear -> gone). Uses a fake backend_id; leaves no
 -- residue in la_persisted_equips.
 _rt_register("cos_la_offhand_persistence_roundtrip", function()
-    if not (LA_PERSIST and LA_PERSIST.save_offhand) then return "offhand API missing" end
+    if not (LA_PERSIST and LA_PERSIST.save_offhand
+            and LA_PERSIST.commit_offhand_entry) then return "offhand API missing" end
     local bid, hand = "rt_fake_bid_0001", "left_hand_unit"
     LA_PERSIST.save_offhand(bid, hand, "rt_key", "rt_vanilla")
     local saved = LA_PERSIST.get_saved_offhands()
@@ -277,10 +279,18 @@ _rt_register("cos_la_offhand_persistence_roundtrip", function()
     saved = LA_PERSIST.get_saved_offhands()
     if saved and saved[bid] then return "cleared offhand still present" end
 
-    LA_PERSIST.save_offhand(bid, hand, nil, nil, "units/rt/dual_left")
+    local committed = LA_PERSIST.commit_offhand_entry({
+        backend_id = bid,
+        hand_field = hand,
+        offhand_unit = "units/rt/dual_left",
+        skin_key = "rt_dual_skin",
+        player_unit = nil,
+    })
+    if not committed then return "exact offhand commit rejected without a player unit" end
     saved = LA_PERSIST.get_saved_offhands()
     rec = saved and saved[bid] and saved[bid][hand]
     if not (rec and rec.unit_path == "units/rt/dual_left"
+            and rec.vanilla_key == "rt_dual_skin"
             and rec.armoury_key == nil) then
         LA_PERSIST.clear_offhand(bid, hand)
         return "saved native/CWV hand mesh did not read back"

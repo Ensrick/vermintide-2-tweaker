@@ -19,6 +19,8 @@ local tab_labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_lab
 local ordering = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_ordering")
 local DialogueUI = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")
 local label_policy = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_label_policy")
+local dx12_diag_module = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dx12_fence630")
+local dx12_diag = mod._gut_dx12_fence630
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -2286,6 +2288,7 @@ function ModTweakerView:on_enter(params)
     -- by the probe to prove the borrowed renderer is the same instance across opens.
     if mod._gut_mt_repin_la then pcall(mod._gut_mt_repin_la, self, "on_enter") end
     self:_rebuild()
+    if dx12_diag then dx12_diag:enter(dx12_diag_module.runtime_info(self, "standalone")) end
     self:_dump_state("on_enter"); self:_dump_scrollbar("on_enter"); _wwise_probe()
     -- Native menu-open feedback (matches OptionsView / VMF options menu). pcall'd
     -- inside _play_event, so a missing world or renamed event is silent, never a crash.
@@ -2301,6 +2304,7 @@ function ModTweakerView:on_enter(params)
 end
 
 function ModTweakerView:on_exit()
+    if dx12_diag then dx12_diag:leave("on_exit", self) end
     self:_search_finish() -- (#559) retain last-changed/top-result branch on menu exit
     self._active = false
     self.exiting = nil
@@ -2386,7 +2390,9 @@ function ModTweakerView:update(dt, t)
     local input_service = self.input_manager:get_service(SERVICE)
     if not input_service then return end
 
+    if dx12_diag then dx12_diag:before_draw(dx12_diag_module.runtime_info(self, "standalone")) end
     self:_draw(dt, input_service)
+    if dx12_diag then dx12_diag:after_draw() end
 
     self._draw_frames = (self._draw_frames or 0) + 1
     if self._draw_frames % 120 == 1 then
@@ -2471,6 +2477,7 @@ function ModTweakerView:update(dt, t)
 end
 
 function ModTweakerView:destroy()
+    if dx12_diag and dx12_diag:snapshot().active then dx12_diag:leave("destroy", self) end
     -- #605: destruction can bypass on_exit during state replacement.
     DialogueUI.stop()
     pcall(function()

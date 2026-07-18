@@ -1,5 +1,20 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.287-dev (2026-07-17) -- #630 DX12 fence diagnostics
+
+- Added automatic, bounded lifecycle evidence around both Mod Tweaker
+  presentation passes. The probe records view entry/exit, renderer identity,
+  selected-tab and window-focus edges, row counts, hold-pose gates, and balanced
+  draw begin/end counts under the `[gut:630]` prefix.
+- This is deliberately diagnostics-only. The attached dump stalls for 15.8
+  seconds in native `D3D12RenderDevice::end_frame` with no Lua exception and
+  healthy Lua memory; current source proves Mod Tweaker borrows its renderer and
+  WT's hold-pose module owns no preview world, preview unit, or package. There is
+  not yet evidence for a renderer/focus behavior change.
+- Added Lua 5.1 coverage for balanced passes, unmatched/re-entered passes,
+  focus/tab edge deduplication, the hard line cap, and both presentation call
+  sites, plus runtime contract `issue630_dx12_fence_probe`.
+
 ## 0.2.286-dev (2026-07-17) -- #694 clean player-facing labels
 
 - Mod Tweaker now removes legacy leading verification/status prefixes when it

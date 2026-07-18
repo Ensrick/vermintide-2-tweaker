@@ -1,5 +1,46 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.446-dev - 2026-07-17 - custom Outrider launcher mesh (#627) [verify-fix]
+
+- Replaced the `cwv_es_outrider_grenade_launcher` blunderbuss placeholder visual
+  with a user-supplied custom launcher mesh. Source archive
+  `fa676a4e-...` (SHA-256 `CC1230D2...D3C6A76`) carries no author/title/source/
+  license metadata; provenance is recorded honestly in `THIRD_PARTY_NOTICES.md`
+  as user-supplied.
+- Mesh optimized from 500,000 triangles (847k position scalars / 1.5M polygon
+  indices in the raw capture) to 11,999 triangles via collapse decimation, then
+  normalized (long axis to two Blender units, barrel along +X) and collapsed to
+  the Stingray-safe `launcher_mat` slot; identical 1P and `_3p` FBX siblings.
+  Reproducible pipeline: `tools/convert_launcher_assets.ps1` +
+  `tools/convert_launcher_mesh.py` + `tools/LAUNCHER_ASSET_PIPELINE.md`.
+- Textures unpacked from the packed glTF metallicRoughness map (G = roughness,
+  B = metallic) plus albedo/normal, capped at 2048px, neutral-white AO (source
+  has none), shipped as PNG + `.texture` under `textures/cwv_launcher/launcher_01/`.
+- New `_cwv_launcher_family.lua` policy module (single model) wires the custom
+  unit through the same package-alias machinery as Greataxe (#597) / Crowbill
+  (#604): preview-package + collected-package + inventory `NetworkLookup` forward
+  aliases to the vanilla blunderbuss so owner 1P/3P, inventory/item previews, the
+  illusion browser, and remote husks resolve, while unmodded peers fall back to
+  the blunderbuss visual (issues #279/#399).
+- Starting `right_hand_scale`/`right_hand_rotation` are placeholders pending
+  in-game Hold-Pose tuning; icon art still points at the blunderbuss icon.
+  Both tracked in `TODO.md`.
+
+**Solo verify:** Equip the Outrider Grenade Launcher (craft via CIM). The held
+1P mesh and the 3P body mesh should be the new launcher, not the blunderbuss.
+Open its illusion picker - the thumbnail spawns the launcher without crash. Tune
+scale/rotation with WT's 3P Hold-Pose tuner and report the values to bake.
+**Coop verify:** A CWV peer sees your launcher; a non-CWV peer sees the vanilla
+blunderbuss with no equip crash.
+
+**DoD:** Universal walked. Trait gates: G-CROSS-CHAR (custom unit is a static
+package dependency), G-CUSTOM-ILLUSION (auto-skin now renders the custom mesh),
+G-APPEARANCE (owner/preview/browser wired; non-CWV fallback wire-safe; matrix
+cells: owner-1p, owner-3p, inventory-preview, illusion-browser pending user
+in-game confirmation). Deferrals: transform tuning + custom icon art (TODO.md);
+husk-on-CWV-peer render and rotation correctness pending user in-game verify
+(#392 husk class - the husk rides the existing CWV weapon-skin wire path).
+
 ## 0.1.445-dev - 2026-07-17 - cloned career-action ownership (#661) [verify-fix]
 
 - Prepared each distinct private weapon template from its declared base weapon

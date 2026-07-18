@@ -61,6 +61,7 @@ local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
 local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
+local OFFHAND_COMMIT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy")
 local LA_REPLAY_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_policy")
 mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_instance_policy")
 -- v0.9.49-dev (issue #186): disable Loremaster's Armoury's Okri's-Challenges /
@@ -86,7 +87,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.146-dev"
+local MOD_VERSION = "0.9.147-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2650,85 +2651,9 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
     -- _ct_on_offhand_pressed. Each preview click overwrote its own queue
     -- slot, so this drains exactly ONE final selection per backend_id —
     -- the one the user left selected when navigating away.
-    if mod._pending_la_emit_on_exit and _send_la_apply then
-        local n = 0
-        for _, entry in pairs(mod._pending_la_emit_on_exit) do
-            if entry and entry.player_unit and Unit.alive(entry.player_unit) then
-                if entry.offhand_unit ~= nil then
-                    -- v0.9.82-dev (#416): committed VANILLA offhand mesh pick. Emit
-                    -- under BOTH key namespaces (weapon_key + template) the husk
-                    -- get_item_units lookup can key on; "" is the CLEAR sentinel that
-                    -- reverts peers to the base offhand (and drops any stale LA entry).
-                    mod:info("[cos-la-sync] EMIT-OFFHAND-MESH-ON-EXIT weapon=%s template=%s hand=%s unit=%s",
-                        tostring(entry.weapon_key), tostring(entry.template_key),
-                        tostring(entry.hand_field), tostring(entry.offhand_unit))
-                    if mod._send_offhand_mesh then
-                        mod._send_offhand_mesh(entry.player_unit, entry.weapon_key,
-                            entry.hand_field, entry.offhand_unit)
-                        if entry.template_key and entry.template_key ~= entry.weapon_key then
-                            mod._send_offhand_mesh(entry.player_unit, entry.template_key,
-                                entry.hand_field, entry.offhand_unit)
-                        end
-                    end
-                    -- #583: direct native/CWV hand meshes use the same exact
-                    -- backend-id + hand persistence section as LA picks. The
-                    -- empty Follow Main sentinel clears only this hand.
-                    if entry.backend_id and LA_PERSIST then
-                        if entry.offhand_unit ~= "" and LA_PERSIST.save_offhand then
-                            LA_PERSIST.save_offhand(entry.backend_id, entry.hand_field,
-                                nil, entry.skin_key, entry.offhand_unit, entry.inventory_icon)
-                        elseif LA_PERSIST.clear_offhand then
-                            LA_PERSIST.clear_offhand(entry.backend_id, entry.hand_field)
-                        end
-                    end
-                    n = n + 1
-                elseif entry.revert then
-                    -- v0.9.69-dev (#265 Slice 1): committed vanilla pick over a
-                    -- synced LA entry -> broadcast the revert for BOTH key
-                    -- namespaces the apply flow writes (weapon_key + template).
-                    mod:info("[cos-la-sync] EMIT-REVERT-ON-EXIT weapon=%s template=%s hand=%s vanilla=%s",
-                        tostring(entry.weapon_key), tostring(entry.template_key),
-                        tostring(entry.hand_field), tostring(entry.vanilla_key))
-                    if mod._send_la_revert then
-                        mod._send_la_revert(entry.player_unit, entry.weapon_key, "offhand",
-                            entry.vanilla_key, entry.hand_field)
-                        if entry.template_key and entry.template_key ~= entry.weapon_key then
-                            mod._send_la_revert(entry.player_unit, entry.template_key, "offhand",
-                                entry.vanilla_key, entry.hand_field)
-                        end
-                    end
-                    -- v0.9.71-dev: committed revert also clears the on-disk pick.
-                    if entry.backend_id and LA_PERSIST and LA_PERSIST.clear_offhand then
-                        LA_PERSIST.clear_offhand(entry.backend_id, entry.hand_field)
-                    end
-                    n = n + 1
-                else
-                -- v0.9.61-dev (#203): [cos-la-sync] the authoritative offhand key
-                -- actually broadcast on screen exit. Pair with the receiver's
-                -- [cos-la-sync] RECV line (same armoury_key) in the HOST's log to
-                -- confirm the host cached it; a mismatch vs the wearer's rendered
-                -- shield is the #203 divergence.
-                mod:info("[cos-la-sync] EMIT-ON-EXIT weapon=%s template=%s hand=%s armoury=%s vanilla=%s",
-                    tostring(entry.weapon_key), tostring(entry.template_key),
-                    tostring(entry.hand_field), tostring(entry.armoury_key), tostring(entry.vanilla_key))
-                _send_la_apply(entry.player_unit, entry.weapon_key, "offhand",
-                    entry.armoury_key, entry.vanilla_key, entry.hand_field)
-                if entry.template_key and entry.template_key ~= entry.weapon_key then
-                    _send_la_apply(entry.player_unit, entry.template_key, "offhand",
-                        entry.armoury_key, entry.vanilla_key, entry.hand_field)
-                end
-                -- v0.9.71-dev: committed Apply persists the pick across game
-                -- restarts (user report 2026-07-06: shield illusions died with
-                -- the session - _offhand_selection had no on-disk mirror).
-                if entry.backend_id and LA_PERSIST and LA_PERSIST.save_offhand then
-                    LA_PERSIST.save_offhand(entry.backend_id, entry.hand_field,
-                        entry.armoury_key, entry.vanilla_key, nil,
-                        entry.inventory_icon, entry.cos_authored)
-                end
-                n = n + 1
-                end
-            end
-        end
+    if mod._pending_la_emit_on_exit then
+        local n = OFFHAND_COMMIT.drain(mod, mod._pending_la_emit_on_exit,
+            LA_PERSIST, _send_la_apply, function(unit) return Unit.alive(unit) end)
         if n > 0 then
             _dbg("[ct offhand] drained %d deferred LA emit(s) on screen exit", n)
             -- v0.9.3.8: pulse-wield to force fresh weapon-unit spawn.
@@ -2939,6 +2864,12 @@ end
 mod._la_restore_offhand_selections = function()
     if mod._la_offhand_restore_done then return end
     if not (LA_PERSIST and LA_PERSIST.get_saved_offhands) then return end
+    local restore_now = os.clock()
+    if mod._la_offhand_restore_retry_at
+            and restore_now < mod._la_offhand_restore_retry_at then return end
+    mod._la_offhand_restore_retry_at = restore_now + 0.5
+    mod._la_offhand_restore_deadline = mod._la_offhand_restore_deadline
+        or (restore_now + 15)
     local saved = LA_PERSIST.get_saved_offhands()
     if not next(saved) then mod._la_offhand_restore_done = true return end
     local la_pools = LA_BRIDGE and LA_BRIDGE.registered
@@ -2961,11 +2892,9 @@ mod._la_restore_offhand_selections = function()
     local backend_items = backend_mgr and backend_mgr._interfaces
         and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
     if needs_mesh and not (backend_items and backend_items.get_item_from_id) then return end
-    if get_mod("character_weapon_variants") and mod._discover_cwv_dual_offhand_pools
-            and mod._discover_cwv_dual_offhand_pools() < 7 then
-        return
+    if get_mod("character_weapon_variants") and mod._discover_cwv_dual_offhand_pools then
+        mod._discover_cwv_dual_offhand_pools()
     end
-    mod._la_offhand_restore_done = true
     -- armoury_key -> bridge option record (first hit wins; records for the
     -- same key are identical across weapon types/hands).
     local by_key = {}
@@ -2999,11 +2928,12 @@ mod._la_restore_offhand_selections = function()
             end
         end
     end
-    local n, miss = 0, 0
+    local n, miss, deferred = 0, 0, 0
     for backend_id, hands in pairs(saved) do
         for hand_field, rec in pairs(hands) do
             local la_opt = rec and rec.armoury_key and by_key[rec.armoury_key]
             local mesh_opt = nil
+            local this_deferred = false
             if rec and type(rec.unit_path) == "string" and rec.unit_path ~= "" then
                 -- Backend records can outlive salvaged items or removed CWV
                 -- variants. Resolve defensively and accept only a unit still in
@@ -3017,8 +2947,41 @@ mod._la_restore_offhand_selections = function()
                     local pools = item_type and mod._ensure_independent_dual_pool
                         and mod._ensure_independent_dual_pool(item_type)
                     local pool = pools and pools[hand_field]
+                    local unit_fallback, unit_ambiguous = nil, false
                     for _, candidate in ipairs(pool or {}) do
-                        if candidate.unit == rec.unit_path then mesh_opt = candidate break end
+                        if candidate.unit == rec.unit_path then
+                            local component_key = candidate.skin_key
+                                or candidate.source_skin_key
+                            if rec.vanilla_key and component_key == rec.vanilla_key then
+                                mesh_opt = candidate
+                                break
+                            elseif not unit_fallback then
+                                unit_fallback = candidate
+                            else
+                                unit_ambiguous = true
+                            end
+                        end
+                    end
+                    if not mesh_opt and unit_fallback and not unit_ambiguous then
+                        -- Legacy records may predate the component skin key.
+                        -- A unique exact-unit hit remains deterministic.
+                        mesh_opt = unit_fallback
+                    end
+                    if not mesh_opt and (not pool or #pool == 0)
+                            and restore_now < mod._la_offhand_restore_deadline then
+                        deferred = deferred + 1
+                        this_deferred = true
+                    end
+                else
+                    -- CIM can own an exact saved instance before its backend
+                    -- mirror injection is available. Preserve that identity and
+                    -- retry boundedly instead of consuming the one-shot restore.
+                    local cim = get_mod("cim_dev") or get_mod("cim")
+                    local pending_cim = cim and cim._cim_get_craft
+                        and cim._cim_get_craft(backend_id) ~= nil
+                    if pending_cim and restore_now < mod._la_offhand_restore_deadline then
+                        deferred = deferred + 1
+                        this_deferred = true
                     end
                 end
             end
@@ -3042,7 +3005,7 @@ mod._la_restore_offhand_selections = function()
                 _offhand_selection[backend_id][hand_field] = mesh_opt
                 _preload_offhand_for_option(mesh_opt)
                 n = n + 1
-            else
+            elseif not this_deferred then
                 miss = miss + 1
             end
         end
@@ -3052,8 +3015,18 @@ mod._la_restore_offhand_selections = function()
         -- (it reads _offhand_selection for equipped backend_ids).
         mod._la_self_rebroadcast_pending = true
     end
-    if printf then printf("[la-state] OFFHAND-RESTORE %d pick(s) restored from disk, %d unresolvable (safe native fallback)",
-        n, miss) end
+    mod._la_offhand_restore_done = deferred == 0
+        or restore_now >= mod._la_offhand_restore_deadline
+    if mod._la_offhand_restore_done then
+        mod._la_offhand_restore_retry_at = nil
+    end
+    local summary = string.format("%d|%d|%d|%s", n, miss, deferred,
+        tostring(mod._la_offhand_restore_done))
+    if printf and summary ~= mod._la_offhand_restore_last_summary then
+        mod._la_offhand_restore_last_summary = summary
+        printf("[la-state] OFFHAND-RESTORE restored=%d unresolvable=%d deferred=%d done=%s",
+            n, miss, deferred, tostring(mod._la_offhand_restore_done))
+    end
 end
 
 local function _cos_ui_icon_available(icon)
@@ -4149,13 +4122,18 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
         local pm = Managers and Managers.player
         local local_player = _local_player_safe(pm)
         local player_unit = local_player and local_player.player_unit
-        if player_unit and Unit.alive(player_unit) then
-            local template_key = nil
-            if self._item_backend_id and Managers and Managers.backend then
-                local bi = Managers.backend:get_interface("items")
-                local item = bi and bi.get_item_from_id and bi:get_item_from_id(self._item_backend_id)
-                template_key = item and item.data and item.data.template
-            end
+        local template_key = nil
+        local backend_mgr = Managers and Managers.backend
+        local bi = backend_mgr and backend_mgr._interfaces
+            and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
+        if self._item_backend_id and bi and bi.get_item_from_id then
+            local item = bi:get_item_from_id(self._item_backend_id)
+            template_key = item and item.data and item.data.template
+        end
+        -- #702: queue the exact Apply intent even when no player unit exists.
+        -- The on-exit commit owns persistence; player_unit is optional delivery
+        -- context for the subsequent peer emit.
+        if self._item_backend_id then
             mod._pending_la_emit_on_exit = mod._pending_la_emit_on_exit or {}
             -- v0.9.9.4-dev: queue per-hand so multi-mount weapons with two
             -- LA picks (rare today — LA ships only left_hand variants) each
@@ -4179,6 +4157,9 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
             _trace("WRITE pending_la_emit_on_exit[%s] armoury=%s vanilla=%s hand=%s weapon=%s",
                 tostring(q_key), tostring(opt.la_armoury_key), tostring(opt.vanilla_skin),
                 tostring(hand_field), tostring(weapon_key))
+        elseif printf then
+            printf("[cos:702] OFFHAND-QUEUE rejected: missing exact backend id hand=%s armoury=%s",
+                tostring(hand_field), tostring(opt.la_armoury_key))
         end
     elseif opt then
         -- v0.9.61-dev (#203): a NON-LA (vanilla) offhand press must SUPERSEDE any
@@ -4217,13 +4198,15 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
             local pm_v = Managers and Managers.player
             local lp_v = _local_player_safe(pm_v)
             local player_unit_v = lp_v and lp_v.player_unit
-            if player_unit_v and Unit.alive(player_unit_v) then
-                local template_key_v = nil
-                if self._item_backend_id and Managers and Managers.backend then
-                    local bi_v = Managers.backend:get_interface("items")
-                    local item_v = bi_v and bi_v.get_item_from_id and bi_v:get_item_from_id(self._item_backend_id)
-                    template_key_v = item_v and item_v.data and item_v.data.template
-                end
+            local template_key_v = nil
+            local backend_mgr_v = Managers and Managers.backend
+            local bi_v = backend_mgr_v and backend_mgr_v._interfaces
+                and backend_mgr_v._interfaces.items and backend_mgr_v:get_interface("items")
+            if self._item_backend_id and bi_v and bi_v.get_item_from_id then
+                local item_v = bi_v:get_item_from_id(self._item_backend_id)
+                template_key_v = item_v and item_v.data and item_v.data.template
+            end
+            if self._item_backend_id then
                 local vkey2 = (self._item_backend_id or "__no_backend__") .. "|" .. tostring(hand_field)
                 local selected_inventory_icon = opt.inventory_icon
                 if not selected_inventory_icon and _SHIELD_ICON_OWNER_ITEM_TYPES[weapon_key] then
@@ -4244,6 +4227,9 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
                 mod:info("[cos-la-sync] EXIT-QUEUE OFFHAND-MESH bid=%s hand=%s vanilla_pick=%s unit=%s",
                     tostring(self._item_backend_id), tostring(hand_field), tostring(opt.name),
                     tostring((opt.unit or opt.intended_unit) or "<clear>"))
+            elseif printf then
+                printf("[cos:702] OFFHAND-QUEUE rejected: missing exact backend id hand=%s mesh=%s",
+                    tostring(hand_field), tostring((opt.unit or opt.intended_unit) or "<clear>"))
             end
         end
     end

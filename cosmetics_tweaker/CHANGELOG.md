@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.147-dev - 2026-07-18 - exact dual-illusion persistence lifecycle (#702) [verify-fix-coop]
+
+- Dual/offhand Apply now commits its durable owner record by exact backend item and hand before any live-model or peer delivery work. The previous save was nested under `player_unit` liveness and the LA sender's availability, so a valid inventory Apply could update the session preview while silently omitting the disk write.
+- Selection queuing no longer requires a live keep player unit. When delivery is temporarily unavailable, the existing bounded self-rebroadcast path carries the already-persisted state after the owner equipment exists.
+- Restart restore no longer consumes a CIM-owned exact instance before CIM/CWV finishes registering it. Exact pending instances retry every 0.5 seconds for at most 15 seconds; candidate resolution accepts only the saved hand, unit, and component skin (with a unique-unit legacy fallback), then fails closed to the native appearance.
+- Engine-free coverage proves two same-family inventory instances remain isolated, Apply persists with no render owner, Follow Main clears only the selected exact hand, invalid identities fail closed, and source wiring retains the existing preview/mission/network replay surfaces.
+- The bounded commit-and-peer-delivery transaction lives in `_cos_offhand_commit_policy.lua`; the frozen main-file size remains below its existing QA baseline rather than expanding the monolith.
+- In-game check: customize the offhand of one dual weapon, press Apply, fully restart the game, and confirm that exact inventory instance keeps both its primary illusion and independently selected offhand while a second copy remains unchanged.
+
 ## 0.9.146-dev - 2026-07-17 - reconciliation build: #698 + #713 [verify-fix-coop]
 
 - Reconciliation reship: two different builds were briefly uploaded as `0.9.145-dev` by parallel sessions. This unambiguous version carries BOTH the #698 career-scoped remote appearance identity (below) and #713's unlock-injection log demotion: the per-second `[unlock_all_frames]`/`[unlock_cosmetics]` lines now fire only on the first pass or when counts change (the injection still runs per mirror rebuild; `/cos frames_status` keeps live counters).

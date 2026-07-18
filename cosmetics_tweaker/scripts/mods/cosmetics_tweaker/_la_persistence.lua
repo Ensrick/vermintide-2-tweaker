@@ -34,6 +34,7 @@
 --   M.restore_for_player(player)              -- re-emit saved hat/armor
 --   M.is_known_backend_id(backend_id)         -- has any saved illusion?
 --   M.save_offhand / clear_offhand / get_saved_offhands
+--   M.commit_offhand_entry(entry)                  -- Apply-gated exact-item commit
 --
 -- Career name resolution: player.career_name or
 -- SPProfiles[player.profile_index].careers[player.career_index].name.
@@ -234,6 +235,45 @@ M.save_offhand = function(backend_id, hand_field, armoury_key, vanilla_key,
     _persist()
     mod:info("[la-persist] save offhand %s/%s = %s", tostring(backend_id),
         tostring(hand_field), tostring(armoury_key or unit_path))
+end
+
+-- #702: durable ownership must not depend on a live render/network owner.
+-- The customization screen records the final Apply-gated intent in a plain
+-- entry, then this helper commits only the exact backend instance + hand.  It
+-- deliberately does not inspect player_unit, Unit.alive, a peer id, or a
+-- weapon slot: those are ephemeral delivery concerns and may be unavailable
+-- while the inventory UI still has a perfectly valid backend item identity.
+M.commit_offhand_entry = function(entry)
+    if type(entry) ~= "table" then return false, "invalid-entry" end
+    local backend_id = entry.backend_id
+    local hand_field = entry.hand_field
+    if type(backend_id) ~= "string" or backend_id == ""
+            or (hand_field ~= "left_hand_unit" and hand_field ~= "right_hand_unit") then
+        return false, "invalid-exact-identity"
+    end
+
+    if entry.offhand_unit ~= nil then
+        if type(entry.offhand_unit) == "string" and entry.offhand_unit ~= "" then
+            M.save_offhand(backend_id, hand_field, nil, entry.skin_key,
+                entry.offhand_unit, entry.inventory_icon, false)
+            return true, "save-mesh"
+        end
+        M.clear_offhand(backend_id, hand_field)
+        return true, "clear-follow-main"
+    end
+
+    if entry.revert then
+        M.clear_offhand(backend_id, hand_field)
+        return true, "clear-revert"
+    end
+
+    if type(entry.armoury_key) == "string" and entry.armoury_key ~= "" then
+        M.save_offhand(backend_id, hand_field, entry.armoury_key,
+            entry.vanilla_key, nil, entry.inventory_icon, entry.cos_authored)
+        return true, "save-authored"
+    end
+
+    return false, "missing-selection"
 end
 
 M.clear_offhand = function(backend_id, hand_field)
