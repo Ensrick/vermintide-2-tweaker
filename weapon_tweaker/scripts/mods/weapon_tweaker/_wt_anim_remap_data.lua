@@ -1903,11 +1903,6 @@ do
         parry_pose                 = "parry_pose",
         push_stab                  = "attack_swing_left_diagonal",
     }
-    -- CWV's Infantry combat style runs es_2h_heavy_spear under a verbatim clone of
-    -- the elf spear template. The clone name is what reaches _resolve_template_remap,
-    -- so without this alias no wh_ remap installs and the elf stab fires unauthored
-    -- on Saltzpyre's billhook skeleton - an engine fatal pcall cannot catch (#732).
-    R.cwv_infantry_spear_template = R.two_handed_spears_elf_template_1
     R.two_handed_swords_executioner_template_1 = R.two_handed_swords_executioner_template_1 or {}
     R.two_handed_swords_executioner_template_1.es_ = R.two_handed_swords_executioner_template_1.es_ or false
     R.two_handed_swords_executioner_template_1.we_ = {
@@ -1953,6 +1948,16 @@ do
     R.we_one_hand_axe_template.wh_ = {
         attack_swing_up = "attack_swing_up_left",
     }
+end
+
+-- #732: CWV's Infantry Combat Style deep-clones the elf spear actions under
+-- this effective template name.  WT resolves remaps by the effective name, so
+-- share the donor table by identity: fixes to the elf-spear receiver contract
+-- cannot drift away from the clone, and the donor's native `we_ = false`
+-- branch remains intact.
+local infantry_spear_donor = rawget(_3p_template_remaps, "two_handed_spears_elf_template_1")
+if type(infantry_spear_donor) == "table" then
+    rawset(_3p_template_remaps, "cwv_infantry_spear_template", infantry_spear_donor)
 end
 
 

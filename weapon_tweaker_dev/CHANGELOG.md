@@ -1,12 +1,27 @@
 # Weapon Tweaker Changelog
 
-## 0.12.277-dev (2026-07-18) - #701 crossbow offsets, #732 CWV Infantry spear crash [verify-fix]
+## 0.12.278-dev (2026-07-18) - #701 Kruber crossbow left-hand grip offsets [verify-fix]
 
 - Runtime-parity mirror of weapon_tweaker 0.12.276-beta: `wh_crossbow` (Saltzpyre Crossbow) on `es_` (Kruber) careers now carries the recorded LEFT-hand additive offset Y +0.100, Z +0.025 on the DURABLE per-frame re-apply path, hand-scoped `hand="left"` (the crossbow's only 3P unit; guards the issue 735 paired-unit class). Preview parity fix: the MenuWorldPreviewer fake slot is keyed `left_unit_3p` for templates declaring only a left-hand unit so `hand="left"` offsets show in the keep preview. Spec from issue 109's census comment.
 
 - Also mirrors the #732 fix: CWV's `cwv_infantry_spear_template` (a verbatim clone of `two_handed_spears_elf_template_1`) is now aliased to the donor's 3P remap table in `_build_3p_template_remaps`, with a matching `wt_wield_patches.lua` row. Without the alias `_resolve_template_remap` returned nil and the elf spear's native `attack_swing_down_left_axe` fired unauthored on Saltzpyre's billhook skeleton - an engine fatal `pcall` cannot catch. Only this one template needs aliasing; every other CWV clone style carries its own `remap_key`.
 
 **Solo verify:** as 0.12.276-beta.
+
+## 0.12.277-dev (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
+
+- Runtime-parity mirror of Weapon Tweaker `0.12.276-beta`: CWV's Infantry
+  Combat Style effective template now shares the elf-spear donor's 3P remap
+  and wield contracts by identity.
+- This routes the observed Saltzpyre first-light event
+  `attack_swing_down_left_axe` to the donor's receiver-safe
+  `attack_swing_stab` target while retaining the native Kerillian branch.
+- Offline and `/wt_regression_test` coverage lock the clone/donor identity,
+  all three standard Saltzpyre wield routes, and the crash event mapping.
+
+**Solo verify:** Confirm `[wt:LOAD] v0.12.277-dev`, then follow the
+`0.12.276-beta` verification above. `/wt_regression_test` must pass
+`issue732_cwv_infantry_spear_saltzpyre_remap`.
 
 ## 0.12.276-dev (2026-07-18) - #724 release/source reconciliation [tooling]
 

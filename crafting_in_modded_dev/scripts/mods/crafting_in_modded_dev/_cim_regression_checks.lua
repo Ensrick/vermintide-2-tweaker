@@ -744,6 +744,38 @@ _rt_register("issue524_render_diagnostics_armed", function()
     end
 end)
 
+_rt_register("issue703_athanor_cwv_rows_unlocked", function()
+    -- #703: vanilla `_sync_backend_loadout` stamps `content.locked = not
+    -- backend_id` from a backend-items OWNERSHIP lookup
+    -- (hero_window_weave_forge_weapons.lua:555/:565). CWV rows are
+    -- registration-only definitions (issue 592) so ownership never resolves and
+    -- every CWV row drew a false padlock. The consolidated hook clears the lock
+    -- for provider=cwv keys only; this check pins the classifier's boundary so
+    -- vanilla/other-provider locks can never be swept up with it.
+    local classify = (mod._cim_synthetic_item_contract or {}).is_cwv_provider_key
+    if type(classify) ~= "function" then
+        return "#703 CWV lock-clear classifier (contract.is_cwv_provider_key) not exposed"
+    end
+    if classify("cwv_rt_unregistered_variant") ~= true then
+        return "#703 cwv-prefixed key no longer classified as provider=cwv (rows re-lock)"
+    end
+    if classify("es_bastard_sword") ~= false then
+        return "#703 vanilla key classified as cwv - would clear genuine vanilla locks"
+    end
+    if classify("woc_rt_unregistered_relic") ~= false then
+        return "#703 non-cwv provider key classified as cwv - scope widened past issue scope"
+    end
+    if classify(nil) ~= false or classify("") ~= false then
+        return "#703 empty/nil key must never classify as cwv"
+    end
+    -- The clear must ride the ONE consolidated (HeroWindowWeaveForgeWeapons,
+    -- _sync_backend_loadout) hook; the issue 628 contract owns the ladder.
+    local contract = mod._cim_synthetic_item_contract
+    if type(contract) ~= "table" or type(contract.provider_for) ~= "function" then
+        return "#703 issue 628 provider ladder (contract.provider_for) missing"
+    end
+end)
+
 _rt_register("issue624_keep_forge_interaction", function()
     local policy = mod._cim_keep_forge_interaction
     local state = mod._cim_keep_forge_interaction_state

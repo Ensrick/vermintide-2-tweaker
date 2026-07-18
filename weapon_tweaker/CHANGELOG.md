@@ -1,15 +1,32 @@
 # Weapon Tweaker Changelog
 
-## 0.12.276-beta (2026-07-18) - #701 crossbow offsets, #732 CWV Infantry spear crash [verify-fix]
+## 0.12.277-beta (2026-07-18) - #701 Kruber crossbow left-hand grip offsets [verify-fix]
 
 - Baked the recorded Kruber crossbow grip offset: `wh_crossbow` (Saltzpyre Crossbow) on `es_` (Kruber) careers now carries the LEFT-hand additive offset Y +0.100, Z +0.025 (spec recorded in issue 109's census comment, 2026-07-16 session). Applied through the DURABLE per-frame re-apply path (`_DURABLE_GRIP_OFFSETS` + `mod._reapply_durable_grip_offsets`, driven from `mod.update`) - a one-shot create_equipment write is stomped every anim tick (OFFSETS.md). Owner, bot, and remote-husk renderers all re-apply. `hand="left"` scopes the write to the crossbow's only 3P unit (the template declares a left-hand unit only) and guards the issue 735 paired-unit bleed class. Saltzpyre's native `wh_*` careers find no prefix and are untouched. 3P-only; 1P untouched.
 - Preview parity: `MenuWorldPreviewer._spawn_item_unit`'s fake slot is now keyed `left_unit_3p` for weapon templates that declare ONLY a left-hand unit, so `hand="left"` offsets show in the keep inventory preview too (they previously skipped it silently - the faked `right_unit_3p` field never matched the hand filter). Paired and right-hand weapons keep the historical key; hand-agnostic entries are unaffected (the offset helper iterates both fields).
 
-- Fixed the hard crash when Saltzpyre light-attacks with CWV's Infantry combat style (#732). CWV templates `es_2h_heavy_spear` as `cwv_infantry_spear_template`, a verbatim clone of `two_handed_spears_elf_template_1`; wt's catalogs keyed only the donor name, so `_resolve_template_remap` returned nil, no `wh_` remap installed, and the elf spear's native `attack_swing_down_left_axe` fired unauthored on Saltzpyre's billhook skeleton - an engine fatal `pcall` cannot catch (`_wt_anim_remap.lua:938`). The clone is now aliased to the donor's remap table in `_build_3p_template_remaps`, with a matching `wt_wield_patches.lua` row so the wield picker resolves it too. Target `attack_swing_stab` already shipped for the native elf spear on Saltzpyre, so it is billhook-valid. Every other CWV clone style carries its own `remap_key` and is covered by CWV's own hook - this is the only alias needed. The `weapon_foley_es_deus_01` foley miss seen alongside it is an independent bank-residency issue tracked separately (issue 161 / issue 112).
-
-**Solo verify (#732):** with CWV enabled, on Saltzpyre (Captain, Bounty Hunter, or Zealot) equip the Infantry combat style and light-attack: no crash, and the 3P swing reads as a billhook stab rather than an axe swing. Repeat on a Kruber career for the `to_polearm` row.
 
 **Solo verify:** confirm `[wt:LOAD] v0.12.276-beta`. On a Kruber career (Mercenary or Huntsman; repeat once on GK if handy) equip the regular Saltzpyre Crossbow: (1) keep inventory preview shows the shifted left-hand grip, (2) in-mission 3P (third-person camera or a second client watching the husk) shows the same grip and it HOLDS - no snap-back after a shot/reload (durable re-apply), (3) weapon swap away and back re-applies it, (4) Saltzpyre's own crossbow grip is unchanged.
+
+## 0.12.276-beta (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
+
+- CWV's Infantry Combat Style reports its deep-cloned effective template as
+  `cwv_infantry_spear_template`, while WT's receiver-safe Saltzpyre 3P remap
+  and wield contracts were keyed only by the elf-spear donor template. The
+  first light therefore reached Saltzpyre's animation graph as
+  `attack_swing_down_left_axe` and faulted in `Unit.animation_event`.
+- The effective clone now shares the donor's remap and wield tables by identity,
+  preserving all three standard Saltzpyre billhook-vocabulary routes and the
+  native Kerillian no-remap branch without duplicating data.
+- Offline and `/wt_regression_test` coverage lock table identity, the first-light
+  target `attack_swing_stab`, and WHC/Bounty Hunter/Zealot wield routing.
+
+**Solo verify:** Confirm `[wt:LOAD] v0.12.276-beta`. On Witch Hunter Captain,
+Bounty Hunter, or Zealot, equip Tuskgor Spear, select Infantry Combat Style,
+then perform the first light and the complete light/heavy/block/push chains.
+The game must not crash and `/wt_regression_test` must pass
+`issue732_cwv_infantry_spear_saltzpyre_remap`. One player is sufficient for
+the reported owner-side crash.
 
 ## 0.12.275-beta (2026-07-18) - #724 release/source reconciliation [tooling]
 
