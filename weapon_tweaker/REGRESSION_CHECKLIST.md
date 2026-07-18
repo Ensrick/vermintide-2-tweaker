@@ -121,6 +121,18 @@
 
 ---
 
+## #701 - Kruber Crossbow left-hand grip offset
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.277-beta / 0.12.278-dev |
+| Automated | Offline `test_wt_crossbow_offset` locks the exact `es_`-scoped `{0, 0.100, 0.025, hand="left"}` row, durable membership, left-only preview routing, owner/bot/husk adapter fan-out, retained-position readback, native Saltzpyre exclusion, and the generated #109 census row. `/wt_regression_test`: `issue701_kruber_crossbow_left_grip_offset`. |
+| Two-player repro | Both peers enable the same WT build. Kruber equips Saltzpyre's regular Crossbow; the owner checks inventory preview and local 3P while the observer checks the remote husk. Fire/reload, swap away/back, transition into a mission, and hot-join once. |
+| Expected | The left 3P Crossbow unit retains additive Y `+0.100`, Z `+0.025` on every exercised renderer and replay edge. `[wt:701] retained ...` reports retained and target positions, not setter success. First person, Saltzpyre's native Crossbow, and Kruber's Volley Crossbow control remain unchanged. |
+| Tuner boundary | Transient Hold-Pose values stay local to the dev tool. Its identity sliders defer to the baked baseline; non-default live tuning composes over that baseline and is not transported to bots or husks. |
+
+---
+
 ## #391 - per-career CWV availability
 
 | Field | Check |
@@ -963,6 +975,7 @@ Last updated: 2026-07-13.
 - feedback-workshop-upload-without-deploy
 - gated-registration-divergence
 - inventory-preview-hook-menuworldpreviewer
+- issue701-kruber-crossbow-left-grip-offset
 - issue290-billhook-bake-merge
 - issue587-baked-transform-husk-fanout
 - issue594-saltzpyre-hammer-shield-ownership

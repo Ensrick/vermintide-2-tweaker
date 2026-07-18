@@ -111,6 +111,7 @@ mod:dofile("scripts/mods/weapon_tweaker/_safe_hook")
 
 local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_axe_balance")
 local _wt_axe_balance = _wt_axe_balance_policy.new()
+local _wt_grip_offset_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_grip_offset_policy")
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
 -- mutates the weapon template, so a restart is needed to apply/revert).
 mod:dofile("scripts/mods/weapon_tweaker/_wt_brett_sword_shield_buff")
@@ -472,11 +473,8 @@ local function _scale_weapon_units(slot_data, weapon_key, career_name)
     end
 end
 
--- Grip offset: shift weapon along its local axes to adjust hand position.
--- Values are {x, y, z} in the weapon's local space. +z = grip lower on weapon.
--- Optional `hand` field: "right" or "left" restricts to one hand (default both).
--- Same dual-path note as scale (above): in-game and menu preview both apply
--- via the same helper.
+-- 3P grip deltas are {x,y,z[, hand]}; spawn, preview, and durable paths share them.
+-- +z seats the grip lower; an omitted hand targets both spawned 3P units.
 local _weapon_grip_offsets = {
     we_1h_sword    = { dr_ = {0, 0, 0.05} },
     bw_sword       = { dr_ = {0, 0, 0.05} },
@@ -542,8 +540,8 @@ local _weapon_grip_offsets = {
     -- durable because animation ticks were the user-observed source of the lost
     -- offset. Position-only application composes with #569 rotation and scale.
     es_handgun = { wh_ = {0, -0.17, -0.05} },
-    -- NOTE: this table is the SINGLE SOURCE OF TRUTH for every 3P grip nudge
-    -- (preview AND in-game read it). Two application paths consume it:
+    wh_crossbow = { es_ = {0, 0.100, 0.025, hand = "left"} }, -- #701 Kruber, 3P left hand only
+    -- Single source of truth for preview, spawn, and durable 3P grip nudges.
     --   * SMALL static nudges (the 0.05-0.15 entries above): a one-shot additive
     --     write at create_equipment / preview spawn via _offset_weapon_units. Fine
     --     for small deltas the engine's per-frame attachment re-apply doesn't
@@ -551,12 +549,10 @@ local _weapon_grip_offsets = {
     --   * STOMP-PRONE large offsets (the scythe): ALSO listed in
     --     _DURABLE_GRIP_OFFSETS below, which re-applies the SAME value every frame
     --     in-game so the engine's per-tick canonical-pose reset can't erase it.
-    -- NEVER bake a tuned hold-pose value as a raw
-    -- unit_attachment_node_linking.third_person write on a SHARED template
+    -- NEVER bake a tuned hold-pose value as a raw attachment-linking write on a SHARED template
     -- (staff_scythe is shared with Sienna) — that breaks the native wielder. The
     -- durable re-apply is career-gated to es_ instead. (es_handgun-on-Saltzpyre
     -- offset was mis-baked into a linking table in v0.12.135 and reverted in .136.)
-    -- Full rationale + the preview-OK/in-game-wrong post-mortem: OFFSETS.md.
 }
 
 -- Baked local-Euler corrections for cross-character 3P weapon roots. These
@@ -637,6 +633,7 @@ local _DURABLE_GRIP_OFFSETS = {
     bw_deus_01                 = true,  -- Sienna Coruscation Staff on Kruber (+0.6 Z, es_-only)
     es_bastard_sword           = true,  -- Bretonnian Longsword on Saltzpyre (+0.08 Z, wh_-only)
     es_handgun                 = true,  -- Empire Handgun on Saltzpyre (-0.17 Y, -0.05 Z, wh_-only)
+    wh_crossbow                = true,  -- Saltzpyre Crossbow on Kruber (+0.100 Y, +0.025 Z, left-only, #701)
 }
 
 -- Resolve the career-prefix-matched offset entry for (weapon_key, career_name)
@@ -754,6 +751,7 @@ local function _wt587_track_durable_3p_units(slot_data, weapon_key, career_name,
                     weapon_key = weapon_key,
                     career_name = career_name,
                     hand = hand,
+                    role = role,
                     offset = { offset[1], offset[2], offset[3] },
                 }
                 tracked = tracked + 1
@@ -782,8 +780,9 @@ function mod._reapply_durable_grip_offsets()
             _wt587_tracked_durable_3p_units[unit] = nil
         elseif _wt587_is_wielded(row) then
             local base = row.base:unbox()
-            local delta = Vector3(row.offset[1], row.offset[2], row.offset[3])
-            pcall(Unit.set_local_position, unit, 0, base + delta)
+            local target = base + Vector3(row.offset[1], row.offset[2], row.offset[3])
+            pcall(Unit.set_local_position, unit, 0, target)
+            _wt_grip_offset_policy.log_issue701_retained_once(row, unit, target)
         end
     end
 end
@@ -3227,7 +3226,7 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
                         or (self._profile and self._profile.name)
     if not career_name then return r1, r2, r3 end
 
-    local fake_slot = { right_unit_3p = unit }
+    local fake_slot = { [_wt_grip_offset_policy.preview_slot_field(item_template)] = unit }
     _scale_weapon_units(fake_slot, weapon_key, career_name)
     _offset_weapon_units(fake_slot, weapon_key, career_name)
     _wt569_track_3p_units(fake_slot, weapon_key, career_name, item_template,
@@ -3903,6 +3902,7 @@ local _wt_runtime_check_deps = {
     master_toggles = _wt_master_toggles,
     wield_patches_module = _WIELD_PATCHES_MODULE,
     is_sp_crossbow_presentation_item = _is_sp_crossbow_presentation_item,
+    grip_offset_policy = _wt_grip_offset_policy,
     weapon_backend = weapon_backend,
 }
 _wt_runtime_checks.install(mod, _rt_register, _wt_runtime_check_deps)
