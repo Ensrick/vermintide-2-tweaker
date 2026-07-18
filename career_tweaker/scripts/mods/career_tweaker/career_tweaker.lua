@@ -3,13 +3,12 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.5-beta"
+local MOD_VERSION = "0.4.6-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
--- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
--- issue 425 peer-parity beacon channel. Bump ONLY when a channel's payload
--- shape changes.
-local CRT_RPC_SCHEMA = 1
+-- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
+-- exact wire-catalog identity to the issue-425 beacon transport.
+local CRT_RPC_SCHEMA = 2
 _MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([crt] enabled v<X> settings_fp=<hash>) is the canonical version surface
@@ -96,6 +95,9 @@ end
 -- Pure damage-category policy must load before the armor/overcharge consumer.
 -- It contains no hooks or engine reads and is shared through mod._crt.
 mod._crt.damage_classification = mod:dofile("scripts/mods/career_tweaker/_crt_damage_classification")
+-- Pure issue-776 wire contract. The balance catalog consumes its timed-buff
+-- constants; the beacon and receiver floor consume its exact catalog policy.
+mod._crt.wire_policy = mod:dofile("scripts/mods/career_tweaker/_crt_wire_policy")
 
 -- Safe-stub fallback (CHANGELOG 0.2.2): if dofile fails we substitute no-op
 -- functions so on_game_state_changed / on_setting_changed / on_disabled
@@ -674,8 +676,9 @@ end
 -- ============================================================
 -- COPIED single-source lib (master: tools/shared_lib/_lib_peer_parity.lua; the
 -- standalone invariant forbids a get_mod() runtime dep). Proves "does every
--- lobby peer have crt?" over VMF's own mod-to-mod channel -- wire-safe by
--- construction, no vanilla NetworkLookup key, no vanilla RPC. Consumed by
+-- lobby peer have this exact CRT name+numeric catalog?" over VMF's own
+-- mod-to-mod channel -- wire-safe by construction, no vanilla NetworkLookup
+-- key, no vanilla RPC. Consumed by
 -- career_tweaker_balance.lua: the network_unsafe reworks (the seven whose crt_*
 -- buffs ride rpc_add_buff) apply only under settled parity, and the wire-safe
 -- proc/driver wrappers consult the live state per send. Fail-safe: features
@@ -685,11 +688,32 @@ end
 -- install() wraps the existing mod.update (preserving the OE cooldown tick +
 -- dump retry) and would capture nil if run earlier.
 do
-    local ok, factory = pcall(function()
-        return mod:dofile("scripts/mods/career_tweaker/_lib_peer_parity")
-    end)
-    if ok and type(factory) == "function" then
-        local ok2, inst = pcall(factory, mod, {
+    local wire_identity, wire_identity_err, wire_names =
+        mod._crt.wire_policy.build_wire_identity(
+            mod._crt_mod_registered_buff_names,
+            NetworkLookup and NetworkLookup.buff_templates)
+    mod._crt.wire_catalog_identity = wire_identity
+    mod._crt.wire_catalog_count = wire_names and #wire_names or 0
+    if not wire_identity then
+        pcall(printf, "[crt:776] WARNING exact wire-catalog identity unavailable (%s); networked reworks stay vanilla (fail-safe)",
+            tostring(wire_identity_err))
+    else
+        pcall(printf, "[crt:776] wire catalog identity=%s entries=%d",
+            wire_identity, mod._crt.wire_catalog_count)
+    end
+
+    local ok, factory = false, nil
+    local parity_transport = nil
+    if wire_identity then
+        local wire_runtime = mod:dofile("scripts/mods/career_tweaker/_crt_wire_runtime")
+        parity_transport = wire_runtime and wire_runtime.wrap_parity_transport
+            and wire_runtime.wrap_parity_transport(mod, wire_identity)
+        ok, factory = pcall(function()
+            return mod:dofile("scripts/mods/career_tweaker/_lib_peer_parity")
+        end)
+    end
+    if wire_identity and parity_transport and ok and type(factory) == "function" then
+        local ok2, inst = pcall(factory, parity_transport, {
             channel     = "crt_peer_parity_present",
             schema      = CRT_RPC_SCHEMA,
             mod_label   = "Career Tweaker",
@@ -697,8 +721,11 @@ do
         })
         if ok2 and type(inst) == "table" then
             mod._crt_peer_parity = inst
+            parity_transport:_bind_parity_instance(inst)
+            mod._crt_wire_transport_identity = wire_identity
             pcall(function() inst:install() end)
-            pcall(printf, "[crt:425] peer-parity beacon installed (channel=crt_peer_parity_present)")
+            pcall(printf, "[crt:425] peer-parity beacon installed (channel=crt_peer_parity_present schema=%d exact_identity=%s)",
+                CRT_RPC_SCHEMA, wire_identity)
             -- ONE gated feature covering every networked_unsafe entry (seven
             -- balance reworks + the trn_wh_priest tourney port). On a parity
             -- transition the beacon fires these callbacks; each just re-runs the
@@ -726,7 +753,7 @@ do
         else
             pcall(printf, "[crt:425] WARNING peer-parity factory failed (%s); networked reworks stay vanilla (fail-safe)", tostring(inst))
         end
-    else
+    elseif wire_identity then
         pcall(printf, "[crt:425] WARNING peer-parity lib failed to load (%s); networked reworks stay vanilla (fail-safe)", tostring(factory))
     end
 end

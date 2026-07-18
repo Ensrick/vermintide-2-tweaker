@@ -55,6 +55,7 @@ local suites = {
     "test_crt_balance_split",
     "test_crt_retired_big_rebalance",
     "test_crt_talent_selection",
+    "test_crt_wire_contract",
     "test_mod_tweaker_transaction",
     "test_mod_tweaker_profiles",
     "test_mod_tweaker_tab_labels",
