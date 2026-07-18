@@ -238,6 +238,40 @@ end
 
 M.canonical_item_key = _canonical_item_key
 
+-- The native `can_craft_with` result is an acquisition-selector surface, not
+-- an inventory surface.  Keep this classification beside canonical identity
+-- so a CWV item cannot be treated as a definition token by one consumer and a
+-- crafted instance by another.  Vanilla admits only default-rarity rows here
+-- (backend_interface_common.lua `can_craft_with`); CIM's final selector seam
+-- uses this same policy as a fail-closed guard against hook/mirror leakage.
+local CRAFT_PICKER_SLOTS = {
+    melee = true,
+    ranged = true,
+    ring = true,
+    necklace = true,
+    trinket = true,
+}
+
+local function _item_rarity(item)
+    if type(item) ~= "table" then return nil end
+    local data = type(item.data) == "table" and item.data or nil
+    local custom = type(item.CustomData) == "table" and item.CustomData
+        or (data and type(data.CustomData) == "table" and data.CustomData)
+    local mod_data = type(item.mod_data) == "table" and item.mod_data
+        or (data and type(data.mod_data) == "table" and data.mod_data)
+    return item.rarity or (custom and custom.rarity) or (mod_data and mod_data.rarity)
+end
+
+function M.craft_picker_role(item)
+    if type(item) ~= "table" then return "invalid" end
+    local data = type(item.data) == "table" and item.data or nil
+    local slot_type = data and data.slot_type or item.slot_type
+    if not CRAFT_PICKER_SLOTS[slot_type] then return "other" end
+    local rarity = _item_rarity(item)
+    if rarity == nil or rarity == "default" then return "selector" end
+    return "instance"
+end
+
 local function instance_key(item)
     return item and M.canonical_item_key(item)
 end
