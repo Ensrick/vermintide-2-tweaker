@@ -1,5 +1,13 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.293-dev (2026-07-18) - #487 citadel-finale freeze root fix [verify-fix]
+
+- Symptom: host-side "initializing Chaos Wastes" freeze at the journey_citadel (Belakor) finale round-end, requiring alt-F4 (#487; blocked #465/#460/#470/#406).
+- Root cause (proven from the 2026-07-13-17.45 host log + decompiled source): baked journeys assign each labeled TRAVEL/SIGNATURE node a level by indexing the shuffled distinct-key list with the node label (`deus_populate_graph.lua:460-462`); journey_citadel's baked TRAVEL labels reach 6, and ct's pool underflow floor (POOL_SAFETY_THRESHOLD=4) could leave the label-6 node without a level - `levels_available[nil].paths` throws, the graph never finishes, and the finale transition deadlocks. The SIGNATURE=4-survives / TRAVEL=4-throws differential in the freeze log pins the label-count bound. Vanilla never hits this (6 native TRAVEL levels); only the mod's floor did.
+- Fix: POOL_SAFETY_THRESHOLD 4 -> 6 (>= max baked node label across all journeys), UNDERFLOW diagnostic bound and /ct_regression_test bound corrected to match, and a new engine-free test pins the floor against the baked-journey label maxima so a future journey with higher labels fails the suite instead of freezing a run.
+
+**Solo verify (HOST, full Steam restart, confirm the LOAD banner):** enable exactly ONE Travel mission + Belakor, host a CW run and play THROUGH the citadel finale round-end. Expected: no freeze; console shows `GRAPH-SOLVE begin journey=journey_citadel` with `TRAVEL=6(dup=...)` and a matching `GRAPH-SOLVE end`; no `deus_populate_graph.lua` nil-index and no `path_graph` nil warning. `/ct_regression_test` must pass `pool_floor_underflow_duplicates_487`.
+
 ## 0.7.292-dev (2026-07-17) - #2 boon-runtime file-size extraction
 
 - Reduced the dev entry file from 17,480 physical lines to 13,629, below its frozen 13,938-line regression baseline, without raising or suppressing the repository size gate.

@@ -53,6 +53,7 @@ local mod = get_mod("gut_dev")
 local Policy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_native_loadout_policy")
 local WTTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_wt_loadout_trace_core")
 local BackendCommit = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_backend_commit")
+local ExitSnapshotCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_exit_snapshot_core")
 
 local MARKER = "native_loadouts_v1"
 
@@ -1334,6 +1335,149 @@ mod:command("scrub_official_loadouts", "Repair modded/dangling weapon+frame ids 
 end)
 
 -- ==================================================================
+-- EXIT-TIME SNAPSHOT BACKSTOP (issues #354, #353, #287, #175).
+--
+-- The store above is captured on EQUIP EVENTS only (the mirror write hooks + the outer
+-- BackendUtils.set_loadout_item capture), each persisted immediately. Any loadout/cosmetic
+-- state that reaches the LIVE backend interface through a path that fires NONE of those hooks
+-- (an LA-cloned cosmetic dispatch #353, a WT cross-character weapon whose enable/apply lands
+-- outside a captured equip #354) is never written to the store and is lost on quit. This is
+-- the BACKSTOP: at bounded exit edges (wired from gui_tweaker_dev.lua to StateIngame exit /
+-- StateTitleScreen enter / on_unload) it re-reads the live selected loadout and reconciles any
+-- diverged slot into the SAME store via the SAME single writer (_persist / _persist_overlay).
+-- It is a second capture TRIGGER, never a second store or format. The pure diff arithmetic is
+-- _gut_exit_snapshot_core.lua (offline-tested); this half does the engine reads + persist.
+--
+-- NO NEW HOOK. Pre-flight (2026-07-18): this adds ZERO mod:hook / mod:hook_safe. It reads live
+-- values with plain BackendUtils.* function CALLS and writes through the existing store helpers,
+-- and is driven by VMF lifecycle callbacks (mod.on_game_state_changed / mod.on_unload) chained
+-- in the entry point -- so there is no (Class, method) collision to clear (NON-NEGOTIABLE 8).
+--
+-- ISOLATION. Reads go through BackendUtils.get_loadout_item_id / get_loadout_item -- the exact
+-- readers the hero view uses, which dispatch per-slot to the (possibly LA-cloned) live
+-- interface. These are NOT mirror-read hooks, so calling get_item_from_id underneath here does
+-- NOT recurse (the v0.2.173 1 GiB burn was get_item_from_id called from INSIDE the
+-- get_character_data hook; an exit edge is not a mirror read -- same safety /gut_loadout_status
+-- relies on). Gear reconciles only a value that resolves to a registered item RIGHT NOW
+-- (RESOLVE_YES); an unresolved live read is a SKIP, never a clear, so a late-registering
+-- synthetic id can never blank a stored id (#375/#387 non-destructive doctrine). Official realm
+-- / Versus / non-adventure backend => fully inert. Official cloud data is never written (the
+-- store/overlay are modded-only; #175 isolation guarantee is untouched).
+-- ==================================================================
+
+-- Read one career+slot's LIVE equipped value, canonicalized to the store's format (gear = raw
+-- backend id; cosmetics = override_id or ItemId, the same identity the equip capture stores).
+-- Returns nil to SKIP the slot (no live value / unresolved) -- a nil never overwrites the store.
+local function _live_slot_value(career_name, slot_name)
+    local BU = rawget(_G, "BackendUtils")
+    if COSMETIC_SLOT_SET[slot_name] then
+        if not (BU and BU.get_loadout_item) then return nil end
+        -- get_loadout_item resolves the live equipped item through the per-slot (LA-aware)
+        -- interface; take vanilla's stored identity (override_id or ItemId), matching
+        -- Policy.canonical_equip_value. Safe here: exit edge, not a mirror read.
+        local ok, item = pcall(BU.get_loadout_item, career_name, slot_name, false)
+        if not ok or type(item) ~= "table" then return nil end
+        local v = item.override_id or item.ItemId
+        return (type(v) == "string" and v ~= "") and v or nil
+    end
+    if not (BU and BU.get_loadout_item_id) then return nil end
+    local ok, backend_id = pcall(BU.get_loadout_item_id, career_name, slot_name, false)
+    if not ok or backend_id == nil then return nil end
+    -- Gear: only a genuinely-registered live id (RESOLVE_YES). RESOLVE_NO/UNKNOWN => skip so a
+    -- transiently-unresolvable live read never overwrites a good stored id (raw tri-state, never
+    -- an interface method -- no get_item_from_id recursion).
+    if _resolve_item_raw(backend_id) ~= RESOLVE_YES then return nil end
+    return backend_id
+end
+
+-- Build the live selected-row values for one career over `slots` (nil entries omitted).
+local function _build_live_row(career_name, slots)
+    local row = {}
+    for i = 1, #slots do
+        local slot = slots[i]
+        local v = _live_slot_value(career_name, slot)
+        if v ~= nil then row[slot] = v end
+    end
+    return row
+end
+
+-- Resolve the live Adventure mirror at an exit edge (mirror-less `self` here). Returns nil for
+-- Versus / non-adventure / backend-down so the snapshot stays inert exactly where the mirror
+-- hooks do.
+local function _exit_adventure_mirror()
+    local ok, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
+    if ok and mirror and mirror._characters_data_key == ADVENTURE_DATA_KEY then return mirror end
+    return nil
+end
+
+-- M.exit_snapshot(edge_name) -> total_diverged, wrote. Idempotent: a clean state diverges 0 and
+-- writes nothing. Bounded: <= #careers x #slots live reads, once per edge (never per frame).
+function M.exit_snapshot(edge_name)
+    local mode = _feature_mode()
+    if mode == MODE_OFF then return 0, false end
+    local mirror = _exit_adventure_mirror()
+    if not mirror then
+        printf("[gut:persist] edge=%s diverged=0 written=false (not adventure backend)", tostring(edge_name))
+        return 0, false
+    end
+
+    local total, wrote = 0, false
+    if mode == MODE_STORE then
+        local store = _store()
+        local live_by_career = {}
+        for career_name in pairs(store) do
+            live_by_career[career_name] = _build_live_row(career_name, LOADOUT_SLOT_NAMES)
+        end
+        local diverged, merged_rows, per_career =
+            ExitSnapshotCore.reconcile_selected(live_by_career, store, LOADOUT_SLOT_NAMES)
+        if diverged > 0 then
+            for career_name, merged in pairs(merged_rows) do
+                local entry = store[career_name]
+                entry.loadouts[entry.selected_index] = merged
+                printf("[gut:persist] edge=%s career=%s idx=%s reconciled=%d slots -> store",
+                    tostring(edge_name), tostring(career_name), tostring(entry.selected_index),
+                    tostring(per_career[career_name]))
+            end
+            _persist()
+            _dirtify()
+            wrote = true
+        end
+        total = diverged
+    elseif mode == MODE_READONLY then
+        -- #287: gameplay gear is official-read-only; only mod-owned cosmetics + exact CWV
+        -- instances live modded-side, in the overlay keyed by the official selected index. Back
+        -- up those for careers the overlay already tracks (first-touch is the eager capture's job).
+        local overlay = _overlay()
+        for career_name, career_ov in pairs(overlay) do
+            local idx = _official_index(mirror, career_name, nil)
+            local stored_row = career_ov[idx]
+            if type(stored_row) == "table" then
+                local live = _build_live_row(career_name, LOADOUT_SLOT_NAMES)
+                local filtered = {}
+                for slot, v in pairs(live) do
+                    if Policy.readonly_action(slot, v) == "preserve" then filtered[slot] = v end
+                end
+                local merged, dn = ExitSnapshotCore.diff_row(filtered, stored_row, LOADOUT_SLOT_NAMES)
+                if dn > 0 then
+                    career_ov[idx] = merged
+                    total = total + dn
+                    printf("[gut:persist] edge=%s career=%s idx=%s reconciled=%d slots -> readonly overlay",
+                        tostring(edge_name), tostring(career_name), tostring(idx), tostring(dn))
+                end
+            end
+        end
+        if total > 0 then
+            _persist_overlay()
+            _dirtify()
+            wrote = true
+        end
+    end
+
+    printf("[gut:persist] edge=%s diverged=%d written=%s", tostring(edge_name), total, tostring(wrote))
+    return total, wrote
+end
+
+-- ==================================================================
 -- Regression markers (issue #175 requirement 11). Registered by gui_tweaker_dev.lua.
 -- ==================================================================
 M.HOOK_TARGETS = {
@@ -1555,6 +1699,27 @@ M.rt_checks = {
         for slot in pairs(WEAPON_SLOT_SET) do
             if not GEAR_SLOT_SET[slot] then return "weapon slot not in gear set: " .. slot end
         end
+    end },
+    { name = "native_loadouts_exit_snapshot_backstop", fn = function()
+        -- issues #354/#353/#287/#175: the exit-time backstop must be wired, must reuse the pure
+        -- core, and must be non-destructive + idempotent (a nil live value never clears a stored
+        -- slot; a clean state diverges 0). The recursion/isolation safety is structural (exit
+        -- edge, RESOLVE_YES gate, raw reads) and covered by the offline harness.
+        if type(M.exit_snapshot) ~= "function" then return "exit_snapshot not wired" end
+        if type(ExitSnapshotCore) ~= "table" or type(ExitSnapshotCore.diff_row) ~= "function"
+            or type(ExitSnapshotCore.reconcile_selected) ~= "function" then
+            return "exit snapshot pure core missing"
+        end
+        local slots = { "slot_melee", "slot_ranged", "slot_hat" }
+        -- nil live value must NOT clear a stored slot; a differing live value overwrites.
+        local merged, dn = ExitSnapshotCore.diff_row(
+            { slot_melee = "live_melee" }, { slot_melee = "old_melee", slot_ranged = "keep_r" }, slots)
+        if dn ~= 1 then return "diff_row diverged count wrong: " .. tostring(dn) end
+        if merged.slot_melee ~= "live_melee" then return "diverged slot not overwritten" end
+        if merged.slot_ranged ~= "keep_r" then return "unrelated stored slot not preserved" end
+        -- clean state diverges 0 and returns no merged row (idempotent, no write).
+        local m2, d2 = ExitSnapshotCore.diff_row({ slot_melee = "live_melee" }, merged, slots)
+        if d2 ~= 0 or m2 ~= nil then return "clean diff not idempotent" end
     end },
 }
 

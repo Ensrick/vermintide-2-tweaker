@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.149-dev (2026-07-18) - cold-join replay reconciler (#660 S3) [verify-fix-coop]
+
+- #233/#149/#203 family: ONE bounded replay reconciler now re-applies persisted LA appearance at peer-ready (remote player added / husk init), session-ready (StateIngame enter), and lobby-return edges - coalesced per (peer, slot, hand, generation), never per-frame, reusing the proven live-change apply path. This closes the "cosmetics only appear after I change something" class.
+- #738: the husk identity human-gate is now local_player_id-aware (bot never owns slot 1), and skip lines print local_player_id/controlled - the 2026-07-18 "alias skip" ambiguity (host bots reading as the human) cannot recur.
+- STATE-PULL hardening: the responder's two silent early-returns now log their reason host-side; an exhausted client pull re-arms once per reconciler edge instead of dying for the session.
+- Rides the 0.9.148-dev #282 post-teardown package-release fix (first upload carrying it).
+- 7 new suite tests + a runtime rt-check (cos_replay_reconciler_wired).
+
+**Coop verify (2 players, both join orders):** wearer pre-equips LA shield illusion + hat + skin; cold-join and hot-join peers must see them on the husk with NO customization edit, surviving keep->mission->keep. `[cos:replay] edge=... applied=N` appears per edge; 3-player+bot check: [cos:698] skips show local_player_id=2/3/4 controlled=false only. Quit-to-desktop after transitions: `[cos:282] postcondition-ok`, no `not unloaded ... deadlock`.
+
 ## 0.9.148-dev - 2026-07-18 - post-world material-package release (#282) [verify-fix]
 
 - Moved the embedded Material-Hijack skin-package release from the pre-teardown `on_game_state_changed("exit", "StateIngame")` callback to one post-call `StateIngame.on_exit` hook. Vanilla has destroyed player/preview units, entity systems, the level and world before the mod drops its reference, so the Purpure/Azure package no longer enters shutdown's delayed-unload queue merely because live units still consume it.

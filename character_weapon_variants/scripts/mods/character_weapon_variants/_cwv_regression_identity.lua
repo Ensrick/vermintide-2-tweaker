@@ -1406,5 +1406,27 @@ _rt_register("cwv_husk_transform_coverage", function()
     end
 end)
 
+_rt_register("cwv_husk_stale_unit_and_postcondition", function()
+    -- Issue 395 (stale husk override-unit drain) + issue 660 (retained-state
+    -- postcondition). The drain releases a superseded per-(owner, slot, hand)
+    -- override unit that vanilla teardown left alive (the no_left_hand Rapier
+    -- leak floor); the postcondition reads the RETAINED transform back from the
+    -- engine instead of trusting setter success. Assert both helpers + the weak
+    -- ledger landed so a refactor can't silently drop them.
+    if type(_om._husk_record_override_unit) ~= "function" then
+        return "_om._husk_record_override_unit missing -- husk stale-unit drain lost (issue 395)"
+    end
+    if type(_om._husk_unit_ledger) ~= "table" then
+        return "_om._husk_unit_ledger missing -- husk override-unit ledger lost (issue 395)"
+    end
+    if getmetatable(_om._husk_unit_ledger) == nil
+            or getmetatable(_om._husk_unit_ledger).__mode ~= "k" then
+        return "_om._husk_unit_ledger is not weak-keyed -- husk owners would leak across missions (issue 395)"
+    end
+    if type(_om._husk_postcondition_log) ~= "function" then
+        return "_om._husk_postcondition_log missing -- husk retained-state proof lost (issue 660)"
+    end
+end)
+
 
 end

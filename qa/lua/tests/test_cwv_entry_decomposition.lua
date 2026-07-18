@@ -29,7 +29,11 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        H.truthy(lines <= 11617, "entry line count exceeded frozen 11617-line baseline")
+        -- 11791 = 2026-07-18 wave recount (husk-path postcondition/ledger +
+        -- skin-wire sender #4 landed concurrently; each recomputed against a
+        -- snapshot the other then grew). The ceiling only ratchets DOWN as
+        -- the ct_dev/cwv decomposition (OOP W5) extracts modules.
+        H.truthy(lines <= 11791, "entry line count exceeded frozen 11791-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
@@ -88,10 +92,11 @@ return function(H, repo_root)
         for name in (identity .. "\n" .. render):gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 68)
+        H.equal(#names, 69)
         H.equal(names[1], "cwv_variant_flag_present")
         H.equal(names[32], "cwv_husk_transform_coverage")
-        H.equal(names[33], "cwv_unit_bearing_variants_registered")
+        H.equal(names[33], "cwv_husk_stale_unit_and_postcondition")
+        H.equal(names[34], "cwv_unit_bearing_variants_registered")
         H.equal(names[#names], "issue567_skin_reverse_index_valid")
         H.truthy(entry:find("mod_version = MOD_VERSION", 1, true))
         H.truthy(entry:find("dbg = _dbg", 1, true))

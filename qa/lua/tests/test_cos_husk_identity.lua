@@ -89,6 +89,37 @@ return function(H, repo_root)
         H.equal(store.peer.slot_skin, nil)
     end)
 
+    H.test("Cosmetics #698 human wearer is local_player_id-aware, never peer-only", function()
+        -- Controlled human -> human.
+        local human = { peer_id = "host", _local_player_id = 1,
+            is_player_controlled = function() return true end }
+        local ok, reason = policy.wearer_is_human(human)
+        H.equal(ok, true)
+        H.equal(reason, "player-controlled")
+
+        -- A host bot shares the host peer but is local_player_id 2..4 and
+        -- not controlled -> NOT human (correctly skipped).
+        local bot = { peer_id = "host", _local_player_id = 3,
+            is_player_controlled = function() return false end }
+        local bot_ok, bot_reason = policy.wearer_is_human(bot)
+        H.equal(bot_ok, false)
+        H.equal(bot_reason, "non-human-owner-alias")
+
+        -- The regression: a real human whose controlled flag is transiently
+        -- nil during spawn/sync is rescued by local_player_id 1 (bots never
+        -- own slot 1), so the human is no longer skipped as an "alias".
+        local flaky_human = { peer_id = "host", _local_player_id = 1,
+            is_player_controlled = function() return nil end }
+        local fh_ok, fh_reason = policy.wearer_is_human(flaky_human)
+        H.equal(fh_ok, true)
+        H.equal(fh_reason, "local-player-1")
+
+        -- local_player_id reads either a method or a plain field, nil-safe.
+        H.equal(policy.local_player_id({ local_player_id = function() return 2 end }), 2)
+        H.equal(policy.local_player_id({ _local_player_id = 4 }), 4)
+        H.equal(policy.local_player_id(nil), nil)
+    end)
+
     H.test("Cosmetics #698 host client and husk paths carry one career identity", function()
         local entry_path = repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"

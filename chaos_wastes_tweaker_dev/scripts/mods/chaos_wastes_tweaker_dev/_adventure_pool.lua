@@ -563,26 +563,39 @@ end
 -- Pool mutation
 -- =====================================================================
 
-local POOL_SAFETY_THRESHOLD = 4  -- Distinct entries needed per (journey × pool_type)
-                                  -- before duplicate-injection kicks in. The only wired
-                                  -- solver constraint for TRAVEL/SIGNATURE is
-                                  -- prevent_same_level_choice (branch-sibling width;
-                                  -- deus_map_populate_settings.lua:222 lists only that
-                                  -- validator - prevent_same_level_on_same_path is defined
-                                  -- but never wired into a journey). Its provable worst
-                                  -- case: a node has <= MAX_INCOMING_CONNECTIONS_PER_NODE
-                                  -- (3) parents, each with <= MAX_CONNECTIONS_PER_NODE (2)
-                                  -- children, so <= 3 same-type siblings + itself = 4
-                                  -- distinct keys (deus_map_base_gen_settings.lua:6-8). 4 is
-                                  -- therefore PROVABLY sufficient AND matches the user's
-                                  -- "fewer than 4" trigger (issue 487). His alternate
-                                  -- "however many non-arena/non-shrine mission nodes the
-                                  -- expedition has" framing over-counts: levels MAY repeat
-                                  -- across non-sibling nodes down a path (that path-wide
-                                  -- validator is unwired), so we need branch width, not
-                                  -- total node count. Duplication clones the user's ENABLED
-                                  -- missions (never disabled vanilla levels); a zero-enabled
-                                  -- pool has nothing to clone and falls back to vanilla.
+local POOL_SAFETY_THRESHOLD = 6  -- Distinct entries needed per (journey × pool_type)
+                                  -- before duplicate-injection kicks in.
+                                  --
+                                  -- ROOT CAUSE (#487, proven from the 2026-07-13 HOST log):
+                                  -- the binding constraint is NOT the branch-sibling
+                                  -- validator (prevent_same_level_choice) but the
+                                  -- LABELED-NODE level assignment the baked journeys use.
+                                  -- journey_citadel / journey_cave / journey_ice /
+                                  -- journey_ruin ship pre-baked graphs whose TRAVEL/SIGNATURE
+                                  -- nodes carry a `label` (deus_map_baked_base_graphs_*.lua).
+                                  -- deus_populate_graph assigns those nodes a level by
+                                  -- INDEXING `shuffled_levels_for_labels[type][node_label]`
+                                  -- (deus_populate_graph.lua:460), where
+                                  -- `shuffled_levels_for_labels[type] = get_random_key_list(pool)`
+                                  -- (:987) is an array of the pool's DISTINCT keys and
+                                  -- node_label is a 1-based index. If the pool holds fewer
+                                  -- distinct keys than the highest label, the index yields
+                                  -- nil and :462 `levels_available[nil].paths` throws
+                                  -- "attempt to index a nil value" -> deus_populate_graph
+                                  -- returns nil -> path_graph nil -> the CW run/finale
+                                  -- transition deadlocks (the "initializing Chaos Wastes"
+                                  -- freeze). Max label per type across all baked journeys:
+                                  -- TRAVEL=6, SIGNATURE=5, so 6 distinct keys satisfy every
+                                  -- journey (SHOP nodes are unlabeled). The old value 4 only
+                                  -- covered the sibling-width validator and left the citadel
+                                  -- finale (TRAVEL labels up to 6) two keys short. Proof: in
+                                  -- the #487 host freeze the floored citadel pools were
+                                  -- TRAVEL=4 (needs 6 -> threw) and SIGNATURE=4 (needs 4 ->
+                                  -- survived); the SIGNATURE-fine/TRAVEL-crash split is
+                                  -- explained only by this label-count bound. Duplication
+                                  -- clones the user's ENABLED missions (never disabled
+                                  -- vanilla levels); a zero-enabled pool has nothing to clone
+                                  -- and falls back to vanilla.
 
 -- Snapshot of the original (untouched) journey-level LEVEL_AVAILABILITY tables,
 -- captured exactly once on first inject. Subsequent calls reset to this snapshot

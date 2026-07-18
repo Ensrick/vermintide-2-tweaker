@@ -107,6 +107,35 @@ function M.player_controlled(player)
     return ok and controlled or nil
 end
 
+-- The peer-shared slot: a host owns local_player_id 1 (its human) plus 2..4 for
+-- its bots, and every one of those players carries the host's peer_id
+-- [src: scripts/managers/player/player_manager.lua:361-372,297-326]. So a peer
+-- id alone cannot tell a human from a host bot; local_player_id CAN
+-- (RemotePlayer.local_player_id -> self._local_player_id, remote_player.lua:135).
+-- Returned as a field or via the method, whichever the player object exposes.
+function M.local_player_id(player)
+    if type(player) ~= "table" then return nil end
+    local fn = player.local_player_id
+    if type(fn) == "function" then
+        local ok, id = pcall(fn, player)
+        if ok and id ~= nil then return id end
+    end
+    return player._local_player_id
+end
+
+-- Positive human-wearer test that does NOT trust the peer id alone. A human is
+-- proven by is_player_controlled()==true OR by owning local_player_id 1 at its
+-- peer (bots are never local_player_id 1, so this can never mis-accept a bot).
+-- The second arm rescues a human whose controlled flag is transiently unproven
+-- during the spawn/sync window - the #698 gate skipping a real human because
+-- is_player_controlled briefly read nil is exactly the misclassification the
+-- peer-only view produced. Returns (is_human, reason).
+function M.wearer_is_human(player)
+    if M.player_controlled(player) == true then return true, "player-controlled" end
+    if M.local_player_id(player) == 1 then return true, "local-player-1" end
+    return false, "non-human-owner-alias"
+end
+
 function M.validate_live_entry(entry, unit, script_unit, managers, persistence)
     local player = M.player_for_unit(managers and managers.player, unit)
     if M.player_controlled(player) ~= true then
