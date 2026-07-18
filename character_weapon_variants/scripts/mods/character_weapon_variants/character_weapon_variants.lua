@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.449-dev"
+local MOD_VERSION = "0.1.450-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -4617,186 +4617,11 @@ end
 -- transition record on toggle/wield/state-entry and a query/reply on join. It
 -- never polls or transmits per frame. Receivers cache by owner+slot; a late
 -- husk/preview reconstruction consumes the same state as an immediate update.
-do
-	local CHANNEL, SCHEMA = "cwv_old_musket_mode_v1", 1
-	local modes_by_owner = setmetatable({}, { __mode = "k" })
-	local modes_by_peer = {}
-	local modes_by_backend = {}
-	local diag_seen, diag_count, DIAG_MAX = {}, 0, 48
-	_om._old_musket_modes_by_owner = modes_by_owner
-	_om._old_musket_modes_by_backend = modes_by_backend
-
-	local function old_bid(item_data)
-		local bid = item_data and (item_data.backend_id or item_data.ItemInstanceId
-			or (item_data.mod_data and item_data.mod_data.backend_id))
-		local key = item_data and _om._cwv_key_for_item
-			and _om._cwv_key_for_item(bid, item_data)
-		if key ~= "cwv_es_musket_old" then
-			local template = item_data and item_data.template
-			if template ~= "old_musket_template" and template ~= "old_musket_template_melee" then
-				return nil
-			end
-		end
-		return type(bid) == "string" and bid ~= "" and bid or nil
-	end
-
-	local function valid_bid(bid)
-		return type(bid) == "string" and bid ~= "" and #bid <= 128
-	end
-	-- Runtime-regression handles for #484. These are pure identity checks; they
-	-- do not send traffic or mutate presentation state.
-	_om._old_musket_bid_for_item = old_bid
-	_om._old_musket_valid_bid = valid_bid
-
-	local function diag_once(key, fmt, ...)
-		if diag_seen[key] or diag_count >= DIAG_MAX then return end
-		diag_seen[key], diag_count = true, diag_count + 1
-		pcall(printf, "[cwv:474] " .. fmt, ...)
-	end
-
-	local function send(recipient, op, slot_name, mode, bid)
-		if type(mod.network_send) ~= "function" then return false end
-		local ok = pcall(function()
-			mod:network_send(CHANNEL, recipient or "others", SCHEMA, op,
-				slot_name or "", mode or "", bid or "")
-		end)
-		return ok
-	end
-
-	local function owner_slot(owner_unit)
-		if not owner_unit or not Unit.alive(owner_unit) then return nil end
-		local ok, inv = pcall(ScriptUnit.extension, owner_unit, "inventory_system")
-		if not ok or not inv or not inv.equipment then return nil end
-		local equipment = inv:equipment()
-		return equipment and equipment.wielded_slot, equipment
-	end
-
-	local function apply_owner(owner_unit, slot_name, mode, surface)
-		local wielded_slot, equipment = owner_slot(owner_unit)
-		if wielded_slot ~= slot_name or not equipment then return false end
-		local unit = equipment.right_hand_wielded_unit_3p
-		if not unit or not Unit.alive(unit) then return false end
-		_om._track_old_musket_unit(unit, "3p", mode)
-		_om._apply_old_musket_textures(unit)
-		_om._apply_old_musket_transform(unit, "3p", mode)
-		local pos, _, scale = _om._old_musket_transform_components("3p", mode)
-		diag_once("apply:" .. tostring(owner_unit) .. ":" .. slot_name .. ":" .. mode .. ":" .. surface,
-			"presentation owner=%s slot=%s surface=%s mode=%s final_pos=(%.3f,%.3f,%.3f) final_scale=(%.3f,%.3f,%.3f)",
-			tostring(owner_unit), slot_name, surface, mode,
-			pos[1], pos[2], pos[3], scale[1], scale[2], scale[3])
-		return true
-	end
-
-	local function peer_for_owner(owner_unit)
-		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.owner, pm, owner_unit)
-		player = ok and player or nil
-		if not player then return nil end
-		if type(player.peer_id) == "string" then return player.peer_id end
-		local nok, peer_id = pcall(player.network_id, player)
-		return nok and peer_id or nil
-	end
-
-	_om._old_musket_mode_for_owner = function(owner_unit, slot_name)
-		local slots = owner_unit and modes_by_owner[owner_unit]
-		if not slots then slots = modes_by_peer[peer_for_owner(owner_unit)] end
-		if not slots then return "ranged" end
-		if not slot_name then slot_name = owner_slot(owner_unit) end
-		return slots[slot_name] or "ranged"
-	end
-
-	_om._old_musket_record_and_publish = function(owner_unit, slot_name, item_data, mode, reason, recipient)
-		local bid = old_bid(item_data)
-		if not bid or (mode ~= "melee" and mode ~= "ranged") then return false end
-		modes_by_backend[bid] = mode
-		if owner_unit then
-			local slots = modes_by_owner[owner_unit] or {}
-			modes_by_owner[owner_unit], slots[slot_name] = slots, mode
-		end
-		send(recipient, "state", slot_name, mode, bid)
-		diag_once("tx:" .. tostring(owner_unit) .. ":" .. slot_name .. ":" .. mode .. ":" .. tostring(reason),
-			"state tx owner=%s slot=%s mode=%s bid=%s reason=%s",
-			tostring(owner_unit), slot_name, mode, bid, tostring(reason))
-		return true
-	end
-
-	_om._old_musket_publish_local_loadout = function(recipient, reason)
-		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.local_player, pm, 1)
-		player = ok and player or nil
-		local owner_unit = player and player.player_unit
-		local _, equipment = owner_slot(owner_unit)
-		local slots = equipment and equipment.slots
-		if type(slots) ~= "table" then return 0 end
-		local n = 0
-		for slot_name, slot_data in pairs(slots) do
-			local item_data = slot_data and slot_data.item_data
-			if old_bid(item_data) then
-				local mode = item_data.mod_data and item_data.mod_data.cwv_musket_stance or "ranged"
-				if _om._old_musket_record_and_publish(owner_unit, slot_name, item_data,
-						mode, reason, recipient) then n = n + 1 end
-			end
-		end
-		return n
-	end
-
-	_om._old_musket_request_states = function(reason)
-		send("others", "query")
-		_om._old_musket_publish_local_loadout(nil, reason or "state_boundary")
-	end
-
-	_om._old_musket_publish_fire = function(owner_unit, event_name)
-		local slot_name, equipment = owner_slot(owner_unit)
-		local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
-		local bid = old_bid(slot_data and slot_data.item_data)
-		if not bid or event_name ~= "player_combat_weapon_rifle_fire" then return false end
-		return send("others", "fire", slot_name, event_name, bid)
-	end
-
-	if type(mod.network_register) == "function" then
-		pcall(function()
-			mod:network_register(CHANNEL, function(sender_peer_id, schema, op, slot_name, mode, bid)
-				if schema ~= SCHEMA then return end
-				if op == "query" then
-					_om._old_musket_publish_local_loadout(sender_peer_id, "query_reply")
-					return
-				end
-				if op == "fire" then
-					if mode ~= "player_combat_weapon_rifle_fire" or not valid_bid(bid) then return end
-					local pm = Managers and Managers.player
-					local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
-					player = ok and player or nil
-					local owner_unit = player and player.player_unit
-					local world = rawget(_G, "Application") and Application.main_world()
-					if owner_unit and Unit.alive(owner_unit) and world and rawget(_G, "WwiseUtils") then
-						local played = pcall(WwiseUtils.trigger_unit_event, world, mode, owner_unit, 0)
-						diag_once("fire:" .. tostring(sender_peer_id) .. ":" .. tostring(bid),
-							"remote fire peer=%s owner=%s bid=%s played=%s",
-							tostring(sender_peer_id), tostring(owner_unit), bid, tostring(played))
-					end
-					return
-				end
-				if op ~= "state" or (mode ~= "melee" and mode ~= "ranged")
-						or type(slot_name) ~= "string" or not valid_bid(bid) then return end
-				local peer_slots = modes_by_peer[sender_peer_id] or {}
-				modes_by_peer[sender_peer_id], peer_slots[slot_name], modes_by_backend[bid] = peer_slots, mode, mode
-				local pm = Managers and Managers.player
-				local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
-				player = ok and player or nil
-				local owner_unit = player and player.player_unit
-				if not owner_unit then return end
-				local slots = modes_by_owner[owner_unit] or {}
-				modes_by_owner[owner_unit], slots[slot_name] = slots, mode
-				apply_owner(owner_unit, slot_name, mode, "remote_event")
-				diag_once("rx:" .. tostring(sender_peer_id) .. ":" .. slot_name .. ":" .. mode,
-					"state rx peer=%s owner=%s slot=%s mode=%s bid=%s",
-					tostring(sender_peer_id), tostring(owner_unit), slot_name, mode, bid)
-			end)
-		end)
-	end
-	_om._old_musket_mode_channel = CHANNEL
-	_om._old_musket_mode_schema = SCHEMA
-end
+-- Implementation lives in _cwv_old_musket_wire.lua (state caches, both-wire
+-- acceptors, publish/query/fire). Dofiled HERE so its _om exports exist before
+-- the fire-dispatch block above first runs and before the identity register
+-- (defined later) routes into them.
+mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_wire")(mod, { om = _om })
 
 -- v0.1.293 approach A: spawn a hidden vanilla rifle alongside our custom mesh
 -- so sound/VFX actions (which look up named nodes like "fx_muzzle" / "j_hammer"
@@ -10762,6 +10587,16 @@ do
 			return descriptor, reason
 		end,
 		send = function(recipient, schema, payload, edge)
+			-- #474: stance rides the delivering channel. Stamped only on Old
+			-- Musket payloads so every other item's wire shape is unchanged;
+			-- receivers without this build ignore the extra field.
+			if payload and payload.item_key == "cwv_es_musket_old"
+					and _om._old_musket_mode_for_local_slot then
+				local ok_mode, mode = pcall(_om._old_musket_mode_for_local_slot, payload.slot)
+				if ok_mode and (mode == "melee" or mode == "ranged") then
+					payload.musket_mode = mode
+				end
+			end
 			local ok = pcall(mod.network_send, mod, "cwv_item_identity",
 				recipient, schema, payload)
 			if ok then
@@ -10825,7 +10660,27 @@ do
 	_om._cwv_send_identity_slots = _send_identity_slots
 
 	mod:network_register("cwv_item_identity", function(sender_peer_id, schema, payload)
+		-- #474: the Old Musket shot report rides this channel (the dedicated
+		-- mode channel never delivered in the 2026-07-18 paired logs). The
+		-- sentinel slot fails valid_slot() in accept() on builds without this
+		-- code, so mixed-version lobbies drop it safely.
+		if type(payload) == "table" and payload.slot == "cwv_musket_fire" then
+			if schema == _IDENTITY_SCHEMA and _om._old_musket_play_remote_fire then
+				_om._old_musket_play_remote_fire(sender_peer_id, payload.fire_event,
+					"identity_channel")
+			end
+			return
+		end
 		local changed, descriptor, reason = _om._cwv_accept_identity(sender_peer_id, schema, payload)
+		-- #474: apply stance BEFORE the changed-gate. A stance toggle changes
+		-- musket_mode while the identity signature stays identical, so the
+		-- accept() dedupe must not swallow it.
+		if type(payload) == "table" and payload.item_key == "cwv_es_musket_old"
+				and (payload.musket_mode == "melee" or payload.musket_mode == "ranged")
+				and _om._old_musket_accept_mode then
+			_om._old_musket_accept_mode(sender_peer_id, payload.slot,
+				payload.musket_mode, nil, "identity_channel")
+		end
 		if not changed then return end
 		pcall(printf, "[cwv:396/660] exact identity received: peer=%s slot=%s key=%s descriptor=%s state=%s",
 			tostring(sender_peer_id), tostring(payload and payload.slot),
@@ -10999,7 +10854,7 @@ do
 		return payloads
 	end
 
-	_om._replay_cwv_skins_after_parity = function()
+	_om._replay_cwv_skins_after_parity = function(identity_force)
 		local pm = Managers and Managers.player
 		local network = Managers and Managers.state and Managers.state.network
 		local storage = Managers and Managers.state and Managers.state.unit_storage
@@ -11011,9 +10866,14 @@ do
 		local ok_inv, inventory = pcall(ScriptUnit.extension, unit, "inventory_system")
 		if not ok_inv or not inventory or type(inventory.equipment) ~= "function" then return 0 end
 		local equipment = inventory:equipment()
-		_send_identity_slots(equipment and equipment.slots, "parity_replay", true)
+		-- #474 (2026-07-18): force the identity replay ONLY on the parity-enable
+		-- edge. The bounded 0.5s transition poll re-entered here every tick with
+		-- force=true, bypassing the signature dedupe (paired log: ~300 identity
+		-- sends in 50s). Unforced sends dedupe to zero traffic while unchanged.
+		_send_identity_slots(equipment and equipment.slots, "parity_replay",
+			identity_force == true)
 		local payloads = _om._cwv_skin_replay_payloads(equipment)
-		if #payloads == 0 then return 0 end
+		if #payloads == 0 then return 0, "empty" end
 		local go_id = storage:go_id(unit)
 		if not go_id then return 0 end
 		local transmit = network.network_transmit
@@ -11040,7 +10900,18 @@ do
 	end
 
 	local function _replay_and_clear_pending(reason)
-		local sent = _om._replay_cwv_skins_after_parity()
+		local force_identity = reason ~= "bounded_transition_poll"
+		local sent, empty = _om._replay_cwv_skins_after_parity(force_identity)
+		if empty == "empty" and _om._cwv_skin_replay_pending then
+			-- #474 (2026-07-18): nothing wire-skinned remains to replay; keeping
+			-- the pending record alive re-polled (and re-sent identity) every
+			-- 0.5s for the full 60s window. Consume it.
+			local pending = _om._cwv_skin_replay_pending
+			_om._cwv_skin_replay_pending = nil
+			pcall(printf,
+				"[cwv:416/483] deferred skin replay cleared: no cwv-skinned slot remains (source=%s trigger=%s)",
+				tostring(pending.context), tostring(reason))
+		end
 		if sent > 0 and _om._cwv_skin_replay_pending then
 			local pending = _om._cwv_skin_replay_pending
 			_om._cwv_skin_replay_pending = nil
@@ -11175,7 +11046,8 @@ do
 			pending, dt, _wire_parity_live, function()
 				return _replay_and_clear_pending("bounded_transition_poll")
 			end)
-		-- _replay_and_clear_pending may already have cleared the shared field.
+		-- _replay_and_clear_pending may already have cleared the shared field
+		-- (replay sent, or nothing wire-skinned remained). Never re-arm it.
 		if sent > 0 then
 			_om._cwv_skin_replay_pending = nil
 		elseif outcome == "expired" then
@@ -11183,7 +11055,7 @@ do
 			pcall(printf,
 				"[cwv:416/483] deferred skin replay expired safely after 60s: source=%s slots=%s (parity never confirmed / equipment unavailable)",
 				tostring(pending.context), tostring(pending.count))
-		else
+		elseif _om._cwv_skin_replay_pending ~= nil then
 			_om._cwv_skin_replay_pending = next_pending
 		end
 	end
