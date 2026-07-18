@@ -221,6 +221,23 @@ local function _release_career_action_claims()
 end
 
 local function _inject_career_actions(template, template_key, career_name, failures)
+    -- Deep-cloned variant templates (CWV `table.clone(donor, true)`) carry the
+    -- donor's engine-installed career-action rows as identity-broken copies.
+    -- Vanilla installs these rows BY IDENTITY (weapons.lua:263) and no mod in
+    -- this repo authors custom action_career rows, so a mismatched row under a
+    -- career-action name is always an inherited clone: point it back at the
+    -- canonical ActionTemplates entry before installing, the same
+    -- reconciliation WOC's restore_inherited_career_action_identity performs
+    -- (issue 661: conflict:action_career_dr_3 / action_career_es_4 spam).
+    local required = _career_weapon_actions.collect({ career_name },
+        CareerSettings, ActionTemplates)
+    for _, action_name in ipairs(required.names or {}) do
+        local existing = template.actions[action_name]
+        local canonical = required.actions[action_name]
+        if existing ~= nil and canonical ~= nil and existing ~= canonical then
+            template.actions[action_name] = canonical
+        end
+    end
     local report = _career_weapon_actions.install(template, { career_name },
         CareerSettings, ActionTemplates, _career_action_owner)
     if (report.claimed or 0) > 0 then
@@ -233,7 +250,8 @@ local function _inject_career_actions(template, template_key, career_name, failu
         failures["career:" .. tostring(career)] = true
     end
     for _, action_name in ipairs(report.conflicting_names or {}) do
-        failures["conflict:" .. tostring(action_name)] = true
+        failures["conflict:" .. tostring(action_name)
+            .. "@" .. tostring(template_key)] = true
     end
 end
 

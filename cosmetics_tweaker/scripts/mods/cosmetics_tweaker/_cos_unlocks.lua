@@ -230,16 +230,28 @@ mod:hook("PlayFabMirrorAdventure", "_create_fake_inventory_items", function(func
         if mod:get("unlock_all_frames") then
             local added, skipped = _inject_all_frames(fake_inventory_items)
             _frame_inject_stats.hook_fired = _frame_inject_stats.hook_fired + 1
+            -- The mirror rebuilds fake inventory about once per second, so the
+            -- injection must re-run per call, but logging every pass drowned the
+            -- console (issue 713: 200+ identical lines in 2 minutes). Log the
+            -- first pass and any pass whose counts CHANGE; /cos frames_status
+            -- still exposes the live counters.
+            if added ~= _frame_inject_stats.last_added
+                    or skipped ~= _frame_inject_stats.last_skipped_dlc
+                    or _frame_inject_stats.hook_fired == 1 then
+                mod:info("[unlock_all_frames] _create_fake_inventory_items pre-hook fired: added=%d skipped_dlc=%d (pass %d)",
+                    added, skipped, _frame_inject_stats.hook_fired)
+            end
             _frame_inject_stats.last_added = added
             _frame_inject_stats.last_skipped_dlc = skipped
-            mod:info("[unlock_all_frames] _create_fake_inventory_items pre-hook fired: added=%d skipped_dlc=%d", added, skipped)
         end
         -- v0.9.63-dev: grant modded-realm ownership of vanilla-unobtainable skins/hats
         -- so the per-career unlock toggles can actually surface them (they otherwise
         -- never enter the player's inventory). Always runs in modded realm — this is
         -- NOT gated on the frame toggle, which is a separate feature.
+        local prev_ca = _unob_inject_stats.last_added
+        local prev_cs = _unob_inject_stats.last_skipped_dlc
         local ca, cs = _inject_unobtainable_cosmetics(fake_inventory_items)
-        if ca > 0 then
+        if ca > 0 and (ca ~= prev_ca or cs ~= prev_cs) then
             mod:info("[unlock_cosmetics] injected %d unobtainable cosmetics into fake inventory (skipped_dlc=%d)", ca, cs)
         end
     end

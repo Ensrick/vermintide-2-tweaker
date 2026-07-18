@@ -1,5 +1,11 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.146-dev - 2026-07-17 - reconciliation build: #698 + #713 [verify-fix-coop]
+
+- Reconciliation reship: two different builds were briefly uploaded as `0.9.145-dev` by parallel sessions. This unambiguous version carries BOTH the #698 career-scoped remote appearance identity (below) and #713's unlock-injection log demotion: the per-second `[unlock_all_frames]`/`[unlock_cosmetics]` lines now fire only on the first pass or when counts change (the injection still runs per mirror rebuild; `/cos frames_status` keeps live counters).
+
+**Test:** #698 co-op checklist below, plus solo: idle in the keep 2+ minutes and confirm at most one line of each unlock marker in the newest log.
+
 ## 0.9.145-dev - 2026-07-17 - career-scoped remote appearance identity (#698) [verify-fix-coop]
 
 - Fixed the host-side Grail Knight armor repaint recorded after a remote player changed to Foot Knight: `_la_equips_by_peer` was keyed only by Steam peer, while the husk armor replay accepted every cached `slot_skin` without proving that the record belonged to the husk's current career.
