@@ -161,6 +161,32 @@ function M.install(mod, _rt_register, deps)
         if #failures > 0 then return table.concat(failures, "; ") end
     end)
 
+    _rt_register("issue732_cwv_infantry_spear_saltzpyre_remap", function()
+        local donor = _3p_template_remaps
+            and _3p_template_remaps.two_handed_spears_elf_template_1
+        local clone = _3p_template_remaps
+            and _3p_template_remaps.cwv_infantry_spear_template
+        if type(donor) ~= "table" or clone ~= donor then
+            return "CWV Infantry spear does not share the elf-spear 3P remap contract"
+        end
+        if type(clone.wh_) ~= "table"
+            or clone.wh_.attack_swing_down_left_axe ~= "attack_swing_stab" then
+            return "Saltzpyre first-light event is not remapped to attack_swing_stab"
+        end
+
+        local patches = _WIELD_PATCHES_MODULE and _WIELD_PATCHES_MODULE.patches
+        local donor_wield = patches and patches.two_handed_spears_elf_template_1
+        local clone_wield = patches and patches.cwv_infantry_spear_template
+        if type(donor_wield) ~= "table" or clone_wield ~= donor_wield then
+            return "CWV Infantry spear does not share the elf-spear 3P wield contract"
+        end
+        for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+            if clone_wield[career] ~= "to_2h_billhook" then
+                return career .. " Infantry spear wield is not routed to billhook vocabulary"
+            end
+        end
+    end)
+
     _rt_register("issue603_ranger_dual_axes_inventory_preview_pose", function()
         return _wt603_post_spawn_preview_event(
                 "dr_dual_wield_axes", "dr_ranger", "to_dual_axes") == "to_dual_hammers"

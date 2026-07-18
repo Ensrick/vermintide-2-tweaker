@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.277-dev (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
+
+- Runtime-parity mirror of Weapon Tweaker `0.12.276-beta`: CWV's Infantry
+  Combat Style effective template now shares the elf-spear donor's 3P remap
+  and wield contracts by identity.
+- This routes the observed Saltzpyre first-light event
+  `attack_swing_down_left_axe` to the donor's receiver-safe
+  `attack_swing_stab` target while retaining the native Kerillian branch.
+- Offline and `/wt_regression_test` coverage lock the clone/donor identity,
+  all three standard Saltzpyre wield routes, and the crash event mapping.
+
+**Solo verify:** Confirm `[wt:LOAD] v0.12.277-dev`, then follow the
+`0.12.276-beta` verification above. `/wt_regression_test` must pass
+`issue732_cwv_infantry_spear_saltzpyre_remap`.
+
 ## 0.12.276-dev (2026-07-18) - #724 release/source reconciliation [tooling]
 
 - Rebuilt the friends-only development stream from the current merged source
