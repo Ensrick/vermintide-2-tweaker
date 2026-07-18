@@ -87,7 +87,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.147-dev"
+local MOD_VERSION = "0.9.148-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -543,16 +543,11 @@ mod.on_game_state_changed = function(status, state_name)
     -- v0.9.43-dev TRANSITION trace: world/mission/keep load + game-state change.
     -- Anchors the area-load drop (#3) and the mission-load timeline in the trace.
     _trace("TRANSITION game_state %s/%s", tostring(state_name), tostring(status))
-    -- v0.9.76-dev (#282): release the MH embed's package references at level-world
-    -- teardown. StateIngame exit destroys the world and every unit using a hijacked
-    -- material, so the single per-path reference (exactly-once since 0.9.76) can
-    -- drop; if the engine still holds a resource, PackageManager routes the release
-    -- through its own delayed-unload queue (package_manager.lua:213-224). Next
-    -- level's first hijacked spawn re-loads fresh.
-    if status == "exit" and state_name == "StateIngame"
-        and MH_EMBED and MH_EMBED.release_packages then
-        MH_EMBED.release_packages("StateIngame exit")
-    end
+    -- #282: this callback is PRE-StateIngame.on_exit (game_state_machine.lua
+    -- notifies Managers.mod before StateMachine destroys the old state). Never
+    -- release material packages here: player/preview units still consume them,
+    -- which puts the handle in PackageManager's delayed queue. The single
+    -- StateIngame.on_exit post-hook below owns the release boundary.
     mod._cos.apply_cosmetic_unlocks()
     -- v0.9.0-dev: retry deferred _G.apply_material_settings hook (lazy-loaded
     -- by Stingray flow graph on first hub/level enter).
@@ -617,6 +612,29 @@ mod.on_game_state_changed = function(status, state_name)
 
     -- Glow state restores on equipment spawn; editor opening is manual.
 end
+
+-- v0.9.148-dev (#282): release MH skin packages only AFTER vanilla has destroyed
+-- player machines, every registered unit, entity systems, the level and world
+-- (StateIngame.on_exit). VMF hook_safe is explicitly a post-call hook.
+-- Boot.shutdown immediately calls Managers:destroy after this method, with no
+-- PackageManager.update frame between them, so the old pre-exit release left a
+-- delayed handle for PackageManager.destroy to force through the renderer.
+-- Keep exactly one Cosmetics hook for this (Class, method) pair.
+mod:hook_safe("StateIngame", "on_exit", function(self, application_shutdown)
+    if not (MH_EMBED and MH_EMBED.release_packages) then return end
+    MH_EMBED.release_packages(string.format(
+        "StateIngame.on_exit post shutdown=%s",
+        tostring(application_shutdown and true or false)))
+    local pending = MH_EMBED.pending_release_paths
+        and MH_EMBED.pending_release_paths() or {}
+    if #pending > 0 then
+        pcall(printf, "[cos:282] POSTCONDITION FAILED: %d mod-owned skin package(s) still delayed after StateIngame.on_exit: %s",
+            #pending, table.concat(pending, ","))
+    else
+        pcall(printf, "[cos:282] postcondition-ok: no mod-owned skin packages delayed before manager destruction")
+    end
+end)
+
 mod.on_setting_changed = function(setting_id)
     if setting_id == "cos_encarmine_hat_enabled" and CUSTOM_HATS then
         CUSTOM_HATS.sync_toggle()
@@ -9484,6 +9502,12 @@ end
 local _la_bridge_missing_dep_logged = false
 mod.update = function(dt)
 	CUSTOM_HATS.tick(dt)
+    -- #282: retain release-pending ledger entries until PackageManager.update
+    -- actually removes their delayed handles. Normally a no-op because the
+    -- post-StateIngame boundary releases synchronously.
+    if MH_EMBED and MH_EMBED.reconcile_packages then
+        MH_EMBED.reconcile_packages("mod.update")
+    end
     -- v0.9.12-dev: pump persistence-restore queue. SimpleInventoryExtension
     -- .extensions_ready queues a Player for restore; tick processes the queue
     -- once career_name + player_unit are both ready (~1 frame later).

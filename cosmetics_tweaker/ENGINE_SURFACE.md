@@ -280,16 +280,19 @@ accumulated 90+ references per session with no unload, so shutdown walked the co
 down one-by-one ("Package still referenced, NOT unloaded" cascades) and ended in the
 deadlock-warning block on both peers (#282/#477). The fix (`_safe_load_package`,
 `:191`): load exactly once per path under a mod-owned reference name
-(`"cosmetics_tweaker_mh"`), tracked in `_mh_loaded_packages`; `release_packages`
-(`:215`) drops the single reference on the `("exit","StateIngame")` game-state
-notification (which fires BEFORE `StateIngame.on_exit` destroys units and the level
-world, [src: `state_ingame.lua:1924-1929`,`:1939`]) and on `mod.on_unload`. Releasing
-while units may still use the material is engine-safe: `unload` frees the resource only
-once NO reference under ANY name remains, and even then routes a still-in-use package
-through the delayed-unload queue instead of freeing it live
-[src: `package_manager.lua:213-224`, the `can_unload` gate]. The release wiring lives in
-`cosmetics_tweaker.lua` (not this module) because the module is `dofile`'d before
-`mod.on_game_state_changed`/`mod.on_unload` are defined (`:158-186` memo).
+(`"cosmetics_tweaker_mh"`), tracked in a `held`/`release_pending` lifecycle ledger.
+The game-state `("exit","StateIngame")` notification fires **before**
+`StateIngame.on_exit` and is therefore not a safe release boundary
+[src: `game_state_machine.lua:13-22`]. The v0.9.148 fix uses one VMF `hook_safe` on
+`StateIngame.on_exit`, whose post-call handler runs after vanilla destroys player
+machines, all registered units, entity systems, the level, and the world
+[src: `state_ingame.lua:1847-2074`; VMF `hooks.lua:367-373`]. This ordering matters on
+shutdown because `Boot.shutdown` calls state-machine destroy and then
+`Managers:destroy` without another `PackageManager.update` frame
+[src: `boot.lua:917-924`]. The ledger is retained while the engine's
+`_delayed_packages_to_remove` still owns a handle and clears only when release is
+observed complete. Stable shutdown postcondition: no package owned by reference
+`cosmetics_tweaker_mh` remains in that delayed queue before manager destruction.
 
 ### CosmeticUtils.update_cosmetic_slot GameSession sync channel (owner: `docs/engine/03`, `/11`)
 

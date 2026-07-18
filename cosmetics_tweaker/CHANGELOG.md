@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.148-dev - 2026-07-18 - post-world material-package release (#282) [verify-fix]
+
+- Moved the embedded Material-Hijack skin-package release from the pre-teardown `on_game_state_changed("exit", "StateIngame")` callback to one post-call `StateIngame.on_exit` hook. Vanilla has destroyed player/preview units, entity systems, the level and world before the mod drops its reference, so the Purpure/Azure package no longer enters shutdown's delayed-unload queue merely because live units still consume it.
+- Replaced the boolean load registry with a lifecycle ledger that distinguishes held references from engine-delayed releases. Entries remain observable until PackageManager actually removes the delayed handle; `/cos_regression_test` now fails on any retained Cosmetics-owned delayed package.
+- Added bounded `[cos:282] release-complete`, `release-DELAYED`, and shutdown postcondition evidence. Added offline regression coverage for three repeated transitions, immediate shutdown with no PackageManager update frame, release retention/reconciliation, and exactly one post-StateIngame hook.
+
+**Verify:** equip the Purpure/Azure outfit, complete at least three keep/mission or Chaos Wastes transitions, then quit immediately after the final return. The log must show `[cos:282] postcondition-ok` before manager destruction, with no `cosmetics_tweaker_mh` delayed package at `PackageManager.destroy`, no `#ID[...] not unloaded` fatal, and no shutdown fence stall attributable to this package.
+
 ## 0.9.147-dev - 2026-07-18 - exact dual-illusion persistence lifecycle (#702) [verify-fix-coop]
 
 - Dual/offhand Apply now commits its durable owner record by exact backend item and hand before any live-model or peer delivery work. The previous save was nested under `player_unit` liveness and the LA sender's availability, so a valid inventory Apply could update the session preview while silently omitting the disk write.

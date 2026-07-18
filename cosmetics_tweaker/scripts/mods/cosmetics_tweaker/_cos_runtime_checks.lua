@@ -1657,6 +1657,16 @@ _rt_register("mh_package_single_reference", function()
     if type(MH_EMBED.release_packages) ~= "function" then
         return "release_packages missing from MH embed exports (issue 282 regression)"
     end
+    if type(MH_EMBED.reconcile_packages) ~= "function"
+        or type(MH_EMBED.pending_release_paths) ~= "function" then
+        return "MH release completion ledger missing (issue 282 regression)"
+    end
+    local pending = MH_EMBED.pending_release_paths()
+    if #pending > 0 then
+        return string.format(
+            "%d cosmetics_tweaker_mh package(s) remain in PackageManager delayed queue: %s",
+            #pending, table.concat(pending, ","))
+    end
     if not (Managers and Managers.package and Managers.package.reference_count) then
         return nil  -- package manager not up yet: vacuous pass
     end
