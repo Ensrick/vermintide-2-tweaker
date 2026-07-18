@@ -16,13 +16,9 @@ return function(H, repo_root)
 	-- Bootstrap allowlist: mods whose retroactive census has not landed yet.
 	-- Every entry here is DEBT - remove the entry in the same change that
 	-- adds the mod's census file. Do NOT add new entries: a new appearance
-	-- mod must ship its census from day one.
-	local PENDING_CENSUS = {
-		character_weapon_variants = "census being enumerated (2026-07-18 W0)",
-		cosmetics_tweaker = "census being enumerated (2026-07-18 W0)",
-		weapon_tweaker = "census being enumerated (2026-07-18 W0)",
-		weapons_of_chaos = "census being enumerated (2026-07-18 W0)",
-	}
+	-- mod must ship its census from day one. (All four retroactive censuses
+	-- landed 2026-07-18; the list is empty and must stay that way.)
+	local PENDING_CENSUS = {}
 
 	local function file_exists(path)
 		local f = io.open(path, "rb")
