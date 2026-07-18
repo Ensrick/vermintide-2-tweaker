@@ -249,6 +249,24 @@ return function(H, repo_root)
         end
     end)
 
+    H.test("CIM #524 picker role separates selectors from exact instances", function()
+        H.equal(contract.craft_picker_role({
+            rarity = "default",
+            data = { slot_type = "melee", cwv_key = "cwv_es_longsword" },
+        }), "selector")
+        H.equal(contract.craft_picker_role({
+            rarity = "modded",
+            data = { slot_type = "melee", cwv_key = "cwv_es_longsword" },
+        }), "instance")
+        H.equal(contract.craft_picker_role({
+            CustomData = { rarity = "modded" },
+            data = { slot_type = "necklace" },
+        }), "instance")
+        H.equal(contract.craft_picker_role({
+            rarity = "unique", data = { slot_type = "hat" },
+        }), "other")
+    end)
+
     H.test("CIM #628 base-keyed CWV instance stays salvage-eligible", function()
         local row = master("cwv_variant")
         local record = assert(contract.normalize_record("cwv_es_longsword_100", {
@@ -290,11 +308,9 @@ return function(H, repo_root)
         H.truthy(forge:find("mod._cim277_delete_owned_ids(owned)", 1, true))
         H.truthy(filter:find("contract.is_salvage_eligible", 1, true))
         H.equal(filter:find("REGARDLESS of equip / loadout / favorite", 1, true), nil)
-        -- issue 628 identity unification: the acquisition selector must read the
-        -- contract's one canonical resolver, injected at standard_forge load.
-        H.truthy(selector:find("function M.set_canonical_key_resolver", 1, true))
-        H.truthy(forge:find(
-            "template_selector.set_canonical_key_resolver(_contract.canonical_item_key)",
-            1, true))
+        -- issues 524/628 identity unification: the acquisition selector must
+        -- consume both exact identity and picker-row role from one contract.
+        H.truthy(selector:find("function M.set_identity_contract", 1, true))
+        H.truthy(forge:find("template_selector.set_identity_contract(_contract)", 1, true))
     end)
 end

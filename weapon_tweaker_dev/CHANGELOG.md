@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.276-dev (2026-07-18) - #724 release/source reconciliation [tooling]
+
+- Rebuilt the friends-only development stream from the current merged source
+  so its tracked bundle, Workshop artifact, and GitHub release manifest all
+  carry the #660 appearance census added after `0.12.275-dev` was published.
+- The census is bounded, observation-only tooling. This entry makes no new
+  player-facing behavior claim and does not change #660's verification state.
+
 ## 0.12.275-dev (2026-07-17) - #661 reconciliation build: both parallel fixes [verify-fix]
 
 - Runtime-parity mirror of weapon_tweaker 0.12.274-beta: carries BOTH parallel #661 changes - the shared library's private-clone action ownership (below) and the inject-site clone-identity restore in `_inject_career_actions` (canonical `ActionTemplates` identity restored on mismatched career-action rows before install; residual conflicts report `conflict:<action>@<template>`). Two different builds were briefly uploaded as the prior version pair by parallel sessions; this version is unambiguous.

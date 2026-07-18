@@ -589,7 +589,11 @@ _rt_register("issue524_cwv_selector_bounded", function()
         backend_id = "cwv_rt_longsword_001",
         rarity = "default",
         key = "es_bastard_sword",
-        data = { key = "es_bastard_sword" },
+        data = {
+            key = "es_bastard_sword",
+            slot_type = "melee",
+            item_type = "es_bastard_sword", -- name-integrity: non-rendered-test-data
+        },
     }
     local synthetic = {
         backend_id = "cim_template_cwv_rt_longsword",
@@ -610,8 +614,6 @@ _rt_register("issue524_cwv_selector_bounded", function()
         key = "es_bastard_sword",
         data = { key = "es_bastard_sword", slot_type = "melee", item_type = "es_bastard_sword" }, -- name-integrity: non-rendered-test-data
     }
-    legacy.data.slot_type = "melee"
-    legacy.data.item_type = "es_bastard_sword" -- name-integrity: non-rendered-test-data
     legacy.power_level = 5
     rows = { legacy_300, legacy, synthetic }
     selector.inject(rows, { synthetic })
@@ -621,13 +623,13 @@ _rt_register("issue524_cwv_selector_bounded", function()
     local crafted = {
         backend_id = "cwv_rt_longsword_100",
         rarity = "modded",
-        data = { cwv_key = "cwv_rt_longsword" },
+        data = { slot_type = "melee", cwv_key = "cwv_rt_longsword" },
     }
     rows = { crafted }
     selector.inject(rows, { synthetic })
     selector.inject(rows, { synthetic })
-    if #rows ~= 2 or rows[1] ~= crafted or rows[2] ~= synthetic then
-        return "crafted CWV instance changed the one-selector acquisition bound"
+    if #rows ~= 1 or rows[1] ~= synthetic then
+        return "crafted CWV instance leaked into the acquisition picker"
     end
 end)
 

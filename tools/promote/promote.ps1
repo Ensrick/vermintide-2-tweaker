@@ -61,9 +61,24 @@ $devSrc = Join-Path $devDir "scripts/mods/$($p.Dev)"
 $pubSrc = Join-Path $pubDir "scripts/mods/$Mod"
 
 function Convert-Id([string]$text) {
-    $t = [regex]::Replace($text, "\b" + [regex]::Escape($p.Dev)   + "\b", $Mod)
-    $t = [regex]::Replace($t,    "\b" + [regex]::Escape($p.DevId) + "\b", $p.PubId)
-    return $t
+    # Longest-first explicit replacements (issue 684 defect 1): '_' is a word char,
+    # so a bare \b<dev>\b never matches inside <dev>_data / <dev>_localization
+    # (the require/dofile module names) and those sites leaked into stable
+    # unconverted. Replace the known suffixed forms first, then the bare ids.
+    # Any exotic suffix the list does not know is caught by the grep-clean
+    # verify below (defect 2 fix) and surfaced for a human.
+    $replacements = @(
+        @{ From = $p.Dev   + '_data';         To = $Mod     + '_data' }
+        @{ From = $p.Dev   + '_localization'; To = $Mod     + '_localization' }
+        @{ From = $p.Dev;                     To = $Mod }
+        @{ From = $p.DevId + '_data';         To = $p.PubId + '_data' }
+        @{ From = $p.DevId + '_localization'; To = $p.PubId + '_localization' }
+        @{ From = $p.DevId;                   To = $p.PubId }
+    )
+    foreach ($r in $replacements) {
+        $text = [regex]::Replace($text, "\b" + [regex]::Escape($r.From) + "\b", $r.To)
+    }
+    return $text
 }
 
 $mode = if ($Apply) { "APPLY" } else { "DRY-RUN (no changes written)" }
@@ -121,14 +136,21 @@ if (Test-Path $mainLua) {
     Set-Content -Path $mainLua -Value $mc -NoNewline -Encoding utf8
 }
 
-# Verify grep-clean of dev identity.
-$leak = Select-String -Path (Join-Path $pubSrc '*.lua') -Pattern ([regex]::Escape($p.Dev) + '|' + [regex]::Escape($p.DevId)) -SimpleMatch -ErrorAction SilentlyContinue
+# Verify grep-clean of dev identity. NO -SimpleMatch: the pattern is a regex
+# alternation of two pre-escaped literals; -SimpleMatch made the '|' literal, so
+# the verify matched nothing and always reported clean (issue 684 defect 2).
+$leak = Select-String -Path (Join-Path $pubSrc '*.lua') -Pattern ([regex]::Escape($p.Dev) + '|' + [regex]::Escape($p.DevId)) -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Host ("Wrote {0} public file(s); set MOD_VERSION = {1}." -f $written, $Version) -ForegroundColor Green
 if ($leak) {
     Write-Host "!! DEV IDENTITY LEAK -- public source still references the dev id:" -ForegroundColor Red
-    $leak | Select-Object -First 20 | ForEach-Object { Write-Host ("   {0}:{1}" -f $_.Filename, $_.LineNumber) -ForegroundColor Red }
-    Write-Host "   Resolve before building (e.g. an id embedded in a way word-boundary sed missed)." -ForegroundColor Red
+    # No Select-Object -First here: it stops the upstream pipeline and has killed
+    # outer pipelines before (memory: ship.ps1). Slice the collected array instead.
+    $leakArr = @($leak)
+    $show = if ($leakArr.Count -gt 20) { $leakArr[0..19] } else { $leakArr }
+    foreach ($l in $show) { Write-Host ("   {0}:{1}" -f $l.Filename, $l.LineNumber) -ForegroundColor Red }
+    if ($leakArr.Count -gt 20) { Write-Host ("   ... and {0} more" -f ($leakArr.Count - 20)) -ForegroundColor Red }
+    Write-Host "   Resolve before building (e.g. an id embedded with a suffix the normalizer does not know)." -ForegroundColor Red
     exit 1
 }
 Write-Host "grep-clean: no dev identity in public source." -ForegroundColor Green
