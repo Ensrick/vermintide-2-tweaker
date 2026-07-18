@@ -184,5 +184,79 @@
                 }
             )
         }
+        @{
+            Id = 'woc.issue712.blightreaper-transform'
+            Issue = 712
+            Claim = 'structural-only'
+            Owners = @(
+                'tools/shared_lib/_lib_weapon_appearance.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_appearance_policy.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_durable_transform.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_mod_unit_preview.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'covered'; Evidence = 'GearUtils return adapter resolves the authored 1P render node' }
+                        owner_3p = @{ Disposition = 'covered'; Evidence = 'GearUtils return adapter resolves the authored local 3P render node' }
+                        bot_3p = @{ Disposition = 'covered'; Evidence = 'the positively identified non-1P GearUtils recipe consumes the same descriptor' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'husk GearUtils return adapter consumes the same descriptor without transform RPC' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'HeroPreviewer character-preview adapter consumes the same descriptor' }
+                        cosmetic_preview = @{ Disposition = 'covered'; Evidence = 'LootItemUnitPreviewer item-preview adapter consumes the same descriptor' }
+                        athanor_preview = @{ Disposition = 'covered'; Evidence = 'Athanor reuses the LootItemUnitPreviewer item-preview adapter' }
+                        crafting_preview = @{ Disposition = 'covered'; Evidence = 'crafting item previews reuse the LootItemUnitPreviewer adapter' }
+                        lobby_preview = @{ Disposition = 'covered'; Evidence = 'MenuWorldPreviewer character-preview adapter consumes the same descriptor' }
+                        score_screen = @{ Disposition = 'covered'; Evidence = 'score/end character preview reuses the HeroPreviewer/MenuWorldPreviewer adapter' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons, not a weapon unit transform' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the immutable transform descriptor has no per-instance persisted state' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'each GearUtils return is adapted before the caller receives it' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'equip creates a fresh GearUtils recipe and applies the descriptor' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'wielded owner and husk units are weak-tracked for measured pose drift' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'the immutable relic has no selectable cosmetic transform' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'Blightreaper has no combat-style transform variants' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'replacement units consume the descriptor independently after transition' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'replacement GearUtils units consume the descriptor independently after respawn' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'new remote husk spawn consumes the local render descriptor' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the transform is local presentation with no peer-ready payload' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the transform is local presentation with no parity payload' }
+                        rejoin = @{ Disposition = 'covered'; Evidence = 'a re-created husk consumes a new local render descriptor' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each preview-spawn recipe resolves the named render node' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'a replacement preview unit has an independent weak application guard' }
+                        lobby_score_create = @{ Disposition = 'covered'; Evidence = 'character-preview creation resolves the named render node on each unit' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live restoration of already-spawned imported units on mod disable is not proven' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_woc_blightreaper_pulse.lua'
+                            Names = @(
+                                'WOC #712 resolves named render node across gameplay and preview surfaces'
+                            )
+                            Surfaces = @(
+                                'owner_1p', 'owner_3p', 'bot_3p', 'remote_husk_3p',
+                                'inventory_preview', 'cosmetic_preview', 'athanor_preview',
+                                'crafting_preview', 'lobby_preview', 'score_screen'
+                            )
+                            ReplayEdges = @(
+                                'initial_spawn', 'equip', 'wield', 'hot_join', 'rejoin',
+                                'preview_open', 'preview_reopen', 'lobby_score_create'
+                            )
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_woc_blightreaper_pulse.lua'
+                            Names = @(
+                                'WOC #712 replays transform for replacement units after mission transition'
+                            )
+                            Surfaces = @('owner_3p')
+                            ReplayEdges = @('mission_transition', 'respawn')
+                        }
+                    )
+                }
+            )
+        }
     )
 }

@@ -9,6 +9,14 @@ return function(H, repo_root)
 		for i = 1, #value do out[i] = value[i] end
 		return out
 	end
+	local function transform_spec()
+		return {
+			node = 2,
+			scale = policy.TRANSFORM.scale,
+			offset = policy.TRANSFORM.offset,
+			rotation = policy.TRANSFORM.rotation,
+		}
+	end
 
 	local function fixture(surface, should_yield)
 		local unit = {}
@@ -27,7 +35,8 @@ return function(H, repo_root)
 		local expected_rotation = { 0.5, -0.5, -0.5, 0.5 }
 		local owner = module.new({
 			alive = function(value) return value == unit and live end,
-			read = function()
+			read = function(_, node)
+				H.equal(node, 2)
 				return {
 					position = copy(state.position), scale = copy(state.scale),
 					rotation = copy(state.rotation),
@@ -38,6 +47,7 @@ return function(H, repo_root)
 				return copy(expected_rotation)
 			end,
 			apply = function(_, spec)
+				H.equal(spec.node, 2)
 				writes = writes + 1
 				state.position = copy(spec.position)
 				state.scale = copy(spec.scale)
@@ -62,14 +72,18 @@ return function(H, repo_root)
 			events, function() live = false end, surface or "owner-spawn"
 	end
 
-	H.test("WOC #613 resolves the exact canonical node-zero pose", function()
-		local target = module.resolve({ position = { 1, 2, 3 } }, policy.TRANSFORM,
+	H.test("WOC #712 resolves the exact canonical authored-render-node pose", function()
+		local target = module.resolve({ position = { 1, 2, 3 } }, transform_spec(),
 			{ 0.5, -0.5, -0.5, 0.5 })
 		H.deep_equal(target.position, { 1, 2, 2.7 })
 		H.deep_equal(target.scale, { 0.9, 0.9, 0.9 })
 		H.deep_equal(target.apply_spec.rotation, { -90, -90, -90 })
-		H.equal(module.CONTRACT.target_node, 0)
-		H.equal(module.CONTRACT.position, "linked_baseline_plus_offset")
+		H.equal(target.node, 2)
+		H.equal(target.apply_spec.node, 2)
+		H.equal(module.CONTRACT.attachment_node, 0)
+		H.equal(module.CONTRACT.target_node, "authored_render_node")
+		H.equal(module.CONTRACT.target_node_name, policy.TRANSFORM_NODE_NAME)
+		H.equal(module.CONTRACT.position, "render_baseline_plus_offset")
 		H.equal(module.CONTRACT.scale, "absolute")
 		H.equal(module.CONTRACT.rotation, "absolute_euler_xyz")
 		H.equal(module.CONTRACT.write_mode, "atomic_local_pose")
@@ -105,7 +119,7 @@ return function(H, repo_root)
 	H.test("WOC #613 repairs animation-stomped owner 1P and 3P poses", function()
 		for _, perspective in ipairs({ "1p", "3p" }) do
 			local owner, unit, state, _, stomp, writes, events = fixture()
-			H.equal(owner:apply(unit, policy.TRANSFORM, perspective, "owner-spawn"), true)
+			H.equal(owner:apply(unit, transform_spec(), perspective, "owner-spawn"), true)
 			H.equal(owner:count(), 1)
 			H.deep_equal(state.position, { 1, 2, 2.7 })
 			local applied, tracked = owner:step()
@@ -126,7 +140,7 @@ return function(H, repo_root)
 
 	H.test("WOC #613 tracks husks, prunes dead units, and leaves previews one-shot", function()
 		local husk, unit, _, _, stomp, writes, _, kill = fixture("husk-spawn")
-		H.truthy(husk:apply(unit, policy.TRANSFORM, "3p", "husk-spawn"))
+		H.truthy(husk:apply(unit, transform_spec(), "3p", "husk-spawn"))
 		stomp()
 		H.equal(husk:step(), 1)
 		kill()
@@ -137,7 +151,7 @@ return function(H, repo_root)
 
 		local preview, preview_unit, _, _, preview_stomp, preview_writes =
 			fixture("character-preview")
-		H.truthy(preview:apply(preview_unit, policy.TRANSFORM, "3p", "character-preview"))
+		H.truthy(preview:apply(preview_unit, transform_spec(), "3p", "character-preview"))
 		preview_stomp()
 		applied, tracked = preview:step()
 		H.equal(applied, 0)
@@ -147,7 +161,7 @@ return function(H, repo_root)
 
 	H.test("WOC #613 yields to an intentional live dev-tuner edit", function()
 		local owner, unit, state, _, stomp, writes = fixture("owner-spawn", true)
-		H.truthy(owner:apply(unit, policy.TRANSFORM, "3p", "owner-spawn"))
+		H.truthy(owner:apply(unit, transform_spec(), "3p", "owner-spawn"))
 		stomp()
 		state.position = { 8, 8, 8 }
 		local applied, tracked = owner:step()
@@ -176,7 +190,7 @@ return function(H, repo_root)
 		local source = file:read("*a")
 		file:close()
 		H.truthy(source:find("record.write_report", 1, true))
-		H.truthy(source:find("mode=%s ok=%s scale=%s position=%s offset=%s rotation=%s",
+		H.truthy(source:find("mode=%s ok=%s node=%s error=%s scale=%s position=%s offset=%s rotation=%s",
 			1, true))
 	end)
 end

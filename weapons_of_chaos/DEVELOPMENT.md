@@ -270,14 +270,19 @@ verbatim; only the mesh source differs.
   The authored Blightreaper is an explicit exception: its reviewed canonical
   transform applies to its separate 1P and 3P units as one presentation policy.
 
-- **Linked roots require one complete local pose.** Vanilla links the wielded
-  weapon's target node `0` (`gear_utils.lua:293-308`; one-handed mapping at
+- **Attachment roots and authored render nodes have separate ownership.**
+  Vanilla links the wielded weapon's target node `0`
+  (`gear_utils.lua:293-308`; one-handed mapping at
   `attachment_node_linking.lua:2726-2753`) and restores a saved linked transform
   with `Unit.set_local_pose` (`gear_utils.lua:321-327`). Blightreaper
   `0.1.24-dev` proved the separate-setter dead end: its immediate read retained
   rotation while position and scale remained native on owner 1P/3P and husks.
-  Use the shared `WeaponAppearance.apply` atomic-pose path and require its full
-  channel report; never infer complete delivery from any one successful setter.
+  WOC `0.1.28-dev` then proved that the complete node-0 pose can itself be
+  rejected on both authored perspectives and character previews. Resolve the
+  imported unit's exact named `blightreaper` render node, apply one complete
+  pose there through `WeaponAppearance.apply`, and require its full
+  channel/node/error report. Never guess a node index or infer complete
+  delivery from any one successful setter.
 
 - **Deep-cloned weapon templates inherit career actions by value, not by
   identity.** Vanilla decorates each already-parsed weapon template with the

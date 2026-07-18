@@ -1,17 +1,18 @@
 -- Durable presentation owner for the authored Blightreaper transform.
 --
--- GearUtils links weapon node 0 before WOC receives the spawned unit. Running
--- weapon animations can subsequently restore that linked node's native pose,
--- so a successful one-shot Unit.set_local_* call is not retained evidence.
--- This owner captures the linked position once, resolves the canonical WA
+-- GearUtils owns the linked attachment root before WOC receives the spawned
+-- unit. The authored import exposes a separate named render node, so this owner
+-- captures that node's position once, resolves the canonical WA
 -- descriptor once, and re-applies only after a retained-pose comparison fails.
 -- Preview worlds are event-driven and remain one-shot; gameplay 1P/3P units
 -- are weak-tracked and never create network traffic.
 local M = {}
 
 M.CONTRACT = {
-	target_node = 0,
-	position = "linked_baseline_plus_offset",
+	attachment_node = 0,
+	target_node = "authored_render_node",
+	target_node_name = "blightreaper",
+	position = "render_baseline_plus_offset",
 	scale = "absolute",
 	rotation = "absolute_euler_xyz",
 	write_mode = "atomic_local_pose",
@@ -98,9 +99,11 @@ function M.resolve(base, spec, rotation_components)
 	if type(base) ~= "table" or not triplet(base.position)
 			or type(spec) ~= "table" or not triplet(spec.scale)
 			or not triplet(spec.offset) or not triplet(spec.rotation)
+			or type(spec.node) ~= "number"
 			or type(rotation_components) ~= "table" then return nil end
 	return {
 		apply_spec = {
+			node = spec.node,
 			scale = copy_triplet(spec.scale),
 			position = {
 				base.position[1] + spec.offset[1],
@@ -117,6 +120,7 @@ function M.resolve(base, spec, rotation_components)
 		scale = copy_triplet(spec.scale),
 		rotation = { rotation_components[1], rotation_components[2],
 			rotation_components[3], rotation_components[4] },
+		node = spec.node,
 	}
 end
 
@@ -136,9 +140,9 @@ function M.new(api)
 		return unit ~= nil and type(api.alive) == "function" and api.alive(unit) == true
 	end
 
-	local function read(unit)
+	local function read(unit, node)
 		if not alive(unit) or type(api.read) ~= "function" then return nil end
-		return api.read(unit)
+		return api.read(unit, node)
 	end
 
 	local function emit(kind, record, before, after)
@@ -148,13 +152,16 @@ function M.new(api)
 	end
 
 	function owner:apply(unit, spec, perspective, surface)
-		local base = read(unit)
+		local node = type(spec) == "table" and spec.node or nil
+		if type(node) ~= "number" then return false end
+		local base = read(unit, node)
 		if not base or type(api.rotation_components) ~= "function"
 				or type(api.apply) ~= "function" then return false end
 		local expected_rotation = api.rotation_components(spec and spec.rotation)
 		local target = M.resolve(base, spec, expected_rotation)
 		if not target then return false end
 		local record = {
+			node = node,
 			perspective = perspective,
 			surface = surface,
 			base = base,
@@ -163,7 +170,7 @@ function M.new(api)
 		local wrote, write_report = api.apply(unit, target.apply_spec)
 		wrote = wrote == true
 		record.write_report = write_report
-		local after = read(unit)
+		local after = read(unit, node)
 		local retained = wrote and M.matches(after, target)
 		emit(retained and "initial-retained" or "initial-miss", record, base, after)
 		if type(api.should_track) == "function" and api.should_track(surface) then
@@ -182,13 +189,13 @@ function M.new(api)
 				local yielded = type(api.should_yield) == "function"
 					and api.should_yield(record) == true
 				if not yielded then
-					local before = read(unit)
+					local before = read(unit, record.node)
 					local retained = M.matches(before, record.target)
 					if not retained then
 						local wrote, write_report = api.apply(unit, record.target.apply_spec)
 						wrote = wrote == true
 						record.write_report = write_report
-						local after = read(unit)
+						local after = read(unit, record.node)
 						if wrote then applied = applied + 1 end
 						if not record.drift_proof_logged then
 							record.drift_proof_logged = true
