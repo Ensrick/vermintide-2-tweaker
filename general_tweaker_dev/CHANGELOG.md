@@ -1,5 +1,16 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.248-dev (2026-07-18) -- #731 VOIP disconnect channel guard
+
+- Source inspection confirmed that `Voip._ensure_left_voip_room` clears its local room and then sends `rpc_voip_room_request(false)`. During disconnect, the server's `PEER_ID_TO_CHANNEL` entry can already be gone, so vanilla passes `nil` to the engine RPC and crashes on `Channel must be an integer`.
+- Added an exact preflight gate for only that VOIP request. It drops the teardown message when the server peer or numeric channel is already absent, and a narrow race guard contains the same engine assertion if the channel closes between preflight and send. All other RPC names and all other failures preserve the vanilla path.
+- Consolidated the existing noclip `rpc_suicide` decision and the new VOIP decision behind one `NetworkTransmit.send_rpc_server` hook owner. This avoids introducing duplicate hooks on a shared engine seam.
+- Added Lua 5.1 coverage for live/missing channels, server/local paths, exact error matching, singleton hook ownership, and noclip composition.
+
+### Co-op verify
+
+Join another player's lobby as a client, then leave or disconnect during a transition and repeat several times. The client must return without a crash. If the server channel closed before VOIP teardown, the log may contain one `[gt:731][WARN] Dropped stale VOIP leave-room RPC` line for the session; unrelated RPC failures must not be swallowed.
+
 ## v0.2.247-dev (2026-07-18) -- #659 extension-ready keep-pet reconciliation [diagnostics-armed]
 
 - The failed 2026-07-18 verification ran GT Dev `v0.2.245-dev`; the live Necromancer extension reached vanilla `warm_up_skeletons`, but GT emitted no `[gt:659]` lifecycle decision. The offline truth-table passing therefore did not prove that the live initialized extension consumed the policy.
