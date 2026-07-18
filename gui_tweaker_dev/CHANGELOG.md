@@ -1,5 +1,13 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.291-dev (2026-07-18) -- #700 localize the in-mission vote title [verify-fix-coop]
+
+- **Observed after the popup fix:** the client vote HUD is functional, but its title renders the internal `game_settings_vote` localization key with underscores.
+- **Source-backed cause:** `IngameVotingUI.start_vote` localizes `template.text` only when `modify_title_text` exists (`ingame_voting_ui.lua:116-121`). Vanilla `game_settings_vote` has no modifier because its ordinary keep presentation localizes the title independently (`mission_voting_ui.lua:256-264`). Promoting that template to an ingame vote without supplying the missing title seam therefore exposes the raw key.
+- **Fix:** the already-bounded per-vote copy now receives an identity `modify_title_text` only when the source template has no authored modifier. This makes the native HUD perform exactly one localization lookup, preserves authored modifiers, and still leaves the shared vanilla template, keep votes, RPC payload, and unrelated votes untouched.
+- **Regression coverage:** pure Lua tests prove the copy is non-mutating, the localized title passes through unchanged, malformed templates fail closed, and an authored modifier is preserved. Runtime regression now checks the same title contract.
+- **Co-op verify:** host and client enter an Adventure mission and start the in-mission map vote. The client must see normal localized title text with no internal key/underscores, accept or decline normally, and both logs must contain one `[gut:700] mission vote promoted to localized IngameVotingUI` line. Keep and unrelated votes remain unchanged.
+
 ## 0.2.290-dev (2026-07-18) -- #717 keep Mod Tweaker gear rows lost their tan accent [verify-fix]
 
 - **Symptom:** in the Mod Tweaker menu most entries render plain white/grey while some keep their intended color (user report, 2026-07-17 evening). The white rows are the gear-parent rows - every "Enable All ..." Weapon Availability master (issue 611) plus every advanced-options parent - in the KEEP Mod Tweaker; group headers (orange) and tabs/buttons (tan/gold) keep their colors.
