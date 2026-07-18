@@ -242,6 +242,8 @@ local suites = {
     "test_gut_cosmetics_mission_mount",
     "test_gut_module_extraction",
     "test_character_dialogue",
+    "test_appearance_descriptor",
+    "test_appearance_census",
 }
 
 for _, suite in ipairs(suites) do
