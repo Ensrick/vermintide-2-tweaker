@@ -79,10 +79,17 @@ return {
     { key = "cwv_es_longsword_shield", careers = ES },
     { key = "cwv_es_javelin", careers = ES },
     { key = "cwv_wh_javelin", careers = WH },
-    { key = "cwv_es_outrider_grenade_launcher", careers = ES },
+    -- #661: WT owns Saltzpyre access to these CWV Empire ranged/custom weapons.
+    -- If a standard Witch Hunter career can equip one through WT, the effective
+    -- template must also receive that career's `action_career_*` row; keeping
+    -- them ES-only lets Bounty Hunter wield the item while Locked and Loaded
+    -- silently fails.
+    { key = "cwv_es_outrider_grenade_launcher", careers = ES_AND_WH_STANDARD,
+      default_careers = ES, authored_careers = ES, conditional_careers = WH_STANDARD },
     { key = "cwv_es_crossbow", careers = ES },
     { key = "cwv_es_musket", careers = ES },
-    { key = "cwv_es_musket_old", careers = ES },
+    { key = "cwv_es_musket_old", careers = ES_AND_WH_STANDARD,
+      default_careers = ES, authored_careers = ES, conditional_careers = WH_STANDARD },
     { key = "cwv_dr_priest_greathammer", careers = DR },
     { key = "cwv_es_priest_greathammer", careers = ES },
     { key = "cwv_es_warpriest_hammer", careers = ES },
