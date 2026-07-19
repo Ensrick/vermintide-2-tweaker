@@ -1,5 +1,12 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.294-dev (2026-07-19) -- #222 remove repeated HideBuffs tooltip titles [verify-fix]
+
+- **Symptom:** the cross-mod title/body audit still found two GUT HideBuffs rows whose tooltip bodies merely repeated the orange popup header: Hide Player Levels and Hide Portrait Frames.
+- **Fix:** rewrote both tooltip bodies to describe behavior first without restating the setting title. Added the repository QA gate `check_loc_description_titles.ps1` so future `foo` + `foo_tooltip`/`foo_description` localization pairs fail if the body starts with the normalized localized title.
+- **Stable debt:** the stable `gui_tweaker/` copy is intentionally left untouched until promotion; the new gate freezes those exact stable lines as debt while enforcing the cleaned `gui_tweaker_dev/` stream.
+- **Verify:** open Tweaker: GUI dev in Mod Tweaker or VMF options, hover Hide Player Levels and Hide Portrait Frames, and confirm the popup shows the title once in the header while the body starts with behavior text.
+
 ## 0.2.293-dev (2026-07-19) -- #402 complete native loadout slot isolation [verify-fix]
 
 - **Empirical root:** the latest #402 logs on v0.2.291-dev showed the store serving many selected-row gear slots as `source=store-unknown` during early hero-view startup, then later serving the same stored ids as `source=store-yes` once backend item tables had settled. That explains the “last official weapon appears initially” side: the modded value was present, but presentation could initialize before the id was presentable and needed a later refresh.
