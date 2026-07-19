@@ -216,7 +216,9 @@ explicitly swap. `—` = not applicable.
   (v0.1.377-dev, #474/#475, superseding the Phase C base+career-primary model)
   runs through ONE decision point (`_om._husk_resolve_display_def`) in this
   order:
-  1. **Wire skin PRIMARY**: a skin in either cwv namespace (base
+  1. **Exact semantic descriptor PRIMARY (#660/#741)**: `cwv_item_identity`
+     carries stable provider/item/base/skin string keys and each receiver
+     reconstructs local unit paths. A skin in either cwv namespace (base
      `<item_key>_skin` or pairing `<item_key>_<tail>`, lazy longest-prefix)
      positively identifies the variant → re-key mesh + transform REGARDLESS of
      `can_wield` (#474: wieldability-exclusion had suppressed the re-key of a
@@ -229,9 +231,13 @@ explicitly swap. `—` = not applicable.
      evaluated LAZILY at wield time (respects weapon_tweaker's runtime
      expansion whatever the boot order; #475's snapshot hole). A
      currently-wieldable pair declines — ambiguous shows base; the following
-     skinned wield still re-keys via arm 1.
+     accepted semantic descriptor still re-keys via arm 1.
   Residency: vanilla overrides via the shared resident-3p guard (#403/#418);
   mod-bundled custom meshes (Old Musket) via `_om._husk_custom_bundle_unit`.
+  Every CWV skin is unconditionally nulled on vanilla initial-spawn, resync,
+  hot-join, and profile-sync senders. Mod presence cannot prove numeric lookup
+  identity when another mod appends skins in a different order (#741); never
+  replay a CWV `weapon_skins` index through vanilla `rpc_add_equipment`.
   Closes #394/#396/#397/#401 for skin-carrying wields; skinless parity under
   wt-expanded `can_wield` still needs the per-wearer marker. → §5.
 

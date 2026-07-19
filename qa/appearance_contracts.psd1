@@ -85,8 +85,8 @@
                         mission_transition = @{ Disposition = 'covered'; Evidence = 'gameplay-state enter request/replay' }
                         respawn = @{ Disposition = 'deferred'; Reason = 'paired runtime respawn evidence is still required by open #660' }
                         hot_join = @{ Disposition = 'covered'; Evidence = 'targeted joining-peer descriptor replay' }
-                        peer_ready = @{ Disposition = 'deferred'; Reason = 'the first proven peer/session-ready callback has not replaced provider-specific retry and replay paths' }
-                        parity_ready = @{ Disposition = 'covered'; Evidence = 'post-parity bounded replay' }
+                        peer_ready = @{ Disposition = 'covered'; Evidence = 'acknowledged semantic identity delivery retries at 0.5-second cadence with an eight-attempt cap until the joining peer accepts the exact fingerprint' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'issue #741 retired numeric skin replay; appearance transport is roster-independent and uses stable string-key semantic identity' }
                         rejoin = @{ Disposition = 'deferred'; Reason = 'leave/rejoin generation clearing and replay have not been proven as one bounded lifecycle edge' }
                         preview_open = @{ Disposition = 'not-applicable'; Reason = 'preview adapters resolve synchronously for each spawned recipe instead of replaying world state' }
                         preview_reopen = @{ Disposition = 'not-applicable'; Reason = 'preview adapters resolve synchronously for each newly spawned recipe instead of replaying prior preview state' }
@@ -102,7 +102,7 @@
                                 'CWV #660 world lifecycle adapters are bounded and vanilla-wire safe'
                             )
                             Surfaces = @('owner_1p', 'owner_3p', 'bot_3p', 'remote_husk_3p')
-                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'mission_transition', 'hot_join', 'parity_ready')
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'mission_transition', 'hot_join', 'peer_ready')
                         }
                         @{
                             Path = 'qa/lua/tests/test_cwv_exact_appearance.lua'

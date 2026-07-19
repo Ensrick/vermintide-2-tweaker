@@ -437,44 +437,30 @@ _rt_register("cwv_wire_safe_skin_installed", function()
     end
 end)
 
-_rt_register("cwv_wire_skin_parity_gate", function()
-    -- (issue 495) Behavioral contract of the shared null helper:
-    --   * parity CONFIRMED + broadcast sender -> skin RIDES (issue 474 husk display);
-    --   * parity confirmed + hot-join replay (force) -> nulled anyway (join-handshake
-    --     race, issue 425 lesson) and restored after the send;
-    --   * parity UNCONFIRMED -> nulled and restored.
+_rt_register("issue741_cwv_skin_wire_unconditional", function()
+    -- Same-mod presence cannot prove numeric NetworkLookup parity. The helper
+    -- must null every CWV skin without even consulting the parity service, then
+    -- restore the owner's live slot after the vanilla sender returns.
     local helper = _om._wire_null_skins
     if type(helper) ~= "function" then return "_om._wire_null_skins helper missing" end
     local real_pp = mod._cwv_peer_parity
-    local function drive(parity_up, force)
-        mod._cwv_peer_parity = { all_peers_have = function() return parity_up end }
-        local slot = { skin = "cwv___rt495_fake_skin" }
-        local at_send
-        local ok, err = pcall(helper, { slot }, function() at_send = slot.skin end, "rt495", force)
-        mod._cwv_peer_parity = real_pp
-        if not ok then return nil, nil, "helper raised: " .. tostring(err) end
-        return at_send, slot.skin, nil
-    end
-    local at_send, after, err = drive(true, false)
-    if err then return err end
-    if at_send ~= "cwv___rt495_fake_skin" then
-        return "parity-confirmed broadcast nulled the skin -- issue 474 husk display would regress to base"
-    end
-    at_send, after, err = drive(true, true)
-    if err then return err end
-    if at_send ~= nil then
-        return "hot-join replay (force) kept the skin under confirmed parity -- join-handshake race reopened (issue 425 lesson)"
-    end
-    if after ~= "cwv___rt495_fake_skin" then
-        return "skin not restored after the forced null (owner spawn would lose the illusion)"
-    end
-    at_send, after, err = drive(false, false)
-    if err then return err end
-    if at_send ~= nil then
-        return "parity-unconfirmed broadcast kept the skin -- issue 278/495 CTD shape live"
-    end
-    if after ~= "cwv___rt495_fake_skin" then
-        return "skin not restored after the parity-unconfirmed null"
+    mod._cwv_peer_parity = {
+        all_peers_have = function() error("appearance helper consulted parity") end,
+    }
+    local cwv = { skin = "cwv___rt741_fake_skin" }
+    local vanilla = { skin = "wh_sword_skin_01" }
+    local cwv_at_send, vanilla_at_send
+    local ok, err = pcall(helper, { cwv, vanilla }, function()
+        cwv_at_send, vanilla_at_send = cwv.skin, vanilla.skin
+    end, "rt741")
+    mod._cwv_peer_parity = real_pp
+    if not ok then return "helper raised/consulted parity: " .. tostring(err) end
+    if cwv_at_send ~= nil then return "CWV skin reached the vanilla numeric wire" end
+    if vanilla_at_send ~= "wh_sword_skin_01" then return "vanilla skin was altered" end
+    if cwv.skin ~= "cwv___rt741_fake_skin" then return "owner CWV skin was not restored" end
+    if not (mod._cwv_skin_wire_surfaces
+            and mod._cwv_skin_wire_surfaces.vanilla_skin_replay_retired) then
+        return "unsafe vanilla skin replay is not marked retired"
     end
 end)
 
@@ -586,7 +572,7 @@ _rt_register("cwv_wire_safe_damage_profile_gate", function()
         return "wire-safe resolver coerced a vanilla profile id (should only touch cwv keys)"
     end
 
-    -- (3) Behavioral gate with a stubbed beacon (mirrors cwv_wire_skin_parity_gate):
+    -- (3) Gameplay-axis behavioral gate with a stubbed beacon:
     -- pick any tracked cwv profile whose source differs, then drive the decision.
     local cwv_id, src_id
     for k, v in pairs(dp) do

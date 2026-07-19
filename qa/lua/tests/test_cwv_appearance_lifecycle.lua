@@ -310,6 +310,8 @@ return function(H, repo_root)
             'lifecycle:track_delivery(peer_id, slots, "hot_join_retry")',
             'lifecycle:step_deliveries(dt)',
             'payload.slot == _om.appearance_lifecycle_policy.ACK_SLOT',
+            '_om.cosmetic_skin_wire.with_safe_slots',
+            'mod._cwv_skin_wire_surfaces.vanilla_skin_replay_retired = true',
             'lifecycle=world_spawn adapter=%s',
             'issue660_world_identity_lifecycle_replay',
         }) do
@@ -319,5 +321,7 @@ return function(H, repo_root)
             "modded identity leaked into vanilla item lookup")
         H.equal(source:find('NetworkLookup.weapon_skins[payload.skin_key]', 1, true), nil,
             "modded skin identity leaked into vanilla skin lookup")
+        H.equal(source:find('_replay_cwv_skins_after_parity', 1, true), nil,
+            "numeric CWV skin replay re-entered the vanilla equipment channel")
     end)
 end

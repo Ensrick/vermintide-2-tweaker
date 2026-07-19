@@ -1355,10 +1355,21 @@ end
 ```
 Assert it in the regression suite with a check that the coercion is correct AND takes no toggle argument (`wire_rarity_rewrite_ungated`).
 
+For temporary mutation of live equipment records, restoration must also be
+exception-safe: call the sender under `pcall`, restore every substituted field,
+then rethrow. CWV #741 uses one pure `with_safe_slots` helper for all live-slot
+equipment senders. It has no toggle, roster, or parity argument and tests both
+normal and error returns.
+
 ### Related Issues / commits
 - cim v0.8.34 (public hotfix) + cim_dev v0.8.54-dev; commits `cd64fa8` / `02e9d69`.
 - Memory: `reference_vt2_wire_safety_never_toggle_gated`.
 - Related: class 27 (husk resolves BASE item_data — the render-side twin of the same "clone keeps base identity on the wire" root); the general gated-registration cold-read crash (`rawget` section near the top of this file).
+- CWV #741 (2026-07-19): retired the #495 all-CWV skin exception after two
+  modded peers with different skin-appending mod sets proved that presence did
+  not establish `weapon_skins` index identity. Exact appearance now travels on
+  the string-key `cwv_item_identity` channel; vanilla skin senders always see
+  `n/a`.
 
 ## 32. Cleanup-on-teardown dispatches into a destroyed World (LineObject/Gui use-after-free that pcall cannot catch)
 
@@ -2426,6 +2437,12 @@ across preview worlds, owner units, or remote husks.
    (`buff_system.lua:248-260`).
 
 ### Fix template
+- Prefer eliminating the numeric transport entirely when the value is cosmetic.
+  CWV #741 sends a vanilla `n/a` skin on every vanilla equipment/profile wire
+  and carries provider/item/base/skin **string keys** on its VMF channel; each
+  receiver reconstructs unit paths from local registries. Presence/schema then
+  proves only that the semantic decoder exists, which is the property actually
+  needed.
 - Build a deterministic identity from every owned network name plus its ACTUAL
   live numeric assignment, validating forward and reverse maps. Exchange that
   compact identity on the mod's VMF channel and gate every custom emission on
