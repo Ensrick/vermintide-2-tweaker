@@ -1,5 +1,11 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.298-dev (2026-07-18) - #505 deepest-run weapon-chest crash
+
+- Fixed the verified `DeusWeaponGeneration.get_random_rarity` crash after the Single Mission Loader launched with `Run Progress = 100%`. Vanilla requires `0 <= run_progress < 1` and its own ImGui loader caps the slider at `0.999`; CT had exposed and forwarded exactly `1.0`.
+- Added one canonical `sanitize_progress` boundary shared by menu presets, `/ct_load_mission`, and the final load primitive. Values below zero become `0`, values at/above the engine limit become `0.999`, and invalid numeric input cannot enter the seed.
+- Renamed the final preset to `Deepest (99.9%)` so the UI states the actual engine-safe value. Runtime and offline regressions prove neither the menu nor command path can reintroduce the `>= 1.0` assertion.
+
 ## 0.7.297-dev (2026-07-18) - reconciliation build: parallel 0.7.296-dev streams
 
 - Second same-day version collision: two sessions independently minted 0.7.296-dev - one as the reconciliation upload below (on the Workshop since 20:58), one carrying the issue 52 Tower skull diagnostics (landed in git 21:06, never uploaded). This build ships the union so the Workshop item finally carries issue 406 + issue 52 + the stranded-pipeline completion. Root cause of the repeated collisions: ships from pre-claim-broker worktrees bypass the tools/ship claim gate. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.

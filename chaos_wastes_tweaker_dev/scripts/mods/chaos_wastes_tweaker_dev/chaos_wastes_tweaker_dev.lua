@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.297-dev"
+local MOD_VERSION = "0.7.298-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -470,6 +470,7 @@ _rt_register("single_mission_loader_redesign_505", function()
     end
     local cat = mod._ct_dev_mission_catalog
     if type(cat) ~= "table" or type(cat.compose_level_key) ~= "function" then return "mission catalog/composer missing" end
+    if not (cat.sanitize_progress and cat.MAX_RUN_PROGRESS == 0.999 and cat.PROGRESS[#cat.PROGRESS] == 0.999 and cat.sanitize_progress(1) == 0.999) then return "unsafe run progress" end
     if type(cat.MISSIONS) ~= "table" or #cat.MISSIONS <= #AdventurePool.CW_SCENARIOS then
         return "mission catalog does not include Adventure plus CW missions"
     end
