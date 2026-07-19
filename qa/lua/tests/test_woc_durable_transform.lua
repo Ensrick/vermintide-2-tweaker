@@ -294,7 +294,7 @@ return function(H, repo_root)
 			pose_writes[1].pose.scale[3] }, { 0.9, 0.9, 0.9 })
 	end)
 
-	H.test("WOC #712 raw callable-table constructor reproduces invalid-position", function()
+	H.test("WOC #712/#835 raw callable-table constructor reaches atomic pose", function()
 		local lib = dofile(lib_path)
 		local globals, pose_writes = retail_fakes()
 		local wa = lib.new({
@@ -306,9 +306,10 @@ return function(H, repo_root)
 			node = 2, scale = { 0.9, 0.9, 0.9 },
 			position = { 0, 0, -0.3 }, rotation = { -180, -90, -90 },
 		})
-		H.equal(ok, false)
-		H.equal(report.transform_error, "invalid-position")
-		H.equal(#pose_writes, 0)
+		H.equal(ok, true)
+		H.equal(report.transform_mode, "atomic-local-pose")
+		H.equal(#pose_writes, 1)
+		H.equal(pose_writes[1].node, 2)
 	end)
 
 	H.test("WOC #712/#613/#278 production wiring pins", function()

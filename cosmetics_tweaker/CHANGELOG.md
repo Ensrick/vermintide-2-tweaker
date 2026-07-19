@@ -1,5 +1,12 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.156-dev - 2026-07-19 - #835 callable Vector3 constructor [verify-fix]
+
+- Synchronized the shared appearance primitive's protected callable constructor
+  boundary. This keeps every standalone consumer byte-identical and prevents a
+  future Cosmetics transform path from rejecting retail's callable-table
+  `Vector3` binding.
+
 ## 0.9.155-dev - 2026-07-18 - #566 harness context preconditions for the glow regression check [untested]
 
 - `cosmetics_tweaker.lua` (regression scaffold only): `_rt_register(name, fn, opts)`

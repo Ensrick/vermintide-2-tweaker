@@ -48,7 +48,10 @@ function M.new(injected)
     end
 
     local function vector(value)
-        if not _triplet(value) or type(vector_new) ~= "function" then return nil end
+        if not _triplet(value) then return nil end
+        -- Retail Stingray exposes Vector3 as a callable table, not a Lua
+        -- function. pcall honors __call while also failing closed for a nil,
+        -- non-callable, throwing, or nil-returning constructor (#835).
         local ok, result = pcall(vector_new, value[1], value[2], value[3])
         return ok and result or nil
     end
@@ -126,15 +129,15 @@ function M.new(injected)
             and not offset_was_applied(unit, node)
         if offset_pending then
             if not _triplet(spec.offset) or not position
-                    or type(vector_to_elements) ~= "function"
-                    or type(vector_new) ~= "function" then
+                    or type(vector_to_elements) ~= "function" then
                 return false, "invalid-offset"
             end
             local ok, x, y, z = pcall(vector_to_elements, position)
             if not ok then return false, "offset-read-rejected" end
-            ok, position = pcall(vector_new,
-                x + spec.offset[1], y + spec.offset[2], z + spec.offset[3])
-            if not ok then return false, "offset-build-rejected" end
+            position = vector({
+                x + spec.offset[1], y + spec.offset[2], z + spec.offset[3],
+            })
+            if not position then return false, "offset-build-rejected" end
         end
 
         local scale
@@ -177,15 +180,13 @@ function M.new(injected)
         if not _triplet(value) or not alive(unit) or offset_was_applied(unit, node)
                 or type(unit_api.local_position) ~= "function"
                 or type(unit_api.set_local_position) ~= "function"
-                or type(vector_to_elements) ~= "function"
-                or type(vector_new) ~= "function" then return false end
+                or type(vector_to_elements) ~= "function" then return false end
         local ok, current = pcall(unit_api.local_position, unit, node)
         if not ok then return false end
         local elements_ok, x, y, z = pcall(vector_to_elements, current)
         if not elements_ok then return false end
-        local target_ok, target = pcall(
-            vector_new, x + value[1], y + value[2], z + value[3])
-        if not target_ok then return false end
+        local target = vector({ x + value[1], y + value[2], z + value[3] })
+        if not target then return false end
         local applied = pcall(unit_api.set_local_position, unit, node, target)
         if applied then mark_offset_applied(unit, node) end
         return applied

@@ -7,7 +7,8 @@ return function(H, repo_root)
         local calls = {}
         local alive = setmetatable({}, { __mode = "k" })
         local api = {
-            vector_new = function(x, y, z) return { x, y, z } end,
+            vector_new = options.vector_new
+                or function(x, y, z) return { x, y, z } end,
             vector_to_elements = function(v) return v[1], v[2], v[3] end,
             quaternion = {
                 from_euler_angles_xyz = function(x, y, z)
@@ -62,6 +63,17 @@ return function(H, repo_root)
         return Library.new(api), unit, calls, alive
     end
 
+    local function with_engine_globals(values, callback)
+        local old = {}
+        for name, value in pairs(values) do
+            old[name] = rawget(_G, name)
+            rawset(_G, name, value)
+        end
+        local ok, message = pcall(callback)
+        for name in pairs(values) do rawset(_G, name, old[name]) end
+        if not ok then error(message, 0) end
+    end
+
     H.test("shared WeaponAppearance composes absolute transforms and one additive offset", function()
         local WA, unit, calls = fixture()
         local ok, report = WA.apply(unit, {
@@ -80,6 +92,115 @@ return function(H, repo_root)
         H.equal(unit.rotation.kind, "quaternion")
         H.equal(WA.apply_offset(unit, { 9, 9, 9 }), false)
         H.equal(#calls, 1)
+    end)
+
+    H.test("shared WeaponAppearance default API accepts retail callable-table Vector3", function()
+        local vector3 = setmetatable({
+            to_elements = function(value) return value[1], value[2], value[3] end,
+        }, {
+            __call = function(_, x, y, z) return { x, y, z } end,
+        })
+        local calls = {}
+        local alive = setmetatable({}, { __mode = "k" })
+        local unit_api = {}
+        function unit_api.alive(unit) return alive[unit] == true end
+        function unit_api.local_position(unit) return unit.position end
+        function unit_api.local_scale(unit) return unit.scale end
+        function unit_api.local_rotation(unit) return unit.rotation end
+        function unit_api.set_local_position(unit, node, value)
+            unit.position = value
+            calls[#calls + 1] = { "position", node, value }
+        end
+        function unit_api.set_local_scale(unit, node, value)
+            unit.scale = value
+            calls[#calls + 1] = { "scale", node, value }
+        end
+        function unit_api.set_local_pose(unit, node, pose)
+            unit.position, unit.scale, unit.rotation =
+                pose.position, pose.scale, pose.rotation
+            calls[#calls + 1] = { "pose", node, pose }
+        end
+        local quaternion = {
+            from_euler_angles_xyz = function(x, y, z)
+                return { kind = "quaternion", x, y, z }
+            end,
+        }
+        local matrix4x4 = {
+            from_quaternion_position_scale = function(rotation, position, scale)
+                return { rotation = rotation, position = position, scale = scale }
+            end,
+        }
+        local unit = {
+            position = { 1, 2, 3 }, scale = { 1, 1, 1 },
+            rotation = { kind = "quaternion", 0, 0, 0 },
+        }
+        local offset_unit = {
+            position = { 10, 20, 30 }, scale = { 1, 1, 1 },
+            rotation = { kind = "quaternion", 0, 0, 0 },
+        }
+        local atomic_offset_unit = {
+            position = { 2, 4, 6 }, scale = { 1, 1, 1 },
+            rotation = { kind = "quaternion", 0, 0, 0 },
+        }
+        alive[unit], alive[offset_unit], alive[atomic_offset_unit] =
+            true, true, true
+
+        with_engine_globals({
+            Vector3 = vector3,
+            Unit = unit_api,
+            Quaternion = quaternion,
+            Matrix4x4 = matrix4x4,
+        }, function()
+            local WA = Library.new()
+            local ok, report = WA.apply(unit, {
+                position = { 4, 5, 6 }, scale = { 0.9, 0.8, 0.7 },
+                rotation = { -90, -90, -90 },
+            })
+            H.equal(ok, true)
+            H.equal(report.transform_mode, "atomic-local-pose")
+            H.deep_equal(unit.position, { 4, 5, 6 })
+            H.deep_equal(unit.scale, { 0.9, 0.8, 0.7 })
+            H.equal(WA.apply_position(unit, { 7, 8, 9 }, 1), true)
+            H.equal(WA.apply_scale(unit, { 2, 3, 4 }, 1), true)
+            H.equal(WA.apply_offset(offset_unit, { 0.5, -1, 2 }), true)
+            H.deep_equal(offset_unit.position, { 10.5, 19, 32 })
+            local offset_ok, offset_report = WA.apply(atomic_offset_unit, {
+                offset = { -1, 0.5, 3 },
+            })
+            H.equal(offset_ok, true)
+            H.equal(offset_report.transform_mode, "atomic-local-pose")
+            H.deep_equal(atomic_offset_unit.position, { 1, 4.5, 9 })
+        end)
+        H.equal(#calls, 5)
+    end)
+
+    H.test("shared WeaponAppearance callable constructor failures remain bounded", function()
+        local constructors = {
+            {},
+            setmetatable({}, { __call = function() error("constructor rejected") end }),
+            setmetatable({}, { __call = function() return nil end }),
+        }
+        for _, constructor in ipairs(constructors) do
+            local WA, unit, calls = fixture({ vector_new = constructor })
+            local ok, report = WA.apply(unit, {
+                position = { 4, 5, 6 }, scale = { 2, 2, 2 },
+            })
+            H.equal(ok, false)
+            H.equal(report.transform_mode, "atomic-local-pose")
+            H.equal(report.transform_error, "invalid-position")
+            H.equal(WA.apply_position(unit, { 4, 5, 6 }), false)
+            H.equal(WA.apply_scale(unit, { 2, 2, 2 }), false)
+            H.equal(WA.apply_offset(unit, { 1, 1, 1 }), false)
+            H.equal(#calls, 0)
+        end
+    end)
+
+    H.test("shared WeaponAppearance has no function-only Vector3 guard", function()
+        local file = assert(io.open(source_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.equal(source:find('type(vector_new) ~= "function"', 1, true), nil)
+        H.equal(source:find('type(vector_new) == "function"', 1, true), nil)
     end)
 
     H.test("shared WeaponAppearance gives absolute position precedence over offset", function()

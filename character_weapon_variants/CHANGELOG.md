@@ -1,5 +1,13 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.458-dev (2026-07-19) - #835 callable Vector3 constructor [verify-fix]
+
+- The shared appearance primitive now invokes engine vector constructors through
+  a protected callable boundary, so retail's callable-table `Vector3` reaches
+  position, scale, and offset writes instead of being rejected by a
+  function-only type check.
+- Nil, non-callable, throwing, and nil-returning constructors still fail closed.
+
 ## 0.1.457-dev (2026-07-19) - unconditional CWV skin wire safety (#741) [verify-fix-coop]
 
 - Retired the issue-495 all-CWV parity exception. Presence and schema agreement

@@ -1,5 +1,13 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.39-dev (2026-07-19) - #835 callable Vector3 constructor [verify-fix]
+
+- The shared appearance primitive now invokes engine vector constructors through
+  a protected callable boundary, allowing retail's callable-table `Vector3` to
+  reach Blightreaper position, scale, and offset writes.
+- Updated the #712 reproduction test to require an atomic pose write through the
+  raw retail-shaped constructor.
+
 ## 0.1.38-dev (2026-07-19) - #782 validate Shyish spirit positions [verify-fix]
 
 - Replaced direct `POSITION_LOOKUP` arithmetic in the Blightreaper spirit chase

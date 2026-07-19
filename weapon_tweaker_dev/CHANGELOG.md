@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.281-dev (2026-07-19) - #835 callable Vector3 constructor [verify-fix]
+
+- Synchronized the shared appearance primitive's protected callable constructor
+  boundary so retail callable-table engine namespaces are accepted without
+  weakening malformed-constructor failure handling.
+
 ## 0.12.280-dev (2026-07-18) - #661 effective runtime career actions [verify-fix]
 
 - Runtime-parity mirror of Weapon Tweaker `0.12.279-beta`: Old Musket's rifle
