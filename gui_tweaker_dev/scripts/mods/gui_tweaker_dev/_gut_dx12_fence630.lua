@@ -34,6 +34,37 @@ local function _count_visible(rows)
     return visible
 end
 
+local EQUIPMENT_GROUP_NAMES = {
+    __equip_cosmetics = "cosmetics",
+    __equip_crafting = "crafting",
+    __equip_weapons = "weapons",
+    __equip_cwv = "cwv",
+}
+
+local function _equipment_state(owner)
+    local rows = owner and owner._rows or {}
+    local expanded = owner and owner._expanded or {}
+    local exact, expansion = {}, {}
+    for i = 1, #rows do
+        local row = rows[i]
+        local name = row and EQUIPMENT_GROUP_NAMES[row._setting_id]
+        if name and row._wtype == "group" then
+            local display = row._display_expanded
+            local is_expanded = display
+            local source = "forced"
+            if display == nil then
+                is_expanded = row._group_key and expanded[row._group_key] == true
+                source = "stored"
+            end
+            local status = (is_expanded and "expanded-" or "collapsed-") .. source
+            expansion[#expansion + 1] = name .. ":" .. status
+            exact[#exact + 1] = name .. ":" .. status .. ":visible=" .. _bool(row._middle_visible)
+        end
+    end
+    if #exact == 0 then return "none", "none" end
+    return table.concat(exact, ";"), table.concat(expansion, ";")
+end
+
 function M.new(options)
     options = options or {}
     local emit = options.emit or function() end
@@ -51,6 +82,7 @@ function M.new(options)
         imbalance_count = 0,
         last_focus = nil,
         last_tab = nil,
+        last_equipment_expanded = nil,
     }
 
     local function log(message)
@@ -80,6 +112,7 @@ function M.new(options)
         state.in_draw = false
         state.last_focus = nil
         state.last_tab = nil
+        state.last_equipment_expanded = nil
         log(string.format(
             "enter session=%d presentation=%s view=%s renderer=%s top_renderer=%s scenegraph=%s wt_enabled=%s wt_1p=%s wt_3p=%s wt_live=%s",
             state.session, _value(state.presentation), _value(info.view),
@@ -98,7 +131,8 @@ function M.new(options)
         state.in_draw = true
 
         if state.draw_begins == 1 then
-            log(string.format("first_draw rows=%s visible_previous=%s", _value(info.rows), _value(info.visible)))
+            log(string.format("first_draw rows=%s visible_previous=%s",
+                _value(info.rows), _value(info.visible)))
         end
         if info.focus ~= state.last_focus then
             state.last_focus = info.focus
@@ -106,8 +140,19 @@ function M.new(options)
         end
         if info.tab ~= state.last_tab then
             state.last_tab = info.tab
-            log(string.format("tab=%s draw=%d rows=%s visible_previous=%s", _value(info.tab),
-                state.draw_begins, _value(info.rows), _value(info.visible)))
+            if info.tab == "gut_equipment" then
+                state.last_equipment_expanded = info.equipment_expanded
+                log(string.format("tab=%s draw=%d rows=%s visible_previous=%s equipment_state=%s",
+                    _value(info.tab), state.draw_begins, _value(info.rows), _value(info.visible),
+                    _value(info.equipment_state)))
+            else
+                log(string.format("tab=%s draw=%d rows=%s visible_previous=%s", _value(info.tab),
+                    state.draw_begins, _value(info.rows), _value(info.visible)))
+            end
+        elseif info.tab == "gut_equipment"
+            and info.equipment_expanded ~= state.last_equipment_expanded then
+            state.last_equipment_expanded = info.equipment_expanded
+            log(string.format("equipment_state=%s draw=%d", _value(info.equipment_state), state.draw_begins))
         end
     end
 
@@ -153,6 +198,7 @@ function M.new(options)
             imbalance_count = state.imbalance_count,
             last_focus = state.last_focus,
             last_tab = state.last_tab,
+            last_equipment_expanded = state.last_equipment_expanded,
         }
     end
 
@@ -186,6 +232,11 @@ function M.runtime_info(owner, presentation)
         end
     end
 
+    local equipment_state, equipment_expanded
+    if category and category.mod_id == "gut_equipment" then
+        equipment_state, equipment_expanded = _equipment_state(owner)
+    end
+
     return {
         presentation = presentation,
         view = owner,
@@ -197,6 +248,8 @@ function M.runtime_info(owner, presentation)
         tab = category and (category.mod_id or category.label),
         rows = owner and #(owner._rows or {}) or 0,
         visible = owner and _count_visible(owner._rows) or 0,
+        equipment_state = equipment_state,
+        equipment_expanded = equipment_expanded,
         wt_enabled = _safe_setting(wt, "wt_dev_hp_enabled"),
         wt_1p = _safe_setting(wt, "wt_dev_hp_enable_1p"),
         wt_3p = _safe_setting(wt, "wt_dev_hp_enable_3p"),
@@ -206,5 +259,6 @@ end
 
 M.DEFAULT_LINE_CAP = DEFAULT_LINE_CAP
 M.count_visible = _count_visible
+M.equipment_state = _equipment_state
 
 return M
