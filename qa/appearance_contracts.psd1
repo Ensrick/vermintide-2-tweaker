@@ -400,6 +400,67 @@
             )
         }
         @{
+            Id = 'cosmetics.issue883.la-exact-instance-icon'
+            Issue = 883
+            Claim = 'structural-only'
+            Owners = @(
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_instance_policy.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_inventory_icon.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'icon'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'first-person weapon units do not render inventory-card icons' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'third-person weapon units do not render inventory-card icons' }
+                        bot_3p = @{ Disposition = 'not-applicable'; Reason = 'bot weapon units do not render inventory-card icons' }
+                        remote_husk_3p = @{ Disposition = 'not-applicable'; Reason = 'remote husk weapon units do not render local inventory-card icons' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'the singleton UIUtils adapter resolves the LA icon from exact backend identity, exact item skin, and authored SKIN_LIST data without mutating shared registries' }
+                        cosmetic_preview = @{ Disposition = 'deferred'; Reason = 'the illusion picker uses skin widgets rather than the exact backend-item UIUtils card adapter' }
+                        athanor_preview = @{ Disposition = 'deferred'; Reason = 'Athanor icon ownership is a separate exact-identity adapter and is not claimed by issue 883' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'ordinary crafting rows may not carry the exact persisted backend identity required by this contract' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'lobby item-card exact backend identity and LA atlas capability have not been proven' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'score-screen item-card exact backend identity and LA atlas capability have not been proven' }
+                        hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab receives peer-safe loadout presentation through a separate adapter' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'covered'; Evidence = 'persisted exact-item illusion and offhand records resolve through the same pure provider on the next card request' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'weapon spawning does not create inventory-card icon state' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'inventory-card icon resolution is synchronous and independent of equipped world units' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'inventory-card icon resolution is synchronous and independent of wield state' }
+                        customization_change = @{ Disposition = 'covered'; Evidence = 'the committed exact-instance selection is read on the next inventory-card request' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style does not own LA cosmetic icon identity' }
+                        career_change = @{ Disposition = 'not-applicable'; Reason = 'the icon provider keys the exact item rather than retaining career-local card state' }
+                        mission_transition = @{ Disposition = 'not-applicable'; Reason = 'the local card resolves persisted identity on demand after any transition' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not retain inventory-card icon state' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'issue 883 owns local exact-instance inventory icons and sends no custom icon identity' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'issue 883 owns local exact-instance inventory icons and sends no custom icon identity' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the local LA atlas/provider is required and no icon identity is sent to peers' }
+                        rejoin = @{ Disposition = 'not-applicable'; Reason = 'the local card resolves persisted identity on demand rather than replaying peer state' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each inventory-card request resolves from current exact identity with no retained grid-cell state' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'the resolver has no screen-local cache and re-evaluates the persisted item state' }
+                        lobby_score_create = @{ Disposition = 'deferred'; Reason = 'lobby and score card adapters remain outside this exact inventory surface' }
+                        mod_disable_restore = @{ Disposition = 'covered'; Evidence = 'the adapter never mutates WeaponSkins or ItemMasterList, so vanilla presentation remains authoritative when Cosmetics is disabled' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cos_la_instance_policy.lua'
+                            Names = @(
+                                'direct LA Armoury identities resolve without hat-outfit clone maps (#883)'
+                                'inventory icon provider bounds and deduplicates automatic diagnostics (#883)'
+                                'offhand icon prefers exact item skin before bridge paint fallback (#883)'
+                                'persisted row-one LA icon is exact-backend-instance only'
+                                'unknown LA metadata fails closed to vanilla icon'
+                            )
+                            Surfaces = @('inventory_preview')
+                            ReplayEdges = @('instance_load', 'customization_change', 'preview_open', 'preview_reopen', 'mod_disable_restore')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cwv-cim.issue787.dual-axes-athanor-icon'
             Issue = 787
             Claim = 'structural-only'
