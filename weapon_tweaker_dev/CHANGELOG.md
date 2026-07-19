@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.279-dev (2026-07-18) - #661 Saltzpyre CWV ranged career actions [verify-fix]
+
+- Runtime-parity mirror of Weapon Tweaker `0.12.278-beta`: WT-owned Saltzpyre
+  access to CWV's Empire Old Musket and Outrider Grenade Launcher now installs
+  the standard Witch Hunter career action rows, including Bounty Hunter's
+  Locked and Loaded action.
+- Kruber remains the default authored owner for both items; Saltzpyre remains
+  optional WT-controlled compatibility and Warrior Priest remains excluded.
+- Mirrored regression coverage proves the two rows include Bounty Hunter as a
+  conditional WT receiver without making him part of the default career list.
+
+**Solo verify:** Confirm `[wt] v0.12.279-dev loaded`, then follow the
+`0.12.278-beta` verification above. `/wt_regression_test` should also include
+the `issue661 Saltzpyre CWV ranged ports receive career actions` coverage.
+
 ## 0.12.278-dev (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix-coop]
 
 - Runtime-parity mirror of Weapon Tweaker `0.12.277-beta`: Kruber's regular

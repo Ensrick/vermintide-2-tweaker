@@ -1,5 +1,23 @@
 # Weapon Tweaker Changelog
 
+## 0.12.278-beta (2026-07-18) - #661 Saltzpyre CWV ranged career actions [verify-fix]
+
+- Fixed WT-owned Saltzpyre access to CWV's Empire Old Musket and Outrider
+  Grenade Launcher so standard Witch Hunter careers receive their native
+  weapon-bound career action rows when those items are enabled through WT.
+- Kept Kruber as the default authored owner for both weapons. Saltzpyre access
+  remains optional WT-controlled availability, not a CWV default grant and not
+  a Warrior Priest grant.
+- Added regression coverage proving Bounty Hunter is present in the effective
+  conditional career set for both weapons while remaining out of the default
+  crafted/owned career list.
+
+**Solo verify:** Confirm `[wt] v0.12.278-beta loaded`. With CWV active, enable
+Old Musket and Outrider Grenade Launcher for Bounty Hunter through WT, equip
+each weapon, and fire Locked and Loaded. Repeat after swapping away/back and
+after loading into a mission. The career skill must trigger normally and the log
+must not contain `[wt:career-actions] incomplete` for either item.
+
 ## 0.12.277-beta (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix-coop]
 
 - Added the user-tuned additive third-person grip correction for Kruber using
