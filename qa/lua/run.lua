@@ -102,6 +102,7 @@ local suites = {
     "test_wt_kerillian_coverage",
     "test_wt_saltzpyre_coverage",
     "test_wt_crossbow_offset",
+    "test_wt_hand_transform_policy",
     "test_wt_warrior_priest_coverage",
     "test_wt_cwv_ownership",
     "test_wt_cwv_independence",

@@ -184,6 +184,75 @@
             )
         }
         @{
+            Id = 'wt.issue735.saltzpyre-shield-left-rotation'
+            Issue = 735
+            Claim = 'structural-only'
+            Owners = @(
+                'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_grip_offset_policy.lua'
+                'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_paired_preview_transform.lua'
+                'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua'
+                'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = '#735 is an explicitly third-person shield seating correction' }
+                        owner_3p = @{ Disposition = 'covered'; Evidence = 'create-equipment resolves the baked descriptor and tracks only the exact left 3P unit' }
+                        bot_3p = @{ Disposition = 'covered'; Evidence = 'the same create-equipment adapter tracks bot left-unit identity with no separate transform table' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'husk wield resolves the same receiver-and-hand descriptor against its renderer-local left unit' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'post-_spawn_item adapter bridges spawn_data hand flags to numeric-slot equipment units instead of guessing in _spawn_item_unit' }
+                        cosmetic_preview = @{ Disposition = 'deferred'; Reason = 'LootItemUnitPreviewer has no proven WT baked-transform adapter for this family' }
+                        athanor_preview = @{ Disposition = 'deferred'; Reason = 'Athanor preview has no proven WT baked-transform adapter for this family' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'ordinary crafting preview has no proven WT baked-transform adapter for this family' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'the concrete lobby preview constructor consuming the WT transform path has not been source-proven' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'the concrete score preview constructor consuming the WT transform path has not been source-proven' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons rather than linked weapon transforms' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the transform is baked by item and receiver career rather than persisted per backend instance' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'owner/bot creation and husk wield capture the canonical left-unit rotation before durable ownership' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'equipment creation re-resolves receiver and hand through one transform policy' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'durable writer gates on the live wielded slot and restores canonical rotation while stowed' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'illusion selection does not own the baked receiver-and-hand transform' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = '#735 is keyed to fixed weapon identities rather than combat-style state' }
+                        career_change = @{ Disposition = 'deferred'; Reason = 'career recreation has no focused #735 live evidence yet' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'new equipment units re-enter create-equipment or husk wield and resolve the same descriptor' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'respawn creates new weak-key unit rows through the same world adapters' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'husk wield consumes vanilla-replicated item identity and shipped transform data with no custom RPC' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'renderer-local baked transforms create no peer-ready transport' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'renderer-local baked transforms create no parity channel or payload' }
+                        rejoin = @{ Disposition = 'deferred'; Reason = 'full leave-and-rejoin retention still requires two-player evidence' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each preview spawn bridges exact left/right recipe identity after vanilla creates both units' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'reopening creates fresh units and re-enters the exact hand adapter' }
+                        lobby_score_create = @{ Disposition = 'deferred'; Reason = 'lobby and score constructor coverage is not proven for this transform family' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live disable restoration for already-linked units has no focused #735 evidence' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_wt_hand_transform_policy.lua'
+                            Names = @(
+                                'WT #735 receiver and hand policy is shared across transform channels'
+                                'WT #735 public and dev route shield rotation through exact hand adapters'
+                                'WT #735 retained proof reads rotation back after the durable write'
+                            )
+                            Surfaces = @('owner_3p', 'bot_3p', 'remote_husk_3p')
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'mission_transition', 'respawn', 'hot_join')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_wt_hand_transform_policy.lua'
+                            Names = @(
+                                'WT #735 paired preview refuses ambiguous unit callback routing'
+                                'WT #735 public and dev route shield rotation through exact hand adapters'
+                            )
+                            Surfaces = @('inventory_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cosmetics.issue641.component-item-text'
             Issue = 641
             Claim = 'structural-only'

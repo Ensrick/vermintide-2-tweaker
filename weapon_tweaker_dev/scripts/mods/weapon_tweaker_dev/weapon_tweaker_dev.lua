@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.281-dev"
+local MOD_VERSION = "0.12.282-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -439,15 +439,8 @@ local _weapon_scale_overrides = {
 }
 
 local function _resolve_scale_factor(weapon_key, career_name)
-    if not weapon_key or not career_name then return nil end
-    local overrides = _weapon_scale_overrides[weapon_key]
-    if not overrides then return nil end
-    for prefix, factor in pairs(overrides) do
-        if career_name:sub(1, #prefix) == prefix then
-            return factor
-        end
-    end
-    return nil
+    return _wt_grip_offset_policy.resolve(
+        _weapon_scale_overrides, weapon_key, career_name)
 end
 
 local _scale_field_probe_logged = {}
@@ -590,7 +583,7 @@ local _weapon_grip_offsets = {
 -- absent. CWV's Empire Axe+Shield currently inherits `.name = dr_shield_axe`
 -- from its donor; retain both public variant keys for a future identity fix
 -- and the donor alias for the live clone-name boundary.
-local _SALTZ_KRUBER_SHIELD_ROTATION = { 25, -17.5, -15 }
+local _SALTZ_KRUBER_SHIELD_ROTATION = { 25, -17.5, -15, hand = "left" }
 local _weapon_rotation_overrides = {
     es_mace_shield           = { wh_ = _SALTZ_KRUBER_SHIELD_ROTATION },
     es_sword_shield          = { wh_ = _SALTZ_KRUBER_SHIELD_ROTATION },
@@ -601,15 +594,8 @@ local _weapon_rotation_overrides = {
 }
 
 local function _resolve_rotation_override(weapon_key, career_name)
-    if not weapon_key or not career_name then return nil end
-    local overrides = _weapon_rotation_overrides[weapon_key]
-    if not overrides then return nil end
-    for prefix, rotation in pairs(overrides) do
-        if career_name:sub(1, #prefix) == prefix then
-            return rotation
-        end
-    end
-    return nil
+    return _wt_grip_offset_policy.resolve(
+        _weapon_rotation_overrides, weapon_key, career_name)
 end
 
 -- ===========================================================================
@@ -668,15 +654,8 @@ local _DURABLE_GRIP_OFFSETS = {
 -- by the one-shot and durable paths so owner bodies, bots, remote husks, and the
 -- preview all consume the same baked value.
 local function _resolve_grip_offset(weapon_key, career_name)
-    if not weapon_key or not career_name then return nil end
-    local overrides = _weapon_grip_offsets[weapon_key]
-    if not overrides then return nil end
-    for prefix, off in pairs(overrides) do
-        if career_name:sub(1, #prefix) == prefix then
-            return off
-        end
-    end
-    return nil
+    return _wt_grip_offset_policy.resolve(
+        _weapon_grip_offsets, weapon_key, career_name)
 end
 
 local function _offset_weapon_units(slot_data, weapon_key, career_name)
@@ -686,7 +665,6 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
     if not offset then return end
 
     local pos = Vector3(offset[1], offset[2], offset[3])
-    local hand = offset.hand
     -- v0.12.136-dev: 3P-ONLY. Grip offsets must NEVER move the 1P units
     -- (right_unit_1p / left_unit_1p). First person is universal across all six
     -- characters and renders correctly by default — offsetting it visibly breaks
@@ -694,14 +672,7 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
     -- The *_1p fields that used to be in these lists were a latent bug: EVERY
     -- grip offset was silently shifting the 1P weapon too. Cross-character grip
     -- correction is a 3P-skeleton concern only.
-    local unit_fields
-    if hand == "right" then
-        unit_fields = { "right_unit_3p" }
-    elseif hand == "left" then
-        unit_fields = { "left_unit_3p" }
-    else
-        unit_fields = { "left_unit_3p", "right_unit_3p" }
-    end
+    local unit_fields = _wt_grip_offset_policy.unit_fields_3p(offset)
     for _, field in ipairs(unit_fields) do
         local unit = slot_data[field]
         if unit then
@@ -717,7 +688,7 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
             end
         end
     end
-    _dbg("Offset %s on %s by {%.3f, %.3f, %.3f} (hand=%s)", weapon_key, career_name, offset[1], offset[2], offset[3], tostring(hand or "both"))
+    _dbg("Offset %s on %s by {%.3f, %.3f, %.3f} (hand=%s)", weapon_key, career_name, offset[1], offset[2], offset[3], tostring(offset.hand or "both"))
 end
 
 -- #587 committed transform fan-out. "Committed" means source-baked in the two
@@ -734,6 +705,7 @@ mod._wt587_transform_contract = {
     live_tuner_scope = "local_player_3p_only",
     first_person = "unchanged",
     components = { scale = "scale_only", offset = "position_only", rotation = "wt569_rotation_only" },
+    hand_scope = _wt_grip_offset_policy.contract.hand_scope,
 }
 
 mod._wt587_baked_transform_plan = function(weapon_key, career_name)
@@ -761,12 +733,11 @@ local function _wt587_track_durable_3p_units(slot_data, weapon_key, career_name,
     if not _DURABLE_GRIP_OFFSETS[weapon_key] then return 0 end
     local offset = _resolve_grip_offset(weapon_key, career_name)
     if not offset then return 0 end
-    local wanted_hand = offset.hand
     local tracked = 0
     for _, field in ipairs({ "right_unit_3p", "left_unit_3p" }) do
         local hand = field == "right_unit_3p" and "right" or "left"
         local unit = slot_data and slot_data[field]
-        if unit and (not wanted_hand or wanted_hand == hand)
+        if unit and _wt_grip_offset_policy.applies_to_hand(offset, hand)
                 and not _wt587_tracked_durable_3p_units[unit] then
             local ok_alive, alive = pcall(Unit.alive, unit)
             local ok_pos, base_position = pcall(Unit.local_position, unit, 0)
@@ -867,12 +838,15 @@ local function _wt569_rotation_delta(row)
     return Quaternion.axis_angle(Vector3(0, 0, 1), math.pi)
 end
 
-local function _wt569_track_3p_units(slot_data, weapon_key, career_name, item_template, owner_3p, slot_name, preview_wielded)
+local function _wt569_track_3p_units(slot_data, weapon_key, career_name, item_template, owner_3p, slot_name, preview_wielded, role)
     if not mod._wt569_should_rotate_3p(weapon_key, career_name, item_template) then return end
     local baked_euler = _resolve_rotation_override(weapon_key, career_name)
     for _, field in ipairs({ "right_unit_3p", "left_unit_3p" }) do
+        local hand = field == "right_unit_3p" and "right" or "left"
         local unit = slot_data and slot_data[field]
-        if unit and not _wt569_tracked_3p_units[unit] then
+        if unit and (not baked_euler
+                or _wt_grip_offset_policy.applies_to_hand(baked_euler, hand))
+                and not _wt569_tracked_3p_units[unit] then
             local ok_alive, alive = pcall(Unit.alive, unit)
             local ok_rot, base_rotation = pcall(Unit.local_rotation, unit, 0)
             if ok_alive and alive and ok_rot and base_rotation then
@@ -883,20 +857,21 @@ local function _wt569_track_3p_units(slot_data, weapon_key, career_name, item_te
                     preview_wielded = preview_wielded == true,
                     weapon_key = weapon_key,
                     career_name = career_name,
-                    hand = field == "right_unit_3p" and "right" or "left",
+                    hand = hand,
+                    role = role,
                     euler = baked_euler and { baked_euler[1], baked_euler[2], baked_euler[3] } or nil,
                 }
                 if baked_euler then
                     pcall(printf,
                         "[wt:112] tracked shield rotation career=%s weapon=%s hand=%s euler={%.1f,%.1f,%.1f} first_person=untouched",
                         tostring(career_name), tostring(weapon_key),
-                        field == "right_unit_3p" and "right" or "left",
+                        hand,
                         baked_euler[1], baked_euler[2], baked_euler[3])
                 else
                     pcall(printf,
                         "[wt:569] tracked career=%s weapon=%s hand=%s remap=%s axis=local_z degrees=180 first_person=untouched",
                         tostring(career_name), tostring(weapon_key),
-                        field == "right_unit_3p" and "right" or "left", _WT569_REMAP_EVENT)
+                        hand, _WT569_REMAP_EVENT)
                 end
             end
         end
@@ -936,6 +911,9 @@ function mod._wt569_reapply_3p_orientation()
                 desired = Quaternion.multiply(base, _wt569_rotation_delta(row))
             end
             pcall(Unit.set_local_rotation, unit, 0, desired)
+            if corrected then
+                _wt_grip_offset_policy.log_issue735_retained_once(row, unit, desired)
+            end
             if row.last_corrected ~= corrected then
                 row.last_corrected = corrected
                 pcall(printf, "[wt:569] applied=%s career=%s weapon=%s hand=%s slot=%s mode=%s",
@@ -1047,7 +1025,7 @@ mod:traced_hook("GearUtils", "create_equipment", function(func, world, slot_name
             unit_3p, slot_name, is_bot and "bot" or "owner")
         _offset_weapon_units(result, weapon_key, career_name)
         _wt569_track_3p_units(result, weapon_key, career_name, result.item_template,
-            unit_3p, slot_name, false)
+            unit_3p, slot_name, false, is_bot and "bot" or "owner")
     end
     return result or {}   -- never nil to the vanilla caller (see stub rationale above)
 end)
@@ -1082,7 +1060,7 @@ mod:hook_safe("SimpleHuskInventoryExtension", "_wield_slot",
             item_template = ok_template and resolved or nil
         end
         _wt569_track_3p_units(spawned_3p, weapon_key, career_name, item_template,
-            (self and self._unit) or unit_3p, slot_name, false)
+            (self and self._unit) or unit_3p, slot_name, false, "remote_husk")
     end)
 
 -- ============================================================
@@ -3848,6 +3826,15 @@ local function _wt603_post_spawn_preview_event(weapon_key, career_name, fired_ev
     return nil
 end
 
+local _wt_paired_preview_transform = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/_wt_paired_preview_transform")
+_wt_paired_preview_transform.install(mod, {
+    local_career_name = _local_career_name, resolve_rotation = _resolve_rotation_override,
+    resolve_offset = _resolve_grip_offset, offset_weapon_units = _offset_weapon_units,
+    track_rotation = _wt569_track_3p_units, is_unit = _is_unit,
+    policy = _wt_grip_offset_policy,
+})
+
 -- v0.12.114-dev: converted from hook_safe to mod:hook (full wrapper) so we
 -- can PRE-VALIDATE attachment_node_linking before the original _spawn_item_unit
 -- calls link_units. Previously hook_safe ran AFTER spawn (post-crash, useless
@@ -3877,11 +3864,22 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
                         or (self._profile and self._profile.name)
     if not career_name then return r1, r2, r3 end
 
-    local fake_slot = { [_wt_grip_offset_policy.preview_slot_field(item_template)] = unit }
+    local default_field = _wt_grip_offset_policy.preview_slot_field(item_template)
+    local fake_slot = { [default_field] = unit }
     _scale_weapon_units(fake_slot, weapon_key, career_name)
-    _offset_weapon_units(fake_slot, weapon_key, career_name)
-    _wt569_track_3p_units(fake_slot, weapon_key, career_name, item_template,
-        nil, slot_type, not skip_wield_anim and self._wielded_slot_type == slot_type)
+    local offset_field = _wt_grip_offset_policy.preview_slot_field(
+        item_template, _resolve_grip_offset(weapon_key, career_name))
+    if offset_field then
+        _offset_weapon_units({ [offset_field] = unit }, weapon_key, career_name)
+    end
+    local rotation_field = _wt_grip_offset_policy.preview_slot_field(
+        item_template, _resolve_rotation_override(weapon_key, career_name))
+    if rotation_field then
+        _wt569_track_3p_units({ [rotation_field] = unit }, weapon_key, career_name,
+            item_template, nil, slot_type,
+            not skip_wield_anim and self._wielded_slot_type == slot_type,
+            "inventory_preview")
+    end
 
     -- v0.12.146-dev: INVENTORY-PREVIEW WIELD POSE (3P-ONLY). Correct the wield
     -- stance for cross-character ports whose wield_anim_career_3p entry omits the
