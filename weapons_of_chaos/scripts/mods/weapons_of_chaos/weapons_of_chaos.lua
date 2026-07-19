@@ -148,6 +148,17 @@ local _WIRE_PROTECTED_TRAITS = {
 local _power = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_power")
 local _cursed = mod:dofile("scripts/mods/weapons_of_chaos/_woc_cursed_rarity")
 local TEMPLATE = _moveset.TEMPLATE
+-- Attack-order picker: pure permutation engine + the Blightreaper chain
+-- descriptor (single source for dropdown vocabulary, defaults, and the
+-- transition data layer). Registered so future CWV descriptors share the path.
+local _attack_order = mod:dofile("scripts/mods/weapons_of_chaos/_woc_attack_order")
+local _chain_descriptor = _moveset.chain_descriptor()
+do
+	local ok, reason = _attack_order.register(_chain_descriptor)
+	if not ok then
+		_dbg_alert("attack-order descriptor rejected: %s", tostring(reason))
+	end
+end
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
 local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
@@ -626,6 +637,106 @@ local function _install_blightreaper_poison()
 	return _moveset.install_poison_buff(templates)
 end
 
+-- ============================================================
+-- Blightreaper attack order (author-picked chain permutation)
+-- ============================================================
+-- Reads the Blightreaper Combat dropdowns and applies the permutation plan to
+-- the private clone AFTER it is fully prepared (install site below) and again
+-- on every picker settings change (mod.on_setting_changed). The module fails
+-- closed: a bad selection or descriptor mutates nothing and the native order
+-- keeps playing. Sub_action tables are mutated in place, never replaced, so a
+-- re-apply reaches the very next attack without a re-equip.
+
+local _attack_order_receipts = 16
+
+local function _attack_order_selections()
+	return {
+		lights = {
+			mod:get("woc_blightreaper_light_1"),
+			mod:get("woc_blightreaper_light_2"),
+			mod:get("woc_blightreaper_light_3"),
+			mod:get("woc_blightreaper_light_4"),
+		},
+		heavies = {
+			mod:get("woc_blightreaper_heavy_1"),
+			mod:get("woc_blightreaper_heavy_2"),
+			mod:get("woc_blightreaper_heavy_3"),
+		},
+		push = { mod:get("woc_blightreaper_push_follow") },
+	}
+end
+
+local function _apply_attack_order(source)
+	local weapons = rawget(_G, "Weapons")
+	local template = weapons and rawget(weapons, TEMPLATE)
+	if type(template) ~= "table" then
+		return nil, "template_not_installed"
+	end
+	local report, reason = _attack_order.apply(template, _chain_descriptor,
+		_attack_order_selections())
+	if _attack_order_receipts > 0 then
+		_attack_order_receipts = _attack_order_receipts - 1
+		if report then
+			pcall(printf, "[WOC:order] attack order applied (%s): writes=%d identity=%s",
+				tostring(source), report.writes, tostring(report.identity))
+		else
+			pcall(printf, "[WOC:order] attack order NOT applied (%s): %s; native order stays",
+				tostring(source), tostring(reason))
+		end
+	end
+	return report, reason
+end
+
+mod.on_setting_changed = function(setting_id)
+	if type(setting_id) == "string" and setting_id:find("^woc_blightreaper_") then
+		_apply_attack_order("setting:" .. setting_id)
+	end
+end
+
+mod:command("woc_chains", "Show the Blightreaper attack chain map (what follows what)", function()
+	local weapons = rawget(_G, "Weapons")
+	local template = weapons and rawget(weapons, TEMPLATE)
+	if type(template) ~= "table" then
+		mod:echo("[WOC] Blightreaper template is not installed yet (enable the relic and enter the keep).")
+		return
+	end
+	local lines, reason = _attack_order.describe_chains(template, _chain_descriptor,
+		_attack_order_selections(), function(key) return mod:localize(key) end)
+	if not lines then
+		mod:echo("[WOC] chain map unavailable: %s", tostring(reason))
+		return
+	end
+	mod:echo("[WOC] Blightreaper chain map (positions are chain steps):")
+	for i = 1, #lines do
+		mod:echo("  %s", lines[i])
+	end
+end)
+
+_rt_register("attack_order_pick_vocabulary_and_apply", function()
+	local ids = {}
+	for _, unit in ipairs(_chain_descriptor.lights) do ids[unit.id] = true end
+	for _, unit in ipairs(_chain_descriptor.heavies) do ids[unit.id] = true end
+	for _, unit in ipairs(_chain_descriptor.push) do ids[unit.id] = true end
+	local selections = _attack_order_selections()
+	for pool, chosen in pairs(selections) do
+		for i, value in pairs(chosen) do
+			if value ~= nil and not ids[value] then
+				return string.format("%s pick %s stores out-of-vocabulary unit %s",
+					tostring(pool), tostring(i), tostring(value))
+			end
+		end
+	end
+	local weapons = rawget(_G, "Weapons")
+	local template = weapons and rawget(weapons, TEMPLATE)
+	if type(template) ~= "table" then
+		return "skip: Blightreaper template not installed"
+	end
+	local report, reason = _attack_order.apply(template, _chain_descriptor, selections)
+	if not report then
+		return "attack order failed to apply: " .. tostring(reason)
+	end
+end)
+
 local function _install_blightreaper_moveset()
 	if _moveset_report and _moveset_report.installed
 			and _moveset_report.ability_actions
@@ -674,6 +785,11 @@ local function _install_blightreaper_moveset()
 			table.concat(abilities.missing_actions or {}, ","),
 			table.concat(abilities.missing_careers or {}, ","))
 	end
+	-- Attack-order picker: permute the fully prepared clone per the Blightreaper
+	-- Combat dropdowns. Never gates registration; a failed apply keeps the
+	-- native order (module is fail-closed, receipt is printf log-only).
+	local order_report = _apply_attack_order("install")
+	_moveset_report.attack_order = order_report or false
 	mod:info("[WOC:690] private Crowbill template ready (attacks=%d poison=%s crit=15%% speed=83%% executioner_audio=true career_actions=%d/%d restored_inherited=%d discarded_claims=%d)",
 		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE,
 		abilities.installed + abilities.existing, abilities.required,

@@ -169,6 +169,7 @@ local suites = {
 	"test_woc_blightreaper_pulse",
 	"test_woc_durable_transform",
 	"test_woc_blightreaper_audio",
+	"test_woc_attack_order",
     "test_dcp_portrait_materials",
     "test_dcp_player_scope_probe",
     "test_dcp_score_record",

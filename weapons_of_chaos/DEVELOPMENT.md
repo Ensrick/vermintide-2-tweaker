@@ -493,3 +493,57 @@ those one-shots at the corresponding ActionMeleeStart and ActionSweep seams for
 the positively tracked local 1P Blightreaper. The private template declares
 `wwise/two_handed_swords`; Greataxe impact events remain independently owned by
 the sweep definitions.
+
+### Attack chain control (2026-07-19, attack-order picker)
+
+Author request 2026-07-19: pick which attacks play in which order on custom
+weapons, Blightreaper first, reusable for WoC/CWV additions later. The
+implementation splits the chain into two independent layers.
+
+**Layer 1 - what plays at each position (SHIPPED as the Blightreaper Combat
+dropdowns).** The crowbill graph is a ring of four charge nodes (chain
+positions); each position offers a light release and a heavy release, and every
+attack's `allowed_chain_actions` names the next charge node
+(`1h_crowbills.lua`: charge nodes :8/:65/:120/:175; lights :939/:1078/:810/:680;
+heavies :230/:530/:380; push-attack bopp :1212). `_woc_attack_order.lua` (pure
+module) treats each light as a payload UNIT (anim_event, anim_event_3p where
+authored, anim_time_scale, damage profile + windows, baked_sweep, buff_data,
+impact identity, aim assist - everything except the position wiring in
+`M.PRESERVED_FIELDS`: `allowed_chain_actions`, `lookup_data`, `kind`,
+`attack_hold_input`, condition funcs) and each heavy as the PAIR of release
+payload + its native charge node's windup `anim_event` (heavies always move
+with their charge pairing; positions 2 and 4 natively share the heavy sub
+action, so one pick covers both). Applying a selection copies unit payloads
+from a pristine BASELINE onto position sub_actions in place - tables are never
+replaced, so engine references stay valid and the next swing uses the new
+order; the baseline is stamped onto the template (`M.BASELINE_KEY`) so applies
+are idempotent and survive VMF reload. Validation fails closed: unknown unit
+ids, missing slots, or a malformed descriptor mutate nothing and the native
+order keeps playing. Apply sites: end of `_install_blightreaper_moveset()`
+(after the clone is fully prepared) and `mod.on_setting_changed` for the
+`woc_blightreaper_*` dropdowns.
+
+**Layer 2 - what follows what (DATA LAYER SHIPPED, editing UI deliberately
+not).** The weapon descriptor (`_woc_blightreaper_moveset.chain_descriptor()`)
+carries a TRANSITION TABLE keyed by after-state: `entry`, `after_light[i]`,
+`after_heavy[j]`, `after_push_attack`, each naming the next chain position.
+Natively: entry->1, lights 1..4 -> 2/3/4/1, heavies 1..3 -> 3/1/4 (heavy 1
+into position 3 is the exact heavy-into-light-3 behavior the author wants
+controllable), push follow-up -> 3. The permutation plan PRESERVES this wiring
+under every selection (regression-tested), `M.derive_transitions` re-reads the
+live template so descriptor drift is detectable, and the read-only `/woc_chains`
+chat command prints the live map in plain English with the currently picked
+attack names. A future transition EDITOR retargets the `action_one`
+continuation rows inside `allowed_chain_actions`; because payloads and wiring
+are already independent layers, that editor composes with the picker without
+rework. One topology fact it must surface: positions sharing a heavy sub_action
+(2 and 4) necessarily share that heavy's exit until the editor clones the slot.
+
+**Registry for reuse.** `_woc_attack_order.register(descriptor)` +
+`M.get(template_name)`: a CWV weapon later ships its own descriptor
+(`template_name`, `lights`, `heavies` with charge pairings, `push`,
+`charge_nodes`, position arrays, `transitions`) and inherits plan building,
+baseline apply, chain description, and the validation suite unchanged. Unit
+tests: `qa/lua/tests/test_woc_attack_order.lua` (identity, full reverse,
+duplicates, charge pairing, topology preservation, baseline restore,
+fail-closed validation).

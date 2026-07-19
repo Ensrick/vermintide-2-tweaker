@@ -307,6 +307,56 @@ function M.install_poison_buff(buff_templates)
 	return true, "installed"
 end
 
+-- Attack-chain descriptor for `_woc_attack_order.lua` (additive; consumes the
+-- clone this module installs, mutates nothing here). Slot names, charge-node
+-- pairings, and transition targets are the verified `one_handed_crowbill`
+-- enumeration (1h_crowbills.lua: charge nodes :8/:65/:120/:175, lights
+-- :939/:1078/:810/:680, heavies :230/:530/:380, push-attack bopp :1212).
+-- Positions are the four charge nodes in chain order; `transitions` is the
+-- after-state map (values = next chain position) that the permutation plan
+-- preserves. Returns a fresh table per call (mod:dofile is not a singleton).
+function M.chain_descriptor()
+	return {
+		template_name = M.TEMPLATE,
+		action = "action_one",
+		-- Attack units. `slot` = native home sub_action; labels are raw loc keys.
+		lights = {
+			{ id = "overhead",       slot = "light_attack_last",  label = "woc_atk_overhead" },
+			{ id = "upper_left",     slot = "light_attack_upper", label = "woc_atk_upper_left" },
+			{ id = "right_diagonal", slot = "light_attack_right", label = "woc_atk_right_diagonal" },
+			{ id = "stab",           slot = "light_attack_left",  label = "woc_atk_stab" },
+		},
+		-- Heavy PAIRS: release payload + the windup anim of `charge_slot`.
+		heavies = {
+			{ id = "left_up_smash",  slot = "heavy_attack",          charge_slot = "default",       label = "woc_atk_left_up_smash" },
+			{ id = "right_smash",    slot = "heavy_attack_left",     charge_slot = "default_left",  label = "woc_atk_right_smash" },
+			{ id = "diagonal_smash", slot = "heavy_attack_right_up", charge_slot = "default_right", label = "woc_atk_diagonal_smash" },
+		},
+		push = {
+			{ id = "upper_bopp", slot = "light_attack_bopp", label = "woc_atk_upper_bopp" },
+		},
+		-- Chain positions (charge nodes) in native chain order.
+		charge_nodes = { "default", "default_right", "default_left", "default_last" },
+		light_positions = { "overhead", "upper_left", "right_diagonal", "stab" },
+		heavy_positions = {
+			{ native = "left_up_smash",  charge_slots = { "default" } },
+			-- Positions 2 and 4 share this heavy sub_action natively.
+			{ native = "diagonal_smash", charge_slots = { "default_right", "default_last" } },
+			{ native = "right_smash",    charge_slots = { "default_left" } },
+		},
+		push_positions = { "upper_bopp" },
+		-- After-state map (next chain position). Mirrors the native wiring the
+		-- permutation plan preserves; /woc_chains re-derives it from the live
+		-- template so drift is visible.
+		transitions = {
+			entry = 1,
+			after_light = { 2, 3, 4, 1 },
+			after_heavy = { 3, 1, 4 },
+			after_push_attack = 3,
+		},
+	}
+end
+
 function M.remap_3p(event_name, career_name, template_name)
 	if template_name ~= M.TEMPLATE or type(event_name) ~= "string" then
 		return event_name, false

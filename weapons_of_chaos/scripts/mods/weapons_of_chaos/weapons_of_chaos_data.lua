@@ -1,10 +1,62 @@
 local mod = get_mod("WOC")
+local _moveset = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset")
 
 -- VMF widget tree. `enable_blightreaper` gates registration of the Blightreaper
 -- item (takes effect on game restart; registration is boot/keep-time). WOC has no
 -- debug-logging checkbox: it uses the VMF-native debug channels (mod:debug /
 -- mod:warning) gated by VMF output_mode_debug / output_mode_warning, migrated in
 -- v0.1.2-dev (PROJECT_STANDARDS.md § 3.6).
+
+-- Blightreaper Combat: attack-order dropdowns consumed by `_woc_attack_order`.
+-- Options/defaults come from the single-source chain descriptor; option tables
+-- are built fresh per widget and never mutated after registration
+-- (docs/VMF_RECIPES.md). Values are unit ids, not engine sub_action names, so a
+-- stale user_settings.config entry fails closed to the native order.
+local _descriptor = _moveset.chain_descriptor()
+
+local function _fresh_options(units)
+	local options = {}
+	for i = 1, #units do
+		options[i] = { text = units[i].label, value = units[i].id }
+	end
+	return options
+end
+
+local function _native_at(positions, index)
+	local native = positions[index]
+	return type(native) == "table" and native.native or native
+end
+
+local function _combat_widgets()
+	local rows = {}
+	for i = 1, #_descriptor.light_positions do
+		rows[#rows + 1] = {
+			setting_id    = "woc_blightreaper_light_" .. i,
+			type          = "dropdown",
+			default_value = _native_at(_descriptor.light_positions, i),
+			tooltip       = "woc_blightreaper_light_tooltip",
+			options       = _fresh_options(_descriptor.lights),
+		}
+	end
+	for i = 1, #_descriptor.heavy_positions do
+		rows[#rows + 1] = {
+			setting_id    = "woc_blightreaper_heavy_" .. i,
+			type          = "dropdown",
+			default_value = _native_at(_descriptor.heavy_positions, i),
+			tooltip       = "woc_blightreaper_heavy_tooltip",
+			options       = _fresh_options(_descriptor.heavies),
+		}
+	end
+	rows[#rows + 1] = {
+		setting_id    = "woc_blightreaper_push_follow",
+		type          = "dropdown",
+		default_value = _native_at(_descriptor.push_positions, 1),
+		tooltip       = "woc_blightreaper_push_tooltip",
+		options       = _fresh_options(_descriptor.push),
+	}
+	return rows
+end
+
 return {
 	name           = "Weapons of Chaos",
 	description     = mod:localize("mod_description"),
@@ -39,6 +91,11 @@ return {
 				type          = "checkbox",
 				default_value = true,
 				tooltip       = "enable_blightreaper_tooltip",
+			},
+			{
+				setting_id  = "blightreaper_combat",
+				type        = "group",
+				sub_widgets = _combat_widgets(),
 			},
 		},
 	},
