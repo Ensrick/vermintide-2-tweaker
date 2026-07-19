@@ -1,0 +1,19 @@
+materials = {
+	skarrik_halberd_mat = "units/woc_skarrik_dual_swords/skarrik_swords"
+}
+
+renderables = {
+	skarrik_halberd = {
+		always_keep = false
+		culling = "bounding_volume"
+		generate_uv_unwrap = false
+		occluder = false
+		shadow_caster = false
+		surface_queries = false
+		viewport_visible = true
+	}
+}
+
+material_contexts = {
+	surface_material = ""
+}
