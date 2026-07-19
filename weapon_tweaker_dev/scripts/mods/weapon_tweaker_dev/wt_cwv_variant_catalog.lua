@@ -85,11 +85,20 @@ return {
     -- them ES-only lets Bounty Hunter wield the item while Locked and Loaded
     -- silently fails.
     { key = "cwv_es_outrider_grenade_launcher", careers = ES_AND_WH_STANDARD,
-      default_careers = ES, authored_careers = ES, conditional_careers = WH_STANDARD },
+      default_careers = ES, authored_careers = ES, conditional_careers = WH_STANDARD,
+      effective_templates = {
+          { name = "outrider_grenade_launcher_template",
+            source_template = "dr_deus_01_template_1" },
+      } },
     { key = "cwv_es_crossbow", careers = ES },
     { key = "cwv_es_musket", careers = ES },
     { key = "cwv_es_musket_old", careers = ES_AND_WH_STANDARD,
-      default_careers = ES, authored_careers = ES, conditional_careers = WH_STANDARD },
+      default_careers = ES, authored_careers = ES, conditional_careers = WH_STANDARD,
+      effective_templates = {
+          { name = "old_musket_template", source_template = "handgun_template_1" },
+          { name = "old_musket_template_melee",
+            source_template = "two_handed_heavy_spears_template" },
+      } },
     { key = "cwv_dr_priest_greathammer", careers = DR },
     { key = "cwv_es_priest_greathammer", careers = ES },
     { key = "cwv_es_warpriest_hammer", careers = ES },

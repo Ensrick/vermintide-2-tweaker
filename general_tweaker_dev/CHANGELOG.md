@@ -1,5 +1,13 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.249-dev (2026-07-18) -- lobby appearance-parity banner [untested]
+
+- New client-side banner (issue 737 mitigation): after a SUCCESSFUL join, posts one chat line when an appearance mod (wt / cosmetics / cwv / cim / woc) is enabled on only one side of the session, or when host and client run different streams or versions of the same mod. Appearance mismatches let the join succeed and then desync the NetworkLookup index spaces mid-session (score-screen CTD, husk/preview failures) - this makes the divergence visible at join time instead.
+- Manifest travels in `ltw_*` lobby_data slots via the shared `_lib_appearance_parity` module (canonical copy in `tools/shared_lib/`, byte-exact per the shared-lib gate). Banner text: `Parity warning: <Mod Label> - host: <state>, you: <state> - modded appearance may desync`.
+- Toggle `gt_lobby_appearance_parity_enabled` (default ON) in the Lobby group.
+- 16 Lua 5.1 tests cover manifest encode/decode, mismatch classification, and banner suppression when states agree.
+- NOT SHIPPED: gt_dev upload remains frozen until issue 625 reconciles master with the Workshop build. Bundle in this commit exists only to satisfy release-bundle atomicity (issue 724); no deploy, no upload.
+
 ## v0.2.248-dev (2026-07-18) -- #731 VOIP disconnect channel guard
 
 - Source inspection confirmed that `Voip._ensure_left_voip_room` clears its local room and then sends `rpc_voip_room_request(false)`. During disconnect, the server's `PEER_ID_TO_CHANNEL` entry can already be gone, so vanilla passes `nil` to the engine RPC and crashes on `Channel must be an integer`.

@@ -615,6 +615,13 @@ M.build_local_index = _build_local_index
 M.diff_mods = _diff_mods
 M.build_popup_text = _build_popup_text
 
+-- Engine helpers reused by the in-lobby appearance-parity banner
+-- (_gt_lobby_appearance_parity.lua) so there is ONE manifest fetch and ONE local
+-- mod index shared between the failed-join reveal and the successful-join banner.
+mod._gt_lobby_fetch_manifest    = _fetch_manifest_for_lobby
+mod._gt_lobby_safe_lobby_id     = _safe_get_lobby_id
+mod._gt_lobby_build_local_index = _build_local_index
+
 -- audit 2026-06-07 (F4): exposed on `mod` so /gt_regression_test can assert the
 -- restart_as_server teardown driver sets the exact vanilla fields without
 -- reloading this module (which would re-attempt the create_popup hook).

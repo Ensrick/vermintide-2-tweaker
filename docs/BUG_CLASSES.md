@@ -2168,6 +2168,15 @@ whose activated ability declares `action_name`.
    `template.actions`. A deep clone can copy the donor's owner registry and
    canonical action rows by value, producing false ownership and new table
    identities even though the declared donor remains canonical.
+5. Resolve the complete effective-template family. `item.template` is only the
+   catalog default: Old Musket returns `old_musket_template_melee` from
+   `BackendUtils.get_item_template` while bayonet stance is active. The
+   2026-07-18 #661 log showed catalog reconciliation succeeding while Bounty
+   Hunter still failed on this unregistered alternate.
+6. Treat live `ItemMasterList[key].can_wield` as the eligibility contract.
+   Catalog declarations and menu defaults can lag a late writer. Audit every
+   writer: CIM's former adventure-visibility stamp appended careers without a
+   paired action reconciliation and was removed at this boundary.
 
 ### Fix template
 - Use `tools/shared_lib/_lib_career_weapon_actions.lua`; collect every declared
@@ -2184,6 +2193,15 @@ whose activated ability declares `action_name`.
   integration. Do not hand-copy `activated_ability[1]` in individual weapon
   constructors: that misses alternate rows and lets the next private template
   bypass the contract.
+- Declare stance/style families through
+  `tools/shared_lib/_lib_effective_weapon_templates.lua`, including exact donor
+  provenance for every deep-cloned member. Reconcile the full family from live
+  `can_wield`, then repeat idempotently for the actual effective template at the
+  bounded wield event. Never add a per-frame repair loop.
+- Availability consumers such as CIM must not append `can_wield` independently.
+  Either leave it byte-for-byte provider-owned or invoke the same atomic
+  availability-plus-action transaction; a visibility helper is not an
+  availability owner.
 - Before the first claim on a declared private clone, call the shared
   `prepare_inherited_clone` boundary with an exact source token. It discards
   copied donor claims and restores only rows whose donor is still the exact
@@ -2191,6 +2209,10 @@ whose activated ability declares `action_name`.
   later foreign replacement remains a hard conflict instead of being clobbered.
 - Missing career settings/action providers are integration failures: emit a
   bounded runtime error and fail the offline matrix. Never silently skip them.
+- Weapon-chain audits must exclude `action_career_*` rows. Issue #412's Old
+  Musket stance interrupt owns running weapon sub-actions; a later canonical
+  career action is neither a missing interrupt nor a place from which stance
+  toggling should be installed.
 - Test all ten current actions, the Waywatcher alternate, existing-row identity,
   missing providers, clone-claim contamination, repeated preparation, foreign
   replacement, setting reapply, and disable cleanup. Issue #661 owns the

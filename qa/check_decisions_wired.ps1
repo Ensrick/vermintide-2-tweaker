@@ -376,6 +376,42 @@ function Parse-LocSet([string]$path) {
     return $set
 }
 
+# ---------------------------------------------------------------------------
+# Staleness advisory for the checker-consumed decisions doc.
+#
+# This checker reads CROSS_CHARACTER_PORT_DECISIONS.md as GROUND TRUTH for which
+# cross-character ports are live work. When a rescinded row is left in the doc it
+# is trusted as real work for as long as nobody re-verifies it (that is exactly
+# how stale rescinded rows read as live work for weeks). The doc carries a
+#   checker-consumed: verified-current YYYY-MM-DD
+# header line stamped when it was last reconciled against the three wiring
+# surfaces. Warn (ADVISORY ONLY - never touches the exit code) when that date is
+# missing, unparseable, or older than $MaxAgeDays so the maintainer re-verifies
+# and re-stamps it. Silent when the header is present and fresh.
+# ---------------------------------------------------------------------------
+function Test-CheckerConsumedFreshness {
+    param([string]$Path, [int]$MaxAgeDays = 30)
+    $leaf = Split-Path $Path -Leaf
+    $text = Read-FileUtf8 $Path
+    $m = [regex]::Match($text, 'checker-consumed:\s*verified-current\s+(\d{4}-\d{2}-\d{2})')
+    if (-not $m.Success) {
+        Write-Host ("[check_decisions_wired] STALENESS WARNING (advisory): {0} has no 'checker-consumed: verified-current YYYY-MM-DD' header. This checker trusts the doc as ground truth; add the header once you have re-verified the rows." -f $leaf) -ForegroundColor Yellow
+        return
+    }
+    $stamp = [datetime]::MinValue
+    $ok = [datetime]::TryParseExact($m.Groups[1].Value, 'yyyy-MM-dd',
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::None, [ref]$stamp)
+    if (-not $ok) {
+        Write-Host ("[check_decisions_wired] STALENESS WARNING (advisory): {0} has an unparseable checker-consumed date '{1}' (want YYYY-MM-DD)." -f $leaf, $m.Groups[1].Value) -ForegroundColor Yellow
+        return
+    }
+    $ageDays = [int]([datetime]::UtcNow.Date - $stamp.Date).TotalDays
+    if ($ageDays -gt $MaxAgeDays) {
+        Write-Host ("[check_decisions_wired] STALENESS WARNING (advisory): {0} was last verified-current {1} ({2} days ago, > {3}). Re-verify the decisions against unlock_map + checkboxes + loc and bump the header date." -f $leaf, $m.Groups[1].Value, $ageDays, $MaxAgeDays) -ForegroundColor Yellow
+    }
+}
+
 # ===========================================================================
 #  SELF-TEST — planted fixtures verify REGRESSION + LEAK fire.
 # ===========================================================================
@@ -645,6 +681,10 @@ foreach ($p in @($docPath, $mapPath, $dataPath, $locPath)) {
         exit 2
     }
 }
+
+# Advisory only - prints a warning if the decisions doc's checker-consumed header
+# is missing/stale; never changes the exit code below.
+Test-CheckerConsumedFreshness -Path $docPath
 
 $r = Invoke-DecisionsCheck -DocPath $docPath -MapPath $mapPath -DataPath $dataPath -LocPath $locPath -Quiet:$Quiet
 

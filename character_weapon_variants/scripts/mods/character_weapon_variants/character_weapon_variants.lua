@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.452-dev"
+local MOD_VERSION = "0.1.453-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -347,6 +347,9 @@ local _career_weapon_actions = mod:dofile(
 	"scripts/mods/character_weapon_variants/_lib_career_weapon_actions")
 local _cwv_career_weapon_actions = mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_career_weapon_actions")
+-- Keep this on the mod table: the entry chunk is at Lua 5.1's local ceiling.
+mod._cwv_effective_weapon_templates = mod:dofile(
+	"scripts/mods/character_weapon_variants/_lib_effective_weapon_templates")
 local _career_action_owner = "character_weapon_variants"
 local _es_all_careers = _om.variant_catalog.es_all_careers
 local _wh_all_careers = _om.variant_catalog.wh_all_careers
@@ -9190,7 +9193,8 @@ local function _auto_register_all()
 		-- private templates otherwise silently bypass the shared contract.
 		local action_report = _cwv_career_weapon_actions.install(pending_defs,
 			ItemMasterList, Weapons, CareerSettings, ActionTemplates,
-			_career_weapon_actions, _career_action_owner)
+			_career_weapon_actions, mod._cwv_effective_weapon_templates,
+			_career_action_owner)
 		if not action_report.ok then
 			mod:error("[cwv:661] incomplete career-action integration: %s",
 				table.concat(action_report, ","))

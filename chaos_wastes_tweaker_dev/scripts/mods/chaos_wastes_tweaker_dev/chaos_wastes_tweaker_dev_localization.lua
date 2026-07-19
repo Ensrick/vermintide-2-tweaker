@@ -461,10 +461,10 @@ local loc = {
     -- kill test is confirmed (LOCALIZATION_STANDARD section 13).
     disable_boon_ct_kill_heal = { en = "Disable Boon: (Mod Boon) Khaine's Communion" },
     start_boon_ct_kill_heal   = { en = "Starting Boon: (Mod Boon) Khaine's Communion" },
-    disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Listed under Modded Boons. Toggle this off to remove it from the boon pool." },
-    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Open Starting Boons > Modded Boons and enable it to receive it through Starting Boons, including Single Mission Loader runs." },
+    disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 1 permanent (green) health. Exotic rarity. Listed under Modded Boons. Toggle this off to remove it from the boon pool." },
+    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 1 permanent (green) health. Exotic rarity. Open Starting Boons > Modded Boons and enable it to receive it through Starting Boons, including Single Mission Loader runs." },
     display_name_ct_kill_heal = { en = "Khaine's Communion" },
-    description_ct_kill_heal  = { en = "Killing an enemy heals you for 0.25 permanent (green) health." },
+    description_ct_kill_heal  = { en = "Killing an enemy heals you for 1 permanent (green) health." },
     -- v0.7.240-dev (#426): label for the peer-parity chat notice ("Peer-parity:
     -- disabled <label>..."). This is runtime feedback, not a menu option title.
     ct_gated_modded_boons = { en = "Modded Boons and Miracles" },

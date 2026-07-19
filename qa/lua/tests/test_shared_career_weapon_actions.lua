@@ -1,6 +1,8 @@
 return function(H, repo_root)
 	local integration = dofile(repo_root
 		.. "/tools/shared_lib/_lib_career_weapon_actions.lua")
+	local effective_templates = dofile(repo_root
+		.. "/tools/shared_lib/_lib_effective_weapon_templates.lua")
 	local function deep_clone(value, seen)
 		if type(value) ~= "table" then return value end
 		seen = seen or {}
@@ -225,7 +227,7 @@ return function(H, repo_root)
 		local pending = { { def = { item_key = "cwv_late_a" } } }
 		local report = cwv.install(pending, items,
 			{ shared_private = template }, career_settings, action_templates,
-			integration, "character_weapon_variants")
+			integration, effective_templates, "character_weapon_variants")
 		H.equal(report.ok, true)
 		H.equal(report.template_count, 1)
 		H.equal(template.actions.action_career_dr_3,
@@ -257,13 +259,76 @@ return function(H, repo_root)
 			donor_template = donor,
 			private_template = private,
 		}, career_settings, action_templates, integration,
-			"character_weapon_variants")
+			effective_templates, "character_weapon_variants")
 		H.equal(report.ok, true)
 		H.equal(report.prepared_templates, 1)
 		H.equal(report.restored_actions, 1)
 		H.equal(report.discarded_inherited_claims, 1)
 		H.equal(private.actions.action_career_dr_3,
 			action_templates.action_career_dr_3)
+	end)
+
+	H.test("effective template families use live can_wield across primary and alternate templates", function()
+		local cwv = dofile(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_career_weapon_actions.lua")
+		local handgun = { actions = {} }
+		local spear = { actions = {} }
+		integration.install(handgun, { "es_questingknight" }, career_settings,
+			action_templates, "vanilla")
+		integration.install(spear, { "es_questingknight" }, career_settings,
+			action_templates, "vanilla")
+		local primary = deep_clone(handgun)
+		local melee = deep_clone(spear)
+		local items = {
+			es_handgun = { template = "handgun_template_1" },
+			cwv_es_musket_old = {
+				template = "old_musket_template",
+				-- Live availability deliberately diverges from the declaration.
+				can_wield = { "es_questingknight", "wh_bountyhunter" },
+			},
+		}
+		local definition = {
+			item_key = "cwv_es_musket_old",
+			base_weapon = "es_handgun",
+			careers = { "es_questingknight" },
+			effective_templates = {
+				{ name = "old_musket_template", source_template = "handgun_template_1" },
+				{ name = "old_musket_template_melee",
+					source_template = "two_handed_heavy_spears_template" },
+			},
+		}
+		local report = cwv.install({ { def = definition } }, items, {
+			handgun_template_1 = handgun,
+			two_handed_heavy_spears_template = spear,
+			old_musket_template = primary,
+			old_musket_template_melee = melee,
+		}, career_settings, action_templates, integration,
+			effective_templates, "character_weapon_variants")
+		H.equal(report.ok, true)
+		H.equal(report.template_count, 2)
+		for _, template in ipairs({ primary, melee }) do
+			H.equal(template.actions.action_career_es_4,
+				action_templates.action_career_es_4)
+			H.equal(template.actions.action_career_wh_2,
+				action_templates.action_career_wh_2)
+		end
+	end)
+
+	H.test("effective template planner deduplicates primary and preserves donor provenance", function()
+		local plan = effective_templates.plan({
+			template = "primary",
+			can_wield = { "wh_bountyhunter", "wh_bountyhunter", "es_questingknight" },
+		}, {
+			effective_templates = {
+				{ name = "primary", source_template = "donor" },
+				"alternate",
+			},
+		})
+		H.equal(#plan.templates, 2)
+		H.equal(plan.templates[1].name, "primary")
+		H.equal(plan.templates[1].source_template, "donor")
+		H.equal(plan.templates[2].name, "alternate")
+		H.deep_equal(plan.careers, { "wh_bountyhunter", "es_questingknight" })
 	end)
 
 	H.test("WT stable, dev, and WOC consume the provider-neutral integration", function()

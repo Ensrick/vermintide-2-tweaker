@@ -1318,10 +1318,10 @@ _rt_register("issue521_tooltip_follows_hovered_weapon", function()
     end
 end)
 
-_rt_register("adventure_visible_stamp_and_mechanism_clear", function()
-    -- v0.7.62-dev: _ensure_item_adventure_visible must (1) APPEND the crafting
-    -- career to ItemMasterList[key].can_wield exactly once (idempotent), and
-    -- (2) CLEAR a non-adventure `mechanisms` field (e.g. {"versus"}) so the
+_rt_register("adventure_visible_preserves_availability_and_clears_mechanism", function()
+    -- #661: _ensure_item_adventure_visible must preserve can_wield byte-for-byte
+    -- (WT/native/CWV own availability + paired career actions) while clearing a
+    -- non-adventure `mechanisms` field (e.g. {"versus"}) so the
     -- Adventure inventory grid stops hiding the crafted item. Tested against a
     -- throwaway fake key (rawset/rawget bypass the ItemMasterList Crashify
     -- metatable), removed afterward so there's zero side effect on real data.
@@ -1330,23 +1330,17 @@ _rt_register("adventure_visible_stamp_and_mechanism_clear", function()
     local fake_key = "__cim_rt_fake_advvis__"
     rawset(IML, fake_key, { can_wield = { "es_mercenary", "es_huntsman" }, mechanisms = { "versus" } })
     local ok, errmsg = pcall(function()
-        _ensure_item_adventure_visible(fake_key, "es_questingknight")   -- append career + clear mechanisms
-        _ensure_item_adventure_visible(fake_key, "es_questingknight")   -- no-op (present + already cleared)
-        _ensure_item_adventure_visible(fake_key, "es_mercenary")        -- no-op (already wieldable)
+        _ensure_item_adventure_visible(fake_key, "es_questingknight")
+        _ensure_item_adventure_visible(fake_key, "es_questingknight")
+        _ensure_item_adventure_visible(fake_key, "es_mercenary")
     end)
     local entry = IML[fake_key] or {}
     local cw = entry.can_wield or {}
-    local count_qk = 0
-    for _, c in ipairs(cw) do if c == "es_questingknight" then count_qk = count_qk + 1 end end
-    local total = #cw
     local mechanisms_cleared = (entry.mechanisms == nil)
     rawset(IML, fake_key, nil)  -- cleanup: no lingering fake entry
     if not ok then return "adventure-visible helper errored: " .. tostring(errmsg) end
-    if count_qk ~= 1 then
-        return string.format("can_wield stamp not idempotent: es_questingknight appears %d times (expected 1)", count_qk)
-    end
-    if total ~= 3 then
-        return string.format("can_wield stamp wrong size: expected 3 entries (2 original + 1 appended), got %d", total)
+    if #cw ~= 2 or cw[1] ~= "es_mercenary" or cw[2] ~= "es_huntsman" then
+        return "CIM mutated provider-owned can_wield — career action contract can diverge"
     end
     if not mechanisms_cleared then
         return "mechanisms not cleared — Versus item would stay hidden in Adventure grid"
