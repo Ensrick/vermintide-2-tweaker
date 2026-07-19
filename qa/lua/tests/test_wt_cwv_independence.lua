@@ -158,6 +158,21 @@ return function(H, repo_root)
             H.equal(contains(row.default_careers, "wh_bountyhunter"), false,
                 key .. "/default/wh_bountyhunter")
         end
+        local musket = by_key.cwv_es_musket_old
+        H.equal(#musket.effective_templates, 2)
+        H.equal(musket.effective_templates[1].name, "old_musket_template")
+        H.equal(musket.effective_templates[2].name, "old_musket_template_melee")
+        local outrider = by_key.cwv_es_outrider_grenade_launcher
+        H.equal(#outrider.effective_templates, 1)
+        H.equal(outrider.effective_templates[1].name,
+            "outrider_grenade_launcher_template")
+        H.truthy(availability:find(
+            "local plan = _effective_weapon_templates.plan(item, variant)", 1, true))
+        H.truthy(availability:find("ipairs(plan.careers)", 1, true),
+            "career actions must follow live can_wield, not catalog declarations")
+        H.truthy(availability:find(
+            "WT.reconcile_effective_career_actions = reconcile_effective_career_actions",
+            1, true))
     end)
 
     H.test("issue391 policy composes legacy item master with exact career choice", function()

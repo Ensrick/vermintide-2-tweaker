@@ -1,5 +1,25 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.453-dev (2026-07-18) - effective-template career actions (#661) [verify-fix]
+
+- Declared Old Musket's ranged and bayonet templates as one effective family,
+  with exact Handgun and Tuskgor Spear donor provenance. Both templates now
+  receive every career action required by the item's live `can_wield` set;
+  Outrider Grenade Launcher uses the same provider-neutral contract.
+- Preserved shared action identity and multi-provider ownership. CWV prepares
+  inherited clones from proven donors; WT no longer overwrites an arbitrary
+  non-canonical action row during reconciliation.
+- Corrected #412's Old Musket interrupt audit: `action_career_*` rows are
+  career activations, not running weapon sub-actions, and are neither patched
+  nor reported as missing stance interrupts.
+
+**Solo verify:** With WT `0.12.279-beta` or `0.12.280-dev`, enable Old Musket
+and Outrider for Bounty Hunter. Confirm Locked and Loaded fires while Old Musket
+is in both rifle and bayonet stance and while Outrider is wielded. Repeat after
+swapping slots and entering a mission. Require one bounded `[wt:661]
+effective-action` result per distinct item/template/career result and no
+`[wt:career-actions] incomplete` or #412 interrupt failure.
+
 ## 0.1.452-dev (2026-07-18) - acknowledged hot-join identity replay (#660) [diagnostics-armed]
 
 - Added a bounded acknowledgement handshake to the existing schema-2

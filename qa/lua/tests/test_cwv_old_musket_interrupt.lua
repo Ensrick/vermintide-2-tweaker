@@ -59,6 +59,19 @@ return function(H, repo_root)
         H.equal(found[1].clear_input, nil)
     end)
 
+    H.test("CWV Old Musket interrupt excludes later career ability rows", function()
+        local template = sample_template()
+        template.actions.action_career_wh_2 = {
+            default = { kind = "career_wh_2", allowed_chain_actions = {} },
+        }
+        Policy.install(template, "action_three")
+        local ok, covered = Policy.audit(template, "action_three")
+        H.truthy(ok)
+        H.equal(covered, 4)
+        H.equal(#template.actions.action_career_wh_2.default.allowed_chain_actions, 0,
+            "career activation is not a running weapon action and must not toggle stance")
+    end)
+
     H.test("CWV issue 412 wires both Old Musket templates without new transport", function()
         local source_path = repo_root
             .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"

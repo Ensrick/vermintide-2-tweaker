@@ -54,7 +54,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.95-dev"
+local MOD_VERSION = "0.8.96-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -4872,10 +4872,10 @@ end)
 -- entry, and two vanilla fields on that entry can hide the result from the
 -- Adventure grid:
 --
---  1. can_wield — the grid filters by the current career. Append the crafting
---     career if missing (additive/idempotent). Mostly redundant on the Athanor
---     (the weapon list only offers weapons the career can already wield) but
---     closes the weapon_tweaker-toggled-late edge case.
+--  1. can_wield is intentionally NOT mutated here. Weapon availability belongs
+--     to WT/native/CWV. A CIM-only append created a live eligibility/action
+--     divergence: the item could be equipped by a career whose effective
+--     template lacked that career's action_career_* row (#661).
 --
 --  2. mechanisms — THE 5-day "crafted but not in inventory" bug. The Versus
 --     carousel weapons (vs_*, e.g. vs_es_bastard_sword = "Gallant's Blade",
@@ -4903,17 +4903,8 @@ local function _ensure_item_adventure_visible(item_key, career_name)
     local entry = rawget(ItemMasterList, item_key)
     if not entry then return end
 
-    -- (1) can_wield: append the crafting career if known + missing.
-    if career_name and career_name ~= "<unknown>" and type(entry.can_wield) == "table" then
-        local present = false
-        for _, c in ipairs(entry.can_wield) do
-            if c == career_name then present = true; break end
-        end
-        if not present then
-            entry.can_wield[#entry.can_wield + 1] = career_name
-            mod:info("[cim] can_wield stamp: %s now wieldable by %s", tostring(item_key), tostring(career_name))
-        end
-    end
+    -- (1) can_wield remains byte-for-byte owned by its availability provider.
+    -- career_name stays in this API for save/backward-call compatibility.
 
     -- (2) mechanisms: clear any non-adventure scoping (e.g. {"versus"}) so the
     -- Adventure keep grid's mechanism filter stops hiding the crafted item.
@@ -4942,8 +4933,8 @@ local function _athanor_inject_item(weapon_data, backend_id)
     end
 
     -- Ensure the new item is visible in the Adventure keep grid BEFORE it
-    -- enters the mirror: append the crafting career to can_wield (if known) and
-    -- clear any non-adventure `mechanisms` scoping (the vs_* Versus weapons).
+    -- enters the mirror by clearing non-adventure `mechanisms` scoping (the
+    -- vs_* Versus weapons). Availability/can_wield remains provider-owned.
     -- Called unconditionally — career_name may be nil for boot re-injects of
     -- old saves, but the mechanisms clear still needs to run for those.
     _ensure_item_adventure_visible(item_key, weapon_data.career_name)
@@ -5130,8 +5121,8 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         return
     end
 
-    -- Resolve the crafting career once (used for the Way-3 can_wield stamp and
-    -- the diagnostic probes). self._career_name is the forge's current career.
+    -- Resolve the crafting career once for persisted provenance and diagnostic
+    -- probes. CIM does not mutate can_wield; availability stays provider-owned.
     local career_name = self._career_name
     if not career_name then
         local pl = Managers.player and Managers.player:local_player()
@@ -5152,7 +5143,7 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         power_level = (mod._cim_base_power and mod._cim_base_power()) or 300,
         rarity = "modded",
         via_mirror = true,
-        career_name = career_name,  -- drives the Way-3 can_wield stamp in inject
+        career_name = career_name,  -- persisted provenance; no can_wield mutation
     }
 
     local injected, err = _athanor_inject_item(weapon_data, new_backend_id)
@@ -5330,7 +5321,7 @@ local function _cim_amulet_craft_one_slot(properties_win, slot_index, slot_name)
         power_level = power,
         rarity = "modded",
         via_mirror = true,
-        career_name = career_name,  -- drives the Way-3 can_wield stamp in inject
+        career_name = career_name,  -- persisted provenance; no can_wield mutation
     }
     local injected, err = _athanor_inject_item(weapon_data, new_bid)
     if not injected then

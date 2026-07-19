@@ -29,6 +29,8 @@ local _cwv_variant_catalog = mod:dofile("scripts/mods/weapon_tweaker/wt_cwv_vari
 local _cwv_availability_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_cwv_availability_policy")
 local _career_weapon_actions = mod:dofile(
     "scripts/mods/weapon_tweaker/_lib_career_weapon_actions")
+local _effective_weapon_templates = mod:dofile(
+    "scripts/mods/weapon_tweaker/_lib_effective_weapon_templates")
 local _career_action_owner = "weapon_tweaker:" .. tostring(mod)
 WT.cwv_variant_catalog = _cwv_variant_catalog
 WT.cwv_ownership         = _cwv_ownership
@@ -211,37 +213,21 @@ end
 local _career_action_injections = {}
 
 local function _release_career_action_claims()
-    for tmpl_key in pairs(_career_action_injections) do
-        local tmpl = Weapons and Weapons[tmpl_key]
-        if tmpl then
-            _career_weapon_actions.release(tmpl, _career_action_owner)
-        end
+    for tmpl in pairs(_career_action_injections) do
+        _career_weapon_actions.release(tmpl, _career_action_owner)
     end
     _career_action_injections = {}
 end
 
 local function _inject_career_actions(template, template_key, career_name, failures)
-    -- Deep-cloned variant templates (CWV `table.clone(donor, true)`) carry the
-    -- donor's engine-installed career-action rows as identity-broken copies.
-    -- Vanilla installs these rows BY IDENTITY (weapons.lua:263) and no mod in
-    -- this repo authors custom action_career rows, so a mismatched row under a
-    -- career-action name is always an inherited clone: point it back at the
-    -- canonical ActionTemplates entry before installing, the same
-    -- reconciliation WOC's restore_inherited_career_action_identity performs
-    -- (issue 661: conflict:action_career_dr_3 / action_career_es_4 spam).
-    local required = _career_weapon_actions.collect({ career_name },
-        CareerSettings, ActionTemplates)
-    for _, action_name in ipairs(required.names or {}) do
-        local existing = template.actions[action_name]
-        local canonical = required.actions[action_name]
-        if existing ~= nil and canonical ~= nil and existing ~= canonical then
-            template.actions[action_name] = canonical
-        end
-    end
+    failures = failures or {}
+    -- Clone identity belongs to the provider that can prove donor provenance
+    -- (CWV/WOC prepare_inherited_clone). WT never overwrites an arbitrary
+    -- non-canonical row here; shared ownership reports it as a conflict.
     local report = _career_weapon_actions.install(template, { career_name },
         CareerSettings, ActionTemplates, _career_action_owner)
     if (report.claimed or 0) > 0 then
-        _career_action_injections[template_key] = true
+        _career_action_injections[template] = template_key or true
     end
     for _, action_name in ipairs(report.missing_actions or {}) do
         failures[action_name] = true
@@ -253,6 +239,7 @@ local function _inject_career_actions(template, template_key, career_name, failu
         failures["conflict:" .. tostring(action_name)
             .. "@" .. tostring(template_key)] = true
     end
+    return report
 end
 
 -- CLARIFY: when a cross-career weapon is unlocked, that weapon's template
@@ -291,12 +278,13 @@ local function patch_career_actions_on_weapons()
         for _, variant in ipairs(_cwv_variant_catalog) do
             local item = rawget(ItemMasterList, variant.key)
             if item and item.cwv_variant == true then
-                for _, career in ipairs(variant.careers or {}) do
-                    if _cwv_availability_policy.is_enabled(_get_setting, variant.key, career) then
-                        local tmpl = item.template and Weapons[item.template]
-                        if tmpl and tmpl.actions then
+                local plan = _effective_weapon_templates.plan(item, variant)
+                for _, descriptor in ipairs(plan.templates) do
+                    local tmpl = Weapons[descriptor.name]
+                    if tmpl and tmpl.actions then
+                        for _, career in ipairs(plan.careers) do
                             _inject_career_actions(
-                                tmpl, item.template, career, failures)
+                                tmpl, descriptor.name, career, failures)
                         end
                     end
                 end
@@ -310,6 +298,54 @@ local function patch_career_actions_on_weapons()
         mod:error("[wt:career-actions] incomplete weapon ability integration: %s",
             table.concat(names, ","))
     end
+end
+
+local _effective_action_diag = {}
+
+-- Last-mile provider-neutral reconciliation. A stance/style provider may make
+-- BackendUtils.get_item_template return a template other than item.template,
+-- and a late availability provider may change can_wield after WT's catalog
+-- pass. The sole local wield hook calls this at event rate (never per frame).
+local function reconcile_effective_career_actions(item, template, career_name, item_key)
+    if type(item) ~= "table" or type(template) ~= "table"
+            or type(template.actions) ~= "table" or type(career_name) ~= "string" then
+        return nil, "effective_context_unavailable"
+    end
+    local allowed = false
+    for _, career in ipairs(item.can_wield or {}) do
+        if career == career_name then allowed = true; break end
+    end
+    if not allowed then return nil, "career_not_in_live_can_wield" end
+
+    local template_key = item.template
+    for _, variant in ipairs(_cwv_variant_catalog) do
+        if variant.key == item_key then
+            for _, descriptor in ipairs(_effective_weapon_templates.templates(item, variant)) do
+                if Weapons and Weapons[descriptor.name] == template then
+                    template_key = descriptor.name
+                    break
+                end
+            end
+            break
+        end
+    end
+    local failures = {}
+    local report = _inject_career_actions(
+        template, template_key, career_name, failures)
+    local failure_names = {}
+    for name in pairs(failures) do failure_names[#failure_names + 1] = name end
+    table.sort(failure_names)
+    local result = #failure_names == 0 and "ok" or table.concat(failure_names, ",")
+    local signature = table.concat({ tostring(item_key), tostring(template_key),
+        career_name, tostring(report and report.required or 0), result }, "|")
+    if not _effective_action_diag[signature] then
+        _effective_action_diag[signature] = true
+        printf("[wt:661] effective-action item=%s template=%s career=%s required=%d installed=%d existing=%d result=%s",
+            tostring(item_key), tostring(template_key), career_name,
+            report and report.required or 0, report and report.installed or 0,
+            report and report.existing or 0, result)
+    end
+    return report, result
 end
 
 -- Clean disable: strip every cross-career career name this mod added to ItemMasterList[*].can_wield
@@ -353,5 +389,6 @@ end
 
 WT.apply_weapon_unlocks            = apply_weapon_unlocks
 WT.patch_career_actions_on_weapons = patch_career_actions_on_weapons
+WT.reconcile_effective_career_actions = reconcile_effective_career_actions
 WT.clear_weapon_unlocks            = clear_weapon_unlocks
 WT.clear_career_action_injections  = clear_career_action_injections
