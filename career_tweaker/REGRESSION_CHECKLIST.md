@@ -72,8 +72,8 @@ Last updated: 2026-07-17.
 | Field | Value |
 |-------|-------|
 | Symptom | Opening and closing Talents without changing a row rebuilds every talent buff and erases accumulated stacks such as Bounty Hunter's Job Well Done. |
-| Expected | The 0.4.0 public beta exposes no casting/transposition widgets, loads no swap module, and installs no talent-window hooks. Existing saved selections remain untouched and unapplied. |
-| Detection | `/crt_regression_test` must report `PASS: public_beta_talent_swaps_disabled`; confirm the Career Ability & Talent Swapping group is absent after a full restart. The historical pure selection test remains as redesign evidence, not shipped behavior. |
+| Expected | Identical desktop/controller selections skip persistence and talent/ammo reapply; changing any row delegates to vanilla unchanged. The beta still exposes no casting/transposition widgets or runtime exports and never reads saved swap selections. |
+| Detection | Offline `test_crt_talent_selection.lua`; `/crt_regression_test` checks `issue283_talent_menu_noop_guard` and `public_beta_talent_swaps_disabled`; solo in-game Job Well Done check from issue #283. |
 
 ---
 ## Handmaiden Focused Spirit (#472)

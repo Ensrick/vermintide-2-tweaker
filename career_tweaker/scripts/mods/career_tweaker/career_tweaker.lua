@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.9-beta"
+local MOD_VERSION = "0.4.10-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -261,8 +261,8 @@ end
 mod._crt.mutex = mutex
 
 -- Public-beta boundary: career talent/ability casting-transposition is excluded.
--- Do not load `_crt_talent_swap.lua`: loading it installs HeroWindowTalents
--- hooks and exposes apply/restore entry points. VMF retains the old saved
+-- Do not load `_crt_talent_swap.lua`: loading it exposes apply/restore entry
+-- points. VMF retains the old saved
 -- `talent_swap_*` values in user settings, but this beta never reads, writes,
 -- clears, or applies them. A later redesign can therefore migrate the data.
 mod._crt.PUBLIC_BETA_TALENT_SWAPS_DISABLED = true
@@ -270,6 +270,13 @@ mod._crt.apply_talent_swaps = nil
 mod._crt.restore_talent_swaps = nil
 mod._crt.refresh_talent_ui = nil
 mod._crt.ALL_CAREERS = nil
+
+-- #283 is a separate vanilla no-op guard, not part of casting/transposition.
+-- Both talent pickers otherwise rebuild all talent buffs when closed without a
+-- selection change. Keep this module isolated so the retired swap system stays
+-- inert while accumulated talent state survives merely viewing the menu.
+local ok_tmg, _tmg = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/_crt_talent_menu_guard")
+if not ok_tmg then mod:error("Failed to load talent-menu no-op guard: %s", tostring(_tmg)) end
 
 -- Read-only talent/buff diagnostics: /crt_dump_talents + the auto-dump harness.
 -- Exposes mod.crt_dump_career_talents, mod._crt_auto_dump_check,

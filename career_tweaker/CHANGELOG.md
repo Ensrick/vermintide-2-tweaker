@@ -1,5 +1,21 @@
 # Career Tweaker Changelog
 
+## 0.4.10-beta - 2026-07-19 - #283 preserve Job Well Done stacks [verify-fix]
+
+- Added one dedicated talent-menu guard owning the desktop/controller
+  `on_enter` and `on_exit` pairs.
+- Skips vanilla talent reapplication only when the menu closes with an exact,
+  valid, unchanged selection; changed or invalid rows delegate to vanilla.
+- Removed duplicate hook ownership from the dormant talent-swap module while
+  keeping talent casting/transposition unloaded as required.
+- Added runtime/offline contracts for unchanged, changed, and invalid close
+  paths so other temporary career state is not broadly suppressed.
+
+**Solo verify:** build Job Well Done stacks, open and close the talent menu
+without changing a talent, and confirm stacks remain. Then change a talent and
+confirm vanilla reapplication still occurs. Run `/crt_regression_test` and
+require the #283 talent-menu guard checks to pass.
+
 ## 0.4.9-beta - 2026-07-19 - #446 register exclusive radio groups [verify-fix]
 
 - Registered both Career Tweaker mutually exclusive clusters with GUT Dev's

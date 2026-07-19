@@ -14,8 +14,9 @@
 --
 -- Manifest position: after the module dofiles (needs `mod`). The entry's
 -- mod.update calls mod._crt_dump_retry_tick(dt); on_game_state_changed calls
--- mod._crt_start_dump_retry(); HeroWindowTalents.on_enter (in _crt_talent_swap)
--- calls mod._crt_auto_dump_check(). All are runtime, mod-field-guarded, so load
+-- mod._crt_start_dump_retry(); HeroWindowTalents.on_enter (in the independent
+-- _crt_talent_menu_guard) calls mod._crt_auto_dump_check(). All are runtime,
+-- mod-field-guarded, so load
 -- order relative to those callers is not load-bearing. Split out of
 -- career_tweaker.lua (v0.3.57-dev, Phase 1 OOP decomposition); pure structural
 -- move, no behavior change.
