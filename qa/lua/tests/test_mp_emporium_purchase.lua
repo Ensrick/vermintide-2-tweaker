@@ -58,6 +58,60 @@ return function(H, repo_root)
         H.equal(plan.item.UnitPrice, 40)
     end)
 
+    H.test("Emporium projects official ownership onto local state without mutating stock", function()
+        local official = offer("hat_officially_owned", 25)
+        official.owned = true
+        local platform = offer("platform", 25)
+        platform.owned = true
+        platform.steam_itemdefid = "123"
+        local projected = Policy.project_stock({ official, platform }, "SM", function(key)
+            return key == "locally_owned"
+        end)
+        H.equal(projected[1].owned, false)
+        H.equal(projected[2].owned, true)
+        H.equal(official.owned, true)
+        H.equal(projected[1] == official, false)
+        H.equal(projected[2], platform)
+    end)
+
+    H.test("Emporium local ownership ignores official mirror inventory", function()
+        local unlocks = { hat_unlock = true }
+        local inventory = { bid = { ItemId = "hat_inventory" } }
+        H.equal(Policy.is_locally_owned("hat_unlock", unlocks, inventory), true)
+        H.equal(Policy.is_locally_owned("hat_inventory", unlocks, inventory), true)
+        H.equal(Policy.is_locally_owned("official_only", unlocks, inventory), false)
+    end)
+
+    H.test("Emporium cleanup preserves borrowed official unlocks", function()
+        local mirror = {
+            _inventory_items = { official_bid = true },
+            _fake_inventory_items = { official_bid = true },
+            _unlocked_cosmetics = { hat = "official_bid" },
+        }
+        local removed = Policy.cleanup_overlay_record(mirror, {
+            item_key = "hat", actual_id = "official_bid", kind = "cosmetic", preexisting = true,
+        })
+        H.equal(removed, false)
+        H.equal(mirror._inventory_items.official_bid, true)
+        H.equal(mirror._fake_inventory_items.official_bid, true)
+        H.equal(mirror._unlocked_cosmetics.hat, "official_bid")
+    end)
+
+    H.test("Emporium cleanup removes only MP-created overlay rows", function()
+        local mirror = {
+            _inventory_items = { local_bid = true },
+            _fake_inventory_items = { local_bid = true },
+            _unlocked_cosmetics = { hat = "local_bid" },
+        }
+        local removed = Policy.cleanup_overlay_record(mirror, {
+            item_key = "hat", actual_id = "local_bid", kind = "cosmetic", preexisting = false,
+        })
+        H.equal(removed, true)
+        H.equal(mirror._inventory_items.local_bid, nil)
+        H.equal(mirror._fake_inventory_items.local_bid, nil)
+        H.equal(mirror._unlocked_cosmetics.hat, nil)
+    end)
+
     H.test("Emporium rejects stale ownership unavailable DLC bundle and platform offers", function()
         local base = offer("hat", 25)
         local function reason(overrides)
@@ -145,6 +199,15 @@ return function(H, repo_root)
         H.truthy(source:find("callback_fn(true, { granted })", 1, true))
         H.truthy(source:find("return func(self, item_id, chip_type, price, callback_fn, ...)", 1, true))
         H.equal(source:find('enqueue_api_request("PurchaseItem"', 1, true), nil)
+        H.truthy(source:find('"get_peddler_stock"', 1, true))
+        H.truthy(source:find('"get_filtered_items"', 1, true))
+        H.truthy(source:find("_mp577_ui.with_local_ownership", 1, true))
+        H.truthy(source:find('"_populate_item_widget", _mp577_ui.with_local_ownership', 1, true))
+        H.truthy(source:find('"_populate_pose_item", _mp577_ui.with_local_ownership', 1, true))
+        H.truthy(source:find("mp577_store_ownership_facade_restores", 1, true))
+        H.truthy(source:find("Emporium.cleanup_overlay_record(mirror, record)", 1, true))
+        H.truthy(source:find("official unlock was deleted or replaced", 1, true))
+        H.equal(source:find("\n        offer.owned = true", 1, true), nil)
     end)
 
     H.test("Emporium overlay waits for peddler registration without warning probes", function()
