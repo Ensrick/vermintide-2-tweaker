@@ -310,6 +310,9 @@ _rt_register("public_beta_talent_swaps_disabled", function()
         or mod._crt.refresh_talent_ui ~= nil or mod._crt.ALL_CAREERS ~= nil then
         return "talent-swap runtime surface is exposed in the public beta"
     end
+    if mod._crt.talent_menu_guard_installed ~= true then
+        return "independent no-op talent-menu guard is missing"
+    end
 end)
 
 _rt_register("crt_buff_names_deterministic_sorted", function()
@@ -767,6 +770,10 @@ _rt_register("issue283_talent_menu_noop_guard", function()
     if not selection.equal(opened, { 1, 2, 3, 1, 2, 3 })
        or selection.equal(opened, { 1, 1, 3, 1, 2, 3 }) then
         return "talent-selection no-op/change boundary drifted"
+    end
+    if mod._crt.apply_talent_swaps ~= nil or mod._crt.restore_talent_swaps ~= nil
+       or mod._crt.refresh_talent_ui ~= nil or mod._crt.ALL_CAREERS ~= nil then
+        return "no-op guard re-enabled retired casting/transposition surface"
     end
 end)
 

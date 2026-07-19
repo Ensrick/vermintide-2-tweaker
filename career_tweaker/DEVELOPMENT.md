@@ -67,7 +67,8 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `career_tweaker_armor_overcharge.lua` | Seven armor/overcharge/Focused-Spirit controls using one `DamageUtils.apply_buffs_to_damage` hook and one consolidated `PlayerUnitHealthExtension.add_damage` hook. Owns Focused Spirit's proc wrapper and one-frame cooldown re-arm; the stacking template fields remain in balance's reversible lifecycle. | installs its own hooks; exports `mod._crt_focused_spirit_tick(dt)` | after tourney |
 | `career_tweaker_oe_cooldown.lua` | Outcast Engineer cooldown-reduction benefit. Driven per-frame from the entry's `mod.update`. | `mod._crt_oe_cdr_tick(dt)`, `mod._crt_oe_cdr_clear` | after armor |
 | `career_tweaker_mutex.lua` | Mutex cluster framework ("pick one of N" checkbox groups), enforced from `on_setting_changed`. | returns `{ declare, enforce, active, snapshot }` | after oe |
-| `_crt_talent_selection.lua` | Dormant pure snapshot/equality policy retained for a future casting/transposition redesign. | returns `{ snapshot, equal }` if loaded independently | **not loaded in the beta line** |
+| `_crt_talent_selection.lua` | Pure snapshot/equality policy for the independent no-op talent-menu close guard (#283). | returns `{ snapshot, equal }`, published as `mod._crt.talent_selection` by the guard | loaded by `_crt_talent_menu_guard.lua` |
+| `_crt_talent_menu_guard.lua` | Desktop/controller talent-picker lifecycle guard. Skips only an identical close so live accumulated talent buffs are not rebuilt; changed or invalid selections delegate to vanilla. | sets `talent_menu_guard_installed`; installs four bounded hooks | after the public-beta swap exclusion, before diagnostics |
 | `_crt_talent_swap.lua` | Dormant historical talent-tree + ability/passive swap engine. Saved `talent_swap_*` values remain in VMF storage, but the beta exposes no widgets and never loads this module. | none in the beta | **not loaded in the beta line** |
 | `_crt_diagnostics.lua` | Read-only talent/buff diagnostics: `/crt_dump_talents`, the reusable dump body, the per-session auto-dump harness + retry pump. | `mod.crt_dump_career_talents` (mod method), `mod._crt_auto_dump_check`, `mod._crt_dump_retry_tick(dt)`, `mod._crt_start_dump_retry` | after talent |
 | `_crt_bardin_disabler_probe.lua` | Dormant #440 comparison probe retained for a future diagnostic build. | none in the beta | **not loaded in the beta line** |
@@ -140,9 +141,10 @@ even though its assertion now targets 0.75 seconds.
   the `_dbg` helpers, and `MOD_VERSION` as module-locals at load. It also asserts
   that the beta exclusion markers are present and the retired runtime exports
   remain nil.
-- **`_crt_talent_swap.lua` is deliberately absent from the manifest.** Merely
-  loading it installs talent-window hooks, so a setting gate after `dofile`
-  would not be a valid fail-closed exclusion.
+- **`_crt_talent_swap.lua` is deliberately absent from the manifest.** Its
+  casting/transposition exports and mutation lifecycle remain excluded. The
+  independent `_crt_talent_menu_guard.lua` owns the only active talent-window
+  hooks and does not read or expose any `talent_swap_*` state.
 - **The issue-425 beacon block sits AFTER `mod.update` is defined.** The shared
   lib's `install()` WRAPS the existing `mod.update`; running it earlier would
   capture nil and drop the OE + dump ticks.
