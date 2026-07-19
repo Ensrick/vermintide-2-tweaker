@@ -1355,10 +1355,21 @@ end
 ```
 Assert it in the regression suite with a check that the coercion is correct AND takes no toggle argument (`wire_rarity_rewrite_ungated`).
 
+For temporary mutation of live equipment records, restoration must also be
+exception-safe: call the sender under `pcall`, restore every substituted field,
+then rethrow. CWV #741 uses one pure `with_safe_slots` helper for all live-slot
+equipment senders. It has no toggle, roster, or parity argument and tests both
+normal and error returns.
+
 ### Related Issues / commits
 - cim v0.8.34 (public hotfix) + cim_dev v0.8.54-dev; commits `cd64fa8` / `02e9d69`.
 - Memory: `reference_vt2_wire_safety_never_toggle_gated`.
 - Related: class 27 (husk resolves BASE item_data — the render-side twin of the same "clone keeps base identity on the wire" root); the general gated-registration cold-read crash (`rawget` section near the top of this file).
+- CWV #741 (2026-07-19): retired the #495 all-CWV skin exception after two
+  modded peers with different skin-appending mod sets proved that presence did
+  not establish `weapon_skins` index identity. Exact appearance now travels on
+  the string-key `cwv_item_identity` channel; vanilla skin senders always see
+  `n/a`.
 
 ## 32. Cleanup-on-teardown dispatches into a destroyed World (LineObject/Gui use-after-free that pcall cannot catch)
 
@@ -1652,6 +1663,15 @@ not create a network retry loop. Do not synchronously purge peer caches on
 `PlayerManager.remove_player`, which also fires during level transitions (bug
 class 24).
 
+The weapon customization pane is another independent consumer: it owns a
+`LootItemUnitPreviewer` and its own preview-world hand units. A slider callback
+that only walks the local player's inventory extension cannot update that
+model. Bind the pane's returned spawned units to the exact backend item plus
+selected illusion, repaint them from the transient state, and reject stale
+backend/skin ownership after an asynchronous rebuild. Cancel/Restore must
+repaint registered native material vectors on that same target; preview paint
+is local-only and must not add network traffic (#796).
+
 Related coverage: Cosmetics runtime `glow_picker_apply_transaction_574` and
 `glow_picker_render_fanout_574`; offline `test_cos_glow_lifecycle.lua`; tier-a
 source invariants for exact identity, explicit Apply, acknowledged state pull,
@@ -1829,6 +1849,16 @@ Athanor, lobby, score, owner, bot, and husk surfaces.
   shield supplies its own name and description, while the primary supplies
   only its side of a composed title. Never retain primary flavor text after an
   independent component resolves (#641).
+- Treat preview spawn completion and final presentation readiness as separate
+  lifecycle edges. `TeamPreviewer` receives its spawn callback from
+  `HeroPreviewer._poll_hero_package_loading`, but `_spawn_hero_unit` leaves the
+  mesh hidden until a later `post_update` visibility pass
+  [src: `scripts/ui/views/world_hero_previewer.lua:98-105,526-539,579-585`].
+  A successful texture write in that callback is not final-render evidence.
+  Defer authored paint until the mesh is visible, cache by exact mesh unit,
+  invalidate while hidden, and replay once after hide/show or mesh replacement
+  (#730; observed 0.9.142/0.9.146 logs resolved the exact score wearer and
+  logged `surface=score_preview` while the donor appearance remained visible).
 - Test the full acceptance matrix in `WEAPON_APPEARANCE_STANDARD.md` plus the
   Athanor and customization panes. Include initial open, re-open, transition,
   hot join, and one unmodified control.
@@ -2426,6 +2456,12 @@ across preview worlds, owner units, or remote husks.
    (`buff_system.lua:248-260`).
 
 ### Fix template
+- Prefer eliminating the numeric transport entirely when the value is cosmetic.
+  CWV #741 sends a vanilla `n/a` skin on every vanilla equipment/profile wire
+  and carries provider/item/base/skin **string keys** on its VMF channel; each
+  receiver reconstructs unit paths from local registries. Presence/schema then
+  proves only that the semantic decoder exists, which is the property actually
+  needed.
 - Build a deterministic identity from every owned network name plus its ACTUAL
   live numeric assignment, validating forward and reverse maps. Exchange that
   compact identity on the mod's VMF channel and gate every custom emission on
@@ -2552,3 +2588,39 @@ across preview worlds, owner units, or remote husks.
 
 ### Related Issues / commits
 - [#518](https://github.com/Ensrick/vermintide-2-tweaker/issues/518), [#660](https://github.com/Ensrick/vermintide-2-tweaker/issues/660); cosmetics_tweaker CHANGELOG v0.9.84-dev / v0.9.89-dev; kin: class 27 (husk resolves BASE item_data - same "shared identity, different instance" root on the husk axis).
+## 69. Callable engine constructor is rejected as a non-function
+
+**First confirmed:** 2026-07-19 (shared appearance issue #835; exposed by
+Weapons of Chaos issue #712).
+**Lives in:** Lua wrappers that copy a callable Stingray namespace such as
+`Vector3` into a constructor field, then require `type(constructor) ==
+"function"` before invoking it.
+
+### Symptoms
+- Direct engine calls such as `Vector3(x, y, z)` work, but a shared wrapper
+  returns `invalid-position`, `invalid-scale`, or `invalid-offset` before any
+  `Unit.set_local_*` / `Unit.set_local_pose` call.
+- Rotation can still work because `Quaternion.from_euler_angles_xyz` is a real
+  function member, making the failure look channel- or node-specific.
+- Offline dependency-injection tests pass when their fake constructor is a Lua
+  function, while retail binds the namespace itself as a callable table.
+
+### Diagnosis pattern
+1. Record the constructor's runtime type and the apply report before changing
+   transform data or nodes. A setter cannot be the cause when no setter ran.
+2. Reproduce with a Lua table whose metatable implements `__call`; do not model
+   every engine constructor as a plain function.
+3. Audit every constructor call in the shared primitive and every synchronized
+   consumer copy. Fixing one call site or one provider leaves the class live.
+
+### Fix template
+- Route construction through one protected call. Lua 5.1 `pcall` honors
+  `__call`, while nil, non-callable, throwing, and nil-returning constructors
+  still fail closed without an engine write.
+- Do not use a function-only type guard for a value whose contract is
+  callability. Keep method guards on genuine namespace members such as
+  `Vector3.to_elements`.
+- Test the production default-global binding with a callable table, every
+  vector-consuming public operation, malformed constructors, and exact-byte
+  synchronization of all standalone consumer copies. The canonical reference
+  is `tools/shared_lib/_lib_weapon_appearance.lua` and issue #835.

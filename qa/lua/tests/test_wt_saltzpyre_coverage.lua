@@ -94,7 +94,9 @@ return function(H, repo_root)
         local checks = assert(io.open(root .. "_wt_runtime_checks.lua", "rb"))
         source = source .. checks:read("*a")
         checks:close()
-        H.truthy(source:find("local _SALTZ_KRUBER_SHIELD_ROTATION = { 25, -17.5, -15 }", 1, true))
+        H.truthy(source:find(
+            'local _SALTZ_KRUBER_SHIELD_ROTATION = { 25, -17.5, -15, hand = "left" }',
+            1, true))
         for _, key in ipairs({
             "es_mace_shield", "es_sword_shield", "es_sword_shield_breton",
             "dr_shield_axe", "cwv_es_axe_shield", "cwv_es_axe_shield_veteran",

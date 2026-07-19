@@ -232,12 +232,10 @@ return {
             -- ============================================================
             -- BOSS BALANCE (v0.7.34-dev — GitHub issue #450)
             -- Per-boss curated balance toggles, all default false (vanilla).
-            -- ON applies the exact value the issue asks for, as a pure
-            -- load-time data mutation (Breeds max_health / armor_category,
-            -- grey-seer warp-lightning ExplosionTemplates power_level). No
-            -- hooks; revert-safe (recompute-from-vanilla-snapshot). See
-            -- _et_boss_balance.lua. Grouped by boss (deliberate order, NOT
-            -- A→Z — reads as the issue's boss list).
+            -- Stat toggles are revert-safe data mutations in
+            -- _et_boss_balance.lua. Runtime behaviors share the consolidated
+            -- post-spawn/lifecycle owners in _et_boss_grudge.lua and
+            -- _et_boss_behavior.lua. Grouped by boss (deliberate issue order).
             -- ============================================================
             {
                 setting_id  = "boss_balance_group",
@@ -250,16 +248,46 @@ return {
                         tooltip       = "boss_bal_halescourge_health_tooltip",
                     },
                     {
+                        setting_id    = "boss_behavior_halescourge_monster",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_behavior_halescourge_monster_tooltip",
+                    },
+                    {
                         setting_id    = "boss_bal_skarrik_health",
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "boss_bal_skarrik_health_tooltip",
                     },
                     {
+                        setting_id    = "boss_behavior_skarrik_ranged_dr",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_behavior_skarrik_ranged_dr_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_grudge_skarrik_berserk",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_grudge_skarrik_berserk_tooltip",
+                    },
+                    {
                         setting_id    = "boss_bal_bodvarr_health",
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "boss_bal_bodvarr_health_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_grudge_bodvarr_crippling",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_grudge_bodvarr_crippling_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_behavior_deathrattler_tracking",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_behavior_deathrattler_tracking_tooltip",
                     },
                     {
                         setting_id    = "boss_bal_rasknitt_health",
@@ -284,21 +312,6 @@ return {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "boss_bal_nurgloth_armor_tooltip",
-                    },
-                    -- #531 tranche 1: grudge-mark behavioral knobs (Cataclysm+,
-                    -- Adventure, host-only). Reuse vanilla CW grudge-mark buff
-                    -- templates applied at spawn. See _et_boss_grudge.lua.
-                    {
-                        setting_id    = "boss_grudge_skarrik_berserk",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = "boss_grudge_skarrik_berserk_tooltip",
-                    },
-                    {
-                        setting_id    = "boss_grudge_bodvarr_crippling",
-                        type          = "checkbox",
-                        default_value = false,
-                        tooltip       = "boss_grudge_bodvarr_crippling_tooltip",
                     },
                 },
             },

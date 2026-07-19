@@ -1,5 +1,28 @@
 # Weapon Tweaker Changelog
 
+## 0.12.282-beta (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
+
+- Extended the existing declarative animation-remap owner with the missing
+  CWV animation vocabulary used by Outrider and cross-character weapon states.
+- Kept one wield hook and fail-closed donor fallback; added regression evidence
+  for recognized events and bounded unknown-event diagnostics.
+
+## 0.12.281-beta (2026-07-19) - #735 shield-only rotation routing [verify-fix-coop]
+
+- Added an explicit hand discriminator to baked transform descriptors so the
+  Saltzpyre shield seating rotation targets only the left-hand shield and never
+  the paired sword.
+- Unified scale, offset, and rotation receiver/hand policy across owner, bot,
+  remote husk, and paired inventory preview paths.
+- Added bounded retained-quaternion evidence and regression coverage for exact
+  hand composition without changing first-person behavior.
+
+## 0.12.280-beta (2026-07-19) - #835 callable Vector3 constructor [verify-fix]
+
+- Synchronized the shared appearance primitive's protected callable constructor
+  boundary so retail callable-table engine namespaces are accepted without
+  weakening malformed-constructor failure handling.
+
 ## 0.12.279-beta (2026-07-18) - #661 effective runtime career actions [verify-fix]
 
 - Expanded the initial Saltzpyre catalog fix to every effective runtime

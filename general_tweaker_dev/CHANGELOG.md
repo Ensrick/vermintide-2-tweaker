@@ -1,5 +1,19 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.251-dev (2026-07-19) -- bounded runtime evidence (#254, #797) [diagnostics-armed]
+
+- Added a bounded host-side Chaos Wastes creature-spawn queue trace that
+  preserves the exact request, director, effective breed, blocker, and terminal
+  outcome without adding a ConflictDirector hook or changing spawn behavior.
+- Added inert one-shot/five-sample player-stat probes that inventory exact buff,
+  equipment, and action context without guessing unsupported final values or
+  polluting game chat.
+- Added transition-only Steam, PlayFab, P2P, and NetworkClient teardown evidence;
+  the captured PlayFab reason is frozen at vanilla's actual disconnect promotion
+  edge so later queued errors cannot overwrite attribution.
+- All probes are read-only, session-capped, fail closed, and reuse existing
+  lifecycle/network owners. Offline coverage locks bounds and ownership.
+
 ## v0.2.250-dev (2026-07-18) -- aid-errand pin + explosion-arity pin [untested]
 
 Two root-cause clusters, one combined build. Not shipped (issue 625 freeze).

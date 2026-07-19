@@ -53,6 +53,37 @@ return function(H, repo_root)
 		H.equal(type(policy.is_cwv_skin), "function")
 	end)
 
+	H.test("CWV #741 equipment sender nulls only CWV skins and restores live slots", function()
+		local cwv = { skin = "cwv_es_musket_old_skin" }
+		local vanilla = { skin = "wh_sword_skin_01" }
+		local seen_cwv, seen_vanilla
+		local a, b, c, d = policy.with_safe_slots({ cwv, vanilla }, skin_keys,
+			custom_skin_keys, function()
+				seen_cwv, seen_vanilla = cwv.skin, vanilla.skin
+				return "a", "b", nil, "d"
+			end)
+		H.equal(seen_cwv, nil)
+		H.equal(seen_vanilla, "wh_sword_skin_01")
+		H.equal(cwv.skin, "cwv_es_musket_old_skin")
+		H.equal(vanilla.skin, "wh_sword_skin_01")
+		H.equal(a, "a")
+		H.equal(b, "b")
+		H.equal(c, nil)
+		H.equal(d, "d")
+	end)
+
+	H.test("CWV #741 equipment sender restores the live skin when the sender raises", function()
+		local slot = { skin = "cwv_pairing_illusion" }
+		local ok, err = pcall(policy.with_safe_slots, { slot }, skin_keys,
+			custom_skin_keys, function()
+				H.equal(slot.skin, nil)
+				error("rt741-send-failure")
+			end)
+		H.equal(ok, false)
+		H.truthy(tostring(err):find("rt741-send-failure", 1, true))
+		H.equal(slot.skin, "cwv_pairing_illusion")
+	end)
+
 	H.test("CWV #423 main file wires the update_cosmetic_slot sender to this module", function()
 		local main_path = repo_root
 			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
@@ -72,5 +103,11 @@ return function(H, repo_root)
 		-- The predicate has a single source of truth (the equipment-sender path
 		-- delegates to the same module rather than re-implementing the check).
 		H.truthy(text:find("_om.cosmetic_skin_wire.is_cwv_skin(skin, _om._skin_keys, _custom_skin_keys)", 1, true))
+		-- All three equipment senders delegate to the same unconditional,
+		-- exception-safe helper. Numeric modded-skin replay is permanently absent.
+		H.truthy(text:find("_om.cosmetic_skin_wire.with_safe_slots", 1, true))
+		H.truthy(text:find("mod._cwv_skin_wire_surfaces.vanilla_skin_replay_retired = true", 1, true))
+		H.equal(text:find("_replay_cwv_skins_after_parity", 1, true), nil)
+		H.equal(text:find('register_gated_feature("cwv_skin_hot_join_replay"', 1, true), nil)
 	end)
 end

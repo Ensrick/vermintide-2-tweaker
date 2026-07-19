@@ -68,9 +68,30 @@ return function(H, repo_root)
             "issue 83 dynamic-widget closure check missing")
         H.truthy(seen.issue703_athanor_cwv_rows_unlocked,
             "issue 703 Athanor CWV false-lock check missing")
-        H.equal(#names, 77, "regression registration set changed")
+        H.truthy(seen.issue787_cim_dual_axes_authored_icon,
+            "issue 787 authored Dual Axes icon check missing")
+        H.equal(#names, 78, "regression registration set changed")
         local ok, result = pcall(checks[1])
         H.truthy(ok, "registered checks did not close over the supplied mod object")
         H.equal(type(result), "string")
+    end)
+
+    H.test("CIM regression checks never reload hook-owning modules", function()
+        local source = read_all(module_path)
+        H.equal(
+            source:find('pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/modded_rarities")', 1, true),
+            nil,
+            "regression check must not re-execute modded_rarities.lua; it owns live VMF hooks"
+        )
+        H.truthy(
+            source:find("mod._cim_rarity_loc_overrides", 1, true),
+            "accessories-label check should read the side-effect-free API table"
+        )
+
+        local rarity_source = read_all(mod_root .. "modded_rarities.lua")
+        H.truthy(
+            rarity_source:find("if mod._cim_modded_rarities_api then", 1, true),
+            "modded_rarities.lua must stay idempotent because it owns hook registrations"
+        )
     end)
 end

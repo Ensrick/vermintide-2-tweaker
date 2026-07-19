@@ -1,5 +1,18 @@
 # Enemy Tweaker Changelog
 
+## 0.7.54-dev (2026-07-19): #450 bounded boss balance controls [verify-fix]
+
+- Adds opt-in Halescourge Cataclysm+ attack scaling that caps Troll and Spawn
+  one-shot damage at half a full-health hero while leaving lower difficulties
+  unchanged.
+- Adds an exact ranged-only `0.70` damage branch for Skarrik and a reversible
+  Deathrattler tracking-rate control using the source-backed animation method;
+  neither path adds polling, RPC traffic, or duplicate singleton hooks.
+- `/verify_boss_balance` now reports the active contract through bounded
+  `[et:450]` engine-log rows with one chat acknowledgement. Regression coverage
+  pins difficulty, attack-class, restoration, hook-ownership, and command
+  behavior.
+
 ## 0.7.53-dev (2026-07-18): #512 harness context preconditions; mini_patrol assert skips at the keep [untested]
 
 - `_et_regression.lua`: `_rt_register(name, fn, opts)` now accepts

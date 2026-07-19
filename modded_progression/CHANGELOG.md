@@ -1,5 +1,11 @@
 # Modded Progression — Changelog
 
+## 0.2.33-dev (2026-07-19) - #840 fresh-profile ownership census [diagnostics-armed]
+
+- Adds a bounded, observation-only census of all nine profile-owned backend interfaces and eight direct bypass methods after the modded backend is ready.
+- Captures one automatic `[mp:840]` block per backend identity and provides `/mp_fresh_profile_census` as a read-only fallback without mutating progression state.
+- Distinguishes missing interfaces, topology mismatches, and shared-native mirrors so the remaining fresh-profile ownership work can be based on exact live evidence.
+
 ## 0.2.32-dev (2026-07-19) - #577 isolate Emporium ownership [verify-fix]
 
 - Replaced the Emporium's official-account ownership reads with a presentation-scoped local ownership facade for plain Silver Shilling offers. An account that owns every official cosmetic can now see and buy items that its Modded Progression profile has not earned.

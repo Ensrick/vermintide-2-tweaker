@@ -47,4 +47,36 @@ function M.button(family, open_for_identity)
     }
 end
 
+-- Only the weapon-illusion selector owns this exact definition shape. This
+-- classifier lets the global UIWidget.init pre-hook enrich that definition
+-- without catching unrelated widgets that also happen to draw an icon.
+function M.is_illusion_definition(widget_definition)
+    if type(widget_definition) ~= "table"
+            or widget_definition.scenegraph_id ~= "illusions_root" then
+        return false
+    end
+
+    local element = widget_definition.element
+    local content = widget_definition.content
+    local style = widget_definition.style
+    if type(element) ~= "table" or element.pass_data ~= nil
+            or type(element.passes) ~= "table"
+            or type(content) ~= "table"
+            or type(content.button_hotspot) ~= "table"
+            or type(style) ~= "table"
+            or type(style.icon_texture) ~= "table" then
+        return false
+    end
+
+    for _, pass in ipairs(element.passes) do
+        if type(pass) == "table" and pass.pass_type == "texture"
+                and pass.style_id == "icon_texture"
+                and pass.texture_id == "icon_texture" then
+            return true
+        end
+    end
+
+    return false
+end
+
 return M

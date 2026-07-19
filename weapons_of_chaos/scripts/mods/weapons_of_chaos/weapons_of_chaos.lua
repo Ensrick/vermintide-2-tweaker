@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.38-dev"
+local MOD_VERSION = "0.1.42-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -195,6 +195,22 @@ local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_p
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
+local _boss_weapon_catalog = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_woc_boss_weapon_catalog")
+mod._woc_boss_catalog_snapshot = _boss_weapon_catalog.runtime_snapshot
+mod:command("woc_boss_catalog",
+	"Write the source-backed boss weapon catalogue to the console log",
+	function()
+		_boss_weapon_catalog.emit_runtime()
+		_boss_weapon_catalog.emit_authored_runtime()
+	end)
+_rt_register("issue642_boss_weapon_catalog_source_mapped",
+	_boss_weapon_catalog.runtime_check)
+
+-- Automatic and bounded: seven rows once at WOC load. Re-run manually with
+-- /woc_boss_catalog after entering a boss mission to compare residency.
+_boss_weapon_catalog.emit_runtime()
+_boss_weapon_catalog.emit_authored_runtime()
 -- Issue 712 / 835: retail Stingray exposes Vector3 as a callable TABLE, but
 -- the shared library's default api guards its stored constructor with
 -- `type(...) == "function"`, so every position/scale channel silently
@@ -1433,6 +1449,20 @@ local function _spirit_delete(entry, reason, explode)
 	end
 end
 
+local function _spirit_live_position(unit)
+	return Unit.local_position(unit, 0)
+end
+
+local function _spirit_is_vector(value)
+	if value == nil or type(Vector3.to_elements) ~= "function" then return false end
+	return pcall(Vector3.to_elements, value)
+end
+
+local function _spirit_position(unit)
+	return _spirits.resolve_position(unit, _spirit_live_position,
+		rawget(_G, "POSITION_LOOKUP"), _spirit_is_vector)
+end
+
 local function _spawn_spirit(killed_unit, target_unit, attribution)
 	if _spirit_state.count >= _spirits.MAX_ACTIVE then
 		_spirit_state.dropped = _spirit_state.dropped + 1
@@ -1451,17 +1481,12 @@ local function _spawn_spirit(killed_unit, target_unit, attribution)
 	local spawner = Managers and Managers.state and Managers.state.unit_spawner
 	local entity = Managers and Managers.state and Managers.state.entity
 	local network = Managers and Managers.state and Managers.state.network
-	local killed_pos
-	if killed_unit and Unit.alive(killed_unit) then
-		pcall(function() killed_pos = Unit.local_position(killed_unit, 0) end)
-	end
-	if not killed_pos and killed_unit and rawget(_G, "POSITION_LOOKUP") then
-		killed_pos = POSITION_LOOKUP[killed_unit]
-	end
+	local killed_pos, killed_pos_reason = _spirit_position(killed_unit)
 	if not (spawner and entity and network and network.is_server and killed_pos
 		and target_unit and Unit.alive(target_unit)) then
 		_spirit_state.dropped = _spirit_state.dropped + 1
-		_spirit_diag("spawn prerequisites unavailable attribution=%s", tostring(attribution))
+		_spirit_diag("spawn prerequisites unavailable attribution=%s position=%s",
+			tostring(attribution), tostring(killed_pos_reason))
 		return false
 	end
 	local spawn_position = killed_pos + Vector3(0, 0, _spirits.SPAWN_OFFSET_Z)
@@ -1554,13 +1579,20 @@ local function _update_spirits(dt)
 		else
 			entry.delay = math.max(entry.delay - dt, 0)
 			if entry.delay == 0 then
-				local target_pos = POSITION_LOOKUP[target]
+				local target_pos, target_pos_reason = _spirit_position(target)
 				if not target_pos then
-					doomed[#doomed + 1] = { entry, "target_position_missing", false }
+					doomed[#doomed + 1] = {
+						entry, "target_position_invalid:" .. tostring(target_pos_reason), false,
+					}
 				else
-					local position = Unit.local_position(unit, 0)
-					local destination = target_pos + Vector3.up()
-					local delta = destination - position
+					local position, position_reason = _spirit_position(unit)
+					if not position then
+						doomed[#doomed + 1] = {
+							entry, "spirit_position_invalid:" .. tostring(position_reason), false,
+						}
+					else
+						local destination = target_pos + Vector3.up()
+						local delta = destination - position
 					local distance_sq = Vector3.length_squared(delta)
 					local direction = Vector3.normalize(delta)
 					if distance_sq <= _spirits.HIT_DISTANCE * _spirits.HIT_DISTANCE then
@@ -1602,6 +1634,7 @@ local function _update_spirits(dt)
 							doomed[#doomed + 1] = { entry, "expired", true }
 						end
 					end
+					end
 				end
 			end
 		end
@@ -1630,6 +1663,21 @@ _rt_register("issue632_blightreaper_shyish_spirit_contract", function()
 	local dot = _spirits.kill_is_attributable(false, "arrow_poison_dot", true, 3)
 	local stale = _spirits.kill_is_attributable(false, "arrow_poison_dot", true, 5)
 	if not direct or not dot or stale then return "direct/DOT attribution policy regressed" end
+	local position_key, live_position, lookup_position = {}, {}, {}
+	local position, position_reason = _spirits.resolve_position(position_key,
+		function() return live_position end,
+		{ [position_key] = lookup_position },
+		function(value) return value == live_position end)
+	if position ~= live_position or position_reason ~= "live" then
+		return "live spirit-position preference regressed"
+	end
+	position, position_reason = _spirits.resolve_position(position_key,
+		function() error("unavailable") end,
+		{ [position_key] = lookup_position },
+		function(value) return value == lookup_position end)
+	if position ~= lookup_position or position_reason ~= "lookup" then
+		return "validated spirit-position fallback regressed"
+	end
 	if _spirits.contact_damage(10, 0) ~= 5
 			or _spirits.contact_damage(3, 0) ~= 2
 			or _spirits.contact_damage(2, 4) ~= 5 then

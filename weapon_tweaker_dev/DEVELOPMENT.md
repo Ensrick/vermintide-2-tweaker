@@ -499,11 +499,18 @@ menu preview:
   capture the weapon key per slot. This is the only place the actual
   weapon key is exposed.
 - Hook `MenuWorldPreviewer:_spawn_item_unit(unit, slot_type, item_data, ...)`
-  to apply scale/offset to the spawned `unit`. Note: `item_data` here
+  to apply scale/offset to an unpaired spawned `unit`. Note: `item_data` here
   is the weapon TEMPLATE (e.g. `we_one_hand_axe_template`), NOT an
   inventory item — so `item_data.key`/`name` returns the template name,
   not the weapon key. Look up the captured key from the equip_item map
   by `slot_type` (which is "melee"/"ranged"/"hat", not "slot_melee").
+- A paired weapon template makes `_spawn_item_unit` hand-ambiguous. For a
+  transform descriptor scoped to `hand = "left"` or `"right"`, defer the
+  write until `MenuWorldPreviewer:_spawn_item` returns. Its `spawn_data`
+  retains `left_hand`/`right_hand`, while `spawn_data[i].slot_index` bridges
+  the string-keyed `_item_info_by_slot` data to numeric `_equipment_units`.
+  Apply the descriptor only to that exact spawned hand; never guess from
+  template shape. This is the #735 shield/sword separation contract.
 - Use a weak-keyed table (`setmetatable({}, {__mode = "k"})`) for the
   previewer→key mapping so dismissed previewers don't leak.
 

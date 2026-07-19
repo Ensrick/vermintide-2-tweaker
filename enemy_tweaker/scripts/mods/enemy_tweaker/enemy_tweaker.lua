@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.53-dev"
+local MOD_VERSION = "0.7.54-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -60,6 +60,7 @@ mod._et.HealthMultiplierCore = mod:dofile("scripts/mods/enemy_tweaker/_et_health
 mod._et.SpecialVariantsCore = mod:dofile("scripts/mods/enemy_tweaker/_et_special_variants_core") -- #452 engine-free asset census
 mod._et.EnemyModifiersCore = mod:dofile("scripts/mods/enemy_tweaker/_et_enemy_modifiers_core") -- #453 engine-free modifier census
 mod._et.BossIdeasCore = mod:dofile("scripts/mods/enemy_tweaker/_et_boss_ideas_core") -- #451 engine-free asset/behavior census
+mod._et.BossBehaviorCore = mod:dofile("scripts/mods/enemy_tweaker/_et_boss_behavior_core") -- #450 engine-free Halescourge threshold policy
 mod._et.PersonalHandicapPolicy = mod:dofile("scripts/mods/enemy_tweaker/_et_personal_handicap_policy") -- #61 engine-free bounds/policy
 mod._et.PersonalHandicapUnits = mod:dofile("scripts/mods/enemy_tweaker/_et_personal_handicap_units") -- #640 lifetime-safe Unit boundary
 
@@ -95,6 +96,7 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_commands")             -- chat comman
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_tweaks")          -- boss mechanic tweaks (fly-disable duration; pre-existing module)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_balance")         -- #450 per-boss balance toggles (health/armor/warp-lightning data mutations)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_grudge")          -- #531 grudge-mark behavioral knobs (Skarrik Berserk / Bodvarr Crippling, Cata+)
+mod:dofile("scripts/mods/enemy_tweaker/_et_boss_behavior")        -- #450 Halescourge Cata+ half-health monster add
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_ideas")           -- #451 bounded source/runtime feasibility audit; no unsafe arena-breed injection
 mod:dofile("scripts/mods/enemy_tweaker/_et_special_variants")     -- #452 bounded premium-special asset audit; no breed/spawn mutation
 mod:dofile("scripts/mods/enemy_tweaker/_et_enemy_modifiers")      -- #453 bounded modifier/template/category audit; no application yet

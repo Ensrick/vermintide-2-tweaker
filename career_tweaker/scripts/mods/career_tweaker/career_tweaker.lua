@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.9-beta"
+local MOD_VERSION = "0.4.12-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -261,8 +261,8 @@ end
 mod._crt.mutex = mutex
 
 -- Public-beta boundary: career talent/ability casting-transposition is excluded.
--- Do not load `_crt_talent_swap.lua`: loading it installs HeroWindowTalents
--- hooks and exposes apply/restore entry points. VMF retains the old saved
+-- Do not load `_crt_talent_swap.lua`: loading it exposes apply/restore entry
+-- points. VMF retains the old saved
 -- `talent_swap_*` values in user settings, but this beta never reads, writes,
 -- clears, or applies them. A later redesign can therefore migrate the data.
 mod._crt.PUBLIC_BETA_TALENT_SWAPS_DISABLED = true
@@ -270,6 +270,13 @@ mod._crt.apply_talent_swaps = nil
 mod._crt.restore_talent_swaps = nil
 mod._crt.refresh_talent_ui = nil
 mod._crt.ALL_CAREERS = nil
+
+-- #283 is a separate vanilla no-op guard, not part of casting/transposition.
+-- Both talent pickers otherwise rebuild all talent buffs when closed without a
+-- selection change. Keep this module isolated so the retired swap system stays
+-- inert while accumulated talent state survives merely viewing the menu.
+local ok_tmg, _tmg = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/_crt_talent_menu_guard")
+if not ok_tmg then mod:error("Failed to load talent-menu no-op guard: %s", tostring(_tmg)) end
 
 -- Read-only talent/buff diagnostics: /crt_dump_talents + the auto-dump harness.
 -- Exposes mod.crt_dump_career_talents, mod._crt_auto_dump_check,
@@ -456,43 +463,10 @@ for _, mirror_class in ipairs({ "PlayFabMirrorAdventure", "PlayFabMirrorDedicate
     mod:hook(mirror_class, "get_read_only_data", _mirror_experience_override)
 end
 
--- ============================================================
--- Unlock All Careers (level gate only — DLC ownership preserved)
--- ============================================================
--- v0.3.21-dev: bypass the level requirement on careers the player already owns.
--- DLC ownership is NOT bypassed (CLAUDE.md § "DLC Ownership Gate": modded mods
--- unlock vanilla progression, NOT paid DLC content). Unowned-DLC careers stay
--- locked regardless of this toggle.
---
--- Verified against decompiled source. The unlock chain in vanilla:
---   career_settings.lua:23 local_is_unlocked_function
---     -> career:override_available_for_mechanism()   -- mechanism gate
---     -> career:is_dlc_unlocked()                    -- DLC GATE (unchanged)
---     -> ProgressionUnlocks.is_unlocked_for_profile(display_name, hero_name, hero_level)  -- LEVEL gate
--- DLC careers (lake/bless/cog/shovel/woods) have bespoke is_unlocked_functions
--- that return after the DLC check WITHOUT calling the level gate, so for DLC
--- careers ownership IS the whole gate — this toggle correctly has no effect on
--- DLC careers (they just need to be owned).
---
--- Convenient: vanilla ALREADY has a dev flag for this exact behavior, baked
--- into the level gate itself:
---   progression_unlocks.lua:205-208
---   ProgressionUnlocks.is_unlocked_for_profile = function (unlock_name, profile, level)
---       if Development.parameter("unlock_all_careers") then return true end
---       ...level check...
--- So the surgical fix is to hook that ONE function. Returning `true` skips the
--- level check ONLY; the upstream DLC gate has already run and locked unowned
--- DLC careers. Authority stays local — this is read in the LOCAL character-select
--- and talent-validation paths. The host's join-time check (network_server:91-94)
--- uses the SAME function via career:is_unlocked_function, so a host running this
--- mod won't reject their own client picks; clients without crt joining a normal
--- host are still gated by the host's vanilla check.
-mod:hook("ProgressionUnlocks", "is_unlocked_for_profile", function(func, unlock_name, profile, level)
-    if mod:get("unlock_all_careers") then
-        return true
-    end
-    return func(unlock_name, profile, level)
-end)
+-- Unlock All Careers owns one level-gate hook plus both career-select UI
+-- adapters. The module preserves vanilla mechanism/DLC/occupancy authority and
+-- emits bounded #728 diagnostics through engine printf.
+mod:dofile("scripts/mods/career_tweaker/_crt_career_unlock").install(mod)
 
 -- ============================================================
 -- Bug fixes (2026-06-21): ability-swap ult crash + career-unlock UI refresh
@@ -519,29 +493,6 @@ mod:hook("CareerExtension", "current_ability_cooldown", function(func, self, abi
     if not ok then return 0, 1 end
     return cooldown or 0, max_cooldown or 1
 end)
-
--- (2) The career-select tiles (HeroWindowCharacterSummary._setup_hero_selection_
--- widgets) bake each career's `content.locked` ONCE at populate, from the hero's
--- level -- which the Character Experience Level override and Unlock All Careers
--- both feed. Flipping either setting while the hero view is open left the tiles
--- stale (which is why the user saw careers wrongly locked/unlocked until they
--- toggled unlock-all, forcing a rebuild). Track the live window and re-run its
--- tile setup when a level_override_* / unlock_all_careers setting changes.
-local _char_summary_instance = nil
-mod:hook_safe("HeroWindowCharacterSummary", "on_enter", function(self)
-    _char_summary_instance = self
-end)
-mod:hook_safe("HeroWindowCharacterSummary", "on_exit", function(self)
-    _char_summary_instance = nil
-end)
-local function refresh_career_unlock_ui()
-    local inst = _char_summary_instance
-    if inst and inst._setup_hero_selection_widgets then
-        -- pcall: window may be mid-teardown between the on_exit hook firing late
-        -- and this call; never let a refresh break the menu.
-        pcall(function() inst:_setup_hero_selection_widgets() end)
-    end
-end
 
 -- ============================================================
 -- Lifecycle hooks
@@ -611,11 +562,13 @@ mod.on_setting_changed = function(setting_id)
         _sync_rework_master_indicators()
     end
 
-    -- Career-select lock state is baked at populate; refresh the open hero view so
-    -- a level-override / unlock-all change takes effect without re-opening (bug fix
-    -- (2) above).
+    -- Career-select lock state is baked at populate. Refresh both independent
+    -- career grids through the bounded #728 adapter so a level-override or
+    -- unlock-all change takes effect without reopening the view.
     if setting_id == "unlock_all_careers" or setting_id:find("^level_override_") then
-        refresh_career_unlock_ui()
+        if mod._crt_refresh_career_unlock_ui then
+            mod._crt_refresh_career_unlock_ui()
+        end
     end
 end
 
@@ -679,6 +632,11 @@ mod.update = function(dt)
     -- #440 automatic profile summaries; self-throttled to once per second.
     if mod._crt_bardin_disabler_tick then pcall(mod._crt_bardin_disabler_tick, dt) end
     foot_knight.tick(dt)
+    -- #699 bounded HUD census. It records only Foot Knight icon-state
+    -- transitions and is otherwise a read-only, self-throttled no-op.
+    if mod._crt_foot_knight_icon_probe_tick then
+        pcall(mod._crt_foot_knight_icon_probe_tick, dt)
+    end
 end
 
 -- ============================================================

@@ -27,7 +27,9 @@ local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
 local ordering = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_ordering")
 local transactions = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
 local profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles")
+local profile_runtime = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profile_runtime")
 local disabled_sections = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_disabled_sections")
+local external_group = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_external_group")
 local tab_labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_labels")
 local label_policy = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_label_policy")
 local dx12_diag_module = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dx12_fence630")
@@ -98,7 +100,8 @@ end
 -- (#389) Keep-substate twin of the standalone Mod Tweaker slider registry.
 local STEP_OVERRIDES = {
     cim = { base_power_level = 25 }, cim_dev = { base_power_level = 25 },
-    ct = { starting_coins = 25 }, ct_dev = { starting_coins = 25 },
+    ct = { starting_coins = 25, cot_cost_amount = 25 },
+    ct_dev = { starting_coins = 25, cot_cost_amount = 25 },
 }
 
 local function _resolve_step(node, mod_id, setting_id, dec)
@@ -442,18 +445,14 @@ local function _inject_ckc_into_gut(out)
     -- gut_cat.mod_obj stays = gut (its own settings fall back via _owner)
 end
 
--- (#312) Bridge gut's surfaced "UI Tweaks" toggles to the STOCK UI Tweaks (HideBuffs)
--- mod so the Mod Tweaker reads/writes ITS live settings, not gut's own private copies.
--- gut kept HideBuffs' setting_ids VERBATIM in its data tree (hide_frames, HIDE_BOSS_HP_BAR,
--- ...), but the two mods persist them in SEPARATE VMF namespaces (gut_dev vs HideBuffs) --
--- so a toggle the user set ON in UI Tweaks' own VMF menu showed OFF in the Mod Tweaker
--- (issue #312, user reports 2026-07-10 / 2026-07-12). When HideBuffs is installed + enabled
--- we route every OVERLAPPING checkbox setting_id's get/set to it via the same per-node
--- _owners mechanism the Equipment merge (#208) and CKC injection (#339) use: reads now show
--- HideBuffs' live value, edits stage under a "HideBuffs" buffer and commit as HB:set(id, v,
--- true) (fires its on_setting_changed live + VMF-persists) -- the own-or-pin doctrine that
--- matches the drag-offset sync module (_gut_uitweaks_sync.lua) and the CKC bridge (#313).
--- HideBuffs becomes the single owner of the shared toggles. No-op when HideBuffs is absent
+-- (#312) Fold the STOCK UI Tweaks (HideBuffs) live VMF widget tree into GUT and
+-- route its setting get/set calls to the stock mod, never GUT's private fallback
+-- copies. This is a dynamic tree splice, not a copied setting-id allow-list, so a
+-- future supported widget type appears without editing GUT. Reads show HideBuffs'
+-- live value; Apply commits through HB:set(id, v, true), firing its ordinary VMF
+-- callback and persistence path. The per-node _owners model is shared with the
+-- Equipment merge (#208) and CKC injection (#339).
+-- HideBuffs becomes the single owner of its live tree. No-op when HideBuffs is absent
 -- or disabled: gut's own copies drive its absorbed hb/ fork exactly as before. Runs AFTER
 -- _inject_ckc_into_gut so it MERGES into any CKC-set _owner_mod_ids. Marker
 -- [UITWEAKS-BRIDGE-312]. Byte-parallel twin with the one in _mod_tweaker_view.lua.
@@ -475,48 +474,65 @@ local function _bridge_uitweaks_to_stock(out)
             return                                    -- present but disabled: explained header only
         end
     end
-    local names = HB.SETTING_NAMES
-    if type(names) ~= "table" then return end
-    -- Real HideBuffs setting_ids are the VALUES of SETTING_NAMES (key may differ from id).
-    local valid = {}
-    for _, sid in pairs(names) do
-        if type(sid) == "string" then valid[sid] = true end
-    end
     local gut_cat
     for _, c in ipairs(out) do
         if c.mod_id == "gut" or c.mod_id == "gut_dev" then gut_cat = c; break end
     end
     if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
 
-    local owners  = gut_cat._owners or {}
-    local bridged = 0
-    for i = 1, #gut_cat.widgets do
-        local node  = gut_cat.widgets[i]
-        local sid   = _nf(node, "setting_id")
-        local wtype = _nf(node, "type")
-        -- Bridge only OVERLAPPING value toggles: a checkbox whose id is a real HideBuffs
-        -- setting. Skips groups, the HIDE_HUD hotkey (keybind, read-only here), and gut's
-        -- OWN control settings (gut_uitweaks_sync / the vanilla mirrors are NOT in
-        -- SETTING_NAMES). Never override a node already owned (e.g. a CKC-injected one).
-        if type(sid) == "string" and valid[sid]
-                and (wtype == "checkbox" or wtype == "boolean")
-                and owners[sid] == nil then
-            owners[sid] = { mod_id = "HideBuffs", mod_obj = HB }
-            bridged = bridged + 1
+    -- Consume the stock mod's CURRENT VMF widget list, not the old absorbed fork's
+    -- copied checkbox catalogue. A future UI Tweaks group, slider, dropdown, or
+    -- keybind therefore appears without a GUT code change. The planner shallow-copies
+    -- every VMF node, rebases it under hb_group, removes stale mirrored rows, and
+    -- preserves GUT's own Sync & Vanilla Mirrors subgroup. [UITWEAKS-LIVE-TREE-312]
+    local vmf = get_mod("VMF")
+    local live = external_group.find_mod_list(vmf and vmf.options_widgets_data,
+        "HideBuffs", _nf)
+    local plan = external_group.replace_group_children({
+        widgets = gut_cat.widgets,
+        live_list = live,
+        group_id = "hb_group",
+        preserve_group_ids = { gut_uitweaks_integration_group = true },
+        field = _nf,
+        owners = gut_cat._owners,
+        owner_mod_ids = gut_cat._owner_mod_ids,
+        base_owner_id = gut_cat.mod_id,
+        owner_id = "HideBuffs",
+        owner_obj = HB,
+        profile_excluded_owners = gut_cat._profile_excluded_owners,
+        exclude_owner_from_profiles = true,
+    })
+    if not plan.changed then
+        if not mod._gut_uitweaks_live_tree_missing_logged then
+            mod._gut_uitweaks_live_tree_missing_logged = true
+            _printf("[gut:312] live UI Tweaks tree unavailable reason=%s; keeping authored fallback",
+                tostring(plan.reason))
         end
+        local fallback = external_group.bridge_known_fallback({
+            widgets = gut_cat.widgets,
+            setting_names = HB.SETTING_NAMES,
+            field = _nf,
+            owners = gut_cat._owners,
+            owner_mod_ids = gut_cat._owner_mod_ids,
+            base_owner_id = gut_cat.mod_id,
+            owner_id = "HideBuffs",
+            owner_obj = HB,
+            profile_excluded_owners = gut_cat._profile_excluded_owners,
+            exclude_owner_from_profiles = true,
+        })
+        if fallback.changed then
+            gut_cat._owners = fallback.owners
+            gut_cat._owner_mod_ids = fallback.owner_mod_ids
+            gut_cat._profile_excluded_owners = fallback.profile_excluded_owners
+        end
+        return
     end
-    if bridged == 0 then return end
-    gut_cat._owners = owners
-    -- Merge "HideBuffs" into _owner_mod_ids so apply/dirty flush ITS staged buffer too.
-    -- _inject_ckc_into_gut may have already set this to { gut_id, CKC }; preserve those and
-    -- add gut's own id (its non-bridged settings buffer under it) + HideBuffs.
-    local ids  = gut_cat._owner_mod_ids or {}
-    local seen = {}
-    for _, id in ipairs(ids) do seen[id] = true end
-    if not seen[gut_cat.mod_id] then ids[#ids + 1] = gut_cat.mod_id end
-    seen[gut_cat.mod_id] = true
-    if not seen["HideBuffs"] then ids[#ids + 1] = "HideBuffs" end
-    gut_cat._owner_mod_ids = ids
+    gut_cat.widgets = plan.widgets
+    gut_cat._owners = plan.owners
+    gut_cat._owner_mod_ids = plan.owner_mod_ids
+    -- UI Tweaks owns its own profiles. Its live rows remain editable here, but
+    -- GUT's ten per-tab profile slots never capture or restore HideBuffs values.
+    gut_cat._profile_excluded_owners = plan.profile_excluded_owners
     -- gut_cat.mod_obj stays = gut (its own non-bridged settings fall back via _owner).
 end
 
@@ -678,7 +694,8 @@ function HeroViewStateModTweaker:_profile_snapshot(category, defaults)
             local _, owner_id = _owner(category, sid)
             local value = defaults and _nf(node, "default_value") or _cat_get(category, sid)
             if value == nil and defaults then value = _cat_get(category, sid) end
-            if owner_id and value ~= nil then
+            local excluded = category._profile_excluded_owners
+            if owner_id and not (excluded and excluded[owner_id]) and value ~= nil then
                 out[profiles.member_key(owner_id, sid)] = value
             end
         end
@@ -693,12 +710,37 @@ function HeroViewStateModTweaker:_profile_ensure(category)
     self._profile_slot = profiles.get_active(mod, tab_id)
     local ready_key = tab_id .. ":" .. tostring(self._profile_slot)
     if self._profile_ready[ready_key] then return end
-    if not profiles.load(mod, tab_id, self._profile_slot) then
+    if not profile_runtime.migrate(profiles, mod, _printf) then
+        self._profile_ready[ready_key] = true
+        return
+    end
+    local values = profiles.load(mod, tab_id, self._profile_slot)
+    if not values then
         local use_defaults = self._profile_slot ~= 1
         profiles.save(mod, tab_id, self._profile_slot,
             self:_profile_snapshot(category, use_defaults))
         _printf("[gut:561] initialized tab=%s profile=%d source=%s",
             tostring(tab_id), self._profile_slot, use_defaults and "defaults" or "live")
+    else
+        local merged, _, added, applied_ok, applied, failures, apply_err =
+            profile_runtime.reconcile_and_apply({
+                profiles = profiles, transactions = transactions,
+                values = values, defaults = self:_profile_snapshot(category, true),
+                category = category, owner = _owner, set_one = _cat_set,
+            })
+        if added > 0 then
+            if applied_ok then
+                profiles.save(mod, tab_id, self._profile_slot, merged)
+            else
+                _printf("[gut:828] reconciliation deferred tab=%s profile=%d added=%d applied=%d failures=%d error=%s",
+                    tostring(tab_id), self._profile_slot, added, applied, failures,
+                    tostring(apply_err or "none"))
+                self._profile_ready[ready_key] = true
+                return
+            end
+            _printf("[gut:828] reconciled tab=%s profile=%d added=%d applied=%d",
+                tostring(tab_id), self._profile_slot, added, applied)
+        end
     end
     self._profile_ready[ready_key] = true
 end
@@ -722,10 +764,28 @@ function HeroViewStateModTweaker:_switch_profile(slot)
     if slot == current then return end
     if self:_active_category_dirty() then self:apply_pending(category) end
     self:_profile_capture(category)
+    if not profile_runtime.migrate(profiles, mod, _printf) then return end
     local values = profiles.load(mod, tab_id, slot)
+    local reconciled_additions = {}
     if not values then
         values = self:_profile_snapshot(category, true)
         profiles.save(mod, tab_id, slot, values)
+    else
+        local reconciled, additions, added, applied_ok, applied, failures, apply_err =
+            profile_runtime.reconcile_and_apply({
+                profiles = profiles, transactions = transactions,
+                values = values, defaults = self:_profile_snapshot(category, true),
+                category = category, owner = _owner, set_one = _cat_set,
+            })
+        if not applied_ok then
+            _printf("[gut:828] profile switch deferred tab=%s profile=%d added=%d applied=%d failures=%d error=%s",
+                tostring(tab_id), slot, added, applied, failures,
+                tostring(apply_err or "none"))
+            return
+        end
+        values = reconciled
+        reconciled_additions = additions
+        if added > 0 then profiles.save(mod, tab_id, slot, values) end
     end
     profiles.set_active(mod, tab_id, slot)
     self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
@@ -734,7 +794,10 @@ function HeroViewStateModTweaker:_switch_profile(slot)
     for member, value in pairs(values) do
         local owner_id, sid = profiles.split_member_key(member)
         local _, actual_owner = _owner(category, sid)
-        if owner_id and sid and actual_owner == owner_id then
+        local excluded = category._profile_excluded_owners
+        if owner_id and sid and actual_owner == owner_id
+                and reconciled_additions[member] == nil
+                and not (excluded and excluded[owner_id]) then
             self:stage_set(category, sid, value)
             staged = staged + 1
         end

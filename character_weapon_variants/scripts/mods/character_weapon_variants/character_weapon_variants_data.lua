@@ -77,12 +77,6 @@ return {
 				tooltip       = "enable_cwv_mace_hammer_identity_tooltip",
 			},
 			{
-				setting_id    = "enable_cwv_vanilla_crowbill_hammer_mode",
-				type          = "checkbox",
-				default_value = false,
-				tooltip       = "enable_cwv_vanilla_crowbill_hammer_mode_tooltip",
-			},
-			{
 				setting_id    = "mace_sword_tweak",
 				type          = "checkbox",
 				default_value = true,

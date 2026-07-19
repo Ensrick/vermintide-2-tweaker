@@ -21,6 +21,13 @@ local _snap_to_canonical_size = ET.snap_to_canonical_size
 local _get_original_compositions_pacing = ET.original_compositions_pacing
 local _get_original_sip  = ET.get_original_sip
 
+local function _boss_balance_log(fmt, ...)
+    local engine_printf = rawget(_G, "printf")
+    if engine_printf then
+        pcall(engine_printf, "[et:450] " .. fmt, ...)
+    end
+end
+
 -- Issue #18: surface last-applied refresh_conflict_director_patches timestamp
 -- + trigger source so verification doesn't depend on log-scraping.
 mod:command("et_verify_refresh", "Show last refresh_conflict_director_patches apply", function()
@@ -31,6 +38,50 @@ mod:command("et_verify_refresh", "Show last refresh_conflict_director_patches ap
     mod:echo("[et_verify_refresh] last apply: %s (trigger=%s)",
         os.date("%Y-%m-%d %H:%M:%S", mod._et_last_refresh_at),
         tostring(mod._et_last_refresh_trigger))
+end)
+
+-- Issue #450: engine-state readback for every shipped boss data knob plus the
+-- live Halescourge half-health monitor. The providers load after this command
+-- module, so dispatch resolves them dynamically when the user invokes it.
+mod:command("verify_boss_balance", "Verify boss balance values and Halescourge monitor", function()
+    _boss_balance_log("=== /verify_boss_balance ===")
+    local rows = type(ET.boss_balance_live_rows) == "function"
+        and ET.boss_balance_live_rows() or nil
+    if type(rows) ~= "table" then
+        _boss_balance_log("FAIL: boss balance readback provider missing")
+    else
+        local pass, fail = 0, 0
+        for i = 1, #rows do
+            local row = rows[i]
+            local verdict = row.pass and "PASS" or "FAIL"
+            _boss_balance_log("%s: %s | toggle=%s | live=%s | expected=%s",
+                verdict, tostring(row.name), tostring(row.enabled),
+                tostring(row.live), tostring(row.expected))
+            if row.pass then pass = pass + 1 else fail = fail + 1 end
+        end
+        _boss_balance_log("Data result: %d PASS, %d FAIL", pass, fail)
+    end
+
+    local core = ET.BossBehaviorCore
+    _boss_balance_log("Skarrik ranged | toggle=%s | multiplier=%s | provider=%s",
+        tostring(mod:get("boss_behavior_skarrik_ranged_dr") and true or false),
+        tostring(core and core.SKARRIK_RANGED_DAMAGE_MULTIPLIER),
+        type(ET.boss_behavior_scale_incoming_damage) == "function" and "ready" or "missing")
+    _boss_balance_log("Deathrattler tracking | toggle=%s | multiplier=%s",
+        tostring(mod:get("boss_behavior_deathrattler_tracking") and true or false),
+        tostring(core and core.DEATHRATTLER_TRACKING_MULTIPLIER))
+    local behavior_on = mod:get("boss_behavior_halescourge_monster") and true or false
+    local state = type(ET.boss_behavior_live_state) == "function"
+        and ET.boss_behavior_live_state() or nil
+    _boss_balance_log("Halescourge add | toggle=%s | threshold=%s | Cata rank=%s | observer=%s",
+        tostring(behavior_on), tostring(core and core.HALESCOURGE_THRESHOLD),
+        tostring(core and core.CATACLYSM_RANK), state and "live" or "waiting for boss")
+    if state then
+        _boss_balance_log("Halescourge live | reason=%s | health=%s | attempts=%s | queued=%s | queue_id=%s",
+            tostring(state.last_reason), tostring(state.last_health_percent),
+            tostring(state.attempts), tostring(state.queued_breed), tostring(state.queue_id))
+    end
+    mod:echo("Boss balance verification written to the console log.")
 end)
 
 mod:command("et_dump_breeds", "List all registered breed names by faction", function()
@@ -178,6 +229,10 @@ mod:command("et_reset", "Reset all Enemy Tweaker SPAWN settings to inert (vanill
         breed_swap_from = "off", breed_swap_to = "off",
         faction_swap_skaven = "off", faction_swap_chaos = "off", faction_swap_beastmen = "off",
         horde_preset = "off",
+        -- the only boss control that directly queues a new spawn
+        boss_behavior_halescourge_monster = false,
+        boss_behavior_skarrik_ranged_dr = false,
+        boss_behavior_deathrattler_tracking = false,
     }
     local n = 0
     for id, val in pairs(inert) do

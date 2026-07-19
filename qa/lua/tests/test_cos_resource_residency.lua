@@ -107,4 +107,24 @@ return function(H, repo_root)
         local local_copy = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_resource_residency.lua")
         H.equal(local_copy, shared)
     end)
+
+    H.test("Cosmetics #696 brackets the material-manager boundary with bounded identity", function()
+        local source = read(
+            "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua")
+        H.truthy(source:find("local MH_MAT_BIND_TRACE_CAP = 24", 1, true))
+        H.truthy(source:find("local function _set_material_traced(unit, mat_slot, mat, convention)", 1, true))
+        H.truthy(source:find("[cos:696] bind-start source=", 1, true))
+        H.truthy(source:find("[cos:696] bind-end source=", 1, true))
+        H.truthy(source:find(
+            'local key = source .. "|" .. unit_name .. "|" .. tostring(mat_slot) .. "|" .. tostring(mat)',
+            1, true))
+        H.equal(source:find(
+            'local key = tostring(unit) .. "|" .. tostring(mat_slot) .. "|" .. tostring(mat)',
+            1, true), nil, "respawn-unique unit handles must not defeat the trace cap")
+
+        local mat_to_use = assert(source:find('if unit_has_data(unit, "mat_to_use") then', 1, true))
+        local mat_list = assert(source:find('if unit_has_data(unit, "mat_list") then', mat_to_use, true))
+        H.truthy(source:find('_set_material_traced(unit, mat_slot, mat, "mat_to_use")', mat_to_use, true) < mat_list)
+        H.truthy(source:find('_set_material_traced(unit, mat_slot, mat, "mat_list")', mat_list, true))
+    end)
 end

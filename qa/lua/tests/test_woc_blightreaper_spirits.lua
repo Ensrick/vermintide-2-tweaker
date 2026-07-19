@@ -68,6 +68,34 @@ return function(H, repo_root)
 		H.equal(ok, false)
 	end)
 
+	H.test("WOC spirit positions reject stale lookup userdata before arithmetic", function()
+		local unit = {}
+		local live = { vector = true, source = "live" }
+		local stale = { source = "stale" }
+		local function is_vector(value)
+			return type(value) == "table" and value.vector == true
+		end
+
+		local position, reason = spirits.resolve_position(unit, function()
+			return live
+		end, { [unit] = stale }, is_vector)
+		H.equal(position, live)
+		H.equal(reason, "live")
+
+		local fallback = { vector = true, source = "lookup" }
+		position, reason = spirits.resolve_position(unit, function()
+			error("dead engine unit")
+		end, { [unit] = fallback }, is_vector)
+		H.equal(position, fallback)
+		H.equal(reason, "lookup")
+
+		position, reason = spirits.resolve_position(unit, function()
+			return stale
+		end, { [unit] = stale }, is_vector)
+		H.equal(position, nil)
+		H.equal(reason, "invalid_live_and_lookup")
+	end)
+
 	H.test("WOC production spirit path is host-authoritative and traffic-bounded", function()
 		local path = repo_root
 			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
@@ -94,6 +122,12 @@ return function(H, repo_root)
 			"loaded native package is the spawn boundary; stale can_get blocked all spirits")
 		H.equal(source:find('convert_to_temp', 1, true), nil,
 			"contact must reproduce native death_explosion damage then mutator heal")
+		H.truthy(source:find('local target_pos, target_pos_reason = _spirit_position(target)',
+			1, true), "chase target must pass the validated live-position seam")
+		H.truthy(source:find('local position, position_reason = _spirit_position(unit)',
+			1, true), "spawned spirit must pass the validated live-position seam")
+		H.equal(source:find('local target_pos = POSITION_LOOKUP[target]', 1, true), nil,
+			"stale lookup userdata must never reach Vector3 arithmetic directly")
 
 		local package_path = repo_root
 			.. "/weapons_of_chaos/resource_packages/weapons_of_chaos/weapons_of_chaos.package"

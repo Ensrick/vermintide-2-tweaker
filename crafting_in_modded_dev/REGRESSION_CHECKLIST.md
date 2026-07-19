@@ -80,6 +80,7 @@ Last updated: 2026-07-15.
 |---|---|
 | Repro | Open CIM's Athanor weapon selector and scroll until a CWV Dual Axes row using `icon_wpn_axe_hatchet_t1_dual_cwv` becomes visible. |
 | Expected post-fix | The list remains open. Every icon passed to `_populate_list` has a masked+saturated material proven in the exact `ui_top_renderer` Gui. Unsafe custom icons use their paired vanilla/base icon; a row with no proven fallback is omitted rather than drawn. |
+| CWV paired-icon refinement (#787) | With CWV active, both Kruber and Saltzpyre Dual Axes selectors retain `icon_wpn_axe_hatchet_t1_dual_cwv` through the shared `ingame_ui` top renderer; a failed exact-Gui material proof still takes the single-axe fallback. These synthetic rows do not enter Cosmetics #650's exact-instance compositor. Run `/cim_regression_test` and require `issue787_cim_dual_axes_authored_icon`. |
 | Boundedness | One catalog pass per list build; at most one summary plus twelve changed-row diagnostic lines. No per-frame probe, package load, renderer rebuild, RPC, or ItemMasterList mutation. |
 | Detection | Offline `test_cim_athanor_icon_policy.lua` proves all nine current CWV paired icons close to vanilla and rejects missing material variants. `/cim_regression_test` passes `issue617_athanor_icon_resource_closure`; `[cim:617] Athanor icon closure` reports `omitted=0` in a healthy live catalog. |
 
@@ -142,15 +143,15 @@ Last updated: 2026-07-15.
 
 ## Bulk Cleanup
 
-### issue277-exact-cim-weapon-cleanup - Destructive cleanup fails closed
+### issue277-exact-cim-craft-cleanup - Destructive cleanup fails closed
 
 | Field | Value |
 |-------|-------|
-| Scope | Only backend IDs present in CIM's exact `_forged_weapons` store whose live ItemMasterList row is `melee` or `ranged`. Accessories, unresolved definitions, rarity-only rows, prefix-only rows, and ordinary backend items are retained. |
-| Safety | `/forge_delete_all` previews and snapshots the exact set. `/forge_delete_all CONFIRM` proceeds only if the set is unchanged and no candidate appears in a current or saved loadout; uncertainty refuses the entire transaction. |
+| Scope | Only backend IDs present in CIM's exact `_forged_weapons` store whose normalized owner/schema and live ItemMasterList row prove a contract-owned craftable slot: `melee`, `ranged`, `necklace`, `ring` (Charm), or `trinket`. Out-of-scope rows, unresolved definitions, rarity/prefix lookalikes, and ordinary backend items are retained. |
+| Safety | `/forge_delete_all` previews and fingerprints the exact cleanup identity: backend ID, owner/schema, canonical item, live slot/provider, and mirror-vs-MIL route. `/forge_delete_all CONFIRM` proceeds only if that identity is unchanged and no candidate appears in a current or saved loadout; uncertainty refuses the entire transaction. Execution revalidates the same contract before mutation. |
 | Persistence | The runtime mirror row, legacy MoreItemsLibrary row, CIM forged record, dormant modded-loadout references, and exact-ID illusion override are removed; forge persistence and UI refresh run once per batch. |
-| Repro | Craft two weapons and one accessory. Leave every craft unequipped. Run `/forge_delete_all`, review the counts, then run `/forge_delete_all CONFIRM`. Restart and verify the weapons do not return while the accessory and every vanilla item remain. |
-| Negative cases | Equip one CIM weapon in any current or saved loadout and confirm the command deletes nothing. Preview, craft another weapon, then confirm and verify the changed-set guard refuses. Disable a source mod and verify its unresolved record is retained. |
+| Repro | Craft one weapon plus a necklace, Charm, and trinket. Leave every craft unequipped. Run `/forge_delete_all`, verify the preview counts all four, then run `/forge_delete_all CONFIRM`. Restart and verify none return while ordinary equivalents remain. |
+| Negative cases | Equip one CIM craft in any current or saved loadout and confirm the command deletes nothing. Preview, craft another item, then confirm and verify the changed-set guard refuses. Disable a source mod and verify its unresolved record is retained. |
 | Detection | Run the offline Lua suite and `/cim_regression_test`; require `issue277_bulk_cleanup_exact_owner_transaction` PASS. |
 
 ---

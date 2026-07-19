@@ -1,7 +1,7 @@
 # Crowbill Pick/Hammer Mode Contract
 
 This began as the engine-free contract for the Imperial Crowbill (Kruber and
-Saltzpyre), Dawi Crowbill (Bardin), and the optional vanilla Sienna Crowbill
+Saltzpyre), Dawi Crowbill (Bardin), and the native Sienna Crowbill
 capability. `_cwv_crowbill_runtime.lua` now owns live input, local gameplay
 template selection, bounded state transport, and lifecycle replay; model and
 preview composition remains centralized in `_cwv_crowbill_presentation.lua`.
@@ -80,12 +80,13 @@ The absent peer therefore sees the normal Crowbill face and receives vanilla
 profile identifiers rather than an unknown NetworkLookup index.
 
 Disabling CWV restores the active local Crowbill to pick mode before runtime
-selection is turned off. The optional `Sienna Crowbill Hammer Mode` setting is
-off by default; Imperial and Dawi Crowbills always retain the capability.
+selection is turned off. Crowbill mode is an implicit family capability while
+CWV is enabled: no saved setting can exclude the native Sienna donor or an
+authored Imperial/Dawi variant. Retired saved values are ignored.
 
 ## In-game verification gate
 
-The automated contract is complete. Before #604 is verified in game, confirm:
+The automated contract is complete. Before #798 is verified in game, confirm:
 
 1. local 1P, local 3P, bot, remote husk, inventory, and score-preview rotation;
 2. late-join/equip/respawn state replay without repeated messages;

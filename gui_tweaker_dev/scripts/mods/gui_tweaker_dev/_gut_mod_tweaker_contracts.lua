@@ -484,7 +484,8 @@ end)
 -- (anchored at RANGE MIN, clamped to range). The two seeded consumers are ct starting_coins
 -- and cim base_power_level, both step 25 via the registry (VMF strips a custom `step` field
 -- off a foreign mod's widget, so the registry is the working path — see _resolve_step /
--- STEP_OVERRIDES comments). Guards against a regression that reverts the registry keys to
+-- STEP_OVERRIDES comments). Chest-of-Trials cost joins those consumers for #826. Guards
+-- against a regression that reverts the registry keys to
 -- directory names (which silently never match) or drops the min-anchoring.
 _rt_register("mod_tweaker_arrow_edge_latch_hold_repeat", function()
     -- (#152) Mod Tweaker slider arrows: a single click = ONE natural increment, EDGE-LATCHED
@@ -516,8 +517,9 @@ _rt_register("mod_tweaker_step_resolution", function()
     if resolve({ step = 10 }, "ct_dev", "starting_coins", 0) ~= 10 then
         return "widget-def `step` field did not take precedence over the registry"
     end
-    -- (2) Registry hit for BOTH seeded consumers, on stable AND dev ids (by new_mod id).
+    -- (2) Registry hit for every seeded consumer, on stable AND dev ids (by new_mod id).
     for _, case in ipairs({ { "ct", "starting_coins" }, { "ct_dev", "starting_coins" },
+                            { "ct", "cot_cost_amount" }, { "ct_dev", "cot_cost_amount" },
                             { "cim", "base_power_level" }, { "cim_dev", "base_power_level" } }) do
         local got = resolve({}, case[1], case[2], 0)
         if got ~= 25 then

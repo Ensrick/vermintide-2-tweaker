@@ -19,9 +19,9 @@ Last updated: 2026-07-17.
 | Authority/network | Host reconciles humans/bots; client reconciles local owner. Custom templates remain local-only and never enter `NetworkLookup` or a vanilla RPC. |
 | Final March | Requires a nonempty roster of other allies whose exact status is dead. Downed/disabled is false. One mission latch; 60 seconds; disabler stagger is server-only. |
 | Talent text | Rock uses the authored `_desc_2` key and composes range/shield toggles per lookup; Teamwork uses its authored `_desc_2` key. All-off delegates to vanilla localization exactly. |
-| Buff-bar feedback | Stable local effect buffs use resident vanilla Foot Knight icons. Rock/Teamwork conditional bonuses and Final March expose icons only for their active lifetime; Final March owns one icon-bearing sub-buff, and the internal Teamwork DR canceller has no icon. |
+| Buff-bar feedback | Stable local effect buffs use their exact resident vanilla Foot Knight talent icons. Both Rock effects use Rock of Reikland; Teamwork uses That's Bloody Teamwork. Conditional bonuses and Final March expose icons only for their active lifetime; Final March owns one icon-bearing sub-buff, and the internal Teamwork DR canceller has no icon. |
 | Secondary slot | Reconciles both backend `CareerSettings` and menu `SPProfiles` carriers in place to include `{ "melee", "ranged" }`; removes only its owned melee insertion and abandons ownership after foreign array replacement. Inventory category creation rechecks the carrier before caching its filter. |
-| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` check `issue619_foot_knight_contract`; transition-only `[crt:619] secondary-slot` diagnostic; solo walk in CHANGELOG 0.4.2-beta. |
+| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` checks `issue619_foot_knight_contract` and `issue699_foot_knight_icon_census`; transition-only `[crt:619] secondary-slot` and `[crt:699]` live HUD diagnostics; local and spectated subjects mirror BuffUI. Full #699 acceptance is co-op: client-local Foot Knight plus host spectating a Foot Knight bot, while preserving #663's two-Foot-Knight no-flicker behavior. |
 
 ---
 ## Foot Knight multi-source aura ownership (#663)
@@ -72,8 +72,8 @@ Last updated: 2026-07-17.
 | Field | Value |
 |-------|-------|
 | Symptom | Opening and closing Talents without changing a row rebuilds every talent buff and erases accumulated stacks such as Bounty Hunter's Job Well Done. |
-| Expected | The 0.4.0 public beta exposes no casting/transposition widgets, loads no swap module, and installs no talent-window hooks. Existing saved selections remain untouched and unapplied. |
-| Detection | `/crt_regression_test` must report `PASS: public_beta_talent_swaps_disabled`; confirm the Career Ability & Talent Swapping group is absent after a full restart. The historical pure selection test remains as redesign evidence, not shipped behavior. |
+| Expected | Identical desktop/controller selections skip persistence and talent/ammo reapply; changing any row delegates to vanilla unchanged. The beta still exposes no casting/transposition widgets or runtime exports and never reads saved swap selections. |
+| Detection | Offline `test_crt_talent_selection.lua`; `/crt_regression_test` checks `issue283_talent_menu_noop_guard` and `public_beta_talent_swaps_disabled`; solo in-game Job Well Done check from issue #283. |
 
 ---
 ## Handmaiden Focused Spirit (#472)

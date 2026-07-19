@@ -77,6 +77,12 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 ## Domain: Inventory / Equipment
 
+- Named enemy weapons are resolved by following a boss breed's
+  `default_inventory_template` into `InventoryConfigurations`, whose item
+  categories hold concrete enemy `unit_name` paths; Rasknitt is a grounded
+  exception because the Grey Seer breed declares `has_inventory = false`.
+  [src: scripts/settings/breeds/breed_chaos_exalted_champion.lua:49; scripts/settings/breeds/breed_skaven_grey_seer.lua:25; scripts/settings/ai_inventory_templates.lua:579-582,690-700,2002-2008,2255-2266]
+
 - `SimpleInventoryExtension.init` sets `self._career_name = career_name` at line 47,
   BEFORE `extensions_ready` fires — so in-mission spawn hooks should read career
   from this field, not from `Managers.player:owner(unit):career_name()` (the
@@ -151,6 +157,24 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 - `AIBotGroupExtension.set_hold_position` boxes a supplied position, and `_assign_destination_points` makes it the bot's `follow_position`; clearing the hold removes both the position and radius. [src: scripts/entity_system/systems/ai/ai_bot_group_system.lua:32-53,1109-1122]
 
 ## Domain: Spawning / Conflict-Director
+
+- `AISystem.update_blackboard` writes the breed blackboard's current health
+  percentage before invoking the breed's `run_on_update`, so a bounded external
+  monitor can read the same live value after vanilla updates it. [src: scripts/entity_system/systems/ai/ai_system.lua:1169,1259-1260]
+- Halescourge's arena setup stores `valid_teleport_pos_func` and `nav_world` on
+  his blackboard; his vanilla skulk teleport passes those to
+  `ConflictUtils.get_spawn_pos_on_circle_with_func`, making that the grounded
+  arena-contained position seam for an accompanying add. [src: scripts/unit_extensions/human/ai_player_unit/ai_breed_snippets.lua:932-1244; scripts/entity_system/systems/behaviour/nodes/chaos_sorcerer/bt_chaos_exalted_sorcerer_skulk_action.lua:99-116]
+- `ConflictDirector.spawn_queued_unit` places a breed in the director's spawn
+  queue, and `update_spawn_queue` waits for required breed packages to be loaded
+  on every peer before completing the queued spawn. [src: scripts/managers/conflict_director/conflict_director.lua:1732-1791,1847-1891]
+- Vanilla classifies ranged victim modifiers with
+  `RangedAttackTypes[buff_attack_type]` inside
+  `DamageUtils.apply_buffs_to_damage`, after base damage enters the singleton
+  buff/proc chokepoint. [src: scripts/helpers/damage_utils.lua:2134-2185]
+- Deathrattler's ordinary ratling aim follows the target through a hardcoded
+  `min(dt * 6, 1)` position lerp; his dual-gun intro instead rotates toward the
+  target only until the authored `rotation_time` expires. [src: scripts/entity_system/systems/behaviour/nodes/bt_stormfiend_shoot_action.lua:684-698; scripts/entity_system/systems/behaviour/nodes/bt_stormfiend_dual_shoot_action.lua:54-84; scripts/settings/breeds/breed_skaven_stormfiend_boss.lua:1131-1152]
 
 - `HordeCompositionsPacing` entries each carry a `loaded_probs` field built from
   variant weights via `LoadedDice.create` at `conflict_settings.lua:636`

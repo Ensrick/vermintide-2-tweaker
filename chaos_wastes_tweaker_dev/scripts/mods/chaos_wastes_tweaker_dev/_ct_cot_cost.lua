@@ -4,19 +4,27 @@ local Policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_cot_cost_po
 -- Issue #63. The stock WAITING -> RUNNING transition is already server-owned and
 -- carries the true interactor unit. Gate and debit there: no new RPC and no
 -- client-authored buyer identity. The host-effective setting channel supplies
--- both values to every peer for matching interaction text.
+-- the absolute amount to every peer for matching interaction text.
 
 local function _effective(name)
     local get = mod._ct_effective_setting
     return type(get) == "function" and get(name) or mod:get(name)
 end
 
-local function _enabled()
-    return _effective("cot_cost_enabled") == true
-end
-
 local function _cost()
     return Policy.sanitize_cost(_effective("cot_cost_amount"))
+end
+
+-- #825: migrate the retired enable+amount pair once. VMF retains removed
+-- setting keys in the user's saved table, so nil cleanly distinguishes a fresh
+-- absolute-cost install from a profile that initialized the old checkbox.
+if mod:get("cot_cost_absolute_migrated") ~= true then
+    local legacy_enabled = mod:get("cot_cost_enabled")
+    local migrated, reason = Policy.migrate_legacy(legacy_enabled, mod:get("cot_cost_amount"))
+    if legacy_enabled ~= nil then mod:set("cot_cost_amount", migrated) end
+    mod:set("cot_cost_absolute_migrated", true)
+    pcall(printf, "[ct:825] cost migration reason=%s amount=%d",
+        tostring(reason), migrated)
 end
 
 local function _state(self)
@@ -37,7 +45,7 @@ local function _log_reject(self, peer_id, reason, balance, cost)
 end
 
 mod._ct_cot_cost_action_key = function(self)
-    if _enabled() and _state(self) == Policy.WAITING then return "ct_cot_cost_action" end
+    if _cost() > 0 and _state(self) == Policy.WAITING then return "ct_cot_cost_action" end
 end
 
 mod._ct_cot_cost_action_text = function()
@@ -66,7 +74,8 @@ mod:hook("DeusCursedChestExtension", "on_server_interact", function(func, self,
         return func(self, world, interactor_unit, interactable_unit, data, config, t, result)
     end
     local before_state = _state(self)
-    if not _enabled() or before_state ~= Policy.WAITING then
+    local cost = _cost()
+    if cost == 0 or before_state ~= Policy.WAITING then
         return func(self, world, interactor_unit, interactable_unit, data, config, t, result)
     end
 
@@ -76,18 +85,18 @@ mod:hook("DeusCursedChestExtension", "on_server_interact", function(func, self,
     local controller = self._deus_run_controller
     local run_state = controller and controller._run_state
     if not peer_id or not run_state or type(run_state.set_player_soft_currency) ~= "function" then
-        _log_reject(self, peer_id, "authority_unavailable", nil, _cost())
+        _log_reject(self, peer_id, "authority_unavailable", nil, cost)
         return
     end
 
     local balance_ok, balance = pcall(controller.get_player_soft_currency, controller, peer_id)
     if not balance_ok then
-        _log_reject(self, peer_id, "balance_unavailable", nil, _cost())
+        _log_reject(self, peer_id, "balance_unavailable", nil, cost)
         return
     end
-    local allowed, charge, reason = Policy.activation_plan(true, before_state, balance, _cost())
+    local allowed, charge, reason = Policy.activation_plan(before_state, balance, cost)
     if not allowed then
-        _log_reject(self, peer_id, reason, balance, _cost())
+        _log_reject(self, peer_id, reason, balance, cost)
         return
     end
 
@@ -131,11 +140,13 @@ local rt_checks = {
     {
         name = "issue63_cot_cost_transaction",
         fn = function()
-            local allow, charge = Policy.activation_plan(true, Policy.WAITING, 100, 100)
+            local allow, charge = Policy.activation_plan(Policy.WAITING, 100, 100)
             if not allow or charge ~= 100 then return "exact-balance activation rejected" end
-            if Policy.activation_plan(true, Policy.WAITING, 99, 100) ~= false then
+            if Policy.activation_plan(Policy.WAITING, 99, 100) ~= false then
                 return "insufficient balance accepted"
             end
+            local free, free_charge = Policy.activation_plan(Policy.WAITING, nil, 0)
+            if not free or free_charge ~= 0 then return "zero cost did not preserve vanilla" end
             if not Policy.transition_committed(Policy.WAITING, 2) then
                 return "WAITING-to-RUNNING commit not recognized"
             end

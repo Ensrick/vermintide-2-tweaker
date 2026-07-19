@@ -4,7 +4,33 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-18.
+Last updated: 2026-07-19.
+
+## #798 Universal Crowbill hammer mode
+
+- [ ] No Sienna Crowbill Hammer Mode checkbox appears; both legacy saved values
+  converge on the same runtime behavior.
+- [ ] Native Sienna, Imperial, and Dawi Crowbills each expose Weapon Special and
+  switch pick/hammer gameplay plus presentation together.
+- [ ] Owner 1P/3P, inventory/item previews, bots, remote husks, swaps, respawn,
+  hot join, and map transitions retain the selected exact-instance mode.
+- [ ] Disabling CWV rewields the active Crowbill in pick mode through the native
+  donor template; re-enabling installs one family owner with no duplicate hook,
+  template, profile, or network-channel registration.
+- [ ] A peer without CWV receives the resident vanilla Crowbill identity and
+  donor damage profile, never a custom template/unit/profile lookup.
+- [ ] Offline `test_cwv_crowbill_runtime.lua`, strict CWV lint, and the full Lua
+  5.1 suite pass before the co-op verification run.
+
+## #792 Old Musket inventory-preview idle retention
+
+| Field | Check |
+|---|---|
+| Repro | Equip Old Musket, open the inventory-screen character preview, switch between melee/ranged equipment slots, change the Musket stance, close/reopen inventory, and repeat on each Kruber career. Include a vanilla Handgun control and, if available, put same-name inherited Handgun items in both slots. |
+| Expected post-fix | The preview settles into the active Old Musket stance's career-safe idle after item loading and any delayed menu pose. The exact spawned slot/backend instance owns the replay; slot/item changes cannot replay a stale Musket pose, reopening starts a fresh preview generation, and vanilla Handgun presentation is unchanged. |
+| Detection | The log emits one `[cwv:792] preview pose retained ... edge=loading_done` row per stable Old Musket preview generation, never one per frame. Offline tests prove exact spawn-slot resolution, closed-schema retention, loading retention, one-shot consumption, and stale character/slot/item rejection. |
+
+---
 
 ## #742 Old Musket remote material-binding crash guard
 
@@ -62,10 +88,17 @@ Last updated: 2026-07-18.
 
 | Field | Check |
 |---|---|
-| Fix version(s) | CWV v0.1.422-dev; v0.1.430-dev (#644 input/donor parity); v0.1.433-dev (#648 Bretonnian balance/indicator); v0.1.434-dev (#644/#648 Greatsword dedup/receiver transform); v0.1.436-dev (#645 Saltzpyre membership/receiver remaps) |
-| Repro | Select supported Kruber and Saltzpyre Greatswords, Bretonnian Longsword, Greathammer, and Tuskgor Spear instances, cycle with the contextual `Switch to:` button, then use the hotkey. Both native Greatswords must follow `Kerillian -> Bretonnian -> Greatsword`; Bretonnian must follow `Greatsword -> Kerillian -> Bretonnian`. Confirm the small unboxed inventory ordinal advances once with each transition. On Witch Hunter Captain, Bounty Hunter, and Zealot, exercise light/heavy/charge/block in both foreign Greatsword styles and compare owner 3P with a remote husk. Compare Kruber Greatsword's Bretonnian style on owner 3P, remote husk, and preview surfaces against first person and a native Bretonnian control. Restart and hot join with a second CWV peer; include pre-#620 Infantry Spear, Imperial Longsword, and Black Guard UUIDs. Open CIM's Athanor on Dual Axes. |
-| Expected post-fix | Each exact instance retains its style. One physical equipment-button click consumes exactly one release edge and commits one transition; button, hotkey, and ordinal orders are identical. Native Greatsword exposes three distinct movesets; its Bretonnian receiver uses the Imperial scale/grip on 3P/presentation surfaces only. Bretonnian exposes three and its receiver-specific Kruber package has matched native reach, 125% stagger, and 75% cleave. Kerillian style has 85% attack timing, 107.5% damage, 125% stagger, and 125% cleave. Legacy Imperial UUIDs retain their hidden Longsword style until explicitly cycled away. Greathammers expose two and Tuskgor Hunter/Infantry. Foot Knight has Tuskgor by default. Legacy UUIDs become their native item+style without illusion/forged-field loss, and retired rows are absent from new crafting/WT. All render surfaces agree without stale transforms, active-attack switches, per-frame RPCs, query loops, or missing-icon crashes. |
-| Detection | Offline `test_cwv_combat_styles.lua` passes the Saltzpyre member cycle, receiver template clone, source-backed Kerillian/Bretonnian event remaps, descriptor catalogue, DLC, reciprocal Spear and Shield donor clone (including its first-person `parry_pose` block contract), exact-instance/remote effective-template contract, one owner rebuild, one deduplicated husk rebuild, and empty-slot fail-closed guard; `test_wt_cwv_effective_template.lua` covers both Sword and Shield donor directions plus native fallback; `/cwv_regression_test` passes `issue620_per_instance_combat_styles` and `issue645_reciprocal_style_descriptors`; in-game Saltzpyre must show the style control and match foreign-style 3P animations on owner and peer, while Kruber with Elven Spear and Shield style must visibly enter/hold/leave first-person block before #645 is verification-ready; transition-only `[cwv:620]` state/refresh and capped `[cwv:645]` candidate evidence remain bounded. |
+| Fix version(s) | CWV v0.1.422-dev; v0.1.430-dev (#644 input/donor parity); v0.1.433-dev (#648 Bretonnian balance/indicator); v0.1.434-dev (#644/#648 Greatsword dedup/receiver transform); v0.1.436-dev (#645 Saltzpyre membership/receiver remaps); staged #692 reciprocal Bretonnian transform |
+| Repro | Select supported Kruber and Saltzpyre Greatswords, Bretonnian Longsword, Greathammer, and Tuskgor Spear instances, cycle with the contextual `Switch to:` button, then use the hotkey. Both native Greatswords must follow `Kerillian -> Bretonnian -> Greatsword`; Bretonnian must follow `Greatsword -> Kerillian -> Bretonnian`. Confirm the small unboxed inventory ordinal advances once with each transition. On Witch Hunter Captain, Bounty Hunter, and Zealot, exercise light/heavy/charge/block in both foreign Greatsword styles and compare owner 3P with a remote husk. Compare Kruber Greatsword's Bretonnian style on owner 3P, remote husk, and preview surfaces against first person and a native Bretonnian control. Then equip the native Bretonnian Longsword, switch to Greatsword and Kerillian styles, and compare its grip and proportions across owner 1P, owner/peer 3P, inventory, and Athanor; swap away/back and enter a mission. Restart and hot join with a second CWV peer; include pre-#620 Infantry Spear, Imperial Longsword, and Black Guard UUIDs. Open CIM's Athanor on Dual Axes. |
+| Expected post-fix | Each exact instance retains its style. One physical equipment-button click consumes exactly one release edge and commits one transition; button, hotkey, and ordinal orders are identical. Native Greatsword exposes three distinct movesets; its Bretonnian receiver uses the Imperial scale/grip on 3P/presentation surfaces only. Native Bretonnian Longsword uses the exact reciprocal scale `{1, 1.25, 1.111111...}` and Z offset `+0.065` under Greatsword/Kerillian styles on 1P and every 3P/preview consumer; its native style remains untransformed. Retired Imperial/Black Guard rows do not receive that inverse because their physical meshes are Empire Greatswords. Bretonnian exposes three and its receiver-specific Kruber package has matched native reach, 125% stagger, and 75% cleave. Kerillian style has 85% attack timing, 107.5% damage, 125% stagger, and 125% cleave. Legacy Imperial UUIDs retain their hidden Longsword style until explicitly cycled away. Greathammers expose two and Tuskgor Hunter/Infantry. Foot Knight has Tuskgor by default. Legacy UUIDs become their native item+style without illusion/forged-field loss, and retired rows are absent from new crafting/WT. All render surfaces agree without stale transforms, active-attack switches, per-frame RPCs, query loops, or missing-icon crashes. |
+| Detection | Offline `test_cwv_combat_styles.lua` passes both reciprocal Greatsword presentation descriptors, confirms native Bretonnian style stays untransformed, and proves retired Imperial rows do not inherit the native-mesh inverse; it also passes the Saltzpyre member cycle, receiver template clone, source-backed Kerillian/Bretonnian event remaps, descriptor catalogue, DLC, reciprocal Spear and Shield donor clone (including its first-person `parry_pose` block contract), exact-instance/remote effective-template contract, one owner rebuild, one deduplicated husk rebuild, and empty-slot fail-closed guard. `test_wt_cwv_effective_template.lua` covers both Sword and Shield donor directions plus native fallback; `/cwv_regression_test` passes `issue620_per_instance_combat_styles` (including the #692 reciprocal descriptor) and `issue645_reciprocal_style_descriptors`; in-game Saltzpyre must show the style control and match foreign-style 3P animations on owner and peer, while Kruber with Elven Spear and Shield style must visibly enter/hold/leave first-person block before #645 is verification-ready; transition-only `[cwv:620]` state/refresh and capped `[cwv:645]` candidate evidence remain bounded. |
+
+### Mission-mounted equipment Combat Style diagnostic (#774)
+
+- [ ] In an Adventure mission, use GUI Tweaker to open Equipment, select a supported exact weapon, and press its Combat Style control once on desktop and once on controller if available.
+- [ ] Retain the log from menu open through the result. `[cwv:774]` must identify `desktop` or `console` and separate `widget_missing`, `selected_unresolved`, input press/release, and transition complete/rejected/deferred stages.
+- [ ] The diagnostic is mission-only, deduplicated, and capped at 24 records per session; it never sends item identity or diagnostic state over the network.
+- [ ] A keep-screen style change and the existing hotkey remain controls and must not emit `[cwv:774]`.
 
 ---
 
@@ -99,6 +132,14 @@ Last updated: 2026-07-18.
 | Repro | Equip Dawi Crowbill Model 01, then inspect owner 3P, inventory and item/Athanor previews, and a remote client's view. Compare owner 1P and one Imperial Crowbill. |
 | Expected post-fix | Each 3P/presentation unit is half its own settled attachment scale and uses Euler `{-90,-90,-90}`. Owner 1P keeps its native scale and uses the same Euler import correction. A non-unit baseline is never replaced by absolute `{0.5,0.5,0.5}`. Durable replay preserves the first target without compounding. Imperial models remain unchanged. |
 | Detection | Bounded `[cwv:604] transform delivered` rows report `baseline_scale`, `scale_multiplier=(0.500,0.500,0.500)`, and an axis-wise half-size `target_scale`; offline production-boundary assertions and `/cwv_regression_test` `issue604_dawi_crowbill_model01_transform` cover the tuned Dawi model, a reconstructed/spawned-unit mismatch that fails closed, and an untuned Imperial control. |
+
+## #719 Imperial Crowbill remote identity
+
+| Field | Check |
+|---|---|
+| Repro | Craft/equip the Imperial Crowbill before a second CWV player joins. Observe it in the Keep, enter a mission without re-equipping, swap away/back, respawn, and hot-join once with roles reversed. |
+| Invariant | The canonical CIM synthetic row keeps the exact variant in `mod_data.cwv_key` while the vanilla equipment wire carries `bw_1h_crowbill` and no CWV skin. The VMF-only exact descriptor must retain `cwv_es_imperial_crowbill` and locally reconstruct its authored custom unit. The unit path never enters a vanilla `NetworkLookup`; a duplicate fingerprint never causes a second rebuild. |
+| Detection | Offline `test_cwv_appearance_lifecycle.lua` proves the skinless Imperial payload/reconstruction/dedupe contract. `/cwv_regression_test` passes `issue719_imperial_crowbill_remote_identity`. Paired logs must show the same descriptor fingerprint through identity receive, `lifecycle=husk_wield adapter=hand_selection`, and `[cwv:huskpath] def=cwv_es_imperial_crowbill`; a Sienna donor model with `state=exact` is a downstream husk adapter failure, while no exact receive is delivery/parity. |
 
 ---
 
@@ -204,8 +245,8 @@ Last updated: 2026-07-18.
 | Fix version(s) | CWV v0.1.377-dev, v0.1.394-dev, v0.1.395-dev (#474) |
 | Category | MULTIPLAYER |
 | Repro | Equip Old Musket in melee, let a second player hot-join, then live re-equip and repeat in ranged. Observer checks custom model/pose/transforms and listens to hip/ADS shots; reverse host/client roles. |
-| Expected post-fix | Handshake remains safe, then one post-parity replay restores exact Old Musket identity in either slot. Each real Old Musket shot produces one positional vanilla rifle report for other peers and no additional report for the owner. |
-| Detection | `/cwv_regression_test`: `issue474_old_musket_hot_join_identity_and_remote_fire`; logs show bounded `[cwv:579] replayed ...` on parity enable and one `[cwv:474] remote old-musket rifle fire dispatched ...` per shot. |
+| Expected post-fix | Handshake remains safe: vanilla always carries base Handgun/`n/a`, while the acknowledged `cwv_item_identity` string-key descriptor restores exact Old Musket identity in either slot. Each real Old Musket shot produces one positional vanilla rifle report for other peers and no additional report for the owner. |
+| Detection | `/cwv_regression_test`: `issue474_old_musket_hot_join_identity_and_remote_fire`; logs show bounded `[cwv:660] lifecycle=hot_join_retry` delivery/ack and one `[cwv:474] remote old-musket rifle fire dispatched ...` per shot. No numeric CWV skin replay is permitted. |
 
 ### issue478-outrider-husk-handedness — Skinless crafted Outrider is wholly invisible remotely
 
@@ -220,6 +261,19 @@ Last updated: 2026-07-18.
 | Expected post-fix | The observer sees only the right-hand blunderbuss. CWV preselects authored hands before vanilla's spawn branch; the later residency gate still suppresses any unsafe stale unit. Skinned/native weapons remain unchanged. |
 | Detection | `/cwv_regression_test`: `cwv_husk_nonresident_spawn_deferred`; one bounded `[cwv:478] husk preselected hands ...` line proves the upstream decision, and no nonresident-spawn error follows. |
 
+### issue760-outrider-saltzpyre-repeater-stance — Saltzpyre inherits Kruber's body pose
+
+| Field | Value |
+|-------|-------|
+| Symptom | Outrider uses Kruber's blunderbuss wield/body presentation when WT exposes it to standard Saltzpyre careers. |
+| Root cause | The private Outrider clone unconditionally inherited `to_blunderbuss`, while inventory preview and remote husk reconstruction resolve the shared `dr_deus_01` donor rather than the private clone. |
+| Mod(s) | character_weapon_variants + weapon_tweaker/weapon_tweaker_dev |
+| Fix version(s) | Staged candidate only; runtime visual result is unverified (#760). |
+| Category | ANIMATION / MULTIPLAYER / PREVIEW |
+| Repro | Enable Outrider for WHC, Bounty Hunter, or Zealot through WT; compare owner 3P and inventory preview with Kruber, then have a second player observe initial equip, re-wield, mission transition, and hot join. |
+| Expected post-fix | Standard Saltzpyre bodies use the resident `to_repeater_pistol` stance in owner 3P, preview, and remote-husk reconstruction. Kruber and native Trollhammer remain on their authored presentation. The functional Outrider first-person launcher state machine remains unchanged. WT's closed #536 path supplies the owner-local 3P reload replay; fire, reload, push, and block still require eyes-on confirmation in the receiver stance. |
+| Detection | `/cwv_regression_test`: `cwv_issue760_outrider_saltzpyre_repeater_stance`; at most 16 deduplicated `[cwv:760] surface=... result=...` lines prove mapping or exact preview/husk dispatch. `network_event_unavailable`, `unit_not_alive`, or `dispatch_error` is a fail-closed diagnostic result, not a crash. `visual=unverified` remains explicit because structural dispatch cannot prove the compiled clip looks correct. |
+
 ### issue416-483-transition-generated-skin-replay — Mission load permanently replaces paired cosmetic with base donor
 
 | Field | Value |
@@ -230,8 +284,8 @@ Last updated: 2026-07-18.
 | Fix version(s) | CWV v0.1.395-dev (#416/#483) |
 | Category | MULTIPLAYER / APPEARANCE / TRANSITION |
 | Repro | Select generated skin `cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1`, verify it remotely in the keep, then load a mission without re-equipping. Reverse host/client roles. |
-| Expected post-fix | The transient send may safely carry `n/a`; once parity is confirmed, one bounded replay restores the exact sword-right/mace-left skin and current wield. A peer without CWV never receives the modded skin id. |
-| Detection | `/cwv_regression_test`: `issue416_483_transition_generated_skin_replay`; log shows `[cwv:416/483] deferred skin identity replayed ...` after a transition-time `[cwv:495] ... -> n/a` line. |
+| Expected post-fix | Every vanilla transition send carries `n/a`; the semantic identity payload independently restores the exact sword-right/mace-left descriptor. A peer without CWV never receives a modded skin id, and even all-CWV lobbies never depend on numeric lookup parity. |
+| Detection | `/cwv_regression_test`: `issue416_483_transition_generated_skin_identity` and `issue741_cwv_skin_wire_unconditional`; log shows `[cwv:741] ... -> n/a` plus bounded `[cwv:660]` exact-identity delivery. |
 
 ---
 
@@ -446,7 +500,7 @@ Last updated: 2026-07-18.
 | Category | INTEGRATION |
 | Repro | Open the Dual Axes illusion picker and compare its unique cosmetic keys with `wh_1h_axe_skins` plus `WeaponSkins.default_skins.wh_1h_axe`; select one with visibly distinct hands, inspect the inventory character preview, then join as a second player and inspect the owner's husk after the parity handshake. |
 | Expected post-fix | Exact source/clone key-set parity; source tier memberships and `required_dlc` are preserved; each clone has both hands and the family display rig. The inventory character preview and remote husk preserve the exact generated skin instead of reverting to the variant default. |
-| Detection | `/cwv_regression_test` checks `dual_axes_cosmetic_family_parity` and `issue579_dual_axes_preview_and_husk_skin_continuity`; coop log contains one bounded `[cwv:579] replayed ... after peer-parity confirmation` line per parity-enable edge. |
+| Detection | `/cwv_regression_test` checks `dual_axes_cosmetic_family_parity` and `issue579_dual_axes_preview_and_husk_skin_continuity`; coop log contains bounded `[cwv:660]` semantic identity delivery/ack and no `rpc_add_equipment` replay carrying a CWV skin index. |
 
 
 ---

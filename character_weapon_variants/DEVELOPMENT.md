@@ -54,6 +54,15 @@ material in CWV's `custom_gui_textures` does not make it valid in another mod's
 renderer. `_cwv_inventory_icons.lua` is the cross-mod contract: it lists exact
 injected renderers and a resident vanilla fallback for each custom icon.
 Consumers must resolve through it or fail closed to their own proven icon.
+The Athanor weapon list draws through `ingame_ui_context.ui_top_renderer`, whose
+VMF creator key is the already-injected `ingame_ui` renderer—not the separate
+`hero_view_state_weave_forge` preview renderer [src:
+`hero_window_weave_forge_weapons.lua:38,1005-1058`; `ingame_ui.lua:75-77,95`].
+VMF's six-argument `custom_atlas` API does not populate
+`masked_saturated_material_name`, so CWV idempotently fills only that absent
+field for its nine owned rows [src: VMF `custom_textures.lua:67-101`]. CIM still
+proves the resulting material in the exact live Gui before retaining a paired
+icon; any failed proof continues to select the vanilla fallback (#617/#787).
 
 Do not infer ownership from a `cwv_` prefix. A CWV item is owned only when its
 exact backend ID exists in CIM's persisted craft table. Migration code may
@@ -741,6 +750,10 @@ Every System B template clone follows the same shape (see `_create_imperial_dual
    ```
    Do **not** clobber `wield_anim_career_3p` wholesale — merge keys.
 
+   **Shared-donor exception (#760):** do not mutate the base when the same donor+career pair can also represent a genuine native item. The Outrider inherits `dr_deus_01`, so adding Saltzpyre's repeater stance to that base would also alter an actual Trollhammer exposed by WT. Instead, put the career map on the private Outrider clone, then replay the stance only after an exact Outrider preview spawn and after a remote husk wield has positive `cwv_item_identity` proof. Vanilla owner and husk wield resolution read `wield_anim_career_3p` before calling the body event [src: `scripts/unit_extensions/default_player_unit/inventory/simple_inventory_extension.lua:2008-2013`; `scripts/unit_extensions/default_player_unit/inventory/simple_husk_inventory_extension.lua:708-724`]. `to_repeater_pistol` is both the Repeater Pistol template's authored wield and a resident network animation [src: `scripts/settings/equipment/weapon_templates/repeating_pistols.lua:215`; `scripts/network_lookup/anims_lookup_table.lua:669`]. Validate the bidirectional lookup before mutation/dispatch, fail closed to the donor stance, cap evidence, never poll, and never transmit a custom animation id.
+
+   Owner first-person state machines are a separate contract. Switching Outrider to `ranged/repeater_pistol` is not structurally safe merely because `attack_shoot` is shared: Outrider also authors `attack_push`/`parry_pose`, while Repeater Pistol authors `lock_target` [src: `scripts/settings/equipment/weapon_templates/dr_deus_01.lua:15,77,136`; `scripts/settings/equipment/weapon_templates/repeating_pistols.lua:15,83,144`]. Preserve the functional launcher state machine until the complete target animation subgraph is proved in-game. When WT exposes Outrider to Saltzpyre, its closed #536 owner-local replay supplies the otherwise omitted local 3P `reload`; do not add a second CWV replay hook and double-fire that event.
+
 7. **Call the function at file load** (after the `Weapons` global is populated by VMF).
    ```lua
    _create_imperial_dual_swords_template()
@@ -1178,7 +1191,10 @@ Two things are intentionally KEPT alongside it:
 Husk mesh re-key AND transform fallback route through ONE decision point,
 `_om._husk_resolve_display_def(base, career, skin)`, with this order:
 
-1. **Wire skin PRIMARY.** A skin in either def-keyed cwv namespace — base
+1. **Exact semantic descriptor PRIMARY (#660/#741).** `cwv_item_identity`
+   carries provider/item/base/skin **string keys** and the receiver reconstructs
+   both hand units from its local registry. A skin in either def-keyed cwv
+   namespace — base
    `<item_key>_skin` or pairing `<item_key>_<tail>` (lazy longest-prefix,
    cached) — positively identifies the variant: re-key mesh + apply the def's
    transforms REGARDLESS of `can_wield` (#474: the old can_wield-excluded map
@@ -1192,11 +1208,11 @@ Husk mesh re-key AND transform fallback route through ONE decision point,
    named OUTSIDE any def's item_key (`cwv_il_es/wh_*`, `cwv_es_priest_es/wh_*`)
    don't resolve here — their skin data already drives the display and they
    carry no def transforms; the decline log wording marks them as cwv-family,
-   not native. NOTE (review finding): this arm is fed by today's skin wire
-   LEAK — the null-on-wire hook covers only base `_skin_keys` on
-   `game_object_initialized`, so pairing skins (and resync/hot-join base
-   skins) reach cwv clients un-nulled. A future all-sender null (the
-   cosmetics #421 treatment) MUST be peer-parity-gated or this arm goes dark.
+   not native. The vanilla `weapon_skin_id` wire is only a compatibility
+   fallback and receives `n/a` for every CWV skin on initial spawn, resync, and
+   hot join. Same-mod presence is **not** numeric lookup parity: another
+   skin-appending mod can shift indexes, so no roster gate may restore a CWV
+   skin to vanilla `rpc_add_equipment` (#741 / BUG_CLASSES 31, 64).
 2. **A present NON-cwv skin NEVER re-keys** (#475 Invariant 1). A native item
    virtually always carries a vanilla/LA skin on the wire; mis-applying a
    variant to it (the falsified "can never mis-apply" claim of the boot-time
@@ -1206,7 +1222,7 @@ Husk mesh re-key AND transform fallback route through ONE decision point,
    — the boot-time snapshot predated weapon_tweaker's can_wield patches (#475's
    second hole). A currently-wieldable pair declines: the shape is ambiguous
    between a wt-freedom native wield and a variant echo, and ambiguous shows
-   base. The skinned wield that follows still re-keys via arm 1.
+   base. The accepted semantic descriptor re-keys via arm 1.
 
 `backend_id` on the husk is always the base's, so it never resolves a cwv key.
 

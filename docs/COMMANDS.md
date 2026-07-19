@@ -51,6 +51,8 @@ dump_settings, dump_level, dump_glossary, dump_cosmetics, dump_items_by_slot,
 dump_hero_view, dump_ai, dump_menu, ai_slotdump, bot_loadout_dump, fire_probe,
 gt_disconnect_grace_probe, -- arm one bounded host disconnect lifecycle trace (#309)
 gt_chest_pickup_probe,      -- arm one bounded closed-chest pickup trace (#347)
+gt_stat_probe,              -- one read-only player stat census (#797)
+gt_stat_trace,              -- five bounded player stat censuses over ten seconds (#797)
 gt_regression_test,         -- issue diagnostic + regression commands retain gt_ prefix
 -- Host-side lobby controls (absorbed from lobby_tweaker; still lobby_-prefixed):
 lobby_reserve, lobby_unreserve, lobby_reservations,
@@ -122,7 +124,11 @@ forge_list, forge_delete, forge_delete_all, inv_dump, mirror_dump, craft_recent
 
 ### `enemy` (enemy_tweaker)
 ```
-et_dump_breeds, et_dump_compositions, et_status
+et_boss_idea_audit, et_dump_breeds, et_dump_compositions,
+et_dump_horde_composition, et_modifier_audit, et_regression_test,
+et_reset, et_spawn_dump, et_status, et_verify_refresh,
+verify_boss_balance, verify_event_size, verify_horde_size,
+verify_patrol_size, verify_roaming_size
 ```
 
 ### `vdl` (verminious_dreams_lighting)
@@ -150,7 +156,8 @@ event_probe, event_active, event_clear, event_apply
 
 ### `WOC` (weapons_of_chaos)
 ```
-woc_regression_test, woc_audio_contract, woc_audio_probe, woc_pose, woc_pose_reset, woc_chains
+woc_regression_test, woc_audio_contract, woc_audio_probe, woc_pose, woc_pose_reset,
+woc_chains, woc_boss_catalog
 ```
 
 ### `bt` (buff_tweaker)

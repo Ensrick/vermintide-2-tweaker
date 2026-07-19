@@ -306,6 +306,31 @@ function M.is_salvage_eligible(item, record, state)
     return true
 end
 
+-- #277 uses the same closed slot set as crafting/salvage. ItemMasterList calls
+-- the Charm slot `ring`; the runtime loadout carrier calls it `slot_ring`.
+function M.is_craftable_slot_type(slot_type)
+    return SALVAGE_SLOTS[slot_type] == true
+end
+
+-- One destructive-cleanup identity verdict shared by preview, confirmation,
+-- and execution. Exact membership in CIM's forged map is supplied by the
+-- caller; this contract proves the saved owner/schema stamp, canonical key,
+-- live provider row, and craftable slot. It never infers ownership from rarity
+-- or a backend-id prefix.
+function M.classify_owned_record(backend_id, record, master)
+    if type(backend_id) ~= "string" or backend_id == "" then return "unresolved" end
+    if type(record) ~= "table" then return "unresolved" end
+    if record.owner ~= M.OWNER or record.schema_version ~= M.SCHEMA_VERSION then
+        return "unresolved"
+    end
+    local item_key = M.canonical_item_key(record, backend_id)
+    if type(item_key) ~= "string" or item_key == "" then return "unresolved" end
+    if type(master) ~= "table" then return "unresolved" end
+    if not M.validate_provider(item_key, master) then return "unresolved" end
+    if not M.is_craftable_slot_type(master.slot_type) then return "retained" end
+    return "owned"
+end
+
 function M.partition_exact_ids(ids, records)
     local owned, foreign, seen = {}, {}, {}
     for i = 1, #(ids or {}) do

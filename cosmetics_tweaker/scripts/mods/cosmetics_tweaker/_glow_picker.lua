@@ -62,6 +62,7 @@ end
 -- one pure module so the picker and the renderer cannot drift apart. Pure and
 -- stateless, so a per-consumer dofile instance is safe.
 local INSTANCE_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy")
+local SLIDER_GEOMETRY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_slider_geometry")
 
 -- Backend ids identify the inventory instance; the skin suffix keeps a glow
 -- choice attached to the exact illusion variant when an item's illusion changes.
@@ -376,6 +377,13 @@ local SLIDER_VALUE_W = 60
 local SLIDER_GAP     = 10
 
 local function _widget_slider(scenegraph_id, label, min_val, max_val, decimals, thumb_color)
+    local track_style = {
+        size   = { SLIDER_TRACK_W, SLIDER_TRACK_H },
+        color  = { 220, 30, 30, 40 },
+        offset = { SLIDER_LABEL_W + SLIDER_GAP, 4, 1 },
+    }
+    local hotspot_style = SLIDER_GEOMETRY.hotspot_style(track_style, 2)
+
     return {
         element = {
             passes = {
@@ -397,10 +405,12 @@ local function _widget_slider(scenegraph_id, label, min_val, max_val, decimals, 
                         local sg_id = ui_content.scenegraph_id
                         local world_pos = UISceneGraph.get_world_position(ui_scenegraph, sg_id)
                         if not world_pos then return end
-                        local track_x = world_pos[1] + (ui_style.track and ui_style.track.offset and ui_style.track.offset[1] or 0)
-                        local rel = (scaled[1] - track_x) / SLIDER_TRACK_W
-                        if rel < 0 then rel = 0 end
-                        if rel > 1 then rel = 1 end
+                        -- `style_id = "track"` means this callback receives the
+                        -- track style itself.  Looking for `ui_style.track`
+                        -- loses the label/gap offset and displaces every click.
+                        local rel = SLIDER_GEOMETRY.value_from_cursor(
+                            scaled[1], world_pos[1], ui_style)
+                        if rel == nil then return end
                         ui_content.internal_value = rel
                         local real = ui_content.min + (ui_content.max - ui_content.min) * rel
                         if (ui_content.num_decimals or 0) == 0 then
@@ -428,10 +438,10 @@ local function _widget_slider(scenegraph_id, label, min_val, max_val, decimals, 
                     pass_type = "local_offset",
                     offset_function = function(ui_scenegraph, ui_style, ui_content)
                         local rel = ui_content.internal_value or 0
-                        local thumb_offset_x = (SLIDER_TRACK_W - SLIDER_THUMB_W) * rel
-                        local track_offset_x = ui_style.track and ui_style.track.offset and ui_style.track.offset[1] or 0
-                        if ui_style.thumb and ui_style.thumb.offset then
-                            ui_style.thumb.offset[1] = track_offset_x + thumb_offset_x
+                        local thumb_left = SLIDER_GEOMETRY.thumb_left(
+                            ui_style.track, rel, SLIDER_THUMB_W)
+                        if thumb_left and ui_style.thumb and ui_style.thumb.offset then
+                            ui_style.thumb.offset[1] = thumb_left
                         end
                     end,
                 },
@@ -457,10 +467,7 @@ local function _widget_slider(scenegraph_id, label, min_val, max_val, decimals, 
             -- region. Without this, default hotspot used the full 360x24
             -- scenegraph node size including the label area where there's
             -- no visual track to click.
-            hotspot = {
-                size   = { SLIDER_TRACK_W + 4, SLIDER_TRACK_H + 4 },
-                offset = { SLIDER_LABEL_W + SLIDER_GAP - 2, 2, 0 },
-            },
+            hotspot = hotspot_style,
             label = {
                 font_type = "hell_shark",
                 font_size = 16,
@@ -470,11 +477,7 @@ local function _widget_slider(scenegraph_id, label, min_val, max_val, decimals, 
                 size   = { SLIDER_LABEL_W, SLIDER_TRACK_H },
                 offset = { 0, 4, 1 },
             },
-            track = {
-                size   = { SLIDER_TRACK_W, SLIDER_TRACK_H },
-                color  = { 220, 30, 30, 40 },
-                offset = { SLIDER_LABEL_W + SLIDER_GAP, 4, 1 },
-            },
+            track = track_style,
             thumb = {
                 size   = { SLIDER_THUMB_W, SLIDER_TRACK_H },
                 color  = thumb_color or { 255, 200, 200, 200 },
@@ -1165,6 +1168,10 @@ function GlowPicker._live_preview()
     if mod._reapply_glow_on_wielded then
         pcall(mod._reapply_glow_on_wielded)
     end
+    if mod._reapply_glow_on_customization_preview then
+        pcall(mod._reapply_glow_on_customization_preview, GlowPicker._preview_host,
+            GlowPicker._current_backend_id, GlowPicker._current_slot_data)
+    end
 end
 
 function GlowPicker.open_for(backend_id, slot_data)
@@ -1276,6 +1283,10 @@ function GlowPicker.apply()
     mod._active_per_item_glow_item_name = item_data and item_data.name or nil
     mod._active_per_item_glow_item_template = item_data and item_data.template or nil
     if mod._reapply_glow_on_wielded then pcall(mod._reapply_glow_on_wielded) end
+    if mod._reapply_glow_on_customization_preview then
+        pcall(mod._reapply_glow_on_customization_preview, GlowPicker._preview_host,
+            backend_id, slot_data)
+    end
     if mod._emit_per_item_glow then pcall(mod._emit_per_item_glow) end
     GlowPicker._commit_revision = GlowPicker._commit_revision + 1
     if mod._cos_glow_badges_refresh then
@@ -1336,6 +1347,10 @@ function GlowPicker.restore_default()
     if mod._repaint_native_glow_on_wielded then
         pcall(mod._repaint_native_glow_on_wielded, GlowPicker._native_mat)
     end
+    if mod._repaint_native_glow_on_customization_preview then
+        pcall(mod._repaint_native_glow_on_customization_preview,
+            GlowPicker._preview_host, backend_id, slot_data, GlowPicker._native_mat)
+    end
 
     -- The committed override is gone, so refresh the grids to drop the badge.
     GlowPicker._commit_revision = GlowPicker._commit_revision + 1
@@ -1355,6 +1370,7 @@ function GlowPicker.close()
     local backend_id = GlowPicker._current_backend_id
     local committed = GlowPicker._committed_glow_state
     local native_mat = GlowPicker._native_mat
+    local slot_data = GlowPicker._current_slot_data
     if backend_id ~= nil then
         mod._per_item_glow_runtime = mod._per_item_glow_runtime or {}
         mod._per_item_glow_runtime[backend_id] = committed and _clone(committed) or nil
@@ -1364,6 +1380,13 @@ function GlowPicker.close()
         -- the native template directly to undo any live-preview paint.
         if not committed and mod._repaint_native_glow_on_wielded then
             pcall(mod._repaint_native_glow_on_wielded, native_mat)
+        end
+        if committed and mod._reapply_glow_on_customization_preview then
+            pcall(mod._reapply_glow_on_customization_preview,
+                GlowPicker._preview_host, backend_id, slot_data)
+        elseif not committed and mod._repaint_native_glow_on_customization_preview then
+            pcall(mod._repaint_native_glow_on_customization_preview,
+                GlowPicker._preview_host, backend_id, slot_data, native_mat)
         end
     end
     GlowPicker._open               = false
@@ -1376,6 +1399,7 @@ function GlowPicker.close()
     GlowPicker._native_mat         = nil
     GlowPicker._has_override       = false
     GlowPicker._dirty              = false
+    GlowPicker._preview_host       = nil
 end
 
 function GlowPicker.is_open()
@@ -1385,8 +1409,9 @@ end
 -- --------------------------------------------------------
 -- Per-frame: input + render
 -- --------------------------------------------------------
-function GlowPicker.handle_input(input_service)
+function GlowPicker.handle_input(input_service, preview_host)
     if not GlowPicker._open then return false end
+    if preview_host ~= nil then GlowPicker._preview_host = preview_host end
     local by_name = GlowPicker._widgets_by_name
     if not by_name then return false end
     local close = by_name.close_btn
@@ -1453,8 +1478,9 @@ end
 
 -- Throttle draw-hook logging so it doesn't spam every frame.
 GlowPicker._draw_log_frame = 0
-function GlowPicker.draw(ui_renderer, input_service, dt)
+function GlowPicker.draw(ui_renderer, input_service, dt, preview_host)
     if not GlowPicker._open then return end
+    if preview_host ~= nil then GlowPicker._preview_host = preview_host end
     if not GlowPicker._built then
         _log_only("[glow_picker:draw] open=true but built=false — _build never succeeded")
         return

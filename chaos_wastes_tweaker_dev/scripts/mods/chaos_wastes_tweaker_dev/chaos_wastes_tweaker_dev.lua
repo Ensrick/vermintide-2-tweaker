@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.300-dev"
+local MOD_VERSION = "0.7.302-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -2847,177 +2847,14 @@ mod:hook("DeusRunController", "get_run_difficulty", function(func, self)
     return stepped
 end)
 
--- ============================================================
--- Replacement-player progression compensation (Issue #465)
--- ============================================================
--- Vanilla keeps CW progression under (peer, local-player, profile, career) keys.
--- Removing a bot for a joiner does not move those keys, and adding a bot after a
--- departure initializes a fresh profile row. Preserve the selected replacement's
--- boons, persistent buffs, and serialized melee/ranged CW weapons at the exact
--- GameModeDeus add/remove boundaries. A joining human receives the host's current
--- coin balance, per the feature specification; a departure-created bot receives
--- the departing human's balance until another human takes over.
---
--- Direct run-state writes use only vanilla SharedState fields. No custom RPC or
--- per-frame polling is involved. If CT peer parity has not been positively proven,
--- CT-owned boon/buff names are filtered before the copy so this convenience feature
--- can never put an unknown NetworkLookup index on a joining peer's wire.
-CT_REPLACEMENT_COMPENSATION_MARKER = "replacement_compensation:host_state_handoff_v0.7.277"
-mod._ct_replacement_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_replacement_compensation")
-mod._ct_replacement_cache = {}
-mod._ct_replacement_log_count = 0
-
-function mod._ct_replacement_log(fmt, ...)
-    if mod._ct_replacement_log_count >= 32 then return end
-    mod._ct_replacement_log_count = mod._ct_replacement_log_count + 1
-    pcall(printf, "[ct:465] " .. fmt, ...)
-end
-
-function mod._ct_replacement_filtered(snapshot)
-    local wire_safe = mod._ct_wire_safe and mod._ct_wire_safe() or false
-    local ok, filtered, removed_power_ups, removed_buffs = pcall(
-        mod._ct_replacement_policy.wire_safe_copy, snapshot, wire_safe,
-        mod._ct_is_modded_power_up, mod._ct_is_ct_buff_template)
-    if not ok then return nil, 0, 0, filtered end
-    return filtered, removed_power_ups, removed_buffs
-end
-
-function mod._ct_replacement_capture(run_state, peer_id, local_player_id, profile_index, career_index)
-    local ok, snapshot, reason = pcall(mod._ct_replacement_policy.capture, run_state,
-        peer_id, local_player_id, profile_index, career_index)
-    if not ok then return nil, snapshot end
-    return snapshot, reason
-end
-
-function mod._ct_replacement_apply(run_state, peer_id, local_player_id, profile_index, career_index, snapshot, coins)
-    local ok, applied, reason = pcall(mod._ct_replacement_policy.apply, run_state,
-        peer_id, local_player_id, profile_index, career_index, snapshot, coins)
-    if not ok then return false, applied end
-    return applied, reason
-end
-
-mod:hook("GameModeDeus", "player_left_game_session", function(func, self, peer_id, local_player_id)
-    if self and self._is_server and effective_setting("replacement_player_compensation") then
-        local run_state = self._deus_run_controller and self._deus_run_controller._run_state
-        if run_state then
-            local profile_index, career_index = run_state:get_player_profile(peer_id, local_player_id)
-            if not profile_index or profile_index == 0 then
-                local player = Managers.player and Managers.player:player(peer_id, local_player_id)
-                profile_index = player and player.profile_index and player:profile_index() or profile_index
-                career_index = player and player.career_index and player:career_index() or career_index
-            end
-            local snapshot, reason = mod._ct_replacement_capture(run_state, peer_id,
-                local_player_id, profile_index, career_index)
-            local key = mod._ct_replacement_policy.profile_key(profile_index, career_index)
-            if snapshot and key then
-                mod._ct_replacement_cache[key] = mod._ct_replacement_cache[key] or {}
-                mod._ct_replacement_cache[key][#mod._ct_replacement_cache[key] + 1] = snapshot
-                mod._ct_replacement_log("captured departing human peer=%s local=%s profile=%s:%s boons=%d coins=%s",
-                    tostring(peer_id), tostring(local_player_id), tostring(profile_index),
-                    tostring(career_index), #(snapshot.power_ups or {}), tostring(snapshot.coins))
-            else
-                mod._ct_replacement_log("departure capture skipped peer=%s local=%s reason=%s",
-                    tostring(peer_id), tostring(local_player_id), tostring(reason))
-            end
-        end
-    end
-    return func(self, peer_id, local_player_id)
-end)
-
-mod:hook_safe("GameModeDeus", "_add_bot", function(self)
-    if not (self and self._is_server) then return end
-    local bots = self._bot_players
-    local bot = bots and bots[#bots]
-    local run_state = self._deus_run_controller and self._deus_run_controller._run_state
-    if not (bot and run_state) then return end
-
-    -- Fresh bots begin with their own ledger seeded from the host's live balance.
-    -- A #465 departure snapshot, when present, intentionally overwrites this seed
-    -- below with the departing human's balance.
-    if mod._ct_bot_economy_active() then
-        local bot_peer, bot_local = bot:network_id(), bot:local_player_id()
-        local ledger_key = tostring(bot_peer) .. ":" .. tostring(bot_local)
-        local host_peer = run_state:get_server_peer_id()
-        local host_coins = run_state:get_player_soft_currency(host_peer, REAL_PLAYER_LOCAL_ID) or 0
-        run_state:set_player_soft_currency(bot_peer, bot_local, host_coins)
-        mod._ct_bot_economy_initialized[ledger_key] = true
-        mod._ct_bot_economy_log("initialized bot=%s balance=%s from host",
-            tostring(bot.name and bot:name() or bot_local), tostring(host_coins))
-    end
-
-    if not effective_setting("replacement_player_compensation") then return end
-
-    local profile_index = bot:profile_index()
-    local career_index = bot:career_index()
-    local key = mod._ct_replacement_policy.profile_key(profile_index, career_index)
-    local queue = key and mod._ct_replacement_cache[key]
-    local snapshot = queue and queue[1]
-    if not snapshot then return end
-
-    local filtered, removed_power_ups, removed_buffs, filter_reason = mod._ct_replacement_filtered(snapshot)
-    local ok, reason = mod._ct_replacement_apply(run_state, bot:network_id(),
-        bot:local_player_id(), profile_index, career_index, filtered)
-    if ok then
-        table.remove(queue, 1)
-        if #queue == 0 then mod._ct_replacement_cache[key] = nil end
-    end
-    mod._ct_replacement_log("human->bot profile=%s:%s applied=%s boons=%d coins=%s parity_filtered=%d/%d reason=%s",
-        tostring(profile_index), tostring(career_index), tostring(ok),
-        #(filtered and filtered.power_ups or {}), tostring(filtered and filtered.coins),
-        removed_power_ups or 0, removed_buffs or 0, tostring(reason or filter_reason))
-end)
-
-mod:hook("GameModeDeus", "remove_bot", function(func, self, party_id, peer_id, local_player_id, update_safe)
-    local bot = func(self, party_id, peer_id, local_player_id, update_safe)
-    if not (bot and self and self._is_server and effective_setting("replacement_player_compensation")) then
-        return bot
-    end
-
-    local run_controller = self._deus_run_controller
-    local run_state = run_controller and run_controller._run_state
-    if not run_state then return bot end
-
-    local bot_profile = bot:profile_index()
-    local bot_career = bot:career_index()
-    local snapshot, reason = mod._ct_replacement_capture(run_state, bot:network_id(),
-        bot:local_player_id(), bot_profile, bot_career)
-    local target_profile, target_career = run_state:get_player_profile(peer_id, local_player_id)
-    if not mod._ct_replacement_policy.same_identity(bot_profile, bot_career,
-        target_profile, target_career) then
-        mod._ct_replacement_log("bot->human skipped incompatible identity bot=%s:%s target=%s:%s",
-            tostring(bot_profile), tostring(bot_career), tostring(target_profile), tostring(target_career))
-        return bot
-    end
-    if not snapshot then
-        mod._ct_replacement_log("bot->human capture skipped target=%s reason=%s", tostring(peer_id), tostring(reason))
-        return bot
-    end
-
-    local filtered, removed_power_ups, removed_buffs, filter_reason = mod._ct_replacement_filtered(snapshot)
-    local host_peer = run_state:get_server_peer_id()
-    local host_coins = run_state:get_player_soft_currency(host_peer, REAL_PLAYER_LOCAL_ID)
-    local ok, apply_reason = mod._ct_replacement_apply(run_state, peer_id, local_player_id,
-        target_profile, target_career, filtered, host_coins)
-
-    -- player_entered_game_session may have restored spawn data before party assignment.
-    -- Rebuild it once after the authoritative row is copied so the first spawn consumes
-    -- the compensated weapons and buffs rather than the joiner's temporary initial row.
-    if ok and self._deus_spawning and self._deus_spawning._restore_player_game_mode_data then
-        local status = Managers.party and Managers.party:get_player_status(peer_id, local_player_id)
-        if status then
-            local restore_ok, restored = pcall(self._deus_spawning._restore_player_game_mode_data,
-                self._deus_spawning, peer_id, local_player_id, target_profile, target_career)
-            if restore_ok then status.game_mode_data = restored end
-        end
-    end
-
-    mod._ct_replacement_log("bot->human bot_profile=%s:%s target=%s:%s applied=%s boons=%d host_coins=%s parity_filtered=%d/%d reason=%s",
-        tostring(bot_profile), tostring(bot_career), tostring(target_profile), tostring(target_career),
-        tostring(ok), #(filtered and filtered.power_ups or {}), tostring(host_coins),
-        removed_power_ups or 0, removed_buffs or 0, tostring(apply_reason or filter_reason))
-    return bot
-end)
-
+-- Replacement-player progression compensation (Issue #465). Runtime ownership
+-- is extracted to keep the CT entry chunk below its frozen decomposition ceiling.
+mod._ct_replacement_runtime = mod:dofile(
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_replacement_runtime")
+mod._ct_replacement_runtime.install(mod, {
+    effective_setting = effective_setting,
+    real_player_local_id = REAL_PLAYER_LOCAL_ID,
+})
 -- ============================================================
 -- Journey-completion difficulty crash guard (Issue #291)
 -- ============================================================
@@ -3088,6 +2925,7 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     mod._ct_progdiff_last_logged = nil
     mod._ct_progcoin_last_logged = nil
     mod._ct_replacement_cache = {}
+    mod._ct_replacement_pending_humans = {}
     mod._ct_replacement_log_count = 0
     mod._ct_bot_economy_initialized = {}
     mod._ct_bot_economy_log_count = 0
@@ -8989,6 +8827,11 @@ mod:hook_safe("IngamePlayerListUI", "_draw", function(self, dt)
     local widgets = self._ct_boon_preview_widgets
     local has_boons = widgets and #widgets > 0
     local cw = self._ct_deus_collectibles
+    -- #571 load-order fence: gut_dev can suppress setup before CT's wrapper runs.
+    -- Recover CT's owner-specific rows once, from this consolidated draw seam.
+    if not cw and type(mod._ct_ensure_deus_collectibles) == "function" then
+        pcall(mod._ct_ensure_deus_collectibles, self, "draw_recovery"); cw = self._ct_deus_collectibles
+    end
     if not has_boons and not cw then return end
     pcall(function()
         local r = self._ui_top_renderer
@@ -9185,7 +9028,7 @@ do
         { key = "chests", icon = "deus_icons_boon", label_key = "ct_tab_chests_of_trials" },
         { key = "coins",  icon = "deus_icons_coin", label_key = "ct_tab_pilgrims_coins" },
     }
-    -- Native-sized; #571 resolves any downscale from the live scenegraph.
+    -- Native-sized; #571 reuses vanilla's widget-local two-per-row offset loop.
     local ICON_SIZE = 80
 
     -- Verbatim copy of vanilla create_loot_widget (definitions:843-1041) MINUS the
@@ -9317,25 +9160,19 @@ do
             end
         end
     end
-
     -- Build point + adventure-counter suppression. FULL wrapper (not hook_safe): under
     -- the deus mechanism vanilla must NOT run -- it would build tome/grim/dice counters
     -- from the injected level's defaulted loot_objectives. Keep/hubs stay vanilla.
     mod:hook("IngamePlayerListUI", "_setup_mission_data", function(func, self, level_settings)
         self._ct_deus_collectibles = nil
+        self._ct_deus_collectibles_build_failed = nil
         if self._is_in_inn or (level_settings and level_settings.hub_level)
             or not deus_run_controller_or_nil() then
             return func(self, level_settings)
         end
-        local ok, err = pcall(function()
-            self._ct_deus_collectibles = mod._ct_build_deus_collectibles()
-        end)
-        if not ok then
-            self._ct_deus_collectibles = nil
-            pcall(printf, "[ct:533] deus collectibles build failed (pane falls back to vanilla): %s", tostring(err))
+        if not mod._ct_ensure_deus_collectibles(self, "setup_mission_data") then
             return func(self, level_settings)
         end
-        pcall(printf, "[ct:533] Tab-hold collectibles -> deus counters (Chests of Trials + Pilgrim's Coins); adventure tome/grim/dice counters suppressed")
         -- Deliberately NOT calling func: on a deus-run level the vanilla build is either
         -- a no-op (vanilla CW level, no loot_objectives) or wrong (injected adventure
         -- level, defaulted adventure loot_objectives).
@@ -10405,6 +10242,11 @@ local function _bot_equip_weapon(bot, new_weapon, slot_name, run_state, host_pee
 
     return true
 end
+
+-- #465's replacement hook is registered earlier in this chunk but fires only
+-- after load. Export the one canonical bot equip primitive so a human->bot
+-- handoff updates the live/backend loadout as well as the SharedState row.
+mod._ct_bot_equip_weapon = _bot_equip_weapon
 
 local function _bot_get_current_loadout(bot, run_state, host_peer_id, slot_name)
     local profile_index, career_index, _ = _resolve_bot_career(bot)

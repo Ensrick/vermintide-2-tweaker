@@ -1,5 +1,18 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.303-dev (2026-07-19) -- reconcile newly added settings into existing profiles (#828) [verify-fix-coop]
+
+- Upgrades sparse saved profiles from the current declared defaults while preserving every explicit saved value, including `false` and explicit opt-ins.
+- Applies only missing members through the existing bounded owner transaction and persists the upgraded snapshot only after every addition succeeds.
+- Keeps stable/dev and standalone/keep-state profile behavior aligned, with bounded `[gut:828]` receipts only when a migration is actually needed.
+
+## 0.2.302-dev (2026-07-19) -- #312 live UI Tweaks integration [verify-fix]
+
+- Replaces the copied UI Tweaks checkbox allow-list with the installed mod's current VMF widget tree, preserving groups, sliders, dropdowns, and keybinds in both Mod Tweaker presentations.
+- Routes reads and writes to UI Tweaks as the single owner while excluding its values from GUI Tweaker's per-tab profiles.
+- Preserves the authored fallback when UI Tweaks is absent, disabled, or its live widget registry is temporarily unavailable.
+- Adds pure planner regression coverage for live-tree rebasing, ownership, profile exclusion, future widget types, and fail-closed fallback behavior.
+
 ## 0.2.301-dev (2026-07-19) -- #257/#274 order-independent cutscene skip window + #245/#246/#250/#533 live-session Hold-Tab provider [untested]
 
 Two root-cause clusters, one build.

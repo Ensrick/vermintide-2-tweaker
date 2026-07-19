@@ -1,5 +1,48 @@
 # Crafting in Modded Changelog
 
+## 0.8.100-dev (2026-07-19): #277 accessory cleanup and #787 authored Dual Axes icons [verify-fix]
+
+- Extended `/forge_delete_all` from melee/ranged weapons to the complete
+  synthetic craft scope already owned by the issue 628 contract: melee,
+  ranged, necklace, ring (Charm), and trinket. Exact `_forged_weapons`
+  membership plus the normalized owner/schema stamp remains mandatory;
+  ordinary inventory, rarity/prefix lookalikes, out-of-scope rows, and
+  unresolved provider definitions remain untouched.
+- Kept the destructive path fail-closed when any candidate is equipped in a
+  current or saved loadout or when equip state cannot be read. Execution now
+  revalidates every requested record through the same contract before making
+  any mutation.
+- Hardened preview/confirm against same-ID replacement. The snapshot now
+  fingerprints canonical item identity, owner/schema, live slot/provider, and
+  mirror-vs-MIL cleanup route rather than only backend IDs. Cosmetic/property
+  edits do not change cleanup identity and do not invalidate the preview.
+- Updated command, preview, completion, list, log, checklist, and Workshop copy
+  that incorrectly described the forged store as weapons-only.
+
+**Solo verification after integration/deployment:** craft a weapon plus one
+necklace, Charm, and trinket; keep ordinary equivalents; unequip every CIM
+craft from current and saved loadouts; preview and confirm `/forge_delete_all`.
+Only the four CIM crafts should disappear and stay absent after restart. Then
+repeat with one CIM accessory equipped and confirm the entire batch refuses.
+
+- The Athanor icon resolver now requests the complete masked-and-saturated atlas material pair from the active `ingame_ui` renderer instead of assuming the weave-forge state supplies it.
+- CWV Dual Axes rows consume CWV's paired authored icon for both Kruber and Saltzpyre; missing providers or atlas materials fail closed to the native icon.
+- Added cross-mod appearance-contract coverage and kept stable CIM untouched pending its normal promotion path.
+
+## 0.8.99-dev (2026-07-19): #823 prevent regression checks from rehooking live modules [verify-fix]
+
+- Made the modded-rarity owner idempotent so an accidental second load returns
+  its existing API instead of registering the same five VMF hooks again.
+- Removed the regression suite's side-effecting `mod:dofile` call and read the
+  already-published localization table instead.
+- Added offline contracts that forbid regression checks from reloading hook
+  owners and require the hook-owning module's reload guard.
+
+**Solo verification:** launch CIM Dev, run `/cim_regression_test` twice, and
+confirm `no_duplicate_hook_safe_registrations` passes both times. The log must
+contain no `Attempting to rehook active hook` warning for `Localize`,
+`_state_setup_upgrade`, either inventory `on_enter`, or `get_weapon_pool`.
+
 ## 0.8.98-dev (2026-07-19): #404 restore in-mission Athanor preview [verify-fix]
 
 - Accepted Stingray's retail callable-table `Vector3` and `Vector3Box`

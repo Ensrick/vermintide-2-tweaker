@@ -162,25 +162,44 @@ function M.install(mod, _rt_register, deps)
         if #failures > 0 then return table.concat(failures, "; ") end
     end)
 
-    _rt_register("issue732_cwv_infantry_spear_saltzpyre_remap", function()
-        local donor = _3p_template_remaps
-            and _3p_template_remaps.two_handed_spears_elf_template_1
+    _rt_register("issue748_cwv_style_clone_contracts", function()
+        local aliases = _WIELD_PATCHES_MODULE and _WIELD_PATCHES_MODULE.cwv_style_donors
+        if type(aliases) ~= "table" then return "CWV style alias catalogue missing" end
+        local function wield_contract(name)
+            local direct = _WIELD_PATCHES_MODULE.patches[name]
+            local bulk = _WIELD_PATCHES_MODULE.bulk[name]
+            if type(direct) == "table" and type(bulk) == "table" then
+                return nil, name .. " is duplicated across wield catalogues"
+            end
+            return direct or bulk
+        end
+        local count = 0
+        for clone_name, donor_name in pairs(aliases) do
+            count = count + 1
+            local donor_wield, err = wield_contract(donor_name)
+            if err then return err end
+            local clone_wield, clone_err = wield_contract(clone_name)
+            if clone_err then return clone_err end
+            if type(donor_wield) ~= "table" then
+                return donor_name .. " donor 3P wield contract missing"
+            end
+            if clone_wield ~= donor_wield then
+                return clone_name .. " does not share donor 3P wield contract " .. donor_name
+            end
+            local donor_remap = _3p_template_remaps and _3p_template_remaps[donor_name]
+            local clone_remap = _3p_template_remaps and _3p_template_remaps[clone_name]
+            if type(donor_remap) == "table" and clone_remap ~= donor_remap then
+                return clone_name .. " does not share donor 3P remap contract " .. donor_name
+            end
+        end
+        if count ~= 6 then return "CWV style alias catalogue expected 6 rows, got " .. count end
         local clone = _3p_template_remaps
             and _3p_template_remaps.cwv_infantry_spear_template
-        if type(donor) ~= "table" or clone ~= donor then
-            return "CWV Infantry spear does not share the elf-spear 3P remap contract"
-        end
-        if type(clone.wh_) ~= "table"
+        if type(clone) ~= "table" or type(clone.wh_) ~= "table"
             or clone.wh_.attack_swing_down_left_axe ~= "attack_swing_stab" then
             return "Saltzpyre first-light event is not remapped to attack_swing_stab"
         end
-
-        local patches = _WIELD_PATCHES_MODULE and _WIELD_PATCHES_MODULE.patches
-        local donor_wield = patches and patches.two_handed_spears_elf_template_1
-        local clone_wield = patches and patches.cwv_infantry_spear_template
-        if type(donor_wield) ~= "table" or clone_wield ~= donor_wield then
-            return "CWV Infantry spear does not share the elf-spear 3P wield contract"
-        end
+        local clone_wield = wield_contract("cwv_infantry_spear_template")
         for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
             if clone_wield[career] ~= "to_2h_billhook" then
                 return career .. " Infantry spear wield is not routed to billhook vocabulary"
@@ -337,6 +356,34 @@ function M.install(mod, _rt_register, deps)
         assert(contract.baked_shield_scope == "standard_saltzpyre_3p"
             and contract.spear_shield_exempt_key == "es_deus_01",
             "shield rotation ownership/exemption contract drifted")
+    end)
+
+    _rt_register("issue735_shield_rotation_left_only", function()
+        local plan = mod._wt587_baked_transform_plan
+        local policy = _wt_grip_offset_policy
+        assert(type(plan) == "function" and policy and policy.contract,
+            "per-hand transform policy missing")
+        for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+            for _, weapon_key in ipairs({
+                "es_mace_shield", "es_sword_shield", "es_sword_shield_breton",
+                "dr_shield_axe", "cwv_es_axe_shield", "cwv_es_axe_shield_veteran",
+            }) do
+                local rotation = plan(weapon_key, career).rotation
+                assert(rotation and rotation.hand == "left",
+                    string.format("#735 shield rotation hand drift key=%s career=%s",
+                        weapon_key, career))
+                assert(policy.applies_to_hand(rotation, "left")
+                    and not policy.applies_to_hand(rotation, "right"),
+                    "#735 hand policy would rotate the primary weapon: " .. weapon_key)
+                assert(policy.preview_slot_field(
+                    { left_hand_unit = "shield", right_hand_unit = "weapon" }, rotation) == nil,
+                    "#735 paired preview must defer to exact spawn_data hand adapter")
+            end
+        end
+        assert(policy.contract.hand_scope == "descriptor_hand_field"
+            and policy.contract.paired_scoped_preview == "post_spawn_data_hand_adapter"
+            and policy.contract.retained_evidence == "post_write_engine_readback",
+            "#735 hand/preview/retained-state contract drifted")
     end)
 
     _rt_register("wt_safe_hook_installed", function()

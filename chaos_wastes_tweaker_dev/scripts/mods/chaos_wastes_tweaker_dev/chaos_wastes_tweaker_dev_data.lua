@@ -871,8 +871,7 @@ local data = {
                         sub_widgets = {
                             -- Per-Chest-of-Trials enemy spawn-count multiplier (Issue #64).
                             -- 1.0 = vanilla; applies only to the "cursed_chest_enemies" waves.
-                            { setting_id = "cot_cost_enabled", type = "checkbox", default_value = false, tooltip = "cot_cost_enabled_tooltip" },
-                            { setting_id = "cot_cost_amount", type = "numeric", default_value = 100, range = { 25, 1000 }, decimals_number = 0, step = 25, tooltip = "cot_cost_amount_tooltip" },
+                            { setting_id = "cot_cost_amount", type = "numeric", default_value = 0, range = { 0, 1000 }, decimals_number = 0, tooltip = "cot_cost_amount_tooltip" },
                             { setting_id = "cot_open_at_trial_start", type = "checkbox", default_value = false, tooltip = "cot_open_at_trial_start_tooltip" },
                             { setting_id = "cot_enemy_multiplier", type = "numeric", default_value = 1.0, range = { 0.5, 5.0 }, decimals_number = 1, tooltip = "cot_enemy_multiplier_tooltip" },
                             { setting_id = "respawn_on_chest_complete", type = "checkbox", default_value = false, tooltip = "respawn_on_chest_complete_tooltip" },

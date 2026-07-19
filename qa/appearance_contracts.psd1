@@ -50,6 +50,83 @@
 
     Contracts = @(
         @{
+            Id = 'cwv.issue760.outrider-saltzpyre-stance'
+            Issue = 760
+            Claim = 'structural-only'
+            Owners = @(
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_outrider_animation.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'pose'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'covered'; Evidence = 'the policy and runtime regression preserve the functional blunderbuss state_machine, wield_anim, and no-ammo wield; no receiver-specific first-person mutation is made' }
+                        owner_3p = @{ Disposition = 'covered'; Evidence = 'the private Outrider clone maps all three standard Saltzpyre careers to bidirectionally resident to_repeater_pistol without changing Kruber; WT closed issue 536 supplies the local-owner reload replay' }
+                        bot_3p = @{ Disposition = 'covered'; Evidence = 'Saltzpyre bots consume the same career-aware private clone mapping as the owning extension' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'the consolidated husk-wield edge replays the resident stance only after exact cwv_item_identity proves Outrider; malformed identity, missing lookup, dead unit, or dispatch failure fails closed' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'the shared item-spawn post hook replays the stance only for the exact Outrider definition and receiver career after lookup/liveness validation' }
+                        cosmetic_preview = @{ Disposition = 'not-applicable'; Reason = 'weapon-only cosmetic preview renders the weapon unit without a character body pose' }
+                        athanor_preview = @{ Disposition = 'not-applicable'; Reason = 'Athanor weapon preview renders the weapon unit without a character body pose' }
+                        crafting_preview = @{ Disposition = 'not-applicable'; Reason = 'crafting item preview renders the weapon unit without a character body pose' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'generic lobby character reconstruction is not part of the issue claim and has no paired runtime evidence for this exact item' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'score-screen character reconstruction is not part of the issue claim and has no paired runtime evidence for this exact item' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab displays item data and icons rather than an animated character body' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the receiver stance is derived from exact item and career identity and has no persisted pose state' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'the private template carries the receiver mapping before initial equipment construction' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'vanilla owner wield selection consumes the career-aware private template map' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'owner and consolidated husk wield edges consume the receiver-native stance' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'illusion customization does not alter the item or receiver identity that selects the stance' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'Outrider has no Combat Style state in the #760 contract' }
+                        career_change = @{ Disposition = 'deferred'; Reason = 'career replacement reconstructs equipment, but a live career-change observation for this item has not been captured' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'replacement owner equipment consumes the clone map and replacement husks consume exact semantic identity' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'replacement owner equipment consumes the clone map and replacement husks consume exact semantic identity' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'accepted exact identity triggers one active-slot husk re-wield and exact receiver stance replay' }
+                        peer_ready = @{ Disposition = 'covered'; Evidence = 'the existing acknowledged semantic identity channel re-wields the active slot after receiver acceptance' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the stance uses a resident vanilla animation id and depends on exact semantic identity rather than numeric content parity' }
+                        rejoin = @{ Disposition = 'covered'; Evidence = 'a recreated husk receives exact semantic identity and re-enters the bounded wield reconstruction edge' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each exact preview spawn runs the receiver-scoped post hook once' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'each replacement exact preview unit runs the receiver-scoped post hook once' }
+                        lobby_score_create = @{ Disposition = 'deferred'; Reason = 'lobby and score reconstruction remain outside the paired #760 evidence boundary' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live restoration of an already spawned receiver pose on CWV disable has not been proven' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_outrider_animation.lua'
+                            Names = @(
+                                'CWV #760 applies receiver-native Outrider 3P stance only to standard Saltzpyre'
+                                'CWV #760 fails closed when the resident animation contract is absent'
+                                'CWV #760 runtime regression owns template and preview invariants'
+                            )
+                            Surfaces = @('owner_1p', 'owner_3p', 'bot_3p')
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'mission_transition', 'respawn')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_outrider_animation.lua'
+                            Names = @(
+                                'CWV #760 husk replay is exact semantic identity gated'
+                                'CWV #760 dispatch and evidence fail closed with a hard cap'
+                            )
+                            Surfaces = @('remote_husk_3p')
+                            ReplayEdges = @('hot_join', 'peer_ready', 'rejoin')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_outrider_animation.lua'
+                            Names = @(
+                                'CWV #760 preview resolver is exact item and receiver scoped'
+                                'CWV #760 dispatch and evidence fail closed with a hard cap'
+                            )
+                            Surfaces = @('inventory_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cwv.issue660.exact-unit-identity'
             Issue = 660
             Claim = 'structural-only'
@@ -85,8 +162,8 @@
                         mission_transition = @{ Disposition = 'covered'; Evidence = 'gameplay-state enter request/replay' }
                         respawn = @{ Disposition = 'deferred'; Reason = 'paired runtime respawn evidence is still required by open #660' }
                         hot_join = @{ Disposition = 'covered'; Evidence = 'targeted joining-peer descriptor replay' }
-                        peer_ready = @{ Disposition = 'deferred'; Reason = 'the first proven peer/session-ready callback has not replaced provider-specific retry and replay paths' }
-                        parity_ready = @{ Disposition = 'covered'; Evidence = 'post-parity bounded replay' }
+                        peer_ready = @{ Disposition = 'covered'; Evidence = 'acknowledged semantic identity delivery retries at 0.5-second cadence with an eight-attempt cap until the joining peer accepts the exact fingerprint' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'issue #741 retired numeric skin replay; appearance transport is roster-independent and uses stable string-key semantic identity' }
                         rejoin = @{ Disposition = 'deferred'; Reason = 'leave/rejoin generation clearing and replay have not been proven as one bounded lifecycle edge' }
                         preview_open = @{ Disposition = 'not-applicable'; Reason = 'preview adapters resolve synchronously for each spawned recipe instead of replaying world state' }
                         preview_reopen = @{ Disposition = 'not-applicable'; Reason = 'preview adapters resolve synchronously for each newly spawned recipe instead of replaying prior preview state' }
@@ -102,7 +179,7 @@
                                 'CWV #660 world lifecycle adapters are bounded and vanilla-wire safe'
                             )
                             Surfaces = @('owner_1p', 'owner_3p', 'bot_3p', 'remote_husk_3p')
-                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'mission_transition', 'hot_join', 'parity_ready')
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'mission_transition', 'hot_join', 'peer_ready')
                         }
                         @{
                             Path = 'qa/lua/tests/test_cwv_exact_appearance.lua'
@@ -184,6 +261,75 @@
             )
         }
         @{
+            Id = 'wt.issue735.saltzpyre-shield-left-rotation'
+            Issue = 735
+            Claim = 'structural-only'
+            Owners = @(
+                'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_grip_offset_policy.lua'
+                'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_paired_preview_transform.lua'
+                'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua'
+                'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = '#735 is an explicitly third-person shield seating correction' }
+                        owner_3p = @{ Disposition = 'covered'; Evidence = 'create-equipment resolves the baked descriptor and tracks only the exact left 3P unit' }
+                        bot_3p = @{ Disposition = 'covered'; Evidence = 'the same create-equipment adapter tracks bot left-unit identity with no separate transform table' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'husk wield resolves the same receiver-and-hand descriptor against its renderer-local left unit' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'post-_spawn_item adapter bridges spawn_data hand flags to numeric-slot equipment units instead of guessing in _spawn_item_unit' }
+                        cosmetic_preview = @{ Disposition = 'deferred'; Reason = 'LootItemUnitPreviewer has no proven WT baked-transform adapter for this family' }
+                        athanor_preview = @{ Disposition = 'deferred'; Reason = 'Athanor preview has no proven WT baked-transform adapter for this family' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'ordinary crafting preview has no proven WT baked-transform adapter for this family' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'the concrete lobby preview constructor consuming the WT transform path has not been source-proven' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'the concrete score preview constructor consuming the WT transform path has not been source-proven' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons rather than linked weapon transforms' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the transform is baked by item and receiver career rather than persisted per backend instance' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'owner/bot creation and husk wield capture the canonical left-unit rotation before durable ownership' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'equipment creation re-resolves receiver and hand through one transform policy' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'durable writer gates on the live wielded slot and restores canonical rotation while stowed' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'illusion selection does not own the baked receiver-and-hand transform' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = '#735 is keyed to fixed weapon identities rather than combat-style state' }
+                        career_change = @{ Disposition = 'deferred'; Reason = 'career recreation has no focused #735 live evidence yet' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'new equipment units re-enter create-equipment or husk wield and resolve the same descriptor' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'respawn creates new weak-key unit rows through the same world adapters' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'husk wield consumes vanilla-replicated item identity and shipped transform data with no custom RPC' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'renderer-local baked transforms create no peer-ready transport' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'renderer-local baked transforms create no parity channel or payload' }
+                        rejoin = @{ Disposition = 'deferred'; Reason = 'full leave-and-rejoin retention still requires two-player evidence' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each preview spawn bridges exact left/right recipe identity after vanilla creates both units' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'reopening creates fresh units and re-enters the exact hand adapter' }
+                        lobby_score_create = @{ Disposition = 'deferred'; Reason = 'lobby and score constructor coverage is not proven for this transform family' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live disable restoration for already-linked units has no focused #735 evidence' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_wt_hand_transform_policy.lua'
+                            Names = @(
+                                'WT #735 receiver and hand policy is shared across transform channels'
+                                'WT #735 public and dev route shield rotation through exact hand adapters'
+                                'WT #735 retained proof reads rotation back after the durable write'
+                            )
+                            Surfaces = @('owner_3p', 'bot_3p', 'remote_husk_3p')
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'mission_transition', 'respawn', 'hot_join')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_wt_hand_transform_policy.lua'
+                            Names = @(
+                                'WT #735 paired preview refuses ambiguous unit callback routing'
+                                'WT #735 public and dev route shield rotation through exact hand adapters'
+                            )
+                            Surfaces = @('inventory_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cosmetics.issue641.component-item-text'
             Issue = 641
             Claim = 'structural-only'
@@ -248,6 +394,80 @@
                             )
                             Surfaces = @('inventory_preview', 'cosmetic_preview', 'hold_tab')
                             ReplayEdges = @('hot_join', 'parity_ready')
+                        }
+                    )
+                }
+            )
+        }
+        @{
+            Id = 'cwv-cim.issue787.dual-axes-athanor-icon'
+            Issue = 787
+            Claim = 'structural-only'
+            Owners = @(
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_inventory_icons.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants_data.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_athanor_icon_policy.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'icon'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'first-person weapon units do not render inventory icons' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'third-person weapon units do not render inventory icons' }
+                        bot_3p = @{ Disposition = 'not-applicable'; Reason = 'bot weapon units do not render inventory icons' }
+                        remote_husk_3p = @{ Disposition = 'not-applicable'; Reason = 'remote husk units do not render inventory icons' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'CWV hero_view injection already owns and advertises the paired atlas' }
+                        cosmetic_preview = @{ Disposition = 'deferred'; Reason = 'the cosmetic browser has a separate renderer and is outside the CIM selector claim' }
+                        athanor_preview = @{ Disposition = 'covered'; Evidence = 'the shared ingame_ui top-renderer capability plus exact masked-saturated live-Gui proof retains the paired icon' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'the ordinary crafting picker does not consume the Athanor sanitizer' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'lobby item-card icon residency is owned by its renderer-specific contract' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'score-screen item-card icon residency is owned by its renderer-specific contract' }
+                        hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab item-card icon residency is owned by its peer-safe renderer contract' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the authored icon is immutable provider data, not per-instance state' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'weapon spawn does not create item-list icons' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'equip does not create the Athanor selector' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'wield does not create the Athanor selector' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'the synthetic base crafting row has no exact backend-instance identity and must not enter the Cosmetics primary/offhand/glow compositor' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style does not change the base Dual Axes selector icon' }
+                        career_change = @{ Disposition = 'covered'; Evidence = 'the catalog rebuild preserves the authored icon for both Kruber and Saltzpyre variants' }
+                        mission_transition = @{ Disposition = 'not-applicable'; Reason = 'renderer capability is registered at mod initialization and each list open performs a fresh live-Gui proof' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not create the Athanor selector' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'the local selector sends no custom icon identity to peers' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the local selector sends no custom icon identity to peers' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the local renderer reads only locally registered resources' }
+                        rejoin = @{ Disposition = 'not-applicable'; Reason = 'the local selector sends no custom icon identity to peers' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'every Athanor list build sanitizes against the exact current ui_top_renderer Gui' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'every Athanor list rebuild repeats the exact live-Gui material proof' }
+                        lobby_score_create = @{ Disposition = 'not-applicable'; Reason = 'the candidate changes only the Athanor selector renderer capability' }
+                        mod_disable_restore = @{ Disposition = 'covered'; Evidence = 'CIM falls back to vanilla provider/base icons when CWV is absent' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_dual_icons.lua'
+                            Names = @(
+                                'CWV Dual Axes has a packaged atlas entry for every primary axe icon'
+                                'CWV custom icon contract fails closed outside injected renderers'
+                                'CWV completes the VMF-missing masked saturated atlas variant'
+                            )
+                            Surfaces = @('inventory_preview', 'athanor_preview')
+                            ReplayEdges = @()
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cim_athanor_icon_policy.lua'
+                            Names = @(
+                                'renderer-owned CWV Dual Axes icons remain authored in Athanor'
+                                'every live CWV custom inventory icon closes to vanilla in Athanor'
+                            )
+                            Surfaces = @('athanor_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen', 'mod_disable_restore')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cim_cwv_template_catalog.lua'
+                            Names = @('every CWV family keeps exact definition and authored icon')
+                            Surfaces = @('athanor_preview')
+                            ReplayEdges = @('career_change')
                         }
                     )
                 }
@@ -323,6 +543,73 @@
                             )
                             Surfaces = @('owner_3p')
                             ReplayEdges = @('mission_transition', 'respawn')
+                        }
+                    )
+                }
+            )
+        }
+        @{
+            Id = 'cwv.issue692.reciprocal-bretonnian-transform'
+            Issue = 692
+            Claim = 'structural-only'
+            Owners = @(
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'covered'; Evidence = 'unified inverse descriptor reaches create_equipment owner first-person roots' }
+                        owner_3p = @{ Disposition = 'covered'; Evidence = 'unified inverse descriptor reaches create_equipment owner third-person roots' }
+                        bot_3p = @{ Disposition = 'covered'; Evidence = 'create_equipment uses the same resolved descriptor for bot third-person roots' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'remote style state resolves the concrete Bretonnian receiver descriptor before husk transform apply' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'MenuWorldPreviewer resolves the exact instance style and applies the unified inverse descriptor' }
+                        cosmetic_preview = @{ Disposition = 'covered'; Evidence = 'LootItemUnitPreviewer resolves the exact instance style and applies the unified inverse descriptor' }
+                        athanor_preview = @{ Disposition = 'covered'; Evidence = 'Athanor reuses the LootItemUnitPreviewer exact-instance transform seam' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'ordinary crafting preview has no proven exact backend instance style identity' }
+                        lobby_preview = @{ Disposition = 'covered'; Evidence = 'lobby HeroPreviewer reuses the MenuWorldPreviewer equipment-unit transform seam' }
+                        score_screen = @{ Disposition = 'covered'; Evidence = 'team score HeroPreviewer reuses the MenuWorldPreviewer equipment-unit transform seam' }
+                        hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab does not expose a proven exact backend instance style to the appearance resolver' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'covered'; Evidence = 'exact backend instance style is loaded from the schema-checked Combat Style store' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'owner/bot create and remote husk spawn resolve the receiver descriptor before applying the transform' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'every equipment creation resolves the current exact-instance style' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'owner and husk wield rebuild paths resolve the current exact-instance or remote style' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'the reciprocal transform belongs to Combat Style, not cosmetic customization' }
+                        style_change = @{ Disposition = 'covered'; Evidence = 'style transition rewields locally and publishes one bounded remote refresh state' }
+                        career_change = @{ Disposition = 'deferred'; Reason = 'career transition ownership is outside the #692 reciprocal presentation change' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'new mission equipment spawn resolves the persisted exact-instance style' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'replacement equipment units resolve the persisted local or accepted remote style' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'targeted Combat Style loadout publication precedes the remote husk receiver lookup' }
+                        peer_ready = @{ Disposition = 'covered'; Evidence = 'bounded Combat Style query reply publishes current exact-instance style state' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'Combat Style state uses its own schema-bounded mod channel rather than content-parity replay' }
+                        rejoin = @{ Disposition = 'deferred'; Reason = 'disconnect-generation teardown and full rejoin remain part of the broader #747 lifecycle audit' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each preview spawn resolves the exact backend instance style before transform application' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'reopened preview spawns new units and repeats exact-instance style resolution' }
+                        lobby_score_create = @{ Disposition = 'covered'; Evidence = 'lobby and score HeroPreviewer creation enter the shared MenuWorldPreviewer transform seam' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live restoration after disabling CWV is outside the #692 reciprocal presentation change' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_combat_styles.lua'
+                            Names = @(
+                                'CWV Combat Styles expose deterministic multi-style family cycles'
+                                'CWV Combat Style runtime resolves exact IDs and legacy defaults'
+                                'CWV #692 reciprocal Bretonnian transform reaches every appearance consumer'
+                            )
+                            Surfaces = @(
+                                'owner_1p', 'owner_3p', 'bot_3p', 'remote_husk_3p',
+                                'inventory_preview', 'cosmetic_preview', 'athanor_preview',
+                                'lobby_preview', 'score_screen'
+                            )
+                            ReplayEdges = @(
+                                'instance_load', 'initial_spawn', 'equip', 'wield', 'style_change',
+                                'mission_transition', 'respawn', 'hot_join', 'peer_ready',
+                                'preview_open', 'preview_reopen', 'lobby_score_create'
+                            )
                         }
                     )
                 }

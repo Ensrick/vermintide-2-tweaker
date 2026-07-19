@@ -254,12 +254,29 @@ M.bulk = {
     wh_deus_01_template_1 = { es_mercenary = "to_repeating_handgun", es_huntsman = "to_repeating_handgun", es_knight = "to_repeating_handgun", es_questingknight = "to_repeating_handgun", we_waywatcher = "to_repeating_crossbow_elf", we_maidenguard = "to_repeating_crossbow_elf", we_shade = "to_repeating_crossbow_elf", we_thornsister = "to_repeating_crossbow_elf" },
 }
 
--- #732: the CWV Infantry spear is a clone of the elf spear action template.
--- Keep its receiver-side 3P wield vocabulary on the same table object as the
--- donor so either mod load order receives the identical Saltzpyre contract.
-local infantry_spear_donor = rawget(M.patches, "two_handed_spears_elf_template_1")
-if type(infantry_spear_donor) == "table" then
-    rawset(M.patches, "cwv_infantry_spear_template", infantry_spear_donor)
+-- #732/#748: CWV Combat Styles run under clone template names, while this
+-- catalog is keyed by donor template name. Alias the clone keys to the donor
+-- wield tables so receiver bodies do not fall through to raw native events.
+local cwv_style_donors = {
+    cwv_infantry_spear_template = "two_handed_spears_elf_template_1",
+    cwv_combat_style_kerillian_greatsword = "two_handed_swords_wood_elf_template",
+    cwv_combat_style_bretonnian_greatsword = "two_handed_swords_template_1",
+    cwv_combat_style_saltz_bretonnian_greatsword = "bastard_sword_template",
+    cwv_combat_style_empire_spear_shield = "es_deus_01_template",
+    cwv_combat_style_elven_spear_shield = "one_handed_spears_shield_template",
+}
+M.cwv_style_donors = cwv_style_donors
+for clone_name, donor_name in pairs(cwv_style_donors) do
+    -- The historical catalog is split between hand-authored `patches` rows and
+    -- generated `bulk` rows. Keep the clone in the donor's exact owner table;
+    -- looking only in `patches` leaves every current Greatsword and
+    -- Spear-and-Shield style clone unaliased.
+    for _, catalog in ipairs({ M.patches, M.bulk }) do
+        local donor = rawget(catalog, donor_name)
+        if type(donor) == "table" then
+            rawset(catalog, clone_name, donor)
+        end
+    end
 end
 
 return M

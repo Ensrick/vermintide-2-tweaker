@@ -67,7 +67,8 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `career_tweaker_armor_overcharge.lua` | Seven armor/overcharge/Focused-Spirit controls using one `DamageUtils.apply_buffs_to_damage` hook and one consolidated `PlayerUnitHealthExtension.add_damage` hook. Owns Focused Spirit's proc wrapper and one-frame cooldown re-arm; the stacking template fields remain in balance's reversible lifecycle. | installs its own hooks; exports `mod._crt_focused_spirit_tick(dt)` | after tourney |
 | `career_tweaker_oe_cooldown.lua` | Outcast Engineer cooldown-reduction benefit. Driven per-frame from the entry's `mod.update`. | `mod._crt_oe_cdr_tick(dt)`, `mod._crt_oe_cdr_clear` | after armor |
 | `career_tweaker_mutex.lua` | Mutex cluster framework ("pick one of N" checkbox groups), enforced from `on_setting_changed`. | returns `{ declare, enforce, active, snapshot }` | after oe |
-| `_crt_talent_selection.lua` | Dormant pure snapshot/equality policy retained for a future casting/transposition redesign. | returns `{ snapshot, equal }` if loaded independently | **not loaded in the beta line** |
+| `_crt_talent_selection.lua` | Pure snapshot/equality policy for the independent no-op talent-menu close guard (#283). | returns `{ snapshot, equal }`, published as `mod._crt.talent_selection` by the guard | loaded by `_crt_talent_menu_guard.lua` |
+| `_crt_talent_menu_guard.lua` | Desktop/controller talent-picker lifecycle guard. Skips only an identical close so live accumulated talent buffs are not rebuilt; changed or invalid selections delegate to vanilla. | sets `talent_menu_guard_installed`; installs four bounded hooks | after the public-beta swap exclusion, before diagnostics |
 | `_crt_talent_swap.lua` | Dormant historical talent-tree + ability/passive swap engine. Saved `talent_swap_*` values remain in VMF storage, but the beta exposes no widgets and never loads this module. | none in the beta | **not loaded in the beta line** |
 | `_crt_diagnostics.lua` | Read-only talent/buff diagnostics: `/crt_dump_talents`, the reusable dump body, the per-session auto-dump harness + retry pump. | `mod.crt_dump_career_talents` (mod method), `mod._crt_auto_dump_check`, `mod._crt_dump_retry_tick(dt)`, `mod._crt_start_dump_retry` | after talent |
 | `_crt_bardin_disabler_probe.lua` | Dormant #440 comparison probe retained for a future diagnostic build. | none in the beta | **not loaded in the beta line** |
@@ -132,7 +133,7 @@ even though its assertion now targets 0.75 seconds.
 - Rock's dodge drawback composes through vanilla's `apply_movement_buff`/`remove_movement_buff` distance path. Teamwork cancels exactly the native -0.10 `damage_taken` contribution with a +0.10 local stat buff only while that native buff exists; it does not rewrite the aura, talent stacks, or Final March.
 - WT/CWV interoperability is capability-based: live `weapon_type`, runtime template name, and inherited melee template metadata decide behavior. Avoid item-key allowlists.
 - Secondary melee reconciles both canonical live carriers: backend validation reads `CareerSettings.es_knight.item_slot_types_by_slot_name.slot_ranged`, while inventory category creation reads the Foot Knight career object under `SPProfiles`. Stock aliases them, but CRT handles independent replacement, preserves each array identity, keeps both `melee` and `ranged` accepted while enabled, and never deletes an inventory item.
-- Buff-bar state is carried by the existing stable local-only effect buffs, never by the 0.2s tick itself. Icons reuse authored vanilla Foot Knight atlas keys; Rock/Teamwork conditional buffs retain their IDs until the condition changes, Final March puts one icon on its power sub-buff, and the internal Teamwork DR canceller intentionally has none.
+- Buff-bar state is carried by the existing stable local-only effect buffs, never by the 0.2s tick itself. Icons reuse the exact authored vanilla Foot Knight talent art: both Rock effects use Rock of Reikland, Teamwork uses That's Bloody Teamwork, and the other effects retain their matching Foot Knight keys. Rock/Teamwork conditional buffs retain their IDs until the condition changes, Final March puts one icon on its power sub-buff, and the internal Teamwork DR canceller intentionally has none. While #699 is open, the transition-only `[crt:699]` census records the live template icon, atlas residency, vanilla BuffUI widget result, active count and total pool capacity, and stock HideBuffs disposition; it never mutates presentation state. Its subject selection mirrors `BuffUI._sync_buffs`: local player normally, `_spectated_player_unit` while spectating, including host-side bot verification.
 
 ## Load-order rules that are load-bearing
 
@@ -140,9 +141,10 @@ even though its assertion now targets 0.75 seconds.
   the `_dbg` helpers, and `MOD_VERSION` as module-locals at load. It also asserts
   that the beta exclusion markers are present and the retired runtime exports
   remain nil.
-- **`_crt_talent_swap.lua` is deliberately absent from the manifest.** Merely
-  loading it installs talent-window hooks, so a setting gate after `dofile`
-  would not be a valid fail-closed exclusion.
+- **`_crt_talent_swap.lua` is deliberately absent from the manifest.** Its
+  casting/transposition exports and mutation lifecycle remain excluded. The
+  independent `_crt_talent_menu_guard.lua` owns the only active talent-window
+  hooks and does not read or expose any `talent_swap_*` state.
 - **The issue-425 beacon block sits AFTER `mod.update` is defined.** The shared
   lib's `install()` WRAPS the existing `mod.update`; running it earlier would
   capture nil and drop the OE + dump ticks.

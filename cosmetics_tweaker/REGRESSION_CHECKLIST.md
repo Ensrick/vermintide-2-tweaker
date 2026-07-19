@@ -19,11 +19,22 @@ Last updated: 2026-07-16.
 | Detection | Offline `test_cos_la_instance_policy.lua` and `test_cos_la_shield_parity.lua`; `/cos_regression_test` passes `issue481_athanor_exact_offhand_target`. |
 
 ---
+## CWV Sword+Mace picker-family census (#704)
+
+| Field | Value |
+|---|---|
+| Empirical boundary | CWV registers paired row-1 skins under `cwv_es_sword_and_mace`; Cosmetics' live provider contract declares independent right-hand sources as `es_1h_sword` and left-hand sources as `es_1h_mace`. The reported Bardin hammer is absent from all three authored declarations. The census reads that provider contract rather than duplicating it. |
+| Capture | Opening the exact CWV Sword+Mace customization screen automatically records the post-vanilla illusion widgets and both lazily built component pools through the existing `_setup_illusions` hook. |
+| Bounds | At most four distinct signatures and 56 lines per signature, deduplicated for the session. Signature parts are capped at 64 and every logged engine value at 128 bytes before formatting, so a contaminated provider cannot create unbounded pre-log work. Output uses engine `printf` only under `[cos:704]`; it never writes chat, modifies a picker row, adds a hook, or adds an RPC. |
+| Decision | `dr_1h_hammer` and every other foreign/missing family is reported as `SUSPECT`; no automatic removal occurs until the live source is identified. |
+| Detection | Offline `test_cos_dual_offhands.lua`; `/cos_regression_test` passes `issue704_sword_mace_picker_family_diagnostics`; an in-game picker open ends with `[cos:704] summary ... suspects=<N>`. |
+
+---
 ## Phase 4b runtime-owner boundaries
 
 | Field | Value |
 |---|---|
-| Registry | `_cos_runtime_checks.lua` installs exactly 51 late checks in historical order, from `cos_la_reconcile_and_pull_wired` through `mh_package_single_reference`, plus one `/verify_gk_set` command. The entry retains the registry runner and injects private dependencies explicitly. |
+| Registry | `_cos_runtime_checks.lua` installs exactly 54 late checks in historical order, from `cos_la_reconcile_and_pull_wired` through `mh_package_single_reference`, plus one `/verify_gk_set` command. The entry retains the registry runner and injects private dependencies explicitly. |
 | Commands | `_cos_glow_probe.lua` owns six wielded-material probe commands and both bounded tick functions; `_cos_la_commands.lua` owns six LA diagnostic commands. Neither module owns a hook, RPC, or lifecycle callback. |
 | API | The later manual picker continues to consume the same `_wielded_units_for_probe` function through the glow module export. No command name, runtime-check name, registration order, or `mod._*` tick name changes. |
 | Detection | Offline `test_cos_runtime_modules.lua` executes all three installers under Lua 5.1, pins counts/order/exports, and proves the entry loads each owner once. Full suite tests concatenate `_cos_runtime_checks.lua` when asserting moved runtime signatures. |
@@ -53,6 +64,19 @@ Last updated: 2026-07-16.
 | Expected | Hidden or not-yet-visible meshes are never cached. The first visible frame paints once after vanilla's material restore; hide/show, view reopen, and career respawn invalidate and replay once without per-frame writes. |
 | Detection | Offline `test_cos_grail_knight_set.lua` simulates hidden spawn, visible transition, same-mesh steady state, hide/show, and new-mesh respawn. `/cos_regression_test` passes `issue629_grail_knight_set_contract`. |
 | Tracking | GitHub issue #629. |
+
+---
+## Purpure/Azure cross-career availability (#658)
+
+| Check | Requirement |
+|---|---|
+| Defaults | Grail Knight remains available while Mercenary, Huntsman, and Foot Knight sharing each default off. |
+| Independence | Enabling one career adds only that exact career to all three authored set items; disabling it removes only that career. |
+| Master switch | Disabling the Purpure/Azure set empties authored-item availability even when a sharing toggle remains saved on. Re-enabling restores the saved career choices. |
+| Career identity | Sharing changes `ItemMasterList.can_wield` only. The #698 `(peer, career)` render-state stamp and invalidation remain exact; a career change cannot replay another career's stored appearance. |
+| Mixed lobby | Every outgoing authored hat/outfit item key and every persisted/hot-join replay resolves the wearer's exact native vanilla default (`mercenary_hat_0000`/`skin_es_mercenary`, `huntsman_hat_0000`/`skin_es_huntsman`, or `knight_hat_0000`/`skin_es_knight`). Grail Knight retains its existing donor fallback. The provider rejects an unresolved/unknown career instead of guessing; the wire adapter then degrades to the already-registered resident donor so no custom key reaches an unsupported peer. |
+| Detection | Offline `test_cos_grail_knight_set.lua` passes the independent/default-off cases and all vanilla-wire, persisted-loadout, hot-join, and self-rebroadcast owners; `/cos_regression_test` passes `issue658_gk_cross_career_availability`. |
+| Tracking | GitHub issue #658; regression boundary #698. |
 
 ---
 ## Authored Encarmine Helmet (#612)
@@ -87,7 +111,19 @@ Last updated: 2026-07-16.
 | Color | Rune uses committed RGB. Magic uses the deterministic intensity-weighted lower/upper/dots blend. |
 | Refresh | One Apply callback refreshes weakly tracked live grids/windows once; no per-frame decode or RPC traffic. |
 | Asset safety | Authored PNG is packaged unchanged and runtime tinted. Missing atlas/material fails closed with one bounded warning. |
-| Detection | Offline `test_cos_glow_badge_policy.lua` and `test_cos_glow_lifecycle.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
+| Slider geometry | The rendered track, padded hotspot, cursor normalization, and thumb centre derive from one track-style rectangle. The held pass consumes the selected `track` style directly; label/value regions never become slider coordinates. |
+| Slider detection | Offline `test_cos_glow_slider_geometry.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
+| Manual #794 | At multiple UI scales/resolutions, click and drag each visible track at both endpoints, quartiles, and midpoint. Values and thumb centres must match the visible cursor position. |
+| Illusion selector | Enrich the shared `illusions_root` definition only inside the `UIWidget.init` pre-hook. Never append render passes after a widget owns `element.pass_data`; Apply/Restore only update existing content/style. |
+| Badge detection | Offline `test_cos_glow_badge_policy.lua` and `test_cos_glow_lifecycle.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
+| Manual #795 | Apply a glow on one exact item/skin, then close/reopen and restart. Its selector badge appears immediately and persists; another instance/skin remains unchanged; Restore Default removes the badge. |
+
+## Live glow on the customization preview model (#796)
+
+| Contract | Slider edits repaint both the local wielded units and the exact `HeroWindowItemCustomization._previewer._spawned_units` owned by the same backend item + selected illusion. |
+| Failure floor | A stale backend ID, a different preview skin, an unspawned preview, or a dead unit fails closed. `LootItemUnitPreviewer` is never inferred from the gameplay inventory extension. |
+| Transaction | Slider movement remains transient and local. Apply persists/emits once; Cancel restores the committed state, and Cancel/Restore without a commit copies the registered native material vectors back onto the preview units. |
+| Detection | Offline `test_cos_glow_lifecycle.lua` covers exact ownership, stale rejection, both-hand filtering, Slider/Apply/Restore/Cancel wiring, and absence of networking from the preview-paint module. In-game: move every channel and observe the standalone customization model change immediately; Cancel and Restore return it immediately without switching weapons or reopening the menu. |
 
 ---
 ## Authored heroic weapon poses (#485)
@@ -239,6 +275,19 @@ Last updated: 2026-07-16.
 | Expected post-fix | Human rows resolve from `score_snapshot`; their previewer hats swap/paint before display. Bot rows sharing a host peer remain vanilla, cannot read the host's LA store, and cannot purge it when their skeleton differs. |
 | Detection | `/cos_regression_test` passes `cos_la_score_screen_apply_wired`. Log has bounded `BOT-OWNER-ALIAS retained`, human `SCORE-ROW role=local/remote ... source=score_snapshot` followed by `SCORE-HAT` markers, and bot rows as `role=bot source=score_snapshot_bot peer=nil` with no subsequent bot hat swap. |
 | Tracking | GitHub issue #513. |
+
+### score-lineup-authored-armor-visibility-replay -- Purpure outfit
+
+| Field | Value |
+|-------|-------|
+| Symptom | End-of-mission lineup resolves the exact wearer and logs a successful Purpure armor paint, but displays the vanilla donor outfit. |
+| Root cause | `TeamPreviewer` invokes the spawn callback while `HeroPreviewer` still marks the new mesh hidden. The authored score adapter painted at that callback and had no post-visibility replay, unlike the bounded inventory-preview path. |
+| Mod(s) | cosmetics_tweaker |
+| Category | INTEGRATION / PREVIEW LIFECYCLE |
+| Repro | Equip Midnight Purpure and Azure, finish a mission, and inspect the local score-lineup model. Repeat after one lineup hide/show or replacement edge when available. |
+| Expected post-fix | The score callback stores the provider-owned exact authored armor key. The shared preview adapter paints once after the exact mesh becomes visible, does not repaint every frame, invalidates while hidden, and paints a replacement mesh once. This is not a claim that the full #660 cross-mod descriptor migration is complete. |
+| Detection | `/cos_regression_test` passes `issue730_score_armor_visibility_replay`; the log contains `SCORE-ROW ... skin=cos_gk_purpure_azure_skin_variant` followed by `[cos:629] applied kind=armor surface=score_preview`, and the visible lineup model retains the authored colors. Offline `test_cos_grail_knight_set.lua` proves hidden, visible, repeated-frame, hide/show, replacement-mesh, and unknown-variant behavior. |
+| Tracking | GitHub issue #730; bug class 48 in `docs/BUG_CLASSES.md`. |
 
 ### offhand-preload-async-bounded -- no blocking startup package storm
 

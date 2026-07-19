@@ -35,24 +35,32 @@ etc. Integrated third-party options belong inside one of these.
 
 ## The correct precedent: UI Tweaks / HideBuffs (#312)
 
-HideBuffs ("UI Tweaks") is deliberately **NOT** in `AUTHOR_MOD_IDS`. Its options render as ordinary
-gut checkboxes inside the HUD group (`gut_hide_hud_ui_group` > "UI Tweaks"), keeping HideBuffs'
-setting_ids verbatim. **This is the model every third-party integration follows.** Re-adding
-HideBuffs to `AUTHOR_MOD_IDS` would resurrect the duplicate tab — don't.
+HideBuffs ("UI Tweaks") is deliberately **NOT** in `AUTHOR_MOD_IDS`. When the stock mod is
+installed and enabled, GUT reads its **current live `VMF.options_widgets_data` tree** and folds
+shallow copies of every group/value node inside the HUD group
+(`gut_hide_hud_ui_group` > "UI Tweaks"). The shared
+`_mod_tweaker_external_group.lua` planner rebases depths without mutating VMF-owned nodes;
+both keep and mission presentations consume that one planner. This means a future UI Tweaks
+group, checkbox, slider, dropdown, or keybind appears without adding it to a GUT allow-list.
+The old authored HideBuffs subset is only a fail-closed fallback when the stock mod is absent
+or its VMF tree is not ready. **This live-tree fold is the model every third-party integration
+follows.** Re-adding HideBuffs to `AUTHOR_MOD_IDS` would resurrect the duplicate tab — don't.
 
 **Sync to the stock mod (#312, `_bridge_uitweaks_to_stock`, marker `[UITWEAKS-BRIDGE-312]`).**
 gut and the stock UI Tweaks (HideBuffs) mod persist those verbatim ids in **separate** VMF
 namespaces (`gut_dev` vs `HideBuffs`), so the surfaced toggles must NOT read gut's own private
 copies or they diverge from UI Tweaks' own VMF page (the exact bug the user reported). When
-HideBuffs is installed **and enabled**, both Mod Tweaker twins route every overlapping checkbox
-setting_id's get/set to `get_mod("HideBuffs")` through the per-node `_owners` mechanism (the
+HideBuffs is installed **and enabled**, both Mod Tweaker twins route every live value node's
+setting_id get/set to `get_mod("HideBuffs")` through the per-node `_owners` mechanism (the
 same own-or-pin path Equipment/#208 and CKC/#339 use, and the drag-offset sync module already
 uses for the four repositioned bars). Reads show HideBuffs' live value; edits commit as
 `HB:set(id, v, true)`. `"HideBuffs"` is merged into the gut category's `_owner_mod_ids` so
-Apply/dirty flush its buffer alongside gut's own and any CKC edits. When HideBuffs is absent
+Apply/dirty flush its buffer alongside gut's own and any CKC edits. GUT's ten per-tab profiles
+explicitly exclude the `HideBuffs` owner: UI Tweaks retains its own profile authority and a
+GUT profile switch cannot rewrite its settings. When HideBuffs is absent
 the bridge is a no-op and gut's own copies drive its absorbed `hb/` fork as before (that fork
-also aborts at load on a missing Penlight dep, #281, so the stock mod is the real provider on
-most setups). **When integrating another mod whose options gut mirrors 1:1, bridge to that
+uses the repository-owned Penlight-free shim shipped under #281). **When integrating another
+mod whose options gut mirrors 1:1, bridge to that
 mod's live settings — never display a private copy.**
 
 When HideBuffs is installed but disabled, keep the `UI Tweaks` group header in its normal

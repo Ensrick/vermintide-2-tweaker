@@ -120,10 +120,24 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 	local bret_package = policy.package("es_2h_sword", "bretonnian")
 	local native_bret_package = policy.package("es_bastard_sword", "bretonnian")
+	local native_bret_greatsword = policy.package("es_bastard_sword", "greatsword")
+	local native_bret_kerillian = policy.package("es_bastard_sword", "kerillian")
 	if not bret_package or not bret_package.presentation
 			or bret_package.presentation.transform_key ~= "greatsword_bretonnian"
-			or (native_bret_package and native_bret_package.presentation ~= nil) then
+			or (native_bret_package and native_bret_package.presentation ~= nil)
+			or not native_bret_greatsword or not native_bret_greatsword.presentation
+			or native_bret_greatsword.presentation.transform_key ~= "bretonnian_greatsword_inverse"
+			or not native_bret_kerillian or not native_bret_kerillian.presentation
+			or native_bret_kerillian.presentation.transform_key ~= "bretonnian_greatsword_inverse" then
 		return "Greatsword Bretonnian receiver presentation drifted"
+	end
+	local inverse = runtime:presentation("bretonnian_greatsword_inverse")
+	if type(inverse) ~= "table"
+			or inverse.item_key ~= "cwv_style_bretonnian_greatsword_inverse"
+			or math.abs((inverse.right_hand_scale and inverse.right_hand_scale[2] or 0) - 1.25) > 0.000001
+			or math.abs((inverse.right_hand_scale and inverse.right_hand_scale[3] or 0) - (1 / 0.9)) > 0.000001
+			or math.abs((inverse.right_hand_offset and inverse.right_hand_offset[3] or 0) - 0.065) > 0.000001 then
+		return "Bretonnian Greatsword inverse transform drifted"
 	end
 	local imperial = rawget(Weapons, "imperial_longsword_template")
 	local greatsword = rawget(Weapons, "two_handed_swords_template_1")
@@ -321,7 +335,7 @@ _rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
 
 	local surfaces = mod._cwv_identity_surfaces
 	for _, name in ipairs({ "network", "game_object_initialized", "spawn_resynced_loadout",
-			"hot_join_sync", "parity_replay" }) do
+			"hot_join_sync", "peer_ready" }) do
 		if not (surfaces and surfaces[name]) then return "missing CWV identity surface: " .. name end
 	end
 	local plan = _om._cwv_identity_payloads
@@ -330,13 +344,18 @@ _rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
 	if type(plan) ~= "function" or type(accept) ~= "function" or type(resolve) ~= "function" then
 		return "CWV item-identity side-channel helpers missing"
 	end
+	local skin_key = "cwv_es_longsword_nordland_skin"
 	local payloads = plan({
-		slot_melee = { item_data = { name = "es_bastard_sword", cwv_key = "cwv_es_longsword" } },
+		slot_melee = {
+			item_data = { name = "es_bastard_sword", cwv_key = "cwv_es_longsword" },
+			skin = skin_key,
+		},
 		slot_ranged = { item_data = { name = "es_handgun" } },
 	})
 	local by_slot = {}
 	for _, payload in ipairs(payloads) do by_slot[payload.slot] = payload end
 	if not by_slot.slot_melee or by_slot.slot_melee.item_key ~= "cwv_es_longsword"
+			or by_slot.slot_melee.skin_key ~= skin_key
 			or not by_slot.slot_ranged or by_slot.slot_ranged.item_key ~= "" then
 		return "identity planner did not preserve CWV owner and native clear payloads"
 	end
@@ -348,6 +367,11 @@ _rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
 	if resolve("rt396-peer", "slot_melee", "es_handgun") ~= nil then
 		return "identity marker crossed its authored base-weapon boundary"
 	end
+	local descriptor = _om._cwv_identity_descriptor_for_peer(
+		"rt396-peer", "slot_melee", "es_bastard_sword")
+	if not descriptor or descriptor.skin ~= skin_key then
+		return "semantic identity channel lost the exact Helmgart illusion"
+	end
 	local native = by_slot.slot_ranged
 	native.slot = "slot_melee"
 	native.base_item_key = "es_bastard_sword"
@@ -356,16 +380,6 @@ _rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
 		return "native-slot clear left stale CWV identity behind"
 	end
 
-	local replay = _om._cwv_skin_replay_payloads
-	local skin_key = "cwv_es_longsword_nordland_skin"
-	local skin_payloads = replay and replay({
-		wielded_slot = "slot_melee",
-		slots = { slot_melee = { item_data = { name = "es_bastard_sword" }, skin = skin_key } },
-	}) or {}
-	if #skin_payloads ~= 1 or skin_payloads[1].skin ~= skin_key
-			or skin_payloads[1].item_name ~= "es_bastard_sword" or not skin_payloads[1].wielded then
-		return "hot-join/transition replay lost the exact Helmgart illusion or current wield"
-	end
 	local skin_def, reason = _om._husk_resolve_display_def("es_bastard_sword", "es_mercenary", skin_key)
 	if skin_def ~= illusion or reason ~= "skin" then
 		return "Helmgart skin does not positively resolve its exact remote-husk mesh"
@@ -423,6 +437,77 @@ _rt_register("issue660_world_identity_lifecycle_replay", function()
 	end
 end)
 
+_rt_register("issue719_imperial_crowbill_remote_identity", function()
+	local family = _om.crowbill_family
+	local plan = _om._cwv_identity_payloads
+	local accept = _om._cwv_accept_identity
+	local resolve = _om._cwv_identity_descriptor_for_peer
+	if not family or type(plan) ~= "function" or type(accept) ~= "function"
+			or type(resolve) ~= "function" then
+		return "#719 exact Crowbill identity prerequisites are not installed"
+	end
+	if type(_om._husk_preselect_units) ~= "function"
+			or type(_om._husk_rekey_units) ~= "function"
+			or type(_om._husk_apply_cwv_transform) ~= "function" then
+		return "#719 centralized husk appearance adapters are not installed"
+	end
+	local surfaces = mod._cwv_identity_surfaces
+	if type(surfaces) ~= "table" or surfaces.network ~= true
+			or surfaces.remote_husk ~= true or surfaces.husk_wield ~= true
+			or surfaces.game_object_initialized ~= true
+			or surfaces.spawn_resynced_loadout ~= true
+			or surfaces.hot_join_sync ~= true or surfaces.peer_ready ~= true then
+		return "#719 exact identity lifecycle surface coverage is incomplete"
+	end
+	local model = family.model_for_variant
+		and family.model_for_variant("cwv_es_imperial_crowbill")
+	if not model or type(model.right_hand_unit) ~= "string"
+			or model.right_hand_unit == family.PLACEHOLDER_UNIT then
+		return "#719 Imperial Crowbill model is absent or still resolves to Sienna's donor"
+	end
+	local payloads = plan({
+		slot_melee = {
+			item_data = {
+				name = family.SOURCE_ITEM,
+				-- Canonical CIM synthetic shape: the cloned vanilla-base row keeps
+				-- its exact acquisition identity inside mod_data.  Do not rely on
+				-- a cwv-prefixed backend id or a top-level convenience stamp.
+				mod_data = {
+					backend_id = "rt719-guid-shaped-backend",
+					cwv_key = "cwv_es_imperial_crowbill",
+				},
+			},
+		},
+	})
+	local payload
+	for _, candidate in ipairs(payloads) do
+		if candidate.slot == "slot_melee" then payload = candidate; break end
+	end
+	if not payload or payload.item_key ~= "cwv_es_imperial_crowbill"
+			or payload.base_item_key ~= family.SOURCE_ITEM
+			or payload.skin_key ~= "" or type(payload.fingerprint) ~= "string"
+			or payload.fingerprint == "" then
+		return "#719 owner payload collapsed the skinless Imperial Crowbill to its donor"
+	end
+	local changed, descriptor, reason = accept("rt719-peer",
+		_om.appearance_lifecycle_policy.SCHEMA, payload)
+	if not changed or reason ~= "exact" or not descriptor
+			or descriptor.variant_key ~= "cwv_es_imperial_crowbill"
+			or descriptor.right_hand_unit ~= model.right_hand_unit
+			or descriptor.right_hand_unit == family.PLACEHOLDER_UNIT then
+		return "#719 receiver did not reconstruct the exact Imperial Crowbill model"
+	end
+	local retained, state = resolve("rt719-peer", "slot_melee", family.SOURCE_ITEM)
+	if state ~= "exact" or retained ~= descriptor then
+		return "#719 reconstructed Imperial Crowbill was not retained for husk wield"
+	end
+	local duplicate = accept("rt719-peer",
+		_om.appearance_lifecycle_policy.SCHEMA, payload)
+	if duplicate then
+		return "#719 duplicate identity scheduled a second husk rebuild"
+	end
+end)
+
 _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
     local source_by_target = _om._dual_axes_source_by_skin
     local ws = rawget(_G, "WeaponSkins")
@@ -430,12 +515,16 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
         return "dual-axes generated skins not loaded yet (run in-keep)"
     end
     local apply_preview = mod._cwv_preview_meshswap_apply
-    local plan_replay = _om._cwv_skin_replay_payloads
-    if type(apply_preview) ~= "function" or type(plan_replay) ~= "function" then
-        return "#579 preview/replay helpers are not installed"
+    local plan_identity = _om._cwv_identity_payloads
+    local accept_identity = _om._cwv_accept_identity
+    local resolve_identity = _om._cwv_identity_descriptor_for_peer
+    if type(apply_preview) ~= "function" or type(plan_identity) ~= "function"
+            or type(accept_identity) ~= "function" or type(resolve_identity) ~= "function" then
+		return "#579 preview/semantic identity helpers are not installed"
     end
-    if not (mod._cwv_skin_wire_surfaces and mod._cwv_skin_wire_surfaces.parity_replay) then
-        return "#579 post-handshake parity replay is not registered"
+    if not (mod._cwv_skin_wire_surfaces
+            and mod._cwv_skin_wire_surfaces.vanilla_skin_replay_retired) then
+		return "#579 unsafe numeric skin replay is not retired"
     end
 
     for _, target_key in ipairs({ "cwv_es_dual_axes", "cwv_wh_dual_axes" }) do
@@ -463,25 +552,34 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
             return generated_skin .. " was overwritten by the preview fallback"
         end
 
-        -- Hot join initially sends the vanilla base item with a nulled cwv skin.
-        -- After parity, the replay planner must retain that clone-name-clobbered
-        -- base id while restoring the exact generated skin and current wield.
-        local payloads = plan_replay({
-            wielded_slot = "slot_melee",
-            slots = {
-                slot_melee = {
-                    item_data = { name = "dr_dual_wield_axes" },
-                    skin = generated_skin,
-                },
-                slot_ranged = {
-                    item_data = { name = "wh_crossbow" },
-                    skin = "wh_crossbow_skin_01",
-                },
+        -- The vanilla equipment wire receives n/a. The same-mod semantic channel
+        -- must preserve target variant + generated skin string, from which the
+        -- receiver reconstructs both authored hand units without numeric indexes.
+        local payloads = plan_identity({
+            slot_melee = {
+                item_data = { name = "dr_dual_wield_axes", cwv_key = target_key },
+                skin = generated_skin,
             },
+            slot_ranged = { item_data = { name = "wh_crossbow" } },
         })
-        if #payloads ~= 1 or payloads[1].item_name ~= "dr_dual_wield_axes"
-                or payloads[1].skin ~= generated_skin or payloads[1].wielded ~= true then
-            return generated_skin .. " parity replay payload lost base/skin/wield identity"
+        local payload
+        for _, candidate in ipairs(payloads) do
+            if candidate.slot == "slot_melee" then payload = candidate end
+        end
+        if not payload or payload.item_key ~= target_key
+                or payload.base_item_key ~= "dr_dual_wield_axes"
+                or payload.skin_key ~= generated_skin then
+            return generated_skin .. " semantic payload lost variant/base/skin identity"
+        end
+        local peer_id = "rt579-" .. target_key
+        local changed, accepted = accept_identity(peer_id,
+            _om.appearance_lifecycle_policy.SCHEMA, payload)
+        local descriptor = resolve_identity(peer_id, "slot_melee", "dr_dual_wield_axes")
+        if changed ~= true or not accepted or not descriptor
+                or descriptor.skin ~= generated_skin
+                or descriptor.right_hand_unit ~= skin.right_hand_unit
+                or descriptor.left_hand_unit ~= skin.left_hand_unit then
+            return generated_skin .. " did not reconstruct both hands from semantic identity"
         end
         local def, reason = _om._husk_resolve_display_def("dr_dual_wield_axes",
             target_key == "cwv_es_dual_axes" and "es_mercenary" or "wh_captain", generated_skin)
@@ -491,68 +589,71 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
     end
 end)
 
-_rt_register("issue416_483_transition_generated_skin_replay", function()
+_rt_register("issue416_483_transition_generated_skin_identity", function()
     local exact_skin = "cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1"
-    local plan_replay = _om._cwv_skin_replay_payloads
+    local plan_identity = _om._cwv_identity_payloads
+    local accept_identity = _om._cwv_accept_identity
+    local resolve_identity = _om._cwv_identity_descriptor_for_peer
     local null_skins = _om._wire_null_skins
-    local step = _om._cwv_skin_replay_pending_step
-    if type(plan_replay) ~= "function" or type(null_skins) ~= "function" or type(step) ~= "function" then
-        return "#416/#483 transition replay helpers are not installed"
+    if type(plan_identity) ~= "function" or type(accept_identity) ~= "function"
+            or type(resolve_identity) ~= "function" or type(null_skins) ~= "function" then
+		return "#416/#483 transition semantic identity helpers are not installed"
     end
-    if not (mod._cwv_skin_wire_surfaces and mod._cwv_skin_wire_surfaces.transition_replay) then
-        return "#416/#483 bounded transition replay update is not installed"
+    if not (mod._cwv_identity_surfaces and mod._cwv_identity_surfaces.mission_transition)
+            or not (mod._cwv_skin_wire_surfaces
+                and mod._cwv_skin_wire_surfaces.vanilla_skin_replay_retired) then
+		return "#416/#483 transition identity/unconditional fallback surfaces are not installed"
     end
 
     -- The exact generated pair from the repro must retain both authored meshes
-    -- and its clone-name-clobbered vanilla base id in a replay payload.
+    -- and its clone-name-clobbered vanilla base id in a semantic payload.
     local skin = WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[exact_skin]
     if type(skin) ~= "table" or type(skin.right_hand_unit) ~= "string"
             or type(skin.left_hand_unit) ~= "string" then
         return exact_skin .. " is absent or lost one generated hand"
     end
-    local payloads = plan_replay({
-        wielded_slot = "slot_melee",
-        slots = {
-            slot_melee = {
-                item_data = { name = "es_dual_wield_hammer_sword" },
-                skin = exact_skin,
+    local payloads = plan_identity({
+        slot_melee = {
+            item_data = {
+                name = "es_dual_wield_hammer_sword",
+                cwv_key = "cwv_es_sword_and_mace",
             },
+            skin = exact_skin,
         },
     })
-    if #payloads ~= 1 or payloads[1].item_name ~= "es_dual_wield_hammer_sword"
-            or payloads[1].skin ~= exact_skin or payloads[1].wielded ~= true then
-        return "Sword+Mace mission-transition replay lost exact base+generated-skin+wield identity"
+    local payload = payloads[1]
+    if #payloads ~= 1 or payload.item_key ~= "cwv_es_sword_and_mace"
+			or payload.base_item_key ~= "es_dual_wield_hammer_sword"
+            or payload.skin_key ~= exact_skin then
+		return "Sword+Mace transition payload lost exact variant/base/generated-skin identity"
     end
 
-    -- Reproduce the transition send: parity is transiently false, so the wire
-    -- sees n/a, the selected live skin is restored, and a deferred replay is
-    -- scheduled. Restore global probe state before assertions return.
+    local changed, accepted = accept_identity("rt416-peer",
+        _om.appearance_lifecycle_policy.SCHEMA, payload)
+    local descriptor = resolve_identity("rt416-peer", "slot_melee",
+        "es_dual_wield_hammer_sword")
+    if changed ~= true or not accepted or not descriptor
+            or descriptor.skin ~= exact_skin
+            or descriptor.right_hand_unit ~= skin.right_hand_unit
+            or descriptor.left_hand_unit ~= skin.left_hand_unit then
+        return "Sword+Mace transition semantic identity did not reconstruct both hands"
+    end
+
+    -- Reproduce the vanilla transition send. Even a parity provider that claims
+    -- success (or crashes) must be irrelevant: the wire sees n/a and the live
+    -- owner slot is restored immediately after the sender returns.
     local real_pp = mod._cwv_peer_parity
-    local real_pending = _om._cwv_skin_replay_pending
-    mod._cwv_peer_parity = { all_peers_have = function() return false end }
+    mod._cwv_peer_parity = { all_peers_have = function()
+        error("transition appearance path consulted parity")
+    end }
     local slot = { skin = exact_skin }
     local at_send
-    null_skins({ slot }, function() at_send = slot.skin end, "rt416_transition", false)
-    local pending = _om._cwv_skin_replay_pending
+    local ok, err = pcall(null_skins, { slot }, function() at_send = slot.skin end,
+        "rt416_transition")
     mod._cwv_peer_parity = real_pp
-    _om._cwv_skin_replay_pending = real_pending
-    if at_send ~= nil or slot.skin ~= exact_skin or type(pending) ~= "table" then
-        return "transition null did not restore the live Sword+Mace skin and schedule recovery"
-    end
-
-    -- No unsafe replay while parity is false. The first confirmed half-second
-    -- poll sends exactly once and consumes the pending state even if the shared
-    -- feature never observed a disable->enable edge.
-    local calls = 0
-    local p, sent = step(pending, 0.5, function() return false end,
-        function() calls = calls + 1 return 1 end)
-    if not p or sent ~= 0 or calls ~= 0 then
-        return "deferred generated-skin replay ran while parity was unconfirmed"
-    end
-    p, sent = step(p, 0.5, function() return true end,
-        function() calls = calls + 1 return 1 end)
-    if p ~= nil or sent ~= 1 or calls ~= 1 then
-        return "deferred generated-skin replay did not send exactly once after parity recovery"
+    if not ok then return "transition fallback raised/consulted parity: " .. tostring(err) end
+    if at_send ~= nil or slot.skin ~= exact_skin then
+		return "transition fallback leaked the CWV skin or failed to restore the live slot"
     end
 end)
 
@@ -601,35 +702,44 @@ _rt_register("issue273_cwv_deus_identity_is_exact", function()
 end)
 
 _rt_register("issue474_old_musket_hot_join_identity_and_remote_fire", function()
-    local plan_replay = _om._cwv_skin_replay_payloads
-    if type(plan_replay) ~= "function" then return "post-parity skin replay planner missing" end
-    if not (mod._cwv_skin_wire_surfaces and mod._cwv_skin_wire_surfaces.parity_replay) then
-        return "post-parity skin replay is not registered"
+    local plan_identity = _om._cwv_identity_payloads
+    local accept_identity = _om._cwv_accept_identity
+    local resolve_identity = _om._cwv_identity_descriptor_for_peer
+    if type(plan_identity) ~= "function" or type(accept_identity) ~= "function"
+            or type(resolve_identity) ~= "function" then
+        return "semantic identity helpers missing"
     end
-    local payloads = plan_replay({
-        wielded_slot = "slot_melee",
-        slots = {
-            slot_melee = {
-                item_data = { name = "es_handgun" },
-                skin = "cwv_es_musket_old_skin",
-            },
-            slot_ranged = {
-                item_data = { name = "es_handgun" },
-                skin = "cwv_es_musket_old_skin",
-            },
+    if not (mod._cwv_skin_wire_surfaces
+            and mod._cwv_skin_wire_surfaces.vanilla_skin_replay_retired) then
+		return "unsafe numeric skin replay is not retired"
+    end
+    local payloads = plan_identity({
+        slot_melee = {
+            item_data = { name = "es_handgun", cwv_key = "cwv_es_musket_old" },
+            skin = "cwv_es_musket_old_skin",
+        },
+        slot_ranged = {
+            item_data = { name = "es_handgun", cwv_key = "cwv_es_musket_old" },
+            skin = "cwv_es_musket_old_skin",
         },
     })
     local by_slot = {}
-    for _, payload in ipairs(payloads) do by_slot[payload.slot_name] = payload end
+    for _, payload in ipairs(payloads) do by_slot[payload.slot] = payload end
     for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
         local payload = by_slot[slot_name]
-        if not payload or payload.item_name ~= "es_handgun"
-                or payload.skin ~= "cwv_es_musket_old_skin" then
-            return slot_name .. " lost Old Musket base+skin identity in the parity replay"
+        if not payload or payload.item_key ~= "cwv_es_musket_old"
+                or payload.base_item_key ~= "es_handgun"
+				or payload.skin_key ~= "cwv_es_musket_old_skin" then
+			return slot_name .. " lost Old Musket variant/base/skin semantic identity"
         end
-    end
-    if not by_slot.slot_melee.wielded or by_slot.slot_ranged.wielded then
-        return "cross-slot replay lost the currently wielded slot"
+        local peer_id = "rt474-peer"
+        local changed, accepted = accept_identity(peer_id,
+            _om.appearance_lifecycle_policy.SCHEMA, payload)
+        local descriptor = resolve_identity(peer_id, slot_name, "es_handgun")
+        if changed ~= true or not accepted or not descriptor
+                or descriptor.skin ~= "cwv_es_musket_old_skin" then
+            return slot_name .. " failed to reconstruct Old Musket semantic identity"
+        end
     end
 
     local template = Weapons and Weapons.old_musket_template

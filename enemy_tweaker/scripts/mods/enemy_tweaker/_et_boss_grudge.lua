@@ -76,7 +76,7 @@ local rt_register = ET.rt_register
 -- cataclysm_3 = 8. "Cataclysm+" is therefore rank >= 6. The regression check
 -- below asserts this constant still matches DifficultySettings.cataclysm.rank so a
 -- vanilla renumber surfaces instead of silently disarming the gate.
-local CATACLYSM_RANK = 6
+local CATACLYSM_RANK = ET.BossBehaviorCore.CATACLYSM_RANK
 
 -- Per-boss grudge-mark config. buff = the vanilla grudge-mark buff TEMPLATE name
 -- (grudge_mark_settings.lua enhancement -> its buff template); mark = the display
@@ -160,6 +160,13 @@ end
 -- ----------------------------------------------------------------------------
 mod:hook_safe("ConflictDirector", "_post_spawn_unit", function(self, ai_unit, go_id, breed, spawn_pos, spawn_category, spawn_animation, optional_data, spawn_type, spawn_queue_id)
     if type(breed) ~= "table" then return end
+    -- #450 shares this already-owned post-spawn seam to register Halescourge
+    -- for a one-shot half-health monitor. The behavior module loads later but
+    -- publishes the callback before any mission can spawn the boss.
+    if type(ET.observe_boss_behavior_spawn) == "function" then
+        _safe("boss_behavior_observe:" .. tostring(breed.name),
+            ET.observe_boss_behavior_spawn, ai_unit, breed)
+    end
     -- #452 shares this already-owned post-spawn seam. The callback is installed
     -- later in the manifest and only inspects each of five naturally spawned
     -- special skeletons once; it never spawns or links the premium attachment.

@@ -93,9 +93,21 @@ local function _replace_celebrate_levels(func, self, ...)
         return
     end
 
-    self._levels_by_act = Missions.filter_levels_by_act(self._levels_by_act, LevelSettings, _get)
+    -- Vanilla reads the selected area through `self.parent` on desktop
+    -- (start_game_window_mission_selection.lua:46) and `self._parent` on
+    -- console (start_game_window_mission_selection_console.lua:45). Resolve
+    -- those two source-verified shapes only; an unknown shape fails closed and
+    -- leaves vanilla's mission map untouched.
+    local area_name = Missions.selected_area_name(self)
+    local levels_by_act, applied = Missions.filter_levels_for_area(
+        area_name, self._levels_by_act, LevelSettings, _get)
+    if not applied then
+        return
+    end
+
+    self._levels_by_act = levels_by_act
     local ids = Missions.enabled_ids(_get)
-    pcall(printf, "[event-missions:626] menu applied: area=%s act=%s missions=[%s] unrelated_acts=untouched",
+    pcall(printf, "[event-missions:626,802] menu applied: area=%s act=%s missions=[%s] unrelated_acts=untouched",
         Missions.AREA_KEY, Missions.ACT_KEY, table.concat(ids, ","))
 end
 
@@ -147,4 +159,19 @@ ET.rt_register("issue626_event_mission_allowlist_contract", function()
             return "GameActs." .. Missions.ACT_KEY .. " lacks " .. id
         end
     end
+end)
+
+ET.rt_register("issue802_event_mission_area_scope", function()
+    local control = { { level_id = "control" } }
+    local original = { act_1 = control }
+    local untouched, applied = Missions.filter_levels_for_area(
+        "helmgart", original, {}, function() return true end)
+    if applied then return "non-event area was filtered" end
+    if untouched ~= original then return "non-event mission map identity changed" end
+
+    local event_levels, event_applied = Missions.filter_levels_for_area(
+        Missions.AREA_KEY, original, LevelSettings, _get)
+    if not event_applied then return "celebrate area was not filtered" end
+    if event_levels == original then return "celebrate area retained unfiltered outer map" end
+    if event_levels.act_1 ~= control then return "unrelated act identity changed" end
 end)

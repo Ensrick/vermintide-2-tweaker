@@ -186,6 +186,7 @@ _hook_wrap("ConflictDirector", "spawn_queued_unit", "spawn_queued_unit_swaps",
             and wl2
             and type(breed) == "table"
             and _WARLORD_ELIGIBLE_MONSTERS[breed.name]
+            and not (optional_data and optional_data.et_boss_balance_no_pool_swap)
             and rawget(_G, "Breeds") and Breeds[wl2] then
         -- Host-only: spawn_queued_unit/request_breed are server-authoritative.
         -- Substituting on the host means the warlord replicates to clients

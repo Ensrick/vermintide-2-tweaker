@@ -184,6 +184,75 @@ local function _mat_resident_or_log(unit, mat_slot, mat)
     return false
 end
 
+-- #696 follow-up diagnostics. The residency guard proved that a resource can
+-- be globally gettable while Unit.set_material still reports a lookup miss in
+-- the spawned unit's material manager. Put bounded brackets around that exact
+-- native boundary so the next log identifies the binding convention, authored
+-- unit path, slot and material preceding an engine MeshObject warning. Do not use
+-- tostring(unit) as the dedupe identity: it changes on every respawn and would
+-- turn a transition loop into unbounded logging.
+local MH_MAT_BIND_TRACE_CAP = 24
+local _mh_mat_bind_trace_count = 0
+local _mh_mat_bind_trace_logged = {}
+
+local function _material_trace_unit_name(unit)
+    local ok_has, has_name = pcall(unit_has_data, unit, "unit_name")
+    if ok_has and has_name then
+        local ok_name, name = pcall(unit_get_data, unit, "unit_name")
+        if ok_name and name then return tostring(name) end
+    end
+
+    if Unit.debug_name then
+        local ok_debug, debug_name = pcall(Unit.debug_name, unit)
+        if ok_debug and debug_name then return tostring(debug_name) end
+    end
+
+    return "<unknown>"
+end
+
+local function _material_trace_meshes(unit, mat_slot)
+    local ok_count, count = pcall(unit_num_meshes, unit)
+    if not ok_count or type(count) ~= "number" then return -1, -1 end
+
+    local matching = 0
+    for i = 0, count - 1 do
+        local ok_mesh, mesh = pcall(unit_mesh, unit, i)
+        if ok_mesh and mesh then
+            local ok_has, has_slot = pcall(mesh_has_matrerial, mesh, mat_slot)
+            if ok_has and has_slot then matching = matching + 1 end
+        end
+    end
+    return count, matching
+end
+
+local function _set_material_traced(unit, mat_slot, mat, convention)
+    if not _mat_resident_or_log(unit, mat_slot, mat) then return false end
+
+    local unit_name = _material_trace_unit_name(unit)
+    local source = tostring(convention or "unknown")
+    local key = source .. "|" .. unit_name .. "|" .. tostring(mat_slot) .. "|" .. tostring(mat)
+    local trace = not _mh_mat_bind_trace_logged[key]
+        and _mh_mat_bind_trace_count < MH_MAT_BIND_TRACE_CAP
+
+    if trace then
+        _mh_mat_bind_trace_logged[key] = true
+        _mh_mat_bind_trace_count = _mh_mat_bind_trace_count + 1
+        local mesh_count, matching = _material_trace_meshes(unit, mat_slot)
+        pcall(printf,
+            "[cos:696] bind-start source=%s unit_name='%s' unit=%s slot='%s' material='%s' resident=true meshes=%d matching=%d trace=%d/%d",
+            source, unit_name, tostring(unit), tostring(mat_slot), tostring(mat),
+            mesh_count, matching, _mh_mat_bind_trace_count, MH_MAT_BIND_TRACE_CAP)
+    end
+
+    unit_set_material(unit, mat_slot, mat)
+
+    if trace then
+        pcall(printf, "[cos:696] bind-end source=%s unit_name='%s' slot='%s' material='%s'",
+            source, unit_name, tostring(mat_slot), tostring(mat))
+    end
+    return true
+end
+
 -- v0.9.76-dev (issue #282): exactly-once package loading with a symmetric
 -- lifecycle release. PackageManager.load() INCREMENTS a per-(package,
 -- reference_name) refcount on every call (package_manager.lua:26-27) and
@@ -326,9 +395,7 @@ local function replace_textures(unit)
         end
 
         for mat_slot, texture in pairs(dict) do
-            if _mat_resident_or_log(unit, mat_slot, mat) then
-                unit_set_material(unit, mat_slot, mat)
-            end
+            _set_material_traced(unit, mat_slot, mat, "mat_to_use")
             local num_meshes = unit_num_meshes(unit)
             for i = 0, num_meshes - 1, 1 do
                 local mesh = unit_mesh(unit, i)
@@ -355,9 +422,7 @@ local function replace_textures(unit)
         for i = 1, num_mats, 1 do
             local mat_slot = unit_get_data(unit, "mat_slots", "slot" .. tostring(i))
             local mat      = unit_get_data(unit, "mat_list", "slot" .. tostring(i))
-            if _mat_resident_or_log(unit, mat_slot, mat) then
-                unit_set_material(unit, mat_slot, mat)
-            end
+            _set_material_traced(unit, mat_slot, mat, "mat_list")
         end
     end
 end

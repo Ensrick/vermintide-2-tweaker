@@ -10,6 +10,9 @@ return function(H, repo_root)
     local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
     local instance_policy = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy.lua")
+    local preview_policy_path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_preview_policy.lua"
+    local preview_policy = assert(loadfile(preview_policy_path))()
 
     H.test("Cosmetics local-player lookups are safe across network teardown", function()
         local lifecycle_sources = table.concat({
@@ -57,6 +60,51 @@ return function(H, repo_root)
         H.truthy(picker:find("pcall(mod._repaint_native_glow_on_wielded, native_mat)", 1, true))
     end)
 
+    H.test("Cosmetics glow live preview owns exact customization item and skin", function()
+        local right, left, dead = {}, {}, {}
+        local host = {
+            _item_backend_id = "backend-796",
+            _previewer = {
+                _item = {
+                    skin = "skin-796",
+                    data = { name = "weapon-796", template = "template-796" },
+                },
+                _spawned_units = { right, dead, left },
+            },
+        }
+        local target, state = preview_policy.resolve(host, "backend-796",
+            { skin = "skin-796" }, function(unit) return unit ~= dead end)
+        H.equal(state, "ready")
+        H.equal(#target.units, 2)
+        H.equal(target.units[1], right)
+        H.equal(target.units[2], left)
+        H.equal(target.skin, "skin-796")
+        H.equal(target.item_name, "weapon-796")
+
+        local rejected, reason = preview_policy.resolve(host, "other-backend",
+            { skin = "skin-796" })
+        H.equal(rejected, nil)
+        H.equal(reason, "backend_mismatch")
+        rejected, reason = preview_policy.resolve(host, "backend-796",
+            { skin = "other-skin" })
+        H.equal(rejected, nil)
+        H.equal(reason, "skin_mismatch")
+    end)
+
+    H.test("Cosmetics glow slider, Apply, Restore, and Cancel repaint the preview pane", function()
+        local glow = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow.lua")
+        H.truthy(entry:find("GlowPicker.handle_input(_resolve_input_service(self), self)", 1, true))
+        H.truthy(entry:find("GlowPicker.draw(ui_renderer, input_service, dt, self)", 1, true))
+        H.truthy(picker:find("function GlowPicker.handle_input(input_service, preview_host)", 1, true))
+        H.truthy(picker:find("function GlowPicker.draw(ui_renderer, input_service, dt, preview_host)", 1, true))
+        H.truthy(picker:find("GlowPicker._preview_host = preview_host", 1, true))
+        H.truthy(glow:find("mod._reapply_glow_on_customization_preview = function", 1, true))
+        H.truthy(glow:find("GLOW_PREVIEW_POLICY.resolve(host, backend_id, slot_data, _is_unit)", 1, true))
+        H.truthy(picker:find("pcall(mod._reapply_glow_on_customization_preview", 1, true))
+        H.truthy(picker:find("pcall(mod._repaint_native_glow_on_customization_preview", 1, true))
+        H.equal(glow:find("network_send", 1, true), nil)
+    end)
+
     H.test("Cosmetics glow replay is host-authoritative and locally bounded", function()
         H.truthy(entry:find('mod:network_register("cos_glow_apply_req"', 1, true))
         H.truthy(entry:find('mod:network_register("cos_glow_apply"', 1, true))
@@ -100,6 +148,22 @@ return function(H, repo_root)
         H.truthy(entry:find("widget._ct_glow_badge_enriched", 1, true))
         H.truthy(entry:find("GlowPicker.committed_state_for", 1, true))
         H.truthy(entry:find("mod._cos_glow_badges_refresh = function", 1, true))
+
+        -- #795: illusion-button passes must exist before UIWidget.init creates
+        -- its positional pass_data twin. Never append a pass to live widgets.
+        local enrich = assert(entry:find(
+            "local illusion_added = _enrich_illusion_glow_badge(widget_definition)",
+            1, true))
+        local init = assert(entry:find(
+            "return func(widget_definition, ui_renderer)", enrich, true))
+        H.truthy(enrich < init)
+        local refresh_start = assert(entry:find(
+            "local function _refresh_illusion_glow_badges(self)", 1, true))
+        local refresh_end = assert(entry:find("\nend", refresh_start, true))
+        local refresh = entry:sub(refresh_start, refresh_end)
+        H.equal(refresh:find("_enrich_illusion_glow_badge(widget)", 1, true), nil)
+        H.truthy(entry:find(
+            "GLOW_BADGE.is_illusion_definition(widget)", 1, true))
 
         local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")
         local data = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data.lua")

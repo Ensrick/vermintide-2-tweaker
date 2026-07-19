@@ -1,6 +1,7 @@
 lua = [
 	"scripts/mods/weapons_of_chaos/_woc_appearance_policy"
 	"scripts/mods/weapons_of_chaos/_woc_attack_order"
+	"scripts/mods/weapons_of_chaos/_woc_boss_weapon_catalog"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_audio"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_power"
@@ -23,11 +24,18 @@ material = [
 	"materials/ui/icon_bg_cursed"
 	"materials/ui/icon_wpn_blightreaper"
 	"units/woc_blightreaper/blightreaper"
+	"units/woc_skarrik_dual_swords/skarrik_swords"
 ]
 
 unit = [
 	"units/woc_blightreaper/blightreaper"
 	"units/woc_blightreaper/blightreaper_3p"
+	"units/woc_skarrik_dual_swords/skarrik_sword_left"
+	"units/woc_skarrik_dual_swords/skarrik_sword_left_3p"
+	"units/woc_skarrik_dual_swords/skarrik_sword_right"
+	"units/woc_skarrik_dual_swords/skarrik_sword_right_3p"
+	"units/woc_skarrik_halberd/skarrik_halberd"
+	"units/woc_skarrik_halberd/skarrik_halberd_3p"
 ]
 
 texture = [
@@ -40,4 +48,8 @@ texture = [
 	"textures/woc_blightreaper/blightreaper_noise"
 	"textures/woc_blightreaper/blightreaper_packed"
 	"textures/woc_blightreaper/blightreaper_roughness"
+	"textures/woc_skarrik_dual_swords/skarrik_albedo"
+	"textures/woc_skarrik_dual_swords/skarrik_metallic"
+	"textures/woc_skarrik_dual_swords/skarrik_normal"
+	"textures/woc_skarrik_dual_swords/skarrik_roughness"
 ]

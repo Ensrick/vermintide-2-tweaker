@@ -51,6 +51,7 @@ texture = [
 	"gui/1080p/single_textures/cosmetics_tweaker/icon_cos_breton_shield_rune_glow"
 	"textures/cosmetics_tweaker/encarmine_hat/*"
 	"textures/cosmetics_tweaker/grail_knight_set/*"
+	"textures/cosmetics_tweaker/reikland_griffin/*"
 ]
 
 unit = [

@@ -1,5 +1,50 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.42-dev (2026-07-19) - union: load-fix over the 0.1.39-0.1.41 chain [untested]
+
+- Reconciliation ship. The Workshop timeline interleaved: 0.1.41 (boss-weapon catalogue chain) uploaded 06:38 BUILT ON the 0.1.37 data file whose single-option dropdown kills the whole mod at options init (issue 822), then the 0.1.38 load-fix uploaded 11:20 without the 0.1.39-0.1.41 content. This build carries BOTH: the dropdown arity guard + reader fallback + data-widget regression test, and the issue 835 canonical constructor fix, Skarrik dual-sword closure, and boss-weapon resource catalogue. Supersedes every prior 0.1.3x upload.
+## 0.1.41-dev (2026-07-19) - #614 #615 #642 boss-weapon resource catalogue [diagnostics-armed]
+
+- Adds compiled first- and third-person Skarrik halberd units that reuse the
+  single shared Skarrik material/texture owner from the dual-sword tranche.
+- Unifies two previously overlapping catalogue concepts under one module:
+  source/residency audit rows and separate authored-resource readiness
+  descriptors. `/woc_boss_catalog` reports both facets without loading,
+  spawning, registering, or mutating an item.
+- The command is bounded and read-only. Missing resources fail closed with an
+  exact row/reason so runtime weapon registration is not attempted until the
+  compiled asset boundary is proven.
+
+## 0.1.40-dev (2026-07-19) - #615 Skarrik dual-sword asset closure
+
+- Adds explicit left/right first- and third-person FBX/unit sources for
+  Skarrik's dual swords, plus the authored albedo, normal, metallic, and
+  roughness descriptors.
+- Makes this tranche the single owner of the shared Skarrik material/texture
+  closure. The halberd/catalogue tranche reuses that material instead of
+  duplicating textures or introducing a second asset owner.
+- Adds a pinned source/provenance gate for package membership, material-slot
+  identity, texture colour space, and zero-byte-source exclusion. Runtime item
+  registration remains deliberately separate.
+
+## 0.1.39-dev (2026-07-19) - #835 callable Vector3 constructor [verify-fix]
+
+- The shared appearance primitive now invokes engine vector constructors through
+  a protected callable boundary, allowing retail's callable-table `Vector3` to
+  reach Blightreaper position, scale, and offset writes.
+- Updated the #712 reproduction test to require an atomic pose write through the
+  raw retail-shaped constructor.
+
+## 0.1.38-dev (2026-07-19) - #782 validate Shyish spirit positions [verify-fix]
+
+- Replaced direct `POSITION_LOOKUP` arithmetic in the Blightreaper spirit chase
+  with one validated position boundary. It reads the live unit node first and
+  accepts the lookup only as an engine-validated fallback.
+- Invalid or stale engine userdata now expires the affected spirit through the
+  existing bounded diagnostic path instead of throwing a full call stack every
+  frame.
+- Added regression coverage for live-position preference, safe fallback, and
+  rejection of stale userdata before any Vector3 arithmetic.
 ## 0.1.38-dev (2026-07-19) - fix mod-killing single-option dropdown (issue 822) [untested]
 
 - The 0.1.37 attack-order picker registered the push follow-up dropdown with ONE option; VMF hard-rejects dropdowns with fewer than two, which aborts the ENTIRE mod's options init - WOC never loaded and the Blightreaper vanished from every inventory. The widget is now registered only when the descriptor carries two or more follow-up units; the selections reader falls back to the native unit so the light/heavy pickers stay live. New suite test loads the real data file under a stub and enforces VMF dropdown arity for every widget (test_woc_data_widgets.lua).

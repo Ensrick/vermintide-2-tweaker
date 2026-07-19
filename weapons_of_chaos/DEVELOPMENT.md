@@ -12,6 +12,29 @@ weapon's `.unit`.
 > prop cannot be loaded safely. This doc remains the research foundation for
 > enemy meshes, trophy paths, and the duplicate-item constraints.
 
+### Boss weapon catalogue boundary
+
+`_woc_boss_weapon_catalog.lua` is the single owner for two separate facets.
+`SOURCE_ROWS` plus `audit()` read the live breed/inventory chain without
+spawning, loading, or mutating anything. `get()` / `all()` plus
+`registration_readiness()` describe player relic identity, vanilla gameplay and
+wire fallback, and the mod-owned 1P/3P closure. Keeping the facets together
+prevents the #642 source diagnostic and #614/#615 registration work from
+becoming competing catalogues. `registration_enabled` fails closed until each
+row has a complete compiled resource closure.
+
+The Skarrik extraction is present in the authoring workspace at
+`_woc_trophy_extract/exports`. `skarrik_halberd.fbx` hashes to
+`4BDA4ED14BDA32B3560BCB7BF0BF256274539BE67ECEECD4D0B9A7713180865F`.
+The importer resolved the native material
+`units/weapons/enemy/wpn_skaven_set/wpn_skaven_set` and texture hashes
+`A9D9E4D3A8440FF5` and `28E105E0AD31F399`. Issue #615 proved the third native
+hash, `EC0DEBBFA142BC2B`, is a zero-byte/default resource and authored the shared
+`units/woc_skarrik_dual_swords/skarrik_swords` material with explicit bounded
+metallic/roughness maps. The halberd's explicit 1P/3P units reuse that shared
+material; they do not package a second texture/material copy. Integrate #615's
+asset closure before #614.
+
 ### Canonical WOC inventory contract
 
 WOC artifacts are unique local relics, not CIM-crafted weapons. Every enabled
@@ -187,12 +210,24 @@ how to discover which mesh a given enemy actually carries.
    trophies: the wieldable artifact is the boss's enemy weapon mesh in
    `ai_inventory_templates.lua`, not the `hub_trophy_*` prop.
 
-> **Open follow-up:** map each named keep trophy → the boss's actual enemy
-> weapon `.unit`. Nurgloth → `wpn_chaos_sorcerer_scythe_01` is confirmed.
-> Burblespue / Bodvarr / Skarrik / Rasknitt etc. need their boss breed's
-> inventory template walked to find the corresponding `units/weapons/enemy/...`
-> mesh (some bosses may use a unique one-off mesh; verify per-boss before
-> promising a wieldable).
+The named rows now mapped in `_woc_boss_weapon_catalog.lua` are:
+
+- Nurgloth: `wpn_chaos_sorcerer_scythe_01` (`ai_inventory_templates.lua:698-700`).
+- Burblespue: `wpn_sorcerer_stick` (`ai_inventory_templates.lua:690-692`,
+  `InventoryConfigurations.chaos_exalted_sorcerer` at `:2255-2260`).
+- Bodvarr: `wpn_chaos_2h_axe_03` through `item_categories.exalted_axe`
+  (`ai_inventory_templates.lua:579-581,1513-1515,2002-2008`).
+- Skarrik: champion halberd plus distinct left/right swords
+  (`ai_inventory_templates.lua:184-190,555-557,1963-1969,2064-2068`).
+
+Rasknitt remains deferred. The keep `hub_trophy_*` props remain forbidden as
+weapon units; each catalogue row points at the boss inventory mesh instead.
+
+`/woc_boss_catalog` writes the bounded seven-row source audit plus one bounded
+authored-resource row per relic descriptor to the console. WOC emits the same
+audit once at load. `resident_now` only reports current PackageManager state;
+false means unloaded, not absent. The authored facet uses only
+`Application.can_get("unit", ...)`; neither facet triggers a load or spawn.
 
 ---
 

@@ -1,5 +1,23 @@
 # Weapon Tweaker Changelog
 
+## 0.12.283-dev (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
+
+- Mirrors the beta track's expanded declarative remap vocabulary, single wield
+  owner, donor fallback, and bounded unknown-event evidence.
+
+## 0.12.282-dev (2026-07-19) - #735 shield-only rotation routing [verify-fix-coop]
+
+- Mirrors WT beta's explicit hand discriminator and receiver policy so the
+  Saltzpyre shield rotation applies only to the left-hand shield across owner,
+  bot, remote husk, and paired inventory preview surfaces.
+- Added bounded retained-quaternion evidence and exact-hand regression coverage.
+
+## 0.12.281-dev (2026-07-19) - #835 callable Vector3 constructor [verify-fix]
+
+- Synchronized the shared appearance primitive's protected callable constructor
+  boundary so retail callable-table engine namespaces are accepted without
+  weakening malformed-constructor failure handling.
+
 ## 0.12.280-dev (2026-07-18) - #661 effective runtime career actions [verify-fix]
 
 - Runtime-parity mirror of Weapon Tweaker `0.12.279-beta`: Old Musket's rifle

@@ -1314,6 +1314,11 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 
 - In the keep and in a mission, profile 1 starts from the user's current settings.
 - Profiles 2-10 start from declared defaults and restore independently per tab.
+- When a mod adds a setting, an older profile inherits that setting's current
+  declared default without changing any explicitly saved value (including false).
+- Persist the reconciled snapshot only after every added default commits through
+  the bounded owner transaction; a failed owner callback must not mark migration
+  complete.
 - Switching profiles with pending edits applies those edits to the old profile first.
 - DEFAULT plus Apply updates only the active profile on the visible tab.
 - The active number and values survive a full restart, including merged tabs.

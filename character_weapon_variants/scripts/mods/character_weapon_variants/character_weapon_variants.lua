@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.456-dev"
+local MOD_VERSION = "0.1.460-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -64,8 +64,15 @@ _om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_c
 _om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
 _om.rapier_contract = mod:dofile("scripts/mods/character_weapon_variants/_cwv_rapier_contract")
 _om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inventory_icons")
+_om.outrider_animation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_outrider_animation")
 -- Public sibling-renderer contract: call resolve(icon, renderer), never guess atlas residency.
 mod._cwv_inventory_icons = _om.inventory_icons
+-- #787: mod data registered the private atlas before this script runs. Finish
+-- its VMF-missing masked+saturated variant so the exact Athanor Gui may prove
+-- and retain the paired icon instead of taking the single-axe fallback.
+_om.icon_variants = _om.inventory_icons.complete_masked_saturated(rawget(_G, "UIAtlasHelper"))
+pcall(printf, "[cwv:787] paired icon atlas variants=%d expected=%d",
+	_om.icon_variants, 9)
 mod._cwv_crowbill_family = _om.crowbill_family
 mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode
 mod._cwv_crowbill_presentation = _om.crowbill_presentation
@@ -76,6 +83,7 @@ _om.profile_package_wire = mod:dofile("scripts/mods/character_weapon_variants/_c
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
+_om.old_musket_preview_pose = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview_pose")
 mod._cwv_preview_descriptor = _om.old_musket_preview
 _om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.profile_package_wire })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
@@ -393,9 +401,6 @@ do
 	function mod.on_setting_changed(setting_id)
 		if setting_id == policy.SETTING_ID then
 			_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
-		end
-		if _om.crowbill_runtime and _om.crowbill_runtime.on_setting_changed then
-			_om.crowbill_runtime.on_setting_changed(setting_id)
 		end
 	end
 end
@@ -1531,6 +1536,15 @@ local function _create_outrider_grenade_launcher_template()
 	template.wield_anim_not_loaded  = nil   -- blunderbuss has no "not_loaded" wield variant
 	template.display_unit           = "units/weapons/weapon_display/display_blunderbusses"
 	template.reload_event           = "reload"   -- vanilla blunderbuss event name (kept for clarity)
+	-- #760: 3P only. WT may expose this exact CWV item to the three standard
+	-- Saltzpyre careers. Route their body into their native Repeater Pistol
+	-- stance while Kruber retains the authored blunderbuss stance. The 1P
+	-- launcher state machine above remains shared and unchanged.
+	local receiver_count, receiver_reason = _om.outrider_animation.apply_template(
+		template, NetworkLookup and NetworkLookup.anims)
+	_om.outrider_animation.emit_evidence(printf, "template", "wh_standard",
+		_om.outrider_animation.SALTZPYRE_WIELD_3P,
+		receiver_reason or ("mapped_" .. tostring(receiver_count)), "private_clone")
 
 	-- Hand swap: weapon mounts on the right hand instead of left.
 	template.left_hand_unit                    = ""
@@ -3724,9 +3738,32 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
 		_om.combat_styles:end_husk_wield()
 	end
 	if not ok then error(err) end
+	-- #760: a remote husk receives the vanilla Trollhammer item shape for wire
+	-- safety, so its local item-template lookup cannot see the Outrider's
+	-- Saltzpyre career map. The semantic identity channel is the positive
+	-- variant proof. Re-apply the same vanilla Repeater Pistol stance once at
+	-- the existing husk-wield reconstruction edge; no custom animation id or
+	-- extra RPC is sent. A late identity delivery already re-wields this slot.
+	local slot = equipment and equipment.slots and equipment.slots[slot_name]
+	local item_data = slot and slot.item_data
+	local descriptor = _om._husk_identity_descriptor
+		and _om._husk_identity_descriptor(self and self._unit, slot_name,
+			item_data and item_data.name)
+	local husk_wield, husk_reason = _om.outrider_animation.husk_event(
+		descriptor, self and self._career_name,
+		NetworkLookup and NetworkLookup.anims)
+	if husk_wield then
+		local _, result = _om.outrider_animation.dispatch_event(
+			unit_3p, husk_wield, Unit)
+		_om.outrider_animation.emit_evidence(printf, "remote_husk_3p",
+			self and self._career_name, husk_wield, result, "exact_identity")
+	elseif husk_reason then
+		_om.outrider_animation.emit_evidence(printf, "remote_husk_3p",
+			self and self._career_name,
+			_om.outrider_animation.SALTZPYRE_WIELD_3P,
+			"skip_" .. tostring(husk_reason), "exact_identity")
+	end
 	pcall(function()
-		local slot = equipment and equipment.slots and equipment.slots[slot_name]
-		local item_data = slot and slot.item_data
 		local item_template = slot and slot.item_template
 		local function _live(u) return (u and Unit.alive(u)) and tostring(u) or "nil" end
 		printf("[cwv husk-wield] slot=%s item_name=%s backend_id=%s skin=%s template=%s | wielded r3p=%s l3p=%s (issues 395/398 diag)",
@@ -9989,6 +10026,18 @@ do
 		return true
 	end
 
+	local imperial_transform = _type_transforms.cwv_imperial_longsword
+	local inverse_bretonnian_scale = {
+		1 / imperial_transform.right_hand_scale[1],
+		1 / imperial_transform.right_hand_scale[2],
+		1 / imperial_transform.right_hand_scale[3],
+	}
+	local inverse_bretonnian_offset = {
+		-imperial_transform.right_hand_offset[1],
+		-imperial_transform.right_hand_offset[2],
+		-imperial_transform.right_hand_offset[3],
+	}
+
 	_om.combat_styles = policy.install(mod, {
 		cwv_key_for_item = function(backend_id, item_data)
 			return _om._cwv_key_for_item(backend_id, item_data)
@@ -9996,16 +10045,25 @@ do
 		presentations = {
 			imperial_longsword = {
 				item_key = "cwv_style_imperial_longsword",
-				right_hand_scale = _type_transforms.cwv_imperial_longsword.right_hand_scale,
-				right_hand_offset = _type_transforms.cwv_imperial_longsword.right_hand_offset,
+				right_hand_scale = imperial_transform.right_hand_scale,
+				right_hand_offset = imperial_transform.right_hand_offset,
 			},
 			greatsword_bretonnian = {
 				item_key = "cwv_style_greatsword_bretonnian",
 				-- Reuse the reviewed Imperial Longsword proportions only on
 				-- third-person/presentation consumers. The first-person Greatsword
 				-- unit remains untouched and follows the Bretonnian state machine.
-				right_hand_scale_3p = _type_transforms.cwv_imperial_longsword.right_hand_scale,
-				right_hand_offset_3p = _type_transforms.cwv_imperial_longsword.right_hand_offset,
+				right_hand_scale_3p = imperial_transform.right_hand_scale,
+				right_hand_offset_3p = imperial_transform.right_hand_offset,
+			},
+			bretonnian_greatsword_inverse = {
+				item_key = "cwv_style_bretonnian_greatsword_inverse",
+				-- #692: reciprocal presentation for the native Bretonnian mesh
+				-- under Greatsword/Kerillian state machines. Unified fields are
+				-- intentional: owner 1P and every 3P/preview consumer need the
+				-- same physical correction.
+				right_hand_scale = inverse_bretonnian_scale,
+				right_hand_offset = inverse_bretonnian_offset,
 			},
 		},
 		owns_dlc = function(dlc_name)
@@ -10421,8 +10479,8 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	_cwv_net_safe_loadout_hook_installed = true
 end
 
--- WIRE-SAFETY: weapon_skin_id axis of issue 278 / issue 371; sender coverage +
--- parity gating reworked for issue 495. A cwv-registered NetworkLookup.weapon_skins
+-- WIRE-SAFETY: weapon_skin_id axis of issue 278 / issue 371; issue 741 retires
+-- the issue-495 parity exception. A cwv-registered NetworkLookup.weapon_skins
 -- key is undefined on a peer without cwv: any sender that encodes
 -- weapon_skin_id = NetworkLookup.weapon_skins[<live slot skin>] onto
 -- rpc_add_equipment fatals that peer on decode (inventory_system.lua:300 -> strict
@@ -10434,17 +10492,12 @@ end
 --     (re)equip, :1443-1457, encode :1451)
 --   * GearUtils.hot_join_sync (host replays worn slots to each joining peer,
 --     gear_utils.lua:462-488, encode :484)
--- PARITY GATE (issue 495 load-bearing constraint): the wire skin is the PRIMARY
--- husk display signal on cwv peers (issue 474 skin-key resolution), so when EVERY
--- other human peer has positively acked the cwv beacon the skin RIDES and remote
--- cwv clients render the variant. Parity unconfirmed (or beacon absent/erroring)
--- -> null to the universal vanilla "n/a", restore the slot's real skin after the
--- send (the owner's own spawn reads the restored value; a non-cwv peer renders
--- the base weapon instead of crashing). EXCEPTION: the hot-join replay is ALWAYS
--- nulled -- it fires during the join handshake, before the joiner's ack can
--- exist, so no roster-reactive gate can win that race (the issue 425 crt
--- hot-join lesson); a cwv joiner sees base display on others' husks until their
--- next re-equip (documented issue 474 residual).
+-- UNCONDITIONAL FALLBACK (issue 741 / BUG_CLASSES 31, 64): same-mod presence and
+-- schema agreement do not prove numeric NetworkLookup parity. Another
+-- skin-appending mod can shift weapon_skins indexes between two CWV peers. Every
+-- CWV skin is therefore nulled to vanilla "n/a" for all three vanilla senders,
+-- without consulting the roster. The real skin travels as a stable string key on
+-- cwv_item_identity and remote husks consume that reconstructed descriptor.
 -- Key set: _om._skin_keys (base variant skins) + _custom_skin_keys
 -- (pairing/illusion registrations) + the cwv_ name prefix as belt-and-suspenders
 -- (every cwv-injected weapon_skins key is cwv_-prefixed; no vanilla key is).
@@ -10468,14 +10521,17 @@ do
 		local ok, res = pcall(pp.all_peers_have, pp)
 		return ok and res == true
 	end
+	-- Gameplay damage-profile fallback still needs this gate. Appearance does not:
+	-- #741 forbids numeric CWV skin ids on the vanilla wire in every lobby shape.
 	_om._wire_parity_live = _wire_parity_live
 
 	-- #396 positive owner identity. Vanilla equipment RPCs deliberately encode a
 	-- CWV clone as its stable base item name, so the receiver cannot distinguish
 	-- an Imperial Longsword from a native Bretonnian Longsword when the selected
 	-- skin is nil/vanilla-looking. Carry only the missing item-key axis over VMF's
-	-- same-mod channel; the ordinary vanilla RPC remains authoritative for slot,
-	-- skin, units, and wield timing. The side channel is absence-safe for non-CWV
+	-- same-mod channel; the ordinary vanilla RPC remains authoritative for slot and
+	-- wield timing, while this descriptor is authoritative for CWV skin/units. The
+	-- side channel is absence-safe for non-CWV
 	-- peers and bounded to equip/resync/parity edges (never per-frame).
 	local _IDENTITY_SCHEMA = _om.appearance_lifecycle_policy.SCHEMA
 	mod._cwv_identity_surfaces = {
@@ -10652,225 +10708,36 @@ do
 		end
 	end)
 
-	-- issue 476 diagnostic (printf, dev-always-on). Makes the husk-illusion wire
-	-- DECISION legible in the WIELDER's own log at equip time. A remote view (the
-	-- host + other clients) renders the wielder as a HUSK, which resolves the BASE
-	-- item_data (no cwv backend_id, memory reference_vt2_husk_resolves_base_item_data),
-	-- so an applied illusion reaches a husk ONLY if its cwv skin id rides THIS wire
-	-- -- and it rides only under confirmed peer parity (issue 474/495). Logged once
-	-- per (surface, skin, decision) so a "illusion doesn't change for other players"
-	-- repro (#476) pins the failing link without guessing:
-	--   * NULL + the beacon's "Missing this mod" chat notice = genuinely mixed
-	--     lobby, WORKING AS DESIGNED (a non-cwv peer would CTD on the modded id).
-	--   * NULL + other_human_peers>0 + NO missing-peer notice = all-cwv but parity
-	--     UNCONFIRMED at send time (ack race); the illusion syncs on next re-equip.
-	--   * RIDE + a husk still shows base = downstream on the OTHER peer: read its
-	--     [cwv:474] husk re-key / DEFERRED(residency) / [cwv:478] DEFER lines (a
-	--     PAIRING illusion whose per-hand mesh differs from the def default is NOT
-	--     covered by the def-field husk residency pass -- issue 396/401 class).
-	-- Hung on _om (not new locals): this chunk sits at the Lua 5.1 200-local ceiling.
+	-- Issues #476/#741 diagnostic. The vanilla decision is now invariant: NULL.
+	-- Exact remote appearance is independently observable on the semantic
+	-- cwv_item_identity lifecycle logs, so a failed illusion can be assigned to the
+	-- descriptor/husk consumer without ever re-enabling an unsafe numeric replay.
 	_om._probe_476_logged = {}
-	_om._probe_476 = function(context, skin, rode, force)
-		local key = tostring(context) .. "|" .. tostring(skin) .. "|" .. tostring(rode)
+	_om._probe_476 = function(context, skin)
+		local key = tostring(context) .. "|" .. tostring(skin)
 		if _om._probe_476_logged[key] then return end
 		_om._probe_476_logged[key] = true
-		local peers = -1
-		local pm = Managers and Managers.player
-		if pm and type(pm.human_players) == "function" then
-			local ok, humans = pcall(function() return pm:human_players() end)
-			if ok and type(humans) == "table" then
-				local me
-				pcall(function() me = Network.peer_id() end)
-				peers = 0
-				for _, p in pairs(humans) do
-					local pid = p and p.peer_id
-					if type(pid) == "string" and pid ~= me then peers = peers + 1 end
-				end
-			end
-		end
 		pcall(printf,
-			"[cwv:476] husk illusion wire (%s): skin=%s decision=%s other_human_peers=%s parity_all_have=%s%s",
-			tostring(context), tostring(skin), rode and "RIDE" or "NULL",
-			tostring(peers), tostring(_wire_parity_live()),
-			force and " (hot-join replay: ALWAYS nulled -- join-handshake race, syncs on next re-equip)" or "")
+			"[cwv:476/741] husk illusion transport (%s): skin=%s vanilla_wire=NULL identity_channel=cwv_item_identity",
+			tostring(context), tostring(skin))
 	end
 
 	local _null_logged = {}
-	-- #416/#483 mission-transition recovery. A sender can observe a newly
-	-- reconstructed peer roster between the last confirmed parity tick and the
-	-- replacement peer's ack. Nulling is still mandatory at that instant, but the
-	-- shared gate can remain logically "enabled" if the ack lands before its next
-	-- poll, so no disable->enable callback edge exists to replay the selected skin.
-	-- Record every withheld CWV identity and retry for a bounded window. The pure
-	-- step helper is exported for the runtime regression; production polls at most
-	-- twice per second and sends only after parity is positively confirmed.
-	_om._cwv_skin_replay_pending_step = function(pending, dt, parity_check, replay_fn)
-		if type(pending) ~= "table" then return nil, 0 end
-		pending.elapsed = (pending.elapsed or 0) + (dt or 0)
-		pending.poll = (pending.poll or 0) + (dt or 0)
-		if pending.elapsed >= 60 then return nil, 0, "expired" end
-		if pending.poll < 0.5 then return pending, 0 end
-		pending.poll = 0
-		local ok_parity, parity_live = pcall(parity_check)
-		if not ok_parity or parity_live ~= true then return pending, 0 end
-		local ok, sent = pcall(replay_fn)
-		if ok and type(sent) == "number" and sent > 0 then
-			return nil, sent, "sent"
-		end
-		return pending, 0
-	end
-
-	local function _mark_skin_replay_pending(context, saved)
-		if not saved then return end
-		local count = 0
-		for _ in pairs(saved) do count = count + 1 end
-		_om._cwv_skin_replay_pending = {
-			context = context,
-			count = count,
-			elapsed = 0,
-			poll = 0,
-		}
-	end
-
-	local function _wire_null_skins(slots, send_fn, context, force)
-		if not force and _wire_parity_live() then
-			-- Every lobby peer runs cwv: the skin is decodable everywhere and
-			-- carries the issue-474 husk display. Let it ride. (#476: probe the
-			-- decision for any cwv skin present, WITHOUT altering the fast path.)
-			for _, slot_data in pairs(slots) do
-				local skin = slot_data and slot_data.skin
-				if skin and _wire_skin(skin) then _om._probe_476(context, skin, true, false) end
-			end
-			return send_fn()
-		end
-		local saved
-		for _, slot_data in pairs(slots) do
-			local skin = slot_data and slot_data.skin
-			if skin and _wire_skin(skin) then
-				_om._probe_476(context, skin, false, force)
-				saved = saved or {}
-				saved[slot_data] = skin
-				slot_data.skin = nil
+	local function _wire_null_skins(slots, send_fn, context)
+		return _om.cosmetic_skin_wire.with_safe_slots(
+			slots, _om._skin_keys, _custom_skin_keys, send_fn,
+			function(_, skin)
+				_om._probe_476(context, skin)
 				local lk = tostring(context) .. "|" .. tostring(skin)
-				if not _null_logged[lk] then   -- once per (surface, skin); no equip-spam
+				if not _null_logged[lk] then
 					_null_logged[lk] = true
-					pcall(printf, "[cwv:495] wire skin null (%s): %s -> n/a (%s)",
-						tostring(context), tostring(skin),
-						force and "join replay: always nulled" or "peer parity not confirmed")
+					pcall(printf,
+						"[cwv:741] wire skin null (%s): %s -> n/a (exact identity via cwv_item_identity)",
+						tostring(context), tostring(skin))
 				end
-			end
-		end
-		local r1, r2, r3, r4 = send_fn()
-		if saved then
-			for slot_data, skin in pairs(saved) do
-				slot_data.skin = skin
-			end
-			-- A forced hot-join sync can run before the joining peer is even visible
-			-- in the roster; all_peers_have could therefore be vacuously/stale true.
-			-- Keep that path exclusively on the existing settled parity-enable edge.
-			-- The bounded poll owns only ordinary transition/resync sends whose roster
-			-- was observed and explicitly returned parity=false.
-			if not force then _mark_skin_replay_pending(context, saved) end
-		end
-		return r1, r2, r3, r4
+			end)
 	end
 	_om._wire_null_skins = _wire_null_skins   -- exported for /cwv_regression_test
-
-	-- #579 post-handshake replay. GearUtils.hot_join_sync must null a cwv skin
-	-- before the joining peer has acknowledged this mod; otherwise its strict
-	-- NetworkLookup.weapon_skins decode can CTD. Once peer parity transitions to
-	-- enabled, every decoder has proven the same CWV schema and the owner can
-	-- safely replay only its cwv-skinned slots through vanilla rpc_add_equipment.
-	-- If the corrected slot is currently wielded, follow it with the vanilla
-	-- wield RPC so the remote husk respawns immediately instead of waiting for a
-	-- manual weapon swap. This is bounded to the parity-enable edge (join/rejoin),
-	-- never a frame/update loop.
-	_om._cwv_skin_replay_payloads = function(equipment)
-		local payloads = {}
-		local slots = equipment and equipment.slots
-		if type(slots) ~= "table" then return payloads end
-		for slot_name, slot_data in pairs(slots) do
-			local item_data = slot_data and slot_data.item_data
-			local skin = slot_data and slot_data.skin
-			if type(item_data) == "table" and type(item_data.name) == "string" and _wire_skin(skin) then
-				payloads[#payloads + 1] = {
-					slot_name = slot_name,
-					item_name = item_data.name, -- clone-name clobber is wire-safe: vanilla base id
-					skin = skin,
-					wielded = equipment.wielded_slot == slot_name,
-				}
-			end
-		end
-		return payloads
-	end
-
-	_om._replay_cwv_skins_after_parity = function(identity_force)
-		local pm = Managers and Managers.player
-		local network = Managers and Managers.state and Managers.state.network
-		local storage = Managers and Managers.state and Managers.state.unit_storage
-		if not (pm and network and network.network_transmit and storage) then return 0 end
-		local ok_player, player = pcall(pm.local_player, pm, 1)
-		if not ok_player or not player then return 0 end
-		local unit = player.player_unit
-		if not unit or not Unit.alive(unit) then return 0 end
-		local ok_inv, inventory = pcall(ScriptUnit.extension, unit, "inventory_system")
-		if not ok_inv or not inventory or type(inventory.equipment) ~= "function" then return 0 end
-		local equipment = inventory:equipment()
-		-- #474 (2026-07-18): force the identity replay ONLY on the parity-enable
-		-- edge. The bounded 0.5s transition poll re-entered here every tick with
-		-- force=true, bypassing the signature dedupe (paired log: ~300 identity
-		-- sends in 50s). Unforced sends dedupe to zero traffic while unchanged.
-		_send_identity_slots(equipment and equipment.slots, "parity_replay",
-			identity_force == true)
-		local payloads = _om._cwv_skin_replay_payloads(equipment)
-		if #payloads == 0 then return 0, "empty" end
-		local go_id = storage:go_id(unit)
-		if not go_id then return 0 end
-		local transmit = network.network_transmit
-		local network_lookup = rawget(_G, "NetworkLookup")
-		if not network_lookup then return 0 end
-		local sent = 0
-		for _, payload in ipairs(payloads) do
-			local slot_id = rawget(network_lookup.equipment_slots or {}, payload.slot_name)
-			local item_id = rawget(network_lookup.item_names or {}, payload.item_name)
-			local skin_id = rawget(network_lookup.weapon_skins or {}, payload.skin)
-			if slot_id and item_id and skin_id then
-				if network.is_server then
-					transmit:send_rpc_clients("rpc_add_equipment", go_id, slot_id, item_id, skin_id)
-					if payload.wielded then transmit:send_rpc_clients("rpc_wield_equipment", go_id, slot_id) end
-				else
-					transmit:send_rpc_server("rpc_add_equipment", go_id, slot_id, item_id, skin_id)
-					if payload.wielded then transmit:send_rpc_server("rpc_wield_equipment", go_id, slot_id) end
-				end
-				sent = sent + 1
-			end
-		end
-		pcall(printf, "[cwv:579] replayed %d cwv skin slot(s) after peer-parity confirmation", sent)
-		return sent
-	end
-
-	local function _replay_and_clear_pending(reason)
-		local force_identity = reason ~= "bounded_transition_poll"
-		local sent, empty = _om._replay_cwv_skins_after_parity(force_identity)
-		if empty == "empty" and _om._cwv_skin_replay_pending then
-			-- #474 (2026-07-18): nothing wire-skinned remains to replay; keeping
-			-- the pending record alive re-polled (and re-sent identity) every
-			-- 0.5s for the full 60s window. Consume it.
-			local pending = _om._cwv_skin_replay_pending
-			_om._cwv_skin_replay_pending = nil
-			pcall(printf,
-				"[cwv:416/483] deferred skin replay cleared: no cwv-skinned slot remains (source=%s trigger=%s)",
-				tostring(pending.context), tostring(reason))
-		end
-		if sent > 0 and _om._cwv_skin_replay_pending then
-			local pending = _om._cwv_skin_replay_pending
-			_om._cwv_skin_replay_pending = nil
-			pcall(printf,
-				"[cwv:416/483] deferred skin identity replayed after parity recovery: slots=%d source=%s trigger=%s",
-				sent, tostring(pending.context), tostring(reason))
-		end
-		return sent
-	end
 
 	mod._cwv_skin_wire_surfaces = {}
 
@@ -10882,7 +10749,7 @@ do
 		_send_identity_slots(slots, "game_object_initialized", true)
 		local r1, r2, r3, r4 = _wire_null_skins(slots, function()
 			return func(self, unit, unit_go_id)
-		end, "game_object_initialized", false)
+		end, "game_object_initialized")
 		if _om._exact_pair_publish_inventory then
 			_om._exact_pair_publish_inventory(self, "game_object_initialized")
 		end
@@ -10903,7 +10770,7 @@ do
 		-- Single slot-shaped table; wrap in a one-element array for the helper.
 		local r1, r2, r3, r4 = _wire_null_skins({ equipment_to_spawn }, function()
 			return func(self, equipment_to_spawn, skip_wield)
-		end, "spawn_resynced_loadout", false)
+		end, "spawn_resynced_loadout")
 		if _om._exact_pair_publish_inventory then
 			_om._exact_pair_publish_inventory(self, "spawn_resynced_loadout")
 		end
@@ -10933,10 +10800,9 @@ do
 				_om.appearance_lifecycle_policy.RETRY_INTERVAL,
 				_om.appearance_lifecycle_policy.MAX_RETRY_ATTEMPTS)
 		end
-		-- force=true: the joining peer's parity is unknowable here by construction.
 		local r1, r2, r3, r4 = _wire_null_skins(slots, function()
 			return func(peer_id, unit, equipment, additional_items)
-		end, "hot_join_sync", true)
+		end, "hot_join_sync")
 		if _om._exact_pair_publish_local then
 			_om._exact_pair_publish_local("hot_join_sync")
 		end
@@ -10982,20 +10848,12 @@ do
 		mod._cwv_skin_wire_surfaces.update_cosmetic_slot = true
 	end
 
-	local pp = mod._cwv_peer_parity
-	if pp and type(pp.register_gated_feature) == "function" then
-		pp:register_gated_feature("cwv_skin_hot_join_replay", {
-			label = "remote weapon cosmetics",
-			on_enable = function() return _replay_and_clear_pending("parity_enable_edge") end,
-		})
-		mod._cwv_skin_wire_surfaces.parity_replay = true
-		mod._cwv_identity_surfaces.parity_replay = true
-	end
+	-- #741: a numeric vanilla skin replay can never be made safe by mod presence.
+	-- Exact appearance recovery instead uses the acknowledged, bounded semantic
+	-- identity delivery already stepped below.
+	mod._cwv_skin_wire_surfaces.vanilla_skin_replay_retired = true
+	mod._cwv_identity_surfaces.peer_ready = true
 
-	-- The peer-parity library installed the current mod.update wrapper near boot.
-	-- Chain after it so an enable edge gets first chance to replay. If no edge was
-	-- observed, this bounded retry closes the mission-transition race. A genuinely
-	-- mixed lobby never passes _wire_parity_live and therefore never sends a CWV id.
 	local previous_update = mod.update
 	mod.update = function(dt)
 		if previous_update then previous_update(dt) end
@@ -11013,26 +10871,7 @@ do
 				"[cwv:660] lifecycle=hot_join_retry adapter=identity_timeout expired=%d pending=%d",
 				identity_expired, lifecycle:pending_delivery_count())
 		end
-		local pending = _om._cwv_skin_replay_pending
-		if not pending then return end
-		local next_pending, sent, outcome = _om._cwv_skin_replay_pending_step(
-			pending, dt, _wire_parity_live, function()
-				return _replay_and_clear_pending("bounded_transition_poll")
-			end)
-		-- _replay_and_clear_pending may already have cleared the shared field
-		-- (replay sent, or nothing wire-skinned remained). Never re-arm it.
-		if sent > 0 then
-			_om._cwv_skin_replay_pending = nil
-		elseif outcome == "expired" then
-			_om._cwv_skin_replay_pending = nil
-			pcall(printf,
-				"[cwv:416/483] deferred skin replay expired safely after 60s: source=%s slots=%s (parity never confirmed / equipment unavailable)",
-				tostring(pending.context), tostring(pending.count))
-		elseif _om._cwv_skin_replay_pending ~= nil then
-			_om._cwv_skin_replay_pending = next_pending
-		end
 	end
-	mod._cwv_skin_wire_surfaces.transition_replay = true
 end
 _om._skin_wire_hook_installed = true
 
@@ -11234,8 +11073,14 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
 	return result
 end)
 
-local function _find_preview_slot_info(self, item_name)
+local function _find_preview_slot_info(self, item_name, spawn_data)
 	if not self._item_info_by_slot then return nil, nil end
+	if spawn_data then
+		local exact_slot, exact = _om.old_musket_preview_pose.resolve_spawn_slot(
+			self, item_name, spawn_data)
+		if exact_slot then return exact_slot, exact end
+		return nil, nil
+	end
 	for slot_id, info in pairs(self._item_info_by_slot) do
 		if info and info.name == item_name then
 			return slot_id, info
@@ -11253,17 +11098,17 @@ local function _crowbill_def_from_spawn_data(spawn_data)
 	return nil, nil
 end
 
-local function _resolve_preview_def(self, item_name)
-	local _, info = _find_preview_slot_info(self, item_name)
+local function _resolve_preview_def(self, item_name, spawn_data)
+	local slot_type, info = _find_preview_slot_info(self, item_name, spawn_data)
 	if _om.combat_styles and _om.combat_styles.transform_decision then
 		local decision = _om.combat_styles:transform_decision({ name = item_name },
 			info and info.backend_id)
-		if decision ~= nil then return decision or nil, info end
+		if decision ~= nil then return decision or nil, info, slot_type end
 	end
 	local skin = info and info.skin_name
-	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], info end
+	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], info, slot_type end
 	local model_def = info and _crowbill_def_from_spawn_data(info.spawn_data)
-	if model_def then return model_def, info end
+	if model_def then return model_def, info, slot_type end
 
 	if info and info.backend_id then
 		-- v0.1.316: match ANY instance suffix (_001, _002, _003, ...). The
@@ -11276,14 +11121,16 @@ local function _resolve_preview_def(self, item_name)
 		-- bid (no item_data), so a crafted instance's UUID bid resolves via
 		-- the ladder's backend-lookup rung to the stamped cwv_key.
 		local matched = _om._cwv_key_for_item(info.backend_id, nil)
-		if matched and _transform_map[matched] then return _transform_map[matched], info end
+		if matched and _transform_map[matched] then
+			return _transform_map[matched], info, slot_type
+		end
 	end
-	if _transform_map[item_name] then return _transform_map[item_name], info end
-	return nil, info
+	if _transform_map[item_name] then return _transform_map[item_name], info, slot_type end
+	return nil, info, slot_type
 end
 
-local function _cwv_spawn_item_post(self, item_name)
-	local def, info = _resolve_preview_def(self, item_name)
+local function _cwv_spawn_item_post(self, item_name, spawn_data)
+	local def, info, slot_type = _resolve_preview_def(self, item_name, spawn_data)
 	if not def then
 		-- v0.1.326: log when the resolver fails for a musket-shaped item_name
 		-- so we can tell whether the regex / lookup is broken vs the hook
@@ -11321,6 +11168,25 @@ local function _cwv_spawn_item_post(self, item_name)
 
 	local slot = equip_units[slot_index]
 	if type(slot) ~= "table" then return end
+
+	-- #760: the previewer resolves the inherited BASE Trollhammer template, so
+	-- mutating that table would also change the real Trollhammer on Saltzpyre.
+	-- Replay one exact item+career stance after the item-specific preview spawn.
+	-- This is reconstruction-bound (not per-frame) and leaves Kruber untouched.
+	local preview_wield, preview_reason = _om.outrider_animation.runtime_event(
+		def.item_key, self._current_career_name,
+		NetworkLookup and NetworkLookup.anims)
+	if preview_wield then
+		local _, result = _om.outrider_animation.dispatch_event(
+			self.character_unit, preview_wield, Unit)
+		_om.outrider_animation.emit_evidence(printf, "inventory_preview",
+			self._current_career_name, preview_wield, result, "exact_item")
+	elseif preview_reason then
+		_om.outrider_animation.emit_evidence(printf, "inventory_preview",
+			self._current_career_name,
+			_om.outrider_animation.SALTZPYRE_WIELD_3P,
+			"skip_" .. tostring(preview_reason), "exact_item")
+	end
 
 	-- Preview spawns 3P-style models; use _3p override if set, else unified.
 	if slot.right and _is_unit(slot.right) then
@@ -11409,20 +11275,24 @@ local function _cwv_spawn_item_post(self, item_name)
 		end
 		-- Vanilla resolves preview animation from the inherited es_handgun name,
 		-- so melee mode otherwise keeps the rifle idle even when the mesh pose is
-		-- correct. Replay the selected template's career-aware wield event once
-		-- after reconstruction.
+		-- correct. #792: do not replay here. Vanilla can still trigger a delayed
+		-- menu pose later in this post-update, overwriting this spawn-time event.
+		-- Arm one compact record for the final `_loading_done` edge instead.
 		local stance_template = _stance == "melee" and Weapons.old_musket_template_melee
 			or Weapons.old_musket_template
-		local wield_event = stance_template and stance_template.wield_anim
-		local by_career = stance_template and stance_template.wield_anim_career_3p
-			or stance_template and stance_template.wield_anim_career
-		if by_career and self._current_career_name then
-			wield_event = by_career[self._current_career_name] or wield_event
-		end
-		if wield_event and self.character_unit and Unit.alive(self.character_unit) then
-			pcall(Unit.animation_event, self.character_unit, wield_event)
-			pcall(printf, "[cwv:474] preview presentation slot=%s bid=%s mode=%s anim=%s",
-				tostring(slot_index), tostring(info and info.backend_id), _stance, tostring(wield_event))
+		local wield_event = _om.old_musket_preview_pose.resolve_wield_event(
+			stance_template, self._current_career_name)
+		if wield_event and slot_type == self._wielded_slot_type
+				and self.character_unit and Unit.alive(self.character_unit) then
+			_om.old_musket_preview_pose.arm(self, {
+				character_unit = self.character_unit,
+				item_name = item_name,
+				backend_id = info and info.backend_id,
+				slot_type = slot_type,
+				slot_index = slot_index,
+				stance = _stance,
+				wield_event = wield_event,
+			})
 		end
 	elseif def.item_key == "cwv_es_musket_old" then
 		-- v0.1.341-dev: promoted to `_dbg_alert` — "gate failed" is an
@@ -11431,6 +11301,32 @@ local function _cwv_spawn_item_post(self, item_name)
 			tostring(slot and slot.right), tostring(slot and slot.right and _is_unit(slot.right)))
 	end
 end
+
+-- #792: `_spawn_item` runs inside `_poll_item_package_loading`, after vanilla's
+-- visibility pass for that frame. A delayed menu pose may then run at the end of
+-- the same poll and replace the Musket wield event. The next visibility pass is
+-- vanilla's explicit final-stability edge (`_loading_done = true`). Consume the
+-- pending record there once; never replay every frame.
+mod:hook("HeroPreviewer", "_update_units_visibility", function(func, self, dt)
+	local was_loading_done = self._loading_done
+	local result = func(self, dt)
+	if not was_loading_done and self._loading_done then
+		local pending, reason = _om.old_musket_preview_pose.take_when_stable(self, true)
+		if pending then
+			if Unit.alive(pending.character_unit) then
+				pcall(Unit.animation_event, pending.character_unit, pending.wield_event)
+				pcall(printf, "[cwv:792] preview pose retained slot=%s bid=%s mode=%s anim=%s edge=loading_done",
+					tostring(pending.slot_index), tostring(pending.backend_id),
+					tostring(pending.stance), tostring(pending.wield_event))
+			else
+				_dbg("[cwv:792] preview pose skipped reason=character_dead")
+			end
+		elseif reason ~= "not_armed" then
+			_dbg("[cwv:792] preview pose skipped reason=%s", tostring(reason))
+		end
+	end
+	return result
+end)
 
 -- #604 TeamPreviewer identity bridge. Score rows preserve the peer in
 -- context.players_session_score even though LevelEndView._get_hero_from_score
@@ -11556,7 +11452,7 @@ mod:hook("HeroPreviewer", "_spawn_item", function(func, self, item_name, spawn_d
 	local result = func(self, item_name, spawn_data)
 	_dbg("[cwv preview hook] HeroPreviewer._spawn_item fired item_name=%s self=%s",
 		tostring(item_name), tostring(self))
-	_cwv_spawn_item_post(self, item_name)
+	_cwv_spawn_item_post(self, item_name, spawn_data)
 	return result
 end)
 
@@ -11564,7 +11460,7 @@ mod:hook("MenuWorldPreviewer", "_spawn_item", function(func, self, item_name, sp
 	local result = func(self, item_name, spawn_data)
 	_dbg("[cwv preview hook] MenuWorldPreviewer._spawn_item fired item_name=%s self=%s",
 		tostring(item_name), tostring(self))
-	_cwv_spawn_item_post(self, item_name)
+	_cwv_spawn_item_post(self, item_name, spawn_data)
 	return result
 end)
 

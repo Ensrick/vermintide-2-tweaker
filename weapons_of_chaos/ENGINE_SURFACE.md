@@ -14,12 +14,17 @@ vanilla behavior, and links out. Decompile paths are relative to
 `WOC` lets player characters wield ENEMY weapons and named keep-trophy artifacts
 via the duplicate-item approach modeled on `character_weapon_variants`: it clones
 a player base weapon template into a new MoreItemsLibrary item and swaps the held
-mesh to a different `.unit`. As of v0.1.20-dev there is ONE item - the Blightreaper
+mesh to a different `.unit`. There is one registered item - the Blightreaper
 (private 75%-speed Kerillian Sword actions, all careers), rendered with the authored Blightreaper mesh
 because the intended keep-trophy prop is not runtime-loadable (see dead ends). Its
 engine contact includes display/registration/wire safety plus the four canonical
 weapon-render consumers: gameplay inventory spawn, character preview, item
 preview, and package collection/loading.
+
+`_woc_boss_weapon_catalog.lua` owns two explicit facets: a read-only
+breed/inventory source audit for #642, and fail-closed registration descriptors
+for #614/#615. The descriptors record player-template fallbacks and authored
+resource closure; unclosed rows remain registration-disabled.
 
 ## Hook table
 
@@ -88,6 +93,12 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 | `ActionInspect.client_owner_start_action` / `finish` [hook] | The cloned elf Sword uses `ActionTemplates.action_inspect`; start owns local first-person state and finish releases it [src: `scripts/settings/equipment/weapon_templates/1h_swords_wood_elf.lua:1290`; `scripts/unit_extensions/weapons/actions/action_inspect.lua:21-56`] | Start `nds_skull_inspect` only on the positively tracked local WOC 1P unit and stop its exact playing id on finish | The donor package is boot-loaded through `DLCSettings.geheimnisnacht_2021.package_name` [src: `scripts/settings/dlc_settings.lua:274-283`; `scripts/boot.lua:358-363`]. Missing package/API/unit fails closed; vanilla inspect is untouched. |
 | `GearUtils.destroy_equipment` [hook] | Destroys wielded 1P/3P units during inventory teardown [src: `scripts/unit_extensions/default_player_unit/inventory/gear_utils.lua:348-370`] | Stop any WOC-owned inspect/probe playing id before its unit is destroyed | Sole WOC hook on this pair. Game-state exit, disable/unload, dead-unit detection, and an eight-second cap close the remaining lifecycle edges. |
 | VMF `/woc_audio_probe` [explicit diagnostic] | `WwiseUtils.trigger_unit_event` creates an auto source attached to a unit and applies the sound environment [src: `scripts/helpers/wwise_utils.lua:13-57`] | Attempt `emitter_trophy_evil_sword` on the local 3P Blightreaper for at most eight seconds and three commands | The event belongs to level-scoped `wwise/level_hub`; mission residency is unproven. No force-load, automatic playback, or network traffic exists. Other peers are intentionally unaffected until a resident contract is proven. |
+
+### Boss weapon catalogue (#642)
+
+| Seam | Vanilla behavior | Why WOC reads it | Trap / invariant |
+|---|---|---|---|
+| `Breeds` + `InventoryConfigurations` + `Application.can_get` + VMF `/woc_boss_catalog` [read-only diagnostic] | A boss breed names its default inventory configuration; that configuration contains item categories whose entries carry concrete enemy `unit_name` paths [src: `scripts/settings/breeds/breed_chaos_exalted_champion.lua:49`; `scripts/settings/ai_inventory_templates.lua:690-700,2002-2008,2255-2266`] | Emit seven bounded `[WOC:642]` source rows plus one bounded authored-resource row per relic descriptor; report current source-unit residency and whether each exact mod-owned 1P/3P unit can be resolved | No spawn, force-load, item registration, lookup injection, or table mutation. Keep trophy props never enter the source facet. `resident_now=false` means unloaded, not absent. Rasknitt remains explicit `deferred_no_inventory` because his breed declares `has_inventory=false` [src: `scripts/settings/breeds/breed_skaven_grey_seer.lua:25`] |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for WOC's cases)
 
