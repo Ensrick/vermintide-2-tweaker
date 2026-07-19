@@ -31,7 +31,7 @@ bug-class-to-detection map.
 | `check_cfg.ps1`         | `tags=[]`, missing preview, wrong visibility, missing BMC/bug-report blocks | <1s | ✓ |
 | `check_versions.ps1`    | Missing `MOD_VERSION`, cfg title or leading description banner doesn't match version, no CHANGELOG entry | <2s | ✓ |
 | `check_localization.ps1`| Unescaped `%`, referenced-but-undefined keys, missing `mod_description` | <3s | ✓ |
-| `check_translation_readiness.ps1` | Versioned #444 census for seven explicit PC translations and format-token parity (`-Strict` is the future gate) | <3s | diagnostic |
+| `check_translation_readiness.ps1` | Versioned #444 census for seven explicit PC translations, format-token parity, locale IDs, computed localization generators, and duplicate static identities (`-Strict` is the future gate) | <3s | diagnostic |
 | `check_file_sizes.ps1`  | Files over 1500-line target / 2500-line hard limit | <1s | ✓ |
 | `check_stale_docs.ps1`  | Audit/review markdowns >14 days old without SUPERSEDED banner | <1s | ✓ |
 | `check_published_ids.ps1`| Duplicate / mismatched Workshop `published_id` (the hijack class) | <1s | ✓ |
