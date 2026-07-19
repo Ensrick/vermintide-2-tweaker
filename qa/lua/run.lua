@@ -275,6 +275,7 @@ local suites = {
     "test_gt_ai_takeover",
     "test_gt_bot_aid_pin_policy",
     "test_gt_solo_qol_explosion_arity",
+    "test_gt_client_ragdoll_retention",
     "test_et_boss_behavior",
     "test_gut_revive_scoreboard",
     "test_gut_scoreboard_diagnostics",

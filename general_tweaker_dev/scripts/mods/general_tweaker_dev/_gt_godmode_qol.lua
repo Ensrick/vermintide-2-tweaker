@@ -12,7 +12,8 @@ local mod = get_mod("gt_dev")
 --   (1) Unstuck (/unstuck command, no hook)
 --   (2) Friendly Fire Toggle (DamageUtils.allow_friendly_fire_ranged/melee hooks)
 --   (3) Player-state toggles: inn-damage / cloak / unkillable (commands, no hook)
---   (4) More Corpses (RagdollSettings cap, no hook)
+--   (4) More Corpses (RagdollSettings cap; client retention hook is owned by
+--       the adjacent _gt_client_ragdolls.lua module)
 --   (Disable Loading-Screen Monologues MIGRATED to gut 2026-06-29, #192.)
 --
 -- DISPATCH WIRING (no behavior change after extraction):
