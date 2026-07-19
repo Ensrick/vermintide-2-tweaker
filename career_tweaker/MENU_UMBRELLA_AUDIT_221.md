@@ -2,7 +2,8 @@
 
 #445 already supplies Career Tweaker's safe whole-family controls. The remaining historical proposal is not one setting family: it combines armor hooks, Unchained overcharge hooks, native rework template mutations, and Tourney/native per-career catalogs.
 
-`/crt_umbrella_audit` records one bounded `[crt:221]` line with:
+The public beta now runs this census once at startup and `/crt_umbrella_audit`
+runs it on demand. Each invocation records one bounded `[crt:221]` line with:
 
 - active/total counts for the complete Ensrick and Tourney catalogs;
 - Unchained native-rework and separate runtime-overcharge counts;
@@ -21,4 +22,7 @@ The zero is intentional. A visible subgroup master is not safe until its catalog
 5. Apply or restore each owner once, with nested callbacks suppressed.
 6. Prove default behavior is unchanged and peer/network registration is independent of the toggle.
 
-Until those criteria are met, #445 is the supported master-control surface and the subgroup census is diagnostic only.
+Until those criteria are met, #445 is the supported master-control surface and
+the subgroup census is diagnostic only. The census registers no hooks and never
+writes a setting; `mutation=false` is a contract enforced offline and by
+`/crt_regression_test`.

@@ -712,6 +712,28 @@ _rt_register("issue445_rework_family_masters", function()
     end
 end)
 
+_rt_register("issue221_umbrella_audit_armed", function()
+    local audit = mod._crt and mod._crt.umbrella_audit_policy
+    if mod._crt.ISSUE221_UMBRELLA_AUDIT_ARMED ~= true
+        or type(audit) ~= "table"
+        or type(audit.snapshot) ~= "function"
+        or type(audit.format) ~= "function"
+        or type(mod._crt.umbrella_audit) ~= "function" then
+        return "#221 bounded ownership census is not armed"
+    end
+    local snapshot = audit.snapshot(
+        mod._crt.rework_master_policy.ensrick_ids,
+        mod._crt.rework_master_policy.tourney_ids,
+        function() return false end)
+    local line = audit.format(snapshot)
+    if type(line) ~= "string"
+        or not line:find("[crt:221]", 1, true)
+        or not line:find("cluster_gates=0/4", 1, true)
+        or not line:find("mutation=false", 1, true) then
+        return "#221 census receipt lost its bounded observation-only contract"
+    end
+end)
+
 _rt_register("issue405_heal_network_is_server_gated", function()
     -- Issue 405 (client CTD on Fires-from-Ash THP heal): the heal_from_proc
     -- call must stay behind the Managers.player.is_server gate. The gate site
@@ -828,14 +850,12 @@ _rt_register("issue367_ale_one_second_drink", function()
 end)
 
 _rt_register("public_beta_issue_probes_disabled", function()
-    if mod._crt.PUBLIC_BETA_BARDIN_PROBE_DISABLED ~= true
-        or mod._crt.PUBLIC_BETA_UMBRELLA_AUDIT_DISABLED ~= true then
-        return "public-beta issue-probe disable marker missing"
+    if mod._crt.PUBLIC_BETA_BARDIN_PROBE_DISABLED ~= true then
+        return "public-beta Bardin-probe disable marker missing"
     end
     if mod._crt.bardin_disabler_probe ~= nil
-        or mod._crt_bardin_disabler_tick ~= nil
-        or mod._crt.umbrella_audit ~= nil then
-        return "an investigation probe is active in the public beta"
+        or mod._crt_bardin_disabler_tick ~= nil then
+        return "the co-op Bardin investigation probe is active in the public beta"
     end
 end)
 

@@ -7,8 +7,9 @@ intentionally excluded. Lua-only (survives hot-reload in theory, but full
 restart is still safest).
 
 Public-beta boundary check: `pwsh career_tweaker/tests/check_public_beta.ps1`.
-It fails if casting/transposition widgets or loaders return, either issue probe
-is armed, or the runtime exclusion regressions disappear.
+It fails if casting/transposition widgets/loaders or the #440 co-op probe
+return, if the read-only #221 ownership census is absent, or if the matching
+runtime contracts disappear.
 
 > Operational rules live in the repo-root `PROJECT_STANDARDS.md` (esp. §2.2a
 > module-split conventions and §3.6 logging). This file is the crt-specific
@@ -72,7 +73,7 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `_crt_talent_swap.lua` | Dormant historical talent-tree + ability/passive swap engine. Saved `talent_swap_*` values remain in VMF storage, but the beta exposes no widgets and never loads this module. | none in the beta | **not loaded in the beta line** |
 | `_crt_diagnostics.lua` | Read-only talent/buff diagnostics: `/crt_dump_talents`, the reusable dump body, the per-session auto-dump harness + retry pump. | `mod.crt_dump_career_talents` (mod method), `mod._crt_auto_dump_check`, `mod._crt_dump_retry_tick(dt)`, `mod._crt_start_dump_retry` | after talent |
 | `_crt_bardin_disabler_probe.lua` | Dormant #440 comparison probe retained for a future diagnostic build. | none in the beta | **not loaded in the beta line** |
-| `_crt_umbrella_audit_policy.lua` | Dormant #221 ownership-census policy retained for future development. | none in the beta | **not loaded in the beta line** |
+| `_crt_umbrella_audit_policy.lua` | Read-only #221 ownership census for the deferred subgroup-master boundary. It counts the live native/Tourney catalogs and the cross-owner Unchained, Engineer, and armor clusters without writing settings or installing hooks. | `mod._crt.umbrella_audit_policy`; `mod._crt.umbrella_audit()`; `/crt_umbrella_audit` | after the #445 policy, before master callbacks |
 | `_lib_peer_parity.lua` | COPIED single-source shared lib (master: `tools/shared_lib/_lib_peer_parity.lua`). The issue-371 peer-parity beacon factory. Do NOT diverge from master. | returns a factory function | dofile'd inside the beacon block |
 | `_crt_regression.lua` | The `/crt_regression_test` harness + all check bodies, in frozen registration order. | `mod._crt.rt_register` (for future phases) | LAST |
 
