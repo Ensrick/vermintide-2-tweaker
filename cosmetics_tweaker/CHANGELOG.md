@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.152-dev - 2026-07-18 - session-score weapon skin crash floor (#734) [verify-fix-coop]
+
+- Added a Cosmetics-side receiver floor for the session-score/player-list weapon-skin read path. `CosmeticUtils.get_weapon_skin_name` now rawget-checks weapon-slot `NetworkLookup.weapon_skins` ids before vanilla's strict lookup can crash the client; an unknown id degrades to no skin and logs one bounded `[cos:734]` line.
+- Preserved the existing sender-side safe substitution model: custom/LA/CWV skin identity must travel through mod-owned channels, while vanilla profile/session-score sync receives only vanilla-safe ids such as `n/a`.
+- Extended the Cosmetics wire tests to prove the unknown numeric id observed in #734 does not call the strict vanilla decoder, vanilla ids still pass through, non-weapon slot behavior remains vanilla-owned, and hot reload does not stack the new hook.
+
+**Co-op verify:** with a Cosmetics-capable client and a peer whose `NetworkLookup.weapon_skins` table differs, play to a score/session-score update after custom or CWV weapon skins have been equipped. Expected: no `weapon_skins does not contain key` CTD; the receiving log may show one `[cos:734]` fallback line and the score/player-list weapon skin degrades to vanilla/no-skin instead of crashing.
+
 ## 0.9.151-dev - 2026-07-18 - per-instance glow policy core (#48) [untested]
 
 - #48: a committed glow must belong to ONE exact inventory instance wearing ONE exact illusion. Authoring was already exact-instance (persistence keyed `backend:<id>|skin:<skin>`, matching the issue 628 synthetic-item contract and the issue 702 exact-commit pattern), but two paths still let a single item's glow bleed onto items that merely shared the family. Both are closed by a new pure policy module, `_cos_glow_instance_policy.lua`, now the single owner of instance identity, runtime rebinding, and remote matching.
