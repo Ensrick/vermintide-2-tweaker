@@ -178,8 +178,9 @@ M.bulk = {
     -- #181: Skullsplitter & Tome (wh_hammer_book) on Kruber renders as a regular 1H
     -- Skullsplitter (hammer in the RIGHT hand, no book) playing 1H mace/hammer 3P
     -- anims, so the es_* wield is the bare to_1h_hammer (Kruber's native es_1h_mace /
-    -- one_handed_hammer_template_1 wield), NOT to_1h_hammer_shield. The 3P mesh swap +
-    -- book/left-hand-hammer hide live in weapon_tweaker.lua (_wt_hammer_book_3p_swap_apply).
+    -- one_handed_hammer_template_1 wield), NOT to_1h_hammer_shield. The 3P book hide +
+    -- existing-hammer relink to the right-hand node live in weapon_tweaker.lua
+    -- (_wt_hammer_book_3p_swap_apply).
     -- we_* (Kerillian) entries deliberately unchanged.
     one_handed_hammer_book_priest_template = { es_mercenary = "to_1h_hammer", es_huntsman = "to_1h_hammer", es_knight = "to_1h_hammer", es_questingknight = "to_1h_hammer", we_waywatcher = "to_1h_spear_shield", we_maidenguard = "to_1h_spear_shield", we_shade = "to_1h_spear_shield", we_thornsister = "to_1h_spear_shield" },
     one_handed_hammer_priest_template = { we_waywatcher = "to_1h_axe", we_maidenguard = "to_1h_axe", we_shade = "to_1h_axe", we_thornsister = "to_1h_axe" },

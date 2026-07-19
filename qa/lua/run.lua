@@ -102,6 +102,7 @@ local suites = {
     "test_wt_bardin_coverage",
     "test_wt_port_status",
     "test_wt_kruber_coverage",
+    "test_wt_skullsplitter_hand",
     "test_wt_kerillian_coverage",
     "test_wt_saltzpyre_coverage",
     "test_wt_crossbow_offset",

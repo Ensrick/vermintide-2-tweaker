@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.283-beta (2026-07-19) - #181 Skullsplitter right-hand presentation [verify-fix]
+
+- Relinked the illusion-correct third-person Skullsplitter hammer to Kruber's
+  native right-hand attachment while keeping the tome hidden.
+- Corrected the separately owned inventory-preview entry without changing the
+  first-person presentation or Warrior Priest behavior.
+
 ## 0.12.282-beta (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
 
 - Extended the existing declarative animation-remap owner with the missing
