@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.296-dev"
+local MOD_VERSION = "0.2.297-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1822,15 +1822,16 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_parry_indicator")
 
 -- Optional: large respawn countdown over a dead teammate's portrait (client-safe
 -- estimate anchored to the dead-skull state). Draws from IngameHud.update via a
--- mirrored-scenegraph UIWidget anchored on the frame's pivot slot (#285 fix,
+-- UIWidget anchored on the frame's own live portrait scenegraph (#285 fix,
 -- ported verbatim from Respawn CD 3747644100). See _gut_respawn_timer.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_respawn_timer")
 
 -- (#285) Guards the respawn-timer #285 fix on THREE invariants:
 --   (a) the draw rides IngameHud.update (proven by "Respawn CD", 3747644100),
 --       never the broken UnitFrameUI.draw path (which rendered nothing);
---   (b) it draws the number via UIRenderer.draw_widget through a mirrored
---       scenegraph anchored on the frame's `pivot` LOCAL position -- NOT an
+--   (b) it draws the number via UIRenderer.draw_widget through the live team
+--       frame scenegraph and its canonical `portrait_pivot` -- NOT a mirrored
+--       copy and NOT an
 --       immediate draw_text at get_world_position, which double-applies the
 --       resolution scale and lands the number off the portrait (the "wrong
 --       spot / tiny red numbers over the health bar" report);
@@ -1852,13 +1853,21 @@ _rt_register("respawn_timer_ingamehud_draw_path", function()
         return "respawn timer regressed: reintroduced the broken UnitFrameUI.draw hook (renders nothing) -- #285"
     end
     if not txt:find("UIRenderer.draw_widget", 1, true) then
-        return "respawn timer regressed: no longer draws via the mirrored-scenegraph widget path -- #285 wrong-position"
+        return "respawn timer regressed: no longer draws via the widget path -- #285 wrong-position"
     end
     if txt:find("get_world_position", 1, true) then
         return "respawn timer regressed: reintroduced get_world_position immediate-draw (double-scaled, wrong spot) -- #285"
     end
     if not txt:find("font_size%s*=%s*72") then  -- Lua pattern: whitespace-robust
         return "respawn timer regressed: teammate font base is no longer 72 (renders tiny) -- #285"
+    end
+    if not txt:find("frame_scenegraph", 1, true)
+        or not txt:find("frame_scenegraph.portrait_pivot", 1, true)
+        or not txt:find("widget.ui_scenegraph", 1, true) then
+        return "respawn timer regressed: draw no longer uses the live frame portrait scenegraph -- #285"
+    end
+    if txt:find("SCENEGRAPH_DEF", 1, true) then
+        return "respawn timer regressed: copied frame scenegraph reintroduced -- #285"
     end
 end)
 
