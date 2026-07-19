@@ -1,5 +1,14 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.296-dev (2026-07-19) - #52 Tower skull object-set diagnostics hardened
+
+- Replaced the stale inline Tower skull census with `_ct_diag_skull52.lua`, an observation-only module scoped to `dlc_wizards_tower`.
+- Corrected the diagnostic premise: Tower of Treachery skulls are source-backed level-flow interactables (`flow_callback_on_tower_skull_found` -> `on_tower_skull_found`), not the Drachenfels/portals `gargoyle_head` pickup path.
+- The census now logs `mode=`, level key/base, object-set counts, spawned state, unit counts, set kind, suspicion score, and capped `LevelResource.unit_data` samples for suspect or unspawned populated sets. Output is deduplicated, log-only, and hard-capped.
+- Behavior is unchanged: the #156 injected-adventure `adventure` object-set fix still owns the only mutation. #52 remains diagnostics-armed until a normal Adventure vs injected Deus log pair names the missing binary object set.
+
+**Solo diagnostic:** run `dlc_wizards_tower` once as a normal Adventure map, then via `/ct_load_mission dlc_wizards_tower` as an injected CW mission. Attach both logs and grep `[ct:skull52]`; the fix target is any populated set with `spawned=true` in Adventure and `spawned=false` in injected Deus, especially one with `suspect>0` or relevant unit samples.
+
 ## 0.7.295-dev (2026-07-19) - #406 Khaine's Communion functional heal diagnostics
 
 - Khaine's Communion now heals 1 permanent green HP per kill, matching the legacy player-facing contract while preserving the `health_regen` permanent-heal type and server-only `DamageUtils.heal_network` gate that prevents the original client CTD.
