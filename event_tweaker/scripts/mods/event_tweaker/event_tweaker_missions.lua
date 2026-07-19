@@ -213,4 +213,99 @@ function M.filter_levels_for_area(area_name, levels_by_act, level_settings, get)
     return M.filter_levels_by_act(levels_by_act, level_settings, get), true
 end
 
+-- Bounded, engine-free observation helpers for issue 626. Keeping the state
+-- transition and its proof in this required module lets offline tests execute
+-- the exact ordering used by the runtime hooks instead of checking for log
+-- marker strings in _evt_missions.lua.
+function M.area_widget_proof(view)
+    local widgets = type(view) == "table" and view._active_area_widgets
+    if type(widgets) ~= "table" then
+        return "widgets=missing target=0 areas=[]"
+    end
+
+    local names = {}
+    local target_count = 0
+    for i = 1, #widgets do
+        local widget = widgets[i]
+        local content = type(widget) == "table" and widget.content
+        local area_name = type(content) == "table" and content.area_name
+        names[#names + 1] = tostring(area_name or "<nil>")
+        if area_name == M.AREA_KEY then
+            target_count = target_count + 1
+        end
+    end
+
+    return string.format("widgets=%d target=%d areas=[%s]",
+        #widgets, target_count, table.concat(names, ","))
+end
+
+function M.celebrate_level_proof(levels_by_act)
+    local levels = type(levels_by_act) == "table" and levels_by_act[M.ACT_KEY]
+    if type(levels) ~= "table" then
+        return "count=missing ids=[]"
+    end
+
+    local ids = {}
+    for i = 1, #levels do
+        local level = levels[i]
+        ids[#ids + 1] = tostring(type(level) == "table" and level.level_id or "<nil>")
+    end
+    return string.format("count=%d ids=[%s]", #levels, table.concat(ids, ","))
+end
+
+-- Each native UI surface owns its own previous signature. Alternating between
+-- desktop and controller therefore cannot defeat deduplication for either one.
+function M.should_emit_for_surface(signatures, surface, signature)
+    local key = tostring(surface or "unknown")
+    local changed = type(signatures) ~= "table" or signatures[key] ~= signature
+    if type(signatures) == "table" then
+        signatures[key] = signature
+    end
+    return changed
+end
+
+function M.area_observation(signatures, surface, call_ok, restored, view)
+    -- A failed native build may leave _active_area_widgets from a prior view.
+    -- Do not misreport that stale table as the result of the failed call.
+    local observed = "widgets=skipped"
+    if call_ok then
+        local proof_ok, proof = pcall(M.area_widget_proof, view)
+        observed = proof_ok and proof or "probe-error=" .. tostring(proof)
+    end
+    local proof = string.format("surface=%s call_ok=%s restored=%s %s",
+        tostring(surface), tostring(call_ok), tostring(restored), observed)
+    local signature = table.concat({ tostring(call_ok), tostring(restored), observed }, "|")
+    return M.should_emit_for_surface(signatures, surface, signature), proof
+end
+
+-- Execute the exact temporary-setting transaction used by both area hooks.
+-- The caller owns error propagation so diagnostics can be recorded first.
+function M.run_area_setup(func, view, surface, area, signatures)
+    local previous = area.exclude_from_area_selection
+    area.exclude_from_area_selection = false
+    local call_ok, call_error = pcall(func, view)
+    area.exclude_from_area_selection = previous
+
+    local restored = area.exclude_from_area_selection == previous
+    local should_emit, proof = M.area_observation(
+        signatures, surface, call_ok, restored, view)
+    return call_ok, call_error, should_emit, proof
+end
+
+-- Filter, assign, then return the value read back from the view. This order is
+-- deliberate: diagnostics must describe self._levels_by_act after mutation,
+-- not merely the candidate map returned by the filter.
+function M.apply_levels_for_area(view, area_name, level_settings, get)
+    local current = type(view) == "table" and view._levels_by_act
+    local filtered, filter_applied = M.filter_levels_for_area(
+        area_name, current, level_settings, get)
+    if not filter_applied then
+        return false, false, current
+    end
+
+    view._levels_by_act = filtered
+    local assigned = view._levels_by_act
+    return true, assigned == filtered, assigned
+end
+
 return M

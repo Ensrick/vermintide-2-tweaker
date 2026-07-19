@@ -1,5 +1,13 @@
 # Tweaker: Events — Changelog
 
+## 0.4.39-dev (2026-07-19) - issue #626 active event-area diagnostics [diagnostics-armed]
+
+- Replaced the stale allocated-widget inference with bounded observation of vanilla's authoritative `_active_area_widgets` after successful desktop and controller area-selection builds. Failed native builds explicitly record `call_ok=false` and skip potentially stale widget state. Diagnostics record the rendered area keys, exact `celebrate` target count, temporary-setting restoration, hook counts, selected mission area, filter result, assignment readback, and assigned allowlisted mission IDs.
+- Extended `/event_mission_probe` with the last area/mission observations so one command captures whether the event area was lost during controller enumeration, reached the active widget list, or failed during mission-list assignment. Repeated identical observations are deduplicated independently for desktop and controller surfaces.
+- Added source-backed documentation for the controller's 5-by-3 pre-sort enumeration limit and executable regression coverage for widget publication, error-path stale-state exclusion, per-surface deduplication, assignment ordering, and assignment readback. This release changes diagnostics only; it does not reintroduce the stale unconditional `act_celebrate` presentation rewrite.
+
+Solo diagnostic method: confirm `[event_tweaker:LOAD] v0.4.39-dev ... OK`, enable The Feast of Grimnir, open Own Game on both desktop and controller paths where available, then run `/event_mission_probe`. Attach the log. It must include `[event-missions:626] area observed:`, `[event-missions:626] mission observed:`, and the probe line with `area_hooks=`, `mission_hooks=`, `last_area={...}`, and `last_mission={...}`. Do not infer success from `AreaSettings`; the decisive values are the successful active-widget `target=` count and `assigned=true` readback for the selected event area.
+
 ## 0.4.38-dev (2026-07-19) - issue #802 top-level event mission placement [verify-fix]
 
 - Places enabled dormant event missions at the top event-selection level in both desktop and controller menu flows instead of requiring a nested event-act choice.
