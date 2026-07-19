@@ -78,7 +78,9 @@ mod:command("cos_421_diag", "Audit custom illusion wire safety", function()
 
     local live_custom = 0
     local ok_player, player = pcall(function()
-        return Managers and Managers.player and Managers.player:local_player()
+        local player_manager = Managers and Managers.player
+        return player_manager and player_manager.local_player_safe
+            and player_manager:local_player_safe()
     end)
     local unit = ok_player and player and player.player_unit
     local inventory = unit and ScriptUnit and ScriptUnit.has_extension
