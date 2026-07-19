@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-18 - Canonical hidden build-only pipeline (#832)
+
+`tools/ship/ship.ps1 -BuildOnly` now provides the serialized, no-window VMB build needed to generate a release bundle before the source/bundle atomicity gate can pass. Build-only preflight defers only that circular gate, runs it immediately after generation, preserves the ship claim for the eventual full release, and exits before deploy, Workshop upload, GitHub release, or issue lifecycle changes.
+
 ## 2026-07-18 - Headless VMB process boundary (#829)
 
 `tools/ship/ship.ps1` now starts VMBLauncher with explicit no-window process flags and redirected output instead of PowerShell's raw native call operator. Both the identity probe and full release preserve exit-code/output handling without allocating visible console windows in desktop automation. The ship self-test executes the boundary and passes under Windows PowerShell 5.1 and PowerShell 7.

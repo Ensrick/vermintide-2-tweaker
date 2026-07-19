@@ -14,6 +14,7 @@
 #   .\tools\ship\ship.ps1 -Mod chaos_wastes_tweaker -AllowPublic        # public Workshop item
 #   .\tools\ship\ship.ps1 -Mod gui_tweaker_dev -NoRemote                # skip the PC-B push
 #   .\tools\ship\ship.ps1 -Mod gui_tweaker_dev -SkipGitHub              # local ship only, no GH release
+#   .\tools\ship\ship.ps1 -Mod gui_tweaker_dev -BuildOnly               # hidden, serialized bundle build
 #
 # WHY THIS SCRIPT EXISTS -- hard-won facts encoded below (do not "simplify" them away):
 #
@@ -56,6 +57,7 @@ param(
     [switch]$AllowPublic,
     [switch]$NoRemote,
     [switch]$SkipGitHub,
+    [switch]$BuildOnly,
     [switch]$NoClaim,
     [switch]$SelfTest
 )
@@ -937,6 +939,10 @@ finally {
     Assert ($selfTxt.IndexOf('-Verify -ExpectedVersion $modVersion') -ge 0) "claim gate verifies the claim against the source MOD_VERSION"
     Assert ($selfTxt.IndexOf('-Mod $Mod -Release -Quiet') -ge 0) "ship auto-releases the claim on success"
     Assert ($selfTxt -match '(?m)^\s*\[switch\]\$NoClaim\b') "ship exposes the -NoClaim solo-session escape hatch"
+    Assert ($selfTxt -match '(?m)^\s*\[switch\]\$BuildOnly\b') "ship exposes the canonical hidden build-only path"
+    Assert ($selfTxt.IndexOf('-SkipBundleAtomicity:$BuildOnly') -ge 0) "build-only preflight defers bundle atomicity until after generation"
+    Assert ($selfTxt.IndexOf("@('build', `$Mod, '--clean')") -ge 0) "build-only invokes VMBLauncher's clean build action"
+    Assert ($selfTxt.IndexOf('BUILD-ONLY COMPLETE') -ge 0) "build-only exits before deploy/upload/release handling"
 
     Write-Host ""
     if ($script:__stpass) {
@@ -949,7 +955,10 @@ finally {
 }
 
 if ($SelfTest) { exit (Invoke-ShipSelfTest) }
-if (-not $Mod) { Fail "Usage: ship.ps1 -Mod <name> [-AllowPublic] [-NoRemote] [-SkipGitHub]  (or ship.ps1 -SelfTest)" }
+if (-not $Mod) { Fail "Usage: ship.ps1 -Mod <name> [-AllowPublic] [-NoRemote] [-SkipGitHub] [-BuildOnly]  (or ship.ps1 -SelfTest)" }
+if ($BuildOnly -and ($AllowPublic -or $NoRemote -or $SkipGitHub)) {
+    Fail "-BuildOnly cannot be combined with -AllowPublic, -NoRemote, or -SkipGitHub because it never deploys, uploads, or publishes."
+}
 
 # ---------------------------------------------------------------------------
 # Step 1: resolve paths + parse published_id and MOD_VERSION
@@ -1101,7 +1110,7 @@ if (-not (Test-Path $quickGate)) {
 
 Write-Host ""
 Write-Host "==> Headless preflight (fast QA + Lua 5.1 units)" -ForegroundColor Cyan
-& $quickGate -Quick -SkipLua -Quiet
+& $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -Quiet
 if ($LASTEXITCODE -ne 0) {
     Fail "Headless QA FAILED -- no build, deploy, or upload was attempted (issue #591)."
 }
@@ -1127,7 +1136,8 @@ $deployDir    = Join-Path $workshopRoot $publishedId
 $workshopLog  = 'C:\Program Files (x86)\Steam\logs\workshop_log.txt'
 
 Write-Host ""
-Write-Host "==> Shipping $Mod  (v$modVersion, published_id $publishedId)" -ForegroundColor Cyan
+$operationLabel = if ($BuildOnly) { 'Building bundle for' } else { 'Shipping' }
+Write-Host "==> $operationLabel $Mod  (v$modVersion, published_id $publishedId)" -ForegroundColor Cyan
 Write-Host "    repo root : $repoRoot"
 Write-Host "    launcher  : $launcher ($($launcherResolution.Source))"
 Write-Host "    .vmbrc    : $($vmbRcResolution.Path) ($($vmbRcResolution.Source))"
@@ -1138,9 +1148,9 @@ if ($NoRemote)    { Write-Host "    --no-remote    : ON (skipping PC-B push)" }
 # ---------------------------------------------------------------------------
 # Step 2: build + deploy + upload via VMBLauncher
 # ---------------------------------------------------------------------------
-$launcherArgs = @('all', $Mod)
-if ($AllowPublic) { $launcherArgs += '--allow-public' }
-if ($NoRemote)    { $launcherArgs += '--no-remote' }
+$launcherArgs = if ($BuildOnly) { @('build', $Mod, '--clean') } else { @('all', $Mod) }
+if (-not $BuildOnly -and $AllowPublic) { $launcherArgs += '--allow-public' }
+if (-not $BuildOnly -and $NoRemote)    { $launcherArgs += '--no-remote' }
 $launcherArgs += @('--config', $launcherSettings)
 
 Write-Host ""
@@ -1198,13 +1208,28 @@ try {
                 -ArgumentList $launcherArgs -ReplayOutput
             $launcherExit = $launcherRun.ExitCode
             if ($launcherExit -ne 0) {
-                throw "VMBLauncher 'all $Mod' exited $launcherExit (build/deploy/upload failed -- see output above)."
+                $launcherOperation = if ($BuildOnly) { 'build' } else { 'all' }
+                throw "VMBLauncher '$launcherOperation $Mod' exited $launcherExit (see output above)."
             }
         }
     }
 }
 catch {
     Fail $_.Exception.Message
+}
+
+if ($BuildOnly) {
+    $bundleGate = Join-Path $repoRoot 'qa\check_release_bundle_atomicity.ps1'
+    if (-not (Test-Path -LiteralPath $bundleGate -PathType Leaf)) {
+        Fail "Post-build bundle atomicity gate not found: $bundleGate"
+    }
+    & $bundleGate -Quiet
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Build completed, but the generated root bundle did not satisfy release atomicity. No deploy or upload was attempted."
+    }
+    Write-Host ""
+    Write-Host "BUILD-ONLY COMPLETE -- bundle generated and atomicity verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
+    exit 0
 }
 
 # ---------------------------------------------------------------------------
