@@ -1,5 +1,9 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.161-dev - 2026-07-19 - reconciliation: issue 883 icons over the shipped 0.9.160
+
+- Version-number collision: the Workshop's 0.9.160 (uploaded 14:05) carries the issue 154/373/650 fixes but not issue 883; master's 0.9.160 carries both. This build ships the union under 0.9.161-dev.
+
 ## 0.9.160-dev - 2026-07-19 - #883 exact Loremaster inventory icons
 
 - Source-backed root cause: Loremaster's Armoury weapon selections persist the
