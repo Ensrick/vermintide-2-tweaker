@@ -42,17 +42,30 @@ local loc = {
 
     boss_bal_halescourge_health = { en = "Halescourge: reduce health 30%%" },
     boss_bal_halescourge_health_tooltip = {
-        en = "Burblespue Halescourge (the Halescourge boss) spawns with 30%% less health on every difficulty. Host only; the health bar is server-controlled, so all players see the reduced pool. The issue's Cataclysm mid-fight monster spawn is not part of this build.",
+        en = "Burblespue Halescourge spawns with 30%% less health on every difficulty. Host only; the health bar is server-controlled, so all players see the reduced pool.",
+    },
+    boss_behavior_halescourge_monster = { en = "Halescourge: monster at half health" },
+    boss_behavior_halescourge_monster_tooltip = {
+        en = "On Cataclysm and above in Halescourge, reaching half health causes Burblespue to summon one Bile Troll or Chaos Spawn. Host only; the vanilla monster spawn replicates to every player. Off below Cataclysm and outside Adventure mode.",
     },
 
     boss_bal_skarrik_health = { en = "Skarrik: increase health 30%%" },
     boss_bal_skarrik_health_tooltip = {
-        en = "Skarrik Spinemanglr (the first Skittergate boss) spawns with 30%% more health on every difficulty. Host only. The issue's ranged damage-reduction and Cataclysm Berserk modifier are not part of this build.",
+        en = "Skarrik Spinemanglr in Into the Nest spawns with 30%% more health on every difficulty. Host only.",
+    },
+    boss_behavior_skarrik_ranged_dr = { en = "Skarrik: 30%% ranged damage reduction" },
+    boss_behavior_skarrik_ranged_dr_tooltip = {
+        en = "Reduces ranged damage dealt to Skarrik by 30%%. The host applies the exact Skarrik-only ranged branch before vanilla damage-taken effects; melee and every other enemy remain unchanged.",
     },
 
     boss_bal_bodvarr_health = { en = "Bodvarr: increase health 10%%" },
     boss_bal_bodvarr_health_tooltip = {
-        en = "Bodvarr Ribspreader (the Chaos champion boss) spawns with 10%% more health on every difficulty. Host only. The issue's Cataclysm Crippling modifier is not part of this build.",
+        en = "Bodvarr Ribspreader in War Camp spawns with 10%% more health on every difficulty. Host only.",
+    },
+
+    boss_behavior_deathrattler_tracking = { en = "Deathrattler: slower ratling tracking" },
+    boss_behavior_deathrattler_tracking_tooltip = {
+        en = "Halves Deathrattler's ratling-gun aim tracking rate and the tracking window of his dual-gun intro. Projectile speed, spread, fire rate, and every ordinary Stormfiend remain unchanged. Host only.",
     },
 
     boss_bal_rasknitt_health = { en = "Rasknitt: reduce health to 4/5" },
@@ -67,7 +80,7 @@ local loc = {
 
     boss_bal_nurgloth_health = { en = "Nurgloth: reduce health to 3/4" },
     boss_bal_nurgloth_health_tooltip = {
-        en = "Nurgloth the Eternal (the Tower of Treachery boss) spawns with 75%% of his normal health (3/4) on every difficulty. Host only.",
+        en = "Nurgloth the Eternal in The Enchanter's Lair spawns with 75%% of his normal health (3/4) on every difficulty. Host only.",
     },
 
     boss_bal_nurgloth_armor = { en = "Nurgloth: armor Berserker to Infantry" },
@@ -78,11 +91,11 @@ local loc = {
     -- #531 tranche 1: grudge-mark behavioral knobs (Cataclysm+, Adventure, host-only)
     boss_grudge_skarrik_berserk = { en = "Skarrik: Berserk on Cataclysm+" },
     boss_grudge_skarrik_berserk_tooltip = {
-        en = "Skarrik Spinemanglr (the first Skittergate boss) spawns carrying the Chaos Wastes Berserk (Frenzy) grudge mark on Cataclysm and above, in Adventure only. He builds attack-speed and move-speed stacks as he fights, like a grudge-marked monster. Host only: the buff is server-controlled and syncs to all players. Off below Cataclysm and in Chaos Wastes (where bosses already carry marks).",
+        en = "Skarrik Spinemanglr in Into the Nest spawns carrying the Chaos Wastes Berserk (Frenzy) grudge mark on Cataclysm and above, in Adventure only. He builds attack-speed and move-speed stacks as he fights, like a grudge-marked monster. Host only: the buff is server-controlled and syncs to all players. Off below Cataclysm and in Chaos Wastes, where bosses already carry marks.",
     },
     boss_grudge_bodvarr_crippling = { en = "Bodvarr: Crippling on Cataclysm+" },
     boss_grudge_bodvarr_crippling_tooltip = {
-        en = "Bodvarr Ribspreader (the Chaos champion boss) spawns carrying the Chaos Wastes Crippling grudge mark on Cataclysm and above, in Adventure only. Players he hits are slowed (movement, dodge, jump) for a few seconds, like a grudge-marked monster. Host only: the buff is server-controlled and syncs to all players. Off below Cataclysm and in Chaos Wastes (where bosses already carry marks).",
+        en = "Bodvarr Ribspreader in War Camp spawns carrying the Chaos Wastes Crippling grudge mark on Cataclysm and above, in Adventure only. Players he hits are slowed (movement, dodge, jump) for a few seconds, like a grudge-marked monster. Host only: the buff is server-controlled and syncs to all players. Off below Cataclysm and in Chaos Wastes, where bosses already carry marks.",
     },
 
     -- ============================================================

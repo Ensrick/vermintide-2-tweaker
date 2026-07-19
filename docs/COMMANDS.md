@@ -122,7 +122,11 @@ forge_list, forge_delete, forge_delete_all, inv_dump, mirror_dump, craft_recent
 
 ### `enemy` (enemy_tweaker)
 ```
-et_dump_breeds, et_dump_compositions, et_status
+et_boss_idea_audit, et_dump_breeds, et_dump_compositions,
+et_dump_horde_composition, et_modifier_audit, et_regression_test,
+et_reset, et_spawn_dump, et_status, et_verify_refresh,
+verify_boss_balance, verify_event_size, verify_horde_size,
+verify_patrol_size, verify_roaming_size
 ```
 
 ### `vdl` (verminious_dreams_lighting)

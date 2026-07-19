@@ -20,6 +20,19 @@ Last updated: 2026-07-15.
 | Lifecycle | `verify-fix-coop` only. Host Champion, client Cataclysm; verify both damage directions, then Auto, friendly fire, barrel/fall, bot, and pet controls. |
 
 ---
+## Boss balance behaviors (#450)
+
+| Field | Detail |
+|---|---|
+| Symptom | The data controls and grudge marks existed, but Halescourge's half-health add, Skarrik's ranged resistance, and Deathrattler's tracking penalty did not. |
+| Root cause | No threshold monitor, exact ranged-damage branch, or Stormfiend-boss tracking adapter existed. |
+| Expected | Host Adventure `ground_zero`, Cataclysm+, living arena Halescourge at or below 50% queues one Troll/Spawn. Skarrik takes 70% ranged damage and unchanged melee damage. Deathrattler tracks ratling targets at half rate and for half his dual-intro window; ordinary Stormfiends remain vanilla. |
+| Safety | Halescourge shares existing post-spawn/update owners and the package-aware queue. Skarrik composes the existing singleton damage hook with exact breed/ranged gates. Deathrattler owns one exact method hook plus a reversible data snapshot. All controls default off. |
+| Offline | `test_et_boss_behavior` covers threshold gates, catalogue, exact 0.70/0.50 policies, owner composition, setting wiring, and pool-substitution exemption. |
+| Runtime | `/verify_boss_balance` reports boss data, Deathrattler's live rotation window, and Halescourge observer state. `[et:450] ... queued` appears once; failures are reason-deduplicated and retried at most twice per second. |
+| Lifecycle | After integration/deployment, `verify-fix` (solo): Cata Halescourge success plus Legend/disabled controls; compare ranged/melee hits on Skarrik; strafe across Deathrattler's sustained fire and confirm ordinary Stormfiend control. |
+
+---
 ## Boss idea portability audit (#451)
 
 | Field | Detail |

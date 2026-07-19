@@ -126,6 +126,10 @@ mod.update = function(dt)
     if _previous_update then _previous_update(dt) end
     _settings_queue.drain()
     if ET.personal_handicap_update then ET.personal_handicap_update() end
+    -- #450 registers this provider after the lifecycle module loads. Dynamic
+    -- dispatch keeps the single mod.update owner while monitoring the one live
+    -- Halescourge unit for its Cataclysm half-health threshold.
+    if ET.boss_behavior_update then ET.boss_behavior_update() end
 end
 
 ET.rt_register("issue560_settings_reapply_coalesced", function()

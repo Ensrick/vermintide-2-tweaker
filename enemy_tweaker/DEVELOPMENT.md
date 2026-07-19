@@ -51,6 +51,7 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_fingerprint` | Deterministic whole-mod settings fingerprint used by diagnostics and parity checks |
 | `_et_settings_queue` | Engine-free next-frame coalescer for VMF/Mod Tweaker setting bursts (#560) |
 | `_et_health_multiplier_core` | Engine-free bounds, hostile-breed policy, and health-percentage rescale math (#369) |
+| `_et_boss_behavior_core` | Engine-free #450 Halescourge gate, Skarrik ranged multiplier, and Deathrattler tracking policy |
 | `_et_horde_presets` | horde preset catalog + composition backup/apply + CHS horde size |
 | `_et_swaps` | breed/faction substitution + HordeSpawner hooks |
 | `_et_mimic` | per-system difficulty mimic |
@@ -64,11 +65,12 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_patrol` | patrol formation size |
 | `_et_specials` | per-difficulty special spawns |
 | `_et_health_multiplier` | #369 host-authoritative final-spawn health scaling + bounded live rescale/replication |
-| `_et_lifecycle` | queued on_setting_changed / batch completion / update drain + on_enabled / on_disabled + BR bootstrap |
+| `_et_lifecycle` | queued on_setting_changed / batch completion / update drain + on_enabled / on_disabled + BR bootstrap; sole `mod.update` owner also dispatches the bounded #450 boss monitor |
 | `_et_commands` | chat commands (`/et_status`, `/verify_*`, dumps, `/et_reset`) |
-| `_et_boss_tweaks`, `_et_nurgloth_probe` | pre-existing modules (fly-disable duration; issue 275 probe) |
-| `_et_boss_balance` | #450 per-boss balance toggles (health/armor/warp-lightning; pure data mutation, no hooks). Bodvarr is runtime breed `chaos_exalted_champion_warcamp`, never the unsuffixed source-family stem. |
+| `_et_boss_tweaks` | fly-disable duration; issue 275 probe |
+| `_et_boss_balance` | #450 reversible boss data toggles (health/armor/warp-lightning and Deathrattler's dual-gun rotation window; no hooks). Bodvarr is runtime breed `chaos_exalted_champion_warcamp`, never the unsuffixed source-family stem. |
 | `_et_boss_grudge` | #531 grudge-mark behavioral knobs (Skarrik Berserk / Bodvarr Crippling on Cata+ Adventure); single `hook_safe` on `ConflictDirector._post_spawn_unit`, applies vanilla CW grudge-mark buff templates host-side. Bodvarr maps to `chaos_exalted_champion_warcamp`; `_norsca` is the Skittergate champion. |
+| `_et_boss_behavior` | #450 runtime behavior adapter: Halescourge uses existing post-spawn/update owners for one package-aware Troll/Spawn; Skarrik composes the existing damage owner; one exact `BTStormfiendShootAction._fire_from_position_direction` hook halves Deathrattler-only ratling tracking. |
 | `_et_boss_ideas` | #451 read-only feasibility audit for proposed boss variants. Prints a bounded source/runtime inventory automatically at mod load; owns no spawn hook and never injects arena-coupled lord breeds. See `BOSS_IDEA_FEASIBILITY.md`. |
 
 Where new code goes: the module whose "Owns" row it extends; a new subsystem gets a
