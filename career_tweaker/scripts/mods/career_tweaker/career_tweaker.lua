@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.11-beta"
+local MOD_VERSION = "0.4.12-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -632,6 +632,11 @@ mod.update = function(dt)
     -- #440 automatic profile summaries; self-throttled to once per second.
     if mod._crt_bardin_disabler_tick then pcall(mod._crt_bardin_disabler_tick, dt) end
     foot_knight.tick(dt)
+    -- #699 bounded HUD census. It records only Foot Knight icon-state
+    -- transitions and is otherwise a read-only, self-throttled no-op.
+    if mod._crt_foot_knight_icon_probe_tick then
+        pcall(mod._crt_foot_knight_icon_probe_tick, dt)
+    end
 end
 
 -- ============================================================

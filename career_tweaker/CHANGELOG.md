@@ -1,5 +1,15 @@
 # Career Tweaker Changelog
 
+## 0.4.12-beta - 2026-07-19 - #699 Foot Knight HUD icon identity diagnostics [verify-fix-coop]
+
+- Replaced the generic power-increase art on the Rock shield-power and Teamwork great-weapon buffs with the exact resident icons for Rock of Reikland and That's Bloody Teamwork. Both Rock effects now share their talent's authored identity; Teamwork no longer reuses Rock's generic power art.
+- Added a bounded automatic `[crt:699]` census at effect transitions. It reports the active sub-template and icon, live atlas residency, vanilla BuffUI widget/icon result, active-widget count and total pool capacity, plus stock UI Tweaks/HideBuffs hidden-or-priority disposition. It follows BuffUI's own local-or-spectated unit selection so a host can diagnose a spectated bot, remains read-only and silent while state is unchanged, and is hard-capped at 64 rows per session.
+- Extended offline and `/crt_regression_test` coverage with `issue699_foot_knight_icon_census`, including the 0.25-second throttle and exact vanilla talent-icon keys.
+
+**Solo diagnostic:** play Foot Knight and activate each rework condition. The matching HUD icon should use the talent's own art. If an icon is absent, retain the `[crt:699]` line: `atlas=false` identifies residency, `widget=false` with `hud_widgets` equal to `hud_capacity` identifies capacity, and `hidden=true` or `priority=true` identifies UI Tweaks routing. A host may also spectate a Foot Knight bot; `subject=spectated` proves the census followed the same unit as BuffUI.
+
+**Full acceptance is co-op:** repeat as a client Foot Knight to cover the client's local-owner reconciliation path, then have the host spectate a Foot Knight bot. Preserve #663's two-Foot-Knight no-flicker behavior. This issue therefore requires `verify-fix-coop`, not the mutually exclusive solo label.
+
 ## 0.4.11-beta - 2026-07-19 - #728 refresh the live career picker [verify-fix-coop]
 
 - Moved career-unlock ownership into one module that preserves vanilla's four

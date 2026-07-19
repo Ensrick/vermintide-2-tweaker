@@ -33,8 +33,8 @@ local BUFF_FINAL_MARCH = "crt_fk_final_march"
 local BUFF_ICONS = {
     [BUFF_UNINTERRUPTIBLE] = "markus_knight_ability_invulnerability",
     [BUFF_ROCK_DODGE] = "markus_knight_passive_block_cost_aura",
-    [BUFF_ROCK_POWER] = "markus_knight_passive_power_increase",
-    [BUFF_TEAMWORK_POWER] = "markus_knight_passive_power_increase",
+    [BUFF_ROCK_POWER] = "markus_knight_passive_block_cost_aura",
+    [BUFF_TEAMWORK_POWER] = "markus_knight_damage_taken_ally_proximity",
     [BUFF_FINAL_MARCH] = "markus_knight_movement_speed_on_incapacitated_allies",
 }
 

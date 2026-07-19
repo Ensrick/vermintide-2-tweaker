@@ -158,3 +158,157 @@ mod._crt_start_dump_retry = function()
     _crt_dump_retry_left = 20.0
     _crt_dump_retry_acc = 1.0  -- fire on the next frame, then ~1x/sec
 end
+
+-- ============================================================
+-- Issue #699: Foot Knight effect-icon presentation census
+-- ============================================================
+-- BuffUI consumes the live sub-template's `icon` and indexes its widget by the
+-- sub-template `name` [src: scripts/ui/hud_ui/buff_ui.lua:105-134,216-267].
+-- The mechanics regression already proved the authored fields exist, but that
+-- cannot distinguish a missing active buff, an unavailable atlas entry, a full
+-- HUD widget pool, or a third-party HideBuffs disposition. This automatic,
+-- transition-only census captures those four runtime boundaries without a
+-- command and without changing the HUD.
+local _CRT_FK_ICON_SPECS = {
+    {
+        outer = "crt_fk_uninterruptible_heavies",
+        active = "crt_fk_uninterruptible_heavies",
+    },
+    {
+        outer = "crt_fk_rock_dodge_distance",
+        active = "crt_fk_rock_dodge_distance",
+    },
+    {
+        outer = "crt_fk_rock_shield_power",
+        active = "crt_fk_rock_shield_power",
+    },
+    {
+        outer = "crt_fk_teamwork_great_power",
+        active = "crt_fk_teamwork_great_power",
+    },
+    {
+        outer = "crt_fk_final_march",
+        active = "crt_fk_final_march_power",
+    },
+}
+
+local _crt_fk_icon_probe_accumulator = 0
+local _crt_fk_icon_last = {}
+local _CRT_FK_ICON_LOG_CAP = 64
+local _crt_fk_icon_log_count = 0
+
+local function _crt_fk_icon_log(format, ...)
+    if _crt_fk_icon_log_count >= _CRT_FK_ICON_LOG_CAP then return false end
+    _crt_fk_icon_log_count = _crt_fk_icon_log_count + 1
+    pcall(printf, format, ...)
+    return true
+end
+
+local function _crt_fk_icon_local_unit()
+    local player_manager = Managers.player
+    local player = player_manager and player_manager.local_player
+        and player_manager:local_player()
+    return player and player.player_unit
+end
+
+-- Mirror BuffUI._sync_buffs exactly: while spectating, its widget collection
+-- is sourced from `_spectated_player_unit`, not the local player's unit. This
+-- lets the same bounded census cover the host spectating a bot without adding
+-- a second presentation path or any network traffic.
+local function _crt_fk_icon_observed_unit(hud)
+    local spectated = hud and hud._is_spectator and hud._spectated_player_unit
+    if spectated and Unit.alive(spectated) then return spectated, "spectated" end
+    return _crt_fk_icon_local_unit(), "local"
+end
+
+local function _crt_fk_icon_atlas_has(icon)
+    if type(icon) ~= "string" or not UIAtlasHelper
+       or not UIAtlasHelper.has_atlas_settings_by_texture_name then
+        return false
+    end
+    local ok, present = pcall(UIAtlasHelper.has_atlas_settings_by_texture_name, icon)
+    return ok and present == true
+end
+
+local function _crt_fk_icon_hidebuffs_disposition(buff_type)
+    local hide_buffs = get_mod("HideBuffs")
+    local manager = hide_buffs and hide_buffs.bm
+    if not manager then return false, false, false end
+
+    local hidden, priority = false, false
+    if manager.is_hidden_buff then
+        local ok, result = pcall(manager.is_hidden_buff, buff_type)
+        hidden = ok and result == true
+    end
+    if manager.is_priority_buff then
+        local ok, result = pcall(manager.is_priority_buff, buff_type)
+        priority = ok and result == true
+    end
+    return true, hidden, priority
+end
+
+mod._crt_foot_knight_icon_probe_tick = function(dt)
+    _crt_fk_icon_probe_accumulator = _crt_fk_icon_probe_accumulator + (dt or 0)
+    if _crt_fk_icon_probe_accumulator < 0.25 then return end
+    _crt_fk_icon_probe_accumulator = 0
+
+    local hud
+    if Managers.ui and Managers.ui.get_hud_component then
+        local ok, component = pcall(Managers.ui.get_hud_component, Managers.ui, "BuffUI")
+        if ok then hud = component end
+    end
+    local unit, subject = _crt_fk_icon_observed_unit(hud)
+    if not (unit and Unit.alive(unit)) then return end
+    local buff_extension = ScriptUnit.has_extension(unit, "buff_system")
+    if not buff_extension then return end
+
+    local active_by_name = {}
+    local buffs = buff_extension:active_buffs()
+    for _, buff in ipairs(buffs or {}) do
+        local template = not buff.removed and buff.template
+        if template then
+            if type(buff.buff_type) == "string" then active_by_name[buff.buff_type] = buff end
+            if type(template.name) == "string" then active_by_name[template.name] = buff end
+        end
+    end
+
+    local widget_count = hud and hud._active_buff_widgets and #hud._active_buff_widgets or -1
+    local unused_widget_count = hud and hud._unused_buff_widgets
+        and #hud._unused_buff_widgets or -1
+    local widget_capacity = widget_count >= 0 and unused_widget_count >= 0
+        and widget_count + unused_widget_count or -1
+
+    for _, spec in ipairs(_CRT_FK_ICON_SPECS) do
+        local state_key = subject .. ":" .. spec.outer
+        local active_buff = active_by_name[spec.active]
+        if active_buff then
+            local active_template = active_buff.template or {}
+            local icon = active_template.icon
+            local atlas = _crt_fk_icon_atlas_has(icon)
+            local widget = hud and hud._buff_name_to_widget
+                and hud._buff_name_to_widget[active_template.name]
+            local widget_icon = widget and widget.content and widget.content.texture_icon
+            local hide_buffs, hidden, priority =
+                _crt_fk_icon_hidebuffs_disposition(active_buff.buff_type or spec.active)
+            local signature = table.concat({
+                subject, tostring(icon), tostring(atlas), tostring(widget ~= nil),
+                tostring(widget_icon), tostring(widget_count), tostring(widget_capacity),
+                tostring(hide_buffs), tostring(hidden), tostring(priority),
+            }, "|")
+            if _crt_fk_icon_last[state_key] ~= signature then
+                _crt_fk_icon_last[state_key] = signature
+                _crt_fk_icon_log(
+                    "[crt:699] icon active=true subject=%s buff=%s template=%s icon=%s atlas=%s widget=%s widget_icon=%s hud_widgets=%d hud_capacity=%d hidebuffs=%s hidden=%s priority=%s",
+                    subject, tostring(spec.outer), tostring(active_template.name), tostring(icon),
+                    tostring(atlas), tostring(widget ~= nil), tostring(widget_icon),
+                    widget_count, widget_capacity, tostring(hide_buffs), tostring(hidden),
+                    tostring(priority))
+            end
+        elseif _crt_fk_icon_last[state_key]
+           and _crt_fk_icon_last[state_key] ~= "inactive" then
+            _crt_fk_icon_last[state_key] = "inactive"
+            _crt_fk_icon_log("[crt:699] icon active=false subject=%s buff=%s",
+                subject, tostring(spec.outer))
+        end
+    end
+end

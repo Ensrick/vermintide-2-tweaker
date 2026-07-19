@@ -944,8 +944,8 @@ _rt_register("issue619_foot_knight_contract", function()
     local expected_icons = {
         crt_fk_uninterruptible_heavies = "markus_knight_ability_invulnerability",
         crt_fk_rock_dodge_distance = "markus_knight_passive_block_cost_aura",
-        crt_fk_rock_shield_power = "markus_knight_passive_power_increase",
-        crt_fk_teamwork_great_power = "markus_knight_passive_power_increase",
+        crt_fk_rock_shield_power = "markus_knight_passive_block_cost_aura",
+        crt_fk_teamwork_great_power = "markus_knight_damage_taken_ally_proximity",
         crt_fk_final_march = "markus_knight_movement_speed_on_incapacitated_allies",
     }
     for buff_name, icon in pairs(expected_icons) do
@@ -1047,6 +1047,32 @@ _rt_register("issue619_foot_knight_contract", function()
            or not block_driver or block_driver.range ~= 20
            or not rock_driver or rock_driver.range ~= 20 then
             return "enabled Protective Presence/Rock ranges are not 10m/20m"
+        end
+    end
+end)
+
+_rt_register("issue699_foot_knight_icon_census", function()
+    if type(mod._crt_foot_knight_icon_probe_tick) ~= "function" then
+        return "Foot Knight automatic icon census is not loaded"
+    end
+    local diagnostics_source = mod:_io_read_text(
+        "scripts/mods/career_tweaker/_crt_diagnostics.lua") or ""
+    for _, marker in ipairs({
+        "[crt:699] icon active=true",
+        "UIAtlasHelper.has_atlas_settings_by_texture_name",
+        'get_hud_component, Managers.ui, "BuffUI"',
+        "_buff_name_to_widget[active_template.name]",
+        "#hud._unused_buff_widgets",
+        "hud_capacity=%d",
+        "_crt_fk_icon_hidebuffs_disposition",
+        "_crt_fk_icon_probe_accumulator < 0.25",
+        "_CRT_FK_ICON_LOG_CAP = 64",
+        "_crt_fk_icon_log_count >= _CRT_FK_ICON_LOG_CAP",
+        "hud._is_spectator and hud._spectated_player_unit",
+        "subject=%s",
+    }) do
+        if not diagnostics_source:find(marker, 1, true) then
+            return "Foot Knight icon census marker missing: " .. marker
         end
     end
 end)
