@@ -168,6 +168,7 @@ local suites = {
     "test_woc_appearance_policy",
 	"test_woc_blightreaper_pulse",
 	"test_woc_durable_transform",
+	"test_woc_data_widgets",
 	"test_woc_blightreaper_audio",
 	"test_woc_attack_order",
     "test_dcp_portrait_materials",

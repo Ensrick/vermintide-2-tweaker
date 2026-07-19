@@ -1,5 +1,9 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.38-dev (2026-07-19) - fix mod-killing single-option dropdown (issue 822) [untested]
+
+- The 0.1.37 attack-order picker registered the push follow-up dropdown with ONE option; VMF hard-rejects dropdowns with fewer than two, which aborts the ENTIRE mod's options init - WOC never loaded and the Blightreaper vanished from every inventory. The widget is now registered only when the descriptor carries two or more follow-up units; the selections reader falls back to the native unit so the light/heavy pickers stay live. New suite test loads the real data file under a stub and enforces VMF dropdown arity for every widget (test_woc_data_widgets.lua).
+
 ## 0.1.37-dev (2026-07-19) - Blightreaper moveset swapped to Crowbill [untested]
 
 - Author request 2026-07-19: the Blightreaper's combat template now clones Sienna's Crowbill graph (`one_handed_crowbill`, bw_1h_crowbill) instead of Kerillian's 1H Sword (`we_one_hand_sword_template_1`). The crowbill graph natively ships four chained lights, three heavies, and the push-attack follow-up, so the Sword era's four-light chain surgery (Empire Sword overhead donor, stab-fourth splice, heavy retargeting) is removed outright; native crowbill chain transitions are preserved. SPEED_MULTIPLIER stays 0.83 and now multiplies the crowbill's own per-action timings; the +15 percent intrinsic crit, light/heavy damage-profile overrides, Hagbane poison, Shyish curse, and property/trait rows carry over unchanged.

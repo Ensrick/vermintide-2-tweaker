@@ -47,13 +47,21 @@ local function _combat_widgets()
 			options       = _fresh_options(_descriptor.heavies),
 		}
 	end
-	rows[#rows + 1] = {
-		setting_id    = "woc_blightreaper_push_follow",
-		type          = "dropdown",
-		default_value = _native_at(_descriptor.push_positions, 1),
-		tooltip       = "woc_blightreaper_push_tooltip",
-		options       = _fresh_options(_descriptor.push),
-	}
+	-- Push follow-up: the crowbill graph authors exactly ONE follow-up unit
+	-- (light_attack_bopp), and VMF hard-rejects dropdowns with fewer than two
+	-- options - a single-option widget here aborted the ENTIRE mod's options
+	-- init (issue 822 regression, 2026-07-19: no Blightreaper anywhere because
+	-- WOC never loaded). Re-add this dropdown only when a second follow-up
+	-- unit exists in the descriptor.
+	if type(_descriptor.push) == "table" and #_descriptor.push >= 2 then
+		rows[#rows + 1] = {
+			setting_id    = "woc_blightreaper_push_follow",
+			type          = "dropdown",
+			default_value = _native_at(_descriptor.push_positions, 1),
+			tooltip       = "woc_blightreaper_push_tooltip",
+			options       = _fresh_options(_descriptor.push),
+		}
+	end
 	return rows
 end
 
