@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.294-dev"
+local MOD_VERSION = "0.2.296-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -312,8 +312,10 @@ _rt_register("localization_format_safe", function()
     -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
     -- ship even if the static check is skipped. RULE: any literal % in a loc
     -- string must be doubled to %%.
-    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/gui_tweaker_localization")
-    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization")
+    if not ok or type(loc) ~= "table" then
+        return "localization table could not be loaded: " .. tostring(loc)
+    end
     for k, v in pairs(loc) do
         if type(v) == "table" and type(v.en) == "string" then
             local fmt_ok, fmt_err = pcall(string.format, v.en)

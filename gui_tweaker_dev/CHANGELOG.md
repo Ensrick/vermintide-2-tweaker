@@ -1,5 +1,17 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.296-dev (2026-07-19) -- #824 dev localization runtime contract [verify-fix]
+
+- Corrected the runtime localization regression check to load the dev stream's
+  `gui_tweaker_dev_localization` resource instead of the stable stream name.
+- A failed localization `dofile` now fails the regression check rather than
+  being reported as a pass.
+- Extended the repository dofile/package coverage gate to detect dot-form and
+  protected `mod.dofile` calls, closing the static-check gap that hid this bug.
+
+**Solo verify:** launch Tweaker: GUI dev and run `/gut_regression_test`.
+`localization_format_safe` must pass without a resource error in the log.
+
 ## 0.2.294-dev (2026-07-19) -- #222 remove repeated HideBuffs tooltip titles [verify-fix]
 
 - **Symptom:** the cross-mod title/body audit still found two GUT HideBuffs rows whose tooltip bodies merely repeated the orange popup header: Hide Player Levels and Hide Portrait Frames.

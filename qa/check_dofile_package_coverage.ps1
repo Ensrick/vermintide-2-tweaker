@@ -38,14 +38,32 @@ foreach ($modEntry in $inventory.Mods) {
         $lineNumber = 0
         foreach ($line in [System.IO.File]::ReadAllLines($luaFile.FullName, [System.Text.Encoding]::UTF8)) {
             $lineNumber++
-            $callIndex = $line.IndexOf("mod:dofile")
+            $colonCallIndex = $line.IndexOf("mod:dofile")
+            $dotCallIndex = $line.IndexOf("mod.dofile")
+            $callIndex = if ($colonCallIndex -ge 0 -and $dotCallIndex -ge 0) {
+                [Math]::Min($colonCallIndex, $dotCallIndex)
+            } elseif ($colonCallIndex -ge 0) {
+                $colonCallIndex
+            } else {
+                $dotCallIndex
+            }
             $commentIndex = $line.IndexOf("--")
             if ($callIndex -lt 0 -or ($commentIndex -ge 0 -and $commentIndex -lt $callIndex)) {
                 continue
             }
 
+            $targets = New-Object System.Collections.Generic.List[string]
             foreach ($match in [regex]::Matches($line, 'mod:dofile\s*\(\s*["'']([^"'']+)["'']\s*\)')) {
-                $target = $match.Groups[1].Value
+                $targets.Add($match.Groups[1].Value)
+            }
+            foreach ($match in [regex]::Matches($line, 'mod\.dofile\s*\(\s*mod\s*,\s*["'']([^"'']+)["'']')) {
+                $targets.Add($match.Groups[1].Value)
+            }
+            foreach ($match in [regex]::Matches($line, 'pcall\s*\(\s*mod\.dofile\s*,\s*mod\s*,\s*["'']([^"'']+)["'']')) {
+                $targets.Add($match.Groups[1].Value)
+            }
+
+            foreach ($target in $targets) {
                 $sourcePath = Join-Path $modDir.FullName (($target -replace '/', '\') + ".lua")
                 if (-not (Test-Path -LiteralPath $sourcePath)) {
                     $errors.Add("$($modDir.Name): $($luaFile.Name):$lineNumber dofile target has no source file: $target.lua")
