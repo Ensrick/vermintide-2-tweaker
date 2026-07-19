@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-19 - Exact per-instance Loremaster inventory icons (#883)
+
+Cosmetics Tweaker 0.9.160-dev now resolves inventory-card icons from the exact
+backend item's saved Loremaster selection and skin. Direct Armoury keys are
+validated against LA's authored `SKIN_LIST`; exact skins precede bridge
+representatives, while unknown identities fail closed without mutating global
+icon tables. Bounded file-only diagnostics and unit/appearance contracts cover
+the regression. Source is prepared for the serialized bundle build and still
+requires merge/deployment before in-game verification.
+
 ## 2026-07-19 - Blightreaper visible-scale restoration (#712)
 
 The WOC `0.1.33-dev` log proves its durable writer retained the requested pose

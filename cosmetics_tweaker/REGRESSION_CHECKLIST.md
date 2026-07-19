@@ -159,13 +159,13 @@ Last updated: 2026-07-16.
 | Field | Value |
 |-------|-------|
 | Symptom | LA illusions survived only in session and inventory icons were either vanilla or leaked onto unrelated same-type weapons. |
-| Root cause | LA's authored icon is keyed by `(armoury_key, vanilla_skin)` in `SKIN_LIST[*].icons`; the reverted v0.9.9.0 attempt read `WeaponSkins.skins[armoury_key]` and mutated shared icon tables. Persisted exact-item records also outlived deleted official items. |
+| Root cause | LA's authored icon is keyed by `(armoury_key, vanilla_skin)` in `SKIN_LIST[*].icons`; the reverted v0.9.9.0 attempt read `WeaponSkins.skins[armoury_key]` and mutated shared icon tables. The replacement adapter still required the hat/outfit clone map for primary selections and preferred an offhand's representative paint skin over the exact item's skin, so valid direct LA weapon keys and exact runed variants could not resolve their own icon. Persisted exact-item records also outlived deleted official items. |
 | Mod(s) | cosmetics_tweaker + Loremaster's Armoury |
-| Fix version(s) | cosmetics_tweaker v0.9.99-dev |
+| Fix version(s) | cosmetics_tweaker v0.9.99-dev; direct-key/exact-skin correction pending release (#883) |
 | Category | INTEGRATION / SOLO |
 | Repro | Apply different LA choices to two same-type backend items, restart, inspect both inventory icons/renders, then delete one modified item and return to the keep. |
 | Expected post-fix | Each surviving backend item restores and displays only its own authored icon/illusion. Duals keep the row-1/main-right icon regardless of their saved left override; shields follow the selected left-hand shield, including LA's authored variant/base-skin icon. Unmodified instances retain vanilla icons. Missing metadata fails closed; deleted-item overrides are pruned after the backend-ready delay. |
-| Detection | Offline `test_cos_la_instance_policy.lua` passes; `/cos_regression_test` passes `la_exact_instance_inventory_icon_376`; console prints one bounded `[la-state] INSTANCE-PRUNE N...` summary. |
+| Detection | Offline `test_cos_la_instance_policy.lua` passes direct Armoury-key, exact-skin-first, cross-family fallback, and fail-closed cases; `/cos_regression_test` passes `la_exact_instance_inventory_icon_376`; console prints one bounded `[la-state] INSTANCE-PRUNE N...` summary and at most 32 distinct `[cos:883] inventory-icon` outcomes per session. |
 
 ---
 

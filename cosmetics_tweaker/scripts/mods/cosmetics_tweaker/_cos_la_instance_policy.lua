@@ -76,65 +76,120 @@ function M.preview_target_matches(proven_unit_path, variant)
             and proven_unit_path == variant.new_units[2])
 end
 
-local function _icon_for(armoury_key, vanilla_skin, skin_list)
-    local variant = type(skin_list) == "table" and skin_list[armoury_key] or nil
+local function _icon_for(armoury_key, exact_skin, fallback_skin, skin_list)
+    if type(armoury_key) ~= "string" or armoury_key == "" then
+        return nil, "missing-armoury-key"
+    end
+    local variant = type(skin_list) == "table" and rawget(skin_list, armoury_key) or nil
     local icons = type(variant) == "table" and variant.icons or nil
-    if type(icons) ~= "table" or type(vanilla_skin) ~= "string" then return nil end
-    local icon = icons[vanilla_skin]
-    return type(icon) == "string" and icon ~= "" and icon or nil
+    if type(variant) ~= "table" then return nil, "missing-variant", armoury_key end
+    if type(icons) ~= "table" then return nil, "missing-icon-table", armoury_key end
+
+    -- The exact backend item's current skin owns its inventory card.  The
+    -- bridge's `vanilla_skin` is only a representative paint target and may
+    -- belong to a different shield family (or a non-glow variant).
+    if type(exact_skin) == "string" and exact_skin ~= "" then
+        local icon = rawget(icons, exact_skin)
+        if type(icon) == "string" and icon ~= "" then
+            return icon, "exact-skin", armoury_key, exact_skin
+        end
+    end
+    if type(fallback_skin) == "string" and fallback_skin ~= ""
+            and fallback_skin ~= exact_skin then
+        local icon = rawget(icons, fallback_skin)
+        if type(icon) == "string" and icon ~= "" then
+            return icon, "fallback-skin", armoury_key, fallback_skin
+        end
+    end
+    return nil, "unmapped-skin", armoury_key
 end
 
 local function _illusion_icon(item, saved_illusion,
         backend_to_armoury, backend_to_vanilla, skin_list)
-    if type(saved_illusion) ~= "string" then return nil end
+    if type(saved_illusion) ~= "string" then return nil, "no-main-selection" end
     local armoury_key = type(backend_to_armoury) == "table"
         and backend_to_armoury[saved_illusion] or nil
-    local vanilla_skin = item.skin or (type(backend_to_vanilla) == "table"
-        and backend_to_vanilla[saved_illusion])
-    return _icon_for(armoury_key, vanilla_skin, skin_list)
+    -- LA itself uses the Armoury key directly as the setting/skin identity
+    -- (`WeaponSkins.skins[Armoury_key]`).  Only hat/outfit clones populate the
+    -- bridge maps, so requiring backend_to_armoury here drops legitimate
+    -- per-instance weapon selections.  Positive SKIN_LIST membership is the
+    -- source-backed direct-key proof; unknown strings still fail closed.
+    if not armoury_key and type(skin_list) == "table"
+            and type(rawget(skin_list, saved_illusion)) == "table" then
+        armoury_key = saved_illusion
+    end
+    local fallback_skin = type(backend_to_vanilla) == "table"
+        and backend_to_vanilla[saved_illusion] or nil
+    -- A present exact main skin that is not authored must fail closed; using
+    -- the clone's vanilla parent would show a different cosmetic. The parent
+    -- is only a reconstruction fallback when the item omits its skin field.
+    return _icon_for(armoury_key, item.skin,
+        (type(item.skin) ~= "string" or item.skin == "") and fallback_skin or nil,
+        skin_list)
 end
 
 local function _offhand_icon(item, saved_offhands, skin_list)
-    if type(saved_offhands) ~= "table" then return nil end
+    if type(saved_offhands) ~= "table" then return nil, "no-offhand-selection" end
     local record = saved_offhands.left_hand_unit
-    if type(record) ~= "table" then return nil end
+    if type(record) ~= "table" then return nil, "no-left-selection" end
 
     -- LA owns its authored variant/base-skin pairing. A cached vanilla icon
     -- must never mask a later LA selection on the same exact item.
-    if record.armoury_key then
-        return _icon_for(record.armoury_key,
-            record.vanilla_key or item.skin, skin_list)
-            or (record.cos_authored == true
+    local armoury_key = record.armoury_key or record.la_armoury_key
+    if armoury_key then
+        local icon, reason, resolved_key, resolved_skin = _icon_for(armoury_key,
+            item.skin, record.vanilla_key, skin_list)
+        if icon then return icon, reason, resolved_key, resolved_skin end
+        if record.cos_authored == true
                 and type(record.inventory_icon) == "string"
-                and record.inventory_icon ~= "" and record.inventory_icon or nil)
+                and record.inventory_icon ~= "" then
+            return record.inventory_icon, "authored-cached-icon", armoury_key,
+                record.vanilla_key
+        end
+        return nil, reason, resolved_key, resolved_skin
     end
-    return type(record.inventory_icon) == "string"
-        and record.inventory_icon ~= "" and record.inventory_icon or nil
+    if type(record.inventory_icon) == "string" and record.inventory_icon ~= "" then
+        return record.inventory_icon, "vanilla-cached-icon", nil, record.vanilla_key
+    end
+    return nil, "missing-offhand-icon"
 end
 
-function M.resolve_inventory_icon(item, saved_illusion, saved_offhands,
+function M.resolve_inventory_icon_detailed(item, saved_illusion, saved_offhands,
         backend_to_armoury, backend_to_vanilla, skin_list, ownership)
-    if type(item) ~= "table" or not _backend_id(item) then return nil end
+    if type(item) ~= "table" or not _backend_id(item) then
+        return nil, "missing-exact-item"
+    end
 
-    local main_icon = _illusion_icon(item, saved_illusion,
+    local main_icon, main_reason, main_key, main_skin = _illusion_icon(item, saved_illusion,
         backend_to_armoury, backend_to_vanilla, skin_list)
 
     -- Dual weapons retain vanilla row one's main/right-hand ownership. Their
     -- independently customized left hand is visual-only and cannot replace
     -- the inventory icon.
     if ownership == "dual" then
-        return main_icon
+        return main_icon, main_reason, main_key, main_skin
     end
 
     -- A shield is the independently owned presentation surface. Prefer its
     -- exact saved left-hand choice, then fall back to row one's LA illusion.
     if ownership == "shield" then
-        return _offhand_icon(item, saved_offhands, skin_list) or main_icon
+        local icon, reason, key, skin = _offhand_icon(item, saved_offhands, skin_list)
+        if icon then return icon, reason, key, skin end
+        if main_icon then return main_icon, main_reason, main_key, main_skin end
+        return nil, reason ~= "no-offhand-selection" and reason or main_reason,
+            key or main_key, skin or main_skin
     end
 
     -- Compatibility for older callers that do not yet classify the item:
     -- preserve the former whole-illusion-first behavior.
-    return main_icon or _offhand_icon(item, saved_offhands, skin_list)
+    if main_icon then return main_icon, main_reason, main_key, main_skin end
+    return _offhand_icon(item, saved_offhands, skin_list)
+end
+
+function M.resolve_inventory_icon(item, saved_illusion, saved_offhands,
+        backend_to_armoury, backend_to_vanilla, skin_list, ownership)
+    return M.resolve_inventory_icon_detailed(item, saved_illusion, saved_offhands,
+        backend_to_armoury, backend_to_vanilla, skin_list, ownership)
 end
 
 return M
