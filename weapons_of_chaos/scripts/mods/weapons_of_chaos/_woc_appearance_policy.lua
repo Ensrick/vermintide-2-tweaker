@@ -27,11 +27,30 @@ M.PULSE_VARIABLES = {
 -- Canonical authored-mesh pose. The durable owner resolves the offset against
 -- that render node's baseline and writes scale/position/rotation atomically
 -- without mutating the game-owned attachment root.
+-- SCALE IS ABSOLUTE and the authored render node's NATIVE scale is 100 (the
+-- import's centimeter-to-meter compensation; issue 712 log evidence:
+-- before s={100,100,100}). 90 = the author-approved 10 percent reduction on
+-- that baseline for third person; first person runs 80 (author sight-tuned
+-- 2026-07-19: "0.8 scale for first person"). 0.9 here shrank the sword 111x
+-- into invisibility the moment the constructor fix made writes land.
+-- Rotation x=-180 total is the author-verified bake from the /woc_pose tuner.
+-- TRANSFORM_1P deliberately SHARES the offset and rotation tables with
+-- TRANSFORM (live /woc_pose tuning moves both perspectives together); only
+-- the scale table is per-perspective.
 M.TRANSFORM = {
-	scale = { 0.9, 0.9, 0.9 },
+	scale = { 90, 90, 90 },
 	offset = { 0, 0, -0.3 },
-	rotation = { -90, -90, -90 },
+	rotation = { -180, -90, -90 },
 }
+M.TRANSFORM_1P = {
+	scale = { 80, 80, 80 },
+	offset = M.TRANSFORM.offset,
+	rotation = M.TRANSFORM.rotation,
+}
+
+function M.transform_for(perspective)
+	return perspective == "1p" and M.TRANSFORM_1P or M.TRANSFORM
+end
 
 function M.canonicalize_item_units(item_units, is_exact_relic)
 	if type(item_units) ~= "table" or is_exact_relic ~= true then
@@ -92,6 +111,35 @@ function M.network_package_aliases()
 	return {
 		[M.UNIT_1P] = M.VANILLA_1P,
 		[M.UNIT_3P] = M.VANILLA_3P,
+	}
+end
+
+-- Issue 712 root cause: retail Stingray registers `Vector3` as a callable
+-- TABLE (constructed via its `__call` metamethod), not a Lua function. The
+-- shared appearance library guards its constructor with
+-- `type(vector_new) ~= "function"` (_lib_weapon_appearance.lua:51), so with
+-- the library's default api every position/scale construction returned nil
+-- in-game and the atomic pose path exited "invalid-position" BEFORE
+-- Unit.set_local_pose ran. Proof: every 0.1.30/0.1.31-dev `[WOC:712]
+-- transform proof` line carries `write={mode=atomic-local-pose ok=false
+-- error=invalid-position}` with before==after, while rotation-only writes
+-- (a genuine function member, Quaternion.from_euler_angles_xyz) landed in
+-- 0.1.24-dev. Build the injected api here so the constructor reaches the
+-- library wrapped in a plain Lua closure, and the shared library copy stays
+-- byte-identical to its canonical source.
+-- Returns nil when `Vector3` is absent (offline harness) so the library's
+-- default api remains in charge there.
+function M.appearance_api(globals)
+	if type(globals) ~= "table" then return nil end
+	local vector3 = globals.Vector3
+	if vector3 == nil then return nil end
+	local ok_member, to_elements = pcall(function() return vector3.to_elements end)
+	return {
+		unit = globals.Unit,
+		vector_new = function(x, y, z) return vector3(x, y, z) end,
+		vector_to_elements = ok_member and to_elements or nil,
+		quaternion = globals.Quaternion,
+		matrix4x4 = globals.Matrix4x4,
 	}
 end
 

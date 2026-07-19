@@ -856,17 +856,19 @@ end)
 _rt_register("material_settings_templates_loaded", function()
     -- v0.9.30-dev: the new MaterialSettingsTemplates dump (in _ui_dump.lua)
     -- depends on the global table being populated by the time the
-    -- customizer opens. Assert the engine global is there and that the
-    -- known weapon-mat families exist. If vanilla ever renames any of
-    -- them this catches it before subscribers hit it.
+    -- customizer opens. Assert the known weapon-mat families exist. If
+    -- vanilla ever renames any of them this catches it before subscribers
+    -- hit it. (#566/#512 class: catalog POPULATION is a declared harness
+    -- precondition below - an unpopulated engine boot state reports
+    -- "context absent", never FAIL.)
     local templates = rawget(_G, "MaterialSettingsTemplates")
-    if type(templates) ~= "table" then
-        return "MaterialSettingsTemplates global not loaded"
-    end
     -- Vanilla registers exactly these weapon templates in
     -- weapon_material_settings_templates.lua:4-115. `white_glow` is not in
     -- that table: it is referenced only by the Morris Nornaz skin below and
-    -- must remain a tolerated missing-template/fallback case.
+    -- must remain a tolerated missing-template/fallback case (#566) - the
+    -- glow system resolves it through the no-template fallback path (fail
+    -- closed, no invented color; issue 610 contract). The suite must NEVER
+    -- demand a `white_glow` registration vanilla does not perform.
     local REQUIRED_REGISTERED_WEAPON_MATS = {
         "blue_glow", "purple_glow", "golden_glow", "deep_crimson",
         "life_green", "lileath", "weaves", "versus",
@@ -909,7 +911,23 @@ _rt_register("material_settings_templates_loaded", function()
             return "weaves." .. field .. " missing or wrong type (expected vector3)"
         end
     end
-end)
+end, {
+    -- #566/#512 class: the engine catalogs this check reads are boot-time
+    -- populated state, not an invariant this mod owns. When they are not
+    -- there yet, the asserted context is absent - report SKIP, not FAIL.
+    -- (Once populated, a missing family or a drifted Nornaz mapping in the
+    -- body above remains a true FAIL.)
+    precondition = function()
+        if type(rawget(_G, "MaterialSettingsTemplates")) ~= "table" then
+            return false, "MaterialSettingsTemplates not populated (engine boot state)"
+        end
+        local ws = rawget(_G, "WeaponSkins")
+        if type(ws) ~= "table" or type(ws.skins) ~= "table" then
+            return false, "WeaponSkins.skins not populated (engine boot state)"
+        end
+        return true
+    end,
+})
 
 _rt_register("filter_illusion_widgets_hides_named_mat", function()
     -- v0.9.29-dev (issue #48): the `_filter_illusion_widgets` helper must

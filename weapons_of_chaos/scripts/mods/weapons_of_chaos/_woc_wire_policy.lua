@@ -40,6 +40,39 @@ local function strip_protected_traits(item, protected_traits)
 	return shadow, true
 end
 
+-- Issue 278/613: name the caller behind a nil-key loadout-sync skip. Pure text
+-- transform over a debug.traceback string so the runtime probe stays testable
+-- offline. Drops the "stack traceback:" header and every frame matching a
+-- self/plumbing marker (plain-text match), keeps at most `max_frames` caller
+-- frames; when filtering removes everything, falls back to the first frames
+-- unfiltered so the probe never reports an empty capture.
+function M.caller_frames(trace, self_markers, max_frames)
+	max_frames = type(max_frames) == "number" and max_frames or 3
+	if type(trace) ~= "string" or max_frames < 1 then return nil end
+	local all, kept = {}, {}
+	for line in trace:gmatch("[^\r\n]+") do
+		local frame = line:match("^%s*(.-)%s*$")
+		if frame ~= "" and not frame:find("stack traceback", 1, true) then
+			all[#all + 1] = frame
+			local self_frame = false
+			for _, marker in ipairs(self_markers or {}) do
+				if frame:find(marker, 1, true) then
+					self_frame = true
+					break
+				end
+			end
+			if not self_frame and #kept < max_frames then
+				kept[#kept + 1] = frame
+			end
+		end
+	end
+	local source = #kept > 0 and kept or all
+	local out = {}
+	for i = 1, math.min(max_frames, #source) do out[i] = source[i] end
+	if #out == 0 then return nil end
+	return table.concat(out, " <- ")
+end
+
 function M.safe_item(item, base_key, base_resolvable, wire_rarity, protected_traits)
 	local trait_safe_item = strip_protected_traits(item, protected_traits)
 	if not M.is_woc_item(item) then

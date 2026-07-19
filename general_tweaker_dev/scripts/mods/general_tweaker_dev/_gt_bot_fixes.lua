@@ -549,6 +549,146 @@ mod._gt_rescue_awaiting_within_cap = function(distance_m, cap_m)
 end
 mod.GT_BOT300_RESCUE_RANGE_POLICY_MARKER_v0_2_221 = true
 
+-- ----------------------------------------------------------------------------
+-- #384 AID-ERRAND PIN (v0.2.250-dev): hold the errand across need_type flicker
+-- ----------------------------------------------------------------------------
+-- WHAT
+--   Vanilla's picker drops a downed ally from the aid evaluation whenever
+--   _ally_path_allowed is inside a failed-path cooldown -- the candidate is
+--   skipped outright when the follow path is disallowed, or its in_need_type is
+--   nil'd when only the aid path is disallowed (player_bot_base.lua:960-964;
+--   cooldowns 1 s ahead / 5-10 s behind / 3-12 s distance-scaled,
+--   player_bot_base.lua:1948-1983). _update_target_ally then clears
+--   target_ally_needs_aid/target_ally_need_type (:721-724), which breaks BOTH
+--   the revive errand (can_revive keys on need_type, bt_bot_conditions.lua:738)
+--   AND every distance-teleport aid exception (vanilla :1226-1228 and gt's
+--   tighter leash) for the cooldown window.
+-- EVIDENCE (issue 384 + the 2026-07-18 log sweep of gt 0.2.248)
+--   console-2026-07-06: both bots assigned to downed Rain; Markus teleported to
+--   the standing human 3x starting ~2 s after the aid flag cleared, VETOED=0.
+--   gt 0.2.248 session logs (FS 22.26/01.48): 410x "[gt_bot:139] TELEPORT
+--   executed"; "[gt:139:chain] VETO bot=Sienna reason=tighter_leash" followed
+--   0.02 s later by "TELEPORT ... veto_age=0.02s same_aid=false" -- the veto did
+--   not hold; and "[gt:492] ... BAILED aid pursuit (reason=no-progress)"
+--   released the veto in the same chain while the ally was still down.
+-- FIX
+--   Pin the errand per bot: whenever the picker hands _update_target_ally a
+--   real aid pick (knocked_down / ledge / hook, incl. the FIX 3 awaiting-rescue
+--   relabel and the FIX 3b force pick), remember (ally, need). On any later
+--   tick where the wrapped chain produced NO aid pick while the pinned ally
+--   STILL classifies (live status via policy.pin_need_type -- path cooldowns
+--   cannot flicker it), re-return the pinned ally with its live need type. That
+--   keeps target_ally_need_type continuously set, so vanilla's own aid
+--   exception and gt's tighter leash decline the teleport at the source and the
+--   #139 veto becomes the backstop instead of the sole gate.
+-- RELEASE (state-based, no wall-clock -- BUG_CLASSES 34)
+--   * ally no longer classifies (revived / rescued / dead with no awaiting
+--     relabel) -> release;
+--   * #492 bail with reason "no-path" on the pinned ally (the engine's own aid
+--     pathing keeps failing -> authoritative unreachable) -> release;
+--   * #492 bail with reason "no-progress" -> HOLD (per the log evidence above a
+--     no-progress stall with a live errand is combat holding the bot, not
+--     unreachability; genuine unreachability surfaces as failing paths).
+--   The pin deliberately bypasses the FIX 3 range cap once armed: the errand
+--   was legitimately acquired, and an unreachable target releases via no-path.
+-- Host-side only (bot AI is server-owned); no RPC, no wire surface. All pin
+-- state lives on the bot's own blackboard. Runtime deps are read through the
+-- mod table (call-time) because this block precedes their definitions.
+GT_BOT384_AID_ERRAND_PIN_MARKER_v0_2_250 = "gt-bot384-aid-errand-pin-holds-veto"
+
+local function _gt384_aid_priority_on()
+    local fn = mod._gt_aid_priority_on
+    return fn and fn() and true or false
+end
+
+local function _gt384_label(u)
+    local fn = mod._gt492_label
+    if fn then return fn(u) end
+    return tostring(u)
+end
+
+-- Arm/refresh the pin on every real aid pick. Clears the held-episode printf
+-- latch so each later flicker episode logs exactly once.
+local function _gt384_arm_pin(blackboard, ally, need_type)
+    if not _gt384_aid_priority_on() then
+        return
+    end
+    if blackboard._gt384_pin_unit ~= ally and rawget(_G, "printf") then
+        printf("[gt:384:pin] ARMED bot=%s ally=%s need=%s",
+            _gt384_label(blackboard.unit), _gt384_label(ally), tostring(need_type))
+    end
+    blackboard._gt384_pin_unit = ally
+    blackboard._gt384_pin_need = need_type
+    blackboard._gt384_pin_held_latch = nil
+end
+
+local function _gt384_clear_pin(blackboard)
+    blackboard._gt384_pin_unit = nil
+    blackboard._gt384_pin_need = nil
+    blackboard._gt384_pin_held_latch = nil
+end
+
+-- Hold check: returns (unit, dist, need) to substitute as this tick's pick, or
+-- nil (no pin / released / positions transiently missing). Pure decision rides
+-- policy.pin_need_type + policy.pin_should_release (_gt_teleport_loop_policy).
+local function _gt384_hold_pin(blackboard, self_pos, rescue_awaiting_active)
+    local pin_unit = blackboard._gt384_pin_unit
+    if not pin_unit then
+        return nil
+    end
+    if not _gt384_aid_priority_on() then
+        _gt384_clear_pin(blackboard)
+        return nil
+    end
+    local policy = mod._gt_teleport_loop_policy
+    if not (policy and policy.pin_need_type and policy.pin_should_release) then
+        return nil   -- policy unavailable: degrade to pre-pin (shipped) behavior
+    end
+
+    local pin_need
+    if ALIVE[pin_unit] then
+        local st = ScriptUnit.has_extension(pin_unit, "status_system")
+        -- Awaiting-rescue relabel mirrors FIX 3's pick gates exactly: feature
+        -- toggle on AND the awaiting unit is health-alive.
+        local allow_awaiting = rescue_awaiting_active and HEALTH_ALIVE[pin_unit] and true or false
+        pin_need = st and policy.pin_need_type(st, allow_awaiting) or nil
+    end
+
+    local bail_active = blackboard._gt492_bailout and true or false
+    local bail_is_pin = bail_active and blackboard._gt492_bailout_unit == pin_unit
+    local release, why = policy.pin_should_release(
+        pin_need, bail_active, blackboard._gt492_bailout_reason, bail_is_pin)
+    if release then
+        if rawget(_G, "printf") then
+            printf("[gt:384:pin] RELEASED bot=%s ally=%s reason=%s",
+                _gt384_label(blackboard.unit), _gt384_label(pin_unit), tostring(why))
+        end
+        _gt384_clear_pin(blackboard)
+        return nil
+    end
+
+    blackboard._gt384_pin_need = pin_need
+    local cpos = POSITION_LOOKUP[pin_unit]
+    if not (self_pos and cpos) then
+        return nil   -- transient (hot-join/despawn tick): keep the pin, no substitute
+    end
+    if rawget(_G, "printf") and not blackboard._gt384_pin_held_latch then
+        blackboard._gt384_pin_held_latch = true
+        printf("[gt:384:pin] HELD errand across need-flicker bot=%s ally=%s need=%s bail=%s",
+            _gt384_label(blackboard.unit), _gt384_label(pin_unit), tostring(pin_need),
+            tostring(bail_active and blackboard._gt492_bailout_reason or "none"))
+    end
+    return pin_unit, Vector3.distance(self_pos, cpos), pin_need
+end
+
+-- True while an armed pin's target still classifies -- read by the
+-- should_teleport / cant_reach_ally hooks to decide whether a #492 no-progress
+-- bail may release the teleport veto. Field read only (1-frame lag vs the
+-- picker's release converges next tick).
+local function _gt384_pin_live(blackboard)
+    return blackboard._gt384_pin_unit ~= nil
+end
+
 mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit, blackboard, breed, t)
     local ally, real_dist, need_type, look_at = func(self, unit, blackboard, breed, t)
     -- Vanilla returns math.huge when no ally wins. Preserve that producer
@@ -577,9 +717,19 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         -- drop the pick so _update_target_ally clears target_ally_need_type
         -- (player_bot_base.lua:721-723) and the bot re-evaluates teleport.
         if mod._gt492_should_suppress_pick and mod._gt492_should_suppress_pick(blackboard, ally) then
-            return nil, math.huge, nil, nil
+            if blackboard._gt492_bailout_reason ~= "no-progress" then
+                -- no-path (authoritative give-up) keeps the shipped hard drop.
+                return nil, math.huge, nil, nil
+            end
+            -- #384: a no-progress bail must not hard-drop a live errand (log
+            -- evidence: veto released into a teleport loop while the ally was
+            -- still down). Null the pick and fall through so the pin below can
+            -- re-assert it; the pin releases the moment the bail turns no-path.
+            ally, real_dist, need_type, look_at = nil, math.huge, nil, nil
+        else
+            _gt384_arm_pin(blackboard, ally, need_type)
+            return ally, real_dist, need_type, look_at
         end
-        return ally, real_dist, need_type, look_at
     end
 
     -- While #523 is enabled, its explicit thresholds and Zealot policy replace
@@ -689,6 +839,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         -- the priority toggles without rescuing awaiting allies when its own
         -- toggle is off.)
         mod:debug("[gt:bot-rescue] RESCUE picked awaiting ally dist=%.1f -> relabel knocked_down", best_dist or -1)
+        _gt384_arm_pin(blackboard, best_unit, "knocked_down")
         return best_unit, best_dist, "knocked_down", false
     end
 
@@ -768,7 +919,28 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         if _fr_unit and not (mod._gt492_should_suppress_pick and mod._gt492_should_suppress_pick(blackboard, _fr_unit)) then
             local _real = Vector3.distance(self_pos, POSITION_LOOKUP[_fr_unit])
             mod:debug("[gt:bot-priority] FORCE %s ally dist=%.1f (prior_need=%s)", _fr_need, _real, tostring(need_type))
+            _gt384_arm_pin(blackboard, _fr_unit, _fr_need)
             return _fr_unit, _real, _fr_need, false
+        end
+    end
+
+    -- ========================================================================
+    -- #384 AID-ERRAND PIN hold (v0.2.250-dev): the wrapped chain (vanilla +
+    -- FIX 3 + FIX 3b) produced NO aid pick this tick. If a pinned ally still
+    -- classifies (live status -- path cooldowns cannot flicker it), re-return
+    -- the errand so target_ally_need_type never drops mid-revive: vanilla's own
+    -- teleport aid exception (bt_bot_conditions.lua:1226-1228), gt's tighter
+    -- leash, AND can_revive (:738) all stay engaged. Runs BEFORE the FIX 13
+    -- heal injection because aid outranks heal (vanilla utility 200 vs 70,
+    -- player_bot_base.lua:909-937), and also overrides a heal/give/attention
+    -- pick vanilla produced during a flicker frame -- exactly the pick that
+    -- broke the revive lock. Rationale, evidence + release matrix at the pin
+    -- helper block above; #492 no-path bail releases it there.
+    -- ========================================================================
+    do
+        local pin_unit, pin_dist, pin_need = _gt384_hold_pin(blackboard, self_pos, _gt_rescue_awaiting_active)
+        if pin_unit then
+            return pin_unit, pin_dist, pin_need, false
         end
     end
 
@@ -1015,6 +1187,9 @@ local function _gt492_label(u)
     end)
     return (ok and name) or tostring(u)
 end
+-- Exposed so the #384 pin helpers (declared ABOVE this definition, calling at
+-- runtime via the mod table) and future diagnostics share one label format.
+mod._gt492_label = _gt492_label
 
 -- True if the unit's player is an AI bot (player_bot.lua:23 bot_player = true), so
 -- the #492 census can say whether a down is a human or a bot. pcall-guarded.
@@ -1138,7 +1313,12 @@ mod._gt492_aid_stall_tick = function(self, unit, blackboard, t)
     -- pin, which is the only thing that keeps the bot from teleporting.
     if not _gt_aid_priority_on() then
         blackboard._gt492_bailout = nil
+        blackboard._gt492_bailout_reason = nil
         blackboard._gt492_state = nil
+        -- #384: drop any armed errand pin too -- the picker's early passthrough
+        -- (all bot-aid toggles off) can skip the pin branch, and this tick runs
+        -- every frame, so the pin state cannot go stale on a toggle flip.
+        _gt384_clear_pin(blackboard)
         return
     end
 
@@ -1184,20 +1364,29 @@ mod._gt492_aid_stall_tick = function(self, unit, blackboard, t)
     blackboard._gt492_state = new_state
 
     if bailout then
+        -- #384 (v0.2.250-dev): name WHICH signal bailed and stamp it on the
+        -- blackboard. The pin + veto release discriminate on it: a no-path bail
+        -- (the engine's own aid pathing keeps failing) is the authoritative
+        -- give-up and releases the errand; a no-progress bail (straight-line
+        -- distance not closing) must NOT release while the pinned ally still
+        -- classifies -- field log gt 0.2.248 showed no-progress bails releasing
+        -- the veto into a teleport loop while the ally was still down.
+        local reason = (new_state.fail_since ~= nil
+            and (t - new_state.fail_since) >= GT492_PATH_FAIL_CONFIRM_S) and "no-path" or "no-progress"
         if not prev_bailed and rawget(_G, "printf") then
             -- Decisive branch point: name WHICH signal fired + the roster census,
             -- so the next field log settles bots-down vs unreachable-path (item 2).
-            local reason = (new_state.fail_since ~= nil
-                and (t - new_state.fail_since) >= GT492_PATH_FAIL_CONFIRM_S) and "no-path" or "no-progress"
             local helpers, dh, db = _gt492_aid_census(unit)
             printf("[gt:492] %s BAILED aid pursuit (reason=%s down=%s is_bot=%s dist=%.0fm best=%.0fm) -- suspending aid pin+veto so it can regroup; roster: alive_helpers=%d downed_humans=%d downed_bots=%d",
                 _gt492_label(unit), reason, _gt492_label(aid_unit), tostring(_gt492_is_bot(aid_unit)),
                 aid_dist or -1, new_state.best_dist or -1, helpers, dh, db)
         end
         blackboard._gt492_bailout = true
+        blackboard._gt492_bailout_reason = reason
         blackboard._gt492_bailout_unit = aid_unit
     else
         blackboard._gt492_bailout = nil
+        blackboard._gt492_bailout_reason = nil
     end
 end
 
@@ -1563,7 +1752,17 @@ mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     local aid_unit = _gt_aid_priority_on()
         and _gt_any_side_teammate_needs_aid(blackboard.unit)
         or nil
-    if want and not blackboard._gt492_bailout and aid_unit then
+    -- #384 (v0.2.250-dev): the #492 bailout steps this veto aside ONLY when it
+    -- is the authoritative no-path bail, or when no live pin holds the errand.
+    -- A no-progress bail with a pinned, still-classifying ally must NOT release
+    -- (log evidence: "VETO ... reason=tighter_leash" followed 0.02 s later by
+    -- "TELEPORT ... same_aid=false" after a "BAILED (reason=no-progress)" in
+    -- the same chain -- the release fed a teleport loop while the ally was
+    -- still down). Reason nil (pre-stamp state) keeps the shipped release.
+    local bail_release = blackboard._gt492_bailout
+        and (blackboard._gt492_bailout_reason ~= "no-progress"
+             or not _gt384_pin_live(blackboard))
+    if want and not bail_release and aid_unit then
         local now = Managers.time and Managers.time.time and Managers.time:time("game")
         local group_ext = blackboard.ai_bot_group_extension
         local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
@@ -1574,9 +1773,11 @@ mod:hook("BTConditions", "should_teleport", function (func, blackboard)
         end
         if rawget(_G, "printf") and not blackboard._gt139_veto_latched then
             blackboard._gt139_veto_latched = true
-            printf("[gt:139:chain] VETO bot=%s reason=%s follow=%s aid=%s bailout=false need_type=%s",
+            printf("[gt:139:chain] VETO bot=%s reason=%s follow=%s aid=%s bailout=%s need_type=%s pin=%s",
                 _gt492_label(blackboard.unit), tostring(reason), _gt492_label(follow_unit),
-                _gt492_label(aid_unit), tostring(blackboard.target_ally_need_type))
+                _gt492_label(aid_unit), tostring(blackboard._gt492_bailout and true or false),
+                tostring(blackboard.target_ally_need_type),
+                _gt492_label(blackboard._gt384_pin_unit))
         end
         blackboard._gt139_tp_reason = nil
         return false
@@ -1647,7 +1848,13 @@ mod:hook("BTConditions", "cant_reach_ally", function (func, blackboard)
     -- watchdog already bailed this bot out of an UNREACHABLE aid pursuit
     -- (blackboard._gt492_bailout), in which case the backward teleport is exactly how
     -- it regroups (item 3). Vanilla's forward path above is never subject to this veto.
-    if not blackboard._gt492_bailout and _gt_aid_priority_on()
+    -- #384 (v0.2.250-dev): same bail discrimination as the should_teleport veto --
+    -- only a no-path bail (or a bail with no live errand pin) releases; a
+    -- no-progress bail while the pinned ally still classifies holds the veto.
+    local creach_bail_release = blackboard._gt492_bailout
+        and (blackboard._gt492_bailout_reason ~= "no-progress"
+             or not _gt384_pin_live(blackboard))
+    if not creach_bail_release and _gt_aid_priority_on()
             and _gt_any_side_teammate_needs_aid(blackboard.unit) then
         if rawget(_G, "printf") and blackboard._gt515_creach_latched ~= "veto" then
             blackboard._gt515_creach_latched = "veto"
@@ -1670,6 +1877,20 @@ end)
 
 -- #515 GAP 2 regression marker (read by gt_bot515_cant_reach_backward_bypass).
 GT_BOT515_CANT_REACH_BACKWARD_MARKER_v0_2_203 = "gt-bot515-cant-reach-ally-backward-bypass"
+
+-- #385 below-leash branch instrument (v0.2.250-dev, log-only, capped). The
+-- #385 log's missing datum: 9 of 40 executed teleports fired BELOW the leash
+-- slider (down to 2.8 m) with `trigger=unknown`. Every distance trigger
+-- (vanilla 40 m, tighter leash, backward) is impossible below min(leash, 40),
+-- so any such execution came from a non-distance branch -- the reason stamp
+-- (vanilla_no_path / backward_no_path / other) names it. Instrument only, no
+-- suppression added here (diagnose-before-mitigating); the existing bounded
+-- no-path retry (mod._gt385_should_suppress_no_path) is unchanged. Distance is
+-- captured PRE-teleport from the same navmesh whereabouts source the decision
+-- reads (mod._gt385_no_path_distance); the session cap lives in
+-- _gt_teleport_loop_policy.BELOW_LEASH_LOG_CAP.
+GT_BOT385_BELOW_LEASH_INSTRUMENT_MARKER_v0_2_250 = "gt-bot385-below-leash-branch-instrument"
+local _gt385_below_leash_logged = 0
 
 -- Debug confirmation that the teleport ACTION actually executed -- a SEPARATE
 -- (Class, method) pair from FIX 7's BTConditions.should_teleport, so not a
@@ -1705,6 +1926,10 @@ mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackbo
     -- by the should_teleport hook above).
     local p139_aid_unit, p139_pre_dist = _gt_nearest_needing_aid(unit)
     local p139_reason = (blackboard and blackboard._gt139_tp_reason) or "other"
+    -- #385: capture the follow distance BEFORE the snap (afterwards the bot is
+    -- beside its follow target and the datum is destroyed).
+    local p385_pre_dist = (blackboard and mod._gt385_no_path_distance)
+        and mod._gt385_no_path_distance(blackboard) or nil
 
     local result = func(self, unit, blackboard, t, dt)
 
@@ -1759,6 +1984,23 @@ mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackbo
         end
         printf("[139:bot_tp] bot=%s dist_to_downed=%.1fm reason=%s post_dist=%.1fm target=%.1f,%.1f,%.1f t=%.2f",
             bot_career, p139_pre_dist or -1, p139_reason, post_dist, tx, ty, tz, t)
+    end
+    -- #385 instrument: one capped line for every teleport that executed while
+    -- the pre-snap follow distance was below BOTH the gt leash slider and
+    -- vanilla's 40 m floor -- tagging WHICH branch fired (the missing datum).
+    -- Fires regardless of aid state (the observed events had no teammate down).
+    if rawget(_G, "printf") and blackboard and p385_pre_dist then
+        local policy = mod._gt_teleport_loop_policy
+        local leash_m = tonumber(mod:get("gt_bot_follow_distance_m")) or 40.0
+        if policy and policy.should_log_below_leash
+                and policy.should_log_below_leash(p385_pre_dist, leash_m,
+                    _gt385_below_leash_logged, policy.BELOW_LEASH_LOG_CAP) then
+            _gt385_below_leash_logged = _gt385_below_leash_logged + 1
+            printf("[gt:385] below-leash TELEPORT %d/%d bot=%s branch=%s follow_dist=%.1fm leash=%.1fm aid_now=%s need_type=%s",
+                _gt385_below_leash_logged, policy.BELOW_LEASH_LOG_CAP,
+                _gt492_label(unit), tostring(p139_reason), p385_pre_dist, leash_m,
+                _gt492_label(p139_aid_unit), tostring(blackboard.target_ally_need_type))
+        end
     end
     -- #139/#384 correlated execution record. The earlier probe printed a veto
     -- without bot/ally identity and an execution without the veto/bailout state,

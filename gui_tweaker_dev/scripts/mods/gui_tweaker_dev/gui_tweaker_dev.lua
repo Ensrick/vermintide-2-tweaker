@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.293-dev"
+local MOD_VERSION = "0.2.295-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -400,9 +400,16 @@ _rt_register("cutscene_postskip_fade_swallow", function()
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
-    local guard_needle = '_skipped_cutscene_system == self and name == "fx' .. '_fade"'
-    if not txt:find(guard_needle, 1, true) then
-        return "#140 regression: the post-skip fx_fade swallow guard is gone from flow_cb_cutscene_effect (stray black fade returns on 'A Parting of the Waves' / dlc_dwarf_whaling)"
+    -- ROUND 3 needle (issues 257/274 rework): the swallow site is the marker
+    -- comment `_gut_cutscene_fade_swallow_site` plus the episode classifier
+    -- call. The pre-rework expression needle (`_skipped_cutscene_system ==
+    -- self and name == "fx_fade"`) went stale when the policy274 refactor
+    -- renamed the guard read - marker comments survive refactors, expression
+    -- needles do not. Split so this registration site cannot self-match.
+    local marker_needle = "_gut_cutscene_fade_" .. "swallow_site"
+    local classifier_needle = "classify_" .. "fade(_sw_state"
+    if not txt:find(marker_needle, 1, true) or not txt:find(classifier_needle, 1, true) then
+        return "#140/#257 regression: the fx_fade swallow classification site is gone from flow_cb_cutscene_effect (stray black fade returns on 'A Parting of the Waves' / dlc_dwarf_whaling)"
     end
 end)
 -- (issue 275) The Skip Cutscenes feature must NEVER latch script_data.skippable_cutscenes
@@ -1962,9 +1969,15 @@ do
     end
 end
 
--- Held-Tab weapon property refresh (#245). The v2 player list renders a
--- detached RPC loadout row; while visible, reconcile only the local equipped
--- melee/ranged properties from their exact live backend instances at 4 Hz.
+-- Held-Tab live-session loadout provider (#245 properties/traits, #246
+-- equipped illusion, #250 CW talents, #533 CW collectible rows). The v2 player
+-- list renders detached RPC loadout rows frozen at add_equipment time; while
+-- visible, the provider reconciles the local player's melee/ranged
+-- properties+traits+skin from their exact live backend instances at 4 Hz,
+-- decorates every player's row skin from the synchronized (wearer, slot)
+-- cosmetic identity, repairs the deus talent strip after vanilla populates it,
+-- and suppresses the adventure tome/grim/dice rows inside the deus mechanism.
+-- One module owns both IngamePlayerListUI hooks (see its header).
 do
     local ok, api = pcall(mod.dofile, mod,
         "scripts/mods/gui_tweaker_dev/_gut_tab_property_refresh")
@@ -1973,7 +1986,7 @@ do
             _rt_register(check.name, check.fn)
         end
     else
-        _dbg_alert("[gut:245] Tab property refresh failed: %s", tostring(api))
+        _dbg_alert("[gut:245] Tab live-loadout provider failed: %s", tostring(api))
     end
 end
 

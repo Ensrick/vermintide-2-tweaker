@@ -60,6 +60,24 @@ local mod = get_mod("gut_dev")
 --   activation or level change), any scripted standalone fx_fade routed through
 --   CutsceneSystem is also swallowed - a cosmetic pop instead of a masking fade.
 --   Accepted vs. the erroneous black screen.
+--   ROUND 3 (issues 257 + 274, per-episode order-independent rework): the round-2
+--   guard was still ORDER-dependent - it armed only at skip time and released only at
+--   flow_cb_activate_cutscene_logic or a fixed timeout, so (a) an intro fade that
+--   precedes BOTH activation callbacks fell outside every armed window (issue 257,
+--   The Well of Dreams = dlc_termite_3), and (b) stragglers later than the fixed
+--   timeout leaked while a legitimate later cutscene depended on that same timeout
+--   for release (issue 274 class, dlc_dwarf_whaling ending). The guard state now
+--   lives in _gut_cutscene_skipwindow.lua (pure, offline-tested): per-system cutscene
+--   EPISODES with one release condition (new episode opens, or the rolling-grace /
+--   hard-cap deadline passes). During a skipped episode's window EVERY fx_fade is
+--   swallowed and EVERY camera activation is suppressed regardless of arrival order;
+--   a deferred-skip PENDING window swallows fades between the intro's logic node and
+--   the deferred skip_pressed tick (the old one-shot only caught the first); and a
+--   bounded pre-identity INTRO WATCH swallows an auto-skip-armed mission's first
+--   fades before any identity is knowable (the 257 shape). The issue-275/274
+--   intro-only SKIP policy (_gut_cutscene_policy274.is_intro, nil on_skip = never
+--   skip) is UNCHANGED - the watch affects fades only, never whether a cutscene
+--   skips.
 --   * CutsceneSystem.flow_cb_deactivate_cutscene_cameras (hook_safe, lifecycle log only;
 --     same dup-check, no other hook)
 --   * ShowCursorStack.pop                       (table-form, guarded)
@@ -117,6 +135,7 @@ local _printf = rawget(_G, "printf") or function(fmt, ...) print(string.format(f
 local _probe257 = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_cutscene_probe257")
 local _probe257_state = _probe257.new()
 local _policy274 = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_cutscene_policy274")
+local _skipwindow = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_cutscene_skipwindow")
 
 local function _level_key()
     local lvl = "?"
@@ -233,36 +252,33 @@ local _pending_auto_skip_system = nil
 -- nodes. Map wiring defect; distinct from the dlc_termite deferred-teardown variant
 -- fixed above.
 --
--- Guard shape: remember WHICH CutsceneSystem instance a skip actually executed on
--- (armed in the skip_pressed hook only when the before-state had an active_camera and
--- the after-state doesn't — i.e. vanilla's teardown really ran; covers BOTH the
--- deferred auto-skip and a manual player skip, since both route through the hooked
--- skip_pressed). While armed, that instance's later flow_cb_activate_cutscene_camera
--- calls are suppressed. Reset points:
---   (a) flow_cb_activate_cutscene_logic — a genuinely NEW cutscene is starting; the
---       reset runs BEFORE the auto-skip evaluation so the new cutscene can activate
---       its camera normally and, if auto-skipped, re-arm the guard itself.
---   (b) level transition — IMPLICIT via instance keying. This file has NO per-level
---       reset point for its other state (_skip_next_fade is deliberately
---       module-scoped across missions), so instead of hooking a level-load site the
---       guard compares against the exact system instance: every level constructs a
---       FRESH CutsceneSystem (cutscene_system.lua:11-24 init), so `_skipped == self`
---       can never match across a level boundary. Stricter than a boolean + reset.
-local _skipped_cutscene_system = nil
-local _post_skip_guard_remaining = 0
+-- Guard shape (ROUND 3, issues 257 + 274): per-system cutscene EPISODES in the pure
+-- _gut_cutscene_skipwindow state machine. A skip PROVEN executed (before-state had an
+-- active_camera and the after-state doesn't - vanilla's teardown really ran; covers
+-- BOTH the deferred auto-skip and a manual player skip, since both route through the
+-- hooked skip_pressed) marks the CURRENT episode skipped and opens its straggler
+-- window. Every later flow_cb_* on that system CLASSIFIES against the episode instead
+-- of assuming an arrival order: fades swallow, camera activations suppress. ONE
+-- release condition (checked inside the state machine): the window ends when a new
+-- episode opens on that system (flow_cb_activate_cutscene_logic, or a camera
+-- activation carrying a DIFFERENT non-nil identity) or when its deadline passes -
+-- a rolling GRACE_SECONDS grace re-granted by each classified straggler (the flow
+-- timeline is still replaying the skipped cutscene) under a MAX_WINDOW_SECONDS hard
+-- cap from the skip moment, so the issue-274 class (a legitimate later cutscene
+-- suppressed - the dlc_dwarf_whaling ENDING) is structurally impossible: its window
+-- is long dead. Level transitions stay IMPLICIT via instance keying (every level
+-- constructs a FRESH CutsceneSystem, cutscene_system.lua:11-24; episodes are held
+-- under weak keys so dead systems never leak).
+local _sw_state = _skipwindow.new()
+-- Monotonic clock for the window deadlines: accumulated dt from the chained
+-- mod.update below. Absolute-time deadlines make the classification callbacks
+-- order-independent (no per-tick decay coupling).
+local _sw_now = 0
+-- Last system whose window armed, for the one-shot expiry log in mod.update.
+local _sw_last_armed_system = nil
 
 local function _post_skip_guard_active(system)
-    return _policy274.guard_is_active(
-        _skipped_cutscene_system, system, _post_skip_guard_remaining)
-end
-
-local function _clear_post_skip_guard(reason)
-    if _skipped_cutscene_system then
-        _printf("[gut:274] post-intro camera guard cleared reason=%s level=%s",
-            tostring(reason), _level_key())
-    end
-    _skipped_cutscene_system = nil
-    _post_skip_guard_remaining = 0
+    return _skipwindow.window_active(_sw_state, system, _sw_now)
 end
 
 local function _gut_cutscene_skip_active()
@@ -307,9 +323,46 @@ mod._gut_cutscene_is_intro = _gut_cutscene_is_intro
 
 if CutsceneSystem then
     mod:hook(CutsceneSystem, "flow_cb_cutscene_effect", function(func, self, name, flow_params, ...)
+        local auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false
+        local pending = _pending_auto_skip_system == self
+        -- ROUND 3 order-independent classification (_gut_cutscene_fade_swallow_site;
+        -- issues 140/257/274, see the header docstring): classify this fade against
+        -- the system's live EPISODE instead of assuming arrival order. Exactly one
+        -- classification per callback; the #257 trace records the real verdict.
+        --   swallow_one_shot    - armed just before a skip_pressed call so the fade
+        --                         fired INSIDE vanilla's skip teardown is swallowed
+        --                         (issue 140 trace 22:04:36.434 proves this branch
+        --                         is load-bearing). Cleared on use AND after every
+        --                         proven skip so it can never leak forward.
+        --   swallow_pending     - deferred intro auto-skip queued for THIS system:
+        --                         the fade belongs to the cutscene about to skip
+        --                         (covers EVERY fade between the logic node and the
+        --                         deferred tick, not just the first).
+        --   swallow_window      - skipped episode's straggler window live (the
+        --                         issue-140 round-2 swallow, now with a rolling
+        --                         grace + hard cap instead of a fixed timeout).
+        --   swallow_intro_watch - pre-identity mission-intro watch (issue 257):
+        --                         auto-skip armed and this system's first cutscene
+        --                         has not yet identified itself; bounded to
+        --                         INTRO_WATCH_SECONDS from first contact.
+        -- Trade-offs (accepted, documented in header + CHANGELOG): a scripted
+        -- standalone fx_fade during a live window, or during the intro watch of a
+        -- mission whose first cinematic is locked, is also swallowed - a cosmetic
+        -- pop instead of a masking fade. Skip POLICY (issue 275) is untouched.
+        local verdict
+        if name ~= "fx_fade" then
+            verdict = "pass_nonfade"
+            _skipwindow.note_contact(_sw_state, self, _sw_now)
+        elseif _skip_next_fade then
+            verdict = "swallow_one_shot"
+        else
+            verdict = _skipwindow.classify_fade(_sw_state, self, pending, auto, _sw_now)
+            if verdict == "pass" then
+                verdict = "pass_fade"
+            end
+        end
         _trace257(self, "effect", {
-            disposition = _probe257.fade_disposition(name, _skip_next_fade,
-                _post_skip_guard_active(self)),
+            disposition = verdict,
             skip_next = _skip_next_fade,
             guard = _post_skip_guard_active(self),
             active_camera = self.active_camera ~= nil,
@@ -317,27 +370,18 @@ if CutsceneSystem then
             fade_in = flow_params and flow_params.fade_in_time,
             hold = flow_params and flow_params.hold_time,
             fade_out = flow_params and flow_params.fade_out_time,
-            auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
+            auto = auto,
         })
         -- DIAGNOSTIC (#106): every fade/text effect the cutscene queues. The stuck
         -- dlc_castle bars are an fx_fade that never gets a matching disable.
         _printf("[gut:cutscene] effect | name=%s skip_next_fade=%s level=%s",
             tostring(name), tostring(_skip_next_fade), _level_key())
-        if _skip_next_fade and name == "fx_fade" then
+        if verdict == "swallow_one_shot" then
             _skip_next_fade = false
             return
         end
-        -- #140 round 2 (v0.2.178-dev): guard-based swallow. On dlc_dwarf_whaling
-        -- ("A Parting of the Waves") the flow keeps firing delayed node groups after
-        -- the skip, and in each group fx_fade fires ~97 ms BEFORE its camera node -
-        -- so the one-shot _skip_next_fade (armed at the camera node) is still false
-        -- when the fade arrives. While the #106 post-skip guard is armed for THIS
-        -- system instance, swallow every fx_fade. Trade-off (documented in the top
-        -- docstring + CHANGELOG): a scripted standalone fx_fade routed through
-        -- CutsceneSystem while the guard is armed is also swallowed (cosmetic pop
-        -- instead of a masking fade) - accepted vs. the erroneous black screen.
-        if _post_skip_guard_active(self) and name == "fx_fade" then
-            _printf("[gut:cutscene] fx_fade swallowed (post-skip guard) | level=%s", _level_key())
+        if verdict ~= "pass_fade" and verdict ~= "pass_nonfade" then
+            _printf("[gut:cutscene] fx_fade swallowed (%s) | level=%s", verdict, _level_key())
             return
         end
         return func(self, name, flow_params, ...)
@@ -352,10 +396,20 @@ if CutsceneSystem then
             on_skip = event_on_skip,
             auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
         })
-        -- #106 bastion fix: a genuinely NEW cutscene is starting — clear the post-skip
-        -- camera guard BEFORE the auto-skip evaluation below, so this cutscene's camera
-        -- activates normally and, if auto-skip fires, the skip re-arms the guard itself.
-        _clear_post_skip_guard("new_cutscene_logic")
+        -- #106 bastion fix, ROUND 3 shape: a genuinely NEW cutscene episode opens
+        -- BEFORE the auto-skip evaluation below (the release half of the single
+        -- skip-window release condition), so this cutscene's camera activates
+        -- normally and, if auto-skip fires, the skip re-arms the window itself.
+        -- This also resolves the system's first-episode identity, closing the
+        -- issue-257 pre-identity intro fade watch.
+        do
+            local release, gen = _skipwindow.note_logic_activate(
+                _sw_state, self, event_on_skip, _sw_now)
+            if release == "released" then
+                _printf("[gut:274] skip window released (new cutscene episode gen=%s) | level=%s",
+                    tostring(gen), _level_key())
+            end
+        end
         local result = func(self, player_input_enabled, event_on_activate, event_on_skip)
         -- DIAGNOSTIC (#106): log every CutsceneSystem activation (on_activate/on_skip
         -- event names + level + deus gate + readable teardown state). The boss-phase
@@ -380,14 +434,16 @@ if CutsceneSystem then
             -- arbiter (the old in_deus force-unlock split is gone with the global
             -- latch it relied on).
             if _policy274.is_intro(event_on_skip) then
-                -- Swallow the cutscene's fade-IN since it will actually skip; pairs
-                -- with the deferred processor's fade-OUT so no blackscreen shows.
-                _skip_next_fade = true
                 -- Don't fire event_on_skip directly here -- defer to skip_pressed on
                 -- the next tick so vanilla's full teardown runs (letterbox off +
                 -- cameras deactivated + logic deactivated + event_on_skip). The
                 -- deferred processor scope-unlocks script_data.skippable_cutscenes
-                -- only around that skip_pressed call.
+                -- only around that skip_pressed call. ROUND 3: the old one-shot
+                -- `_skip_next_fade = true` arm here is gone - while
+                -- _pending_auto_skip_system == self, classify_fade swallows EVERY
+                -- fade in the logic-to-deferred-tick gap (the one-shot missed all
+                -- but the first); the deferred processor still arms the one-shot
+                -- for the fade fired INSIDE its skip_pressed call.
                 _pending_auto_skip_system = self
             else
                 _printf("[gut:274] NOT-INTRO (cutscene preserved) | level=%s disposition=%s on_skip=%s in_deus=%s",
@@ -429,10 +485,18 @@ if CutsceneSystem then
         -- author-locked CW cutscene falling through vanilla does NOT arm the guard.
         local had_camera = self.active_camera ~= nil
         local was_intro = _gut_cutscene_is_intro(self)
+        -- Captured BEFORE the vanilla call: skip_pressed fires event_on_skip early
+        -- and then NILS the field (cutscene_system.lua:99-105), so the skipped
+        -- episode's identity must be read here for the window's later
+        -- new-identity release comparison.
+        local pre_skip_identity = self.event_on_skip
         local function _arm_post_skip_guard()
             if was_intro and had_camera and self.active_camera == nil then
-                _skipped_cutscene_system = self
-                _post_skip_guard_remaining = _policy274.POST_INTRO_GUARD_SECONDS
+                _skipwindow.note_skip_executed(_sw_state, self, pre_skip_identity, _sw_now)
+                _sw_last_armed_system = self
+                -- The window now owns every post-skip fade; a stale unconsumed
+                -- one-shot must not leak into a later cutscene's legitimate fade.
+                _skip_next_fade = false
                 _trace257(self, "guard_armed", {
                     disposition = "post_skip_guard",
                     skip_next = _skip_next_fade,
@@ -441,7 +505,8 @@ if CutsceneSystem then
                     on_skip = self.event_on_skip,
                     auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
                 })
-                _printf("[gut:cutscene] post-skip camera guard ARMED | level=%s", _level_key())
+                _printf("[gut:cutscene] post-skip camera guard ARMED (window grace=%ss cap=%ss) | level=%s",
+                    tostring(_skipwindow.GRACE_SECONDS), tostring(_skipwindow.MAX_WINDOW_SECONDS), _level_key())
             end
         end
         -- issue 274: force-unlock (scope-only) ONLY for exact mission intros. A
@@ -497,8 +562,24 @@ if CutsceneSystem then
     -- client's entire 7-mission log), so this camera-level line is what closes the
     -- client instrumentation blind spot.
     mod:hook(CutsceneSystem, "flow_cb_activate_cutscene_camera", function(func, self, camera_unit, transition_data, ingame_hud_enabled, letterbox_enabled)
+        -- ROUND 3 classification: while the skipped episode's window is live, a
+        -- camera activation with NO new identity visible (vanilla niled the skipped
+        -- event_on_skip at cutscene_system.lua:105, and stragglers never re-set it)
+        -- is a straggler of the SKIPPED cutscene - suppress it, order-independent
+        -- of the fade/camera sequence inside each straggler group. A DIFFERENT
+        -- non-nil identity proves a new cutscene instance (its logic node already
+        -- stored a fresh event_on_skip, cutscene_system.lua:183) - release + pass.
+        -- The window's rolling grace + hard cap bound the worst case, so a
+        -- legitimate later cutscene (the issue-274 dlc_dwarf_whaling ENDING,
+        -- minutes after the intro skip) always finds the window dead and passes.
+        -- NOTE (ROUND 3): the old #140 round-1 CAMERA-NODE one-shot fade-arm that
+        -- lived here is gone - by the time an intro identity is visible on this
+        -- system the deferred-skip PENDING window already swallows those fades,
+        -- and the pre-identity case is the issue-257 intro watch's job.
+        local verdict = _skipwindow.classify_camera(_sw_state, self, self.event_on_skip, _sw_now)
         _trace257(self, "camera_activate", {
-            disposition = _post_skip_guard_active(self) and "suppress_post_skip" or "pass_camera",
+            disposition = verdict == "suppress" and "suppress_post_skip"
+                or verdict == "released_pass" and "released_pass" or "pass_camera",
             skip_next = _skip_next_fade,
             guard = _post_skip_guard_active(self),
             active_camera = self.active_camera ~= nil,
@@ -507,29 +588,14 @@ if CutsceneSystem then
             letterbox = letterbox_enabled,
             auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
         })
-        -- #140 round 1 (Parting of the Waves = dlc_dwarf_whaling, NOT dlc_portals -
-        -- earlier docs had the level key wrong): the map's native
-        -- fade-in effect fires around THIS earlier camera node, before
-        -- flow_cb_activate_cutscene_logic arms _skip_next_fade -- so the fade-in
-        -- still played for a couple seconds after an auto-skip. Mirror Aussiemon
-        -- SkipCutscenes.lua:8 and RE-ARM the fade-swallow here when auto-skip is
-        -- active and this cutscene will actually skip: outside CW always
-        -- (not _gut_in_deus() is true), in CW only when the level's own
-        -- script_data.skippable_cutscenes is true -- so a CW author-LOCKED boss
-        -- cinematic that is intentionally played through keeps its fade intact.
-        do
-            local in_deus = _gut_in_deus()
-            if _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto")
-               and _gut_cutscene_is_intro(self) then
-                _skip_next_fade = true
-                _printf("[gut:cutscene] CAMERA-NODE fade-arm (_skip_next_fade=true, #140) | level=%s in_deus=%s skippable=%s",
-                    _level_key(), tostring(in_deus), tostring(script_data and script_data.skippable_cutscenes))
-            end
-        end
-        if _post_skip_guard_active(self) then
-            _printf("[gut:cutscene] CAMERA-ACTIVATE suppressed (post-skip guard) | level=%s hud=%s letterbox=%s | %s",
+        if verdict == "suppress" then
+            _printf("[gut:cutscene] CAMERA-ACTIVATE suppressed (post-skip window) | level=%s hud=%s letterbox=%s | %s",
                 _level_key(), tostring(ingame_hud_enabled), tostring(letterbox_enabled), _cs_snapshot(self))
             return nil
+        end
+        if verdict == "released_pass" then
+            _printf("[gut:274] skip window released (new identity at camera node: %s) | level=%s",
+                tostring(self.event_on_skip), _level_key())
         end
         local result = func(self, camera_unit, transition_data, ingame_hud_enabled, letterbox_enabled)
         _printf("[gut:cutscene] CAMERA-ACTIVATE | level=%s hud=%s letterbox=%s | %s",
@@ -542,6 +608,7 @@ if CutsceneSystem then
     -- (skip_pressed -> :107) and the natural flow-driven end, host and client alike.
     -- PRE-FLIGHT dup check 2026-07-01: no other gut hook on this method.
     mod:hook_safe(CutsceneSystem, "flow_cb_deactivate_cutscene_cameras", function(self)
+        _skipwindow.note_contact(_sw_state, self, _sw_now)
         _trace257(self, "camera_deactivate", {
             disposition = "observed",
             skip_next = _skip_next_fade,
@@ -576,11 +643,13 @@ mod.update = function(dt)
     if _gut_cutscene_prev_update then _gut_cutscene_prev_update(dt) end
     -- [gut:frametime] heartbeat. dt is seconds; VMF calls mod.update every frame.
     local d = dt or 0
-    if _skipped_cutscene_system then
-        _post_skip_guard_remaining = _policy274.tick_guard(_post_skip_guard_remaining, d)
-        if _post_skip_guard_remaining <= 0 then
-            _clear_post_skip_guard("timeout")
-        end
+    -- ROUND 3: the skip-window deadlines are absolute against this monotonic
+    -- clock (no per-tick decay); advance it, then emit the one-shot expiry log
+    -- for the last armed system so the trace still shows when a window closed.
+    _sw_now = _sw_now + d
+    if _sw_last_armed_system and not _post_skip_guard_active(_sw_last_armed_system) then
+        _printf("[gut:274] post-skip window closed (deadline or release) | level=%s", _level_key())
+        _sw_last_armed_system = nil
     end
     local ms = d * 1000
     _ft_frames = _ft_frames + 1
@@ -703,14 +772,29 @@ _rt_checks[#_rt_checks + 1] = {
 _rt_checks[#_rt_checks + 1] = {
     name = "issue274_post_intro_guard_bounded",
     fn = function()
-        if _policy274.POST_INTRO_GUARD_SECONDS <= 0
-            or _policy274.POST_INTRO_GUARD_SECONDS > 15 then
-            return "issue 274 regression: post-intro camera guard is unbounded"
+        -- ROUND 3: the guard is the _gut_cutscene_skipwindow episode window.
+        -- Bounds: rolling grace positive, hard cap covers >= one grace and stays
+        -- finite (dlc_dwarf_whaling's skipped timeline runs ~35.5 s; anything
+        -- past the cap must pass so a legitimate later cutscene is never eaten).
+        if _skipwindow.GRACE_SECONDS <= 0
+            or _skipwindow.MAX_WINDOW_SECONDS < _skipwindow.GRACE_SECONDS
+            or _skipwindow.MAX_WINDOW_SECONDS > 60 then
+            return "issue 274 regression: skip window bounds drifted (grace="
+                .. tostring(_skipwindow.GRACE_SECONDS) .. " cap="
+                .. tostring(_skipwindow.MAX_WINDOW_SECONDS) .. ")"
         end
-        local owner = {}
-        if _policy274.guard_is_active(owner, owner,
-            _policy274.tick_guard(_policy274.POST_INTRO_GUARD_SECONDS, 15)) then
-            return "issue 274 regression: post-intro camera guard survives its deadline"
+        local state, sys = _skipwindow.new(), {}
+        _skipwindow.note_skip_executed(state, sys, "cs_01_skip", 0)
+        if not _skipwindow.window_active(state, sys, 1) then
+            return "issue 274 regression: skip window does not arm on a proven skip"
+        end
+        local release = _skipwindow.note_logic_activate(state, sys, "cs_02_skip", 2)
+        if release ~= "released" or _skipwindow.window_active(state, sys, 2) then
+            return "issue 274 regression: a new cutscene episode does not release the window"
+        end
+        _skipwindow.note_skip_executed(state, sys, "cs_01_skip", 10)
+        if _skipwindow.window_active(state, sys, 10 + _skipwindow.MAX_WINDOW_SECONDS + 1) then
+            return "issue 274 regression: skip window survives its hard cap"
         end
     end,
 }

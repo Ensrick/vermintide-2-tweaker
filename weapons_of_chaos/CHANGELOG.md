@@ -1,5 +1,57 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.36-dev (2026-07-19) - author-baked pose, 1P scale split, speed to -17 percent [untested]
+
+- Baked the author-verified pose from the /woc_pose session: rotation x is now -180 total ({-180, -90, -90}), offset unchanged {0, 0, -0.3}, third-person scale 90. First person now runs its own scale 80 (author: 0.8 for first person) via a new per-perspective TRANSFORM_1P that shares offset/rotation tables with the 3P spec, so /woc_pose keeps moving both perspectives together; the command gains an optional eighth argument for the 1P scale (/woc_pose x y z rx ry rz scale_3p scale_1p).
+- Blightreaper speed penalty reduced from -25 percent to -17 percent (SPEED_MULTIPLIER 0.75 -> 0.83; derived anim_time_scale pins updated).
+
+## 0.1.35-dev (2026-07-19) - fix invisible sword: absolute scale vs native-100 baseline [untested]
+
+- The render node's native scale is 100 (import unit compensation); the canonical absolute scale of 0.9 shrank the sword 111x into invisibility once the 0.1.33 constructor fix made pose writes actually land. Canonical scale corrected to 90 (the intended 10 percent reduction on the real baseline). Offset and rotation unchanged pending live tuning via /woc_pose (issue 712).
+
+## 0.1.34-dev (2026-07-19) - issue 712 live pose tuner [untested]
+
+- The 0.1.33-dev log proves the transform machinery now applies and retains (initial-retained / next-frame-retained, before != after on owner 1p/3p and preview) - so the remaining defect is the authored NUMBERS, not the plumbing. New chat command `/woc_pose x y z rx ry rz [scale]` (meters, degrees) live-tunes the Blightreaper pose on every tracked unit instantly; `/woc_pose_reset` restores the shipped canonical values. Each call echoes a copy-paste bake line and logs a `[WOC:712] tuner set` receipt.
+- Retargeting rebuilds each unit's pose from its STORED spawn baseline (new `retarget` method on the durable owner), so repeated tuning calls never compound the offset. Future spawns pick the tuned values up automatically for the rest of the session; values reset to canonical on restart until baked.
+
+## 0.1.33-dev (2026-07-18) - #712 transform root cause + #613 husk/caller evidence [untested]
+
+- #712 root cause found in tonight's log sweep: every `[WOC:712] transform
+  proof` line carried `write={mode=atomic-local-pose ok=false
+  error=invalid-position}` with before==after. Retail Stingray's `Vector3` is
+  a callable table, so the shared appearance library's
+  `type(vector_new) == "function"` constructor guard rejected every
+  position/scale construction and `Unit.set_local_pose` was never called
+  (rotation alone landed in 0.1.24-dev because
+  `Quaternion.from_euler_angles_xyz` is a genuine function member). WOC now
+  injects a policy-built api (`_woc_appearance_policy.appearance_api`) that
+  wraps the constructor in a plain Lua closure; the shared library copy stays
+  byte-identical to canonical. The probe remains; expected flip:
+  `initial-retained` / `drift-repaired` with `write={... ok=true ...}` and
+  before~=after on every surface. Related umbrella: issue 747.
+- #613 husk slice: `returned_1p={nil-or-dead}` on husk spawns was a probe
+  misread, not a spawn defect. Vanilla returns `weapon_3p, ammo_3p` only when
+  `owner_unit_1p` is nil (gear_utils.lua:276) and husks always pass a nil 1P
+  rig (simple_husk_inventory_extension.lua:319). The spawn-identity probe now
+  prints `returned_1p={not-expected vanilla-3p-only gear_utils.lua:276}` for
+  that source contract and reserves `nil-or-dead` for owner spawns that truly
+  owe a live 1P unit. All four spawn returns were already captured and passed
+  through unchanged.
+- issue 278 evidence: the nil-key `SKIPPING loadout sync (fail-safe)` line
+  (79 hits across the 2026-07-18 logs) now also names its caller: a
+  `[WOC:278] skip caller` line with debug.traceback capped to 3 frames,
+  deduplicated per (item shape, slot, frames), hard-capped at 8 lines per
+  session, printf log-only. The fail-safe skip itself is unchanged and stays
+  load-bearing (a nil item would crash vanilla at loadout_utils.lua:21).
+
+Verify (solo ok, co-op strengthens): confirm `[WOC] v0.1.33-dev loaded` in the
+newest log, equip Blightreaper, inspect 1P, owner 3P, inventory character
+preview, item preview, then enter a mission and swap away/back. The blade must
+sit rotated -90/-90/-90, scaled 0.9, 0.3 lower on Z, and every `[WOC:712]
+transform proof` line must report `ok=true` with a changed after-pose. Attach
+the newest log so the `[WOC:278] skip caller` frames can name the nil-key
+source.
+
 ## 0.1.32-dev (2026-07-18) - #712 Blightreaper transform census [diagnostics-armed]
 
 - Added automatic bounded `[WOC:712] unit census` evidence on the first

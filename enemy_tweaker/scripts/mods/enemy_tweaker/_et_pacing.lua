@@ -426,26 +426,52 @@ rt_register("spawn_pacing_hook_targets_present", function()
             missing[#missing+1] = "PacingSettings.default.mini_patrol.only_spawn_below_intensity (path changed)"
         end
     end
-    -- Runtime clone, asserted only where the CURRENT context guarantees it.
-    -- CurrentPacing always EXISTS: false at boot (conflict_settings.lua:5539),
-    -- a table after any director refresh (keep included) - rawget nil means
-    -- the global itself was renamed. horde_frequency is present in every
-    -- PacingSettings entry INCLUDING disabled (conflict_settings.lua:3615);
-    -- mini_patrol only exists when pacing is enabled, so that assert is gated
-    -- on CP.disabled being falsy (mission director) - vanilla itself couples
-    -- enabled pacing to mini_patrol via the unguarded read at
-    -- conflict_director.lua:1379, so a FAIL inside that gate is a true positive.
+    -- Runtime clone, context-free part only. CurrentPacing always EXISTS:
+    -- false at boot (conflict_settings.lua:5539), a table after any director
+    -- refresh (keep included) - rawget nil means the global itself was
+    -- renamed. horde_frequency is present in every PacingSettings entry
+    -- INCLUDING disabled (conflict_settings.lua:3615). The mini_patrol clone
+    -- path is context-DEPENDENT (exists only under an enabled mission pacing
+    -- preset) and lives in the precondition-gated check below (#512).
     local CP = rawget(_G, "CurrentPacing")
     if CP == nil then
         missing[#missing+1] = "CurrentPacing global (renamed/removed)"
     elseif type(CP) == "table" then
         if type(CP.horde_frequency) ~= "table" then missing[#missing+1] = "CurrentPacing.horde_frequency (field type changed)" end
-        if not CP.disabled and (type(CP.mini_patrol) ~= "table" or type(CP.mini_patrol.only_spawn_below_intensity) ~= "number") then
-            missing[#missing+1] = "CurrentPacing.mini_patrol.only_spawn_below_intensity (path changed)"
-        end
     end
     if #missing > 0 then return "spawn-pacing surface missing: " .. table.concat(missing, ", ") end
 end)
+
+-- #512: the runtime-clone half of the pacing-path lock, split out behind a
+-- harness context precondition. CurrentPacing.mini_patrol exists ONLY after a
+-- mission conflict director clones an enabled pacing preset
+-- (refresh_conflict_director_patches, conflict_director.lua:878); the keep
+-- runs PacingSettings.disabled (conflict_settings.lua:3603), which
+-- legitimately has NO mini_patrol block, so a keep run now reports an
+-- explicit "context absent" SKIP instead of the pre-0.7.36 false FAIL. When
+-- the context IS live, vanilla couples enabled pacing to mini_patrol via the
+-- unguarded read in update_mini_patrol (conflict_director.lua:1379), so any
+-- FAIL here is a true positive: our update_mini_patrol hook mutates
+-- mini_patrol.only_spawn_below_intensity (conflict_settings.lua:3028) and a
+-- rename/removal of that path silently no-ops the ambients slider.
+rt_register("spawn_pacing_mini_patrol_runtime_path", function()
+    local CP = rawget(_G, "CurrentPacing")
+    if type(CP) ~= "table" then
+        return "CurrentPacing no longer a table (changed between precondition and check?)"
+    end
+    if type(CP.mini_patrol) ~= "table"
+            or type(CP.mini_patrol.only_spawn_below_intensity) ~= "number" then
+        return "CurrentPacing.mini_patrol.only_spawn_below_intensity (path changed)"
+    end
+end, {
+    precondition = function()
+        local CP = rawget(_G, "CurrentPacing")
+        if type(CP) ~= "table" or CP.disabled then
+            return false, "no live mission conflict director pacing (keep runs the disabled preset)"
+        end
+        return true
+    end,
+})
 
 rt_register("double_freeze_guard_wired", function()
     -- (#213) The engine "Tried to freeze unit twice in the same frame" ERROR under raised

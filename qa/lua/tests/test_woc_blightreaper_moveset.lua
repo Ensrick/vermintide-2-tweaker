@@ -119,8 +119,8 @@ return function(H, repo_root)
 		H.truthy(installed ~= donor)
 		H.deep_equal(donor, snapshot, "donor template changed")
 		H.equal(installed.name, moveset.TEMPLATE)
-		H.equal(installed.actions.action_one.default.anim_time_scale, 1.5)
-		H.equal(installed.actions.action_one.light_attack.anim_time_scale, 0.75)
+		H.equal(installed.actions.action_one.default.anim_time_scale, 1.66)
+		H.equal(installed.actions.action_one.light_attack.anim_time_scale, 0.83)
 		H.equal(installed.actions.action_one.default.anim_event,
 			"attack_swing_charge_left_diagonal")
 		H.equal(installed.actions.action_one.light_attack.anim_event,

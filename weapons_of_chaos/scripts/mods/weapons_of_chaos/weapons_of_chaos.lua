@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.32-dev"
+local MOD_VERSION = "0.1.36-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -183,7 +183,33 @@ local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_p
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
-local _weapon_appearance = _appearance_lib.new()
+-- Issue 712: the shared library's default api stores the raw `Vector3` global
+-- as its constructor and guards it with `type(...) == "function"`. Retail
+-- Stingray's `Vector3` is a callable TABLE, so that guard failed and every
+-- position/scale channel silently no-oped ("invalid-position" in each
+-- `[WOC:712] transform proof write={...}` report; Unit.set_local_pose was
+-- never reached). Inject the policy-built api whose vector constructor is a
+-- plain Lua closure. The shared library copy itself stays canonical.
+local _weapon_appearance = _appearance_lib.new(_appearance.appearance_api(_G))
+_rt_register("issue712_appearance_vector_ctor_wrapped", function()
+	local api = _appearance.appearance_api(_G)
+	if api == nil then return "skip: Vector3 global unavailable" end
+	if type(api.vector_new) ~= "function" then
+		return "appearance_api did not wrap the Vector3 constructor in a function"
+	end
+	local ok, vec = pcall(api.vector_new, 1, 2, 3)
+	if not ok or vec == nil then
+		return "wrapped Vector3 constructor rejected plain numbers: " .. tostring(vec)
+	end
+	if type(api.vector_to_elements) ~= "function" then
+		return "vector_to_elements member missing from injected api"
+	end
+	local ok_elems, x, y, z = pcall(api.vector_to_elements, vec)
+	if not ok_elems or x ~= 1 or y ~= 2 or z ~= 3 then
+		return string.format("constructed vector did not roundtrip (ok=%s %s,%s,%s)",
+			tostring(ok_elems), tostring(x), tostring(y), tostring(z))
+	end
+end)
 local _transform_diag_budget = 32
 local _appearance_diag_budget = 32
 local function _appearance_diag(format, ...)
@@ -272,6 +298,77 @@ local _transform_owner = _durable_transform_lib.new({
 	end,
 })
 local _wa = _pulse_lib.new(_appearance, _transform_owner)
+
+-- Issue 712 live pose tuner. The canonical numbers in M.TRANSFORM are a
+-- prescription that has never been sight-verified; this command lets the
+-- author dial the pose on the live weapon and paste the result back for
+-- baking. Mutates the shared TRANSFORM table in place (future spawns pick it
+-- up at apply time) and retargets every tracked unit from its stored
+-- baseline so repeated calls never compound the offset.
+local _POSE_CANONICAL = {
+	scale = { _appearance.TRANSFORM.scale[1], _appearance.TRANSFORM.scale[2],
+		_appearance.TRANSFORM.scale[3] },
+	scale_1p = _appearance.TRANSFORM_1P and _appearance.TRANSFORM_1P.scale[1]
+		or _appearance.TRANSFORM.scale[1],
+	offset = { _appearance.TRANSFORM.offset[1], _appearance.TRANSFORM.offset[2],
+		_appearance.TRANSFORM.offset[3] },
+	rotation = { _appearance.TRANSFORM.rotation[1],
+		_appearance.TRANSFORM.rotation[2], _appearance.TRANSFORM.rotation[3] },
+}
+local function _pose_set(x, y, z, rx, ry, rz, scale, scale_1p)
+	local t = _appearance.TRANSFORM
+	local t1p = _appearance.TRANSFORM_1P
+	t.offset[1], t.offset[2], t.offset[3] = x, y, z
+	t.rotation[1], t.rotation[2], t.rotation[3] = rx, ry, rz
+	if scale then t.scale[1], t.scale[2], t.scale[3] = scale, scale, scale end
+	if scale_1p and t1p then
+		t1p.scale[1], t1p.scale[2], t1p.scale[3] = scale_1p, scale_1p, scale_1p
+	end
+	local retargeted, live = _transform_owner:retarget({
+		scale = t.scale,
+		scale_1p = t1p and t1p.scale or nil,
+		offset = t.offset,
+		rotation = t.rotation,
+	})
+	mod:echo("[WOC pose] offset={%.3f, %.3f, %.3f} rotation={%.1f, %.1f, %.1f} scale_3p=%.3f scale_1p=%.3f -- retargeted %d of %d live unit(s)",
+		t.offset[1], t.offset[2], t.offset[3],
+		t.rotation[1], t.rotation[2], t.rotation[3], t.scale[1],
+		t1p and t1p.scale[1] or t.scale[1], retargeted, live)
+	mod:echo("[WOC pose] bake line: /woc_pose %g %g %g %g %g %g %g %g",
+		t.offset[1], t.offset[2], t.offset[3],
+		t.rotation[1], t.rotation[2], t.rotation[3], t.scale[1],
+		t1p and t1p.scale[1] or t.scale[1])
+	pcall(printf, "[WOC:712] tuner set offset={%f,%f,%f} rotation={%f,%f,%f} scale_3p=%f scale_1p=%f retargeted=%d live=%d",
+		t.offset[1], t.offset[2], t.offset[3],
+		t.rotation[1], t.rotation[2], t.rotation[3], t.scale[1],
+		t1p and t1p.scale[1] or t.scale[1], retargeted, live)
+end
+mod:command("woc_pose",
+	"Live-tune the Blightreaper pose: /woc_pose x y z rx ry rz [scale_3p] [scale_1p] (meters, degrees)",
+	function(x, y, z, rx, ry, rz, scale, scale_1p)
+		local nx, ny, nz = tonumber(x), tonumber(y), tonumber(z)
+		local nrx, nry, nrz = tonumber(rx), tonumber(ry), tonumber(rz)
+		local nscale = scale ~= nil and tonumber(scale) or nil
+		local nscale_1p = scale_1p ~= nil and tonumber(scale_1p) or nil
+		if not (nx and ny and nz and nrx and nry and nrz)
+				or (scale ~= nil and not nscale)
+				or (scale_1p ~= nil and not nscale_1p) then
+			local t = _appearance.TRANSFORM
+			local t1p = _appearance.TRANSFORM_1P
+			mod:echo("[WOC pose] usage: /woc_pose x y z rx ry rz [scale_3p] [scale_1p] -- current: /woc_pose %g %g %g %g %g %g %g %g",
+				t.offset[1], t.offset[2], t.offset[3],
+				t.rotation[1], t.rotation[2], t.rotation[3], t.scale[1],
+				t1p and t1p.scale[1] or t.scale[1])
+			return
+		end
+		_pose_set(nx, ny, nz, nrx, nry, nrz, nscale, nscale_1p)
+	end)
+mod:command("woc_pose_reset", "Restore the Blightreaper pose to the shipped canonical values", function()
+	_pose_set(_POSE_CANONICAL.offset[1], _POSE_CANONICAL.offset[2],
+		_POSE_CANONICAL.offset[3], _POSE_CANONICAL.rotation[1],
+		_POSE_CANONICAL.rotation[2], _POSE_CANONICAL.rotation[3],
+		_POSE_CANONICAL.scale[1], _POSE_CANONICAL.scale_1p)
+end)
 local _audio = type(_audio_lib) == "table" and type(_audio_lib.new) == "function"
 	and _audio_lib.new() or {
 		observe_spawn = function() end,
@@ -1570,16 +1667,24 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	if is_blightreaper then
 		local surface = _durable_transform_lib.classify_surface(
 			owner_unit_1p, owner_unit_3p)
+		-- Issue 613: vanilla returns weapon_3p, ammo_3p ONLY when owner_unit_1p
+		-- is nil (gear_utils.lua:276); husks always pass a nil 1P rig
+		-- (simple_husk_inventory_extension.lua:319). Report the absent husk /
+		-- preview 1P unit as the source contract; reserve "nil-or-dead" for an
+		-- owner spawn (gear_utils.lua:273) that really owes a live 1P unit.
+		local expects_1p = _durable_transform_lib.expects_first_person_unit(owner_unit_1p)
 		_appearance_diag(
 			"[WOC:613] spawn identity surface=%s requested_1p=%s requested_3p=%s returned_1p={%s} returned_3p={%s}",
 			tostring(surface), tostring(item_units.right_hand_unit),
-			tostring(_appearance.UNIT_3P), _returned_unit_identity(unit_1p),
+			tostring(_appearance.UNIT_3P),
+			(expects_1p or unit_1p ~= nil) and _returned_unit_identity(unit_1p)
+				or "not-expected vanilla-3p-only gear_utils.lua:276",
 			_returned_unit_identity(unit_3p))
 		_log_unit_shape_once(surface, "3p", unit_3p)
-		_wa.apply(unit_3p, _appearance.TRANSFORM, "3p", surface)
+		_wa.apply(unit_3p, _appearance.transform_for("3p"), "3p", surface)
 		if unit_1p then
 			_log_unit_shape_once(surface, "1p", unit_1p)
-			_wa.apply(unit_1p, _appearance.TRANSFORM, "1p", surface)
+			_wa.apply(unit_1p, _appearance.transform_for("1p"), "1p", surface)
 		end
 		_audio.observe_spawn(unit_3p, unit_1p, owner_unit_1p, owner_unit_3p)
 	end
@@ -1657,6 +1762,36 @@ mod.on_unload = function()
 	_audio.stop_all("mod-unload")
 end
 
+-- Issue 278/613: the fail-safe skip below fires with `key nil` many times per
+-- session (79 hits across the 24 logs of 2026-07-18) and the caller is still
+-- unnamed. A nil item would also crash vanilla (`item.key` deref,
+-- loadout_utils.lua:21), so the skip stays; this probe only NAMES the source.
+-- debug.traceback capped to 3 caller frames, deduplicated per (shape, slot,
+-- frames), hard-capped at 8 lines per session, printf log-only.
+local _skip_caller_seen = {}
+local _skip_caller_budget = 8
+local function _log_skip_caller(item, slot_name)
+	if _skip_caller_budget <= 0 then return end
+	local frames = "traceback-unavailable"
+	local dbg = rawget(_G, "debug")
+	if type(dbg) == "table" and type(dbg.traceback) == "function"
+			and type(_wire_policy.caller_frames) == "function" then
+		local ok, trace = pcall(dbg.traceback, "", 2)
+		local named = ok and _wire_policy.caller_frames(trace,
+			{ "weapons_of_chaos", "vmf/modules", "[C]" }, 3)
+		if named then frames = named end
+	end
+	local shape = item == nil and "nil-item"
+		or type(item) ~= "table" and ("non-table-" .. type(item))
+		or (item.key == nil and "table-without-key" or "key=" .. tostring(item.key))
+	local dedup = shape .. "|" .. tostring(slot_name) .. "|" .. frames
+	if _skip_caller_seen[dedup] then return end
+	_skip_caller_seen[dedup] = true
+	_skip_caller_budget = _skip_caller_budget - 1
+	pcall(printf, "[WOC:278] skip caller item=%s slot=%s frames=%s chat=false",
+		shape, tostring(slot_name), frames)
+end
+
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
 		local is_blightreaper = _power.is_relic(item)
@@ -1675,6 +1810,7 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 			-- Mirrors CWV's skip branch (character_weapon_variants.lua:10183-10188).
 			printf("[WOC:278] base '%s' unresolvable for woc_ key %s; SKIPPING loadout sync (fail-safe, issue 422)",
 				BASE_WEAPON, tostring(item and item.key))
+			_log_skip_caller(item, slot_name)
 			return
 		end
 		if send_item ~= item then

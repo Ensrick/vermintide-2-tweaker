@@ -455,10 +455,23 @@ local function make_cw_pickup_settings(vanilla)
             potions            = 0,
         }
     end
-    return {
-        default = { primary = primary(), secondary = secondary() },
-        normal  = { primary = primary(), secondary = secondary() },
-    }
+    -- issue 251 (v0.7.298-dev): cover EVERY reachable difficulty key, not just
+    -- default+normal. Vanilla populate resolves `level_pickup_settings[difficulty]`
+    -- and only falls back to `.default` with an engine warning when the key is
+    -- absent (pickup_system.lua:409-419); a CW run at Cataclysm therefore logged
+    -- "[pickups:mission_start] NO MATCH for current difficulty='cataclysm'" on
+    -- injected missions (host log, ground_zero_nurgle) and rode the fallback for
+    -- every spawn decision. Mirror the canonical difficulty array
+    -- (difficulty_settings.lua:402-411, minus versus_base which Deus/Adventure
+    -- never runs); cataclysm_2/_3 are reachable via ct's progressive difficulty.
+    -- Each key gets FRESH primary()/secondary() tables because the entry file's
+    -- populate_pickups hook mutates per-difficulty entries in place (cap
+    -- overrides) and restores them per-entry -- shared tables would alias.
+    local out = { default = { primary = primary(), secondary = secondary() } }
+    for _, dk in ipairs({ "normal", "hard", "harder", "hardest", "cataclysm", "cataclysm_2", "cataclysm_3" }) do
+        out[dk] = { primary = primary(), secondary = secondary() }
+    end
+    return out
 end
 
 local function make_altar_distribution()

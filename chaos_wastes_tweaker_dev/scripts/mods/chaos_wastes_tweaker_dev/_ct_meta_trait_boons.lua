@@ -51,6 +51,12 @@ local _injected_dormants = registry.injected_dormants
 local register_buff_in_network_lookup = registry.register_buff_in_network_lookup
 local register_power_up_in_network_lookup = registry.register_power_up_in_network_lookup
 
+-- issues 249/256/289 (v0.7.298-dev): engine-free grant/clamp policy kernel.
+-- Pure module (loadfile-safe) so qa/lua tests drive the exact shipped logic.
+local AmmoGuardCore = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_ammo_guard_core")
+CT_META_AMMO_SERVER_AUTH_MARKER = AmmoGuardCore.MARKER
+mod._ct_ammo_guard_core = AmmoGuardCore
+
 local sync_host_dependent_state
 -- ============================================================
 -- Mod Boons: per-boon scaling (v0.7.30-alpha)
@@ -183,9 +189,47 @@ local function _make_meta_proc(stack_name)
         -- both together close the door. See doc-block near MOD_VERSION.
         local stacks_target = math.min(num_boons, CT_META_AMMO_MAX_STACKS)
         local num_existing = buff_extension:num_buff_stacks(stack_key)
-        for _ = num_existing + 1, stacks_target do
-            buff_extension:add_buff(stack_name)
+        -- v0.7.298-dev (issues 249/289): SERVER-AUTHORITATIVE stack grant. The
+        -- old body added stacks through the LOCAL extension path on whichever
+        -- peer ran the proc; a client's stacks never activated ([ct:289]
+        -- evidence: client effective=5 active=0 while the host tracked
+        -- correctly), so the client's capacity buff (total_ammo) never applied
+        -- and its HUD lagged the real value (issue 249, 36 vs 62). Vanilla
+        -- triggers on_boon_granted on the SERVER for every gainer - locally at
+        -- grant [src: deus_run_controller.lua:1152-1160] and in the host's
+        -- rpc_deus_add_power_ups receiver for client gainers [src:
+        -- deus_run_controller.lua:1397-1404] - so the host proc is the one
+        -- authoritative writer: BuffSystem.add_buff(unit, name, unit, true)
+        -- adds locally AND broadcasts rpc_add_buff to every client, and
+        -- re-sends server-controlled buffs on hot-join [src:
+        -- buff_system.lua:277-311, :66-97]. The client-side apply_buff_func
+        -- (ct_meta_ammo_refresh_capacity) then runs on the replicated add, so
+        -- the client's own _max_ammo recomputes and the issue 256 clamp fires
+        -- on every peer. Wire safety: the stack template name is a MODDED
+        -- NetworkLookup index, so the networked path is gated on the issue 426
+        -- parity beacon (mod._ct_wire_safe); unconfirmed parity degrades to
+        -- the local host-only add (zero wire exposure). Client peers never
+        -- add - the replicated adds are their stacks (grant_plan
+        -- "defer_to_server"). Parity-loss cleanup: the stack names are
+        -- ct_-prefixed, so the issue 426 strip's server-controlled-buff
+        -- removal covers them.
+        local is_server = Managers.player and Managers.player.is_server and true or false
+        local wire_safe = mod._ct_wire_safe and mod._ct_wire_safe() == true
+        local mode, n = AmmoGuardCore.grant_plan(is_server, wire_safe, num_existing, stacks_target)
+        if mode == "networked" then
+            local buff_system = Managers.state and Managers.state.entity
+                and Managers.state.entity:system("buff_system")
+            if buff_system then
+                for _ = 1, n do
+                    buff_system:add_buff(unit, stack_name, unit, true)
+                end
+            else
+                for _ = 1, n do buff_extension:add_buff(stack_name) end
+            end
+        elseif mode == "local" then
+            for _ = 1, n do buff_extension:add_buff(stack_name) end
         end
+        -- mode "defer_to_server" / "none": nothing to do on this peer.
     end
 end
 
@@ -323,26 +367,22 @@ do
     -- buff applies locally; AmmoSystem carries only a [0,1] fraction over the wire, which
     -- flows through the already-clamping `add_ammo` path), so the seam clamp covers host
     -- and client alike. Fires a `[ct:256]` printf ONLY when a clamp actually engages.
+    -- v0.7.298-dev: clamp arithmetic extracted to _ct_ammo_guard_core.clamp_value
+    -- (pure, offline-tested); this wrapper owns the field writes + [ct:256] printf.
     local function _ct_clamp_current_ammo_256(ax, seam)
         if type(ax) ~= "table" then return end
-        local max_ammo = (type(ax._max_ammo) == "number") and ax._max_ammo or math.huge
-        local reserve = ax._available_ammo
-        if type(reserve) == "number" then
-            local clamped = math.max(0, math.min(reserve, max_ammo))
-            if clamped ~= reserve then
-                ax._available_ammo = clamped
-                pcall(printf, "[ct:256] clamped reserve ammo %s -> %d (max=%s seam=%s item=%s) issue 256",
-                    tostring(reserve), clamped, tostring(max_ammo), tostring(seam), tostring(ax.item_name))
-            end
+        local max_ammo = ax._max_ammo
+        local reserve, r_changed = AmmoGuardCore.clamp_value(max_ammo, ax._available_ammo)
+        if r_changed then
+            pcall(printf, "[ct:256] clamped reserve ammo %s -> %d (max=%s seam=%s item=%s) issue 256",
+                tostring(ax._available_ammo), reserve, tostring(max_ammo), tostring(seam), tostring(ax.item_name))
+            ax._available_ammo = reserve
         end
-        local current = ax._current_ammo
-        if type(current) == "number" then
-            local clamped = math.max(0, math.min(current, max_ammo))
-            if clamped ~= current then
-                ax._current_ammo = clamped
-                pcall(printf, "[ct:256] clamped clip ammo %s -> %d (max=%s seam=%s item=%s) issue 256",
-                    tostring(current), clamped, tostring(max_ammo), tostring(seam), tostring(ax.item_name))
-            end
+        local current, c_changed = AmmoGuardCore.clamp_value(max_ammo, ax._current_ammo)
+        if c_changed then
+            pcall(printf, "[ct:256] clamped clip ammo %s -> %d (max=%s seam=%s item=%s) issue 256",
+                tostring(ax._current_ammo), current, tostring(max_ammo), tostring(seam), tostring(ax.item_name))
+            ax._current_ammo = current
         end
     end
     mod._ct_clamp_current_ammo_256 = _ct_clamp_current_ammo_256

@@ -1640,4 +1640,82 @@ _rt_register("chunk_sends_paced_not_bursted", function()
         return "PACED-SEND REGRESSION: _ct_chunk_send_queue FIFO table missing — paced send queue dismantled"
     end
 end)
+
+_rt_register("ct_meta_ammo_server_auth_grant_249", function()
+    -- v0.7.298-dev (issues 249/289): the meta-boon stack grant must be
+    -- server-authoritative (host adds via BuffSystem server-controlled path,
+    -- clients defer to replication) and parity-gated (issue 426). Drives the
+    -- pure grant_plan kernel through the exact decision matrix.
+    local core = mod._ct_ammo_guard_core
+    if type(core) ~= "table" or type(core.grant_plan) ~= "function" then
+        return "#249 REGRESSION: mod._ct_ammo_guard_core.grant_plan missing (server-auth grant reverted?)"
+    end
+    if CT_META_AMMO_SERVER_AUTH_MARKER ~= "meta_ammo:server_authoritative_stack_grant_v0.7.298" then
+        return "#249 REGRESSION: CT_META_AMMO_SERVER_AUTH_MARKER missing/mismatch; got " .. tostring(CT_META_AMMO_SERVER_AUTH_MARKER)
+    end
+    if type(mod._ct_wire_safe) ~= "function" then
+        return "#249 REGRESSION: mod._ct_wire_safe parity gate missing (issue 426 beacon not installed)"
+    end
+    local cases = {
+        -- is_server, wire_safe, existing, target, want_mode, want_n
+        { true,  true,  0, 5, "networked", 5 },
+        { true,  true,  3, 5, "networked", 2 },
+        { true,  false, 0, 5, "local",     5 },
+        { false, true,  0, 5, "defer_to_server", 0 },
+        { false, false, 2, 5, "defer_to_server", 0 },
+        { true,  true,  5, 5, "none", 0 },
+        { true,  true,  7, 5, "none", 0 },
+        { false, true,  5, 5, "none", 0 },
+    }
+    for i, c in ipairs(cases) do
+        local mode, n = core.grant_plan(c[1], c[2], c[3], c[4])
+        if mode ~= c[5] or n ~= c[6] then
+            return string.format("#249 REGRESSION: grant_plan case %d gave (%s,%s), expected (%s,%d)",
+                i, tostring(mode), tostring(n), c[5], c[6])
+        end
+    end
+end)
+
+_rt_register("cursed_chest_reconcile_132", function()
+    -- v0.7.298-dev (issues 132/60): the settled chest reconcile must exist
+    -- (prune-side cross-path cap) with its pickup-path ledger feed, and the
+    -- pure planner must never prune below cap, outside the pickup set, or on a
+    -- non-prunable (non-WAITING) chest.
+    local m132 = mod._ct_chest132
+    if type(m132) ~= "table" or type(m132.pickup_chest) ~= "function" then
+        return "#132 REGRESSION: mod._ct_chest132.pickup_chest ledger feed missing"
+    end
+    if m132.RECONCILE_MARKER ~= "CT_CHEST132_RECONCILE_PRUNE_v0.7.298" then
+        return "#132 REGRESSION: RECONCILE_MARKER missing/mismatch; got " .. tostring(m132.RECONCILE_MARKER)
+    end
+    local core = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_chest_count_audit_core")
+    if type(core) ~= "table" or type(core.reconcile_plan) ~= "function" then
+        return "#132 REGRESSION: _ct_chest_count_audit_core.reconcile_plan missing"
+    end
+    local u1, u2, u3, u4, u5 = "u1", "u2", "u3", "u4", "u5"
+    local appearance = { u1, u2, u3, u4, u5 }
+    local pickup_set = { [u3] = true, [u4] = true, [u5] = true }
+    local alive = function() return true end
+    local waiting = function(u) return u ~= u5 end  -- u5 already activated
+    local plan = core.reconcile_plan(appearance, pickup_set, 3, alive, waiting)
+    if plan.alive_n ~= 5 or plan.over_n ~= 2 then
+        return string.format("#132 REGRESSION: plan counts wrong (alive=%s over=%s, expected 5/2)",
+            tostring(plan.alive_n), tostring(plan.over_n))
+    end
+    -- Excess 2: u5 blocked (non-WAITING), u4 + u3 prunable from the end.
+    if #plan.prune ~= 2 or plan.prune[1] ~= u4 or plan.prune[2] ~= u3 or plan.unprunable_n ~= 0 then
+        return string.format("#132 REGRESSION: prune selection wrong (%s,%s unprunable=%s; expected u4,u3/0)",
+            tostring(plan.prune[1]), tostring(plan.prune[2]), tostring(plan.unprunable_n))
+    end
+    -- Baked-only over-cap (nothing in the pickup set) must prune NOTHING.
+    local baked_plan = core.reconcile_plan({ u1, u2 }, {}, 1, alive, waiting)
+    if #baked_plan.prune ~= 0 or baked_plan.unprunable_n ~= 1 then
+        return "#132 REGRESSION: baked-only over-cap must be reported unprunable, never deleted"
+    end
+    -- Under-cap must be a full no-op plan.
+    local under = core.reconcile_plan({ u1 }, { [u1] = true }, 3, alive, waiting)
+    if #under.prune ~= 0 or under.over_n ~= 0 then
+        return "#132 REGRESSION: under-cap mission produced a prune plan"
+    end
+end)
 end

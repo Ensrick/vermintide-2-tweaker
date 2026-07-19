@@ -12,10 +12,17 @@ function M.new()
     return { system = nil, count = 0, capped = false }
 end
 
-function M.fade_disposition(name, skip_next_fade, post_skip_guard)
+-- Mirrors the production swallow precedence in _gut_cutscenes.lua's
+-- flow_cb_cutscene_effect (ROUND 3): one-shot, then deferred-skip pending,
+-- then the skipped episode's window, then the pre-identity intro watch.
+-- The two trailing args are optional so pre-ROUND-3 3-arg callers (and the
+-- offline probe test) keep their exact legacy behavior.
+function M.fade_disposition(name, skip_next_fade, post_skip_guard, pending_skip, intro_watch)
     if name ~= "fx_fade" then return "pass_nonfade" end
     if skip_next_fade then return "swallow_one_shot" end
+    if pending_skip then return "swallow_pending" end
     if post_skip_guard then return "swallow_post_skip" end
+    if intro_watch then return "swallow_intro_watch" end
     return "pass_fade"
 end
 
@@ -44,7 +51,10 @@ M.rt_checks = {
             end
             if M.fade_disposition("fx_fade", true, false) ~= "swallow_one_shot"
                 or M.fade_disposition("fx_fade", false, true) ~= "swallow_post_skip"
-                or M.fade_disposition("fx_fade", false, false) ~= "pass_fade" then
+                or M.fade_disposition("fx_fade", false, false) ~= "pass_fade"
+                or M.fade_disposition("fx_fade", false, false, true) ~= "swallow_pending"
+                or M.fade_disposition("fx_fade", false, false, false, true) ~= "swallow_intro_watch"
+                or M.fade_disposition("fx_fade", false, true, true) ~= "swallow_pending" then
                 return "#257 fade classifier no longer mirrors production precedence"
             end
         end,
