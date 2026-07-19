@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.460-dev"
+local MOD_VERSION = "0.1.461-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -3887,23 +3887,31 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- signal with can_wield evaluated lazily at wield time. Residency-guarded
 	-- (vanilla overrides via the resident-3p helper, mod-bundled custom meshes
 	-- via the custom-bundle predicate). No-op when nothing resolves.
-	if not owner_unit_1p and _om._husk_rekey_units then
-		if _om._husk_rekey_units(hand, item_data, item_units, owner_unit_3p, slot_name) then
-			-- #478 residency-gated defer: the resolved variant would hand vanilla a
-			-- NON-RESIDENT unit for this hand (a Deus-only base mesh outside Chaos
-			-- Wastes -- e.g. the Outrider keeping dr_deus_01's Trollhammer left-mount).
-			-- Skip the vanilla spawn entirely rather than error into an invisible
-			-- wield / async C-assert. Vanilla only reached this hand because
-			-- item_units[hand.."_hand_unit"] is truthy (simple_husk_inventory_extension
-			-- .lua:665/669), so returning all-nil is exactly a hand vanilla never spawned.
+	-- COMPLETE husk adapter, PRE-SPAWN half (issues 394/398/399/401/474/476/482/
+	-- 719 -- BUG_CLASSES class 27; body in the husk-path module, entry is
+	-- size-ratcheted). One call resolves the FULL variant definition: mesh re-key
+	-- with fail-closed residency (KEEP base identity when an override/donor
+	-- material is not resident -- the #474 MeshObject AV killer), pre-spawn
+	-- ammo-nil (#399), and clone-template identity for the spawn (#398).
+	-- `suppress` is the #478 residency-gated defer: vanilla only reached this
+	-- hand because item_units[hand.."_hand_unit"] is truthy
+	-- (simple_husk_inventory_extension.lua:665/669), so returning all-nil is
+	-- exactly a hand vanilla never spawned. The template override feeds ONLY the
+	-- vanilla call below; owner-path gates further down keep reading the
+	-- caller's item_template.
+	local husk_spawn_template
+	if not owner_unit_1p and _om._husk_adapter_pre then
+		local suppress, husk_tpl = _om._husk_adapter_pre(hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
+		if suppress then
 			if _om._probe_279_spawn then
 				_om._probe_279_spawn(hand, item_data, item_units, owner_unit_1p, owner_unit_3p, nil, "deferred_478")
 			end
 			return nil, nil, nil, nil
 		end
+		husk_spawn_template = husk_tpl
 	end
 	local v_w3p, v_a3p, v_w1p, v_a1p =
-		func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+		func(world, hand, husk_spawn_template or item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
 
 	-- issue 279 (2nd repro): capture the full ammo-attach decision at EVERY
 	-- spawn (owner + husk, both hands) for a no_ammo_unit variant's base. Self-gates
@@ -3913,34 +3921,21 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	end
 
 	-- ============================================================
-	-- Husk (remote-player) CWV apply  (issues 397/394/399)
+	-- Husk (remote-player) CWV apply -- COMPLETE adapter, POST-SPAWN half
 	-- ============================================================
 	-- This hook is the ONLY GearUtils path that fires for husks:
 	-- SimpleHuskInventoryExtension._wield_slot -> spawn_inventory_unit
 	-- (simple_husk_inventory_extension.lua:666/670). The owner/bot path runs
-	-- GearUtils.create_equipment (which passes a 1P rig as owner_unit_1p and
-	-- applies CWV transforms itself, hook at the bottom of this file); husks
-	-- have no 1P rig, so `owner_unit_1p == nil` is the husk/bot discriminator.
-	-- Everything here is IDEMPOTENT with the create_equipment apply (scale is
-	-- an absolute set; offset is guarded by a weak-keyed applied-set), so a
-	-- bot spawn that reaches both paths is harmless. Bounded to `not
-	-- owner_unit_1p` purely so the local owner's 1P-having spawn is never
-	-- touched. The helpers live on `_om` because they must reference
-	-- `_transform_unit` / `_resolve_field` / `_resolve_cwv_def` which are
-	-- declared far below this line (Lua locals are only visible after their
-	-- declaration point; `_om` is captured as an upvalue and its fields are
-	-- populated at load time, before any in-mission spawn).
-	if not owner_unit_1p then
-		-- issue 399: strip the inherited ammo (Trollhammer torpedo) that the
-		-- husk attaches for a no_ammo_unit variant (the husk resolves the BASE
-		-- item_data, so no_ammo_unit on the CWV entry never reaches it).
-		if _om._husk_strip_cwv_ammo and _om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name) then
+	-- GearUtils.create_equipment (1P rig present); husks have no 1P rig, so
+	-- `owner_unit_1p == nil` is the husk/bot discriminator, and everything here
+	-- is IDEMPOTENT with the create_equipment apply so a bot spawn reaching both
+	-- paths is harmless. Post half = #399 ammo-strip net (returns true -> nil
+	-- the captured ammo return), transform/texture/presentation apply
+	-- (397/394/604), and the #579 per-hand compare probe. Helpers live on `_om`
+	-- (populated at load time; entry locals are not visible from the module).
+	if not owner_unit_1p and _om._husk_adapter_post then
+		if _om._husk_adapter_post(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p, v_a3p) then
 			v_a3p = nil
-		end
-		-- issues 397/394: apply the CWV scale/offset transform to the husk 3P
-		-- weapon unit, mirroring the owner-side create_equipment hook.
-		if _om._husk_apply_cwv_transform then
-			_om._husk_apply_cwv_transform(hand, item_data, item_units, v_w3p, owner_unit_3p, slot_name)
 		end
 	end
 

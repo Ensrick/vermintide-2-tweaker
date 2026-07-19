@@ -115,6 +115,7 @@ local suites = {
     "test_cwv_remote_audio",
     "test_cwv_remote_identity",
     "test_cwv_husk_path",
+    "test_cwv_husk_adapter",
     "test_cwv_old_musket_presentation",
     "test_cwv_texture_residency",
     "test_cwv_old_musket_preview",
