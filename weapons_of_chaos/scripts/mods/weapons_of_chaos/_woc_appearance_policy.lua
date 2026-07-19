@@ -24,9 +24,12 @@ M.PULSE_VARIABLES = {
 	{ name = "intensity", value = 1.746000051498413 },
 	{ name = "pulse", value = { 1, 0.5 } },
 }
--- Canonical authored-mesh pose. The durable owner resolves the offset against
--- that render node's baseline and writes scale/position/rotation atomically
--- without mutating the game-owned attachment root.
+-- Canonical authored-mesh pose. Scale is a multiplier of the imported render
+-- node's captured native scale, not an absolute Stingray scale. Live 0.1.33
+-- evidence reports native {100,100,100}; writing absolute {0.9,0.9,0.9}
+-- shrank the model by roughly 111x. The durable owner resolves this multiplier
+-- and the offset against the render-node baseline, then writes the resulting
+-- absolute scale/position/rotation atomically without mutating GearUtils' root.
 M.TRANSFORM = {
 	scale = { 0.9, 0.9, 0.9 },
 	offset = { 0, 0, -0.3 },
@@ -92,6 +95,23 @@ function M.network_package_aliases()
 	return {
 		[M.UNIT_1P] = M.VANILLA_1P,
 		[M.UNIT_3P] = M.VANILLA_3P,
+	}
+end
+
+-- Retail Stingray exposes Vector3 as a callable table, while the shared
+-- appearance library deliberately accepts only a plain function constructor.
+-- Wrap it here so the library stays byte-identical to its canonical source.
+function M.appearance_api(globals)
+	if type(globals) ~= "table" then return nil end
+	local vector3 = globals.Vector3
+	if vector3 == nil then return nil end
+	local ok_member, to_elements = pcall(function() return vector3.to_elements end)
+	return {
+		unit = globals.Unit,
+		vector_new = function(x, y, z) return vector3(x, y, z) end,
+		vector_to_elements = ok_member and to_elements or nil,
+		quaternion = globals.Quaternion,
+		matrix4x4 = globals.Matrix4x4,
 	}
 end
 

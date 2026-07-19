@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.32-dev"
+local MOD_VERSION = "0.1.35-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -183,7 +183,29 @@ local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_p
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
-local _weapon_appearance = _appearance_lib.new()
+-- Issue 712 / 835: retail Stingray exposes Vector3 as a callable table. WOC
+-- 0.1.33-dev wrapped it in a plain Lua closure before constructing the shared
+-- appearance library, allowing the atomic position/scale write to execute.
+local _weapon_appearance = _appearance_lib.new(_appearance.appearance_api(_G))
+_rt_register("issue712_appearance_vector_ctor_wrapped", function()
+	local api = _appearance.appearance_api(_G)
+	if api == nil then return "skip: Vector3 global unavailable" end
+	if type(api.vector_new) ~= "function" then
+		return "appearance_api did not wrap the Vector3 constructor in a function"
+	end
+	local ok, vec = pcall(api.vector_new, 1, 2, 3)
+	if not ok or vec == nil then
+		return "wrapped Vector3 constructor rejected plain numbers: " .. tostring(vec)
+	end
+	if type(api.vector_to_elements) ~= "function" then
+		return "vector_to_elements member missing from injected api"
+	end
+	local ok_elems, x, y, z = pcall(api.vector_to_elements, vec)
+	if not ok_elems or x ~= 1 or y ~= 2 or z ~= 3 then
+		return string.format("constructed vector did not roundtrip (ok=%s %s,%s,%s)",
+			tostring(ok_elems), tostring(x), tostring(y), tostring(z))
+	end
+end)
 local _transform_diag_budget = 32
 local _appearance_diag_budget = 32
 local function _appearance_diag(format, ...)
@@ -1570,10 +1592,13 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	if is_blightreaper then
 		local surface = _durable_transform_lib.classify_surface(
 			owner_unit_1p, owner_unit_3p)
+		local expects_1p = _durable_transform_lib.expects_first_person_unit(owner_unit_1p)
 		_appearance_diag(
 			"[WOC:613] spawn identity surface=%s requested_1p=%s requested_3p=%s returned_1p={%s} returned_3p={%s}",
 			tostring(surface), tostring(item_units.right_hand_unit),
-			tostring(_appearance.UNIT_3P), _returned_unit_identity(unit_1p),
+			tostring(_appearance.UNIT_3P),
+			(expects_1p or unit_1p ~= nil) and _returned_unit_identity(unit_1p)
+				or "not-expected vanilla-3p-only gear_utils.lua:276",
 			_returned_unit_identity(unit_3p))
 		_log_unit_shape_once(surface, "3p", unit_3p)
 		_wa.apply(unit_3p, _appearance.TRANSFORM, "3p", surface)
@@ -1657,6 +1682,32 @@ mod.on_unload = function()
 	_audio.stop_all("mod-unload")
 end
 
+-- Issue 278/613: keep the loadout fail-safe, but name its upstream caller.
+-- The diagnostic is log-only, deduplicated, and hard-bounded per session.
+local _skip_caller_seen = {}
+local _skip_caller_budget = 8
+local function _log_skip_caller(item, slot_name)
+	if _skip_caller_budget <= 0 then return end
+	local frames = "traceback-unavailable"
+	local dbg = rawget(_G, "debug")
+	if type(dbg) == "table" and type(dbg.traceback) == "function"
+			and type(_wire_policy.caller_frames) == "function" then
+		local ok, trace = pcall(dbg.traceback, "", 2)
+		local named = ok and _wire_policy.caller_frames(trace,
+			{ "weapons_of_chaos", "vmf/modules", "[C]" }, 3)
+		if named then frames = named end
+	end
+	local shape = item == nil and "nil-item"
+		or type(item) ~= "table" and ("non-table-" .. type(item))
+		or (item.key == nil and "table-without-key" or "key=" .. tostring(item.key))
+	local dedup = shape .. "|" .. tostring(slot_name) .. "|" .. frames
+	if _skip_caller_seen[dedup] then return end
+	_skip_caller_seen[dedup] = true
+	_skip_caller_budget = _skip_caller_budget - 1
+	pcall(printf, "[WOC:278] skip caller item=%s slot=%s frames=%s chat=false",
+		shape, tostring(slot_name), frames)
+end
+
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
 		local is_blightreaper = _power.is_relic(item)
@@ -1675,6 +1726,7 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 			-- Mirrors CWV's skip branch (character_weapon_variants.lua:10183-10188).
 			printf("[WOC:278] base '%s' unresolvable for woc_ key %s; SKIPPING loadout sync (fail-safe, issue 422)",
 				BASE_WEAPON, tostring(item and item.key))
+			_log_skip_caller(item, slot_name)
 			return
 		end
 		if send_item ~= item then
@@ -1885,7 +1937,7 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 			or durable.target_node ~= "authored_render_node"
 			or durable.target_node_name ~= _appearance.TRANSFORM_NODE_NAME
 			or durable.position ~= "render_baseline_plus_offset"
-			or durable.scale ~= "absolute"
+			or durable.scale ~= "render_baseline_multiplier"
 			or durable.rotation ~= "absolute_euler_xyz"
 			or durable.write_mode ~= "atomic_local_pose"
 			or durable.gameplay ~= "retained_check_then_reapply"

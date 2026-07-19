@@ -335,7 +335,9 @@ captured runtime evidence shows animation can restore that linked node on the
 following update (`weapon_tweaker/OFFSETS.md`). For an authored transform large
 enough to require durable ownership:
 
-- capture the linked baseline and resolve one absolute target through `WA`;
+- declare whether authored scale is absolute or a baseline multiplier, capture
+  the proven target node's native baseline, and resolve one absolute target
+  through `WA` (never carry root-node scale semantics onto a child node);
 - weak-track only animated gameplay 1P/3P/bot/husk consumers, compare numeric
   retained state, and reconstruct the target only after measured drift;
 - keep static preview surfaces one-shot, prune dead units, and send no

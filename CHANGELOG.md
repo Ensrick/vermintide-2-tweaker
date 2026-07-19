@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-19 - Blightreaper visible-scale restoration (#712)
+
+The WOC `0.1.33-dev` log proves its durable writer retained the requested pose
+on the correct render node, but also proves the node's native scale is 100 and
+the writer replaced it with absolute 0.9. WOC now resolves the authored 0.9 as
+a baseline multiplier (90 in the observed units) before issuing the absolute
+atomic pose. This draft is source-tested only and still needs the serialized
+bundle/build/deploy step.
+
 ## 2026-07-19 - Dev localization resource contract (#824)
 
 Tweaker: GUI dev 0.2.296-dev now loads its own localization resource in the
