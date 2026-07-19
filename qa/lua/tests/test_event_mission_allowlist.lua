@@ -52,6 +52,81 @@ return function(H, repo_root)
         H.equal(out.act_celebrate[1] == levels.control_level, false)
     end)
 
+    H.test("Event mission filter changes only the selected celebrate area", function()
+        local levels = fixtures()
+        local control = { levels.control_level }
+        local original = { act_1 = control, act_celebrate = { { level_id = "future_event" } } }
+        local enabled = {
+            mission_dlc_dwarf_fest = true,
+            mission_dlc_celebrate_crawl = true,
+        }
+        local get = function(id) return enabled[id] end
+
+        local helmgart, helmgart_applied = Missions.filter_levels_for_area(
+            "helmgart", original, levels, get)
+        H.equal(helmgart_applied, false)
+        H.equal(helmgart, original)
+        H.equal(helmgart.act_celebrate[1].level_id, "future_event")
+
+        local unknown, unknown_applied = Missions.filter_levels_for_area(
+            nil, original, levels, get)
+        H.equal(unknown_applied, false)
+        H.equal(unknown, original)
+
+        local celebrate, celebrate_applied = Missions.filter_levels_for_area(
+            Missions.AREA_KEY, original, levels, get)
+        H.equal(celebrate_applied, true)
+        H.equal(celebrate == original, false)
+        H.equal(celebrate.act_1, control)
+        H.equal(#celebrate.act_celebrate, 2)
+
+        local malformed, malformed_applied = Missions.filter_levels_for_area(
+            Missions.AREA_KEY, nil, levels, get)
+        H.equal(malformed_applied, false)
+        H.equal(malformed, nil)
+    end)
+
+    H.test("Event mission selected-area resolver covers both native parent shapes", function()
+        local desktop = {
+            parent = { get_selected_area_name = function() return Missions.AREA_KEY end },
+        }
+        local console = {
+            _parent = { get_selected_area_name = function() return "helmgart" end },
+        }
+        H.equal(Missions.selected_area_name(desktop), Missions.AREA_KEY)
+        H.equal(Missions.selected_area_name(console), "helmgart")
+        H.equal(Missions.selected_area_name({ parent = {} }), nil)
+        H.equal(Missions.selected_area_name({
+            parent = { get_selected_area_name = function() error("foreign proxy") end },
+        }), nil)
+    end)
+
+    H.test("Event Tweaker owns one hook per event-area and mission-list surface", function()
+        local function read(path)
+            local file = assert(io.open(path, "rb"))
+            local source = file:read("*a")
+            file:close()
+            return source
+        end
+        local event_source = read(repo_root
+            .. "/event_tweaker/scripts/mods/event_tweaker/_evt_missions.lua")
+        local _, area_desktop = event_source:gsub(
+            'mod:hook%("StartGameWindowAreaSelection", "_setup_area_widgets"', "")
+        local _, area_console = event_source:gsub(
+            'mod:hook%("StartGameWindowAreaSelectionConsoleV2", "_setup_area_widgets"', "")
+        local _, mission_desktop = event_source:gsub(
+            'mod:hook%("StartGameWindowMissionSelection", "_setup_level_acts"', "")
+        local _, mission_console = event_source:gsub(
+            'mod:hook%("StartGameWindowMissionSelectionConsole", "_setup_level_acts"', "")
+        H.equal(area_desktop, 1)
+        H.equal(area_console, 1)
+        H.equal(mission_desktop, 1)
+        H.equal(mission_console, 1)
+        H.truthy(event_source:find("area.exclude_from_area_selection = previous", 1, true))
+        H.truthy(event_source:find("Missions.selected_area_name(self)", 1, true))
+
+    end)
+
     H.test("Event mission contract ignores NetworkLookup and accepts the menu-read shape", function()
         local levels, areas, acts = fixtures()
         local ok, problems = Missions.validate_contract(levels, areas, acts)

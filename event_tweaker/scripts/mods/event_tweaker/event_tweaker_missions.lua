@@ -9,6 +9,7 @@ local M = {}
 
 M.AREA_KEY = "celebrate"
 M.ACT_KEY = "act_celebrate"
+local PARENT_FIELDS = { "parent", "_parent" }
 
 -- Deliberately closed. A future event level must be source-audited and added
 -- here before Event Tweaker will expose it; sharing act_celebrate is not enough.
@@ -47,6 +48,30 @@ function M.enabled_ids(get)
         end
     end
     return ids
+end
+
+-- Resolve only the two source-backed mission-view parent shapes. Keep every
+-- access and callback contained: another mod may rebuild a view with a partial
+-- proxy, and menu presentation must fail closed rather than turn that drift
+-- into a selection-time crash.
+function M.selected_area_name(view)
+    for i = 1, #PARENT_FIELDS do
+        local field = PARENT_FIELDS[i]
+        local parent_ok, parent = pcall(function()
+            return view and view[field]
+        end)
+        if parent_ok and parent then
+            local getter_ok, getter = pcall(function()
+                return parent.get_selected_area_name
+            end)
+            if getter_ok and type(getter) == "function" then
+                local area_ok, area_name = pcall(getter, parent)
+                if area_ok and type(area_name) == "string" then
+                    return area_name
+                end
+            end
+        end
+    end
 end
 
 -- Returns true when a LevelSettings entry is complete enough to advertise and
@@ -171,6 +196,21 @@ function M.filter_levels_by_act(levels_by_act, level_settings, get)
     end
     filtered[M.ACT_KEY] = selected
     return filtered
+end
+
+-- Scope the celebrate replacement to the celebrate area itself. Desktop and
+-- console both build mission lists after reading the selected area from their
+-- parent window; unrelated areas must retain the exact view-local map vanilla
+-- built, including its outer-table identity.
+function M.filter_levels_for_area(area_name, levels_by_act, level_settings, get)
+    if area_name ~= M.AREA_KEY
+            or type(levels_by_act) ~= "table"
+            or type(level_settings) ~= "table"
+            or type(get) ~= "function" then
+        return levels_by_act, false
+    end
+
+    return M.filter_levels_by_act(levels_by_act, level_settings, get), true
 end
 
 return M

@@ -17,10 +17,12 @@ Plus one orthogonal switch:
 
 And one bounded mission-menu feature:
 
-4. **Dormant Event Missions** (issue 626, opt-in). Shows only `dlc_dwarf_fest`
+4. **Dormant Event Missions** (issues 626 and 802, opt-in). Shows only `dlc_dwarf_fest`
    and `dlc_celebrate_crawl` in Own Game. It temporarily exposes the stock
    `celebrate` area while vanilla builds the area widgets, then replaces only the
-   menu instance's `act_celebrate` level list from a closed two-entry allowlist.
+   selected event-area menu instance's `act_celebrate` level list from a closed
+   two-entry allowlist. Normal campaign/DLC menu instances remain identical to
+   vanilla; the event area is not injected into their mission lists.
    The visibility gate requires only the tables the menus read (AreaSettings /
    ActSettings / LevelSettings). A load-time idempotent fallback appends a level
    vanilla's boot pass genuinely missed to the local `UnlockableLevels` /
@@ -187,19 +189,22 @@ greyed "(skipped: a peer lacks the mod)"; on a client the header carries a
 "host decides" caveat (et never syncs the host's picks). ct files are read-only
 reference; no ct file is touched.
 
-**`_evt_missions.lua` — manifest position 9 (issue 626 dormant event missions).**
+**`_evt_missions.lua` — manifest position 9 (issues 626/802 dormant event missions).**
 Four menu hooks cover desktop/controller area and mission-selection views. The
 area wrapper temporarily clears only `AreaSettings.celebrate.exclude_from_area_selection`
-and restores it even when vanilla raises. The mission wrapper replaces only the
-view instance's `_levels_by_act.act_celebrate` list from the two-entry allowlist;
-unrelated act tables retain identity. The visibility gate validates only the
+and restores it even when vanilla raises. The mission wrapper first reads the
+selected area from the source-verified desktop/console parent, then replaces
+only the celebrate view instance's `_levels_by_act.act_celebrate` list from the
+two-entry allowlist. Every non-celebrate view retains its entire map by identity;
+unrelated act tables in the celebrate view also retain identity. The visibility gate validates only the
 menu-read tables (area/act/level settings, NOT NetworkLookup - the old
 NetworkLookup preconditions were the issue 626 "toggle on, nothing shows"
 defect). At mod load it unconditionally runs the idempotent
 `ensure_campaign_registration` fallback for `UnlockableLevels` / `GameActs` /
 `MapPresentationActs`, logs `[event-missions:626]`, exposes
 `/event_mission_probe` (contract= plus campaign=), and registers
-`issue626_event_mission_allowlist_contract`. VMF owns hook disable/re-enable, and
+`issue626_event_mission_allowlist_contract` plus
+`issue802_event_mission_area_scope`. VMF owns hook disable/re-enable, and
 each view rebuilds from vanilla state on re-entry, so there is no persistent
 mission state or lifecycle callback to restore.
 
@@ -291,7 +296,10 @@ the stock `celebrate` area already points at `act_celebrate`. Desktop/controller
 area views skip `exclude_from_area_selection` areas (`start_game_window_area_selection.lua:
 91-95`; console V2 `:100-105`), and mission views build their instance-local
 `_levels_by_act` from `UnlockableLevels` (`start_game_window_mission_selection.lua:
-108-129`; console `:98-125`). Once a selected level starts,
+108-129`; console `:98-125`). Desktop reads the current area through
+`self.parent:get_selected_area_name()` (`:46`), while console uses
+`self._parent:get_selected_area_name()` (`:45`); Event Tweaker therefore scopes
+its celebrate replacement to that exact selected area. Once a selected level starts,
 `LevelTransitionHandler._load_level_packages` loads its stock `LevelSettings.packages`
 and unloads them by the same level-key reference (`level_transition_handler.lua:
 518-572`). Event Tweaker therefore changes only the temporary/view-local menu
