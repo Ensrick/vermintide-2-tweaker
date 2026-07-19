@@ -1,5 +1,12 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.252-dev (2026-07-19) -- client-owned ragdoll retention (#332) [verify-fix-coop]
+
+- Snapshot dead client AI husks into bounded, static, non-colliding visual
+  clones before authoritative destroy or BreedFreezer reuse removes them.
+- Preserve the original teardown/RPC paths, add no network surface, and trim
+  retained client visuals immediately when the local ragdoll cap is lowered.
+
 ## v0.2.251-dev (2026-07-19) -- bounded runtime evidence (#254, #797) [diagnostics-armed]
 
 - Added a bounded host-side Chaos Wastes creature-spawn queue trace that

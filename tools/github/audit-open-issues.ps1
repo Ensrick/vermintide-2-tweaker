@@ -91,7 +91,7 @@ function Test-HasMethodAndExpected($Issue) {
     $comments = @($Issue.comments | ForEach-Object { [string]$_.body })
     foreach ($comment in $comments) {
         $hasMethod = $comment -match '(?i)test[- ]method|diagnostics? method|verification|verify(?::|\s+(?:after|this|in|with))|to verify|steps?:|next repro|repro(?:duce|duction)?'
-        $hasExpected = $comment -match '(?i)expected|must pass|should pass|result:|\bconfirm\b|\brequire\b.{0,24}\bpass|\bno (?:crash|error|warning|spam|desync)\b'
+        $hasExpected = $comment -match '(?i)expected|pass\s*=|must pass|should pass|result:|\bconfirm\b|\brequire\b.{0,24}\bpass|\bno (?:crash|error|warning|spam|desync)\b'
         if ($hasMethod -and $hasExpected) { return $true }
     }
     return $false
@@ -119,13 +119,13 @@ function Test-CommentRequiresCoop($Issue) {
     if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*solo\b[^)\r\n]{0,80}\)') {
         return $false
     }
-    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*co-?op\b[^)\r\n]{0,80}\)') {
+    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*(?:co-?op\b|two[ -]players?\b[^)\r\n]{0,30}\bco-?op\b)[^)\r\n]{0,80}\)') {
         return $true
     }
-    if ($text -match '(?i)verify solo|solo verification|no (?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
+    if ($text -match '(?i)verify solo|solo verification|no (?:second|2nd) player|do(?:es)? not require (?:a )?(?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
         return $false
     }
-    return $text -match '(?i)two[^\r\n]{0,40}(?:players|testers|humans)|2\+? (?:players|testers|humans)|needs? 2 (?:players|testers|humans)|host\s*\+\s*client|host and client|second player|both peers|remote peer|non-mod peer|co-?op(?:/perspective)? (?:verification|diagnostics?)'
+    return $text -match '(?i)two[ -]players?\b|two[^\r\n]{0,40}(?:players|testers|humans)|2\+? (?:players|testers|humans)|needs? 2 (?:players|testers|humans)|host\s*\+\s*client|host and client|second player|both peers|remote peer|non-mod peer|co-?op(?:/perspective)? (?:verification|diagnostics?)'
 }
 
 function Get-IssueFindings($Issue) {
@@ -892,10 +892,19 @@ function Invoke-SelfTest {
         comments = @([PSCustomObject]@{ body = "Diagnostic method (co-op; deployed v1.2.3)`nOwner and observer capture evidence. Expected: PASS." })
     }
     if (-not (Test-CommentRequiresCoop $qualifiedScopedCoopWording)) { throw "qualified co-op method header was missed" }
+    $twoPlayerScopedCoopWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "**TEST METHOD (two-player co-op)**`nReverse roles once.`n`n**PASS =** both peers agree." })
+    }
+    if (-not (Test-CommentRequiresCoop $twoPlayerScopedCoopWording)) { throw "two-player co-op method header was missed" }
+    if (-not (Test-HasMethodAndExpected $twoPlayerScopedCoopWording)) { throw "PASS-equals expected-result wording was missed" }
     $soloCannotRepro = [PSCustomObject]@{
         comments = @([PSCustomObject]@{ body = "Test method corrected: a solo host cannot reproduce this reliable queue; use a remote peer. Expected: no crash." })
     }
     if (-not (Test-CommentRequiresCoop $soloCannotRepro)) { throw "negative solo wording hid remote-peer evidence" }
+    $soloDoesNotRequireSecond = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "### Verification after deployment`nThis local score-screen defect does not require a second player. Remote-player coverage remains useful. Expected: local outfit persists." })
+    }
+    if (Test-CommentRequiresCoop $soloDoesNotRequireSecond) { throw "explicit does-not-require-second-player wording was misclassified as co-op" }
     Write-Host "[audit-open-issues -SelfTest] OK"
 }
 

@@ -1,6 +1,6 @@
 # Co-op Playtest Checklist
 
-> Auto-generated on 2026-07-19 17:19 UTC. Plain-language co-op-only checklist for a second tester.
+> Auto-generated on 2026-07-19 17:12 UTC. Plain-language co-op-only checklist for a second tester.
 
 Thanks for helping test. Each item below is either a fix to verify or a diagnostic check that needs real co-op evidence. You do not need any of our tools or notes, just the game and this list.
 
@@ -244,20 +244,20 @@ Thanks for helping test. Each item below is either a fix to verify or a diagnost
    - Please report: attach both players' logs and note what appeared on each player's screen.
 4. (Item #290) Weapons: On any Kruber career, equip Saltzpyre's Billhook and close the inventory.
    - It works if: everything behaves normally for all players and nobody crashes.
-5. (Item #657) Test Empire Sword and Shield on Grail Knight and Bretonnian Sword and Shield on Mercenary, Huntsman, and Foot Knight with host and joining player on matching builds.
-   - Please report: diagnostic result: prove the receiver-specific combat-style boundary before any Sword-and-Shield family is reintroduced; this does not claim a fix.
-6. (Item #602) Weapons: With current CWV and CIM, census the Dawi Mace, Dawi Mace and Shield, and Dawi Dual Maces catalog identities, model resources, and cosmetic acquisition paths.
+5. (Item #602) Weapons: With current CWV and CIM, census the Dawi Mace, Dawi Mace and Shield, and Dawi Dual Maces catalog identities, model resources, and cosmetic acquisition paths.
    - Please report: attach both players' logs and note what appeared on each player's screen.
-7. (Item #266) Cosmetics: Run current Tweaker: Cosmetics with Loremaster's Armoury on host and joining player; execute /cos_regression_test first.
+6. (Item #266) Cosmetics: Run current Tweaker: Cosmetics with Loremaster's Armoury on host and joining player; execute /cos_regression_test first.
    - It works if: everything behaves normally for all players and nobody crashes.
-8. (Item #798) Test native Sienna Crowbill, Imperial Crowbill, and Dawi Crowbill. For each, use Weapon Special to alternate pick and hammer modes while the second player observes.
+7. (Item #798) Test native Sienna Crowbill, Imperial Crowbill, and Dawi Crowbill. For each, use Weapon Special to alternate pick and hammer modes while the second player observes.
    - It works if: everything behaves normally for all players and nobody crashes.
-9. (Item #792) On each Kruber career, equip Old Musket and open the inventory-screen character preview. Wait for the mannequin to settle.
+8. (Item #792) On each Kruber career, equip Old Musket and open the inventory-screen character preview. Wait for the mannequin to settle.
    - It works if: to_handgun event. This rules out the closed #606 failure class (a missing receiver-career entry) for the reported run.
-10. (Item #748) Weapons: Exercise cross-character weapons that previously fell through the third-person vocabulary: light/heavy windups and releases, block/push, weapon special, reload, swap,...
+9. (Item #748) Weapons: Exercise cross-character weapons that previously fell through the third-person vocabulary: light/heavy windups and releases, block/push, weapon special, reload, swap,...
    - It works if: everything behaves normally for all players and nobody crashes.
-11. (Item #579) Give one Dual Axes instance different primary and offhand illusions through Tweaker: Cosmetics.
+10. (Item #579) Give one Dual Axes instance different primary and offhand illusions through Tweaker: Cosmetics.
    - Please report: every surface preserves the exact saved right/offhand pair. No surface may reconstruct the base Dual Axes models or swap the hand order.
+11. (Item #657) Test Empire Sword and Shield on Grail Knight and Bretonnian Sword and Shield on Mercenary, Huntsman, and Foot Knight with host and joining player on matching builds.
+   - Please report: diagnostic result: prove the receiver-specific combat-style boundary before any Sword-and-Shield family is reintroduced; this does not claim a fix.
 12. (Item #633) In the keep and again in an Adventure mission, run /woc_audio_contract, then the wielder runs /woc_audio_probe once.
    - Please report: attach both players' logs and note what appeared on each player's screen.
 13. (Item #656) Cosmetics: Host and one joining player use the exact same Cosmetics build. Enable Reikland Griffin and equip the red Foot Knight outfit.

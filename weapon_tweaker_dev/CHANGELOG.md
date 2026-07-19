@@ -1,6 +1,6 @@
 # Weapon Tweaker Changelog
 
-## 0.12.284-dev (2026-07-19) - #664 dead parity tick + #374/#388 EnergyData seeding [untested]
+## 0.12.285-dev (2026-07-19) - #664 dead parity tick + #374/#388 EnergyData seeding [untested]
 
 - Mirrors WT beta 0.12.283-beta: the backend's `mod.update` assignment now
   preserves the previously-installed peer-parity beacon wrapper instead of
@@ -12,6 +12,12 @@
   owner, husk, and bot spawn paths - restoring native Moonfire recharge (#374)
   and the on_energy_drainable flow-event FX/sounds (#388 partial; the
   hardcoded energy_bar_ui color override remains open).
+## 0.12.284-dev (2026-07-19) - #181 Skullsplitter right-hand presentation [verify-fix]
+
+- Mirrors beta's reuse-and-relink correction for Kruber's third-person hammer
+  and the independently owned inventory-preview item table.
+- Preserves the hidden tome, first-person presentation, illusion/material data,
+  and native Warrior Priest behavior.
 
 ## 0.12.283-dev (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
 

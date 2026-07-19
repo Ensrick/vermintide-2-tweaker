@@ -21,6 +21,7 @@ function M.install(mod, _rt_register, deps)
     local _WIELD_PATCHES_MODULE = deps.wield_patches_module
     local _is_sp_crossbow_presentation_item = deps.is_sp_crossbow_presentation_item
     local _wt_grip_offset_policy = deps.grip_offset_policy
+    local _wt_skullsplitter_hand_policy = deps.skullsplitter_hand_policy
     local weapon_backend = deps.weapon_backend
     -- WT_DEV_OVERLAY_BEGIN:runtime-check-dependencies
     local _wt_dev_anim_picker = deps.dev_anim_picker
@@ -45,6 +46,53 @@ function M.install(mod, _rt_register, deps)
         -- class check + an embedded comment marker proving wt hooks it.
         local _MARKER = "SimpleHuskInventoryExtension"
         if #_MARKER == 0 then return "marker missing" end
+    end)
+
+    _rt_register("issue181_skullsplitter_right_hand_contract", function()
+        local policy = _wt_skullsplitter_hand_policy
+        if type(policy) ~= "table" then return "#181 Skullsplitter hand policy missing" end
+        if policy.runtime_action("wh_hammer_book", "es_mercenary", "left")
+                ~= "relink_hammer_right" then
+            return "#181 Kruber hammer is not routed to the right-hand relink"
+        end
+        if policy.runtime_action("wh_hammer_book", "es_mercenary", "right")
+                ~= "hide_book" then
+            return "#181 Kruber book is not routed to the hide action"
+        end
+        if policy.runtime_action("wh_hammer_book", "wh_priest", "left") ~= nil then
+            return "#181 native Warrior Priest was captured by the Kruber presentation"
+        end
+
+        local linking, reason = policy.resolve_right_hand_linking(rawget(_G, "Weapons"))
+        if not linking then return "skip: #181 target template unavailable: " .. tostring(reason) end
+        local first = linking[1]
+        if type(first) ~= "table" or first.source ~= "j_rightweaponattach"
+                or first.target ~= 0 then
+            return "#181 target linking is not j_rightweaponattach -> root"
+        end
+
+        local left = { left_hand = true, unit_name = "hammer", marker = "preserve" }
+        local right = { right_hand = true, unit_name = "book" }
+        local other = { unit_name = "other" }
+        local right_third_person, preview_reason =
+            policy.resolve_right_hand_third_person(rawget(_G, "Weapons"))
+        if not right_third_person then
+            return "skip: #181 preview linking unavailable: " .. tostring(preview_reason)
+        end
+        local rewritten, hid_book, moved_hammer = policy.rewrite_preview_spawn_data(
+            { left, right, other }, right_third_person)
+        if not hid_book or not moved_hammer or #rewritten ~= 2 then
+            return "#181 preview transaction did not replace the hammer/book pair"
+        end
+        local hammer = rewritten[1]
+        if not hammer.right_hand or hammer.left_hand ~= nil
+                or hammer.unit_attachment_node_linking ~= right_third_person
+                or hammer.marker ~= "preserve" then
+            return "#181 preview hammer is not a right-hand illusion-preserving copy"
+        end
+        if left.left_hand ~= true or left.right_hand ~= nil then
+            return "#181 preview transaction mutated the vanilla spawn entry"
+        end
     end)
 
     _rt_register("anim_remap_per_unit", function()

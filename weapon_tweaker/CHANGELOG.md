@@ -1,6 +1,6 @@
 # Weapon Tweaker Changelog
 
-## 0.12.283-beta (2026-07-19) - #664 dead parity tick + #374/#388 EnergyData seeding [untested]
+## 0.12.284-beta (2026-07-19) - #664 dead parity tick + #374/#388 EnergyData seeding [untested]
 
 - #664 root cause: `weapon_tweaker_backend.lua`'s `M.install` (run at the
   bottom of `weapon_tweaker.lua`) assigned `mod.update` with a naked
@@ -36,6 +36,12 @@
 confirm `enabled=true parity=true` plus the +30% light headshot in-mission.
 For #374, grant Moonfire to a non-elf career, fire until drained, and confirm
 the bar refills at the native rate with draw/charge FX and sounds (#388).
+## 0.12.283-beta (2026-07-19) - #181 Skullsplitter right-hand presentation [verify-fix]
+
+- Relinked the illusion-correct third-person Skullsplitter hammer to Kruber's
+  native right-hand attachment while keeping the tome hidden.
+- Corrected the separately owned inventory-preview entry without changing the
+  first-person presentation or Warrior Priest behavior.
 
 ## 0.12.282-beta (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
 

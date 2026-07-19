@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.251-dev"
+local MOD_VERSION = "0.2.252-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -622,6 +622,9 @@ mod.on_setting_changed = function(setting_id)
         -- resolves at call time — safe to reference even though the function
         -- body is assigned later in the file.
         if mod.gt_apply_corpse_count then mod.gt_apply_corpse_count() end
+        if mod._gt332_reconcile_client_corpses then
+            mod._gt332_reconcile_client_corpses()
+        end
     -- (Disable Loading-Screen Monologues MIGRATED to gui_tweaker / gut 2026-06-29,
     -- #192 — branch removed.)
     elseif setting_id == "ai_takeover_enabled" then
@@ -1309,8 +1312,10 @@ end)
 -- variable in-game. Command-only, no Class.method hook, no cross-file state.
 
 -- More Corpses (RagdollSettings cap) is extracted to _gt_godmode_qol.lua (dofile'd
--- after the main chunk). No hooks. It exposes mod.gt_apply_corpse_count, resolved at
--- call time from the on_setting_changed branch for gt_more_corpses_*.
+-- after the main chunk). It exposes mod.gt_apply_corpse_count, resolved at call
+-- time from the on_setting_changed branch for gt_more_corpses_*. Client-local
+-- retention at the authoritative husk-destroy seam lives in
+-- _gt_client_ragdolls.lua (#332).
 -- (Disable Loading-Screen Monologues MIGRATED to gui_tweaker / gut 2026-06-29, #192 —
 -- gut's _gut_monologue.lua now owns the script_data.disable_level_intro_dialogue
 -- flag + the /gut_intromono command.)
@@ -1456,6 +1461,7 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_misc_features")
 -- + Disable Loading-Screen Monologues + More Corpses. Exposes
 -- mod.gt_apply_corpse_count (on_setting_changed) + the *_toggle commands.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_godmode_qol")
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_client_ragdolls")
 -- In-mission hero-view access (Open Inventory In Mission + Customize cim gate +
 -- Show menu tabs in-mission + the InventorySettings/ESC-menu patch) MIGRATED to
 -- gui_tweaker (gut) 2026-06-24 — gut now owns the in-mission inventory. Both

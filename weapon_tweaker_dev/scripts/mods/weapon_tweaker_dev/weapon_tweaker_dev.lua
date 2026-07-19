@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.284-dev"
+local MOD_VERSION = "0.12.285-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -128,6 +128,7 @@ local _wt_dev_hold_pose   = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_dev_h
 local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_axe_balance")
 local _wt_axe_balance = _wt_axe_balance_policy.new()
 local _wt_grip_offset_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_grip_offset_policy")
+local _wt_skullsplitter_hand_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_skullsplitter_hand")
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
 -- mutates the weapon template, so a restart is needed to apply/revert).
 mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_brett_sword_shield_buff")
@@ -2965,8 +2966,8 @@ mod:traced_hook("GearUtils", "spawn_inventory_unit", function(func, world, hand,
         return _wt_repeating_pistol_3p_swap_apply(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p, material_settings_name)
     end
     -- #181: Skullsplitter & Tome on Kruber → 1H Skullsplitter (hammer in the right
-    -- hand, no book). The helper handles BOTH hands (right=book → swapped to hammer;
-    -- left=original hammer → hidden), career-gated to es_ inside.
+    -- hand, no book). The helper handles BOTH hands (right=book → hidden;
+    -- left=hammer → relinked to Kruber's right-hand 1H node), es_-gated inside.
     if item_data.name == "wh_hammer_book" then
         return _wt_hammer_book_3p_swap_apply(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p, material_settings_name)
     end
@@ -3451,53 +3452,34 @@ end
 -- ============================================================
 -- Kruber Skullsplitter & Tome (wh_hammer_book) → 1H Skullsplitter in-game 3P (#181)
 -- ============================================================
--- v0.12.187-dev: REPLACED the spawned-unit mesh swap (v0.12.186-dev) with the simpler
--- offset-free approach the user asked for. The spawned-unit swap mounted a freshly-
--- spawned hammer at the right node and produced bad transforms / crazy offsets in-game.
--- Instead we KEEP the vanilla Skullsplitter hammer in its native engine position and
--- just HIDE THE BOOK, letting the to_1h_hammer wield redirect (wt_wield_patches.lua)
--- animate the hammer as Kruber's native 1H mace. NOTHING is spawned, linked, or
--- relinked — so there are no swap-induced offsets.
+-- v0.12.187-dev removed the fresh-unit mesh swap because the separately spawned hammer
+-- picked up a bad transform. That revision kept the authored left-hand hammer and only
+-- hid the book, which directly caused the live wrong-hand defect: the source item really
+-- authors its hammer as `left_hand_unit`. Reuse that already-spawned, illusion-correct
+-- unit and relink only its 3P root onto Kruber's receiver-native right-hand node. This
+-- avoids the old fresh-spawn offset path while producing the requested main-hand model.
 --
 -- Vanilla `one_handed_hammer_book_priest_template`: left_hand_unit = the Skullsplitter
--- HAMMER (keep it), right_hand_unit = the BOOK (hide it). spawn_inventory_unit fires
+-- HAMMER, right_hand_unit = the BOOK. spawn_inventory_unit fires
 -- once per hand:
 --   * hand == "right" (the book): hide that 3P unit. `show_third_person_inventory`
 --     re-shows the right-hand wielded unit on every wield
 --     (simple_inventory_extension.lua:1017-1024), so `_rehide_hidden_3p_units` (below)
 --     re-hides it durably; this spawn-time hide additionally covers the husk path
 --     (husks don't call show_third_person_inventory from _wield_slot).
---   * hand == "left" (the hammer): return the vanilla units UNCHANGED — the hammer
---     keeps its correct native attachment.
+--   * hand == "left" (the hammer): validate and relink the existing 3P unit to
+--     `Weapons.one_handed_hammer_template_1`'s right-hand wielded linking
+--     (`j_rightweaponattach` in vanilla attachment_node_linking.lua:2742-2753).
 -- 3P-ONLY: v_w1p/v_a1p (1P) are never touched — 1P is universal across all six chars.
-_wt_hammer_book_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p, material_settings_name)
-    do
-        local is_husk = owner_unit_1p == nil
-        local career_for_log = _unit_career_name(owner_unit_3p)
-        _dbg("[wt hammer-book-3p-swap] enter hand=%s husk=%s owner_unit_3p=%s career=%s v_w3p=%s",
-            tostring(hand), tostring(is_husk), tostring(owner_unit_3p ~= nil),
-            tostring(career_for_log), tostring(v_w3p ~= nil))
-    end
-
-    local career_name = _unit_career_name(owner_unit_3p)
-    if not career_name or career_name:sub(1, 3) ~= "es_" then
-        _dbg("[wt hammer-book-3p-swap] SKIP (career not Kruber: %s)", tostring(career_name))
-        return v_w3p, v_a3p, v_w1p, v_a1p
-    end
-
-    -- RIGHT hand = the book → hide it (3P only). LEFT hand (the hammer) and any other
-    -- hand → return vanilla unchanged (hammer stays in its native position).
-    if hand == "right" and v_w3p and Unit.alive(v_w3p) then
-        if Unit.has_visibility_group(v_w3p, "normal") then
-            Unit.set_visibility(v_w3p, "normal", false)
-        else
-            Unit.set_unit_visibility(v_w3p, false)
-        end
-        _dbg("[wt hammer-book-3p-swap] hid book 3P unit at spawn (husk=%s career=%s)",
-            tostring(owner_unit_1p == nil), career_name)
-    end
-
-    -- Never spawn/relink/delete — always return the vanilla units (book just hidden).
+_wt_hammer_book_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p)
+    _wt_skullsplitter_hand_policy.apply_runtime({
+        world = world, world_api = World, gear_utils = GearUtils, unit_api = Unit,
+        hand = hand, item_template = item_template, item_name = item_data and item_data.name,
+        owner_unit_3p = owner_unit_3p, weapon_unit_3p = v_w3p,
+        career_name = _unit_career_name(owner_unit_3p),
+        perspective = owner_unit_1p == nil and "husk" or "owner_or_bot",
+        weapons = rawget(_G, "Weapons"), emit = printf,
+    })
     return v_w3p, v_a3p, v_w1p, v_a1p
 end
 
@@ -3509,8 +3491,9 @@ end
 --   * wh_brace_of_pistols: hide the LEFT pistol. The brace renders two pistols; the
 --     right-hand mesh is swapped to the Empire repeater and the left pistol clips it.
 --   * wh_hammer_book (#181): hide the RIGHT-hand unit (the BOOK). The Skullsplitter
---     hammer (left_hand_wielded_unit_3p) is KEPT visible in its correct native
---     position — it just animates via the to_1h_hammer wield redirect.
+--     hammer remains stored in `left_hand_wielded_unit_3p` by the vanilla inventory
+--     schema, but its existing 3P unit is relinked onto the receiver's right-hand node;
+--     it animates via the `to_1h_hammer` wield redirect.
 --
 -- v0.12.39 — registered on BOTH SimpleInventoryExtension AND SimpleHuskInventoryExtension.
 -- The husk class has the same method but no inheritance from the self-owned class
@@ -3747,39 +3730,13 @@ _wt_repeating_pistol_preview_swap_apply = function(self, item_name, slot)
     end
 end
 
--- Inventory preview book-hide for Kruber's wh_hammer_book (#181).
--- v0.12.187-dev: matches the offset-free in-mission approach — the keep/hero preview
--- spawns 3P units from precomputed `spawn_data` (World.spawn_unit; it does NOT route
--- through GearUtils.spawn_inventory_unit), so to hide the book here we DROP its
--- spawn_data entry (the book is the right_hand entry). The Skullsplitter hammer
--- (left_hand entry) is left UNTOUCHED so it renders in its correct native position.
--- No mesh swap, no node-linking substitution → no preview offsets.
+-- Inventory-preview mirror for Kruber's wh_hammer_book (#181). The previewer bypasses
+-- GearUtils.spawn_inventory_unit and consumes precomputed spawn_data directly, so the
+-- same transaction must drop the right/book entry and reclassify the existing
+-- left/hammer entry as a right-hand unit using receiver-native linking.
 _wt_hammer_book_preview_swap_apply = function(self, item_name, slot)
-    if item_name ~= "wh_hammer_book" then return end
-    local career = self._current_career_name
-    if not career or career:sub(1, 3) ~= "es_" then return end
-
-    local slot_type = (type(slot) == "table" and slot.type) or nil
-    if not slot_type then return end
-    local info = self._item_info_by_slot and self._item_info_by_slot[slot_type]
-    if not info or not info.spawn_data then return end
-
-    local new_spawn_data = {}
-    local hid_book = false
-    for _, entry in ipairs(info.spawn_data) do
-        if entry.right_hand then
-            -- drop the book (right_hand) entry so it never spawns in the preview
-            hid_book = true
-        else
-            -- keep the hammer (left_hand) + any other entry, untouched (native position)
-            new_spawn_data[#new_spawn_data + 1] = entry
-        end
-    end
-    info.spawn_data = new_spawn_data
-
-    if hid_book then
-        _dbg("[wt hammer-book-3p-swap preview] dropped book (right_hand) entry, kept native hammer on career=%s", career)
-    end
+    _wt_skullsplitter_hand_policy.apply_preview(
+        self, item_name, slot, rawget(_G, "Weapons"), printf)
 end
 
 -- Apply scale/offset to the inventory character preview.
@@ -4566,6 +4523,7 @@ local _wt_runtime_check_deps = {
     wield_patches_module = _WIELD_PATCHES_MODULE,
     is_sp_crossbow_presentation_item = _is_sp_crossbow_presentation_item,
     grip_offset_policy = _wt_grip_offset_policy,
+    skullsplitter_hand_policy = _wt_skullsplitter_hand_policy,
     weapon_backend = weapon_backend,
 }
 -- WT_DEV_OVERLAY_BEGIN:runtime-check-dependencies
