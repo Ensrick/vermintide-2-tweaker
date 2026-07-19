@@ -37,6 +37,17 @@ return function(H, repo_root)
         H.equal(policy.difficulty("cataclysm_3", 100, vanilla_difficulties, vanilla_lookup), "cataclysm_3")
     end)
 
+    H.test("CT #460 never jumps across a missing registered tier", function()
+        local difficulties = {
+            "normal", "hard", "harder", "hardest", "cataclysm",
+            "cataclysm_2", "cataclysm_3", "cataclysm_5", "versus_base",
+        }
+        local lookup = {}
+        for i, key in ipairs(difficulties) do lookup[i], lookup[key] = key, i end
+        H.equal(policy.difficulty("cataclysm_3", 2, difficulties, lookup), "cataclysm_3")
+        H.equal(policy.difficulty("cataclysm_3", 4, difficulties, lookup), "cataclysm_3")
+    end)
+
     H.test("CT #460 coin reduction begins on map three and clamps input", function()
         H.equal(policy.coin_multiplier(2, -25, 1), 2)
         H.equal(policy.coin_multiplier(2, -25, 2), 1.5)
@@ -46,16 +57,64 @@ return function(H, repo_root)
         H.equal(policy.coin_multiplier(2, 50, 2), 2)
     end)
 
+    H.test("CT #460 hot join sends and consumes one original-tier message", function()
+        local callbacks, hooks, events = {}, {}, {}
+        local old_managers = rawget(_G, "Managers")
+        _G.Managers = { mechanism = { server_peer_id = function() return "host" end } }
+        local mod = {}
+        function mod:network_register(name, callback) callbacks[name] = callback end
+        function mod:hook(class_name, method_name, callback)
+            hooks[class_name .. "." .. method_name] = callback
+        end
+        function mod:network_send(name, peer_id, schema, start_key)
+            events[#events + 1] = table.concat({ "send", name, peer_id, schema, start_key }, ":")
+        end
+
+        policy.install_hot_join(mod, 7)
+        callbacks.ct_progdiff_start("host", 6, "hardest")
+        H.equal(mod._ct_progdiff_pending_host_start, nil)
+        callbacks.ct_progdiff_start("not-host", 7, "hardest")
+        H.equal(mod._ct_progdiff_pending_host_start, nil)
+        callbacks.ct_progdiff_start("host", 7, "hardest")
+        H.equal(mod._ct_progdiff_pending_host_start, "hardest")
+
+        local hook = hooks["DeusMechanism.sync_mechanism_data"]
+        local mechanism = { _deus_run_controller = {
+            _ct_progdiff_start = "hardest",
+            _run_state = { is_server = function() return true end },
+        } }
+        local result = hook(function()
+            events[#events + 1] = "vanilla"
+            return "ok"
+        end, mechanism, "peer-2", true)
+        H.equal(result, "ok")
+        H.equal(events[1], "send:ct_progdiff_start:peer-2:7:hardest")
+        H.equal(events[2], "vanilla")
+        _G.Managers = old_managers
+    end)
+
     H.test("CT #460 production wires both advanced host-effective settings", function()
         local path = repo_root
             .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
         local f = assert(io.open(path, "rb"))
         local source = f:read("*a")
         f:close()
+        local policy_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_progressive_difficulty.lua"
+        local pf = assert(io.open(policy_path, "rb"))
+        local policy_source = pf:read("*a")
+        pf:close()
         H.truthy(source:find('effective_setting("progressive_difficulty_increase")', 1, true))
         H.truthy(source:find('effective_setting("progressive_coin_reduction")', 1, true))
         H.truthy(source:find("mod._ct_progressive_policy", 1, true))
         H.truthy(source:find("policy.coin_multiplier", 1, true))
         H.truthy(source:find("mod._ct_progressive_policy.difficulty", 1, true))
+        H.truthy(source:find("mod._ct_progdiff_pending_host_start or args[2]", 1, true))
+        H.truthy(source:find("(self and self._ct_progdiff_start) or base", 1, true))
+        H.equal(source:find("mod._ct_progdiff_start", 1, true), nil)
+        H.truthy(source:find("install_hot_join(mod, CT_RPC_SCHEMA)", 1, true))
+        H.truthy(policy_source:find('mod:network_register("ct_progdiff_start"', 1, true))
+        H.truthy(policy_source:find('mod:hook("DeusMechanism", "sync_mechanism_data"', 1, true))
+        H.truthy(policy_source:find('mod:network_send("ct_progdiff_start", peer_id', 1, true))
     end)
 end
