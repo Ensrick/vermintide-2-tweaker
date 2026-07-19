@@ -149,6 +149,27 @@ return function(H, repo_root)
         H.equal(rows[2], zulu)
     end)
 
+    H.test("slot-split craft queries append only matching synthetic selectors", function()
+        local melee = selector("cwv_melee")
+        melee.data = { slot_type = "melee", item_type = "cwv_melee" }
+        local ranged = selector("cwv_ranged")
+        ranged.data = { slot_type = "ranged", item_type = "cwv_ranged" }
+
+        local melee_rows = {}
+        Selector.inject(melee_rows, { melee = melee, ranged = ranged }, {
+            allowed_slots = { melee = true },
+        })
+        H.equal(#melee_rows, 1)
+        H.equal(melee_rows[1], melee)
+
+        local ranged_rows = {}
+        Selector.inject(ranged_rows, { melee = melee, ranged = ranged }, {
+            allowed_slots = { ranged = true },
+        })
+        H.equal(#ranged_rows, 1)
+        H.equal(ranged_rows[1], ranged)
+    end)
+
     H.test("canonical_key delegates to the injected contract resolver", function()
         local seen = {}
         Selector.set_canonical_key_resolver(function(item)
@@ -208,7 +229,8 @@ return function(H, repo_root)
         -- the former one-liner: the inject result is captured as `result`, handed to
         -- the render-seam probe (observation-only, pcall'd), then returned unchanged,
         -- so the rendered-list identity is still exactly the selector's output.
-        H.truthy(source:find("local result = template_selector.inject(items, _template_cache)", 1, true))
+        H.truthy(source:find("_single_slot_filter(filter)", 1, true))
+        H.truthy(source:find("local result = template_selector.inject(items, _template_cache, {", 1, true))
         H.truthy(source:find("return result", 1, true))
     end)
 end

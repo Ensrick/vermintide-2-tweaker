@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.31-dev"
+local MOD_VERSION = "0.1.32-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -1484,6 +1484,62 @@ local function _returned_unit_identity(unit)
 		debug_name, name_hash, mesh_node)
 end
 
+local _unit_shape_seen = {}
+local function _mesh_name(unit, index)
+	if type(Unit.mesh_name) == "function" then
+		local ok, value = pcall(Unit.mesh_name, unit, index)
+		if ok and value ~= nil then return tostring(value) end
+	end
+	if type(Unit.mesh) == "function" then
+		local ok, value = pcall(Unit.mesh, unit, index)
+		if ok and value ~= nil then return tostring(value) end
+	end
+	return "unavailable"
+end
+
+local function _unit_shape_summary(unit)
+	if not unit or not Unit.alive(unit) then return "nil-or-dead" end
+	local scene_count, parents, meshes = "unavailable", {}, {}
+	if type(Unit.num_scene_graph_items) == "function" then
+		local ok, count = pcall(Unit.num_scene_graph_items, unit)
+		if ok and type(count) == "number" then
+			scene_count = tostring(count)
+			if type(Unit.scene_graph_parent) == "function" then
+				for i = 0, math.min(count - 1, 7) do
+					local ok_parent, parent = pcall(Unit.scene_graph_parent, unit, i)
+					parents[#parents + 1] = string.format("%d>%s", i,
+						tostring(ok_parent and parent or "err"))
+				end
+			end
+		end
+	end
+	if type(Unit.num_meshes) == "function" then
+		local ok, count = pcall(Unit.num_meshes, unit)
+		if ok and type(count) == "number" then
+			for i = 0, math.min(count - 1, 5) do
+				meshes[#meshes + 1] = string.format("%d:%s", i, _mesh_name(unit, i))
+			end
+		end
+	end
+	local node_name = tostring(_appearance.TRANSFORM_NODE_NAME)
+	local has_node = "api-missing"
+	if type(Unit.has_node) == "function" then
+		local ok, value = pcall(Unit.has_node, unit, node_name)
+		has_node = tostring(ok and value or "err")
+	end
+	return string.format("scene_count=%s parents=[%s] has_%s=%s meshes=[%s]",
+		scene_count, table.concat(parents, ","),
+		node_name, has_node, table.concat(meshes, ","))
+end
+
+local function _log_unit_shape_once(surface, perspective, unit)
+	local key = tostring(surface) .. ":" .. tostring(perspective)
+	if _unit_shape_seen[key] then return end
+	_unit_shape_seen[key] = true
+	_appearance_diag("[WOC:712] unit census surface=%s perspective=%s %s",
+		tostring(surface), tostring(perspective), _unit_shape_summary(unit))
+end
+
 -- Remote husks resolve the intentionally vanilla wire item. Re-key the render
 -- unit only when the WOC sideband positively identifies this peer+slot. Passing
 -- a shallow item-data shadow with a WOC name prevents another variant mod from
@@ -1519,8 +1575,10 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 			tostring(surface), tostring(item_units.right_hand_unit),
 			tostring(_appearance.UNIT_3P), _returned_unit_identity(unit_1p),
 			_returned_unit_identity(unit_3p))
+		_log_unit_shape_once(surface, "3p", unit_3p)
 		_wa.apply(unit_3p, _appearance.TRANSFORM, "3p", surface)
 		if unit_1p then
+			_log_unit_shape_once(surface, "1p", unit_1p)
 			_wa.apply(unit_1p, _appearance.TRANSFORM, "1p", surface)
 		end
 		_audio.observe_spawn(unit_3p, unit_1p, owner_unit_1p, owner_unit_3p)

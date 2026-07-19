@@ -1,5 +1,26 @@
 # Crafting in Modded Changelog
 
+## 0.8.97-dev (2026-07-18): #524 bound slot-split Craft Item selector injection
+
+- Used the latest `0.8.95-dev` verification log to identify a different seam
+  from the old 300-power crafted-instance leak: the native Craft Item picker
+  calls `can_craft_with` through slot-split subqueries, and CIM was appending
+  the full synthetic selector cache to each matching subquery. That can make
+  ordinary 5-power selectors look duplicated even when the final-list probe
+  reports `hard_dups=0`.
+- The selector injection path now parses a single `slot_type == ...` filter and
+  appends only matching synthetic selectors for that subquery. Broad mixed-slot
+  queries keep the existing full-cache behavior, and distinct authored CWV
+  variants or accessory icon selectors remain separate choices.
+- Added engine-free regression coverage proving melee-only and ranged-only
+  Craft Item queries receive only their matching synthetic templates.
+
+**Verification:** open the native Keep Craft Item picker, especially on a career
+that previously showed two crossbows, dual axes, dual maces, rapiers, or Tuskgor
+javelins. Each definition should appear once as a 5-power selector; no 300-power
+crafted instances should appear. Run `/cim_regression_test` and require the
+`issue524_*` checks to pass.
+
 ## 0.8.96-dev (2026-07-18): #661 preserve provider-owned weapon availability
 
 - Removed CIM's independent `can_wield` append from the adventure-visibility
