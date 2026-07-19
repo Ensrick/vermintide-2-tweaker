@@ -1,5 +1,13 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.299-dev (2026-07-18) - #136 live host graph reconciliation [verify-fix-coop]
+
+- Clients now apply the completed host `ct_graph_snapshot_chunk` payload to the live `DeusRunController` graph immediately after chunk assembly, so direct current-node and mission consumers no longer wait for the Chaos Wastes map UI to open before seeing the host-authoritative mission graph.
+- The existing `DeusMapScene.on_enter` snapshot application remains as a late visual safety path. This adds no RPC, per-frame stream, or unpaced chunk send; the existing #97 paced transport remains the only graph-snapshot carrier.
+- Added Lua coverage proving receiver store-before-apply ordering, the direct live graph boundary, and the preserved paced-send contract.
+
+**Co-op verify:** host and client run CT dev 0.7.299-dev, start a Chaos Wastes expedition with the same injected-adventure-map settings used for the prior repro, and play through node 1 without reopening the map as a workaround. Host/client logs should name the same current node, level, and god; the client should log `[ct:136] live snapshot apply ... marker=graph_snapshot_live_apply_before_mission_select_v0.7.299`.
+
 ## 0.7.298-dev (2026-07-18) - #505 deepest-run weapon-chest crash
 
 - Fixed the verified `DeusWeaponGeneration.get_random_rarity` crash after the Single Mission Loader launched with `Run Progress = 100%`. Vanilla requires `0 <= run_progress < 1` and its own ImGui loader caps the slider at `0.999`; CT had exposed and forwarded exactly `1.0`.
