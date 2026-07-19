@@ -4,18 +4,6 @@
 > be stale. GitHub Issues is the sole current tracker; retain this file only for
 > design evidence that is not yet captured in an issue.
 
-## #627 Outrider launcher custom mesh - deferred polish
-
-- [ ] In-game tune `right_hand_scale` / `right_hand_rotation` (and offset if
-  needed) for `_type_transforms.cwv_es_outrider_grenade_launcher` via WT's 3P
-  Hold-Pose tuner at multiple yaw headings, then bake the settled values. The
-  shipped `{0.4,0.4,0.4}` / `{-90,-90,-90}` are imported-FBX starting guesses.
-- [ ] Custom inventory/HUD icon art. The variant still points at
-  `icon_wpn_empire_blunderbuss_t1` / `weapon_generic_icon_blunderbuss`.
-- [ ] Verify husk-on-CWV-peer renders the custom mesh (rides the existing CWV
-  weapon-skin wire path; #392 husk class). Confirm the packed-map channel
-  assignment (G=roughness, B=metallic) looks correct or swap it (data-free).
-
 ## #343 Smoke Bomb implementation gates
 
 - [ ] Resolve the existing bomb-slot registration quarantine first: the v0.1.352/.353 Tuskgor experiment made all CWV variants disappear despite no registration exception. Do not add another `ItemMasterList`/`NetworkLookup`/`Pickups.grenades` member until that mutation is isolated.
