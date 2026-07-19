@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.153-dev - 2026-07-18 - strict LA texture residency gate (#749) [verify-fix-coop]
+
+- #749: the active Loremaster offhand paint path now fails closed before `Unit.set_texture_for_materials`. Missing/throwing `Application.can_get`, non-resident textures, malformed slot/path data, or a non-live unit all skip the native C setter and emit one bounded `[cos:749]` diagnostic instead of trusting `pcall` to catch a renderer crash it cannot catch.
+- Added a byte-identical `_lib_resource_residency.lua` contract in `tools/shared_lib` and Cosmetics so future borrowed-renderer fixes have one strict resource-proof shape instead of another local `can_get` variation.
+- Audited the shared `WeaponAppearance.apply_textures` helper from the #749 site inventory. It remains a latent hazard if a future consumer feeds borrowed textures through it, but current production evidence shows the active callers are transform-only, so this patch leaves stable consumers untouched and fixes the observed LA bridge boundary first.
+- Added Lua regression coverage for strict texture proof, malformed data, absent units, local/shared helper byte identity, and the active LA bridge source seam.
+
+**Co-op verify:** with Cosmetics + Loremaster’s Armoury, have host/client preview/equip LA shield/offhand texture variants in lobby and mission, including a client viewing a host and a host viewing a client. Expected: no renderer/AV crash during customization preview, inventory preview, mission entry, or remote husk rendering. If a texture is not resident, the affected shield may degrade to no LA repaint and the log should contain at most one bounded `[cos:749] residency SKIP` line per reason/path/slot/context.
+
 ## 0.9.152-dev - 2026-07-18 - session-score weapon skin crash floor (#734) [verify-fix-coop]
 
 - Added a Cosmetics-side receiver floor for the session-score/player-list weapon-skin read path. `CosmeticUtils.get_weapon_skin_name` now rawget-checks weapon-slot `NetworkLookup.weapon_skins` ids before vanilla's strict lookup can crash the client; an unknown id degrades to no skin and logs one bounded `[cos:734]` line.
