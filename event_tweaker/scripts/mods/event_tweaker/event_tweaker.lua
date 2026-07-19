@@ -1,7 +1,7 @@
 local mod = get_mod("event_tweaker")
 local _mem_probe_t0 = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.4.36-dev"
+local MOD_VERSION = "0.4.37-dev"
 
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([event_tweaker:LOAD] v<X> enabled fp=<hash> OK) is the canonical version
@@ -57,6 +57,7 @@ mod:dofile("scripts/mods/event_tweaker/_evt_dlc")                  -- DLC owners
 mod:dofile("scripts/mods/event_tweaker/_evt_guard413_weave")       -- issue 413: weave-only mutator injection gate
 mod:dofile("scripts/mods/event_tweaker/_evt_guard455_boss_events") -- issue 455: boss-event mutator guard
 mod:dofile("scripts/mods/event_tweaker/_evt_guard430_curse_parity") -- issue 430: Cursed Adventure curse wire-safety floor (peer-parity beacon)
+mod:dofile("scripts/mods/event_tweaker/_evt_shadow_adventure")      -- issue 413: asset-free Shadow adapter + capability parity
 mod:dofile("scripts/mods/event_tweaker/_evt_selection")            -- preset/checkbox/discovery selection -> gather_mutators
 mod:dofile("scripts/mods/event_tweaker/_evt_preview")              -- issue 532: Tab-hold active-mutator preview (IngamePlayerListUI)
 mod:dofile("scripts/mods/event_tweaker/_evt_missions")              -- issue 626: allowlisted event missions in Own Game

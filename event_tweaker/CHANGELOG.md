@@ -1,5 +1,12 @@
 # Tweaker: Events — Changelog
 
+## 0.4.37-dev (2026-07-18) - issue #413 Adventure Shadow gameplay adapter [candidate]
+
+- Replaced the containment-only Shadow exclusion with a bounded Adventure implementation. Shadow now retains Fatshark's six-metre reveal boundary, enemy fade, ping suppression through the existing buff identity, and 90% damage reduction outside the reveal radius without spawning the non-resident `wpn_shadow_gargoyle_head` light or `vfx_static_shadow_01` unit.
+- Added a capability-specific peer beacon (`et_shadow_adventure_v1`). Shadow injects only when every current peer proves this adapter; modless peers and older Event Tweaker builds fail closed. The existing pre-session pending-peer fence and `GameModeBase.is_joinable` lock prevent unsafe hot joins while Shadow is selected/active.
+- Native Weaves continue through Fatshark's original Shadow functions. The other six unsafe Winds-of-Magic mutators retain the unconditional Adventure drop floor; `metal` remains unchanged.
+- Added engine-free policy/regression coverage (`test_event_shadow_adventure`, runtime `issue413_shadow_adventure_adapter`) and updated the checklist/source contracts. `MOD_VERSION` and Workshop metadata advanced from `0.4.36-dev` to `0.4.37-dev`.
+
 ## 0.4.36-dev (2026-07-18) - issue #626 fix: narrowed mission visibility gate [untested]
 
 - Fixed the "toggle on, nothing shows" defect: the mission visibility contract fail-closed on four `NetworkLookup` tables (`level_keys`, `mission_ids`, `act_keys`, `unlockable_level_keys`) that the Own Game menus never read, so any lookup mismatch silently blocked all four menu hooks with only a `[event-missions:626] blocked:` printf. `validate_contract` now requires ONLY the tables the menus actually read: `AreaSettings.celebrate` with `act_celebrate` in its acts (`start_game_window_area_selection.lua:91-95`), `ActSettings.act_celebrate` with numeric `sorting` (`start_game_window_mission_selection.lua:156-160`), and each allowlisted `LevelSettings` entry with matching `level_id`/`act` and a non-empty package list.

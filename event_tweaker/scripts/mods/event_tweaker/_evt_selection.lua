@@ -59,6 +59,9 @@ local notify_weave_drop   = ET.notify_weave_drop
 -- is dofile'd before this module, so the export exists here).
 local curse_wire_safe     = ET.curse_wire_safe
 local set_curse_requested = ET.set_curse_session_requested
+local shadow_plan         = ET.shadow_adventure_plan
+local notify_shadow_drop  = ET.notify_shadow_drop
+local set_shadow_requested = ET.set_shadow_session_requested
 
 local function active_preset()
     local pick = mod:get("event_preset")
@@ -215,6 +218,7 @@ end)
 local function gather_mutators()
     local seen = {}
     local out = {}
+    if set_shadow_requested then set_shadow_requested(false) end
     local function add(name)
         -- issue 413: outside a real weave, weave-only mutators must never
         -- reach append_live_event_mutators -- the engine broadcasts each
@@ -223,7 +227,19 @@ local function gather_mutators()
         -- engine fatal) or the host (heavens/light/death/beasts: nil
         -- wind_settings index). Single chokepoint: every injection route
         -- (preset, checkbox, discovered, curse) funnels through here.
-        if WEAVE_ONLY_MUTATORS[name] and not _weave_wind_active() then
+        if name == "shadow" and not _weave_wind_active() then
+            local decision = shadow_plan and shadow_plan() or "drop_adapter_unavailable"
+            if decision == "adventure_adapter" then
+                if set_shadow_requested then set_shadow_requested(true) end
+                pcall(printf, "[et:413] Shadow routed through asset-free Adventure adapter (radius=6; capability parity proven)")
+            else
+                pcall(printf, "[et:413] dropped Adventure Shadow (decision=" .. tostring(decision) .. ")")
+                if notify_shadow_drop and mod:get("mut_" .. name) then
+                    notify_shadow_drop(decision)
+                end
+                return
+            end
+        elseif WEAVE_ONLY_MUTATORS[name] and not _weave_wind_active() then
             pcall(printf, "[et:413] dropped weave-only mutator [" .. tostring(name)
                 .. "] (no active wind settings - not a Weave mission)")
             -- issue 413 follow-up: if the HOST explicitly ticked this Winds box,
@@ -289,9 +305,18 @@ end
 --             these greyed/flagged so a curse that will NOT activate is never
 --             advertised as active.
 local function preview_selection()
-    local seen, active = {}, {}
+    local seen, active, dropped, dropped_seen = {}, {}, {}, {}
     local function consider(name, is_curse)
-        if WEAVE_ONLY_MUTATORS[name] and not _weave_wind_active() then
+        if name == "shadow" and not _weave_wind_active() then
+            local decision = shadow_plan and shadow_plan() or "drop_adapter_unavailable"
+            if decision ~= "adventure_adapter" then
+                if not dropped_seen[name] then
+                    dropped_seen[name] = true
+                    dropped[#dropped + 1] = name
+                end
+                return
+            end
+        elseif WEAVE_ONLY_MUTATORS[name] and not _weave_wind_active() then
             return  -- same drop gather_mutators applies; minus its chat notice
         end
         if not seen[name] then
@@ -324,14 +349,16 @@ local function preview_selection()
     -- Floor-dropped curses: the user checked them and owns the DLC, but the
     -- parity floor removed them (a lobby peer lacks event_tweaker). Enumerated
     -- separately so the panel can list them greyed instead of silently vanishing.
-    local dropped = {}
     if not (curse_wire_safe and curse_wire_safe()) then
         local MT = rawget(_G, "MutatorTemplates")
         for i = 1, #MANAGED_CURSES do
             local c = MANAGED_CURSES[i]
             if mod:get("mut_" .. c.id) and owns_dlc(c.dlc)
                and (not MT or rawget(MT, c.id)) then
-                dropped[#dropped + 1] = c.id
+                if not dropped_seen[c.id] then
+                    dropped_seen[c.id] = true
+                    dropped[#dropped + 1] = c.id
+                end
             end
         end
     end

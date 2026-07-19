@@ -91,15 +91,16 @@ injection route that bypasses `add()` silently bypasses every guard.
 
 Issue 386 uses a mutator-handler hook; issue 430 uses the joinability hook above.
 Issues 413 and 455 enforce without hooking a vanilla method. All are load-bearing:
-- **Issue 413 (weave-only mutators)** - the 7 Winds-of-Magic mutators
+- **Issue 413 (weave-only mutators)** - the stock paths of 7 Winds-of-Magic mutators
   (`shadow`/`heavens`/`light`/`death`/`beasts`/`fire`/`life`) assume a Weave context;
   outside one, `Managers.weave:get_active_wind_settings()` is nil and the weave
   packages are non-resident, so they nil-index or spawn a non-resident unit and fatal
   (host, client, or every-peer depending on the mutator) [src: `weave_manager.lua`
-  wind-settings; `mutator_shadow.lua:186-187` non-resident unit]. Fixed by DROPPING
-  the 7 names at `add()` whenever no weave wind is active - a host-only mod cannot
-  preload vanilla clients, so exclusion at injection is the only safe fix
-  (`_evt_guard413_weave.lua`).
+  wind-settings; `mutator_shadow.lua:186-187` non-resident unit]. Six stay excluded
+  at `add()`. Shadow has an explicit all-peer exception: a capability-specific
+  handshake, closed hot-join boundary, and `_evt_shadow_adventure.lua` adapter omit
+  the non-resident lantern/VFX while retaining the resident fade + 90% DR mechanics.
+  Any absent/older/modless peer restores exclusion before activation.
 - **Issue 455 (boss-event mutators)** - `multiple_bosses` / `blessing_of_grimnir` /
   `deus_pacing_tweak` index `CurrentBossSettings.boss_events` with no nil check; a
   fixed-end-boss level (e.g. The War Camp) ships a boss block with no `boss_events`
@@ -147,10 +148,10 @@ re-discover these.
   would - extend `PACING_TABLE_FIELDS` if a new scalar-writing field surfaces (issue
   386).
 - **A host-only mod cannot make an injected mutator safe on a vanilla client by
-  preloading - it can only decline to inject it.** That is why the weave-only fix
-  (issue 413) is exclusion-at-injection, in contrast to Cursed Adventure where every
-  peer runs the mod and preloads. Any future "run this normally-gated mutator in
-  Adventure" idea has to answer "does an unmodded client survive it?" first.
+  preloading - it can only decline to inject it.** Normally gated content therefore
+  stays excluded unless every peer proves the exact adapter capability and the
+  session closes hot joins. Adventure Shadow uses that bounded exception without
+  loading the unavailable assets; Cursed Adventure uses it with package preload.
 - **Keep decoration is not mutator-driven and mutators cannot reach hubs.**
   `GameModeBase.append_live_event_mutators` early-returns on `hub_level` /
   `tutorial_level` [src: `game_mode_base.lua:260-262`], and vanilla seasonal keeps are

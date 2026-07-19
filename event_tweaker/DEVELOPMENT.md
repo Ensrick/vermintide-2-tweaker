@@ -115,8 +115,21 @@ at both sites.) Public surface: `mod._evt.owns_dlc`, `mod._evt.mutator_allowed`,
 `mod._evt.preset_allowed`.
 
 **`_evt_guard413_weave.lua` — manifest position 4.**
-Issue 413 guard data: the weave-only mutator blocklist + the fail-closed
-`_weave_wind_active()` probe. Registers check `issue413_weave_only_mutators_gated`.
+Issue 413 unsafe-stock-path data: the weave-only mutator blocklist + the
+fail-closed `_weave_wind_active()` probe. Shadow remains classified here even
+though the later adapter can admit it after capability proof. Registers check
+`issue413_weave_only_mutators_gated`.
+
+**`_evt_shadow_adventure.lua` — after peer parity, before selection.**
+Capability-gated Adventure implementation of Shadow. It keeps the native
+six-metre reveal / 90% damage-reduction mechanics using the resident fade system
+and vanilla buff identity, but never spawns the Weave-only gargoyle light or
+shadow VFX. A dedicated parity channel rejects older Event Tweaker versions as
+well as modless peers; the shared pre-session fence closes hot joins. Public
+surface: `shadow_adventure_plan`, `shadow_adventure_wire_safe`,
+`shadow_adventure_adapter_ready`. Pure policy:
+`event_tweaker_shadow_policy.lua`. Runtime check:
+`issue413_shadow_adventure_adapter`.
 Public surface: `mod._evt.WEAVE_ONLY_MUTATORS`, `mod._evt.weave_wind_active`.
 
 **`_evt_guard455_boss_events.lua` — manifest position 5.**
@@ -457,7 +470,7 @@ The eight Winds-of-Magic mutators assume the Weave context. Outside one, `Manage
 - `life` — nil-safe reads, but `spawn_bush` network-spawns the weave-package unit `units/weave/life/life_thorn_bushes_mutator` (`mutator_life.lua:19-24`); same non-resident-resource class, replicated to every peer.
 - `metal` — the one SAFE wind: `get_wind_strength()` falls back to 1 (`weave_manager.lua:679-683`), no `wind_settings` index, no spawns.
 
-**Fix (do not remove):** `WEAVE_ONLY_MUTATORS` + `_weave_wind_active()` in `_evt_guard413_weave.lua`; `gather_mutators()`'s `add()` (`_evt_selection.lua`) drops the 7 unsafe names whenever no weave wind is active, before `append_live_event_mutators` broadcasts via `rpc_activate_mutator_client`. Vanilla clients cannot be preloaded by a host-only mod, so exclusion at injection is the only safe fix (contrast Cursed Adventure, where every peer runs the mod and preloads). Real Weave missions are untouched — `GameModeWeave` pulls winds from `Managers.weave:mutators()` (`game_mode_weave.lua:134-138`), not from live events. Regression check: `issue413_weave_only_mutators_gated`; checklist slug `et-weave-only-mutator-gate`.
+**Fix (do not remove):** `WEAVE_ONLY_MUTATORS` + `_weave_wind_active()` in `_evt_guard413_weave.lua` preserve the stock-path floor. `gather_mutators()` drops six unsafe winds unconditionally outside a Weave. Shadow is the bounded exception: `_evt_shadow_adventure.lua` replaces its non-resident presentation with an asset-free radius/fade/buff adapter, and selection admits it only when a capability-specific all-peer roster plus closed pre-session set are proven. Otherwise it is dropped before `rpc_activate_mutator_client`, including for modless and older-ET peers. Real Weave missions delegate to Fatshark's untouched native functions. Checks: `issue413_weave_only_mutators_gated`, `issue413_shadow_adventure_adapter`; checklist slug `et-weave-only-mutator-gate`.
 
 ### Boss-event mutators fatal on fixed-end-boss levels (issue 455, v0.4.25-dev)
 
