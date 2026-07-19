@@ -58,7 +58,9 @@ return function(H, repo_root)
         -- stubs). No check was lost or duplicated: 68 + 33 == 101.
         -- v0.7.298-dev adds two NEW module checks (ct_meta_ammo_server_auth_grant_249,
         -- cursed_chest_reconcile_132): module 68 -> 70, conserved total 103.
-        H.equal(count_plain(regression, "_rt_register("), 70)
+        -- v0.7.304-dev adds one NEW module check (cot471_placement_topup, the #471
+        -- Chest-of-Trials placement top-up marker): module 70 -> 71, total 104.
+        H.equal(count_plain(regression, "_rt_register("), 71)
         H.equal(count_plain(entry, "_rt_register("), 33)
         -- The shared _RT_CHECKS registrar stays defined and exposed in the entry;
         -- the module registers through the exposed handle, never a second registry.

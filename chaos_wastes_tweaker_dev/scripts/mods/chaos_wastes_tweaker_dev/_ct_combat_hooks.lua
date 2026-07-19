@@ -324,6 +324,32 @@ end
 -- pulses carry spawn_counter_category="cursed_chest_elites", which the #64 filter
 -- never matched, so they are never multiplied).
 CT_COT_471_DIAG_MARKER = "cot471:spawn_composition_pre_scaled_placed_probe_v0.7.248"
+-- [ct:471] v0.7.304-dev FIX - the diagnostic above settled the root cause as
+-- placed<built_req (finder under-placement), logs 2026-07-18: built_req=54
+-- placed=23 (mult=3 cataclysm) and built_req=8 placed=7 (mult=1). Cause, in
+-- the decompile: ConflictUtils.find_positions_around_position gives each
+-- requested slot ONE separation-filter attempt - the inner `break` sits inside
+-- `if spawn_pos then` (conflict_utils.lua:1678-1693), so an on-nav candidate
+-- rejected for sitting within distance_to_enemies (default 2, mixer
+-- terror_event_mixer.lua:136) of an already-accepted position
+-- (conflict_utils.lua:1616-1622) still ends the slot; `tries` only retries
+-- OFF-NAV candidates. And the cursed-chest annulus (radius 8 +/- spread/2,
+-- deus_generic_terror_events.lua:95-100) saturates around ~23 positions at
+-- 2 m spacing, capping any scaled request. The runtime spawner then spawns
+-- one enemy per PLACED position (terror_event_mixer.lua:1043), silently
+-- dropping the spawn_table tail.
+-- FIX: after vanilla places, top up event.spawn_positions to #event.spawn_table
+-- by re-driving the SAME engine finder over a bounded pass plan (fresh random
+-- phase per call, conflict_utils.lua:1644-1647; later passes widen max_distance
+-- - pure schedule in _ct_cot_placement_policy.lua). Runs for BOTH cursed-chest
+-- categories whenever a wave under-places (a trial advertising N enemies must
+-- deliver N - the mult=1 8->7 loss is the same defect), matching the #117
+-- precedent of always-on trial-correctness layers. Host-only by construction:
+-- terror-event init functions only run in the server-side ConflictDirector.
+-- Failure degrades to vanilla placement (top-up is pcall-guarded).
+CT_COT_471_TOPUP_MARKER = "cot471:placement_topup_drain_v0.7.304"
+
+local COT_PLACEMENT = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_cot_placement_policy")
 
 if rawget(_G, "TerrorEventMixer") and TerrorEventMixer.init_functions
         and TerrorEventMixer.init_functions.spawn_around_origin_unit then
@@ -383,13 +409,79 @@ if rawget(_G, "TerrorEventMixer") and TerrorEventMixer.init_functions
             end
             if not ok then error(err) end
 
+            -- [ct:471] placement top-up (see CT_COT_471_TOPUP_MARKER banner above).
+            -- Runs BEFORE the spawn tick: init fires at element start, the runtime
+            -- spawner only reads spawn_positions at t > event.spawn_at
+            -- (spawn_delay later, terror_event_mixer.lua:1026), so appending here
+            -- is race-free. pcall-guarded: any failure keeps vanilla placement.
+            local vanilla_placed = placed
+            local topup, passes_used, residual = 0, 0, 0
+            if COT_PLACEMENT.needs_topup(built_req, placed) then
+                pcall(function()
+                    local CU = rawget(_G, "ConflictUtils")
+                    local spawn_positions = event and event.spawn_positions
+                    local spawn_table = event and event.spawn_table
+                    local center_box = event and event.center_position
+                    if not (CU and CU.find_positions_around_position and spawn_positions
+                            and spawn_table and center_box) then
+                        return
+                    end
+                    local center = center_box:unbox()
+                    local nav_world = Managers.state.entity:system("ai_system"):nav_world()
+                    if not (center and nav_world) then return end
+                    -- Same spacing vanilla used (terror_event_mixer.lua:136).
+                    local spacing = element.distance_to_enemies or 2
+                    -- Already-placed entries are Vector3Box (mixer boxes them
+                    -- post-find, terror_event_mixer.lua:194-205): unbox copies
+                    -- into the forbidden list so new picks keep vanilla spacing
+                    -- against every enemy already placed this wave.
+                    local forbidden = {}
+                    for i = 1, #spawn_positions do
+                        forbidden[i] = spawn_positions[i]:unbox()
+                    end
+                    -- ONE shared raw output list across passes: the engine finder
+                    -- appends into it, and its filter_func spaces each candidate
+                    -- against everything already in the list
+                    -- (conflict_utils.lua:1616-1622).
+                    local accepted = {}
+                    local function finder(pass, want)
+                        local before = #accepted
+                        CU.find_positions_around_position(center, accepted, nav_world,
+                            pass.min_distance, pass.max_distance, want,
+                            forbidden, spacing, pass.tries, pass.circle_subdivision,
+                            element.row_distance, element.above_max, element.below_max,
+                            false, nil, nil)
+                        return #accepted - before
+                    end
+                    local passes = COT_PLACEMENT.plan_passes(element.min_distance, element.max_distance)
+                    local _, got, used = COT_PLACEMENT.drain(built_req, placed, passes, finder)
+                    -- Mirror the mixer's own post-pass: box each new position and
+                    -- fire the telegraph decal before appending, so topped-up
+                    -- spawns keep the ground warning (terror_event_mixer.lua:194-205).
+                    for i = 1, #accepted do
+                        local idx = #spawn_positions + 1
+                        local boxed = Vector3Box(accepted[i])
+                        if element.pre_spawn_unit_func then
+                            pcall(element.pre_spawn_unit_func, event, element, boxed, spawn_table[idx])
+                        end
+                        spawn_positions[idx] = boxed
+                    end
+                    topup = got
+                    passes_used = used
+                end)
+                placed = (event and event.spawn_positions and #event.spawn_positions) or placed
+                residual = math.max(0, (type(built_req) == "number" and built_req or 0)
+                    - (type(placed) == "number" and placed or 0))
+            end
+
             pcall(function()
-                printf("[ct:471] cot_spawn cat=%s breed=%s diff=%s mult=%s pre_req=%s built_req=%s placed=%s scaled=%s",
+                printf("[ct:471] cot_spawn cat=%s breed=%s diff=%s mult=%s pre_req=%s built_req=%s placed=%s vanilla_placed=%s topup=%s passes=%s residual=%s scaled=%s",
                     tostring(cat), tostring(element.breed_name),
                     tostring((Managers and Managers.state and Managers.state.difficulty
                         and Managers.state.difficulty:get_difficulty()) or "?"),
                     tostring(mult), tostring(pre_req), tostring(built_req),
-                    tostring(placed), do_scale and "yes" or "no")
+                    tostring(placed), tostring(vanilla_placed), tostring(topup),
+                    tostring(passes_used), tostring(residual), do_scale and "yes" or "no")
             end)
 
             _dbg("[cot_enemy_mult] event=%s breed=%s cat=%s scaled=%s (pre=%s built=%s placed=%s mult=%s)",
