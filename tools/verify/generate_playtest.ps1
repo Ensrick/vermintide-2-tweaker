@@ -156,7 +156,11 @@ function Get-VtCoopTier {
 function Get-VtLocation {
     param([string]$Method, [string]$Title, [string[]]$LabelNames)
     $hay = (($Title + " `n " + $Method)).ToLower()
+    # verify-fix-coop is the mutually-exclusive shipped-fix lifecycle. Armed
+    # diagnostics keep diagnostics-armed as their sole lifecycle and use the
+    # orthogonal coop-required qualifier (PROJECT_STANDARDS section 11).
     $isCoop = ($LabelNames -contains 'verify-fix-coop') -or
+        ($LabelNames -contains 'coop-required') -or
         ($hay -match '(both peers|both players|two players|2 players|3 players|three players|3\+ players|2\+ players|second player|other player|host and client|client husk|no-?cwv peer|remote (player|peer)|co-?op|cold[ -]?join|another player|second tester|host bot)')
     if ($isCoop) { return (Get-VtCoopTier $hay) }
 
@@ -191,22 +195,54 @@ function Get-VtModTag {
     return $null
 }
 
+# Priority labels are mutually exclusive by doctrine. Unknown/missing priority sorts
+# after the four documented levels so a malformed issue cannot jump ahead of a crash.
+function Get-VtPriorityRank {
+    param([string[]]$LabelNames)
+    foreach ($pair in @(
+        @{ Name = '0-critical'; Rank = 0 }
+        @{ Name = '1-major';    Rank = 1 }
+        @{ Name = '2-moderate'; Rank = 2 }
+        @{ Name = '3-low';      Rank = 3 }
+    )) {
+        if ($LabelNames -contains $pair.Name) { return $pair.Rank }
+    }
+    return 4
+}
+
+function Sort-VtRows {
+    param($Items)
+    return @($Items | Sort-Object `
+        @{ Expression = 'PriorityRank'; Ascending = $true }, `
+        @{ Expression = 'UpdatedAt'; Descending = $true }, `
+        @{ Expression = 'Number'; Ascending = $true })
+}
+
 # Strip internal jargon for the plain-language second-tester doc.
 function ConvertTo-PlainLanguage {
     param([string]$Text)
     if (-not $Text) { return $Text }
     $s = $Text -replace '\*\*', '' -replace '`', ''
+    $s = $s -replace '(?i)\bno\s+CTD\b', 'no crash to desktop'
     $s = $s -replace '(?i)\bCTD\b', 'a crash to desktop'
     $s = $s -replace '(?i)\bcold[- ]?join(ing)?\b', 'joining a game already in progress'
     $s = $s -replace '(?i)\bno-?cwv peer\b', 'a player who does NOT have that mod'
-    $s = $s -replace '(?i)\bhusks?\b', "the other players' characters"
-    $s = $s -replace '(?i)\bpeers?\b', 'players'
-    $s = $s -replace '(?i)\bclients?\b', 'the other players'
+    $s = $s -replace '(?i)\bclient husks?\b', "joining players' characters"
+    $s = $s -replace '(?i)\bremote husks?\b', "other players' characters"
+    $s = $s -replace '(?i)\bhusks?\b', "other players' characters"
+    $s = $s -replace "(?i)\bpeer's\b", "player's"
+    $s = $s -replace "(?i)\bpeers'\b", "players'"
+    $s = $s -replace '(?i)\bpeer\b', 'player'
+    $s = $s -replace '(?i)\bpeers\b', 'players'
+    $s = $s -replace "(?i)\bclient's\b", "joining player's"
+    $s = $s -replace "(?i)\bclients'\b", "joining players'"
+    $s = $s -replace '(?i)\bclient\b', 'joining player'
+    $s = $s -replace '(?i)\bclients\b', 'joining players'
     $s = $s -replace '(?i)\brpc\b', 'network message'
     $s = $s -replace '\[[a-z][a-z0-9_]*:LOAD\]\s*(v[\d.][\w.-]*)', 'the version line ($1) shown when the mod loads'
     $s = $s -replace '\[[a-z][a-z0-9_]*:[A-Za-z0-9_.\-]+\]', 'a marker in the game log'
     $s = $s -replace '\s+', ' '
-    $s = $s -replace '(?i)\bthe the\b', 'the'   # fix article doubling from client->the other players
+    $s = $s -replace '(?i)\bthe the\b', 'the'
     # em dash / en dash -> comma-space (repo rule: no em dashes)
     $s = $s -replace '\s*[—–]\s*', ', '
     return $s.Trim()
@@ -273,6 +309,7 @@ function Invoke-SelfTest {
     # classification
     Assert ((Get-VtLocation -Method $m -Title 'crt tooltip' -LabelNames @('verify-fix')) -eq 'KEEP-MENU') 'talent tooltip -> KEEP-MENU'
     Assert ((Get-VtLocation -Method $inline -Title 'score sync' -LabelNames @('verify-fix-coop')) -eq 'COOP-2P') 'coop label -> COOP-2P'
+    Assert ((Get-VtLocation -Method 'Open the menu and attach the resulting log.' -Title 'bounded probe' -LabelNames @('diagnostics-armed', 'coop-required')) -eq 'COOP-2P') 'coop-required routes armed diagnostics to co-op without relying on prose'
     Assert ((Get-VtLocation -Method 'Test (3 players + host bot): host cosmetics visible on client husks at cold join.' -Title 'host cosmetics' -LabelNames @('verify-fix-coop')) -eq 'COOP-3P') '3 players -> COOP-3P'
     Assert ((Get-VtLocation -Method 'Load a Chaos Wastes expedition, grab a boon at the shrine.' -Title 'boon' -LabelNames @('verify-fix')) -eq 'MISSION-CW') 'chaos wastes -> MISSION-CW'
     Assert ((Get-VtLocation -Method 'Start an Adventure mission on Righteous Stand, watch for the horde.' -Title 'spawn' -LabelNames @('verify-fix')) -eq 'MISSION-ADVENTURE') 'adventure -> MISSION-ADVENTURE'
@@ -281,9 +318,21 @@ function Invoke-SelfTest {
 
     # plain language + no em dash
     $plain = ConvertTo-PlainLanguage 'Host cosmetics visible on client husks at cold-join, no CTD.'
-    Assert ($plain -notmatch 'husk' -and $plain -notmatch 'CTD' -and $plain -notmatch '[—–]') 'plain language strips husk/CTD/em-dash'
+    Assert ($plain -notmatch 'husk' -and $plain -notmatch 'CTD' -and $plain -notmatch '[—–]' -and $plain -notmatch 'no a crash') 'plain language strips husk/CTD/em-dash'
 
     Assert ((Get-VtModTag @('bug', 'Tweaker: General', '2-moderate')) -eq 'General') 'mod tag extracted from label'
+    Assert ((Get-VtPriorityRank @('bug', '1-major')) -eq 1) 'priority rank extracted from label'
+    Assert ((Get-VtPriorityRank @('bug')) -eq 4) 'missing priority sorts last'
+
+    $ordered = Sort-VtRows @(
+        [pscustomobject]@{ Number = 1; PriorityRank = 2; UpdatedAt = [datetime]'2026-07-19T03:00:00Z' }
+        [pscustomobject]@{ Number = 2; PriorityRank = 0; UpdatedAt = [datetime]'2026-07-18T03:00:00Z' }
+        [pscustomobject]@{ Number = 3; PriorityRank = 2; UpdatedAt = [datetime]'2026-07-19T04:00:00Z' }
+    )
+    Assert (($ordered.Number -join ',') -eq '2,3,1') 'rows sort by priority then newest update'
+
+    $plainClient = ConvertTo-PlainLanguage "A client joins and checks the client's weapon."
+    Assert ($plainClient -eq "A joining player joins and checks the joining player's weapon.") 'plain language preserves client grammar'
 
     if ($script:fail -eq 0) { Write-Host 'SELF-TEST PASS' -ForegroundColor Green; exit 0 }
     else { Write-Host "SELF-TEST FAIL ($script:fail)" -ForegroundColor Red; exit 1 }
@@ -301,7 +350,7 @@ Write-Host 'Fetching open verify-state issues from GitHub...' -ForegroundColor C
 $labels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed')
 $byNumber = [ordered]@{}
 foreach ($lbl in $labels) {
-    $raw = & gh issue list --state open --label $lbl --json number,title,labels,comments --limit $Limit 2>$null | Out-String
+    $raw = & gh issue list --state open --label $lbl --json number,title,labels,comments,updatedAt --limit $Limit 2>$null | Out-String
     if ([string]::IsNullOrWhiteSpace($raw)) { Write-Host "  (${lbl}: none)"; continue }
     $list = $raw | ConvertFrom-Json
     foreach ($it in $list) {
@@ -332,6 +381,8 @@ foreach ($k in $byNumber.Keys) {
         HasMethod= $hasMethod
         Method   = $method
         Diag     = ($labelNames -contains 'diagnostics-armed')
+        PriorityRank = Get-VtPriorityRank $labelNames
+        UpdatedAt = [datetime]$it.updatedAt
     })
 }
 
@@ -361,7 +412,7 @@ function Fmt-Row {
     $modTag = if ($r.Mod) { " ($($r.Mod))" } else { '' }
     $diag = if ($r.Diag) { ' [diag]' } else { '' }
     $miss = if (-not $r.HasMethod) { ' **[MISSING-METHOD -> open issue]**' } else { '' }
-    return "- [ ] #$($r.Number)$modTag$diag - $($r.Check)$miss  `n  _Evidence:_ $($r.Evidence)"
+    return "- [ ] #$($r.Number)$modTag$diag - $($r.Check)$miss`n  _Evidence:_ $($r.Evidence)"
 }
 
 $L = New-Object System.Collections.Generic.List[string]
@@ -384,7 +435,7 @@ $L.Add('')
 
 $secEstimates = @()
 foreach ($sec in $sections) {
-    $items = @($rows | Where-Object { $_.Section -eq $sec.Key } | Sort-Object Number)
+    $items = Sort-VtRows ($rows | Where-Object { $_.Section -eq $sec.Key })
     if ($items.Count -eq 0) { continue }
     $mins = [math]::Round($sec.Over + $items.Count * $sec.Per)
     $secEstimates += "$($sec.Title): $($items.Count) checks, ~$mins min"
@@ -407,7 +458,7 @@ $L.Add('4. Play to the end scoreboard and clear the score-sync checks.')
 $L.Add('5. For the 3+ player checks, pull in a third player and repeat only those rows.')
 $L.Add('')
 foreach ($sec in $coopSections) {
-    $items = @($rows | Where-Object { $_.Section -eq $sec.Key } | Sort-Object Number)
+    $items = Sort-VtRows ($rows | Where-Object { $_.Section -eq $sec.Key })
     if ($items.Count -eq 0) { continue }
     $mins = [math]::Round($sec.Over + $items.Count * $sec.Per)
     $secEstimates += "Co-op $($sec.Title): $($items.Count) checks, ~$mins min"
@@ -444,13 +495,13 @@ $C.Add('# Co-op Playtest Checklist')
 $C.Add('')
 $C.Add("> Auto-generated on $now. Plain-language co-op-only checklist for a second tester.")
 $C.Add('')
-$C.Add('Thanks for helping test. Each item below is one bug we think we fixed and need to see working in a real co-op game. You do not need any of our tools or notes, just the game and this list.')
+$C.Add('Thanks for helping test. Each item below is either a fix to verify or a diagnostic check that needs real co-op evidence. You do not need any of our tools or notes, just the game and this list.')
 $C.Add('')
 $C.Add('## Before you start')
 $C.Add('- Make sure everyone in the group has updated to the newest version of each mod. Re-subscribe if you are not sure.')
 $C.Add('- Turn on the in-game console log if you can, so we can read it afterward. If you cannot, just watch for anything that looks wrong on screen.')
 $C.Add('- Play in ONE group/lobby the whole time so you can tick off as many items as possible in a single session.')
-$C.Add('- "It works if" describes what a PASS looks like. If you see a crash or the wrong thing, note the item number and what happened.')
+$C.Add('- "It works if" describes a fix PASS. "Please report" marks a diagnostic check. If you see a crash or the wrong thing, note the item number and what happened.')
 $C.Add('')
 $C.Add('## Suggested order')
 $C.Add('1. Everyone joins one lobby in the keep and confirms the game loaded the newest mod versions.')
@@ -461,7 +512,7 @@ $C.Add('5. If some items need a third player, add one and redo just those.')
 $C.Add('')
 
 foreach ($sec in $coopSections) {
-    $items = @($rows | Where-Object { $_.Section -eq $sec.Key } | Sort-Object Number)
+    $items = Sort-VtRows ($rows | Where-Object { $_.Section -eq $sec.Key })
     if ($items.Count -eq 0) { continue }
     $label = if ($sec.Key -eq 'COOP-2P') { 'Games with 2 players' } else { 'Games with 3 or more players' }
     $C.Add("## $label")
@@ -472,12 +523,16 @@ foreach ($sec in $coopSections) {
         $modName = if ($r.Mod) { "$($r.Mod): " } else { '' }
         $do = Get-VtFirstSentences (ConvertTo-PlainLanguage $r.Check) 2
         $pass = Get-VtPlainPass $r.Method
+        if ($r.Diag -and $pass -eq 'everything behaves normally for all players and nobody crashes.') {
+            $pass = "attach both players' logs and note what appeared on each player's screen."
+        }
         if (-not $r.HasMethod) {
             $C.Add("$n. (Item #$($r.Number)) $modName$($r.Title). We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.")
         }
         else {
             $C.Add("$n. (Item #$($r.Number)) $modName$do")
-            $C.Add("   - It works if: $pass")
+            if ($r.Diag) { $C.Add("   - Please report: $pass") }
+            else { $C.Add("   - It works if: $pass") }
         }
     }
     $C.Add('')

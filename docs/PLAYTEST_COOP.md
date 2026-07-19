@@ -1,14 +1,14 @@
 # Co-op Playtest Checklist
 
-> Auto-generated on 2026-07-18 15:39 UTC. Plain-language co-op-only checklist for a second tester.
+> Auto-generated on 2026-07-19 11:20 UTC. Plain-language co-op-only checklist for a second tester.
 
-Thanks for helping test. Each item below is one bug we think we fixed and need to see working in a real co-op game. You do not need any of our tools or notes, just the game and this list.
+Thanks for helping test. Each item below is either a fix to verify or a diagnostic check that needs real co-op evidence. You do not need any of our tools or notes, just the game and this list.
 
 ## Before you start
 - Make sure everyone in the group has updated to the newest version of each mod. Re-subscribe if you are not sure.
 - Turn on the in-game console log if you can, so we can read it afterward. If you cannot, just watch for anything that looks wrong on screen.
 - Play in ONE group/lobby the whole time so you can tick off as many items as possible in a single session.
-- "It works if" describes what a PASS looks like. If you see a crash or the wrong thing, note the item number and what happened.
+- "It works if" describes a fix PASS. "Please report" marks a diagnostic check. If you see a crash or the wrong thing, note the item number and what happened.
 
 ## Suggested order
 1. Everyone joins one lobby in the keep and confirms the game loaded the newest mod versions.
@@ -19,168 +19,212 @@ Thanks for helping test. Each item below is one bug we think we fixed and need t
 
 ## Games with 2 players
 
-1. (Item #61) Enemies: Confirm both players load Enemy Tweaker v0.7.49-dev or newer. Host a mission on a known difficulty with the host on Auto and the other players on Auto; record one repeatable ho...
+1. (Item #139) General: Blanket leash veto at the BTConditions.should_teleport hook, applied to the FINAL decision, so it vetoes both vanilla's 40 m and gt's tighter leash. With aid-priority...
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+2. (Item #430) Events: Both in the keep lobby. Expected within ~4s on the host: chat notice "[Events] player-parity: disabled Cursed Adventure curses.
+   - Please report: within ~4s on the host: chat notice "[Events] player-parity: disabled Cursed Adventure curses. Missing Tweaker: Events: <player>...".
+3. (Item #136) Chaos Wastes: Both players fully restart Steam, confirm 0.7.243-dev in both load logs.
    - It works if: everything behaves normally for all players and nobody crashes.
-2. (Item #63) Chaos Wastes: Confirm both players load CT v0.7.286-dev or newer. Host a Chaos Wastes mission, enable the Chest of Trials cost, and set it to 100 coins.
+4. (Item #278) cross-mod: host runs cim/cwv, a joining player joins WITHOUT the mod. Host equips a crafted or skinned CWV/cim item (loadout sync).
    - It works if: everything behaves normally for all players and nobody crashes.
-3. (Item #107) Chaos Wastes: with a banned grudge mark configured, reach a Belakor mission where a Shadow Lieutenant champion spawns.
+5. (Item #458) Chaos Wastes: Keep: /ct_regression_test shows PASS issue458_start_shrine_config; /ct_verify_start_shrine prints the config.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+6. (Item #424) Host with cwv, equip the Tuskgor Javelin (cwv_es_javelin), throw at enemies and terrain with the non-cwv player in the lobby.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+7. (Item #205) Chaos Wastes: corrected: the crash class is a RELIABLE SEND-QUEUE overflow, and that queue only grows when a remote player is connected - a solo host has nobody to send to, so the pri...
    - It works if: everything behaves normally for all players and nobody crashes.
-4. (Item #112) Weapons: On Witch Hunter Captain, Bounty Hunter, or Zealot, equip Kruber's Empire Handgun.
+8. (Item #421) cross-mod: On the Cosmetics player, equip ct_es_mace_gk_shield_01 or any ct_es_heavy_spear_deus_* illusion and run /cos_421_diag.
    - It works if: everything behaves normally for all players and nobody crashes.
-5. (Item #136) Chaos Wastes: Both players fully restart Steam, confirm 0.7.243-dev in both load logs.
+9. (Item #749) cross-mod: With both players running Cosmetics, open the Hero/Equipment cosmetic preview and browse Loremaster shield variants repeatedly, including glow/weave/Shyish variants wh...
    - It works if: everything behaves normally for all players and nobody crashes.
-6. (Item #149) Cosmetics: equip the LA Myrmidia Sun shield on a Bret sword & shield, then start a mission.
-   - It works if: the shield keeps the Myrmidia Sun illusion at MISSION START (no host/the other players divergence reverting it to the default imperial shield).
-7. (Item #154) Cosmetics: host equips a cross-character WEAPON cosmetic; a second player observes the other players' characters.
+10. (Item #776) Career: Reproduce Impetuous Knight kills from both host and joining player; repeat kills must refresh one 20-second attack-speed/power effect without stacking.
    - It works if: everything behaves normally for all players and nobody crashes.
-8. (Item #200) open the weapon illusion browser and hover offhand illusions.
+11. (Item #734) Cosmetics: Equip a CWV, Loremaster, or Cosmetics-authored weapon illusion, then enter a mission together.
    - It works if: everything behaves normally for all players and nobody crashes.
-9. (Item #203) Cosmetics: in a mission, swap primary<->secondary weapon while an LA offhand shield illusion is equipped, including the mission-entry case, then have the final pick be a vanilla...
+12. (Item #807) As Grail Knight, equip the CWV Kruber Rapier in the secondary/ranged slot and close Hero/Equipment view.
    - It works if: everything behaves normally for all players and nobody crashes.
-10. (Item #204) Cosmetics: Open CWV Empire Axe & Shield customization and confirm the vanilla Empire shield choices are present alongside compatible Loremaster choices.
+13. (Item #423) a non-cwv player HOSTS; a cwv player joins and lands a hit with a CWV variant carrying a cloned damage_profile.
+   - Please report: no crash to desktop on the non-cwv host (player-parity gate suppresses the cloned damage_profile on the wire when a player lacks cwv).
+14. (Item #279) cross-mod: host and joining player both equip or observe a CIM-crafted CWV item that previously rendered as merged/base models. Compare owner view, other players' characters, inventory preview, lobby/...
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+15. (Item #660) GUI: Host equips one transformed CWV weapon with a custom illusion; also keep one unmodified vanilla weapon as a control.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+16. (Item #426) Chaos Wastes: installed=FAIL or gate=FAIL: beacon/hook installation or parity transition failure.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+17. (Item #371) GUI: host runs cwv; a player joins WITHOUT cwv. Host equips the Tuskgor Javelin (cwv_es_javelin) bomb pool.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+18. (Item #491) cross-mod: Form a two-player modded lobby with exactly one player running CWV and the other player not running CWV.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+19. (Item #474) Cosmetics: Host equips Old Musket in the ranged slot; the joining player must see the custom Musket mesh, correct full transform, and rifle report.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+20. (Item #413) Events: Tick Shadow (Winds of Magic) in event_tweaker; start any Adventure mission.
    - It works if: everything behaves normally for all players and nobody crashes.
-11. (Item #205) Chaos Wastes: corrected: the crash class is a RELIABLE SEND-QUEUE overflow, and that queue only grows when a remote players is connected - a solo host has nobody to send to, so the pri...
+21. (Item #735) Weapons: On Saltzpyre, equip each affected paired shield weapon (Empire Mace & Shield, Empire Sword & Shield, Bretonnian Sword & Shield, and Dwarf Axe & Shield where available).
    - It works if: everything behaves normally for all players and nobody crashes.
-12. (Item #233) Cosmetics: Host equips a Loremaster shield/offhand cosmetic and closes the game so the exact-item selection is persisted.
+22. (Item #835) cross-mod: Equip a CWV weapon with a committed nonzero position/scale override and the Blightreaper.
    - It works if: everything behaves normally for all players and nobody crashes.
-13. (Item #241) General: the other players was not updated over Tailscale. As a friends-only self-authored upload, it needs a full Steam restart (tray -> Exit, reopen) to pull.
+23. (Item #782) Equip Blightreaper, enter a mission, and kill enough enemies to spawn several Shyish spirits.
    - It works if: everything behaves normally for all players and nobody crashes.
-14. (Item #246) Player A equips non-default illusions on both melee and ranged weapons.
+24. (Item #823) Open the inventory/crafting surfaces that show CIM's modded-rarity background and salvage controls, then close and reopen them once.
    - It works if: everything behaves normally for all players and nobody crashes.
-15. (Item #247) General: Start a bot-filled Adventure with host plus one GT the other players. the other players enables Bot Takeover; expect the other players to enter observer, exactly one temporary bot to drive the...
+25. (Item #741) cross-mod: Both players enable CWV, but deliberately use different skin-appending mod sets: the proven reproduction is host with stable WT disabled and joining player with WT Dev enabled.
    - It works if: everything behaves normally for all players and nobody crashes.
-16. (Item #249) Chaos Wastes: with "more ammo per boon" active, a the other players checks the HUD ammo count vs actual.
+26. (Item #613) Host equips Blightreaper in the keep. Verify its model uses {-90,-90,-90}, Z offset -0.3, and scale 0.9 in owner first person, owner third person, inventory character...
+   - It works if: result is zero failures. Attach both newest logs if any surface differs.
+27. (Item #384) General: One human pushes ~40m ahead; the other goes down near the bots (stay knocked, then bleed out to awaiting-rescue).
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+28. (Item #256) Chaos Wastes: Ranged career with a reserve+clip weapon (crossbow/handgun/blunderbuss - not an all-loaded bow). Fire to a partial clip, refill from an ammo crate so the clip exceeds...
    - It works if: everything behaves normally for all players and nobody crashes.
-17. (Item #256) Chaos Wastes: Ranged career with a reserve+clip weapon (crossbow/handgun/blunderbuss - not an all-loaded bow). Fire to a partial clip, refill from an ammo crate so the clip exceeds...
+29. (Item #340) GUI: Run /gut_all_languages_status with the standalone Support All Languages mod disabled.
+   - Please report: newest-log banner: the version line (v0.2.298-dev.) shown when the mod loads
+30. (Item #285) GUI: Mission with bots; let a bot (or a coop teammate) die - not just get downed.
    - It works if: everything behaves normally for all players and nobody crashes.
-18. (Item #263) Open the illusion/cosmetic customization view for a normal vanilla-rarity item that can be upgraded. Its existing upgrade copy and behavior must remain unchanged.
+31. (Item #762) Equip the Outrider on Kruber, inspect it in the inventory character preview, and enter a mission.
    - It works if: everything behaves normally for all players and nobody crashes.
-19. (Item #266) Cosmetics: Unify Kruber Shield Illusion Availability. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
-20. (Item #272) GUI: Add Scoreboard Features to GUI Tweaker. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
-21. (Item #273) Chaos Wastes: after a Chaos Wastes run with a wt cross-character weapon (or a ct weapon-upgrade), return to the keep and check Kruber's active weapon.
+32. (Item #461) Chaos Wastes: Empty list under the header: the rows were anchored on a scenegraph node with no size, so they computed to a position below the screen and were silently swallowed. Re-...
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+33. (Item #702) Cosmetics: owner applies distinct illusions to each hand of a dual weapon; second player observes in keep, mission, after swap, after transition, and after rejoin.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+34. (Item #700) General: Enter an Adventure mission together.
+   - Please report: the joining player popup, input, localized title, and accepted transition all work; the existing keep/unrelated vote behavior is unchanged.
+35. (Item #476) One player equips Imperial Longsword & Shield, applies a non-default illusion, enters the keep or a mission; the other looks at them.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+36. (Item #786) [CWV] Combat Style switch hides remote weapons. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
+37. (Item #154) Cosmetics: host equips a cross-character WEAPON cosmetic; a second player observes the other players' characters.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+38. (Item #416) Cosmetics: Both in the keep. Player A equips sword-and-shield, picks a VANILLA shield in the row-2 offhand picker (not an LA armoury option), Apply, exit.
+   - Please report: player B sees A''s chosen shield (not base). Confirm the reverse direction.
+39. (Item #632) Host and then joining player wield Blightreaper and kill a healthy enemy with a direct Blightreaper hit.
+   - Please report: exactly one native Shyish spirit targets the exact wielder; contact converts green HP to THP without killing them, then the spirit cleans up.
+40. (Item #299) Chaos Wastes: with respawn_on_chest_complete ON in a CW run, player A dies or reaches the awaiting-rescue hang far from the group; player B completes a Chest of Trials.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+41. (Item #273) Chaos Wastes: after a Chaos Wastes run with a wt cross-character weapon (or a ct weapon-upgrade), return to the keep and check Kruber's active weapon.
    - It works if: everything behaves normally for all players and nobody crashes.
-22. (Item #278) cross-mod: host runs cim/cwv, a the other players joins WITHOUT the mod. Host equips a crafted or skinned CWV/cim item (loadout sync).
+42. (Item #247) General: Start a bot-filled Adventure with host plus one GT joining player. The joining player enables Bot Takeover; expect the joining player to enter observer, exactly one temporary bot to drive the...
    - It works if: everything behaves normally for all players and nobody crashes.
-23. (Item #279) cross-mod: craft the Outrider Grenade Launcher CWV variant, equip it, and observe it on a the other players the other players' characters.
+43. (Item #233) Cosmetics: Host equips a Loremaster shield/offhand cosmetic and closes the game so the exact-item selection is persisted.
    - It works if: everything behaves normally for all players and nobody crashes.
-24. (Item #285) GUI: Mission with bots; let a bot (or a coop teammate) die - not just get downed.
+44. (Item #204) Cosmetics: Open CWV Empire Axe & Shield customization and confirm the vanilla Empire shield choices are present alongside compatible Loremaster choices.
    - It works if: everything behaves normally for all players and nobody crashes.
-25. (Item #287) GUI: enable gut_use_non_modded_loadouts, enter the modded realm, and try to change a cosmetic.
+45. (Item #203) Cosmetics: in a mission, swap primary<->secondary weapon while an LA offhand shield illusion is equipped, including the mission-entry case, then have the final pick be a vanilla...
+   - It works if: everything behaves normally for all players and nobody crashes.
+46. (Item #149) Cosmetics: equip the LA Myrmidia Sun shield on a Bret sword & shield, then start a mission.
+   - It works if: the shield keeps the Myrmidia Sun illusion at MISSION START (no host/joining player divergence reverting it to the default imperial shield).
+47. (Item #626) Events: Assemble the lobby first. On the host, enable both Dormant Event Missions.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+48. (Item #200) open the weapon illusion browser and hover offhand illusions.
+   - It works if: everything behaves normally for all players and nobody crashes.
+49. (Item #241) General: joining player was not updated over Tailscale. As a friends-only self-authored upload, it needs a full Steam restart (tray -> Exit, reopen) to pull.
+   - It works if: everything behaves normally for all players and nobody crashes.
+50. (Item #378) General: B joins A. Expected within ~60s: popup listing the missing mod(s) with Open Workshop + Leave (or the stalled-join notice if A broadcasts no manifest); Leave lands B on...
+   - It works if: everything behaves normally for all players and nobody crashes.
+51. (Item #728) Career: Join the same keep and have the second player reserve any Kruber career.
+   - It works if: everything behaves normally for all players and nobody crashes.
+52. (Item #322) Chaos Wastes: in a CW mission with linked pickups (grimoire / tome), a joining player picks up / drops the item.
+   - It works if: everything behaves normally for all players and nobody crashes.
+53. (Item #288) Chaos Wastes: Enable tweak_anath_raema_permanent.
+   - It works if: everything behaves normally for all players and nobody crashes.
+54. (Item #349) Chaos Wastes: As host, set Chests of Trials Per Mission to two.
+   - It works if: diagnostic result: collect the bounded evidence below; this does not claim the issue is fixed.
+55. (Item #249) Chaos Wastes: with "more ammo per boon" active, a joining player checks the HUD ammo count vs actual.
+   - It works if: everything behaves normally for all players and nobody crashes.
+56. (Item #246) Player A equips non-default illusions on both melee and ranged weapons.
+   - It works if: everything behaves normally for all players and nobody crashes.
+57. (Item #717) GUI: In the keep, open Mod Tweaker and select Equipment.
+   - It works if: everything behaves normally for all players and nobody crashes.
+58. (Item #697) Cosmetics: Nil wearer/hat guard, Trigger: other players' characters LA paint step runs before the hat unit or wearer unit exists. Change: fail closed and defer once to the next realized-other players' charact...
+   - It works if: everything behaves normally for all players and nobody crashes.
+59. (Item #567) As joining player, equip and persist each original skin: Sword+Mace cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1, runed Dual Maces, and Axe+Shield. The observe...
+   - It works if: everything behaves normally for all players and nobody crashes.
+60. (Item #482) Equip the existing affected Imperial Longsword/Black Guard Blade by UUID. Do not recraft it.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+61. (Item #309) General: Host an Adventure mission with current gt_dev and one living joining player.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+62. (Item #645) Equip Saltzpyre's Greatsword on WHC, Bounty Hunter, or Zealot. Warrior Priest is intentionally excluded.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+63. (Item #373) Cosmetics: Cosmetics Tweaker 0.9.106-dev is deployed and uploaded (Workshop manifest 5884392257591688555). Co-op verification: on each supported Bretonnian, Empire sword/mace, an...
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+64. (Item #417) host equips a unit-bearing CWV variant; a second player observes the other players' characters.
+   - Please report: the transform is applied (the resolution + residency hardening closes the path where a unit-bearing variant silently skipped its transform).
+65. (Item #641) Cosmetics: Open Tweaker: Cosmetics customization for a dual weapon, then for a weapon and shield.
+   - Please report: primary, offhand-weapon, and shield names remain independent without changing saved cosmetic identity. This can be verified solo.
+66. (Item #629) Cosmetics: Equip Couronne de la Lune and Midnight Purpure and Azure on Grail Knight.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+67. (Item #598) With CIM on both players, equip a crafted modded item and inspect its hold-TAB equipment frame from both host/joining player directions.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+68. (Item #472) Career: As Handmaiden, enable the Focused Spirit filter and take each exempt damage family; verify the talent remains active.
+   - It works if: everything behaves normally for all players and nobody crashes.
+69. (Item #401) host equips the Imperial Axe + Shield CWV variant; a second player observes the host's other players' characters.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+70. (Item #399) crafted Outrider launcher shows no torpedo on the remote view; joining player log [cwv other players' characters-ammo-strip] via=descriptor.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+71. (Item #398) Related hardening shipped 2026-07-18: cwv v0.1.447-dev consolidated other players' characters apply + retained-state postcondition logging (a marker in the game log lines), and cosmetics v0.9.149-d...
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+72. (Item #394) host equips a CWV variant that uses a grip offset; a second player observes the host's other players' characters.
+   - Please report: the grip offset is applied on the other players' characters (joining player) view, matching the owner.
+73. (Item #388) Weapons: Load current WT build, equip Deepwood Staff on a non-Sister career, build low/medium/high overcharge, then swap away and back.
+   - It works if: everything behaves normally for all players and nobody crashes.
+74. (Item #351) Chaos Wastes: Convert Adventure Pickups to Pilgrim's Coins. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
+75. (Item #321) cross-mod: Open WT, CT, ET, and CRT in Mod Tweaker.
+   - It works if: everything behaves normally for all players and nobody crashes.
+76. (Item #287) GUI: enable gut_use_non_modded_loadouts, enter the modded realm, and try to change a cosmetic.
    - It works if: cosmetics stay editable (you can change them) even with "Use non-modded loadouts" ON.
-26. (Item #288) Chaos Wastes: Enable tweak_anath_raema_permanent.
+77. (Item #272) GUI: Add Scoreboard Features to GUI Tweaker. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
+78. (Item #266) Cosmetics: Unify Kruber Shield Illusion Availability. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
+79. (Item #112) Weapons: On Witch Hunter Captain, Bounty Hunter, or Zealot, equip Kruber's Empire Handgun.
    - It works if: everything behaves normally for all players and nobody crashes.
-27. (Item #289) Chaos Wastes: Host and the other players enter the same Chaos Wastes mission with the same CT build.
-   - It works if: diagnostic result: collect the bounded evidence below; this does not claim the issue is fixed.
-28. (Item #296) Tuskgor Javelins cannot recover after impact. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
-29. (Item #299) Chaos Wastes: with respawn_on_chest_complete ON in a CW run, player A dies or reaches the awaiting-rescue hang far from the group; player B completes a Chest of Trials.
+80. (Item #602) Weapons: Add Dawi Mace weapon family. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
+81. (Item #332) General: as a joining player (non-host), enable "Disable mutator death explosions" (and Max Ragdolls).
+   - It works if: the setting takes effect on the joining player's own machine (death explosions suppressed joining player-side), not host-only.
+82. (Item #61) Enemies: Confirm both players load Enemy Tweaker v0.7.49-dev or newer. Host a mission on a known difficulty with the host on Auto and the joining player on Auto; record one repeatable ho...
    - It works if: everything behaves normally for all players and nobody crashes.
-30. (Item #309) General: Host an Adventure mission with current gt_dev and one living the other players.
-   - It works if: everything behaves normally for all players and nobody crashes.
-31. (Item #317) Enable the Animation Picker and equip Dual Axes on Saltzpyre or Kruber.
-   - It works if: everything behaves normally for all players and nobody crashes.
-32. (Item #321) cross-mod: Open WT, CT, ET, and CRT in Mod Tweaker.
-   - It works if: everything behaves normally for all players and nobody crashes.
-33. (Item #322) Chaos Wastes: in a CW mission with linked pickups (grimoire / tome), a the other players picks up / drops the item.
-   - It works if: everything behaves normally for all players and nobody crashes.
-34. (Item #323) Chaos Wastes: Complete one Chaos Wastes pilgrimage with host and the other players logs retained.
-   - It works if: diagnostic result: collect the bounded evidence below; this does not claim the issue is fixed.
-35. (Item #332) General: as a the other players (non-host), enable "Disable mutator death explosions" (and Max Ragdolls).
-   - It works if: the setting takes effect on the other players's own machine (death explosions suppressed the other players-side), not host-only.
-36. (Item #333) General: On the host, leave Twitch unlinked and enable Offline Twitch Mode. Load a supported mission with a second player.
+83. (Item #333) General: On the host, leave Twitch unlinked and enable Offline Twitch Mode. Load a supported mission with a second player.
    - It works if: result: complete the audited steps below and confirm every issue-specific condition.
-37. (Item #342) Chaos Wastes: Start a Chaos Wastes run and acquire either static_blade (lightning on parry) or boon_skulls_03 (drakegun explosion on parry).
+84. (Item #107) Chaos Wastes: with a banned grudge mark configured, reach a Belakor mission where a Shadow Lieutenant champion spawns.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+85. (Item #380) General: Turn on Disable downed screen effects.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+86. (Item #342) Chaos Wastes: Start a Chaos Wastes run and acquire either static_blade (lightning on parry) or boon_skulls_03 (drakegun explosion on parry).
    - It works if: everything behaves normally for all players and nobody crashes.
-38. (Item #349) Chaos Wastes: As host, set Chests of Trials Per Mission to two.
-   - It works if: diagnostic result: collect the bounded evidence below; this does not claim the issue is fixed.
-39. (Item #350) Chaos Wastes: Open Trial Rewards During Combat. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
-40. (Item #351) Chaos Wastes: Convert Adventure Pickups to Pilgrim's Coins. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
-41. (Item #355) General: With /god on: /suicide dies, /down goes down and stays down (expected, documented).
-   - It works if: , documented).
-42. (Item #357) Chaos Wastes: Give host and the other players different supported bomb-bubble boons and set a visible nonzero cooldown.
+87. (Item #263) Open the illusion/cosmetic customization view for a normal vanilla-rarity item that can be upgraded. Its existing upgrade copy and behavior must remain unchanged.
+   - It works if: everything behaves normally for all players and nobody crashes.
+88. (Item #369) Enemies: Add Per-Difficulty Enemy Health Multipliers. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
+89. (Item #531) Enemies: Toggle ON the two new Boss Balance grudge options.
+   - It works if: everything behaves normally for all players and nobody crashes.
+90. (Item #317) Enable the Animation Picker and equip Dual Axes on Saltzpyre or Kruber.
+   - It works if: everything behaves normally for all players and nobody crashes.
+91. (Item #296) Tuskgor Javelins cannot recover after impact. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
+92. (Item #488) General: Host with Tweaker: General DEV v0.2.238-dev and bring a shield-equipped bot; the second player joins as observer/control.
+   - Please report: diagnostic output
+93. (Item #323) Chaos Wastes: Complete one Chaos Wastes pilgrimage with host and joining player logs retained.
+   - Please report: diagnostic result: collect the bounded evidence below; this does not claim the issue is fixed.
+94. (Item #289) Chaos Wastes: Host and joining player enter the same Chaos Wastes mission with the same CT build.
+   - Please report: diagnostic result: collect the bounded evidence below; this does not claim the issue is fixed.
+95. (Item #440) Career: Investigate Bardin's Disabler Dodge Consistency. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
+96. (Item #358) Chaos Wastes: Load current CT build, enable the Manann's Tempest cooldown display, equip or select a source that can trigger Manann's Tempest, and proc it repeatedly.
+   - It works if: everything behaves normally for all players and nobody crashes.
+97. (Item #357) Chaos Wastes: Give host and joining player different supported bomb-bubble boons and set a visible nonzero cooldown.
    - It works if: result: complete the audited steps below and confirm every issue-specific condition.
-43. (Item #358) Chaos Wastes: Both players confirm the current CT Dev build is loaded. Enable Manann's Tempest cooldown, then trigger the weapon-trait source on one players and the mod-boon source on...
-   - It works if: everything behaves normally for all players and nobody crashes.
-44. (Item #361) Chaos Wastes: Host enables Permanent Purifying Torch Carrier, sets Safe Area Radius to 12 m, and Miasma Stack Interval to 0.5 s. Enter a Rotten Miasma mission with one the other players.
-   - It works if: everything behaves normally for all players and nobody crashes.
-45. (Item #369) Enemies: Add Per-Difficulty Enemy Health Multipliers. We are missing exact steps for this one, so just play normally and tell us if anything about it looks broken.
-46. (Item #371) GUI: host runs cwv; a players joins WITHOUT cwv. Host equips the Tuskgor Javelin (cwv_es_javelin) bomb pool.
-   - It works if: everything behaves normally for all players and nobody crashes.
-47. (Item #373) Cosmetics: Cosmetics Tweaker 0.9.106-dev is deployed and uploaded (Workshop manifest 5884392257591688555). Co-op verification: on each supported Bretonnian, Empire sword/mace, an...
-   - It works if: everything behaves normally for all players and nobody crashes.
-48. (Item #377) Cosmetics: Select a glow-capable weapon illusion.
-   - It works if: everything behaves normally for all players and nobody crashes.
-49. (Item #378) General: B joins A. Expected within ~60s: popup listing the missing mod(s) with Open Workshop + Leave (or the stalled-join notice if A broadcasts no manifest); Leave lands B on...
-   - It works if: everything behaves normally for all players and nobody crashes.
-50. (Item #380) General: Turn on Disable downed screen effects.
-   - It works if: everything behaves normally for all players and nobody crashes.
-51. (Item #384) General: One human pushes ~40m ahead; the other goes down near the bots (stay knocked, then bleed out to awaiting-rescue).
-   - It works if: everything behaves normally for all players and nobody crashes.
-52. (Item #388) Weapons: Both players load the current WT build. Player A equips Deepwood Staff on a non-Sister career, builds low/medium/high overcharge, then swaps to another ranged weapon a...
-   - It works if: everything behaves normally for all players and nobody crashes.
-53. (Item #395) wearer swaps off the Rapier; it must vanish on the remote view; a caught leak logs a marker in the game log.
-   - It works if: everything behaves normally for all players and nobody crashes.
-54. (Item #396) host equips the CWV Imperial Longsword; a second player observes the host's the other players' characters.
-   - It works if: the weapon is visible on the other players the other players' characters view (residency/mesh parity), not invisible.
-55. (Item #398) Related hardening shipped 2026-07-18: cwv v0.1.447-dev consolidated the other players' characters apply + retained-state postcondition logging (a marker in the game log lines), and cosmetics v0.9.1...
-   - It works if: everything behaves normally for all players and nobody crashes.
-56. (Item #399) crafted Outrider launcher shows no torpedo on the remote view; the other players log [cwv the other players' characters-ammo-strip] via=descriptor.
-   - It works if: everything behaves normally for all players and nobody crashes.
-57. (Item #406) Chaos Wastes: Both players use the same current Chaos Wastes Tweaker build.
-   - It works if: everything behaves normally for all players and nobody crashes.
-58. (Item #426) Chaos Wastes: Host starts an expedition with CT v0.7.291-dev and obtains or grants a CT-owned boon or miracle.
-   - It works if: the other players joins without a crash; if the positive parity acknowledgement arrived before native sync, the custom state remains active.
-59. (Item #458) Chaos Wastes: Keep: /ct_regression_test shows PASS issue458_start_shrine_config; /ct_verify_start_shrine prints the config.
-   - It works if: everything behaves normally for all players and nobody crashes.
-60. (Item #461) Chaos Wastes: Empty list under the header: the rows were anchored on a scenegraph node with no size, so they computed to a position below the screen and were silently swallowed. Re-...
-   - It works if: everything behaves normally for all players and nobody crashes.
-61. (Item #472) Career: As Handmaiden, enable the Focused Spirit filter and take each exempt damage family; verify the talent remains active.
-   - It works if: everything behaves normally for all players and nobody crashes.
-62. (Item #488) General: Host with Tweaker: General DEV v0.2.238-dev and bring a shield-equipped bot; the second player joins as observer/control.
-   - It works if: diagnostic output
-63. (Item #504) Equip a ct_* custom illusion before mission start.
-   - It works if: everything behaves normally for all players and nobody crashes.
-64. (Item #531) Enemies: Toggle ON the two new Boss Balance grudge options.
-   - It works if: everything behaves normally for all players and nobody crashes.
-65. (Item #567) As the other players, equip and persist each original skin: Sword+Mace cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1, runed Dual Maces, and Axe+Shield. The observe...
-   - It works if: everything behaves normally for all players and nobody crashes.
-66. (Item #578) Open the Emporium and daily-reward surfaces. The wallet should read [Local] N, and shilling tooltips, purchase labels, and reward rows should identify Local Silver Shi...
-   - It works if: everything behaves normally for all players and nobody crashes.
-67. (Item #598) With CIM on both players, equip a crafted modded item and inspect its hold-TAB equipment frame from both host/the other players directions.
-   - It works if: everything behaves normally for all players and nobody crashes.
-68. (Item #629) Cosmetics: Equip Couronne de la Lune and Midnight Purpure and Azure on Grail Knight.
-   - It works if: everything behaves normally for all players and nobody crashes.
-69. (Item #637) cross-mod: Enable Weapons of Chaos, More Items Library, and Crafting in Modded (Dev). Ensure Enable Blightreaper is on, then enter the Keep.
-   - It works if: result
-70. (Item #645) Equip Saltzpyre's Greatsword on WHC, Bounty Hunter, or Zealot. Warrior Priest is intentionally excluded.
-   - It works if: everything behaves normally for all players and nobody crashes.
-71. (Item #660) GUI: Host equips one transformed CWV weapon with a custom illusion; also keep one unmodified vanilla weapon as a control.
-   - It works if: everything behaves normally for all players and nobody crashes.
-72. (Item #700) General: Start an Adventure mission with both players in the lobby.
-   - It works if: everything behaves normally for all players and nobody crashes.
-73. (Item #713) Cosmetics: Fully exit and restart Steam/Vermintide so the test begins from a clean mod initialization.
-   - It works if: everything behaves normally for all players and nobody crashes.
-74. (Item #737) Cosmetics: cwv wearer equips Old Musket, play to the end scoreboard; no a crash to desktop on the a player who does NOT have that mod; wearer log shows a marker in the game log wire skin null ... idx -> n/a.
+98. (Item #361) Chaos Wastes: Host enables Permanent Purifying Torch Carrier, sets Safe Area Radius to 12 m, and Miasma Stack Interval to 0.5 s. Enter a Rotten Miasma mission with one joining player.
    - It works if: everything behaves normally for all players and nobody crashes.
 
 ## Games with 3 or more players
 
-1. (Item #290) Weapons: On any Kruber career, equip Saltzpyre's Billhook and close the inventory.
+1. (Item #604) Weapons: Equip Imperial Crowbill Model 05 and compare the inventory character preview, owner third person, remote joining player's view, lobby/team presentation, score screen, and Atha...
+   - Please report: every 3P/presentation surface uses the same tuned pose; first person is unchanged.
+2. (Item #738) Cosmetics: a marker in the game log skips show local_player_id=2/3/4 controlled=false only; host cosmetics visible on joining players' characters at joining a game already in progress.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+3. (Item #290) Weapons: On any Kruber career, equip Saltzpyre's Billhook and close the inventory.
    - It works if: everything behaves normally for all players and nobody crashes.
-2. (Item #316) Weapons: Both players use matching current WT builds and confirm their load banners.
-   - It works if: everything behaves normally for all players and nobody crashes.
-3. (Item #400) Weapons: Player A equips Flamestorm Staff on one non-Sienna career supported by WT.
-   - It works if: everything behaves normally for all players and nobody crashes.
-4. (Item #579) Give one Dual Axes instance different primary and offhand illusions through Tweaker: Cosmetics.
-   - It works if: every surface preserves the exact saved right/offhand pair. No surface may reconstruct the base Dual Axes models or swap the hand order.
-5. (Item #604) Weapons: Equip Imperial Crowbill Model 05 and compare the inventory character preview, owner third person, remote the other players's view, lobby/team presentation, score screen, and Atha...
-   - It works if: every 3P/presentation surface uses the same tuned pose; first person is unchanged.
-6. (Item #627) confirm the version line (v0.1.446-dev) shown when the mod loads in the newest log, equip the Outrider Grenade Launcher on Kruber, and check: owner 1P and 3P show the custom launcher (not the blund...
-   - It works if: everything behaves normally for all players and nobody crashes.
+4. (Item #789) Host equips CWV Kruber Rapier; joining player watches owner 3P/other players' characters after equip, repeated weapon swaps, keep-to-mission transition, death/respawn, and hot join.
+   - It works if: for #789: no offhand pistol ever appears remotely.
+5. (Item #579) Give one Dual Axes instance different primary and offhand illusions through Tweaker: Cosmetics.
+   - Please report: every surface preserves the exact saved right/offhand pair. No surface may reconstruct the base Dual Axes models or swap the hand order.
+6. (Item #657) Test Empire Sword and Shield on Grail Knight and Bretonnian Sword and Shield on Mercenary, Huntsman, and Foot Knight with host and joining player on matching builds.
+   - Please report: diagnostic result: prove the receiver-specific combat-style boundary before any Sword-and-Shield family is reintroduced; this does not claim a fix.
 7. (Item #633) In the keep and again in an Adventure mission, run /woc_audio_contract, then the wielder runs /woc_audio_probe once.
-   - It works if: everything behaves normally for all players and nobody crashes.
-8. (Item #657) Test Empire Sword and Shield on Grail Knight and Bretonnian Sword and Shield on Mercenary, Huntsman, and Foot Knight with host and the other players on matching builds.
-   - It works if: diagnostic result: prove the receiver-specific combat-style boundary before any Sword-and-Shield family is reintroduced; this does not claim a fix.
-9. (Item #738) Cosmetics: a marker in the game log skips show local_player_id=2/3/4 controlled=false only; host cosmetics visible on the other players the other players' characters at joining a game already in progress.
+   - Please report: attach both players' logs and note what appeared on each player's screen.
+8. (Item #316) Weapons: Both players use matching current WT builds and confirm their load banners.
    - It works if: everything behaves normally for all players and nobody crashes.
 
 When you are done, tell us which item numbers passed and which did not. Thank you.
