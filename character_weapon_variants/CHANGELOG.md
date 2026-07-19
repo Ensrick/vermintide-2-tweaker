@@ -1,6 +1,6 @@
 # Character Weapon Variants — Changelog
 
-## 0.1.461-dev (2026-07-19) - complete husk adapter (#394 #398 #399 #401 #474 #476 #482 #719, #579 probe) [untested]
+## 0.1.462-dev (2026-07-19) - complete husk adapter (#394 #398 #399 #401 #474 #476 #482 #719, #579 probe) [untested]
 
 - One complete husk adapter at the GearUtils.spawn_inventory_unit seam
   (issue 392 class / BUG_CLASSES 27 root): every husk concern now consumes ONE
