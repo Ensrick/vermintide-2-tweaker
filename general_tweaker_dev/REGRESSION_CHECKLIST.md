@@ -192,6 +192,39 @@ Last updated: 2026-07-17.
 
 ---
 
+## Chaos Wastes creature-spawn queue diagnostics (#254)
+
+- [ ] In a Chaos Wastes mission, one manual creature request emits one `[gt:254] phase=enqueue` row, at most one `phase=blocked` row, and exactly one terminal `phase=outcome` row.
+- [ ] The terminal row identifies `spawned`, `left_queue_without_spawn_lut`, `timeout`, `director_replaced`, or bounded capacity eviction without per-frame output.
+- [ ] A vanilla breed substitution records both the requested and effective queued breed; package readiness is classified against the effective breed.
+- [ ] Adventure creature-spawn behavior and closed #693's client-to-host request path are unchanged.
+- [ ] `/gt_regression_test` passes `issue254_deus_spawn_queue_diagnostics_armed`.
+- Detection: offline `test_gt_creature_spawner_deus_queue_diag.lua`; runtime `[gt:254]` queue trace.
+
+---
+
+## Disconnect service failure diagnostics (#753)
+
+- [ ] A Steam/client or P2P incident emits one transition line prefixed `[gt:753]`, not one line per update frame.
+- [ ] Every line contains measured `steam_connected`, `backend_disconnected`, and `observed` fields; a `NetworkClient` failure also contains `reason` and before/after channel state.
+- [ ] An unrelated `eac_authorize_failed` transition does not emit a `[gt:753]` P2P line.
+- [ ] A PlayFab error that reaches `_is_disconnected=true` emits `edge=playfab_disconnect` with the last queued reason when one was observed.
+- [ ] The probe never sends an RPC, changes a popup, retries a connection, or changes any teardown result.
+- [ ] `/gt_regression_test` passes `issue753_disconnect_failure_diagnostics_armed`.
+
+---
+
+## Player-stat HUD census diagnostics (#797)
+
+- [ ] `/gt_stat_probe` writes one `[gt:797]` census to the engine log and never echoes diagnostic output into chat.
+- [ ] `/gt_stat_trace` writes exactly five bounded samples at 0, 0.25, 1, 3, and 10 seconds, then terminates.
+- [ ] Each sample reports career, wielded item/template, health/status context, and every nonempty authoritative `BuffExtension._stat_buffs` row without calling `apply_buffs_to_value`.
+- [ ] Death, respawn, career/equipment transitions, or a missing extension produce a bounded `skip=` row rather than an error or retained engine handle.
+- [ ] `/gt_regression_test` passes `issue797_player_stat_diagnostics_armed`.
+- Detection: offline `test_gt_player_stat_probe.lua`; runtime commands `/gt_stat_probe` and `/gt_stat_trace`; source owner `docs/engine/10_damage_buffs_and_talents.md`.
+
+---
+
 ## Keep dummy player collision (#304)
 
 - [ ] With the toggle off (default), a keep training dummy blocks the local player as vanilla does.

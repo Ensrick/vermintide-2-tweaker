@@ -51,6 +51,8 @@ dump_settings, dump_level, dump_glossary, dump_cosmetics, dump_items_by_slot,
 dump_hero_view, dump_ai, dump_menu, ai_slotdump, bot_loadout_dump, fire_probe,
 gt_disconnect_grace_probe, -- arm one bounded host disconnect lifecycle trace (#309)
 gt_chest_pickup_probe,      -- arm one bounded closed-chest pickup trace (#347)
+gt_stat_probe,              -- one read-only player stat census (#797)
+gt_stat_trace,              -- five bounded player stat censuses over ten seconds (#797)
 gt_regression_test,         -- issue diagnostic + regression commands retain gt_ prefix
 -- Host-side lobby controls (absorbed from lobby_tweaker; still lobby_-prefixed):
 lobby_reserve, lobby_unreserve, lobby_reservations,
