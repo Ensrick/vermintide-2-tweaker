@@ -152,7 +152,10 @@ local options_data = {
             -- Confirmation sub-group at the HEAD of this child block too
             -- (_inject_ckc_into_gut in both twins), so the rendered order is
             -- CKC group, UI Tweaks group, loose options. Setting ids kept
-            -- verbatim (HideBuffs fork hooks read mod:get(SETTING_NAMES.<id>));
+            -- verbatim (HideBuffs fork hooks read mod:get(SETTING_NAMES.<id>)).
+            -- This authored subtree is the ABSENT/NOT-READY fallback only. When
+            -- stock UI Tweaks is live, #312 replaces its copied children with the
+            -- current VMF widget tree through _mod_tweaker_external_group.lua;
             -- only labels changed.
             {
                 setting_id  = "gut_hide_hud_ui_group",
