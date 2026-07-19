@@ -200,6 +200,7 @@ local suites = {
     "test_ct_cot_cost",
     "test_ct_chest_count_audit",
     "test_ct_collectible_conversion",
+    "test_ct_tower_skull_diag",
     "test_ct_tab_native_diag",
     "test_ct_parry_cooldown_contract",
     "test_ct_starting_talent_identity",
