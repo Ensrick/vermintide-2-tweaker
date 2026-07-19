@@ -50,6 +50,67 @@
 
     Contracts = @(
         @{
+            Id = 'cim.issue882.ranged-properties-preview-position'
+            Issue = 882
+            Claim = 'structural-only'
+            Owners = @(
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview_policy.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'the correction is scoped to the Athanor properties previewer and never mutates gameplay units' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'the correction is scoped to the Athanor properties previewer and never mutates gameplay units' }
+                        bot_3p = @{ Disposition = 'not-applicable'; Reason = 'the correction is scoped to the Athanor properties previewer and never mutates gameplay units' }
+                        remote_husk_3p = @{ Disposition = 'not-applicable'; Reason = 'the correction is local UI state and has no network transport or husk consumer' }
+                        inventory_preview = @{ Disposition = 'not-applicable'; Reason = 'the inventory character preview uses MenuWorldPreviewer rather than HeroWindowWeaveProperties' }
+                        cosmetic_preview = @{ Disposition = 'not-applicable'; Reason = 'the cosmetic browser uses its own LootItemUnitPreviewer surface outside the CIM forge-active gate' }
+                        athanor_preview = @{ Disposition = 'covered'; Evidence = 'the ranged-only HeroWindowWeaveProperties construction adapter composes native centered x with authored y/z and updates the live link plus boxed zoom-reset position atomically' }
+                        crafting_preview = @{ Disposition = 'not-applicable'; Reason = 'the ordinary crafting preview does not instantiate HeroWindowWeaveProperties' }
+                        lobby_preview = @{ Disposition = 'not-applicable'; Reason = 'lobby preview construction does not instantiate HeroWindowWeaveProperties' }
+                        score_screen = @{ Disposition = 'not-applicable'; Reason = 'score preview construction does not instantiate HeroWindowWeaveProperties' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards rather than the Athanor properties preview unit' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the correction is derived from current preview slot and native position and has no persisted state' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'gameplay unit spawning does not instantiate the Athanor properties previewer' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'equip does not mutate an already-open Athanor properties preview' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'wield does not mutate an already-open Athanor properties preview' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'the correction is slot-scoped and independent of illusion selection' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style does not own the Athanor properties preview position' }
+                        career_change = @{ Disposition = 'not-applicable'; Reason = 'career selection rebuilds the forge catalogue; preview placement is reapplied only when the properties view opens' }
+                        mission_transition = @{ Disposition = 'not-applicable'; Reason = 'a mission transition destroys the preview; the construction adapter reapplies on the next view open' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not construct the Athanor properties preview' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'the local preview transform has no peer state' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the local preview transform has no peer state' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the local preview uses only resident vanilla coordinates and no peer registry' }
+                        rejoin = @{ Disposition = 'not-applicable'; Reason = 'the local preview transform has no peer state' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each ranged properties preview construction applies one active-only correction after vanilla creates the previewer' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'each replacement previewer recomputes from its untouched native position; the boxed start position preserves the correction through zoom reset' }
+                        lobby_score_create = @{ Disposition = 'not-applicable'; Reason = 'lobby and score creation do not instantiate HeroWindowWeaveProperties' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'restoring an already-open preview when CIM is disabled has no paired runtime evidence' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_old_musket_preview.lua'
+                            Names = @(
+                                'CIM #882 centers only ranged properties previews'
+                                'CIM #882 runtime installs one active-only zoom-durable correction'
+                                'CIM #882 accepts retail callable-table vector constructors'
+                                'CIM #882 constructor failure leaves preview state untouched'
+                                'CIM #882 production correction is construction-only and zoom durable'
+                            )
+                            Surfaces = @('athanor_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cwv.issue760.outrider-saltzpyre-stance'
             Issue = 760
             Claim = 'structural-only'
