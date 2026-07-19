@@ -1,5 +1,33 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.35-dev (2026-07-19) - #712 restore visible Blightreaper scale [not built]
+
+- The exact `0.1.33-dev` log proves the named `blightreaper` render node and
+  rotation/position writes were correct and retained, but its native scale was
+  `{100,100,100}` and WOC replaced it with absolute `{0.9,0.9,0.9}`. That made
+  the weapon roughly 111 times smaller, explaining the missing/off-space model.
+- The durable transform owner now treats authored `0.9` as the requested 10%
+  reduction and composes it against each unit's captured native render-node
+  scale. The observed target is therefore `{90,90,90}`. It still passes one
+  absolute atomic pose to the shared appearance primitive and never compounds
+  from a later read.
+- Added the retail `{100,100,100}` regression, nonuniform baseline composition,
+  and a fail-closed missing-baseline case. This source draft has not been built,
+  deployed, or uploaded.
+
+## 0.1.33-dev (2026-07-19) - retained production fixes and evidence
+
+- Wrapped retail Stingray's callable-table `Vector3` constructor before passing
+  it to the shared appearance primitive, allowing atomic pose writes to execute.
+- Corrected #613 spawn evidence so husk/preview paths report vanilla's valid
+  3P-only return contract instead of misdiagnosing a missing 1P unit.
+- Added the bounded, deduplicated #278 caller-frame probe for loadout fail-safe
+  skips. It is log-only and emits at most eight distinct lines per session.
+- This deployed build produced the decisive #712 evidence: the named render node
+  retained position and rotation, but its native `{100,100,100}` scale was
+  replaced by absolute `{0.9,0.9,0.9}`. Version 0.1.35-dev preserves these fixes
+  and corrects that separate scale-semantics defect.
+
 ## 0.1.32-dev (2026-07-18) - #712 Blightreaper transform census [diagnostics-armed]
 
 - Added automatic bounded `[WOC:712] unit census` evidence on the first

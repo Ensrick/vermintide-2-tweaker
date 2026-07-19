@@ -2146,6 +2146,17 @@ same units positively resolved their authored renderable as node `2`. This
 supersedes the earlier assumption that vanilla's scene-graph restoration made
 node 0 a universally writable authored-transform target.
 
+**Refined 2026-07-19:** changing the target node also changes the transform
+baseline and therefore can change scale semantics. WOC `0.1.33-dev` retained
+position and rotation on the correct named node, but the live proof showed that
+node's native scale was `{100,100,100}` and the writer replaced it with absolute
+`{0.9,0.9,0.9}`. The model became roughly 111 times smaller even though every
+setter/readback check passed. A descriptor that means “10% smaller” must be
+declared as a baseline multiplier, resolved once from the captured native scale
+(`100 * 0.9 = 90`), and only then passed as an absolute value to the shared pose
+primitive. Regression coverage must use the observed non-unit baseline; an
+identity-scale fixture cannot detect this class.
+
 ## 59. Private/cross-career weapon template omits career ability actions
 
 **First confirmed:** Weapons of Chaos Blightreaper and Weapon Tweaker
