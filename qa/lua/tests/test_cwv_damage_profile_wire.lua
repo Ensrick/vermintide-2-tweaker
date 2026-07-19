@@ -65,4 +65,29 @@ return function(H, repo_root)
 		H.truthy(source:find('disposition == "drop"', 1, true))
 		H.equal(source:find("return safe or id", 1, true), nil)
 	end)
+
+	H.test("CWV #423 capture is exclusive to damage-profile send-gate events", function()
+		local path = repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+		local file = assert(io.open(path, "rb"))
+		local source = file:read("*a")
+		file:close()
+
+		-- Cosmetic skin nulling is a separate wire-safety axis. Its line must
+		-- remain observable without satisfying an issue #423 log capture.
+		H.truthy(source:find("[cwv:skin-wire] wire skin null", 1, true))
+		H.equal(source:find("[cwv:423] wire skin null", 1, true), nil)
+
+		-- Reserve the issue marker for the two outcomes produced by the
+		-- WeaponSystem.send_rpc_attack_hit gate: substitute or fail closed.
+		H.truthy(source:find("[cwv:423] wire dmg-profile sub:", 1, true))
+		H.truthy(source:find("[cwv:423] blocked unsafe hit:", 1, true))
+		local runtime_marker_count = 0
+		for line in source:gmatch("[^\r\n]+") do
+			if line:find('pcall(printf, "[cwv:423]', 1, true) then
+				runtime_marker_count = runtime_marker_count + 1
+			end
+		end
+		H.equal(runtime_marker_count, 2)
+	end)
 end

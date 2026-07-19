@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.462-dev"
+local MOD_VERSION = "0.1.463-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -4307,6 +4307,9 @@ end)
 -- live unit handle to read get_data from.
 mod:hook("GearUtils", "destroy_wielded", function(func, world, wielded_unit)
 	if wielded_unit and Unit.alive(wielded_unit) then
+		if _om._cwv_forget_crowbill_transform_unit then
+			_om._cwv_forget_crowbill_transform_unit(wielded_unit, "destroy_wielded")
+		end
 		-- Also clear any tracking entry to avoid using a dead key.
 		_musket_bayonet_pairs[wielded_unit] = nil
 		_detach_musket_bayonet(world, wielded_unit)
@@ -9790,29 +9793,36 @@ local function _transform_unit(unit, scale_tbl, offset_tbl, rotation)
 	return WA.apply(unit, { scale = scale_tbl, offset = offset_tbl, rotation = rotation })
 end
 
--- #604 single transform-delivery owner. Every world/presentation consumer calls
--- this helper, which resolves the same hand+perspective fields and emits one
--- bounded always-on line per spawned tuned Crowbill unit. This turns a future
--- silent resolver miss into direct evidence in the user's ordinary console log.
+-- #604 single transform-scheduling owner. Every world/presentation consumer
+-- calls this helper, which resolves the same hand+perspective fields and emits
+-- one bounded scheduling line per spawned tuned Crowbill unit. Retained proof
+-- is deliberately deferred to the durable owner's next-tick pre/final samples.
 local _crowbill_transform_diag_seen = setmetatable({}, { __mode = "k" })
 local _crowbill_transform_diag_total = 0
 _om._cwv_crowbill_transform_delivery = { counts = {} }
 local _DURABLE_TRANSFORM_LIBRARY = mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_durable_transform")
-local _durable_crowbill_first_tick = setmetatable({}, { __mode = "k" })
-local _durable_crowbill_owner
 local _RELATIVE_SCALE_LIBRARY = mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_relative_scale")
-local _crowbill_relative_scale_owner = _RELATIVE_SCALE_LIBRARY.new({
-	read_scale = function(unit)
-		if not (unit and Unit.alive(unit)) then return nil end
-		local ok, current = pcall(Unit.local_scale, unit, 0)
-		if not ok or not current then return nil end
-		local elements_ok, x, y, z = pcall(Vector3.to_elements, current)
-		if not elements_ok then return nil end
-		return { x, y, z }
-	end,
+local _TRANSFORM_EVIDENCE_LIBRARY = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_transform_evidence")
+local _CROWBILL_TRANSFORM_RUNTIME_LIBRARY = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_crowbill_transform_runtime")
+local _crowbill_transform_runtime = _CROWBILL_TRANSFORM_RUNTIME_LIBRARY.new({
+	om = _om,
+	appearance = WA,
+	durable_library = _DURABLE_TRANSFORM_LIBRARY,
+	relative_library = _RELATIVE_SCALE_LIBRARY,
+	evidence_library = _TRANSFORM_EVIDENCE_LIBRARY,
+	emit = printf,
 })
+local _durable_crowbill_owner = _crowbill_transform_runtime.durable
+_om._cwv_durable_crowbill_owner, _om._cwv_crowbill_transform_evidence = _durable_crowbill_owner, _crowbill_transform_runtime.evidence
+_om._cwv_forget_crowbill_transform_unit = function(unit, reason)
+	if not unit then return false end
+	_durable_crowbill_owner:forget(unit, reason)
+	return true
+end
 local function _triplet_text(value)
 	if type(value) ~= "table" then return "nil" end
 	return string.format("%.3f,%.3f,%.3f", value[1] or 0, value[2] or 0, value[3] or 0)
@@ -9824,20 +9834,14 @@ local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, 
 		or _resolve_field(def, prefix .. "scale")
 	local scale_multiplier = _resolve_field(def, prefix .. "scale_multiplier_" .. perspective)
 		or _resolve_field(def, prefix .. "scale_multiplier")
-	local scale_baseline
-	if scale_multiplier and unit then
-		local resolved, baseline = _crowbill_relative_scale_owner:resolve(unit, scale_multiplier)
-		if resolved then
-			scale = resolved
-			scale_baseline = baseline
-		end
-	end
 	local offset = _resolve_field(def, prefix .. "offset_" .. perspective)
 		or _resolve_field(def, prefix .. "offset")
 	local rotation = _resolve_field(def, prefix .. "rotation_" .. perspective)
 		or _resolve_field(def, prefix .. "rotation")
 	local applied = _transform_unit(unit, scale, offset, rotation)
-	if def.crowbill_model_key and (scale or offset or rotation) and unit and _is_unit(unit)
+	local generation
+	if def.crowbill_model_key and (scale or scale_multiplier or offset or rotation)
+			and unit and _is_unit(unit)
 			and _durable_crowbill_owner then
 		-- Offset is authored as native+delta, but durable replay must be absolute
 		-- or it would accumulate every frame. Capture the resolved post-write
@@ -9847,19 +9851,22 @@ local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, 
 			local ok, position = pcall(Unit.local_position, unit, 0)
 			if ok and position then position_box = Vector3Box(position) end
 		end
-		_durable_crowbill_owner:track(unit, {
+		local _, assigned_generation = _durable_crowbill_owner:track(unit, {
 			def = def,
+			model_key = def.crowbill_model_key,
 			hand = hand,
 			perspective = perspective,
 			surface = surface,
 			unit_name = unit_name,
 			skin = skin,
 			scale = scale,
+			scale_multiplier = scale_multiplier,
 			position = position_box,
 			rotation = rotation,
 		})
+		generation = assigned_generation
 	end
-	if def.crowbill_model_key and (scale or offset or rotation) and unit
+	if def.crowbill_model_key and (scale or scale_multiplier or offset or rotation) and unit
 			and _is_unit(unit) and _crowbill_transform_diag_total < 64 then
 		local surfaces = _crowbill_transform_diag_seen[unit]
 		if not surfaces then
@@ -9873,10 +9880,10 @@ local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, 
 			local counts = _om._cwv_crowbill_transform_delivery.counts
 			counts[surface] = (counts[surface] or 0) + 1
 			pcall(printf,
-				"[cwv:604] transform delivered surface=%s perspective=%s hand=%s variant=%s model=%s unit=%s skin=%s baseline_scale=(%s) scale_multiplier=(%s) target_scale=(%s) offset=(%s) rotation=(%s) applied=%s count=%d/64",
+				"[cwv:604] transform scheduled surface=%s perspective=%s hand=%s variant=%s model=%s unit=%s skin=%s generation=%s scale_multiplier=(%s) absolute_scale=(%s) offset=(%s) rotation=(%s) initial_apply=%s count=%d/64",
 				tostring(surface), tostring(perspective), tostring(hand),
 				tostring(def.item_key), tostring(def.crowbill_model_key),
-				tostring(unit_name), tostring(skin), _triplet_text(scale_baseline),
+				tostring(unit_name), tostring(skin), tostring(generation),
 				_triplet_text(scale_multiplier), _triplet_text(scale),
 				_triplet_text(offset), _triplet_text(rotation), tostring(applied),
 				_crowbill_transform_diag_total)
@@ -9884,38 +9891,6 @@ local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, 
 	end
 	return applied
 end
-
--- The engine's weapon attachment owner can rewrite custom-unit roots after the
--- one-shot spawn hooks. Restore only tracked, tuned Crowbill units each frame.
--- Absolute scale/position/rotation make this idempotent; weak keys bound the
--- registry to live units. Crowbill presentation runs last so hammer mode keeps
--- its local 180-degree face flip over the restored authored base rotation.
-_durable_crowbill_owner = _DURABLE_TRANSFORM_LIBRARY.new({
-	alive = function(unit) return unit and Unit.alive(unit) end,
-	apply = function(unit, spec)
-		local wrote = false
-		if spec.scale then wrote = WA.apply_scale(unit, spec.scale) or wrote end
-		if spec.position then
-			wrote = WA.apply_position(unit, spec.position:unbox()) or wrote
-		end
-		if spec.rotation then wrote = WA.apply_rotation(unit, spec.rotation) or wrote end
-		if wrote and not _durable_crowbill_first_tick[unit] then
-			_durable_crowbill_first_tick[unit] = true
-			pcall(printf,
-				"[cwv:604] durable transform active surface=%s perspective=%s hand=%s model=%s unit=%s",
-				tostring(spec.surface), tostring(spec.perspective), tostring(spec.hand),
-				tostring(spec.def and spec.def.crowbill_model_key), tostring(spec.unit_name))
-		end
-		return wrote
-	end,
-	after_all = function()
-		if _om.crowbill_presentation_owner
-				and type(_om.crowbill_presentation_owner.reapply_all) == "function" then
-			_om.crowbill_presentation_owner:reapply_all()
-		end
-	end,
-})
-_om._cwv_durable_crowbill_owner = _durable_crowbill_owner
 
 -- Vanilla mace+sword cosmetic tweak (toggleable via "mace_sword_tweak"
 -- setting, default ON). When the toggle is on:
@@ -10834,7 +10809,7 @@ do
 					-- divergent numeric index ("weapon_skins does not contain key: 924").
 					local nl = rawget(_G, "NetworkLookup")
 					local idx = nl and nl.weapon_skins and rawget(nl.weapon_skins, skin_name)
-					pcall(printf, "[cwv:423] wire skin null (update_cosmetic_slot %s): %s (local weapon_skins idx=%s) -> n/a",
+					pcall(printf, "[cwv:skin-wire] wire skin null (update_cosmetic_slot %s): %s (local weapon_skins idx=%s) -> n/a",
 						tostring(slot), tostring(skin_name), tostring(idx))
 				end
 			end
@@ -11459,6 +11434,34 @@ mod:hook("MenuWorldPreviewer", "_spawn_item", function(func, self, item_name, sp
 	return result
 end)
 
+-- Explicit preview teardown for #604. Weak-key pruning is only a fallback:
+-- preview units can remain alive until their world is released, so forgetting
+-- at the source-backed destruction edge prevents stale baseline/presentation
+-- state from surviving a slot reconstruction.
+mod:hook("HeroPreviewer", "_destroy_item_units_by_slot", function(func, self, slot_type)
+	local info = self._item_info_by_slot and self._item_info_by_slot[slot_type]
+	local equipment = self._equipment_units
+	for _, row in ipairs(info and info.spawn_data or {}) do
+		local slot = equipment and equipment[row.slot_index]
+		if slot then
+			if row.right_hand or row.despawn_both_hands_units then
+				_om._cwv_forget_crowbill_transform_unit(slot.right, "hero_preview_slot_destroy")
+			end
+			if row.left_hand or row.despawn_both_hands_units then
+				_om._cwv_forget_crowbill_transform_unit(slot.left, "hero_preview_slot_destroy")
+			end
+		end
+	end
+	return func(self, slot_type)
+end)
+
+mod:hook("LootItemUnitPreviewer", "_destroy_units", function(func, self)
+	for _, unit in ipairs(self._spawned_units or {}) do
+		_om._cwv_forget_crowbill_transform_unit(unit, "item_preview_destroy")
+	end
+	return func(self)
+end)
+
 -- Cosmetic picker / illusion browser preview pane.
 --
 -- IMPORTANT: this MUST be `mod:hook` (full wrapper), NOT `mod:hook_safe`.
@@ -11597,6 +11600,9 @@ local _cwv_regression_context = {
 	auto_register_all = _auto_register_all,
 	cross_access_action_remap = _cross_access_action_remap,
 	wield_hook_registration_count = _cwv_wield_hook_registration_count,
+	transform_map = _transform_map,
+	skin_transform_map = _skin_transform_map,
+	crowbill_transform_by_unit = _crowbill_transform_by_unit,
 }
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_identity")(mod, _cwv_regression_context)
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_render")(mod, _cwv_regression_context)

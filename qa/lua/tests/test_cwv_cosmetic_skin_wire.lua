@@ -98,6 +98,10 @@ return function(H, repo_root)
 		-- The hook decides via the tested pure function and forwards the safe value.
 		H.truthy(text:find("_om.cosmetic_skin_wire.wire_safe_skin", 1, true))
 		H.truthy(text:find("return func(player, slot, item_name, safe)", 1, true))
+		-- Cosmetic nulling keeps a generic wire-safety marker and cannot be
+		-- mistaken for issue #423 damage-profile evidence.
+		H.truthy(text:find("[cwv:skin-wire] wire skin null", 1, true))
+		H.equal(text:find("[cwv:423] wire skin null", 1, true), nil)
 		-- The surface is recorded for /cwv_regression_test coverage.
 		H.truthy(text:find("mod._cwv_skin_wire_surfaces.update_cosmetic_slot = true", 1, true))
 		-- The predicate has a single source of truth (the equipment-sender path

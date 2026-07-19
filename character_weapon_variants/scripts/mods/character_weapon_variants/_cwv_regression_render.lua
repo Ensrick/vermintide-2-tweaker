@@ -12,6 +12,9 @@ local _build_entry = ctx.build_entry
 local _auto_register_all = ctx.auto_register_all
 local _cross_access_action_remap = ctx.cross_access_action_remap
 local _cwv_wield_hook_registration_count = ctx.wield_hook_registration_count
+local _transform_map = ctx.transform_map
+local _skin_transform_map = ctx.skin_transform_map
+local _crowbill_transform_by_unit = ctx.crowbill_transform_by_unit
 
 _rt_register("cwv_unit_bearing_variants_registered", function()
     -- Issue #417: a variant that overrides a hand unit must resolve a def on every
@@ -41,6 +44,9 @@ end)
 
 _rt_register("issue597_greataxe_replaces_poleaxe", function()
 	local greataxe = _om.greataxe
+	if type(_skin_transform_map) ~= "table" then
+		return "Greataxe regression skin-transform dependency missing"
+	end
 	local function same_triplet(a, b)
 		return type(a) == "table" and type(b) == "table"
 			and a[1] == b[1] and a[2] == b[2] and a[3] == b[3]
@@ -1091,6 +1097,9 @@ end)
 
 _rt_register("issue604_imperial_crowbill_model05_transform", function()
 	local family = mod._cwv_crowbill_family
+	if type(_skin_transform_map) ~= "table" then
+		return "#604 Crowbill regression skin-transform dependency missing"
+	end
 	if type(family) ~= "table" or type(family.MODELS) ~= "table" then
 		return "#604 Crowbill model manifest missing"
 	end
@@ -1128,10 +1137,34 @@ _rt_register("issue604_imperial_crowbill_model05_transform", function()
 			end
 		end
 	end
+	if type(_om._cwv_select_husk_transform_def) ~= "function"
+			or type(_om._cwv_husk_transform_apply_plan) ~= "function" then
+		return "#604 remote husk transform boundary missing"
+	end
+	local exact = {
+		variant_key = target.variant_key,
+		right_hand_unit = target.right_hand_unit,
+	}
+	local selected, source = _om._cwv_select_husk_transform_def("right", exact,
+		{ name = family.SOURCE_ITEM }, nil, target.right_hand_unit, nil)
+	local plan = _om._cwv_husk_transform_apply_plan("right", selected, source)
+	if selected ~= applied or source ~= "exact_model" or not plan
+			or plan.should_apply ~= true or plan.durable ~= true
+			or not same_triplet(plan.scale, { 0.45, 0.45, 0.45 })
+			or plan.scale_multiplier ~= nil
+			or not same_triplet(plan.offset, { 0, -0.03, -0.20 })
+			or not same_triplet(plan.rotation, { -90, -90, -90 }) then
+		return "#604 exact Imperial husk does not preserve its canonical absolute transform"
+	end
 end)
 
 _rt_register("issue604_dawi_crowbill_model01_transform", function()
 	local family = mod._cwv_crowbill_family
+	if type(_skin_transform_map) ~= "table"
+			or type(_transform_map) ~= "table"
+			or type(_crowbill_transform_by_unit) ~= "table" then
+		return "#604 Crowbill regression transform dependencies missing"
+	end
 	if type(family) ~= "table" or type(family.MODELS) ~= "table" then
 		return "#604 Crowbill model manifest missing"
 	end
@@ -1189,7 +1222,8 @@ _rt_register("issue604_dawi_crowbill_model01_transform", function()
 	local plan = _om._cwv_husk_transform_apply_plan("right", selected, source)
 	if selected ~= applied or source ~= "exact_model" or not plan
 			or plan.should_apply ~= true or plan.durable ~= true
-			or not same_triplet(plan.scale, { 0.5, 0.5, 0.5 })
+			or plan.scale ~= nil
+			or not same_triplet(plan.scale_multiplier, { 0.5, 0.5, 0.5 })
 			or not same_triplet(plan.rotation, { -90, -90, -90 }) then
 		return "#604 exact Dawi husk does not select/apply its canonical durable 3P transform"
 	end
@@ -1214,8 +1248,22 @@ _rt_register("issue604_dawi_crowbill_model01_transform", function()
 	local control_plan = _om._cwv_husk_transform_apply_plan("right", control_def, control_source)
 	if not control or not control_def or control_source ~= "exact_model" or not control_plan
 			or control_plan.should_apply ~= false or control_plan.durable ~= false
-			or control_plan.scale or control_plan.offset or control_plan.rotation then
+			or control_plan.scale or control_plan.scale_multiplier
+			or control_plan.offset or control_plan.rotation then
 		return "#604 Dawi remote transform leaked into the untuned Imperial control"
+	end
+	local native_def, native_source = _om._cwv_select_husk_transform_def("right", nil,
+		{ name = family.SOURCE_ITEM }, nil, family.PLACEHOLDER_UNIT, nil)
+	if native_def ~= nil or native_source ~= "miss" then
+		return "#604 native Sienna Crowbill acquired a CWV transform"
+	end
+	local evidence = _om._cwv_crowbill_transform_evidence
+	local retained_diag = evidence and evidence:stats()
+	if type(retained_diag) ~= "table" or retained_diag.limit ~= 96
+			or retained_diag.per_model_limit ~= 16
+			or type(retained_diag.count) ~= "number"
+			or retained_diag.count < 0 or retained_diag.count > retained_diag.limit then
+		return "#604 dedicated retained-state diagnostics are missing or unbounded"
 	end
 end)
 

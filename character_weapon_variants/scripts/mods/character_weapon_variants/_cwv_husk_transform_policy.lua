@@ -30,16 +30,18 @@ function M.bind(deps)
 		local prefix = hand == "left" and "left_hand_" or "right_hand_"
 		local scale = deps.resolve_field(def, prefix .. "scale_3p")
 			or deps.resolve_field(def, prefix .. "scale")
-			or deps.resolve_field(def, prefix .. "scale_multiplier_3p")
+		local scale_multiplier = deps.resolve_field(def, prefix .. "scale_multiplier_3p")
+			or deps.resolve_field(def, prefix .. "scale_multiplier")
 		local offset = deps.resolve_field(def, prefix .. "offset_3p")
 			or deps.resolve_field(def, prefix .. "offset")
 		local rotation = deps.resolve_field(def, prefix .. "rotation_3p")
 			or deps.resolve_field(def, prefix .. "rotation")
-		local should_apply = (scale or offset or rotation) and true or false
+		local should_apply = (scale or scale_multiplier or offset or rotation) and true or false
 		return {
 			def = def,
 			source = source,
 			scale = scale,
+			scale_multiplier = scale_multiplier,
 			offset = offset,
 			rotation = rotation,
 			should_apply = should_apply,

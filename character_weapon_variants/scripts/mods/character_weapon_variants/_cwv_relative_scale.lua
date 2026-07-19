@@ -19,16 +19,24 @@ function M.new(deps)
 	local baselines = setmetatable({}, { __mode = "k" })
 	local owner = {}
 
-	function owner:resolve(unit, multiplier)
+	function owner:resolve(unit, multiplier, identity_token)
 		if unit == nil or not triplet(multiplier) then return nil, nil end
-		local baseline = baselines[unit]
-		if not baseline then
+		local record = baselines[unit]
+		if record and record.identity_token ~= identity_token then
+			record = nil
+			baselines[unit] = nil
+		end
+		if not record then
 			if type(deps.read_scale) ~= "function" then return nil, nil end
 			local read = deps.read_scale(unit)
 			if not triplet(read) then return nil, nil end
-			baseline = { read[1], read[2], read[3] }
-			baselines[unit] = baseline
+			record = {
+				baseline = { read[1], read[2], read[3] },
+				identity_token = identity_token,
+			}
+			baselines[unit] = record
 		end
+		local baseline = record.baseline
 		return {
 			baseline[1] * multiplier[1],
 			baseline[2] * multiplier[2],
@@ -37,7 +45,8 @@ function M.new(deps)
 	end
 
 	function owner:baseline(unit)
-		return baselines[unit]
+		local record = baselines[unit]
+		return record and record.baseline or nil
 	end
 
 	function owner:forget(unit)
