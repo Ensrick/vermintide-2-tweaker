@@ -1,5 +1,39 @@
 # Enemy Tweaker Changelog
 
+## 0.7.53-dev (2026-07-18): #512 harness context preconditions; mini_patrol assert skips at the keep [untested]
+
+- `_et_regression.lua`: `_rt_register(name, fn, opts)` now accepts
+  `opts.precondition` - a function returning true when the asserted runtime
+  context exists, or (false, "reason") when it legitimately does not. The
+  /et_regression_test runner reports such checks as an explicit
+  `SKIP: <name> -- context absent: <reason>` result (chat echo + engine
+  `printf`, visible with mod logging off), distinct from PASS and FAIL, plus a
+  trailing `=== N skipped (context absent) ===` summary line. A THROWING
+  precondition reports as FAIL, never a skip, so a broken gate cannot mask its
+  check. Kills the issue 511/512 false-failure class at the harness level:
+  FAIL now always means "context present, invariant broken".
+- `_et_pacing.lua`: the `CurrentPacing.mini_patrol.only_spawn_below_intensity`
+  runtime-clone assert splits OUT of `spawn_pacing_hook_targets_present`
+  (which keeps every context-free surface: hook targets, RecycleSettings
+  fields, static `PacingSettings.default` paths, CurrentPacing global +
+  horde_frequency) into the new precondition-gated
+  `spawn_pacing_mini_patrol_runtime_path`. Precondition: a live enabled
+  pacing clone (`type(CurrentPacing) == "table" and not CurrentPacing.disabled`).
+  At the keep the director's pacing is `PacingSettings.disabled`
+  (conflict_settings.lua:3603) which has no `mini_patrol` block - the clone
+  only gains one from an enabled preset via
+  `refresh_conflict_director_patches` (conflict_director.lua:878) - so a keep
+  run now prints the explicit context-absent SKIP instead of silently passing
+  through the old inline `CP.disabled` gate (and instead of the pre-0.7.36
+  false FAIL). In-mission a FAIL remains a true positive (unguarded vanilla
+  read at conflict_director.lua:1379).
+- Offline coverage: new `qa/lua/tests/test_rt_harness_context_absent.lua`
+  loads the real `_et_regression.lua` + `_et_protect.lua` + `_et_pacing.lua`
+  under the stubbed VMF environment and drives /et_regression_test in both a
+  keep-shaped state (disabled preset -> SKIP line) and a mission-shaped state
+  (enabled pacing -> PASS), plus synthetic pass/fail/skip/throwing-precondition
+  checks locking the runner contract.
+
 ## 0.7.52-dev (2026-07-18): #640 deleted lingering-damage source guard [verify-fix]
 
 - Published the already-merged lifetime guard under a new unambiguous version;

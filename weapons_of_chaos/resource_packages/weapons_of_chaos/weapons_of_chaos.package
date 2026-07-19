@@ -1,5 +1,6 @@
 lua = [
 	"scripts/mods/weapons_of_chaos/_woc_appearance_policy"
+	"scripts/mods/weapons_of_chaos/_woc_attack_order"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_audio"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_power"

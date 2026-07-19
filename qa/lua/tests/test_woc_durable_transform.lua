@@ -43,7 +43,7 @@ return function(H, repo_root)
 				}
 			end,
 			rotation_components = function(value)
-				H.deep_equal(value, { -90, -90, -90 })
+				H.deep_equal(value, { -180, -90, -90 })
 				return copy(expected_rotation)
 			end,
 			apply = function(_, spec)
@@ -84,7 +84,7 @@ return function(H, repo_root)
 		H.deep_equal(target.position, { 1, 2, 2.7 })
 		H.deep_equal(target.scale, { 90, 90, 90 })
 		H.deep_equal(target.apply_spec.scale, { 90, 90, 90 })
-		H.deep_equal(target.apply_spec.rotation, { -90, -90, -90 })
+		H.deep_equal(target.apply_spec.rotation, { -180, -90, -90 })
 		H.equal(target.node, 2)
 		H.equal(target.apply_spec.node, 2)
 		H.equal(module.CONTRACT.attachment_node, 0)
@@ -282,7 +282,7 @@ return function(H, repo_root)
 		local unit = {}
 		local ok, report = wa.apply(unit, {
 			node = 2, scale = { 0.9, 0.9, 0.9 },
-			position = { 0, 0, -0.3 }, rotation = { -90, -90, -90 },
+			position = { 0, 0, -0.3 }, rotation = { -180, -90, -90 },
 		})
 		H.equal(ok, true)
 		H.equal(report.transform_mode, "atomic-local-pose")
@@ -304,7 +304,7 @@ return function(H, repo_root)
 		})
 		local ok, report = wa.apply({}, {
 			node = 2, scale = { 0.9, 0.9, 0.9 },
-			position = { 0, 0, -0.3 }, rotation = { -90, -90, -90 },
+			position = { 0, 0, -0.3 }, rotation = { -180, -90, -90 },
 		})
 		H.equal(ok, false)
 		H.equal(report.transform_error, "invalid-position")
@@ -360,5 +360,74 @@ return function(H, repo_root)
 		H.equal(wire.caller_frames(nil, SELF_MARKERS, 3), nil)
 		H.equal(wire.caller_frames("", SELF_MARKERS, 3), nil)
 		H.equal(wire.caller_frames("stack traceback:", SELF_MARKERS, 3), nil)
+	end)
+
+	-- ============ issue 712 tuner: retarget from stored baselines ============
+
+	H.test("WOC #712 retarget rebuilds from stored baselines with per-perspective scale", function()
+		local unit_3p, unit_1p = { "u3" }, { "u1" }
+		local states = {
+			[unit_3p] = { position = { 1, 1, 1 }, scale = { 100, 100, 100 },
+				rotation = { 0.7071, 0, 0, -0.7071 } },
+			[unit_1p] = { position = { 2, 2, 2 }, scale = { 100, 100, 100 },
+				rotation = { 0.7071, 0, 0, -0.7071 } },
+		}
+		local function copy3(v) return { v[1], v[2], v[3] } end
+		local rotation_q = { 0, 0.7071, 0, -0.7071 }
+		local events = {}
+		local owner = module.new({
+			alive = function(u) return states[u] ~= nil end,
+			read = function(u)
+				local s = states[u]
+				return { position = copy3(s.position), scale = copy3(s.scale),
+					rotation = { s.rotation[1], s.rotation[2], s.rotation[3], s.rotation[4] } }
+			end,
+			rotation_components = function() return { rotation_q[1], rotation_q[2],
+				rotation_q[3], rotation_q[4] } end,
+			apply = function(u, spec)
+				local s = states[u]
+				s.position = copy3(spec.position)
+				s.scale = copy3(spec.scale)
+				s.rotation = { rotation_q[1], rotation_q[2], rotation_q[3], rotation_q[4] }
+				return true, { ok = true }
+			end,
+			should_track = function() return true end,
+			diagnostic = function(kind) events[#events + 1] = kind end,
+		})
+		local spec = { node = 2, scale = { 0.9, 0.9, 0.9 }, offset = { 0, 0, -0.3 },
+			rotation = { -180, -90, -90 } }
+		H.equal(owner:apply(unit_3p, spec, "3p", "owner-spawn"), true)
+		local spec_1p = { node = 2, scale = { 0.8, 0.8, 0.8 }, offset = spec.offset,
+			rotation = spec.rotation }
+		H.equal(owner:apply(unit_1p, spec_1p, "1p", "owner-spawn"), true)
+		H.deep_equal(states[unit_3p].scale, { 90, 90, 90 })
+		H.deep_equal(states[unit_1p].scale, { 80, 80, 80 })
+
+		-- Retarget with new values: 3P scale 0.7, 1P scale 0.6, new offset.
+		-- Both units must resolve from their STORED baselines (positions 1,1,1
+		-- and 2,2,2 plus the new offset - never compounding the old -0.3).
+		local retargeted, live = owner:retarget({
+			scale = { 0.7, 0.7, 0.7 },
+			scale_1p = { 0.6, 0.6, 0.6 },
+			offset = { 0, 0, -0.5 },
+			rotation = { -180, -90, -90 },
+		})
+		H.equal(retargeted, 2)
+		H.equal(live, 2)
+		H.deep_equal(states[unit_3p].scale, { 70, 70, 70 })
+		H.deep_equal(states[unit_1p].scale, { 60, 60, 60 })
+		H.deep_equal(states[unit_3p].position, { 1, 1, 0.5 })
+		H.deep_equal(states[unit_1p].position, { 2, 2, 1.5 })
+		H.equal(events[#events], "retargeted")
+
+		-- Dead units prune instead of counting as live.
+		states[unit_1p] = nil
+		local retargeted2, live2 = owner:retarget({
+			scale = { 0.9, 0.9, 0.9 },
+			offset = { 0, 0, -0.3 },
+			rotation = { -180, -90, -90 },
+		})
+		H.equal(retargeted2, 1)
+		H.equal(live2, 1)
 	end)
 end

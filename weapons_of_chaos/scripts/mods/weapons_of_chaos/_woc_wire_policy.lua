@@ -40,8 +40,12 @@ local function strip_protected_traits(item, protected_traits)
 	return shadow, true
 end
 
--- Issue 278/613: name the caller behind a nil-key loadout-sync skip. This pure
--- transform keeps the bounded runtime probe testable offline.
+-- Issue 278/613: name the caller behind a nil-key loadout-sync skip. Pure text
+-- transform over a debug.traceback string so the runtime probe stays testable
+-- offline. Drops the "stack traceback:" header and every frame matching a
+-- self/plumbing marker (plain-text match), keeps at most `max_frames` caller
+-- frames; when filtering removes everything, falls back to the first frames
+-- unfiltered so the probe never reports an empty capture.
 function M.caller_frames(trace, self_markers, max_frames)
 	max_frames = type(max_frames) == "number" and max_frames or 3
 	if type(trace) ~= "string" or max_frames < 1 then return nil end

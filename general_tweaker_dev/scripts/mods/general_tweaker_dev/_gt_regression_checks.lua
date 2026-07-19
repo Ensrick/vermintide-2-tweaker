@@ -941,6 +941,110 @@ function M.install(mod, _rt_register, deps)
         end
     end)
 
+    _rt_register("gt_bot384_aid_errand_pin", function()
+        -- #384 (v0.2.250-dev): the aid-errand PIN. Vanilla's path-fail cooldowns
+        -- nil target_ally_need_type mid-errand (player_bot_base.lua:960-964 +
+        -- :721-724), which dropped BOTH the revive errand and every distance-
+        -- teleport aid exception; field log (gt 0.2.248) showed the tighter_leash
+        -- branch teleporting 0.02 s after its own veto and a #492 no-progress
+        -- bail releasing the veto while the ally was still down. The pin holds
+        -- the errand from the ally's LIVE status and releases state-based only.
+        -- Locks: marker + the two pure policy seams + their truth tables.
+        if GT_BOT384_AID_ERRAND_PIN_MARKER_v0_2_250 ~= "gt-bot384-aid-errand-pin-holds-veto" then
+            return "bot #384 aid-errand pin marker absent -- was the pin reverted?"
+        end
+        local policy = mod._gt_teleport_loop_policy
+        if type(policy) ~= "table"
+                or type(policy.pin_need_type) ~= "function"
+                or type(policy.pin_should_release) ~= "function" then
+            return "bot #384 pin policy seams missing (pin_need_type / pin_should_release)"
+        end
+        -- pin_need_type truth table (stub status objects; the unit boundary
+        -- cannot be stubbed -- same constraint as the #139/#384 predicates).
+        local function st(o)
+            o = o or {}
+            local function g(k) return function() return o[k] or false end end
+            return {
+                is_knocked_down               = g("knocked"),
+                get_is_ledge_hanging          = g("ledge"),
+                is_pulled_up                  = g("pulled"),
+                is_hanging_from_hook          = g("hook"),
+                is_ready_for_assisted_respawn = g("awaiting"),
+            }
+        end
+        local cases = {
+            { s = st{ knocked = true },  awaiting_ok = false, want = "knocked_down", why = "knocked down" },
+            { s = st{ ledge = true },    awaiting_ok = false, want = "ledge",        why = "ledge-hanging, not pulled up" },
+            { s = st{ ledge = true, pulled = true }, awaiting_ok = false, want = nil, why = "ledge but already pulled up" },
+            { s = st{ hook = true },     awaiting_ok = false, want = "hook",         why = "hanging from hook" },
+            { s = st{ awaiting = true }, awaiting_ok = true,  want = "knocked_down", why = "awaiting rescue, FIX 3 relabel on" },
+            { s = st{ awaiting = true }, awaiting_ok = false, want = nil,            why = "awaiting rescue but relabel off" },
+            { s = st{},                  awaiting_ok = true,  want = nil,            why = "healthy (no pinnable errand)" },
+        }
+        for _, c in ipairs(cases) do
+            local got = policy.pin_need_type(c.s, c.awaiting_ok)
+            if got ~= c.want then
+                return string.format("pin_need_type(%s): want=%s got=%s",
+                    c.why, tostring(c.want), tostring(got))
+            end
+        end
+        -- pin_should_release matrix: recovery releases; no-path bail on the
+        -- pinned unit releases; no-progress bail HOLDS; other-unit bail holds.
+        local rel = policy.pin_should_release
+        if rel(nil, false, nil, false) ~= true then
+            return "pin must release when the ally no longer classifies"
+        end
+        if rel("knocked_down", true, "no-path", true) ~= true then
+            return "pin must release on a no-path #492 bail for the pinned ally"
+        end
+        if rel("knocked_down", true, "no-progress", true) ~= false then
+            return "pin must HOLD through a no-progress #492 bail (the #384 log gap)"
+        end
+        if rel("knocked_down", true, "no-path", false) ~= false then
+            return "a no-path bail for a DIFFERENT unit must not release the pin"
+        end
+        if rel("knocked_down", false, nil, false) ~= false then
+            return "pin must hold while the ally classifies and no bail is active"
+        end
+    end)
+
+    _rt_register("gt_bot385_below_leash_instrument", function()
+        -- #385 (v0.2.250-dev): the capped, log-only below-leash branch
+        -- instrument -- the issue's missing datum was WHICH should_teleport /
+        -- cant_reach_ally branch fired for teleports below the leash slider.
+        -- Locks the marker + the pure log-gate truth table (below min(leash,40)
+        -- only, capped, malformed input fails closed).
+        if GT_BOT385_BELOW_LEASH_INSTRUMENT_MARKER_v0_2_250 ~= "gt-bot385-below-leash-branch-instrument" then
+            return "bot #385 below-leash instrument marker absent"
+        end
+        local policy = mod._gt_teleport_loop_policy
+        if type(policy) ~= "table" or type(policy.should_log_below_leash) ~= "function" then
+            return "bot #385 below-leash log-gate seam missing"
+        end
+        if type(policy.BELOW_LEASH_LOG_CAP) ~= "number" or policy.BELOW_LEASH_LOG_CAP <= 0 then
+            return "bot #385 log cap missing or non-positive"
+        end
+        local log = policy.should_log_below_leash
+        if log(2.8, 15, 0, 24) ~= true then
+            return "a 2.8 m teleport under a 15 m leash must log"
+        end
+        if log(15, 15, 0, 24) ~= false then
+            return "an at-leash teleport must not log (distance triggers own it)"
+        end
+        if log(20, 15, 0, 24) ~= false or log(20, 40, 0, 24) ~= true then
+            return "the floor must be min(leash, 40): 20 m is legit at leash 15 (tighter-leash trigger) but anomalous at leash 40"
+        end
+        if log(45, 60, 0, 24) ~= false then
+            return "at/above vanilla's 40 m floor the vanilla trigger owns the teleport -- no log"
+        end
+        if log(2.8, 15, 24, 24) ~= false then
+            return "the session cap must silence the instrument"
+        end
+        if log(nil, 15, 0, 24) ~= false or log(2.8, nil, 0, 24) ~= false then
+            return "malformed distance/leash input must fail closed"
+        end
+    end)
+
     _rt_register("gt_bot383_fix9_splits_follow_position", function()
         -- issue 383 (v0.2.194-dev): FIX 9 (split bots among humans) must set
         -- data.follow_position -- a vanilla-spacing fan point around each bot's OWN

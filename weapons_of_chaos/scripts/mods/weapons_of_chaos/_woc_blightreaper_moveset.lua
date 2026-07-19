@@ -1,17 +1,20 @@
 -- Private Blightreaper combat template.
 --
--- The relic uses Kerillian's one-handed Sword action graph, slowed to 75%.
+-- The relic uses Sienna's one-handed Crowbill action graph (author request
+-- 2026-07-19; replaces the earlier Kerillian Sword graph), slowed to 83%.
+-- Source template `one_handed_crowbill` (`1h_crowbills.lua:1572`) natively
+-- ships four chained lights, three heavies, and a push-attack follow-up, so
+-- the Sword era's four-light chain surgery is retired with its donor.
 -- Poison is described as a native on-hit equipment buff instead of cloning
 -- damage profiles (which would require private network lookup entries).
 
 local M = {}
 
-M.SOURCE_ITEM = "we_1h_sword"
-M.SOURCE_TEMPLATE = "we_one_hand_sword_template_1"
-M.OVERHEAD_SOURCE_TEMPLATE = "one_handed_swords_template_1"
+M.SOURCE_ITEM = "bw_1h_crowbill"
+M.SOURCE_TEMPLATE = "one_handed_crowbill"
 M.EXECUTIONER_SOURCE_TEMPLATE = "two_handed_swords_executioner_template_1"
 M.TEMPLATE = "woc_blightreaper_template"
-M.SPEED_MULTIPLIER = 0.75
+M.SPEED_MULTIPLIER = 0.83
 M.INTRINSIC_CRIT_CHANCE = 0.15
 M.LIGHT_DAMAGE_PROFILE = "medium_slashing_smiter_2h"
 M.HEAVY_DAMAGE_PROFILE = "heavy_slashing_axe_linesman"
@@ -31,87 +34,84 @@ M.ORDER_PROPERTY = "woc_power_vs_order"
 M.CRIT_PROPERTY_BUFF = "properties_woc_intrinsic_crit_display_only"
 M.ORDER_PROPERTY_BUFF = "properties_woc_power_vs_order_display_only"
 
--- Blightreaper is a heavy cursed relic, not an elven/Empire sword.  Impact
--- presentation is copied from Bardin's Greataxe sweeps
--- (`2h_axes.lua`:194-198, 333-337, 474-477, 619-622, 765-768, 911-915).
--- Its action timings and damage geometry remain the Elf Sword graph. Greataxe
--- swing events cannot be substituted safely because their charge timing and
--- baked sweep geometry belong to the 2H Axe graph. Instead, translate each
--- Sword event to the action-by-action native 1H Axe event at the same action
--- index (`1h_swords.lua` versus `1h_axes.lua`). This removes the sword swing
--- presentation without transplanting a mechanically different action graph.
-M.GREATAXE_IMPACT_SOUND = "axe_2h_hit"
-M.GREATAXE_HIT_EFFECT = "melee_hit_axes_2h"
-M.AXE_ARMOUR_IMPACT_SOUND = "blunt_hit_armour"
-M.ONE_HAND_AXE_SWING_REMAP = {
-	attack_swing_charge_left = "attack_swing_charge_left_diagonal",
-	attack_swing_charge_right_pose = "attack_swing_charge_right_diagonal_pose",
-	attack_swing_charge_left_pose = "attack_swing_charge_left_diagonal_pose",
-	attack_swing_heavy = "attack_swing_heavy_down",
-	attack_swing_heavy_right = "attack_swing_heavy_down_right",
-	attack_swing_right = "attack_swing_right_diagonal",
-	attack_swing_down = "attack_swing_left",
-	attack_swing_right_diagonal = "attack_swing_down_right",
+-- Impact presentation: the Crowbill graph carries its own authored pick
+-- identity (`1h_crowbills.lua`: `crowbill_stab_hit` impacts,
+-- `melee_hit_hammers_1h` effects, `blunt_hit_armour` no-damage impacts), so
+-- the Sword era's Greataxe impact translation layer is retired together with
+-- the Sword graph it was authored against. One normalization remains: the
+-- native burn stab (`light_attack_left`, `1h_crowbills.lua:680-708`) presents
+-- fire impacts (`fire_hit` / `fire_hit_armour`) for a burn damage profile
+-- (`light_blunt_smiter_stab_burn`) that this template replaces with its
+-- poison identity, so those sounds are normalized to the crowbill family
+-- baseline instead of keeping a fire cue with no burn behind it.
+M.CROWBILL_IMPACT_SOUND = "crowbill_stab_hit"
+M.CROWBILL_ARMOUR_IMPACT_SOUND = "blunt_hit_armour"
+M.FIRE_IMPACT_SOUNDS = {
+	fire_hit = true,
+	fire_hit_armour = true,
 }
 
+-- Crowbill 3P attack events are authored for Sienna's (bw_) skeleton only.
+-- Every other receiver redirects into its own native vocabulary using Weapon
+-- Tweaker's PROVEN per-receiver crowbill coverage, reused verbatim
+-- (`weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap_data.lua`,
+-- `one_handed_crowbill`): the authored dr_ table plus the 2026-07-03 remote
+-- tester-baked es_/wh_ picks; `_default` is wt's non-Sienna fallback row and
+-- reaches we_ receivers. Do not invent new mappings here.
+M.NATIVE_3P_PREFIX = "bw_"
 M.THIRD_PERSON_REMAP = {
-	attack_swing_stab = "attack_swing_down",
-	attack_swing_charge_down = "attack_swing_charge_left_diagonal",
-	attack_swing_charge_left = "attack_swing_charge_right_pose",
-	attack_swing_heavy_left_up = "attack_swing_heavy_right",
-	attack_swing_charge_right_diagonal_pose = "attack_swing_charge_left_diagonal",
-	attack_swing_heavy_down_right = "attack_swing_heavy_down",
+	dr_ = {
+		attack_swing_stab                = "attack_swing_down",
+		attack_swing_up_left             = "attack_swing_left",
+		attack_swing_charge_left         = "attack_swing_charge_left_diagonal",
+		attack_swing_heavy_left_up       = "attack_swing_heavy_down",
+		attack_swing_charge_left_pose    = "attack_swing_charge_left_diagonal",
+		attack_swing_heavy_left_diagonal = "attack_swing_heavy_down",
+	},
+	es_ = {
+		attack_swing_up_left = "attack_swing_left",
+	},
+	wh_ = {
+		attack_swing_up_left = "attack_swing_left",
+	},
+	_default = {
+		attack_swing_stab                = "attack_swing_down",
+		attack_swing_heavy_left_up       = "attack_swing_heavy",
+		attack_swing_heavy_left_diagonal = "attack_swing_heavy",
+		attack_swing_up_left             = "attack_swing_left",
+	},
+}
+
+-- Per-career 3P wield redirect, applied in DATA on the private clone via
+-- `wield_anim_career_3p` (read by simple_inventory_extension.lua:2011, the
+-- husk path simple_husk_inventory_extension.lua:710, and the keep previewer
+-- world_hero_previewer.lua:1003). `to_1h_crowbill` exists only on bw_ 3P
+-- skeletons; the non-Sienna rows reuse Weapon Tweaker's proven wield coverage
+-- (`wt_wield_patches.lua` patch (e) + bulk `one_handed_crowbill` rows, and
+-- the `_wt_anim_remap.lua:79` wh_priest override). bw_ careers are
+-- deliberately absent so the engine falls back to the native `wield_anim`.
+M.WIELD_ANIM_CAREER_3P = {
+	es_mercenary      = "to_1h_sword",
+	es_huntsman       = "to_1h_sword",
+	es_knight         = "to_1h_sword",
+	es_questingknight = "to_1h_sword",
+	dr_ranger         = "to_1h_sword",
+	dr_ironbreaker    = "to_1h_sword",
+	dr_slayer         = "to_1h_sword",
+	dr_engineer       = "to_1h_sword",
+	we_waywatcher     = "to_1h_sword",
+	we_maidenguard    = "to_1h_sword",
+	we_shade          = "to_1h_sword",
+	we_thornsister    = "to_1h_sword",
+	wh_captain        = "to_1h_sword",
+	wh_bountyhunter   = "to_1h_sword",
+	wh_zealot         = "to_1h_sword",
+	wh_priest         = "to_1h_hammer",
 }
 
 local function is_attack(sub_action)
 	return type(sub_action) == "table"
 		and (sub_action.kind == "melee_start" or sub_action.kind == "sweep")
-end
-
-local function retarget_chain(action, target)
-	for _, chain in ipairs(action and action.allowed_chain_actions or {}) do
-		if chain.action == "action_one"
-				and (chain.input == "action_one" or chain.input == "action_one_hold")
-				and type(chain.sub_action) == "string" then
-			chain.sub_action = target
-		end
-	end
-end
-
-local function install_four_light_chain(template, weapons, clone)
-	local actions = template.actions and template.actions.action_one
-	local overhead_source = weapons[M.OVERHEAD_SOURCE_TEMPLATE]
-	local overhead_actions = overhead_source and overhead_source.actions
-		and overhead_source.actions.action_one
-	local overhead = overhead_actions and overhead_actions.light_attack_last
-	if type(actions) ~= "table" or type(actions.light_attack_last) ~= "table"
-			or type(actions.default_left) ~= "table" or type(overhead) ~= "table" then
-		return false, "four_light_donor_missing"
-	end
-
-	-- Kerillian Sword's third light is the stab. Preserve that complete authored
-	-- sweep as light four, and insert the Empire Sword's authored vertical light
-	-- (including its matching baked sweep) as light three.
-	actions.light_attack_stab = actions.light_attack_last
-	actions.light_attack_last = clone(overhead, true)
-	actions.default_stab = clone(actions.default_left, true)
-	for _, chain in ipairs(actions.default_stab.allowed_chain_actions or {}) do
-		if chain.action == "action_one" and chain.input == "action_one_release"
-				and chain.sub_action == "light_attack_last" then
-			chain.sub_action = "light_attack_stab"
-		end
-	end
-	retarget_chain(actions.light_attack_last, "default_stab")
-
-	-- Every single heavy enters the requested overhead -> stab finisher instead
-	-- of resuming at a different point in the ordinary Elf Sword light chain.
-	for name, action in pairs(actions) do
-		if type(name) == "string" and name:find("^heavy_attack_")
-				and type(action) == "table" then
-			retarget_chain(action, "default_left")
-		end
-	end
-	return true
 end
 
 -- These two rows are presentation-only. The actual +15% critical chance is
@@ -210,11 +210,10 @@ function M.install(weapons, clone)
 		return report
 	end
 	template.name = M.TEMPLATE
-	local chain_ok, chain_reason = install_four_light_chain(template, weapons, clone)
-	if not chain_ok then
-		report.skipped = chain_reason
-		return report
-	end
+	-- The clone inherits the crowbill state machine and `wwise/one_handed_
+	-- crowbills` bank; `WeaponUtils.get_weapon_packages` (weapon_utils.lua:73/
+	-- :104-109) makes both resident wherever the relic spawns. Append the
+	-- Executioner bank the same way so the manual swing whooshes stay resident.
 	local dependencies = template.wwise_dep_right_hand or {}
 	local has_executioner_audio = false
 	for i = 1, #dependencies do
@@ -227,6 +226,13 @@ function M.install(weapons, clone)
 		dependencies[#dependencies + 1] = M.EXECUTIONER_WWISE_DEP
 	end
 	template.wwise_dep_right_hand = dependencies
+	-- Non-Sienna receivers get their 3P wield stance redirected in data; the
+	-- attack events are redirected at the `_play_3p_anim` boundary (remap_3p).
+	local wield_3p = {}
+	for career_name, wield_event in pairs(M.WIELD_ANIM_CAREER_3P) do
+		wield_3p[career_name] = wield_event
+	end
+	template.wield_anim_career_3p = wield_3p
 	-- Poison is attached through the intrinsic item trait below. Keeping the
 	-- same buff on the template would give one effect two proc owners.
 	template.buffs = template.buffs or {}
@@ -249,16 +255,16 @@ function M.install(weapons, clone)
 								sub_action.damage_profile = M.HEAVY_DAMAGE_PROFILE
 							end
 							sub_action.additional_critical_strike_chance = M.INTRINSIC_CRIT_CHANCE
-							sub_action.impact_sound_event = M.GREATAXE_IMPACT_SOUND
-							sub_action.no_damage_impact_sound_event = M.AXE_ARMOUR_IMPACT_SOUND
-							sub_action.hit_effect = M.GREATAXE_HIT_EFFECT
+							if M.FIRE_IMPACT_SOUNDS[sub_action.impact_sound_event] then
+								sub_action.impact_sound_event = M.CROWBILL_IMPACT_SOUND
+							end
+							if M.FIRE_IMPACT_SOUNDS[sub_action.no_damage_impact_sound_event] then
+								sub_action.no_damage_impact_sound_event = M.CROWBILL_ARMOUR_IMPACT_SOUND
+							end
+							if M.FIRE_IMPACT_SOUNDS[sub_action.armor_impact_sound_event] then
+								sub_action.armor_impact_sound_event = nil
+							end
 						end
-						-- The inserted Empire-Sword finisher is specifically the authored
-						-- vertical overhead. Do not flatten it back into the generic axe
-						-- left swing while translating the remaining Sword events.
-						local axe_event = sub_action_name ~= "light_attack_last"
-							and M.ONE_HAND_AXE_SWING_REMAP[sub_action.anim_event]
-						if axe_event then sub_action.anim_event = axe_event end
 						sub_action.anim_time_scale = (sub_action.anim_time_scale or 1)
 							* M.SPEED_MULTIPLIER
 						report.attacks = report.attacks + 1
@@ -301,14 +307,67 @@ function M.install_poison_buff(buff_templates)
 	return true, "installed"
 end
 
+-- Attack-chain descriptor for `_woc_attack_order.lua` (additive; consumes the
+-- clone this module installs, mutates nothing here). Slot names, charge-node
+-- pairings, and transition targets are the verified `one_handed_crowbill`
+-- enumeration (1h_crowbills.lua: charge nodes :8/:65/:120/:175, lights
+-- :939/:1078/:810/:680, heavies :230/:530/:380, push-attack bopp :1212).
+-- Positions are the four charge nodes in chain order; `transitions` is the
+-- after-state map (values = next chain position) that the permutation plan
+-- preserves. Returns a fresh table per call (mod:dofile is not a singleton).
+function M.chain_descriptor()
+	return {
+		template_name = M.TEMPLATE,
+		action = "action_one",
+		-- Attack units. `slot` = native home sub_action; labels are raw loc keys.
+		lights = {
+			{ id = "overhead",       slot = "light_attack_last",  label = "woc_atk_overhead" },
+			{ id = "upper_left",     slot = "light_attack_upper", label = "woc_atk_upper_left" },
+			{ id = "right_diagonal", slot = "light_attack_right", label = "woc_atk_right_diagonal" },
+			{ id = "stab",           slot = "light_attack_left",  label = "woc_atk_stab" },
+		},
+		-- Heavy PAIRS: release payload + the windup anim of `charge_slot`.
+		heavies = {
+			{ id = "left_up_smash",  slot = "heavy_attack",          charge_slot = "default",       label = "woc_atk_left_up_smash" },
+			{ id = "right_smash",    slot = "heavy_attack_left",     charge_slot = "default_left",  label = "woc_atk_right_smash" },
+			{ id = "diagonal_smash", slot = "heavy_attack_right_up", charge_slot = "default_right", label = "woc_atk_diagonal_smash" },
+		},
+		push = {
+			{ id = "upper_bopp", slot = "light_attack_bopp", label = "woc_atk_upper_bopp" },
+		},
+		-- Chain positions (charge nodes) in native chain order.
+		charge_nodes = { "default", "default_right", "default_left", "default_last" },
+		light_positions = { "overhead", "upper_left", "right_diagonal", "stab" },
+		heavy_positions = {
+			{ native = "left_up_smash",  charge_slots = { "default" } },
+			-- Positions 2 and 4 share this heavy sub_action natively.
+			{ native = "diagonal_smash", charge_slots = { "default_right", "default_last" } },
+			{ native = "right_smash",    charge_slots = { "default_left" } },
+		},
+		push_positions = { "upper_bopp" },
+		-- After-state map (next chain position). Mirrors the native wiring the
+		-- permutation plan preserves; /woc_chains re-derives it from the live
+		-- template so drift is visible.
+		transitions = {
+			entry = 1,
+			after_light = { 2, 3, 4, 1 },
+			after_heavy = { 3, 1, 4 },
+			after_push_attack = 3,
+		},
+	}
+end
+
 function M.remap_3p(event_name, career_name, template_name)
 	if template_name ~= M.TEMPLATE or type(event_name) ~= "string" then
 		return event_name, false
 	end
-	if type(career_name) == "string" and career_name:sub(1, 3) == "we_" then
+	local prefix = type(career_name) == "string" and career_name:sub(1, 3) or nil
+	if prefix == M.NATIVE_3P_PREFIX then
 		return event_name, false
 	end
-	local mapped = M.THIRD_PERSON_REMAP[event_name]
+	local remap = (prefix and M.THIRD_PERSON_REMAP[prefix])
+		or M.THIRD_PERSON_REMAP._default
+	local mapped = type(remap) == "table" and remap[event_name] or nil
 	return mapped or event_name, mapped ~= nil
 end
 

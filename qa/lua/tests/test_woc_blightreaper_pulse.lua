@@ -97,7 +97,7 @@ return function(H, repo_root)
 		H.equal(calls.transforms, 1)
 	end)
 
-	H.test("WOC #613 sends the exact 0.9 transform through 1P and 3P pulse paths", function()
+	H.test("WOC #613 sends the exact canonical 0.9 multiplier transform through 1P and 3P pulse paths", function()
 		for _, perspective in ipairs({ "1p", "3p" }) do
 			local runtime, unit, calls = fixture()
 			local ok, reason = runtime.apply(

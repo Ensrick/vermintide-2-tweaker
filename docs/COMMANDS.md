@@ -150,7 +150,7 @@ event_probe, event_active, event_clear, event_apply
 
 ### `WOC` (weapons_of_chaos)
 ```
-woc_regression_test, woc_audio_contract, woc_audio_probe
+woc_regression_test, woc_audio_contract, woc_audio_probe, woc_pose, woc_pose_reset, woc_chains
 ```
 
 ### `bt` (buff_tweaker)

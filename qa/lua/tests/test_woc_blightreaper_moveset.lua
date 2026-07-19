@@ -15,80 +15,108 @@ return function(H, repo_root)
 		return copy
 	end
 
+	-- Faithful miniature of the real `one_handed_crowbill` donor
+	-- (`1h_crowbills.lua`): native chain targets, per-action anim_time_scale
+	-- products of time_mod 0.95, crowbill impact identity, and the fire-flavored
+	-- burn stab (`light_attack_left`).
 	local function donor_template()
 		return {
 			name = moveset.SOURCE_TEMPLATE,
-			wwise_dep_right_hand = { "wwise/one_handed_swords" },
+			wield_anim = "to_1h_crowbill",
+			state_machine = "units/beings/player/first_person_base/state_machines/melee/1h_crowbill",
+			wwise_dep_right_hand = { "wwise/one_handed_crowbills" },
+			buffs = {
+				change_dodge_distance = { external_optional_multiplier = 1.25 },
+			},
 			actions = {
 				action_one = {
 					default = {
 						kind = "melee_start",
 						anim_event = "attack_swing_charge_left",
-						anim_time_scale = 2,
-						damage_profile = "light_slashing_smiter",
 						lookup_data = { item_template_name = "donor" },
-						allowed_chain_actions = {},
+						allowed_chain_actions = {
+							{ action = "action_one", end_time = 0.3, input = "action_one_release",
+								start_time = 0, sub_action = "light_attack_last" },
+							{ action = "action_one", input = "action_one_release",
+								start_time = 0.5, sub_action = "heavy_attack" },
+							{ action = "action_one", auto_chain = true, start_time = 0.8,
+								sub_action = "heavy_attack" },
+						},
 					},
 					default_left = {
 						kind = "melee_start",
-						anim_event = "attack_swing_charge_left",
+						anim_event = "attack_swing_charge_right_pose",
 						allowed_chain_actions = {
+							{ action = "action_one", end_time = 0.3, input = "action_one_release",
+								start_time = 0, sub_action = "light_attack_right" },
 							{ action = "action_one", input = "action_one_release",
-								sub_action = "light_attack_last" },
-							{ action = "action_one", input = "action_one_hold",
-								sub_action = "heavy_attack_left" },
+								start_time = 0.5, sub_action = "heavy_attack_left" },
 						},
 					},
-					light_attack = {
+					heavy_attack = {
 						kind = "sweep",
-						anim_event = "attack_swing_heavy",
-						damage_profile = "light_slashing_smiter",
-						allowed_chain_actions = {},
-					},
-					light_attack_last = {
-						kind = "sweep",
-						anim_event = "attack_swing_stab",
-						damage_profile = "light_slashing_smiter_stab_swords",
-						allowed_chain_actions = {},
-					},
-					heavy_attack_left = {
-						kind = "sweep",
-						anim_event = "attack_swing_heavy_right",
-						damage_profile = "heavy_slashing_smiter",
-						allowed_chain_actions = {
-							{ action = "action_one", input = "action_one",
-								sub_action = "default" },
-						},
-					},
-					block = {
-						kind = "block",
-						anim_time_scale = 0.8,
-					},
-				},
-				action_two = {
-					push = {
-						kind = "push_stagger",
-						anim_time_scale = 1.4,
-						damage_profile = { internal = "must_not_be_cloned_or_rewritten" },
-					},
-				},
-			},
-		}
-	end
-
-	local function overhead_template()
-		return {
-			actions = {
-				action_one = {
-					light_attack_last = {
-						kind = "sweep",
-						anim_event = "attack_swing_down",
-						damage_profile = "sword_1h_light_smiter_vertical",
+						anim_event = "attack_swing_heavy_left_up",
+						anim_time_scale = 0.95 * 1.2,
+						damage_profile = "crowbill_1h_heavy_smiter",
+						impact_sound_event = "crowbill_stab_hit",
+						no_damage_impact_sound_event = "blunt_hit_armour",
+						hit_effect = "melee_hit_hammers_1h",
 						baked_sweep = { { 0.1, 1, 2, 3 } },
 						allowed_chain_actions = {
 							{ action = "action_one", input = "action_one",
-								sub_action = "default" },
+								release_required = "action_one_hold", start_time = 0.55,
+								sub_action = "default_left" },
 						},
+					},
+					light_attack_left = {
+						kind = "sweep",
+						anim_event = "attack_swing_stab",
+						anim_time_scale = 0.95 * 0.95,
+						damage_profile = "light_blunt_smiter_stab_burn",
+						armor_impact_sound_event = "fire_hit",
+						impact_sound_event = "fire_hit",
+						no_damage_impact_sound_event = "fire_hit_armour",
+						hit_effect = "melee_hit_hammers_1h",
+						allowed_chain_actions = {
+							{ action = "action_one", end_time = 1.25, input = "action_one",
+								start_time = 0.5, sub_action = "default" },
+						},
+					},
+					light_attack_last = {
+						kind = "sweep",
+						anim_event = "attack_swing_down",
+						anim_time_scale = 0.95 * 1.15,
+						damage_profile = "light_pointy_smiter",
+						impact_sound_event = "crowbill_stab_hit",
+						no_damage_impact_sound_event = "blunt_hit_armour",
+						baked_sweep = { { 0.2, 4, 5, 6 } },
+						allowed_chain_actions = {
+							{ action = "action_one", end_time = 1.25, input = "action_one",
+								start_time = 0.55, sub_action = "default_right" },
+						},
+					},
+					light_attack_bopp = {
+						kind = "sweep",
+						anim_event = "attack_swing_up_left",
+						anim_event_3p = "attack_swing_left",
+						anim_time_scale = 0.95 * 1,
+						damage_profile = "crowbill_1h_light_smiter_upper",
+						impact_sound_event = "crowbill_stab_hit",
+						no_damage_impact_sound_event = "blunt_hit_armour",
+						allowed_chain_actions = {},
+					},
+					push = {
+						kind = "push_stagger",
+						anim_event = "attack_push",
+						impact_sound_event = "slashing_hit",
+						damage_profile_inner = { internal = "must_not_be_cloned_or_rewritten" },
+					},
+				},
+				action_two = {
+					default = {
+						kind = "block",
+						anim_event = "parry_pose",
+						anim_time_scale = 0.8,
 					},
 				},
 			},
@@ -98,11 +126,10 @@ return function(H, repo_root)
 	local function donor_weapons(donor)
 		return {
 			[moveset.SOURCE_TEMPLATE] = donor or donor_template(),
-			[moveset.OVERHEAD_SOURCE_TEMPLATE] = overhead_template(),
 		}
 	end
 
-	H.test("WOC Blightreaper deep-clones elf Sword without damage-profile mutation", function()
+	H.test("WOC Blightreaper deep-clones the Crowbill graph without donor mutation", function()
 		local donor = donor_template()
 		local snapshot = deep_clone(donor)
 		local weapons = donor_weapons(donor)
@@ -114,55 +141,86 @@ return function(H, repo_root)
 		local installed = weapons[moveset.TEMPLATE]
 
 		H.truthy(report.installed)
-		H.equal(report.attacks, 7)
+		H.equal(report.attacks, 6)
 		H.equal(clone_was_deep, true)
 		H.truthy(installed ~= donor)
 		H.deep_equal(donor, snapshot, "donor template changed")
 		H.equal(installed.name, moveset.TEMPLATE)
-		H.equal(installed.actions.action_one.default.anim_time_scale, 1.5)
-		H.equal(installed.actions.action_one.light_attack.anim_time_scale, 0.75)
-		H.equal(installed.actions.action_one.default.anim_event,
-			"attack_swing_charge_left_diagonal")
-		H.equal(installed.actions.action_one.light_attack.anim_event,
-			"attack_swing_heavy_down")
-		H.equal(installed.actions.action_one.light_attack.impact_sound_event,
-			"axe_2h_hit")
-		H.equal(installed.actions.action_one.light_attack.hit_effect,
-			"melee_hit_axes_2h")
-		H.equal(installed.actions.action_one.light_attack.no_damage_impact_sound_event,
-			"blunt_hit_armour")
-		H.equal(installed.actions.action_one.block.anim_time_scale, 0.8)
-		H.equal(installed.actions.action_two.push.anim_time_scale, 1.4)
+
+		-- Speed multiplies the crowbill's own per-action timings; charge
+		-- windups carry no authored scale and land at the bare multiplier.
+		local a = installed.actions.action_one
+		H.equal(a.default.anim_time_scale, moveset.SPEED_MULTIPLIER)
+		H.equal(a.heavy_attack.anim_time_scale, (0.95 * 1.2) * moveset.SPEED_MULTIPLIER)
+		H.equal(a.light_attack_left.anim_time_scale, (0.95 * 0.95) * moveset.SPEED_MULTIPLIER)
+		H.equal(a.light_attack_last.anim_time_scale, (0.95 * 1.15) * moveset.SPEED_MULTIPLIER)
+		H.equal(a.light_attack_bopp.anim_time_scale, (0.95 * 1) * moveset.SPEED_MULTIPLIER)
+		H.equal(installed.actions.action_two.default.anim_time_scale, 0.8,
+			"block is not an attack and must keep its authored scale")
+
+		-- Native crowbill anim events are the point of the swap: no swing
+		-- translation layer may rewrite them.
+		H.equal(a.default.anim_event, "attack_swing_charge_left")
+		H.equal(a.heavy_attack.anim_event, "attack_swing_heavy_left_up")
+		H.equal(a.light_attack_left.anim_event, "attack_swing_stab")
+		H.equal(a.light_attack_bopp.anim_event_3p, "attack_swing_left")
+
+		-- Native chain transitions preserved verbatim (no retargeting).
+		H.equal(a.default.allowed_chain_actions[1].sub_action, "light_attack_last")
+		H.equal(a.default.allowed_chain_actions[2].sub_action, "heavy_attack")
+		H.equal(a.default.allowed_chain_actions[3].sub_action, "heavy_attack")
+		H.equal(a.default_left.allowed_chain_actions[1].sub_action, "light_attack_right")
+		H.equal(a.default_left.allowed_chain_actions[2].sub_action, "heavy_attack_left")
+		H.equal(a.heavy_attack.allowed_chain_actions[1].sub_action, "default_left")
+		H.equal(a.light_attack_last.allowed_chain_actions[1].sub_action, "default_right")
+
+		-- Relic damage/crit layers ride on top of the native graph.
+		H.equal(a.light_attack_left.damage_profile, moveset.LIGHT_DAMAGE_PROFILE)
+		H.equal(a.light_attack_last.damage_profile, moveset.LIGHT_DAMAGE_PROFILE)
+		H.equal(a.light_attack_bopp.damage_profile, moveset.LIGHT_DAMAGE_PROFILE)
+		H.equal(a.heavy_attack.damage_profile, moveset.HEAVY_DAMAGE_PROFILE)
+		H.equal(a.default.damage_profile, nil,
+			"charge windups have no damage profile to override")
+		H.equal(a.heavy_attack.additional_critical_strike_chance,
+			moveset.INTRINSIC_CRIT_CHANCE)
+		H.equal(a.light_attack_left.additional_critical_strike_chance,
+			moveset.INTRINSIC_CRIT_CHANCE)
+
+		-- Crowbill native impact identity is kept; only the burn stab's fire
+		-- sounds are normalized (its burn profile is replaced by poison).
+		H.equal(a.heavy_attack.impact_sound_event, "crowbill_stab_hit")
+		H.equal(a.heavy_attack.no_damage_impact_sound_event, "blunt_hit_armour")
+		H.equal(a.heavy_attack.hit_effect, "melee_hit_hammers_1h")
+		H.equal(a.light_attack_left.impact_sound_event, moveset.CROWBILL_IMPACT_SOUND)
+		H.equal(a.light_attack_left.no_damage_impact_sound_event,
+			moveset.CROWBILL_ARMOUR_IMPACT_SOUND)
+		H.equal(a.light_attack_left.armor_impact_sound_event, nil)
+		H.equal(a.light_attack_left.hit_effect, "melee_hit_hammers_1h")
+		H.equal(a.push.impact_sound_event, "slashing_hit",
+			"push is not a sweep and keeps its authored sounds")
+		H.deep_equal(a.push.damage_profile_inner,
+			{ internal = "must_not_be_cloned_or_rewritten" })
+		H.deep_equal(a.heavy_attack.baked_sweep, { { 0.1, 1, 2, 3 } })
+		H.deep_equal(a.light_attack_last.baked_sweep, { { 0.2, 4, 5, 6 } })
+
+		-- Residency: the clone keeps the crowbill bank and appends the
+		-- Executioner swing bank; both ride WeaponUtils.get_weapon_packages.
+		H.deep_equal(installed.wwise_dep_right_hand,
+			{ "wwise/one_handed_crowbills", moveset.EXECUTIONER_WWISE_DEP })
+		H.equal(installed.state_machine,
+			"units/beings/player/first_person_base/state_machines/melee/1h_crowbill")
+		H.equal(installed.wield_anim, "to_1h_crowbill")
+
+		-- The per-career 3P wield redirect is installed as a fresh copy.
+		H.deep_equal(installed.wield_anim_career_3p, moveset.WIELD_ANIM_CAREER_3P)
+		H.truthy(installed.wield_anim_career_3p ~= moveset.WIELD_ANIM_CAREER_3P,
+			"wield table must be a copy, not the module constant")
+
 		H.equal(installed.buffs[moveset.POISON_BUFF_TEMPLATE], nil,
 			"template-level poison would duplicate the trait proc owner")
-		H.equal(installed.actions.action_one.default.damage_profile,
-			"light_slashing_smiter")
-		H.equal(installed.actions.action_one.light_attack.damage_profile,
-			moveset.LIGHT_DAMAGE_PROFILE)
-		H.equal(installed.actions.action_one.light_attack_last.anim_event,
-			"attack_swing_down")
-		H.equal(installed.actions.action_one.light_attack_last.damage_profile,
-			moveset.LIGHT_DAMAGE_PROFILE)
-		H.equal(installed.actions.action_one.light_attack_stab.damage_profile,
-			moveset.LIGHT_DAMAGE_PROFILE)
-		H.equal(installed.actions.action_one.heavy_attack_left.damage_profile,
-			moveset.HEAVY_DAMAGE_PROFILE)
-		H.equal(installed.actions.action_one.light_attack.additional_critical_strike_chance,
-			moveset.INTRINSIC_CRIT_CHANCE)
-		H.equal(installed.actions.action_one.heavy_attack_left.additional_critical_strike_chance,
-			moveset.INTRINSIC_CRIT_CHANCE)
-		H.equal(installed.actions.action_one.default_stab.allowed_chain_actions[1].sub_action,
-			"light_attack_stab")
-		H.equal(installed.actions.action_one.light_attack_last.allowed_chain_actions[1].sub_action,
-			"default_stab")
-		H.equal(installed.actions.action_one.heavy_attack_left.allowed_chain_actions[1].sub_action,
-			"default_left")
-		H.deep_equal(installed.actions.action_one.light_attack_last.baked_sweep,
-			{ { 0.1, 1, 2, 3 } })
-		H.deep_equal(installed.wwise_dep_right_hand,
-			{ "wwise/one_handed_swords", moveset.EXECUTIONER_WWISE_DEP })
-		H.deep_equal(installed.actions.action_two.push.damage_profile,
-			{ internal = "must_not_be_cloned_or_rewritten" })
+		H.deep_equal(installed.buffs.change_dodge_distance,
+			{ external_optional_multiplier = 1.25 },
+			"native crowbill dodge buff must survive the clone")
 
 		for action_name, group in pairs(installed.actions) do
 			for sub_action_name, sub_action in pairs(group) do
@@ -175,26 +233,15 @@ return function(H, repo_root)
 		end
 	end)
 
-	H.test("WOC Blightreaper audio uses Greataxe impacts and 1H Axe-safe swings", function()
-		H.equal(moveset.GREATAXE_IMPACT_SOUND, "axe_2h_hit")
-		H.equal(moveset.GREATAXE_HIT_EFFECT, "melee_hit_axes_2h")
-		H.equal(moveset.AXE_ARMOUR_IMPACT_SOUND, "blunt_hit_armour")
-		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_charge_left,
-			"attack_swing_charge_left_diagonal")
-		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_charge_right_pose,
-			"attack_swing_charge_right_diagonal_pose")
-		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_charge_left_pose,
-			"attack_swing_charge_left_diagonal_pose")
-		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_heavy,
-			"attack_swing_heavy_down")
-		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_heavy_right,
-			"attack_swing_heavy_down_right")
-		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_right,
-			"attack_swing_right_diagonal")
-		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_down,
-			"attack_swing_left")
-		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_right_diagonal,
-			"attack_swing_down_right")
+	H.test("WOC Blightreaper impact constants match the crowbill family baseline", function()
+		H.equal(moveset.SOURCE_ITEM, "bw_1h_crowbill")
+		H.equal(moveset.SOURCE_TEMPLATE, "one_handed_crowbill")
+		H.equal(moveset.CROWBILL_IMPACT_SOUND, "crowbill_stab_hit")
+		H.equal(moveset.CROWBILL_ARMOUR_IMPACT_SOUND, "blunt_hit_armour")
+		H.deep_equal(moveset.FIRE_IMPACT_SOUNDS,
+			{ fire_hit = true, fire_hit_armour = true })
+		H.equal(moveset.EXECUTIONER_WWISE_DEP, "wwise/two_handed_swords")
+		H.equal(moveset.SPEED_MULTIPLIER, 0.83)
 	end)
 
 	H.test("WOC Blightreaper install is idempotent and fails closed", function()
@@ -231,7 +278,7 @@ return function(H, repo_root)
 		}
 		local cloned_dr = template.actions.action_career_dr_1
 		local report = career_actions.prepare_inherited_clone(
-			template, source, action_templates, "woc_private<-elf_sword")
+			template, source, action_templates, "woc_private<-crowbill")
 		H.equal(report.ok, true)
 		H.deep_equal(report.restored_names, { "action_career_es_1" })
 		H.equal(template.actions.action_career_es_1, canonical)
@@ -262,30 +309,108 @@ return function(H, repo_root)
 		H.equal(moveset.install_intrinsic_property_rows(nil, buffs), false)
 	end)
 
-	H.test("WOC Blightreaper has exactly six non-elf third-person remaps", function()
-		local count = 0
-		for source_event, target_event in pairs(moveset.THIRD_PERSON_REMAP) do
-			count = count + 1
-			local mapped, changed = moveset.remap_3p(
-				source_event, "es_mercenary", moveset.TEMPLATE)
-			H.equal(mapped, target_event)
-			H.equal(changed, true)
-
-			local elf_event, elf_changed = moveset.remap_3p(
-				source_event, "we_waywatcher", moveset.TEMPLATE)
-			H.equal(elf_event, source_event)
-			H.equal(elf_changed, false)
+	H.test("WOC Blightreaper 3P remap reuses wt's per-receiver crowbill coverage", function()
+		-- Table shape mirrors weapon_tweaker's proven `one_handed_crowbill`
+		-- coverage: authored dr_ table, tester-baked es_/wh_ picks, wt's
+		-- non-Sienna fallback for everyone else (reaches we_ receivers).
+		local expected_shape = { dr_ = 6, es_ = 1, wh_ = 1, _default = 4 }
+		for prefix, expected in pairs(expected_shape) do
+			local remap = moveset.THIRD_PERSON_REMAP[prefix]
+			local count = 0
+			for _ in pairs(remap) do count = count + 1 end
+			H.equal(count, expected, "remap entry count for " .. prefix)
 		end
-		H.equal(count, 6)
 
-		local event, changed = moveset.remap_3p(
-			"idle", "es_mercenary", moveset.TEMPLATE)
+		H.deep_equal(moveset.THIRD_PERSON_REMAP.dr_, {
+			attack_swing_stab                = "attack_swing_down",
+			attack_swing_up_left             = "attack_swing_left",
+			attack_swing_charge_left         = "attack_swing_charge_left_diagonal",
+			attack_swing_heavy_left_up       = "attack_swing_heavy_down",
+			attack_swing_charge_left_pose    = "attack_swing_charge_left_diagonal",
+			attack_swing_heavy_left_diagonal = "attack_swing_heavy_down",
+		})
+		H.deep_equal(moveset.THIRD_PERSON_REMAP.es_,
+			{ attack_swing_up_left = "attack_swing_left" })
+		H.deep_equal(moveset.THIRD_PERSON_REMAP.wh_,
+			{ attack_swing_up_left = "attack_swing_left" })
+		H.deep_equal(moveset.THIRD_PERSON_REMAP._default, {
+			attack_swing_stab                = "attack_swing_down",
+			attack_swing_heavy_left_up       = "attack_swing_heavy",
+			attack_swing_heavy_left_diagonal = "attack_swing_heavy",
+			attack_swing_up_left             = "attack_swing_left",
+		})
+
+		-- Per-receiver resolution through the public remap entry point.
+		local mapped, changed = moveset.remap_3p(
+			"attack_swing_heavy_left_up", "dr_ironbreaker", moveset.TEMPLATE)
+		H.equal(mapped, "attack_swing_heavy_down")
+		H.equal(changed, true)
+		mapped, changed = moveset.remap_3p(
+			"attack_swing_up_left", "es_mercenary", moveset.TEMPLATE)
+		H.equal(mapped, "attack_swing_left")
+		H.equal(changed, true)
+		mapped, changed = moveset.remap_3p(
+			"attack_swing_stab", "es_mercenary", moveset.TEMPLATE)
+		H.equal(mapped, "attack_swing_stab",
+			"tester-baked es_ coverage leaves the stab native")
+		H.equal(changed, false)
+		mapped, changed = moveset.remap_3p(
+			"attack_swing_up_left", "wh_priest", moveset.TEMPLATE)
+		H.equal(mapped, "attack_swing_left")
+		H.equal(changed, true)
+		mapped, changed = moveset.remap_3p(
+			"attack_swing_stab", "we_waywatcher", moveset.TEMPLATE)
+		H.equal(mapped, "attack_swing_down")
+		H.equal(changed, true)
+		mapped, changed = moveset.remap_3p(
+			"attack_swing_heavy_left_up", nil, moveset.TEMPLATE)
+		H.equal(mapped, "attack_swing_heavy",
+			"unknown career falls back to wt's non-Sienna default")
+		H.equal(changed, true)
+
+		-- Sienna's careers own the native vocabulary: never remapped.
+		for _, career in ipairs({
+			"bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
+		}) do
+			for _, event in ipairs({
+				"attack_swing_stab", "attack_swing_up_left",
+				"attack_swing_heavy_left_up", "attack_swing_charge_left",
+			}) do
+				local bw_event, bw_changed = moveset.remap_3p(
+					event, career, moveset.TEMPLATE)
+				H.equal(bw_event, event)
+				H.equal(bw_changed, false)
+			end
+		end
+
+		-- Foreign template and unknown events pass through untouched.
+		local event
+		event, changed = moveset.remap_3p("idle", "es_mercenary", moveset.TEMPLATE)
 		H.equal(event, "idle")
 		H.equal(changed, false)
 		event, changed = moveset.remap_3p(
 			"attack_swing_stab", "es_mercenary", "another_template")
 		H.equal(event, "attack_swing_stab")
 		H.equal(changed, false)
+	end)
+
+	H.test("WOC Blightreaper wield redirect covers every non-Sienna career", function()
+		local expected = {
+			es_mercenary = "to_1h_sword", es_huntsman = "to_1h_sword",
+			es_knight = "to_1h_sword", es_questingknight = "to_1h_sword",
+			dr_ranger = "to_1h_sword", dr_ironbreaker = "to_1h_sword",
+			dr_slayer = "to_1h_sword", dr_engineer = "to_1h_sword",
+			we_waywatcher = "to_1h_sword", we_maidenguard = "to_1h_sword",
+			we_shade = "to_1h_sword", we_thornsister = "to_1h_sword",
+			wh_captain = "to_1h_sword", wh_bountyhunter = "to_1h_sword",
+			wh_zealot = "to_1h_sword",
+			wh_priest = "to_1h_hammer",
+		}
+		H.deep_equal(moveset.WIELD_ANIM_CAREER_3P, expected)
+		for career in pairs(moveset.WIELD_ANIM_CAREER_3P) do
+			H.equal(career:sub(1, 3) ~= moveset.NATIVE_3P_PREFIX, true,
+				"bw_ careers must stay on the native wield_anim fallback")
+		end
 	end)
 
 	H.test("WOC Blightreaper poison uses the native on-hit DOT contract", function()

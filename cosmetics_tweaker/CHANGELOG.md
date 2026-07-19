@@ -1,5 +1,33 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.155-dev - 2026-07-18 - #566 harness context preconditions for the glow regression check [untested]
+
+- `cosmetics_tweaker.lua` (regression scaffold only): `_rt_register(name, fn, opts)`
+  now accepts `opts.precondition` - a function returning true when the asserted
+  runtime context exists, or (false, "reason") when it legitimately does not.
+  The /cos_regression_test runner reports such checks as an explicit
+  `SKIP: <name> -- context absent: <reason>` result (chat echo + engine `printf`,
+  visible with mod logging off), distinct from PASS and FAIL, plus a trailing
+  `=== N skipped (context absent) ===` summary. A THROWING precondition reports
+  as FAIL, never a skip. Same harness contract as enemy_tweaker 0.7.53-dev
+  (issue 512); kills the context-dependent false-failure class of issue 511.
+- `_cos_runtime_checks.lua`: `material_settings_templates_loaded` declares the
+  engine-catalog population gate (`MaterialSettingsTemplates` /
+  `WeaponSkins.skins` boot tables) as its precondition instead of FAILing with
+  "global not loaded" when run in a context where the catalogs are not
+  populated. The issue 566 inversion shipped in 0.9.89-dev is preserved
+  unchanged: the check requires exactly the eight weapon material template
+  families vanilla registers (weapon_material_settings_templates.lua:4-115) and
+  separately locks the lone Nornaz skin
+  (`deus_dw_1h_axe_skin_06_runed_02_white`) mapping to the intentionally
+  UNREGISTERED `white_glow` fallback (no-template fail-closed resolution, the
+  issue 610 contract) - the suite never demands a `white_glow` registration
+  vanilla does not perform. With the catalogs populated, a missing family or a
+  drifted Nornaz mapping stays a true FAIL.
+- Note: the 2026-07-18 session log attached to issue 566 shows
+  `material_settings_templates_loaded` PASSING on 0.9.151-dev; the four
+  remaining suite failures in that log belong to issues 612 / 583 / 641 / 204,
+  not to issue 566.
 ## 0.9.154-dev - 2026-07-18 - four-surface custom-skin wire contract (#421) [diagnostics-armed] [coop-required]
 
 - Correlated both 2026-07-18 attachments: the host ran Cosmetics v0.9.147-dev, the non-Cosmetics client crashed in the Old Musket albedo texture path tracked by #742, and neither log exercised a `ct_*` skin or emitted `[cos:421]`. Those logs therefore neither verify nor refute #421.

@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.299-dev"
+local MOD_VERSION = "0.7.300-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -5164,6 +5164,8 @@ do
         local k = tostring(pickup_name)
         _counts[k] = (_counts[k] or 0) + 1
         _total = _total + 1
+        -- v0.7.298-dev (issue 132): pickup-path chest units are engine-deletable; ledger them for the settled reconcile.
+        if k == "deus_cursed_chest" and mod._ct_chest132 and mod._ct_chest132.pickup_chest then pcall(mod._ct_chest132.pickup_chest, spawned_unit) end
     end
 
     local function _emit()
@@ -5238,7 +5240,8 @@ mod:hook_safe("DeusCursedChestExtension", "extensions_ready", function(self, wor
         cap = (cap == -1 or cap == nil) and 1 or cap
         local census = mod._ct_tally_cursed_count and mod._ct_tally_cursed_count() or -1
         local is_server = (Managers and Managers.player and Managers.player.is_server) and true or false
-        mod._ct_chest132.chest_appeared(level_id, cap, census, is_server)
+        -- v0.7.298-dev (issue 132 / issue 60): unit feeds the reconcile ledger.
+        mod._ct_chest132.chest_appeared(level_id, cap, census, is_server, unit)
     end)
 end)
 

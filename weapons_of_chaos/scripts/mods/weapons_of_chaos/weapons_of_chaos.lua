@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.35-dev"
+local MOD_VERSION = "0.1.37-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -12,9 +12,10 @@ mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 -- each weapon is a real inventory item cloned from a player base weapon
 -- template, with its `right_hand_unit` swapped to a different `.unit` mesh.
 --
--- FIRST ITEM: "Blightreaper" — a unique relic with Kerillian's one-handed
--- Sword action graph, slowed to 75%, equippable by every career of all five
--- heroes. Its vanilla `es_1h_sword` transport identity remains mixed-peer safe.
+-- FIRST ITEM: "Blightreaper" — a unique relic with Sienna's one-handed
+-- Crowbill action graph (bw_1h_crowbill), slowed to 83%, equippable by every
+-- career of all five heroes. Its vanilla `es_1h_sword` transport identity
+-- remains mixed-peer safe.
 --
 -- HELD MESH: the sword placed beside the Bögenhafen mission cage was extracted
 -- from the level bundle and re-authored as explicit WOC-owned 1P and 3P units.
@@ -147,6 +148,17 @@ local _WIRE_PROTECTED_TRAITS = {
 local _power = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_power")
 local _cursed = mod:dofile("scripts/mods/weapons_of_chaos/_woc_cursed_rarity")
 local TEMPLATE = _moveset.TEMPLATE
+-- Attack-order picker: pure permutation engine + the Blightreaper chain
+-- descriptor (single source for dropdown vocabulary, defaults, and the
+-- transition data layer). Registered so future CWV descriptors share the path.
+local _attack_order = mod:dofile("scripts/mods/weapons_of_chaos/_woc_attack_order")
+local _chain_descriptor = _moveset.chain_descriptor()
+do
+	local ok, reason = _attack_order.register(_chain_descriptor)
+	if not ok then
+		_dbg_alert("attack-order descriptor rejected: %s", tostring(reason))
+	end
+end
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
 local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
@@ -183,9 +195,12 @@ local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_p
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
--- Issue 712 / 835: retail Stingray exposes Vector3 as a callable table. WOC
--- 0.1.33-dev wrapped it in a plain Lua closure before constructing the shared
--- appearance library, allowing the atomic position/scale write to execute.
+-- Issue 712 / 835: retail Stingray exposes Vector3 as a callable TABLE, but
+-- the shared library's default api guards its stored constructor with
+-- `type(...) == "function"`, so every position/scale channel silently
+-- no-oped ("invalid-position"; Unit.set_local_pose never reached). Inject
+-- the policy-built api whose vector constructor is a plain Lua closure. The
+-- shared library copy itself stays canonical.
 local _weapon_appearance = _appearance_lib.new(_appearance.appearance_api(_G))
 _rt_register("issue712_appearance_vector_ctor_wrapped", function()
 	local api = _appearance.appearance_api(_G)
@@ -294,6 +309,77 @@ local _transform_owner = _durable_transform_lib.new({
 	end,
 })
 local _wa = _pulse_lib.new(_appearance, _transform_owner)
+
+-- Issue 712 live pose tuner. The canonical numbers in M.TRANSFORM are a
+-- prescription that has never been sight-verified; this command lets the
+-- author dial the pose on the live weapon and paste the result back for
+-- baking. Mutates the shared TRANSFORM table in place (future spawns pick it
+-- up at apply time) and retargets every tracked unit from its stored
+-- baseline so repeated calls never compound the offset.
+local _POSE_CANONICAL = {
+	scale = { _appearance.TRANSFORM.scale[1], _appearance.TRANSFORM.scale[2],
+		_appearance.TRANSFORM.scale[3] },
+	scale_1p = _appearance.TRANSFORM_1P and _appearance.TRANSFORM_1P.scale[1]
+		or _appearance.TRANSFORM.scale[1],
+	offset = { _appearance.TRANSFORM.offset[1], _appearance.TRANSFORM.offset[2],
+		_appearance.TRANSFORM.offset[3] },
+	rotation = { _appearance.TRANSFORM.rotation[1],
+		_appearance.TRANSFORM.rotation[2], _appearance.TRANSFORM.rotation[3] },
+}
+local function _pose_set(x, y, z, rx, ry, rz, scale, scale_1p)
+	local t = _appearance.TRANSFORM
+	local t1p = _appearance.TRANSFORM_1P
+	t.offset[1], t.offset[2], t.offset[3] = x, y, z
+	t.rotation[1], t.rotation[2], t.rotation[3] = rx, ry, rz
+	if scale then t.scale[1], t.scale[2], t.scale[3] = scale, scale, scale end
+	if scale_1p and t1p then
+		t1p.scale[1], t1p.scale[2], t1p.scale[3] = scale_1p, scale_1p, scale_1p
+	end
+	local retargeted, live = _transform_owner:retarget({
+		scale = t.scale,
+		scale_1p = t1p and t1p.scale or nil,
+		offset = t.offset,
+		rotation = t.rotation,
+	})
+	mod:echo("[WOC pose] offset={%.3f, %.3f, %.3f} rotation={%.1f, %.1f, %.1f} scale_3p=%.3f scale_1p=%.3f -- retargeted %d of %d live unit(s)",
+		t.offset[1], t.offset[2], t.offset[3],
+		t.rotation[1], t.rotation[2], t.rotation[3], t.scale[1],
+		t1p and t1p.scale[1] or t.scale[1], retargeted, live)
+	mod:echo("[WOC pose] bake line: /woc_pose %g %g %g %g %g %g %g %g",
+		t.offset[1], t.offset[2], t.offset[3],
+		t.rotation[1], t.rotation[2], t.rotation[3], t.scale[1],
+		t1p and t1p.scale[1] or t.scale[1])
+	pcall(printf, "[WOC:712] tuner set offset={%f,%f,%f} rotation={%f,%f,%f} scale_3p=%f scale_1p=%f retargeted=%d live=%d",
+		t.offset[1], t.offset[2], t.offset[3],
+		t.rotation[1], t.rotation[2], t.rotation[3], t.scale[1],
+		t1p and t1p.scale[1] or t.scale[1], retargeted, live)
+end
+mod:command("woc_pose",
+	"Live-tune the Blightreaper pose: /woc_pose x y z rx ry rz [scale_3p] [scale_1p] (meters, degrees)",
+	function(x, y, z, rx, ry, rz, scale, scale_1p)
+		local nx, ny, nz = tonumber(x), tonumber(y), tonumber(z)
+		local nrx, nry, nrz = tonumber(rx), tonumber(ry), tonumber(rz)
+		local nscale = scale ~= nil and tonumber(scale) or nil
+		local nscale_1p = scale_1p ~= nil and tonumber(scale_1p) or nil
+		if not (nx and ny and nz and nrx and nry and nrz)
+				or (scale ~= nil and not nscale)
+				or (scale_1p ~= nil and not nscale_1p) then
+			local t = _appearance.TRANSFORM
+			local t1p = _appearance.TRANSFORM_1P
+			mod:echo("[WOC pose] usage: /woc_pose x y z rx ry rz [scale_3p] [scale_1p] -- current: /woc_pose %g %g %g %g %g %g %g %g",
+				t.offset[1], t.offset[2], t.offset[3],
+				t.rotation[1], t.rotation[2], t.rotation[3], t.scale[1],
+				t1p and t1p.scale[1] or t.scale[1])
+			return
+		end
+		_pose_set(nx, ny, nz, nrx, nry, nrz, nscale, nscale_1p)
+	end)
+mod:command("woc_pose_reset", "Restore the Blightreaper pose to the shipped canonical values", function()
+	_pose_set(_POSE_CANONICAL.offset[1], _POSE_CANONICAL.offset[2],
+		_POSE_CANONICAL.offset[3], _POSE_CANONICAL.rotation[1],
+		_POSE_CANONICAL.rotation[2], _POSE_CANONICAL.rotation[3],
+		_POSE_CANONICAL.scale[1], _POSE_CANONICAL.scale_1p)
+end)
 local _audio = type(_audio_lib) == "table" and type(_audio_lib.new) == "function"
 	and _audio_lib.new() or {
 		observe_spawn = function() end,
@@ -551,6 +637,106 @@ local function _install_blightreaper_poison()
 	return _moveset.install_poison_buff(templates)
 end
 
+-- ============================================================
+-- Blightreaper attack order (author-picked chain permutation)
+-- ============================================================
+-- Reads the Blightreaper Combat dropdowns and applies the permutation plan to
+-- the private clone AFTER it is fully prepared (install site below) and again
+-- on every picker settings change (mod.on_setting_changed). The module fails
+-- closed: a bad selection or descriptor mutates nothing and the native order
+-- keeps playing. Sub_action tables are mutated in place, never replaced, so a
+-- re-apply reaches the very next attack without a re-equip.
+
+local _attack_order_receipts = 16
+
+local function _attack_order_selections()
+	return {
+		lights = {
+			mod:get("woc_blightreaper_light_1"),
+			mod:get("woc_blightreaper_light_2"),
+			mod:get("woc_blightreaper_light_3"),
+			mod:get("woc_blightreaper_light_4"),
+		},
+		heavies = {
+			mod:get("woc_blightreaper_heavy_1"),
+			mod:get("woc_blightreaper_heavy_2"),
+			mod:get("woc_blightreaper_heavy_3"),
+		},
+		push = { mod:get("woc_blightreaper_push_follow") },
+	}
+end
+
+local function _apply_attack_order(source)
+	local weapons = rawget(_G, "Weapons")
+	local template = weapons and rawget(weapons, TEMPLATE)
+	if type(template) ~= "table" then
+		return nil, "template_not_installed"
+	end
+	local report, reason = _attack_order.apply(template, _chain_descriptor,
+		_attack_order_selections())
+	if _attack_order_receipts > 0 then
+		_attack_order_receipts = _attack_order_receipts - 1
+		if report then
+			pcall(printf, "[WOC:order] attack order applied (%s): writes=%d identity=%s",
+				tostring(source), report.writes, tostring(report.identity))
+		else
+			pcall(printf, "[WOC:order] attack order NOT applied (%s): %s; native order stays",
+				tostring(source), tostring(reason))
+		end
+	end
+	return report, reason
+end
+
+mod.on_setting_changed = function(setting_id)
+	if type(setting_id) == "string" and setting_id:find("^woc_blightreaper_") then
+		_apply_attack_order("setting:" .. setting_id)
+	end
+end
+
+mod:command("woc_chains", "Show the Blightreaper attack chain map (what follows what)", function()
+	local weapons = rawget(_G, "Weapons")
+	local template = weapons and rawget(weapons, TEMPLATE)
+	if type(template) ~= "table" then
+		mod:echo("[WOC] Blightreaper template is not installed yet (enable the relic and enter the keep).")
+		return
+	end
+	local lines, reason = _attack_order.describe_chains(template, _chain_descriptor,
+		_attack_order_selections(), function(key) return mod:localize(key) end)
+	if not lines then
+		mod:echo("[WOC] chain map unavailable: %s", tostring(reason))
+		return
+	end
+	mod:echo("[WOC] Blightreaper chain map (positions are chain steps):")
+	for i = 1, #lines do
+		mod:echo("  %s", lines[i])
+	end
+end)
+
+_rt_register("attack_order_pick_vocabulary_and_apply", function()
+	local ids = {}
+	for _, unit in ipairs(_chain_descriptor.lights) do ids[unit.id] = true end
+	for _, unit in ipairs(_chain_descriptor.heavies) do ids[unit.id] = true end
+	for _, unit in ipairs(_chain_descriptor.push) do ids[unit.id] = true end
+	local selections = _attack_order_selections()
+	for pool, chosen in pairs(selections) do
+		for i, value in pairs(chosen) do
+			if value ~= nil and not ids[value] then
+				return string.format("%s pick %s stores out-of-vocabulary unit %s",
+					tostring(pool), tostring(i), tostring(value))
+			end
+		end
+	end
+	local weapons = rawget(_G, "Weapons")
+	local template = weapons and rawget(weapons, TEMPLATE)
+	if type(template) ~= "table" then
+		return "skip: Blightreaper template not installed"
+	end
+	local report, reason = _attack_order.apply(template, _chain_descriptor, selections)
+	if not report then
+		return "attack order failed to apply: " .. tostring(reason)
+	end
+end)
+
 local function _install_blightreaper_moveset()
 	if _moveset_report and _moveset_report.installed
 			and _moveset_report.ability_actions
@@ -599,7 +785,12 @@ local function _install_blightreaper_moveset()
 			table.concat(abilities.missing_actions or {}, ","),
 			table.concat(abilities.missing_careers or {}, ","))
 	end
-	mod:info("[WOC:690] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true career_actions=%d/%d restored_inherited=%d discarded_claims=%d)",
+	-- Attack-order picker: permute the fully prepared clone per the Blightreaper
+	-- Combat dropdowns. Never gates registration; a failed apply keeps the
+	-- native order (module is fail-closed, receipt is printf log-only).
+	local order_report = _apply_attack_order("install")
+	_moveset_report.attack_order = order_report or false
+	mod:info("[WOC:690] private Crowbill template ready (attacks=%d poison=%s crit=15%% speed=83%% executioner_audio=true career_actions=%d/%d restored_inherited=%d discarded_claims=%d)",
 		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE,
 		abilities.installed + abilities.existing, abilities.required,
 		identity.restored or 0, identity.discarded_claims or 0)
@@ -876,9 +1067,11 @@ mod:hook_safe("StateInGameRunning", "on_exit", function()
 	_stop_spirit_runtime("state_exit")
 end)
 
--- Kerillian's sword events are authored for the elf skeleton. Reuse Weapon
--- Tweaker's proven non-elf remap at the single pre-RPC animation boundary so
--- owner 3P, bots, and remote husks all receive the same vanilla animation id.
+-- Crowbill attack events are authored for Sienna's (bw_) skeleton. Reuse
+-- Weapon Tweaker's proven per-receiver crowbill remap at the single pre-RPC
+-- animation boundary so owner 3P, bots, and remote husks all receive the same
+-- vanilla animation id. The 3P wield stance is handled in data instead
+-- (`wield_anim_career_3p` on the private clone; see the moveset module).
 mod:hook("WeaponUnitExtension", "_play_3p_anim",
 		function(func, self, event_3p, event, owner_unit, looping_event, anim_time_scale)
 			local lookup = self.current_action_settings and self.current_action_settings.lookup_data
@@ -949,22 +1142,28 @@ _rt_register("issue632_blightreaper_cursed_combat_contract", function()
 	local template = rawget(Weapons, TEMPLATE)
 	local donor = rawget(Weapons, _moveset.SOURCE_TEMPLATE)
 	if type(entry) ~= "table" or entry.template ~= TEMPLATE then
-		return "item is not bound to the private elf-Sword template"
+		return "item is not bound to the private Crowbill template"
 	end
 	if type(template) ~= "table" or type(donor) ~= "table" or template == donor then
-		return "private elf-Sword clone is missing or aliases its donor"
+		return "private Crowbill clone is missing or aliases its donor"
 	end
 	if not _moveset.item_has_trait(entry, _moveset.POISON_TRAIT)
 			or not _moveset.item_has_trait(entry, _moveset.SHYISH_CURSE_TRAIT) then
 		return "intrinsic poison/Shyish trait ownership is incomplete"
 	end
 	local actions = template.actions and template.actions.action_one
-	if not (actions and actions.light_attack_last and actions.light_attack_stab
-			and actions.default_stab) then
-		return "overhead-third/stab-fourth light chain is incomplete"
+	for _, required in ipairs({
+		"light_attack_left", "light_attack_right", "light_attack_last",
+		"light_attack_upper", "light_attack_bopp",
+		"heavy_attack", "heavy_attack_left", "heavy_attack_right_up",
+	}) do
+		if type(actions and actions[required]) ~= "table" then
+			return "native Crowbill action is missing: " .. tostring(required)
+		end
 	end
-	if actions.light_attack_last.anim_event ~= "attack_swing_down" then
-		return "third light is not the authored overhead"
+	if actions.light_attack_left.impact_sound_event ~= _moveset.CROWBILL_IMPACT_SOUND
+			or actions.light_attack_left.armor_impact_sound_event ~= nil then
+		return "burn-stab fire impact identity was not normalized"
 	end
 	for name, action in pairs(actions) do
 		if type(action) == "table" and action.kind == "sweep" then
@@ -972,7 +1171,7 @@ _rt_register("issue632_blightreaper_cursed_combat_contract", function()
 				return "intrinsic 15% critical chance drifted on " .. tostring(name)
 			end
 			if name:find("^light_attack") and action.damage_profile ~= _moveset.LIGHT_DAMAGE_PROFILE then
-				return "greataxe-light damage profile drifted on " .. tostring(name)
+				return "relic light damage profile drifted on " .. tostring(name)
 			end
 			if name:find("^heavy_attack") and action.damage_profile ~= _moveset.HEAVY_DAMAGE_PROFILE then
 				return "armor-piercing heavy profile drifted on " .. tostring(name)
@@ -1006,9 +1205,24 @@ _rt_register("issue632_blightreaper_cursed_combat_contract", function()
 			and ui_settings.item_rarity_textures.cursed == _cursed.TEXTURE) then
 		return "Cursed rarity presentation registry is incomplete"
 	end
-	local remaps = 0
-	for _ in pairs(_moveset.THIRD_PERSON_REMAP) do remaps = remaps + 1 end
-	if remaps ~= 6 then return "non-elf 3P remap set is not exactly six events" end
+	local remap_shape = { dr_ = 6, es_ = 1, wh_ = 1, _default = 4 }
+	for prefix, expected in pairs(remap_shape) do
+		local remap = _moveset.THIRD_PERSON_REMAP[prefix]
+		local count = 0
+		if type(remap) == "table" then
+			for _ in pairs(remap) do count = count + 1 end
+		end
+		if count ~= expected then
+			return string.format(
+				"crowbill 3P remap table %s expected %d entries, found %d",
+				tostring(prefix), expected, count)
+		end
+	end
+	local wield_3p = template.wield_anim_career_3p
+	if type(wield_3p) ~= "table" or wield_3p.es_mercenary ~= "to_1h_sword"
+			or wield_3p.wh_priest ~= "to_1h_hammer" or wield_3p.bw_adept ~= nil then
+		return "per-career crowbill 3P wield redirect table is incomplete"
+	end
 end)
 
 -- ============================================================
@@ -1592,6 +1806,11 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	if is_blightreaper then
 		local surface = _durable_transform_lib.classify_surface(
 			owner_unit_1p, owner_unit_3p)
+		-- Issue 613: vanilla returns weapon_3p, ammo_3p ONLY when owner_unit_1p
+		-- is nil (gear_utils.lua:276); husks always pass a nil 1P rig
+		-- (simple_husk_inventory_extension.lua:319). Report the absent husk /
+		-- preview 1P unit as the source contract; reserve "nil-or-dead" for an
+		-- owner spawn (gear_utils.lua:273) that really owes a live 1P unit.
 		local expects_1p = _durable_transform_lib.expects_first_person_unit(owner_unit_1p)
 		_appearance_diag(
 			"[WOC:613] spawn identity surface=%s requested_1p=%s requested_3p=%s returned_1p={%s} returned_3p={%s}",
@@ -1601,17 +1820,18 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 				or "not-expected vanilla-3p-only gear_utils.lua:276",
 			_returned_unit_identity(unit_3p))
 		_log_unit_shape_once(surface, "3p", unit_3p)
-		_wa.apply(unit_3p, _appearance.TRANSFORM, "3p", surface)
+		_wa.apply(unit_3p, _appearance.transform_for("3p"), "3p", surface)
 		if unit_1p then
 			_log_unit_shape_once(surface, "1p", unit_1p)
-			_wa.apply(unit_1p, _appearance.TRANSFORM, "1p", surface)
+			_wa.apply(unit_1p, _appearance.transform_for("1p"), "1p", surface)
 		end
 		_audio.observe_spawn(unit_3p, unit_1p, owner_unit_1p, owner_unit_3p)
 	end
 	return unit_3p, ammo_3p, unit_1p, ammo_1p
 end)
 
--- #633: ActionInspect is the exact action used by the cloned elf Sword graph.
+-- #633: ActionInspect is the exact action used by the cloned Crowbill graph
+-- (`1h_crowbills.lua:1479` binds ActionTemplates.action_inspect verbatim).
 -- Attach the boot-resident ritual-skull whisper only to a positively tracked
 -- local WOC 1P unit. The helper owns and stops only its returned playing id.
 mod:hook("ActionInspect", "client_owner_start_action", function(func, self, ...)
@@ -1682,8 +1902,12 @@ mod.on_unload = function()
 	_audio.stop_all("mod-unload")
 end
 
--- Issue 278/613: keep the loadout fail-safe, but name its upstream caller.
--- The diagnostic is log-only, deduplicated, and hard-bounded per session.
+-- Issue 278/613: the fail-safe skip below fires with `key nil` many times per
+-- session (79 hits across the 24 logs of 2026-07-18) and the caller is still
+-- unnamed. A nil item would also crash vanilla (`item.key` deref,
+-- loadout_utils.lua:21), so the skip stays; this probe only NAMES the source.
+-- debug.traceback capped to 3 caller frames, deduplicated per (shape, slot,
+-- frames), hard-capped at 8 lines per session, printf log-only.
 local _skip_caller_seen = {}
 local _skip_caller_budget = 8
 local function _log_skip_caller(item, slot_name)

@@ -24,17 +24,29 @@ M.PULSE_VARIABLES = {
 	{ name = "intensity", value = 1.746000051498413 },
 	{ name = "pulse", value = { 1, 0.5 } },
 }
--- Canonical authored-mesh pose. Scale is a multiplier of the imported render
--- node's captured native scale, not an absolute Stingray scale. Live 0.1.33
--- evidence reports native {100,100,100}; writing absolute {0.9,0.9,0.9}
--- shrank the model by roughly 111x. The durable owner resolves this multiplier
--- and the offset against the render-node baseline, then writes the resulting
--- absolute scale/position/rotation atomically without mutating GearUtils' root.
+-- Canonical authored-mesh pose. Scale is a MULTIPLIER of the imported render
+-- node's captured native scale (the durable owner multiplies against the
+-- baseline; native is {100,100,100} per issue 712 log evidence), never an
+-- absolute Stingray scale - writing absolute 0.9 shrank the model 111x.
+-- Values are the author's sight-verified bake (2026-07-19 /woc_pose session):
+-- rotation x=-180 total, third person 0.9, first person 0.8.
+-- TRANSFORM_1P deliberately SHARES the offset and rotation tables with
+-- TRANSFORM (live /woc_pose tuning moves both perspectives together); only
+-- the scale table is per-perspective.
 M.TRANSFORM = {
 	scale = { 0.9, 0.9, 0.9 },
 	offset = { 0, 0, -0.3 },
-	rotation = { -90, -90, -90 },
+	rotation = { -180, -90, -90 },
 }
+M.TRANSFORM_1P = {
+	scale = { 0.8, 0.8, 0.8 },
+	offset = M.TRANSFORM.offset,
+	rotation = M.TRANSFORM.rotation,
+}
+
+function M.transform_for(perspective)
+	return perspective == "1p" and M.TRANSFORM_1P or M.TRANSFORM
+end
 
 function M.canonicalize_item_units(item_units, is_exact_relic)
 	if type(item_units) ~= "table" or is_exact_relic ~= true then
@@ -98,9 +110,20 @@ function M.network_package_aliases()
 	}
 end
 
--- Retail Stingray exposes Vector3 as a callable table, while the shared
--- appearance library deliberately accepts only a plain function constructor.
--- Wrap it here so the library stays byte-identical to its canonical source.
+-- Issue 712 root cause: retail Stingray registers `Vector3` as a callable
+-- TABLE (constructed via its `__call` metamethod), not a Lua function. The
+-- shared appearance library guards its constructor with
+-- `type(vector_new) ~= "function"` (_lib_weapon_appearance.lua:51), so with
+-- the library's default api every position/scale construction returned nil
+-- in-game and the atomic pose path exited "invalid-position" BEFORE
+-- Unit.set_local_pose ran (proof: every 0.1.30/0.1.31-dev `[WOC:712]
+-- transform proof` line carried `ok=false error=invalid-position` with
+-- before==after, while rotation-only writes landed in 0.1.24-dev because
+-- Quaternion.from_euler_angles_xyz is a genuine function member). Build the
+-- injected api here so the constructor reaches the library wrapped in a plain
+-- Lua closure, and the shared library copy stays byte-identical to canonical.
+-- Returns nil when `Vector3` is absent (offline harness) so the library's
+-- default api remains in charge there.
 function M.appearance_api(globals)
 	if type(globals) ~= "table" then return nil end
 	local vector3 = globals.Vector3

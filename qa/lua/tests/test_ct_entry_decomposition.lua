@@ -56,7 +56,9 @@ return function(H, repo_root)
         -- after extraction the module holds 68 and the entry retains 33 (the ~30
         -- scattered checks, the inline starting-coins check, and the commented
         -- stubs). No check was lost or duplicated: 68 + 33 == 101.
-        H.equal(count_plain(regression, "_rt_register("), 68)
+        -- v0.7.298-dev adds two NEW module checks (ct_meta_ammo_server_auth_grant_249,
+        -- cursed_chest_reconcile_132): module 68 -> 70, conserved total 103.
+        H.equal(count_plain(regression, "_rt_register("), 70)
         H.equal(count_plain(entry, "_rt_register("), 33)
         -- The shared _RT_CHECKS registrar stays defined and exposed in the entry;
         -- the module registers through the exposed handle, never a second registry.

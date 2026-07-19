@@ -58,8 +58,14 @@
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='local punits = side and side.player_units and side:player_units()'; literal=$true; polarity='present'; issueRef='#139'; note='aid scan iterates the unfiltered side player roster (side-scoped), not the bot follow target.' }
 
     # -- item 4: #492 picker/veto wiring - suppress-pick flag + bailout veto.
+    #    v0.2.250-dev (#384): the veto no longer reads the bare latch; it computes
+    #    bail_release from the latch + the stamped bail REASON + the errand pin, so
+    #    a no-path bail releases while a no-progress bail holds a live errand.
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='mod._gt492_should_suppress_pick'; literal=$true; polarity='present'; issueRef='#492'; note='aid-pursuit picker suppression hook must stay wired.' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='not blackboard._gt492_bailout'; literal=$true; polarity='present'; issueRef='#492'; note='aid veto must respect the #492 bailout latch.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='bail_release = blackboard._gt492_bailout'; literal=$true; polarity='present'; issueRef='#492'; note='aid veto must still consume the #492 bailout latch (now via the bail_release discrimination).' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='blackboard._gt492_bailout_reason ~= "no-progress"'; literal=$true; polarity='present'; issueRef='#384'; note='bail release must discriminate no-path (release) from no-progress (hold while the errand pin is live).' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='not _gt384_pin_live(blackboard)'; literal=$true; polarity='present'; issueRef='#384'; note='a no-progress bail may release the veto only when no errand pin is live.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='blackboard._gt492_bailout_reason = reason'; literal=$true; polarity='present'; issueRef='#384'; note='the #492 watchdog must stamp WHICH signal bailed (no-path vs no-progress).' }
 
     # -- item 5: #383 split-branch follow_position writes still guard hold_position.
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='_gt_fan_points_for_unit(self, nav_world, human'; literal=$true; polarity='present'; issueRef='#383'; note='FIX 9 fan-point follow spread must stay wired.' }
@@ -141,6 +147,14 @@
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='mod._ct_boon_scroll_setup(self, boon_widgets, 4)'; literal=$true; polarity='present'; issueRef='#115'; note='boon-offer scrollbar wired on the boon-widgets surface (4).' }
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='mod._ct_boon_scroll_setup(self, self._power_up_widgets, 3)'; literal=$true; polarity='present'; issueRef='#114'; note='boon-offer scrollbar wired on the power-up-widgets surface (3).' }
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='mod._ct_force_finale_god(result[1], config)'; literal=$true; polarity='present'; minCount=2; issueRef='#145'; note='force-finale-god wired at BOTH deus_populate_graph branches (>= 2 call sites).' }
+    # Source: chaos_wastes_tweaker_dev/CHANGELOG.md 0.7.298-dev (fable-fix-wave clusters).
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua'; needle='buff_system:add_buff(unit, stack_name, unit, true)'; literal=$true; polarity='present'; issueRef='#249'; note='meta-boon stack grant is server-controlled (replicates to clients; issue 289 evidence).' }
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua'; needle='CT_META_AMMO_SERVER_AUTH_MARKER = AmmoGuardCore.MARKER'; literal=$true; polarity='present'; issueRef='#249'; note='server-authoritative grant marker sourced from the pure kernel.' }
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua'; needle='AmmoGuardCore.clamp_value(max_ammo, ax._available_ammo)'; literal=$true; polarity='present'; issueRef='#256'; note='issue 256 clamp routes through the offline-tested pure kernel.' }
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'; needle='M.RECONCILE_MARKER = "CT_CHEST132_RECONCILE_PRUNE_v0.7.298"'; literal=$true; polarity='present'; issueRef='#132'; note='settled cross-path chest reconcile (prune side) present.' }
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'; needle='Managers.state.unit_spawner:mark_for_deletion(u)'; literal=$true; polarity='present'; issueRef='#132'; note='prune uses the engine pickup delete path (pickup_system.lua:1451-1455).' }
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_adventure_pool.lua'; needle='"normal", "hard", "harder", "hardest", "cataclysm", "cataclysm_2", "cataclysm_3"'; literal=$true; polarity='present'; issueRef='#251'; note='injected pickup_settings cover every reachable difficulty key (no engine fallback).' }
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'; needle='multiplier  = -0.5'; literal=$true; polarity='present'; issueRef='#464'; note='Anath Raema permanent reload buff stays NEGATIVE (reload_speed is inverse).' }
 
     # ============================ gut_dev ============================
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadout_policy.lua'; needle='backend_id:match("^cwv_.+_%d%d%d$")'; literal=$true; polarity='present'; issueRef='#287'; note='readonly overlay accepts only exact CWV backend-instance identity.' }
@@ -152,7 +166,14 @@
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_map.lua'; needle='_kick_preview_pkg_load'; literal=$true; polarity='present'; issueRef='#336'; note='async preview-package load kick.' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_map.lua'; needle='has_loaded(PREVIEW_PKG, MM_PKG_REF)'; literal=$true; polarity='present'; issueRef='#336'; note='def-swap gated on has_loaded (ungated mount = C-fatal, v0.2.190 lesson).' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_map.lua'; needle='level_name = PREVIEW_LEVEL'; literal=$true; polarity='present'; issueRef='#336'; note='tier-2 def mounts the preview level (backdrop present).' }
-    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'; needle='_post_skip_guard_active(self) and name == "fx_fade"'; literal=$true; polarity='present'; issueRef='#140'; note='post-skip fx_fade swallow guard (stray black fade on A Parting of the Waves).' }
+    # -- #140/#257/#274 ROUND 3 (0.2.294-dev): the fixed-order guard expression
+    #    was replaced by the per-episode order-independent skip window
+    #    (_gut_cutscene_skipwindow.lua). Pin the classification sites + the
+    #    intro-only skip policy that the rework must preserve (issue 275).
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'; needle='_gut_cutscene_fade_swallow_site'; literal=$true; polarity='present'; issueRef='#140'; note='fx_fade swallow classification site marker (stray black fade on A Parting of the Waves; ROUND 3 rework).' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'; needle='_skipwindow.classify_fade(_sw_state, self, pending, auto, _sw_now)'; literal=$true; polarity='present'; issueRef='#257'; note='order-independent fade classification against the per-system cutscene episode (pending/window/intro-watch).' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'; needle='_skipwindow.classify_camera(_sw_state, self, self.event_on_skip, _sw_now)'; literal=$true; polarity='present'; issueRef='#274'; note='camera activations classify per episode with identity-based release; a legitimate later cutscene must pass.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscene_policy274.lua'; needle='M.INTRO_SKIP_EVENT = "cs_01_skip"'; literal=$true; polarity='present'; issueRef='#274'; note='issue 275/274 skip policy: only the authored mission-intro event is skippable; nil on_skip never skips (boss desync guard).' }
 
     # -- #517: retail exposes no arbitrary file-read channel. Keep the useful
     #    settings export, but never resurrect the nonfunctional read/apply half.
@@ -286,6 +307,27 @@
     #    seconds, disconnects never do). Losing the cancel wipes every peer's cosmetic
     #    store on every keep<->mission change. Recurs via classes 43 and 61.
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook_safe(PlayerManager, "add_remote_player"'; literal=$true; polarity='present'; issueRef='BC24'; note='BUG_CLASSES 24: the add_remote_player hook_safe cancels the deferred peer purge; without it, remove_player-on-transition wipes the per-peer LA store every map change.' }
+
+    # ==================== issue #511: no live io.open in converted surfaces ====================
+    # The retail Stingray VM registers no `io` into the shared _G that mods are
+    # loadstring'd into (scripts/managers/mod/mod_manager.lua:375; `os` IS present -
+    # os.date runs unguarded at :312 - but `io` is not). Every in-game source
+    # self-grep therefore threw "attempt to index global 'io'" and FALSE-FAILED
+    # healthy code. Issue #511 converted every active-stream runtime check to
+    # load-time markers / runtime assertions; these ABSENCE needles forbid a live
+    # `io.open(` from re-entering the converted surfaces. Comment-excluding regex:
+    # every file documents the io-nil trap in comments. Stable clones
+    # (general_tweaker lines 1597/1620/1685/1713) ride promotion and are NOT
+    # pinned here - add their needles when the promotion lands the conversion.
+    @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_pacing.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='io is nil in the retail sandbox; the #479 checks assert wrap-registry provenance instead of reading source.' }
+    @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_protect.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='io is nil in the retail sandbox; provenance lives in ET.wrap_registry set at hook install.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_regression_checks.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='all 22 gt source self-greps were converted (v0.2.202-dev); a live io.open would false-FAIL every /gt_regression_test in retail.' }
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='ct conversion rode 0.7.245-dev; runtime checks must stay marker-based.' }
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_regression.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='ct regression module must stay marker-based; io is nil in the retail sandbox.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='gut conversion rode 0.2.220-dev; the TOML config READ was a retail-broken feature tracked separately.' }
+    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='cim conversion rode 0.8.57-dev; runtime checks must stay marker-based.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='WOC conversion rode 0.1.10-dev; runtime checks must stay marker-based.' }
+    @{ mod='dynamic_cosmetic_portraits'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='dcp conversion rode 0.1.18-dev; runtime checks must stay marker-based.' }
 
   )
 }

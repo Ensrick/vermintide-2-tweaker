@@ -32,8 +32,11 @@ function M.classify_surface(owner_unit_1p, owner_unit_3p)
 	return "preview-spawn"
 end
 
--- GearUtils returns a first-person weapon only when its caller supplied an
--- owner 1P rig. Husk and preview callers are valid 3P-only spawn paths.
+-- Vanilla returns only `weapon_unit_3p, ammo_unit_3p` when owner_unit_1p is
+-- nil (gear_utils.lua:276); the husk path always passes a nil 1P rig
+-- (simple_husk_inventory_extension.lua:319 -> :666). A nil returned 1P unit on
+-- husk/preview spawns is therefore the source contract, not a defect; only an
+-- owner spawn (owner_unit_1p ~= nil, gear_utils.lua:201/:273) owes a 1P unit.
 function M.expects_first_person_unit(owner_unit_1p)
 	return owner_unit_1p ~= nil
 end
@@ -230,6 +233,47 @@ function M.new(api)
 
 	function owner:clear()
 		for unit in pairs(records) do records[unit] = nil end
+	end
+
+	-- Live pose retune (issue 712 tuner): rebuild every tracked record's target
+	-- from its STORED baseline - never a fresh read, which would compound the
+	-- offset - then apply immediately and re-arm the proof lines so the next
+	-- log documents the new pose. `values` carries scale/offset/rotation.
+	function owner:retarget(values)
+		if type(values) ~= "table"
+				or type(api.rotation_components) ~= "function"
+				or type(api.apply) ~= "function" then return 0, 0 end
+		local expected_rotation = api.rotation_components(values.rotation)
+		if not expected_rotation then return 0, 0 end
+		local retargeted, live = 0, 0
+		for unit, record in pairs(records) do
+			if not alive(unit) then
+				records[unit] = nil
+			else
+				live = live + 1
+				local spec = {
+					node = record.node,
+					scale = (record.perspective == "1p" and values.scale_1p)
+						or values.scale,
+					offset = values.offset,
+					rotation = values.rotation,
+				}
+				local target = M.resolve(record.base, spec, expected_rotation)
+				if target then
+					record.target = target
+					record.drift_proof_logged = nil
+					record.retention_proof_logged = nil
+					local wrote, write_report = api.apply(unit, target.apply_spec)
+					record.write_report = write_report
+					local after = read(unit, record.node)
+					if wrote == true and M.matches(after, target) then
+						retargeted = retargeted + 1
+					end
+					emit("retargeted", record, record.base, after)
+				end
+			end
+		end
+		return retargeted, live
 	end
 
 	function owner:count()

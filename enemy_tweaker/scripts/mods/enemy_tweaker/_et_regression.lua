@@ -14,26 +14,64 @@ local mod = get_mod("enemy_tweaker")
 local ET = mod._et
 
 local _RT_CHECKS = {}
-local function _rt_register(name, fn)
-    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+-- #512 class fix: a check that asserts state which legitimately varies by
+-- context (keep vs mission, engine boot phase, "registered by us" state) may
+-- declare opts.precondition -- a function returning true when the asserted
+-- context exists, or (false, "reason") when it is absent. The runner then
+-- reports an explicit "context absent" SKIP result (distinct from PASS and
+-- FAIL), so FAIL stays reserved for "context present, invariant broken". A
+-- THROWING precondition is a broken check and reports as FAIL, never a skip.
+local function _rt_register(name, fn, opts)
+    _RT_CHECKS[#_RT_CHECKS + 1] = {
+        name = name,
+        fn = fn,
+        precondition = opts and opts.precondition or nil,
+    }
 end
 ET.rt_register = _rt_register
 
 mod:command("et_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail = 0, 0
+    local pass, fail, skip = 0, 0, 0
     mod:echo("=== enemy_tweaker regression_test (v%s) ===", ET.version)
     for _, c in ipairs(_RT_CHECKS) do
-        local ok, err = pcall(c.fn)
-        if ok and err == nil then
-            mod:echo("  PASS: %s", c.name); pass = pass + 1
-            mod:info("[regression] PASS %s", c.name)
+        local ok, err
+        local skip_reason
+        if c.precondition then
+            local pc_ok, present, reason = pcall(c.precondition)
+            if not pc_ok then
+                ok, err = false, "precondition error: " .. tostring(present)
+            elseif not present then
+                skip_reason = tostring(reason or "precondition not met")
+            end
+        end
+        if skip_reason then
+            -- Context absent (#512): the asserted state legitimately does not
+            -- exist here. printf so the line lands in the log with mod
+            -- logging OFF (PROJECT_STANDARDS: diagnostics use engine printf).
+            skip = skip + 1
+            mod:echo("  SKIP: %s -- context absent: %s", c.name, skip_reason)
+            mod:info("[regression] SKIP (context absent) %s: %s", c.name, skip_reason)
+            if type(printf) == "function" then
+                printf("[et-regression] SKIP (context absent) %s: %s", c.name, skip_reason)
+            end
         else
-            local msg = (not ok and tostring(err)) or tostring(err)
-            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
-            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+            if ok == nil then
+                ok, err = pcall(c.fn)
+            end
+            if ok and err == nil then
+                mod:echo("  PASS: %s", c.name); pass = pass + 1
+                mod:info("[regression] PASS %s", c.name)
+            else
+                local msg = (not ok and tostring(err)) or tostring(err)
+                mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
+                mod:warning("[regression] FAIL %s: %s", c.name, msg)
+            end
         end
     end
     mod:echo("=== %d passed, %d failed ===", pass, fail)
+    if skip > 0 then
+        mod:echo("=== %d skipped (context absent) ===", skip)
+    end
 end)
 mod:info("[regression-test-command] registered as /et_regression_test")
 

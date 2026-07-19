@@ -22,8 +22,10 @@ function M.install(policy, appearance)
 		if not policy.is_custom_unit_name(name) then return false end
 		if unit == nil or transformed[unit] then return false end
 		local perspective = name == policy.UNIT_3P and "3p" or "1p"
+		local spec = type(policy.transform_for) == "function"
+			and policy.transform_for(perspective) or policy.TRANSFORM
 		local ok = appearance
-			and appearance.apply(unit, policy.TRANSFORM, perspective, surface) or false
+			and appearance.apply(unit, spec, perspective, surface) or false
 		if ok then transformed[unit] = true end
 		return ok
 	end

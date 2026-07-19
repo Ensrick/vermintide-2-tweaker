@@ -1,32 +1,74 @@
 # Weapons of Chaos — Changelog
 
-## 0.1.35-dev (2026-07-19) - #712 restore visible Blightreaper scale [not built]
+## 0.1.37-dev (2026-07-19) - Blightreaper moveset swapped to Crowbill [untested]
 
-- The exact `0.1.33-dev` log proves the named `blightreaper` render node and
-  rotation/position writes were correct and retained, but its native scale was
-  `{100,100,100}` and WOC replaced it with absolute `{0.9,0.9,0.9}`. That made
-  the weapon roughly 111 times smaller, explaining the missing/off-space model.
-- The durable transform owner now treats authored `0.9` as the requested 10%
-  reduction and composes it against each unit's captured native render-node
-  scale. The observed target is therefore `{90,90,90}`. It still passes one
-  absolute atomic pose to the shared appearance primitive and never compounds
-  from a later read.
-- Added the retail `{100,100,100}` regression, nonuniform baseline composition,
-  and a fail-closed missing-baseline case. This source draft has not been built,
-  deployed, or uploaded.
+- Author request 2026-07-19: the Blightreaper's combat template now clones Sienna's Crowbill graph (`one_handed_crowbill`, bw_1h_crowbill) instead of Kerillian's 1H Sword (`we_one_hand_sword_template_1`). The crowbill graph natively ships four chained lights, three heavies, and the push-attack follow-up, so the Sword era's four-light chain surgery (Empire Sword overhead donor, stab-fourth splice, heavy retargeting) is removed outright; native crowbill chain transitions are preserved. SPEED_MULTIPLIER stays 0.83 and now multiplies the crowbill's own per-action timings; the +15 percent intrinsic crit, light/heavy damage-profile overrides, Hagbane poison, Shyish curse, and property/trait rows carry over unchanged.
+- Impact presentation: the Greataxe impact translation layer (axe_2h_hit / melee_hit_axes_2h and the sword-to-1H-axe swing-event remap) was authored against the Sword graph and is retired with it; the relic now keeps the crowbill's native pick identity (crowbill_stab_hit / melee_hit_hammers_1h / blunt_hit_armour). One normalization: the native burn stab (light_attack_left) presented fire_hit / fire_hit_armour sounds for a burn profile this template replaces with poison, so its sounds are normalized to the crowbill family baseline. Executioner Sword swing whooshes stay (the authored held mesh still has no weapon-flow graph).
+- 3P on non-Sienna receivers: reuses Weapon Tweaker's proven per-receiver crowbill coverage verbatim - attack events through the existing WeaponUnitExtension._play_3p_anim boundary (dr_ 6-event table, tester-baked es_/wh_ single-event tables, wt's non-Sienna fallback for we_), and the wield stance in data via wield_anim_career_3p on the private clone (to_1h_sword everywhere, to_1h_hammer for wh_priest, bw_ native). Crowbill state machine and wwise/one_handed_crowbills ride the clone through WeaponUtils.get_weapon_packages exactly as the sword deps did; the Executioner swing bank is still appended the same way.
+- Menu/localization and Workshop description updated to the crowbill wording; regression checks re-pinned to the crowbill graph (native action presence, fire-impact normalization, remap-table shape, wield-redirect coverage).
+- Attack-order picker [untested]: new "Blightreaper Combat" settings group with eight dropdowns - Light attack 1-4 (Overhead, Upper left, Right diagonal, Stab), Heavy attack 1-3 (Left-up smash, Right smash, Diagonal smash), and Push follow-up (Upper bopp) - defaults are the native crowbill order. Each pick moves the whole attack as one unit (anim, 3P event where authored, speed, damage windows, baked sweep, movement buffs, impact identity); each heavy brings its matching charge-up windup with it, so windup and release always pair. Picking the same attack for two steps plays it at both. Chain flow between steps (which step follows which) is untouched by the picker.
+- New pure module `_woc_attack_order.lua` [untested]: descriptor-driven permutation engine (weapon descriptor -> permutation plan -> in-place apply from a pristine baseline stamped on the template, reload-safe and idempotent; validation fails closed so a bad pick keeps the native order). Applied when the private clone finishes installing and re-applied live on every picker settings change; the descriptor registry is the reuse surface for future WoC/CWV weapons. Blightreaper descriptor is built additively by `_woc_blightreaper_moveset.chain_descriptor()`.
+- Transitions data layer + `/woc_chains` [untested]: the descriptor carries the after-state transition table (entry, after each light/heavy, after the push follow-up -> next chain position; heavy 1 chains into position 3, the behavior slated for future control), the permutation plan preserves it under every selection, and the read-only `/woc_chains` chat command prints the live chain map in plain English with the currently picked attack names. Transition EDITING ships later; design in DEVELOPMENT.md "Attack chain control".
+- QA: new `qa/lua/tests/test_woc_attack_order.lua` (14 tests: identity under defaults, full reverse, duplicate picks, heavy charge-pairing as one unit, topology preservation under any permutation, baseline restore, fail-closed validation) registered in `qa/lua/run.lua`; suite green at 1229.
 
-## 0.1.33-dev (2026-07-19) - retained production fixes and evidence
+## 0.1.36-dev (2026-07-19) - author-baked pose, 1P scale split, speed to -17 percent [untested]
 
-- Wrapped retail Stingray's callable-table `Vector3` constructor before passing
-  it to the shared appearance primitive, allowing atomic pose writes to execute.
-- Corrected #613 spawn evidence so husk/preview paths report vanilla's valid
-  3P-only return contract instead of misdiagnosing a missing 1P unit.
-- Added the bounded, deduplicated #278 caller-frame probe for loadout fail-safe
-  skips. It is log-only and emits at most eight distinct lines per session.
-- This deployed build produced the decisive #712 evidence: the named render node
-  retained position and rotation, but its native `{100,100,100}` scale was
-  replaced by absolute `{0.9,0.9,0.9}`. Version 0.1.35-dev preserves these fixes
-  and corrects that separate scale-semantics defect.
+- Baked the author-verified pose from the /woc_pose session: rotation x is now -180 total ({-180, -90, -90}), offset unchanged {0, 0, -0.3}, third-person scale 90. First person now runs its own scale 80 (author: 0.8 for first person) via a new per-perspective TRANSFORM_1P that shares offset/rotation tables with the 3P spec, so /woc_pose keeps moving both perspectives together; the command gains an optional eighth argument for the 1P scale (/woc_pose x y z rx ry rz scale_3p scale_1p).
+- Blightreaper speed penalty reduced from -25 percent to -17 percent (SPEED_MULTIPLIER 0.75 -> 0.83; derived anim_time_scale pins updated).
+
+## 0.1.35-dev (2026-07-19) - fix invisible sword: absolute scale vs native-100 baseline [untested]
+
+- The render node's native scale is 100 (import unit compensation); the canonical absolute scale of 0.9 shrank the sword 111x into invisibility once the 0.1.33 constructor fix made pose writes actually land. Canonical scale corrected to 90 (the intended 10 percent reduction on the real baseline). Offset and rotation unchanged pending live tuning via /woc_pose (issue 712).
+
+## 0.1.34-dev (2026-07-19) - issue 712 live pose tuner [untested]
+
+- The 0.1.33-dev log proves the transform machinery now applies and retains (initial-retained / next-frame-retained, before != after on owner 1p/3p and preview) - so the remaining defect is the authored NUMBERS, not the plumbing. New chat command `/woc_pose x y z rx ry rz [scale]` (meters, degrees) live-tunes the Blightreaper pose on every tracked unit instantly; `/woc_pose_reset` restores the shipped canonical values. Each call echoes a copy-paste bake line and logs a `[WOC:712] tuner set` receipt.
+- Retargeting rebuilds each unit's pose from its STORED spawn baseline (new `retarget` method on the durable owner), so repeated tuning calls never compound the offset. Future spawns pick the tuned values up automatically for the rest of the session; values reset to canonical on restart until baked.
+
+## 0.1.33-dev (2026-07-18) - #712 transform root cause + #613 husk/caller evidence [untested]
+
+- #712 root cause found in tonight's log sweep: every `[WOC:712] transform
+  proof` line carried `write={mode=atomic-local-pose ok=false
+  error=invalid-position}` with before==after. Retail Stingray's `Vector3` is
+  a callable table, so the shared appearance library's
+  `type(vector_new) == "function"` constructor guard rejected every
+  position/scale construction and `Unit.set_local_pose` was never called
+  (rotation alone landed in 0.1.24-dev because
+  `Quaternion.from_euler_angles_xyz` is a genuine function member). WOC now
+  injects a policy-built api (`_woc_appearance_policy.appearance_api`) that
+  wraps the constructor in a plain Lua closure; the shared library copy stays
+  byte-identical to canonical. The probe remains; expected flip:
+  `initial-retained` / `drift-repaired` with `write={... ok=true ...}` and
+  before~=after on every surface. Related umbrella: issue 747.
+- #613 husk slice: `returned_1p={nil-or-dead}` on husk spawns was a probe
+  misread, not a spawn defect. Vanilla returns `weapon_3p, ammo_3p` only when
+  `owner_unit_1p` is nil (gear_utils.lua:276) and husks always pass a nil 1P
+  rig (simple_husk_inventory_extension.lua:319). The spawn-identity probe now
+  prints `returned_1p={not-expected vanilla-3p-only gear_utils.lua:276}` for
+  that source contract and reserves `nil-or-dead` for owner spawns that truly
+  owe a live 1P unit. All four spawn returns were already captured and passed
+  through unchanged.
+- issue 278 evidence: the nil-key `SKIPPING loadout sync (fail-safe)` line
+  (79 hits across the 2026-07-18 logs) now also names its caller: a
+  `[WOC:278] skip caller` line with debug.traceback capped to 3 frames,
+  deduplicated per (item shape, slot, frames), hard-capped at 8 lines per
+  session, printf log-only. The fail-safe skip itself is unchanged and stays
+  load-bearing (a nil item would crash vanilla at loadout_utils.lua:21).
+
+Verify (solo ok, co-op strengthens): confirm `[WOC] v0.1.33-dev loaded` in the
+newest log, equip Blightreaper, inspect 1P, owner 3P, inventory character
+preview, item preview, then enter a mission and swap away/back. The blade must
+sit rotated -90/-90/-90, scaled 0.9, 0.3 lower on Z, and every `[WOC:712]
+transform proof` line must report `ok=true` with a changed after-pose. Attach
+the newest log so the `[WOC:278] skip caller` frames can name the nil-key
+source.
+> **Merge note (2026-07-19):** a parallel session independently fixed the same
+> scale defect by changing the durable owner to MULTIPLIER semantics (scale
+> composes against the captured native render-node baseline) in an unshipped
+> 0.1.35 draft, while the shipped 0.1.35/0.1.36 chain above fixed it with
+> absolute values. The merged source keeps the multiplier semantics with the
+> author-baked numbers re-encoded as multipliers (3P 0.9, 1P 0.8 - identical
+> visuals to the shipped 0.1.36). Ships with the next version.
 
 ## 0.1.32-dev (2026-07-18) - #712 Blightreaper transform census [diagnostics-armed]
 

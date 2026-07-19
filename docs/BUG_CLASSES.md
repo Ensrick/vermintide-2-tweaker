@@ -2482,3 +2482,73 @@ across preview worlds, owner units, or remote husks.
 - Add status diagnostics that print both the migration marker and a per-row
   `missing=[...]` list. Test full-row corruption, nil visual slots, cosmetic
   key resolution, and command coverage before shipping.
+
+## 66. Protective hook fallback re-runs a non-idempotent per-tick engine function
+
+**First seen:** 2026-07-11 (enemy_tweaker #479; no-re-run guard v0.7.33-dev, exact-error quarantine v0.7.39-dev, both on master 0.7.51-dev)
+**Canonical Issue:** [#479](https://github.com/Ensrick/vermintide-2-tweaker/issues/479) (crash evidence from [#470](https://github.com/Ensrick/vermintide-2-tweaker/issues/470))
+**Lives in:** any pcall-wrapped hook whose error path "bails to vanilla" by calling `func(...)` a SECOND time (the PROJECT_STANDARDS 4.1 protective pattern) on a target that mutates state mid-call or whose CALLER does post-return bookkeeping. Known non-idempotent targets: `ConflictDirector.update` (spawn-queue bookkeeping runs AFTER `_spawn_unit` [src: `conflict_director.lua:1835-1891`]) and anything reached from it - `EnemyRecycler.update_main_path_events` advances `current_main_path_event_id` only after `TerrorEventMixer.start_event` returns [src: `enemy_recycler.lua:456-463`].
+
+### Symptoms
+- Paired log lines: `inner errored: ... bailing to vanilla` followed by `vanilla fallback ALSO errored` - the same tick ran twice, re-popped the same queue entry, re-threw, and doubled partial state (two half-initialized extension sets crashed the host: #470 `i470.log:158014-158017`).
+- Frame-rate retry storm on a persistent malformed state: 1,173 identical `terror_event_mixer.lua:1800` failures in 17.5 s (#479 2026-07-13 log) because the caller's index advance lives after the throwing call, so nothing ever moves past the bad entry.
+- A "save -> override -> call -> restore" engine-global override leaks for the session when the restore is success-path-only (et's `RecycleSettings.max_grunts` pre-#479).
+
+### Diagnosis pattern
+1. Grep the mod's protective wrapper for a second `func(` on the error path. Then classify the target: a pure decision fn is safe to re-run; a per-tick update that mutates queues/indices mid-call is NOT.
+2. An identical engine error repeating every frame means the CALLER's post-return bookkeeping was skipped - find who advances state only after the wrapped call returns cleanly.
+3. Related to class 26 and the guard-that-delegates class (#270): a "protective" wrapper that changes vanilla's call count IS the bug.
+
+### Fix template
+- Tick-level targets: SKIP the tick on inner error, never re-call vanilla. One printf per fault episode plus a recovery summary with the suppressed-repeat count (`_et_protect.lua` `_make_tick_guard` / `_hook_wrap_tick`, exposed as `mod._et479_*`).
+- Restore engine-global overrides on BOTH the success and the error path (`_call_with_override`).
+- Persistent-retry states: recover ONLY on an exact error match (`err:find("terror_event_mixer.lua:1800", 1, true)`), reproduce vanilla's missed post-return bookkeeping, and quarantine the mod's overrides for the session; UNKNOWN errors fail closed - tick skipped, no guessed state mutation (`_et_pacing.lua:52-96`).
+- Pin the wiring with registration provenance, not source greps (class 67): the wrap registry must show the tick target under the no-re-run guard and NOT under the re-running wrap (`issue479_cd_tick_no_rerun_and_restore` in-game; `qa/lua/tests/test_et_pacing_tick_guard.lua` offline).
+
+### Related Issues / commits
+- [#479](https://github.com/Ensrick/vermintide-2-tweaker/issues/479) / [#470](https://github.com/Ensrick/vermintide-2-tweaker/issues/470); enemy_tweaker CHANGELOG v0.7.33-dev + v0.7.39-dev; memory `reference_vt2_guard_that_delegates_still_crashes.md` (#270 kin).
+
+## 67. In-game regression check reads mod source via `io.open` (`io` is nil in the retail sandbox)
+
+**First seen:** 2026-07-12 (the #479 verification "Failed." report - the FIX was working; the CHECK threw)
+**Canonical Issue:** [#511](https://github.com/Ensrick/vermintide-2-tweaker/issues/511) (repo-wide sweep; gate follow-up [#516](https://github.com/Ensrick/vermintide-2-tweaker/issues/516))
+**Lives in:** any `/<mod>_regression_test` check (or feature) that opens files at runtime. At discovery: 79 `io.open` sites across 14 files in 8 mods (gt 22, gut 17+5, cim 6, ct 5, WOC 2, dcp 2, wt 1, et 3).
+
+### Symptoms
+- `attempt to index global 'io' (a nil value)` thrown from a check body; the check prints FAIL on healthy code.
+- The same code works in the modding-tools executable (full stdlib) - which is where the disproven "read-only io works" belief came from.
+
+### Diagnosis pattern
+- The retail Stingray binary registers no `io` library into the shared `_G` that mods are loadstring'd into [src: `scripts/managers/mod/mod_manager.lua:375`]; `os` IS present (the engine itself calls `os.date` unguarded [src: `mod_manager.lua:312`]) - so "os works" proves nothing about `io`.
+- Distinguish CHECKS (convert) from genuine file-backed FEATURES (need a different transport entirely - `io` has no read OR write half in retail; see memory `reference_vt2_mod_file_io.md`).
+
+### Fix template
+- Runtime half of each check -> load-time markers / runtime assertions: registration-provenance tables written at hook install (et `ET.wrap_registry`), mod-field markers, live `mod:get` reads.
+- Genuinely textual half (a literal that must be present/absent in SOURCE) -> a `qa/rt_textual_invariants.psd1` needle checked by the blocking repo gate `qa/check_rt_textual_invariants.ps1` (tier-a, PROJECT_STANDARDS 2.2b).
+- The psd1's `#511` section forbids any live `io.open(` re-entering the converted surfaces (comment-excluding regex). Stable clones ride promotion (general_tweaker lines 1597/1620/1685/1713 at the time of writing) - extend the needles when each promotion lands.
+
+### Related Issues / commits
+- [#511](https://github.com/Ensrick/vermintide-2-tweaker/issues/511), [#516](https://github.com/Ensrick/vermintide-2-tweaker/issues/516), [#479](https://github.com/Ensrick/vermintide-2-tweaker/issues/479); converted streams: et 0.7.33-dev, gt_dev 0.2.202-dev, ct_dev 0.7.245-dev, gut_dev 0.2.220-dev, cim_dev 0.8.57-dev, WOC 0.1.10-dev, dcp 0.1.18-dev; memory `reference_vmf_no_io_library_retail_sandbox.md`.
+
+## 68. Per-template override storage leaks onto generated item instances (deus); mechanism name over-scopes the yield boundary
+
+**First seen:** 2026-07-12 (cosmetics_tweaker 0.9.84-dev deus-yield gate; staging-hub over-scope regression fixed 0.9.89-dev)
+**Canonical Issue:** [#518](https://github.com/Ensrick/vermintide-2-tweaker/issues/518) (root-cause per-`backend_id` descriptor work continues under the [#660](https://github.com/Ensrick/vermintide-2-tweaker/issues/660) umbrella)
+**Lives in:** any per-weapon customization store keyed by TEMPLATE (or item key) confronted with GENERATED item instances. Chaos Wastes deus weapons clone the base item - `create_item` sets `key = deus_item_data.base_item`, same weapon template [src: `deus_weapon_generation.lua:185-202`] - and re-roll `item.skin` on generation [src: `:246-249`] and every shrine upgrade [src: `:318-321`]; the skin change IS the upgrade's visual feedback.
+
+### Symptoms
+- A keep-committed cosmetic re-appears on every CW starting/upgraded weapon sharing the template; the rolled upgrade skin is stomped on every wield (log tell: the re-apply firing with `mechanism=deus`).
+- The over-scoped first fix: gating on `mechanism == "deus"` ALONE also suppressed the cosmetic in the Pilgrimage Chamber - the deus MECHANISM owns the staging hub and route map too, not just missions.
+
+### Diagnosis pattern
+1. Store key is a template / item key; the CW item is a FRESH instance with the SAME key. Any per-instance intent stored per-template will match every generated sibling.
+2. Boundary check: vanilla splits the deus mechanism by level into `inn_deus` (`morris_hub`), `map_deus` (`dlc_morris_map`), and `deus` (every mission node) [src: `deus_mechanism.lua:28-35,49-59`]. "In the deus mechanism" is NOT "in an expedition".
+
+### Fix template
+- Gate on mechanism AND game mode: yield only when both are `"deus"` (`mod._la_weapon_yield_for_context`). Read live per call so returning to a hub re-asserts with no state loss.
+- Resolve the game mode with fallbacks - `GameModeManager.game_mode_key` [src: `game_mode_manager.lua:915-917`] -> `LevelTransitionHandler.get_current_game_mode` [src: `level_transition_handler.lua:387-389`] -> level-key classification - with the fail direction "staging never yields; a starting mission never briefly repaints".
+- Put the terminal gate at the single apply funnel every trigger routes through, and make the retry queue treat the yield as a TERMINAL reason so pending applies don't spin to their deadline.
+- Owner doc: `cosmetics_tweaker/LA_SYNC_MODEL.md` section 6.10. Pins: in-game `cos_la_deus_yield_active_mission_only` truth table; offline `qa/lua/tests/test_cos_deus_yield_policy.lua`.
+
+### Related Issues / commits
+- [#518](https://github.com/Ensrick/vermintide-2-tweaker/issues/518), [#660](https://github.com/Ensrick/vermintide-2-tweaker/issues/660); cosmetics_tweaker CHANGELOG v0.9.84-dev / v0.9.89-dev; kin: class 27 (husk resolves BASE item_data - same "shared identity, different instance" root on the husk axis).
