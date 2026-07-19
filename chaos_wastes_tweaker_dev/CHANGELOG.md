@@ -1,5 +1,9 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.295-dev (2026-07-18) - complete stranded ship pipeline
+
+- No source change. The pipeline-state ladder (PROJECT_STANDARDS 11b) flagged this mod UPLOAD-BEHIND: the 0.7.294-dev bundle was rebuilt after the last Workshop upload, so subscribers were behind the repo. This build re-runs the full pipeline to reconcile. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
+
 ## 0.7.294-dev (2026-07-18) - OOP W5: regression-suite extraction [untested]
 
 - Structural only, zero behavior change: the contiguous /ct_regression_test suite (68 registrations) moved verbatim into `_ct_regression.lua`; entry shrinks 12,831 -> 11,338 (size-gate metric). Print order preserved except `starting_coins_value_matches_setting`, which stays inline (mutable upvalue read) and slides to the suite tail - documented in the guard test. New `test_ct_entry_decomposition` pins the manifest; 1,024-test suite, strict lint (115 hooks unchanged), and a bundle build all green.
