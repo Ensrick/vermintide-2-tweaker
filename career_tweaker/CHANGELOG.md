@@ -1,5 +1,15 @@
 # Career Tweaker Changelog
 
+## 0.4.8-beta - 2026-07-19 - #445 nested masters and authorship prefixes [verify-fix]
+
+- Kept the two whole-family all-on controls together under the dedicated **Talent Reworks > Master Toggles** nested group. Individual rework checkboxes remain in their career groups, so the masters are discoverable without mixing bulk controls into the leaf list.
+- Changed every active family leaf from the superseded trailing `[Ensrick's Reworks]` / `[Tourney Balance]` suffix form to the requested leading `[Ensrick]` / `[Tourney Balance]` authorship prefix. No `[Working]`, `[Untested]`, issue number, or other lifecycle metadata is displayed.
+- Moved family identity, master IDs, and label-prefix policy into one engine-free metadata owner consumed by runtime, localization, and QA. New rework rows can no longer join the visible family tree without the offline test requiring the matching prefix.
+- Extended `issue445_rework_family_masters` to validate the live localized prefix for every runtime-owned family member. Offline coverage now proves exact nested parentage, all visible rework checkboxes, prefix idempotence, bounded bulk writes, and the custom partial-selection state.
+- Re-audited #611 against current source and RainReligion's confirmed-working report: WT already uses one per-career/slot/source master as an advanced-options gear parent, with individual children nested beneath it and complete bulk/partial/cross-career regression coverage. No WT behavior was changed in this release.
+
+**Solo verify:** open Mod Tweaker > Career Tweaker > Talent Reworks. Confirm **Master Toggles** is a nested group containing only **Enable all Ensrick's Reworks** and **Enable all Tourney Balance Reworks**. Confirm every individual rework begins with `[Ensrick]` or `[Tourney Balance]`, with no lifecycle/status tag and no trailing family suffix. Toggle each master, then make a partial individual selection and confirm both master indicators are off while the selected leaf stays on. Run `/crt_regression_test` and require `PASS: issue445_rework_family_masters` plus `PASS: crt_mod_tweaker_exclusive_groups_registered`.
+
 ## 0.4.6-beta - 2026-07-18 - #776 exact buff-wire identity and timed sync [verify-fix-coop]
 
 - Corrected the initial diagnosis using all three attached client crashes. Each receiver got positive server buff id `12`, `13`, or `9` at numeric lookup id `1574`, which resolved locally to timed `crt_questingknight_impetuous_as`. Vanilla `ProcFunctions.add_buff` can only send server id `0`; the repeated positive ids prove a different server-controlled name collided with the client's process-local CRT lookup assignment.

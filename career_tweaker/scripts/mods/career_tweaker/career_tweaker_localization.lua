@@ -1,3 +1,5 @@
+local ReworkFamilies = require("scripts/mods/career_tweaker/_crt_rework_master_policy")
+
 local localization = {
     mod_name = {
         en = "Tweaker: Careers",
@@ -6,7 +8,7 @@ local localization = {
         en = "Swap talents and abilities between careers, and turn a large set of optional talent reworks on or off.",
     },
 
-    rework_master_group = { en = "Rework Family Presets" },
+    rework_master_group = { en = "Master Toggles" },
     rework_master_ensrick = { en = "Enable all Ensrick's Reworks" },
     rework_master_ensrick_description = { en = "Enables every active native Career Tweaker rework and disables every Tourney Balance port. Turn it off to clear that family; individual edits return the controls to a custom state." },
     rework_master_tourney = { en = "Enable all Tourney Balance Reworks" },
@@ -765,23 +767,13 @@ local localization = {
 
 }
 
--- Issue #445 attribution is derived from stable setting identity instead of a
--- hand-maintained label list. Only leaf option titles are decorated: groups,
+-- Issue #445 attribution is derived from the same stable family metadata used
+-- by the runtime master policy. Only leaf option titles are decorated: groups,
 -- descriptions/tooltips, and the two master controls keep concise labels.
 for key, row in pairs(localization) do
-    local family
-    if key:find("^rework_") then family = "Ensrick's Reworks" end
-    if key:find("^trn_") then family = "Tourney Balance" end
-    local is_leaf = family
-        and not key:find("_group$")
-        and not key:find("_description$")
-        and not key:find("_tooltip$")
-        and not key:find("^rework_master_")
-    if is_leaf and type(row) == "table" then
+    if ReworkFamilies.is_leaf_localization_key(key) and type(row) == "table" then
         for language, text in pairs(row) do
-            if type(text) == "string" and not text:find("[" .. family .. "]", 1, true) then
-                row[language] = text .. " [" .. family .. "]"
-            end
+            row[language] = ReworkFamilies.decorate_label(key, text)
         end
     end
 end

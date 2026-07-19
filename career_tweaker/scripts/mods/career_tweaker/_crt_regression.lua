@@ -676,6 +676,20 @@ _rt_register("issue445_rework_family_masters", function()
     if #(policy.tourney_ids or {}) < 10 then
         return "Tourney family catalog unexpectedly small: " .. tostring(#(policy.tourney_ids or {}))
     end
+    local family_metadata = mod._crt and mod._crt.rework_master_module
+    if type(family_metadata) ~= "table"
+            or type(family_metadata.family_for_setting) ~= "function" then
+        return "rework-family localization metadata missing"
+    end
+    for setting_id, family in pairs(policy.members or {}) do
+        local _, metadata = family_metadata.family_for_setting(setting_id)
+        local label = mod:localize(setting_id)
+        if not metadata or type(label) ~= "string"
+                or label:sub(1, #metadata.label_prefix) ~= metadata.label_prefix then
+            return string.format("%s family label mismatch for %s: %s",
+                tostring(family), tostring(setting_id), tostring(label))
+        end
+    end
     local mutex = mod._crt and mod._crt.mutex
     local members = mutex and mutex.CLUSTERS and mutex.CLUSTERS.rework_family_master_choice
     if type(members) ~= "table" or #members ~= 2
