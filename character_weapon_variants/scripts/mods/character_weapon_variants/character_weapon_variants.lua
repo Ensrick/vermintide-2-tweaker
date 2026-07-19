@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.453-dev"
+local MOD_VERSION = "0.1.454-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -63,6 +63,7 @@ _om.crowbill_presentation = mod:dofile("scripts/mods/character_weapon_variants/_
 _om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_runtime")
 _om.launcher_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_launcher_family")
 _om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
+_om.rapier_contract = mod:dofile("scripts/mods/character_weapon_variants/_cwv_rapier_contract")
 _om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inventory_icons")
 -- Public sibling-renderer contract: call resolve(icon, renderer), never guess atlas residency.
 mod._cwv_inventory_icons = _om.inventory_icons
@@ -6285,42 +6286,11 @@ local function _create_rapier_template()
 
 	local template = table.clone(Weapons.fencing_sword_template_1, true)
 
-	-- Disable the pistol-shoot action_three (kind="handgun"). Keep the
-	-- action defined for state-machine/network consistency; just
-	-- prevent it from ever firing. Same pattern as tuskgor_javelin_template's
-	-- weapon_reload disable.
-	if template.actions and template.actions.action_three then
-		for _, sub_action in pairs(template.actions.action_three) do
-			if type(sub_action) == "table" then
-				sub_action.condition_func       = _always_false
-				sub_action.chain_condition_func = _always_false
-			end
-		end
-	end
-
-	-- Override left_hand_attachment_node_linking. The base fencing template
-	-- uses `AttachmentNodeLinking.pistol.left`, which has component
-	-- bindings for `lock_hammer`, `trigger`, and `lock_lid` (nodes that
-	-- exist on the pistol mesh `wpn_emp_pistol_01_t1`). Our variant
-	-- replaces left_hand_unit with `wpn_invisible_weapon`, which does
-	-- NOT have those nodes — so vanilla's `Unit.node(unit, "lock_hammer")`
-	-- crashes with `[Script Error]: lock_hammer` on equip
-	-- (GUID acb910d1-a625-49b1-b899-86d48d27462d, v0.1.183).
-	-- Replace with a minimal binding: just attach the (invisible) left
-	-- weapon to `j_leftweaponattach` at node 0, no component lookups.
-	-- This is on the CLONE only — base template still has the full
-	-- pistol bindings intact for native Saltzpyre wielders.
-	template.left_hand_attachment_node_linking = {
-		first_person = {
-			wielded   = { { source = "j_leftweaponattach", target = 0 } },
-			unwielded = { { source = "j_hips",             target = 0 } },
-		},
-		third_person = {
-			display   = { { source = "j_leftweaponattach", target = 0 } },
-			wielded   = { { source = "j_leftweaponattach", target = 0 } },
-			unwielded = { { source = "j_hips",             target = 0 } },
-		},
-	}
+	-- Disable the pistol action and remove its ammo contract together. Keeping
+	-- cloned ammo_data while omitting the left-hand pistol makes the stock HUD
+	-- request ammo_system from a nil unit when this melee weapon occupies Grail
+	-- Knight's second (slot_ranged) weapon slot (#807).
+	_om.rapier_contract.disable_pistol(template, _always_false)
 
 	-- Per-action 3P remap on every sub-action whose anim_event has a
 	-- substitute. 3P-only — never write anim_event (1P).

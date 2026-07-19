@@ -678,6 +678,11 @@ local _variant_definitions = {
 		-- attach anything at j_leftweaponattach because there's nothing
 		-- to attach.
 		no_left_hand    = true,
+		-- #807: the cloned template also deletes ammo_data. Keep the item-entry
+		-- contract aligned so no skin/crafted/no-skin path can inherit an ammo
+		-- unit from the fencing-sword donor while the melee-only rapier occupies
+		-- Grail Knight's second slot.
+		no_ammo_unit    = true,
 		-- TODO icon: placeholder uses vanilla fencing-sword icon. Variant
 		-- is NOT complete until proper inventory_icon + hud_icon are
 		-- authored.
