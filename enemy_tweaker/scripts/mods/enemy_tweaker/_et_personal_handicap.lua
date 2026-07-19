@@ -123,6 +123,13 @@ mod:hook(DamageUtils, "apply_buffs_to_damage", function(func, current_damage,
         attacked_unit, attacker_unit, damage_source, victim_units, damage_type,
         buff_attack_type, first_hit, source_attacker_unit)
     if _is_server() and type(current_damage) == "number" and current_damage > 0 then
+        -- #450 composes Skarrik's ranged resistance into this existing singleton
+        -- damage owner. The provider is exact-breed/ranged gated and otherwise
+        -- returns the original value, so Personal difficulty remains independent.
+        if type(ET.boss_behavior_scale_incoming_damage) == "function" then
+            current_damage = ET.boss_behavior_scale_incoming_damage(
+                current_damage, attacked_unit, buff_attack_type)
+        end
         local attacked_player = UnitAccess.owner(attacked_unit)
         if attacked_player then
             local incoming = Policy.factors(_host_difficulty(), _preset_for_player(attacked_player))

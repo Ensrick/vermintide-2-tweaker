@@ -28,9 +28,10 @@ local mod = get_mod("enemy_tweaker")
 -- runtime hooks / the Chaos Wastes grudge-mark buff system, tracked as issue 531.
 -- The grudge-mark pair (Skarrik Cata+ Berserk = grudge-mark frenzy; Bödvarr Cata+
 -- Crippling = grudge-mark crippling) now ships in `_et_boss_grudge.lua` (the #531
--- tranche-1 hook module). Still deferred there: Halescourge 50%-HP mid-fight
--- monster spawn; Skarrik 30% ranged damage-reduction (needs a DamageUtils branch,
--- #433); Deathrattler ratling-gun tracking. Citations live in the CHANGELOG.
+-- tranche-1 hook module). The Halescourge 50%-HP mid-fight monster spawn lives
+-- in `_et_boss_behavior.lua`, which also composes Skarrik ranged resistance
+-- into the existing damage owner and narrows Deathrattler's tracking. Citations
+-- live in the mechanics documentation.
 --
 -- Owned by: enemy_tweaker.lua entry point (dofile'd after _et_lifecycle, which
 -- re-applies via mod._et_apply_boss_balance on every setting change).
@@ -125,6 +126,19 @@ local function _apply_explosion_power(template_name, enabled, mult)
     return true
 end
 
+local function _apply_deathrattler_tracking(enabled)
+    local actions = rawget(_G, "BreedActions")
+    local boss = actions and actions[ET.BossBehaviorCore.DEATHRATTLER_BREED]
+    local dual = boss and boss.dual_shoot_intro
+    if not dual or type(dual.rotation_time) ~= "number" then return false end
+    if dual._et_bb_vanilla_rotation_time == nil then
+        dual._et_bb_vanilla_rotation_time = dual.rotation_time
+    end
+    dual.rotation_time = ET.BossBehaviorCore.deathrattler_rotation_time(
+        dual._et_bb_vanilla_rotation_time, enabled)
+    return true
+end
+
 -- ----------------------------------------------------------------------------
 -- Apply all boss-balance toggles per current settings. Called at load and from
 -- _et_lifecycle on_setting_changed / on_enabled / on_disabled.
@@ -151,6 +165,11 @@ local function _apply_boss_balance()
         active[#active + 1] = "Nurgloth armor->infantry"
     end
 
+    local tracking_on = mod:get("boss_behavior_deathrattler_tracking") and true or false
+    if _apply_deathrattler_tracking(tracking_on) and tracking_on then
+        active[#active + 1] = "Deathrattler tracking x0.50"
+    end
+
     -- [et:450] per-apply summary marker. Fires at boot and on every setting
     -- change; survives a mod-logging-OFF session (engine printf, rate-limited).
     -- This is the apply-time surface deliberately chosen over a per-spawn hook:
@@ -169,6 +188,83 @@ end
 -- _et_lifecycle.lua (that module is dofile'd BEFORE this one, so it nil-guards
 -- the reference — same pattern as mod._et_apply_fly_disable).
 mod._et_apply_boss_balance = _apply_boss_balance
+
+-- Live readback for /verify_boss_balance. This reports the values the engine
+-- will consume from Breeds/ExplosionTemplates, not merely that the setter ran.
+ET.boss_balance_live_rows = function()
+    local rows = {}
+    local breeds = rawget(_G, "Breeds") or {}
+    for i = 1, #HEALTH do
+        local cfg = HEALTH[i]
+        local breed = breeds[cfg.breed]
+        local live = breed and breed.max_health
+        local vanilla = breed and breed._et_bb_vanilla_health
+        local enabled = mod:get(cfg.setting) and true or false
+        local pass = type(live) == "table" and type(vanilla) == "table"
+        if pass then
+            local factor = enabled and cfg.mult or 1
+            for index = 1, #vanilla do
+                if live[index] ~= _networkify_health(vanilla[index] * factor) then
+                    pass = false
+                    break
+                end
+            end
+        end
+        rows[#rows + 1] = {
+            name = cfg.label .. " health",
+            setting = cfg.setting,
+            enabled = enabled,
+            live = type(live) == "table" and table.concat(live, ",") or "missing",
+            expected = enabled and string.format("vanilla x%.2f", cfg.mult) or "vanilla",
+            pass = pass,
+        }
+    end
+
+    local lightning = rawget(_G, "ExplosionTemplates")
+    lightning = lightning and lightning.grey_seer_warp_lightning_impact
+        and lightning.grey_seer_warp_lightning_impact.explosion
+    local lightning_on = mod:get("boss_bal_rasknitt_lightning") and true or false
+    local lightning_expected = lightning and lightning._et_bb_vanilla_power
+        and lightning._et_bb_vanilla_power * (lightning_on and 2 or 1)
+    rows[#rows + 1] = {
+        name = "Rasknitt lightning",
+        setting = "boss_bal_rasknitt_lightning",
+        enabled = lightning_on,
+        live = lightning and lightning.power_level or "missing",
+        expected = lightning_expected or "snapshot missing",
+        pass = lightning_expected ~= nil and lightning.power_level == lightning_expected,
+    }
+
+    local nurgloth = breeds.chaos_exalted_sorcerer_drachenfels
+    local armor_on = mod:get("boss_bal_nurgloth_armor") and true or false
+    local armor_expected = nurgloth and (armor_on and ARMOR_INFANTRY
+        or nurgloth._et_bb_vanilla_armor)
+    rows[#rows + 1] = {
+        name = "Nurgloth armor",
+        setting = "boss_bal_nurgloth_armor",
+        enabled = armor_on,
+        live = nurgloth and nurgloth.armor_category or "missing",
+        expected = armor_expected or "snapshot missing",
+        pass = armor_expected ~= nil and nurgloth.armor_category == armor_expected,
+    }
+
+    local actions = rawget(_G, "BreedActions")
+    local deathrattler = actions and actions[ET.BossBehaviorCore.DEATHRATTLER_BREED]
+    local dual = deathrattler and deathrattler.dual_shoot_intro
+    local tracking_on = mod:get("boss_behavior_deathrattler_tracking") and true or false
+    local tracking_expected = dual and dual._et_bb_vanilla_rotation_time
+        and ET.BossBehaviorCore.deathrattler_rotation_time(
+            dual._et_bb_vanilla_rotation_time, tracking_on)
+    rows[#rows + 1] = {
+        name = "Deathrattler tracking window",
+        setting = "boss_behavior_deathrattler_tracking",
+        enabled = tracking_on,
+        live = dual and dual.rotation_time or "missing",
+        expected = tracking_expected or "snapshot missing",
+        pass = tracking_expected ~= nil and dual.rotation_time == tracking_expected,
+    }
+    return rows
+end
 
 -- ----------------------------------------------------------------------------
 -- Regression checks (runtime-only, no io — issue 511).
@@ -195,6 +291,12 @@ rt_register("boss_balance_targets_present", function()
         and templates.grey_seer_warp_lightning_impact.explosion
     if not expl or type(expl.power_level) ~= "number" then
         return "grey_seer_warp_lightning_impact.explosion.power_level missing"
+    end
+    local actions = rawget(_G, "BreedActions")
+    local deathrattler = actions and actions[ET.BossBehaviorCore.DEATHRATTLER_BREED]
+    if not (deathrattler and deathrattler.dual_shoot_intro
+            and type(deathrattler.dual_shoot_intro.rotation_time) == "number") then
+        return "Deathrattler dual-shoot rotation_time missing"
     end
 end)
 
