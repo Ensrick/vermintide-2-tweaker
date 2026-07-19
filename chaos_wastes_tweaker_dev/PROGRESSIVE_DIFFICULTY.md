@@ -13,10 +13,25 @@ provides the stable mission ordinal: completed counts 2 and 4 are maps 3 and 5.
 The path graph is generated once and is not reshaped by this read-time override.
 
 Vanilla defines `cataclysm`, `cataclysm_2`, and `cataclysm_3`, followed by the
-unrelated `versus_base`. The policy searches for Cata 5, then 4, then 3, and
-caps at the highest registered tier. It never advances into Versus. This honors
-the requested Cata 5 ceiling when a compatible tier provider is installed while
-remaining safe on stock VT2.
+unrelated `versus_base`. The policy advances only through contiguous registered
+tiers and caps before the first gap. It never advances into Versus. This honors
+the requested Cata 5 ceiling when a compatible provider registers both Cata 4
+and Cata 5, while a partial provider cannot cause a jump over a missing tier.
+
+The original difficulty and the two diagnostic throttles live on each
+`DeusRunController`, not on the mod singleton. At ordinary run start,
+`setup_run` supplies the original run difficulty. Vanilla hot join is different:
+`DeusMechanism.sync_mechanism_data` serializes `get_run_difficulty()`, which is
+already stepped. The host therefore sends the immutable original tier in one
+schema-gated `ct_progdiff_start` message immediately before vanilla's setup RPC;
+the joining client consumes it once when constructing its controller. Replacing
+a controller or starting a later run cannot inherit another run's ramp state.
+
+Source seams audited in the 2026-07-19 decompile:
+
+- `deus_mechanism.lua:930-964` (`sync_mechanism_data` and its setup RPC)
+- `deus_mechanism.lua:1179-1198` (controller construction and `setup_run`)
+- `deus_run_controller.lua:273-284` (the stored run difficulty and graph build)
 
 Coin pickup continues through the existing `on_soft_currency_picked_up` hook.
 From map 3, effective multiplier is:

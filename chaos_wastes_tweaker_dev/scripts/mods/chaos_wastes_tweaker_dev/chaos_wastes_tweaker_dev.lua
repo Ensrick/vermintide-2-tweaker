@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.302-dev"
+local MOD_VERSION = "0.7.303-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -1025,8 +1025,8 @@ mod:hook("DeusRunController", "on_soft_currency_picked_up", function(func, self,
                 and run_state:get_completed_level_count()) or 0
             local reduction = effective_setting("progressive_coin_reduction")
             multiplier = policy.coin_multiplier(multiplier, reduction, completed)
-            if completed >= 2 and completed ~= mod._ct_progcoin_last_logged then
-                mod._ct_progcoin_last_logged = completed
+            if completed >= 2 and completed ~= self._ct_progcoin_last_logged then
+                self._ct_progcoin_last_logged = completed
                 pcall(printf, "[ct:460] map=%d completed=%d coin_multiplier=%.3f reduction=%s%%",
                     completed + 1, completed, multiplier, tostring(reduction))
             end
@@ -2820,10 +2820,12 @@ end
 -- count via effective_setting), so host and clients land on the same tier with no
 -- RPC-timing race.
 --
--- Caveat: a peer that HOT-JOINS mid-run inherits the host's already-stepped difficulty
--- as its "start" and could over-step; peers present at run start are unaffected.
-CT_PROGRESSIVE_DIFFICULTY_MARKER = "progressive_difficulty:maps_3_and_5_dynamic_cata5_coin_reduction_v0.7.276"
+-- setup_run receives the original tier during an ordinary start; the installed
+-- adapter supplies it for hot joins. Keep it on the controller instance so an
+-- overlapping/replaced controller cannot leak ramp state into a later run.
+CT_PROGRESSIVE_DIFFICULTY_MARKER = "progressive_difficulty:per_controller_start_hotjoin_sync_contiguous_tiers_v3"
 mod._ct_progressive_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_progressive_difficulty")
+mod._ct_progressive_policy.install_hot_join(mod, CT_RPC_SCHEMA)
 mod._ct_progdiff_step = function(start_key, completed_level_count)
     local Diff = rawget(_G, "Difficulties")
     local Lookup = rawget(_G, "DifficultyLookup")
@@ -2834,13 +2836,13 @@ mod:hook("DeusRunController", "get_run_difficulty", function(func, self)
     local base = func(self)
     if not effective_setting("progressive_difficulty")
         or not effective_setting("progressive_difficulty_increase") then return base end
-    local start_key = mod._ct_progdiff_start or base
+    local start_key = (self and self._ct_progdiff_start) or base
     local run_state = self and self._run_state
     local completed = (run_state and run_state.get_completed_level_count
         and run_state:get_completed_level_count()) or 0
     local stepped = mod._ct_progdiff_step(start_key, completed)
-    if completed ~= mod._ct_progdiff_last_logged then
-        mod._ct_progdiff_last_logged = completed
+    if completed ~= self._ct_progdiff_last_logged then
+        self._ct_progdiff_last_logged = completed
         pcall(printf, "[ct:progdiff] mission %d (completed=%d): start=%s -> difficulty=%s",
             completed + 1, completed, tostring(start_key), tostring(stepped))
     end
@@ -2921,9 +2923,10 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- setup_run `difficulty` arg = args[2]) so the get_run_difficulty ramp computes
     -- from a stable base, and reset the per-mission log throttle. At run start this is
     -- the unstepped base on every peer present (step==0 at completed==0).
-    mod._ct_progdiff_start = args[2]
-    mod._ct_progdiff_last_logged = nil
-    mod._ct_progcoin_last_logged = nil
+    self._ct_progdiff_start = mod._ct_progdiff_pending_host_start or args[2]
+    mod._ct_progdiff_pending_host_start = nil
+    self._ct_progdiff_last_logged = nil
+    self._ct_progcoin_last_logged = nil
     mod._ct_replacement_cache = {}
     mod._ct_replacement_pending_humans = {}
     mod._ct_replacement_log_count = 0

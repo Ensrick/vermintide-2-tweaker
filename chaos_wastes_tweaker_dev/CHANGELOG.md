@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.303-dev (2026-07-19) - progressive difficulty lifecycle hardening (#460) [verify-fix-coop]
+
+- Scoped the captured starting difficulty and both bounded log throttles to the active `DeusRunController`; controller replacement and a later run can no longer inherit another run's ramp state.
+- Source audit found that vanilla hot join serializes the already-stepped `get_run_difficulty()` result. The host now sends the immutable original tier in one schema-gated message immediately before vanilla's setup RPC; the joining client consumes it once when constructing its controller.
+- Custom tiers must now be contiguous. A partial provider that registers Cataclysm 5 without Cataclysm 4 cannot make map five jump across the missing tier.
+- Extends offline and runtime regressions for the lifecycle marker, per-controller capture, hot-join preservation, and sparse-tier behavior.
+
 ## 0.7.302-dev (2026-07-19) - preserve progression across bot substitutions (#465) [verify-fix-coop]
 
 - Transfers the departing human's Chaos Wastes setup through the existing bot substitution and deferred human-rejoin lifecycle instead of rebuilding from an unrelated profile.

@@ -449,6 +449,13 @@ _rt_register("progressive_difficulty_installed", function()
     if cls and type(cls.get_run_difficulty) ~= "function" then
         return "get_run_difficulty missing on DeusRunController"
     end
+    if CT_PROGRESSIVE_DIFFICULTY_MARKER ~= "progressive_difficulty:per_controller_start_hotjoin_sync_contiguous_tiers_v3" then
+        return "progressive difficulty per-controller lifecycle guard missing"
+    end
+    local mechanism = rawget(_G, "DeusMechanism")
+    if mechanism and type(mechanism.sync_mechanism_data) ~= "function" then
+        return "progressive difficulty hot-join sync seam missing"
+    end
 end)
 
 _rt_register("replacement_player_compensation_installed", function()
