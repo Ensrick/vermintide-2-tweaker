@@ -339,6 +339,34 @@ function M.install(mod, _rt_register, deps)
             "shield rotation ownership/exemption contract drifted")
     end)
 
+    _rt_register("issue735_shield_rotation_left_only", function()
+        local plan = mod._wt587_baked_transform_plan
+        local policy = _wt_grip_offset_policy
+        assert(type(plan) == "function" and policy and policy.contract,
+            "per-hand transform policy missing")
+        for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+            for _, weapon_key in ipairs({
+                "es_mace_shield", "es_sword_shield", "es_sword_shield_breton",
+                "dr_shield_axe", "cwv_es_axe_shield", "cwv_es_axe_shield_veteran",
+            }) do
+                local rotation = plan(weapon_key, career).rotation
+                assert(rotation and rotation.hand == "left",
+                    string.format("#735 shield rotation hand drift key=%s career=%s",
+                        weapon_key, career))
+                assert(policy.applies_to_hand(rotation, "left")
+                    and not policy.applies_to_hand(rotation, "right"),
+                    "#735 hand policy would rotate the primary weapon: " .. weapon_key)
+                assert(policy.preview_slot_field(
+                    { left_hand_unit = "shield", right_hand_unit = "weapon" }, rotation) == nil,
+                    "#735 paired preview must defer to exact spawn_data hand adapter")
+            end
+        end
+        assert(policy.contract.hand_scope == "descriptor_hand_field"
+            and policy.contract.paired_scoped_preview == "post_spawn_data_hand_adapter"
+            and policy.contract.retained_evidence == "post_write_engine_readback",
+            "#735 hand/preview/retained-state contract drifted")
+    end)
+
     _rt_register("wt_safe_hook_installed", function()
         -- v0.12.77 (Issue #26): pcall-isolated `mod:safe_hook` wrapper. The helper
         -- is required from `_safe_hook.lua` near the top of this file, BEFORE any

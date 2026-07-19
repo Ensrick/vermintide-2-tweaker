@@ -139,9 +139,11 @@ return {
 		-- owner_1p: 3P-ONLY invariant (writes only *_unit_3p, :615/:675-679) leaves
 		-- the universal 1P grip vanilla by design. bot: durable track covers local/
 		-- bot/husk (:736). husk: _wield_slot applies offset+track+#569 at
-		-- weapon_tweaker.lua:1048-1059. inventory_preview: one-shot offset at preview
-		-- spawn (:627). mission_transition/respawn: per-frame reapply + re-track at
-		-- each wield.
+		-- weapon_tweaker.lua:1048-1059. inventory_preview: unpaired transforms apply
+		-- at _spawn_item_unit; paired hand-scoped transforms use the exact
+		-- spawn_data.slot_index -> _equipment_units[left/right] bridge after
+		-- _spawn_item (#735). mission_transition/respawn: per-frame reapply +
+		-- re-track at each wield.
 		grip_hold_override = {
 			cells = base_cells(),
 			edges = base_edges(),

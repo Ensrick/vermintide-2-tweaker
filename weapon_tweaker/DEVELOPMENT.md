@@ -159,7 +159,8 @@ SEPARATE key from the established flat `mod._wt_*` fields (`mod._wt_link_filter`
 | Module | Owns / public surface (on `mod._wt` unless noted) |
 |---|---|
 | `weapon_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the pre-existing dofile manifest (`_safe_hook`, `wt_dev_anim_picker`, `wt_dev_hold_pose`, `_wt_brett_sword_shield_buff`, `wt_unlock_data`, `wt_wield_patches`, backend, BR-on-ice), the `mod._wt` namespace setup + `_wt_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`), and everything not yet extracted: the `wield_anim_career_3p` template patchers + cross-character port pipeline (spawn/link/previewer hooks), the per-frame grip offsets, the weapon-behavior features (Authentic Brace, WP punch, Moonfire), the P0 guards (`link_units`, `create_equipment`, `anim_event_with_variable_float`), and the ~30 inline `/wt_regression_test` check bodies. `feature_enabled` + `_local_career_name` stay here (generic player-state helpers the anim funnel reads on a hot path; published to `mod._wt` for the core to capture). |
-| `_wt_grip_offset_policy.lua` | Pure left-only preview hand routing plus the bounded retained-position readback used by #701. It owns no offset values and sends no RPC; `_weapon_grip_offsets` remains the entry point's single source. |
+| `_wt_grip_offset_policy.lua` | Pure receiver/hand routing for baked scale, grip-offset, and rotation descriptors, plus bounded retained transform readbacks (#701 position, #735 rotation). It owns no transform values and sends no RPC; the entry-point catalogs remain the single source. |
+| `_wt_paired_preview_transform.lua` | Sole `MenuWorldPreviewer._spawn_item` owner. It bridges source-authored `spawn_data` hand flags and numeric slot indices to the exact paired preview unit, then invokes the injected transform owners; no inferred hand and no RPC (#735). |
 | `_wt_anim_remap_data.lua` | Declarative `_3p_template_remaps` catalog. Returns a one-time builder that receives the three existing shared remap tables and returns one mutable template catalog; no `mod`, engine, hook, command, or runtime-event dependency. The entry manifest loads it immediately before `_wt_anim_remap.lua` and publishes the builder as `mod._wt.build_3p_template_remaps`. |
 | `_wt_anim_remap.lua` | The 3P anim-remap CORE (v0.12.210-dev Phase 2, catalog split in v0.12.235-dev). Owns the three redirect layers (`_anim_redirect`/`_career_anim_redirect`/`_suffix_career_map` + `_try_suffix_redirect`/`_safe_has_anim`), the per-weapon/key remap tables (`_3p_remap_*`/`_3p_key_remaps`), constructs the sibling's `_3p_template_remaps` catalog, and owns all resolvers, the weak-keyed per-unit remap state (`_unit_state`/`_state_for`), the `Unit.animation_event` funnel hook, the two wield hooks (`SimpleInventoryExtension`/`SimpleHuskInventoryExtension`) that populate the state, the anim-funnel commands (`/info`,`/animlog`,`/force3p`,`/force1p`), and the keep-previewer pose resolver `_resolve_preview_wield_event`. Hot tables are file-local upvalues (per-event-hot path). Reads `mod._wt.feature_enabled`/`.local_career_name`/`.dbg`/`.dev_anim_picker`/`.MOD_VERSION`/`.weapon_unlock_map`/`.build_3p_template_remaps`; exports `mod._wt.safe_has_anim`/`.resolve_preview_wield_event`/`.unit_career_name`/`.unit_state`/`.suffix_career_map`/`.three_p_template_remaps` (all non-hot-path reads by the entry's port pipeline, previewer, and rt-checks). The `wield_anim_career_3p` patchers, force-loads, and mesh swaps stay in the entry (port-pipeline-coupled, Phase 3). |
 | `_wt_regression.lua` | `/wt_regression_test` harness: `_RT_CHECKS` + `rt_register` + the command. Loads FIRST. Reads `mod._wt.MOD_VERSION`; exports `mod._wt.rt_register`. The check bodies stay inline in the entry (they close over its file-locals) via `local _rt_register = mod._wt.rt_register`. |
@@ -758,11 +759,18 @@ menu preview:
   capture the weapon key per slot. This is the only place the actual
   weapon key is exposed.
 - Hook `MenuWorldPreviewer:_spawn_item_unit(unit, slot_type, item_data, ...)`
-  to apply scale/offset to the spawned `unit`. Note: `item_data` here
+  to apply scale/offset to an unpaired spawned `unit`. Note: `item_data` here
   is the weapon TEMPLATE (e.g. `we_one_hand_axe_template`), NOT an
   inventory item — so `item_data.key`/`name` returns the template name,
   not the weapon key. Look up the captured key from the equip_item map
   by `slot_type` (which is "melee"/"ranged"/"hat", not "slot_melee").
+- A paired weapon template makes `_spawn_item_unit` hand-ambiguous. For a
+  transform descriptor scoped to `hand = "left"` or `"right"`, defer the
+  write until `MenuWorldPreviewer:_spawn_item` returns. Its `spawn_data`
+  retains `left_hand`/`right_hand`, while `spawn_data[i].slot_index` bridges
+  the string-keyed `_item_info_by_slot` data to numeric `_equipment_units`.
+  Apply the descriptor only to that exact spawned hand; never guess from
+  template shape. This is the #735 shield/sword separation contract.
 - Use a weak-keyed table (`setmetatable({}, {__mode = "k"})`) for the
   previewer→key mapping so dismissed previewers don't leak.
 
