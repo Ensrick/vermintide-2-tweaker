@@ -25,4 +25,13 @@ return function(H, repo_root)
         H.truthy(data:find('setting_id%s*=%s*"gut_hud_mode"') ~= nil)
         H.truthy(data:find('setting_id%s*=%s*"gut_hud_cycle_hotkey"') ~= nil)
     end)
+
+    H.test("GUT #824 runtime localization check loads the dev localization resource", function()
+        local main = read("/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua")
+        H.truthy(main:find(
+            'pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization")',
+            1, true))
+        H.equal(main:find("scripts/mods/gui_tweaker_dev/gui_tweaker_localization", 1, true), nil)
+        H.truthy(main:find("localization table could not be loaded", 1, true))
+    end)
 end

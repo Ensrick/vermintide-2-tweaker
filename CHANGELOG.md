@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-19 - Dev localization resource contract (#824)
+
+Tweaker: GUI dev 0.2.296-dev now loads its own localization resource in the
+runtime format check and treats an unreachable localization table as a failed
+check. The static dofile/package gate now recognizes colon-form, dot-form, and
+protected dot-form module loads so the same resource-boundary mistake is caught
+before deployment.
+
 ## 2026-07-18 - Canonical hidden build-only pipeline (#832)
 
 `tools/ship/ship.ps1 -BuildOnly` now provides the serialized, no-window VMB build needed to generate a release bundle before the source/bundle atomicity gate can pass. Build-only preflight defers only that circular gate, runs it immediately after generation, preserves the ship claim for the eventual full release, and exits before deploy, Workshop upload, GitHub release, or issue lifecycle changes.
