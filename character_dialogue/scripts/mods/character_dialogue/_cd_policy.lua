@@ -1,5 +1,13 @@
 local Policy = {}
 
+-- Preserve the false member of the persistent true/false/nil override.  The
+-- usual Lua `and`/`or` pseudo-ternary cannot return false from its true branch.
+function Policy.parse_override_state(state)
+    if state == "enable" then return true end
+    if state == "disable" then return false end
+    return nil
+end
+
 function Policy.has_override(dialogue, overrides)
     for i = 1, dialogue and dialogue.sound_events_n or 0 do
         if overrides[dialogue.sound_events[i]] ~= nil then return true end

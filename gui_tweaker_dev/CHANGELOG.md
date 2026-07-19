@@ -1,5 +1,16 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.299-dev (2026-07-19) -- #605 preserve dialogue collapse states [verify-fix]
+
+- Replaced the dialogue browser's `closing and nil or speaker` pseudo-ternary
+  with an explicit transition so closing a speaker can actually store `nil`.
+- Fixed the same false/nil state class for the Disabled line state and added
+  one bounded `[gut:605]` action record plus regression contracts.
+
+**Solo verify:** open and close Dialogue speaker groups and cycle one line
+through enabled, disabled, and default. The group must remain closed and the
+selected state must repaint immediately and persist after Apply/reopen.
+
 ## 0.2.298-dev (2026-07-19) -- #340 language glyph diagnostics [diagnostics-armed]
 
 - Extended `/gut_all_languages_status` to classify all eight active font rows

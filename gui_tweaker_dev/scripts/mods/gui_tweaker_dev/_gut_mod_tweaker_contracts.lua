@@ -16,6 +16,21 @@ function M.install(api)
     local _rt_src_read = assert(api.src_read, "Mod Tweaker contracts require src_read")
     local math = math
 
+_rt_register("issue605_dialogue_collapse_and_tristate", function()
+    local dialogue = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")
+    if dialogue.next_expanded("kruber", "kruber") ~= nil then
+        return "active dialogue group cannot collapse to nil"
+    end
+    if dialogue.next_expanded("bardin", "kruber") ~= "kruber" then
+        return "dialogue group expansion did not select the requested speaker"
+    end
+    if dialogue.next_line_state(nil) ~= true
+       or dialogue.next_line_state(true) ~= false
+       or dialogue.next_line_state(false) ~= nil then
+        return "dialogue line tri-state transition lost true, false, or nil"
+    end
+end)
+
 _rt_register("issue630_dx12_fence_probe", function()
     local module = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dx12_fence630")
     if type(module) ~= "table" or type(module.new) ~= "function"
