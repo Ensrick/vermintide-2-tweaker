@@ -28,10 +28,10 @@ Cross-reference: `CLAUDE.md` (technical) describes HOW things work. This doc
   audit docs). See §11a for the full table.
 
 ### What's still weak
-- **File sizes exceed Claude's effective working memory.** 13 lua files remain
+- **File sizes exceed Claude's effective working memory.** 9 Lua files remain
   over the 2500-line hard limit (`chaos_wastes_tweaker_dev.lua` at ~13500,
   `chaos_wastes_tweaker.lua` at ~12800, `character_weapon_variants.lua` at
-  ~12200, `cosmetics_tweaker.lua` at ~10000, plus nine others). Reading the
+  ~12200, `cosmetics_tweaker.lua` at ~10000, plus five others). Reading the
   worst offenders consumes well over ~80K tokens. The set is now frozen in
   `qa/baselines/file_sizes.json` (issue #429) so the gate blocks only on growth
   past a baselined count or a new file crossing the limit. Tracked under GitHub

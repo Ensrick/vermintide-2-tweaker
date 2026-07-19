@@ -7,7 +7,7 @@
 # qa/baselines/file_sizes.json. A file already in the baseline only fails if it
 # GROWS beyond its frozen line count; a file NOT in the baseline that crosses the
 # hard limit fails immediately. This lets the gate BLOCK on regressions without
-# being permanently red on the 13 known-oversized files (which are tracked for
+# being permanently red on the 9 known-oversized files (which are tracked for
 # refactor in PROJECT_STANDARDS §11, not fixable per-session). Regenerate the
 # baseline ONLY with -UpdateBaseline (never automatic). Target-tier overages
 # (1500–2500) remain plain non-baselined warnings.
@@ -22,7 +22,8 @@ param(
     [int]$Target = 1500,
     [int]$HardLimit = 2500,
     [switch]$Quiet,
-    [switch]$UpdateBaseline
+    [switch]$UpdateBaseline,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,26 +45,42 @@ function Test-GeneratedPureDataLua([string]$path) {
     return [bool]($head | Where-Object { $_ -match '^\s*return\s*\{' } | Select-Object -First 1)
 }
 
+function Test-RepositoryInternalWorktreePath([string]$path) {
+    # Agent tools may create complete linked checkouts beneath a hidden
+    # repository-owned worktree container. Those checkouts are not source in
+    # this repository and must never be counted or frozen into its baseline.
+    # Match the convention structurally so .claude/worktrees, .git/worktrees,
+    # .codex/worktrees, and a top-level .worktrees directory are all covered.
+    $normalized = $path.Replace('\', '/')
+    return [regex]::IsMatch(
+        $normalized,
+        '(?i)(?:^|/)(?:\.[^/]+/worktrees|\.worktrees)(?:/|$)'
+    )
+}
+
+function Test-ModLuaCandidate([System.IO.FileInfo]$file) {
+    $p = $file.FullName
+    if (Test-RepositoryInternalWorktreePath $p) { return $false }
+    return $p -notlike "*\_archive\*" `
+        -and $p -notlike "*\bundleV2\*" `
+        -and $p -notlike "*\.build\*" `
+        -and $p -notlike "*\.temp\*" `
+        -and $p -notlike "*\.spawn_tweaks_ref\*" `
+        -and $p -notlike "*\tweaker\*" `
+        -and $p -notlike "*\sample_*\*" `
+        -and $p -notlike "*\Vermintide-2-Source-Code\*" `
+        -and $p -notlike "*\misc-vermintide-mods\*" `
+        -and $p -notlike "*\_big_rebalance_extract\*" `
+        -and $p -notlike "*.lua.processed" `
+        -and $file.Name -notmatch "^_cosmetic_unlocks" `
+        -and $file.Name -notmatch "_localization\.lua$" `
+        -and $file.Name -notmatch "^item_master_list_" `
+        -and -not (Test-GeneratedPureDataLua $file.FullName)
+}
+
 function Find-ModLuas {
     Get-ChildItem -Path $repoRoot -Filter "*.lua" -Recurse -File -ErrorAction SilentlyContinue `
-        | Where-Object {
-            $p = $_.FullName
-            $p -notlike "*\_archive\*" `
-                -and $p -notlike "*\bundleV2\*" `
-                -and $p -notlike "*\.build\*" `
-                -and $p -notlike "*\.temp\*" `
-                -and $p -notlike "*\.spawn_tweaks_ref\*" `
-                -and $p -notlike "*\tweaker\*" `
-                -and $p -notlike "*\sample_*\*" `
-                -and $p -notlike "*\Vermintide-2-Source-Code\*" `
-                -and $p -notlike "*\misc-vermintide-mods\*" `
-                -and $p -notlike "*\_big_rebalance_extract\*" `
-                -and $p -notlike "*.lua.processed" `
-                -and $_.Name -notmatch "^_cosmetic_unlocks" `
-                -and $_.Name -notmatch "_localization\.lua$" `
-                -and $_.Name -notmatch "^item_master_list_" `
-                -and -not (Test-GeneratedPureDataLua $_.FullName)
-        }
+        | Where-Object { Test-ModLuaCandidate $_ }
 }
 
 # Baseline keys are repo-relative paths with forward slashes (cross-platform,
@@ -79,6 +96,45 @@ function Load-Baseline {
     }
     return $map
 }
+
+function Invoke-SelfTest {
+    $script:FileSizeSelfTestPass = $true
+    function Assert([bool]$condition, [string]$description) {
+        $verdict = if ($condition) { 'PASS' } else { 'FAIL' }
+        $colour = if ($condition) { 'Green' } else { 'Red' }
+        Write-Host ("  [{0}] {1}" -f $verdict, $description) -ForegroundColor $colour
+        if (-not $condition) { $script:FileSizeSelfTestPass = $false }
+    }
+
+    $canonicalRel = 'career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua'
+    $canonicalPath = Join-Path $repoRoot ($canonicalRel.Replace('/', '\'))
+    $canonicalFile = Get-Item -LiteralPath $canonicalPath -ErrorAction Stop
+    $clonedSuffix = 'career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua'
+
+    Assert (Test-RepositoryInternalWorktreePath ".claude/worktrees/agent-a/$clonedSuffix") 'ignores Claude nested worktree checkout'
+    Assert (Test-RepositoryInternalWorktreePath ".codex/worktrees/task-a/$clonedSuffix") 'ignores equivalent hidden-tool worktree checkout'
+    Assert (Test-RepositoryInternalWorktreePath ".git/worktrees/task-a/gitdir") 'ignores Git repository-internal worktree metadata'
+    Assert (Test-RepositoryInternalWorktreePath ".worktrees/task-a/$clonedSuffix") 'ignores conventional top-level hidden worktree checkout'
+    Assert (-not (Test-RepositoryInternalWorktreePath $canonicalRel)) 'does not classify canonical module as worktree metadata'
+    Assert (Test-ModLuaCandidate $canonicalFile) 'canonical oversized module remains in scan candidates'
+    $canonicalLines = (Get-Content -LiteralPath $canonicalPath | Measure-Object -Line).Lines
+    Assert ($canonicalLines -gt $HardLimit) 'canonical fixture still exercises hard-limit enforcement'
+
+    $baseline = Load-Baseline
+    $internalBaselineKeys = @($baseline.Keys | Where-Object { Test-RepositoryInternalWorktreePath $_ })
+    Assert ($baseline.Count -eq 9) 'baseline contains exactly the 9 canonical oversized modules'
+    Assert ($internalBaselineKeys.Count -eq 0) 'baseline contains no nested-worktree entries'
+    Assert ($baseline.ContainsKey($canonicalRel)) 'baseline retains the canonical career balance module'
+
+    if ($script:FileSizeSelfTestPass) {
+        Write-Host '[check_file_sizes -SelfTest] OK -- worktree exclusion and canonical enforcement intact.' -ForegroundColor Green
+        return 0
+    }
+    Write-Host '[check_file_sizes -SelfTest] FAILED -- worktree exclusion or canonical enforcement regressed.' -ForegroundColor Red
+    return 2
+}
+
+if ($SelfTest) { exit (Invoke-SelfTest) }
 
 foreach ($lua in Find-ModLuas) {
     $lineCount = (Get-Content $lua.FullName | Measure-Object -Line).Lines
