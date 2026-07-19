@@ -1,5 +1,18 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.297-dev (2026-07-19) -- #285 anchor respawn timers to live portraits [verify-fix]
+
+- Removed the duplicated team-frame scenegraph and world-position conversion
+  used by the respawn timer overlay.
+- Draws each timer through the owning live `UnitFrameUI` widget renderer and
+  `portrait_pivot`, so HUD/layout changes cannot drift a copied coordinate set.
+- Added a bounded `[gut:285]` marker and regression coverage for the direct
+  portrait-anchor contract.
+
+**Solo verify:** kill a bot and confirm its respawn timer remains centered on
+that bot's live portrait through HUD scaling/layout changes. The newest log must
+contain `[gut:LOAD] v0.2.297-dev`; the timer should not drift or duplicate.
+
 ## 0.2.296-dev (2026-07-19) -- #824 dev localization runtime contract [verify-fix]
 
 - Corrected the runtime localization regression check to load the dev stream's
