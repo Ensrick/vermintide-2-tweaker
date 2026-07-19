@@ -124,10 +124,40 @@ local widgets = {
                 tooltip       = "cos_encarmine_hat_enabled_tooltip",
             },
             {
+                setting_id    = "cos_fk_reikland_griffin_enabled",
+                type          = "checkbox",
+                default_value = true,
+                tooltip       = "cos_fk_reikland_griffin_enabled_tooltip",
+            },
+            {
                 setting_id    = "cos_gk_purpure_azure_enabled",
                 type          = "checkbox",
                 default_value = true,
                 tooltip       = "cos_gk_purpure_azure_enabled_tooltip",
+            },
+            {
+                setting_id  = "cos_gk_purpure_azure_career_sharing_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "cos_gk_purpure_azure_share_mercenary",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "cos_gk_purpure_azure_share_mercenary_tooltip",
+                    },
+                    {
+                        setting_id    = "cos_gk_purpure_azure_share_huntsman",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "cos_gk_purpure_azure_share_huntsman_tooltip",
+                    },
+                    {
+                        setting_id    = "cos_gk_purpure_azure_share_foot_knight",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "cos_gk_purpure_azure_share_foot_knight_tooltip",
+                    },
+                },
             },
             -- v0.9.47-dev: collapsed the redundant "Weapon Model Tweaks" wrapper;
             -- the lone toggles sit directly under this group now.

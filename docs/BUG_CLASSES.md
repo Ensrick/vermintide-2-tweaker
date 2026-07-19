@@ -1849,6 +1849,16 @@ Athanor, lobby, score, owner, bot, and husk surfaces.
   shield supplies its own name and description, while the primary supplies
   only its side of a composed title. Never retain primary flavor text after an
   independent component resolves (#641).
+- Treat preview spawn completion and final presentation readiness as separate
+  lifecycle edges. `TeamPreviewer` receives its spawn callback from
+  `HeroPreviewer._poll_hero_package_loading`, but `_spawn_hero_unit` leaves the
+  mesh hidden until a later `post_update` visibility pass
+  [src: `scripts/ui/views/world_hero_previewer.lua:98-105,526-539,579-585`].
+  A successful texture write in that callback is not final-render evidence.
+  Defer authored paint until the mesh is visible, cache by exact mesh unit,
+  invalidate while hidden, and replay once after hide/show or mesh replacement
+  (#730; observed 0.9.142/0.9.146 logs resolved the exact score wearer and
+  logged `surface=score_preview` while the donor appearance remained visible).
 - Test the full acceptance matrix in `WEAPON_APPEARANCE_STANDARD.md` plus the
   Athanor and customization panes. Include initial open, re-open, transition,
   hot join, and one unmodified control.

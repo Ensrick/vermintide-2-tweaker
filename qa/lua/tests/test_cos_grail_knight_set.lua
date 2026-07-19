@@ -12,7 +12,7 @@ return function(H, repo_root)
     local localization = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization.lua")
     local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")
 
-    local function with_loaded_module(callback)
+    local function with_loaded_module(callback, setting_values)
         local saved = {
             get_mod = _G.get_mod,
             Cosmetics = _G.Cosmetics,
@@ -20,8 +20,21 @@ return function(H, repo_root)
             Unit = _G.Unit,
             Mesh = _G.Mesh,
             Material = _G.Material,
+            printf = _G.printf,
+            ItemMasterList = _G.ItemMasterList,
         }
-        _G.get_mod = function() return { get = function() return true end } end
+        _G.get_mod = function()
+            return {
+            get = function(_, setting_id)
+                if setting_values then return setting_values[setting_id] end
+                return true
+            end,
+            dofile = function(_, path)
+                H.equal(path, "scripts/mods/cosmetics_tweaker/_lib_resource_residency")
+                return assert(loadfile(repo_root .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_resource_residency.lua"))()
+            end,
+            }
+        end
         local path = repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_grail_knight_set.lua"
         local set = assert(loadfile(path))()
@@ -32,6 +45,8 @@ return function(H, repo_root)
         _G.Unit = saved.Unit
         _G.Mesh = saved.Mesh
         _G.Material = saved.Material
+        _G.printf = saved.printf
+        _G.ItemMasterList = saved.ItemMasterList
         if not ok then error(err, 0) end
     end
 
@@ -42,6 +57,99 @@ return function(H, repo_root)
         H.truthy(module:find('M.SHIELD_BASE_UNIT = "units/weapons/player/wpn_emp_gk_shield_05/wpn_emp_gk_shield_05"', 1, true))
         H.equal(module:find("World.spawn_unit", 1, true), nil)
         H.equal(module:find("CUSTOM_UNIT", 1, true), nil)
+    end)
+
+    H.test("Grail Knight set career sharing is independent and fail-closed", function()
+        local settings = {
+            cos_gk_purpure_azure_enabled = true,
+            cos_gk_purpure_azure_share_mercenary = true,
+            cos_gk_purpure_azure_share_huntsman = false,
+            cos_gk_purpure_azure_share_foot_knight = true,
+        }
+        with_loaded_module(function(set)
+            H.equal(#set.SHARED_CAREERS, 3)
+            H.equal(set.SHARED_CAREERS[1].career, "es_mercenary")
+            H.equal(set.SHARED_CAREERS[2].career, "es_huntsman")
+            H.equal(set.SHARED_CAREERS[3].career, "es_knight")
+            H.equal(table.concat(set.can_wield_careers(), ","),
+                "es_questingknight,es_mercenary,es_knight")
+            H.equal(set.vanilla_fallback_for_career(set.HAT_ITEM_KEY, "es_mercenary"),
+                "mercenary_hat_0000")
+            H.equal(set.vanilla_fallback_for_career(set.SKIN_ITEM_KEY, "es_huntsman"),
+                "skin_es_huntsman")
+            H.equal(set.vanilla_fallback_for_career(set.HAT_ITEM_KEY, "es_knight"),
+                "knight_hat_0000")
+            H.equal(set.vanilla_fallback_for_career(set.SKIN_ITEM_KEY, "es_questingknight"),
+                set.SKIN_VANILLA_FALLBACK)
+            H.equal(set.vanilla_fallback_for_career(set.HAT_ITEM_KEY, nil), nil)
+            H.equal(set.vanilla_fallback_for_career(set.SKIN_ITEM_KEY, "future_career"), nil)
+            H.equal(set.vanilla_fallback_for_career("unrelated", "es_knight"), nil)
+            local bridge = {
+                registered = true,
+                backend_to_armoury = { [set.SKIN_ITEM_KEY] = set.SKIN_VARIANT_KEY },
+                backend_to_vanilla = { [set.SKIN_ITEM_KEY] = set.SKIN_VANILLA_FALLBACK },
+            }
+            H.equal(set.wire_fallback(bridge, set.SKIN_ITEM_KEY, "es_huntsman"), "skin_es_huntsman")
+            H.equal(set.wire_fallback(bridge, set.SKIN_ITEM_KEY, nil), set.SKIN_VANILLA_FALLBACK)
+            H.equal(set.wire_fallback(bridge, "foreign", "es_huntsman"), nil)
+            H.equal(set.career_for_player({ career_name = function() return "es_knight" end }), "es_knight")
+
+            local items = {
+                [set.HAT_ITEM_KEY] = {},
+                [set.SKIN_ITEM_KEY] = {},
+                [set.SHIELD_SKIN_KEY] = {},
+            }
+            _G.ItemMasterList = items
+            set.sync_toggle()
+            for _, item in pairs(items) do
+                H.equal(table.concat(item.can_wield, ","),
+                    "es_questingknight,es_mercenary,es_knight")
+            end
+            H.truthy(items[set.HAT_ITEM_KEY].can_wield ~= items[set.SKIN_ITEM_KEY].can_wield,
+                "set items must not alias a mutable can_wield table")
+
+            settings.cos_gk_purpure_azure_share_mercenary = false
+            settings.cos_gk_purpure_azure_share_huntsman = true
+            set.sync_toggle()
+            H.equal(table.concat(items[set.HAT_ITEM_KEY].can_wield, ","),
+                "es_questingknight,es_huntsman,es_knight")
+            H.truthy(set.is_availability_setting("cos_gk_purpure_azure_share_huntsman"))
+            H.equal(set.is_availability_setting("unrelated_setting"), false)
+
+            settings.cos_gk_purpure_azure_enabled = false
+            set.sync_toggle()
+            for _, item in pairs(items) do H.equal(#item.can_wield, 0) end
+        end, settings)
+    end)
+
+    H.test("Grail Knight set sharing widgets are explicit and default off", function()
+        local data = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data.lua")
+        H.truthy(data:find('setting_id  = "cos_gk_purpure_azure_career_sharing_group"', 1, true))
+        for _, setting_id in ipairs({
+            "cos_gk_purpure_azure_share_mercenary",
+            "cos_gk_purpure_azure_share_huntsman",
+            "cos_gk_purpure_azure_share_foot_knight",
+        }) do
+            local start_at = assert(data:find('setting_id    = "' .. setting_id .. '"', 1, true))
+            local row = data:sub(start_at, start_at + 220)
+            H.truthy(row:find("default_value = false", 1, true), setting_id .. " must default off")
+            H.truthy(localization:find(setting_id .. " = {", 1, true), setting_id .. " localization missing")
+        end
+        H.truthy(entry:find("GK_SET.wire_fallback(LA_BRIDGE, name, career)", 1, true))
+        H.truthy(module:find("function M.wire_fallback(bridge, original_name, career_name)", 1, true))
+        H.truthy(module:find("or vanilla", 1, true),
+            "unknown career must not leave a custom key on the wire")
+        H.truthy(entry:find("_la_vanilla_fallback(item_name, _wire_career_for_player(player))", 1, true))
+        H.truthy(entry:find("_la_vanilla_fallback(item.key, _wire_career_for_player(player))", 1, true))
+        H.truthy(entry:find("_la_substitute_name(orig, career)", 1, true))
+        H.truthy(entry:find("_la_vanilla_fallback(bid, career_name)", 1, true),
+            "persisted loadout clones must use the exact career fallback")
+        H.truthy(entry:find("_la_vanilla_fallback(raw, career_name)", 1, true),
+            "loadout item lookup must use the exact career fallback")
+        H.truthy(entry:find("_la_vanilla_fallback(la_id, career)", 1, true),
+            "hot-join replay must use the exact wearer career fallback")
+        H.truthy(entry:find("_wire_career_for_player(lp)", 1, true),
+            "self-rebroadcast must use the exact local player career fallback")
     end)
 
     H.test("Grail Knight set keeps authored names and descriptions synchronized", function()
@@ -63,6 +171,9 @@ return function(H, repo_root)
     end)
 
     H.test("Grail Knight set uses per-unit texture bindings and wire fallbacks", function()
+        H.truthy(module:find("scripts/mods/cosmetics_tweaker/_lib_resource_residency", 1, true))
+        H.truthy(module:find("texture_bind_resident", 1, true))
+        H.truthy(module:find("textures_ready(slots, textures", 1, true))
         H.truthy(module:find("pcall(Unit.set_texture_for_materials", 1, true))
         H.truthy(module:find("bridge.backend_to_vanilla[row[1]] = row[3]", 1, true))
         H.truthy(module:find("bridge.custom_variants[row[2]] = true", 1, true))
@@ -96,12 +207,15 @@ return function(H, repo_root)
 
     H.test("Grail Knight outfit replays on each inventory hero mesh", function()
         H.truthy(module:find("function M.apply_armor_to_hero_preview(previewer)", 1, true))
+        H.truthy(module:find("function M.apply_armor_to_score_preview(previewer, variant_key)", 1, true))
         H.truthy(module:find("previewer.character_unit_skin_data or (loading and loading.skin_data)", 1, true))
         H.truthy(module:find("previewer.character_unit_hidden_after_spawn", 1, true))
         H.truthy(module:find("previewer.character_unit_visible ~= true", 1, true))
-        H.truthy(module:find("previewer._cos_gk_armor_applied_mesh == mesh", 1, true))
-        H.truthy(module:find("previewer._cos_gk_armor_applied_mesh = mesh", 1, true))
+        H.truthy(module:find("previewer[mesh_cache_field] == mesh", 1, true))
+        H.truthy(module:find("previewer[mesh_cache_field] = mesh", 1, true))
         H.truthy(entry:find("GK_SET.apply_armor_to_hero_preview(self)", 1, true))
+        H.truthy(entry:find("GK_SET.apply_armor_to_score_preview(self, self._cos_score_armor_variant)", 1, true))
+        H.truthy(entry:find("hero_previewer._cos_score_armor_variant = nil", 1, true))
     end)
 
     H.test("Grail Knight inventory hero replay is bounded and mesh-aware", function()
@@ -155,7 +269,104 @@ return function(H, repo_root)
             H.equal(writes, 18, "view/career respawn must repaint its new mesh once")
             H.equal(set.PREVIEW_REPLAY_CONTRACT.apply_after_visibility, true)
             H.equal(set.PREVIEW_REPLAY_CONTRACT.invalidate_while_hidden, true)
-            H.equal(set.PREVIEW_REPLAY_CONTRACT.cache_identity, "mesh_unit")
+            H.equal(set.PREVIEW_REPLAY_CONTRACT.cache_identity, "mesh_unit+variant_key")
+            H.equal(set.PREVIEW_REPLAY_CONTRACT.score_uses_same_visibility_boundary, true)
+        end)
+    end)
+
+    H.test("authored outfit score preview waits for visibility and clears by mesh and variant", function()
+        with_loaded_module(function(set)
+            local mesh_a, mesh_b = {}, {}
+            local writes = 0
+            _G.Application = { can_get = function(kind) return kind == "texture" end }
+            _G.Unit = {
+                alive = function(unit) return unit == mesh_a or unit == mesh_b end,
+                has_data = function() return false end,
+                num_meshes = function() return 1 end,
+                mesh = function(unit) return unit end,
+            }
+            _G.Mesh = {
+                has_material = function(_, name)
+                    return name == "mtr_outfit" or name == "mtr_outfit_ds"
+                end,
+                material = function(mesh, name) return { mesh = mesh, name = name } end,
+            }
+            _G.Material = { set_texture = function() writes = writes + 1 end }
+            local previewer = {
+                mesh_unit = mesh_a,
+                character_unit_hidden_after_spawn = true,
+                character_unit_visible = false,
+            }
+            H.equal(set.apply_armor_to_score_preview(previewer, set.SKIN_VARIANT_KEY), false)
+            H.equal(writes, 0)
+            previewer.character_unit_hidden_after_spawn = false
+            previewer.character_unit_visible = true
+            H.truthy(set.apply_armor_to_score_preview(previewer, set.SKIN_VARIANT_KEY))
+            H.equal(writes, 6)
+            H.truthy(set.apply_armor_to_score_preview(previewer, set.SKIN_VARIANT_KEY))
+            H.equal(writes, 6, "same score mesh and authored identity must remain bounded")
+            previewer.character_unit_visible = false
+            H.equal(set.apply_armor_to_score_preview(previewer, set.SKIN_VARIANT_KEY), false)
+            previewer.character_unit_visible = true
+            H.truthy(set.apply_armor_to_score_preview(previewer, set.SKIN_VARIANT_KEY))
+            H.equal(writes, 12, "hide/show must replay after donor material work")
+            previewer.mesh_unit = mesh_b
+            H.truthy(set.apply_armor_to_score_preview(previewer, set.SKIN_VARIANT_KEY))
+            H.equal(writes, 18, "replacement score mesh must paint once")
+            H.equal(set.apply_armor_to_score_preview(previewer, "not_an_authored_skin"), false)
+            H.equal(writes, 18, "unknown score identity must fail closed")
+        end)
+    end)
+
+    H.test("authored outfit preview cache repaints a new variant on the same mesh", function()
+        with_loaded_module(function(set)
+            local first_skin, second_skin, mesh = {}, {}, {}
+            local writes = 0
+            _G.Cosmetics = { [set.SKIN_ITEM_KEY] = first_skin, second_skin = second_skin }
+            _G.Application = { can_get = function(kind) return kind == "texture" end }
+            _G.Unit = {
+                alive = function(unit) return unit == mesh end,
+                has_data = function() return false end,
+                num_meshes = function() return 1 end,
+                mesh = function(unit) return unit end,
+            }
+            _G.Mesh = {
+                has_material = function(_, name)
+                    return name == "mtr_outfit" or name == "mtr_outfit_ds"
+                end,
+                material = function(unit, name) return { unit = unit, name = name } end,
+            }
+            _G.Material = { set_texture = function() writes = writes + 1 end }
+            set.add_outfit_provider({
+                PROVIDER_ID = "test_second_variant",
+                ITEM_LOCALIZATION = {},
+                resolve_skin_variant = function(skin)
+                    return skin == second_skin and "second_variant" or nil
+                end,
+                resolve_variant = function(key)
+                    if key ~= "second_variant" then return nil end
+                    return {
+                        swap_hand = "armor",
+                        textures = { "second_d", "second_c", "second_n" },
+                        textures_fps = { "second_1d", "second_1c", "second_1n" },
+                    }
+                end,
+                register_all = function() return true end,
+                sync_toggle = function() return true end,
+            })
+            local previewer = {
+                character_unit_skin_data = first_skin,
+                mesh_unit = mesh,
+                character_unit_hidden_after_spawn = false,
+                character_unit_visible = true,
+            }
+            H.truthy(set.apply_armor_to_hero_preview(previewer))
+            H.equal(writes, 6)
+            previewer.character_unit_skin_data = second_skin
+            H.truthy(set.apply_armor_to_hero_preview(previewer))
+            H.equal(writes, 12, "same mesh must repaint when authored skin identity changes")
+            H.truthy(set.apply_armor_to_hero_preview(previewer))
+            H.equal(writes, 12, "same mesh and variant must remain bounded")
         end)
     end)
 
@@ -209,6 +420,138 @@ return function(H, repo_root)
             _G.Material = { set_texture = function() writes = writes + 1 end }
             H.equal(set.apply_variant_to_unit(set.SKIN_VARIANT_KEY, unit, "third_person"), false)
             H.equal(writes, 0)
+        end)
+    end)
+
+    H.test("authored outfit providers reject malformed, duplicate, and excess registrations", function()
+        with_loaded_module(function(set)
+            local function provider(id)
+                return {
+                    PROVIDER_ID = id,
+                    ITEM_LOCALIZATION = {},
+                    resolve_variant = function() return nil end,
+                    resolve_skin_variant = function() return nil end,
+                    register_all = function() return true end,
+                    sync_toggle = function() return true end,
+                }
+            end
+            H.equal(set.add_outfit_provider({}), false)
+            local first = provider("test_provider_1")
+            H.truthy(set.add_outfit_provider(first))
+            H.truthy(set.has_outfit_provider("test_provider_1"))
+            H.equal(set.add_outfit_provider(first), false, "duplicate identity must not grow the registry")
+            H.equal(set.add_outfit_provider(provider("test_provider_1")), false)
+            for i = 2, 16 do H.truthy(set.add_outfit_provider(provider("test_provider_" .. i))) end
+            H.equal(#set._outfit_providers, 16)
+            H.equal(set.add_outfit_provider(provider("test_provider_17")), false)
+            H.equal(#set._outfit_providers, 16)
+        end)
+    end)
+
+    H.test("Grail Knight texture residency drift fails closed before any unit write", function()
+        with_loaded_module(function(set)
+            local unit, writes = {}, 0
+            _G.Application = {
+                can_get = function(_, path) return path ~= set.TEXTURES.shield[2] end,
+            }
+            _G.Unit = {
+                alive = function(candidate) return candidate == unit end,
+                set_texture_for_materials = function() writes = writes + 1 end,
+            }
+            H.equal(set.apply_variant_to_unit(set.SHIELD_VARIANT_KEY, unit, "network_husk"), false)
+            H.equal(writes, 0)
+        end)
+    end)
+
+    H.test("Grail Knight armor texture residency drift fails closed before any material write", function()
+        with_loaded_module(function(set)
+            local unit, writes = {}, 0
+            _G.Application = {
+                can_get = function(_, path) return path ~= set.TEXTURES.skin_3p[3] end,
+            }
+            _G.Unit = {
+                alive = function(candidate) return candidate == unit end,
+                has_data = function() return false end,
+                num_meshes = function() return 1 end,
+                mesh = function() return { materials = { mtr_outfit = true, mtr_outfit_ds = true } } end,
+            }
+            _G.Mesh = {
+                has_material = function(mesh, name) return mesh.materials[name] == true end,
+                material = function(_, name) return { name = name } end,
+            }
+            _G.Material = { set_texture = function() writes = writes + 1 end }
+            H.equal(set.apply_variant_to_unit(set.SKIN_VARIANT_KEY, unit, "third_person"), false)
+            H.equal(writes, 0)
+        end)
+    end)
+
+    H.test("Grail Knight missing residency helper fails closed before native texture writes", function()
+        local saved = {
+            get_mod = _G.get_mod,
+            Application = _G.Application,
+            Unit = _G.Unit,
+        }
+        _G.get_mod = function() return { get = function() return true end } end
+        local path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_grail_knight_set.lua"
+        local set = assert(loadfile(path))()
+        local unit, writes = {}, 0
+        _G.Application = { can_get = function() return true end }
+        _G.Unit = {
+            alive = function(candidate) return candidate == unit end,
+            set_texture_for_materials = function() writes = writes + 1 end,
+        }
+        local ok, err = pcall(function()
+            H.equal(set.apply_variant_to_unit(set.SHIELD_VARIANT_KEY, unit, "network_husk"), false)
+            H.equal(writes, 0)
+        end)
+        _G.get_mod = saved.get_mod
+        _G.Application = saved.Application
+        _G.Unit = saved.Unit
+        if not ok then error(err, 0) end
+    end)
+
+    H.test("authored outfit residency diagnostics are explicitly bounded", function()
+        with_loaded_module(function(set)
+            local unit, reports = {}, 0
+            _G.printf = function() reports = reports + 1 end
+            _G.Application = { can_get = function() return false end }
+            _G.Unit = {
+                alive = function(candidate) return candidate == unit end,
+                set_texture_for_materials = function() error("must not write") end,
+            }
+            for i = 1, 80 do
+                H.equal(set.apply_variant_to_unit(set.SHIELD_VARIANT_KEY, unit,
+                    "adversarial_surface_" .. i .. string.rep("x", 512)), false)
+            end
+            H.equal(set._residency_diag_count, 24)
+            H.equal(reports, 24)
+        end)
+    end)
+
+    H.test("provider-specific surface evidence is exact and deduplicated", function()
+        with_loaded_module(function(set)
+            local unit, reports = {}, {}
+            _G.printf = function(format, ...)
+                reports[#reports + 1] = string.format(format, ...)
+            end
+            _G.Application = { can_get = function() return true end }
+            _G.Unit = {
+                alive = function(candidate) return candidate == unit end,
+                set_texture_for_materials = function() end,
+            }
+            local variant = {
+                swap_hand = "left_hand_unit",
+                textures = { "diffuse", "combined", "normal" },
+                issue = 656,
+                variant_key = "cos_fk_reikland_griffin_skin_variant",
+            }
+            H.truthy(set.apply_variant_to_unit(variant, unit, "remote_husk"))
+            H.truthy(set.apply_variant_to_unit(variant, unit, "remote_husk"))
+            H.equal(#reports, 1)
+            H.truthy(reports[1]:find("[cos:656] applied", 1, true))
+            H.truthy(reports[1]:find("variant=cos_fk_reikland_griffin_skin_variant", 1, true))
+            H.truthy(reports[1]:find("surface=remote_husk", 1, true))
         end)
     end)
 

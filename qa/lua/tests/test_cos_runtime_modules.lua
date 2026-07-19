@@ -61,14 +61,30 @@ return function(H, repo_root)
             dbg_alert = function() end, ui_dump = {}, custom_skin_keys = {},
             offhand_preload_lifecycle = {}, mh_embed = {},
             la_instance_policy = {}, husk_identity = {},
+            issue704_picker_family = function(surface, family)
+                local expected = {
+                    vanilla = "cwv_es_sword_and_mace",
+                    right_hand_unit = "es_1h_sword",
+                    left_hand_unit = "es_1h_mace",
+                }
+                return expected[surface] == family
+            end,
         }
         local module = assert(loadfile(base .. "_cos_runtime_checks.lua"))()
         module.install(mod, function(name, fn)
             checks[#checks + 1] = { name = name, fn = fn }
         end, deps)
-        H.equal(#checks, 53)
+        H.equal(#checks, 57)
         H.equal(checks[1].name, "cos_la_reconcile_and_pull_wired")
         H.equal(checks[2].name, "cos_replay_reconciler_wired")
+        local score_identity_index, score_replay_index
+        for index, check in ipairs(checks) do
+            if check.name == "cos_la_score_screen_apply_wired" then score_identity_index = index end
+            if check.name == "issue730_score_armor_visibility_replay" then score_replay_index = index end
+        end
+        H.truthy(score_identity_index)
+        H.equal(score_replay_index, score_identity_index + 1,
+            "score appearance replay must follow exact wearer identity")
         H.equal(checks[#checks].name, "mh_package_single_reference")
         H.equal(#commands, 1)
         H.equal(commands[1].name, "verify_gk_set")

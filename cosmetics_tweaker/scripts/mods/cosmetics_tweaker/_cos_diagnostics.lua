@@ -17,6 +17,175 @@ local COS = mod._cos
 local _flush_log = COS.flush_log
 local _is_unit_alive = function(u) return type(u) == "userdata" and pcall(Unit.alive, u) and Unit.alive(u) end
 
+-- #704: the authored Sword+Mace catalog is intentionally asymmetric. Vanilla
+-- row 1 owns the generated paired skin, while the independent component pools
+-- must contain Empire swords on the right and Empire maces on the left. The
+-- reported Bardin hammer is not present in those declarations, so capture the
+-- exact picker products at their common _setup_illusions seam rather than
+-- guessing at a second filter. This classifier is also injected into the late
+-- runtime checks as a pure family boundary.
+local _ISSUE704_ITEM_TYPE = "cwv_es_sword_and_mace"
+local _ISSUE704_ENTRY_CAP = 56
+local _ISSUE704_CAPTURE_CAP = 4
+local _ISSUE704_SIGNATURE_PART_CAP = 64
+local _ISSUE704_VALUE_BYTE_CAP = 128
+local _issue704_seen = {}
+local _issue704_capture_count = 0
+
+local function _issue704_value(value)
+    local text = tostring(value)
+    if #text > _ISSUE704_VALUE_BYTE_CAP then
+        return string.sub(text, 1, _ISSUE704_VALUE_BYTE_CAP) .. "..."
+    end
+    return text
+end
+
+local function _issue704_expected_family(surface, provider_contract)
+    if surface == "vanilla" then return _ISSUE704_ITEM_TYPE end
+    local family = type(provider_contract) == "table"
+        and provider_contract[_ISSUE704_ITEM_TYPE] or nil
+    local spec = type(family) == "table" and family[surface] or nil
+    return type(spec) == "table" and spec.matching_item_key or nil
+end
+
+COS.classify_issue704_picker_family = function(surface, matching_item_key, provider_contract)
+    local expected = _issue704_expected_family(surface, provider_contract)
+    if not expected then return false, nil, "unknown-surface" end
+    if matching_item_key == expected then return true, expected, "exact-family" end
+    if matching_item_key == nil or matching_item_key == "" then
+        return false, expected, "missing-family"
+    end
+    return false, expected, "foreign-family"
+end
+
+local function _issue704_skin_data(skin_key, item_master_list, weapon_skins)
+    local data = type(item_master_list) == "table" and rawget(item_master_list, skin_key)
+    if type(data) ~= "table" and type(weapon_skins) == "table" then
+        local skins = weapon_skins.skins
+        local candidate = type(skins) == "table" and rawget(skins, skin_key)
+        data = type(candidate) == "table" and (candidate.data or candidate) or nil
+    end
+    return type(data) == "table" and data or nil
+end
+
+COS.capture_issue704_picker = function(context)
+    if type(context) ~= "table" or context.weapon_key ~= _ISSUE704_ITEM_TYPE then
+        return false, "out-of-scope"
+    end
+    local emitter = rawget(_G, "printf")
+    if type(emitter) ~= "function" then return false, "printf-unavailable" end
+
+    local widgets = type(context.illusion_widgets) == "table"
+        and context.illusion_widgets or {}
+    local pools = type(context.hand_pools) == "table" and context.hand_pools or {}
+    local item_master_list = context.item_master_list or rawget(_G, "ItemMasterList")
+    local weapon_skins = context.weapon_skins or rawget(_G, "WeaponSkins")
+    local provider_contract = context.provider_contract
+        or mod._cwv_dual_offhand_contract
+    local signature_parts = {}
+    local signature_truncated = false
+    local function signature_add(value)
+        if #signature_parts >= _ISSUE704_SIGNATURE_PART_CAP then
+            signature_truncated = true
+            return false
+        end
+        signature_parts[#signature_parts + 1] = _issue704_value(value)
+        return true
+    end
+    signature_add(context.backend_id or "nil")
+    signature_add(context.current_skin or "nil")
+    signature_add(#widgets)
+    for _, widget in ipairs(widgets) do
+        if not signature_add(widget and widget.content
+                and widget.content.skin_key or "nil") then break end
+    end
+    for _, hand_field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+        local pool = pools[hand_field]
+        signature_add(hand_field .. ":" .. tostring(
+            type(pool) == "table" and #pool or 0))
+        for _, option in ipairs(type(pool) == "table" and pool or {}) do
+            if not signature_add(option.source_skin_key or option.skin_key
+                    or option.unit or "nil") then break end
+        end
+    end
+    local signature = table.concat(signature_parts, "|")
+    if _issue704_seen[signature] then return false, "duplicate" end
+    if _issue704_capture_count >= _ISSUE704_CAPTURE_CAP then return false, "capture-cap" end
+    _issue704_seen[signature] = true
+    _issue704_capture_count = _issue704_capture_count + 1
+
+    local emitted, inspected, suspects = 0, 0, 0
+    local truncated = false
+    local function emit(format, ...)
+        if emitted >= _ISSUE704_ENTRY_CAP then return false end
+        emitted = emitted + 1
+        pcall(emitter, format, ...)
+        return true
+    end
+    emit("[cos:704] header capture=%d item=%s backend_id=%s current_skin=%s widgets=%d right=%d left=%d",
+        _issue704_capture_count, tostring(context.weapon_key),
+        _issue704_value(context.backend_id), _issue704_value(context.current_skin), #widgets,
+        type(pools.right_hand_unit) == "table" and #pools.right_hand_unit or 0,
+        type(pools.left_hand_unit) == "table" and #pools.left_hand_unit or 0)
+
+    for index, widget in ipairs(widgets) do
+        if emitted >= _ISSUE704_ENTRY_CAP - 1 then truncated = true; break end
+        local skin_key = widget and widget.content and widget.content.skin_key
+        local data = skin_key and _issue704_skin_data(
+            skin_key, item_master_list, weapon_skins) or nil
+        local family = data and data.matching_item_key
+        local accepted, expected, reason = COS.classify_issue704_picker_family(
+            "vanilla", family, provider_contract)
+        inspected = inspected + 1
+        if not accepted then suspects = suspects + 1 end
+        if not emit("[cos:704] row=vanilla index=%d skin=%s family=%s expected=%s decision=%s reason=%s right=%s left=%s",
+                index, _issue704_value(skin_key), _issue704_value(family),
+                _issue704_value(expected),
+                accepted and "ALLOW" or "SUSPECT", tostring(reason),
+                _issue704_value(data and data.right_hand_unit),
+                _issue704_value(data and data.left_hand_unit)) then break end
+    end
+
+    for _, hand_field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+        if truncated then break end
+        local pool = pools[hand_field]
+        for index, option in ipairs(type(pool) == "table" and pool or {}) do
+            if emitted >= _ISSUE704_ENTRY_CAP - 1 then truncated = true; break end
+            if option.follow_main then
+                inspected = inspected + 1
+                if not emit("[cos:704] row=component hand=%s index=%d decision=ALLOW reason=follow-main",
+                        hand_field, index) then break end
+            else
+                local skin_key = option.source_skin_key or option.skin_key
+                local data = skin_key and _issue704_skin_data(
+                    skin_key, item_master_list, weapon_skins) or nil
+                local family = data and data.matching_item_key
+                local accepted, expected, reason = COS.classify_issue704_picker_family(
+                    hand_field, family, provider_contract)
+                inspected = inspected + 1
+                if not accepted then suspects = suspects + 1 end
+                if not emit("[cos:704] row=component hand=%s index=%d skin=%s family=%s expected=%s decision=%s reason=%s unit=%s name=%s",
+                        hand_field, index, _issue704_value(skin_key),
+                        _issue704_value(family), _issue704_value(expected),
+                        accepted and "ALLOW" or "SUSPECT", tostring(reason),
+                        _issue704_value(option.unit), _issue704_value(option.name)) then break end
+            end
+        end
+    end
+    emit("[cos:704] summary inspected=%d suspects=%d emitted=%d truncated=%s signature_truncated=%s signature_bytes=%d",
+        inspected, suspects, emitted + 1,
+        tostring(truncated), tostring(signature_truncated), #signature)
+    return true, suspects
+end
+
+COS.capture_issue704_setup = function(weapon_key, item, current_skin, widgets, pools)
+    return COS.capture_issue704_picker({
+        weapon_key = weapon_key, backend_id = item and item.backend_id,
+        current_skin = current_skin, illusion_widgets = widgets, hand_pools = pools,
+        provider_contract = mod._cwv_dual_offhand_contract,
+    })
+end
+
 mod:command("flush_log", "Force-flush the engine console log to disk", function()
     _flush_log()
     mod:echo("[flush_log] attempted")
