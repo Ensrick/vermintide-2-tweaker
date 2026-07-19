@@ -1555,7 +1555,10 @@ _rt_register("wire_skin_null_all_senders", function()
     if type(surfaces) ~= "table" then
         return "mod._cos_skin_wire_surfaces flag table missing (issue 421 senders unhooked?)"
     end
-    for _, key in ipairs({ "game_object_initialized", "spawn_resynced_loadout", "hot_join_sync" }) do
+    for _, key in ipairs({
+        "game_object_initialized", "spawn_resynced_loadout", "hot_join_sync",
+        "update_cosmetic_slot",
+    }) do
         if not surfaces[key] then
             return "skin-axis wire-null not registered on sender surface: " .. key
         end
@@ -1571,6 +1574,16 @@ _rt_register("wire_skin_null_all_senders", function()
     local FAKE_CUSTOM = "_rt_fake_custom_skin_key_resync"
     local had = _custom_skin_keys[FAKE_CUSTOM]
     _custom_skin_keys[FAKE_CUSTOM] = true
+    if type(mod._cos_wire_safe_custom_skin) ~= "function" then
+        if not had then _custom_skin_keys[FAKE_CUSTOM] = nil end
+        return "GameSession custom-skin wire policy missing"
+    end
+    local game_session_skin, game_session_subbed = mod._cos_wire_safe_custom_skin(
+        FAKE_CUSTOM, "regression update_cosmetic_slot")
+    if game_session_skin ~= "n/a" or not game_session_subbed then
+        if not had then _custom_skin_keys[FAKE_CUSTOM] = nil end
+        return "custom skin was not coerced to n/a for update_cosmetic_slot GameSession sync"
+    end
     local equipment_to_spawn = { slot_id = "slot_melee", skin = FAKE_CUSTOM }
     local skin_at_send
     local ok, err = pcall(mod._cos_wire_null_custom_skins, { equipment_to_spawn }, function()

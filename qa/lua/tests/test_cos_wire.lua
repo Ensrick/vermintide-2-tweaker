@@ -81,6 +81,7 @@ return function(H, repo_root)
         H.truthy(hooks["CosmeticUtils:get_weapon_skin_name"])
         H.truthy(mock_mod._cos_skin_wire_surfaces.get_weapon_skin_name)
         H.equal(type(mock_mod._cos_wire_safe_get_weapon_skin_name), "function")
+        H.equal(type(mock_mod._cos_wire_safe_custom_skin), "function")
 
         H.truthy(wire.install(mock_mod))
         local count = 0
@@ -110,6 +111,46 @@ return function(H, repo_root)
         H.equal(b, "b")
         H.equal(c, "c")
         H.equal(d, "d")
+    end)
+
+    H.test("Cosmetics wire policy owns the GameSession custom-skin substitution", function()
+        local mock_mod = load_wire()
+        local safe, subbed = mock_mod._cos_wire_safe_custom_skin("ct_test_skin", "offline_test")
+        H.equal(safe, "n/a")
+        H.equal(subbed, true)
+
+        local vanilla, vanilla_subbed = mock_mod._cos_wire_safe_custom_skin(
+            "wh_sword_skin_01", "offline_test")
+        H.equal(vanilla, "wh_sword_skin_01")
+        H.equal(vanilla_subbed, false)
+
+        local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+        H.truthy(entry:find("mod._cos_wire_safe_custom_skin(", 1, true))
+        H.truthy(entry:find("mod._cos_skin_wire_surfaces.update_cosmetic_slot = true", 1, true))
+    end)
+
+    H.test("Cosmetics wire wrapper restores custom skin when vanilla raises", function()
+        local mock_mod = load_wire()
+        local custom = { skin = "ct_test_skin" }
+        local ok, err = pcall(mock_mod._cos_wire_null_custom_skins, { custom }, function()
+            error("synthetic vanilla encode failure")
+        end, "offline_error_test")
+        H.equal(ok, false)
+        H.truthy(tostring(err):find("synthetic vanilla encode failure", 1, true))
+        H.equal(custom.skin, "ct_test_skin")
+    end)
+
+    H.test("Cosmetics #421 diagnostic covers catalog policy sender surfaces and live slot", function()
+        local diagnostics = read(
+            "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diagnostics.lua")
+        H.truthy(diagnostics:find('mod:command("cos_421_diag"', 1, true))
+        H.truthy(diagnostics:find("[cos:421:diag] summary", 1, true))
+        for _, marker in ipairs({
+            "catalog key=", "surface=", "diagnostic GameSession",
+            "diagnostic rpc_add_equipment", "live slot=",
+        }) do
+            H.truthy(diagnostics:find(marker, 1, true))
+        end
     end)
 
     H.test("Cosmetics receiver floor degrades unknown weapon skin index to nil", function()

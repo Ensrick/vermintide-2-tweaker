@@ -13,6 +13,15 @@
 local M = {}
 local _unknown_weapon_skin_ids = {}
 
+local function _wire_safe_custom_skin(custom_skin_keys, skin_name, context)
+    if skin_name and custom_skin_keys[skin_name] then
+        pcall(printf, "[cos:421] wire skin null (%s): %s -> n/a",
+            tostring(context or "?"), tostring(skin_name))
+        return "n/a", true
+    end
+    return skin_name, false
+end
+
 -- v0.9.75-dev: pure wrapper around the shipped sender boundary so the runtime
 -- regression suite can drive the exact null-and-restore path without a network
 -- session. Preserve up to four vanilla return values.
@@ -28,11 +37,17 @@ local function _wire_null_custom_skins(custom_skin_keys, slots, send_fn, context
                 tostring(context or "?"), tostring(skin))
         end
     end
-    local r1, r2, r3, r4 = send_fn()
+    -- Restore the owner slot even when a different vanilla encode (for example
+    -- item_names) raises. The wire error still propagates, but it cannot leave
+    -- the exact local instance permanently stripped of its selected illusion.
+    local ok, r1, r2, r3, r4 = pcall(send_fn)
     if saved then
         for slot_data, skin in pairs(saved) do
             slot_data.skin = skin
         end
+    end
+    if not ok then
+        error(r1, 0)
     end
     return r1, r2, r3, r4
 end
@@ -86,6 +101,9 @@ function M.install(owner)
 
     -- These established mod fields are frozen regression/documentation surface.
     owner._cos_wire_null_custom_skins = null_custom_skins
+    owner._cos_wire_safe_custom_skin = function(skin_name, context)
+        return _wire_safe_custom_skin(custom_skin_keys, skin_name, context)
+    end
     owner._cos_wire_safe_get_weapon_skin_name = _safe_get_weapon_skin_name
     owner._cos_skin_wire_surfaces = {}
 
