@@ -72,8 +72,15 @@ then regenerate. Do not hand-edit the doc.
 
 ## How the TEST METHOD is extracted
 
-Per issue, every comment is scored and the highest-scoring one wins (ties break to the
-most recent):
+Per issue, comments are scanned newest-first. The newest runnable comment with an
+explicit method heading wins. Recognized replacement boundaries include `TEST METHOD`,
+`Diagnostic method`, `Verification method`, `Co-op verification`, `Verification still
+required`, and headings qualified as `authoritative`, `current`, `corrected`,
+`replacement`, or `next`. A deployed-floor/banner correction that says the procedure
+above remains authoritative does not replace that runnable procedure.
+
+If an older issue has no explicit method heading, every comment is scored and the
+highest-scoring fallback wins (ties break to the most recent):
 
 - `+` for `Test method`, an uppercase `TEST`, `test with/as/in/(`, `to verify`,
   `pass =`, `expected:`, numbered steps, and a `[mod:marker]` log tag.

@@ -56,21 +56,40 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 # Heuristics (tune these, then regenerate - never hand-edit the output docs)
 # ---------------------------------------------------------------------------
 
-# Pick the single best test-method comment. Scans newest->oldest; on a score tie the
-# newest wins (strict -gt from newest-first). Returns $null if nothing clears threshold.
+# Explicit method headings are an issue author's authoritative replacement boundary.
+# Keep this narrow: deployed-floor/banner corrections that explicitly preserve the
+# procedure above must not replace that runnable procedure.
+function Test-VtExplicitMethodComment {
+    param([string]$Body)
+    if ([string]::IsNullOrWhiteSpace($Body)) { return $false }
+    return $Body -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:' +
+        'test\s+method\b|' +
+        '(?:diagnostic|verification)\s+method\b|' +
+        '(?:solo|co-?op|two-player)\s+verification\s*(?:\([^\r\n)]*\))?\s*:|' +
+        'verification\s*\([^\r\n)]*\)\s*:|' +
+        'verification\s+still\s+required\b|' +
+        '(?:authoritative|current|corrected|replacement|next)\b[^\r\n]{0,100}\b(?:method|test)\b' +
+        ')'
+}
+
+# Pick the newest explicitly headed runnable method. This is the lifecycle-safe
+# contract: a current diagnostic method must supersede an older TEST METHOD even when
+# the older comment has more numbered steps or formatting. If no explicit heading
+# exists, retain the legacy heuristic as a fallback for older issue history.
 function Get-VtMethodComment {
     param($Comments)
     if (-not $Comments -or @($Comments).Count -eq 0) { return $null }
     $arr = @($Comments)
+    for ($i = $arr.Count - 1; $i -ge 0; $i--) {
+        $b = [string]$arr[$i].body
+        if (Test-VtExplicitMethodComment $b) { return $b }
+    }
+
     $best = $null; $bestScore = 0
     for ($i = $arr.Count - 1; $i -ge 0; $i--) {
         $b = [string]$arr[$i].body
         if ([string]::IsNullOrWhiteSpace($b)) { continue }
         $score = 0
-        # An explicit replacement must outrank an older, more heavily formatted
-        # method. This is common when a tester corrects stale instructions after
-        # deployment without deleting history from the issue.
-        if ($b -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:corrected|authoritative|replacement)\s+test\s+method') { $score += 10 }
         if ($b -match '(?i)test\s+method')                                   { $score += 5 }
         if ($b -cmatch '\bTEST\b')                                           { $score += 4 }
         if ($b -match '(?i)test\s+(with|as|in|solo|\()')                     { $score += 3 }
@@ -89,18 +108,56 @@ function Get-VtMethodComment {
     if ($bestScore -ge 3) { return $best } else { return $null }
 }
 
+# A correction after the selected method may update only its deployed version/banner
+# while explicitly preserving the runnable procedure. Keep it as row context instead
+# of letting it replace the method.
+function Get-VtMethodCorrection {
+    param($Comments, [string]$Method)
+    if (-not $Comments -or [string]::IsNullOrWhiteSpace($Method)) { return $null }
+    $arr = @($Comments)
+    $methodIndex = -1
+    for ($i = $arr.Count - 1; $i -ge 0; $i--) {
+        if ([string]$arr[$i].body -ceq $Method) { $methodIndex = $i; break }
+    }
+    if ($methodIndex -lt 0) { return $null }
+    for ($i = $arr.Count - 1; $i -gt $methodIndex; $i--) {
+        $b = [string]$arr[$i].body
+        if ($b -match '(?im)^\s*(?:#{1,6}\s+)?(?:verification\s+banner|current\s+deployed-floor)\s+correction\b') {
+            return $b
+        }
+    }
+    return $null
+}
+
+function Get-VtCorrectionVersion {
+    param([string]$Correction)
+    if ([string]::IsNullOrWhiteSpace($Correction)) { return $null }
+    if ($Correction -match '(?im)^\s*\|\s*Stream\s*\|') { return $null }
+    $versions = @([regex]::Matches($Correction, '(?i)\bv?(\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?)\b') |
+        ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
+    # Correction prose puts the deployed floor first; later versions commonly name
+    # a source-only or explicitly rejected build.
+    if ($versions.Count -ge 1) { return $versions[0] }
+    return $null
+}
+
 # One-line "what to do" from the method body; falls back to the issue title.
 function Get-VtCheckLine {
-    param([string]$Method, [string]$Title)
+    param([string]$Method, [string]$Title, [string]$CorrectionVersion)
     if ([string]::IsNullOrWhiteSpace($Method)) { return $Title }
     $m = $Method -replace '\*\*', '' -replace '`', ''
     $picked = $null
-    $steps = [regex]::Matches($m, '(?ms)^\s*\d+\.\s*(.+?)(?=(\r?\n\s*\d+\.)|\z)')
+    $stepSource = $m
+    $requiredCasesHeading = [regex]::Match($m, '(?im)^\s*Required cases\s*$')
+    if ($requiredCasesHeading.Success) {
+        $stepSource = $m.Substring($requiredCasesHeading.Index + $requiredCasesHeading.Length)
+    }
+    $steps = [regex]::Matches($stepSource, '(?ms)^\s*\d+\.\s*(.+?)(?=(\r?\n\s*\d+\.)|\z)')
     if ($steps.Count -gt 0) {
         foreach ($s in $steps) {
             $t = ($s.Groups[1].Value -replace '\s+', ' ').Trim()
             # skip the "load the newest log / confirm [xx:LOAD]" boilerplate step
-            if ($t -match '(?i)(newest|latest).*log|\[[a-z]+:LOAD\]|confirm.*version|load the .*log') { continue }
+            if ($t -match '(?i)(newest|latest|newly generated).*log|\[[a-z][a-z0-9_]*:LOAD\]|confirm.*version|load the .*log') { continue }
             if ($t.Length -lt 8) { continue }
             $picked = $t; break
         }
@@ -109,6 +166,7 @@ function Get-VtCheckLine {
     else {
         $line = ($m -replace '\r?\n', ' ')
         if     ($line -match '(?i)\bTEST\b\s*(\([^)]*\))?\s*:?\s*(.+)$') { $picked = $Matches[2] }
+        elseif ($line -match '(?i)\b(?:solo|co-?op|two-player)?\s*verification\s*(?:\([^)]*\))?\s*:\s*(.+)$') { $picked = $Matches[1] }
         elseif ($line -match '(?i)to\s+verify[,:]?\s*(.+)$')            { $picked = $Matches[1] }
         else                                                            { $picked = $line }
         $picked = ($picked -replace '\s+', ' ').Trim()
@@ -121,17 +179,33 @@ function Get-VtCheckLine {
         $picked = ($picked -replace '\s+', ' ').Trim()
     }
     if ([string]::IsNullOrWhiteSpace($picked) -or $picked.Length -lt 6) { $picked = $Title }
+    if ($CorrectionVersion) {
+        $picked = $picked -replace '(?i)\bv?\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?\b', ('v' + $CorrectionVersion)
+    }
     if ($picked.Length -gt 170) { $picked = $picked.Substring(0, 167).TrimEnd() + '...' }
     return $picked
 }
 
 # Expected evidence: log markers named in the method + a pass/expected phrase.
 function Get-VtEvidence {
-    param([string]$Method)
+    param([string]$Method, [string]$Correction, [string]$CorrectionVersion)
     if ([string]::IsNullOrWhiteSpace($Method)) { return 'no crash; behavior matches the shipped fix' }
     $parts = @()
-    $markers = [regex]::Matches($Method, '\[[a-z][a-z0-9_]*:[A-Za-z0-9_.\-]+\]') |
-        ForEach-Object { $_.Value } | Select-Object -Unique
+    if ($CorrectionVersion) { $parts += ('current floor v' + $CorrectionVersion) }
+    $baseMarkerPattern = '\[[A-Za-z][A-Za-z0-9_]*:[A-Za-z0-9_.\-]+\]'
+    $correctionMarkerPattern = '\[[A-Za-z][A-Za-z0-9_]*(?::[A-Za-z0-9_.\-]+)?\]'
+    $baseMarkers = @([regex]::Matches($Method, $baseMarkerPattern) | ForEach-Object { $_.Value } | Select-Object -Unique)
+    $correctionMarkers = @([regex]::Matches([string]$Correction, $correctionMarkerPattern) | ForEach-Object {
+        $prefixStart = [math]::Max(0, $_.Index - 12)
+        $prefix = ([string]$Correction).Substring($prefixStart, $_.Index - $prefixStart)
+        if ($prefix -notmatch '(?i)\bnot\s*`?\s*$') { $_.Value }
+    } | Select-Object -Unique)
+    if ($correctionMarkers.Count -gt 0) {
+        # A banner correction supersedes stale LOAD markers, but retain issue-specific
+        # diagnostic markers from the runnable method.
+        $baseMarkers = @($baseMarkers | Where-Object { $_ -notmatch '(?i):LOAD\]$' })
+    }
+    $markers = @(($correctionMarkers + $baseMarkers) | Select-Object -Unique)
     if ($markers) { $parts += ('log ' + ($markers -join ' ')) }
     if ($Method -match '(?i)pass\s*(?:=|:)\s*\**([^\r\n]+)') {
         $p = ($Matches[1] -replace '\*\*', '').Trim()
@@ -306,6 +380,34 @@ function Invoke-SelfTest {
     Assert ($correctedMethod -match 'Trial Chest' -and $correctedMethod -notmatch 'starting boon') 'explicit corrected method outranks older formatted instructions'
     Assert ((Get-VtCheckLine -Method $correctedMethod -Title 'fallback') -notmatch 'Corrected test method') 'corrected method preamble is stripped from generated action'
 
+    $lifecycleCorrection = @(
+        [pscustomobject]@{ body = "TEST METHOD (two-player co-op)`n1. Exercise the old shipped fix.`n2. Repeat after hot join.`nPASS = old verification contract." },
+        [pscustomobject]@{ body = "## Current deployed-floor correction`nThe newest issue-specific procedure above remains authoritative; this supersedes only old version references." },
+        [pscustomobject]@{ body = "Lifecycle correction.`n`nDiagnostic method:`n1. Exercise the current diagnostic surface.`n2. Attach both logs.`n3. Add the missing contract row before restoring verify-fix." }
+    )
+    $currentDiagnostic = Get-VtMethodComment $lifecycleCorrection
+    Assert ($currentDiagnostic -match 'current diagnostic surface' -and $currentDiagnostic -notmatch 'old shipped fix') 'newest explicit diagnostic method supersedes older TEST METHOD'
+
+    $floorOnlyCorrection = @(
+        [pscustomobject]@{ body = "Co-op verification:`n1. Exercise Shadow gameplay.`n2. Confirm both peers retain the gameplay.`nExpected: no crash." },
+        [pscustomobject]@{ body = "## Current deployed-floor correction`nThe newest issue-specific verification procedure above remains authoritative; this comment supersedes only older build references.`nTest v0.4.38-dev and confirm [event_tweaker:LOAD]." }
+    )
+    $floorMethod = Get-VtMethodComment $floorOnlyCorrection
+    $floorCorrection = Get-VtMethodCorrection -Comments $floorOnlyCorrection -Method $floorMethod
+    Assert ($floorMethod -match 'Exercise Shadow gameplay') 'reference-only floor correction preserves runnable method above'
+    Assert ($floorCorrection -match '0.4.38-dev' -and (Get-VtCorrectionVersion $floorCorrection) -eq '0.4.38-dev') 'later floor correction is retained as method context'
+    Assert ((Get-VtEvidence -Method $floorMethod -Correction $floorCorrection -CorrectionVersion '0.4.38-dev') -match 'current floor v0.4.38-dev') 'floor correction updates generated evidence'
+
+    $bannerCorrection = 'Verification banner correction: emits `[crt:LOAD]`, not `[career_tweaker:LOAD]`. For deployed v0.4.13-beta; source v0.4.14-beta is not deployed.'
+    $bannerEvidence = Get-VtEvidence -Method "Co-op verification:`n1. Confirm [career_tweaker:LOAD].`n2. Exercise the fix.`nExpected: no crash." -Correction $bannerCorrection -CorrectionVersion (Get-VtCorrectionVersion $bannerCorrection)
+    Assert ($bannerEvidence -match 'current floor v0.4.13-beta' -and $bannerEvidence -match '\[crt:LOAD\]' -and $bannerEvidence -notmatch '\[career_tweaker:LOAD\]') 'banner correction replaces negated stale LOAD marker and keeps deployed floor'
+
+    $authoritative = @(
+        [pscustomobject]@{ body = "TEST METHOD (solo)`n1. Exercise stale behavior.`n2. Record it.`nPASS = old." },
+        [pscustomobject]@{ body = "Authoritative co-op method for the current deployed floor:`n1. Exercise the current behavior.`n2. Retain both logs." }
+    )
+    Assert ((Get-VtMethodComment $authoritative) -match 'current behavior') 'authoritative co-op method is an explicit replacement boundary'
+
     $cl = Get-VtCheckLine -Method $m -Title 'crt Foot Knight talent tooltip CTD'
     Assert ($cl -match 'Foot Knight' -and $cl -notmatch 'newest log') 'check-line skips LOAD boilerplate step'
 
@@ -315,6 +417,15 @@ function Invoke-SelfTest {
     Assert ($colonEv -match 'pass: colon-form evidence is retained') 'evidence accepts Markdown PASS-colon headings'
 
     Assert ((Get-VtMethodComment @([pscustomobject]@{ body = 'bumping this' })) -eq $null) 'no-method issue returns null'
+
+    $inlineVerification = Get-VtCheckLine -Method 'Verification (solo): restart the item, launch Deepest progress, then open an upgrade chest. Expected: no crash.' -Title 'fallback'
+    Assert ($inlineVerification -match '^restart the item' -and $inlineVerification -notmatch '^Verification') 'inline Verification heading is stripped from generated action'
+
+    $requiredCases = "## Current deployed co-op verification method`n**Setup**`n1. Host with bots.`n2. Enable aid priority.`n**Required cases**`n1. Down a player near the bot and confirm aid remains pinned.`n2. Repeat for disabled states."
+    Assert ((Get-VtCheckLine -Method $requiredCases -Title 'fallback') -match '^Down a player') 'required-cases action outranks setup boilerplate'
+
+    $underscoredLoad = "Authoritative co-op method:`n1. Both peers confirm [event_tweaker:LOAD] in newly generated logs.`n2. Launch Adventure Shadow."
+    Assert ((Get-VtCheckLine -Method $underscoredLoad -Title 'fallback') -match '^Launch Adventure') 'LOAD boilerplate recognizes underscored mod ids'
 
     # inline coop method
     $inline = 'Shipped in cwv v0.1.447. TEST (2 players, one WITHOUT cwv): wearer equips Old Musket, play to the end scoreboard; no CTD on the no-cwv peer.'
@@ -383,6 +494,8 @@ foreach ($k in $byNumber.Keys) {
     $it = $byNumber[$k]
     $labelNames = @($it.labels | ForEach-Object { $_.name })
     $method = Get-VtMethodComment $it.comments
+    $correction = Get-VtMethodCorrection -Comments $it.comments -Method $method
+    $correctionVersion = Get-VtCorrectionVersion $correction
     $hasMethod = $null -ne $method
     if (-not $hasMethod) { $missing.Add([int]$it.number) }
     $rows.Add([pscustomobject]@{
@@ -390,8 +503,8 @@ foreach ($k in $byNumber.Keys) {
         Title    = [string]$it.title
         Mod      = Get-VtModTag $labelNames
         Section  = Get-VtLocation -Method $method -Title $it.title -LabelNames $labelNames
-        Check    = Get-VtCheckLine -Method $method -Title $it.title
-        Evidence = Get-VtEvidence -Method $method
+        Check    = Get-VtCheckLine -Method $method -Title $it.title -CorrectionVersion $correctionVersion
+        Evidence = Get-VtEvidence -Method $method -Correction $correction -CorrectionVersion $correctionVersion
         HasMethod= $hasMethod
         Method   = $method
         Diag     = ($labelNames -contains 'diagnostics-armed')
