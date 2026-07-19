@@ -90,6 +90,7 @@ local suites = {
     "test_mp_shilling_ui_policy",
     "test_mp_emporium_purchase",
     "test_mp_loot_diag",
+    "test_mp_fresh_profile_census",
     "test_wt_passive_charge",
     "test_wt_hold_pose",
     "test_wt_overcharge_presentation",

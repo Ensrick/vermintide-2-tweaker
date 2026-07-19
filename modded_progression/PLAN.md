@@ -36,7 +36,43 @@ No new systems invented. Vanilla only.
 
 The actual loot / XP / currency pipeline is **not** Lua-gated. It runs in modded; the PlayFab CloudScript calls go out and are server-side rejected. The strategy: **intercept each `BackendInterface*Playfab` method before it queues to PlayFab, generate the data locally, call the same `backend_mirror:*` mutator the success callback would have called.**
 
-The backend mirror is the in-memory truth for every UI screen, every `can_wield` check, every level read, every currency display. If our local-rolled data flows through the same mirror mutators, the rest of the game cannot tell the difference.
+The backend mirror is a major in-memory truth source for inventory, unlock,
+attribute, currency, and statistics interfaces. It is also the live official
+account mirror. Bounded local features may project local state at an owned
+interface/presentation seam, but a complete fresh profile must not mutate the
+canonical mirror until exact isolation and restoration are proven.
+
+## Fresh-profile isolation boundary (#840)
+
+The decompiled backend manager exposes three narrow override routes:
+
+- loadout slots through `get_loadout_interface_by_slot`
+  (`backend_manager_playfab.lua:312-341`);
+- talents through `get_talents_interface`
+  (`backend_manager_playfab.lua:343-371`);
+- total power per game mode through `get_total_power_level`
+  (`backend_manager_playfab.lua:373-389`).
+
+Those registries do not replace general
+`Managers.backend:get_interface(name)` calls, which return the corresponding
+entry from `_interfaces` directly (`backend_manager_playfab.lua:201-209`). The
+manager also exposes direct canonical-mirror reads/writes such as
+`get_read_only_data`, `get_stats`, `set_stats`, `get_user_data`, and
+`set_user_data` (`backend_manager_playfab.lua:246-248,887-917`).
+
+The issue #840 diagnostic therefore inventories the nine profile-owned
+interfaces: items, talents, hero attributes, peddler, statistics, quests,
+crafting, loot, and keep decorations. Each is constructed with the canonical
+backend mirror (`backend_manager_playfab.lua:1009-1080`; the store DLC adds the
+peddler interface through `store_common_settings.lua:11-16`). A complete live
+row proves only that the expected interface/mirror topology was observed. It
+does not prove consumer coverage or authorize the dormant destructive overlay.
+
+Until a consumer census closes those bypasses, the safe implementation choices
+remain either a complete interface facade or an exact copy-on-write snapshot
+with restoration postconditions on every official-realm transition. The
+existing `apply_mirror_overlay` stub stays disabled, never seeds `fresh`, and
+never marks the profile seeded.
 
 ## Vanilla data flow (verified)
 
