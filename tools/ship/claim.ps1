@@ -29,8 +29,9 @@
 #
 # Exit codes:
 #   default (claim):  0 acquired / already-held-by-you   1 contention   2 error
-#   -Release:         0 released (or nothing to release)  1 could-not-remove
-#   -Verify:          0 live+match   3 absent   4 version mismatch   5 stale   2 usage
+#   -Release:         0 released (or nothing to release)  1 owner mismatch/could-not-remove
+#   -Verify:          0 live+owner+version match   3 absent   4 version mismatch
+#                     5 stale   6 owner mismatch   2 usage
 #   -SelfTest:        0 all pass     2 regression
 #
 # ASCII only -- PowerShell parses .ps1 as Windows-1252 by default; never use
@@ -88,12 +89,32 @@ function Get-ClaimModVersion {
 }
 
 function Get-ClaimSessionId {
-    # CLAUDE_SESSION_ID is stable across a session's child processes, so claim +
-    # release + re-claim within one session recognize each other. Falls back to a
-    # per-process random id so two ANONYMOUS local runs never collide.
-    if ($env:CLAUDE_SESSION_ID) { return $env:CLAUDE_SESSION_ID }
-    $rand = -join (1..6 | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
-    return "pid$PID-$rand"
+    param([string]$RepoRoot)
+
+    # Prefer orchestrator identities that survive child PowerShell processes.
+    # This is the owner credential consumed by verify/release, not decoration:
+    # another Claude/Codex task must not be able to spend a same-version claim.
+    if ($env:VT2_SHIP_SESSION_ID) { return "explicit:$($env:VT2_SHIP_SESSION_ID)" }
+    if ($env:CLAUDE_SESSION_ID)   { return "claude:$($env:CLAUDE_SESSION_ID)" }
+    if ($env:CODEX_THREAD_ID)     { return "codex:$($env:CODEX_THREAD_ID)" }
+
+    # Manual shells do not have an orchestrator id. Use a deterministic
+    # worktree identity so claim -> ship -> release works across child
+    # processes, while a different clean worktree cannot consume the claim.
+    if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+        throw 'Cannot derive claim owner without RepoRoot.'
+    }
+    $normalized = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/').ToLowerInvariant()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($normalized)
+        $digest = $sha.ComputeHash($bytes)
+    }
+    finally {
+        $sha.Dispose()
+    }
+    $hex = [System.BitConverter]::ToString($digest).Replace('-', '').ToLowerInvariant()
+    return "worktree:$($hex.Substring(0, 16))"
 }
 
 function ConvertTo-ClaimTimestamp {
@@ -255,8 +276,8 @@ function Invoke-ClaimAcquire {
     }
 }
 
-# Free the claim. Always removes the file (the task's contract is "frees the
-# claim"); a cross-session removal is reported so a stomp is at least visible.
+# Free the claim only for its exact owner. A foreign release must fail closed;
+# otherwise another session can erase a live claim and race its upload.
 function Invoke-ClaimRelease {
     param([string]$ClaimsDir, [string]$Mod, [string]$Session)
     $claimPath = Join-Path $ClaimsDir "$Mod.claim"
@@ -264,7 +285,17 @@ function Invoke-ClaimRelease {
         return [pscustomobject]@{ Ok = $true; Removed = $false; CrossSession = $false; Message = 'no claim to release'; Held = $null }
     }
     $existing = Read-ClaimFile $claimPath
-    $cross = [bool]($existing -and $Session -and $existing.Session -ne $Session)
+    if ($null -eq $existing) {
+        return [pscustomobject]@{ Ok = $false; Removed = $false; CrossSession = $false; Message = 'claim file is unreadable; wait for stale recovery or inspect it manually'; Held = $null }
+    }
+    $cross = [bool]($Session -and $existing.Session -ne $Session)
+    if ($cross) {
+        return [pscustomobject]@{
+            Ok = $false; Removed = $false; CrossSession = $true
+            Message = "claim belongs to session '$($existing.Session)', not '$Session'"
+            Held = $existing
+        }
+    }
     Remove-Item -LiteralPath $claimPath -Force -ErrorAction SilentlyContinue
     $removed = -not (Test-Path -LiteralPath $claimPath)
     return [pscustomobject]@{
@@ -275,14 +306,16 @@ function Invoke-ClaimRelease {
 }
 
 # Read-only verification used by ship.ps1: is there a live, non-stale claim whose
-# recorded version equals the source MOD_VERSION about to ship?
+# recorded version equals the source MOD_VERSION about to ship and whose owner
+# equals the current orchestrator/worktree session?
 function Test-ShipClaimState {
-    param([string]$ClaimsDir, [string]$Mod, [string]$ExpectedVersion, [datetime]$NowUtc, [double]$StaleHours = 2)
+    param([string]$ClaimsDir, [string]$Mod, [string]$ExpectedVersion, [string]$ExpectedSession, [datetime]$NowUtc, [double]$StaleHours = 2)
     $claimPath = Join-Path $ClaimsDir "$Mod.claim"
     $existing = Read-ClaimFile $claimPath
     if ($null -eq $existing) { return @{ State = 'absent'; Claim = $null } }
     if (Test-ClaimStale $existing.CreatedUtc $NowUtc $StaleHours) { return @{ State = 'stale'; Claim = $existing } }
     if ($existing.Version -ne $ExpectedVersion) { return @{ State = 'mismatch'; Claim = $existing } }
+    if ([string]::IsNullOrWhiteSpace($ExpectedSession) -or $existing.Session -ne $ExpectedSession) { return @{ State = 'owner_mismatch'; Claim = $existing } }
     return @{ State = 'ok'; Claim = $existing }
 }
 
@@ -328,6 +361,32 @@ function Invoke-ClaimSelfTest {
     [System.IO.File]::WriteAllText((Join-Path $luaDir "$fixMod.lua"), "local MOD_VERSION = `"0.1.5-dev`"`n", $utf8NoBom)
 
     try {
+        # --- stable owner identity across child processes/worktrees ---
+        $savedExplicit = $env:VT2_SHIP_SESSION_ID
+        $savedClaude = $env:CLAUDE_SESSION_ID
+        $savedCodex = $env:CODEX_THREAD_ID
+        try {
+            $env:VT2_SHIP_SESSION_ID = $null
+            $env:CLAUDE_SESSION_ID = $null
+            $env:CODEX_THREAD_ID = $null
+            $ownerA1 = Get-ClaimSessionId -RepoRoot $fixRepo
+            $ownerA2 = Get-ClaimSessionId -RepoRoot $fixRepo
+            $ownerB = Get-ClaimSessionId -RepoRoot (Join-Path $tmp 'other-repo')
+            Assert ($ownerA1 -eq $ownerA2 -and $ownerA1 -match '^worktree:[0-9a-f]{16}$') "manual owner is stable for one worktree"
+            Assert ($ownerA1 -ne $ownerB) "different worktrees derive different owners"
+            $env:CODEX_THREAD_ID = 'thread-fixture'
+            Assert ((Get-ClaimSessionId -RepoRoot $fixRepo) -eq 'codex:thread-fixture') "Codex thread identity outranks worktree fallback"
+            $env:CLAUDE_SESSION_ID = 'claude-fixture'
+            Assert ((Get-ClaimSessionId -RepoRoot $fixRepo) -eq 'claude:claude-fixture') "Claude identity outranks Codex identity"
+            $env:VT2_SHIP_SESSION_ID = 'explicit-fixture'
+            Assert ((Get-ClaimSessionId -RepoRoot $fixRepo) -eq 'explicit:explicit-fixture') "explicit ship identity has highest priority"
+        }
+        finally {
+            $env:VT2_SHIP_SESSION_ID = $savedExplicit
+            $env:CLAUDE_SESSION_ID = $savedClaude
+            $env:CODEX_THREAD_ID = $savedCodex
+        }
+
         # --- allocate from fixture source ---
         $allocDir = Join-Path $tmp 'alloc'
         $a = Invoke-ClaimAcquire -ClaimsDir $allocDir -Mod $fixMod -RepoRoot $fixRepo -Session 'sess-alloc' -NowUtc $nowRef
@@ -367,15 +426,21 @@ function Invoke-ClaimSelfTest {
         Assert (-not (Test-Path -LiteralPath (Join-Path $relDir "$fixMod.claim"))) "claim file gone after release"
         $rel2 = Invoke-ClaimRelease -ClaimsDir $relDir -Mod $fixMod -Session 'sess-r'
         Assert ($rel2.Ok -and -not $rel2.Removed) "release is idempotent (no claim = no-op success)"
+        $foreignDir = Join-Path $tmp 'foreign-release'
+        $foreignClaim = Invoke-ClaimAcquire -ClaimsDir $foreignDir -Mod $fixMod -RepoRoot $fixRepo -Session 'owner-a' -NowUtc $nowRef
+        $foreignRelease = Invoke-ClaimRelease -ClaimsDir $foreignDir -Mod $fixMod -Session 'owner-b'
+        Assert ($foreignClaim.Ok -and -not $foreignRelease.Ok -and $foreignRelease.CrossSession) "foreign owner cannot release a live claim"
+        Assert (Test-Path -LiteralPath (Join-Path $foreignDir "$fixMod.claim")) "foreign release leaves the owner's claim intact"
 
         # --- ship.ps1 verify contract ---
         $vDir = Join-Path $tmp 'verify'
         $v = Invoke-ClaimAcquire -ClaimsDir $vDir -Mod $fixMod -RepoRoot $fixRepo -Session 'sess-v' -NowUtc $nowRef
         $ver = $v.Version
-        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion $ver -NowUtc $nowRef).State -eq 'ok') "verify OK when live claim version matches source"
-        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion '9.9.9-dev' -NowUtc $nowRef).State -eq 'mismatch') "verify reports mismatch on version divergence"
-        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod 'nonesuch' -ExpectedVersion $ver -NowUtc $nowRef).State -eq 'absent') "verify reports absent when no claim"
-        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion $ver -NowUtc $nowRef.AddHours(3)).State -eq 'stale') "verify treats a 3h-old claim as stale"
+        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion $ver -ExpectedSession 'sess-v' -NowUtc $nowRef).State -eq 'ok') "verify OK when live claim owner and version match"
+        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion '9.9.9-dev' -ExpectedSession 'sess-v' -NowUtc $nowRef).State -eq 'mismatch') "verify reports mismatch on version divergence"
+        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion $ver -ExpectedSession 'sess-foreign' -NowUtc $nowRef).State -eq 'owner_mismatch') "same-version foreign owner cannot consume a claim"
+        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod 'nonesuch' -ExpectedVersion $ver -ExpectedSession 'sess-v' -NowUtc $nowRef).State -eq 'absent') "verify reports absent when no claim"
+        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion $ver -ExpectedSession 'sess-v' -NowUtc $nowRef.AddHours(3)).State -eq 'stale') "verify treats a 3h-old claim as stale"
 
         # --- atomic contention: two racing PROCESSES, exactly one wins ---
         $raceDir = Join-Path $tmp 'race'
@@ -416,7 +481,7 @@ if ($SelfTest) { exit (Invoke-ClaimSelfTest) }
 
 if (-not $RepoRoot)  { $RepoRoot  = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }
 if (-not $ClaimsDir) { $ClaimsDir = Join-Path $RepoRoot '.ship_claims' }
-$sessionId = if ($Session) { $Session } else { Get-ClaimSessionId }
+$sessionId = if ($Session) { $Session } else { Get-ClaimSessionId -RepoRoot $RepoRoot }
 $nowUtc = (Get-Date).ToUniversalTime()
 
 if (-not $Mod) {
@@ -433,7 +498,7 @@ if ($Verify) {
         Write-Host "claim.ps1 -Verify requires -ExpectedVersion <MOD_VERSION>." -ForegroundColor Red
         exit 2
     }
-    $state = Test-ShipClaimState -ClaimsDir $ClaimsDir -Mod $Mod -ExpectedVersion $ExpectedVersion -NowUtc $nowUtc -StaleHours $StaleHours
+    $state = Test-ShipClaimState -ClaimsDir $ClaimsDir -Mod $Mod -ExpectedVersion $ExpectedVersion -ExpectedSession $sessionId -NowUtc $nowUtc -StaleHours $StaleHours
     switch ($state.State) {
         'ok' {
             if (-not $Quiet) { Write-Host "OK -- live claim for '$Mod' matches v$ExpectedVersion." -ForegroundColor Green }
@@ -450,6 +515,10 @@ if ($Verify) {
         'stale' {
             if (-not $Quiet) { Write-Host "Claim for '$Mod' is STALE (older than $StaleHours h)." -ForegroundColor Red }
             exit 5
+        }
+        'owner_mismatch' {
+            if (-not $Quiet) { Write-Host "Claim for '$Mod' belongs to '$($state.Claim.Session)'; current owner is '$sessionId'." -ForegroundColor Red }
+            exit 6
         }
     }
 }
@@ -470,6 +539,9 @@ if ($Release) {
     }
     else {
         Write-Host "FAILED to release claim for '$Mod': $($r.Message)" -ForegroundColor Red
+        if ($r.CrossSession -and $r.Held) {
+            Write-Host "  Foreign live claims are never removed; coordinate with '$($r.Held.Session)' or wait for stale recovery." -ForegroundColor Yellow
+        }
         exit 1
     }
     exit 0
