@@ -972,9 +972,13 @@ also change that mod's exact root `.mod_bundle`, identified by the canonical
 `RootBundle` field in `tools/mod-inventory.psd1`. A common VMF bundle or custom
 asset sidecar cannot stand in for the root. `qa/check_release_bundle_atomicity.ps1`
 enforces this in pre-commit, Quick/full QA, and hosted PR QA. Docs/tests-only and
-bundle-only reconciliation changes remain valid. The existing `VT2-Promotion`
-sanction permits only stable metadata-only promotion diffs; it never exempts a
-runtime source delta. This closes the PR #759/#765/#766/#767/#769 class where
+bundle-only reconciliation changes remain valid. The trusted stable-promotion
+authorization from the base-owned `pull_request_target` status and
+`qa/check_promotion_authorization.ps1` permits only the exact approved stable
+directories and only after binding the maintainer grant to the current PR head
+and MOD_VERSION; it never executes PR code at the trust boundary and never
+exempts a runtime source delta.
+This closes the PR #759/#765/#766/#767/#769 class where
 source/version/config merged first and its compiled artifact followed later.
 
 Do NOT downgrade a `-dev` update to deploy-only "to be safe". For a mod the

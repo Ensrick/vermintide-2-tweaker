@@ -1,5 +1,19 @@
 # Career Tweaker Changelog
 
+## 0.4.9-beta - 2026-07-19 - #446 register exclusive radio groups [verify-fix]
+
+- Registered both Career Tweaker mutually exclusive clusters with GUT Dev's
+  nested radio-control contract.
+- Kept the underlying boolean settings and mutex behavior authoritative, so
+  the custom UI remains presentation-only and stock VMF checkboxes remain a
+  safe fallback.
+- Added localized None/default rows and regression checks for complete group
+  registration without re-enabling talent casting or transposition.
+
+**Solo verify:** with GUT Dev `0.2.300-dev`, select each option and None in both
+Career exclusive groups, Apply, reopen, and restart. Exactly one bubble should
+be active and the corresponding boolean settings must persist correctly.
+
 ## 0.4.8-beta - 2026-07-19 - #445 nested masters and authorship prefixes [verify-fix]
 
 - Kept the two whole-family all-on controls together under the dedicated **Talent Reworks > Master Toggles** nested group. Individual rework checkboxes remain in their career groups, so the masters are discoverable without mixing bulk controls into the leaf list.

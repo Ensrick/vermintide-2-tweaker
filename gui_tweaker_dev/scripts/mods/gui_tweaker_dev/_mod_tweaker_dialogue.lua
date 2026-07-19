@@ -27,6 +27,21 @@ end
 
 local function group_key(id) return "character_dialogue:" .. tostring(id) end
 
+-- Lua's `condition and value_if_true or value_if_false` idiom cannot represent
+-- false or nil in its true branch.  Keep these tri-state transitions explicit:
+-- #605 previously assigned `closing and nil or speaker`, which always resolved
+-- back to `speaker` and made an opened character group impossible to close.
+function DialogueUI.next_expanded(current, speaker)
+    if current == speaker then return nil end
+    return speaker
+end
+
+function DialogueUI.next_line_state(current)
+    if current == nil then return true end
+    if current == true then return false end
+    return nil
+end
+
 function DialogueUI.build(view, category, defs)
     local value = api()
     view._dialogue_virtual_first = nil
@@ -188,7 +203,9 @@ local function toggle_group(view, row, value, block_stale_mouse_release)
     local speaker = row._dialogue_speaker
     local closing = view._dialogue_expanded == speaker
     value.stop()
-    view._dialogue_expanded = closing and nil or speaker
+    view._dialogue_expanded = DialogueUI.next_expanded(view._dialogue_expanded, speaker)
+    printf("[gut:605] dialogue_group action=%s speaker=%s",
+        closing and "collapse" or "expand", tostring(speaker))
     view._dialogue_focus_id = group_key(speaker)
     view._dialogue_focus_sequence = row._dialogue_group_index or 1
     view._dialogue_focus_target_sequence = view._dialogue_focus_sequence
@@ -204,7 +221,7 @@ local function activate_line(view, row, value, control)
     local event = row._dialogue_event
     if control == 1 then
         local current = value.get_line_state(event)
-        local next_value = current == nil and true or current == true and false or nil
+        local next_value = DialogueUI.next_line_state(current)
         value.set_line_state(event, next_value)
         row.content.state_text = state_text(next_value)
     else

@@ -36,6 +36,10 @@ local M = {}
 -- can log "mutex group X fired") and future tooling (e.g. a dump
 -- command that lists every mutex group + current selection).
 M.CLUSTERS = {}
+-- Optional Mod Tweaker presentation metadata keyed by the same logical group id.
+-- VMF continues to render the real checkbox settings; current gut consumes this
+-- metadata to synthesize one collapsible multiple-choice control.
+M.PRESENTATIONS = {}
 
 -- Re-entry guard. When `mod:set(other, false)` fires inside `enforce`,
 -- VMF re-fires `on_setting_changed(other)`, which calls back into
@@ -52,7 +56,7 @@ local _enforcing = false
 --   members  : table   -- array of setting_id strings (≥2)
 --
 -- Idempotent: re-declaring the same group_id silently overwrites.
-function M.declare(group_id, members)
+function M.declare(group_id, members, presentation)
     if type(group_id) ~= "string" or group_id == "" then
         mod:warning("[mutex] declare: group_id must be a non-empty string (got %s)", tostring(group_id))
         return
@@ -62,6 +66,7 @@ function M.declare(group_id, members)
         return
     end
     M.CLUSTERS[group_id] = members
+    M.PRESENTATIONS[group_id] = presentation
 end
 
 -- Enforce single-select for the cluster containing `setting_id`. No-op

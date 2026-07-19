@@ -2,8 +2,23 @@ return function(Harness, repo_root)
     local policy = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/_cd_policy.lua")
     local browser = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/_cd_browser.lua")
     local preview = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/_cd_preview_policy.lua")
+    local dialogue_ui = dofile(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue.lua")
 
     local dialogue = { sound_events_n = 3, sound_events = { "a", "b", "c" } }
+
+    Harness.test("cd dialogue groups close and line states retain false", function()
+        Harness.equal("kruber", dialogue_ui.next_expanded(nil, "kruber"))
+        Harness.equal(nil, dialogue_ui.next_expanded("kruber", "kruber"))
+        Harness.equal("bardin", dialogue_ui.next_expanded("kruber", "bardin"))
+
+        Harness.equal(true, dialogue_ui.next_line_state(nil))
+        Harness.equal(false, dialogue_ui.next_line_state(true))
+        Harness.equal(nil, dialogue_ui.next_line_state(false))
+
+        Harness.equal(true, policy.parse_override_state("enable"))
+        Harness.equal(false, policy.parse_override_state("disable"))
+        Harness.equal(nil, policy.parse_override_state("default"))
+    end)
 
     Harness.test("cd policy leaves unmodified groups on vanilla path", function()
         local index, used = policy.choose_index(dialogue, {}, function() return 1 end, function() return true end)

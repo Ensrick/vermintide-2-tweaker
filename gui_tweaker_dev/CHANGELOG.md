@@ -1,6 +1,6 @@
 # Tweaker: GUI dev — Changelog
 
-## 0.2.297-dev (2026-07-19) -- #257/#274 order-independent cutscene skip window + #245/#246/#250/#533 live-session Hold-Tab provider [untested]
+## 0.2.301-dev (2026-07-19) -- #257/#274 order-independent cutscene skip window + #245/#246/#250/#533 live-session Hold-Tab provider [untested]
 
 Two root-cause clusters, one build.
 
@@ -28,6 +28,58 @@ Two root-cause clusters, one build.
 - **Regression:** rt-checks now cover all four issues (`issue245_tab_weapon_property_refresh` + traits, NEW `issue246_tab_equipped_illusion_refresh`, `issue250_deus_tab_talent_module_loaded`, NEW `issue533_cw_collectible_rows_suppressed`); NEW offline suite `test_gut_tab_live_provider.lua` (trait identity gates, skin fallback chain incl. clear-stale and unresolvable-template preservation, wire-safe filters, deus row policy, both-hooks + display-only source pins). Existing `test_gut_tab_property_refresh` / `test_gut_tab_talent_filter` suites unchanged and green.
 
 **Verify (solo, CW + adventure):** (1) #257: auto-skip ON, run The Well of Dreams - the intro fade must no longer show; attach `[gut:257]` lines. (2) #274: finish A Parting of the Waves with skip enabled - the ending cutscene must play/transition normally (no locked camera); a `[gut:274] skip window released` or clean `CAMERA-ACTIVATE` line at the ending is the evidence. (3) #245: reforge the equipped weapon (cim), hold Tab - properties/trait current. (4) #246: apply an illusion, hold Tab (and have a friend inspect you) - illusion icon shows. (5) #250: CW run, gain a talent boon, hold Tab - talents sit in their real tiers. (6) #533: ct adventure map inside CW, hold Tab - no tome/grim/dice rows.
+## 0.2.300-dev (2026-07-19) -- #446 exclusive radio controls [verify-fix]
+
+- Added nested mutually exclusive bubble/radio controls with an explicit
+  UI-only **None [Default]** choice.
+- Preserved existing boolean persistence and stock VMF checkbox fallback when
+  a group is incomplete, scattered, or crosses mod ownership boundaries.
+- Added deterministic immediate repaint, Apply/restart persistence contracts,
+  and Career Tweaker integration coverage.
+
+**Solo verify:** open the Career Tweaker exclusive groups, expand each nested
+group, and select A, B, and None. Exactly one bubble must be selected, repaint
+must be immediate, and Apply/restart must preserve the selected setting state.
+
+## 0.2.299-dev (2026-07-19) -- #605 preserve dialogue collapse states [verify-fix]
+
+- Replaced the dialogue browser's `closing and nil or speaker` pseudo-ternary
+  with an explicit transition so closing a speaker can actually store `nil`.
+- Fixed the same false/nil state class for the Disabled line state and added
+  one bounded `[gut:605]` action record plus regression contracts.
+
+**Solo verify:** open and close Dialogue speaker groups and cycle one line
+through enabled, disabled, and default. The group must remain closed and the
+selected state must repaint immediately and persist after Apply/reopen.
+
+## 0.2.298-dev (2026-07-19) -- #340 language glyph diagnostics [diagnostics-armed]
+
+- Extended `/gut_all_languages_status` to classify all eight active font rows
+  as vanilla, custom, mixed, partial, or missing without mutating them.
+- Added six bounded visual samples for Latin, Greek, Cyrillic, Japanese,
+  Chinese, and Korean glyph coverage.
+- Logs privacy-preserving UTF-8 metrics for human player names—byte,
+  code-point, non-ASCII, and validity counts—without logging the names.
+- Added source-backed documentation and regression coverage distinguishing an
+  intact UTF-8 string path from a missing compiled glyph atlas.
+
+**Solo diagnostic:** run `/gut_all_languages_status` with and without the
+standalone Support All Languages mod. Capture the six rendered sample lines and
+the bounded status records from a log containing `[gut:LOAD] v0.2.298-dev`.
+
+## 0.2.297-dev (2026-07-19) -- #285 anchor respawn timers to live portraits [verify-fix]
+
+- Removed the duplicated team-frame scenegraph and world-position conversion
+  used by the respawn timer overlay.
+- Draws each timer through the owning live `UnitFrameUI` widget renderer and
+  `portrait_pivot`, so HUD/layout changes cannot drift a copied coordinate set.
+- Added a bounded `[gut:285]` marker and regression coverage for the direct
+  portrait-anchor contract.
+
+**Solo verify:** kill a bot and confirm its respawn timer remains centered on
+that bot's live portrait through HUD scaling/layout changes. The newest log must
+contain `[gut:LOAD] v0.2.297-dev`; the timer should not drift or duplicate.
+
 ## 0.2.296-dev (2026-07-19) -- #824 dev localization runtime contract [verify-fix]
 
 - Corrected the runtime localization regression check to load the dev stream's

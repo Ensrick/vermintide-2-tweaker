@@ -44,6 +44,11 @@ local _widget_index = {}
 -- ModTweaker public API).
 local _exclusive_groups = {}
 local _exclusive_member_index = {}
+-- Optional presentation metadata stays separate from the member array so the shipped
+-- get_exclusive_members contract remains byte-compatible.  A `control="radio"`
+-- presentation asks the view to synthesize one collapsible radio control when every
+-- member is present under the same parent; otherwise the view fails closed to checkboxes.
+local _exclusive_presentations = {}
 
 -- (#505) Filtered/searchable-dropdown CATEGORY registry. Keyed by _member_key(mod_id,
 -- setting_id) -> ordered normalized category list { { label=<string>, match=<fn(value,text)> }, ... }.
@@ -163,14 +168,14 @@ function SettingsModule._kv_key(mod_id, setting_id) return _kv_key(mod_id, setti
 -- (#446) Mutually-exclusive group registry.
 -- ---------------------------------------------------------------
 
--- register_exclusive_group(group_id, members) -- members: array of
+-- register_exclusive_group(group_id, members, presentation) -- members: array of
 -- { mod = <mod_id>, setting = <setting_id> } (mod_id / setting_id keys also accepted).
 -- Declares that AT MOST ONE member may be ON at a time: the Mod Tweaker stages the other
 -- members OFF when one is switched ON. All-off is a valid state (the "None [Default]"
 -- option is just another member, or simply every member off). Re-registering the same
 -- group_id REPLACES it, so an author reload re-declares cleanly. Returns true, or
 -- (false, reason).
-function SettingsModule.register_exclusive_group(group_id, members)
+function SettingsModule.register_exclusive_group(group_id, members, presentation)
     if type(group_id) ~= "string" or group_id == "" then
         return false, "exclusive group id must be a non-empty string"
     end
@@ -190,6 +195,28 @@ function SettingsModule.register_exclusive_group(group_id, members)
         end
         normalized[i] = { mod_id = mid, setting_id = sid }
     end
+    local normalized_presentation
+    if presentation ~= nil then
+        if type(presentation) ~= "table" then
+            return false, "exclusive presentation must be a table"
+        end
+        local control = presentation.control or presentation.mode
+        if control ~= "radio" then
+            return false, "exclusive presentation control must be 'radio'"
+        end
+        if type(presentation.label) ~= "string" or presentation.label == "" then
+            return false, "radio presentation needs a non-empty label"
+        end
+        if presentation.none_label ~= nil
+            and (type(presentation.none_label) ~= "string" or presentation.none_label == "") then
+            return false, "radio presentation none_label must be a non-empty string"
+        end
+        normalized_presentation = {
+            control = "radio",
+            label = presentation.label,
+            none_label = presentation.none_label,
+        }
+    end
     -- Replace path: scrub any prior index entries for this group_id first, so a member
     -- dropped from the new list stops resolving to the group.
     local prior = _exclusive_groups[group_id]
@@ -199,6 +226,7 @@ function SettingsModule.register_exclusive_group(group_id, members)
         end
     end
     _exclusive_groups[group_id] = normalized
+    _exclusive_presentations[group_id] = normalized_presentation
     for i = 1, #normalized do
         _exclusive_member_index[_member_key(normalized[i].mod_id, normalized[i].setting_id)] = group_id
     end
@@ -214,6 +242,11 @@ end
 -- Returns the ordered member array for a group_id, or nil.
 function SettingsModule.get_exclusive_members(group_id)
     return _exclusive_groups[group_id]
+end
+
+-- Optional render metadata for a group. Nil preserves the original checkbox bridge.
+function SettingsModule.get_exclusive_presentation(group_id)
+    return _exclusive_presentations[group_id]
 end
 
 -- Count of registered exclusive groups (diagnostics / rt check).

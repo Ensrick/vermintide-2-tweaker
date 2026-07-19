@@ -24,45 +24,29 @@ local mod = get_mod("gut_dev")
 --      retained ui_renderer -- a pass that early-returns on `not self._dirty`
 --      once a dead portrait settles, so nothing composited. Moved to
 --      IngameHud.update.
---   2. Drew in the WRONG SPOT + TINY (this fix): the v0.2.183 rewrite drew
---      immediate `draw_text` at `UISceneGraph.get_world_position(...)`. But a
+--   2. Drew in the WRONG SPOT + TINY (v0.2.227-dev): the v0.2.183 rewrite drew
+--      immediate `draw_text` at the resolved scenegraph world position. But a
 --      node's world_position is ALREADY inverse_scale-transformed for the
 --      resolution (ui_scenegraph.lua:249-252, hud_scale_fit branch); passing it
 --      as an absolute draw coordinate inside a begin_pass makes UIRenderer apply
 --      the resolution scale a SECOND time, shifting the number off the portrait
 --      and onto the health/ability bar. Font defaulted to 32 -> "tiny".
 --
--- FIX -- port the exact widget-based mechanism of the "复活CD / Respawn CD (beta)"
--- Workshop mod (id 3747644100, bundle 6e7d92af18da0995, decompiled clean). Build
--- our own scenegraph that MIRRORS the vanilla team frame's hierarchy (root
--- hud_scale_fit 1920x1080 -> pivot_parent{50,0} -> pivot -> portrait_pivot), set
--- our `pivot` node's LOCAL position to the dead teammate's own team-frame
--- `pivot.position` (the on-screen slot UnitFrameUI.set_position writes at
--- unit_frame_ui.lua:117, and `.position` aliases `.local_position` --
--- ui_scenegraph.lua:83), then draw a UIWidget through that scenegraph with
--- UIRenderer.draw_widget. Feeding a LOCAL position through an identical
--- hierarchy lets update_scenegraph (run inside begin_pass, ui_renderer.lua:344)
--- apply the hud_scale_fit transform EXACTLY ONCE, so the number lands on the
--- portrait pixel-for-pixel with the reference. Widget offsets/size/alignment and
--- the teammate font base (72, hell_shark_header -> materials/fonts/gw_head,
--- ui_fonts.lua:58) are copied verbatim from the reference's `team_respawn_text`.
+--   3. Still offset from the portrait (current fix): the v0.2.227-dev port copied
+--      a second approximation of the team-frame scenegraph. That duplicate can
+--      drift from the live UnitFrameUI hierarchy and from any active HUD layout
+--      mutation. Draw the reference widget through the dead frame's OWN live
+--      `ui_scenegraph` instead. IngameHud.update calls every component's update
+--      and draw before this hook_safe callback (ingame_hud.lua:372-399), so the
+--      live graph already contains UnitFrameUI.set_position's current slot and
+--      UIRenderer.begin_pass resolves `portrait_pivot` exactly once. No copied
+--      parent offsets and no world/local coordinate conversion remain.
 
 local UIRenderer   = UIRenderer
-local UISceneGraph = UISceneGraph
 local UIWidget     = UIWidget
 
 local RESPAWN_TIME   = 30                   -- respawn_handler.lua:7 (Adventure default)
-local SIZE_X, SIZE_Y = 1920, 1080
 local PORTRAIT_SCALE = 1
-
--- Mirror of Respawn CD's scenegraph_definition (Respawn_CD_data.lua:110-179).
--- `pivot.position` gets overwritten per dead teammate from their team frame.
-local SCENEGRAPH_DEF = {
-    root         = { scale = "hud_scale_fit", position = { 0, 0, (UILayer and UILayer.hud) or 100 }, size = { SIZE_X, SIZE_Y } },
-    pivot_parent = { parent = "root",         vertical_alignment = "top",    horizontal_alignment = "left",   position = { 50, 0, 1 }, size = { 0, 0 } },
-    pivot        = { parent = "pivot_parent", vertical_alignment = "top",    horizontal_alignment = "left",   position = { 0, 0, 1 },  size = { 0, 0 } },
-    portrait_pivot = { parent = "pivot",      vertical_alignment = "center", horizontal_alignment = "center", position = { 0, 0, 0 },  size = { 0, 0 } },
-}
 
 -- Mirror of Respawn CD's `team_respawn_text` widget (Respawn_CD_data.lua:60-109):
 -- one centred countdown number on the portrait_pivot node, big header font, 2px
@@ -93,9 +77,9 @@ local TEAM_WIDGET_DEF = {
 }
 
 local _render_settings = { snap_pixel_positions = true }
-local _scenegraph      = nil
 local _widget          = nil
 local _onset           = {}  -- unique_id -> game-time at death onset
+local _traced          = {}  -- unique_id -> one bounded live-anchor marker per death
 local _dummy_input     = { get = function() return end, has = function() return end }
 
 local function _respawn_total()
@@ -112,14 +96,11 @@ local function _menu_blocks_draw(self)
     return false
 end
 
--- Draw one teammate's countdown widget at `node_pos` (their frame's pivot LOCAL
--- position). Exposed on `mod` so the #285 regression test can locate this file.
-mod._gut_respawn_draw = function(renderer, input, dt, node_pos, secs, font_size, r, g, b)
-    if not _scenegraph then _scenegraph = UISceneGraph.init_scenegraph(SCENEGRAPH_DEF) end
+-- Draw through the exact scenegraph that owns the portrait. Exposed on `mod` so
+-- the #285 regression test can locate and lock this file.
+mod._gut_respawn_draw = function(renderer, input, dt, frame_scenegraph, secs, font_size, r, g, b)
+    if not (renderer and frame_scenegraph and frame_scenegraph.portrait_pivot) then return false end
     if not _widget     then _widget     = UIWidget.init(TEAM_WIDGET_DEF) end
-
-    local lp = _scenegraph.pivot.local_position
-    lp[1], lp[2], lp[3] = node_pos[1], node_pos[2], node_pos[3] or 0
 
     _widget.content.respawn_countdown_text = tostring(math.floor(secs))
     local style = _widget.style.respawn_countdown_text
@@ -127,9 +108,11 @@ mod._gut_respawn_draw = function(renderer, input, dt, node_pos, secs, font_size,
     local tc = style.text_color
     tc[1], tc[2], tc[3], tc[4] = 255, r, g, b
 
-    UIRenderer.begin_pass(renderer, _scenegraph, input, dt, nil, _render_settings)
+    UIRenderer.begin_pass(renderer, frame_scenegraph, input, dt, nil, _render_settings)
     UIRenderer.draw_widget(renderer, _widget)
     UIRenderer.end_pass(renderer)
+
+    return true
 end
 
 mod:hook_safe("IngameHud", "update", function(self, dt, t)
@@ -170,13 +153,15 @@ mod:hook_safe("IngameHud", "update", function(self, dt, t)
                 local secs = total - (now - t0)
                 if secs < 0 then secs = 0 end
 
-                -- Read the frame's OWN pivot LOCAL position (its on-screen slot,
-                -- unit_frame_ui.lua:117). `.position` aliases `.local_position`
-                -- (ui_scenegraph.lua:83) so it is the slot, not a world coord.
-                local ws    = widget.ui_scenegraph
-                local pivot = ws and ws.pivot
-                if pivot and pivot.position then
-                    mod._gut_respawn_draw(renderer, input, dt, pivot.position, secs, font_size, r, g, b)
+                -- The frame graph is the canonical portrait anchor. Reusing it
+                -- also composes current HUD scale/layout mutations instead of
+                -- reconstructing a stale copy of those transforms.
+                local ws = widget.ui_scenegraph
+                local frame_renderer = widget.ui_renderer or renderer
+                if mod._gut_respawn_draw(frame_renderer, input, dt, ws, secs, font_size, r, g, b)
+                    and not _traced[uid] then
+                    _traced[uid] = true
+                    printf("[gut:285] live portrait anchor applied uid=%s frame=team", tostring(uid))
                 end
             end
         end
@@ -187,7 +172,10 @@ mod:hook_safe("IngameHud", "update", function(self, dt, t)
     -- stale onset carries across missions, and the scenegraph/widget templates
     -- are stateless UI defs that are safe to persist.
     for uid in pairs(_onset) do
-        if not seen[uid] then _onset[uid] = nil end
+        if not seen[uid] then
+            _onset[uid] = nil
+            _traced[uid] = nil
+        end
     end
 end)
 

@@ -50,4 +50,16 @@ function M.properties_preview_position(slot_type, native_position)
     }
 end
 
+-- The overview normally puts every held item at x=-0.8 and relies on the
+-- ranged viewport's `ui_weave_forge_preview_inverted` environment to mirror the
+-- final image.  The mission-safe environment fallback cannot preserve that
+-- keep-only inverted resource, so the ranged item must be mirrored explicitly
+-- at the producer boundary.  Keep and non-ranged paths remain untouched.
+function M.overview_preview_x(slot_type, native_x, in_keep)
+    if in_keep or slot_type ~= "ranged" or type(native_x) ~= "number" then
+        return native_x
+    end
+    return -native_x
+end
+
 return M

@@ -1,5 +1,18 @@
 # Character Dialogue Changelog
 
+## 0.1.4-dev (2026-07-19) - #605 preserve false and nil dialogue states [verify-fix]
+
+- Replaced Lua `and/or` pseudo-ternaries that made `nil` and `false`
+  unreachable when collapsing a speaker or disabling a dialogue line.
+- Added explicit, testable state transitions for the UI Disabled state and
+  `/cd_line ... disable` command path.
+- Added regression coverage for close/reopen and enable/disable/default state
+  transitions without changing the catalogue or network surface.
+
+**Solo verify:** in Mod Tweaker > Dialogue, open and close a speaker group,
+then cycle a line through enabled, disabled, and default. The group must stay
+closed and Disabled must remain selected after Apply/reopen/restart.
+
 ## 0.1.3-dev (2026-07-16) - #605 [not-started]
 
 - Extended the offline-generated 34,327-event catalogue with Fatshark's

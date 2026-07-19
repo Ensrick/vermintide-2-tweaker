@@ -25,6 +25,7 @@ function M.install(ModTweakerView, deps)
     local _format_keybind_value = assert(deps.format_keybind_value, "Mod Tweaker interaction requires keybind formatter")
     local _poll_keybind_combo = assert(deps.poll_keybind_combo, "Mod Tweaker interaction requires keybind poller")
     local _cat_set = assert(deps.cat_set, "Mod Tweaker interaction requires category setter")
+    local _cat_get = assert(deps.cat_get, "Mod Tweaker interaction requires category getter")
     local _play_click = assert(deps.play_click, "Mod Tweaker interaction requires click sound")
     local _play_hover = assert(deps.play_hover, "Mod Tweaker interaction requires hover sound")
     local _printf = assert(deps.printf, "Mod Tweaker interaction requires printf")
@@ -810,6 +811,36 @@ function ModTweakerView:_handle_input(input_service)
                     self:_build_rows(self._categories[self._selected])
                     self._search_rebuild_pending = nil
                     return
+                end
+            elseif row._wtype == "radio" then
+                local clicked = c.hotspot and (c.hotspot.on_release or c.hotspot.on_left_release)
+                if clicked and not row._radio_armed then
+                    row._radio_armed = true
+                    -- Selecting the active bubble is intentionally a no-op. A different
+                    -- choice stages one bounded group transaction, then rebuilds so the
+                    -- filled marker moves immediately without touching unrelated settings.
+                    if not c.selected then
+                        local MT = mod.mod_tweaker
+                        local members = MT and MT:get_exclusive_members(row._mt_radio_group)
+                        if row._mt_radio_none then
+                            for j = 1, #(members or {}) do
+                                local member = members[j]
+                                local live = _cat_get(row._category, member.setting_id)
+                                if self:get_staged(row._category, member.setting_id, live) then
+                                    self:stage_set(row._category, member.setting_id, false)
+                                end
+                            end
+                        else
+                            self:stage_set(row._category, row._setting_id, true)
+                            self:_enforce_exclusive(row._category, row._setting_id)
+                        end
+                        _play_click()
+                        self._dd_block_until_press = true
+                        self:_build_rows(self._categories[self._selected])
+                        return
+                    end
+                elseif not clicked then
+                    row._radio_armed = false
                 end
             elseif row._wtype == "checkbox" or row._wtype == "boolean" then
                 -- on_left_release (not on_release): rows share the mt_list_start node,

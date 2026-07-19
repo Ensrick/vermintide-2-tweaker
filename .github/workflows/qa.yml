@@ -9,8 +9,9 @@ on:
 
 permissions:
   contents: read
-  # issues:read only - the lifecycle-cardinality guard lists open issues with
-  # the default GITHUB_TOKEN. Never grant write here (issue #750 is about
+  pull-requests: read
+  # Read-only issue/PR metadata supports lifecycle cardinality and trusted
+  # promotion authorization. Never grant write here (issue #750 is about
   # unlogged label edits; CI must stay read-only).
   issues: read
 
@@ -42,6 +43,23 @@ jobs:
           # no-op, never a false block, if the base ref is unavailable.
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Authorize stable promotion (maintainer-only)
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./qa/check_promotion_authorization.ps1 -WriteGitHubEnv
+
+      - name: Validate authorized stable promotion
+        if: env.VT2_PROMOTION == '1'
+        shell: pwsh
+        run: |
+          foreach ($dir in ($env:VT2_PROMOTION_DIRS -split ';')) {
+            if (-not $dir) { continue }
+            ./qa/check_promotion.ps1 -Mod $dir
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Windows PowerShell 5.1 - promotion self-test
         shell: powershell

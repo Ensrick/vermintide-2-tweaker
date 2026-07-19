@@ -1,5 +1,12 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Mutually exclusive controls (#446)
+
+- [ ] A presented exclusive group renders as one collapsible with radio bubbles, not separate ON/OFF steppers.
+- [ ] `None [Default]` clears every real member; selecting A/B moves the filled bubble immediately and stages exactly one true member.
+- [ ] APPLY persists the selection across restart; stock VMF options remain ordinary compatible checkboxes.
+- [ ] `/gut_regression_test` passes `mod_tweaker_exclusive_group_api`.
+
 ## Mod Tweaker DX12 fence diagnostics (#630)
 
 - [ ] Open Mod Tweaker in the keep, select Weapons, change window focus once, return, and close the menu normally.
@@ -19,6 +26,10 @@
 
 ## Character Dialogue media controls (#605)
 
+- [ ] An open character section closes on its next mouse/controller activation;
+      its virtual line rows disappear and owned preview audio stops.
+- [ ] Per-line state cycles Default -> Enabled -> Disabled -> Default without
+      skipping the false/Disabled state.
 - [ ] Every visible dialogue row has one fixed media button, not separate Play and Pause buttons.
 - [ ] Stopped/paused displays a play triangle; active playback displays two pause bars.
 - [ ] The active-row progress track advances, freezes while paused, resumes, and resets on replacement/cleanup.
@@ -259,3 +270,15 @@ Last updated: 2026-07-17.
 | Repro | Edit one/multi-digit, negative, and decimal slider values; click every boundary and use Left/Right/Home/End plus insert/delete at multiple UI scales. |
 | Expected post-fix | The caret uses `UIFontByResolution` and `UIRenderer.text_size` full/prefix metrics, remains at the intended insertion boundary, and commit/cancel/highlight behavior is unchanged. |
 | Detection | `/gut_regression_test`: `mod_tweaker_numeric_caret_geometry`; offline `test_mod_tweaker_numeric_editor.lua`; tier-a manifest locks native metric resolution and both `_mod_tweaker_view` / `_mod_tweaker_state` click call sites. |
+
+### issue340-all-language-glyph-diagnostics — distinguish bytes from atlas coverage
+
+| Field | Value |
+|-------|-------|
+| Symptom | Non-Latin player names and chat can render as square blocks even when their UTF-8 bytes reach the UI intact. |
+| Root cause | Vanilla chat copies sender/message strings into a UTF-8-aware widget, but the active font material only renders glyphs present in its compiled atlas. The reference mod supplies a proprietary custom atlas that this repository cannot redistribute. |
+| Fix version(s) | Pending next gui_tweaker_dev diagnostic bundle (#340) |
+| Category | UI / FONT RESOURCE / DIAGNOSTICS |
+| Repro | Run `/gut_all_languages_status` with and without the standalone Support All Languages mod enabled. |
+| Expected post-fix | The command reports all eight font rows, prints six visual language-family samples, and logs bounded per-player UTF-8 metrics without logging or rewriting names. |
+| Detection | Offline `test_gut_all_languages_diagnostics.lua`; `/gut_regression_test`: `all_languages_defer_340`; solo visual confirmation required after deployment. |
