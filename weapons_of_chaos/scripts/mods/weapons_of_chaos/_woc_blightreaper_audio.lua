@@ -180,7 +180,7 @@ function M.new(injected)
 	-- ActionSweep's `sfx_swing_started` flow event is silent. These are the exact
 	-- two Wwise event strings recovered from the native Executioner Sword unit.
 	-- Play them only for the positively tracked local 1P WOC unit; impacts remain
-	-- the Greataxe events owned by the combat template.
+	-- the native Crowbill events owned by the combat template.
 	function runtime.play_swing(action, phase)
 		local weapon_unit = action and action.weapon_unit
 		if not tracked_1p[weapon_unit] then return false, "not-blightreaper" end

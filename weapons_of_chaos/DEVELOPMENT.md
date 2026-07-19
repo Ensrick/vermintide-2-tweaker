@@ -38,12 +38,20 @@ CIM consumes the same provider marker to reject relic acquisition and mutation
 at its catalogue and central craft-dispatch boundaries.
 
 Blightreaper is fixed at 600 power in ordinary play and 900 in Chaos Wastes.
-Its combat template is a private deep clone of `we_one_hand_sword_template_1`;
-attack `anim_time_scale` values are multiplied by 0.75 without mutating the elf
-Sword donor or cloning damage profiles. Damaging sweeps use Greataxe hit audio
-and effects, while each sword swing event is translated to the corresponding
-one-handed Axe event at the same action index; two-handed Greataxe events are
-not safe substitutes for the sword action graph's timing and sweep geometry.
+Its combat template is a private deep clone of `one_handed_crowbill`
+(Sienna's Crowbill; author request 2026-07-19, replacing the earlier
+`we_one_hand_sword_template_1` clone); attack `anim_time_scale` values are
+multiplied by 0.83 without mutating the crowbill donor or cloning damage
+profiles. The crowbill graph natively supplies four chained lights, three
+heavies, and the push-attack follow-up, so the Sword era's four-light chain
+surgery and its Greataxe impact/swing translation layer are retired; damaging
+sweeps keep the crowbill's native pick impact identity, with only the burn
+stab's fire sounds normalized to the family baseline because its burn profile
+is replaced by the relic's poison identity. Non-Sienna receivers reuse Weapon
+Tweaker's proven per-receiver crowbill 3P coverage: attack events through the
+`WeaponUnitExtension._play_3p_anim` boundary and the wield stance in data via
+`wield_anim_career_3p` (`to_1h_sword` on every non-Sienna career except
+`wh_priest`, which takes `to_1h_hammer`; bw_ careers stay native).
 Its `Poisoned Edge` trait owns the only equipment proc and applies the native
 `arrow_poison_dot` through `BuffSyncType.All`, which preserves the Hagbane
 damage and poisoned FX for host- and client-owned hits. `Shyish Health Curse`

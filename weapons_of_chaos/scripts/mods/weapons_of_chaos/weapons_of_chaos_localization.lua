@@ -36,6 +36,6 @@ return {
 		en = "Enable Blightreaper",
 	},
 	enable_blightreaper_tooltip = {
-		en = "Adds the Blightreaper: a Cursed 600-power relic using a four-light Sword combat style at 75%% speed, intrinsic +15%% critical chance, armour-capable attacks, Hagbane poison, and kill-spawned Shyish spirits. It becomes 900 power and cannot be tempered in Chaos Wastes. Any career can equip it. Takes effect after you restart the game.",
+		en = "Adds the Blightreaper: a Cursed 600-power relic using Sienna's Crowbill combat style at 83%% speed, intrinsic +15%% critical chance, armour-capable attacks, Hagbane poison, and kill-spawned Shyish spirits. It becomes 900 power and cannot be tempered in Chaos Wastes. Any career can equip it. Takes effect after you restart the game.",
 	},
 }
