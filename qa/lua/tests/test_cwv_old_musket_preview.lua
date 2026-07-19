@@ -127,6 +127,11 @@ return function(H, repo_root)
         H.equal(Cim.properties_preview_position("melee", native), nil)
         H.equal(Cim.properties_preview_position("ranged", nil), nil)
         H.equal(Cim.properties_preview_position("ranged", {}), nil)
+
+        H.equal(Cim.overview_preview_x("ranged", -0.8, false), 0.8)
+        H.equal(Cim.overview_preview_x("ranged", -0.8, true), -0.8)
+        H.equal(Cim.overview_preview_x("melee", -0.8, false), -0.8)
+        H.equal(Cim.overview_preview_x("ranged", nil, false), nil)
     end)
 
     H.test("CIM #404 runtime installs one active-only zoom-durable correction", function()
@@ -178,6 +183,68 @@ return function(H, repo_root)
         H.equal(Runtime.install({}), false)
     end)
 
+    H.test("CIM #404 accepts retail callable-table vector constructors", function()
+        local Runtime = dofile(repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
+        local hook
+        local set_position
+        local Vector3 = setmetatable({}, {
+            __call = function(_, x, y, z) return x + y + z end,
+        })
+        local Vector3Box = setmetatable({}, {
+            __call = function(_, value) return { value = value } end,
+        })
+        local ok = Runtime.install({
+            mod = { hook = function(_, _, _, callback) hook = callback end },
+            policy = Cim,
+            is_active = function() return true end,
+            unit_api = {
+                alive = function() return true end,
+                world_position = function() return 10 end,
+                set_local_position = function(_, _, value) set_position = value end,
+            },
+            vector3 = Vector3,
+            vector3_box = Vector3Box,
+            printf = function() end,
+        })
+        H.equal(ok, true)
+        local previewer = hook(function()
+            return { _spawn_position = { -0.85, 3, 0 }, _link_unit = {} }
+        end, {}, {}, { data = { key = "es_longbow", slot_type = "ranged" } })
+        H.equal(set_position, 10.85)
+        H.equal(previewer._unit_start_position_boxed.value, 10.85)
+    end)
+
+    H.test("CIM #404 constructor failure leaves preview state untouched", function()
+        local Runtime = dofile(repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
+        local hook
+        local writes = 0
+        local logged = 0
+        H.equal(Runtime.install({
+            mod = { hook = function(_, _, _, callback) hook = callback end },
+            policy = Cim,
+            is_active = function() return true end,
+            unit_api = {
+                alive = function() return true end,
+                world_position = function() return 10 end,
+                set_local_position = function() writes = writes + 1 end,
+            },
+            vector3 = {},
+            vector3_box = function(value) return value end,
+            printf = function() logged = logged + 1 end,
+        }), true)
+        local native = { -0.85, 3, 0 }
+        local previewer = { _spawn_position = native, _link_unit = {} }
+        hook(function() return previewer end, {}, {}, {
+            data = { key = "es_longbow", slot_type = "ranged" },
+        })
+        H.equal(writes, 0)
+        H.equal(previewer._spawn_position, native)
+        H.equal(previewer._unit_start_position_boxed, nil)
+        H.equal(logged, 1)
+    end)
+
     H.test("CIM #404 production correction is construction-only and zoom durable", function()
         local root = repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
@@ -191,8 +258,9 @@ return function(H, repo_root)
         H.truthy(entry:find("_FORGE_PREVIEW.install_runtime(", 1, true))
         H.truthy(runtime:find('deps.mod:hook("HeroWindowWeaveProperties", "_create_item_previewer"', 1, true))
         H.truthy(runtime:find("deps.policy.properties_preview_position", 1, true))
-        H.truthy(runtime:find("previewer._unit_start_position_boxed = deps.vector3_box(adjusted)", 1, true))
+        H.truthy(runtime:find("previewer._unit_start_position_boxed = adjusted_box", 1, true))
         H.truthy(runtime:find("if not deps.is_active() or not previewer then return previewer end", 1, true))
+        H.truthy(runtime:find("pcall(deps.vector3, dx, dy, dz)", 1, true))
     end)
 
     H.test("CWV #474 installs Old Musket in the generic preview lease bridge", function()

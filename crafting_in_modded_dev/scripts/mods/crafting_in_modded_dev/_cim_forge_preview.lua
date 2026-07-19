@@ -10,8 +10,8 @@ function M.install(deps)
             or type(deps.policy.properties_preview_position) ~= "function"
             or type(deps.is_active) ~= "function"
             or type(deps.unit_api) ~= "table"
-            or type(deps.vector3) ~= "function"
-            or type(deps.vector3_box) ~= "function"
+            or deps.vector3 == nil
+            or deps.vector3_box == nil
             or type(deps.printf) ~= "function" then
         return false, "dependencies_unavailable"
     end
@@ -34,11 +34,26 @@ function M.install(deps)
             local dx = target[1] - (native_position[1] or target[1])
             local dy = target[2] - (native_position[2] or target[2])
             local dz = target[3] - (native_position[3] or target[3])
-            local adjusted = current + deps.vector3(dx, dy, dz)
+            -- Stingray exposes Vector3/Vector3Box as callable tables in retail,
+            -- not ordinary Lua functions. Validate by calling them, and make no
+            -- preview state writes if either constructor is unavailable.
+            local vector_ok, delta = pcall(deps.vector3, dx, dy, dz)
+            if not vector_ok or delta == nil then
+                deps.printf("[cim:404] ranged preview correction skipped key=%s reason=vector3_constructor",
+                    tostring((data and data.key) or (item and item.key) or "<?>"))
+                return previewer
+            end
+            local adjusted = current + delta
+            local box_ok, adjusted_box = pcall(deps.vector3_box, adjusted)
+            if not box_ok or adjusted_box == nil then
+                deps.printf("[cim:404] ranged preview correction skipped key=%s reason=vector3_box_constructor",
+                    tostring((data and data.key) or (item and item.key) or "<?>"))
+                return previewer
+            end
 
             deps.unit_api.set_local_position(link_unit, 0, adjusted)
             previewer._spawn_position = target
-            previewer._unit_start_position_boxed = deps.vector3_box(adjusted)
+            previewer._unit_start_position_boxed = adjusted_box
             deps.printf(
                 "[cim:404] ranged properties preview centered key=%s native_x=%.3f target_x=%.3f",
                 tostring((data and data.key) or (item and item.key) or "<?>"),
