@@ -286,6 +286,10 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   `_levels_by_act` map from `UnlockableLevels`. This makes temporary area exposure
   plus view-local act filtering a narrower availability seam than rewriting the
   generated campaign/unlock tables. [src: scripts/ui/views/start_game_view/windows/start_game_window_area_selection.lua:91-95; scripts/ui/views/start_game_view/windows/start_game_window_area_selection_console_v2.lua:100-105; scripts/ui/views/start_game_view/windows/start_game_window_mission_selection.lua:108-129; scripts/ui/views/start_game_view/windows/start_game_window_mission_selection_console.lua:98-125]
+- Both area selectors publish the widgets vanilla actually assigned through
+  `_active_area_widgets`; the controller path stops collecting at its 5-by-3
+  grid limit before sorting, so `AreaSettings` visibility/sort state alone does
+  not prove that a particular area reached the rendered list. [src: scripts/ui/views/start_game_view/windows/start_game_window_area_selection.lua:162; scripts/ui/views/start_game_view/windows/definitions/start_game_window_area_selection_console_v2_definitions.lua:48-51; scripts/ui/views/start_game_view/windows/start_game_window_area_selection_console_v2.lua:100-110,199]
 - Level transition loads every path in `LevelSettings[level_key].packages`
   asynchronously under the level key as reference name, and unloads under the same
   reference on transition. A menu-only availability feature should leave this

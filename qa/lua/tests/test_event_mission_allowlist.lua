@@ -122,9 +122,101 @@ return function(H, repo_root)
         H.equal(area_console, 1)
         H.equal(mission_desktop, 1)
         H.equal(mission_console, 1)
-        H.truthy(event_source:find("area.exclude_from_area_selection = previous", 1, true))
         H.truthy(event_source:find("Missions.selected_area_name(self)", 1, true))
+        local _, area_adapter_calls = event_source:gsub("Missions%.run_area_setup%(", "")
+        local _, mission_adapter_calls = event_source:gsub("Missions%.apply_levels_for_area%(", "")
+        H.equal(area_adapter_calls, 1)
+        H.equal(mission_adapter_calls, 1)
+        H.truthy(event_source:find("area_hooks=%d mission_hooks=%d", 1, true))
 
+    end)
+
+    H.test("Event area setup observes published widgets and restores the global flag", function()
+        local area = { exclude_from_area_selection = true }
+        local view = {}
+        local signatures = {}
+        local ok, err, emit, proof = Missions.run_area_setup(function(self)
+            H.equal(area.exclude_from_area_selection, false)
+            self._active_area_widgets = {
+                { content = { area_name = "helmgart" } },
+                { content = { area_name = Missions.AREA_KEY } },
+            }
+        end, view, "desktop", area, signatures)
+
+        H.equal(ok, true)
+        H.equal(err, nil)
+        H.equal(emit, true)
+        H.equal(area.exclude_from_area_selection, true)
+        H.truthy(proof:find("call_ok=true", 1, true))
+        H.truthy(proof:find("widgets=2 target=1", 1, true))
+    end)
+
+    H.test("Event area setup skips stale widgets after a failed native build", function()
+        local area = { exclude_from_area_selection = true }
+        local view = {
+            _active_area_widgets = {
+                { content = { area_name = Missions.AREA_KEY } },
+            },
+        }
+        local ok, err, emit, proof = Missions.run_area_setup(function()
+            error("native build failed")
+        end, view, "controller", area, {})
+
+        H.equal(ok, false)
+        H.truthy(tostring(err):find("native build failed", 1, true))
+        H.equal(emit, true)
+        H.equal(area.exclude_from_area_selection, true)
+        H.truthy(proof:find("call_ok=false", 1, true))
+        H.truthy(proof:find("widgets=skipped", 1, true))
+        H.equal(proof:find("target=1", 1, true), nil)
+    end)
+
+    H.test("Event diagnostic deduplication is independent per UI surface", function()
+        local signatures = {}
+        H.equal(Missions.should_emit_for_surface(signatures, "desktop", "same"), true)
+        H.equal(Missions.should_emit_for_surface(signatures, "controller", "same"), true)
+        H.equal(Missions.should_emit_for_surface(signatures, "desktop", "same"), false)
+        H.equal(Missions.should_emit_for_surface(signatures, "controller", "same"), false)
+        H.equal(Missions.should_emit_for_surface(signatures, "desktop", "changed"), true)
+        H.equal(Missions.should_emit_for_surface(signatures, "controller", "same"), false)
+    end)
+
+    H.test("Event mission observation reads back assigned view state", function()
+        local levels = fixtures()
+        local original = { act_1 = { levels.control_level } }
+        local view = { _levels_by_act = original }
+        local enabled = {
+            mission_dlc_dwarf_fest = true,
+            mission_dlc_celebrate_crawl = true,
+        }
+        local applied, assigned, observed = Missions.apply_levels_for_area(
+            view, Missions.AREA_KEY, levels, function(id) return enabled[id] end)
+
+        H.equal(applied, true)
+        H.equal(assigned, true)
+        H.equal(observed, view._levels_by_act)
+        H.equal(observed == original, false)
+        H.equal(#observed.act_celebrate, 2)
+        H.truthy(Missions.celebrate_level_proof(observed):find(
+            "count=2 ids=[dlc_dwarf_fest,dlc_celebrate_crawl]", 1, true))
+    end)
+
+    H.test("Event mission observation exposes a rejected assignment", function()
+        local levels = fixtures()
+        local original = { act_1 = { levels.control_level } }
+        local proxy = setmetatable({}, {
+            __index = function(_, key)
+                if key == "_levels_by_act" then return original end
+            end,
+            __newindex = function() end,
+        })
+        local applied, assigned, observed = Missions.apply_levels_for_area(
+            proxy, Missions.AREA_KEY, levels, function() return true end)
+
+        H.equal(applied, true)
+        H.equal(assigned, false)
+        H.equal(observed, original)
+        H.equal(Missions.celebrate_level_proof(observed), "count=missing ids=[]")
     end)
 
     H.test("Event mission contract ignores NetworkLookup and accepts the menu-read shape", function()
