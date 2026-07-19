@@ -1,6 +1,6 @@
 # Character Weapon Variants — Changelog
 
-## 0.1.463-dev (2026-07-19) - truthful Crowbill transform lifecycle and #423 marker isolation (#604 #423) [diagnostics-armed]
+## 0.1.463-dev (2026-07-19) - truthful Crowbill transform lifecycle and #423 marker isolation (#604 #423) [diagnostics-armed] [coop-required]
 
 - Replaced the synchronous Crowbill scale baseline with a generation-aware
   lifecycle owner. The first update after reconstruction reads the settled
