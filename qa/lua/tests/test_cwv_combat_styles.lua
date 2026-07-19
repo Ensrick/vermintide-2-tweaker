@@ -38,6 +38,13 @@ return function(H, repo_root)
 		H.equal(policy.next_style("es_bastard_sword", "kerillian"), "bretonnian")
 		H.equal(policy.package("es_bastard_sword", "greatsword").template,
 			policy.BRETONNIAN_GREATSWORD_TEMPLATE)
+		H.equal(policy.package("es_bastard_sword", "greatsword").presentation.transform_key,
+			"bretonnian_greatsword_inverse")
+		H.equal(policy.package("es_bastard_sword", "kerillian").presentation.transform_key,
+			"bretonnian_greatsword_inverse")
+		-- Retired Imperial/Black Guard rows already use Empire Greatsword meshes;
+		-- they must never receive the native Bretonnian mesh's inverse transform.
+		H.equal(policy.package("cwv_es_longsword", "greatsword").presentation, nil)
 		H.equal(policy.style("wh_2h_sword"), "greatsword")
 		H.equal(policy.next_style("wh_2h_sword", "greatsword"), "kerillian")
 		H.equal(policy.next_style("wh_2h_sword", "kerillian"), "bretonnian")
@@ -327,6 +334,43 @@ return function(H, repo_root)
 	end)
 
 	H.test("CWV Combat Style persistence is exact-instance and compact", function()
+		local long = string.rep("x", policy.MAX_TOKEN + 20)
+		local item = { backend_id = "mission_uuid", data = { name = "es_2h_sword" } }
+		local row = { identity = "mission_uuid", family_id = "greatsword",
+			style_id = "bretonnian" }
+		local probe = policy.mission_ui_probe("console", "input_release", item, row,
+			"_1_1", long)
+		H.equal(probe.surface, "console")
+		H.equal(probe.stage, "input_release")
+		H.equal(probe.item_key, "es_2h_sword")
+		H.equal(probe.raw_identity, "mission_uuid")
+		H.equal(probe.identity, "mission_uuid")
+		H.equal(probe.family, "greatsword")
+		H.equal(probe.style, "bretonnian")
+		H.equal(probe.row, "_1_1")
+		H.equal(#probe.detail, policy.MAX_TOKEN)
+		H.equal(policy.mission_ui_probe_key(probe),
+			policy.mission_ui_probe_key(policy.mission_ui_probe("console",
+				"input_release", item, row, "_1_1", long)))
+		local emitted = {}
+		local sink = policy.new_mission_ui_probe_sink(function(value, count, cap)
+			emitted[#emitted + 1] = { value, count, cap }
+		end, 2)
+		local accepted, count = sink(probe)
+		H.equal(accepted, true)
+		H.equal(count, 1)
+		accepted, count = sink(probe)
+		H.equal(accepted, false)
+		H.equal(count, 1)
+		accepted, count = sink(policy.mission_ui_probe("desktop", "widget_missing"))
+		H.equal(accepted, true)
+		H.equal(count, 2)
+		accepted, count = sink(policy.mission_ui_probe("desktop", "input_release"))
+		H.equal(accepted, false)
+		H.equal(count, 2)
+		H.equal(#emitted, 2)
+		H.equal(emitted[2][3], 2)
+
 		local store = policy.normalize_store(nil)
 		local changed = policy.set(store, "greatsword_a", "es_2h_sword", "longsword")
 		H.equal(changed, true)
@@ -568,6 +612,11 @@ return function(H, repo_root)
 					right_hand_scale_3p = { 1, 0.8, 0.9 },
 					right_hand_offset_3p = { 0, 0, -0.065 },
 				},
+				bretonnian_greatsword_inverse = {
+					item_key = "bret_greatsword_inverse_test",
+					right_hand_scale = { 1, 1.25, 1 / 0.9 },
+					right_hand_offset = { 0, 0, 0.065 },
+				},
 			},
 			peer_for_owner = function(owner)
 				return owner == "remote_owner" and "peer_a" or nil
@@ -592,6 +641,24 @@ return function(H, repo_root)
 		H.equal(receiver_transform.right_hand_scale, nil)
 		H.equal(receiver_transform.right_hand_scale_3p[2], 0.8)
 		H.equal(receiver_transform.right_hand_offset_3p[3], -0.065)
+		H.equal(runtime:presentation("bretonnian_greatsword_inverse").item_key,
+			"bret_greatsword_inverse_test")
+		H.equal(runtime:presentation(false), nil)
+		local inverse_transform = runtime:transform_decision({
+			backend_id = "uuid_bret_greatsword", name = "es_bastard_sword",
+		})
+		H.equal(inverse_transform, false)
+		local inverse_changed = runtime:set_item_style({
+			backend_id = "uuid_bret_greatsword", name = "es_bastard_sword",
+		}, nil, "greatsword", "test", false)
+		H.equal(inverse_changed, true)
+		inverse_transform = runtime:transform_decision({
+			backend_id = "uuid_bret_greatsword", name = "es_bastard_sword",
+		})
+		H.equal(inverse_transform.item_key, "bret_greatsword_inverse_test")
+		H.equal(inverse_transform.right_hand_scale[2], 1.25)
+		H.truthy(math.abs(inverse_transform.right_hand_scale[3] - (1 / 0.9)) < 0.0000001)
+		H.equal(inverse_transform.right_hand_offset[3], 0.065)
 		H.equal(runtime:effective_template_name({ backend_id = "uuid_a", name = "es_2h_sword" }),
 			policy.KERILLIAN_TEMPLATE)
 		H.equal(fake_mod.get_effective_combat_style_template_name(
@@ -611,6 +678,10 @@ return function(H, repo_root)
 			{ name = "es_2h_sword" }).item_key, "greatsword_bret_test")
 		H.equal(runtime:remote_transform("remote_owner", "slot_melee",
 			{ name = "es_bastard_sword" }), false)
+		registered.callback("peer_a", policy.SCHEMA, "state", "slot_melee", "greatsword", "greatsword")
+		local remote_inverse = runtime:remote_transform("remote_owner", "slot_melee",
+			{ name = "es_bastard_sword" })
+		H.equal(remote_inverse.item_key, "bret_greatsword_inverse_test")
 		local changed = runtime:set_item_style({ backend_id = "uuid_b", name = "es_2h_sword" },
 			nil, "longsword", "test", false)
 		H.equal(changed, true)
@@ -708,6 +779,26 @@ return function(H, repo_root)
 		H.equal(policy.valid_wire(1, "query", "", "", ""), true)
 	end)
 
+	H.test("CWV #692 reciprocal Bretonnian transform reaches every appearance consumer", function()
+		local function read(relative)
+			local file = assert(io.open(repo_root .. "/" .. relative, "rb"))
+			local source = file:read("*a")
+			file:close()
+			return source
+		end
+		local main = require("cwv_source").combined(repo_root)
+		local husk = read("character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua")
+		H.truthy(main:find('item_key = "cwv_style_bretonnian_greatsword_inverse"', 1, true))
+		H.truthy(main:find('right_hand_scale = inverse_bretonnian_scale', 1, true))
+		H.truthy(main:find('right_hand_offset = inverse_bretonnian_offset', 1, true))
+		H.truthy(main:find('"right", "1p", "owner_1p"', 1, true))
+		H.truthy(main:find('is_bot and "bot" or "owner_3p"', 1, true))
+		H.truthy(main:find('"right", "3p", "inventory_preview"', 1, true))
+		H.truthy(main:find('_om.combat_styles:transform_decision(item_data, item.backend_id)', 1, true))
+		H.truthy(husk:find('_om.combat_styles:remote_transform(owner_unit_3p, slot_name, item_data)', 1, true))
+		H.truthy(husk:find('"3p", "remote_husk"', 1, true))
+	end)
+
 	H.test("CWV Combat Style production is consolidated and query replies do not echo", function()
 		local function read(relative)
 			local file = assert(io.open(repo_root .. "/" .. relative, "rb"))
@@ -731,6 +822,8 @@ return function(H, repo_root)
 		H.truthy(module:find('function runtime:request_item_style', 1, true))
 		H.truthy(module:find('acquire_style_resource', 1, true))
 		H.truthy(module:find('function M.refresh_console_row_layout', 1, true))
+		H.truthy(module:find('"[cwv:774] surface=%s stage=%s', 1, true))
+		H.truthy(module:find('M.MISSION_UI_DIAGNOSTIC_CAP = 24', 1, true))
 		H.truthy(main:find("policy.plan_legacy_migrations(saved", 1, true))
 		H.truthy(main:find('_om._migrate_legacy_style_items = function()', 1, true))
 		H.truthy(module:find('cwv_es_longsword_blackguard = {', 1, true))

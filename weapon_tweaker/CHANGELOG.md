@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.282-beta (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
+
+- Extended the existing declarative animation-remap owner with the missing
+  CWV animation vocabulary used by Outrider and cross-character weapon states.
+- Kept one wield hook and fail-closed donor fallback; added regression evidence
+  for recognized events and bounded unknown-event diagnostics.
+
 ## 0.12.281-beta (2026-07-19) - #735 shield-only rotation routing [verify-fix-coop]
 
 - Added an explicit hand discriminator to baked transform descriptors so the

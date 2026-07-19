@@ -13,16 +13,15 @@ return function(H, repo_root)
 		return value
 	end
 
-	H.test("CWV #604 runtime classifies explicit family and optional vanilla separately", function()
+	H.test("CWV #798 runtime classifies every Crowbill family member implicitly", function()
 		local cwv = { cwv_key = "cwv_es_imperial_crowbill", template = family.SOURCE_TEMPLATE }
 		local key, identity = runtime.classify(family, cwv, "crafted-guid-1",
-			function() return cwv.cwv_key end, false)
+			function() return cwv.cwv_key end)
 		H.equal(key, cwv.cwv_key)
 		H.equal(identity, "crafted-guid-1")
 		local vanilla = { name = family.SOURCE_ITEM, template = family.SOURCE_TEMPLATE }
-		H.equal(runtime.classify(family, vanilla, "vanilla-1", nil, false), nil)
 		local vanilla_key, vanilla_identity = runtime.classify(family, vanilla,
-			"vanilla-1", nil, true)
+			"vanilla-1", nil)
 		H.equal(vanilla_key, family.SOURCE_ITEM)
 		H.equal(vanilla_identity, "vanilla-1")
 	end)
@@ -77,12 +76,16 @@ return function(H, repo_root)
 		H.equal(backend_hooks, 1)
 	end)
 
-	H.test("CWV #604 optional vanilla capability is explicit and default off", function()
+	H.test("CWV #798 retired vanilla setting cannot gate family enrollment", function()
 		local data = read(repo_root
 			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants_data.lua")
-		H.truthy(data:find('setting_id    = "enable_cwv_vanilla_crowbill_hammer_mode"', 1, true))
-		local at = assert(data:find('setting_id    = "enable_cwv_vanilla_crowbill_hammer_mode"', 1, true))
-		H.truthy(data:sub(at, at + 180):find("default_value = false", 1, true))
+		local localization = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants_localization.lua")
+		local main = require("cwv_source").combined(repo_root)
+		for _, source in ipairs({ data, localization, main }) do
+			H.equal(source:find("enable_cwv_vanilla_crowbill_hammer_mode", 1, true), nil)
+		end
+		H.equal(runtime.VANILLA_SETTING_ID, nil)
 	end)
 
 	H.test("CWV #604 install registers two templates and exact Weapon Special lookup", function()
@@ -138,7 +141,9 @@ return function(H, repo_root)
 					end
 				end,
 			},
-			get = function() return false end,
+			-- A stale retired preference may still exist in VMF persistence. The
+			-- runtime must never consult it.
+			get = function() error("retired Crowbill setting was read") end,
 			network_register = function(self, channel, callback)
 				registered = { channel = channel, callback = callback }
 			end,
@@ -161,6 +166,9 @@ return function(H, repo_root)
 		local item = { cwv_key = "cwv_es_imperial_crowbill", backend_id = "cwv_test_001",
 			mod_data = { cwv_crowbill_mode = "hammer" } }
 		H.equal(runtime.resolve_template(item), _G.Weapons.cwv_crowbill_hammer_template)
+		local native = { name = family.SOURCE_ITEM, template = family.SOURCE_TEMPLATE,
+			backend_id = "native-test-001", mod_data = { cwv_crowbill_mode = "hammer" } }
+		H.equal(runtime.resolve_template(native), _G.Weapons.cwv_crowbill_hammer_template)
 
 		_G.Weapons = saved.Weapons
 		_G.DamageProfileTemplates = saved.DamageProfileTemplates

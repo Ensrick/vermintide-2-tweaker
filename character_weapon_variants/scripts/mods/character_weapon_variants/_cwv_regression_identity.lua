@@ -120,10 +120,24 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 	local bret_package = policy.package("es_2h_sword", "bretonnian")
 	local native_bret_package = policy.package("es_bastard_sword", "bretonnian")
+	local native_bret_greatsword = policy.package("es_bastard_sword", "greatsword")
+	local native_bret_kerillian = policy.package("es_bastard_sword", "kerillian")
 	if not bret_package or not bret_package.presentation
 			or bret_package.presentation.transform_key ~= "greatsword_bretonnian"
-			or (native_bret_package and native_bret_package.presentation ~= nil) then
+			or (native_bret_package and native_bret_package.presentation ~= nil)
+			or not native_bret_greatsword or not native_bret_greatsword.presentation
+			or native_bret_greatsword.presentation.transform_key ~= "bretonnian_greatsword_inverse"
+			or not native_bret_kerillian or not native_bret_kerillian.presentation
+			or native_bret_kerillian.presentation.transform_key ~= "bretonnian_greatsword_inverse" then
 		return "Greatsword Bretonnian receiver presentation drifted"
+	end
+	local inverse = runtime:presentation("bretonnian_greatsword_inverse")
+	if type(inverse) ~= "table"
+			or inverse.item_key ~= "cwv_style_bretonnian_greatsword_inverse"
+			or math.abs((inverse.right_hand_scale and inverse.right_hand_scale[2] or 0) - 1.25) > 0.000001
+			or math.abs((inverse.right_hand_scale and inverse.right_hand_scale[3] or 0) - (1 / 0.9)) > 0.000001
+			or math.abs((inverse.right_hand_offset and inverse.right_hand_offset[3] or 0) - 0.065) > 0.000001 then
+		return "Bretonnian Greatsword inverse transform drifted"
 	end
 	local imperial = rawget(Weapons, "imperial_longsword_template")
 	local greatsword = rawget(Weapons, "two_handed_swords_template_1")
@@ -420,6 +434,77 @@ _rt_register("issue660_world_identity_lifecycle_replay", function()
 	end
 	if resolve("rt660-peer", "slot_melee", "different_base") ~= nil then
 		return "#660 remote descriptor crossed its vanilla base boundary"
+	end
+end)
+
+_rt_register("issue719_imperial_crowbill_remote_identity", function()
+	local family = _om.crowbill_family
+	local plan = _om._cwv_identity_payloads
+	local accept = _om._cwv_accept_identity
+	local resolve = _om._cwv_identity_descriptor_for_peer
+	if not family or type(plan) ~= "function" or type(accept) ~= "function"
+			or type(resolve) ~= "function" then
+		return "#719 exact Crowbill identity prerequisites are not installed"
+	end
+	if type(_om._husk_preselect_units) ~= "function"
+			or type(_om._husk_rekey_units) ~= "function"
+			or type(_om._husk_apply_cwv_transform) ~= "function" then
+		return "#719 centralized husk appearance adapters are not installed"
+	end
+	local surfaces = mod._cwv_identity_surfaces
+	if type(surfaces) ~= "table" or surfaces.network ~= true
+			or surfaces.remote_husk ~= true or surfaces.husk_wield ~= true
+			or surfaces.game_object_initialized ~= true
+			or surfaces.spawn_resynced_loadout ~= true
+			or surfaces.hot_join_sync ~= true or surfaces.peer_ready ~= true then
+		return "#719 exact identity lifecycle surface coverage is incomplete"
+	end
+	local model = family.model_for_variant
+		and family.model_for_variant("cwv_es_imperial_crowbill")
+	if not model or type(model.right_hand_unit) ~= "string"
+			or model.right_hand_unit == family.PLACEHOLDER_UNIT then
+		return "#719 Imperial Crowbill model is absent or still resolves to Sienna's donor"
+	end
+	local payloads = plan({
+		slot_melee = {
+			item_data = {
+				name = family.SOURCE_ITEM,
+				-- Canonical CIM synthetic shape: the cloned vanilla-base row keeps
+				-- its exact acquisition identity inside mod_data.  Do not rely on
+				-- a cwv-prefixed backend id or a top-level convenience stamp.
+				mod_data = {
+					backend_id = "rt719-guid-shaped-backend",
+					cwv_key = "cwv_es_imperial_crowbill",
+				},
+			},
+		},
+	})
+	local payload
+	for _, candidate in ipairs(payloads) do
+		if candidate.slot == "slot_melee" then payload = candidate; break end
+	end
+	if not payload or payload.item_key ~= "cwv_es_imperial_crowbill"
+			or payload.base_item_key ~= family.SOURCE_ITEM
+			or payload.skin_key ~= "" or type(payload.fingerprint) ~= "string"
+			or payload.fingerprint == "" then
+		return "#719 owner payload collapsed the skinless Imperial Crowbill to its donor"
+	end
+	local changed, descriptor, reason = accept("rt719-peer",
+		_om.appearance_lifecycle_policy.SCHEMA, payload)
+	if not changed or reason ~= "exact" or not descriptor
+			or descriptor.variant_key ~= "cwv_es_imperial_crowbill"
+			or descriptor.right_hand_unit ~= model.right_hand_unit
+			or descriptor.right_hand_unit == family.PLACEHOLDER_UNIT then
+		return "#719 receiver did not reconstruct the exact Imperial Crowbill model"
+	end
+	local retained, state = resolve("rt719-peer", "slot_melee", family.SOURCE_ITEM)
+	if state ~= "exact" or retained ~= descriptor then
+		return "#719 reconstructed Imperial Crowbill was not retained for husk wield"
+	end
+	local duplicate = accept("rt719-peer",
+		_om.appearance_lifecycle_policy.SCHEMA, payload)
+	if duplicate then
+		return "#719 duplicate identity scheduled a second husk rebuild"
 	end
 end)
 

@@ -248,6 +248,65 @@ return function(H, repo_root)
         H.equal(remote.fingerprint, owner.fingerprint)
     end)
 
+    H.test("CWV #719 skinless Imperial Crowbill survives exact remote reconstruction", function()
+        local model = assert(CrowbillFamily.model_for_variant("cwv_es_imperial_crowbill"))
+        local cim_item = {
+            name = CrowbillFamily.SOURCE_ITEM,
+            mod_data = {
+                backend_id = "rt719-guid-shaped-backend",
+                cwv_key = "cwv_es_imperial_crowbill",
+            },
+        }
+        H.equal(cim_item.name, CrowbillFamily.SOURCE_ITEM)
+        H.equal(cim_item.mod_data.cwv_key, "cwv_es_imperial_crowbill")
+        local function imperial_descriptor()
+            return assert(Exact.resolve_spawn_descriptor({
+                provider = "cwv",
+                variant = {
+                    item_key = "cwv_es_imperial_crowbill",
+                    base_weapon = CrowbillFamily.SOURCE_ITEM,
+                    right_hand_unit = model.right_hand_unit,
+                },
+                base = { right_hand_unit = CrowbillFamily.PLACEHOLDER_UNIT },
+            }))
+        end
+        local owner = imperial_descriptor()
+        H.equal(owner.skin, nil)
+        H.equal(owner.right_hand_unit, model.right_hand_unit)
+        H.truthy(owner.right_hand_unit ~= CrowbillFamily.PLACEHOLDER_UNIT,
+            "Imperial descriptor must not collapse to Sienna's donor Crowbill")
+
+        local lifecycle = Policy.new({
+            resolve_local = function(slot)
+                local item = slot and slot.item_data
+                if not (item and item.mod_data
+                        and item.mod_data.cwv_key == "cwv_es_imperial_crowbill") then
+                    return nil, item and item.name
+                end
+                return owner, item.name
+            end,
+            resolve_remote = function() return imperial_descriptor() end,
+            send = function() return true end,
+        })
+        local payload = assert(lifecycle:payload_for("slot_melee", { item_data = cim_item }))
+        H.equal(payload.item_key, "cwv_es_imperial_crowbill")
+        H.equal(payload.base_item_key, CrowbillFamily.SOURCE_ITEM)
+        H.equal(payload.skin_key, "")
+        H.equal(payload.right_hand_unit, nil,
+            "custom unit path must be reconstructed locally, never transported")
+
+        local changed, remote, reason = lifecycle:accept(
+            "peer-imperial", Policy.SCHEMA, payload)
+        H.equal(changed, true)
+        H.equal(reason, "exact")
+        H.equal(remote.right_hand_unit, model.right_hand_unit)
+        H.equal(remote.fingerprint, owner.fingerprint)
+
+        local duplicate = lifecycle:accept("peer-imperial", Policy.SCHEMA, payload)
+        H.equal(duplicate, false,
+            "duplicate Imperial identity must not schedule another husk rebuild")
+    end)
+
     H.test("CWV #660 explicit native identity suppresses stale base-career guesses", function()
         local lifecycle = Policy.new({
             resolve_local = function(slot) return nil, slot.base end,

@@ -1,5 +1,10 @@
 # Weapon Tweaker Changelog
 
+## 0.12.283-dev (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
+
+- Mirrors the beta track's expanded declarative remap vocabulary, single wield
+  owner, donor fallback, and bounded unknown-event evidence.
+
 ## 0.12.282-dev (2026-07-19) - #735 shield-only rotation routing [verify-fix-coop]
 
 - Mirrors WT beta's explicit hand discriminator and receiver policy so the

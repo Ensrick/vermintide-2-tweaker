@@ -3,7 +3,6 @@
 -- only a bounded pick/hammer presentation edge and render from local assets.
 local M = {}
 
-M.VANILLA_SETTING_ID = "enable_cwv_vanilla_crowbill_hammer_mode"
 M.SLOT = "slot_melee"
 M.PICK_TEMPLATE_KEY = "cwv_crowbill_pick_template"
 
@@ -25,7 +24,7 @@ local function _is_source_crowbill(family, item_data)
 		or item_data.item_type == family.SOURCE_ITEM
 end
 
-function M.classify(family, item_data, backend_id, cwv_key_for_item, allow_vanilla)
+function M.classify(family, item_data, backend_id, cwv_key_for_item)
 	if type(item_data) ~= "table" then return nil end
 	local bid = _bid(item_data, backend_id)
 	local cwv_key = type(cwv_key_for_item) == "function"
@@ -33,7 +32,10 @@ function M.classify(family, item_data, backend_id, cwv_key_for_item, allow_vanil
 	if _valid_family_key(family, cwv_key) and cwv_key ~= family.SOURCE_ITEM then
 		return cwv_key, bid or cwv_key
 	end
-	if allow_vanilla and _is_source_crowbill(family, item_data) then
+	-- Crowbill mode is a family capability, not a saved preference. The native
+	-- Sienna donor and every authored CWV variant always enter the same mode
+	-- owner while CWV itself is enabled.
+	if _is_source_crowbill(family, item_data) then
 		return family.SOURCE_ITEM, bid or family.SOURCE_ITEM
 	end
 	return nil
@@ -83,12 +85,8 @@ function M.install(mod, om)
 	local enabled = true
 	local restoring_source = false
 
-	local function allow_vanilla()
-		return enabled and mod:get(M.VANILLA_SETTING_ID) == true
-	end
-
 	local function classify(item_data, backend_id)
-		return M.classify(family, item_data, backend_id, om._cwv_key_for_item, allow_vanilla())
+		return M.classify(family, item_data, backend_id, om._cwv_key_for_item)
 	end
 
 	local function item_mode(item_data, identity)
@@ -292,30 +290,6 @@ function M.install(mod, om)
 		if not enabled then return false end
 		send("others", "query")
 		return publish_loadout(nil, reason or "state_boundary")
-	end
-
-	function M.on_setting_changed(setting_id)
-		if setting_id ~= M.VANILLA_SETTING_ID then return end
-		-- Turning vanilla support off restores an actively wielded vanilla
-		-- Crowbill before the classifier becomes ineligible.
-		if mod:get(M.VANILLA_SETTING_ID) ~= true then
-			local pm = Managers and Managers.player
-			local ok, player = pm and pcall(pm.local_player, pm, 1)
-			player = ok and player or nil
-			local unit = player and player.player_unit
-			local inv, equipment = owner_equipment(unit)
-			local slot = equipment and equipment.slots and equipment.slots[M.SLOT]
-			local item = slot and slot.item_data
-			if item and _is_source_crowbill(family, item) and not item.cwv_key then
-				local identity = _bid(item) or family.SOURCE_ITEM
-				if rewield(unit, policy.MODE_PICK, false, family.SOURCE_ITEM, identity, true) then
-					local wire_identity = safe_token(family.SOURCE_ITEM) .. ":"
-						.. safe_token(local_peer_id(unit)) .. ":" .. safe_token(M.SLOT)
-					send("others", "state", M.SLOT, policy.MODE_PICK,
-						wire_identity, family.SOURCE_ITEM)
-				end
-			end
-		end
 	end
 
 	function M.restore_local(reason)
