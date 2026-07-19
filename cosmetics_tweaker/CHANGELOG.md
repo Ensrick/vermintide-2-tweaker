@@ -1,5 +1,53 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.158-dev - 2026-07-19 - #656 #658 #696 #704 #730 authored appearance integration and bounded evidence [diagnostics-armed]
+
+- Added a vanilla-geometry Reikland griffin cape variant for the red Foot Knight
+  outfit (#656). The authored-outfit provider reuses the existing inventory,
+  owner, remote-husk, and score replay path; only the cape diffuse changes, and
+  the vanilla normal/packed/first-person maps remain intact.
+
+### #658 Purpure/Azure cross-career availability [verify-fix-coop]
+
+- Adds independent, default-off Mercenary, Huntsman, and Foot Knight sharing controls while Grail Knight remains the native default owner.
+- Resolves the exact wearer's vanilla hat/outfit fallback for every outgoing peer appearance, persisted replay, and hot join; unknown careers fail closed instead of guessing a donor.
+- Preserves explicit saved career choices across the set master switch and keeps render-state invalidation keyed to the exact peer/career pair.
+
+### #696 material-manager boundary diagnostics [diagnostics-armed]
+
+- The shipped material-residency guard did not emit a single `[cos:696]`
+  skip in twelve recent sessions, while the same six `MeshObject` lookup
+  warnings remained invariant at keep load. This disproves the earlier
+  non-resident-material hypothesis; `Application.can_get("material", path)`
+  succeeds before the warning.
+- Both embedded Material-Hijack bind sites now emit one bounded `bind-start` /
+  `bind-end` bracket per binding convention, authored unit-name, slot and
+  material immediately around `Unit.set_material`. The start line also records
+  mesh count and how many meshes expose the requested slot. The 24-key session
+  cap and stable authored identity prevent respawns/transitions from creating
+  log spam.
+- The diagnostic does not suppress or replace the native bind. Its purpose is
+  to distinguish a warning emitted inside `Unit.set_material` from a warning
+  emitted by the preceding `World.spawn_unit`, and to name the resource path
+  required for the eventual narrow fix.
+
+**Diagnostic (solo):** enter the keep once with the same equipped cosmetics.
+Attach the log section containing the six `MeshObject` warnings plus the
+adjacent `[cos:696] bind-start` / `bind-end` lines. A warning synchronously
+bracketed by a pair identifies that exact binding convention/unit/slot/material.
+An unbracketed warning excludes these two traced calls for that instant but does
+not, by itself, prove which other spawn or compiled-material boundary emitted it.
+
+### #704 Sword+Mace picker-family census [diagnostics-armed]
+
+- Captures the exact post-vanilla illusion rows plus live right/left component pools when CWV Sword+Mace customization opens.
+- Reports missing or foreign families as bounded `[cos:704]` evidence without changing the picker, adding transport, or assuming the reported Bardin hammer's source.
+
+### #730 score-lineup authored armor replay [verify-fix]
+
+- Retains the exact Purpure/Azure armor identity through the score preview's hidden spawn callback and paints once after the mesh becomes visible.
+- Invalidates on hide/show and replacement edges without per-frame material writes, sharing the proven inventory-preview visibility contract.
+
 ## 0.9.157-dev - 2026-07-19 - #794 #795 #796 glow editor geometry, badge, and live preview [verify-fix]
 
 ### #794 glow slider track geometry
@@ -45,7 +93,6 @@
   the selected illusion's registered native material vectors back immediately;
   slider movement performs local material writes only and creates no RPC or
   per-frame network retry.
-
 ## 0.9.156-dev - 2026-07-19 - #835 callable Vector3 constructor [verify-fix]
 
 - Synchronized the shared appearance primitive's protected callable constructor

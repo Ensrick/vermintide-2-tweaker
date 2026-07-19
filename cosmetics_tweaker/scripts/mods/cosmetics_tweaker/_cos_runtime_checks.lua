@@ -29,6 +29,7 @@ function M.install(mod, rt_register, deps)
     local MH_EMBED = deps.mh_embed
     local CWV_PEER_IDENTITY = deps.cwv_peer_identity
     local LA_INSTANCE_POLICY = deps.la_instance_policy
+    local ISSUE704_PICKER_FAMILY = deps.issue704_picker_family
 
 -- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
@@ -211,6 +212,25 @@ _rt_register("cos_la_score_screen_apply_wired", function()
         or SCORE_IDENTITY.should_purge_mismatch(nil)
         or not SCORE_IDENTITY.should_purge_mismatch(true) then
         return "spawn mismatch purge boundary does not distinguish human from bot owner alias"
+    end
+end)
+
+-- #730: authored armor on a score-lineup HeroPreviewer must share the
+-- inventory preview's post-visibility, mesh-identity replay boundary. The
+-- score callback sees the wire-safe donor skin and therefore carries the exact
+-- authored variant separately; it must not treat a successful hidden-spawn
+-- write as proof of final presentation.
+_rt_register("issue730_score_armor_visibility_replay", function()
+    if type(GK_SET.apply_armor_to_score_preview) ~= "function" then
+        return "score armor visibility replay adapter missing"
+    end
+    local contract = GK_SET.PREVIEW_REPLAY_CONTRACT
+    if type(contract) ~= "table"
+        or contract.apply_after_visibility ~= true
+        or contract.invalidate_while_hidden ~= true
+        or contract.cache_identity ~= "mesh_unit"
+        or contract.score_uses_same_visibility_boundary ~= true then
+        return "score armor does not share the bounded preview replay contract"
     end
 end)
 
@@ -512,7 +532,8 @@ local function _issue629_grail_knight_set_contract()
     if type(preview_contract) ~= "table"
         or preview_contract.apply_after_visibility ~= true
         or preview_contract.invalidate_while_hidden ~= true
-        or preview_contract.cache_identity ~= "mesh_unit" then
+        or preview_contract.cache_identity ~= "mesh_unit+variant_key"
+        or preview_contract.score_uses_same_visibility_boundary ~= true then
         return "inventory hero visibility/replay contract drifted"
     end
     for kind, paths in pairs(GK_SET.TEXTURES) do
@@ -523,6 +544,122 @@ local function _issue629_grail_knight_set_contract()
     end
 end
 _rt_register("issue629_grail_knight_set_contract", _issue629_grail_knight_set_contract)
+
+-- #656: the Reikland cape is a provider on the same authored-outfit painter.
+-- Keep this runtime contract data-driven so another body skin cannot silently
+-- fall back to Grail Knight's different packed-map slot or material census.
+_rt_register("issue656_reikland_griffin_contract", function()
+    if not GK_SET.registered then GK_SET.register_all(LA_BRIDGE) end
+    local item_key = "cos_fk_reikland_griffin_skin"
+    local variant_key = "cos_fk_reikland_griffin_skin_variant"
+    if mod._cos_reikland_provider_registered ~= true
+        or type(GK_SET.has_outfit_provider) ~= "function"
+        or GK_SET.has_outfit_provider("issue656_reikland_griffin") ~= true then
+        return "Reikland provider contract was rejected or not registered"
+    end
+    local item = ItemMasterList and rawget(ItemMasterList, item_key)
+    local cosmetic = Cosmetics and rawget(Cosmetics, item_key)
+    local variant = GK_SET.resolve_variant(variant_key)
+    if not (type(item) == "table" and type(cosmetic) == "table" and type(variant) == "table") then
+        return "Reikland cape item/cosmetic/provider registration unavailable"
+    end
+    if item.cos_vanilla_fallback ~= "skin_es_knight_red"
+        or type(item.can_wield) ~= "table" or #item.can_wield ~= 1
+        or item.can_wield[1] ~= "es_knight" then
+        return "Reikland item provider/fallback identity drifted"
+    end
+    if not (cosmetic.first_person_attachment
+        and cosmetic.first_person_attachment.unit == "units/beings/player/empire_soldier_knight/first_person_base/chr_first_person_mesh"
+        and cosmetic.third_person_attachment
+        and cosmetic.third_person_attachment.unit == "units/beings/player/empire_soldier_knight/third_person_base/chr_third_person_mesh") then
+        return "Foot Knight vanilla attachment contract drifted"
+    end
+    if LA_BRIDGE.backend_to_vanilla[item_key] ~= "skin_es_knight_red"
+        or LA_BRIDGE.backend_to_armoury[item_key] ~= variant_key
+        or LA_BRIDGE.armoury_to_backend[variant_key] ~= item_key
+        or not (LA_BRIDGE.custom_variants and LA_BRIDGE.custom_variants[variant_key]) then
+        return "Reikland cape vanilla/wire fallback contract drifted"
+    end
+    if variant.issue ~= 656 or variant.variant_key ~= variant_key
+        or type(variant.new_units) ~= "table" or #variant.new_units ~= 1
+        or variant.new_units[1] ~= "units/beings/player/empire_soldier_knight/third_person_base/chr_third_person_mesh"
+        or type(variant.fps_units) ~= "table" or #variant.fps_units ~= 1
+        or variant.fps_units[1] ~= "units/beings/player/empire_soldier_knight/first_person_base/chr_first_person_mesh"
+        or type(variant.armor_slots_3p) ~= "table"
+        or type(variant.armor_slots_1p) ~= "table"
+        or variant.armor_slots_3p[2] ~= "texture_map_b788717c"
+        or variant.armor_slots_1p[2] ~= "texture_map_b788717c"
+        or type(variant.armor_materials_3p) ~= "table"
+        or type(variant.armor_materials_1p) ~= "table"
+        or #variant.armor_materials_3p ~= 2 or #variant.armor_materials_1p ~= 1 then
+        return "Foot Knight material-slot census drifted"
+    end
+    if type(GK_SET.apply_armor_to_score_preview) ~= "function" then
+        return "Reikland score-preview visibility adapter missing"
+    end
+    local application = rawget(_G, "Application")
+    if type(application) ~= "table" or type(application.can_get) ~= "function" then
+        return "Application.can_get unavailable for #656 resource proof"
+    end
+    for _, paths in pairs({ variant.textures, variant.textures_fps }) do
+        if type(paths) ~= "table" or #paths ~= 3 or paths[4] ~= nil then
+            return "malformed #656 texture triplet"
+        end
+        for _, path in ipairs(paths) do
+            if type(path) ~= "string" or path == "" then return "malformed #656 texture path" end
+            local ok, resident = pcall(application.can_get, "texture", path)
+            if not (ok and resident) then return "missing #656 texture " .. tostring(path) end
+        end
+    end
+end)
+
+_rt_register("issue658_gk_cross_career_availability", function()
+    if type(GK_SET.can_wield_careers) ~= "function"
+        or type(GK_SET.is_availability_setting) ~= "function" then
+        return "Grail Knight set availability policy missing"
+    end
+    GK_SET.sync_toggle()
+    local expected, seen = {}, {}
+    for _, career in ipairs(GK_SET.can_wield_careers()) do
+        if seen[career] then return "duplicate can_wield career " .. tostring(career) end
+        seen[career] = true
+        expected[#expected + 1] = career
+    end
+    local expected_key = table.concat(expected, ",")
+    for _, item_key in ipairs({ GK_SET.HAT_ITEM_KEY, GK_SET.SKIN_ITEM_KEY, GK_SET.SHIELD_SKIN_KEY }) do
+        local item = ItemMasterList and rawget(ItemMasterList, item_key)
+        if not item then return "set item missing: " .. tostring(item_key) end
+        if table.concat(item.can_wield or {}, ",") ~= expected_key then
+            return "set item availability drifted: " .. tostring(item_key)
+        end
+    end
+    if seen.es_questingknight ~= (mod:get("cos_gk_purpure_azure_enabled") ~= false) then
+        return "Grail Knight base availability drifted"
+    end
+    for _, row in ipairs(GK_SET.SHARED_CAREERS) do
+        local should_share = mod:get("cos_gk_purpure_azure_enabled") ~= false
+            and mod:get(row.setting_id) == true
+        if seen[row.career] ~= should_share then
+            return "career availability drifted: " .. tostring(row.career)
+        end
+    end
+    local expected_fallbacks = {
+        es_questingknight = { GK_SET.HAT_BASE_KEY, GK_SET.SKIN_VANILLA_FALLBACK },
+        es_mercenary = { "mercenary_hat_0000", "skin_es_mercenary" },
+        es_huntsman = { "huntsman_hat_0000", "skin_es_huntsman" },
+        es_knight = { "knight_hat_0000", "skin_es_knight" },
+    }
+    for career, pair in pairs(expected_fallbacks) do
+        if GK_SET.vanilla_fallback_for_career(GK_SET.HAT_ITEM_KEY, career) ~= pair[1]
+            or GK_SET.vanilla_fallback_for_career(GK_SET.SKIN_ITEM_KEY, career) ~= pair[2] then
+            return "career wire fallback drifted: " .. tostring(career)
+        end
+    end
+    if GK_SET.vanilla_fallback_for_career(GK_SET.HAT_ITEM_KEY, nil) ~= nil
+        or GK_SET.vanilla_fallback_for_career(GK_SET.SKIN_ITEM_KEY, "future_career") ~= nil then
+        return "unproven career wire fallback does not fail closed"
+    end
+end)
 
 _rt_register("issue481_athanor_exact_offhand_target", function()
     if type(LA_INSTANCE_POLICY) ~= "table"
@@ -1121,6 +1258,26 @@ _rt_register("issue483_cwv_sword_mace_individualized_cosmetics", function()
     if type(mod._send_offhand_mesh) ~= "function" then return "direct-unit sender missing" end
     if type(mod._store_offhand_mesh_recv) ~= "function" then return "direct-unit receiver missing" end
     if type(mod._offhand_mesh_by_peer) ~= "table" then return "hot-join mesh store missing" end
+end)
+
+_rt_register("issue704_sword_mace_picker_family_diagnostics", function()
+    if type(ISSUE704_PICKER_FAMILY) ~= "function" then
+        return "#704 picker-family classifier missing"
+    end
+    local cases = {
+        { "vanilla", "cwv_es_sword_and_mace", true },
+        { "right_hand_unit", "es_1h_sword", true },
+        { "left_hand_unit", "es_1h_mace", true },
+        { "left_hand_unit", "dr_1h_hammer", false },
+        { "right_hand_unit", "dr_1h_hammer", false },
+    }
+    for _, case in ipairs(cases) do
+        local accepted = ISSUE704_PICKER_FAMILY(case[1], case[2])
+        if accepted ~= case[3] then
+            return string.format("surface=%s family=%s accepted=%s expected=%s",
+                case[1], case[2], tostring(accepted), tostring(case[3]))
+        end
+    end
 end)
 
 _rt_register("independent_dual_offhands_583", function()

@@ -5,6 +5,8 @@ return function(H, repo_root)
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_persistence.lua"
     local commit_path = repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy.lua"
+    local diagnostics_path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diagnostics.lua"
     local cwv_path = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
     local cim_path = repo_root
@@ -20,6 +22,7 @@ return function(H, repo_root)
     local cos = read(cos_path)
     local persist = read(persist_path)
     local commit = read(commit_path)
+    local diagnostics = read(diagnostics_path)
     local cim = read(cim_path)
     local cwv = require("cwv_source").combined(repo_root)
 
@@ -81,5 +84,129 @@ return function(H, repo_root)
         H.truthy(cos:find("_la_self_rebroadcast_pending = true", 1, true))
         H.truthy(cos:find('mod:network_send("cos_la_apply"', 1, true))
         H.equal(cos:find('mod:network_register("cos_dual_offhand', 1, true), nil)
+    end)
+
+    H.test("issue 704 picker census is exact bounded and shares setup hook", function()
+        H.truthy(diagnostics:find('local _ISSUE704_ITEM_TYPE = "cwv_es_sword_and_mace"', 1, true))
+        H.truthy(diagnostics:find("mod._cwv_dual_offhand_contract", 1, true))
+        H.truthy(diagnostics:find("COS.classify_issue704_picker_family", 1, true))
+        H.truthy(diagnostics:find("_ISSUE704_ENTRY_CAP = 56", 1, true))
+        H.truthy(diagnostics:find("_ISSUE704_CAPTURE_CAP = 4", 1, true))
+        H.truthy(diagnostics:find("_ISSUE704_SIGNATURE_PART_CAP = 64", 1, true))
+        H.truthy(diagnostics:find("_ISSUE704_VALUE_BYTE_CAP = 128", 1, true))
+        H.truthy(diagnostics:find('"[cos:704] summary', 1, true))
+        H.truthy(diagnostics:find('rawget(_G, "printf")', 1, true))
+        H.equal(diagnostics:find('mod:echo("[cos:704]', 1, true), nil)
+        H.equal((function()
+            local count, at = 0, 1
+            while true do
+                local found = cos:find('mod:hook("HeroWindowItemCustomization", "_setup_illusions"', at, true)
+                if not found then return count end
+                count = count + 1
+                at = found + 1
+            end
+        end)(), 1)
+        local hook_at = assert(cos:find('mod:hook("HeroWindowItemCustomization", "_setup_illusions"', 1, true))
+        local original_at = assert(cos:find("func(self, item)", hook_at, true))
+        local pool_at = assert(cos:find("local hand_pools = _get_offhand_options(weapon_key)", original_at, true))
+        local capture_at = assert(cos:find("capture_issue704_setup", pool_at, true))
+        H.truthy(original_at < pool_at and pool_at < capture_at)
+    end)
+
+    H.test("issue 704 production classifier flags a foreign component family", function()
+        local old_get_mod, old_printf = _G.get_mod, _G.printf
+        local lines = {}
+        local fake_mod = {
+            _cos = { flush_log = function() end },
+            _cwv_dual_offhand_contract = {
+                cwv_es_sword_and_mace = {
+                    right_hand_unit = { matching_item_key = "es_1h_sword" },
+                    left_hand_unit = { matching_item_key = "es_1h_mace" },
+                },
+            },
+            command = function() end,
+        }
+        _G.get_mod = function() return fake_mod end
+        _G.printf = function(format, ...)
+            lines[#lines + 1] = string.format(format, ...)
+        end
+        local ok, err = pcall(dofile, diagnostics_path)
+        _G.get_mod, _G.printf = old_get_mod, old_printf
+        H.truthy(ok, err)
+
+        local classify = fake_mod._cos.classify_issue704_picker_family
+        local provider = fake_mod._cwv_dual_offhand_contract
+        H.equal(classify("vanilla", "cwv_es_sword_and_mace", provider), true)
+        H.equal(classify("right_hand_unit", "es_1h_sword", provider), true)
+        H.equal(classify("left_hand_unit", "es_1h_mace", provider), true)
+        H.equal(classify("left_hand_unit", "dr_1h_hammer", provider), false)
+        H.equal(classify("left_hand_unit", "es_1h_mace", {}), false)
+
+        _G.printf = function(format, ...)
+            lines[#lines + 1] = string.format(format, ...)
+        end
+        local captured, suspects = fake_mod._cos.capture_issue704_picker({
+            weapon_key = "cwv_es_sword_and_mace",
+            backend_id = "test-704",
+            current_skin = "pair_skin",
+            illusion_widgets = {
+                { content = { skin_key = "pair_skin" } },
+            },
+            hand_pools = {
+                right_hand_unit = {
+                    { source_skin_key = "sword_skin", unit = "sword_unit" },
+                },
+                left_hand_unit = {
+                    { follow_main = true, unit = "" },
+                    { source_skin_key = "mace_skin", unit = "mace_unit" },
+                    { source_skin_key = "hammer_skin", unit = "hammer_unit" },
+                },
+            },
+            provider_contract = provider,
+            item_master_list = {
+                pair_skin = { matching_item_key = "cwv_es_sword_and_mace" },
+                sword_skin = { matching_item_key = "es_1h_sword" },
+                mace_skin = { matching_item_key = "es_1h_mace" },
+                hammer_skin = { matching_item_key = "dr_1h_hammer" },
+            },
+            weapon_skins = {},
+        })
+        _G.printf = old_printf
+        H.equal(captured, true)
+        H.equal(suspects, 1)
+        H.truthy(table.concat(lines, "\n"):find("suspects=1", 1, true))
+
+        lines = {}
+        local oversized = {}
+        for index = 1, 200 do
+            oversized[index] = {
+                source_skin_key = "hammer_skin_" .. tostring(index)
+                    .. string.rep("x", 256),
+                unit = string.rep("u", 256),
+                name = string.rep("n", 256),
+            }
+        end
+        _G.printf = function(format, ...)
+            lines[#lines + 1] = string.format(format, ...)
+        end
+        local bounded = fake_mod._cos.capture_issue704_picker({
+            weapon_key = "cwv_es_sword_and_mace",
+            backend_id = "test-704-bounded",
+            current_skin = "pair_skin",
+            illusion_widgets = {},
+            hand_pools = {
+                right_hand_unit = {},
+                left_hand_unit = oversized,
+            },
+            provider_contract = provider,
+            item_master_list = {},
+            weapon_skins = {},
+        })
+        _G.printf = old_printf
+        H.equal(bounded, true)
+        H.equal(#lines, 56)
+        local bounded_log = table.concat(lines, "\n")
+        H.truthy(bounded_log:find("truncated=true", 1, true))
+        H.truthy(bounded_log:find("signature_truncated=true", 1, true))
     end)
 end

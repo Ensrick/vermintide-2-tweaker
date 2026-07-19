@@ -278,33 +278,37 @@ return {
 		},
 
 		-- ================================================================
-		-- Authored cosmetics: Encarmine Helmet (#612) + Grail Knight set (#629)
-		-- owner_3p: M.apply_armor_to_owner (_cos_grail_knight_set.lua:270) +
+		-- Authored cosmetics: Encarmine Helmet (#612), Grail Knight set (#629),
+		-- and provider-backed Foot Knight body variants (#656).
+		-- owner_1p/3p: M.apply_armor_to_owner (_cos_grail_knight_set.lua) +
 		--   AttachmentUtils.create_attachment + Laurel controller install on
 		--   PlayerUnitAttachmentExtension.create_attachment (#612).
 		-- inventory_preview: M.apply_armor_to_hero_preview (:290) +
 		--   HeroPreviewer.post_update #629 replay + _spawn_item_unit controller install.
-		-- score_team: cb_hero_unit_spawned_skin_preview resolves authored via
-		--   GK_SET.resolve_variant (:5501,:5506).
-		-- husk: NO apply-to-husk path exists (only owner + preview + score
-		--   resolvers); the authored per-instance paint does not travel (#629).
+		-- score_team: exact #513 wearer state is resolved before spawn;
+		--   cb_hero_unit_spawned_skin_preview retains the provider-owned authored
+		--   armor key, and HeroPreviewer.post_update replays it through the shared
+		--   post-visibility mesh+variant adapter (#730).
+		-- husk/lobby: the mod-owned armor descriptor travels through cos_la_apply;
+		--   _apply_la_on_unit(kind=armor) resolves the same provider and calls
+		--   M.apply_armor_to_owner on the exact career-scoped wearer (#698).
 		-- ================================================================
 		authored_custom_cosmetics = {
 			cells = {
-				owner_1p          = "unsupported",
+				owner_1p          = "implemented",
 				owner_3p          = "implemented",
 				bot               = "unsupported",
-				husk              = "unsupported",
+				husk              = "implemented",
 				inventory_preview = "implemented",
 				illusion_browser  = "unsupported",
 				cim_preview       = "unsupported",
-				lobby             = "unsupported",
+				lobby             = "implemented",
 				score_team        = "implemented",
 				hold_tab          = "unsupported",
 			},
 			edges = {
 				instance_load       = "implemented",
-				peer_ready          = "unsupported",
+				peer_ready          = "implemented",
 				equip               = "implemented",
 				customize           = "implemented",
 				preview_open        = "implemented",
@@ -313,12 +317,9 @@ return {
 				mod_disable_restore = "unsupported",
 			},
 			unsupported_fallback = {
-				owner_1p         = "The authored hat has no 1P view; the #629 GK outfit declares a 1P mesh/textures (SKIN_FP_UNIT, _cos_grail_knight_set.lua:20,41) but the live owner-body paint (M.apply_armor_to_owner) targets the 3P body -- 1P-arm repaint is unverified. Vanilla 1P mesh renders meanwhile. Tracked #629.",
 				bot              = "Authored cosmetics are player-equipped; bots use the default loadout and render vanilla. Safe by design.",
-				husk             = "M.apply_armor_to_owner / apply_armor_to_hero_preview cover the owner body and preview surfaces only; no apply-to-husk path exists, so the authored per-instance texture paint does not travel to remote peers (the donor mesh syncs net-safe, colours stay vanilla). Tracked #629 (outfit remote visibility).",
 				illusion_browser = "Hat/outfit have no illusion-browser surface; the authored GK shield skin previews via the offhand picker but authored kind=unit paint in LootItemUnitPreviewer is constrained by the null-material AV (LA_SYNC §6.4). Partial/unverified. Tracked #481/#629.",
 				cim_preview      = "Authored cosmetics are not applied in the Athanor forge previewer. Tracked #629 / cim-preview gap.",
-				lobby            = "No lobby-card previewer hook; co-located keep rendering rides the (unsupported) husk cell. Tracked as the lobby-preview gap / #629.",
 				hold_tab         = "Hats/outfit are not weapon-slot cards; the authored GK shield card resolves only for the owner's exact instance -- remote Hold-Tab has no backend_id and falls back to vanilla. Tracked #629 / #233-class.",
 			},
 		},

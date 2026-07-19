@@ -46,7 +46,7 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_moreitemslibrary_embedded")
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local CUSTOM_HATS = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_custom_hats")
-local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set")
+local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set"); mod._cos_reikland_provider_registered = GK_SET.add_outfit_provider(mod:dofile("scripts/mods/cosmetics_tweaker/_cos_reikland_griffin"))
 local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
 mod._cos_cwv_peer_identity = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_peer_identity")
 local OFFHAND_NAMES = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_names")
@@ -87,7 +87,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.157-dev"
+local MOD_VERSION = "0.9.158-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -692,7 +692,7 @@ mod.on_setting_changed = function(setting_id)
     if setting_id == "cos_encarmine_hat_enabled" and CUSTOM_HATS then
         CUSTOM_HATS.sync_toggle()
     end
-    if setting_id == "cos_gk_purpure_azure_enabled" and GK_SET then
+    if GK_SET and (GK_SET.is_availability_setting(setting_id) or setting_id == "cos_fk_reikland_griffin_enabled") then
         GK_SET.sync_toggle()
     end
     if setting_id and setting_id:sub(1, 11) == "cos_unlock_" then
@@ -3679,6 +3679,11 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
         _dbg("[offhand] no options for key=%s, bailing", tostring(weapon_key)); return
     end
 
+    if type(mod._cos.capture_issue704_setup) == "function" then
+        pcall(mod._cos.capture_issue704_setup, weapon_key, item, initial_skin,
+            self._illusion_widgets, hand_pools)
+    end
+
     -- #583: dual weapons use vanilla row 1 as the main/right-hand owner and
     -- add exactly one left/offhand row. Legacy non-dual multi-mount surfaces
     -- retain their previous right+left custom rows.
@@ -5519,11 +5524,11 @@ mod._cos_score_peer_for_profile = function(profile_index, career_index, ctx)
     return nil
 end
 
--- Stamp the wearer peer onto each score-screen previewer BEFORE its spawn
--- request goes out; the HeroPreviewer.equip_item hat branch above and the
--- armor paint below key off it.
+-- Stamp wearer state before spawn; clear exact authored identity/cache so a
+-- reused previewer cannot carry one score row into another (#513/#698/#730).
 mod:hook("TeamPreviewer", "_spawn_hero", function(func, self, hero_previewer, hero_data)
     if hero_previewer and hero_data then
+        hero_previewer._cos_score_armor_variant = nil; hero_previewer._cos_gk_score_armor_applied_mesh = nil; hero_previewer._cos_score_applied_armor_variant = nil
         local okp, peer, source = pcall(mod._cos_score_peer_for_profile,
             hero_data.profile_index, hero_data.career_index, self._context)
         peer = okp and peer or nil
@@ -5564,11 +5569,9 @@ end)
 -- LA ARMOR (slot_skin, kind="armor") on the score-screen body. The hero
 -- spawns with the net-safe vanilla base skin (player_data.hero_skin);
 -- the LA outfit is a texture paint over it. cb_hero_unit_spawned_skin_preview
--- fires right after _spawn_hero_unit (world_hero_previewer.lua:531-536), so
--- character_unit/mesh_unit exist. mesh_unit is the visible skin mesh - LA's
--- own preview repaint targets it (LA utils/hooks.lua:239); character_unit
--- painted too for parity with the live-body path (blanket set_texture over
--- meshes without the armor slots is a no-op, same as LA's own body paint).
+-- fires right after _spawn_hero_unit (world_hero_previewer.lua:531-536), while
+-- hidden. Authored providers retain their key and paint after post_update;
+-- the legacy LA adapter below remains separately owned by LA (#730).
 mod:hook_safe("TeamPreviewer", "cb_hero_unit_spawned_skin_preview", function(self, hero_previewer, hero_data)
     local peer = hero_previewer and hero_previewer._cos_wearer_peer
     local peer_slots = peer and mod._la_equips_by_peer and mod._la_equips_by_peer[peer]
@@ -5576,10 +5579,7 @@ mod:hook_safe("TeamPreviewer", "cb_hero_unit_spawned_skin_preview", function(sel
     if not (entry and entry.kind == "armor" and entry.armoury_key) then return end
     local authored = GK_SET and GK_SET.resolve_variant(entry.armoury_key)
     if authored then
-        local mesh_unit = hero_previewer.mesh_unit
-        if type(mesh_unit) == "userdata" and Unit.alive(mesh_unit) then
-            GK_SET.apply_variant_to_unit(authored, mesh_unit, "score_preview")
-        end
+        hero_previewer._cos_score_armor_variant = entry.armoury_key; hero_previewer._cos_gk_score_armor_applied_mesh = nil; hero_previewer._cos_score_applied_armor_variant = nil
         return
     end
     local la = get_mod("Loremasters-Armoury")
@@ -5605,22 +5605,23 @@ end)
 -- The custom Cosmetics entry reuses those attachments verbatim, so native
 -- animation, visibility and fade behavior remain authoritative.
 mod:hook_safe("PlayerUnitCosmeticExtension", "extensions_ready", function(self)
-    local custom = Cosmetics and Cosmetics[GK_SET.SKIN_ITEM_KEY]
-    if custom and self._cosmetics and self._cosmetics.skin == custom then
+    local variant_key = self._cosmetics and GK_SET.resolve_skin_variant(self._cosmetics.skin)
+    if variant_key then
         local tp = self._tp_unit_mesh
         if tp and Unit.alive(tp) then
-            GK_SET.apply_variant_to_unit(GK_SET.SKIN_VARIANT_KEY, tp, "third_person")
+            GK_SET.apply_variant_to_unit(variant_key, tp, "third_person")
         end
         local fp_ext = ScriptUnit.has_extension(self._unit, "first_person_system")
         local fp = fp_ext and fp_ext.get_first_person_mesh_unit and fp_ext:get_first_person_mesh_unit()
         if fp and Unit.alive(fp) then
-            GK_SET.apply_variant_to_unit(GK_SET.SKIN_VARIANT_KEY, fp, "first_person")
+            GK_SET.apply_variant_to_unit(variant_key, fp, "first_person")
         end
     end
 end)
 
 mod:hook_safe("HeroPreviewer", "post_update", function(self)
     GK_SET.apply_armor_to_hero_preview(self)
+    if self._cos_score_armor_variant then GK_SET.apply_armor_to_score_preview(self, self._cos_score_armor_variant) end
 end)
 
 local function _spawn_item_post(self, item_name, spawn_data)
@@ -5980,6 +5981,8 @@ mod.loadout_cache                = mod.loadout_cache or {}
 -- Mirrors AllHats lines 38-71: cache custom slot_skin loadouts locally so
 -- they're never synced to other clients (vanilla clients crash on unknown
 -- skin backend_ids).
+local _la_vanilla_fallback = function(name, career) return GK_SET.wire_fallback(LA_BRIDGE, name, career) end
+
 local function _install_skin_loadout_safety()
     if _la_skin_safety_done then return end
     if not (Managers.backend and Managers.backend._interfaces and Managers.backend._interfaces["items"]) then return end
@@ -6028,7 +6031,7 @@ local function _install_skin_loadout_safety()
                     for slot_name, bid in pairs(slots) do
                         if LA_BRIDGE.backend_to_armoury[bid] and not (mod.loadout_cache[career_name] and mod.loadout_cache[career_name][slot_name]) then
                             all_items = all_items or items_iface:get_all_backend_items()
-                            local vanilla_key = LA_BRIDGE.backend_to_vanilla[bid]
+                            local vanilla_key = _la_vanilla_fallback(bid, career_name)
                             for vbid, item in pairs(all_items or {}) do
                                 if item.key == vanilla_key and not LA_BRIDGE.backend_to_armoury[vbid] then
                                     slots[slot_name] = vbid
@@ -6063,7 +6066,7 @@ local function _install_skin_loadout_safety()
         end
         local raw = func(self, career_name, slot_name, is_bot)
         if raw and LA_BRIDGE.registered and LA_BRIDGE.backend_to_armoury[raw] then
-            local vanilla_key = LA_BRIDGE.backend_to_vanilla[raw]
+            local vanilla_key = _la_vanilla_fallback(raw, career_name)
             if vanilla_key then
                 local all_items = items_iface:get_all_backend_items()
                 for bid, item in pairs(all_items or {}) do
@@ -6099,7 +6102,7 @@ local function _install_skin_loadout_safety()
             if type(slots) == "table" then
                 for slot_name, bid in pairs(slots) do
                     if LA_BRIDGE.backend_to_armoury[bid] then
-                        local vanilla_key = LA_BRIDGE.backend_to_vanilla[bid]
+                        local vanilla_key = _la_vanilla_fallback(bid, career_name)
                         for vbid, item in pairs(all_items) do
                             if item.key == vanilla_key and not LA_BRIDGE.backend_to_armoury[vbid] then
                                 _dbg("[loadout] fixup server: %s %s clone %s -> vanilla %s", career_name, slot_name, bid, vbid)
@@ -6173,6 +6176,8 @@ end
 -- — the hook silently never fired and the crash kept reproducing. Same
 -- pitfall as BackendUtils (CLAUDE.md "Hooking" section). Must use the
 -- table-form `mod:hook(CosmeticUtils, ...)` with a nil guard.
+local function _wire_career_for_player(player) return GK_SET.career_for_player(player, LA_PERSIST) end
+
 if CosmeticUtils then
     mod:hook(CosmeticUtils, "update_cosmetic_slot", function(func, player, slot, item_name, skin_name)
         -- v0.9.12-dev: persistence-driven LA injection. On the FIRST
@@ -6229,7 +6234,7 @@ if CosmeticUtils then
 
         if LA_BRIDGE and LA_BRIDGE.registered then
             if item_name and LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[item_name] then
-                local vanilla_key = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[item_name]
+                local vanilla_key = _la_vanilla_fallback(item_name, _wire_career_for_player(player))
                 if vanilla_key then
                     _dbg("[net-safe] update_cosmetic_slot %s LA item(%s) -> vanilla(%s)",
                         tostring(slot), tostring(item_name), tostring(vanilla_key))
@@ -6242,7 +6247,7 @@ if CosmeticUtils then
                 end
             end
             if skin_name and LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[skin_name] then
-                local vanilla_skin = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[skin_name]
+                local vanilla_skin = _la_vanilla_fallback(skin_name, _wire_career_for_player(player))
                 if vanilla_skin then
                     _dbg("[net-safe] update_cosmetic_slot %s LA skin(%s) -> vanilla(%s)",
                         tostring(slot), tostring(skin_name), tostring(vanilla_skin))
@@ -6430,7 +6435,7 @@ if LoadoutUtils then
             and LA_BRIDGE.backend_to_armoury
             and LA_BRIDGE.backend_to_armoury[item.key]
         then
-            local vanilla_key = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[item.key]
+            local vanilla_key = _la_vanilla_fallback(item.key, _wire_career_for_player(player))
             if vanilla_key then
                 local shadow = {}
                 for k, v in pairs(item) do shadow[k] = v end
@@ -6473,14 +6478,8 @@ local _net_safe_hook_status = { CosmeticUtils = false, LoadoutUtils = false, Att
 _net_safe_hook_status.CosmeticUtils = CosmeticUtils ~= nil
 _net_safe_hook_status.LoadoutUtils = LoadoutUtils ~= nil
 
-local function _la_substitute_name(original_name)
-    if not (LA_BRIDGE and LA_BRIDGE.registered and original_name) then
-        return nil
-    end
-    if not (LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[original_name]) then
-        return nil
-    end
-    return LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[original_name] or nil
+local function _la_substitute_name(original_name, career_name)
+    return _la_vanilla_fallback(original_name, career_name)
 end
 
 -- v0.8.64-dev: UNIFIED LA peer-sync — cos_la_apply replaces cos_la_attach.
@@ -7462,7 +7461,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
     if kind == "armor" then
         if variant.swap_hand ~= "armor" then return false end
         if GK_SET and GK_SET.resolve_variant(armoury_key) then
-            return GK_SET.apply_armor_to_owner(owner_unit, "appearance_replay")
+            return GK_SET.apply_armor_to_owner(owner_unit, "appearance_replay", armoury_key)
         end
         if not la or type(la.apply_new_skin_from_texture) ~= "function" then return false end
         local world = _level_world()
@@ -9455,7 +9454,7 @@ mod:hook("PlayerUnitAttachmentExtension", "game_object_initialized", function(fu
         for slot_name, slot_data in pairs(slots) do
             local item_data = slot_data and slot_data.item_data
             local orig = item_data and item_data.name
-            local vanilla = _la_substitute_name(orig)
+            local career = mod._la_career_for_unit and mod._la_career_for_unit(unit); local vanilla = _la_substitute_name(orig, career)
             if vanilla then
                 restore = restore or {}
                 restore[#restore + 1] = { item_data, orig }
@@ -9487,7 +9486,7 @@ end)
 mod:hook("PlayerUnitAttachmentExtension", "spawn_resynced_loadout", function(func, self, item_to_spawn)
     local item_data = item_to_spawn and item_to_spawn.item_data
     local orig = item_data and item_data.name
-    local vanilla = _la_substitute_name(orig)
+    local career = mod._la_career_for_unit and mod._la_career_for_unit(self._unit); local vanilla = _la_substitute_name(orig, career)
     if vanilla then
         item_data.name = vanilla
         local ok, err = pcall(func, self, item_to_spawn)
@@ -9516,7 +9515,7 @@ if AttachmentUtils then
         if slots then
             for slot_name, slot_data in pairs(slots) do
                 local orig = slot_data and slot_data.name
-                local vanilla = _la_substitute_name(orig)
+                local career = mod._la_career_for_unit and mod._la_career_for_unit(unit); local vanilla = _la_substitute_name(orig, career)
                 if vanilla then
                     restore = restore or {}
                     restore[#restore + 1] = { slot_data, orig }
@@ -9576,7 +9575,7 @@ if AttachmentUtils then
                         kind = "illusion"
                     end
                     local armoury_key = LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[la_id]
-                    local vanilla = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[la_id]
+                    local career = mod._la_career_for_unit and mod._la_career_for_unit(unit); local vanilla = _la_vanilla_fallback(la_id, career)
                     if (kind == "armor" or kind == "illusion") and armoury_key then
                         _send_la_apply(unit, slot_name, kind, armoury_key, vanilla)
                     end
@@ -9738,8 +9737,8 @@ mod.update = function(dt)
                         else kind = "illusion" end
                         local armoury_key = LA_BRIDGE and LA_BRIDGE.backend_to_armoury
                             and LA_BRIDGE.backend_to_armoury[item_name]
-                        local vanilla_key = LA_BRIDGE and LA_BRIDGE.backend_to_vanilla
-                            and LA_BRIDGE.backend_to_vanilla[item_name]
+                        local vanilla_key = _la_vanilla_fallback(item_name,
+                            _wire_career_for_player(lp))
                         if armoury_key then
                             _send_la_apply(pu, slot, kind, armoury_key, vanilla_key)
                             n = n + 1
@@ -10631,6 +10630,10 @@ _cos_runtime_checks.install(mod, _rt_register, {
     offhand_preload_lifecycle = OFFHAND_PRELOAD_LIFECYCLE, mh_embed = MH_EMBED,
     cwv_peer_identity = mod._cos_cwv_peer_identity,
     la_instance_policy = mod._la_instance_policy,
+    issue704_picker_family = function(surface, family)
+        return mod._cos.classify_issue704_picker_family(
+            surface, family, mod._cwv_dual_offhand_contract)
+    end,
 })
 -- ============================================================
 -- Moonfire Bow cosmetic AOE puff (moved from weapon_tweaker 2026-06-29)

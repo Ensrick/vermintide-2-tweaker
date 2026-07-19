@@ -20,6 +20,27 @@ local loc = {
     cos_gk_purpure_azure_enabled_tooltip = {
         en = "Adds the matching Couronne de la Lune, Midnight Purpure and Azure, and The Blood-Bloomed Bouclier cosmetics for Grail Knight. The set reuses the original game's models, rigging, physics, and fade behavior.",
     },
+    cos_gk_purpure_azure_career_sharing_group = {
+        en = "Purpure and Azure Career Availability",
+    },
+    cos_gk_purpure_azure_share_mercenary = {
+        en = "Mercenary",
+    },
+    cos_gk_purpure_azure_share_mercenary_tooltip = {
+        en = "Allow Mercenary to equip the Purpure and Azure set. Grail Knight availability is unchanged.",
+    },
+    cos_gk_purpure_azure_share_huntsman = {
+        en = "Huntsman",
+    },
+    cos_gk_purpure_azure_share_huntsman_tooltip = {
+        en = "Allow Huntsman to equip the Purpure and Azure set. Grail Knight availability is unchanged.",
+    },
+    cos_gk_purpure_azure_share_foot_knight = {
+        en = "Foot Knight",
+    },
+    cos_gk_purpure_azure_share_foot_knight_tooltip = {
+        en = "Allow Foot Knight to equip the Purpure and Azure set. Grail Knight availability is unchanged.",
+    },
     cos_gk_purpure_azure_hat_name = {
         en = "Couronne de la Lune",
     },
@@ -37,6 +58,18 @@ local loc = {
     },
     cos_gk_purpure_azure_shield_description = {
         en = "Kruber claims the blazon's four roses commemorate four maidens rescued, its gouttes de sang the blood spilled in their defence. The Ubersreik Five suspect the tale grows taller with every telling, but know better than to question his honesty within earshot.",
+    },
+    cos_fk_reikland_griffin_enabled = {
+        en = "Foot Knight: Reikland Griffin Cape",
+    },
+    cos_fk_reikland_griffin_enabled_tooltip = {
+        en = "Adds a Knights Encarmine outfit variant bearing Reikland's griffin on the cape. The variant reuses the original model, cape physics, material shading, and camera-fade behavior.",
+    },
+    cos_fk_reikland_griffin_skin_name = {
+        en = "Knights Encarmine — Reikland Griffin",
+    },
+    cos_fk_reikland_griffin_skin_description = {
+        en = "The colours of the Knights Encarmine, bearing the griffin of Reikland upon the cape.",
     },
     mod_description = {
         en = "Unlock hats and weapon skins per career on every hero, plus size and grip tweaks for individual weapons.",

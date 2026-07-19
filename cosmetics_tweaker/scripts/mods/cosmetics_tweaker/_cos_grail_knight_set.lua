@@ -6,7 +6,15 @@
 -- and preview behavior. Only per-instance texture bindings are changed.
 
 local mod = get_mod("cosmetics_tweaker")
+local RESIDENCY = mod and type(mod.dofile) == "function"
+    and mod:dofile("scripts/mods/cosmetics_tweaker/_lib_resource_residency")
+    or nil
 local M = {}
+
+local MAX_OUTFIT_PROVIDERS = 16
+local MAX_APPLY_DIAGNOSTICS = 32
+local MAX_RESIDENCY_DIAGNOSTICS = 24
+local MAX_DIAGNOSTIC_VALUE_BYTES = 160
 
 M.HAT_ITEM_KEY = "cos_gk_purpure_azure_hat"
 M.HAT_VARIANT_KEY = "cos_gk_purpure_azure_hat_variant"
@@ -25,6 +33,27 @@ M.SHIELD_VARIANT_KEY = "cos_gk_purpure_azure_shield_variant"
 M.SHIELD_BASE_KEY = "es_sword_shield_breton_skin_03"
 M.SHIELD_BASE_UNIT = "units/weapons/player/wpn_emp_gk_shield_05/wpn_emp_gk_shield_05"
 M.SHIELD_BASE_UNIT_3P = M.SHIELD_BASE_UNIT .. "_3p"
+
+-- #658: the authored set remains native to Grail Knight, while these three
+-- default-off settings may independently extend its inventory availability to
+-- Kruber's base careers. Keep this an ordered array so ItemMasterList
+-- `can_wield` output is deterministic and does not acquire duplicates.
+M.SHARED_CAREERS = {
+    { career = "es_mercenary", setting_id = "cos_gk_purpure_azure_share_mercenary" },
+    { career = "es_huntsman", setting_id = "cos_gk_purpure_azure_share_huntsman" },
+    { career = "es_knight", setting_id = "cos_gk_purpure_azure_share_foot_knight" },
+}
+
+-- Vanilla career defaults used only on the network fallback path. These are
+-- the exact base_skin/default hat pairs from career_settings.lua for Huntsman
+-- (:306/:342), Foot Knight (:387/:423), and Mercenary (:468/:504); Grail
+-- Knight keeps the lake-authored donor fallback already used by the set.
+M.CAREER_WIRE_FALLBACKS = {
+    es_questingknight = { hat = M.HAT_BASE_KEY, skin = M.SKIN_VANILLA_FALLBACK },
+    es_mercenary = { hat = "mercenary_hat_0000", skin = "skin_es_mercenary" },
+    es_huntsman = { hat = "huntsman_hat_0000", skin = "skin_es_huntsman" },
+    es_knight = { hat = "knight_hat_0000", skin = "skin_es_knight" },
+}
 
 M.ICONS = {
     hat = "icon_cos_gk_purpure_azure_hat",
@@ -86,16 +115,121 @@ local ARMOR_MATERIAL_NAMES = {
 
 M.registered = false
 M._diag_seen = {}
+M._diag_count = 0
+M._residency_diag_seen = {}
+M._residency_diag_count = 0
+M._outfit_providers = {}
+M._outfit_provider_ids = {}
 M.PREVIEW_REPLAY_CONTRACT = {
     apply_after_visibility = true,
     invalidate_while_hidden = true,
-    cache_identity = "mesh_unit",
+    cache_identity = "mesh_unit+variant_key",
+    score_uses_same_visibility_boundary = true,
 }
+
+-- Authored body variants share the same replay/surface machinery.  Providers
+-- register identities and texture contracts here; callers resolve one
+-- canonical variant instead of adding inventory, husk, and score hooks per
+-- outfit.  The module name remains for compatibility with existing #629 code.
+function M.add_outfit_provider(provider)
+    if type(provider) ~= "table" then return false end
+    local provider_id = rawget(provider, "PROVIDER_ID")
+    if type(provider_id) ~= "string" or provider_id == ""
+        or #provider_id > 96 or M._outfit_provider_ids[provider_id] ~= nil
+        or #M._outfit_providers >= MAX_OUTFIT_PROVIDERS then
+        return false
+    end
+    for _, method in ipairs({ "resolve_variant", "resolve_skin_variant", "register_all", "sync_toggle" }) do
+        if type(provider[method]) ~= "function" then return false end
+    end
+    local localization = provider.ITEM_LOCALIZATION
+    if type(localization) ~= "table" then return false end
+    for key, value in pairs(localization) do
+        if type(key) ~= "string" or key == "" or type(value) ~= "string"
+            or (M.ITEM_LOCALIZATION[key] ~= nil and M.ITEM_LOCALIZATION[key] ~= value) then
+            return false
+        end
+    end
+    M._outfit_providers[#M._outfit_providers + 1] = provider
+    M._outfit_provider_ids[provider_id] = provider
+    for key, value in pairs(localization) do M.ITEM_LOCALIZATION[key] = value end
+    return true
+end
+
+function M.has_outfit_provider(provider_id)
+    return type(provider_id) == "string" and M._outfit_provider_ids[provider_id] ~= nil
+end
 
 local function enabled()
     if not (mod and type(mod.get) == "function") then return true end
     local ok, value = pcall(mod.get, mod, "cos_gk_purpure_azure_enabled")
     return not ok or value ~= false
+end
+
+local function share_enabled(setting_id)
+    if not (mod and type(mod.get) == "function") then return false end
+    local ok, value = pcall(mod.get, mod, setting_id)
+    return ok and value == true
+end
+
+function M.can_wield_careers()
+    if not enabled() then return {} end
+    local careers = { "es_questingknight" }
+    for _, row in ipairs(M.SHARED_CAREERS) do
+        if share_enabled(row.setting_id) then
+            careers[#careers + 1] = row.career
+        end
+    end
+    return careers
+end
+
+function M.is_availability_setting(setting_id)
+    if setting_id == "cos_gk_purpure_azure_enabled" then return true end
+    for _, row in ipairs(M.SHARED_CAREERS) do
+        if setting_id == row.setting_id then return true end
+    end
+    return false
+end
+
+function M.is_item_key(item_key)
+    return item_key == M.HAT_ITEM_KEY
+        or item_key == M.SKIN_ITEM_KEY
+        or item_key == M.SHIELD_SKIN_KEY
+end
+
+function M.vanilla_fallback_for_career(item_key, career_name)
+    if item_key == M.SHIELD_SKIN_KEY then return M.SHIELD_BASE_KEY end
+    if item_key ~= M.HAT_ITEM_KEY and item_key ~= M.SKIN_ITEM_KEY then return nil end
+    -- A missing/unknown career is not permission to publish Grail Knight's
+    -- fallback onto another Kruber body. Every outgoing owner resolves an
+    -- exact player/unit career; fail closed if that identity is unavailable.
+    local fallback = M.CAREER_WIRE_FALLBACKS[career_name]
+    if not fallback then return nil end
+    return item_key == M.HAT_ITEM_KEY and fallback.hat or fallback.skin
+end
+
+function M.wire_fallback(bridge, original_name, career_name)
+    if type(bridge) ~= "table" or bridge.registered ~= true or not original_name then return nil end
+    local armoury = bridge.backend_to_armoury
+    if type(armoury) ~= "table" or not armoury[original_name] then return nil end
+    local vanilla = type(bridge.backend_to_vanilla) == "table"
+        and bridge.backend_to_vanilla[original_name] or nil
+    if M.is_item_key(original_name) then
+        return M.vanilla_fallback_for_career(original_name, career_name) or vanilla
+    end
+    return vanilla
+end
+
+function M.career_for_player(player, persistence)
+    if persistence and type(persistence._career_name_for_player) == "function" then
+        local ok, career = pcall(persistence._career_name_for_player, player)
+        if ok and career then return career end
+    end
+    if player and type(player.career_name) == "function" then
+        local ok, career = pcall(player.career_name, player)
+        if ok then return career end
+    end
+    return nil
 end
 
 local function clone_item(base_key, item_key, display_key, description_key, icon)
@@ -110,7 +244,7 @@ local function clone_item(base_key, item_key, display_key, description_key, icon
     item.localized_description = M.ITEM_LOCALIZATION[description_key]
     item.inventory_icon = icon
     item.rarity = "exotic"
-    item.can_wield = enabled() and { "es_questingknight" } or {}
+    item.can_wield = M.can_wield_careers()
     item.cos_authored = true
     item.cos_vanilla_fallback = base_key
     item.mod_data = {
@@ -143,16 +277,21 @@ end
 function M.sync_toggle()
     for _, key in ipairs({ M.HAT_ITEM_KEY, M.SKIN_ITEM_KEY, M.SHIELD_SKIN_KEY }) do
         local item = ItemMasterList and rawget(ItemMasterList, key)
-        if item then item.can_wield = enabled() and { "es_questingknight" } or {} end
+        if item then item.can_wield = M.can_wield_careers() end
+    end
+    for _, provider in ipairs(M._outfit_providers) do
+        pcall(provider.sync_toggle)
     end
 end
 
 function M.resolve_variant(key)
     if key == M.HAT_VARIANT_KEY then
-        return { kind = "texture", swap_hand = "hat", new_units = { M.HAT_BASE_UNIT }, textures = M.TEXTURES.hat, cos_authored = true }
+        return { kind = "texture", swap_hand = "hat", new_units = { M.HAT_BASE_UNIT }, textures = M.TEXTURES.hat,
+            variant_key = M.HAT_VARIANT_KEY, issue = 629, cos_authored = true }
     elseif key == M.SKIN_VARIANT_KEY then
         return { kind = "texture", swap_hand = "armor", new_units = { M.SKIN_TP_UNIT }, textures = M.TEXTURES.skin_3p,
-            textures_fps = M.TEXTURES.skin_1p, fps_units = { M.SKIN_FP_UNIT }, cos_authored = true }
+            textures_fps = M.TEXTURES.skin_1p, fps_units = { M.SKIN_FP_UNIT },
+            variant_key = M.SKIN_VARIANT_KEY, issue = 629, cos_authored = true }
     elseif key == M.SHIELD_VARIANT_KEY then
         -- HeroPreviewer/GearUtils receive the base 1P path and spawn its explicit
         -- `_3p` sibling for inventory heroes, local bodies, and remote husks.
@@ -160,7 +299,25 @@ function M.resolve_variant(key)
         -- the real `_3p` unit before paint, even though the texture preview works.
         return { kind = "texture", swap_hand = "left_hand_unit",
             new_units = { M.SHIELD_BASE_UNIT, M.SHIELD_BASE_UNIT_3P },
-            textures = M.TEXTURES.shield, cos_authored = true }
+            textures = M.TEXTURES.shield, variant_key = M.SHIELD_VARIANT_KEY,
+            issue = 629, cos_authored = true }
+    end
+    for _, provider in ipairs(M._outfit_providers) do
+        local ok, variant = pcall(provider.resolve_variant, key)
+        if ok and type(variant) == "table" then return variant end
+    end
+    return nil
+end
+
+function M.resolve_skin_variant(skin_data)
+    local cosmetics = rawget(_G, "Cosmetics")
+    local custom = cosmetics and cosmetics[M.SKIN_ITEM_KEY]
+    if custom and skin_data and (skin_data == custom or skin_data.name == M.SKIN_ITEM_KEY) then
+        return M.SKIN_VARIANT_KEY
+    end
+    for _, provider in ipairs(M._outfit_providers) do
+        local ok, key = pcall(provider.resolve_skin_variant, skin_data)
+        if ok and type(key) == "string" and key ~= "" then return key end
     end
     return nil
 end
@@ -185,11 +342,53 @@ function M.offhand_option()
     }
 end
 
-local function resources_ready(textures)
-    if not (Application and type(Application.can_get) == "function") then return false end
-    for _, path in ipairs(textures or {}) do
-        local ok, value = pcall(Application.can_get, "texture", path)
-        if not (ok and value == true) then return false end
+local function diagnostic_value(value)
+    local result = tostring(value == nil and "nil" or value)
+    if #result > MAX_DIAGNOSTIC_VALUE_BYTES then
+        return result:sub(1, MAX_DIAGNOSTIC_VALUE_BYTES) .. "..."
+    end
+    return result
+end
+
+local function residency_diag(reason, resource_type, path, slot, context)
+    local token = table.concat({
+        diagnostic_value(reason or "unknown"),
+        diagnostic_value(resource_type or "resource"),
+        diagnostic_value(path),
+        diagnostic_value(slot),
+        diagnostic_value(context or "unknown"),
+    }, "|")
+    if M._residency_diag_seen[token]
+        or M._residency_diag_count >= MAX_RESIDENCY_DIAGNOSTICS then return end
+    M._residency_diag_seen[token] = true
+    M._residency_diag_count = M._residency_diag_count + 1
+    local engine_printf = rawget(_G, "printf")
+    if engine_printf then
+        pcall(engine_printf, "[cos:629] residency SKIP reason=%s type=%s slot=%s path=%s context=%s evidence=%d/%d",
+            diagnostic_value(reason or "unknown"),
+            diagnostic_value(resource_type or "resource"),
+            diagnostic_value(slot), diagnostic_value(path),
+            diagnostic_value(context or "unknown"),
+            M._residency_diag_count, MAX_RESIDENCY_DIAGNOSTICS)
+    end
+end
+
+local function texture_bind_resident(slot, texture, context)
+    if not (RESIDENCY and type(RESIDENCY.texture_bind_resident) == "function") then
+        residency_diag("missing_residency_helper", "texture", texture, slot, context)
+        return false
+    end
+    return RESIDENCY.texture_bind_resident(slot, texture, Application, residency_diag, context) == true
+end
+
+local function textures_ready(slots, textures, context)
+    if type(slots) ~= "table" or type(textures) ~= "table"
+        or slots[4] ~= nil or textures[4] ~= nil then
+        residency_diag("malformed_texture_set", "texture", nil, nil, context)
+        return false
+    end
+    for i = 1, 3 do
+        if not texture_bind_resident(slots[i], textures[i], context) then return false end
     end
     return true
 end
@@ -200,7 +399,7 @@ end
 -- Target only the two outfit materials proven by the extracted Gallant 1P/3P
 -- donor scenes. Census first and write second: any scene/material drift fails
 -- closed without partially repainting the character.
-local function apply_armor_materials(unit, slots, textures)
+local function apply_armor_materials(unit, slots, textures, material_names)
     if not (Unit and Unit.num_meshes and Unit.mesh
         and Mesh and Mesh.has_material and Mesh.material
         and Material and Material.set_texture) then
@@ -208,11 +407,13 @@ local function apply_armor_materials(unit, slots, textures)
     end
     local ok_count, mesh_count = pcall(Unit.num_meshes, unit)
     if not ok_count or type(mesh_count) ~= "number" then return false end
+    material_names = material_names or ARMOR_MATERIAL_NAMES
+    if type(material_names) ~= "table" or #material_names < 1 or #material_names > 4 then return false end
     local targets, seen = {}, {}
     for mesh_index = 0, mesh_count - 1 do
         local ok_mesh, mesh = pcall(Unit.mesh, unit, mesh_index)
         if not ok_mesh or not mesh then return false end
-        for _, material_name in ipairs(ARMOR_MATERIAL_NAMES) do
+        for _, material_name in ipairs(material_names) do
             local ok_has, has = pcall(Mesh.has_material, mesh, material_name)
             if not ok_has then return false end
             if has then
@@ -223,7 +424,7 @@ local function apply_armor_materials(unit, slots, textures)
             end
         end
     end
-    for _, material_name in ipairs(ARMOR_MATERIAL_NAMES) do
+    for _, material_name in ipairs(material_names) do
         if not seen[material_name] then return false end
     end
     for _, material in ipairs(targets) do
@@ -237,9 +438,12 @@ end
 
 function M.apply_variant_to_unit(key_or_variant, unit, surface)
     local variant = type(key_or_variant) == "table" and key_or_variant or M.resolve_variant(key_or_variant)
-    if not (variant and unit and Unit and Unit.alive and Unit.alive(unit)) then return false end
+    if not (variant and unit and Unit and type(Unit.alive) == "function") then return false end
+    local alive_ok, alive = pcall(Unit.alive, unit)
+    if not alive_ok or alive ~= true then return false end
     local textures = variant.textures
     local slots = DEFAULT_SLOTS
+    local material_names = ARMOR_MATERIAL_NAMES
     if variant.swap_hand == "armor" then
         local is_1p = surface == "first_person"
         if not is_1p and Unit.has_data and Unit.has_data(unit, "unit_name") then
@@ -247,36 +451,51 @@ function M.apply_variant_to_unit(key_or_variant, unit, surface)
             is_1p = ok and name == M.SKIN_FP_UNIT
         end
         textures = is_1p and variant.textures_fps or variant.textures
-        slots = is_1p and ARMOR_1P_SLOTS or ARMOR_3P_SLOTS
+        slots = is_1p and (variant.armor_slots_1p or ARMOR_1P_SLOTS)
+            or (variant.armor_slots_3p or ARMOR_3P_SLOTS)
+        material_names = is_1p and (variant.armor_materials_1p or ARMOR_MATERIAL_NAMES)
+            or (variant.armor_materials_3p or ARMOR_MATERIAL_NAMES)
     end
-    if not resources_ready(textures) then return false end
+    local issue = tonumber(variant.issue) or 629
+    local variant_key = diagnostic_value(variant.variant_key or ("issue" .. tostring(issue)))
+    local context = "authored_outfit:" .. variant_key .. ":" .. diagnostic_value(surface or "unknown")
+    if not textures_ready(slots, textures, context) then return false end
     if variant.swap_hand == "armor" then
-        if not apply_armor_materials(unit, slots, textures) then return false end
+        if not apply_armor_materials(unit, slots, textures, material_names) then return false end
     else
         for i = 1, 3 do
             local ok = pcall(Unit.set_texture_for_materials, unit, slots[i], textures[i])
             if not ok then return false end
         end
     end
-    local token = tostring(variant.swap_hand) .. "|" .. tostring(surface or "unknown")
-    if not M._diag_seen[token] then
+    local token = table.concat({ tostring(issue), variant_key,
+        diagnostic_value(variant.swap_hand), diagnostic_value(surface or "unknown") }, "|")
+    if not M._diag_seen[token] and M._diag_count < MAX_APPLY_DIAGNOSTICS then
         M._diag_seen[token] = true
+        M._diag_count = M._diag_count + 1
         local engine_printf = rawget(_G, "printf")
-        if engine_printf then pcall(engine_printf, "[cos:629] applied kind=%s surface=%s vanilla_geometry=true", tostring(variant.swap_hand), tostring(surface or "unknown")) end
+        if engine_printf then
+            pcall(engine_printf, "[cos:%s] applied variant=%s kind=%s surface=%s vanilla_geometry=true evidence=%d/%d",
+                tostring(issue), variant_key, diagnostic_value(variant.swap_hand),
+                diagnostic_value(surface or "unknown"), M._diag_count, MAX_APPLY_DIAGNOSTICS)
+        end
     end
     return true
 end
 
-function M.apply_armor_to_owner(owner_unit, surface)
+function M.apply_armor_to_owner(owner_unit, surface, armoury_key)
     if not (owner_unit and ScriptUnit and ScriptUnit.has_extension) then return false end
     local ext = ScriptUnit.has_extension(owner_unit, "cosmetic_system")
     if not ext then return false end
+    local variant_key = armoury_key or M.SKIN_VARIANT_KEY
+    local variant = M.resolve_variant(variant_key)
+    if not variant or variant.swap_hand ~= "armor" then return false end
     local applied = false
     local tp = ext.get_third_person_mesh_unit and ext:get_third_person_mesh_unit()
-    if tp then applied = M.apply_variant_to_unit(M.SKIN_VARIANT_KEY, tp, surface or "third_person") or applied end
+    if tp then applied = M.apply_variant_to_unit(variant, tp, surface or "third_person") or applied end
     local fp_ext = ScriptUnit.has_extension(owner_unit, "first_person_system")
     local fp = fp_ext and fp_ext.get_first_person_mesh_unit and fp_ext:get_first_person_mesh_unit()
-    if fp then applied = M.apply_variant_to_unit(M.SKIN_VARIANT_KEY, fp, "first_person") or applied end
+    if fp then applied = M.apply_variant_to_unit(variant, fp, "first_person") or applied end
     return applied
 end
 
@@ -287,32 +506,59 @@ end
 -- the spawn frame therefore loses our textures to that later vanilla write.
 -- Wait until the mesh is visible, and invalidate the mesh cache while hidden so
 -- any later hide/show cycle replays after vanilla restores its donor materials.
-function M.apply_armor_to_hero_preview(previewer)
-    if not previewer then return false end
-    local cosmetics = rawget(_G, "Cosmetics")
-    local custom = cosmetics and cosmetics[M.SKIN_ITEM_KEY]
-    local loading = previewer._hero_loading_package_data
-    local skin_data = previewer.character_unit_skin_data or (loading and loading.skin_data)
-    if not (custom and skin_data and (skin_data == custom or skin_data.name == M.SKIN_ITEM_KEY)) then
-        return false
-    end
+local function apply_armor_to_visible_preview(previewer, variant_key, mesh_cache_field,
+        variant_cache_field, surface)
+    if not previewer or type(variant_key) ~= "string" then return false end
     local mesh = previewer.mesh_unit
     if not (mesh and Unit and Unit.alive and Unit.alive(mesh)) then
-        previewer._cos_gk_armor_applied_mesh = nil
+        previewer[mesh_cache_field] = nil
+        previewer[variant_cache_field] = nil
         return false
     end
     if previewer.character_unit_hidden_after_spawn or previewer.character_unit_visible ~= true then
-        previewer._cos_gk_armor_applied_mesh = nil
+        previewer[mesh_cache_field] = nil
+        previewer[variant_cache_field] = nil
         return false
     end
-    if previewer._cos_gk_armor_applied_mesh == mesh then return true end
-    local applied = M.apply_variant_to_unit(M.SKIN_VARIANT_KEY, mesh, "hero_preview")
-    if applied then previewer._cos_gk_armor_applied_mesh = mesh end
+    if previewer[mesh_cache_field] == mesh
+        and previewer[variant_cache_field] == variant_key then return true end
+    local applied = M.apply_variant_to_unit(variant_key, mesh, surface)
+    if applied then
+        previewer[mesh_cache_field] = mesh
+        previewer[variant_cache_field] = variant_key
+    end
     return applied
 end
 
+function M.apply_armor_to_hero_preview(previewer)
+    if not previewer then return false end
+    local loading = previewer._hero_loading_package_data
+    local skin_data = previewer.character_unit_skin_data or (loading and loading.skin_data)
+    local variant_key = M.resolve_skin_variant(skin_data)
+    if not variant_key then return false end
+    return apply_armor_to_visible_preview(previewer, variant_key,
+        "_cos_gk_armor_applied_mesh", "_cos_authored_armor_variant", "hero_preview")
+end
+
+-- TeamPreviewer's callback receives a spawned but still-hidden HeroPreviewer.
+-- Retain the exact authored provider key there, then share the inventory
+-- preview's visible-mesh/variant cache boundary after post_update (#730).
+function M.apply_armor_to_score_preview(previewer, variant_key)
+    local variant = M.resolve_variant(variant_key)
+    if not (variant and variant.swap_hand == "armor") then return false end
+    return apply_armor_to_visible_preview(previewer, variant_key,
+        "_cos_gk_score_armor_applied_mesh", "_cos_score_applied_armor_variant",
+        "score_preview")
+end
+
 function M.register_all(bridge)
-    if M.registered then M.sync_toggle(); return true end
+    if M.registered then
+        for _, provider in ipairs(M._outfit_providers) do
+            pcall(provider.register_all, bridge)
+        end
+        M.sync_toggle()
+        return true
+    end
     if not (ItemMasterList and WeaponSkins and NetworkLookup and register_cosmetics_template()) then return false end
     if not (mod and type(mod.add_mod_items_to_masterlist) == "function" and type(mod.add_mod_items_to_local_backend) == "function") then return false end
 
@@ -351,6 +597,9 @@ function M.register_all(bridge)
         bridge.registered = true
     end
     M.registered = true
+    for _, provider in ipairs(M._outfit_providers) do
+        pcall(provider.register_all, bridge)
+    end
     local engine_printf = rawget(_G, "printf")
     if engine_printf then pcall(engine_printf, "[cos:629] registered set hat=%s skin=%s shield=%s enabled=%s", M.HAT_ITEM_KEY, M.SKIN_ITEM_KEY, M.SHIELD_SKIN_KEY, tostring(enabled())) end
     return true
