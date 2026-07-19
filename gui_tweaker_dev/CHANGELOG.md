@@ -1,5 +1,18 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.300-dev (2026-07-19) -- #446 exclusive radio controls [verify-fix]
+
+- Added nested mutually exclusive bubble/radio controls with an explicit
+  UI-only **None [Default]** choice.
+- Preserved existing boolean persistence and stock VMF checkbox fallback when
+  a group is incomplete, scattered, or crosses mod ownership boundaries.
+- Added deterministic immediate repaint, Apply/restart persistence contracts,
+  and Career Tweaker integration coverage.
+
+**Solo verify:** open the Career Tweaker exclusive groups, expand each nested
+group, and select A, B, and None. Exactly one bubble must be selected, repaint
+must be immediate, and Apply/restart must preserve the selected setting state.
+
 ## 0.2.299-dev (2026-07-19) -- #605 preserve dialogue collapse states [verify-fix]
 
 - Replaced the dialogue browser's `closing and nil or speaker` pseudo-ternary

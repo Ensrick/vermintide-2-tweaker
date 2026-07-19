@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.8-beta"
+local MOD_VERSION = "0.4.9-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -288,6 +288,10 @@ mod._crt.PUBLIC_BETA_BARDIN_PROBE_DISABLED = true
 mutex.declare("rework_family_master_choice", {
     rework_master_module.MASTER_ENSRICK,
     rework_master_module.MASTER_TOURNEY,
+}, {
+    control = "radio",
+    label = "rework_family_master_choice_radio_group",
+    none_label = "rework_choice_none_default",
 })
 
 -- #447 supplies the second Zealot green-to-THP design anticipated by #446.
@@ -296,6 +300,10 @@ mutex.declare("rework_family_master_choice", {
 mutex.declare("zealot_thp_conversions", {
     "rework_wh_zealot_ability_green_to_thp",
     "rework_wh_zealot_flagellation",
+}, {
+    control = "radio",
+    label = "zealot_thp_conversions_radio_group",
+    none_label = "rework_choice_none_default",
 })
 
 -- ============================================================
@@ -357,7 +365,8 @@ do
                 for i = 1, #members do
                     payload[i] = { mod = "crt", setting = members[i] }
                 end
-                local ok, err = mt:register_exclusive_group("crt_" .. group_id, payload)
+                local ok, err = mt:register_exclusive_group(
+                    "crt_" .. group_id, payload, mutex.PRESENTATIONS[group_id])
                 if ok then
                     count = count + 1
                 else

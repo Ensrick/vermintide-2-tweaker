@@ -51,9 +51,9 @@ Last updated: 2026-07-17.
 |-------|-------|
 | Scope | Active Career Tweaker native reworks and Tourney Balance ports only. Retired Big Rebalance keys remain hidden and inert. |
 | Expected | Selecting either family enables its complete catalog, clears the rival family, and performs one final apply per owner. Turning a master off clears only that family; any partial leaf selection shows both masters off. |
-| Layout | Both all-on controls live only under `Talent Reworks > Master Toggles`; individual family leaves stay in their career groups. |
+| Layout | Stock VMF keeps both all-on checkboxes under `Talent Reworks > Master Toggles`. Current Mod Tweaker replaces the pair with one `Rework Family` radio collapsible and an explicit `None [Default]` choice; Zealot's two THP conversions receive the same presentation. |
 | Labels | Every active leaf title begins with `[Ensrick]` or `[Tourney Balance]`; navigation groups, tooltips, and master rows do not. The metadata is shared with the runtime policy rather than duplicated in localization. |
-| Detection | Offline `test_crt_rework_master_policy.lua`; runtime `/crt_regression_test` checks `issue445_rework_family_masters` and `crt_mod_tweaker_exclusive_groups_registered`; solo UI walk in CHANGELOG 0.4.8-beta. |
+| Detection | Offline `test_crt_rework_master_policy.lua` + `test_gut_exclusive_radio.lua`; runtime `/crt_regression_test` checks `issue445_rework_family_masters` and `crt_mod_tweaker_exclusive_groups_registered`; solo UI walk in CHANGELOG 0.4.8-beta plus #446 radio verification. |
 
 ---
 ## Bardin disabler dodge investigation (#440)

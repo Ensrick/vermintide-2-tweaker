@@ -1,5 +1,12 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Mutually exclusive controls (#446)
+
+- [ ] A presented exclusive group renders as one collapsible with radio bubbles, not separate ON/OFF steppers.
+- [ ] `None [Default]` clears every real member; selecting A/B moves the filled bubble immediately and stages exactly one true member.
+- [ ] APPLY persists the selection across restart; stock VMF options remain ordinary compatible checkboxes.
+- [ ] `/gut_regression_test` passes `mod_tweaker_exclusive_group_api`.
+
 ## Mod Tweaker DX12 fence diagnostics (#630)
 
 - [ ] Open Mod Tweaker in the keep, select Weapons, change window focus once, return, and close the menu normally.

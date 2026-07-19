@@ -656,6 +656,16 @@ _rt_register("crt_mod_tweaker_exclusive_groups_registered", function()
                 return string.format("cluster %q member %q resolves to %s (expected crt_%s)",
                     tostring(group_id), tostring(members[1]), tostring(got), tostring(group_id))
             end
+            if type(mt.get_exclusive_presentation) == "function" then
+                local presentation = mt:get_exclusive_presentation("crt_" .. group_id)
+                local expected = mutex.PRESENTATIONS and mutex.PRESENTATIONS[group_id]
+                if expected and (type(presentation) ~= "table"
+                    or presentation.control ~= "radio"
+                    or presentation.label ~= expected.label
+                    or presentation.none_label ~= expected.none_label) then
+                    return string.format("cluster %q radio presentation did not register", tostring(group_id))
+                end
+            end
             checked = checked + 1
         end
     end

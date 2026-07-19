@@ -92,14 +92,16 @@ Is this one of the author's own Tweaker-series mods (shipped by us, in the Tweak
 
 Some settings can't be enabled together -- e.g. rival rework options for the same talent
 (the issue's example: "Zealot THP Conversions" = None / On Ability Use / Devotion). Declare
-them as a **mutually-exclusive group**: switching one member ON in the Mod Tweaker turns the
-others OFF (a radio group over ordinary checkboxes; all-off is a valid "None" state).
+them as a **mutually-exclusive group**: selecting one member in the Mod Tweaker turns the
+others OFF. With radio presentation metadata, all-off is rendered as an explicit UI-only
+`None [Default]` choice.
 
-- **Members are REAL VMF boolean/checkbox settings** in your own mod (or across mods). You do
-  NOT invent a new widget type -- you keep normal `checkbox` widgets and register the
-  exclusivity separately. For the collapsible look the issue mock-up shows, wrap the members
-  in a native VMF `group` widget in your `_data.lua`; gut renders the group and enforces the
-  exclusivity. No custom widget, no `AUTHOR_MOD_IDS` change.
+- **Members remain real VMF boolean/checkbox settings** in your own mod. The optional
+  `{ control="radio", ... }` metadata changes only Mod Tweaker's presentation: gut replaces
+  a complete same-parent cluster with one synthetic collapsible, `None [Default]`, and one
+  bubble row per setting. Stock VMF and older gut versions retain ordinary checkboxes.
+- Radio synthesis is deliberately same-mod and same-parent. Cross-mod, incomplete, or
+  structurally scattered groups keep their checkbox rows while retaining exclusivity.
 - **Declare it from your own mod** via the gut public API (data-driven -- gut needs no code
   change per group):
 
@@ -107,23 +109,27 @@ others OFF (a radio group over ordinary checkboxes; all-off is a valid "None" st
   local gut = get_mod("gut_dev")   -- or "gut" against the stable item
   if gut and gut.mod_tweaker and gut.mod_tweaker.register_exclusive_group then
       gut.mod_tweaker:register_exclusive_group("crt_zealot_thp", {
-          { mod = "crt", setting = "zealot_thp_none" },      -- None [Default]
           { mod = "crt", setting = "zealot_thp_on_ability" },
           { mod = "crt", setting = "zealot_thp_devotion" },
+      }, {
+          control = "radio",
+          label = "zealot_thp_conversions_group", -- owner-mod localization key
+          none_label = "none_default",            -- UI-only; writes all members false
       })
   end
   ```
 
-- **Enforcement** happens only inside the Mod Tweaker's own menu (the checkbox toggle handler
+- **Enforcement** happens only inside the Mod Tweaker's own menu (the radio/checkbox handler
   stages siblings OFF and rebuilds the rows). Editing the same setting in VMF's stock options
   menu is NOT swept -- register the group above and, if you need hard exclusivity everywhere,
   also guard it in your own `on_setting_changed`.
 - **Same-mod members commit together** on that tab's APPLY. Cross-mod members buffer under
   each owner mod's tab, so a cross-mod sibling commits when ITS tab is applied.
 
-Resolve group ids from gut with `:get_exclusive_group_id(mod_id, setting_id)` /
-`:get_exclusive_members(group_id)`. Registry + API live in `_mod_tweaker_settings.lua` /
-`_mod_tweaker.lua`; the sweep is `ModTweakerView:_enforce_exclusive` in `_mod_tweaker_view.lua`.
+Resolve group ids from gut with `:get_exclusive_group_id(mod_id, setting_id)`,
+`:get_exclusive_members(group_id)`, and `:get_exclusive_presentation(group_id)`. Registry +
+API live in `_mod_tweaker_settings.lua` / `_mod_tweaker.lua`; the fail-closed layout planner is
+`_mod_tweaker_exclusive_layout.lua`; the sweep is `ModTweakerView:_enforce_exclusive`.
 
 ## Filtered / searchable dropdowns (#505)
 
