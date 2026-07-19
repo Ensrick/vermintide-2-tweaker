@@ -2369,9 +2369,10 @@ the renderer-thread stall can occur without a Lua exception.
    long-lived renderer and uses one `UIRenderer.begin_pass`/`end_pass`; WT's
    hold-pose tuner creates no preview world, unit, renderer, or package.
 3. Add bounded edge evidence outside the pass: presentation entry/exit,
-   renderer identity, selected tab, `Window.has_focus()`, and draw begin/end
-   balance. A balanced Lua return before the dump points below the mod's pass;
-   an unmatched begin identifies a mod lifecycle boundary.
+   renderer identity, selected tab, exact expanded subsection plus prior-frame
+   viewport visibility, `Window.has_focus()`, and draw begin/end balance. A
+   balanced Lua return before the dump points below the mod's pass; an unmatched
+   begin identifies a mod lifecycle boundary.
 4. Reproduce the same focus sequence in a vanilla view as a control. A shared
    signature shifts investigation toward the driver/engine path; a Mod Tweaker-
    only signature keeps the borrowed-pass owner in scope.
@@ -2384,8 +2385,12 @@ the renderer-thread stall can occur without a Lua exception.
   Remove them when the issue closes.
 - Change behavior only after the next trace identifies an imbalance or a
   source-backed engine contract. Cover balanced, unmatched, focus-edge, tab-
-  edge, both-presentation, and output-bound behavior offline. GUT
-  `_gut_dx12_fence630.lua` is the diagnostic reference.
+  edge, subsection-edge, both-presentation, and output-bound behavior offline.
+  GUT `_gut_dx12_fence630.lua` is the diagnostic reference. For merged Mod
+  Tweaker Equipment tabs, use the stable synthesized header ids and the owner's
+  `_expanded[row._group_key]` state. Viewport visibility alone is insufficient:
+  a collapsed `Weapons` header can be visible without the subsection being open,
+  and `gut_equipment` replaces the old `wt_dev` top-level edge.
 
 ## 63. Texture resource is resident but the spawned unit material is unresolved
 

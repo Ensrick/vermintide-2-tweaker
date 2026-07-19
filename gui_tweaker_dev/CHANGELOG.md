@@ -1,5 +1,18 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.307-dev (2026-07-19) -- #630 Equipment-section DX12 diagnostics refinement [diagnostics-armed]
+
+- Refined the #630 diagnostics after live logs showed every captured Mod
+  Tweaker pass balanced (`balance=0`, `anomalies=0`) but no captured tab named
+  `wt_dev`: Weapons now lives under the synthesized `gut_equipment` tab. The
+  probe now records each synthesized Equipment section's exact stored/forced
+  expanded state plus its prior-frame viewport visibility as `equipment_state`.
+  A future freeze can therefore prove that Weapons was actually expanded instead
+  of merely present as a visible collapsed header. Scroll-only visibility changes
+  do not emit another edge.
+- This remains diagnostics-only: no renderer, focus, package, view, tab, WT
+  hold-pose, or draw behavior changes.
+
 ## 0.2.306-dev (2026-07-19) -- Dialogue browser mouseover transcript popups (#880) [untested]
 
 - Hovering a dialogue line row shows a transcript popup anchored directly under the row (flipping above only at the screen bottom): title = the row's Wwise event id, body = the line's localized subtitle plus one speaker-label - dialogue-group metadata line. Popup suppressed whenever the subtitle key does not resolve (raw key echoed back or a `<...>` marker), so no raw-key popups.
@@ -115,7 +128,6 @@ contain `[gut:LOAD] v0.2.297-dev`; the timer should not drift or duplicate.
 
 **Solo verify:** launch Tweaker: GUI dev and run `/gut_regression_test`.
 `localization_format_safe` must pass without a resource error in the log.
-
 ## 0.2.294-dev (2026-07-19) -- #222 remove repeated HideBuffs tooltip titles [verify-fix]
 
 - **Symptom:** the cross-mod title/body audit still found two GUT HideBuffs rows whose tooltip bodies merely repeated the orange popup header: Hide Player Levels and Hide Portrait Frames.
