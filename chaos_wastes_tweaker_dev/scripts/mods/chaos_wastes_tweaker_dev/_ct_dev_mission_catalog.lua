@@ -115,9 +115,19 @@ add_mission({ key = "sig_citadel", name = "Citadel of Eternity (Approach)" }, _M
 _M.BASE_LEVELS = {}
 for _, mission in ipairs(_M.MISSIONS) do _M.BASE_LEVELS[#_M.BASE_LEVELS + 1] = mission.key end
 
--- Depth presets -> run_progress fraction. Higher = deeper into the run (more
--- spawns, harder trials, higher weapon-chest tier via ct's progressive hooks).
-_M.PROGRESS = { 0.0, 0.25, 0.5, 0.75, 1.0 }
+-- Depth presets -> run_progress fraction. Fatshark's own Deus loader limits its
+-- slider to 0.999, and DeusWeaponGeneration.get_random_rarity asserts on every
+-- value >= 1.0. Keep the engine boundary and every caller on one canonical cap.
+_M.MAX_RUN_PROGRESS = 0.999
+_M.PROGRESS = { 0.0, 0.25, 0.5, 0.75, _M.MAX_RUN_PROGRESS }
+
+function _M.sanitize_progress(value)
+    local progress = tonumber(value)
+    if not progress or progress ~= progress then return 0 end -- nil / NaN
+    if progress < 0 then return 0 end
+    if progress > _M.MAX_RUN_PROGRESS then return _M.MAX_RUN_PROGRESS end
+    return progress
+end
 
 -- Vanilla graph population picks a valid layout path from level_info.paths
 -- (deus_populate_graph.lua:342-346,462-465). The single-node debug graph bypasses
@@ -177,7 +187,7 @@ local DIFFICULTY_LABEL = {
 
 -- VMF localizes dropdown options through string.format, so literal percent signs
 -- must remain escaped in the localization table. They render as a single "%".
-local PROGRESS_LABEL = { "Start (0%%)", "Early (25%%)", "Mid (50%%)", "Late (75%%)", "Deepest (100%%)" }
+local PROGRESS_LABEL = { "Start (0%%)", "Early (25%%)", "Mid (50%%)", "Late (75%%)", "Deepest (99.9%%)" }
 
 -- ===========================================================================
 -- Loc-key helpers (systematic prefixes keep menu and loc in lockstep)
