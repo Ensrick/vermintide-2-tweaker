@@ -166,9 +166,13 @@ function Invoke-SelfTest {
     Assert (($bad | Where-Object { $_ -match "key 'formatted_percent'" }).Count -eq 0) 'accepts directive plus escaped percent'
     Assert (($bad | Where-Object { $_ -match "key 'formatted_string'" }).Count -eq 0) 'accepts string directive'
     Assert ($bad.Count -eq 2) 'reports only the two unsafe fixtures'
+    $validData = Join-Path $repoRoot 'character_weapon_variants/scripts/mods/character_weapon_variants/example_data.lua'
+    $fixtureData = Join-Path $repoRoot 'qa/lua/tests/test_cwv_action_lookup_data.lua'
+    Assert ((Split-Path (Get-ModDirForFile $validData) -Leaf) -eq 'character_weapon_variants') 'resolves canonical scripts/mods data owner'
+    Assert (-not (Get-ModDirForFile $fixtureData)) 'rejects *_data.lua QA fixture outside scripts/mods'
 
     if ($script:LocalizationSelfTestPass) {
-        Write-Host "[check_localization -SelfTest] OK -- percent detection intact." -ForegroundColor Green
+        Write-Host "[check_localization -SelfTest] OK -- percent and layout detection intact." -ForegroundColor Green
         return 0
     }
     Write-Host "[check_localization -SelfTest] FAILED -- percent detection regression." -ForegroundColor Red
@@ -181,12 +185,18 @@ if ($SelfTest) { exit (Invoke-SelfTest) }
 $modFiles = @{}
 foreach ($locFile in Find-LocFiles) {
     $modDir = Get-ModDirForFile $locFile.FullName
+    # Repository QA fixtures may intentionally end in *_localization.lua but do
+    # not live under <mod>/scripts/mods. They are not VMF localization owners.
+    if (-not $modDir) { continue }
     $modName = Split-Path $modDir -Leaf
     if (-not $modFiles.ContainsKey($modName)) { $modFiles[$modName] = @{ loc = $null; data = $null } }
     $modFiles[$modName].loc = $locFile.FullName
 }
 foreach ($dataFile in Find-DataFiles) {
     $modDir = Get-ModDirForFile $dataFile.FullName
+    # Same layout gate as localization files: e.g. a test named
+    # test_cwv_action_lookup_data.lua is a fixture, not a mod data surface.
+    if (-not $modDir) { continue }
     $modName = Split-Path $modDir -Leaf
     if (-not $modFiles.ContainsKey($modName)) { $modFiles[$modName] = @{ loc = $null; data = $null } }
     $modFiles[$modName].data = $dataFile.FullName
