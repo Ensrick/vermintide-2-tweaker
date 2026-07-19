@@ -1,6 +1,27 @@
 # Cosmetics Tweaker — Changelog
 
-## 0.9.160-dev - 2026-07-19 - #154 #373 #650 log-sweep defect fixes [untested]
+## 0.9.161-dev - 2026-07-19 - reconciliation: issue 883 icons over the shipped 0.9.160
+
+- Version-number collision: the Workshop's 0.9.160 (uploaded 14:05) carries the issue 154/373/650 fixes but not issue 883; master's 0.9.160 carries both. This build ships the union under 0.9.161-dev.
+
+## 0.9.160-dev - 2026-07-19 - #883 exact Loremaster inventory icons
+
+- Source-backed root cause: Loremaster's Armoury weapon selections persist the
+  Armoury key directly, while the Cosmetics bridge maps only contain cloned
+  hat/outfit identities. The inventory provider therefore rejected valid
+  per-instance weapon selections before consulting LA's authored icon table.
+- The shared inventory-icon policy now accepts direct keys only when they have
+  positive `SKIN_LIST` membership, resolves the exact backend item's current
+  skin before any representative bridge paint, and fails closed for unknown or
+  mismatched main-hand identities. Shield cross-family choices retain their
+  deliberate representative-icon fallback; dual-weapon icon ownership remains
+  on the primary/right-hand selection.
+- Added bounded, file-only `[cos:883]` outcome diagnostics (32 distinct states
+  maximum), a complete appearance contract, runtime coverage, and Lua 5.1
+  regression cases for direct keys, exact-skin precedence, fallback behavior,
+  and unknown-key rejection. No global LA/vanilla icon tables are mutated.
+
+## 0.9.159-dev - 2026-07-19 - #154 #373 #650 log-sweep defect fixes [untested]
 
 ### #154 husk cache never populated for cross-char weapon slots [untested]
 

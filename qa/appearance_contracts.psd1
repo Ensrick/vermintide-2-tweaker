@@ -50,6 +50,67 @@
 
     Contracts = @(
         @{
+            Id = 'cim.issue882.ranged-properties-preview-position'
+            Issue = 882
+            Claim = 'structural-only'
+            Owners = @(
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview_policy.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'the correction is scoped to the Athanor properties previewer and never mutates gameplay units' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'the correction is scoped to the Athanor properties previewer and never mutates gameplay units' }
+                        bot_3p = @{ Disposition = 'not-applicable'; Reason = 'the correction is scoped to the Athanor properties previewer and never mutates gameplay units' }
+                        remote_husk_3p = @{ Disposition = 'not-applicable'; Reason = 'the correction is local UI state and has no network transport or husk consumer' }
+                        inventory_preview = @{ Disposition = 'not-applicable'; Reason = 'the inventory character preview uses MenuWorldPreviewer rather than HeroWindowWeaveProperties' }
+                        cosmetic_preview = @{ Disposition = 'not-applicable'; Reason = 'the cosmetic browser uses its own LootItemUnitPreviewer surface outside the CIM forge-active gate' }
+                        athanor_preview = @{ Disposition = 'covered'; Evidence = 'the ranged-only HeroWindowWeaveProperties construction adapter composes native centered x with authored y/z and updates the live link plus boxed zoom-reset position atomically' }
+                        crafting_preview = @{ Disposition = 'not-applicable'; Reason = 'the ordinary crafting preview does not instantiate HeroWindowWeaveProperties' }
+                        lobby_preview = @{ Disposition = 'not-applicable'; Reason = 'lobby preview construction does not instantiate HeroWindowWeaveProperties' }
+                        score_screen = @{ Disposition = 'not-applicable'; Reason = 'score preview construction does not instantiate HeroWindowWeaveProperties' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards rather than the Athanor properties preview unit' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the correction is derived from current preview slot and native position and has no persisted state' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'gameplay unit spawning does not instantiate the Athanor properties previewer' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'equip does not mutate an already-open Athanor properties preview' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'wield does not mutate an already-open Athanor properties preview' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'the correction is slot-scoped and independent of illusion selection' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style does not own the Athanor properties preview position' }
+                        career_change = @{ Disposition = 'not-applicable'; Reason = 'career selection rebuilds the forge catalogue; preview placement is reapplied only when the properties view opens' }
+                        mission_transition = @{ Disposition = 'not-applicable'; Reason = 'a mission transition destroys the preview; the construction adapter reapplies on the next view open' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not construct the Athanor properties preview' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'the local preview transform has no peer state' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the local preview transform has no peer state' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the local preview uses only resident vanilla coordinates and no peer registry' }
+                        rejoin = @{ Disposition = 'not-applicable'; Reason = 'the local preview transform has no peer state' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each ranged properties preview construction applies one active-only correction after vanilla creates the previewer' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'each replacement previewer recomputes from its untouched native position; the boxed start position preserves the correction through zoom reset' }
+                        lobby_score_create = @{ Disposition = 'not-applicable'; Reason = 'lobby and score creation do not instantiate HeroWindowWeaveProperties' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'restoring an already-open preview when CIM is disabled has no paired runtime evidence' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_old_musket_preview.lua'
+                            Names = @(
+                                'CIM #882 centers only ranged properties previews'
+                                'CIM #882 runtime installs one active-only zoom-durable correction'
+                                'CIM #882 accepts retail callable-table vector constructors'
+                                'CIM #882 constructor failure leaves preview state untouched'
+                                'CIM #882 production correction is construction-only and zoom durable'
+                            )
+                            Surfaces = @('athanor_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cwv.issue760.outrider-saltzpyre-stance'
             Issue = 760
             Claim = 'structural-only'
@@ -394,6 +455,67 @@
                             )
                             Surfaces = @('inventory_preview', 'cosmetic_preview', 'hold_tab')
                             ReplayEdges = @('hot_join', 'parity_ready')
+                        }
+                    )
+                }
+            )
+        }
+        @{
+            Id = 'cosmetics.issue883.la-exact-instance-icon'
+            Issue = 883
+            Claim = 'structural-only'
+            Owners = @(
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_instance_policy.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_inventory_icon.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'icon'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'first-person weapon units do not render inventory-card icons' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'third-person weapon units do not render inventory-card icons' }
+                        bot_3p = @{ Disposition = 'not-applicable'; Reason = 'bot weapon units do not render inventory-card icons' }
+                        remote_husk_3p = @{ Disposition = 'not-applicable'; Reason = 'remote husk weapon units do not render local inventory-card icons' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'the singleton UIUtils adapter resolves the LA icon from exact backend identity, exact item skin, and authored SKIN_LIST data without mutating shared registries' }
+                        cosmetic_preview = @{ Disposition = 'deferred'; Reason = 'the illusion picker uses skin widgets rather than the exact backend-item UIUtils card adapter' }
+                        athanor_preview = @{ Disposition = 'deferred'; Reason = 'Athanor icon ownership is a separate exact-identity adapter and is not claimed by issue 883' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'ordinary crafting rows may not carry the exact persisted backend identity required by this contract' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'lobby item-card exact backend identity and LA atlas capability have not been proven' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'score-screen item-card exact backend identity and LA atlas capability have not been proven' }
+                        hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab receives peer-safe loadout presentation through a separate adapter' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'covered'; Evidence = 'persisted exact-item illusion and offhand records resolve through the same pure provider on the next card request' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'weapon spawning does not create inventory-card icon state' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'inventory-card icon resolution is synchronous and independent of equipped world units' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'inventory-card icon resolution is synchronous and independent of wield state' }
+                        customization_change = @{ Disposition = 'covered'; Evidence = 'the committed exact-instance selection is read on the next inventory-card request' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style does not own LA cosmetic icon identity' }
+                        career_change = @{ Disposition = 'not-applicable'; Reason = 'the icon provider keys the exact item rather than retaining career-local card state' }
+                        mission_transition = @{ Disposition = 'not-applicable'; Reason = 'the local card resolves persisted identity on demand after any transition' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not retain inventory-card icon state' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'issue 883 owns local exact-instance inventory icons and sends no custom icon identity' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'issue 883 owns local exact-instance inventory icons and sends no custom icon identity' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the local LA atlas/provider is required and no icon identity is sent to peers' }
+                        rejoin = @{ Disposition = 'not-applicable'; Reason = 'the local card resolves persisted identity on demand rather than replaying peer state' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each inventory-card request resolves from current exact identity with no retained grid-cell state' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'the resolver has no screen-local cache and re-evaluates the persisted item state' }
+                        lobby_score_create = @{ Disposition = 'deferred'; Reason = 'lobby and score card adapters remain outside this exact inventory surface' }
+                        mod_disable_restore = @{ Disposition = 'covered'; Evidence = 'the adapter never mutates WeaponSkins or ItemMasterList, so vanilla presentation remains authoritative when Cosmetics is disabled' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cos_la_instance_policy.lua'
+                            Names = @(
+                                'direct LA Armoury identities resolve without hat-outfit clone maps (#883)'
+                                'inventory icon provider bounds and deduplicates automatic diagnostics (#883)'
+                                'offhand icon prefers exact item skin before bridge paint fallback (#883)'
+                                'persisted row-one LA icon is exact-backend-instance only'
+                                'unknown LA metadata fails closed to vanilla icon'
+                            )
+                            Surfaces = @('inventory_preview')
+                            ReplayEdges = @('instance_load', 'customization_change', 'preview_open', 'preview_reopen', 'mod_disable_restore')
                         }
                     )
                 }

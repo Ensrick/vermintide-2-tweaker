@@ -799,6 +799,16 @@ _rt_register("la_exact_instance_inventory_icon_376", function()
         { rt_clone = "rt_armoury" }, { rt_clone = "rt_vanilla" },
         { rt_armoury = { icons = { rt_vanilla = "rt_icon" } } })
     if got ~= "rt_icon" then return "authored LA icon did not resolve by exact item" end
+    -- #883: LA weapon selections may persist the Armoury key directly. The
+    -- bridge clone maps only own hats/outfits, so direct positive membership
+    -- in SKIN_LIST remains a supported exact-instance identity.
+    local direct = mod._la_instance_policy.resolve_inventory_icon(
+        { backend_id = "rt_direct_bid", skin = "rt_vanilla" },
+        "rt_direct_armoury", nil, {}, {},
+        { rt_direct_armoury = { icons = { rt_vanilla = "rt_direct_icon" } } })
+    if direct ~= "rt_direct_icon" then
+        return "direct LA Armoury identity did not resolve by exact item"
+    end
     local lists = {
         rt_main = { icons = { rt_vanilla = "rt_main_icon" } },
         rt_shield = { icons = { rt_shield_skin = "rt_shield_icon" } },

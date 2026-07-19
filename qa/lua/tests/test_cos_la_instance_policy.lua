@@ -1,6 +1,8 @@
 return function(H, repo_root)
     local policy = dofile(repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_instance_policy.lua")
+    local icon_provider = dofile(repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_inventory_icon.lua")
 
     local bridge_to_armoury = { clone_a = "la_red", clone_b = "la_blue" }
     local bridge_to_vanilla = { clone_a = "skin_a", clone_b = "skin_b" }
@@ -67,12 +69,79 @@ return function(H, repo_root)
             nil, nil, bridge_to_armoury, bridge_to_vanilla, skin_list), nil)
     end)
 
+    H.test("direct LA Armoury identities resolve without hat-outfit clone maps (#883)", function()
+        local direct_key = "Kruber_KOTBS_empire_sword_01"
+        local realistic = {
+            [direct_key] = {
+                swap_hand = "right_hand_unit",
+                icons = {
+                    es_1h_sword_skin_02 = "la_kruber_kotbs_shortsword_icon",
+                },
+            },
+        }
+        local icon, reason, armoury_key, skin = policy.resolve_inventory_icon_detailed(
+            { backend_id = "exact_sword", skin = "es_1h_sword_skin_02" },
+            direct_key, nil, {}, {}, realistic)
+        H.equal(icon, "la_kruber_kotbs_shortsword_icon")
+        H.equal(reason, "exact-skin")
+        H.equal(armoury_key, direct_key)
+        H.equal(skin, "es_1h_sword_skin_02")
+        H.equal(policy.resolve_inventory_icon(
+            { backend_id = "other_sword", skin = "es_1h_sword_skin_02" },
+            "not_an_la_key", nil, {}, {}, realistic), nil)
+    end)
+
+    H.test("inventory icon provider bounds and deduplicates automatic diagnostics (#883)", function()
+        local lines = {}
+        local provider = icon_provider.new(policy, function(fmt, ...)
+            lines[#lines + 1] = string.format(fmt, ...)
+        end, 2)
+        local direct = { icons = { skin_a = "icon_a" } }
+        local list = { la_direct = direct }
+        local function resolve(backend_id)
+            return provider.resolve({ backend_id = backend_id, skin = "skin_a" },
+                "la_direct", nil, {}, {}, list, "dual")
+        end
+        H.equal(resolve("one"), "icon_a")
+        H.equal(resolve("one"), "icon_a")
+        H.equal(resolve("two"), "icon_a")
+        H.equal(resolve("three"), "icon_a")
+        H.equal(#lines, 2)
+        H.truthy(string.find(lines[1], "[cos:883] inventory-icon", 1, true) ~= nil)
+        H.truthy(string.find(lines[1], "bid=one", 1, true) ~= nil)
+    end)
+
     H.test("offhand icon uses LA authored variant and base-skin pair", function()
         local hands = {
             left_hand_unit = { armoury_key = "la_red", vanilla_key = "skin_runed" },
         }
         H.equal(policy.resolve_inventory_icon({ backend_id = "shield", skin = "skin_a" },
-            nil, hands, bridge_to_armoury, bridge_to_vanilla, skin_list), "icon_red_glow")
+            nil, hands, bridge_to_armoury, bridge_to_vanilla, skin_list), "icon_red")
+    end)
+
+    H.test("offhand icon prefers exact item skin before bridge paint fallback (#883)", function()
+        local hands = {
+            left_hand_unit = {
+                armoury_key = "la_red",
+                -- This is a representative paint key, not exact item state.
+                vanilla_key = "skin_a",
+            },
+        }
+        local icon, reason, _, skin = policy.resolve_inventory_icon_detailed(
+            { backend_id = "shield_runed", skin = "skin_runed" },
+            nil, hands, bridge_to_armoury, bridge_to_vanilla, skin_list, "shield")
+        H.equal(icon, "icon_red_glow")
+        H.equal(reason, "exact-skin")
+        H.equal(skin, "skin_runed")
+
+        -- Cross-family options may have no exact authored row; retain the
+        -- representative key as a deliberate fallback instead of going blank.
+        icon, reason, _, skin = policy.resolve_inventory_icon_detailed(
+            { backend_id = "cross_family", skin = "foreign_skin" },
+            nil, hands, bridge_to_armoury, bridge_to_vanilla, skin_list, "shield")
+        H.equal(icon, "icon_red")
+        H.equal(reason, "fallback-skin")
+        H.equal(skin, "skin_a")
     end)
 
     H.test("dual icon remains owned by the main right-hand illusion", function()
@@ -108,7 +177,7 @@ return function(H, repo_root)
         }
         H.equal(policy.resolve_inventory_icon({ backend_id = "shield", skin = "skin_a" },
             "clone_a", la, bridge_to_armoury, bridge_to_vanilla, skin_list,
-            "shield"), "icon_red_glow")
+            "shield"), "icon_red")
 
         la.left_hand_unit.armoury_key = "missing_la_variant"
         H.equal(policy.resolve_inventory_icon({ backend_id = "shield", skin = "skin_a" },

@@ -64,6 +64,7 @@ local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
 local OFFHAND_COMMIT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy")
 local LA_REPLAY_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_policy")
 mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_instance_policy")
+mod._la_icon_provider = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_inventory_icon").new(mod._la_instance_policy, printf, 32)
 -- v0.9.49-dev (issue #186): disable Loremaster's Armoury's Okri's-Challenges /
 -- achievement-book entries (main_quest + 12 sub-quests) — display, tracking and
 -- completion pop-ups — behind the `la_disable_okri_challenges` toggle (default
@@ -87,7 +88,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.160-dev"
+local MOD_VERSION = "0.9.161-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3330,9 +3331,8 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
                     saved_offhands = { left_hand_unit = recovered_left }
                 end
             end
-            local icon = mod._la_instance_policy.resolve_inventory_icon(item,
-                LA_PERSIST.get_saved_illusion(backend_id),
-                saved_offhands,
+            local saved_illusion = LA_PERSIST.get_saved_illusion(backend_id)
+            local icon = mod._la_icon_provider.resolve(item, saved_illusion, saved_offhands,
                 LA_BRIDGE and LA_BRIDGE.backend_to_armoury,
                 LA_BRIDGE and LA_BRIDGE.backend_to_vanilla,
                 la and la.SKIN_LIST,
@@ -3344,7 +3344,7 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
                 or (saved_offhands and saved_offhands.left_hand_unit)
             inventory_icon, display_name, description = _cos_resolve_presentation(item,
                 inventory_icon, display_name, description, ownership, record,
-                LA_PERSIST.get_saved_illusion(backend_id))
+                saved_illusion)
             -- Publish for the exact ItemGrid cell only. UIUtils also feeds
             -- crafting and Hold-Tab, whose widgets do not own the shield/glow
             -- passes; their returned vanilla/owned icon must stay unchanged.
