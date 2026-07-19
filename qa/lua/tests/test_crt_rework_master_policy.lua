@@ -4,6 +4,18 @@ return function(H, repo_root)
     local module = assert(loadfile(policy_path))()
     local policy = module.new({ rework_b = {}, rework_a = {} }, { "trn_b", "trn_a" })
 
+    local function load_localization()
+        local require_key = "scripts/mods/career_tweaker/_crt_rework_master_policy"
+        local previous = package.preload[require_key]
+        package.preload[require_key] = function() return module end
+        local loc_path = repo_root
+            .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_localization.lua"
+        local ok, localization = pcall(assert(loadfile(loc_path)))
+        package.preload[require_key] = previous
+        H.truthy(ok, tostring(localization))
+        return localization
+    end
+
     local function change_map(changes)
         local out = {}
         for i = 1, #changes do
@@ -48,30 +60,26 @@ return function(H, repo_root)
         H.equal(exact[module.MASTER_TOURNEY], true)
     end)
 
-    H.test("CRT active rework labels carry derived family suffixes", function()
-        local loc_path = repo_root
-            .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_localization.lua"
-        local localization = assert(loadfile(loc_path))()
+    H.test("CRT active rework labels carry derived family prefixes", function()
+        local localization = load_localization()
         local checked = 0
         for key, row in pairs(localization) do
-            local family = key:find("^rework_") and "Ensrick's Reworks"
-                or (key:find("^trn_") and "Tourney Balance")
-            local leaf = family
-                and not key:find("_group$")
-                and not key:find("_description$")
-                and not key:find("_tooltip$")
-                and not key:find("^rework_master_")
-            if leaf then
-                H.truthy(row.en:find("[" .. family .. "]", 1, true), key .. " missing family suffix")
+            if module.is_leaf_localization_key(key) then
+                local _, metadata = module.family_for_setting(key)
+                H.equal(row.en:sub(1, #metadata.label_prefix), metadata.label_prefix,
+                    key .. " missing family prefix")
+                H.equal(row.en:find("[Ensrick's Reworks]", 1, true), nil,
+                    key .. " retained superseded suffix")
                 checked = checked + 1
             end
         end
         H.truthy(checked > 50, "expected the complete active rework catalog")
-        H.equal(localization.rework_master_group.en:find("[Ensrick", 1, true), nil,
+        H.equal(localization.rework_master_group.en, "Master Toggles")
+        H.equal(localization.rework_master_ensrick.en:find("[Ensrick", 1, true), nil,
             "navigation/master rows should remain undecorated")
     end)
 
-    H.test("CRT data exposes both live masters as plain checkboxes", function()
+    H.test("CRT data nests both live masters in their own group", function()
         local old_get_mod = _G.get_mod
         _G.get_mod = function()
             return { localize = function(_, id) return id end }
@@ -83,15 +91,53 @@ return function(H, repo_root)
         H.truthy(ok, tostring(data))
 
         local found = {}
+        local master_group_parent
+        local function visit(widget, parent_id)
+            if type(widget) ~= "table" then return end
+            if widget.setting_id == "rework_master_group" then
+                master_group_parent = parent_id
+                H.equal(widget.type, "group")
+            end
+            if widget.setting_id == module.MASTER_ENSRICK or widget.setting_id == module.MASTER_TOURNEY then
+                found[widget.setting_id] = { type = widget.type, parent = parent_id }
+            end
+            for _, child in ipairs(widget.sub_widgets or {}) do visit(child, widget.setting_id) end
+        end
+        for _, widget in ipairs(data.options and data.options.widgets or {}) do visit(widget, nil) end
+        H.equal(master_group_parent, "talent_reworks_group")
+        H.equal(found[module.MASTER_ENSRICK].type, "checkbox")
+        H.equal(found[module.MASTER_ENSRICK].parent, "rework_master_group")
+        H.equal(found[module.MASTER_TOURNEY].type, "checkbox")
+        H.equal(found[module.MASTER_TOURNEY].parent, "rework_master_group")
+    end)
+
+    H.test("CRT every visible rework checkbox has one family prefix", function()
+        local old_get_mod = _G.get_mod
+        _G.get_mod = function()
+            return { localize = function(_, id) return id end }
+        end
+        local data_path = repo_root
+            .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_data.lua"
+        local ok, data = pcall(assert(loadfile(data_path)))
+        _G.get_mod = old_get_mod
+        H.truthy(ok, tostring(data))
+        local localization = load_localization()
+
+        local checked = 0
         local function visit(widget)
             if type(widget) ~= "table" then return end
-            if widget.setting_id == module.MASTER_ENSRICK or widget.setting_id == module.MASTER_TOURNEY then
-                found[widget.setting_id] = widget.type
+            local family, metadata = module.family_for_setting(widget.setting_id)
+            if family and widget.type == "checkbox" then
+                local row = localization[widget.setting_id]
+                H.truthy(type(row) == "table" and type(row.en) == "string",
+                    widget.setting_id .. " missing localization")
+                H.equal(row.en:sub(1, #metadata.label_prefix), metadata.label_prefix,
+                    widget.setting_id .. " missing exact authorship prefix")
+                checked = checked + 1
             end
             for _, child in ipairs(widget.sub_widgets or {}) do visit(child) end
         end
         for _, widget in ipairs(data.options and data.options.widgets or {}) do visit(widget) end
-        H.equal(found[module.MASTER_ENSRICK], "checkbox")
-        H.equal(found[module.MASTER_TOURNEY], "checkbox")
+        H.truthy(checked > 50, "expected every active visible rework checkbox")
     end)
 end

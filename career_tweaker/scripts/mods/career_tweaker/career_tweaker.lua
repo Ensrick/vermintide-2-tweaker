@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.6-beta"
+local MOD_VERSION = "0.4.8-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -205,6 +205,7 @@ local function _sync_rework_master_indicators()
 end
 
 mod._crt.rework_master_policy = rework_master_policy
+mod._crt.rework_master_module = rework_master_module
 
 -- Issue #619: Foot Knight's capability-aware career mechanics load before the
 -- armor module because that module owns crt's singleton
