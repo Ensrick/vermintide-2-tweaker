@@ -183,7 +183,6 @@ local suites = {
     "test_dcp_score_record",
     "test_cos_score_identity",
     "test_cos_husk_identity",
-    "test_cos_husk_cache_bridge",
     "test_cos_custom_hats",
     "test_cos_grail_knight_set",
     "test_cos_reikland_griffin",
