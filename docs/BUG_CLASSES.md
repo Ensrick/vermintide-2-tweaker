@@ -2417,3 +2417,43 @@ across preview worlds, owner units, or remote husks.
   names, observed collision IDs, positive-server-duration rejection, bounded
   logs, hot join, refresh, and expiry. CRT `_crt_wire_policy.lua` and
   `test_crt_wire_contract.lua` are the reference implementation.
+
+## 65. Native loadout isolation repairs only part of the row
+
+**First confirmed:** 2026-07-19 (Tweaker: GUI issue #402 follow-up).
+**Lives in:** any realm-separated or overlay-backed native loadout store.
+
+### Symptoms
+- Weapons appear isolated or mostly correct, but outfit, hat, frame, pose, or
+  accessories still bleed between official and modded realms or become blank.
+- A repair/audit command reports clean because it checks only melee/ranged, or
+  melee/ranged/frame, while the visual/accessory slots remain missing.
+- Logs show the stored weapon ids become presentable later in the same session
+  (`store-unknown` at early hero-view startup, then `store-yes`), making the
+  issue look like a weapon fallback even though row completeness is also broken.
+
+### Diagnosis pattern
+1. Treat the vanilla loadout as a complete row contract, not a weapon pair.
+   The current canonical slot list is:
+   `slot_ranged`, `slot_melee`, `slot_skin`, `slot_hat`, `slot_necklace`,
+   `slot_ring`, `slot_trinket_1`, `slot_frame`, `slot_pose`.
+2. Audit row health by that slot list. A row with both weapons but a nil frame,
+   outfit, pose, or accessory is still incomplete.
+3. Separate two phenomena: late-presenting ids require refresh/diagnostics; nil
+   or absent slots require repair/migration and should not be hidden by weapon
+   success.
+
+### Fix template
+- Define one canonical slot list and reuse it for seed, migration, status,
+  official repair, and runtime regression checks. Do not duplicate a
+  weapon-only subset in commands.
+- Run a one-time migration for old stores that fills only missing slots from the
+  official seed snapshot, then mark the store migrated so future intentional
+  choices are not repeatedly clobbered.
+- Make the official repair command slot-aware: nil is broken; gear must resolve
+  as a backend item; cosmetics may resolve either as a backend item or a stable
+  ItemMasterList key. Its wording must say "native loadout slots", not
+  "weapon/frame".
+- Add status diagnostics that print both the migration marker and a per-row
+  `missing=[...]` list. Test full-row corruption, nil visual slots, cosmetic
+  key resolution, and command coverage before shipping.

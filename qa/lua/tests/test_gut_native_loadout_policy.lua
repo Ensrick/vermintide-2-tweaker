@@ -55,7 +55,41 @@ return function(H, repo_root)
             "BackendUtils hook does not invoke canonical resolver")
         H.truthy(source:find("_capture_bu_equip(mode, mirror, career_name, slot_name, value, source)", 1, true),
             "resolved equip does not enter store/overlay capture")
-        H.truthy(source:find("local is_loadout_slot = GEAR_SLOT_SET[slot_name] or COSMETIC_SLOT_SET[slot_name]", 1, true),
+        H.truthy(source:find("local is_loadout_slot = _is_loadout_slot(slot_name)", 1, true),
             "outer hook is not gated to the complete loadout-slot partition")
+    end)
+
+    H.test("issue 402 native loadout row integrity covers every slot", function()
+        local runtime_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua"
+        local file = assert(io.open(runtime_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(source:find("local function _repair_missing_loadout_slots(entry, official_rows)", 1, true),
+            "missing-slot migration helper absent")
+        H.truthy(source:find("entry._slot_integrity_v2 = true", 1, true),
+            "slot-integrity migration marker absent")
+        H.truthy(source:find("for i = 1, #LOADOUT_SLOT_NAMES do", 1, true),
+            "corrupt-row predicate is not based on the canonical slot list")
+        H.truthy(source:find("if row[slot] == nil then return true end", 1, true),
+            "nil native loadout slots are not treated as corrupt")
+        H.truthy(source:find("slots_repaired = _repair_missing_loadout_slots(entry, cd)", 1, true),
+            "seed repair does not run the full-slot migration")
+    end)
+
+    H.test("issue 402 official scrub uses complete slot contract", function()
+        local runtime_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua"
+        local file = assert(io.open(runtime_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(source:find("for _, slot in ipairs(LOADOUT_SLOT_NAMES) do", 1, true),
+            "official scrub does not iterate the canonical slot list")
+        H.truthy(source:find("if not _slot_resolves(slot, id) then", 1, true),
+            "official scrub does not treat nil/unresolved slots as broken")
+        H.truthy(source:find('mod:echo("[scrub] official loadouts clean -- no broken native loadout slots")', 1, true),
+            "scrub result still describes only weapon/frame coverage")
+        H.truthy(source:find('rawget(ItemMasterList, id)', 1, true),
+            "cosmetic slot resolver does not accept stable ItemMasterList keys")
     end)
 end
