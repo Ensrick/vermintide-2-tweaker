@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.300-dev"
+local MOD_VERSION = "0.7.301-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8989,6 +8989,11 @@ mod:hook_safe("IngamePlayerListUI", "_draw", function(self, dt)
     local widgets = self._ct_boon_preview_widgets
     local has_boons = widgets and #widgets > 0
     local cw = self._ct_deus_collectibles
+    -- #571 load-order fence: gut_dev can suppress setup before CT's wrapper runs.
+    -- Recover CT's owner-specific rows once, from this consolidated draw seam.
+    if not cw and type(mod._ct_ensure_deus_collectibles) == "function" then
+        pcall(mod._ct_ensure_deus_collectibles, self, "draw_recovery"); cw = self._ct_deus_collectibles
+    end
     if not has_boons and not cw then return end
     pcall(function()
         local r = self._ui_top_renderer
@@ -9185,7 +9190,7 @@ do
         { key = "chests", icon = "deus_icons_boon", label_key = "ct_tab_chests_of_trials" },
         { key = "coins",  icon = "deus_icons_coin", label_key = "ct_tab_pilgrims_coins" },
     }
-    -- Native-sized; #571 resolves any downscale from the live scenegraph.
+    -- Native-sized; #571 reuses vanilla's widget-local two-per-row offset loop.
     local ICON_SIZE = 80
 
     -- Verbatim copy of vanilla create_loot_widget (definitions:843-1041) MINUS the
@@ -9317,25 +9322,19 @@ do
             end
         end
     end
-
     -- Build point + adventure-counter suppression. FULL wrapper (not hook_safe): under
     -- the deus mechanism vanilla must NOT run -- it would build tome/grim/dice counters
     -- from the injected level's defaulted loot_objectives. Keep/hubs stay vanilla.
     mod:hook("IngamePlayerListUI", "_setup_mission_data", function(func, self, level_settings)
         self._ct_deus_collectibles = nil
+        self._ct_deus_collectibles_build_failed = nil
         if self._is_in_inn or (level_settings and level_settings.hub_level)
             or not deus_run_controller_or_nil() then
             return func(self, level_settings)
         end
-        local ok, err = pcall(function()
-            self._ct_deus_collectibles = mod._ct_build_deus_collectibles()
-        end)
-        if not ok then
-            self._ct_deus_collectibles = nil
-            pcall(printf, "[ct:533] deus collectibles build failed (pane falls back to vanilla): %s", tostring(err))
+        if not mod._ct_ensure_deus_collectibles(self, "setup_mission_data") then
             return func(self, level_settings)
         end
-        pcall(printf, "[ct:533] Tab-hold collectibles -> deus counters (Chests of Trials + Pilgrim's Coins); adventure tome/grim/dice counters suppressed")
         -- Deliberately NOT calling func: on a deus-run level the vanilla build is either
         -- a no-op (vanilla CW level, no loot_objectives) or wrong (injected adventure
         -- level, defaulted adventure loot_objectives).

@@ -1,10 +1,16 @@
--- #533 native Chaos Wastes hold-Tab layout census.
--- Observation-only: arms on the native player-list activation edge and samples
--- after vanilla _draw, when UISceneGraph world positions are final.
+-- _ct_diag_tab_native533.lua — #533/#571 Chaos Wastes hold-Tab layout census.
+-- Observation-only: arms on the player-list activation edge in any live Deus
+-- run, then waits for the animated right banner to settle before sampling the
+-- final scenegraph and CT collectible rows after vanilla _draw.
+--
+-- Owned by: chaos_wastes_tweaker_dev.lua. Consumed via: mod:dofile contract.
 local mod = get_mod("ct_dev")
 local M = {}
 
-local RECORD_CAP = 24
+local RECORD_CAP = 64
+local SETTLE_FRAMES = 3
+local MAX_WAIT_FRAMES = 120
+local SETTLE_EPSILON = 0.25
 local records = 0
 local seen = {}
 
@@ -42,17 +48,18 @@ local function emit(key, fmt, ...)
     records = records + 1
     local ok, line = pcall(string.format, fmt, ...)
     if not ok then line = "format-error:" .. tostring(fmt) end
-    if printf then printf("[ct:533-native] %s", line) else mod:info("[ct:533-native] %s", line) end
+    if rawget(_G, "printf") then pcall(printf, "[ct:571-native] %s", line) end
     return true
 end
 
-local function current_native_deus_level()
+local function current_deus_level()
     local dc
     local mm = Managers and Managers.mechanism
     local mech = mm and mm.game_mechanism and mm:game_mechanism()
     if mech and mech.get_deus_run_controller then dc = mech:get_deus_run_controller() end
     local ls = LevelHelper and LevelHelper.current_level_settings and LevelHelper:current_level_settings()
-    return dc ~= nil and ls and ls.mechanism == "deus", ls
+    if not (dc and ls) then return false, ls, "outside-deus" end
+    return true, ls, ls.mechanism == "deus" and "native-deus" or "injected-adventure"
 end
 
 local function vec(v, n)
@@ -89,52 +96,138 @@ local function dump_widget(level, name, widget)
         name, tostring(widget.scenegraph_id), vec(widget.offset, 3), content, style)
 end
 
+local function dump_ct_row(capture_key, loot, index, row, layout)
+    local widget = row and row.widget
+    if not widget then
+        emit(capture_key .. "|ct-row|" .. tostring(index) .. "|missing",
+            "ct_row=%s missing", tostring(index))
+        return
+    end
+    local styles = widget.style or {}
+    local icon = styles.icon or {}
+    local text = styles.text or {}
+    local counter = styles.counter_text or {}
+    local offset = widget.offset or {}
+    local world_x = tonumber(loot and loot.world_position and loot.world_position[1])
+    local world_y = tonumber(loot and loot.world_position and loot.world_position[2])
+    local icon_w = tonumber(icon.texture_size and icon.texture_size[1]) or 0
+    local icon_h = tonumber(icon.texture_size and icon.texture_size[2]) or 0
+    local bound = layout and layout.bounds and layout.bounds[index]
+    local text_w = tonumber(bound and bound.text_w) or 0
+    local text_h = tonumber(text.area_size and text.area_size[2]) or 0
+    local x = world_x and world_x + (tonumber(offset[1]) or 0) or nil
+    local y = world_y and world_y + (tonumber(offset[2]) or 0) or nil
+    emit(capture_key .. "|ct-row|" .. tostring(index),
+        "ct_row=%d key=%s title=%q amount=%s scenegraph=%s widget_offset=[%s] origin=[%s,%s] icon_size=[%s] text_offset=[%s] text_area=[%s] measured_text_w=%s text_font=%s counter_offset=[%s] nominal_right=%s nominal_top=%s",
+        index, tostring(row.key), tostring(row.title),
+        tostring(widget.content and widget.content.amount), tostring(widget.scenegraph_id),
+        vec(offset, 3), tostring(x), tostring(y), vec(icon.texture_size, 2),
+        vec(text.offset, 3), vec(text.area_size, 2), tostring(text_w), tostring(text.font_size),
+        vec(counter.offset, 3), tostring(x and x + icon_w + text_w),
+        tostring(y and y + math.max(icon_h, text_h)))
+end
+
+local function geometry(self)
+    local sg = self and self._ui_scenegraph
+    local banner = sg and sg.banner_right
+    local loot = sg and sg.loot_objective
+    local divider = sg and sg.collectibles_divider
+    if not (banner and loot and divider) then return nil end
+    return {
+        banner_x = tonumber(banner.world_position and banner.world_position[1]),
+        loot_x = tonumber(loot.world_position and loot.world_position[1]),
+        loot_y = tonumber(loot.world_position and loot.world_position[2]),
+        divider_y = tonumber(divider.world_position and divider.world_position[2]),
+    }
+end
+
+local function close(a, b)
+    return a ~= nil and b ~= nil and math.abs(a - b) <= SETTLE_EPSILON
+end
+
+local function geometry_settled(self)
+    local now = geometry(self)
+    if not now then return false end
+    local prev = self._ct_diag_native533_geometry
+    self._ct_diag_native533_geometry = now
+    self._ct_diag_native533_wait_frames = (self._ct_diag_native533_wait_frames or 0) + 1
+    if prev and close(now.banner_x, prev.banner_x) and close(now.loot_x, prev.loot_x)
+        and close(now.loot_y, prev.loot_y) and close(now.divider_y, prev.divider_y) then
+        self._ct_diag_native533_stable_frames = (self._ct_diag_native533_stable_frames or 0) + 1
+    else
+        self._ct_diag_native533_stable_frames = 0
+    end
+    return self._ct_diag_native533_stable_frames >= SETTLE_FRAMES
+        or self._ct_diag_native533_wait_frames >= MAX_WAIT_FRAMES
+end
+
 function M.arm(self, active)
     if not active or not self then return end
-    local native, ls = current_native_deus_level()
-    if native then
+    local in_deus, ls, context = current_deus_level()
+    if in_deus then
         self._ct_diag_native533_armed = true
         self._ct_diag_native533_level = tostring(ls.level_id or ls.level_name or "unknown")
+        self._ct_diag_native533_context = context
+        self._ct_diag_native533_geometry = nil
+        self._ct_diag_native533_wait_frames = 0
+        self._ct_diag_native533_stable_frames = 0
     end
 end
 
 function M.capture(self)
     if not (self and self._ct_diag_native533_armed and self._active) then return false end
-    local native, ls = current_native_deus_level()
-    if not native then return false end
+    local in_deus, ls, context = current_deus_level()
+    if not in_deus then return false end
+    if not geometry_settled(self) then return false end
     self._ct_diag_native533_armed = nil
     local level = self._ct_diag_native533_level or tostring(ls.level_id or "unknown")
     local rl = rawget(_G, "RESOLUTION_LOOKUP") or {}
     local safe = Application and Application.user_setting and Application.user_setting("safe_rect") or nil
     local sg = self._ui_scenegraph
-    emit(level .. "|header|" .. tostring(rl.res_w) .. "x" .. tostring(rl.res_h) .. "|" .. tostring(rl.scale),
-        "view=IngamePlayerListUI provider=LevelHelper.current_level_settings level=%s mechanism=%s mission_count=%s active=%s res=%sx%s scale=%s inv_scale=%s safe_rect=%s loot_objectives=%s ct_overlay=%s",
-        level, tostring(ls.mechanism), tostring(self._mission_count), tostring(self._active),
+    local capture_key = table.concat({ level, context, tostring(rl.res_w) .. "x" .. tostring(rl.res_h),
+        tostring(rl.scale), tostring(safe) }, "|")
+    emit(capture_key .. "|header",
+        "view=IngamePlayerListUI provider=LevelHelper.current_level_settings level=%s context=%s mechanism=%s mission_count=%s active=%s res=%sx%s scale=%s inv_scale=%s safe_rect=%s settled_frames=%s wait_frames=%s loot_objectives=%s ct_overlay=%s",
+        level, context, tostring(ls.mechanism), tostring(self._mission_count), tostring(self._active),
         tostring(rl.res_w), tostring(rl.res_h), tostring(rl.scale), tostring(rl.inv_scale),
-        tostring(safe), compact(ls.loot_objectives, 2, { n = 24 }, {}),
+        tostring(safe), tostring(self._ct_diag_native533_stable_frames),
+        tostring(self._ct_diag_native533_wait_frames), compact(ls.loot_objectives, 2, { n = 24 }, {}),
         tostring(self._ct_deus_collectibles ~= nil))
     for _, name in ipairs({ "screen", "banner_right", "loot_objective", "collectibles_name",
                             "collectibles_divider", "node_info" }) do
-        dump_node(level, sg, name)
+        dump_node(capture_key, sg, name)
     end
-    dump_widget(level, "collectibles_name", self._collectibles_name)
-    dump_widget(level, "collectibles_divider", self._collectibles_divider)
-    dump_widget(level, "node_info", self._node_info_widget)
+    dump_widget(capture_key, "collectibles_name", self._collectibles_name)
+    dump_widget(capture_key, "collectibles_divider", self._collectibles_divider)
+    dump_widget(capture_key, "node_info", self._node_info_widget)
     local missions = self._mission_widgets
-    emit(level .. "|mission-widgets|" .. tostring(type(missions) == "table" and #missions or -1),
+    emit(capture_key .. "|mission-widgets|" .. tostring(type(missions) == "table" and #missions or -1),
         "mission_widgets count=%s table=%s", tostring(type(missions) == "table" and #missions or nil),
         compact(missions, 2, { n = 30 }, {}))
     if type(missions) == "table" then
-        for i = 1, math.min(#missions, 4) do dump_widget(level, "mission[" .. i .. "]", missions[i]) end
+        for i = 1, math.min(#missions, 4) do dump_widget(capture_key, "mission[" .. i .. "]", missions[i]) end
     end
-    emit(level .. "|summary", "capture complete records=%d cap=%d trigger=_set_active(true)->post_draw chat=false", records, RECORD_CAP)
+    local cw = self._ct_deus_collectibles
+    if cw then
+        emit(capture_key .. "|ct-layout", "ct_layout=%s", compact(cw.layout, 3, { n = 32 }, {}))
+        local loot = sg and sg.loot_objective
+        for i = 1, math.min(#(cw.rows or {}), 4) do
+            dump_ct_row(capture_key, loot, i, cw.rows[i], cw.layout)
+        end
+    end
+    emit(capture_key .. "|summary",
+        "capture complete records=%d cap=%d trigger=_set_active(true)->settled-post-draw contexts=native-deus,injected-adventure chat=false",
+        records, RECORD_CAP)
     return true
 end
 
 function M.regression()
-    if RECORD_CAP ~= 24 then return "#533 diagnostic record cap drifted" end
+    if RECORD_CAP ~= 64 then return "#571 diagnostic record cap drifted" end
+    if SETTLE_FRAMES ~= 3 or MAX_WAIT_FRAMES ~= 120 then
+        return "#571 diagnostic settle contract drifted"
+    end
     if type(M.arm) ~= "function" or type(M.capture) ~= "function" then
-        return "#533 diagnostic lifecycle missing"
+        return "#571 diagnostic lifecycle missing"
     end
 end
 

@@ -14,6 +14,7 @@ local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
 local transactions = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
 local Search = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_search")
 local profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles")
+local profile_runtime = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profile_runtime")
 local disabled_sections = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_disabled_sections")
 local external_group = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_external_group")
 local tab_labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_labels")
@@ -48,8 +49,8 @@ local math = math
 local STEP_OVERRIDES = {
     cim     = { base_power_level = 25 },  -- crafting starting power level (range 0-950)
     cim_dev = { base_power_level = 25 },
-    ct      = { starting_coins   = 25 },  -- CW starting pilgrim's coins (range 0-3000)
-    ct_dev  = { starting_coins   = 25 },
+    ct      = { starting_coins = 25, cot_cost_amount = 25 },
+    ct_dev  = { starting_coins = 25, cot_cost_amount = 25 },
 }
 
 local SERVICE = "gut_mod_tweaker"
@@ -996,12 +997,33 @@ function ModTweakerView:_profile_ensure(category)
     self._profile_slot = profiles.get_active(mod, tab_id)
     local ready_key = tab_id .. ":" .. tostring(self._profile_slot)
     if self._profile_ready[ready_key] then return end
-    if not profiles.load(mod, tab_id, self._profile_slot) then
+    if not profile_runtime.migrate(profiles, mod, _printf) then
+        self._profile_ready[ready_key] = true
+        return
+    end
+    local values = profiles.load(mod, tab_id, self._profile_slot)
+    if not values then
         local use_defaults = self._profile_slot ~= 1
         profiles.save(mod, tab_id, self._profile_slot,
             self:_profile_snapshot(category, use_defaults))
         _printf("[gut:561] initialized tab=%s profile=%d source=%s",
             tostring(tab_id), self._profile_slot, use_defaults and "defaults" or "live")
+    else
+        local merged, _, added, applied_ok, applied, failures, apply_err =
+            profile_runtime.reconcile_and_apply({
+                profiles = profiles, transactions = transactions,
+                values = values, defaults = self:_profile_snapshot(category, true),
+                category = category, owner = _owner, set_one = _cat_set })
+        if added > 0 and not applied_ok then
+            _printf("[gut:828] reconciliation deferred tab=%s profile=%d added=%d applied=%d failures=%d error=%s",
+                tostring(tab_id), self._profile_slot, added, applied, failures, tostring(apply_err or "none"))
+            self._profile_ready[ready_key] = true
+            return
+        end
+        if added > 0 then
+            profiles.save(mod, tab_id, self._profile_slot, merged)
+            _printf("[gut:828] reconciled tab=%s profile=%d added=%d applied=%d", tostring(tab_id), self._profile_slot, added, applied)
+        end
     end
     self._profile_ready[ready_key] = true
 end
@@ -1027,10 +1049,26 @@ function ModTweakerView:_switch_profile(slot)
     if self:_active_category_dirty() then self:apply_pending(category) end
     self:_profile_capture(category)
 
+    if not profile_runtime.migrate(profiles, mod, _printf) then return end
     local values = profiles.load(mod, tab_id, slot)
+    local reconciled_additions = {}
     if not values then
         values = self:_profile_snapshot(category, true)
         profiles.save(mod, tab_id, slot, values)
+    else
+        local reconciled, additions, added, applied_ok, applied, failures, apply_err =
+            profile_runtime.reconcile_and_apply({
+                profiles = profiles, transactions = transactions,
+                values = values, defaults = self:_profile_snapshot(category, true),
+                category = category, owner = _owner, set_one = _cat_set })
+        if not applied_ok then
+            _printf("[gut:828] profile switch deferred tab=%s profile=%d added=%d applied=%d failures=%d error=%s",
+                tostring(tab_id), slot, added, applied, failures, tostring(apply_err or "none"))
+            return
+        end
+        values = reconciled
+        reconciled_additions = additions
+        if added > 0 then profiles.save(mod, tab_id, slot, values) end
     end
     profiles.set_active(mod, tab_id, slot)
     self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
@@ -1042,6 +1080,7 @@ function ModTweakerView:_switch_profile(slot)
         local _, actual_owner = _owner(category, sid)
         local excluded = category._profile_excluded_owners
         if owner_id and sid and actual_owner == owner_id
+                and reconciled_additions[member] == nil
                 and not (excluded and excluded[owner_id]) then
             self:stage_set(category, sid, value)
             staged = staged + 1

@@ -5,7 +5,11 @@
 -- value on mod:set, so changing one profile must never clone every tab/profile.
 -- This module is engine-free so its key and copy contracts can be tested offline.
 
-local Profiles = { MAX_SLOTS = 10 }
+local Profiles = { MAX_SLOTS = 10, SCHEMA_VERSION = 1 }
+
+local CT_PROFILE_TABS = { "ct", "ct_dev" }
+local CT_PROFILE_OWNERS = { "ct", "ct_dev" }
+local SCHEMA_KEY = "mt_profile_schema::ct_trial_cost_absolute"
 
 local function _tab(tab_id)
     -- mod ids are already stable identifiers. Percent-escape the two bytes used
@@ -76,6 +80,89 @@ function Profiles.save(store, tab_id, slot, values)
     local owned = _copy_map(values) or {}
     store:set(Profiles.slot_key(tab_id, slot), owned, false)
     return owned
+end
+
+-- Bring a persisted profile forward when its owning mod adds a setting.
+-- Explicit values (including false) always win; only absent members inherit
+-- their currently declared defaults.  Return owned maps so callers can safely
+-- persist the merged profile and apply just the additions as one transaction.
+function Profiles.reconcile(values, defaults)
+    local merged = _copy_map(values) or {}
+    local additions = {}
+    local count = 0
+    if type(defaults) == "table" then
+        for key, value in pairs(defaults) do
+            if merged[key] == nil and value ~= nil then
+                merged[key] = value
+                additions[key] = value
+                count = count + 1
+            end
+        end
+    end
+    return merged, additions, count
+end
+
+-- #825: stored Mod Tweaker snapshots outlive foreign widget definitions. Migrate
+-- the retired CT enable+amount pair in every bounded CT tab/slot before any
+-- profile is replayed. Disabled means the new absolute sentinel 0; enabled
+-- retains the authored amount on the runtime's 25-coin grid. The legacy member
+-- is removed so a later replay cannot reactivate the old two-control schema.
+local function _trial_cost(value)
+    value = tonumber(value)
+    if not value or value ~= value then value = 100 end
+    value = math.floor(value / 25 + 0.5) * 25
+    return math.max(0, math.min(1000, value))
+end
+
+function Profiles.migrate_ct_trial_cost_map(values)
+    local migrated = _copy_map(values)
+    if not migrated then return nil, false end
+    local changed = false
+    for i = 1, #CT_PROFILE_OWNERS do
+        local owner = CT_PROFILE_OWNERS[i]
+        local enabled_key = Profiles.member_key(owner, "cot_cost_enabled")
+        local amount_key = Profiles.member_key(owner, "cot_cost_amount")
+        local legacy_enabled = migrated[enabled_key]
+        if legacy_enabled ~= nil then
+            migrated[amount_key] = legacy_enabled == true
+                and _trial_cost(migrated[amount_key]) or 0
+            migrated[enabled_key] = nil
+            changed = true
+        end
+    end
+    return migrated, changed
+end
+
+function Profiles.migrate_all(store)
+    if type(store) ~= "table" or type(store.get) ~= "function"
+            or type(store.set) ~= "function" then
+        return false, 0, "profile store unavailable"
+    end
+    local read_ok, schema = pcall(store.get, store, SCHEMA_KEY)
+    if not read_ok then return false, 0, tostring(schema) end
+    if (tonumber(schema) or 0) >= Profiles.SCHEMA_VERSION then
+        return true, 0
+    end
+
+    local changed = 0
+    for i = 1, #CT_PROFILE_TABS do
+        local tab_id = CT_PROFILE_TABS[i]
+        for slot = 1, Profiles.MAX_SLOTS do
+            local key = Profiles.slot_key(tab_id, slot)
+            local slot_ok, values = pcall(store.get, store, key)
+            if not slot_ok then return false, changed, tostring(values) end
+            local migrated, dirty = Profiles.migrate_ct_trial_cost_map(values)
+            if dirty then
+                local ok, err = pcall(store.set, store, key, migrated, false)
+                if not ok then return false, changed, tostring(err) end
+                changed = changed + 1
+            end
+        end
+    end
+
+    local ok, err = pcall(store.set, store, SCHEMA_KEY, Profiles.SCHEMA_VERSION, false)
+    if not ok then return false, changed, tostring(err) end
+    return true, changed
 end
 
 return Profiles
