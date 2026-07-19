@@ -197,6 +197,7 @@ local suites = {
     "test_ct_boon_split",
     "test_ct_entry_decomposition",
     "test_ct_pool_floor_citadel_487",
+    "test_ct_mission_graph_sync",
     "test_ct_umbrella_policy",
     "test_ct_cot_early_reward",
     "test_ct_cot_cost",
