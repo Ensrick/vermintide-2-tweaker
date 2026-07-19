@@ -117,7 +117,7 @@ return function(H, repo_root)
         H.equal(Cim.authored_mode({}, function() error("bad companion") end, registry()), nil)
     end)
 
-    H.test("CIM #404 centers only ranged properties previews", function()
+    H.test("CIM #882 centers only ranged properties previews", function()
         local native = { -0.85, 3, 0.05 }
         local ranged = Cim.properties_preview_position("ranged", native)
         H.equal(ranged[1], 0)
@@ -134,7 +134,7 @@ return function(H, repo_root)
         H.equal(Cim.overview_preview_x("ranged", nil, false), nil)
     end)
 
-    H.test("CIM #404 runtime installs one active-only zoom-durable correction", function()
+    H.test("CIM #882 runtime installs one active-only zoom-durable correction", function()
         local Runtime = dofile(repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
         local hook
@@ -183,7 +183,7 @@ return function(H, repo_root)
         H.equal(Runtime.install({}), false)
     end)
 
-    H.test("CIM #404 accepts retail callable-table vector constructors", function()
+    H.test("CIM #882 accepts retail callable-table vector constructors", function()
         local Runtime = dofile(repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
         local hook
@@ -215,7 +215,7 @@ return function(H, repo_root)
         H.equal(previewer._unit_start_position_boxed.value, 10.85)
     end)
 
-    H.test("CIM #404 constructor failure leaves preview state untouched", function()
+    H.test("CIM #882 constructor failure leaves preview state untouched", function()
         local Runtime = dofile(repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
         local hook
@@ -245,7 +245,7 @@ return function(H, repo_root)
         H.equal(logged, 1)
     end)
 
-    H.test("CIM #404 production correction is construction-only and zoom durable", function()
+    H.test("CIM #882 production correction is construction-only and zoom durable", function()
         local root = repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
         local entry_file = assert(io.open(root .. "crafting_in_modded_dev.lua", "rb"))
