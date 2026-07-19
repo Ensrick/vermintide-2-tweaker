@@ -50,8 +50,6 @@ $LessonRules = [ordered]@{
     backend_realm_isolation = '(?i)backend|progression|daily|quest|shilling|official realm|modded realm|EAC|PlayFab|forge.{0,25}(?:backend|realm|access)|crafting.{0,25}(?:backend|realm)'
 }
 
-$ToolingLabels = @("tooling", "documentation")
-
 # Labels in this set describe workflow, severity, or issue shape rather than a
 # code-owning subsystem.  Everything else is eligible as an exact subsystem
 # signal.  Exact labels are intentionally preferred over a hand-maintained
@@ -143,10 +141,6 @@ function Get-IssueFindings($Issue) {
     }
     if ($severities.Count -ne 1) {
         $findings.Add("severity_count_$($severities.Count)")
-    }
-    if (@($labels | Where-Object { $ToolingLabels -contains $_ }).Count -gt 0 -and
-        @($lifecycle | Where-Object { $_ -ne "not-started" }).Count -gt 0) {
-        $findings.Add("tooling_uses_human_lifecycle")
     }
     if ((Get-TitleWordCount $Issue.title) -gt 8) {
         $findings.Add("title_over_8_words")
