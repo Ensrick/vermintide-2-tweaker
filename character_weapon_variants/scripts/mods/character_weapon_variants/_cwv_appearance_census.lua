@@ -278,13 +278,13 @@ families.imperial_crossbow = {
 }
 
 -- ── Custom / imported-mesh families ─────────────────────────────────────────
--- cwv_es_outrider_grenade_launcher: imported FBX launcher (launcher_family),
--- Trollhammer behavior, no_ammo_unit, no_left_hand (#627/#279).
+-- cwv_es_outrider_grenade_launcher: resident vanilla Kruber blunderbuss visual,
+-- Trollhammer behavior, no_ammo_unit, no_left_hand (#762/#279).
 families.outrider_grenade_launcher = {
 	cells = cells(),
 	edges = edges(),
 	unsupported_fallback = fb(
-		"#399 (torpedo/ammo on husk) + #279 (crafted copy merges with the Trollhammer). The imported launcher mesh needs _husk_custom_bundle_unit (:4326) residency plus the ammo strip on the husk; both are coop-unverified. Degrades to the resident vanilla dr_deus_01 Trollhammer/blunderbuss base."),
+		"#399 (torpedo/ammo on husk) + #279 (crafted copy merges with the Trollhammer). The #762 visual is the resident vanilla wpn_empire_blunderbuss_t1 unit; only the ammo strip remains coop-unverified. Degrades to the resident vanilla dr_deus_01 Trollhammer/blunderbuss base."),
 }
 
 -- cwv_es_musket_old: LA-pattern custom mesh (mat_to_use vanilla material),

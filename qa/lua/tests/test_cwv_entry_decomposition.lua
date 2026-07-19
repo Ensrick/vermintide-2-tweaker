@@ -96,7 +96,7 @@ return function(H, repo_root)
         for name in (identity .. "\n" .. render):gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 70)
+        H.equal(#names, 71)
         H.equal(names[1], "cwv_variant_flag_present")
         H.equal(names[32], "cwv_husk_transform_coverage")
         H.equal(names[33], "cwv_husk_stale_unit_and_postcondition")

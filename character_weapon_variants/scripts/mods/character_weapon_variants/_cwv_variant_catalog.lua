@@ -308,18 +308,11 @@ local _variant_definitions = {
 		description     = "An imperial-pattern grenade launcher in the Outrider style — built on a blunderbuss frame, fires a single charge-loaded grenade. Fewer pellets, more boom.",
 		character       = "empire_soldier",
 		careers         = _es_all_careers,
-		-- Issue #627: user-supplied custom launcher mesh (converted by
-		-- tools/convert_launcher_assets.ps1). The single source of truth for the
-		-- path is _cwv_launcher_family so the wire/preview package aliases match.
-		-- Non-CWV peers still see the blunderbuss (family fallback anchor).
-		right_hand_unit = _om.launcher_family.UNIT,
-		-- STARTING transforms only. The imported FBX is normalized to two Blender
-		-- units (barrel along +X) so it needs a scale-down plus the imported-FBX
-		-- axis correction the Crowbill/Greataxe imports also needed. Per
-		-- CROWBILL_ASSET_PIPELINE.md these are tuned in game (WT 3P Hold-Pose
-		-- tuner) and baked here later. See TODO.md / CHANGELOG #627.
-		right_hand_scale    = { 0.4, 0.4, 0.4 },
-		right_hand_rotation = { -90, -90, -90 },
+		-- Issue #762: the maintainer rejected #627's imported launcher mesh.
+		-- Restore the exact resident unit authored by vanilla's es_blunderbuss
+		-- item/skin rows and inventory package lookup. The generated CWV skin,
+		-- owner view, previews, and husk re-key all consume this one def field.
+		right_hand_unit = "units/weapons/player/wpn_empire_blunderbuss_t1/wpn_empire_blunderbuss_t1",
 		-- Trollhammer is left-hand-mount (entry inherits left_hand_unit =
 		-- wpn_dr_deus_01 from the clone). We're moving to right-hand-mount
 		-- on the blunderbuss model — clear the inherited left so the preview
