@@ -514,6 +514,10 @@ return {
     gt_lobby_manifest_failnotify_enabled = { en = "Show missing mods when a join fails" },
     gt_lobby_manifest_failnotify_enabled_tooltip = { en = "When you fail to join a modded host over a mod mismatch, replace the generic error with a list of the mods you are missing plus a button to open the Workshop. Falls back to the normal error if the host is not sharing its mod list." },
 
+    -- Issue #737: successful-join appearance-mod parity banner.
+    gt_lobby_appearance_parity_enabled = { en = "Warn when appearance mods differ from the host" },
+    gt_lobby_appearance_parity_enabled_tooltip = { en = "After you join a modded host, post one chat line if an appearance mod (Weapon Tweaker, Character Weapon Variants, Cosmetics Tweaker, Weapons of Chaos, Crafting in Modded) is enabled for you but not the host, or runs a different stream or version. Mismatched appearance mods can desync modded weapon skins and crash the score screen even when the join itself succeeds. Reads the host's shared mod list, and stays silent if the host is not sharing one." },
+
     -- Issue #378: stalled-join watchdog.
     gt_lobby_join_watchdog_enabled = { en = "Recover from a stalled join" },
     gt_lobby_join_watchdog_enabled_tooltip = { en = "If a join to a modded host hangs on the loading screen instead of erroring out, show the missing-mods list (or a plain stall notice when the host shares no mod list) and a Leave button, so you never have to alt-F4. Off leaves a hung join hanging." },
