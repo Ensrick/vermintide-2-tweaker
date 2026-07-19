@@ -2168,6 +2168,15 @@ whose activated ability declares `action_name`.
    `template.actions`. A deep clone can copy the donor's owner registry and
    canonical action rows by value, producing false ownership and new table
    identities even though the declared donor remains canonical.
+5. Resolve the complete effective-template family. `item.template` is only the
+   catalog default: Old Musket returns `old_musket_template_melee` from
+   `BackendUtils.get_item_template` while bayonet stance is active. The
+   2026-07-18 #661 log showed catalog reconciliation succeeding while Bounty
+   Hunter still failed on this unregistered alternate.
+6. Treat live `ItemMasterList[key].can_wield` as the eligibility contract.
+   Catalog declarations and menu defaults can lag a late writer. Audit every
+   writer: CIM's former adventure-visibility stamp appended careers without a
+   paired action reconciliation and was removed at this boundary.
 
 ### Fix template
 - Use `tools/shared_lib/_lib_career_weapon_actions.lua`; collect every declared
@@ -2184,6 +2193,15 @@ whose activated ability declares `action_name`.
   integration. Do not hand-copy `activated_ability[1]` in individual weapon
   constructors: that misses alternate rows and lets the next private template
   bypass the contract.
+- Declare stance/style families through
+  `tools/shared_lib/_lib_effective_weapon_templates.lua`, including exact donor
+  provenance for every deep-cloned member. Reconcile the full family from live
+  `can_wield`, then repeat idempotently for the actual effective template at the
+  bounded wield event. Never add a per-frame repair loop.
+- Availability consumers such as CIM must not append `can_wield` independently.
+  Either leave it byte-for-byte provider-owned or invoke the same atomic
+  availability-plus-action transaction; a visibility helper is not an
+  availability owner.
 - Before the first claim on a declared private clone, call the shared
   `prepare_inherited_clone` boundary with an exact source token. It discards
   copied donor claims and restores only rows whose donor is still the exact
@@ -2191,6 +2209,10 @@ whose activated ability declares `action_name`.
   later foreign replacement remains a hard conflict instead of being clobbered.
 - Missing career settings/action providers are integration failures: emit a
   bounded runtime error and fail the offline matrix. Never silently skip them.
+- Weapon-chain audits must exclude `action_career_*` rows. Issue #412's Old
+  Musket stance interrupt owns running weapon sub-actions; a later canonical
+  career action is neither a missing interrupt nor a place from which stance
+  toggling should be installed.
 - Test all ten current actions, the Waywatcher alternate, existing-row identity,
   missing providers, clone-claim contamination, repeated preparation, foreign
   replacement, setting reapply, and disable cleanup. Issue #661 owns the
@@ -2395,3 +2417,43 @@ across preview worlds, owner units, or remote husks.
   names, observed collision IDs, positive-server-duration rejection, bounded
   logs, hot join, refresh, and expiry. CRT `_crt_wire_policy.lua` and
   `test_crt_wire_contract.lua` are the reference implementation.
+
+## 65. Native loadout isolation repairs only part of the row
+
+**First confirmed:** 2026-07-19 (Tweaker: GUI issue #402 follow-up).
+**Lives in:** any realm-separated or overlay-backed native loadout store.
+
+### Symptoms
+- Weapons appear isolated or mostly correct, but outfit, hat, frame, pose, or
+  accessories still bleed between official and modded realms or become blank.
+- A repair/audit command reports clean because it checks only melee/ranged, or
+  melee/ranged/frame, while the visual/accessory slots remain missing.
+- Logs show the stored weapon ids become presentable later in the same session
+  (`store-unknown` at early hero-view startup, then `store-yes`), making the
+  issue look like a weapon fallback even though row completeness is also broken.
+
+### Diagnosis pattern
+1. Treat the vanilla loadout as a complete row contract, not a weapon pair.
+   The current canonical slot list is:
+   `slot_ranged`, `slot_melee`, `slot_skin`, `slot_hat`, `slot_necklace`,
+   `slot_ring`, `slot_trinket_1`, `slot_frame`, `slot_pose`.
+2. Audit row health by that slot list. A row with both weapons but a nil frame,
+   outfit, pose, or accessory is still incomplete.
+3. Separate two phenomena: late-presenting ids require refresh/diagnostics; nil
+   or absent slots require repair/migration and should not be hidden by weapon
+   success.
+
+### Fix template
+- Define one canonical slot list and reuse it for seed, migration, status,
+  official repair, and runtime regression checks. Do not duplicate a
+  weapon-only subset in commands.
+- Run a one-time migration for old stores that fills only missing slots from the
+  official seed snapshot, then mark the store migrated so future intentional
+  choices are not repeatedly clobbered.
+- Make the official repair command slot-aware: nil is broken; gear must resolve
+  as a backend item; cosmetics may resolve either as a backend item or a stable
+  ItemMasterList key. Its wording must say "native loadout slots", not
+  "weapon/frame".
+- Add status diagnostics that print both the migration marker and a per-row
+  `missing=[...]` list. Test full-row corruption, nil visual slots, cosmetic
+  key resolution, and command coverage before shipping.

@@ -1,5 +1,20 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.293-dev (2026-07-19) -- #402 complete native loadout slot isolation [verify-fix]
+
+- **Empirical root:** the latest #402 logs on v0.2.291-dev showed the store serving many selected-row gear slots as `source=store-unknown` during early hero-view startup, then later serving the same stored ids as `source=store-yes` once backend item tables had settled. That explains the “last official weapon appears initially” side: the modded value was present, but presentation could initialize before the id was presentable and needed a later refresh.
+- **Second root:** the modded store and official repair path still had a weapon-centric definition of a healthy native loadout row. `_row_is_corrupt_partial` treated a row with both weapons as healthy even if it was missing outfit, hat, portrait frame, victory pose, or accessory slots, and `/scrub_official_loadouts` only audited melee/ranged/frame and ignored nil slots. That left exactly the slots the user called out able to remain blank/stale even after the previous #402 fix.
+- **Fix:** `_ensure_seeded` now runs a one-time `_slot_integrity_v2` migration that repairs missing slots from the official seed snapshot across the full canonical native loadout row (`slot_ranged`, `slot_melee`, `slot_skin`, `slot_hat`, `slot_necklace`, `slot_ring`, `slot_trinket_1`, `slot_frame`, `slot_pose`). It preserves existing modded values, fills only missing fields, marks the career migrated, and does not keep refilling forever.
+- **Repair command:** `/scrub_official_loadouts` now audits every native loadout slot, treats nil as broken, and accepts either a resolvable backend item or, for cosmetic slots, a known `ItemMasterList` key. The command text now says “native loadout slots” instead of “weapon/frame ids” so the visible contract matches the code.
+- **Diagnostics:** `/gut_loadout_status` now prints `slots_v2=<bool>` and `slot_integrity_failures=<n>`, and its row-level console line includes a `missing=[...]` list so future logs show which exact slot is absent instead of hiding non-weapon damage.
+- **Regression:** `/gut_regression_test` now covers full-row corruption, the `_slot_integrity_v2` migration, nil-frame damage, cosmetic-key resolution, and the full-slot official scrub contract. Offline Lua tests lock the same source markers in `test_gut_native_loadout_policy.lua`.
+
+### Solo verify
+
+1. Confirm the latest log says `[gut:LOAD] v0.2.293-dev`.
+2. In the modded realm, open Hero View and run `/gut_loadout_status es_questingknight` or the affected career. Expected: `slots_v2=true` and `slot_integrity_failures=0` after the hero view has opened.
+3. In the official realm, run `/scrub_official_loadouts` before applying. Expected: it reports any broken outfit/hat/frame/pose/accessory slots, not just weapons/frame. If it reports broken slots, run `/scrub_official_loadouts apply`, restart, and confirm official frame/outfit/accessory slots are no longer blank while modded selections stay separate.
+
 ## 0.2.291-dev (2026-07-18) -- #700 localize the in-mission vote title [verify-fix-coop]
 
 - **Observed after the popup fix:** the client vote HUD is functional, but its title renders the internal `game_settings_vote` localization key with underscores.

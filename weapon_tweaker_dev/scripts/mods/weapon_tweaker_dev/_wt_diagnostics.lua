@@ -1,13 +1,13 @@
--- _wt_diagnostics.lua -- read-only diagnostic dump/probe chat commands.
+-- _wt_diagnostics.lua -- diagnostic dump/probe commands and wield boundary.
 --
 -- Owns the pure-diagnostic commands split out of the god file in the
 -- v0.12.209-dev Phase 1 OOP decomposition: /sm_probe, /dump, /dump_actions,
 -- /dump_weapons, /wt_dump_wielded, plus the wield-time weapon-data dump and its
 -- SimpleInventoryExtension._wield_slot hook_safe. All read engine globals
 -- (Managers / SPProfiles / ScriptUnit / Weapons / ItemMasterList / Localize) and
--- never touch the anim-remap state or mutate mod state. Public-beta commands
--- are intentionally read-only support surfaces; tuning and coverage commands
--- live only in the friends-only dev stream.
+-- Public-beta commands remain read-only support surfaces. The sole wield hook
+-- also invokes WT's idempotent career-action reconciliation for the effective
+-- runtime template (#661); tuning and coverage commands remain dev-only.
 --
 -- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile.
 -- Registers the sole (SimpleInventoryExtension, _wield_slot) hook repo-wide.
@@ -530,9 +530,19 @@ end
 -- own equips, not teammates'.
 mod:hook_safe("SimpleInventoryExtension", "_wield_slot",
     function(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
-        local item_key = slot_data
-            and (slot_data.id
-                or (slot_data.item_data and slot_data.item_data.key))
+        local item_data = slot_data and slot_data.item_data
+        local item_key = item_data
+            and (item_data.key or (item_data.data and item_data.data.key))
+            or (slot_data and slot_data.id)
+        local iml = rawget(_G, "ItemMasterList")
+        local item = iml and item_key and rawget(iml, item_key)
+            or (item_data and item_data.data) or item_data
+        local ok, effective_template = pcall(
+            BackendUtils.get_item_template, item_data)
+        if ok and mod._wt.reconcile_effective_career_actions then
+            mod._wt.reconcile_effective_career_actions(
+                item, effective_template, self._career_name, item_key)
+        end
         _wt_dump_weapon_data(item_key, "wield_slot")
     end)
 

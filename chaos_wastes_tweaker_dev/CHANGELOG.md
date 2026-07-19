@@ -1,8 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
-## 0.7.295-dev (2026-07-18) - complete stranded ship pipeline
+## 0.7.296-dev (2026-07-18) - reconciliation build: parallel 0.7.295-dev streams
 
-- No source change. The pipeline-state ladder (PROJECT_STANDARDS 11b) flagged this mod UPLOAD-BEHIND: the 0.7.294-dev bundle was rebuilt after the last Workshop upload, so subscribers were behind the repo. This build re-runs the full pipeline to reconcile. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
+- Two sessions independently shipped 0.7.295-dev: one carried the issue 406 Khaine's Communion heal fix (uploaded 19:17), the other a no-change stranded-pipeline completion (uploaded 20:00, which unknowingly clobbered the 406 build on the Workshop item). This build re-ships the union - the 406 source below is included - so subscribers get the fix back. No new source beyond the merge. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
+
+## 0.7.295-dev (2026-07-19) - #406 Khaine's Communion functional heal diagnostics
+
+- Khaine's Communion now heals 1 permanent green HP per kill, matching the legacy player-facing contract while preserving the `health_regen` permanent-heal type and server-only `DamageUtils.heal_network` gate that prevents the original client CTD.
+- Added bounded `[ct:406] kill_heal ...` receipts for the first twelve proc attempts so verification can distinguish "boon absent", "client skipped safely", and "server healed" without chat spam.
+- Updated CT dev localization so the Starting Boons and Disable Boons surfaces no longer disagree about whether the boon heals 0.25 or 1 health.
+
+**Verify:** host and client run CT dev 0.7.296-dev (or later), enable Starting Boons > Modded Boons > Khaine's Communion, start a Chaos Wastes run, and have both host and client kill several enemies. The host log should show capped `[ct:406] kill_heal result=healed ... amount=1` receipts and no `Only server can heal` crash; the client should not crash when getting kills.
 
 ## 0.7.294-dev (2026-07-18) - OOP W5: regression-suite extraction [untested]
 

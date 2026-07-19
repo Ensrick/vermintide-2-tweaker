@@ -1226,16 +1226,30 @@ do
     local buff_funcs = rawget(_G, "BuffFunctionTemplates")
 
     if power_ups and buff_funcs and buff_funcs.functions then
-        -- v0.7.82: nerfed 1 → 0.25 + heal_type heal_from_proc → health_regen.
-        -- User reported "+1 per kill" was granting TEMP green health (the
-        -- fading kind) rather than permanent green. Verified empirically
-        -- against vanilla generic_status_extension.lua:2247 — is_permanent_heal()
-        -- whitelist is `healing_draught, bandage, bandage_trinket,
-        -- buff_shared_medpack, career_passive, health_regen, debug,
-        -- health_conversion`. `heal_from_proc` is NOT in that list, so it
-        -- always routes through the temp-health add path. Switching to
-        -- `health_regen` (which IS in the permanent-heal whitelist + is
-        -- registered in NetworkLookup.heal_types).
+        local CT_KILL_HEAL_AMOUNT = 1
+        local _ct406_heal_diag_count = 0
+        local CT406_HEAL_DIAG_CAP = 12
+        local function _ct406_log_heal(result, unit, amount, before_hp, after_hp)
+            if _ct406_heal_diag_count >= CT406_HEAL_DIAG_CAP then return end
+            _ct406_heal_diag_count = _ct406_heal_diag_count + 1
+            pcall(printf, "[ct:406] kill_heal result=%s server=%s alive=%s amount=%s hp_before=%s hp_after=%s count=%d/%d",
+                tostring(result),
+                tostring(Managers and Managers.player and Managers.player.is_server),
+                tostring(ALIVE and ALIVE[unit]),
+                tostring(amount),
+                tostring(before_hp),
+                tostring(after_hp),
+                _ct406_heal_diag_count,
+                CT406_HEAL_DIAG_CAP)
+        end
+
+        -- v0.7.295-dev (#406): restore a visible 1 permanent-green HP per kill
+        -- and keep a bounded diagnostic receipt. The important vanilla constraint
+        -- remains the heal_type: `health_regen` is in
+        -- GenericStatusExtension.is_permanent_heal(), while the older
+        -- `heal_from_proc` path becomes temporary health. The buff template itself
+        -- has `authority = "server"`; this explicit gate keeps older hook paths
+        -- from tripping DamageUtils.heal_network's "Only server can heal" fassert.
         buff_funcs.functions.ct_kill_heal_on_kill = function(unit, buff, params)
             -- Issue 406: heal_network fasserts "Only server can heal" on
             -- clients (damage_utils.lua:2636) - a CLIENT taking this boon
@@ -1243,10 +1257,30 @@ do
             -- Vanilla gate per buff_templates.lua:325/:404: the client
             -- instance no-ops; the host's instance of the synced buff
             -- grants the heal.
-            if not (Managers and Managers.player and Managers.player.is_server) then return end
-            if ALIVE[unit] then
-                DamageUtils.heal_network(unit, unit, 0.25, "health_regen")
+            if not (Managers and Managers.player and Managers.player.is_server) then
+                _ct406_log_heal("skip-client", unit, CT_KILL_HEAL_AMOUNT, nil, nil)
+                return
             end
+            if not (ALIVE and ALIVE[unit]) then
+                _ct406_log_heal("skip-dead-unit", unit, CT_KILL_HEAL_AMOUNT, nil, nil)
+                return
+            end
+
+            local before_hp = nil
+            local after_hp = nil
+            local health_extension = ScriptUnit and ScriptUnit.has_extension and ScriptUnit.has_extension(unit, "health_system")
+            if health_extension and health_extension.current_permanent_health then
+                local ok, value = pcall(function() return health_extension:current_permanent_health() end)
+                if ok then before_hp = value end
+            end
+
+            DamageUtils.heal_network(unit, unit, CT_KILL_HEAL_AMOUNT, "health_regen")
+
+            if health_extension and health_extension.current_permanent_health then
+                local ok, value = pcall(function() return health_extension:current_permanent_health() end)
+                if ok then after_hp = value end
+            end
+            _ct406_log_heal("healed", unit, CT_KILL_HEAL_AMOUNT, before_hp, after_hp)
         end
 
         power_ups.ct_kill_heal = {

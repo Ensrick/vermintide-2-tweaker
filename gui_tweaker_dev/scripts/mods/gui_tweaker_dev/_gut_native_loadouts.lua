@@ -96,6 +96,10 @@ local WEAPON_SLOT_SET = { slot_melee = true, slot_ranged = true }
 -- cosmetic-equivalent (cosmetic_utils.lua:87-94; set_loadout_item pose branch :661).
 local COSMETIC_SLOT_SET = { slot_skin = true, slot_hat = true, slot_frame = true, slot_pose = true }
 
+local function _is_loadout_slot(slot_name)
+    return GEAR_SLOT_SET[slot_name] or COSMETIC_SLOT_SET[slot_name]
+end
+
 -- The VMF settings key `characters_data` discriminates Adventure from Versus
 -- (`vs_characters_data`), set by the mirror subclass (playfab_mirror_adventure.lua).
 -- We scope the whole feature to the Adventure mirror; Versus stays vanilla.
@@ -356,20 +360,46 @@ end
 -- interface methods, so no get_item_from_id recursion (v0.2.173 burn).
 -- ------------------------------------------------------------------
 local function _row_is_corrupt_partial(row)
-    -- A legitimately edited loadout always retains both weapon slots; a row missing
-    -- either weapon is a partial capture from the pre-seed BU-equip bug (issue #375).
+    -- A complete native loadout row owns EVERY loadout slot, not only melee/ranged.
+    -- issue #402 follow-up: the first repair pass only treated missing weapons as
+    -- partial corruption, so old rows could keep weapons while silently lacking
+    -- outfit/hat/frame/pose/accessory slots. Those missing visual/accessory slots
+    -- then looked like realm bleed or blank cosmetics. Keep this predicate aligned
+    -- with LOADOUT_SLOT_NAMES so the whole row is repaired as one contract.
     if type(row) ~= "table" then return true end
-    for slot in pairs(WEAPON_SLOT_SET) do
+    for i = 1, #LOADOUT_SLOT_NAMES do
+        local slot = LOADOUT_SLOT_NAMES[i]
         if row[slot] == nil then return true end
     end
     return false
 end
 
+local function _repair_missing_loadout_slots(entry, official_rows)
+    if type(entry) ~= "table" or type(entry.loadouts) ~= "table" or type(official_rows) ~= "table" then
+        return 0
+    end
+    local repaired = 0
+    for i = 1, #official_rows do
+        local off_row = official_rows[i]
+        local st_row = entry.loadouts[i]
+        if type(off_row) == "table" and type(st_row) == "table" then
+            for s = 1, #LOADOUT_SLOT_NAMES do
+                local slot = LOADOUT_SLOT_NAMES[s]
+                if st_row[slot] == nil and off_row[slot] ~= nil then
+                    st_row[slot] = off_row[slot]
+                    repaired = repaired + 1
+                end
+            end
+        end
+    end
+    return repaired
+end
+
 local function _ensure_seeded(mirror, career_name)
     local store = _store()
     local entry = store[career_name]
-    if entry and entry._seeded then return end  -- already fully imported
     local cd = mirror._career_data and mirror._career_data[career_name]
+    if entry and entry._seeded and entry._slot_integrity_v2 then return end  -- already fully imported + migrated
     if type(cd) ~= "table" or cd[1] == nil then return end  -- official data not ready yet
     local selected = (mirror._career_loadouts and mirror._career_loadouts[career_name]) or 1
     if not entry then
@@ -378,6 +408,7 @@ local function _ensure_seeded(mirror, career_name)
             bot_index = nil,
             loadouts = _deepcopy(cd),   -- array of { slot=id,..., talents=str }
             _seeded = true,
+            _slot_integrity_v2 = true,
         }
         _persist()
         printf("[gut_dev:NATIVE_LOADOUTS] seeded career=%s loadouts=%d selected=%d from official (fresh)",
@@ -399,13 +430,15 @@ local function _ensure_seeded(mirror, career_name)
             rows_repaired = rows_repaired + 1
         end
     end
+    local slots_repaired = _repair_missing_loadout_slots(entry, cd)
     if entry.selected_index == nil or entry.loadouts[entry.selected_index] == nil then
         entry.selected_index = selected
     end
     entry._seeded = true
+    entry._slot_integrity_v2 = true
     _persist()
-    printf("[gut_dev:NATIVE_LOADOUTS] repaired career=%s partial store (issue #375): rows_added=%d rows_repaired=%d loadouts=%d selected=%d",
-        tostring(career_name), rows_added, rows_repaired, #entry.loadouts, entry.selected_index)
+    printf("[gut_dev:NATIVE_LOADOUTS] repaired career=%s partial store (issues #375/#402): rows_added=%d rows_repaired=%d slots_repaired=%d loadouts=%d selected=%d",
+        tostring(career_name), rows_added, rows_repaired, slots_repaired, #entry.loadouts, entry.selected_index)
 end
 
 -- Tri-state gear-id resolution: "yes" (item PRESENTABLE right now), "no" (checkable and
@@ -603,7 +636,7 @@ local function _install_bu_capture()
     mod:hook(BU, "set_loadout_item", function(func, backend_id, career_name, slot_name)
         -- 3-arg entry point, always the SELECTED loadout (no index arg by design).
         local mode = _adventure_mode()
-        local is_loadout_slot = GEAR_SLOT_SET[slot_name] or COSMETIC_SLOT_SET[slot_name]
+        local is_loadout_slot = _is_loadout_slot(slot_name)
         if mode ~= MODE_OFF and career_name and backend_id and is_loadout_slot then
             local ok_m, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
             local value, source = _bu_canonical_value(backend_id, slot_name)
@@ -1153,6 +1186,15 @@ local function _probe_resolve(id)
     return ok and key or nil
 end
 
+local function _slot_resolves(slot_name, id)
+    if id == nil then return false end
+    if _probe_resolve(id) ~= nil then return true end
+    if COSMETIC_SLOT_SET[slot_name] and rawget(_G, "ItemMasterList") and rawget(ItemMasterList, id) then
+        return true
+    end
+    return false
+end
+
 mod:command("gut_loadout_status", "Show the modded loadout store state + resolve gear ids (issue #375/#387)", function(career_arg)
     local mode = _adventure_mode()
     mod:echo(string.format("[loadouts] realm_modded=%s mode=%s", tostring(_in_modded_realm()), tostring(mode)))
@@ -1168,25 +1210,34 @@ mod:command("gut_loadout_status", "Show the modded loadout store state + resolve
             local rows = entry.loadouts or {}
             -- Count unresolvable WEAPON ids across rows (the #387 stuck-weapon signature).
             local weapon_fail = 0
+            local slot_integrity_fail = 0
             for i = 1, #rows do
                 local row = rows[i]
+                for _, slot in ipairs(LOADOUT_SLOT_NAMES) do
+                    local id = row and row[slot]
+                    if id == nil or not _slot_resolves(slot, id) then
+                        slot_integrity_fail = slot_integrity_fail + 1
+                    end
+                end
                 for slot in pairs(WEAPON_SLOT_SET) do
                     local id = row and row[slot]
                     if id ~= nil and _probe_resolve(id) == nil then weapon_fail = weapon_fail + 1 end
                 end
             end
-            mod:echo(string.format("  %s: seeded=%s loadouts=%d selected=%s bot=%s weapon_ids_unresolvable=%d",
-                tostring(career_name), tostring(entry._seeded and true or false),
-                #rows, tostring(entry.selected_index), tostring(entry.bot_index), weapon_fail))
+            mod:echo(string.format("  %s: seeded=%s slots_v2=%s loadouts=%d selected=%s bot=%s weapon_ids_unresolvable=%d slot_integrity_failures=%d",
+                tostring(career_name), tostring(entry._seeded and true or false), tostring(entry._slot_integrity_v2 and true or false),
+                #rows, tostring(entry.selected_index), tostring(entry.bot_index), weapon_fail, slot_integrity_fail))
             for i = 1, #rows do
                 local row = rows[i]
                 local filled = {}
+                local missing = {}
                 for _, s in ipairs(LOADOUT_SLOT_NAMES) do
-                    if row and row[s] ~= nil then filled[#filled + 1] = s end
+                    if row and row[s] ~= nil then filled[#filled + 1] = s
+                    else missing[#missing + 1] = s end
                 end
-                printf("[gut_dev:NATIVE_LOADOUTS] status career=%s row=%d selected=%s slots=[%s] talents=%s",
+                printf("[gut_dev:NATIVE_LOADOUTS] status career=%s row=%d selected=%s slots=[%s] missing=[%s] talents=%s",
                     tostring(career_name), i, tostring(i == entry.selected_index),
-                    table.concat(filled, ","), tostring(row and row.talents))
+                    table.concat(filled, ","), table.concat(missing, ","), tostring(row and row.talents))
                 -- issue #387: resolve each GEAR slot id both ways -- raw registry (what the
                 -- get_character_data fallback consults) AND get_item_from_id (what the hero-view
                 -- presentation consults). A slot with raw=UNKNOWN/YES but get_item_from_id=FAIL is
@@ -1214,19 +1265,18 @@ end)
 
 -- ==================================================================
 -- /scrub_official_loadouts (issue #402) -- OFFICIAL-realm repair for the pre-isolation #174
--- bleed: modded/dangling weapon + portrait-frame ids committed to the OFFICIAL cloud loadouts
+-- bleed: modded/dangling native loadout ids committed to the OFFICIAL cloud loadouts
 -- BEFORE the modded-realm isolation (this file) existed. Audit 2026-07-06 (decompiled source):
 -- every runtime write that diverges official _career_data from its mirror (and so reaches the
 -- PlayFab cloud) funnels through PlayFabMirrorBase.set_character_data -- it writes _career_data
 -- at :1933 BEFORE delegating to set_career_read_only_data at :1941, so it is the SOLE choke
--- point, and both the weapon AND the portrait FRAME (slot_frame is an ordinary loadout slot,
--- not a hero-attribute) persist through it. We hook it and no-op it in modded, so NO new leak
--- is possible. But rows already corrupted by the pre-isolation bleed never self-heal -- this
--- repairs them.
+-- point, and weapons, cosmetics, accessories, frame, and pose all persist through the same
+-- row-slot path. We hook it and no-op it in modded, so NO new leak is possible. But rows
+-- already corrupted by the pre-isolation bleed never self-heal -- this repairs them.
 --
--- REPORT (default, read-only, safe anywhere): list every official loadout slot (slot_melee /
---   slot_ranged / slot_frame) whose stored id does NOT resolve via get_item_from_id -- the exact
---   ids the engine silently falls back on (merc Kruber -> Blacksmith greatsword).
+-- REPORT (default, read-only, safe anywhere): list every official loadout slot in
+--   LOADOUT_SLOT_NAMES whose stored id is missing or does NOT resolve by the slot-appropriate
+--   policy (backend item, or for cosmetics a known ItemMasterList key).
 -- APPLY (`/scrub_official_loadouts apply`): replace each broken slot's id with a resolvable id
 --   the player ALREADY OWNS for that same slot (taken from another of their official loadout
 --   rows). It writes ONLY a value it has verified resolves, into a slot that is CURRENTLY broken,
@@ -1234,7 +1284,7 @@ end)
 --   (re-equip that slot manually). HARD-GATED to the OFFICIAL realm: in modded, set_character_data
 --   is captured to the store, so the official write would never land -- refuse and say so.
 -- ==================================================================
-mod:command("scrub_official_loadouts", "Repair modded/dangling weapon+frame ids in OFFICIAL loadouts (issue #402; add 'apply' to write, default report-only)", function(arg)
+mod:command("scrub_official_loadouts", "Repair modded/dangling OFFICIAL loadout slot ids (issue #402; add 'apply' to write, default report-only)", function(arg)
     local do_apply = (arg == "apply")
     if do_apply and _in_modded_realm() then
         mod:echo("[scrub] REFUSED -- you are in the MODDED realm; an official write is captured to the modded store here.")
@@ -1246,12 +1296,11 @@ mod:command("scrub_official_loadouts", "Repair modded/dangling weapon+frame ids 
         mod:echo("[scrub] backend not ready -- open the hero view first, then re-run")
         return
     end
-    local SCRUB_SLOTS = { "slot_melee", "slot_ranged", "slot_frame" }
     -- A replacement must itself resolve; only ever an id the player already owns for this slot.
     local function _owned_replacement(slot, rows)
         for i = 1, #rows do
             local id = rows[i] and rows[i][slot]
-            if id ~= nil and _probe_resolve(id) ~= nil then return id end
+            if _slot_resolves(slot, id) then return id end
         end
         return nil
     end
@@ -1263,9 +1312,9 @@ mod:command("scrub_official_loadouts", "Repair modded/dangling weapon+frame ids 
             for i = 1, #rows do
                 local row = rows[i]
                 if type(row) == "table" then
-                    for _, slot in ipairs(SCRUB_SLOTS) do
+                    for _, slot in ipairs(LOADOUT_SLOT_NAMES) do
                         local id = row[slot]
-                        if id ~= nil and _probe_resolve(id) == nil then
+                        if not _slot_resolves(slot, id) then
                             broken = broken + 1
                             printf("[gut_dev:NATIVE_LOADOUTS] #402 official BROKEN career=%s row=%d slot=%s id=%s",
                                 tostring(career_name), i, slot, tostring(id))
@@ -1293,7 +1342,7 @@ mod:command("scrub_official_loadouts", "Repair modded/dangling weapon+frame ids 
         end
     end
     if broken == 0 then
-        mod:echo("[scrub] official loadouts clean -- no broken weapon/frame ids")
+        mod:echo("[scrub] official loadouts clean -- no broken native loadout slots")
     elseif do_apply then
         local skipped_suffix = skipped > 0 and string.format(" (%d skipped -- re-equip manually)", skipped) or ""
         if fixed == 0 then
@@ -1684,20 +1733,59 @@ M.rt_checks = {
         if not M.trace_should_emit(c, s, 1, "idC", "official-fallback-resolve-no") then return "genuine source change suppressed" end
     end },
     { name = "native_loadouts_seed_repair_predicate", fn = function()
-        -- issue #375: the self-heal seed classifies a row as corrupt-partial iff it is
-        -- missing a WEAPON slot (a legitimately edited loadout always keeps both weapons,
-        -- so intentional jewelry unequips are NOT reclassified as corrupt).
+        -- issues #375/#402: the self-heal seed classifies a row as corrupt-partial when
+        -- ANY canonical loadout slot is missing. The old weapon-only predicate let a row
+        -- keep melee/ranged while losing outfit/hat/frame/pose/accessory state, which made
+        -- realm bleed look "mostly fixed" while visual slots still rotted invisibly.
         if type(_row_is_corrupt_partial) ~= "function" then return "_row_is_corrupt_partial missing" end
         if not _row_is_corrupt_partial(nil) then return "nil row must be corrupt-partial" end
-        if not _row_is_corrupt_partial({ slot_ranged = "r" }) then return "row missing slot_melee must be corrupt-partial" end
-        if not _row_is_corrupt_partial({ slot_melee = "m" }) then return "row missing slot_ranged must be corrupt-partial" end
-        -- Both weapons present, ring intentionally empty -> edited, NOT corrupt.
-        if _row_is_corrupt_partial({ slot_melee = "m", slot_ranged = "r" }) then
-            return "row with both weapons must NOT be corrupt-partial (would clobber edits)"
+        local full = {}
+        for _, slot in ipairs(LOADOUT_SLOT_NAMES) do full[slot] = "__rt_" .. slot end
+        if _row_is_corrupt_partial(full) then return "complete row classified corrupt-partial" end
+        for _, slot in ipairs(LOADOUT_SLOT_NAMES) do
+            local partial = {}
+            for _, s in ipairs(LOADOUT_SLOT_NAMES) do partial[s] = "__rt_" .. s end
+            partial[slot] = nil
+            if not _row_is_corrupt_partial(partial) then
+                return "row missing " .. slot .. " must be corrupt-partial"
+            end
+        end
+        if type(_repair_missing_loadout_slots) ~= "function" then return "_repair_missing_loadout_slots missing" end
+        local entry = { loadouts = { { slot_melee = "m", slot_ranged = "r" } } }
+        local fixed = _repair_missing_loadout_slots(entry, {
+            {
+                slot_melee = "off_m", slot_ranged = "off_r", slot_skin = "skin", slot_hat = "hat",
+                slot_necklace = "neck", slot_ring = "ring", slot_trinket_1 = "trinket",
+                slot_frame = "frame", slot_pose = "pose",
+            },
+        })
+        if fixed ~= 7 then return "slot migration repaired " .. tostring(fixed) .. " slots, expected 7" end
+        if entry.loadouts[1].slot_melee ~= "m" or entry.loadouts[1].slot_ranged ~= "r" then
+            return "slot migration clobbered existing weapons"
+        end
+        if entry.loadouts[1].slot_frame ~= "frame" or entry.loadouts[1].slot_skin ~= "skin" then
+            return "slot migration did not fill visual slots"
         end
         -- Every weapon slot must be a gear slot (repair reads gear from official).
         for slot in pairs(WEAPON_SLOT_SET) do
             if not GEAR_SLOT_SET[slot] then return "weapon slot not in gear set: " .. slot end
+        end
+    end },
+    { name = "issue402_official_scrub_all_slots", fn = function()
+        -- issue #402: official repair must cover the SAME slot contract as the modded store,
+        -- not the old weapon/frame subset, and must treat nil visual slots as repairable damage.
+        if type(_slot_resolves) ~= "function" then return "_slot_resolves missing" end
+        if _slot_resolves("slot_frame", nil) then return "nil frame resolved as healthy" end
+        if not rawget(_G, "ItemMasterList") then _G.ItemMasterList = {} end
+        ItemMasterList.__rt_frame_key = { key = "__rt_frame_key" }
+        local cosmetic_ok = _slot_resolves("slot_frame", "__rt_frame_key")
+        local gear_bad = _slot_resolves("slot_necklace", "__rt_frame_key")
+        ItemMasterList.__rt_frame_key = nil
+        if not cosmetic_ok then
+            return "cosmetic ItemMasterList key did not resolve"
+        end
+        if gear_bad then
+            return "gear slot resolved through cosmetic ItemMasterList fallback"
         end
     end },
     { name = "native_loadouts_exit_snapshot_backstop", fn = function()
