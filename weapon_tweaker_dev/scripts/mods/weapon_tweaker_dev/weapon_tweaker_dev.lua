@@ -2728,12 +2728,10 @@ end
 -- ============================================================
 -- Issue 431: peer-parity gate + wire floor for the custom damage profiles
 -- ============================================================
--- Loaded AFTER the three fallback-map registration sites (brace, priest punch,
--- _wt_brett_sword_shield_buff) and BEFORE weapon_backend.install assigns
--- mod.update at the bottom of this file (#664 root cause, fixed v0.12.283:
--- that later assignment must preserve this beacon's update wrapper through its
--- prev_update chain, or the parity tick dies and every gated damage-profile
--- toggle stays parity=false forever - even solo).
+-- Loaded AFTER the three fallback-map registration sites and BEFORE
+-- weapon_backend.install assigns mod.update (issue 664 root cause, fixed
+-- v0.12.283: that assignment must chain prev_update, or the parity tick
+-- dies and every gated toggle stays parity=false forever - even solo).
 mod:dofile("scripts/mods/weapon_tweaker_dev/_wt431_damage_profile_parity")
 -- NOTE: the beacon starts "disabled" (fail-safe), so at this instant all three
 -- toggles sit on their vanilla profiles; the first beacon tick (sub-second, in
