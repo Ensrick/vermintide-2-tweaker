@@ -1950,14 +1950,23 @@ do
     }
 end
 
--- #732: CWV's Infantry Combat Style deep-clones the elf spear actions under
--- this effective template name.  WT resolves remaps by the effective name, so
--- share the donor table by identity: fixes to the elf-spear receiver contract
--- cannot drift away from the clone, and the donor's native `we_ = false`
--- branch remains intact.
-local infantry_spear_donor = rawget(_3p_template_remaps, "two_handed_spears_elf_template_1")
-if type(infantry_spear_donor) == "table" then
-    rawset(_3p_template_remaps, "cwv_infantry_spear_template", infantry_spear_donor)
+-- #732/#748: CWV Combat Styles deep-clone donor actions under cwv_* effective
+-- template names. WT resolves 3P attack remaps by effective template name, so
+-- share the donor table by identity: fixes to a donor receiver contract cannot
+-- drift from its clone, and donor native `*_ = false` branches remain intact.
+local cwv_style_donors = {
+    cwv_infantry_spear_template = "two_handed_spears_elf_template_1",
+    cwv_combat_style_kerillian_greatsword = "two_handed_swords_wood_elf_template",
+    cwv_combat_style_bretonnian_greatsword = "two_handed_swords_template_1",
+    cwv_combat_style_saltz_bretonnian_greatsword = "bastard_sword_template",
+    cwv_combat_style_empire_spear_shield = "es_deus_01_template",
+    cwv_combat_style_elven_spear_shield = "one_handed_spears_shield_template",
+}
+for clone_name, donor_name in pairs(cwv_style_donors) do
+    local donor = rawget(_3p_template_remaps, donor_name)
+    if type(donor) == "table" then
+        rawset(_3p_template_remaps, clone_name, donor)
+    end
 end
 
 

@@ -76,25 +76,45 @@ return function(H, repo_root)
         end
     end)
 
-    H.test("CWV Infantry spear shares elf-spear Saltzpyre remap and wield contracts", function()
+    H.test("CWV Combat Style clones share donor remap and wield contracts", function()
         local streams = {
             "/weapon_tweaker/scripts/mods/weapon_tweaker/",
             "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/",
         }
+        local aliases = {
+            { "cwv_infantry_spear_template", "two_handed_spears_elf_template_1" },
+            { "cwv_combat_style_kerillian_greatsword", "two_handed_swords_wood_elf_template" },
+            { "cwv_combat_style_bretonnian_greatsword", "two_handed_swords_template_1" },
+            { "cwv_combat_style_saltz_bretonnian_greatsword", "bastard_sword_template" },
+            { "cwv_combat_style_empire_spear_shield", "es_deus_01_template" },
+            { "cwv_combat_style_elven_spear_shield", "one_handed_spears_shield_template" },
+        }
         for _, stream in ipairs(streams) do
+            local wield_module = dofile(repo_root .. stream .. "wt_wield_patches.lua")
+            local wield = wield_module.patches
+            local bulk_wield = wield_module.bulk
             local build = dofile(repo_root .. stream .. "_wt_anim_remap_data.lua")
             local remaps = build({}, {}, {})
-            local donor = remaps.two_handed_spears_elf_template_1
+            for _, alias in ipairs(aliases) do
+                local clone_name, donor_name = alias[1], alias[2]
+                H.equal(wield_module.cwv_style_donors[clone_name], donor_name)
+                local donor_remap = remaps[donor_name]
+                H.equal(remaps[clone_name], donor_remap)
+                local donor_wield = wield[donor_name] or bulk_wield[donor_name]
+                local clone_wield = wield[clone_name] or bulk_wield[clone_name]
+                H.truthy(type(donor_wield) == "table")
+                H.equal(clone_wield, donor_wield)
+                H.equal(type(wield[clone_name]) == "table",
+                    type(wield[donor_name]) == "table")
+                H.equal(type(bulk_wield[clone_name]) == "table",
+                    type(bulk_wield[donor_name]) == "table")
+            end
+
             local clone = remaps.cwv_infantry_spear_template
-            H.truthy(type(donor) == "table")
-            H.equal(clone, donor)
             H.equal(clone.wh_.attack_swing_down_left_axe, "attack_swing_stab")
             H.equal(clone.we_, false)
 
-            local wield = dofile(repo_root .. stream .. "wt_wield_patches.lua").patches
-            local donor_wield = wield.two_handed_spears_elf_template_1
             local clone_wield = wield.cwv_infantry_spear_template
-            H.equal(clone_wield, donor_wield)
             for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
                 H.equal(clone_wield[career], "to_2h_billhook")
             end

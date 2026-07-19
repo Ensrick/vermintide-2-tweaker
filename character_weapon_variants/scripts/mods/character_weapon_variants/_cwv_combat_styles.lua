@@ -17,6 +17,7 @@ M.SALTZ_BRETONNIAN_TEMPLATE = "cwv_combat_style_saltz_bretonnian_greatsword"
 M.EMPIRE_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_empire_spear_shield"
 M.ELVEN_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_elven_spear_shield"
 M.DIAGNOSTIC_EVENT_CAP = 32
+M.MISSION_UI_DIAGNOSTIC_CAP = 24
 M.IMPERIAL_SPEED_MULT = 1.15
 M.IMPERIAL_DAMAGE_MULT = 0.85
 M.IMPERIAL_STAGGER_MULT = 0.85
@@ -140,7 +141,13 @@ M.FAMILIES = {
 			greatsword = { label = "Greatsword Combat Style", template = "two_handed_swords_template_1",
 				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword",
 				receivers = {
-					es_bastard_sword = { template = M.BRETONNIAN_GREATSWORD_TEMPLATE },
+					-- The native Bretonnian mesh is already proportioned for its
+					-- native grip. Greatsword-family state machines need the exact
+					-- reciprocal of the Greatsword -> Bretonnian presentation.
+					es_bastard_sword = {
+						template = M.BRETONNIAN_GREATSWORD_TEMPLATE,
+						presentation = { transform_key = "bretonnian_greatsword_inverse" },
+					},
 				},
 			},
 			longsword = { label = "Longsword Combat Style", template = "imperial_longsword_template",
@@ -171,6 +178,9 @@ M.FAMILIES = {
 				modifiers = { attack_speed = M.KERILLIAN_SPEED_MULT, damage = M.KERILLIAN_DAMAGE_MULT,
 					stagger = M.KERILLIAN_STAGGER_MULT, cleave = M.KERILLIAN_CLEAVE_MULT },
 				receivers = {
+					es_bastard_sword = {
+						presentation = { transform_key = "bretonnian_greatsword_inverse" },
+					},
 					wh_2h_sword = { remap_key = "kerillian_greatsword_to_saltz" },
 				},
 			},
@@ -475,6 +485,55 @@ local function console_row(runtime, parent_content, suffix)
 	if not item or type(runtime) ~= "table" or type(runtime.describe) ~= "function" then return nil end
 	local ok, row = pcall(runtime.describe, runtime, item, item.backend_id)
 	return ok and row or nil
+end
+
+local function ui_probe_text(value)
+	value = tostring(value or "")
+	if #value > M.MAX_TOKEN then return string.sub(value, 1, M.MAX_TOKEN) end
+	return value
+end
+
+-- Pure, bounded record for the #774 mission-mounted loadout diagnostic. No item
+-- table or backend payload is retained; the runtime logger deduplicates this
+-- compact projection and never transports it over the network.
+function M.mission_ui_probe(surface, stage, item, row, suffix, detail)
+	local data = item and (item.data or item) or {}
+	local raw_identity = item and (item.backend_id or item.ItemId)
+		or data.backend_id or (data.mod_data and data.mod_data.backend_id)
+	return {
+		surface = ui_probe_text(surface),
+		stage = ui_probe_text(stage),
+		item_key = ui_probe_text(data.cwv_key or data.key or data.name or data.item_type),
+		raw_identity = ui_probe_text(raw_identity),
+		identity = ui_probe_text(row and row.identity),
+		family = ui_probe_text(row and row.family_id),
+		style = ui_probe_text(row and row.style_id),
+		row = ui_probe_text(suffix),
+		detail = ui_probe_text(detail),
+	}
+end
+
+function M.mission_ui_probe_key(probe)
+	probe = type(probe) == "table" and probe or {}
+	return table.concat({ probe.surface or "", probe.stage or "", probe.item_key or "",
+		probe.raw_identity or "", probe.identity or "", probe.family or "",
+		probe.style or "", probe.row or "", probe.detail or "" }, "|")
+end
+
+function M.new_mission_ui_probe_sink(emit, cap)
+	cap = math.min(M.MISSION_UI_DIAGNOSTIC_CAP,
+		math.max(0, math.floor(tonumber(cap) or M.MISSION_UI_DIAGNOSTIC_CAP)))
+	local seen = {}
+	local count = 0
+	return function(probe)
+		if count >= cap then return false, count end
+		local key = M.mission_ui_probe_key(probe)
+		if seen[key] then return false, count end
+		seen[key] = true
+		count = count + 1
+		if type(emit) == "function" then pcall(emit, probe, count, cap) end
+		return true, count
+	end
 end
 
 -- Decorate the definition returned by UIWidgets.create_loadout_grid_console.
@@ -980,6 +1039,13 @@ function M.install(mod, deps)
 		return false
 	end
 
+	-- Read-only-by-convention regression seam for a registered presentation.
+	-- Runtime checks must never persist a synthetic exact-instance style merely
+	-- to inspect its transform descriptor.
+	function runtime:presentation(transform_key)
+		return type(transform_key) == "string" and presentations[transform_key] or nil
+	end
+
 	function runtime:effective_remap_key(item, backend_id)
 		local row = self:describe(item, backend_id)
 		if row and row.family_id == "spear" and row.style_id == "infantry" then
@@ -1276,6 +1342,22 @@ end
 -- no copied view or custom renderer is introduced.
 function M.install_loadout_ui(mod, runtime)
 	if M._ui_installed or type(runtime) ~= "table" then return false end
+	local emit_mission_ui = M.new_mission_ui_probe_sink(function(probe, count, cap)
+		pcall(printf, "[cwv:774] surface=%s stage=%s item=%s raw_id=%s identity=%s family=%s style=%s row=%s detail=%s event=%d/%d",
+			probe.surface, probe.stage, probe.item_key, probe.raw_identity, probe.identity,
+			probe.family, probe.style, probe.row, probe.detail, count, cap)
+	end)
+	local function mission_view_active()
+		local managers = rawget(_G, "Managers")
+		local game_mode = managers and managers.state and managers.state.game_mode
+		local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+		return game_mode ~= nil and not in_keep
+	end
+	local function report_mission_ui(surface, stage, item, row, suffix, detail)
+		if not mission_view_active() then return false end
+		local probe = M.mission_ui_probe(surface, stage, item, row, suffix, detail)
+		return emit_mission_ui(probe)
+	end
 	local desktop_ok, definitions = pcall(local_require,
 		"scripts/ui/views/hero_view/windows/definitions/hero_window_loadout_definitions")
 	local scenegraph = desktop_ok and definitions and definitions.scenegraph_definition
@@ -1346,13 +1428,20 @@ function M.install_loadout_ui(mod, runtime)
 	end
 
 	local function refresh(window)
+		local item, index = selected(window)
 		local widget = window and window._widgets_by_name
 			and window._widgets_by_name.cwv_combat_style_button
 		local status_widget = window and window._widgets_by_name
 			and window._widgets_by_name.cwv_combat_style_status
-		if not widget then return end
-		local item = selected(window)
+		if not widget then
+			report_mission_ui("desktop", "widget_missing", item, nil, index)
+			return
+		end
 		local row = item and runtime:describe(item, item.backend_id)
+		if item then
+			report_mission_ui("desktop", row and "selected_supported" or "selected_unresolved",
+				item, row, index)
+		end
 		widget.content.visible = row ~= nil
 		if status_widget then status_widget.content.visible = row ~= nil end
 		if row then
@@ -1389,13 +1478,34 @@ function M.install_loadout_ui(mod, runtime)
 			refresh(self)
 			local widget = self._widgets_by_name and self._widgets_by_name.cwv_combat_style_button
 			local hotspot = widget and widget.content and widget.content.button_hotspot
+			local selected_item, selected_index = selected(self)
+			local selected_row = selected_item and runtime:describe(selected_item,
+				selected_item.backend_id)
+			if hotspot and hotspot.on_pressed then
+				report_mission_ui("desktop", "input_pressed", selected_item, selected_row,
+					selected_index)
+			end
 			if widget and widget.content.visible and hotspot and hotspot.on_release then
 				hotspot.on_release = false
 				local item = selected(self)
-				if item then runtime:cycle_item(item, item.backend_id,
-					"inventory_button", true, function(changed)
+				local row = item and runtime:describe(item, item.backend_id)
+				report_mission_ui("desktop", "input_release", item, row, selected_index)
+				if item then
+					local callback_called = false
+					local accepted, err = runtime:cycle_item(item, item.backend_id,
+						"inventory_button", true, function(changed, complete_err)
+						callback_called = true
 						on_ui_transition_complete(self, changed)
+						report_mission_ui("desktop", changed and "transition_complete"
+							or "transition_rejected", item,
+							runtime:describe(item, item.backend_id), selected_index,
+							complete_err)
 					end)
+					if not accepted and not callback_called then
+						report_mission_ui("desktop", err == "transition pending"
+							and "transition_deferred" or "transition_rejected", item, row,
+							selected_index, err)
+					end
 				end
 				refresh(self)
 			end
@@ -1429,12 +1539,7 @@ function M.install_loadout_ui(mod, runtime)
 			return window and window._widgets_by_name and window._widgets_by_name.loadout_grid
 		end
 
-		local function refresh_console(window)
-			local widget = console_widget(window)
-			return widget and M.refresh_console_row_layout(widget, runtime) or 0
-		end
-
-		local function selected_console_item(window)
+		local function selected_console_candidate(window)
 			local widget = console_widget(window)
 			local content = widget and widget.content
 			if not content then return nil end
@@ -1442,11 +1547,33 @@ function M.install_loadout_ui(mod, runtime)
 				for k = 1, tonumber(content.columns) or 0 do
 					local suffix = "_" .. tostring(i) .. "_" .. tostring(k)
 					local slot = content["hotspot" .. suffix]
-					local row = slot and slot.is_selected and console_row(runtime, content, suffix)
-					if row then return content["item" .. suffix], suffix, row end
+					if slot and slot.is_selected then
+						local item = content["item" .. suffix]
+						return item, suffix, console_row(runtime, content, suffix)
+					end
 				end
 			end
 			return nil
+		end
+
+		local function selected_console_item(window)
+			local item, suffix, row = selected_console_candidate(window)
+			if row then return item, suffix, row end
+			return nil
+		end
+
+		local function refresh_console(window)
+			local widget = console_widget(window)
+			local item, suffix, row = selected_console_candidate(window)
+			if not widget then
+				report_mission_ui("console", "widget_missing", item, row, suffix)
+				return 0
+			end
+			if item then
+				report_mission_ui("console", row and "selected_supported"
+					or "selected_unresolved", item, row, suffix)
+			end
+			return M.refresh_console_row_layout(widget, runtime)
 		end
 
 		mod:hook("HeroWindowLoadoutConsole", "_populate_loadout", function(func, self, ...)
@@ -1478,12 +1605,28 @@ function M.install_loadout_ui(mod, runtime)
 		mod:hook("HeroWindowLoadoutConsole", "_handle_input", function(func, self, ...)
 			refresh_console(self)
 			local widget = console_widget(self)
+			local candidate, candidate_suffix, candidate_row = selected_console_candidate(self)
+			local candidate_hotspot = widget and candidate_suffix and widget.content
+				and widget.content["cwv_style_hotspot" .. candidate_suffix]
+			if candidate_hotspot and candidate_hotspot.on_pressed then
+				report_mission_ui("console", "input_pressed", candidate, candidate_row,
+					candidate_suffix)
+			end
+			if candidate_hotspot and candidate_hotspot.on_release then
+				report_mission_ui("console", "input_release", candidate, candidate_row,
+					candidate_suffix)
+			end
 			local item, suffix, row
 			if widget then item, suffix, row = M.consume_console_style_press(widget.content, runtime) end
 			if item then
+				local callback_called = false
 				local accepted, err = runtime:cycle_item(item, item.backend_id,
 					"equipment_style_button", true, function(changed, complete_err)
+						callback_called = true
 						on_ui_transition_complete(self, changed)
+						report_mission_ui("console", changed and "transition_complete"
+							or "transition_rejected", item,
+							runtime:describe(item, item.backend_id), suffix, complete_err)
 						if changed then
 							pcall(printf, "[cwv:620] equipment style button item=%s family=%s row=%s",
 								tostring(row.identity), tostring(row.family_id), tostring(suffix))
@@ -1492,7 +1635,10 @@ function M.install_loadout_ui(mod, runtime)
 								tostring(row.identity), tostring(complete_err))
 						end
 					end)
-				if not accepted then
+				if not accepted and not callback_called then
+					report_mission_ui("console", err == "transition pending"
+						and "transition_deferred" or "transition_rejected", item, row,
+						suffix, err)
 					pcall(printf, "[cwv:620] equipment style button deferred item=%s reason=%s",
 						tostring(row.identity), tostring(err))
 				end
@@ -1506,15 +1652,24 @@ function M.install_loadout_ui(mod, runtime)
 			local input = self._input_service and self:_input_service()
 			local item, _, row = selected_console_item(self)
 			if item and input and input:get("special_1", true) then
+				report_mission_ui("console", "controller_pressed", item, row)
+				local callback_called = false
 				local accepted, err = runtime:cycle_item(item, item.backend_id,
 					"equipment_style_controller", true, function(changed, complete_err)
+						callback_called = true
 						on_ui_transition_complete(self, changed)
+						report_mission_ui("console", changed and "transition_complete"
+							or "transition_rejected", item,
+							runtime:describe(item, item.backend_id), nil, complete_err)
 						if not changed and complete_err then
 							pcall(printf, "[cwv:620] controller style rejected item=%s reason=%s",
 								tostring(row.identity), tostring(complete_err))
 						end
 					end)
-				if not accepted then
+				if not accepted and not callback_called then
+					report_mission_ui("console", err == "transition pending"
+						and "transition_deferred" or "transition_rejected", item, row,
+						nil, err)
 					pcall(printf, "[cwv:620] controller style deferred item=%s reason=%s",
 						tostring(row.identity), tostring(err))
 				end

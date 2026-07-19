@@ -49,8 +49,13 @@ Native Greatsword's Bretonnian style owns a receiver-specific, 3P-only
 presentation descriptor. Owner/bot third person, remote husks, inventory,
 lobby/score, and item/Athanor previews reuse Imperial Longsword's reviewed
 scale `{1.0, 0.8, 0.9}` and grip offset `{0, 0, -0.065}`. First person remains
-owned by the Bretonnian donor state machine, and a native Bretonnian Longsword
-does not consume the Greatsword receiver transform.
+owned by the Bretonnian donor state machine. In the reciprocal direction, the
+native Bretonnian Longsword consumes one unified inverse presentation under
+Greatsword and Kerillian styles: scale `{1.0, 1.25, 1.111111...}` and grip
+offset `{0, 0, 0.065}` on owner first person and every third-person/preview
+consumer. Retired Imperial/Black Guard rows already reference Empire
+Greatsword meshes, so they intentionally do not consume that native
+Bretonnian-mesh inverse.
 
 Infantry style reuses #596's cloned Kerillian spear package: 15% slower attack
 actions, 15% more stagger, 15% more cleave, and 7.5% more damage. Hunter style

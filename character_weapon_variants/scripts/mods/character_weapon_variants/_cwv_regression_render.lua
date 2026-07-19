@@ -306,6 +306,30 @@ _rt_register("cwv_issue762_outrider_blunderbuss_owner", function()
     end
 end)
 
+_rt_register("cwv_issue760_outrider_saltzpyre_repeater_stance", function()
+	local policy = _om.outrider_animation
+	local template = Weapons and Weapons[policy and policy.TEMPLATE_KEY]
+	local donor = Weapons and Weapons.dr_deus_01_template_1
+	if not policy then return "#760 Outrider animation policy missing" end
+	local valid, reason = policy.template_contract(template,
+		NetworkLookup and NetworkLookup.anims)
+	if not valid then return "#760 " .. tostring(reason) end
+	if template.wield_anim ~= "to_blunderbuss"
+			or template.state_machine ~= "units/beings/player/first_person_base/state_machines/ranged/blunderbuss" then
+		return "#760 changed the Outrider's functional 1P/Kruber contract"
+	end
+	if donor and donor.wield_anim_career_3p == template.wield_anim_career_3p then
+		return "#760 private Outrider career map aliases shared Trollhammer donor"
+	end
+	if policy.runtime_event(policy.ITEM_KEY, "wh_bountyhunter",
+		NetworkLookup and NetworkLookup.anims) ~= "to_repeater_pistol" then
+		return "#760 Saltzpyre preview resolver drifted"
+	end
+	if policy.preview_event(policy.ITEM_KEY, "es_mercenary") ~= nil then
+		return "#760 Saltzpyre preview stance leaked to Kruber"
+	end
+end)
+
 _rt_register("cwv_husk_nonresident_spawn_deferred", function()
     -- Issue #478: a resolved CWV variant husk must NEVER let vanilla
     -- spawn_inventory_unit spawn a NON-RESIDENT unit. A Deus-only base (e.g.

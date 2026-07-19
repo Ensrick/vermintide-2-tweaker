@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.459-dev (2026-07-19) - universal Crowbill mode (#798) [verify-fix-coop]
+
+- Removed the Sienna-only preference gate: native, Imperial, and Dawi
+  Crowbills now share one exact-instance pick/hammer style owner and preserve
+  the existing bounded semantic peer transport and vanilla fallback.
+- Composed Bretonnian Longsword inverse offsets, Crowbill remote identity,
+  Old Musket inventory-preview pose retention, and mission-equipment style
+  resolution through their existing canonical presentation owners.
+- Added a dedicated Outrider animation vocabulary with bounded diagnostics and
+  expanded the WT remap vocabulary without introducing a second wield hook.
+- Added offline coverage for swaps, previews, transitions, stale settings,
+  remote fallback, transform composition, and combined registration counts.
+
 ## 0.1.458-dev (2026-07-19) - #835 callable Vector3 constructor [verify-fix]
 
 - The shared appearance primitive now invokes engine vector constructors through

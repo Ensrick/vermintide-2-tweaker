@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.458-dev"
+local MOD_VERSION = "0.1.459-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -64,6 +64,7 @@ _om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_c
 _om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
 _om.rapier_contract = mod:dofile("scripts/mods/character_weapon_variants/_cwv_rapier_contract")
 _om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inventory_icons")
+_om.outrider_animation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_outrider_animation")
 -- Public sibling-renderer contract: call resolve(icon, renderer), never guess atlas residency.
 mod._cwv_inventory_icons = _om.inventory_icons
 mod._cwv_crowbill_family = _om.crowbill_family
@@ -76,6 +77,7 @@ _om.profile_package_wire = mod:dofile("scripts/mods/character_weapon_variants/_c
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
+_om.old_musket_preview_pose = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview_pose")
 mod._cwv_preview_descriptor = _om.old_musket_preview
 _om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.profile_package_wire })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
@@ -393,9 +395,6 @@ do
 	function mod.on_setting_changed(setting_id)
 		if setting_id == policy.SETTING_ID then
 			_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
-		end
-		if _om.crowbill_runtime and _om.crowbill_runtime.on_setting_changed then
-			_om.crowbill_runtime.on_setting_changed(setting_id)
 		end
 	end
 end
@@ -1531,6 +1530,15 @@ local function _create_outrider_grenade_launcher_template()
 	template.wield_anim_not_loaded  = nil   -- blunderbuss has no "not_loaded" wield variant
 	template.display_unit           = "units/weapons/weapon_display/display_blunderbusses"
 	template.reload_event           = "reload"   -- vanilla blunderbuss event name (kept for clarity)
+	-- #760: 3P only. WT may expose this exact CWV item to the three standard
+	-- Saltzpyre careers. Route their body into their native Repeater Pistol
+	-- stance while Kruber retains the authored blunderbuss stance. The 1P
+	-- launcher state machine above remains shared and unchanged.
+	local receiver_count, receiver_reason = _om.outrider_animation.apply_template(
+		template, NetworkLookup and NetworkLookup.anims)
+	_om.outrider_animation.emit_evidence(printf, "template", "wh_standard",
+		_om.outrider_animation.SALTZPYRE_WIELD_3P,
+		receiver_reason or ("mapped_" .. tostring(receiver_count)), "private_clone")
 
 	-- Hand swap: weapon mounts on the right hand instead of left.
 	template.left_hand_unit                    = ""
@@ -3724,9 +3732,32 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
 		_om.combat_styles:end_husk_wield()
 	end
 	if not ok then error(err) end
+	-- #760: a remote husk receives the vanilla Trollhammer item shape for wire
+	-- safety, so its local item-template lookup cannot see the Outrider's
+	-- Saltzpyre career map. The semantic identity channel is the positive
+	-- variant proof. Re-apply the same vanilla Repeater Pistol stance once at
+	-- the existing husk-wield reconstruction edge; no custom animation id or
+	-- extra RPC is sent. A late identity delivery already re-wields this slot.
+	local slot = equipment and equipment.slots and equipment.slots[slot_name]
+	local item_data = slot and slot.item_data
+	local descriptor = _om._husk_identity_descriptor
+		and _om._husk_identity_descriptor(self and self._unit, slot_name,
+			item_data and item_data.name)
+	local husk_wield, husk_reason = _om.outrider_animation.husk_event(
+		descriptor, self and self._career_name,
+		NetworkLookup and NetworkLookup.anims)
+	if husk_wield then
+		local _, result = _om.outrider_animation.dispatch_event(
+			unit_3p, husk_wield, Unit)
+		_om.outrider_animation.emit_evidence(printf, "remote_husk_3p",
+			self and self._career_name, husk_wield, result, "exact_identity")
+	elseif husk_reason then
+		_om.outrider_animation.emit_evidence(printf, "remote_husk_3p",
+			self and self._career_name,
+			_om.outrider_animation.SALTZPYRE_WIELD_3P,
+			"skip_" .. tostring(husk_reason), "exact_identity")
+	end
 	pcall(function()
-		local slot = equipment and equipment.slots and equipment.slots[slot_name]
-		local item_data = slot and slot.item_data
 		local item_template = slot and slot.item_template
 		local function _live(u) return (u and Unit.alive(u)) and tostring(u) or "nil" end
 		printf("[cwv husk-wield] slot=%s item_name=%s backend_id=%s skin=%s template=%s | wielded r3p=%s l3p=%s (issues 395/398 diag)",
@@ -9989,6 +10020,18 @@ do
 		return true
 	end
 
+	local imperial_transform = _type_transforms.cwv_imperial_longsword
+	local inverse_bretonnian_scale = {
+		1 / imperial_transform.right_hand_scale[1],
+		1 / imperial_transform.right_hand_scale[2],
+		1 / imperial_transform.right_hand_scale[3],
+	}
+	local inverse_bretonnian_offset = {
+		-imperial_transform.right_hand_offset[1],
+		-imperial_transform.right_hand_offset[2],
+		-imperial_transform.right_hand_offset[3],
+	}
+
 	_om.combat_styles = policy.install(mod, {
 		cwv_key_for_item = function(backend_id, item_data)
 			return _om._cwv_key_for_item(backend_id, item_data)
@@ -9996,16 +10039,25 @@ do
 		presentations = {
 			imperial_longsword = {
 				item_key = "cwv_style_imperial_longsword",
-				right_hand_scale = _type_transforms.cwv_imperial_longsword.right_hand_scale,
-				right_hand_offset = _type_transforms.cwv_imperial_longsword.right_hand_offset,
+				right_hand_scale = imperial_transform.right_hand_scale,
+				right_hand_offset = imperial_transform.right_hand_offset,
 			},
 			greatsword_bretonnian = {
 				item_key = "cwv_style_greatsword_bretonnian",
 				-- Reuse the reviewed Imperial Longsword proportions only on
 				-- third-person/presentation consumers. The first-person Greatsword
 				-- unit remains untouched and follows the Bretonnian state machine.
-				right_hand_scale_3p = _type_transforms.cwv_imperial_longsword.right_hand_scale,
-				right_hand_offset_3p = _type_transforms.cwv_imperial_longsword.right_hand_offset,
+				right_hand_scale_3p = imperial_transform.right_hand_scale,
+				right_hand_offset_3p = imperial_transform.right_hand_offset,
+			},
+			bretonnian_greatsword_inverse = {
+				item_key = "cwv_style_bretonnian_greatsword_inverse",
+				-- #692: reciprocal presentation for the native Bretonnian mesh
+				-- under Greatsword/Kerillian state machines. Unified fields are
+				-- intentional: owner 1P and every 3P/preview consumer need the
+				-- same physical correction.
+				right_hand_scale = inverse_bretonnian_scale,
+				right_hand_offset = inverse_bretonnian_offset,
 			},
 		},
 		owns_dlc = function(dlc_name)
@@ -11015,8 +11067,14 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
 	return result
 end)
 
-local function _find_preview_slot_info(self, item_name)
+local function _find_preview_slot_info(self, item_name, spawn_data)
 	if not self._item_info_by_slot then return nil, nil end
+	if spawn_data then
+		local exact_slot, exact = _om.old_musket_preview_pose.resolve_spawn_slot(
+			self, item_name, spawn_data)
+		if exact_slot then return exact_slot, exact end
+		return nil, nil
+	end
 	for slot_id, info in pairs(self._item_info_by_slot) do
 		if info and info.name == item_name then
 			return slot_id, info
@@ -11034,17 +11092,17 @@ local function _crowbill_def_from_spawn_data(spawn_data)
 	return nil, nil
 end
 
-local function _resolve_preview_def(self, item_name)
-	local _, info = _find_preview_slot_info(self, item_name)
+local function _resolve_preview_def(self, item_name, spawn_data)
+	local slot_type, info = _find_preview_slot_info(self, item_name, spawn_data)
 	if _om.combat_styles and _om.combat_styles.transform_decision then
 		local decision = _om.combat_styles:transform_decision({ name = item_name },
 			info and info.backend_id)
-		if decision ~= nil then return decision or nil, info end
+		if decision ~= nil then return decision or nil, info, slot_type end
 	end
 	local skin = info and info.skin_name
-	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], info end
+	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], info, slot_type end
 	local model_def = info and _crowbill_def_from_spawn_data(info.spawn_data)
-	if model_def then return model_def, info end
+	if model_def then return model_def, info, slot_type end
 
 	if info and info.backend_id then
 		-- v0.1.316: match ANY instance suffix (_001, _002, _003, ...). The
@@ -11057,14 +11115,16 @@ local function _resolve_preview_def(self, item_name)
 		-- bid (no item_data), so a crafted instance's UUID bid resolves via
 		-- the ladder's backend-lookup rung to the stamped cwv_key.
 		local matched = _om._cwv_key_for_item(info.backend_id, nil)
-		if matched and _transform_map[matched] then return _transform_map[matched], info end
+		if matched and _transform_map[matched] then
+			return _transform_map[matched], info, slot_type
+		end
 	end
-	if _transform_map[item_name] then return _transform_map[item_name], info end
-	return nil, info
+	if _transform_map[item_name] then return _transform_map[item_name], info, slot_type end
+	return nil, info, slot_type
 end
 
-local function _cwv_spawn_item_post(self, item_name)
-	local def, info = _resolve_preview_def(self, item_name)
+local function _cwv_spawn_item_post(self, item_name, spawn_data)
+	local def, info, slot_type = _resolve_preview_def(self, item_name, spawn_data)
 	if not def then
 		-- v0.1.326: log when the resolver fails for a musket-shaped item_name
 		-- so we can tell whether the regex / lookup is broken vs the hook
@@ -11102,6 +11162,25 @@ local function _cwv_spawn_item_post(self, item_name)
 
 	local slot = equip_units[slot_index]
 	if type(slot) ~= "table" then return end
+
+	-- #760: the previewer resolves the inherited BASE Trollhammer template, so
+	-- mutating that table would also change the real Trollhammer on Saltzpyre.
+	-- Replay one exact item+career stance after the item-specific preview spawn.
+	-- This is reconstruction-bound (not per-frame) and leaves Kruber untouched.
+	local preview_wield, preview_reason = _om.outrider_animation.runtime_event(
+		def.item_key, self._current_career_name,
+		NetworkLookup and NetworkLookup.anims)
+	if preview_wield then
+		local _, result = _om.outrider_animation.dispatch_event(
+			self.character_unit, preview_wield, Unit)
+		_om.outrider_animation.emit_evidence(printf, "inventory_preview",
+			self._current_career_name, preview_wield, result, "exact_item")
+	elseif preview_reason then
+		_om.outrider_animation.emit_evidence(printf, "inventory_preview",
+			self._current_career_name,
+			_om.outrider_animation.SALTZPYRE_WIELD_3P,
+			"skip_" .. tostring(preview_reason), "exact_item")
+	end
 
 	-- Preview spawns 3P-style models; use _3p override if set, else unified.
 	if slot.right and _is_unit(slot.right) then
@@ -11190,20 +11269,24 @@ local function _cwv_spawn_item_post(self, item_name)
 		end
 		-- Vanilla resolves preview animation from the inherited es_handgun name,
 		-- so melee mode otherwise keeps the rifle idle even when the mesh pose is
-		-- correct. Replay the selected template's career-aware wield event once
-		-- after reconstruction.
+		-- correct. #792: do not replay here. Vanilla can still trigger a delayed
+		-- menu pose later in this post-update, overwriting this spawn-time event.
+		-- Arm one compact record for the final `_loading_done` edge instead.
 		local stance_template = _stance == "melee" and Weapons.old_musket_template_melee
 			or Weapons.old_musket_template
-		local wield_event = stance_template and stance_template.wield_anim
-		local by_career = stance_template and stance_template.wield_anim_career_3p
-			or stance_template and stance_template.wield_anim_career
-		if by_career and self._current_career_name then
-			wield_event = by_career[self._current_career_name] or wield_event
-		end
-		if wield_event and self.character_unit and Unit.alive(self.character_unit) then
-			pcall(Unit.animation_event, self.character_unit, wield_event)
-			pcall(printf, "[cwv:474] preview presentation slot=%s bid=%s mode=%s anim=%s",
-				tostring(slot_index), tostring(info and info.backend_id), _stance, tostring(wield_event))
+		local wield_event = _om.old_musket_preview_pose.resolve_wield_event(
+			stance_template, self._current_career_name)
+		if wield_event and slot_type == self._wielded_slot_type
+				and self.character_unit and Unit.alive(self.character_unit) then
+			_om.old_musket_preview_pose.arm(self, {
+				character_unit = self.character_unit,
+				item_name = item_name,
+				backend_id = info and info.backend_id,
+				slot_type = slot_type,
+				slot_index = slot_index,
+				stance = _stance,
+				wield_event = wield_event,
+			})
 		end
 	elseif def.item_key == "cwv_es_musket_old" then
 		-- v0.1.341-dev: promoted to `_dbg_alert` — "gate failed" is an
@@ -11212,6 +11295,32 @@ local function _cwv_spawn_item_post(self, item_name)
 			tostring(slot and slot.right), tostring(slot and slot.right and _is_unit(slot.right)))
 	end
 end
+
+-- #792: `_spawn_item` runs inside `_poll_item_package_loading`, after vanilla's
+-- visibility pass for that frame. A delayed menu pose may then run at the end of
+-- the same poll and replace the Musket wield event. The next visibility pass is
+-- vanilla's explicit final-stability edge (`_loading_done = true`). Consume the
+-- pending record there once; never replay every frame.
+mod:hook("HeroPreviewer", "_update_units_visibility", function(func, self, dt)
+	local was_loading_done = self._loading_done
+	local result = func(self, dt)
+	if not was_loading_done and self._loading_done then
+		local pending, reason = _om.old_musket_preview_pose.take_when_stable(self, true)
+		if pending then
+			if Unit.alive(pending.character_unit) then
+				pcall(Unit.animation_event, pending.character_unit, pending.wield_event)
+				pcall(printf, "[cwv:792] preview pose retained slot=%s bid=%s mode=%s anim=%s edge=loading_done",
+					tostring(pending.slot_index), tostring(pending.backend_id),
+					tostring(pending.stance), tostring(pending.wield_event))
+			else
+				_dbg("[cwv:792] preview pose skipped reason=character_dead")
+			end
+		elseif reason ~= "not_armed" then
+			_dbg("[cwv:792] preview pose skipped reason=%s", tostring(reason))
+		end
+	end
+	return result
+end)
 
 -- #604 TeamPreviewer identity bridge. Score rows preserve the peer in
 -- context.players_session_score even though LevelEndView._get_hero_from_score
@@ -11337,7 +11446,7 @@ mod:hook("HeroPreviewer", "_spawn_item", function(func, self, item_name, spawn_d
 	local result = func(self, item_name, spawn_data)
 	_dbg("[cwv preview hook] HeroPreviewer._spawn_item fired item_name=%s self=%s",
 		tostring(item_name), tostring(self))
-	_cwv_spawn_item_post(self, item_name)
+	_cwv_spawn_item_post(self, item_name, spawn_data)
 	return result
 end)
 
@@ -11345,7 +11454,7 @@ mod:hook("MenuWorldPreviewer", "_spawn_item", function(func, self, item_name, sp
 	local result = func(self, item_name, spawn_data)
 	_dbg("[cwv preview hook] MenuWorldPreviewer._spawn_item fired item_name=%s self=%s",
 		tostring(item_name), tostring(self))
-	_cwv_spawn_item_post(self, item_name)
+	_cwv_spawn_item_post(self, item_name, spawn_data)
 	return result
 end)
 
