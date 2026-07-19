@@ -1,8 +1,8 @@
 -- career_tweaker / _crt_talent_swap.lua
 --
--- Responsibility: Career talent-tree + ability/passive swapping. Owns the
--- HeroWindowTalents lifecycle hooks (live-refresh the open picker), the DLC
--- ownership gate for swaps, and the apply/restore engine that rebinds one
+-- Responsibility: Dormant career talent-tree + ability/passive swapping. The
+-- independent _crt_talent_menu_guard owns talent-window lifecycle hooks; this
+-- module owns only the DLC gate and apply/restore engine that rebinds one
 -- career's talent tree + activated/passive ability onto another.
 --
 -- Public surface (via mod._crt, consumed by the entry's lifecycle callbacks
@@ -21,8 +21,6 @@
 
 local mod = get_mod("crt")
 mod._crt = mod._crt or {}
-local TalentSelection = mod:dofile("scripts/mods/career_tweaker/_crt_talent_selection")
-mod._crt.talent_selection = TalentSelection
 
 -- All 20 careers in the game.
 local _ALL_CAREERS = {
@@ -44,74 +42,19 @@ local _WEAPON_ABILITY_CAREERS = {
     es_questingknight = true,
 }
 
--- Tracked HeroWindowTalents instance, set by on_enter and cleared by on_exit.
--- Used so apply_talent_swaps() can force the inventory talent picker to
--- re-read swapped trees when the user changes a setting while the menu is open.
+-- The independent no-op guard tracks HeroWindowTalents on mod._crt so this
+-- dormant engine can refresh it if a future redesign explicitly loads both.
 -- QUESTION: HeroWindowTalentsConsole (controller-mode UI) has its own
 -- _update_talent_sync but isn't tracked here — controller users won't get the
 -- live refresh. Acceptable if controller UI is out of scope.
-local _talent_window_instance = nil
-
-local function _capture_talent_selection(window)
-    window._crt_talent_selection_on_enter = TalentSelection.snapshot(window._selected_talents)
-end
-
-local function _selection_is_unchanged(window)
-    return TalentSelection.equal(window._crt_talent_selection_on_enter, window._selected_talents)
-end
-
-mod:hook_safe("HeroWindowTalents", "on_enter", function(self)
-    _talent_window_instance = self
-    _capture_talent_selection(self)
-    -- Opening the talent screen is a guaranteed career-resolved moment -- a
-    -- reliable point to fire the rework-career auto-dump (no-op off those careers
-    -- or after the first dump this session). mod-field ref: defined further down.
-    if mod._crt_auto_dump_check then mod._crt_auto_dump_check() end
-end)
-
--- Vanilla always persists the selected rows, rebuilds every talent buff via
--- TalentExtension:talents_changed(), and reapplies ammo buffs on close
--- (hero_window_talents.lua:53-74), even when the selection is identical. That
--- destroys accumulated talent state such as Job Well Done (#283). Preserve the
--- one genuine teardown write for a no-op close; changed selections delegate to
--- vanilla without altering its apply, sync, or ammo behavior.
-mod:hook("HeroWindowTalents", "on_exit", function(func, self, params)
-    _talent_window_instance = nil
-    if _selection_is_unchanged(self) then
-        self.ui_animator = nil
-        mod._crt_talent_menu_noop_skips = (mod._crt_talent_menu_noop_skips or 0) + 1
-        return
-    end
-    return func(self, params)
-end)
-
--- Controller mode is a distinct class with the same unconditional close path
--- (hero_window_talents_console.lua:67-88); keep the two input modes identical.
-mod:hook_safe("HeroWindowTalentsConsole", "on_enter", function(self)
-    _capture_talent_selection(self)
-end)
-
-mod:hook("HeroWindowTalentsConsole", "on_exit", function(func, self, params)
-    if _selection_is_unchanged(self) then
-        self.ui_animator = nil
-        mod._crt_talent_menu_noop_skips = (mod._crt_talent_menu_noop_skips or 0) + 1
-        return
-    end
-    return func(self, params)
-end)
-
-mod._crt.talent_menu_guard_installed = true
-local engine_printf = rawget(_G, "printf")
-if engine_printf then
-    pcall(engine_printf, "[crt:283] applied: unchanged talent-menu closes preserve live talent buffs (desktop+controller)")
-end
 
 local function refresh_talent_ui()
-    if _talent_window_instance then
+    local talent_window_instance = mod._crt.talent_window_instance
+    if talent_window_instance then
         -- pcall guards against the window being torn down between the on_exit
         -- hook firing late and the refresh attempting to access it.
         pcall(function()
-            _talent_window_instance:_update_talent_sync(false)
+            talent_window_instance:_update_talent_sync(false)
         end)
     end
 end
