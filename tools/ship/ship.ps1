@@ -586,6 +586,21 @@ function Get-LifecycleEditPlan {
     return @{ Target = $target; Remove = $remove; Add = -not ($Existing -contains $target) }
 }
 
+# Preserve an existing co-op routing qualifier when a later diagnostics ship
+# omits the redundant changelog marker. An unmarked diagnostics update must
+# never silently downgrade a known two-player capture to a solo playtest.
+# The qualifier is removed only when the issue leaves diagnostics entirely.
+function Get-CoopQualifierEditPlan {
+    param([string[]]$Existing, [string]$LifecycleTarget, [bool]$ExplicitlyRequired)
+    $hasExisting = $Existing -contains 'coop-required'
+    $want = $LifecycleTarget -eq 'diagnostics-armed' -and ($ExplicitlyRequired -or $hasExisting)
+    return @{
+        Want = $want
+        Add = $want -and -not $hasExisting
+        Remove = $hasExisting -and $LifecycleTarget -ne 'diagnostics-armed'
+    }
+}
+
 # Offline self-test of the step-6 logic + the issue-#489 native-probe guard
 # (qa-script convention: exit 0 = OK, exit 2 = regression). Runnable standalone
 # (`ship.ps1 -SelfTest`) and via qa/run_selftests.ps1. Network/gh interaction
@@ -654,6 +669,15 @@ function Invoke-ShipSelfTest {
     $keepFixed = Get-LifecycleEditPlan -Existing @('Fixed', 'verify-fix', 'diagnostics-armed') -Requested 'verify-fix-coop'
     Assert ($keepFixed.Target -eq 'Fixed') "verified Fixed lifecycle is never downgraded"
     Assert (($keepFixed.Remove -join ',') -eq 'verify-fix,diagnostics-armed') "Fixed cleanup removes stale competing lifecycle labels"
+
+    $keepDiagCoop = Get-CoopQualifierEditPlan -Existing @('diagnostics-armed', 'coop-required') -LifecycleTarget 'diagnostics-armed' -ExplicitlyRequired $false
+    Assert ($keepDiagCoop.Want -and -not $keepDiagCoop.Add -and -not $keepDiagCoop.Remove) "unmarked diagnostics ship preserves existing coop-required routing"
+
+    $addDiagCoop = Get-CoopQualifierEditPlan -Existing @('diagnostics-armed') -LifecycleTarget 'diagnostics-armed' -ExplicitlyRequired $true
+    Assert ($addDiagCoop.Want -and $addDiagCoop.Add -and -not $addDiagCoop.Remove) "explicit coop diagnostic adds missing qualifier"
+
+    $removeStaleCoop = Get-CoopQualifierEditPlan -Existing @('coop-required') -LifecycleTarget 'verify-fix' -ExplicitlyRequired $false
+    Assert (-not $removeStaleCoop.Want -and -not $removeStaleCoop.Add -and $removeStaleCoop.Remove) "leaving diagnostics removes stale coop-required qualifier"
 
     $planL = Get-ShipLabelPlan -Header '## 0.12.204-dev - Localization: applied dev status-tag doctrine (#301)' -Entry 'refs #74 #108 as tag context'
     Assert ($planL.Skip -eq 'loc-sweep') "loc-sweep header is skipped"
@@ -1493,12 +1517,16 @@ try {
                             if ($meta.labels) { $existing = @($meta.labels | ForEach-Object { $_.name }) }
                             $edit = Get-LifecycleEditPlan -Existing $existing -Requested $statusLabel
                             $removeLabels = @($edit.Remove)
-                            # coop-required is meaningful for armed diagnostics only.
-                            $wantCoopQualifier = ($edit.Target -eq 'diagnostics-armed' -and $plan.CoopRequired)
-                            if (-not $wantCoopQualifier -and $existing -contains 'coop-required') { $removeLabels += 'coop-required' }
+                            # coop-required is meaningful for armed diagnostics only. Preserve
+                            # an existing qualifier when a later diagnostic entry omits the
+                            # redundant marker; otherwise ordinary re-ships can misroute a
+                            # known co-op capture into the solo playtest queue.
+                            $coopEdit = Get-CoopQualifierEditPlan -Existing $existing -LifecycleTarget $edit.Target -ExplicitlyRequired $plan.CoopRequired
+                            $wantCoopQualifier = $coopEdit.Want
+                            if ($coopEdit.Remove) { $removeLabels += 'coop-required' }
                             $editArgs = @()
                             if ($edit.Add) { $editArgs += @('--add-label', $edit.Target) }
-                            if ($wantCoopQualifier -and -not ($existing -contains 'coop-required')) { $editArgs += @('--add-label', 'coop-required') }
+                            if ($coopEdit.Add) { $editArgs += @('--add-label', 'coop-required') }
                             foreach ($labelToRemove in ($removeLabels | Select-Object -Unique)) { $editArgs += @('--remove-label', $labelToRemove) }
                             $editOk = $true
                             if ($editArgs.Count -gt 0) {
