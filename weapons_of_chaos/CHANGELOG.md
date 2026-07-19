@@ -1,5 +1,19 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.32-dev (2026-07-18) - #712 Blightreaper transform census [diagnostics-armed]
+
+- Added automatic bounded `[WOC:712] unit census` evidence on the first
+  Blightreaper spawn for each surface/perspective. The census records scene
+  graph count, first parent links, named `blightreaper` node availability, and
+  mesh names/counts before the existing transform writer runs.
+- This does not claim the transform is fixed. It is meant to disambiguate the
+  failed 0.1.29/0.1.30 visual checks: wrong node, non-render node, accepted
+  readback with no visual effect, or a mesh/pivot export issue.
+
+Verification/diagnostic capture: equip Blightreaper on the deployed diagnostic
+build, inspect first person, owner third person, inventory character preview,
+and mission transition. Attach the newest log lines beginning `[WOC:712]`.
+
 ## 0.1.31-dev (2026-07-18) - #724 release/source reconciliation [tooling]
 
 - Rebuilt the friends-only development artifact from the current merged source
