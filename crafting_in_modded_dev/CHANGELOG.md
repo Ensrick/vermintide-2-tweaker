@@ -1,5 +1,19 @@
 # Crafting in Modded Changelog
 
+## 0.8.99-dev (2026-07-19): #823 prevent regression checks from rehooking live modules [verify-fix]
+
+- Made the modded-rarity owner idempotent so an accidental second load returns
+  its existing API instead of registering the same five VMF hooks again.
+- Removed the regression suite's side-effecting `mod:dofile` call and read the
+  already-published localization table instead.
+- Added offline contracts that forbid regression checks from reloading hook
+  owners and require the hook-owning module's reload guard.
+
+**Solo verification:** launch CIM Dev, run `/cim_regression_test` twice, and
+confirm `no_duplicate_hook_safe_registrations` passes both times. The log must
+contain no `Attempting to rehook active hook` warning for `Localize`,
+`_state_setup_upgrade`, either inventory `on_enter`, or `get_weapon_pool`.
+
 ## 0.8.98-dev (2026-07-19): #404 restore in-mission Athanor preview [verify-fix]
 
 - Accepted Stingray's retail callable-table `Vector3` and `Vector3Box`

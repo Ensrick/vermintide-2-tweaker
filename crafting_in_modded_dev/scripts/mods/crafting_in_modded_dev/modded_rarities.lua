@@ -15,6 +15,15 @@ Color is pure data — to change the look, edit MODDED_COLOR below (a, r, g, b).
 
 local mod = get_mod("cim_dev")
 
+-- This module owns live VMF hook registrations. `mod:dofile` is not a Lua
+-- `require` cache: executing this file twice attempts to register the same
+-- hooks twice, and VMF silently drops the second registration. Keep the module
+-- idempotent so regression/debug code can inspect its public API without
+-- re-hooking Localize, ItemCustomization, inventory on_enter, or Deus pools.
+if mod._cim_modded_rarities_api then
+    return mod._cim_modded_rarities_api
+end
+
 -- {alpha, r, g, b}. Soft pale gold — legible on dark inventory backgrounds,
 -- visually distinct from every vanilla rarity color.
 local MODDED_COLOR = { 255, 248, 237, 197 }
@@ -150,6 +159,7 @@ local _CIM_LOC_OVERRIDES = {
     crafting_recipe_jewellery_reroll_properties           = "Reroll Accessory Properties",
     crafting_recipe_jewellery_reroll_traits               = "Reroll Accessory Traits",
 }
+mod._cim_rarity_loc_overrides = _CIM_LOC_OVERRIDES
 
 mod:hook(_G, "Localize", function(func, key, ...)
     local override = _CIM_LOC_OVERRIDES[key]
@@ -309,3 +319,10 @@ mod:hook("DeusRunController", "get_weapon_pool", function(func, self, ...)
     end
     return func(self, ...)
 end)
+
+mod._cim_modded_rarities_api = {
+    loc_overrides = _CIM_LOC_OVERRIDES,
+    registered = _registered,
+}
+
+return mod._cim_modded_rarities_api

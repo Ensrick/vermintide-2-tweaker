@@ -73,4 +73,23 @@ return function(H, repo_root)
         H.truthy(ok, "registered checks did not close over the supplied mod object")
         H.equal(type(result), "string")
     end)
+
+    H.test("CIM regression checks never reload hook-owning modules", function()
+        local source = read_all(module_path)
+        H.equal(
+            source:find('pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/modded_rarities")', 1, true),
+            nil,
+            "regression check must not re-execute modded_rarities.lua; it owns live VMF hooks"
+        )
+        H.truthy(
+            source:find("mod._cim_rarity_loc_overrides", 1, true),
+            "accessories-label check should read the side-effect-free API table"
+        )
+
+        local rarity_source = read_all(mod_root .. "modded_rarities.lua")
+        H.truthy(
+            rarity_source:find("if mod._cim_modded_rarities_api then", 1, true),
+            "modded_rarities.lua must stay idempotent because it owns hook registrations"
+        )
+    end)
 end
