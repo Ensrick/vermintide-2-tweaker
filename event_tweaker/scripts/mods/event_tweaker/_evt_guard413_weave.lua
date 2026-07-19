@@ -2,10 +2,11 @@ local mod = get_mod("event_tweaker")
 
 -- _evt_guard413_weave.lua — issue 413: weave-only mutator injection gate
 --
--- Seven of the eight cat_winds weave mutators are UNSAFE outside a real Weave
--- and must be dropped at the injection chokepoint (_evt_selection.lua's
--- gather_mutators() add()) before append_live_event_mutators broadcasts them
--- to every peer via rpc_activate_mutator_client. Fix shipped v0.4.24-dev;
+-- Seven of the eight cat_winds weave mutators are UNSAFE on their stock path
+-- outside a real Weave. Six are always dropped at the injection chokepoint.
+-- Shadow is admitted only through _evt_shadow_adventure's asset-free adapter
+-- after capability parity and the closed-roster fence are proven. The original
+-- v0.4.24-dev crash floor remains the fail-closed fallback;
 -- regression check issue413_weave_only_mutators_gated; checklist slug
 -- et-weave-only-mutator-gate. DO NOT REMOVE.
 --
@@ -61,9 +62,10 @@ local rt_register = ET.rt_register
 -- functionally-identical curse_belakors_shadows -- event_tweaker_curses.lua:38).
 -- Even then a VANILLA client still runs the stock client_update spawn and CTDs,
 -- and hot_join_sync re-broadcasts the activation to late joiners
--- (mutator_handler.lua:148-159). So the drop stays UNCONDITIONAL; the only
--- addition below is a host-visible notice so the deliberate skip is explained
--- rather than silent.
+-- (mutator_handler.lua:148-159). Therefore the stock path stays prohibited.
+-- v0.4.37-dev's separate adapter proves a capability-specific all-mod roster,
+-- omits both non-resident visual units, supplies radius 6, and locks hot joins.
+-- If any proof fails, selection falls back to this original drop floor.
 --
 -- Real Weave missions do NOT get their wind mutators from this injection
 -- path: GameModeWeave pulls them from the weave template via
@@ -114,10 +116,9 @@ end
 ET.notify_weave_drop = _notify_weave_drop
 
 rt_register("issue413_weave_only_mutators_gated", function()
-    -- The 7 weave-only cat_winds crashers must be blocklisted; metal must
-    -- not be. And in the keep (where this harness runs; never a weave) the
-    -- gate must read "no wind active" so gather_mutators() drops them
-    -- before injection.
+    -- The 7 stock cat_winds crashers must stay classified; metal must not be.
+    -- Shadow's later adapter is an explicit capability-gated exception, not a
+    -- removal from the unsafe-stock-path classification.
     local expected = { "life", "heavens", "light", "shadow", "fire", "death", "beasts" }
     for i = 1, #expected do
         if not WEAVE_ONLY_MUTATORS[expected[i]] then

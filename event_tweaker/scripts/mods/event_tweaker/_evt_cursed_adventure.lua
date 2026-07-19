@@ -107,6 +107,11 @@ end
 -- Hook BOTH the per-mutator activate (host loop + client RPC) and deactivate
 -- so the package is ready before activation and the god cache stays current.
 mod:hook("MutatorHandler", "_activate_mutator", function(func, self, name, ...)
+    if name == "shadow" and ET.set_shadow_session_active then
+        -- The issue-413 sender floor already proved the capability-specific
+        -- roster. Lock before vanilla broadcasts/starts the adapter.
+        ET.set_shadow_session_active(true)
+    end
     if _MANAGED_CURSE[name] and ET.set_curse_session_active then
         -- Close the join boundary before the mutator's start function can spawn
         -- its first package-owned network unit.
@@ -124,6 +129,9 @@ mod:hook("MutatorHandler", "_activate_mutator", function(func, self, name, ...)
 end)
 mod:hook("MutatorHandler", "_deactivate_mutator", function(func, self, name, ...)
     local a, b = func(self, name, ...)
+    if name == "shadow" and ET.set_shadow_session_active then
+        ET.set_shadow_session_active(false)
+    end
     if _CURSE_TO_GOD[name] then _refresh_active_curse_god() end
     return a, b
 end)
