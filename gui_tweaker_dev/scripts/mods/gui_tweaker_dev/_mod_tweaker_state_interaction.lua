@@ -651,7 +651,7 @@ function HeroViewStateModTweaker:_update_tooltip(dt, hover_row, hover_world_y, r
     if not (row and (self._tt_alpha or 0) > 0 and self._tooltip) then return end
     local ok = pcall(defs.layout_tooltip, self._tooltip, renderer,
         row._tip_title or (row.content and row.content.label) or "", row._tip_desc or "",
-        row._list_y or 0, hover_world_y or 0, self._tt_alpha)
+        row._list_y or 0, hover_world_y or 0, self._tt_alpha, row._tip_prefer_below)
     if ok then UIRenderer.draw_widget(renderer, self._tooltip) end
 end
 

@@ -3,6 +3,7 @@ return function(Harness, repo_root)
     local browser = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/_cd_browser.lua")
     local preview = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/_cd_preview_policy.lua")
     local dialogue_ui = dofile(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue.lua")
+    local transcript = dofile(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue_transcript.lua")
 
     local dialogue = { sound_events_n = 3, sound_events = { "a", "b", "c" } }
 
@@ -226,5 +227,339 @@ return function(Harness, repo_root)
         Harness.truthy(require_pos, "DialogueQueries module require missing")
         Harness.truthy(hook_pos, "DialogueQueries hook missing")
         Harness.truthy(require_pos < hook_pos, "DialogueQueries must resolve before VMF hook install")
+    end)
+
+    -- ------------------------------------------------------------------
+    -- #880 mouseover transcript preview popups. These tests drive the REAL
+    -- DialogueUI.build over the REAL browser policy with engine-free stubs:
+    -- rows come back carrying the popup binding the shared #207 hover
+    -- pipeline consumes (_tip_title / _tip_desc / _tip_prefer_below).
+    -- ------------------------------------------------------------------
+    local ROW_H = browser.ROW_HEIGHT
+
+    local function make_entries(count)
+        local entries = {}
+        for i = 1, count do
+            local id = string.format("pes_line_%02d", i)
+            entries[i] = { id, "sub_" .. id, "pes_group_" .. math.ceil(i / 4), "empire_soldier", 2.5 }
+        end
+        return entries
+    end
+
+    local function make_localizer(book, counter)
+        return function(key)
+            counter.calls = counter.calls + 1
+            local hit = book[key]
+            if hit ~= nil then return hit end
+            return "<" .. key .. ">"
+        end
+    end
+
+    local function make_api(entries)
+        local index = browser.build_index(entries)
+        return {
+            version = 3,
+            browser_groups = function(query) return browser.index_groups(index, query or "") end,
+            browser_page = function(speaker, query, offset, limit)
+                return browser.index_page(index, speaker, query or "", offset, limit)
+            end,
+            browser_window = browser.window,
+            browser_reconcile_focus = browser.reconcile_focus,
+            browser_row_height = browser.ROW_HEIGHT,
+            get_line_state = function() return nil end,
+            stop = function() end,
+        }
+    end
+
+    local function make_defs()
+        local function pop(base)
+            local y = base[2] - ROW_H
+            base[2] = y
+            return y
+        end
+        return {
+            create_dialogue_row = function(text, state_text_value, base)
+                pop(base)
+                return { content = { label = text, state_text = state_text_value,
+                    state_hotspot = {}, media_hotspot = {}, row_hs = {} }, style = {} }
+            end,
+            create_group_header = function(text, _, base)
+                pop(base)
+                return { content = { label = text, hotspot = {} }, style = {} }
+            end,
+            create_section_title = function(text, base)
+                pop(base)
+                return { content = { label = text }, style = {} }
+            end,
+        }
+    end
+
+    local function make_view(localize)
+        local view = {
+            _rows = {}, _search_str = "", _scroll_y = 0,
+            _visible_h = ROW_H * 8,
+            _dialogue_localize = localize,
+        }
+        function view:_recompute_scroll_bounds() self._max_scroll = 1000000000 end
+        return view
+    end
+
+    -- DialogueUI.build reads get_mod (cd api + gut's dofile for the transcript
+    -- binder) and math.clamp. Stub both, restore both, rethrow on failure.
+    local function with_build_env(api, body)
+        local saved_get_mod = rawget(_G, "get_mod")
+        local saved_clamp = math.clamp
+        _G.get_mod = function(id)
+            if id == "character_dialogue" then return { character_dialogue_api = api } end
+            if id == "gut_dev" then
+                return { dofile = function(_, path)
+                    return dofile(repo_root .. "/gui_tweaker_dev/" .. path .. ".lua")
+                end }
+            end
+            return nil
+        end
+        if not saved_clamp then
+            math.clamp = function(value, lower, upper)
+                if value < lower then return lower end
+                if value > upper then return upper end
+                return value
+            end
+        end
+        local ok, err = pcall(body)
+        _G.get_mod = saved_get_mod
+        math.clamp = saved_clamp
+        if not ok then error(err, 0) end
+    end
+
+    local function run_build(view, api)
+        view._rows = {}
+        dialogue_ui.build(view, { mod_id = "character_dialogue" }, make_defs())
+    end
+
+    Harness.test("cd 880 hover popup binds the row under the cursor across scroll offsets", function()
+        local entries = make_entries(40)
+        local book = {}
+        for i = 1, #entries do book[entries[i][2]] = "Spoken line " .. i end
+        local counter = { calls = 0 }
+        local api = make_api(entries)
+        with_build_env(api, function()
+            local view = make_view(make_localizer(book, counter))
+            view._dialogue_expanded = "kruber"
+            for _, scroll in ipairs({ 0, 5 * ROW_H, 20 * ROW_H }) do
+                view._scroll_y = scroll
+                run_build(view, api)
+                local first = view._dialogue_virtual_first
+                local last = view._dialogue_virtual_last
+                local line_rows = 0
+                for i = 1, #view._rows do
+                    local row = view._rows[i]
+                    if row._is_dialogue_line then
+                        line_rows = line_rows + 1
+                        -- one visible group (kruber), so line offset = sequence - 2
+                        local entry = entries[row._dialogue_sequence - 1]
+                        Harness.equal(entry[1], row._dialogue_event)
+                        Harness.equal(entry[1], row._tip_title, "popup title names the row's event")
+                        Harness.truthy(row._tip_desc and row._tip_desc:find(book[entry[2]], 1, true) == 1,
+                            "transcript must lead the popup body")
+                        Harness.equal(true, row._tip_prefer_below, "popup anchors under the hovered row")
+                    end
+                end
+                Harness.truthy(line_rows > 0, "window must contain line rows at scroll " .. scroll)
+                Harness.truthy(line_rows <= math.ceil(view._visible_h / ROW_H) + 4,
+                    "popup binding stays bounded by the virtual window")
+                -- cursor simulation: the row occupying the cursor band is the
+                -- catalogue entry the popup must describe.
+                local target_sequence = first + 2
+                Harness.truthy(target_sequence >= 2 and target_sequence <= last, "target must be a line row")
+                local cursor_y = (-42 - (target_sequence - 1) * ROW_H) + ROW_H / 2
+                local under
+                for i = 1, #view._rows do
+                    local row = view._rows[i]
+                    local y = row._list_y or 0
+                    if cursor_y >= y and cursor_y < y + ROW_H then under = row; break end
+                end
+                Harness.truthy(under, "a row must occupy the cursor band at scroll " .. scroll)
+                Harness.equal(target_sequence, under._dialogue_sequence)
+                Harness.equal(true, under._is_dialogue_line)
+                local expected = entries[target_sequence - 1]
+                Harness.equal(expected[1], under._dialogue_event, "row under cursor maps to the right entry")
+                Harness.truthy(under._tip_desc:find(book[expected[2]], 1, true) == 1,
+                    "row under cursor carries that entry's transcript")
+            end
+        end)
+    end)
+
+    Harness.test("cd 880 popup binds transcript with speaker metadata and suppresses unresolved keys", function()
+        local echo = function(key) return key end
+        Harness.equal(nil, transcript.resolve("k", nil), "missing localizer suppresses")
+        Harness.equal(nil, transcript.resolve(nil, echo), "missing key suppresses")
+        Harness.equal(nil, transcript.resolve("", echo), "empty key suppresses")
+        Harness.equal(nil, transcript.resolve("k", echo), "raw key echo suppresses")
+        Harness.equal(nil, transcript.resolve("k", function() return "<k>" end), "marker suppresses")
+        Harness.equal(nil, transcript.resolve("k", function() error("boom") end), "localizer error suppresses")
+        Harness.equal(nil, transcript.resolve("k", function() return 7 end), "non-string result suppresses")
+        Harness.equal("Hello", transcript.resolve("k", function() return "Hello" end))
+        Harness.equal("T\n\nMarkus Kruber - grp", transcript.compose("T", "Markus Kruber", "grp"))
+        Harness.equal("T", transcript.compose("T", nil, nil))
+        Harness.equal("T\n\nMarkus Kruber", transcript.compose("T", "Markus Kruber", ""))
+        Harness.equal("T\n\ngrp", transcript.compose("T", "", "grp"))
+
+        local entries = {
+            { "pes_speaks_01", "sub_pes_speaks_01", "pes_talk", "empire_soldier", 2 },
+            { "pes_silent_02", "sub_pes_silent_02", "pes_talk", "empire_soldier", 2 },
+            { "pes_echo_03", "sub_pes_echo_03", "pes_talk", "empire_soldier", 2 },
+        }
+        local counter = { calls = 0 }
+        local localize = function(key)
+            counter.calls = counter.calls + 1
+            if key == "sub_pes_speaks_01" then return "We march to war." end
+            if key == "sub_pes_echo_03" then return key end
+            return "<" .. key .. ">"
+        end
+        local api = make_api(entries)
+        with_build_env(api, function()
+            local view = make_view(localize)
+            view._dialogue_expanded = "kruber"
+            run_build(view, api)
+            local by_event, group_rows = {}, 0
+            for i = 1, #view._rows do
+                local row = view._rows[i]
+                if row._is_dialogue_line then by_event[row._dialogue_event] = row end
+                if row._is_dialogue_group then
+                    group_rows = group_rows + 1
+                    Harness.equal(nil, row._tip_desc, "group headers never carry the popup")
+                end
+            end
+            local bound = by_event.pes_speaks_01
+            Harness.truthy(bound and bound._tip_desc, "resolved subtitle must bind")
+            Harness.equal("pes_speaks_01", bound._tip_title)
+            Harness.equal("We march to war.\n\nMarkus Kruber - pes_talk", bound._tip_desc,
+                "body = transcript, then speaker label - dialogue group")
+            Harness.equal(nil, bound._tip_desc:find("pes_speaks_01", 1, true),
+                "body must not restate the event id (the popup title owns it)")
+            Harness.equal(true, bound._tip_prefer_below)
+            Harness.truthy(by_event.pes_silent_02, "unresolved line must still be in the window")
+            Harness.equal(nil, by_event.pes_silent_02._tip_desc, "marker key must not bind")
+            Harness.equal(nil, by_event.pes_silent_02._tip_prefer_below)
+            Harness.equal(nil, by_event.pes_echo_03._tip_desc, "echoed key must not bind")
+            Harness.truthy(group_rows > 0)
+        end)
+    end)
+
+    Harness.test("cd 880 popup reuses one widget and binds nothing in the hover path", function()
+        local entries = make_entries(40)
+        local book = {}
+        for i = 1, #entries do book[entries[i][2]] = "Line " .. i end
+        local counter = { calls = 0 }
+        local api = make_api(entries)
+        with_build_env(api, function()
+            local view = make_view(make_localizer(book, counter))
+            view._dialogue_expanded = "kruber"
+            run_build(view, api)
+            local line_rows = {}
+            for i = 1, #view._rows do
+                local row = view._rows[i]
+                if row._is_dialogue_line then line_rows[#line_rows + 1] = row end
+            end
+            local calls_after_build = counter.calls
+            Harness.equal(#line_rows, calls_after_build, "one localize call per visible line row at build time")
+            Harness.truthy(calls_after_build < #entries, "resolution is window-bounded, never catalogue-wide")
+            -- N hover cycles: the capture path only READS the bound fields, and
+            -- re-binding an unchanged (row, event) is a no-op.
+            local sample = line_rows[1]
+            local before = sample._tip_desc
+            for _ = 1, 100 do
+                for i = 1, #line_rows do
+                    local _ = line_rows[i]._tip_desc
+                end
+                transcript.bind_row(sample, { event = sample._dialogue_event, subtitle = "ignored" },
+                    "Markus Kruber", make_localizer(book, counter))
+            end
+            Harness.equal(calls_after_build, counter.calls, "no localizer traffic across 100 hover cycles")
+            Harness.truthy(rawequal(before, sample._tip_desc), "bound body string is reused, not rebuilt")
+        end)
+        -- The popup WIDGET stays the view's single #207 tooltip: the dialogue
+        -- modules never create their own, and both twin surfaces thread the
+        -- #880 under-row anchor through the SAME shared layout call.
+        local function slurp(rel)
+            local f = assert(io.open(repo_root .. rel, "rb")); local s = f:read("*a"); f:close(); return s
+        end
+        local ui = slurp("/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue.lua")
+        local binder_src = slurp("/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue_transcript.lua")
+        Harness.equal(nil, ui:find("create_tooltip_popup", 1, true), "dialogue renderer must not own a popup widget")
+        Harness.equal(nil, binder_src:find("create_tooltip_popup", 1, true), "binder must not own a popup widget")
+        local view_src = slurp("/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_interaction.lua")
+        local state_src = slurp("/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state_interaction.lua")
+        Harness.truthy(view_src:find("row._tip_prefer_below", 1, true), "standalone view must thread the #880 anchor")
+        Harness.truthy(state_src:find("row._tip_prefer_below", 1, true), "hero-state twin must thread the #880 anchor")
+        local defs_src = slurp("/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions.lua")
+        local factory_pos = defs_src:find("local function create_dialogue_row", 1, true)
+        local factory_end = defs_src:find("local function _append_highlight", 1, true)
+        Harness.truthy(factory_pos and factory_end and factory_pos < factory_end)
+        local row_hs_pos = defs_src:find('content_id = "row_hs"', factory_pos, true)
+        Harness.truthy(row_hs_pos and row_hs_pos < factory_end,
+            "dialogue rows need the hover-only row_hs capture surface")
+        Harness.truthy(defs_src:find("prefer_below", 1, true), "layout_tooltip must accept the under-row anchor")
+    end)
+
+    Harness.test("cd 880 popup hides on leave and cannot target unbound rows", function()
+        local entries = make_entries(6)
+        local counter = { calls = 0 }
+        local localize = make_localizer({ sub_pes_line_01 = "Only the first line speaks." }, counter)
+        local api = make_api(entries)
+        with_build_env(api, function()
+            local view = make_view(localize)
+            view._dialogue_expanded = "kruber"
+            run_build(view, api)
+            -- Production capture predicate (twin _draw loops): a row is the popup
+            -- target only while hovered AND carrying a non-empty body.
+            local function popup_target(rows, cursor_y)
+                for i = 1, #rows do
+                    local row = rows[i]
+                    local y = row._list_y or 0
+                    local hovered = cursor_y ~= nil and cursor_y >= y and cursor_y < y + ROW_H
+                    local rc = row.content
+                    if rc and rc.row_hs then rc.row_hs.is_hover = hovered end
+                    if rc and rc.hotspot then rc.hotspot.is_hover = hovered end
+                end
+                local target
+                for i = 1, #rows do
+                    local row = rows[i]
+                    if row._tip_desc and row._tip_desc ~= "" then
+                        local rc = row.content
+                        if (rc.row_hs and rc.row_hs.is_hover) or (rc.hotspot and rc.hotspot.is_hover) then
+                            target = row
+                        end
+                    end
+                end
+                return target
+            end
+            local bound_row, silent_row, header_row
+            for i = 1, #view._rows do
+                local row = view._rows[i]
+                if row._dialogue_event == "pes_line_01" then bound_row = row end
+                if row._dialogue_event == "pes_line_02" then silent_row = row end
+                if row._is_dialogue_group then header_row = row end
+            end
+            Harness.truthy(bound_row and bound_row._tip_desc, "first line must bind")
+            Harness.truthy(rawequal(bound_row, popup_target(view._rows, bound_row._list_y + ROW_H / 2)),
+                "hovering the bound row targets its popup")
+            Harness.equal(nil, popup_target(view._rows, 500), "cursor off every band hides the popup")
+            Harness.equal(nil, popup_target(view._rows, nil), "no cursor hides the popup")
+            Harness.truthy(silent_row, "second line must be in the window")
+            Harness.equal(nil, silent_row._tip_desc)
+            Harness.equal(nil, popup_target(view._rows, silent_row._list_y + ROW_H / 2),
+                "hovering an unresolved line never shows a popup")
+            Harness.truthy(header_row)
+            Harness.equal(nil, popup_target(view._rows, header_row._list_y + ROW_H / 2),
+                "hovering the group header never shows a popup")
+            -- Collapse: a rebuild without an expanded group leaves zero
+            -- popup-capable rows, so a stale popup cannot survive recycling.
+            view._dialogue_expanded = nil
+            run_build(view, api)
+            for i = 1, #view._rows do
+                Harness.equal(nil, view._rows[i]._tip_desc, "collapsed windows carry no transcript bindings")
+            end
+        end)
     end)
 end

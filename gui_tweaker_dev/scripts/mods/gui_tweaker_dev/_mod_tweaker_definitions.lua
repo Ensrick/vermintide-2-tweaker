@@ -481,6 +481,10 @@ local function create_dialogue_row(text, state_text, base_offset, depth)
     local passes = {
         { pass_type = "hotspot", content_id = "state_hotspot", style_id = "state_hotspot" },
         { pass_type = "hotspot", content_id = "media_hotspot", style_id = "media_hotspot" },
+        -- (#880) Full-row HOVER hotspot: the transcript-popup capture (and hover polish)
+        -- reads row_hs.is_hover only - its on_release is NEVER read, so it cannot steal
+        -- the state/media control clicks (same hover-only contract as _append_highlight).
+        { pass_type = "hotspot", content_id = "row_hs", style_id = "row_hs" },
         { pass_type = "text", style_id = "label", text_id = "label" },
         { pass_type = "rect", style_id = "progress_track", content_check_function = showing_progress },
         { pass_type = "rect", style_id = "progress_fill", content_check_function = showing_progress },
@@ -494,7 +498,7 @@ local function create_dialogue_row(text, state_text, base_offset, depth)
         { pass_type = "rect", style_id = "pause_bar_right", content_check_function = showing_pause },
     }
     local content = {
-        state_hotspot = {}, media_hotspot = {},
+        state_hotspot = {}, media_hotspot = {}, row_hs = {},
         label = tostring(text), state_text = tostring(state_text or "DEFAULT"),
         media_is_playing = false, progress_visible = false,
     }
@@ -508,6 +512,7 @@ local function create_dialogue_row(text, state_text, base_offset, depth)
     end
     local style = {
         label = _text_style(label_x, y, label_w, 17, Colors.get_color_table_with_alpha("font_default", 255)),
+        row_hs = { offset = { 0, y, 0 }, size = { ROW_W, ROW_H } },
         state_hotspot = box(state_x, state_w, 8), media_hotspot = box(media_x, media_w, 8),
         progress_track = { offset = { progress_x, y + 3, 4 }, size = { progress_w, 3 }, color = { 150, 45, 45, 45 } },
         progress_fill = { offset = { progress_x, y + 3, 5 }, size = { 0, 3 }, color = { 255, 168, 118, 44 } },
@@ -1568,7 +1573,10 @@ end
 -- (#207) Anchors the box ABOVE the row by default (its bottom edge flush to the row's top),
 -- matching the native options tooltip; FLIPS it BELOW only when drawing above would run off the
 -- TOP of the visible screen. Box height fits the wrapped title + description. Mutates in place.
-local function layout_tooltip(widget, renderer, title, desc, row_list_y, world_row_y, alpha)
+-- (#880) `prefer_below` (optional, from row._tip_prefer_below): dialogue transcript
+-- popups anchor directly UNDER their row, flipping ABOVE only when drawing below
+-- would run off the BOTTOM of the screen. Absent/nil keeps the native above-with-flip.
+local function layout_tooltip(widget, renderer, title, desc, row_list_y, world_row_y, alpha, prefer_below)
     local style, content = widget.style, widget.content
     content.title = tostring(title or "")
     content.desc  = tostring(desc or "")
@@ -1594,7 +1602,14 @@ local function layout_tooltip(widget, renderer, title, desc, row_list_y, world_r
         if r and r.res_h and r.inv_scale then screen_h = r.res_h * r.inv_scale end
     end)
     local above_top_world = world_row_y + ROW_H + box_h
-    local draw_below = above_top_world > (screen_h - TT_SCREEN_MARGIN)
+    -- Explicit branch, not and/or (bug class 26): both anchor modes flip at their
+    -- own screen edge only.
+    local draw_below
+    if prefer_below then
+        draw_below = (world_row_y - box_h) >= TT_SCREEN_MARGIN
+    else
+        draw_below = above_top_world > (screen_h - TT_SCREEN_MARGIN)
+    end
     local box_top    = draw_below and row_list_y or (row_list_y + ROW_H + box_h)
     local box_bottom = box_top - box_h
     local x0 = LABEL_BASE_X

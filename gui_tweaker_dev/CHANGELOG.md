@@ -1,5 +1,16 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.306-dev (2026-07-19) -- Dialogue browser mouseover transcript popups (#880) [untested]
+
+- Hovering a dialogue line row shows a transcript popup anchored directly under the row (flipping above only at the screen bottom): title = the row's Wwise event id, body = the line's localized subtitle plus one speaker-label - dialogue-group metadata line. Popup suppressed whenever the subtitle key does not resolve (raw key echoed back or a `<...>` marker), so no raw-key popups.
+- New pure binder module `_mod_tweaker_dialogue_transcript.lua`; binding runs only at virtual-window build time (bounded rows, no per-frame or per-hover allocation) and rides the existing #207 single-tooltip-widget hover pipeline (same fade, hide-on-leave, and hover sound path).
+- `create_dialogue_row` gains a hover-only full-row `row_hs` hotspot (its clicks are never read, so state/media controls keep all input); `layout_tooltip` gains an optional prefer-below anchor threaded through both twin `_update_tooltip` surfaces.
+- 4 new engine-free tests in `test_character_dialogue`: hover-target resolution across scroll offsets, transcript + speaker content binding with suppression, window-bounded binding with no localizer traffic across 100 hover cycles, and hide-on-leave / unbound-row / collapse coverage.
+
+## 0.2.305-dev (2026-07-19) -- log dialogue media clicks with outcome (#881) [diag]
+
+- `[gut:605] media_click` printf receipt on every dialogue-row media click captures the event id and the toggle_pause result, so a click that never reaches Character Dialogue's preview transport is distinguishable from a play that failed inside it.
+
 ## 0.2.303-dev (2026-07-19) -- reconcile newly added settings into existing profiles (#828) [verify-fix-coop]
 
 - Upgrades sparse saved profiles from the current declared defaults while preserving every explicit saved value, including `false` and explicit opt-ins.
