@@ -1250,11 +1250,15 @@ _rt_register("accessories_label_on_overview", function()
     -- the live widget text (overview is constructed mid-state-transition), but
     -- we can defend the source: if a future edit re-introduces the literal
     -- "JEWELLERY" anywhere in this file or standard_forge.lua, the user-facing
-    -- regression would silently ship. Static-source check via mod.dofile of
-    -- the localization file (the only place the loc key lives) is a layer; we
-    -- also pin the loc override here for the standard forge recipe title.
-    local ok = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/modded_rarities")
-    if not ok then return end  -- module load failed elsewhere; skip
+    -- regression would silently ship. Do NOT `mod:dofile` modded_rarities.lua
+    -- from this check: that file owns live hooks, and re-executing it caused
+    -- issue #823's duplicate Localize/_state_setup_upgrade/on_enter/get_weapon_pool
+    -- registrations. Read only the API table published during the single
+    -- production load.
+    local overrides = mod._cim_rarity_loc_overrides
+    if type(overrides) ~= "table" then
+        return "modded_rarities localization override API missing — do not reload hook-owning module from regression checks"
+    end
     -- modded_rarities sets cat.display_name = "Accessories" on jewellery
     -- category at HeroWindowLoadoutInventory.on_enter. The Localize override
     -- table maps crafting_recipe_craft_jewellery -> "Craft Accessories".
@@ -1266,6 +1270,9 @@ _rt_register("accessories_label_on_overview", function()
     if type(localized) ~= "string" then return "Localize did not return a string" end
     if localized:find("[Jj]ewel") then
         return string.format("crafting_recipe_craft_jewellery still localizes to %q — Accessories override broken", localized)
+    end
+    if overrides.crafting_recipe_craft_jewellery ~= "Craft Accessories" then
+        return "crafting_recipe_craft_jewellery override table no longer maps to Craft Accessories"
     end
 end)
 
