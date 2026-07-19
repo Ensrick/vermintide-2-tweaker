@@ -34,6 +34,7 @@ end
 
 local M = {}
 local SHIELD_PARITY = mod:dofile("scripts/mods/cosmetics_tweaker/_la_shield_parity")
+local RESIDENCY = mod:dofile("scripts/mods/cosmetics_tweaker/_lib_resource_residency")
 M.kruber_shield_item_types = SHIELD_PARITY.KRUBER_SHIELD_ITEM_TYPES
 M.kruber_shield_families = SHIELD_PARITY.KRUBER_SHIELD_FAMILIES
 
@@ -880,6 +881,28 @@ end
 local SHIELD_DIFF_SLOT = "texture_map_c0ba2942"
 local SHIELD_PACK_SLOT = "texture_map_0205ba86"
 local SHIELD_NORM_SLOT = "texture_map_59cd86b9"
+local _residency_diag_seen = {}
+
+local function _residency_diag_once(reason, resource_type, path, slot, context)
+    local key = table.concat({
+        tostring(reason), tostring(resource_type), tostring(path),
+        tostring(slot), tostring(context)
+    }, "|")
+    if _residency_diag_seen[key] then return end
+    _residency_diag_seen[key] = true
+    _plog("#749 residency SKIP ctx=%s type=%s slot=%s path=%s reason=%s",
+        tostring(context or "?"), tostring(resource_type), tostring(slot),
+        tostring(path), tostring(reason))
+end
+
+local function _paint_unit_is_live(unit, context)
+    return RESIDENCY.live_unit(unit, Unit, _residency_diag_once, context)
+end
+
+local function _texture_bind_resident(slot, texture, context)
+    return RESIDENCY.texture_bind_resident(slot, texture, Application,
+        _residency_diag_once, context)
+end
 
 -- Texture-fallback map for `kind="unit"` LA shields whose textures live in
 -- the source `.unit` file's `colors / normals / MABs` fields (which LA's
@@ -1308,8 +1331,7 @@ local function _kind_unit_paint_is_safe(unit, armoury_key, context)
 end
 
 local function _paint_offhand_textures_locally(unit, variant, armoury_key, context)
-    if not unit or type(unit) ~= "userdata" then return false end
-    if not Unit.alive(unit) then return false end
+    if not _paint_unit_is_live(unit, context) then return false end
 
     -- History (v0.8.43/44): the 0x8 AV in `Unit.set_texture_for_materials` on
     -- kind="unit" meshes is the customization PREVIEWER's null material
@@ -1415,20 +1437,19 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key, conte
         end
     end
 
-    local can_get = Application and Application.can_get
-    if diff and (not can_get or can_get("texture", diff)) then
+    if diff and _texture_bind_resident(SHIELD_DIFF_SLOT, diff, context) then
         Unit.set_texture_for_materials(unit, SHIELD_DIFF_SLOT, diff)
     end
-    if pack and (not can_get or can_get("texture", pack)) then
+    if pack and _texture_bind_resident(SHIELD_PACK_SLOT, pack, context) then
         Unit.set_texture_for_materials(unit, SHIELD_PACK_SLOT, pack)
     end
-    if norm and (not can_get or can_get("texture", norm)) then
+    if norm and _texture_bind_resident(SHIELD_NORM_SLOT, norm, context) then
         Unit.set_texture_for_materials(unit, SHIELD_NORM_SLOT, norm)
     end
 
     if variant.special_textures then
         for _, tx in ipairs(variant.special_textures) do
-            if tx.slot and tx.texture and (not can_get or can_get("texture", tx.texture)) then
+            if tx and _texture_bind_resident(tx.slot, tx.texture, context) then
                 Unit.set_texture_for_materials(unit, tx.slot, tx.texture)
             end
         end

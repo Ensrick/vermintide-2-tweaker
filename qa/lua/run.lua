@@ -169,6 +169,7 @@ local suites = {
     "test_cos_husk_identity",
     "test_cos_custom_hats",
     "test_cos_grail_knight_set",
+    "test_cos_resource_residency",
     "test_gut_inventory_preview_lighting",
     "test_gut_native_loadout_policy",
     "test_gut_loadout_slot_policy",
