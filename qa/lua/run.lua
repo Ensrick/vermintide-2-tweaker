@@ -93,6 +93,8 @@ local suites = {
     "test_mp_loot_diag",
     "test_mp_fresh_profile_census",
     "test_wt_passive_charge",
+    "test_wt_energy_seed",
+    "test_wt_664_solo_parity",
     "test_wt_hold_pose",
     "test_wt_overcharge_presentation",
     "test_wt_bolt_staff_overcharge",

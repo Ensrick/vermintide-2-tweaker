@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.284-dev (2026-07-19) - #664 dead parity tick + #374/#388 EnergyData seeding [untested]
+
+- Mirrors WT beta 0.12.283-beta: the backend's `mod.update` assignment now
+  preserves the previously-installed peer-parity beacon wrapper instead of
+  stomping it (#664 root cause - the beacon tick never ran, so applied state
+  froze at fail-safe "disabled" and every parity-gated damage-profile toggle
+  read parity=false forever, even solo), and the new `_wt_energy_seed.lua`
+  policy seeds `EnergyData[career]` (1.5/0.2/25/5, energy_data.lua:4-27) for
+  every career granted an energy weapon before energy extensions initialize -
+  owner, husk, and bot spawn paths - restoring native Moonfire recharge (#374)
+  and the on_energy_drainable flow-event FX/sounds (#388 partial; the
+  hardcoded energy_bar_ui color override remains open).
+
 ## 0.12.283-dev (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
 
 - Mirrors the beta track's expanded declarative remap vocabulary, single wield
