@@ -1,5 +1,12 @@
 # Tweaker: Events — Changelog
 
+## 0.4.38-dev (2026-07-19) - issue #802 top-level event mission placement [verify-fix]
+
+- Places enabled dormant event missions at the top event-selection level in both desktop and controller menu flows instead of requiring a nested event-act choice.
+- Scopes the projection to the exact `celebrate` area while preserving every unrelated area, act identity, and non-event mission.
+- Resolves both native parent-controller shapes through a protected fail-closed adapter; partial, malformed, or throwing foreign proxies retain vanilla layout.
+- Adds regression coverage for both parent shapes, unknown/throwing inputs, exact hook ownership, temporary area restoration, and unrelated-map preservation.
+
 ## 0.4.37-dev (2026-07-18) - issue #413 Adventure Shadow gameplay adapter [candidate]
 
 - Replaced the containment-only Shadow exclusion with a bounded Adventure implementation. Shadow now retains Fatshark's six-metre reveal boundary, enemy fade, ping suppression through the existing buff identity, and 90% damage reduction outside the reveal radius without spawning the non-resident `wpn_shadow_gargoyle_head` light or `vfx_static_shadow_01` unit.
