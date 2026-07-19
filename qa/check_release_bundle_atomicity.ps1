@@ -276,10 +276,19 @@ try {
 
     $trustedPromotions = @{}
     if ($env:VT2_PROMOTION -eq '1') {
-        foreach ($mod in $mods | Where-Object { $_.Stream -eq 'stable' }) { $trustedPromotions[[string]$mod.Dir] = $true }
-    } elseif ($context.LogRange) {
-        foreach ($line in @(Invoke-GitLines @('log', '--format=%(trailers:key=VT2-Promotion,valueonly)', $context.LogRange))) {
-            $value = "$line".Trim().TrimEnd('/'); if ($value) { $trustedPromotions[$value] = $true }
+        if ($env:GITHUB_ACTIONS) {
+            # Issue #676: CI promotion authority is emitted only after the live
+            # PR label, maintainer timeline actor, exact version, and head SHA
+            # pass check_promotion_authorization.ps1. Never trust a branch-owned
+            # commit trailer as authority.
+            $authorized = @("$($env:VT2_PROMOTION_DIRS)" -split ';' | ForEach-Object { $_.Trim().TrimEnd('/', '\') } | Where-Object { $_ })
+            foreach ($dir in $authorized) {
+                if (@($mods | Where-Object { $_.Stream -eq 'stable' -and $_.Dir -eq $dir }).Count -gt 0) {
+                    $trustedPromotions[$dir] = $true
+                }
+            }
+        } else {
+            foreach ($mod in $mods | Where-Object { $_.Stream -eq 'stable' }) { $trustedPromotions[[string]$mod.Dir] = $true }
         }
     }
 

@@ -5,7 +5,7 @@
 param(
     [string]$Repository = "Ensrick/vermintide-2-tweaker",
     [string]$Branch = "master",
-    [string]$RequiredContext = "qa-gate",
+    [string[]]$RequiredContexts = @("qa-gate", "stable-promotion-authorization"),
     [switch]$Apply,
     [switch]$SelfTest
 )
@@ -19,11 +19,11 @@ function Fail {
 }
 
 function New-ProtectionPayload {
-    param([string]$Context)
+    param([string[]]$Contexts)
     return [ordered]@{
         required_status_checks = [ordered]@{
             strict = $true
-            contexts = @($Context)
+            contexts = @($Contexts)
         }
         enforce_admins = $true
         required_pull_request_reviews = $null
@@ -57,9 +57,13 @@ function Invoke-GhCapture {
 }
 
 function Invoke-SelfTest {
-    $payload = New-ProtectionPayload "qa-gate"
+    $payload = New-ProtectionPayload -Contexts @("qa-gate", "stable-promotion-authorization")
     if (-not $payload.required_status_checks.strict) { throw "status checks must require an up-to-date branch" }
-    if ($payload.required_status_checks.contexts.Count -ne 1 -or $payload.required_status_checks.contexts[0] -ne "qa-gate") { throw "required QA context drift" }
+    if ($payload.required_status_checks.contexts.Count -ne 2 -or
+            $payload.required_status_checks.contexts[0] -ne "qa-gate" -or
+            $payload.required_status_checks.contexts[1] -ne "stable-promotion-authorization") {
+        throw "required QA/authorization contexts drift"
+    }
     if (-not $payload.enforce_admins) { throw "administrators must not bypass protection" }
     if ($payload.allow_force_pushes -or $payload.allow_deletions) { throw "force push/deletion must stay disabled" }
     if (-not $payload.required_conversation_resolution) { throw "PR conversations must resolve" }
@@ -90,7 +94,7 @@ if (-not $latest -or -not (Test-GreenConclusion $latest.conclusion)) {
     Fail "Refusing branch protection while latest QA is '$state'. Restore green CI first."
 }
 
-$payload = New-ProtectionPayload $RequiredContext
+$payload = New-ProtectionPayload -Contexts $RequiredContexts
 $json = $payload | ConvertTo-Json -Depth 6
 if (-not $Apply) {
     Write-Host "DRY RUN - latest QA is green; protection payload for $Repository/${Branch}:"
@@ -110,5 +114,5 @@ try {
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
 }
 
-Write-Host "Applied protected-branch policy to $Repository/$Branch (required context: $RequiredContext)."
+Write-Host "Applied protected-branch policy to $Repository/$Branch (required contexts: $($RequiredContexts -join ', '))."
 exit 0
