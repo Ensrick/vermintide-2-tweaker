@@ -106,7 +106,13 @@ function Test-PromotionAuthorization {
         return [pscustomobject]@{ Allowed = $false; Reason = 'approval label has no current grant event' }
     }
     $grant = $labelEvents[-1]
-    $grantPermission = "$($Context.Permissions[$grant.Actor])".ToLowerInvariant()
+    # A repository owner is always an administrator of a personal repository.
+    # GitHub's Actions token can return 403 for the collaborator-permission
+    # endpoint even when the actor is the owner, so prove that case from the
+    # immutable repository owner identity carried by the pull-request event.
+    $grantIsOwner = -not [string]::IsNullOrWhiteSpace("$($Context.OwnerLogin)") -and
+        "$($grant.Actor)".Equals("$($Context.OwnerLogin)", [StringComparison]::OrdinalIgnoreCase)
+    $grantPermission = if ($grantIsOwner) { 'admin' } else { "$($Context.Permissions[$grant.Actor])".ToLowerInvariant() }
     if ($grantPermission -notin @('admin', 'maintain')) {
         return [pscustomobject]@{ Allowed = $false; Reason = "label actor '$($grant.Actor)' lacks maintainer permission" }
     }
@@ -118,7 +124,9 @@ function Test-PromotionAuthorization {
 
     foreach ($comment in @($Context.Comments | Sort-Object CreatedAt -Descending)) {
         if ($comment.Author -ne $grant.Actor) { continue }
-        $permission = "$($Context.Permissions[$comment.Author])".ToLowerInvariant()
+        $commentIsOwner = -not [string]::IsNullOrWhiteSpace("$($Context.OwnerLogin)") -and
+            "$($comment.Author)".Equals("$($Context.OwnerLogin)", [StringComparison]::OrdinalIgnoreCase)
+        $permission = if ($commentIsOwner) { 'admin' } else { "$($Context.Permissions[$comment.Author])".ToLowerInvariant() }
         if ($permission -notin @('admin', 'maintain')) { continue }
 
         $entries = @(Get-ApprovalEntries -Body $comment.Body)
@@ -192,6 +200,7 @@ function Invoke-SelfTest {
     $approval = "VT2-Promotion-Approval: crafting_in_modded@0.8.91 head=$sha"
     $base = [pscustomobject]@{
         IsFork = $false
+        OwnerLogin = 'repo-owner'
         HeadSha = $sha
         Requests = @([pscustomobject]@{ Dir = 'crafting_in_modded'; Version = '0.8.91' })
         Labels = @($APPROVAL_LABEL)
@@ -202,6 +211,12 @@ function Invoke-SelfTest {
 
     $tests = @()
     $tests += @{ Name = 'exact maintainer grant'; Context = $base; Expected = $true }
+
+    $owner = $base.PSObject.Copy()
+    $owner.LabelEvents = @([pscustomobject]@{ Event = 'labeled'; Label = $APPROVAL_LABEL; Actor = 'repo-owner'; CreatedAt = $grantAt })
+    $owner.Comments = @([pscustomobject]@{ Id = 10; Author = 'repo-owner'; Body = $approval; CreatedAt = '2026-07-19T05:59:00Z'; UpdatedAt = '2026-07-19T05:59:00Z' })
+    $owner.Permissions = @{ 'repo-owner' = 'none' }
+    $tests += @{ Name = 'repository owner survives unavailable collaborator permission'; Context = $owner; Expected = $true }
 
     $missing = $base.PSObject.Copy(); $missing.Labels = @()
     $tests += @{ Name = 'missing label'; Context = $missing; Expected = $false }
@@ -337,6 +352,7 @@ foreach ($actor in $actors) {
 
 $context = [pscustomobject]@{
     IsFork = $isFork
+    OwnerLogin = "$($event.repository.owner.login)"
     HeadSha = $headSha
     Requests = $requests
     Labels = $labels
