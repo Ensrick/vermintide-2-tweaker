@@ -1,5 +1,9 @@
 # Verminious Dreams Lighting — Changelog
 
+## v1.0.18-dev - 2026-07-18 - complete stranded ship pipeline
+
+- No source change. The pipeline-state ladder (PROJECT_STANDARDS 11b) flagged this stream stranded: v1.0.14-dev through v1.0.17-dev landed in git (last upload was 2026-07-13, before the shared-lib debug helper and the localization rework) but were never built or uploaded. This build ships all of it. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
+
 ## v1.0.17-dev - 2026-07-17 - #428 canonical copied debug helper [tooling]
 
 - Replaced the entry file's behavior-identical `_dbg` / `_dbg_alert` definitions
@@ -36,7 +40,7 @@ The mod description and per-mission tooltips leaned on internal terms (raw level
 - Key cross-check clean: all four setting_ids and all four tooltip keys already exist in the loc file; nothing added or renamed.
 
 ### Build
-Not built, not deployed, not uploaded.
+Built, deployed, and uploaded with v1.0.18-dev (2026-07-18).
 
 ## v1.0.13-dev — 2026-06-28 — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
 

@@ -1,5 +1,9 @@
 # Modded Progression — Changelog
 
+## 0.2.30-dev (2026-07-18) - complete stranded ship pipeline
+
+- No source change. The pipeline-state ladder (PROJECT_STANDARDS 11b) flagged this mod UPLOAD-BEHIND: the 0.2.29-dev bundle was rebuilt after its last Workshop upload, so subscribers were behind the repo. This build re-runs the full pipeline to reconcile. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
+
 ## 0.2.29-dev (2026-07-17) - #695 pre-login peddler warning flood fix [verify-fix]
 
 - Stopped `_mp577_sync_overlay` from calling `BackendManagerPlayFab:get_interface("peddler")` every frame before that interface exists. The sync now proves `Managers.backend._interfaces.peddler` is present before using the public getter.

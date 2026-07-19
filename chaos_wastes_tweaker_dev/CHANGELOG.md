@@ -1,6 +1,14 @@
 # Chaos Wastes Tweaker Changelog
 
-## 0.7.296-dev (2026-07-19) - #52 Tower skull object-set diagnostics hardened
+## 0.7.297-dev (2026-07-18) - reconciliation build: parallel 0.7.296-dev streams
+
+- Second same-day version collision: two sessions independently minted 0.7.296-dev - one as the reconciliation upload below (on the Workshop since 20:58), one carrying the issue 52 Tower skull diagnostics (landed in git 21:06, never uploaded). This build ships the union so the Workshop item finally carries issue 406 + issue 52 + the stranded-pipeline completion. Root cause of the repeated collisions: ships from pre-claim-broker worktrees bypass the tools/ship claim gate. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
+
+## 0.7.296-dev (2026-07-18) - reconciliation build: parallel 0.7.295-dev streams [superseded by 0.7.297-dev]
+
+- Two sessions independently shipped 0.7.295-dev: one carried the issue 406 Khaine's Communion heal fix (uploaded 19:17), the other a no-change stranded-pipeline completion (uploaded 20:00, which unknowingly clobbered the 406 build on the Workshop item). This build re-ships the union - the 406 source below is included - so subscribers get the fix back. No new source beyond the merge. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
+
+## 0.7.296-dev (2026-07-19) - #52 Tower skull object-set diagnostics hardened [never uploaded; shipped via 0.7.297-dev]
 
 - Replaced the stale inline Tower skull census with `_ct_diag_skull52.lua`, an observation-only module scoped to `dlc_wizards_tower`.
 - Corrected the diagnostic premise: Tower of Treachery skulls are source-backed level-flow interactables (`flow_callback_on_tower_skull_found` -> `on_tower_skull_found`), not the Drachenfels/portals `gargoyle_head` pickup path.
@@ -15,7 +23,7 @@
 - Added bounded `[ct:406] kill_heal ...` receipts for the first twelve proc attempts so verification can distinguish "boon absent", "client skipped safely", and "server healed" without chat spam.
 - Updated CT dev localization so the Starting Boons and Disable Boons surfaces no longer disagree about whether the boon heals 0.25 or 1 health.
 
-**Verify:** host and client run CT dev 0.7.295-dev, enable Starting Boons > Modded Boons > Khaine's Communion, start a Chaos Wastes run, and have both host and client kill several enemies. The host log should show capped `[ct:406] kill_heal result=healed ... amount=1` receipts and no `Only server can heal` crash; the client should not crash when getting kills.
+**Verify:** host and client run CT dev 0.7.296-dev (or later), enable Starting Boons > Modded Boons > Khaine's Communion, start a Chaos Wastes run, and have both host and client kill several enemies. The host log should show capped `[ct:406] kill_heal result=healed ... amount=1` receipts and no `Only server can heal` crash; the client should not crash when getting kills.
 
 ## 0.7.294-dev (2026-07-18) - OOP W5: regression-suite extraction [untested]
 
