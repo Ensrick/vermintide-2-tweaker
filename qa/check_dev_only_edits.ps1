@@ -12,11 +12,11 @@
 #   chaos_wastes_tweaker/  crafting_in_modded/  general_tweaker/
 #   gui_tweaker/  verminious_dreams_lighting/
 #
-# BYPASS: set env VT2_PROMOTION=1 for a legitimate promotion pass (the one time
-# stable dirs are supposed to change). The check then exits 0 with a note.
-# CI has no env-var path (issue 689): a promotion PR instead sanctions each
-# promoted stable dir with a commit trailer "VT2-Promotion: <stable-dir>"
-# anywhere in the PR's commit range; unsanctioned stable dirs still block.
+# LOCAL BYPASS: set env VT2_PROMOTION=1 for a legitimate maintainer promotion.
+# CI authorization is narrower: check_promotion_authorization.ps1 validates the
+# live PR label/timeline/comment and exports VT2_PROMOTION=1 together with the
+# exact semicolon-delimited VT2_PROMOTION_DIRS. Commit trailers are branch-owned
+# input and therefore are not an authorization boundary (issue #676).
 #
 # Change set sources (union):
 #   * staged   — `git diff --cached` (what a commit will contain; pre-commit)
@@ -57,6 +57,16 @@ function Get-StableDirHits {
         }
     }
     return @($hits | Sort-Object -Unique)
+}
+
+function Get-AuthorizedPromotionDirs {
+    param([string]$Raw)
+    $dirs = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($value in @("$Raw" -split ';')) {
+        $dir = "$value".Trim().TrimEnd('/', '\')
+        if ($STABLE_DIRS -contains $dir) { [void]$dirs.Add($dir) }
+    }
+    return $dirs
 }
 
 function Invoke-GitLines {
@@ -111,12 +121,16 @@ function Invoke-SelfTest {
     $noDevTwin   = -not ($hits | Where-Object { $_ -like '*_dev/*' })
     $noSingle    = -not ($hits | Where-Object { $_ -like 'weapon_tweaker/*' })
 
+    $authorized = Get-AuthorizedPromotionDirs -Raw 'crafting_in_modded;gui_tweaker;not_a_mod'
+    $exactAuth = $authorized.Count -eq 2 -and $authorized.Contains('crafting_in_modded') -and $authorized.Contains('gui_tweaker')
+
     Write-Host ("  stable-dir edits flagged:        {0}" -f ($hitStable ? 'PASS' : 'FAIL')) -ForegroundColor ($hitStable ? 'Green' : 'Red')
     Write-Host ("  exactly the 2 stable hits:       {0}" -f ($countRight ? 'PASS' : 'FAIL')) -ForegroundColor ($countRight ? 'Green' : 'Red')
     Write-Host ("  `_dev` twins NOT flagged:         {0}" -f ($noDevTwin ? 'PASS' : 'FAIL')) -ForegroundColor ($noDevTwin ? 'Green' : 'Red')
     Write-Host ("  single-stream mod NOT flagged:   {0}" -f ($noSingle ? 'PASS' : 'FAIL')) -ForegroundColor ($noSingle ? 'Green' : 'Red')
+    Write-Host ("  trusted promotion dirs exact:   {0}" -f ($exactAuth ? 'PASS' : 'FAIL')) -ForegroundColor ($exactAuth ? 'Green' : 'Red')
 
-    if ($hitStable -and $countRight -and $noDevTwin -and $noSingle) {
+    if ($hitStable -and $countRight -and $noDevTwin -and $noSingle -and $exactAuth) {
         Write-Host "[check_dev_only_edits] SELF-TEST PASSED" -ForegroundColor Green
         return 0
     }
@@ -127,7 +141,7 @@ function Invoke-SelfTest {
 # ---- main ----
 if ($SelfTest) { exit (Invoke-SelfTest) }
 
-if ($env:VT2_PROMOTION -eq '1') {
+if ($env:VT2_PROMOTION -eq '1' -and -not $env:GITHUB_ACTIONS) {
     Write-Host "[check_dev_only_edits] VT2_PROMOTION=1 — stable-dir edits allowed (promotion pass). Skipping." -ForegroundColor DarkYellow
     exit 0
 }
@@ -144,29 +158,22 @@ if ($hits.Count -eq 0) {
     exit 0
 }
 
-# CI promotion sanction (issue 689): pre-commit uses env VT2_PROMOTION=1, but a
-# PR's qa-gate run cannot. A promotion PR instead carries a commit trailer
-# "VT2-Promotion: <stable-dir>" in its range; each named dir is allowed while
-# any OTHER stable dir still blocks.
-$ciBase = $env:GITHUB_BASE_REF
-if (-not $Staged -and $ciBase) {
-    $sanctioned = New-Object System.Collections.Generic.HashSet[string]
-    foreach ($line in (Invoke-GitLines @('log', '--format=%(trailers:key=VT2-Promotion,valueonly)', "origin/$ciBase..HEAD"))) {
-        $v = "$line".Trim().TrimEnd('/')
-        if ($v) { [void]$sanctioned.Add($v) }
+# Trusted CI promotion sanction (issue #676). The authorization check binds
+# these dirs to the exact live PR head and current stable versions first.
+if ($env:GITHUB_ACTIONS -and $env:VT2_PROMOTION -eq '1') {
+    $sanctioned = Get-AuthorizedPromotionDirs -Raw $env:VT2_PROMOTION_DIRS
+    $unsanctioned = @($hits | Where-Object { -not $sanctioned.Contains(($_ -split '/')[0]) })
+    if ($sanctioned.Count -gt 0 -and $unsanctioned.Count -eq 0) {
+        Write-Host "[check_dev_only_edits] stable-dir edits covered by trusted authorization: $($sanctioned -join ', ') — promotion PR. Skipping." -ForegroundColor DarkYellow
+        exit 0
     }
     if ($sanctioned.Count -gt 0) {
-        $unsanctioned = @($hits | Where-Object { -not $sanctioned.Contains(($_ -split '/')[0]) })
-        if ($unsanctioned.Count -eq 0) {
-            Write-Host "[check_dev_only_edits] stable-dir edits covered by VT2-Promotion trailer(s): $($sanctioned -join ', ') — promotion PR. Skipping." -ForegroundColor DarkYellow
-            exit 0
-        }
-        Write-Host "[check_dev_only_edits] VT2-Promotion trailer(s) cover $($sanctioned -join ', ') but OTHER stable dirs are also edited:" -ForegroundColor Red
+        Write-Host "[check_dev_only_edits] trusted authorization covers $($sanctioned -join ', ') but OTHER stable dirs are also edited:" -ForegroundColor Red
         $hits = $unsanctioned
     }
 }
 
 Write-Host "[check_dev_only_edits] ERRORS — changes touch split-mod STABLE directories (edit the `*_dev/` twin instead; stable is write-by-promotion-only):" -ForegroundColor Red
 foreach ($h in $hits) { Write-Host "  X $h" -ForegroundColor Red }
-Write-Host "  Fix: move the change to the matching `*_dev/` directory. For a real promotion, set env VT2_PROMOTION=1 (CLAUDE.md NON-NEG #3 / PROMOTION_PROCESS.md)." -ForegroundColor Yellow
+Write-Host "  Fix: move the change to the matching `*_dev/` directory. Local promotion: VT2_PROMOTION=1. CI promotion: maintainer approval per docs/PROMOTION_PROCESS.md." -ForegroundColor Yellow
 exit 2

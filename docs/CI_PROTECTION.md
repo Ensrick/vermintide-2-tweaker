@@ -15,6 +15,13 @@ and keeps a job timeout. The normal gate uses PowerShell 7; release surfaces tha
 promise Windows PowerShell 5.1 compatibility (`check_promotion.ps1` and `ship.ps1`) also run
 their offline self-tests under the inbox `powershell` host.
 
+`Stable Promotion Authorization / stable-promotion-authorization` is the second
+required PR status. It is a `pull_request_target` workflow loaded from protected
+`master`, checks out only that base revision, and uses read-only metadata access.
+It never executes incoming PR code. Ordinary PRs pass it without a grant; stable
+promotion PRs must satisfy the version- and SHA-bound maintainer process in
+`docs/PROMOTION_PROCESS.md`.
+
 `qa/check_ci_hardening.ps1` enforces this contract locally and in CI. Its `-SelfTest`
 plants a mutable action reference, a fragile push path filter, and weakened protection to
 prove those failures are detected.
@@ -31,9 +38,10 @@ file-size ratchet backlog), then preview and apply:
 ```
 
 The tool refuses to apply unless the latest completed master QA run is `success`. The policy
-requires the `qa-gate` context on an up-to-date branch, applies to administrators, requires
-PR conversations to be resolved, and disables force-push and branch deletion. It does not
-require an approving review, so a solo maintainer can merge after the automated gate passes.
+requires both `qa-gate` and `stable-promotion-authorization` on an up-to-date branch,
+applies to administrators, requires PR conversations to be resolved, and disables
+force-push and branch deletion. It does not require an approving review, so a solo
+maintainer can merge after the automated gates pass.
 
 After applying, confirm the rule through GitHub's branch settings or:
 

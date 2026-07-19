@@ -93,6 +93,49 @@ content). Reference: memory `reference_cim_dev_to_stable_promotion`.
 
 ---
 
+## Protected-PR authorization
+
+Stable-source PRs require a maintainer grant that an incoming branch cannot
+create for itself (issue #676). A `VT2-Promotion:` commit trailer is only PR
+content and is no longer trusted by CI.
+
+1. Open the same-repository PR with the complete stable promotion and its exact
+   root bundle. Fork PRs cannot promote stable source.
+2. Copy the exact approval line printed by the failing
+   `check_promotion_authorization.ps1` step into a PR comment. It has this form:
+
+   ```text
+   VT2-Promotion-Approval: crafting_in_modded@0.8.91 head=<40-character-head-sha>
+   ```
+
+   Use one line per stable directory when a deliberately coordinated PR changes
+   more than one. The current `MOD_VERSION` and exact PR head SHA are mandatory.
+3. The same maintainer applies the `stable-promotion-approved` label, then
+   reruns the checks. The base-owned `pull_request_target` authorization
+   workflow reads the live PR, comment, label timeline, and collaborator
+   permission without checking out or executing PR code; only `admin` or
+   `maintain` permission can grant. Branch protection requires both this status
+   and `qa-gate`.
+4. Any new commit invalidates the SHA-bound approval. Post the newly printed
+   line and reapply the label. Editing the approval comment after the label was
+   granted also invalidates it.
+5. Remove `stable-promotion-approved` to revoke authorization. The GitHub label
+   event and comment ID remain in the workflow log as the audit trail.
+
+After authorization, CI runs `qa/check_promotion.ps1` for each exact approved
+directory and exports promotion mode only to the remaining read-only QA steps.
+It never builds, deploys, uploads, or publishes merely because QA passed.
+
+Approval is therefore separate from every later boundary: build the exact root
+bundle before opening the PR; merge only after the protected `qa-gate` passes;
+and deploy/upload only after the fresh, version-named ship signal required below.
+Before merge, rollback is label removal plus closing or superseding the PR. After
+merge, revert through another protected PR (never a direct stable-tree edit). If
+the version was already uploaded, ship a new forward-fix version rather than
+rewriting the published version or relying on an older bundle.
+
+---
+
 ## Invariants (do not violate)
 
 - **Edits happen in `*_dev/` only** (CLAUDE.md NON-NEGOTIABLE #3). Stable is written **only**
