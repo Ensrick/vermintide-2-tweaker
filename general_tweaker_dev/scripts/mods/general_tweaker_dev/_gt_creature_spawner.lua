@@ -390,6 +390,188 @@ local function _gt_cs_get_status(suppress_messages)
     return false, conflict_director, true
 end
 
+-- Issue #254: `spawn_queued_unit` only proves that a request entered the
+-- ConflictDirector queue. Chaos Wastes can return from ConflictDirector.update
+-- before `update_spawn_queue` (director disabled, active conflict settings
+-- disabled, or a breed package not loaded on every peer), so the old immediate
+-- "Created" message did not prove that a unit was actually spawned.
+--
+-- Keep this probe bounded and action-driven: at most eight manual requests are
+-- tracked, each request emits one enqueue line, at most one blocker line, and
+-- one terminal outcome. There is no per-frame log traffic.
+local _GT_CS_254_MAX_PENDING = 8
+local _GT_CS_254_BLOCKED_AFTER = 0.5
+local _GT_CS_254_TIMEOUT = 8
+local _gt_cs_254_pending = {}
+local _gt_cs_254_pending_count = 0
+
+local function _gt_cs_254_call(target, method_name, fallback, ...)
+    local method = target and target[method_name]
+    if type(method) ~= "function" then return fallback end
+    local ok, value = pcall(method, target, ...)
+    return ok and value or fallback
+end
+
+local function _gt_cs_254_context(conflict_director, breed_name)
+    local game_mode = Managers and Managers.state and Managers.state.game_mode
+    local mode_key = _gt_cs_254_call(game_mode, "game_mode_key", "<none>")
+    local level_key = _gt_cs_254_call(game_mode, "level_key", "<none>")
+    local conflict_settings = rawget(_G, "CurrentConflictSettings")
+    local loader = conflict_director and conflict_director.enemy_package_loader
+    local processed = _gt_cs_254_call(loader, "is_breed_processed", false, breed_name)
+    local loaded_all = _gt_cs_254_call(loader,
+        "is_breed_loaded_on_all_peers", false, breed_name)
+
+    return {
+        mode_key = tostring(mode_key),
+        level_key = tostring(level_key),
+        director_disabled = conflict_director and conflict_director.disabled == true or false,
+        conflict_disabled = conflict_settings and conflict_settings.disabled == true or false,
+        processed = processed == true,
+        loaded_all = loaded_all == true,
+        queue_size = conflict_director and tonumber(conflict_director.spawn_queue_size) or -1,
+    }
+end
+
+local function _gt_cs_254_now(conflict_director)
+    return conflict_director and tonumber(conflict_director._time) or 0
+end
+
+local function _gt_cs_254_is_chaos_wastes(context)
+    return context.mode_key == "deus" or context.mode_key == "inn_deus"
+end
+
+local function _gt_cs_254_log(phase, queue_id, breed_name, context, extra)
+    if not rawget(_G, "printf") then return end
+    printf("[gt:254] phase=%s queue_id=%s breed=%s mode=%s level=%s director_disabled=%s conflict_disabled=%s queue_size=%s processed=%s loaded_all=%s%s",
+        tostring(phase), tostring(queue_id), tostring(breed_name), context.mode_key,
+        context.level_key, tostring(context.director_disabled),
+        tostring(context.conflict_disabled), tostring(context.queue_size),
+        tostring(context.processed), tostring(context.loaded_all), extra or "")
+end
+
+local function _gt_cs_254_drop_oldest()
+    local oldest_id
+    local oldest_time
+    for queue_id, pending in pairs(_gt_cs_254_pending) do
+        if oldest_time == nil or pending.started_at < oldest_time then
+            oldest_id = queue_id
+            oldest_time = pending.started_at
+        end
+    end
+    if oldest_id ~= nil then
+        local pending = _gt_cs_254_pending[oldest_id]
+        _gt_cs_254_log("outcome", oldest_id, pending.breed_name,
+            pending.enqueue_context, " result=evicted capacity=8")
+        _gt_cs_254_pending[oldest_id] = nil
+        _gt_cs_254_pending_count = _gt_cs_254_pending_count - 1
+    end
+end
+
+local function _gt_cs_254_queue_entry(conflict_director, queue_id)
+    local queue = conflict_director and conflict_director.spawn_queue
+    local first = conflict_director and tonumber(conflict_director.first_spawn_index) or 1
+    local size = conflict_director and tonumber(conflict_director.spawn_queue_size) or 0
+    if not queue then return nil end
+    for i = first, first + size - 1 do
+        local entry = queue[i]
+        if entry and entry[10] == queue_id then
+            return entry
+        end
+    end
+end
+
+local function _gt_cs_254_track_enqueue(conflict_director, queue_id, breed_name)
+    local entry = _gt_cs_254_queue_entry(conflict_director, queue_id)
+    local queued_breed = entry and entry[1]
+    local queued_breed_name = queued_breed and queued_breed.name or breed_name
+    local context = _gt_cs_254_context(conflict_director, queued_breed_name)
+    if not _gt_cs_254_is_chaos_wastes(context) then return end
+
+    if queue_id == nil then
+        _gt_cs_254_log("outcome", queue_id, queued_breed_name, context,
+            " result=missing_queue_id requested_breed=" .. tostring(breed_name))
+        return
+    end
+
+    if _gt_cs_254_pending_count >= _GT_CS_254_MAX_PENDING then
+        _gt_cs_254_drop_oldest()
+    end
+    _gt_cs_254_pending[queue_id] = {
+        breed_name = queued_breed_name,
+        requested_breed_name = breed_name,
+        started_at = _gt_cs_254_now(conflict_director),
+        blocker_logged = false,
+        conflict_director = conflict_director,
+        enqueue_context = context,
+    }
+    _gt_cs_254_pending_count = _gt_cs_254_pending_count + 1
+    local replacement = queued_breed_name ~= breed_name
+        and " requested_breed=" .. tostring(breed_name) or ""
+    _gt_cs_254_log("enqueue", queue_id, queued_breed_name, context, replacement)
+end
+
+local function _gt_cs_254_is_queued(conflict_director, queue_id)
+    return _gt_cs_254_queue_entry(conflict_director, queue_id) ~= nil
+end
+
+local function _gt_cs_254_finish(queue_id)
+    if _gt_cs_254_pending[queue_id] then
+        _gt_cs_254_pending[queue_id] = nil
+        _gt_cs_254_pending_count = _gt_cs_254_pending_count - 1
+    end
+end
+
+local function _gt_cs_254_blocker(context)
+    if context.director_disabled then return "director_disabled" end
+    if context.conflict_disabled then return "conflict_settings_disabled" end
+    if not context.processed then return "breed_not_processed" end
+    if not context.loaded_all then return "breed_not_loaded_on_all_peers" end
+    return "queue_not_drained"
+end
+
+local function _gt_cs_254_poll_pending()
+    if _gt_cs_254_pending_count == 0 then return end
+    local conflict_director = Managers and Managers.state and Managers.state.conflict
+    if not conflict_director then return end
+    local now = _gt_cs_254_now(conflict_director)
+
+    for queue_id, pending in pairs(_gt_cs_254_pending) do
+        if pending.conflict_director ~= conflict_director then
+            _gt_cs_254_log("outcome", queue_id, pending.breed_name,
+                pending.enqueue_context, " result=director_replaced")
+            _gt_cs_254_finish(queue_id)
+        else
+            local context = _gt_cs_254_context(conflict_director, pending.breed_name)
+            local age = math.max(0, now - pending.started_at)
+            local spawned_unit = _gt_cs_254_call(conflict_director,
+                "get_spawned_unit", nil, queue_id)
+            local queued = _gt_cs_254_is_queued(conflict_director, queue_id)
+
+            if spawned_unit then
+                _gt_cs_254_log("outcome", queue_id, pending.breed_name, context,
+                    string.format(" result=spawned age=%.2f", age))
+                _gt_cs_254_finish(queue_id)
+            elseif not queued then
+                _gt_cs_254_log("outcome", queue_id, pending.breed_name, context,
+                    string.format(" result=left_queue_without_spawn_lut age=%.2f", age))
+                _gt_cs_254_finish(queue_id)
+            elseif age >= _GT_CS_254_TIMEOUT then
+                _gt_cs_254_log("outcome", queue_id, pending.breed_name, context,
+                    string.format(" result=timeout blocker=%s age=%.2f",
+                        _gt_cs_254_blocker(context), age))
+                _gt_cs_254_finish(queue_id)
+            elseif age >= _GT_CS_254_BLOCKED_AFTER and not pending.blocker_logged then
+                pending.blocker_logged = true
+                _gt_cs_254_log("blocked", queue_id, pending.breed_name, context,
+                    " blocker=" .. _gt_cs_254_blocker(context))
+            end
+        end
+    end
+end
+
+mod._gt254_cs_queue_diagnostics_armed = true
+
 -- Recursive table copy (deepcopy). Same implementation upstream uses
 -- before patching `debug_spawn_optional_data` so we don't mutate the
 -- shared `Breeds[breed_name]` table.
@@ -583,8 +765,9 @@ local function _gt_cs_execute_spawn(conflict_director, breed_name, final_positio
             end
         end
 
-        conflict_director:spawn_queued_unit(breed, Vector3Box(final_position), QuaternionBox(final_rotation),
+        local queue_id = conflict_director:spawn_queued_unit(breed, Vector3Box(final_position), QuaternionBox(final_rotation),
             breed.debug_spawn_category or "debug_spawn", nil, nil, breed.debug_spawn_optional_data)
+        _gt_cs_254_track_enqueue(conflict_director, queue_id, breed_name)
         messages[#messages + 1] = "[Spawn]: Created " .. tostring(breed_name) .. "."
         ok = true
     else
@@ -958,6 +1141,7 @@ end
 if StateIngame then
     mod:hook_safe(StateIngame, "update", function(...)
         script_data.disable_breed_freeze_opt = _gt_cs_is_in_keep()
+        _gt_cs_254_poll_pending()
     end)
 end
 
@@ -1456,5 +1640,11 @@ mod._gt_rt_register("gt693_cs_client_request_wired", function()
     end
     if GT_CS_CLIENT_REQUEST_MARKER_v0_2_246 ~= "gt-cs-client-spawn-request-i693" then
         return "client-request marker absent - was the issue-693 fix reverted?"
+    end
+end)
+
+mod._gt_rt_register("issue254_deus_spawn_queue_diagnostics_armed", function()
+    if mod._gt254_cs_queue_diagnostics_armed ~= true then
+        return "Chaos Wastes creature-spawn queue diagnostics are not armed (issue 254)"
     end
 end)

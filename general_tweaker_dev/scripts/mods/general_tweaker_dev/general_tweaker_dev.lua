@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.250-dev"
+local MOD_VERSION = "0.2.251-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1414,6 +1414,10 @@ end
 -- _gt_debug_probes so its existing add_remote_player singleton can dispatch
 -- reconnect evidence into this module without registering a duplicate hook.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_disconnect_grace_diag")
+-- Issue #753: transition-only service-loss diagnostics. Observes measured
+-- Steam availability, PlayFab disconnect state, and NetworkClient failure;
+-- dev-only and read-only, with no recovery or network mutation.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_debug_probes")
 
 -- Console dump commands (level / glossary / cosmetics / items / hero-view) +
@@ -1614,5 +1618,12 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_saved_positions")
 -- and enemy aggro rings. Rides mod._gt_register_update; all toggles default OFF
 -- (zero per-frame work until enabled). Dev-only, client-safe. No new hooks.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_debug_highlights")
+
+-- Live player-stat HUD groundwork (#797). This diagnostics tranche is
+-- read-only and inert until either command is used; it inventories the exact
+-- local BuffExtension rows and player/equipment context at five bounded samples
+-- without guessing conditional finals. The evidence determines the supported
+-- HUD rows and attribution limits before a renderer is added.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_diag_player_stats")
 
 mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - mod._mem_probe_t0) / 1024)
