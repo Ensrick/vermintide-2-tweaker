@@ -54,7 +54,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.97-dev"
+local MOD_VERSION = "0.8.98-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -2461,6 +2461,7 @@ end)
 -- #404: center only CIM ranged properties previews; policy and hook are split.
 local _forge_preview_ok, _forge_preview_reason = _FORGE_PREVIEW.install_runtime(
     mod, _FORGE_PREVIEW_POLICY, function() return _custom_forge_active end)
+mod._cim404_preview_install_ok = _forge_preview_ok == true
 if not _forge_preview_ok then
     printf("[cim:404] ranged preview correction unavailable: %s",
         tostring(_forge_preview_reason))

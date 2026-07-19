@@ -1200,6 +1200,24 @@ mod:hook_safe("HeroWindowWeaveProperties", "on_enter", function(self)
     if mod._cim_suppress_skilltree_rings_in_mission and mod._cim_is_in_keep then
         mod._cim_suppress_skilltree_rings_in_mission(self, mod._cim_is_in_keep())
     end
+    -- #404 always-on, bounded view-open census. The user's latest attached log
+    -- never entered this class, so it could not distinguish missing picker data
+    -- from missing widget passes. One line per property-editor open now proves
+    -- the selected slot, option data, and surviving draw-array sizes.
+    if printf then
+        local selected_ok, selected = pcall(self._selected_item, self)
+        local data = selected_ok and selected and selected.data or nil
+        local groups, rows = 0, 0
+        for _, options in pairs(self._menu_options or {}) do
+            groups = groups + 1
+            if type(options) == "table" then rows = rows + #options end
+        end
+        printf("[cim:404] properties entered key=%s slot=%s menu_groups=%d menu_rows=%d bottom_widgets=%d top_widgets=%d",
+            tostring((data and data.key) or (selected and selected.key) or "<amulet>"),
+            tostring((data and data.slot_type) or "amulet"), groups, rows,
+            type(self._bottom_widgets) == "table" and #self._bottom_widgets or 0,
+            type(self._top_widgets) == "table" and #self._top_widgets or 0)
+    end
     if mod._cim_autodump_props_open then pcall(mod._cim_autodump_props_open, self) end
     if mod._cim_autodump_jewelry_probe then
         pcall(mod._cim_autodump_jewelry_probe, self, "HeroWindowWeaveProperties")

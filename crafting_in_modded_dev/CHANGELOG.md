@@ -1,5 +1,24 @@
 # Crafting in Modded Changelog
 
+## 0.8.98-dev (2026-07-19): #404 restore in-mission Athanor preview [verify-fix]
+
+- Accepted Stingray's retail callable-table `Vector3` and `Vector3Box`
+  constructors, restoring the preview correction that the earlier defensive
+  constructor gate had disabled.
+- Preserved the native mission-only ranged preview inversion so ranged and
+  melee weapon previews no longer overlap.
+- Replaced broad `athanor_*` widget pruning with exact renderer-material
+  checks, retaining atlas-backed panels while skipping only unrenderable
+  material passes.
+- Added bounded `[cim:404]` view/material diagnostics and regression coverage
+  for the remaining engine-only seams.
+
+**Verification:** enable in-mission crafting, open both melee and ranged Athanor
+weapon overviews, and confirm both weapon models and the surrounding atlas-backed
+panels render without overlap or crash. The newest log must show
+`[cim:LOAD] v0.8.98-dev`; any remaining rejection should emit one bounded
+`[cim:404]` record rather than pruning the complete view.
+
 ## 0.8.97-dev (2026-07-18): #524 bound slot-split Craft Item selector injection
 
 - Used the latest `0.8.95-dev` verification log to identify a different seam

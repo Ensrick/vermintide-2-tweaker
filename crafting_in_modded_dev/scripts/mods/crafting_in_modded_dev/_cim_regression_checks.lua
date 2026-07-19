@@ -175,6 +175,15 @@ _rt_register("issue404_ranged_properties_preview_centered", function()
     if fn("melee", native) ~= nil then
         return "#404 preview policy must leave melee on the vanilla path"
     end
+    if policy.overview_preview_x("ranged", -0.8, false) ~= 0.8 then
+        return "#404 mission overview no longer separates ranged from melee"
+    end
+    if policy.overview_preview_x("ranged", -0.8, true) ~= -0.8 then
+        return "#404 overview policy changed the native keep layout"
+    end
+    if mod._cim404_preview_install_ok ~= true then
+        return "#404 properties preview runtime hook did not install"
+    end
 end)
 
 _rt_register("forge_preview_la_diagnostics_armed", function()
@@ -1997,84 +2006,23 @@ _rt_register("hdr_cluster_glow_resuppressed_on_props_enter", function()
 end)
 
 _rt_register("skilltree_ring_widgets_suppressed_in_mission", function()
-    -- v0.8.19-dev (Fix B5, ui_passes.lua:805 "Material 'athanor_skilltree_ring_3'
-    -- not found in Gui", in-mission skill tree): the NON-HDR _bottom_widgets array
-    -- (drawn on the BASE mission ui_renderer) carries raw, inn-only skill-tree
-    -- decorations alongside FUNCTIONAL widgets; the helper must rebuild the array
-    -- minus ONLY the raw textures and leave the keep fully intact.
-    -- v0.8.49-dev (#83, session 9cc7ebf2) EXTENDED: (a) the raw family now also
-    -- includes forge_overview_top_glow_effect_* (panel smoke, the crash the first
-    -- in-mission Athanor test hit); (b) uv-texture widgets carry
-    -- content.texture_id as a TABLE ({texture_id=..., uvs=...}) and must still be
-    -- matched; (c) the prune covers _top_widgets too (panel's third draw loop,
-    -- holding raw athanor_power_bg / athanor_decoration_corner).
+    -- #404: static forge safety must be pass-level and renderer-proven. Prefix
+    -- pruning removed atlas-backed panels such as athanor_power_bg and
+    -- athanor_decoration_corner. Keep remains an unconditional no-op.
     local fn = mod._cim_suppress_skilltree_rings_in_mission
-    if type(fn) ~= "function" then return "suppression helper mod._cim_suppress_skilltree_rings_in_mission not exposed" end
-
-    local function make_win()
-        return {
-            _bottom_widgets = {
-                { content = { texture_id = "athanor_background_write_mask" } },  -- raw write-mask, DROP in mission (the 7th crash vector)
-                { content = { texture_id = "athanor_skilltree_ring_1" } },       -- raw decoration, drop
-                { content = { texture_id = "athanor_skilltree_ring_3" } },       -- raw decoration, drop (earlier reported crash)
-                { content = { texture_id = "athanor_skilltree_background" } },    -- raw decoration, drop
-                { content = { texture_id = "athanor_skilltree_cluster_2" } },     -- raw decoration, drop
-                { content = { texture_id = { texture_id = "forge_overview_top_glow_effect_smoke_1", uvs = {{0,0},{1,1}} } } }, -- raw uv-table smoke (session 9cc7ebf2 crash), drop
-                { content = { texture_id = "athanor_skilltree_slot_1" } },        -- atlas-backed slot, KEEP (convergent rule must not over-prune)
-                { content = { texture_id = "edge_fade_small" } },                 -- functional (atlas, non-athanor), keep
-                { content = {} },                                                -- viewport_background rect (no texture_id), keep
-            },
-            _top_widgets = {
-                { content = { texture_id = "athanor_power_bg" } },                -- raw power-bar bg (panel top array), drop
-                { content = { texture_id = { texture_id = "athanor_decoration_corner", uvs = {{1,0},{0,1}} } } }, -- raw uv-table corner, drop
-                { content = { texture_id = "athanor_skilltree_slot_2" } },        -- atlas-backed slot, keep
-                { content = { text = "essence_counter" } },                       -- functional text widget (no texture_id), keep
-            },
-        }
+    if type(fn) ~= "function" then
+        return "renderer-proof static forge suppression helper not exposed"
     end
-
-    -- (1) In mission (in_keep=false): raw textures dropped from BOTH arrays,
-    --     functional widgets survive, helper reports removal.
-    local mission_win = make_win()
-    local removed = fn(mission_win, false)
-    if removed ~= true then
-        return "helper did not report removing raw forge decorations in mission"
+    local keep_widget = { marker = true }
+    local keep_win = { _bottom_widgets = { keep_widget }, _top_widgets = {} }
+    if fn(keep_win, true) ~= false or keep_win._bottom_widgets[1] ~= keep_widget then
+        return "keep static forge widgets were mutated"
     end
-    if #mission_win._bottom_widgets ~= 3 then
-        return "in-mission _bottom_widgets not filtered to exactly the 3 keep-safe widgets (slot + edge_fade + viewport rect); raw textures would still resolve on the base renderer and crash"
-    end
-    if #mission_win._top_widgets ~= 2 then
-        return "in-mission _top_widgets not filtered to exactly the 2 keep-safe widgets (slot + text); raw athanor_power_bg/decoration_corner would fault on ui_top_renderer (the latent panel crash)"
-    end
-    for _, arr in ipairs({ mission_win._bottom_widgets, mission_win._top_widgets }) do
-        for _, w in ipairs(arr) do
-            local tid = w.content and w.content.texture_id
-            if type(tid) == "table" then tid = tid.texture_id end
-            if type(tid) == "string" then
-                local raw_athanor = tid:sub(1, 8) == "athanor_" and tid:sub(1, 22) ~= "athanor_skilltree_slot"
-                local raw_smoke = tid:sub(1, 31) == "forge_overview_top_glow_effect_"
-                if raw_athanor or raw_smoke then
-                    return "a raw inn-only texture survived the in-mission filter: " .. tid
-                end
-            end
-        end
-    end
-
-    -- (2) In the keep (in_keep=true): both arrays left fully intact.
-    local keep_win = make_win()
-    if fn(keep_win, true) ~= false then
-        return "helper claimed to filter draw arrays in the keep — keep forge must keep its full decoration"
-    end
-    if #keep_win._bottom_widgets ~= 9 or #keep_win._top_widgets ~= 4 then
-        return "keep draw arrays were mutated — keep path must be untouched"
-    end
-
-    -- (3) Idempotent / robust: empty or missing arrays in mission are a safe no-op.
-    if fn({ _bottom_widgets = {}, _top_widgets = {} }, false) ~= false then
-        return "helper reported filtering already-empty draw arrays"
-    end
-    if fn({}, false) ~= false then
-        return "helper not safe on a window with no draw arrays"
+    if type(mod._cim83_forge_widget_policy) ~= "table"
+            or type(mod._cim83_forge_widget_policy.sanitize_widgets) ~= "function"
+            or type(mod._cim_athanor_icon_policy) ~= "table"
+            or type(mod._cim_athanor_icon_policy.renderer_has_texture) ~= "function" then
+        return "static forge renderer-material proof dependencies unavailable"
     end
 end)
 

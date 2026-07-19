@@ -134,6 +134,24 @@ mod:hook("HeroWindowWeaveForgeOverview", "_create_viewport_definition", function
     return _swap_forge_env(func(self, scenegraph_id, invert_rendering))
 end)
 
+-- #404: the native overview gives every item x=-0.8 and mirrors the ranged
+-- viewport through the keep-only `_inverted` shading environment. Mission
+-- safety replaces both keep environments with one resident fallback, removing
+-- that mirror and placing ranged directly over melee. Compensate only at the
+-- overview item producer while in mission; keep behavior is byte-unchanged.
+mod:hook("HeroWindowWeaveForgeOverview", "_create_item_previewer",
+    function(func, self, viewport_widget, item, x_offset, invert_start_rotation)
+        local data = item and item.data
+        local adjusted_x = mod._cim_forge_preview_policy.overview_preview_x(
+            data and data.slot_type, x_offset, _is_in_keep())
+        if adjusted_x ~= x_offset and printf then
+            printf("[cim:404] mission overview ranged preview mirrored key=%s native_x=%.3f target_x=%.3f",
+                tostring((data and data.key) or (item and item.key) or "<?>"),
+                tonumber(x_offset) or 0, tonumber(adjusted_x) or 0)
+        end
+        return func(self, viewport_widget, item, adjusted_x, invert_start_rotation)
+    end)
+
 mod:hook("HeroWindowWeaveForgeWeapons", "_create_viewport_definition", function(func, self, scenegraph_id)
     return _swap_forge_env(func(self, scenegraph_id))
 end)
@@ -678,129 +696,65 @@ function mod._cim_suppress_hdr_glow_in_mission(window, in_keep)
     return cleared
 end
 
--- Mid-mission forge: drop the skill-tree RING / wheel / cluster decorations from
--- the NON-HDR _bottom_widgets draw array (Fix B5)
+-- Mid-mission forge: renderer-proof the static non-HDR widget arrays
 -- ------------------------------------------------------------
--- v0.8.19-dev (ui_passes.lua:805 "Material 'athanor_skilltree_ring_3' not found
--- in Gui", in-mission forge, opening a weapon's skill tree). A NEW vector of the
--- same keep-only-material class B/B2/B3/B4 chased — but on a DIFFERENT draw path
--- the prior fixes never touched:
---
---   * B2 empties the HDR draw arrays (_top_hdr_widgets / _bottom_hdr_widgets),
---     drawn on parent:hdr_renderer().
---   * B3/B4 guard the per-frame bloom set_scalar / upgrade-anim HDR set_scalar.
---   * This vector is the NON-HDR `_bottom_widgets` array, drawn on the BASE
---     mission `ui_renderer` (HeroWindowWeaveProperties._draw, the final
---     `for _, widget in ipairs(self._bottom_widgets)` pass). None of the prior
---     fixes iterate it.
---
--- `_bottom_widgets` mixes FUNCTIONAL widgets (background_write_mask,
--- viewport_background rect, viewport_background_fade = atlas-backed edge_fade_
--- small) with raw, inn-only DECORATIVE textures that only resolve on a Gui built
--- with is_in_inn=true:
---   athanor_skilltree_background        (background_wheel)
---   athanor_skilltree_ring_1 / _2 / _3  (wheel_ring_1..3)   <- the reported crash
---   athanor_skilltree_cluster_1 / _2 .. (cluster_background_<i>, RE-APPENDED per
---                                        cluster by _create_slot_grid ->
---                                        _create_cluster_background at on_enter)
--- (Verified non-atlas: only athanor_skilltree_slot_* live in gui_menus_atlas;
--- the ring / background / cluster textures are in no atlas_settings file — same
--- raw-material signature as the weave_menu_* keep-only set.)
---
--- So we can't empty _bottom_widgets wholesale (it'd strip the functional
--- viewport background). Instead REBUILD it minus only the raw decorative
--- textures, matched by content.texture_id prefix. The vanilla _draw loop then
--- never resolves the missing materials.
---
--- Two append sites feed these into _bottom_widgets, so the helper is called from
--- two places (mirroring B2's two-site pattern):
---   (1) create_ui_elements  -> the static wheel_ring_* / background_wheel
---   (2) on_enter (post)     -> the per-cluster cluster_background_<i> re-append
---       (folded into cim_debug.lua's existing HeroWindowWeaveProperties.on_enter
---        hook, right next to the B2 HDR re-suppression).
---
--- KEEP path untouched: gated on `not in_keep`, so the keep forge keeps the full
--- animated ring/cluster decoration (drawn on the real keep Gui that carries the
--- inn-only materials). The _update_background_animations rotation still mutates
--- widgets_by_name[...] every frame harmlessly (those widgets just aren't in the
--- drawn array in mission). Regression: skilltree_ring_widgets_suppressed_in_mission.
--- v0.8.20-dev — CONVERGENT raw-athanor prune. The old per-prefix allow-list
--- (ring_ / background / cluster_) chased one athanor_* crash at a time and STILL missed
--- athanor_background_write_mask (the 7th reported in-mission crash; log session f9ed28af,
--- ui_passes.lua:134). Per the verified note above, the ONLY athanor_ family in
--- gui_menus_atlas is athanor_skilltree_slot_*; every OTHER athanor_* forge texture is
--- raw / inn-only and faults on the base mission Gui. So in mission, drop ANY athanor_
--- texture that isn't a slot. This catches athanor_background_write_mask (a functional-
--- but-raw window write-mask — losing it only drops background masking in mission, it
--- never crashes) AND every future raw athanor_ sibling in ONE structural guard, instead
--- of one prefix per crash. Atlas-backed slots + all non-athanor functional widgets
--- (edge_fade_small, viewport rects) are untouched. Function name kept for the call sites.
--- v0.8.49-dev (#83, session 9cc7ebf2) — the prune LEARNED TWO THINGS from the
--- first in-mission Athanor test after the blend fix:
---   1. NEW raw family: HeroWindowWeaveForgePanel mixes
---      `forge_overview_top_glow_effect_smoke_1` (create_simple_uv_texture,
---      panel defs :525) into its NON-HDR `_bottom_widgets` — the athanor_-only
---      prefix rule let it through, and it fataled at ui_passes.lua:194
---      (draw_texture_uv) on the base mission Gui. Same raw/inn-only signature
---      as the athanor_ set (grep-verified at v0.8.21: the family lives ONLY in
---      weave-forge definition files, in no atlas_settings file).
---   2. NEW array: the panel's `_top_widgets` (drawn on ui_top_renderer, the
---      third loop of its _draw) carries six more raw athanor_* widgets
---      (athanor_power_bg x2, athanor_decoration_corner x4) that no prior fix
---      iterated — the latent NEXT crash once smoke_1 is gone. Prune both
---      non-HDR arrays, all four windows (a no-op where the array is clean).
--- ALSO: uv-texture widgets store `content.texture_id` as a TABLE
--- ({ texture_id = "<name>", uvs = ... }, ui_widgets.lua:5638-5642) — the
--- resolver below unwraps it so the smoke widget is actually matchable.
-local _CIM_ATLAS_ATHANOR_PREFIX = "athanor_skilltree_slot"   -- the only atlas-backed athanor_ family
-local _CIM_RAW_FORGE_GLOW_PREFIX = "forge_overview_top_glow_effect_"
-local function _cim_widget_texture_name(widget)
-    local texture_id = type(widget) == "table" and widget.content and widget.content.texture_id
-    if type(texture_id) == "table" then
-        texture_id = texture_id.texture_id   -- create_simple_uv_texture shape
-    end
-    if type(texture_id) == "string" then return texture_id end
-    return nil
-end
-local function _cim_is_raw_skilltree_texture(texture_id)
-    if type(texture_id) ~= "string" then return false end
-    if texture_id:sub(1, #_CIM_RAW_FORGE_GLOW_PREFIX) == _CIM_RAW_FORGE_GLOW_PREFIX then
-        return true
-    end
-    if texture_id:sub(1, 8) ~= "athanor_" then return false end
-    return texture_id:sub(1, #_CIM_ATLAS_ATHANOR_PREFIX) ~= _CIM_ATLAS_ATHANOR_PREFIX
-end
-
-local function _cim_prune_raw_widgets(widgets)
-    if type(widgets) ~= "table" or #widgets == 0 then return nil, false end
-    local kept = {}
-    local removed = false
-    for i = 1, #widgets do
-        local widget = widgets[i]
-        if _cim_is_raw_skilltree_texture(_cim_widget_texture_name(widget)) then
-            removed = true
-        else
-            kept[#kept + 1] = widget
-        end
-    end
-    return kept, removed
-end
-
--- Parameterized + exposed so the regression test can drive it synthetically.
--- Prunes BOTH non-HDR draw arrays (_bottom_widgets AND _top_widgets).
+-- Prior crashes proved that raw skill-tree rings and smoke materials can be
+-- absent from a mission Gui. The arrays also contain functional atlas-backed
+-- panel passes, so they cannot be emptied wholesale. Static widgets are created
+-- both in create_ui_elements and again during Properties.on_enter; both existing
+-- call sites invoke this helper after their respective producer completes.
+-- #404 corrected the old prefix assumption with source and renderer evidence:
+-- `gui_menus_atlas.lua` contains athanor trait/property backgrounds, frames,
+-- power backgrounds, decoration corners/headlines, connectors, and slots. The
+-- old "every athanor_* except slot is raw" rule therefore removed legitimate
+-- panels. Prove each pass against the exact Gui that draws it instead. Unsafe
+-- texture passes are suppressed clone-on-write; safe texture passes, text, and
+-- hotspots survive. Function name is retained for existing call sites/checks.
 function mod._cim_suppress_skilltree_rings_in_mission(window, in_keep)
     if in_keep then return false end
     if type(window) ~= "table" then return false end
 
-    local removed_any = false
-    for _, array_name in ipairs({ "_bottom_widgets", "_top_widgets" }) do
-        local kept, removed = _cim_prune_raw_widgets(window[array_name])
-        if removed then
-            window[array_name] = kept
-            removed_any = true
+    local policy = mod._cim83_forge_widget_policy
+    local icon_policy = mod._cim_athanor_icon_policy
+    if type(policy) ~= "table" or type(policy.sanitize_widgets) ~= "function"
+            or type(icon_policy) ~= "table"
+            or type(icon_policy.renderer_has_texture) ~= "function" then
+        return false
+    end
+
+    local suppressed_any = false
+    local arrays = {
+        { widgets = window._bottom_widgets, renderer = window._ui_renderer },
+        { widgets = window._top_widgets, renderer = window._ui_top_renderer },
+    }
+    window._cim404_reported_materials = window._cim404_reported_materials or {}
+    for i = 1, #arrays do
+        local entry = arrays[i]
+        local renderer = entry.renderer
+        local report = policy.sanitize_widgets(entry.widgets, function(texture, flags)
+            local target = renderer
+            if flags and flags.retained and type(renderer) == "table"
+                    and renderer.gui_retained ~= nil then
+                target = { gui = renderer.gui_retained }
+            end
+            return icon_policy.renderer_has_texture(
+                target, texture, UIAtlasHelper, Gui, flags)
+        end)
+        if report.suppressed > 0 then
+            suppressed_any = true
+            if printf then
+                for j = 1, #report.materials do
+                    local texture = report.materials[j]
+                    if not window._cim404_reported_materials[texture] then
+                        window._cim404_reported_materials[texture] = true
+                        printf("[cim:404] suppressed non-resident static forge material: %s",
+                            tostring(texture))
+                    end
+                end
+            end
         end
     end
-    return removed_any
+    return suppressed_any
 end
 
 -- The four weave-forge windows that build HDR glow arrays in create_ui_elements.
