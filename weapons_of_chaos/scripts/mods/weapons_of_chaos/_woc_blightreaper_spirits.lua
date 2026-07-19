@@ -78,6 +78,26 @@ function M.audio_contract()
 	}
 end
 
+-- POSITION_LOOKUP can retain engine userdata after a unit transition.  A
+-- truthy lookup value is therefore not proof that Vector3 arithmetic is safe.
+-- Prefer the unit's live node position and accept either source only after the
+-- caller's engine-aware vector validator approves it.
+function M.resolve_position(unit, live_reader, position_lookup, is_vector)
+	if unit == nil or type(live_reader) ~= "function"
+			or type(is_vector) ~= "function" then
+		return nil, "invalid_contract"
+	end
+
+	local ok, position = pcall(live_reader, unit)
+	if ok and is_vector(position) then return position, "live" end
+
+	local fallback = type(position_lookup) == "table"
+		and position_lookup[unit] or nil
+	if is_vector(fallback) then return fallback, "lookup" end
+
+	return nil, ok and "invalid_live_and_lookup" or "live_read_failed"
+end
+
 -- Exact mutator_death.lua contact amount: damage five when that is below total
 -- health; otherwise damage permanent health minus one. The paired native
 -- `mutator` heal turns the accepted damage into temporary health.
