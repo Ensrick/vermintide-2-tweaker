@@ -57,6 +57,13 @@ return function(H, repo_root)
             { left_hand_scale_3p = { 0.7, 0.7, 1.0 } }, "resolved")
         H.equal(scale_3p.should_apply, true)
         H.deep_equal(scale_3p.scale, { 0.7, 0.7, 1.0 })
+        H.equal(scale_3p.scale_multiplier, nil)
+
+        local relative_scale_3p = policy.plan("right",
+            { right_hand_scale_multiplier_3p = { 0.5, 0.5, 0.5 } }, "exact_model")
+        H.equal(relative_scale_3p.should_apply, true)
+        H.equal(relative_scale_3p.scale, nil)
+        H.deep_equal(relative_scale_3p.scale_multiplier, { 0.5, 0.5, 0.5 })
 
         -- A def with no transform field must NOT report should_apply -- otherwise
         -- the husk apply would call the transform primitive on nothing and the
@@ -120,6 +127,10 @@ return function(H, repo_root)
             "local v = Unit.local_position(unit, 0)",
             "local q = Unit.local_rotation(unit, 0)",
             "[cwv:huskpath] slot=%s hand=%s def=%s source=%s unit=%s retained_scale=(%s)",
+			"local _HUSK_GENERAL_RETAINED_LOG_LIMIT = 64",
+			"if _husk_retained_diag.count >= _husk_retained_diag.limit then return end",
+			"retained_index=%d/%d",
+			"_om._cwv_durable_crowbill_owner:annotate(unit, {",
             "_om._husk_postcondition_log(owner_unit_3p, slot_name, hand, def,",
         }) do
             H.truthy(source:find(marker, 1, true), "missing #660 postcondition anchor: " .. marker)
@@ -127,6 +138,8 @@ return function(H, repo_root)
         -- Guarded by Unit.alive + Unit.has_node before any node read.
         H.truthy(source:find("has0 = Unit.has_node(unit, 0)", 1, true),
             "husk postcondition missing Unit.has_node guard")
+        H.truthy(source:find("scale_multiplier=%s", 1, true),
+            "husk transform diagnostic must distinguish relative from absolute scale")
     end)
 
     H.test("husk hooks are consolidated to one site per (Class, method)", function()

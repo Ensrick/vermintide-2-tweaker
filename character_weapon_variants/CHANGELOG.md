@@ -1,5 +1,33 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.463-dev (2026-07-19) - truthful Crowbill transform lifecycle and #423 marker isolation (#604 #423) [diagnostics-armed]
+
+- Replaced the synchronous Crowbill scale baseline with a generation-aware
+  lifecycle owner. The first update after reconstruction reads the settled
+  attachment before repair, applies the canonical transform, lets hammer/pick
+  presentation write last, and then samples the final presented state.
+- Relative Dawi scale is now bound to exact unit/model/generation identity and
+  is recaptured after reconstruction, model change, respawn, or preview
+  teardown. Durable state is explicitly forgotten at wield, husk, hero-preview,
+  and item-preview teardown edges instead of relying only on weak-key cleanup.
+- Split absolute scale from relative scale multipliers on remote-husk plans.
+  Dawi Model 01 retains its relative half-scale; Imperial Model 05 retains its
+  absolute scale/offset/rotation; untuned Imperial and native Sienna controls
+  remain no-ops.
+- Added a dedicated bounded #604 evidence owner: 96 records total, 16 per exact
+  model, keyed by phase/surface/unit/model/generation/fingerprint. General CWV
+  husk evidence has a separate 64-record budget, so unrelated equips cannot
+  silence the Crowbill repro.
+- Retagged cosmetic skin-null substitution as `[cwv:skin-wire]`. The
+  `[cwv:423]` marker is now exclusive to damage-profile substitution or an
+  unsafe-hit block, preventing cosmetic traffic from falsely satisfying the
+  mixed-peer damage-profile diagnostic.
+- Regression coverage includes delayed attachment settlement, pre-repair then
+  post-presentation ordering, same-unit model replacement, teardown, respawn,
+  recreated previews, identity-aware dedupe, evidence caps, and #423 marker
+  exclusivity. This release remains diagnostic until the two-player lifecycle
+  matrix proves the final in-engine transforms and incompatible-peer hit gate.
+
 ## 0.1.462-dev (2026-07-19) - complete husk adapter (#394 #398 #399 #401 #474 #476 #482 #719, #579 probe) [untested]
 
 - One complete husk adapter at the GearUtils.spawn_inventory_unit seam

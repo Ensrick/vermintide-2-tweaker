@@ -4,6 +4,8 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_variant_catalog.lua",
     "_cwv_cross_access.lua",
     "_cwv_old_musket_wire.lua",
+	"_cwv_transform_evidence.lua",
+	"_cwv_crowbill_transform_runtime.lua",
     "_cwv_husk_path.lua",
     "_cwv_commands_lifecycle.lua",
     "_cwv_regression_identity.lua",

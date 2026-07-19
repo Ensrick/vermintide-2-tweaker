@@ -203,6 +203,17 @@ do
 		printf(fmt, ...)
 	end
 
+	-- General (non-Crowbill) husk evidence keeps its own budget. Exact Crowbill
+	-- generations are sampled next tick by the dedicated #604 evidence owner, so
+	-- unrelated CWV weapons can never consume that issue's diagnostic capacity.
+	local _HUSK_GENERAL_RETAINED_LOG_LIMIT = 64
+	local _husk_retained_seen = {}
+	local _husk_retained_diag = {
+		limit = _HUSK_GENERAL_RETAINED_LOG_LIMIT,
+		count = 0,
+	}
+	_om._cwv_husk_retained_diag = _husk_retained_diag
+
 	local function _husk_career_name(owner_unit_3p)
 		if not owner_unit_3p then return nil end
 		local name
@@ -632,6 +643,9 @@ do
 		local alive = false
 		pcall(function() alive = Unit.alive(prev) and true or false end)
 		if not alive then return false end
+		if _om._cwv_forget_crowbill_transform_unit then
+			_om._cwv_forget_crowbill_transform_unit(prev, "husk_superseded")
+		end
 		pcall(Unit.set_unit_visibility, prev, false)
 		if Managers and Managers.state and Managers.state.unit_spawner then
 			pcall(function() Managers.state.unit_spawner:mark_for_deletion(prev) end)
@@ -653,6 +667,19 @@ do
 	-- husk twin of the owner-side [cwv:604] delivery proof.
 	_om._husk_postcondition_log = function(owner_unit_3p, slot_name, hand, def, def_source, unit, unit_name)
 		if not (unit and def) then return end
+		if def.crowbill_model_key and _om._cwv_durable_crowbill_owner then
+			-- Do not read immediately after the setter: that only proves the setter's
+			-- own write and occurs before the final hammer/pick presentation. Annotate
+			-- the tracked generation; the durable owner samples pre-repair next tick
+			-- and again after the final presentation writer.
+			_om._cwv_durable_crowbill_owner:annotate(unit, {
+				owner_id = tostring(owner_unit_3p),
+				slot_name = slot_name,
+				def_source = def_source,
+			})
+			return
+		end
+		if _husk_retained_diag.count >= _husk_retained_diag.limit then return end
 		local alive = false
 		pcall(function() alive = Unit.alive(unit) and true or false end)
 		if not alive then return end
@@ -676,10 +703,17 @@ do
 			end
 		end)
 		local fp = s .. "|" .. p .. "|" .. r
-		_husk_log_once("huskpath:" .. tostring(slot_name) .. ":" .. tostring(hand) .. ":" .. tostring(def.item_key) .. ":" .. fp,
-			"[cwv:huskpath] slot=%s hand=%s def=%s source=%s unit=%s retained_scale=(%s) retained_pos=(%s) retained_rot=(%s)",
+		local key = tostring(owner_unit_3p) .. ":" .. tostring(slot_name) .. ":"
+			.. tostring(hand) .. ":" .. tostring(def.item_key) .. ":"
+			.. tostring(unit_name) .. ":" .. tostring(unit) .. ":" .. fp
+		if _husk_retained_seen[key] then return end
+		_husk_retained_seen[key] = true
+		_husk_retained_diag.count = _husk_retained_diag.count + 1
+		printf(
+			"[cwv:huskpath] slot=%s hand=%s def=%s source=%s unit=%s retained_scale=(%s) retained_pos=(%s) retained_rot=(%s) retained_index=%d/%d",
 			tostring(slot_name), tostring(hand), tostring(def.item_key or def.item_type),
-			tostring(def_source), tostring(unit_name), s, p, r)
+			tostring(def_source), tostring(unit_name), s, p, r,
+			_husk_retained_diag.count, _husk_retained_diag.limit)
 	end
 
 	-- issue 279 (2ND repro, 2026-07-12). The v0.1.365 entry-clear + the issue-399
@@ -814,14 +848,17 @@ do
 		end
 		local plan = _om._cwv_husk_transform_apply_plan(hand, def, def_source)
 		local scale = plan and plan.scale
+		local scale_multiplier = plan and plan.scale_multiplier
 		local offset = plan and plan.offset
 		local rotation = plan and plan.rotation
 		if plan and plan.should_apply then
 			_apply_cwv_hand_transform(weapon_unit_3p, def, hand, "3p", "remote_husk",
 				resolved_unit_name, skin)
-			printf("[cwv husk-transform] applied hand=%s def=%s source=%s scale=%s offset=%s -- issues 397/394/604",
+			printf("[cwv husk-transform] applied hand=%s def=%s source=%s scale=%s scale_multiplier=%s offset=%s rotation=%s -- issues 397/394/604",
 				tostring(hand), tostring(def.item_key or def.item_type),
-				tostring(plan.source), scale and "y" or "n", offset and "y" or "n")
+				tostring(plan.source), scale and "y" or "n",
+				scale_multiplier and "y" or "n", offset and "y" or "n",
+				rotation and "y" or "n")
 		end
 		-- issue 660 postcondition: read the RETAINED transform back from the engine
 		-- (not the setter return) and emit one bounded [cwv:huskpath] line proving
