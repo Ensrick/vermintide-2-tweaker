@@ -144,6 +144,7 @@ elseif (-not $Quiet) {
     Write-Host ""
 }
 Run-Check "check_appearance_contracts"          { & (Join-Path $here "check_appearance_contracts.ps1")          -Quiet:$Quiet }
+Run-Check "check_decomposition_contracts"       { & (Join-Path $here "check_decomposition_contracts.ps1")       -Quiet:$Quiet }
 Run-Check "check_level_lookup_budget"          { & (Join-Path $here "check_level_lookup_budget.ps1")          -Quiet:$Quiet }
 Run-Check "check_retired_big_rebalance"        { & (Join-Path $here "check_retired_big_rebalance.ps1")        -Quiet:$Quiet }
 # The branch census is a committed, report-only snapshot. CI clones do not

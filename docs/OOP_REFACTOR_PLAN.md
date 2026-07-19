@@ -44,20 +44,24 @@ size gate ratchets nine over-limit files instead of treating them as compliant.
 
 ## Current execution inventory (2026-07-19)
 
-Measured on `origin/master` `c80f704b` with the same
+Measured on `origin/master` `790c5661` with the same
 `(Get-Content | Measure-Object -Line).Lines` metric used by
-`qa/check_file_sizes.ps1`:
+`qa/check_file_sizes.ps1`. The machine-readable owner is now
+`qa/decomposition_contracts.psd1`; `qa/check_decomposition_contracts.ps1`
+runs in Quick/full QA, prints the live census, blocks entry-point regrowth or
+loss of a declared extracted owner, and self-tests planted failures. This table
+explains the contracts; it is not a second hand-maintained numeric authority.
 
 | Scope | State | Current evidence | Owning issue |
 |---|---|---|---|
-| Event Tweaker | Structural phase complete | 62-line entry manifest; 17 `_evt_*` modules; `ee3fe837` | #504 |
-| Enemy Tweaker | Structural phase complete | 95-line entry manifest; 33 `_et_*` modules; `c24c0f84` | #504 |
-| Cosmetics | Partial | Four phase slices plus runtime-owner/wire extractions; entry remains 10,191 lines | #504 / #2 |
-| Weapon Tweaker | Partial | animation, runtime-check, and feature-owner slices landed; beta/dev entries remain 4,186/4,338 lines. PR #783 is not on `master` | #504 / #2 |
-| Career Tweaker | Partial | talent/diagnostic and hook-owner slices landed; balance owner remains 3,889 lines | #504 / #2 |
-| CIM Dev | Partial | forge/inventory/diagnostic owners and regression suite extracted; entry remains 5,741 lines | #504 / #2 |
-| CT Dev | Partial | combat, boon, and regression owners extracted; entry remains 11,330 lines | #504 / #2 |
-| CWV | Partial | catalog, commands, regression, exact-appearance, and husk owners extracted; entry remains 10,935 lines | #504 / #2 |
+| Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
+| Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
+| Cosmetics | Partial | Four phase slices plus runtime-owner/wire extractions; entry ceiling 10,229 lines | #504 / #2 |
+| Weapon Tweaker | Partial | Animation, runtime-check, and feature-owner slices landed; beta/dev entry ceilings 4,183/4,335 lines | #504 / #2 |
+| Career Tweaker | Partial | Talent/diagnostic and hook-owner slices landed; balance entry ceiling 3,889 lines | #504 / #2 |
+| CIM Dev | Partial | Forge/inventory/diagnostic owners and regression suite extracted; entry ceiling 5,723 lines | #504 / #2 |
+| CT Dev | Partial | Combat, boon, and regression owners extracted; entry ceiling 11,333 lines | #504 / #2 |
+| CWV | Partial | Catalog, commands, regression, exact-appearance, and husk owners extracted; entry ceiling 10,844 lines | #504 / #2 |
 | Shared copied libraries | Partial | exact-byte sync gate is green for five manifested libraries; roadmap items remain under #428 | #428 |
 | Appearance consistency | Separate architecture program | descriptor/census work and live diagnostics are owned by #660; module splitting alone does not prove render-surface consistency | #660 |
 
