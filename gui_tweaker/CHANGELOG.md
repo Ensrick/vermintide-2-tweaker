@@ -1,5 +1,11 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.280 (2026-07-19) — reconcile newly added settings into existing profiles (#828) [verify-fix-coop]
+
+- Upgrades sparse saved profiles from the current declared defaults while preserving every explicit saved value, including `false` and explicit opt-ins.
+- Applies only missing members through the existing bounded owner transaction and persists the upgraded snapshot only after every addition succeeds.
+- Keeps stable/dev and standalone/keep-state profile behavior aligned, with bounded `[gut:828]` receipts only when a migration is actually needed.
+
 ## 0.2.278 (2026-07-17) — GUI hard-limit recovery
 
 - Extracted the standalone and HeroView Mod Tweaker input/draw surfaces behind explicit install APIs, without changing their interaction behavior or hook ownership.
