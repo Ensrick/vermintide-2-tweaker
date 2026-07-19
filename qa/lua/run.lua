@@ -58,6 +58,7 @@ local suites = {
     "test_crt_wire_contract",
     "test_mod_tweaker_transaction",
     "test_mod_tweaker_profiles",
+    "test_mod_tweaker_external_group",
     "test_mod_tweaker_tab_labels",
     "test_gut_label_policy",
     "test_gut_gear_accent_parity",
