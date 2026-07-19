@@ -91,7 +91,7 @@ function Test-HasMethodAndExpected($Issue) {
     $comments = @($Issue.comments | ForEach-Object { [string]$_.body })
     foreach ($comment in $comments) {
         $hasMethod = $comment -match '(?i)test[- ]method|diagnostics? method|verification|verify(?::|\s+(?:after|this|in|with))|to verify|steps?:|next repro|repro(?:duce|duction)?'
-        $hasExpected = $comment -match '(?i)expected|pass\s*=|must pass|should pass|result:|\bconfirm\b|\brequire\b.{0,24}\bpass|\bno (?:crash|error|warning|spam|desync)\b'
+        $hasExpected = $comment -match '(?i)expected|pass\s*(?:=|:)|must pass|should pass|result:|\bconfirm\b|\brequire\b.{0,24}\bpass|\bno (?:crash|error|warning|spam|desync)\b'
         if ($hasMethod -and $hasExpected) { return $true }
     }
     return $false
@@ -101,6 +101,13 @@ function Get-LatestTestComment($Issue) {
     $comments = @($Issue.comments)
     for ($index = $comments.Count - 1; $index -ge 0; $index--) {
         $body = [string]$comments[$index].body
+        # A deployed-floor correction may intentionally update only the valid
+        # version/manifest while declaring that the procedure above remains
+        # authoritative.  It is metadata for that method, not a replacement
+        # scope declaration; continue to the preceding runnable method.
+        if ($body -match '(?i)(?:procedure|method) above remains authoritative') {
+            continue
+        }
         if ($body -match '(?i)test[- ]method|diagnostics? method|verification|verify solo|solo diagnostic|co-?op diagnostics?|next repro|needs? 2 (?:players|testers|humans)|two-player|host\s*\+\s*client|host and client|expected') {
             return $body
         }
@@ -112,20 +119,26 @@ function Test-CommentRequiresCoop($Issue) {
     # Historical comments often contain superseded test plans.  The newest
     # explicit test/verification comment is authoritative for current scope.
     $text = Get-LatestTestComment $Issue
+    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?authoritative\s+solo\s+test\b') {
+        return $false
+    }
+    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?authoritative\s+(?:co-?op|two[ -]player)\s+test\b') {
+        return $true
+    }
     # Prefer an explicit method-header scope over incidental prose.  In
     # particular, "a solo host cannot reproduce this" is co-op evidence, not a
     # solo test declaration, while a solo diagnostic may mention that a later
     # implementation will require co-op verification.
-    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*solo\b[^)\r\n]{0,80}\)') {
+    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:(?:corrected|authoritative|replacement)\s+)?(?:test|diagnostics?) method\s*\(\s*solo\b[^)\r\n]{0,80}\)') {
         return $false
     }
-    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*(?:co-?op\b|two[ -]players?\b[^)\r\n]{0,30}\bco-?op\b)[^)\r\n]{0,80}\)') {
+    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:(?:corrected|authoritative|replacement)\s+)?(?:test|diagnostics?) method\s*\(\s*(?:co-?op\b|two[ -]players?\b[^)\r\n]{0,30}\bco-?op\b)[^)\r\n]{0,80}\)') {
         return $true
     }
     if ($text -match '(?i)verify solo|solo verification|no (?:second|2nd) player|do(?:es)? not require (?:a )?(?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
         return $false
     }
-    return $text -match '(?i)two[ -]players?\b|two[^\r\n]{0,40}(?:players|testers|humans)|2\+? (?:players|testers|humans)|needs? 2 (?:players|testers|humans)|host\s*\+\s*client|host and client|second player|both peers|remote peer|non-mod peer|co-?op(?:/perspective)? (?:verification|diagnostics?)'
+    return $text -match '(?i)two[ -]players?\b|two[^\r\n]{0,40}(?:players|testers|humans)|2\+? (?:players|testers|humans)|needs? 2 (?:players|testers|humans)|host\s*\+\s*client|host and client|second player|both peers|remote peer|non-mod peer|co-?op(?:/perspective)? (?:verification|diagnostics?|retest)'
 }
 
 function Get-IssueFindings($Issue) {
@@ -884,6 +897,14 @@ function Invoke-SelfTest {
         comments = @([PSCustomObject]@{ body = "**Diagnostic method (solo):** Capture the bounded probe. Rendered parity will later require co-op verification." })
     }
     if (Test-CommentRequiresCoop $scopedSoloWording) { throw "explicit solo method header was overridden by future co-op prose" }
+    $correctedScopedSoloWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "## Corrected test method (solo)`nCapture the replacement path. A future implementation may need co-op. Expected: PASS." })
+    }
+    if (Test-CommentRequiresCoop $correctedScopedSoloWording) { throw "corrected solo method header was not authoritative" }
+    $authoritativeSoloWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "**Authoritative solo test - current merged floor:**`nExercise exact owner identity. Remote parity remains under separate co-op issues. Expected: owner path persists." })
+    }
+    if (Test-CommentRequiresCoop $authoritativeSoloWording) { throw "authoritative solo test header was overridden by remote-scope prose" }
     $markdownScopedCoopWording = [PSCustomObject]@{
         comments = @([PSCustomObject]@{ body = "### Test method (co-op)`nBoth peers confirm the result. Expected: PASS." })
     }
@@ -897,6 +918,21 @@ function Invoke-SelfTest {
     }
     if (-not (Test-CommentRequiresCoop $twoPlayerScopedCoopWording)) { throw "two-player co-op method header was missed" }
     if (-not (Test-HasMethodAndExpected $twoPlayerScopedCoopWording)) { throw "PASS-equals expected-result wording was missed" }
+    $coopRetestWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "Probe extension shipped. Next co-op retest localizes the first divergent peer. Expected identities are logged." })
+    }
+    if (-not (Test-CommentRequiresCoop $coopRetestWording)) { throw "co-op retest wording was missed" }
+    $floorCorrectionWording = [PSCustomObject]@{
+        comments = @(
+            [PSCustomObject]@{ body = "## Test method (co-op)`nBoth peers exercise the path. Expected: PASS." },
+            [PSCustomObject]@{ body = "## Current deployed-floor correction`nThe newest issue-specific verification procedure above remains authoritative; this comment supersedes only older version references. Expected banner v2." }
+        )
+    }
+    if (-not (Test-CommentRequiresCoop $floorCorrectionWording)) { throw "floor-only correction displaced the authoritative co-op method" }
+    $passColonWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "TEST METHOD (solo)`n1. Exercise the control.`n2. Repeat it.`n**PASS:** the replacement path remains bounded." })
+    }
+    if (-not (Test-HasMethodAndExpected $passColonWording)) { throw "PASS-colon expected-result wording was missed" }
     $soloCannotRepro = [PSCustomObject]@{
         comments = @([PSCustomObject]@{ body = "Test method corrected: a solo host cannot reproduce this reliable queue; use a remote peer. Expected: no crash." })
     }

@@ -67,11 +67,15 @@ function Get-VtMethodComment {
         $b = [string]$arr[$i].body
         if ([string]::IsNullOrWhiteSpace($b)) { continue }
         $score = 0
+        # An explicit replacement must outrank an older, more heavily formatted
+        # method. This is common when a tester corrects stale instructions after
+        # deployment without deleting history from the issue.
+        if ($b -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:corrected|authoritative|replacement)\s+test\s+method') { $score += 10 }
         if ($b -match '(?i)test\s+method')                                   { $score += 5 }
         if ($b -cmatch '\bTEST\b')                                           { $score += 4 }
         if ($b -match '(?i)test\s+(with|as|in|solo|\()')                     { $score += 3 }
         if ($b -match '(?i)to\s+verify|verify\s+(that|in-?game|by|each|the|no|this|it)') { $score += 2 }
-        if ($b -match '(?i)pass\s*=')                                        { $score += 3 }
+        if ($b -match '(?i)pass\s*(?:=|:)')                                  { $score += 3 }
         if ($b -match '(?i)expected\s*:')                                    { $score += 2 }
         $steps = ([regex]::Matches($b, '(?m)^\s*\d+\.\s')).Count
         if ($steps -ge 2) { $score += [math]::Min($steps, 4) }
@@ -111,9 +115,9 @@ function Get-VtCheckLine {
     }
     if ($picked) {
         # drop a leading "Test method (version):" / "method (...):" preamble
-        $picked = $picked -replace '(?i)^\s*(test\s+)?method\s*(\([^)]*\))?\s*:?\s*', ''
+        $picked = $picked -replace '(?i)^\s*(?:(?:corrected|authoritative|replacement)\s+)?(?:test\s+)?method\s*(\([^)]*\))?\s*:?\s*', ''
         # keep only the ACTION; the "Expected:" / "Pass =" tail lives in the evidence column
-        $picked = $picked -replace '(?is)\s*(expected\s*:|pass\s*=).*$', ''
+        $picked = $picked -replace '(?is)\s*(expected\s*:|pass\s*(?:=|:)).*$', ''
         $picked = ($picked -replace '\s+', ' ').Trim()
     }
     if ([string]::IsNullOrWhiteSpace($picked) -or $picked.Length -lt 6) { $picked = $Title }
@@ -129,7 +133,7 @@ function Get-VtEvidence {
     $markers = [regex]::Matches($Method, '\[[a-z][a-z0-9_]*:[A-Za-z0-9_.\-]+\]') |
         ForEach-Object { $_.Value } | Select-Object -Unique
     if ($markers) { $parts += ('log ' + ($markers -join ' ')) }
-    if ($Method -match '(?i)pass\s*=\s*([^\r\n]+)') {
+    if ($Method -match '(?i)pass\s*(?:=|:)\s*\**([^\r\n]+)') {
         $p = ($Matches[1] -replace '\*\*', '').Trim()
         if ($p.Length -gt 110) { $p = $p.Substring(0, 107).TrimEnd() + '...' }
         $parts += ('pass: ' + $p)
@@ -264,7 +268,7 @@ function Get-VtFirstSentences {
 function Get-VtPlainPass {
     param([string]$Method)
     $p = ''
-    if     ($Method -match '(?i)pass\s*=\s*([^\r\n]+)')     { $p = $Matches[1] }
+    if     ($Method -match '(?i)pass\s*(?:=|:)\s*\**([^\r\n]+)') { $p = $Matches[1] }
     elseif ($Method -match '(?i)expected\s*:?\s*([^\r\n]+)') { $p = $Matches[1] }
     $p = ConvertTo-PlainLanguage $p
     $jargon = '(?i)(\.lua|preflight|send-?queue|reliable queue|network message|\bcache\b|unit-not|boxed|\bnil\b|\bindex\b|networklookup|\bprobe\b|marker in the game log|_[a-z]+_[a-z]|::|regression|falsifier|reso(?:lve|urce) )'
@@ -294,11 +298,21 @@ function Invoke-SelfTest {
     $m = Get-VtMethodComment $cs
     Assert ($m -and $m -match 'Foot Knight') 'method skips bookkeeping, picks real test comment'
 
+    $corrected = @(
+        [pscustomobject]@{ body = "**TEST METHOD (solo)**`n1. Buy a starting boon.`n2. Confirm the boon price.`nPASS = old instructions." },
+        [pscustomobject]@{ body = "## Corrected test method (solo)`n1. Activate a Trial Chest at zero cost.`n2. Set an absolute cost and confirm one debit.`n3. Confirm no second charge.`nPASS = the Trial Chest contract replaces the preceding method." }
+    )
+    $correctedMethod = Get-VtMethodComment $corrected
+    Assert ($correctedMethod -match 'Trial Chest' -and $correctedMethod -notmatch 'starting boon') 'explicit corrected method outranks older formatted instructions'
+    Assert ((Get-VtCheckLine -Method $correctedMethod -Title 'fallback') -notmatch 'Corrected test method') 'corrected method preamble is stripped from generated action'
+
     $cl = Get-VtCheckLine -Method $m -Title 'crt Foot Knight talent tooltip CTD'
     Assert ($cl -match 'Foot Knight' -and $cl -notmatch 'newest log') 'check-line skips LOAD boilerplate step'
 
     $ev = Get-VtEvidence -Method $m
     Assert ($ev -match '\[crt:LOAD\]' -and $ev -match 'pass:') 'evidence carries log marker + pass'
+    $colonEv = Get-VtEvidence -Method "TEST METHOD (solo)`n1. Exercise the control.`n2. Repeat it.`n**PASS:** colon-form evidence is retained."
+    Assert ($colonEv -match 'pass: colon-form evidence is retained') 'evidence accepts Markdown PASS-colon headings'
 
     Assert ((Get-VtMethodComment @([pscustomobject]@{ body = 'bumping this' })) -eq $null) 'no-method issue returns null'
 
