@@ -2569,3 +2569,39 @@ across preview worlds, owner units, or remote husks.
 
 ### Related Issues / commits
 - [#518](https://github.com/Ensrick/vermintide-2-tweaker/issues/518), [#660](https://github.com/Ensrick/vermintide-2-tweaker/issues/660); cosmetics_tweaker CHANGELOG v0.9.84-dev / v0.9.89-dev; kin: class 27 (husk resolves BASE item_data - same "shared identity, different instance" root on the husk axis).
+## 69. Callable engine constructor is rejected as a non-function
+
+**First confirmed:** 2026-07-19 (shared appearance issue #835; exposed by
+Weapons of Chaos issue #712).
+**Lives in:** Lua wrappers that copy a callable Stingray namespace such as
+`Vector3` into a constructor field, then require `type(constructor) ==
+"function"` before invoking it.
+
+### Symptoms
+- Direct engine calls such as `Vector3(x, y, z)` work, but a shared wrapper
+  returns `invalid-position`, `invalid-scale`, or `invalid-offset` before any
+  `Unit.set_local_*` / `Unit.set_local_pose` call.
+- Rotation can still work because `Quaternion.from_euler_angles_xyz` is a real
+  function member, making the failure look channel- or node-specific.
+- Offline dependency-injection tests pass when their fake constructor is a Lua
+  function, while retail binds the namespace itself as a callable table.
+
+### Diagnosis pattern
+1. Record the constructor's runtime type and the apply report before changing
+   transform data or nodes. A setter cannot be the cause when no setter ran.
+2. Reproduce with a Lua table whose metatable implements `__call`; do not model
+   every engine constructor as a plain function.
+3. Audit every constructor call in the shared primitive and every synchronized
+   consumer copy. Fixing one call site or one provider leaves the class live.
+
+### Fix template
+- Route construction through one protected call. Lua 5.1 `pcall` honors
+  `__call`, while nil, non-callable, throwing, and nil-returning constructors
+  still fail closed without an engine write.
+- Do not use a function-only type guard for a value whose contract is
+  callability. Keep method guards on genuine namespace members such as
+  `Vector3.to_elements`.
+- Test the production default-global binding with a callable table, every
+  vector-consuming public operation, malformed constructors, and exact-byte
+  synchronization of all standalone consumer copies. The canonical reference
+  is `tools/shared_lib/_lib_weapon_appearance.lua` and issue #835.
