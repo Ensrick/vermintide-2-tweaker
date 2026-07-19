@@ -25,12 +25,24 @@ RPC, or `NetworkLookup` entry is introduced.
 
 ## Live talent resolution
 
-The installed game is newer than the repository's decompile in this talent
-area. The module therefore resolves Devotion from the live Zealot talent table
-by its localized title rather than guessing an internal identifier. If it is
-not found, the feature stays inert and automatically emits a bounded
-`[crt:447]` candidate census. Once resolved, the existing consolidated Localize
-hook changes only that talent's title and description while the toggle is on.
+The live game exposes exactly the decompile's 21 `victor_zealot_*` talents
+(census 2026-07-18 vs `talent_settings_victor.lua`), but none is internally
+named `victor_zealot_devotion`, so Devotion is still resolved from raw loc
+data at runtime. Vanilla derives a talent title via
+`Localize(display_name or name)` (`hero_window_talents.lua:328`); only the
+three `thp_*` talents carry `display_name`
+(`talent_settings_victor.lua:1408/1420/1432`), so the internal name is the
+usual title key. The resolver localizes that `display_key` per candidate,
+counts the engine's `<key>` unknown-key wrapper
+(`localization_manager.lua:3-5`) as unresolved, and accepts only an
+EXACTLY-ONE match on the Devotion identity. Boot always logs
+`[crt:447] census candidates=N resolved=N unresolved=N matches=N`; a healthy
+run shows `candidates=21 resolved=21 unresolved=0 matches=1` then
+`resolved Devotion internal=...`. On failure the feature stays inert, emits
+the bounded candidate census with real titles, and the consolidated Localize
+hook retries resolution exactly once at the first menu localization. Once
+resolved, that hook changes only the talent's title and description while the
+toggle is on (override keys: the talent's `display_key` and `description`).
 
 Flagellation and the existing Holy Fervour green-health conversion are two
 alternative THP conversion models. They share the `zealot_thp_conversions`

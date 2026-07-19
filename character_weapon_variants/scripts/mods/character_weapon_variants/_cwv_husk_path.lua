@@ -277,19 +277,110 @@ do
 		return true, def
 	end
 
+	-- ============================================================
+	-- Residency truth + leases (fail-closed) -- issues 474/476/482/401
+	-- ============================================================
+	-- Direct engine resource truth, the weapons_of_chaos recipe
+	-- (_woc_mod_unit_preview.lua:16-19 / _woc_blightreaper_pulse.lua:41-45):
+	-- Application.can_get asks the resource system whether the resource is
+	-- obtainable RIGHT NOW under any reference. Package-reference bookkeeping
+	-- (has_loaded) can miss a resource another path already made resident, and
+	-- a custom-bundle unit can be resident while its donor material is not.
+	-- Returns true/false, or nil when the API is unavailable (offline tests).
+	local function _resource_ready(kind, name)
+		local app = rawget(_G, "Application")
+		local can_get = app and app.can_get
+		if type(can_get) ~= "function" then return nil end
+		local ok, ready = pcall(can_get, kind, name)
+		if not ok then return nil end
+		return ready == true
+	end
+	_om._husk_resource_ready = _resource_ready   -- exposed for tests/regression
+
+	-- (#474 crash killer) Custom-bundle meshes reference a VANILLA material via
+	-- the .unit's `data.mat_to_use` (LA-pattern block in the entry). The unit
+	-- data is mod-resident, but the DONOR material lives in the vanilla weapon
+	-- package -- spawning the custom mesh while that package is absent on this
+	-- peer is the console-2026-07-18-03.56.47 AV: `[MeshObject] Failed looking
+	-- up material #ID[b6d0945a]` inside GearUtils.spawn_inventory_unit. Gate
+	-- every custom-mesh husk write on donor-material residency; on a miss KEEP
+	-- the base identity (wrong-but-stable, never crash) and package-lease the
+	-- donor (weapons_of_chaos Managers.package:load lease recipe,
+	-- _woc_mod_unit_preview.lua:100) so a later wield of this slot resolves.
+	local _CUSTOM_UNIT_MATERIAL_DONORS = {
+		["units/cwv_es_musket_custom/cwv_es_musket_custom"] =
+			"units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1",
+		["units/cwv_es_musket_custom/cwv_es_musket_custom_3p"] =
+			"units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p",
+	}
+	_om._husk_custom_unit_material_donors = _CUSTOM_UNIT_MATERIAL_DONORS
+	local _donor_lease_attempted = {}
+	_om._husk_material_donor_ready = function(base_unit)
+		if type(base_unit) ~= "string" or base_unit == "" then return false end
+		-- The husk spawn appends "_3p"; gate on the 3P donor form.
+		local donor = _CUSTOM_UNIT_MATERIAL_DONORS[base_unit .. "_3p"]
+			or _CUSTOM_UNIT_MATERIAL_DONORS[base_unit]
+		if not donor then return true end   -- no donor declared: nothing to gate
+		if _resource_ready("material", donor) == true then return true end
+		-- FAIL-CLOSED (unknown counts as missing) + one bounded donor lease. The
+		-- donor is a vanilla per-unit package (the same shape the boot force-load
+		-- pass loads), NEVER the units/cwv_* path itself (#403 boot fatal).
+		if Managers and Managers.package and not _donor_lease_attempted[donor] then
+			_donor_lease_attempted[donor] = true
+			local ok = pcall(function()
+				Managers.package:load(donor, _om.HUSK_OVERRIDE_REF, nil, true, true)
+			end)
+			_husk_log_once("474_donor_lease:" .. donor,
+				"[cwv:474] husk donor-material lease %s: %s (ref=%s) -- custom mesh kept BASE identity this wield (fail-closed residency)",
+				ok and "queued" or "FAILED", donor, tostring(_om.HUSK_OVERRIDE_REF))
+		end
+		return false
+	end
+
+	-- (#476/#482) Bounded lease for a positively-identified vanilla override
+	-- outside the def force-load set (pairing/illusion-skin units, crafted exact
+	-- units): base identity renders this wield, the next wield finds it resident.
+	local _override_lease_attempted = {}
+	_om._husk_lease_override = function(base_unit)
+		if type(base_unit) ~= "string" or base_unit == "" then return false end
+		if base_unit:find("units/weapons/player/", 1, true) ~= 1 then return false end
+		if base_unit:find("wpn_invisible_weapon", 1, true) then return false end
+		if not (Managers and Managers.package) then return false end
+		local queued = false
+		for _, path in ipairs({ base_unit, base_unit .. "_3p" }) do
+			if not _override_lease_attempted[path] then
+				_override_lease_attempted[path] = true
+				local ok = pcall(function()
+					Managers.package:load(path, _om.HUSK_OVERRIDE_REF, nil, true, true)
+				end)
+				queued = queued or (ok == true)
+				_husk_log_once("husk_lease:" .. path,
+					"[cwv:476] husk override lease %s: %s (ref=%s) -- base identity kept this wield (fail-closed residency)",
+					ok and "queued" or "FAILED", path, tostring(_om.HUSK_OVERRIDE_REF))
+			end
+		end
+		return queued
+	end
+
 	-- #478 crash-floor residency predicate. Can vanilla spawn_inventory_unit spawn
 	-- this unit's "_3p" form on THIS peer without an async C-assert? DISTINCT from
 	-- _om._resident_override_3p (issue 418), which demands cwv's OWN force-load
 	-- reference: the crash-floor only asks whether the resource is resident under
 	-- ANY reference -- a naturally game-loaded base mesh counts (has_loaded with no
-	-- reference_name returns the plain loaded flag, package_manager.lua:286-293) --
-	-- OR is a cwv custom-bundle mesh (units/cwv_*, always resident while the mod is
-	-- loaded; the vanilla-prefix resident guard deliberately rejects it, issue 403).
-	-- Used by the husk re-key to suppress a spawn that would otherwise error at
-	-- gear_utils.lua:189 (weapon_unit_name .. "_3p" over a missing package).
+	-- reference_name returns the plain loaded flag, package_manager.lua:286-293).
+	-- A cwv custom-bundle mesh (units/cwv_*) is unit-resident while the mod is
+	-- loaded, but #474 fail-closed: its vanilla donor MATERIAL must also be
+	-- resident, else spawning it is the MeshObject AV -- so it routes through the
+	-- donor gate instead of an unconditional accept. Used by the husk re-key to
+	-- suppress a spawn that would otherwise error at gear_utils.lua:189
+	-- (weapon_unit_name .. "_3p" over a missing package).
 	_om._husk_unit_spawnable = function(base_unit)
 		if type(base_unit) ~= "string" or base_unit == "" then return false end
-		if _om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(base_unit) then return true end
+		if _om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(base_unit) then
+			return _om._husk_material_donor_ready(base_unit)
+		end
+		local ready = _resource_ready("unit", base_unit .. "_3p")
+		if ready ~= nil then return ready end
 		if not (Managers and Managers.package) then return false end
 		local ok, res = pcall(Managers.package.has_loaded, Managers.package, base_unit .. "_3p")
 		return ok and res == true
@@ -372,12 +463,28 @@ do
 		end
 		if override == nil then override = def[field] end
 		if type(override) == "string" and override ~= "" and item_units[field] ~= override then
-			-- Residency: helper checks the "_3p" form; we write the BASE-form path,
-			-- vanilla spawn_inventory_unit appends "_3p". A vanilla override must be
-			-- cwv-force-loaded under HUSK_OVERRIDE_REF (issue 418); a mod-bundled
-			-- custom mesh is accepted via the custom-bundle predicate.
-			if (_om._resident_override_3p and _om._resident_override_3p(override))
-					or (_om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(override)) then
+			-- Residency admissibility (FAIL-CLOSED, #474/#403/#418): we write the
+			-- BASE-form path, vanilla spawn_inventory_unit appends "_3p".
+			--   * custom-bundle mesh: unit data is mod-resident, but its vanilla
+			--     donor MATERIAL must be resident too (#474 MeshObject AV killer);
+			--   * force-loaded vanilla override (HUSK_OVERRIDE_REF, issue 418):
+			--     admissible unless the engine positively denies the resource;
+			--   * any other vanilla override (pairing-skin / crafted exact units
+			--     outside the def force-load set, #476/#482): admissible only on
+			--     direct engine proof (Application.can_get); on a miss KEEP the
+			--     base identity this wield and queue a bounded lease.
+			local admissible
+			if _om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(override) then
+				admissible = _om._husk_material_donor_ready(override)
+			elseif _om._resident_override_3p and _om._resident_override_3p(override) then
+				admissible = _resource_ready("unit", override .. "_3p") ~= false
+			else
+				admissible = _resource_ready("unit", override .. "_3p") == true
+				if not admissible and _om._husk_lease_override then
+					_om._husk_lease_override(override)
+				end
+			end
+			if admissible then
 				item_units[field] = override
 				_husk_log_once("474_rekey:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(hand) .. ":" .. tostring(skin),
 					"[cwv:474] husk re-keyed hand=%s base=%s career=%s via %s (skin=%s) -> %s",
@@ -767,6 +874,180 @@ do
 			pcall(printf, "[cwv:474] husk old-musket presentation: textures + 3p %s pose applied (slot=%s wielded=%s hand=%s skin=%s)",
 				tostring(mode), tostring(slot_name), tostring(wielded_slot), tostring(hand), tostring(skin))
 		end
+	end
+
+	-- ============================================================
+	-- COMPLETE husk adapter (issues 394/398/399/401/474/476/482/719 + #579 probe)
+	-- ============================================================
+	-- BUG_CLASSES class 27 root cause: cwv husk coverage grew per-concern
+	-- per-variant, so any concern not explicitly routed fell back to base. These
+	-- two entry-facing seams make the GearUtils.spawn_inventory_unit hook consume
+	-- ONE full-definition resolution for every husk concern: display units +
+	-- fail-closed residency (mesh re-key), ammo-nil, clone-template identity
+	-- (audio/FX metadata), transforms/textures/presentation, and the #579
+	-- per-hand compare evidence. The owner/bot path (create_equipment, 1P rig
+	-- present) is untouched.
+
+	-- (#399, complete-adapter arm) PRE-SPAWN ammo-nil. The post-spawn strip
+	-- (above) hides+deletes an already-attached torpedo; this clears
+	-- item_units.ammo_unit/_3p BEFORE vanilla's attach gate reads them
+	-- (gear_utils.lua:159-170 gates on item_units.ammo_unit), so the inherited
+	-- ammo mesh never spawns at all. Same descriptor-primary decision order as
+	-- the strip: exact identity (#660) first, skinless base+career fallback
+	-- second; explicit-native / unavailable-provider evidence declines. The
+	-- strip stays installed as the belt-and-suspenders net for a spawn that
+	-- reached vanilla before identity arrived.
+	_om._husk_ammo_nil_item_units = function(item_data, item_units, owner_unit_3p, slot_name)
+		if not (item_data and item_units) then return false end
+		if item_units.ammo_unit == nil and item_units.ammo_unit_3p == nil then return false end
+		local base_name = item_data.name
+		local why
+		local exact, identity_state
+		if _om._husk_identity_descriptor then
+			exact, identity_state = _om._husk_identity_descriptor(owner_unit_3p, slot_name, base_name)
+		end
+		if identity_state and identity_state ~= "none" and identity_state ~= "exact" then
+			return false
+		end
+		if exact then
+			local edef = _find_def(exact.variant_key)
+			if edef then
+				if edef.no_ammo_unit then why = "descriptor" else return false end
+			end
+		end
+		if not why then
+			local careers = base_name and _no_ammo_careers_by_base[base_name]
+			if not careers then return false end
+			local career = _husk_career_name(owner_unit_3p)
+			if not (career and careers[career]) then return false end
+			why = "base_career"
+		end
+		item_units.ammo_unit = nil
+		item_units.ammo_unit_3p = nil
+		_husk_log_once("399_prenil:" .. tostring(base_name) .. ":" .. tostring(why),
+			"[cwv:399] husk ammo-nil pre-spawn: base=%s via=%s -- item_units.ammo_unit/_3p cleared before vanilla attach (complete husk adapter)",
+			tostring(base_name), tostring(why))
+		return true
+	end
+
+	-- (#398) Clone-TEMPLATE identity for the husk spawn. The husk resolves
+	-- item_template from the BASE item_data (simple_husk_inventory_extension
+	-- .lua:662), so template-level cwv changes (impact/audio metadata, hit
+	-- effects, ammo_data shape) never reach the spawned 3P unit's weapon_system
+	-- extension (gear_utils.lua:181-186 stores item_template into the extension
+	-- init data). When the SAME positive identity the mesh re-key trusts
+	-- resolves a def with an authored clone template (def.template ->
+	-- Weapons[name], set by _build_entry), hand that template to the vanilla
+	-- spawn call ONLY. Fail-closed structural guards: the per-hand
+	-- attachment_node_linking vanilla will index must exist on the clone
+	-- (gear_utils.lua:172 reads node_linking_settings.third_person.wielded), and
+	-- an ammo-handed clone must carry ammo_unit_attachment_node_linking or the
+	-- vanilla fassert would fire. Any guard miss keeps the base template.
+	_om._husk_template_for_spawn = function(hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
+		local base_name = item_data and item_data.name
+		if not base_name then return nil end
+		local exact, identity_state
+		if _om._husk_identity_descriptor then
+			exact, identity_state = _om._husk_identity_descriptor(owner_unit_3p, slot_name, base_name)
+		end
+		if identity_state and identity_state ~= "none" and identity_state ~= "exact" then
+			return nil
+		end
+		local skin = item_units and item_units.skin
+		if exact and exact.skin then skin = exact.skin end
+		local def = exact and _find_def(exact.variant_key)
+		if not def then
+			def = _om._husk_resolve_display_def(base_name, _husk_career_name(owner_unit_3p), skin)
+		end
+		if not (def and type(def.template) == "string") then return nil end
+		local weapons = rawget(_G, "Weapons")
+		local ctpl = weapons and rawget(weapons, def.template)
+		if type(ctpl) ~= "table" or ctpl == item_template then return nil end
+		local link = ctpl[hand .. "_hand_attachment_node_linking"]
+		if not (type(link) == "table" and type(link.third_person) == "table"
+				and link.third_person.wielded) then
+			return nil
+		end
+		local ad = ctpl.ammo_data
+		if ad and ad.ammo_hand == hand and item_units and item_units.ammo_unit
+				and not ad.ammo_unit_attachment_node_linking then
+			return nil
+		end
+		_husk_log_once("398_template:" .. tostring(base_name) .. ":" .. tostring(def.item_key) .. ":" .. hand,
+			"[cwv:398] husk template identity: base=%s def=%s hand=%s -> template=%s (clone audio/FX metadata now reaches the husk spawn)",
+			tostring(base_name), tostring(def.item_key), tostring(hand), tostring(def.template))
+		return ctpl, def
+	end
+
+	-- (#579) Per-hand ID compare, the evidence the 2026-07-18 log sweep found
+	-- missing (only the replay count line fired). One capped printf per distinct
+	-- shape comparing, for THIS hand at the husk spawn seam: the descriptor's
+	-- expected unit, what item_units actually carries into vanilla, and whether
+	-- a 3P unit came back. Wire payload / host receive per-hand IDs already ride
+	-- the lifecycle fingerprint logs (right|left are fingerprint components).
+	local _p579_seen, _p579_total = {}, 0
+	_om._probe_579_hand_compare = function(hand, item_data, item_units, slot_name, owner_unit_3p, weapon_unit_3p)
+		pcall(function()
+			local base_name = item_data and item_data.name
+			if not (base_name and _cwv_base_weapons[base_name]) then return end
+			if _p579_total >= 24 then return end
+			local exact, state
+			if _om._husk_identity_descriptor then
+				exact, state = _om._husk_identity_descriptor(owner_unit_3p, slot_name, base_name)
+			end
+			local field = (hand == "right") and "right_hand_unit" or "left_hand_unit"
+			local expected = exact and exact[field]
+			local actual = item_units and item_units[field]
+			local match = (expected == nil) and "n/a" or tostring(expected == actual)
+			local skin = (exact and exact.skin) or (item_units and item_units.skin)
+			local key = tostring(slot_name) .. "|" .. hand .. "|" .. tostring(expected)
+				.. "|" .. tostring(actual) .. "|" .. tostring(skin) .. "|" .. tostring(state)
+			if _p579_seen[key] then return end
+			_p579_seen[key] = true
+			_p579_total = _p579_total + 1
+			printf("[cwv:579] husk hand-compare slot=%s hand=%s state=%s skin=%s expected_%s=%s item_units_%s=%s expected==actual=%s spawned_3p=%s (%d/24)",
+				tostring(slot_name), hand, tostring(state), tostring(skin),
+				field, tostring(expected), field, tostring(actual), match,
+				tostring(weapon_unit_3p ~= nil), _p579_total)
+		end)
+	end
+
+	-- PRE-SPAWN half, called once per hand by the entry hook (husk/bot side
+	-- only). Returns (suppress, template_override): suppress = #478
+	-- residency-gated defer (the entry returns all-nil for this hand instead of
+	-- letting vanilla error over a non-resident unit); template_override is
+	-- consumed ONLY by the vanilla spawn call.
+	_om._husk_adapter_pre = function(hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
+		local suppress
+		if _om._husk_rekey_units then
+			suppress = _om._husk_rekey_units(hand, item_data, item_units, owner_unit_3p, slot_name) == true
+		end
+		if _om._husk_ammo_nil_item_units then
+			_om._husk_ammo_nil_item_units(item_data, item_units, owner_unit_3p, slot_name)
+		end
+		local husk_tpl
+		if not suppress and _om._husk_template_for_spawn then
+			husk_tpl = _om._husk_template_for_spawn(hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
+		end
+		return suppress == true, husk_tpl
+	end
+
+	-- POST-SPAWN half. Returns true when the caller must nil its captured
+	-- ammo_unit_3p return (the #399 strip fired). All four spawn returns are
+	-- captured by the entry hook (gear_utils.lua multi-return: weapon_3p,
+	-- ammo_3p, weapon_1p, ammo_1p) -- only the 3P pair exists for husks.
+	_om._husk_adapter_post = function(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p, v_a3p)
+		local stripped = false
+		if _om._husk_strip_cwv_ammo and _om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name) then
+			stripped = true
+		end
+		if _om._husk_apply_cwv_transform then
+			_om._husk_apply_cwv_transform(hand, item_data, item_units, v_w3p, owner_unit_3p, slot_name)
+		end
+		if _om._probe_579_hand_compare then
+			_om._probe_579_hand_compare(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p)
+		end
+		return stripped
 	end
 end
 

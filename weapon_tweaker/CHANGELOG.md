@@ -1,5 +1,41 @@
 # Weapon Tweaker Changelog
 
+## 0.12.284-beta (2026-07-19) - #664 dead parity tick + #374/#388 EnergyData seeding [untested]
+
+- #664 root cause: `weapon_tweaker_backend.lua`'s `M.install` (run at the
+  bottom of `weapon_tweaker.lua`) assigned `mod.update` with a naked
+  overwrite AFTER `_wt431_damage_profile_parity.lua` had wrapped it with the
+  peer-parity beacon tick. The stomp killed the tick, froze the beacon's
+  applied state at fail-safe "disabled", and held every parity-gated damage
+  profile toggle (Executioner light headshot #664, 1H Axe cleave issue 621,
+  brace/priest/brett issue 431 set) at parity=false forever - even solo
+  (54/54 logs: `[wt:664] ... enabled=false parity=false`). The backend
+  assignment now preserves the previously-installed update
+  (`prev_update` chain), so solo settles to parity=true on the first beacon
+  poll and the toggle engages when enabled.
+- #374: seeded `EnergyData[career]` (recharge_rate 1.5, recharge_delay 0.2,
+  max_value 25, depletion_cooldown 5 - the exact vanilla Kerillian row,
+  `energy_data.lua:4-27`) for every career the final `can_wield` state grants
+  an energy weapon (`bow_energy`/`aim_energy` actions), before energy
+  extensions initialize. All four spawn paths read the row locally
+  (owner `bulldozer_player.lua:207`, bot `player_bot.lua:140`, husk
+  `game_object_initializers_extractors.lua:2128/2296`), so owner, husk, and
+  bot units all recharge natively; covers wt- and CWV-granted careers alike.
+  New engine-free policy module `_wt_energy_seed.lua`; rows are private
+  per-career clones, marker-tagged, added-only (native rows never touched),
+  reverted exactly in `on_disabled`. The issue 584 owner-side workaround
+  self-gates on a non-zero native rate, so no double regen.
+- #388 (partial): with real recharge/delay values the `is_drainable`
+  transitions resume, so the `on_energy_drainable` / `on_energy_not_drainable`
+  equipment flow events (FX/sounds/HUD presentation) fire on non-native
+  careers. The hardcoded `energy_bar_ui` color override remains open.
+
+**Solo verify:** load a keep session and check the log shows
+`[wt:664] applied: ... parity=true` shortly after
+`[wt:431] peer-parity beacon installed`; enable the Executioner toggle and
+confirm `enabled=true parity=true` plus the +30% light headshot in-mission.
+For #374, grant Moonfire to a non-elf career, fire until drained, and confirm
+the bar refills at the native rate with draw/charge FX and sounds (#388).
 ## 0.12.283-beta (2026-07-19) - #181 Skullsplitter right-hand presentation [verify-fix]
 
 - Relinked the illusion-correct third-person Skullsplitter hammer to Kruber's

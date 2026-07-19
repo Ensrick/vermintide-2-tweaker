@@ -389,9 +389,21 @@ _rt_register("cwv_husk_nonresident_spawn_deferred", function()
     if _om._husk_unit_spawnable("units/weapons/player/__cwv_rt_nonresident_478__/__cwv_rt_nonresident_478__") ~= false then
         return "_husk_unit_spawnable returned true for a non-existent unit -- crash-floor would let a non-resident spawn through (#478)"
     end
-    -- Predicate: a cwv mod-bundled custom mesh is always resident while loaded.
-    if _om._husk_unit_spawnable("units/cwv_es_musket_custom/cwv_es_musket_custom") ~= true then
-        return "_husk_unit_spawnable rejected the mod-bundled Old Musket mesh -- custom-bundle arm broken (#478)"
+    -- Predicate (#474 fail-closed): a cwv mod-bundled custom mesh is UNIT-resident
+    -- while loaded, but spawnable only when its vanilla DONOR MATERIAL is also
+    -- resident on this peer (the MeshObject AV killer). Assert the donor is
+    -- declared and that the spawnable answer equals the donor gate -- never the
+    -- old unconditional accept.
+    if type(_om._husk_material_donor_ready) ~= "function" then
+        return "_om._husk_material_donor_ready missing -- #474 donor-material gate lost"
+    end
+    local _custom_mesh = "units/cwv_es_musket_custom/cwv_es_musket_custom"
+    local _donors = _om._husk_custom_unit_material_donors
+    if type(_donors) ~= "table" or not _donors[_custom_mesh .. "_3p"] then
+        return "Old Musket custom mesh has no declared 3P material donor -- #474 gate cannot protect it"
+    end
+    if _om._husk_unit_spawnable(_custom_mesh) ~= _om._husk_material_donor_ready(_custom_mesh) then
+        return "_husk_unit_spawnable disagrees with the donor-material gate for the Old Musket custom mesh (#474 fail-closed contract)"
     end
     -- End-to-end SUPPRESS: the Outrider (base dr_deus_01) resolved by its wire
     -- skin, carrying ONLY a guaranteed-non-resident left-mount leftover, must

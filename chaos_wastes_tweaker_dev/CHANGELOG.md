@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.304-dev (2026-07-19) - Chest of Trials waves now place every requested enemy (#471) [untested]
+
+- Root cause from the armed `[ct:471]` diagnostic (logs 2026-07-18: `built_req=54 placed=23` at multiplier 3 Cataclysm, `built_req=8 placed=7` at multiplier 1): the request list is built correctly, but the engine position finder under-places it. `ConflictUtils.find_positions_around_position` gives each requested slot exactly ONE separation-filter attempt (`conflict_utils.lua:1678-1693` - an on-nav candidate rejected for sitting within 2 m of an already-accepted position still breaks the retry loop), and the fixed cursed-chest sampling annulus (radius 8 +/- spread/2, `deus_generic_terror_events.lua:95-100`) saturates around ~23 accepted positions at 2 m spacing. The runtime spawner then spawns one enemy per PLACED position (`terror_event_mixer.lua:1043`), silently dropping the tail of the wave.
+- Fix: after vanilla places a cursed-chest wave (`cursed_chest_enemies` AND `cursed_chest_elites`), the existing spawn hook now tops `event.spawn_positions` up to `#event.spawn_table` by re-driving the same engine finder over a bounded 5-pass plan - each call re-randomizes its sampling phase, passes 2-5 widen `max_distance` by 2 m per pass (min_distance never shrinks), and every new position keeps vanilla enemy spacing plus the ground-decal telegraph. Runs host-side only, is pcall-guarded (failure keeps vanilla placement), and works at any multiplier - a trial advertising N enemies now delivers N, matching the #117 precedent of always-on trial-correctness layers.
+- Placement logic is extracted engine-free into `_ct_cot_placement_policy.lua` (pass planning + shortfall draining), pinned by the new offline suite `qa/lua/tests/test_ct_cot_placement.lua` and runtime marker check `cot471_placement_topup`.
+- The `[ct:471]` line now proves delivery per wave: `placed` (final) vs `built_req`, plus `vanilla_placed`, `topup`, `passes`, and `residual` naming any remaining engine-limit shortfall.
+
 ## 0.7.303-dev (2026-07-19) - progressive difficulty lifecycle hardening (#460) [verify-fix-coop]
 
 - Scoped the captured starting difficulty and both bounded log throttles to the active `DeusRunController`; controller replacement and a later run can no longer inherit another run's ramp state.

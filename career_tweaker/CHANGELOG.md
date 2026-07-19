@@ -1,5 +1,15 @@
 # Career Tweaker Changelog
 
+## 0.4.14-beta - 2026-07-19 - #447 revive inert Devotion resolution [untested]
+
+**NOT SHIPPED: awaits issue 625 reconciliation.** crt master is ship-frozen (behind the live Workshop build); this fix lands on master only and cannot reach players until the streams reconcile.
+
+- Fixed the fully inert Devotion replacement (every 2026-07-18 log: `[crt:447] Devotion unresolved candidates=21`, all `display_key=nil`). The resolver localized only `talent.display_name`, a field 18 of the 21 live Zealot talents do not carry; vanilla resolves talent titles via `Localize(display_name or name)` (hero_window_talents.lua:328), so the internal name is the usual title loc key. Candidates now carry that vanilla `display_key`, and the title/description overrides register under it.
+- The resolver reads raw loc data per candidate, treats the engine's `<key>` unknown-key wrapper (localization_manager.lua:3-5) as unresolved, and accepts a match only when EXACTLY ONE candidate resolves to the Devotion identity - a duplicated localized title can never retarget an arbitrary talent.
+- The `[crt:447]` census now always reports `census candidates=N resolved=N unresolved=N matches=N` before the verdict line; a healthy boot must show `candidates=21 resolved=21 unresolved=0 matches=1` followed by `resolved Devotion internal=... title=Devotion`. Failure keeps the `Devotion unresolved candidates=N; feature inert` line plus per-candidate rows with real titles.
+- If file-load resolution is inconclusive, the consolidated Localize hook lazily retries exactly once at the first menu localization, when talent and loc data are certainly live.
+- Extended `issue447_flagellation_contract` (try_resolve entry point, census presence, zero unresolved titles) and the offline `test_crt_flagellation` suite (retail-shaped candidate table with nil display_name, loc fallback shape, exactly-one-match rule, census counts).
+
 ## 0.4.13-beta - 2026-07-19 - #221 deferred menu ownership census [diagnostics-armed]
 
 - Re-arms the dormant Career Tweaker family audit as a bounded, read-only startup census and `/crt_umbrella_audit` command.

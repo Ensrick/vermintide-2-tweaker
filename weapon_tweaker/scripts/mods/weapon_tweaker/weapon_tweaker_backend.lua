@@ -54,6 +54,14 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
     local overcharge_presentation = mod:dofile("scripts/mods/weapon_tweaker/_wt_overcharge_presentation")
     M.overcharge_presentation = overcharge_presentation
 
+    -- #374/#388: EnergyData seeding for careers granted an energy weapon
+    -- (Moonfire family). The module header carries the full decompile-cited
+    -- design; install() defines mod._wt374_seed_energy_data /
+    -- mod._wt374_revert_energy_data and runs the initial seed. Re-seeded at
+    -- the availability seams in mod.update below and the entry point's
+    -- state-change / unlock-setting handlers; reverted from on_disabled.
+    mod:dofile("scripts/mods/weapon_tweaker/_wt_energy_seed").install(mod)
+
     local function is_mod_unlocked_weapon(career_name, weapon_key)
         if not career_name or not weapon_key then
             return false
@@ -134,7 +142,21 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
     -- VMF passes the frame `dt` as the first arg (repo-wide convention:
     -- `mod.update = function(dt) ... end`); the deferred-init guards below
     -- ignore it, but the passive-charge tick needs it.
+    --
+    -- #664 ROOT CAUSE FIX: this assignment executes from M.install
+    -- (weapon_tweaker.lua bottom, ~L4300), which runs AFTER
+    -- _wt431_damage_profile_parity.lua (~L2655) already wrapped mod.update
+    -- with the peer-parity beacon tick. The old naked `mod.update = ...`
+    -- STOMPED that wrapper, so the beacon never ticked, applied_state()
+    -- froze at its fail-safe "disabled", and every parity-gated damage
+    -- profile toggle read parity=false forever - even solo (54/54 logs:
+    -- `[wt:664] ... enabled=false parity=false`). Preserve any earlier
+    -- per-frame driver exactly like _lib_peer_parity's own install() does,
+    -- so whichever side assigns last keeps the other alive regardless of
+    -- load order.
+    local prev_update = mod.update
     mod.update = function(dt)
+        if prev_update then pcall(prev_update, dt) end
         if mod._wt368_deferred_availability then
             mod._wt368_deferred_availability = nil
             apply_weapon_unlocks()
@@ -143,6 +165,10 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
             -- action reconciliation leaves a late-created weapon wieldable but
             -- unable to expose the current career's activated-ability action.
             patch_career_actions_on_weapons()
+            -- #374/#388: availability just settled (including CWV's late rows),
+            -- so re-derive which careers now hold an energy weapon and seed
+            -- their EnergyData rows before any energy extension initializes.
+            if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
             mod:info("[wt:368] deferred final availability + career-action reconciliation applied")
         end
         -- Per-frame passive-charge restore (cross-character staves / Moonfire
@@ -187,6 +213,7 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
             apply_weapon_unlocks()
             patch_career_actions_on_weapons()
             if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+            if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
             M.refresh_on_setting_change(mod)
             mod:info("[wt:593/597] CWV ownership transition active=%s axe_shield_ready=%s greataxe_ready=%s; native fallbacks reconciled",
                 tostring(owns_axe_shield), tostring(axe_shield_ready), tostring(greataxe_ready))
@@ -195,6 +222,7 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
         if not mod._applied_unlocks and ItemMasterList then
             mod._applied_unlocks = true
             apply_weapon_unlocks()
+            if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
         end
 
         if not mod.done_hooking_backend and Managers.backend and Managers.backend._interfaces

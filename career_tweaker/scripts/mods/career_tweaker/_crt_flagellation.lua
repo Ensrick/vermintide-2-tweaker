@@ -1,8 +1,10 @@
 -- _crt_flagellation.lua - Zealot Devotion replacement for issue #447.
 --
--- Resolves the live Devotion talent, scopes conversion to the native level-5
--- THP proc call windows, and converts green health equal to half the realized
--- THP gain. No buff name, RPC, or NetworkLookup entry is added.
+-- Resolves the live Devotion talent by localizing each candidate's vanilla
+-- title key (display_name or name, hero_window_talents.lua:328), scopes
+-- conversion to the native level-5 THP proc call windows, and converts green
+-- health equal to half the realized THP gain. No buff name, RPC, or
+-- NetworkLookup entry is added.
 --
 -- Owned by: career_tweaker.lua entry point. Consumed via: mod:dofile.
 
@@ -22,7 +24,13 @@ local function zealot_candidates()
             if talent then
                 result[#result + 1] = {
                     name = name,
-                    display_name = talent.display_name,
+                    -- Vanilla resolves a talent title via
+                    -- Localize(display_name or name) (hero_window_talents.lua:328).
+                    -- Only the three thp_* talents carry display_name
+                    -- (talent_settings_victor.lua:1408/1420/1432); for the other
+                    -- 18 the internal name IS the title loc key. Localizing only
+                    -- display_name is what kept #447 inert (all keys nil).
+                    display_key = talent.display_name or name,
                     description = talent.description,
                     buffs = talent.buffs,
                 }
@@ -33,9 +41,6 @@ local function zealot_candidates()
     return result
 end
 
-local candidates = zealot_candidates()
-state.devotion = policy.resolve_devotion(candidates, function(key) return Localize(key) end)
-
 local diagnostic_count = 0
 local function evidence(fmt, ...)
     if diagnostic_count >= 32 then return end
@@ -43,30 +48,54 @@ local function evidence(fmt, ...)
     pcall(printf, "[crt:447] " .. fmt, ...)
 end
 
-if state.devotion then
+local function register_overrides(devotion)
     mod._crt.extra_desc_overrides = mod._crt.extra_desc_overrides or {}
-    if state.devotion.display_name then
-        mod._crt.extra_desc_overrides[state.devotion.display_name] = {
+    if devotion.display_key then
+        mod._crt.extra_desc_overrides[devotion.display_key] = {
             setting = "rework_wh_zealot_flagellation",
             text = "Flagellation",
         }
     end
-    if state.devotion.description then
-        mod._crt.extra_desc_overrides[state.devotion.description] = {
+    if devotion.description then
+        mod._crt.extra_desc_overrides[devotion.description] = {
             setting = "rework_wh_zealot_flagellation",
             text = "Gaining temporary health from your level 5 talent also converts permanent health equal to half the temporary health gained.",
         }
     end
-    evidence("resolved Devotion internal=%s display_key=%s", state.devotion.name,
-        tostring(state.devotion.display_name))
-else
-    evidence("Devotion unresolved candidates=%d; feature inert", #candidates)
-    for i = 1, math.min(#candidates, 12) do
-        local c = candidates[i]
-        local ok, title = pcall(Localize, c.display_name)
-        evidence("candidate name=%s display_key=%s title=%s", c.name,
-            tostring(c.display_name), tostring(ok and title or "<loc-error>"))
+end
+
+-- Resolve Devotion from the live talent table + raw loc data. Idempotent; the
+-- consolidated Localize hook retries once at first menu localization if file
+-- load was inconclusive (state.lazy_retry_pending). Clears the retry flag
+-- FIRST so the Localize calls inside cannot re-enter this function.
+state.lazy_retry_pending = false
+function state.try_resolve()
+    state.lazy_retry_pending = false
+    if state.devotion then return state.devotion end
+    local devotion, census = policy.resolve_devotion(zealot_candidates(),
+        function(key) return Localize(key) end)
+    state.census = census
+    evidence("census candidates=%d resolved=%d unresolved=%d matches=%d",
+        census.candidates, census.resolved, census.unresolved, census.matches)
+    if devotion then
+        state.devotion = devotion
+        register_overrides(devotion)
+        evidence("resolved Devotion internal=%s display_key=%s title=%s",
+            devotion.name, tostring(devotion.display_key), tostring(devotion.title))
+    else
+        evidence("Devotion unresolved candidates=%d; feature inert", census.candidates)
+        for i = 1, math.min(#census.rows, 12) do
+            local row = census.rows[i]
+            evidence("candidate name=%s display_key=%s title=%s", tostring(row.name),
+                tostring(row.display_key), tostring(row.title or "<loc-error>"))
+        end
     end
+    return state.devotion
+end
+
+state.try_resolve()
+if not state.devotion then
+    state.lazy_retry_pending = true
 end
 
 local proc_context = setmetatable({}, { __mode = "k" })

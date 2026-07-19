@@ -800,6 +800,51 @@ _rt_register("issue524_render_diagnostics_armed", function()
     end
 end)
 
+_rt_register("issue682_provider_gate_routing", function()
+    -- issue 682 (confirmed boundary: Athanor craft on the immutable WOC relic
+    -- rejected with `reason=nil`) + issue 628 (registered provider gate).
+    -- Probe calls use the neutral surface name "rt_check" so this check never
+    -- registers a REAL surface as routed (the 823 lesson: regression checks
+    -- must not mutate live-module state they later assert on).
+    local contract = mod._cim_synthetic_item_contract
+    if type(contract) ~= "table" then return "synthetic-item contract not loaded" end
+    if type(contract.gate_item) ~= "function" or type(contract.gate_record) ~= "function"
+            or type(contract.report_unrouted) ~= "function" then
+        return "provider gate API missing (gate_item/gate_record/report_unrouted)"
+    end
+    local relic = {
+        woc_variant = true,
+        woc_unique_relic = true,
+        slot_type = "melee",
+        can_wield = { "dr_ranger" },
+        template = "rt_template", -- name-integrity: non-rendered-test-data
+        item_type = "rt_relic", -- name-integrity: non-rendered-test-data
+        inventory_icon = "rt_icon", -- name-integrity: non-rendered-test-data
+    }
+    local gate_ok, gate_problems = contract.gate_item("rt_check", "woc_rt_relic", relic)
+    if gate_ok ~= false or type(gate_problems) ~= "table"
+            or gate_problems[1] ~= "immutable_relic" then
+        return "item gate did not classify the immutable relic rejection"
+    end
+    local record, reason = contract.gate_record("rt_check", "rt_682_bid", {
+        item_key = "woc_rt_relic",
+        rarity = "modded",
+    }, relic)
+    if record ~= nil then return "record gate accepted an immutable relic craft" end
+    if type(reason) ~= "string" or reason == "" then
+        return "record-gate rejection reason is nil/empty (issue 682 regression)"
+    end
+    -- Routed-surface census: every expected enumerator surface except the
+    -- deliberately-unrouted cw_conversion must be registered by its install
+    -- site (athanor_list / blacksmith_list / mirror_restore /
+    -- mirror_injection from the entry + standard_forge, salvage from
+    -- _cim_inventory_filter).
+    local missing = contract.unrouted_surfaces()
+    if #missing ~= 1 or missing[1] ~= "cw_conversion" then
+        return "unrouted provider-gate surfaces: [" .. table.concat(missing, ",") .. "]"
+    end
+end)
+
 _rt_register("issue703_athanor_cwv_rows_unlocked", function()
     -- #703: vanilla `_sync_backend_loadout` stamps `content.locked = not
     -- backend_id` from a backend-items OWNERSHIP lookup

@@ -570,6 +570,38 @@ local function build_offhand_options()
             end
         end
     end
+    M.report_magic_receiver_gaps()
+end
+
+-- #373 boot-time validation pass (log-only, capped): walk the live
+-- WeaponSkins tables and printf-flag every magic/runed shield skin whose
+-- family has no paint-receiver row, so the NEXT missing row self-reports in
+-- the user's log instead of dead-ending silently (resolved_unit=nil).
+-- One pass per session; printf survives mod-logging-OFF.
+local _receiver_gap_report_done = false
+function M.report_magic_receiver_gaps()
+    if _receiver_gap_report_done then return end
+    local skins = rawget(_G, "WeaponSkins")
+    skins = skins and skins.skins
+    local pf = rawget(_G, "printf")
+    if type(skins) ~= "table" or not pf then return end
+    _receiver_gap_report_done = true
+    local gaps = SHIELD_PARITY.find_receiver_gaps(skins,
+        function(item_type) return _SHIELD_TYPE_TO_FAMILY[item_type] end,
+        function(skin_key)
+            local prefix = tostring(skin_key):match("^(.-)_skin_")
+            return prefix and _normalize_weapon_type(prefix) or nil
+        end)
+    local cap = 10
+    for i = 1, math.min(#gaps, cap) do
+        pf("[cos:373] RECEIVER-GAP skin=%s family=%s unit=%s (magic/runed shield has no paint receiver row - LA heraldry will dead-end)",
+            gaps[i].skin, gaps[i].family, gaps[i].unit)
+    end
+    if #gaps > cap then
+        pf("[cos:373] RECEIVER-GAP +%d more (capped at %d)", #gaps - cap, cap)
+    elseif #gaps == 0 then
+        pf("[cos:373] receiver coverage OK: no magic/runed shield family gaps")
+    end
 end
 
 -- Diagnostic: dump LA shield variant -> resolved intended_unit mapping, with

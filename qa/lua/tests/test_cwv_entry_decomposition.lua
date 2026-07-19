@@ -144,10 +144,14 @@ return function(H, repo_root)
             H.equal(count_plain(entry, marker), 0, "entry no longer defines " .. marker)
         end
 
-        -- Entry still reaches the moved helpers via the retained hook call sites.
-        H.truthy(entry:find("_om._husk_rekey_units(hand, item_data", 1, true))
-        H.truthy(entry:find("_om._husk_apply_cwv_transform(hand, item_data", 1, true))
+        -- Entry reaches the moved helpers through the COMPLETE husk adapter seams
+        -- (issues 394/398/399/401/474/476/482/719): one pre-spawn call and one
+        -- post-spawn call; the module owns the per-concern dispatch.
+        H.truthy(entry:find("_om._husk_adapter_pre(hand, item_template", 1, true))
+        H.truthy(entry:find("_om._husk_adapter_post(hand, item_data", 1, true))
         H.truthy(entry:find("_om._husk_preselect_units(result, item_data", 1, true))
+        H.truthy(husk:find("_om._husk_rekey_units(hand, item_data", 1, true))
+        H.truthy(husk:find("_om._husk_apply_cwv_transform(hand, item_data", 1, true))
 
         -- Module received its entry file-local dependencies as explicit context.
         H.truthy(husk:find("local _variant_definitions = ctx.variant_definitions", 1, true))

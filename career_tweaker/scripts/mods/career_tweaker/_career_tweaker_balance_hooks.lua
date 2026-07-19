@@ -412,6 +412,14 @@ local CRT_DESC_OVERRIDES = {
 }
 
 mod:hook(_G, "Localize", function(func, key, ...)
+    -- Issue 447: if Devotion resolution was inconclusive at file load, retry
+    -- exactly once at the first menu localization, when talent + loc data are
+    -- certainly live. try_resolve clears lazy_retry_pending before localizing
+    -- anything, so the retry cannot re-enter this hook path.
+    local flagellation = mod._crt and mod._crt.flagellation
+    if flagellation and flagellation.lazy_retry_pending and flagellation.try_resolve then
+        flagellation.try_resolve()
+    end
     if type(key) == "string" then
         local extra = mod._crt and mod._crt.extra_desc_overrides
         local entry = CRT_DESC_OVERRIDES[key] or (extra and extra[key])

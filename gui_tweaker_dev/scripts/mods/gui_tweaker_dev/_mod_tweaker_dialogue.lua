@@ -8,6 +8,26 @@ local function api()
     return value and value.version >= 2 and value or nil
 end
 
+-- #880 transcript popup binder, loaded lazily through gut's own VMF dofile so
+-- THIS module keeps loading engine-free (the unit suite dofiles it directly).
+-- false caches a failed load so a broken module cannot re-log every rebuild.
+local TranscriptBinder
+local function transcript_binder()
+    if TranscriptBinder == nil then
+        local gut = get_mod("gut_dev")
+        local ok, module = pcall(function()
+            return gut and gut:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue_transcript")
+        end)
+        if ok and type(module) == "table" then
+            TranscriptBinder = module
+        else
+            TranscriptBinder = false
+        end
+    end
+    if TranscriptBinder == false then return nil end
+    return TranscriptBinder
+end
+
 function DialogueUI.is_category(category)
     local widget = category and category.widgets and category.widgets[1]
     return category and category.mod_id == "character_dialogue"
@@ -79,6 +99,15 @@ function DialogueUI.build(view, category, defs)
     view._dialogue_virtual_first, view._dialogue_virtual_last = window.first, window.last
     view._dialogue_logical_count = window.logical_count
 
+    -- #880 transcript popups: resolve subtitle keys for the BOUNDED window's
+    -- line rows only, at rebuild time (never per frame / per hover). Tests
+    -- inject view._dialogue_localize; production uses the game's Localize.
+    local binder = transcript_binder()
+    local localize = view._dialogue_localize
+    if localize == nil and binder then localize = binder.default_localizer() end
+    local speaker_labels = {}
+    for i = 1, #groups do speaker_labels[groups[i].id] = groups[i].label end
+
     local visible_groups, expanded_pos = {}, nil
     for i = 1, #groups do
         if groups[i].count > 0 then
@@ -119,6 +148,10 @@ function DialogueUI.build(view, category, defs)
                 row._dialogue_sequence = sequence
                 row._list_y = base[2]
                 row._category = category
+                -- #880: bind (or suppress) the hover transcript popup fields.
+                if binder then
+                    binder.bind_row(row, item, speaker_labels[item.speaker], localize)
+                end
                 view._rows[#view._rows + 1] = row
                 visible_ids[#visible_ids + 1] = item.id
                 visible_sequences[#visible_sequences + 1] = sequence
@@ -225,7 +258,8 @@ local function activate_line(view, row, value, control)
         value.set_line_state(event, next_value)
         row.content.state_text = state_text(next_value)
     else
-        value.toggle_pause(event)
+        local ok, err = value.toggle_pause(event)
+        printf("[gut:605] media_click event=%s ok=%s err=%s", tostring(event), tostring(ok), tostring(err))
     end
 end
 

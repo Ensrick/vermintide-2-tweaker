@@ -1,5 +1,74 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.159-dev - 2026-07-19 - #154 #373 #650 log-sweep defect fixes [untested]
+
+### #154 husk cache never populated for cross-char weapon slots [untested]
+
+- Root cause (2026-07-18 sweep, every co-op log): the husk render surfaces read
+  the LA equip store by the wielded item's TEMPLATE only (the
+  `BackendUtils.get_item_units` mesh gate and the post-wield repaint's
+  `stored_key == wielded_template` match), but the
+  `CosmeticUtils.update_cosmetic_slot` weapon-illusion emit stores entries
+  under the cosmetic SLOT name (`slot_melee`/`slot_ranged`). Those entries
+  were stored yet unreachable, so every cross-char husk slot logged
+  `[cos:sync] decision=no-op(cache-or-kind-miss) cache_entry=false` and the
+  cosmetic never rendered on teammates. Native weapons masked the miss via the
+  vanilla wire skin; cross-char slots have that skin wire-substituted (issue
+  371 family), leaving the mod store as the only delivery path.
+- Fix: new `_cos_husk_cache_bridge.lua` wraps the single reconcile entry point
+  (`mod._la_reconcile`, issue 264 shape) on every peer: a slot-keyed
+  offhand/illusion entry is mirrored under the wearer's live wielded template
+  (same entry table, identity alias) and reconciled under that item-matchable
+  key; the revert receiver sweeps every alias by identity. Direct
+  template-keyed writes always win over mirrors; mirror emits one deduped
+  `[cos:sync] event=cache-mirror` line. Wearer-scoped only (issue 268 rule).
+- Expected post-fix probe: `[cos:sync] ... event=cache-mirror wearer=... slot=slot_melee -> template=...`
+  followed by `husk_meshgate ... cache_entry=true ... decision=resolve-mesh`
+  instead of the former `no-op(cache-or-kind-miss)` for cross-char slots.
+
+### #373 weave/magic shield rows absent from LA receiver tables [untested]
+
+- Root cause (2026-07-18 solo log, FS 23.05-23.24): breton sword-and-shield
+  RESOLVE ended `resolved_unit=nil ready=false ... kind=texture` because the
+  weave (`_magic*`) and glow-event/Shyish (`_runed*`) shield units were absent
+  from `_la_shield_parity.lua`'s exact receiver allow-list, so the pure-paint
+  LA pick dead-ended on a shader with no diffuse slot (LA_SYNC_MODEL 6.5).
+- Added the complete decompile-derived receiver rows for every character's
+  shield family: breton +1, empire +4, dwarf +5, wood_elf +2, imperial +2
+  (each row cites its scripts/settings skin-table source; receivers are the
+  same-directory suffix-stripped plain siblings, keeping the 204/266
+  same-family exactness rule).
+- Added a boot-time, log-only, capped validation pass (`[cos:373]
+  RECEIVER-GAP`, max 10 rows + overflow line) that walks the live WeaponSkins
+  tables at LA bridge init and printf-flags any magic/runed shield skin whose
+  family lacks a receiver row, so the next missing row self-reports.
+
+### #650 icon compositor mapping gaps and residency spam [untested]
+
+- Mapping closure (from the 36-file sweep + decompile): mapped
+  `es_1h_mace_shield_skin_01` and `skin_02_runed_06` (both wpn_emp_mace_02
+  family, item_master_list_weapon_skins.lua:734 /
+  weapon_skins_morris_2024.lua:320) to the authored mace primary, and the
+  Weavebound breton shield unit (`wpn_emp_gk_shield_01_magic_01`) to the
+  existing gk_shield_01 art so weave picks compose after the 373 swap.
+- Stated split: skins `skin_04`, `skin_04_magic_01/_02`, `skin_05` use the
+  different wpn_emp_mace_03 mesh, and the empire kite shields
+  (`wpn_emp_shield_02/_02_runed_01/_03_runed_01/_05`) plus the LA
+  basic1/2/3 custom meshes have no authored 80x80 layer yet - they stay
+  fail-closed to the native icon and self-report via the collapsed
+  diagnostic below.
+- `missing-primary-resource` class: `ui_icon_availability` now distinguishes
+  a genuinely absent resource from the boot window where the shipped
+  material is engine-resident (`Application.can_get("material", ...)`,
+  the fail-closed residency-guard pattern) but the VMF atlas injection is not
+  serving it yet; the latter reports as `transient-*-ui` and self-heals on a
+  later grid refresh instead of miscounting as missing.
+- Diagnostic spam collapsed: the per-bid descriptor rows now dedup per
+  DISTINCT gap (unmapped-primary keyed by skin, unmapped-offhand by
+  offhand unit + armoury key, resource/transient classes once per session)
+  instead of per instance tuple - the up-to-38-rows-per-file sweep pattern
+  becomes a handful of rows.
+
 ## 0.9.158-dev - 2026-07-19 - #656 #658 #696 #704 #730 authored appearance integration and bounded evidence [diagnostics-armed]
 
 - Added a vanilla-geometry Reikland griffin cape variant for the red Foot Knight

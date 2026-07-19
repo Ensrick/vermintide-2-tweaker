@@ -40,6 +40,13 @@ if _contract and _contract.canonical_item_key and _contract.craft_picker_role th
 elseif _contract and _contract.canonical_item_key then
     template_selector.set_canonical_key_resolver(_contract.canonical_item_key)
 end
+-- issues 628/682: declare this module's routed provider-gate surface at load
+-- so the contract's unrouted-walk census is boot-deterministic. The
+-- `_build_template_cache` validate_provider callback re-registers through
+-- `gate_item("blacksmith_list", ...)` at run time.
+if _contract and _contract.register_enumerator then
+    _contract.register_enumerator("blacksmith_list")
+end
 
 -- ============================================================
 -- Lifecycle: track when the standard forge UI is open
@@ -1058,13 +1065,21 @@ local function _make_craft_synth(allowed_slots)
         if not item_key then
             local eligible = {}
             local real_names = _cim_real_display_names()
+            -- issues 682/628: route the random-craft pool through the
+            -- registered provider gate so an immutable relic (or malformed
+            -- provider row) can never be drawn as the random pick and then
+            -- die at the mirror-injection boundary. Same gate the Athanor
+            -- and blacksmith lists consume.
+            local gate_contract = mod._cim_synthetic_item_contract
             for key, data in pairs(ItemMasterList) do
                 if slots[data.slot_type]
                    and data.can_wield and table.contains(data.can_wield, career_name)
                    and data.item_type ~= "weapon_skin"
                    and data.rarity ~= "magic" and data.rarity ~= "promo"
                    and not _item_requires_unowned_dlc(key)
-                   and not _cim_versus_shadowed(data, real_names) then
+                   and not _cim_versus_shadowed(data, real_names)
+                   and not (gate_contract and gate_contract.gate_item
+                        and gate_contract.gate_item("random_craft", key, data) == false) then
                     eligible[#eligible + 1] = key
                 end
             end
@@ -1122,14 +1137,23 @@ local function _make_craft_synth(allowed_slots)
         backend_id = backend_id or Application.guid()
         local contract = mod._cim_synthetic_item_contract
         local master = rawget(ItemMasterList, item_key)
-        local record, record_err = contract and contract.normalize_record(backend_id, {
-            item_key = item_key,
-            properties = rolled_props,
-            traits = rolled_traits,
-            power_level = power_level,
-            rarity = "modded",
-            via_mirror = true,
-        }, master)
+        -- issue 682: `contract and contract.normalize_record(...)` collapsed
+        -- the multi-return (Lua and/or truncation) so rejections logged
+        -- `reason=nil`. gate_record classifies every rejection and registers
+        -- this standard-bench mirror write as a routed boundary.
+        local record, record_err
+        if contract then
+            record, record_err = contract.gate_record("mirror_injection", backend_id, {
+                item_key = item_key,
+                properties = rolled_props,
+                traits = rolled_traits,
+                power_level = power_level,
+                rarity = "modded",
+                via_mirror = true,
+            }, master)
+        else
+            record_err = "contract_unavailable"
+        end
         if not record then
             printf("[cim:628] craft rejected bid=%s key=%s reason=%s",
                 tostring(backend_id), tostring(item_key), tostring(record_err))
@@ -1322,7 +1346,10 @@ local function _build_template_cache()
         validate_provider = function(item_key, master)
             local contract = mod._cim_synthetic_item_contract
             if not contract then return false, { "contract" } end
-            local ok, problems = contract.validate_provider(item_key, master)
+            -- issue 628: route through the REGISTERED gate (same validation
+            -- as validate_provider, plus routed-surface bookkeeping) so the
+            -- blacksmith list is a declared consumer of the provider schema.
+            local ok, problems = contract.gate_item("blacksmith_list", item_key, master)
             return ok, problems
         end,
         real_names = real_names,
@@ -1354,6 +1381,12 @@ local function _build_template_cache()
     if #report.rejected_providers > rejected_limit then
         printf("[cim:628] provider_rejected_more count=%d",
             #report.rejected_providers - rejected_limit)
+    end
+    -- issue 628 scope 3: capped self-report naming any expected enumerator
+    -- surface still bypassing the registered gate (currently cw_conversion).
+    local contract = mod._cim_synthetic_item_contract
+    if contract and contract.report_unrouted then
+        contract.report_unrouted(printf)
     end
 end
 

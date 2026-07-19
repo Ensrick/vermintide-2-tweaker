@@ -1,5 +1,47 @@
 # Crafting in Modded Changelog
 
+## 0.8.101-dev (2026-07-19): #682 classified craft rejections + #628 registered provider gate [untested]
+
+- Fixed the confirmed issue 682 boundary (FS logs 2026-07-18/19, dr_ranger and
+  wh_bountyhunter): an Athanor craft on `woc_blightreaper` died at resolution
+  with `reason=nil`, `mirror_write ok=false`, `resolved key/slot/rarity=<nil>`.
+  Two defects, both fixed:
+  - The Athanor weapon list enumerated ItemMasterList without consulting the
+    provider contract (the issue 793 bypass), so the immutable WOC relic
+    rendered as a craftable `cursed` row on every career. The list now routes
+    every row through the registered provider gate; excluded rows are logged
+    capped as `provider rejected before UI surface=athanor_list`.
+  - Every `contract and contract.normalize_record(...)` call site collapsed
+    the multi-return through Lua's and/or truncation, so the rejection reason
+    was ALWAYS nil (chat: "Craft failed: nil"). All seven collapse sites now
+    route `gate_record`/explicit branches and every rejection carries a
+    classified reason (for the relic: `provider:immutable_relic`).
+- Issue 628 groundwork: the synthetic-item contract now owns a REGISTERED
+  provider-gate schema (`gate_item`/`gate_record`/`register_enumerators` +
+  `unrouted_surfaces`). Routed surfaces: athanor_list, blacksmith_list
+  (template catalog callback), mirror_restore (saved-record load + legacy MIL
+  re-inject), mirror_injection (Athanor/standard-forge/import mirror writes +
+  persistence registration), salvage (filter adapter), plus the standard-bench
+  random-craft pool. `cw_conversion` remains deliberately unrouted and is
+  named by a capped `provider gate unrouted walks=` self-report line.
+- Extracted the legacy MoreItemsLibrary entry builder verbatim to
+  `_cim_mil_entry_builder.lua` (decomposition ceiling; entry stays under its
+  5723-line contract).
+- Runtime check `issue682_provider_gate_routing` (79-check suite) pins the
+  classified relic rejection and the routed-surface census; offline suite
+  `test_cim_provider_gate.lua` covers per-career resolution non-nil, the
+  validator accept/reject table, capped rejection logging, and the routing
+  wiring.
+
+**Solo verification after deployment:** on dr_ranger or wh_bountyhunter, open
+the Athanor weapon list for the melee slot: Blightreaper must be absent and the
+log must show `provider rejected before UI surface=athanor_list
+key=woc_blightreaper missing=immutable_relic`. Craft any normal weapon: the log
+must show `craft_synth_result/athanor_equip` with `resolved: key=<key>
+slot=melee rarity=modded`, `mirror_write ok=true`, `persisted=true`. No
+`reason=nil` line may appear; `/cim_regression_test` must pass
+`issue682_provider_gate_routing`.
+
 ## 0.8.100-dev (2026-07-19): #277 accessory cleanup and #787 authored Dual Axes icons [verify-fix]
 
 - Extended `/forge_delete_all` from melee/ranged weapons to the complete

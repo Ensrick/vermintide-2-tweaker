@@ -150,6 +150,16 @@ local function _is_salvage_filter(filter_infix)
     return filter_infix:find("can_salvage", 1, true) ~= nil
 end
 
+-- issues 628/682: this adapter routes every re-admitted row through the
+-- contract (`is_salvage_eligible` -> validate_instance), so declare salvage
+-- as a routed provider-gate surface for the unrouted-walk census.
+do
+    local _contract = mod._cim_synthetic_item_contract
+    if _contract and _contract.register_enumerator then
+        _contract.register_enumerator("salvage")
+    end
+end
+
 mod:hook("BackendInterfaceCommon", "filter_items", function(func, self, items, filter_infix, params)
     local result = func(self, items, filter_infix, params)
     if not _is_salvage_filter(filter_infix) then return result end

@@ -914,8 +914,19 @@ _rt_register("issue447_flagellation_contract", function()
     if type(zealot_mutex) ~= "table" or #zealot_mutex ~= 2 then
         return "Zealot THP conversion mutex missing"
     end
+    if type(feature.try_resolve) ~= "function" then
+        return "Flagellation lazy resolution entry point missing"
+    end
+    feature.try_resolve()
+    local census = feature.census
+    if type(census) ~= "table" or (census.candidates or 0) == 0 then
+        return "Flagellation resolver never enumerated candidates"
+    end
     if not feature.devotion then
         return "live Devotion talent unresolved; inspect automatic [crt:447] census"
+    end
+    if (census.unresolved or 1) ~= 0 then
+        return "Flagellation census still has unresolved candidate titles"
     end
 end)
 

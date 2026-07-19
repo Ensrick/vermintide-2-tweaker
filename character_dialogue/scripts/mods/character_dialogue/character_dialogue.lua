@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.4-dev"
+local MOD_VERSION = "0.1.6-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
@@ -74,10 +74,16 @@ end
 
 local function play_preview(event)
     local next_state, _, validation_error = PreviewPolicy.transition(preview, "play", event)
-    if validation_error then return false, validation_error end
+    if validation_error then
+        printf("[character_dialogue:preview] rejected event=%s reason=%s", tostring(event), validation_error)
+        return false, validation_error
+    end
     stop_preview()
     local _, wwise_world = level_wwise_world()
-    if not wwise_world then return false, "level audio world is unavailable" end
+    if not wwise_world then
+        printf("[character_dialogue:preview] no_audio_world event=%s", tostring(event))
+        return false, "level audio world is unavailable"
+    end
     local ok, playing_id = pcall(WwiseWorld.trigger_event, wwise_world, event)
     if not ok or not playing_id or playing_id == 0 then
         printf("[character_dialogue:preview] unavailable event=%s error=%s", event, tostring(playing_id))
@@ -137,7 +143,13 @@ local function poll_preview()
     if preview.playing_id and not preview.paused then
         if WwiseWorld.is_playing then
             local ok, playing = pcall(WwiseWorld.is_playing, preview.world, preview.playing_id)
-            if ok and not playing then stop_preview() end
+            if ok and not playing then
+                -- Near-zero elapsed against a real duration is the non-resident
+                -- soundbank signature: trigger accepted, media never played.
+                printf("[character_dialogue:preview] ended event=%s elapsed=%.2f duration=%.2f",
+                    tostring(preview.event), preview.elapsed or 0, preview.duration or 0)
+                stop_preview()
+            end
         end
         if preview.playing_id and WwiseWorld.get_playing_elapsed then
             local ok, elapsed_ms = pcall(WwiseWorld.get_playing_elapsed, preview.world, preview.playing_id)

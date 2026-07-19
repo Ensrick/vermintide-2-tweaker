@@ -279,7 +279,7 @@
     #    floor (issue 280) and the GearUtils.spawn_inventory_unit block gated on
     #    `not owner_unit_1p`. An owner-only (create_equipment) fix never reaches a husk.
     @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'; needle='mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"'; literal=$true; polarity='present'; issueRef='#280'; note='BUG_CLASSES 27: durable husk start_weapon_fx nil-slot crash floor (non-source-character client CTD).' }
-    @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'; needle='if not owner_unit_1p then'; literal=$true; polarity='present'; issueRef='#392'; note='BUG_CLASSES 27: the spawn_inventory_unit husk branch is gated on the no-1P-rig discriminator; removing it strands every husk-side transform/strip fix.' }
+    @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'; needle='if not owner_unit_1p and'; literal=$true; polarity='present'; issueRef='#392'; note='BUG_CLASSES 27: the spawn_inventory_unit husk branch is gated on the no-1P-rig discriminator (v0.1.461 husk adapter added a second conjunct); removing it strands every husk-side transform/strip fix.' }
 
     # -- BUG_CLASSES 29: client-side buff proc calls the server-only heal_network. The
     #    Fires-from-Ash THP heal MUST sit behind the Managers.player.is_server gate or

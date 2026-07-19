@@ -29,6 +29,14 @@ return {
         -- omitted this live skin even though it is the variant used in the
         -- reported verification session (backend 6F7F2C25A71FCC47).
         es_1h_mace_shield_skin_03_runed_05 = "icon_cos_empire_mace_shield_primary_01",
+        -- #650 closure of the wpn_emp_mace_02 mesh family, from the decompile
+        -- (item_master_list_weapon_skins.lua:734 = mace_02_t1;
+        -- dlcs/morris_2024/weapon_skins_morris_2024.lua:320 = mace_02_t2_runed_01).
+        -- skin_04/skin_04_magic_01/skin_04_magic_02/skin_05 use the DIFFERENT
+        -- wpn_emp_mace_03 mesh and stay unmapped until their layer is authored
+        -- (fail-closed; self-reports once via the unmapped-primary diagnostic).
+        es_1h_mace_shield_skin_01 = "icon_cos_empire_mace_shield_primary_01",
+        es_1h_mace_shield_skin_02_runed_06 = "icon_cos_empire_mace_shield_primary_01",
     },
     offhand_by_unit = {
         ["units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03"] = {
@@ -44,6 +52,13 @@ return {
             texture = "icon_cos_breton_shield_02",
         },
         ["units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01"] = {
+            texture = "icon_cos_breton_shield_03",
+        },
+        -- #373/#650: the Weavebound breton shield is the gk_shield_01
+        -- geometry with a magic shader (weapon_skins_lake.lua:192); it reuses
+        -- that exact art so a weave pick composes instead of logging
+        -- unmapped-offhand once the #373 receiver swap lands.
+        ["units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01_magic_01"] = {
             texture = "icon_cos_breton_shield_03",
         },
         ["units/weapons/player/wpn_emp_gk_shield_04/wpn_emp_gk_shield_04"] = {

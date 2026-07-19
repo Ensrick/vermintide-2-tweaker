@@ -1,5 +1,34 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.461-dev (2026-07-19) - complete husk adapter (#394 #398 #399 #401 #474 #476 #482 #719, #579 probe) [untested]
+
+- One complete husk adapter at the GearUtils.spawn_inventory_unit seam
+  (issue 392 class / BUG_CLASSES 27 root): every husk concern now consumes ONE
+  full variant-definition resolution instead of per-concern per-variant partial
+  coverage - display units (issue 396/401/719), pre-spawn ammo-nil (issue 399),
+  clone-template identity so template-level audio/FX metadata reaches the husk
+  spawn (issue 398), transforms/textures/presentation (issue 394/482/604), and
+  fail-closed residency (issue 474/476).
+- FAIL-CLOSED residency, the issue 474 crash killer: a custom-bundle mesh
+  (Old Musket) is admissible only when its vanilla donor MATERIAL is resident
+  (Application.can_get, the weapons_of_chaos recipe); a positively-identified
+  vanilla override outside the def force-load set (pairing-skin/crafted exact
+  units, issue 476/482) needs direct engine proof. On any miss the husk KEEPS
+  the base identity (wrong-but-stable, never crash) and queues one bounded
+  package lease under HUSK_OVERRIDE_REF so the next wield of the slot resolves.
+- Pre-spawn ammo-nil (issue 399): item_units.ammo_unit/_3p cleared before
+  vanilla's attach gate for descriptor/base+career-proven no_ammo variants, so
+  the inherited torpedo never spawns; the post-spawn strip stays as the net.
+- Issue 579 probe extended: per-hand compare lines (capped 24) at the husk
+  spawn seam - descriptor-expected unit vs item_units actual vs spawned 3P -
+  the evidence the 2026-07-18 log sweep found missing.
+- Render-side only: no wire shape changed; issue 741 unconditional skin nulls
+  and the issue 495 parity gates are untouched.
+- Runtime regression updated to the new donor-gated custom-mesh contract; new
+  offline suite test_cwv_husk_adapter.lua pins full-definition resolution,
+  fail-closed residency, ammo-nil propagation, all-four-returns capture, and
+  the 579 per-hand compare shape.
+
 ## 0.1.460-dev (2026-07-19) - authored Dual Axes Athanor icon contract (#787) [verify-fix]
 
 - Publishes the paired Dual Axes authored icon through CWV's existing inventory-icon provider for both Kruber and Saltzpyre variants.

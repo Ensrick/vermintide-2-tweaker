@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.283-beta"
+local MOD_VERSION = "0.12.284-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -2645,14 +2645,10 @@ end
 -- ============================================================
 -- Issue 431: peer-parity gate + wire floor for the custom damage profiles
 -- ============================================================
--- Loaded AFTER all three registration sites (authentic brace above, priest
--- punch above, _wt_brett_sword_shield_buff at the top of this file) so the
--- fallback map is fully populated, and AFTER weapon_tweaker_backend.lua's
--- mod.update definition (line ~81 dofile) -- the beacon's install() WRAPS
--- mod.update and must not capture nil (crt issue-425 ordering rule). The
--- module installs the beacon, registers the gated feature that re-runs the
--- three apply functions on every parity flip, and hooks
--- WeaponSystem.send_rpc_attack_hit with the unconditional sender-side floor.
+-- Loaded AFTER the three fallback-map registration sites and BEFORE
+-- weapon_backend.install assigns mod.update (issue 664 root cause, fixed
+-- v0.12.283: that assignment must chain prev_update, or the parity tick
+-- dies and every gated toggle stays parity=false forever - even solo).
 mod:dofile("scripts/mods/weapon_tweaker/_wt431_damage_profile_parity")
 -- NOTE: the beacon starts "disabled" (fail-safe), so at this instant all three
 -- toggles sit on their vanilla profiles; the first beacon tick (sub-second, in
@@ -3942,6 +3938,7 @@ mod.on_game_state_changed = function(status, state_name)
     patch_career_actions_on_weapons()
     apply_trait_filters()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+    if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
     _wt_bolt_staff_overcharge_runtime.apply()
     -- Re-attempt the Necromancer FX force-load (idempotent). DLC ownership can be
     -- unresolved at mod-init even for owners; by any state transition it's resolved,
@@ -3984,6 +3981,7 @@ mod.on_disabled = function()
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, true) end
+    if mod._wt374_revert_energy_data then mod._wt374_revert_energy_data() end
     clear_weapon_unlocks()
     clear_career_action_injections()
     revert_trait_pools()
@@ -3998,10 +3996,12 @@ mod.on_setting_changed = function(setting_id)
         _wt_master_toggles.on_master_changed(mod, setting_id)
         apply_weapon_unlocks()
         patch_career_actions_on_weapons()
+        if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
         weapon_backend.refresh_on_setting_change(mod)
     elseif setting_id and (setting_id:find("^unlock_") or setting_id == "debug") then
         apply_weapon_unlocks()
         patch_career_actions_on_weapons()
+        if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
         weapon_backend.refresh_on_setting_change(mod)
         -- issue 611 auto-off: recompute the owning master so deselecting one
         -- weapon flips its "Enable All ..." toggle OFF while the rest stay as-is.

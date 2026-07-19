@@ -54,7 +54,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.100-dev"
+local MOD_VERSION = "0.8.101-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -253,6 +253,11 @@ if not _ok_rr then mod:error("Failed to load modded_rarities: %s", tostring(_err
 -- Keep it on `mod` so split modules consume the same singleton at runtime.
 mod._cim_synthetic_item_contract = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_synthetic_item_contract")
+-- issues 628/682/793: declare this entry's routed provider-gate surfaces at
+-- install time (gate calls re-register at run time; blacksmith_list/salvage
+-- register from their modules; cw_conversion stays unrouted -> self-report).
+mod._cim_synthetic_item_contract.register_enumerators(
+    "athanor_list", "mirror_restore", "mirror_injection")
 mod._cim_external_trait_policy = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_external_trait_policy")
 
@@ -472,8 +477,12 @@ local function _forge_load()
         -- next session.
         local rarity = w.rarity
         if rarity == "promo" then rarity = "modded" end
+        -- issue 682: gate_record replaces the `contract and contract.
+        -- normalize_record(...)` form, whose and/or collapse truncated the
+        -- multi-return and logged every rejection as `reason=nil`. The
+        -- contract is dofile'd unconditionally above, so no nil guard.
         local contract = mod._cim_synthetic_item_contract
-        local normalized, err = contract and contract.normalize_record(bid, {
+        local normalized, err = contract.gate_record("mirror_restore", bid, {
             item_key = w.item_key,
             slot_type = w.slot_type,
             properties = w.properties or {},
@@ -505,7 +514,10 @@ mod._cim_register_craft = function(backend_id, weapon_data)
     local contract = mod._cim_synthetic_item_contract
     local item_key = type(weapon_data) == "table" and weapon_data.item_key
     local master = item_key and ItemMasterList and rawget(ItemMasterList, item_key)
-    local entry, err = contract and contract.normalize_record(backend_id, weapon_data, master)
+    -- issue 682: gate_record classifies every rejection (the prior
+    -- `contract and contract.normalize_record(...)` and/or collapse
+    -- truncated the multi-return, so rejections logged `reason=nil`).
+    local entry, err = contract.gate_record("mirror_injection", backend_id, weapon_data, master)
     if not entry then
         printf("[cim:628] rejected synthetic item registration bid=%s key=%s reason=%s",
             tostring(backend_id), tostring(item_key), tostring(err))
@@ -774,85 +786,10 @@ _rt_register("issue484_crafted_old_musket_identity", function()
 end)
 
 
-local function _forge_create_item(weapon_data, backend_id)
-    if not ItemMasterList then return nil end
-    local item_key = weapon_data.item_key
-    local master = rawget(ItemMasterList, item_key)
-    if not master then
-        mod:echo("Forge: unknown weapon key '" .. tostring(item_key) .. "'")
-        return nil
-    end
-
-    local contract = mod._cim_synthetic_item_contract
-    local normalized, normalize_err = contract and contract.normalize_record(
-        backend_id, weapon_data, master)
-    if not normalized then
-        printf("[cim:628] rejected MIL injection bid=%s key=%s reason=%s",
-            tostring(backend_id), tostring(item_key), tostring(normalize_err))
-        return nil
-    end
-    weapon_data = normalized
-
-    local props = weapon_data.properties or {}
-    local trait = weapon_data.trait
-    local traits_array = weapon_data.traits
-    local skin = weapon_data.skin
-    local power_level = weapon_data.power_level or 300
-
-    local custom_props = "{"
-    for k, v in pairs(props) do
-        custom_props = custom_props .. '"' .. k .. '":' .. tostring(v) .. ','
-    end
-    custom_props = custom_props .. "}"
-
-    local traits_table = {}
-    if traits_array then
-        for i, t in ipairs(traits_array) do traits_table[i] = t end
-    elseif trait then
-        traits_table[1] = trait
-    end
-
-    local custom_traits = "["
-    for i, t in ipairs(traits_table) do
-        if i > 1 then custom_traits = custom_traits .. "," end
-        custom_traits = custom_traits .. '"' .. t .. '"'
-    end
-    custom_traits = custom_traits .. "]"
-
-    local rarity = weapon_data.rarity or "exotic"
-
-    local entry = table.clone(master, true)
-    entry.cim_acquisition_key = item_key
-    entry.mod_data = {
-        backend_id = backend_id,
-        ItemInstanceId = backend_id,
-        cim_acquisition_key = item_key,
-        cwv_key = weapon_data.provider == "cwv" and item_key or nil,
-        CustomData = {
-            traits = custom_traits,
-            power_level = tostring(power_level),
-            properties = custom_props,
-            rarity = rarity,
-            cim_acquisition_key = item_key,
-            cim_provider = weapon_data.provider,
-            cwv_key = weapon_data.provider == "cwv" and item_key or nil,
-        },
-        rarity = rarity,
-        traits = traits_table,
-        power_level = power_level,
-        properties = table.clone(props, true),
-    }
-    if skin then
-        entry.mod_data.CustomData.skin = skin
-        entry.mod_data.skin = skin
-        if WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[skin] then
-            entry.mod_data.inventory_icon = WeaponSkins.skins[skin].inventory_icon
-        end
-    end
-    entry.rarity = rarity
-
-    return entry
-end
+-- Legacy MIL entry builder, extracted verbatim to
+-- `_cim_mil_entry_builder.lua` (issue 682 gate + decomposition ceiling).
+local _forge_create_item = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_mil_entry_builder")
 
 local function _forge_inject_item(weapon_data, backend_id)
     if not _forge_detect_mil() then
@@ -4650,6 +4587,16 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
     -- in standard_forge.lua + memory reference_vt2_versus_items_hidden_in_adventure.
     local real_names = mod._cim_real_display_names and mod._cim_real_display_names() or {}
 
+    -- issues 682/793/628 (_cim_athanor_list_provider_gate): this walk was the
+    -- #793 bypass - it never consulted the provider contract, so the immutable
+    -- WOC relic `woc_blightreaper` rendered as a craftable row on every career
+    -- and the craft then died at mirror injection (issue 682's confirmed FAIL
+    -- boundary). Route every row through the registered gate; the contract
+    -- logs rejections capped (`provider rejected before UI`) plus the
+    -- unrouted-walk self-report (issue 628 scope 3).
+    local gate_contract = mod._cim_synthetic_item_contract
+    local gate_rejected = {}
+
     for key, item_data in pairs(ItemMasterList) do
         local slot_type = item_data.slot_type
         if slot_type and table.contains(item_slot_types, slot_type) then
@@ -4660,7 +4607,8 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
                     and mod._cim_item_requires_unowned_dlc(key)
                 if item_data.item_type ~= "weapon_skin" and rarity ~= "magic" and rarity ~= "promo"
                    and not dlc_locked
-                   and not (mod._cim_versus_shadowed and mod._cim_versus_shadowed(item_data, real_names)) then
+                   and not (mod._cim_versus_shadowed and mod._cim_versus_shadowed(item_data, real_names))
+                   and gate_contract.gate_enumerated_row("athanor_list", key, item_data, gate_rejected) then
                     local dn = item_data.display_name or key
                     if not seen_names[dn] then
                         seen_names[dn] = true
@@ -4674,6 +4622,8 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
             end
         end
     end
+
+    gate_contract.log_gate_rejections(printf, "athanor_list", gate_rejected, 8)
 
     -- #617: do not let a catalog/provider icon reach the list widget until its
     -- actual masked+saturated material is proven in this exact ui_top_renderer.
@@ -4941,7 +4891,15 @@ local function _athanor_inject_item(weapon_data, backend_id)
     _ensure_item_adventure_visible(item_key, weapon_data.career_name)
 
     local contract = mod._cim_synthetic_item_contract
-    local normalized, normalize_err = contract and contract.normalize_record(
+    -- issue 682 root fix (confirmed boundary, FS logs 2026-07-18/19,
+    -- dr_ranger + wh_bountyhunter crafting `woc_blightreaper`): the prior
+    -- `contract and contract.normalize_record(...)` and/or collapse
+    -- truncated the multi-return, so the relic rejection logged `reason=nil`
+    -- and chat read "Craft failed: nil". gate_record guarantees a classified
+    -- reason (`provider:immutable_relic`); the relic row is also excluded at
+    -- the athanor_list gate in `_setup_weapon_list` (issue 793 bypass), so
+    -- this boundary is defense-in-depth.
+    local normalized, normalize_err = contract.gate_record("mirror_injection",
         backend_id, weapon_data, master)
     if not normalized then
         printf("[cim:628] rejected mirror injection bid=%s key=%s reason=%s",

@@ -651,6 +651,20 @@ _rt_register("cot471_spawn_composition_probe", function()
     end
 end)
 
+-- v0.7.304-dev #471 FIX: presence check for the Chest-of-Trials placement top-up
+-- (under-placed waves re-drive ConflictUtils.find_positions_around_position over
+-- the bounded widening pass plan in _ct_cot_placement_policy.lua until
+-- placed == built_req or the plan exhausts). Marker is a bare cross-file global
+-- set beside the #471 diagnostic in _ct_combat_hooks.lua.
+_rt_register("cot471_placement_topup", function()
+    if type(CT_COT_471_TOPUP_MARKER) ~= "string" then
+        return "#471 REGRESSION: CT_COT_471_TOPUP_MARKER not defined — CoT placement top-up stripped"
+    end
+    if CT_COT_471_TOPUP_MARKER ~= "cot471:placement_topup_drain_v0.7.304" then
+        return "#471 REGRESSION: CT_COT_471_TOPUP_MARKER mismatch — got: " .. tostring(CT_COT_471_TOPUP_MARKER)
+    end
+end)
+
 -- v0.7.157-dev Task A: presence check for the read-only altar-visual probe block.
 _rt_register("altar_visual_probe_present", function()
     if type(CT_ALTAR_VISUAL_PROBE_MARKER) ~= "string" then

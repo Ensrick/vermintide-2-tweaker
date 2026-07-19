@@ -1,5 +1,13 @@
 # Character Dialogue Changelog
 
+## 0.1.6-dev (2026-07-19) - #881 diagnostics for silent preview clicks [diag]
+
+- printf every preview play rejection (validation error, missing level audio
+  world) - both branches previously returned without any log line.
+- printf every auto-stop with elapsed vs duration; near-zero elapsed against a
+  real duration flags a non-resident soundbank that accepted the trigger but
+  never played media.
+
 ## 0.1.4-dev (2026-07-19) - #605 preserve false and nil dialogue states [verify-fix]
 
 - Replaced Lua `and/or` pseudo-ternaries that made `nil` and `false`

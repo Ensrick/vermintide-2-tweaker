@@ -87,7 +87,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.158-dev"
+local MOD_VERSION = "0.9.159-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3101,9 +3101,10 @@ mod._la_restore_offhand_selections = function()
 end
 
 local function _cos_ui_icon_available(icon)
-    return type(icon) == "string" and icon ~= ""
-        and UIAtlasHelper and UIAtlasHelper.has_texture_by_name
-        and UIAtlasHelper.has_texture_by_name(icon) == true
+    -- #650: tristate (ok, class) - "transient-ui" = shipped material resident
+    -- (Application.can_get) but the VMF atlas injection not serving it yet.
+    return COMPOSITE_ICON_FACTORY.ui_icon_availability(icon, UIAtlasHelper,
+        Application and Application.can_get)
 end
 
 local function _cos_active_skin(item, backend_id)
@@ -8999,13 +9000,9 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
     -- (the genuinely risky case: wt's force-load missed this weapon for husks);
     -- the false-alarm case is demoted to a quiet file-only line.
     --
-    -- OWNERSHIP: cross-character WEAPON meshes belong to weapon_tweaker, not
-    -- cosmetics. cosmetics' _la_equips_by_peer cache correctly has NO entry for
-    -- them (it only tracks LA hat/armor/offhand-shield/illusion cosmetics synced
-    -- via cos_la_apply). We do NOT swap or force-load weapon meshes here — that
-    -- would step on wt and risk a resource-not-found fatal. This block is
-    -- read-only diagnostics; behavior is unchanged (always warn+proceed, the
-    -- v0.9.2.1 decision above).
+    -- Cross-char MESH ownership stays with weapon_tweaker; cosmetics' store
+    -- reaches these slots via the #154 template mirror (_cos_husk_cache_bridge).
+    -- This block stays read-only diagnostics (warn+proceed, v0.9.2.1).
     if Application and Application.can_get and equipment then
         local slot_data = equipment.slots and equipment.slots[slot_name]
         local item_data = slot_data and slot_data.item_data
@@ -10304,18 +10301,21 @@ end
 mod:hook("HeroPreviewer", "_spawn_item_unit", _spawn_item_unit_combined)
 mod:hook("MenuWorldPreviewer", "_spawn_item_unit", _spawn_item_unit_combined)
 
--- v0.9.8.2: the v0.9.7 `_equip_item_capture_bid` hook_safe registrations
--- collided with the pre-existing `mod:hook` registrations on the same
--- Class+method (lines 3581 and 3610 of this file) — VMF emitted two
--- `Attempting to rehook active hook [equip_item]` warnings at boot per
--- 2026-05-22 00:15:15 audit. The bid stash is now FOLDED into those
--- existing hooks (`self._cos_current_equip_backend_id = backend_id`
--- inside each), so this separate registration is removed. Functionally
--- equivalent.
+-- v0.9.8.2: the `_equip_item_capture_bid` hook_safe pair collided with the
+-- existing equip_item mod:hook registrations (VMF rehook warnings); the bid
+-- stash is FOLDED into those hooks - do not re-add a separate registration.
 
 local _cos_la_commands = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_commands")
 _cos_la_commands.install(mod, {
     la_bridge = LA_BRIDGE, local_career_name = _local_career_name, flush_log = _flush_log,
+})
+-- #154: mirror slot-keyed weapon-side LA entries under the wearer's wielded
+-- TEMPLATE at the reconcile edge (the husk mesh gate + repaint match templates
+-- only), and sweep mirror aliases on revert. Wraps mod._la_reconcile +
+-- mod._la_apply_revert_recv, so it MUST attach after both definitions above.
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_husk_cache_bridge").attach(mod, {
+    managers = function() return Managers end, script_unit = ScriptUnit,
+    probe = PROBE, printf = rawget(_G, "printf"),
 })
 -- ============================================================
 -- Glow Picker integration (v0.9.1-dev — M1 scaffold)
