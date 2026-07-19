@@ -122,7 +122,7 @@ function Test-CommentRequiresCoop($Issue) {
     if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*(?:co-?op\b|two[ -]players?\b[^)\r\n]{0,30}\bco-?op\b)[^)\r\n]{0,80}\)') {
         return $true
     }
-    if ($text -match '(?i)verify solo|solo verification|no (?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
+    if ($text -match '(?i)verify solo|solo verification|no (?:second|2nd) player|do(?:es)? not require (?:a )?(?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
         return $false
     }
     return $text -match '(?i)two[ -]players?\b|two[^\r\n]{0,40}(?:players|testers|humans)|2\+? (?:players|testers|humans)|needs? 2 (?:players|testers|humans)|host\s*\+\s*client|host and client|second player|both peers|remote peer|non-mod peer|co-?op(?:/perspective)? (?:verification|diagnostics?)'
@@ -901,6 +901,10 @@ function Invoke-SelfTest {
         comments = @([PSCustomObject]@{ body = "Test method corrected: a solo host cannot reproduce this reliable queue; use a remote peer. Expected: no crash." })
     }
     if (-not (Test-CommentRequiresCoop $soloCannotRepro)) { throw "negative solo wording hid remote-peer evidence" }
+    $soloDoesNotRequireSecond = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "### Verification after deployment`nThis local score-screen defect does not require a second player. Remote-player coverage remains useful. Expected: local outfit persists." })
+    }
+    if (Test-CommentRequiresCoop $soloDoesNotRequireSecond) { throw "explicit does-not-require-second-player wording was misclassified as co-op" }
     Write-Host "[audit-open-issues -SelfTest] OK"
 }
 
