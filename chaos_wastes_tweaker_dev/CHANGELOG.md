@@ -1,5 +1,20 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.305-dev (2026-07-19) - Tower skull lifecycle census (#52) [diagnostics-armed]
+
+- Replaced the selection-only Tower skull trace with a target-scoped lifecycle
+  census that distinguishes selection loss, failed spawn realization, wrong
+  interaction identity, premature disappearance, object-set disablement, and
+  mission-key drift.
+- Both ordinary Adventure Tower and the injected Deus Tower path arm the same
+  bounded evidence owner; unrelated levels and Tower hero sublevels remain
+  inert. Strong skull/Tower identities sort ahead of generic interactables.
+- Teardown and flow diagnostics are contained: active state always clears,
+  vanilla teardown/callbacks run exactly once with their original arguments,
+  and diagnostic failures cannot suppress gameplay lifecycle work.
+- Evidence is capped per session and process, while preserving final lifecycle
+  summaries and up to twelve distinct flow callbacks.
+
 ## 0.7.304-dev (2026-07-19) - Chest of Trials waves now place every requested enemy (#471) [untested]
 
 - Root cause from the armed `[ct:471]` diagnostic (logs 2026-07-18: `built_req=54 placed=23` at multiplier 3 Cataclysm, `built_req=8 placed=7` at multiplier 1): the request list is built correctly, but the engine position finder under-places it. `ConflictUtils.find_positions_around_position` gives each requested slot exactly ONE separation-filter attempt (`conflict_utils.lua:1678-1693` - an on-nav candidate rejected for sitting within 2 m of an already-accepted position still breaks the retry loop), and the fixed cursed-chest sampling annulus (radius 8 +/- spread/2, `deus_generic_terror_events.lua:95-100`) saturates around ~23 accepted positions at 2 m spacing. The runtime spawner then spawns one enemy per PLACED position (`terror_event_mixer.lua:1043`), silently dropping the tail of the wave.
