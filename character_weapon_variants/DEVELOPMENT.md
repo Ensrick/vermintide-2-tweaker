@@ -1178,7 +1178,10 @@ Two things are intentionally KEPT alongside it:
 Husk mesh re-key AND transform fallback route through ONE decision point,
 `_om._husk_resolve_display_def(base, career, skin)`, with this order:
 
-1. **Wire skin PRIMARY.** A skin in either def-keyed cwv namespace — base
+1. **Exact semantic descriptor PRIMARY (#660/#741).** `cwv_item_identity`
+   carries provider/item/base/skin **string keys** and the receiver reconstructs
+   both hand units from its local registry. A skin in either def-keyed cwv
+   namespace — base
    `<item_key>_skin` or pairing `<item_key>_<tail>` (lazy longest-prefix,
    cached) — positively identifies the variant: re-key mesh + apply the def's
    transforms REGARDLESS of `can_wield` (#474: the old can_wield-excluded map
@@ -1192,11 +1195,11 @@ Husk mesh re-key AND transform fallback route through ONE decision point,
    named OUTSIDE any def's item_key (`cwv_il_es/wh_*`, `cwv_es_priest_es/wh_*`)
    don't resolve here — their skin data already drives the display and they
    carry no def transforms; the decline log wording marks them as cwv-family,
-   not native. NOTE (review finding): this arm is fed by today's skin wire
-   LEAK — the null-on-wire hook covers only base `_skin_keys` on
-   `game_object_initialized`, so pairing skins (and resync/hot-join base
-   skins) reach cwv clients un-nulled. A future all-sender null (the
-   cosmetics #421 treatment) MUST be peer-parity-gated or this arm goes dark.
+   not native. The vanilla `weapon_skin_id` wire is only a compatibility
+   fallback and receives `n/a` for every CWV skin on initial spawn, resync, and
+   hot join. Same-mod presence is **not** numeric lookup parity: another
+   skin-appending mod can shift indexes, so no roster gate may restore a CWV
+   skin to vanilla `rpc_add_equipment` (#741 / BUG_CLASSES 31, 64).
 2. **A present NON-cwv skin NEVER re-keys** (#475 Invariant 1). A native item
    virtually always carries a vanilla/LA skin on the wire; mis-applying a
    variant to it (the falsified "can never mis-apply" claim of the boot-time
@@ -1206,7 +1209,7 @@ Husk mesh re-key AND transform fallback route through ONE decision point,
    — the boot-time snapshot predated weapon_tweaker's can_wield patches (#475's
    second hole). A currently-wieldable pair declines: the shape is ambiguous
    between a wt-freedom native wield and a variant echo, and ambiguous shows
-   base. The skinned wield that follows still re-keys via arm 1.
+   base. The accepted semantic descriptor re-keys via arm 1.
 
 `backend_id` on the husk is always the base's, so it never resolves a cwv key.
 

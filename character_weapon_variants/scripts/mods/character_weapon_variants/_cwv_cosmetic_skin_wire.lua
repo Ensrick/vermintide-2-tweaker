@@ -49,4 +49,40 @@ function M.wire_safe_skin(skin, skin_keys, custom_skin_keys)
 	return skin, false
 end
 
+-- Issue #741: temporarily remove every CWV skin from live slot records while a
+-- vanilla equipment sender encodes NetworkLookup.weapon_skins.  Mod presence is
+-- not numeric lookup parity: a second skin-appending mod can shift the index on
+-- one otherwise-CWV-capable peer.  Therefore this helper deliberately has no
+-- roster/parity input.  The real appearance travels on cwv_item_identity as
+-- stable string keys; the vanilla wire always receives its universal no-skin
+-- fallback.
+--
+-- Slot mutation is scoped to send_fn and exception-safe.  This matters because
+-- these are the owner's live equipment records: leaking the temporary nil after
+-- an engine error would corrupt the local appearance as well as later sends.
+function M.with_safe_slots(slots, skin_keys, custom_skin_keys, send_fn, on_substitute)
+	assert(type(slots) == "table", "slots must be a table")
+	assert(type(send_fn) == "function", "send_fn must be a function")
+
+	local saved = {}
+	for _, slot_data in pairs(slots) do
+		local skin = type(slot_data) == "table" and slot_data.skin
+		if M.is_cwv_skin(skin, skin_keys, custom_skin_keys) then
+			saved[#saved + 1] = { slot = slot_data, skin = skin }
+			slot_data.skin = nil
+			if type(on_substitute) == "function" then
+				pcall(on_substitute, slot_data, skin)
+			end
+		end
+	end
+
+	local ok, r1, r2, r3, r4 = pcall(send_fn)
+	for i = 1, #saved do
+		local entry = saved[i]
+		entry.slot.skin = entry.skin
+	end
+	if not ok then error(r1, 0) end
+	return r1, r2, r3, r4
+end
+
 return M

@@ -1,5 +1,33 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.457-dev (2026-07-19) - unconditional CWV skin wire safety (#741) [verify-fix-coop]
+
+- Retired the issue-495 all-CWV parity exception. Presence and schema agreement
+  do not prove numeric `NetworkLookup.weapon_skins` identity when another mod
+  appends skins in a different order, so every CWV skin is now replaced with
+  vanilla `n/a` around initial-spawn, resync, hot-join, and profile-sync sends.
+- Kept exact remote appearance on the existing schema-2 `cwv_item_identity`
+  channel. It transports stable provider/item/base/skin string keys; each CWV
+  peer reconstructs both hand units locally and acknowledges the fingerprint.
+  Hot-join retries remain paced at 0.5 seconds and capped at eight attempts.
+- Removed the numeric post-parity `rpc_add_equipment` replay and its transition
+  poll. The shared slot helper is roster-independent and restores live owner
+  skins even when the wrapped vanilla sender raises. Offline and runtime checks
+  fail if parity is consulted, a CWV skin reaches the vanilla wire, or numeric
+  replay returns.
+
+**Co-op verification:** use two players on v0.1.457-dev with intentionally
+different skin-appending mod sets (the proven repro was host WT disabled and
+client WT-dev enabled), while both have CWV. Equip a CWV weapon with a generated
+or custom illusion before joining; inspect it remotely in the keep, transition
+to a mission, swap away/back, and hot-join once, then reverse host/client roles.
+Both peers must render the exact appearance after semantic identity arrives and
+must not crash with `NetworkLookup.weapon_skins does not contain key`. Logs show
+`[cwv:741] ... -> n/a` and bounded `[cwv:660]` delivery/ack lines; regression
+checks `issue741_cwv_skin_wire_unconditional`,
+`issue416_483_transition_generated_skin_identity`, and
+`issue579_dual_axes_preview_and_husk_skin_continuity` pass.
+
 ## 0.1.456-dev (2026-07-18) - restore Outrider blunderbuss (#762) [verify-fix-coop]
 
 - Reverted #627's rejected imported launcher presentation. The Outrider now

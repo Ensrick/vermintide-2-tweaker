@@ -204,8 +204,8 @@ Last updated: 2026-07-18.
 | Fix version(s) | CWV v0.1.377-dev, v0.1.394-dev, v0.1.395-dev (#474) |
 | Category | MULTIPLAYER |
 | Repro | Equip Old Musket in melee, let a second player hot-join, then live re-equip and repeat in ranged. Observer checks custom model/pose/transforms and listens to hip/ADS shots; reverse host/client roles. |
-| Expected post-fix | Handshake remains safe, then one post-parity replay restores exact Old Musket identity in either slot. Each real Old Musket shot produces one positional vanilla rifle report for other peers and no additional report for the owner. |
-| Detection | `/cwv_regression_test`: `issue474_old_musket_hot_join_identity_and_remote_fire`; logs show bounded `[cwv:579] replayed ...` on parity enable and one `[cwv:474] remote old-musket rifle fire dispatched ...` per shot. |
+| Expected post-fix | Handshake remains safe: vanilla always carries base Handgun/`n/a`, while the acknowledged `cwv_item_identity` string-key descriptor restores exact Old Musket identity in either slot. Each real Old Musket shot produces one positional vanilla rifle report for other peers and no additional report for the owner. |
+| Detection | `/cwv_regression_test`: `issue474_old_musket_hot_join_identity_and_remote_fire`; logs show bounded `[cwv:660] lifecycle=hot_join_retry` delivery/ack and one `[cwv:474] remote old-musket rifle fire dispatched ...` per shot. No numeric CWV skin replay is permitted. |
 
 ### issue478-outrider-husk-handedness — Skinless crafted Outrider is wholly invisible remotely
 
@@ -230,8 +230,8 @@ Last updated: 2026-07-18.
 | Fix version(s) | CWV v0.1.395-dev (#416/#483) |
 | Category | MULTIPLAYER / APPEARANCE / TRANSITION |
 | Repro | Select generated skin `cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1`, verify it remotely in the keep, then load a mission without re-equipping. Reverse host/client roles. |
-| Expected post-fix | The transient send may safely carry `n/a`; once parity is confirmed, one bounded replay restores the exact sword-right/mace-left skin and current wield. A peer without CWV never receives the modded skin id. |
-| Detection | `/cwv_regression_test`: `issue416_483_transition_generated_skin_replay`; log shows `[cwv:416/483] deferred skin identity replayed ...` after a transition-time `[cwv:495] ... -> n/a` line. |
+| Expected post-fix | Every vanilla transition send carries `n/a`; the semantic identity payload independently restores the exact sword-right/mace-left descriptor. A peer without CWV never receives a modded skin id, and even all-CWV lobbies never depend on numeric lookup parity. |
+| Detection | `/cwv_regression_test`: `issue416_483_transition_generated_skin_identity` and `issue741_cwv_skin_wire_unconditional`; log shows `[cwv:741] ... -> n/a` plus bounded `[cwv:660]` exact-identity delivery. |
 
 ---
 
@@ -446,7 +446,7 @@ Last updated: 2026-07-18.
 | Category | INTEGRATION |
 | Repro | Open the Dual Axes illusion picker and compare its unique cosmetic keys with `wh_1h_axe_skins` plus `WeaponSkins.default_skins.wh_1h_axe`; select one with visibly distinct hands, inspect the inventory character preview, then join as a second player and inspect the owner's husk after the parity handshake. |
 | Expected post-fix | Exact source/clone key-set parity; source tier memberships and `required_dlc` are preserved; each clone has both hands and the family display rig. The inventory character preview and remote husk preserve the exact generated skin instead of reverting to the variant default. |
-| Detection | `/cwv_regression_test` checks `dual_axes_cosmetic_family_parity` and `issue579_dual_axes_preview_and_husk_skin_continuity`; coop log contains one bounded `[cwv:579] replayed ... after peer-parity confirmation` line per parity-enable edge. |
+| Detection | `/cwv_regression_test` checks `dual_axes_cosmetic_family_parity` and `issue579_dual_axes_preview_and_husk_skin_continuity`; coop log contains bounded `[cwv:660]` semantic identity delivery/ack and no `rpc_add_equipment` replay carrying a CWV skin index. |
 
 
 ---
