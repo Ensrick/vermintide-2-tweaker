@@ -183,13 +183,12 @@ local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_p
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
--- Issue 712: the shared library's default api stores the raw `Vector3` global
--- as its constructor and guards it with `type(...) == "function"`. Retail
--- Stingray's `Vector3` is a callable TABLE, so that guard failed and every
--- position/scale channel silently no-oped ("invalid-position" in each
--- `[WOC:712] transform proof write={...}` report; Unit.set_local_pose was
--- never reached). Inject the policy-built api whose vector constructor is a
--- plain Lua closure. The shared library copy itself stays canonical.
+-- Issue 712 / 835: retail Stingray exposes Vector3 as a callable TABLE, but
+-- the shared library's default api guards its stored constructor with
+-- `type(...) == "function"`, so every position/scale channel silently
+-- no-oped ("invalid-position"; Unit.set_local_pose never reached). Inject
+-- the policy-built api whose vector constructor is a plain Lua closure. The
+-- shared library copy itself stays canonical.
 local _weapon_appearance = _appearance_lib.new(_appearance.appearance_api(_G))
 _rt_register("issue712_appearance_vector_ctor_wrapped", function()
 	local api = _appearance.appearance_api(_G)
@@ -2021,7 +2020,7 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 			or durable.target_node ~= "authored_render_node"
 			or durable.target_node_name ~= _appearance.TRANSFORM_NODE_NAME
 			or durable.position ~= "render_baseline_plus_offset"
-			or durable.scale ~= "absolute"
+			or durable.scale ~= "render_baseline_multiplier"
 			or durable.rotation ~= "absolute_euler_xyz"
 			or durable.write_mode ~= "atomic_local_pose"
 			or durable.gameplay ~= "retained_check_then_reapply"

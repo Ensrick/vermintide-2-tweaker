@@ -1,6 +1,6 @@
 # Chaos Wastes Tweaker Changelog
 
-## 0.7.299-dev (2026-07-18) - four root-cause clusters: linked pickups, meta-ammo client sync, Anath Raema, trial-chest cap [untested]
+## 0.7.300-dev (2026-07-18) - four root-cause clusters: linked pickups, meta-ammo client sync, Anath Raema, trial-chest cap [untested]
 
 One combined fix wave (session fable-fix-wave); every cluster ships [untested] pending in-game confirmation.
 
@@ -12,7 +12,20 @@ One combined fix wave (session fable-fix-wave); every cluster ships [untested] p
   - Under-spawn (issue 251): root evidence `[pickups:mission_start] NO MATCH for current difficulty='cataclysm'` - `make_cw_pickup_settings` shipped only default+normal keys, so every non-normal difficulty rode the engine fallback (`pickup_system.lua:409-419`). Injected pickup_settings now cover the full reachable key set from `Difficulties` (`difficulty_settings.lua:402-411`, minus versus_base): normal/hard/harder/hardest/cataclysm/cataclysm_2/cataclysm_3, each with FRESH per-key tables (the populate hook mutates entries in place). Whether the missing key alone fully explains the Blood in the Darkness first-tome miss remains [unverified] until a log with the new keys is captured.
   - New rt check `cursed_chest_reconcile_132` + offline reconcile-plan and difficulty-key suites in `test_ct_chest_count_audit.lua`.
 
-**Verify (host, full restart, LOAD banner shows 0.7.298-dev):** (1) issue 249/256 coop: client takes Quiver Cascade boons, compares HUD vs firing-revealed ammo - host log should show no `[ct:256]` clamp beyond legit partial-spawn cases and the client's stack count should match the host's (`/verify_meta_ammo` on both peers). (2) issue 288/464: wield the trait weapon with the Rework on; `[ct:288] add ... stat=reload_speed mult=-0.5 event=nil` in the log plus visibly faster reload = pass. (3) issues 60/132: set Chests of Trials Per Mission = 3, run a `*_belakor_path1` campaign-geometry mission; expect at most 3 chests standing and one `[ct:132] reconcile` line when the map over-spawned. (4) issue 251: Blood in the Darkness at Cataclysm; the `[populate_pickups]` line must show `diff_has_entry=true` and no `NO MATCH` fallback.
+**Verify (host, full restart, LOAD banner shows 0.7.300-dev):** (1) issue 249/256 coop: client takes Quiver Cascade boons, compares HUD vs firing-revealed ammo - host log should show no `[ct:256]` clamp beyond legit partial-spawn cases and the client's stack count should match the host's (`/verify_meta_ammo` on both peers). (2) issue 288/464: wield the trait weapon with the Rework on; `[ct:288] add ... stat=reload_speed mult=-0.5 event=nil` in the log plus visibly faster reload = pass. (3) issues 60/132: set Chests of Trials Per Mission = 3, run a `*_belakor_path1` campaign-geometry mission; expect at most 3 chests standing and one `[ct:132] reconcile` line when the map over-spawned. (4) issue 251: Blood in the Darkness at Cataclysm; the `[populate_pickups]` line must show `diff_has_entry=true` and no `NO MATCH` fallback.
+## 0.7.299-dev (2026-07-18) - #136 live host graph reconciliation [verify-fix-coop]
+
+- Clients now apply the completed host `ct_graph_snapshot_chunk` payload to the live `DeusRunController` graph immediately after chunk assembly, so direct current-node and mission consumers no longer wait for the Chaos Wastes map UI to open before seeing the host-authoritative mission graph.
+- The existing `DeusMapScene.on_enter` snapshot application remains as a late visual safety path. This adds no RPC, per-frame stream, or unpaced chunk send; the existing #97 paced transport remains the only graph-snapshot carrier.
+- Added Lua coverage proving receiver store-before-apply ordering, the direct live graph boundary, and the preserved paced-send contract.
+
+**Co-op verify:** host and client run CT dev 0.7.299-dev, start a Chaos Wastes expedition with the same injected-adventure-map settings used for the prior repro, and play through node 1 without reopening the map as a workaround. Host/client logs should name the same current node, level, and god; the client should log `[ct:136] live snapshot apply ... marker=graph_snapshot_live_apply_before_mission_select_v0.7.299`.
+
+## 0.7.298-dev (2026-07-18) - #505 deepest-run weapon-chest crash
+
+- Fixed the verified `DeusWeaponGeneration.get_random_rarity` crash after the Single Mission Loader launched with `Run Progress = 100%`. Vanilla requires `0 <= run_progress < 1` and its own ImGui loader caps the slider at `0.999`; CT had exposed and forwarded exactly `1.0`.
+- Added one canonical `sanitize_progress` boundary shared by menu presets, `/ct_load_mission`, and the final load primitive. Values below zero become `0`, values at/above the engine limit become `0.999`, and invalid numeric input cannot enter the seed.
+- Renamed the final preset to `Deepest (99.9%)` so the UI states the actual engine-safe value. Runtime and offline regressions prove neither the menu nor command path can reintroduce the `>= 1.0` assertion.
 
 ## 0.7.297-dev (2026-07-18) - reconciliation build: parallel 0.7.296-dev streams
 

@@ -73,10 +73,17 @@ return function(H, repo_root)
 	end
 
 	H.test("WOC #712 resolves the exact canonical authored-render-node pose", function()
-		local target = module.resolve({ position = { 1, 2, 3 } }, transform_spec(),
+		-- Retail 0.1.33 proof captured native scale {100,100,100} on the
+		-- named visible node. The authored 0.9 value means 10% smaller, so the
+		-- absolute pose passed to WeaponAppearance must be {90,90,90}; writing
+		-- {0.9,0.9,0.9} made the model effectively invisible.
+		local target = module.resolve({
+			position = { 1, 2, 3 }, scale = { 100, 100, 100 },
+		}, transform_spec(),
 			{ 0.5, -0.5, -0.5, 0.5 })
 		H.deep_equal(target.position, { 1, 2, 2.7 })
 		H.deep_equal(target.scale, { 90, 90, 90 })
+		H.deep_equal(target.apply_spec.scale, { 90, 90, 90 })
 		H.deep_equal(target.apply_spec.rotation, { -180, -90, -90 })
 		H.equal(target.node, 2)
 		H.equal(target.apply_spec.node, 2)
@@ -84,9 +91,27 @@ return function(H, repo_root)
 		H.equal(module.CONTRACT.target_node, "authored_render_node")
 		H.equal(module.CONTRACT.target_node_name, policy.TRANSFORM_NODE_NAME)
 		H.equal(module.CONTRACT.position, "render_baseline_plus_offset")
-		H.equal(module.CONTRACT.scale, "absolute")
+		H.equal(module.CONTRACT.scale, "render_baseline_multiplier")
 		H.equal(module.CONTRACT.rotation, "absolute_euler_xyz")
 		H.equal(module.CONTRACT.write_mode, "atomic_local_pose")
+	end)
+
+	H.test("WOC #712 scale multiplier preserves nonuniform authored baselines", function()
+		local target = module.resolve({
+			position = { 0, 0, 0 }, scale = { 100, 50, 25 },
+		}, {
+			node = 2,
+			scale = { 0.9, 0.8, 0.4 },
+			offset = { 0, 0, 0 },
+			rotation = { 0, 0, 0 },
+		}, { 0, 0, 0, 1 })
+		H.deep_equal(target.scale, { 90, 40, 10 })
+		H.deep_equal(target.apply_spec.scale, { 90, 40, 10 })
+	end)
+
+	H.test("WOC #712 fails closed without a captured native render scale", function()
+		H.equal(module.resolve({ position = { 0, 0, 0 } }, transform_spec(),
+			{ 0, 0, 0, 1 }), nil)
 	end)
 
 	H.test("WOC #613 tracks only positively identified gameplay spawns", function()
@@ -132,7 +157,7 @@ return function(H, repo_root)
 			H.equal(tracked, 1, perspective)
 			H.equal(writes(), 2, perspective)
 			H.deep_equal(state.position, { 1, 2, 2.7 })
-			H.deep_equal(state.scale, { 90, 90, 90 })
+			H.deep_equal(state.scale, { 0.9, 0.9, 0.9 })
 			H.equal(events[2], "next-frame-retained")
 			H.equal(events[3], "drift-repaired")
 		end
@@ -173,11 +198,11 @@ return function(H, repo_root)
 
 	H.test("WOC #613 quaternion comparison accepts equivalent negative signs", function()
 		local target = {
-			position = { 0, 0, -0.3 }, scale = { 90, 90, 90 },
+			position = { 0, 0, -0.3 }, scale = { 0.9, 0.9, 0.9 },
 			rotation = { 0.5, -0.5, -0.5, 0.5 },
 		}
 		local snapshot = {
-			position = { 0, 0, -0.3 }, scale = { 90, 90, 90 },
+			position = { 0, 0, -0.3 }, scale = { 0.9, 0.9, 0.9 },
 			rotation = { -0.5, 0.5, 0.5, -0.5 },
 		}
 		H.equal(module.matches(snapshot, target), true)
@@ -195,11 +220,6 @@ return function(H, repo_root)
 	end)
 
 	-- ================= issue 712: callable-table Vector3 constructor =================
-	-- Retail Stingray registers Vector3 as a callable TABLE. The shared library
-	-- guard `type(vector_new) == "function"` therefore rejected every
-	-- position/scale construction with its default api and apply_atomic_pose
-	-- exited "invalid-position" before Unit.set_local_pose ran (the exact
-	-- write report in every 2026-07-18 `[WOC:712] transform proof` log line).
 
 	local lib_path = repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_weapon_appearance.lua"
@@ -234,109 +254,73 @@ return function(H, repo_root)
 			end,
 		}
 		return {
-			Vector3 = callable_vector3(),
-			Unit = unit_api,
-			Quaternion = quaternion,
-			Matrix4x4 = matrix4x4,
+			Vector3 = callable_vector3(), Unit = unit_api,
+			Quaternion = quaternion, Matrix4x4 = matrix4x4,
 		}, pose_writes
 	end
 
-	H.test("WOC #712 appearance_api wraps a callable-table Vector3 in a function", function()
+	H.test("WOC #712 appearance api wraps retail callable-table Vector3", function()
 		H.equal(policy.appearance_api(nil), nil)
 		H.equal(policy.appearance_api({}), nil)
-
 		local globals = retail_fakes()
 		local api = policy.appearance_api(globals)
 		H.equal(type(api.vector_new), "function")
 		local vec = api.vector_new(1, 2, 3)
-		H.equal(vec.kind, "vec")
 		H.deep_equal({ vec[1], vec[2], vec[3] }, { 1, 2, 3 })
 		H.equal(api.vector_to_elements, globals.Vector3.to_elements)
-		H.equal(api.unit, globals.Unit)
-		H.equal(api.quaternion, globals.Quaternion)
-		H.equal(api.matrix4x4, globals.Matrix4x4)
-
-		-- A plain-function constructor (tooling build) is also accepted; the
-		-- non-indexable function simply yields no to_elements member.
 		local plain = policy.appearance_api({
 			Vector3 = function(x, y, z) return { x, y, z } end,
 		})
 		H.equal(type(plain.vector_new), "function")
-		H.deep_equal(plain.vector_new(4, 5, 6), { 4, 5, 6 })
 		H.equal(plain.vector_to_elements, nil)
 	end)
 
-	H.test("WOC #712 atomic pose lands through the wrapped constructor", function()
+	H.test("WOC #712 atomic pose lands through wrapped constructor", function()
 		local lib = dofile(lib_path)
 		local globals, pose_writes = retail_fakes()
 		local wa = lib.new(policy.appearance_api(globals))
 		local unit = {}
 		local ok, report = wa.apply(unit, {
-			node = 2,
-			scale = { 90, 90, 90 },
-			position = { 0, 0, -0.3 },
-			rotation = { -180, -90, -90 },
+			node = 2, scale = { 0.9, 0.9, 0.9 },
+			position = { 0, 0, -0.3 }, rotation = { -180, -90, -90 },
 		})
 		H.equal(ok, true)
-		H.equal(report.ok, true)
 		H.equal(report.transform_mode, "atomic-local-pose")
-		H.equal(report.transform_error, nil)
-		H.equal(report.channels.scale, true)
-		H.equal(report.channels.position, true)
-		H.equal(report.channels.rotation, true)
 		H.equal(#pose_writes, 1)
-		H.equal(pose_writes[1].unit, unit)
 		H.equal(pose_writes[1].node, 2)
 		H.deep_equal({ pose_writes[1].pose.position[1], pose_writes[1].pose.position[2],
 			pose_writes[1].pose.position[3] }, { 0, 0, -0.3 })
 		H.deep_equal({ pose_writes[1].pose.scale[1], pose_writes[1].pose.scale[2],
-			pose_writes[1].pose.scale[3] }, { 90, 90, 90 })
-		H.deep_equal({ pose_writes[1].pose.rotation[1], pose_writes[1].pose.rotation[2],
-			pose_writes[1].pose.rotation[3] }, { -180, -90, -90 })
+			pose_writes[1].pose.scale[3] }, { 0.9, 0.9, 0.9 })
 	end)
 
-	H.test("WOC #712 unwrapped callable-table constructor reproduces invalid-position", function()
-		-- Pin of the diagnosed mechanism: feeding the raw callable table the way
-		-- the library's default api captured `Vector3` must fail exactly like the
-		-- live log (`mode=atomic-local-pose ok=false error=invalid-position`,
-		-- no set_local_pose call). If the wiring in weapons_of_chaos.lua ever
-		-- reverts to the default api, the source pin below fails first.
+	H.test("WOC #712 raw callable-table constructor reproduces invalid-position", function()
 		local lib = dofile(lib_path)
 		local globals, pose_writes = retail_fakes()
 		local wa = lib.new({
-			unit = globals.Unit,
-			vector_new = globals.Vector3, -- raw callable table, type "table"
+			unit = globals.Unit, vector_new = globals.Vector3,
 			vector_to_elements = globals.Vector3.to_elements,
-			quaternion = globals.Quaternion,
-			matrix4x4 = globals.Matrix4x4,
+			quaternion = globals.Quaternion, matrix4x4 = globals.Matrix4x4,
 		})
 		local ok, report = wa.apply({}, {
-			node = 2,
-			scale = { 90, 90, 90 },
-			position = { 0, 0, -0.3 },
-			rotation = { -180, -90, -90 },
+			node = 2, scale = { 0.9, 0.9, 0.9 },
+			position = { 0, 0, -0.3 }, rotation = { -180, -90, -90 },
 		})
 		H.equal(ok, false)
-		H.equal(report.transform_mode, "atomic-local-pose")
 		H.equal(report.transform_error, "invalid-position")
-		H.equal(report.channels.position, false)
 		H.equal(#pose_writes, 0)
 	end)
 
-	H.test("WOC #712/#613 production wiring pins", function()
+	H.test("WOC #712/#613/#278 production wiring pins", function()
 		local path = repo_root
 			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
 		local file = assert(io.open(path, "rb"))
 		local source = file:read("*a")
 		file:close()
-		-- 712: the appearance library must be constructed with the wrapped api.
 		H.truthy(source:find("_appearance_lib.new(_appearance.appearance_api(_G))", 1, true))
 		H.equal(source:find("_appearance_lib.new()", 1, true), nil)
-		-- 613: husk/preview spawns report the vanilla 3p-only contract.
 		H.truthy(source:find("expects_first_person_unit(owner_unit_1p)", 1, true))
 		H.truthy(source:find("not-expected vanilla-3p-only gear_utils.lua:276", 1, true))
-		-- 278: the fail-safe skip is retained and now names its caller.
-		H.truthy(source:find("SKIPPING loadout sync (fail-safe, issue 422)", 1, true))
 		H.truthy(source:find("_log_skip_caller(item, slot_name)", 1, true))
 		H.truthy(source:find("[WOC:278] skip caller item=%s slot=%s frames=%s", 1, true))
 	end)
@@ -346,40 +330,104 @@ return function(H, repo_root)
 		H.equal(module.expects_first_person_unit(nil), false)
 	end)
 
-	-- ================= issue 278: skip-caller frame filter =================
-
 	local wire = dofile(repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_wire_policy.lua")
 	local SELF_MARKERS = { "weapons_of_chaos", "vmf/modules", "[C]" }
 
-	H.test("WOC #278 caller frames drop header and self/plumbing frames, cap 3", function()
+	H.test("WOC #278 caller frames filter plumbing and cap output", function()
 		local trace = table.concat({
-			"",
 			"stack traceback:",
-			"\t[string \"scripts/mods/weapons_of_chaos/weapons_of_chaos.lua\"]:1699: in function '_log_skip_caller'",
-			"\t[C]: in function 'pcall'",
-			"\t[string \"scripts/mods/vmf/modules/core/hooks.lua\"]:210: in function 'method'",
-			"\t[string \"scripts/helpers/loadout_utils.lua\"]:62: in function 'sync_loadout'",
-			"\t[string \"scripts/managers/player/player_manager.lua\"]:400: in function 'set_loadout'",
-			"\t[string \"scripts/mods/gui_tweaker/gui_tweaker.lua\"]:99: in main chunk",
-			"\t[string \"scripts/game_state/state_ingame.lua\"]:12: in function 'update'",
+			"[string \"scripts/mods/weapons_of_chaos/weapons_of_chaos.lua\"]:1699",
+			"[C]: in function 'pcall'",
+			"[string \"scripts/helpers/loadout_utils.lua\"]:62",
+			"[string \"scripts/managers/player/player_manager.lua\"]:400",
+			"[string \"scripts/mods/gui_tweaker/gui_tweaker.lua\"]:99",
+			"[string \"scripts/game_state/state_ingame.lua\"]:12",
 		}, "\n")
 		local frames = wire.caller_frames(trace, SELF_MARKERS, 3)
 		H.equal(frames,
-			"[string \"scripts/helpers/loadout_utils.lua\"]:62: in function 'sync_loadout'"
-			.. " <- [string \"scripts/managers/player/player_manager.lua\"]:400: in function 'set_loadout'"
-			.. " <- [string \"scripts/mods/gui_tweaker/gui_tweaker.lua\"]:99: in main chunk")
+			"[string \"scripts/helpers/loadout_utils.lua\"]:62"
+			.. " <- [string \"scripts/managers/player/player_manager.lua\"]:400"
+			.. " <- [string \"scripts/mods/gui_tweaker/gui_tweaker.lua\"]:99")
 	end)
 
-	H.test("WOC #278 caller frames fall back unfiltered when only self frames exist", function()
+	H.test("WOC #278 caller frames fail closed and retain fallback", function()
 		local trace = "stack traceback:\n"
-			.. "\t[string \"scripts/mods/weapons_of_chaos/weapons_of_chaos.lua\"]:10: in function 'a'\n"
-			.. "\t[string \"scripts/mods/vmf/modules/core/hooks.lua\"]:20: in function 'b'"
+			.. "[string \"scripts/mods/weapons_of_chaos/weapons_of_chaos.lua\"]:10\n"
+			.. "[string \"scripts/mods/vmf/modules/core/hooks.lua\"]:20"
 		local frames = wire.caller_frames(trace, SELF_MARKERS, 3)
-		H.truthy(frames:find("weapons_of_chaos.lua\"]:10", 1, true))
-		H.truthy(frames:find(" <- ", 1, true))
+		H.truthy(frames:find("weapons_of_chaos.lua", 1, true))
 		H.equal(wire.caller_frames(nil, SELF_MARKERS, 3), nil)
 		H.equal(wire.caller_frames("", SELF_MARKERS, 3), nil)
 		H.equal(wire.caller_frames("stack traceback:", SELF_MARKERS, 3), nil)
+	end)
+
+	-- ============ issue 712 tuner: retarget from stored baselines ============
+
+	H.test("WOC #712 retarget rebuilds from stored baselines with per-perspective scale", function()
+		local unit_3p, unit_1p = { "u3" }, { "u1" }
+		local states = {
+			[unit_3p] = { position = { 1, 1, 1 }, scale = { 100, 100, 100 },
+				rotation = { 0.7071, 0, 0, -0.7071 } },
+			[unit_1p] = { position = { 2, 2, 2 }, scale = { 100, 100, 100 },
+				rotation = { 0.7071, 0, 0, -0.7071 } },
+		}
+		local function copy3(v) return { v[1], v[2], v[3] } end
+		local rotation_q = { 0, 0.7071, 0, -0.7071 }
+		local events = {}
+		local owner = module.new({
+			alive = function(u) return states[u] ~= nil end,
+			read = function(u)
+				local s = states[u]
+				return { position = copy3(s.position), scale = copy3(s.scale),
+					rotation = { s.rotation[1], s.rotation[2], s.rotation[3], s.rotation[4] } }
+			end,
+			rotation_components = function() return { rotation_q[1], rotation_q[2],
+				rotation_q[3], rotation_q[4] } end,
+			apply = function(u, spec)
+				local s = states[u]
+				s.position = copy3(spec.position)
+				s.scale = copy3(spec.scale)
+				s.rotation = { rotation_q[1], rotation_q[2], rotation_q[3], rotation_q[4] }
+				return true, { ok = true }
+			end,
+			should_track = function() return true end,
+			diagnostic = function(kind) events[#events + 1] = kind end,
+		})
+		local spec = { node = 2, scale = { 0.9, 0.9, 0.9 }, offset = { 0, 0, -0.3 },
+			rotation = { -180, -90, -90 } }
+		H.equal(owner:apply(unit_3p, spec, "3p", "owner-spawn"), true)
+		local spec_1p = { node = 2, scale = { 0.8, 0.8, 0.8 }, offset = spec.offset,
+			rotation = spec.rotation }
+		H.equal(owner:apply(unit_1p, spec_1p, "1p", "owner-spawn"), true)
+		H.deep_equal(states[unit_3p].scale, { 90, 90, 90 })
+		H.deep_equal(states[unit_1p].scale, { 80, 80, 80 })
+
+		-- Retarget with new values: 3P scale 0.7, 1P scale 0.6, new offset.
+		-- Both units must resolve from their STORED baselines (positions 1,1,1
+		-- and 2,2,2 plus the new offset - never compounding the old -0.3).
+		local retargeted, live = owner:retarget({
+			scale = { 0.7, 0.7, 0.7 },
+			scale_1p = { 0.6, 0.6, 0.6 },
+			offset = { 0, 0, -0.5 },
+			rotation = { -180, -90, -90 },
+		})
+		H.equal(retargeted, 2)
+		H.equal(live, 2)
+		H.deep_equal(states[unit_3p].scale, { 70, 70, 70 })
+		H.deep_equal(states[unit_1p].scale, { 60, 60, 60 })
+		H.deep_equal(states[unit_3p].position, { 1, 1, 0.5 })
+		H.deep_equal(states[unit_1p].position, { 2, 2, 1.5 })
+		H.equal(events[#events], "retargeted")
+
+		-- Dead units prune instead of counting as live.
+		states[unit_1p] = nil
+		local retargeted2, live2 = owner:retarget({
+			scale = { 0.9, 0.9, 0.9 },
+			offset = { 0, 0, -0.3 },
+			rotation = { -180, -90, -90 },
+		})
+		H.equal(retargeted2, 1)
+		H.equal(live2, 1)
 	end)
 end

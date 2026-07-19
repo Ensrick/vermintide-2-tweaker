@@ -51,6 +51,13 @@ sit rotated -90/-90/-90, scaled 0.9, 0.3 lower on Z, and every `[WOC:712]
 transform proof` line must report `ok=true` with a changed after-pose. Attach
 the newest log so the `[WOC:278] skip caller` frames can name the nil-key
 source.
+> **Merge note (2026-07-19):** a parallel session independently fixed the same
+> scale defect by changing the durable owner to MULTIPLIER semantics (scale
+> composes against the captured native render-node baseline) in an unshipped
+> 0.1.35 draft, while the shipped 0.1.35/0.1.36 chain above fixed it with
+> absolute values. The merged source keeps the multiplier semantics with the
+> author-baked numbers re-encoded as multipliers (3P 0.9, 1P 0.8 - identical
+> visuals to the shipped 0.1.36). Ships with the next version.
 
 ## 0.1.32-dev (2026-07-18) - #712 Blightreaper transform census [diagnostics-armed]
 

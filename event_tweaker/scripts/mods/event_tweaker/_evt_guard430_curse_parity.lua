@@ -69,14 +69,17 @@ local ET_PEER_PARITY_SCHEMA  = 1
 
 local _curse_requested = false
 local _curse_active = false
+local _shadow_requested = false
+local _shadow_active = false
 local _curse_session_locked = false
 
 local function _refresh_session_lock()
-    local locked = _curse_requested or _curse_active
+    local locked = _curse_requested or _curse_active or _shadow_requested or _shadow_active
     if locked ~= _curse_session_locked then
         _curse_session_locked = locked
-        pcall(printf, "[et:430] cursed-session hot-join contract %s (selected=%s active=%s)",
-            locked and "LOCKED" or "OPEN", tostring(_curse_requested), tostring(_curse_active))
+        pcall(printf, "[et:430] peer-required session hot-join contract %s (curse=%s/%s shadow=%s/%s)",
+            locked and "LOCKED" or "OPEN", tostring(_curse_requested), tostring(_curse_active),
+            tostring(_shadow_requested), tostring(_shadow_active))
     end
 end
 
@@ -87,6 +90,14 @@ end
 
 local function _set_curse_active(value)
     _curse_active = value == true
+    _refresh_session_lock()
+end
+local function _set_shadow_requested(value)
+    _shadow_requested = value == true
+    _refresh_session_lock()
+end
+local function _set_shadow_active(value)
+    _shadow_active = value == true
     _refresh_session_lock()
 end
 local function _pending_remote_peer()
@@ -108,6 +119,8 @@ end
 
 ET.set_curse_session_requested = _set_curse_requested
 ET.set_curse_session_active = _set_curse_active
+ET.set_shadow_session_requested = _set_shadow_requested
+ET.set_shadow_session_active = _set_shadow_active
 ET.curse_session_locked = function() return _curse_session_locked end
 
 -- Pre-flight completed before adding a new hook: event_tweaker had no existing
@@ -174,8 +187,7 @@ end
 -- beacon. Beacon missing or any error -> false (fail-safe: curses inert; every
 -- non-curse feature of the mod is untouched). Read LIVE per gather so the floor
 -- reflects the roster at injection time.
-local function _curse_wire_safe()
-    local pp = mod._et_peer_parity
+local function _peer_feature_wire_safe(pp)
     if not pp then return false end
     local ok, res = pcall(pp.all_peers_have, pp)
     if not ok or res ~= true then return false end
@@ -188,7 +200,12 @@ local function _curse_wire_safe()
     return JoinPolicy.can_arm(true, pending)
 end
 
+local function _curse_wire_safe()
+    return _peer_feature_wire_safe(mod._et_peer_parity)
+end
+
 ET.curse_wire_safe = _curse_wire_safe
+ET.peer_feature_wire_safe = _peer_feature_wire_safe
 
 rt_register("issue430_peer_parity_beacon_installed", function()
     -- The beacon must be built, installed, hold the fail-safe posture, and carry

@@ -160,8 +160,8 @@ local function _build_widgets(active, dropped, base_y, max_active, max_drop, tit
         row = row + 1
     end
 
-    -- issue 430 parity: curses the floor drops, greyed + flagged so the host sees
-    -- a curse that will NOT activate this run (never shown as active above).
+    -- Peer-capability floors: package curses and Adventure Shadow are greyed +
+    -- flagged when a current peer lacks the required implementation.
     if #dropped > 0 then
         local n_drop = math.min(#dropped, max_drop)
         for i = 1, n_drop do
@@ -235,7 +235,7 @@ end)
 
 -- ---- textual preview / verify surface ------------------------------------------
 -- Works even if the panel icons do not render, and confirms the mutator list the
--- panel would show (active + the issue 430 skipped curses).
+    -- panel would show (active + peer-capability-gated skips).
 mod:command("event_preview_mutators", "List the mutators this lobby will activate (the #532 Tab-hold preview)", function()
     local active, dropped = preview_selection()
     if #active == 0 and #dropped == 0 then
@@ -248,7 +248,7 @@ mod:command("event_preview_mutators", "List the mutators this lobby will activat
         mod:echo("%s", string.format("  %d. %s%s", i, mod._evt_mutator_display(a.name), a.is_curse and " (curse)" or ""))
     end
     if #dropped > 0 then
-        mod:echo("%s", string.format("[event_tweaker] Skipped -- %d Cursed Adventure curse(s): a lobby peer lacks the mod (would CTD on the curse husk):", #dropped))
+        mod:echo("%s", string.format("[event_tweaker] Skipped -- %d peer-gated mutator(s): a lobby peer lacks the required Tweaker: Events capability:", #dropped))
         for i = 1, #dropped do
             mod:echo("%s", string.format("  - %s", mod._evt_mutator_display(dropped[i])))
         end

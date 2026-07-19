@@ -126,7 +126,9 @@ local function do_load(opts)
     end
 
     local difficulty = opts.difficulty or current_difficulty()
-    local progress = opts.progress or 0
+    -- Canonical final boundary for menu, command, and any future caller. Vanilla
+    -- asserts when a weapon chest sees run_progress >= 1.0 (#505 crash log).
+    local progress = Cat.sanitize_progress(opts.progress)
     local level_seed = opts.level_seed or 0
     local with_belakor = opts.with_belakor and true or false
 
@@ -193,8 +195,7 @@ local function parse_progress(s)
     local n = tonumber(s)
     if not n then return nil end
     if n > 1 then n = n / 1000 end
-    if n < 0 then n = 0 elseif n > 1 then n = 1 end
-    return n
+    return Cat.sanitize_progress(n)
 end
 
 -- Commands advertise catalog base keys. Also recognize an older composite key

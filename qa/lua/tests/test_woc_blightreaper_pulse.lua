@@ -97,7 +97,7 @@ return function(H, repo_root)
 		H.equal(calls.transforms, 1)
 	end)
 
-	H.test("WOC #613 sends the exact canonical 90 transform through 1P and 3P pulse paths", function()
+	H.test("WOC #613 sends the exact canonical 0.9 multiplier transform through 1P and 3P pulse paths", function()
 		for _, perspective in ipairs({ "1p", "3p" }) do
 			local runtime, unit, calls = fixture()
 			local ok, reason = runtime.apply(
@@ -108,7 +108,7 @@ return function(H, repo_root)
 			H.equal(calls.transform_specs[1].node, 2)
 			H.equal(calls.transform_perspectives[1], perspective)
 			H.equal(calls.transform_surfaces[1], "perspective-contract")
-			H.deep_equal(calls.transform_specs[1].scale, { 90, 90, 90 })
+			H.deep_equal(calls.transform_specs[1].scale, { 0.9, 0.9, 0.9 })
 			H.deep_equal(calls.transform_specs[1].offset, { 0, 0, -0.3 })
 		end
 	end)
@@ -155,7 +155,7 @@ return function(H, repo_root)
 		H.equal(reason, "applied")
 		H.equal(owner:count(), 1)
 		H.deep_equal(state.position, { 0, 0, -0.3 })
-		H.deep_equal(state.scale, { 90, 90, 90 })
+		H.deep_equal(state.scale, { 0.9, 0.9, 0.9 })
 	end)
 
 	H.test("WOC #712 fails closed when the authored render node is unavailable", function()

@@ -12,6 +12,7 @@ param(
     [switch]$SkipLua,
     [switch]$Quick,
     [switch]$FixStale,
+    [switch]$SkipBundleAtomicity,
     [switch]$Quiet
 )
 
@@ -114,10 +115,18 @@ Run-Check "check_versions"                    { & (Join-Path $here "check_versio
 # Issue #724: runtime/version/config/newest-release deltas must carry the
 # owning mod's exact root bundle in the same diff. This is diff-scoped and
 # blocking; docs/tests-only and bundle-only reconciliation changes pass.
-Run-Check "check_release_bundle_atomicity"    { & (Join-Path $here "check_release_bundle_atomicity.ps1")    -Quiet:$Quiet }
+if (-not $SkipBundleAtomicity) {
+    Run-Check "check_release_bundle_atomicity" { & (Join-Path $here "check_release_bundle_atomicity.ps1") -Quiet:$Quiet }
+}
+elseif (-not $Quiet) {
+    Write-Host "===== check_release_bundle_atomicity =====" -ForegroundColor Cyan
+    Write-Host "[check_release_bundle_atomicity] SKIP - build-only pipeline generates the required bundle, then runs this gate." -ForegroundColor DarkYellow
+    Write-Host ""
+}
 Run-Check "check_unpack_safety"               { & (Join-Path $here "check_unpack_safety.ps1")               -Quiet:$Quiet }
 Run-Check "check_vmf_widget_types"            { & (Join-Path $here "check_vmf_widget_types.ps1")            -Quiet:$Quiet }
 Run-Check "check_event_register_signature"    { & (Join-Path $here "check_event_register_signature.ps1")    -Quiet:$Quiet }
+Run-Check "check_loc_description_titles"      { & (Join-Path $here "check_loc_description_titles.ps1")      -Quiet:$Quiet }
 Run-Check "check_ci_hardening"                { & (Join-Path $here "check_ci_hardening.ps1")                -Quiet:$Quiet }
 Run-Check "check_cross_mod_deps"              { & (Join-Path $here "check_cross_mod_deps.ps1")              -Quiet:$Quiet }
 Run-Check "check_shared_lib_drift"            { & (Join-Path $here "check_shared_lib_drift.ps1")            -Quiet:$Quiet }

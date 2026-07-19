@@ -471,9 +471,11 @@ return {
                 setting_id = "talent_reworks_group",
                 type       = "group",
                 sub_widgets = {
-                    -- Issue #445: live rework-family controls. These are ordinary
-                    -- checkboxes so stock VMF can use them; crt enforces the same
-                    -- single-select contract that Mod Tweaker registers via #446.
+                    -- Issue #445: live rework-family controls. The masters stay
+                    -- in one dedicated nested group instead of being mixed into
+                    -- the individual rework rows. These are ordinary checkboxes
+                    -- so stock VMF can use them; crt enforces the same single-
+                    -- select contract that Mod Tweaker registers via #446.
                     {
                         setting_id = "rework_master_group",
                         type = "group",

@@ -1682,7 +1682,9 @@ Related coverage: CWV `cwv_wire_safe_thrown_variant_installed` and offline
 **First seen:** 2026-07-14 (Weapons of Chaos v0.1.11-dev)
 **Canonical Issue:** [#595](https://github.com/Ensrick/vermintide-2-tweaker/issues/595)
 **Lives in:** any VMB mod that adds a Lua helper and loads it with a literal
-`mod:dofile(...)` while its `.package` uses an explicit Lua file list.
+`mod:dofile(...)`, `mod.dofile(mod, ...)`, or `pcall(mod.dofile, mod, ...)`
+while its `.package` uses an explicit Lua file list, or while a dev/stable
+stream accidentally names the sibling stream's localization/helper file.
 
 ### Symptoms
 - Source and offline Lua tests pass because the helper exists in the checkout.
@@ -1692,7 +1694,9 @@ Related coverage: CWV `cwv_wire_safe_thrown_variant_installed` and offline
   event such as initial player spawn.
 
 ### Diagnosis pattern
-1. Match the first resource error to a literal `mod:dofile` target.
+1. Match the first resource error to a literal dofile target. Include dot-form
+   calls such as `pcall(mod.dofile, mod, "...")`; those are the same VMF
+   resource boundary even though they do not contain the `mod:dofile` token.
 2. Read the owning `resource_packages/<mod>/<mod>.package`; an explicit `lua =
    [...]` list that omits the new helper is the root cause.
 3. Do not accept source-level unit coverage as bundle evidence. Build with
@@ -1706,11 +1710,16 @@ Related coverage: CWV `cwv_wire_safe_thrown_variant_installed` and offline
   unrelated vanilla behavior and fail closed for unsafe mod-owned identities.
 - Keep `qa/check_dofile_package_coverage.ps1` in the Quick gate. It checks every
   literal dofile target in the canonical active-mod inventory for both source
-  existence and package coverage.
+  existence and package coverage, including colon-form and dot-form calls.
 
 ### Related Issues / commits
 - WOC v0.1.12-dev (#595); offline `test_woc_wire_policy.lua`; repository gate
   `check_dofile_package_coverage.ps1`.
+- GUT dev #824; the runtime localization-format check used
+  `pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/gui_tweaker_localization")`
+  and then treated the missing resource as a pass. The fix uses the dev
+  localization filename and makes an unreachable localization table fail the
+  regression check.
 
 ## 46. Post-hook initializes state after vanilla already consumed it
 
@@ -2136,6 +2145,17 @@ write itself returning false on owner 1P/3P and character previews while the
 same units positively resolved their authored renderable as node `2`. This
 supersedes the earlier assumption that vanilla's scene-graph restoration made
 node 0 a universally writable authored-transform target.
+
+**Refined 2026-07-19:** changing the target node also changes the transform
+baseline and therefore can change scale semantics. WOC `0.1.33-dev` retained
+position and rotation on the correct named node, but the live proof showed that
+node's native scale was `{100,100,100}` and the writer replaced it with absolute
+`{0.9,0.9,0.9}`. The model became roughly 111 times smaller even though every
+setter/readback check passed. A descriptor that means “10% smaller” must be
+declared as a baseline multiplier, resolved once from the captured native scale
+(`100 * 0.9 = 90`), and only then passed as an absolute value to the shared pose
+primitive. Regression coverage must use the observed non-unit baseline; an
+identity-scale fixture cannot detect this class.
 
 ## 59. Private/cross-career weapon template omits career ability actions
 

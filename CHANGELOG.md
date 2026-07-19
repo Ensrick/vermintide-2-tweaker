@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-07-19 - Blightreaper visible-scale restoration (#712)
+
+The WOC `0.1.33-dev` log proves its durable writer retained the requested pose
+on the correct render node, but also proves the node's native scale is 100 and
+the writer replaced it with absolute 0.9. WOC now resolves the authored 0.9 as
+a baseline multiplier (90 in the observed units) before issuing the absolute
+atomic pose. This draft is source-tested only and still needs the serialized
+bundle/build/deploy step.
+
+## 2026-07-19 - Dev localization resource contract (#824)
+
+Tweaker: GUI dev 0.2.296-dev now loads its own localization resource in the
+runtime format check and treats an unreachable localization table as a failed
+check. The static dofile/package gate now recognizes colon-form, dot-form, and
+protected dot-form module loads so the same resource-boundary mistake is caught
+before deployment.
+
+## 2026-07-18 - Canonical hidden build-only pipeline (#832)
+
+`tools/ship/ship.ps1 -BuildOnly` now provides the serialized, no-window VMB build needed to generate a release bundle before the source/bundle atomicity gate can pass. Build-only preflight defers only that circular gate, runs it immediately after generation, preserves the ship claim for the eventual full release, and exits before deploy, Workshop upload, GitHub release, or issue lifecycle changes.
+
+## 2026-07-18 - Headless VMB process boundary (#829)
+
+`tools/ship/ship.ps1` now starts VMBLauncher with explicit no-window process flags and redirected output instead of PowerShell's raw native call operator. Both the identity probe and full release preserve exit-code/output handling without allocating visible console windows in desktop automation. The ship self-test executes the boundary and passes under Windows PowerShell 5.1 and PowerShell 7.
+
+## 2026-07-18 - Chaos Wastes host graph live reconciliation
+
+Chaos Wastes Tweaker dev 0.7.299-dev addresses #136 at the proven graph-authority seam. Clients still receive the host's resolved graph through the existing paced `ct_graph_snapshot_chunk` pipeline, but now immediately apply the completed snapshot to the live `DeusRunController` graph instead of waiting for the map UI to open. The existing map-open application remains a visual late-safety path.
+
 ## 2026-07-17 - Cross-provider career-action clone ownership
 
 Issue #661's live `action_career_dr_3` / `action_career_es_4` conflicts came

@@ -282,6 +282,30 @@ _rt_register("cwv_husk_native_never_rekeyed", function()
     end
 end)
 
+_rt_register("cwv_issue762_outrider_blunderbuss_owner", function()
+    local expected =
+        "units/weapons/player/wpn_empire_blunderbuss_t1/wpn_empire_blunderbuss_t1"
+    local def = _find_def("cwv_es_outrider_grenade_launcher")
+    if not def or def.right_hand_unit ~= expected then
+        return string.format("Outrider definition visual drifted: %s (expected %s) (#762)",
+            tostring(def and def.right_hand_unit), expected)
+    end
+
+    local entry = ItemMasterList
+        and rawget(ItemMasterList, "cwv_es_outrider_grenade_launcher")
+    if not entry or entry.right_hand_unit ~= expected then
+        return string.format("Outrider item visual drifted: %s (expected %s) (#762)",
+            tostring(entry and entry.right_hand_unit), expected)
+    end
+
+    local skin = WeaponSkins and WeaponSkins.skins
+        and rawget(WeaponSkins.skins, "cwv_es_outrider_grenade_launcher_skin")
+    if not skin or skin.right_hand_unit ~= expected then
+        return string.format("Outrider generated skin visual drifted: %s (expected %s) (#762)",
+            tostring(skin and skin.right_hand_unit), expected)
+    end
+end)
+
 _rt_register("cwv_husk_nonresident_spawn_deferred", function()
     -- Issue #478: a resolved CWV variant husk must NEVER let vanilla
     -- spawn_inventory_unit spawn a NON-RESIDENT unit. A Deus-only base (e.g.

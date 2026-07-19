@@ -16,8 +16,9 @@ rules specific to this mod; architecture and recipes live in `DEVELOPMENT.md`.
 
 ## Hard rules (beyond the repo-wide NON-NEGOTIABLES)
 
-- **Issue guards are load-bearing.** `_evt_guard413_weave.lua` (weave-only
-  mutators CTD vanilla clients), `_evt_guard455_boss_events.lua` (boss_events-less
+- **Issue guards are load-bearing.** `_evt_guard413_weave.lua` (stock weave-only
+  mutators CTD vanilla clients; Shadow's only exception is the capability-gated,
+  asset-free `_evt_shadow_adventure.lua` adapter), `_evt_guard455_boss_events.lua` (boss_events-less
   levels host-fatal), `_evt_guard386_pacing.lua` (scalar pacing kills
   ConflictDirector). Never remove, weaken, or toggle-gate them; their regression
   checks and checklist slugs must survive every refactor.
@@ -51,7 +52,8 @@ rules specific to this mod; architecture and recipes live in `DEVELOPMENT.md`.
 
 Host-side injection into the live-events backend: most features need ONLY the
 host modded (vanilla clients receive mutators via `rpc_activate_mutator_client`),
-EXCEPT the Cursed Adventure group, which needs every peer to run the mod (clients
-must preload the curse resource package for replicated husks). Consequence:
+  EXCEPT the Cursed Adventure group and Adventure Shadow, which need every peer
+  to run the required capability (curse packages; Shadow's safe template adapter).
+  Consequence:
 anything you inject is broadcast to unmodded peers — crash safety of injected
 names is THIS mod's core invariant, which is why the guards above exist.

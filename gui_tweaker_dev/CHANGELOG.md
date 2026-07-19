@@ -1,6 +1,6 @@
 # Tweaker: GUI dev — Changelog
 
-## 0.2.295-dev (2026-07-19) -- #257/#274 order-independent cutscene skip window + #245/#246/#250/#533 live-session Hold-Tab provider [untested]
+## 0.2.297-dev (2026-07-19) -- #257/#274 order-independent cutscene skip window + #245/#246/#250/#533 live-session Hold-Tab provider [untested]
 
 Two root-cause clusters, one build.
 
@@ -28,6 +28,24 @@ Two root-cause clusters, one build.
 - **Regression:** rt-checks now cover all four issues (`issue245_tab_weapon_property_refresh` + traits, NEW `issue246_tab_equipped_illusion_refresh`, `issue250_deus_tab_talent_module_loaded`, NEW `issue533_cw_collectible_rows_suppressed`); NEW offline suite `test_gut_tab_live_provider.lua` (trait identity gates, skin fallback chain incl. clear-stale and unresolvable-template preservation, wire-safe filters, deus row policy, both-hooks + display-only source pins). Existing `test_gut_tab_property_refresh` / `test_gut_tab_talent_filter` suites unchanged and green.
 
 **Verify (solo, CW + adventure):** (1) #257: auto-skip ON, run The Well of Dreams - the intro fade must no longer show; attach `[gut:257]` lines. (2) #274: finish A Parting of the Waves with skip enabled - the ending cutscene must play/transition normally (no locked camera); a `[gut:274] skip window released` or clean `CAMERA-ACTIVATE` line at the ending is the evidence. (3) #245: reforge the equipped weapon (cim), hold Tab - properties/trait current. (4) #246: apply an illusion, hold Tab (and have a friend inspect you) - illusion icon shows. (5) #250: CW run, gain a talent boon, hold Tab - talents sit in their real tiers. (6) #533: ct adventure map inside CW, hold Tab - no tome/grim/dice rows.
+## 0.2.296-dev (2026-07-19) -- #824 dev localization runtime contract [verify-fix]
+
+- Corrected the runtime localization regression check to load the dev stream's
+  `gui_tweaker_dev_localization` resource instead of the stable stream name.
+- A failed localization `dofile` now fails the regression check rather than
+  being reported as a pass.
+- Extended the repository dofile/package coverage gate to detect dot-form and
+  protected `mod.dofile` calls, closing the static-check gap that hid this bug.
+
+**Solo verify:** launch Tweaker: GUI dev and run `/gut_regression_test`.
+`localization_format_safe` must pass without a resource error in the log.
+
+## 0.2.294-dev (2026-07-19) -- #222 remove repeated HideBuffs tooltip titles [verify-fix]
+
+- **Symptom:** the cross-mod title/body audit still found two GUT HideBuffs rows whose tooltip bodies merely repeated the orange popup header: Hide Player Levels and Hide Portrait Frames.
+- **Fix:** rewrote both tooltip bodies to describe behavior first without restating the setting title. Added the repository QA gate `check_loc_description_titles.ps1` so future `foo` + `foo_tooltip`/`foo_description` localization pairs fail if the body starts with the normalized localized title.
+- **Stable debt:** the stable `gui_tweaker/` copy is intentionally left untouched until promotion; the new gate freezes those exact stable lines as debt while enforcing the cleaned `gui_tweaker_dev/` stream.
+- **Verify:** open Tweaker: GUI dev in Mod Tweaker or VMF options, hover Hide Player Levels and Hide Portrait Frames, and confirm the popup shows the title once in the header while the body starts with behavior text.
 
 ## 0.2.293-dev (2026-07-19) -- #402 complete native loadout slot isolation [verify-fix]
 

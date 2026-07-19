@@ -27,20 +27,20 @@ Last updated: 2026-07-15 (v0.4.33-dev issue 626 dormant-event mission boundary).
 
 ---
 
-### et-weave-only-mutator-gate — cat_winds weave mutators must never inject outside a real Weave
+### et-weave-only-mutator-gate — unsafe winds stay gated; Shadow uses a capability-gated Adventure adapter
 
 **[MULTIPLAYER] [INTEGRATION]**
 
 | Field | Value |
 |-------|-------|
 | Symptom | Client CTD in Adventure when a Winds-of-Magic mutator activates: engine fatal in `Unit.light` (shadow, `mutator_shadow.lua:186-187`, non-resident `wpn_shadow_gargoyle_head`); or host/client script error "attempt to index a nil value" from `wind_settings` (heavens/light/death/beasts server_start, fire client_start). |
-| Root cause | The eight cat_winds mutators assume the Weave context: `Managers.weave:get_active_wind_settings()` is nil outside a weave (`weave_manager.lua:423-432`) and the weave resource packages are not resident. Vanilla clients cannot be preloaded by a host-only mod, so the names must be dropped at the injection chokepoint (`gather_mutators()` `add()`) before `rpc_activate_mutator_client` broadcasts them. `metal` is the one safe wind (fallback strength, no wind_settings index, no spawns). |
+| Root cause | The cat_winds mutators assume a Weave context: wind settings are nil and weave presentation assets are not resident. Shadow's gameplay is separable from those assets, but its stock client always spawns the non-resident lantern/VFX. Therefore Shadow may inject only after every peer proves the asset-free adapter capability; the other six unsafe winds remain excluded. `metal` remains natively safe. |
 | Mod(s) | event_tweaker |
-| Fix version(s) | event_tweaker v0.4.24-dev (issue 413) |
+| Fix version(s) | containment v0.4.24-dev; functional candidate v0.4.37-dev (issue 413) |
 | Category | INTEGRATION |
-| Repro | 1. Host an Adventure mission with `mut_shadow` checked and a modless client connected. 2. Mission must load with no CTD on either peer. 3. Host log shows `[et:413] dropped weave-only mutator [shadow]` and `initialized_mutator_map` has no `shadow`. |
-| Expected post-fix | All 7 weave-only names (`life`,`heavens`,`light`,`shadow`,`fire`,`death`,`beasts`) blocked outside a weave; `metal` still injectable; real Weave missions untouched (they pull winds from `Managers.weave:mutators()`, not live events). |
-| Detection | Runtime: `/event_tweaker_regression_test` check `issue413_weave_only_mutators_gated`. Source: `WEAVE_ONLY_MUTATORS` table + `_weave_wind_active()` (`_evt_guard413_weave.lua`), applied inside `gather_mutators()`'s `add()` (`_evt_selection.lua`). |
+| Repro | A. Solo Adventure: check Shadow, load a mission, confirm enemies beyond 6m fade and retain 90% DR; approach within 6m to reveal/remove DR. B. Two current-build peers: repeat and confirm both clients render the same reveal boundary. C. Join/old-build/modless control: Shadow must be omitted before activation and nobody crashes; active Shadow session rejects hot joins. |
+| Expected post-fix | Shadow runs through the asset-free adapter only in a capability-proven closed roster. It never spawns `wpn_shadow_gargoyle_head` or `vfx_static_shadow_01`. Other unsafe winds stay blocked; metal and real Weaves are untouched. |
+| Detection | Engine-free: `qa/lua/tests/test_event_shadow_adventure.lua`. Runtime: `/event_tweaker_regression_test` checks `issue413_shadow_adventure_adapter` and the original blocklist guard. Log: `[et:413] Shadow routed through asset-free Adventure adapter`; no `Unit.light`/resource fatal. |
 
 
 ---

@@ -387,21 +387,26 @@ spawned WOC unit, then replaces every texture and restores the trophy's exact
 gold/intensity/pulse values. Missing resources fail closed before Stingray C
 calls; there is no polling or RPC. Full hashes, bindings, source citations, and
 the rejected compiler paths live in `tools/BLIGHTREAPER_ASSET_PIPELINE.md`.
-The canonical held transform is uniform XYZ scale `{0.9, 0.9, 0.9}`, Euler XYZ
-rotation `{-90, -90, -90}`, and linked-position offset `{0, 0, -0.3}`. Static
-previews apply it once through the shared appearance primitive. Animated 1P/3P
-gameplay units use `_woc_durable_transform.lua`: capture the linked node-0
-baseline, compare retained numeric state, and reapply the resolved absolute pose
-only after animation drift. This weak owner prunes dead units, emits no RPC, and
-yields to an intentional non-identity WT development-tuner edit. A successful
-spawn-time `pcall` is not retention proof (issue #613, v0.1.24-dev).
+The canonical held transform uses uniform XYZ baseline multiplier
+`{0.9, 0.9, 0.9}`, Euler XYZ rotation `{-90, -90, -90}`, and linked-position
+offset `{0, 0, -0.3}`. Live `0.1.33-dev` evidence measured the named render
+node's native scale as `{100,100,100}`; the durable owner must therefore resolve
+the multiplier to absolute `{90,90,90}` before invoking the shared appearance
+primitive. Static previews apply the resolved pose once. Animated 1P/3P gameplay
+units use `_woc_durable_transform.lua`: resolve the exact named `blightreaper`
+render node, capture its baseline, compare retained numeric state, and reapply
+the same resolved absolute pose only after animation drift. This weak owner
+prunes dead units, emits no RPC, and yields to an intentional non-identity WT
+development-tuner edit. A successful spawn-time `pcall` is not retention proof
+(issue #613, v0.1.24-dev), and a retained setter state is not visual success if
+its scale semantics changed with the target node (issue #712, v0.1.33-dev).
 
 The inherited `entry.name` remains required for vanilla equip safety. Every
 exact Blightreaper backend instance is therefore canonicalized at
 `BackendUtils.get_item_units` before owner, husk, character-preview, or item
 preview recipes branch. This descriptor replay composes with, rather than
 replacing, the atomic durable transform above: the canonical producer selects
-the authored unit, then the returned unit receives the retained node-0 pose.
+the authored unit, then the returned unit receives the retained named-render-node pose.
 Do not add a surface-local normal-Sword correction. Bounded unit debug-name,
 hash, and mesh-node diagnostics provide mission-transition evidence.
 

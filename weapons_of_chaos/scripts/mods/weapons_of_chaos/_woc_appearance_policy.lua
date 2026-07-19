@@ -24,26 +24,22 @@ M.PULSE_VARIABLES = {
 	{ name = "intensity", value = 1.746000051498413 },
 	{ name = "pulse", value = { 1, 0.5 } },
 }
--- Canonical authored-mesh pose. The durable owner resolves the offset against
--- that render node's baseline and writes scale/position/rotation atomically
--- without mutating the game-owned attachment root.
--- SCALE IS ABSOLUTE and the authored render node's NATIVE scale is 100 (the
--- import's centimeter-to-meter compensation; issue 712 log evidence:
--- before s={100,100,100}). 90 = the author-approved 10 percent reduction on
--- that baseline for third person; first person runs 80 (author sight-tuned
--- 2026-07-19: "0.8 scale for first person"). 0.9 here shrank the sword 111x
--- into invisibility the moment the constructor fix made writes land.
--- Rotation x=-180 total is the author-verified bake from the /woc_pose tuner.
+-- Canonical authored-mesh pose. Scale is a MULTIPLIER of the imported render
+-- node's captured native scale (the durable owner multiplies against the
+-- baseline; native is {100,100,100} per issue 712 log evidence), never an
+-- absolute Stingray scale - writing absolute 0.9 shrank the model 111x.
+-- Values are the author's sight-verified bake (2026-07-19 /woc_pose session):
+-- rotation x=-180 total, third person 0.9, first person 0.8.
 -- TRANSFORM_1P deliberately SHARES the offset and rotation tables with
 -- TRANSFORM (live /woc_pose tuning moves both perspectives together); only
 -- the scale table is per-perspective.
 M.TRANSFORM = {
-	scale = { 90, 90, 90 },
+	scale = { 0.9, 0.9, 0.9 },
 	offset = { 0, 0, -0.3 },
 	rotation = { -180, -90, -90 },
 }
 M.TRANSFORM_1P = {
-	scale = { 80, 80, 80 },
+	scale = { 0.8, 0.8, 0.8 },
 	offset = M.TRANSFORM.offset,
 	rotation = M.TRANSFORM.rotation,
 }
@@ -120,13 +116,12 @@ end
 -- `type(vector_new) ~= "function"` (_lib_weapon_appearance.lua:51), so with
 -- the library's default api every position/scale construction returned nil
 -- in-game and the atomic pose path exited "invalid-position" BEFORE
--- Unit.set_local_pose ran. Proof: every 0.1.30/0.1.31-dev `[WOC:712]
--- transform proof` line carries `write={mode=atomic-local-pose ok=false
--- error=invalid-position}` with before==after, while rotation-only writes
--- (a genuine function member, Quaternion.from_euler_angles_xyz) landed in
--- 0.1.24-dev. Build the injected api here so the constructor reaches the
--- library wrapped in a plain Lua closure, and the shared library copy stays
--- byte-identical to its canonical source.
+-- Unit.set_local_pose ran (proof: every 0.1.30/0.1.31-dev `[WOC:712]
+-- transform proof` line carried `ok=false error=invalid-position` with
+-- before==after, while rotation-only writes landed in 0.1.24-dev because
+-- Quaternion.from_euler_angles_xyz is a genuine function member). Build the
+-- injected api here so the constructor reaches the library wrapped in a plain
+-- Lua closure, and the shared library copy stays byte-identical to canonical.
 -- Returns nil when `Vector3` is absent (offline harness) so the library's
 -- default api remains in charge there.
 function M.appearance_api(globals)

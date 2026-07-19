@@ -13,7 +13,7 @@ M.CONTRACT = {
 	target_node = "authored_render_node",
 	target_node_name = "blightreaper",
 	position = "render_baseline_plus_offset",
-	scale = "absolute",
+	scale = "render_baseline_multiplier",
 	rotation = "absolute_euler_xyz",
 	write_mode = "atomic_local_pose",
 	gameplay = "retained_check_then_reapply",
@@ -106,6 +106,7 @@ end
 
 function M.resolve(base, spec, rotation_components)
 	if type(base) ~= "table" or not triplet(base.position)
+			or not triplet(base.scale)
 			or type(spec) ~= "table" or not triplet(spec.scale)
 			or not triplet(spec.offset) or not triplet(spec.rotation)
 			or type(spec.node) ~= "number"
@@ -113,7 +114,11 @@ function M.resolve(base, spec, rotation_components)
 	return {
 		apply_spec = {
 			node = spec.node,
-			scale = copy_triplet(spec.scale),
+			scale = {
+				base.scale[1] * spec.scale[1],
+				base.scale[2] * spec.scale[2],
+				base.scale[3] * spec.scale[3],
+			},
 			position = {
 				base.position[1] + spec.offset[1],
 				base.position[2] + spec.offset[2],
@@ -126,7 +131,11 @@ function M.resolve(base, spec, rotation_components)
 			base.position[2] + spec.offset[2],
 			base.position[3] + spec.offset[3],
 		},
-		scale = copy_triplet(spec.scale),
+		scale = {
+			base.scale[1] * spec.scale[1],
+			base.scale[2] * spec.scale[2],
+			base.scale[3] * spec.scale[3],
+		},
 		rotation = { rotation_components[1], rotation_components[2],
 			rotation_components[3], rotation_components[4] },
 		node = spec.node,

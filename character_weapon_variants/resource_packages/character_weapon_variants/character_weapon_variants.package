@@ -16,13 +16,10 @@ material = [
 	"units/cwv_crowbill/imperial_03/imperial_03"
 	"units/cwv_crowbill/imperial_04/imperial_04"
 	"units/cwv_crowbill/imperial_05/imperial_05"
-	"units/cwv_launcher/launcher_01/launcher_01"
 ]
 
 unit = [
 	"units/cwv_es_musket_custom/*"
-	"units/cwv_launcher/launcher_01/launcher_01"
-	"units/cwv_launcher/launcher_01/launcher_01_3p"
 	"units/cwv_es_greataxe/axe_01/axe_01"
 	"units/cwv_es_greataxe/axe_01/axe_01_3p"
 	"units/cwv_es_greataxe/axe_02/axe_02"
@@ -61,5 +58,4 @@ texture = [
 	"textures/cwv_crowbill/imperial_03/*"
 	"textures/cwv_crowbill/imperial_04/*"
 	"textures/cwv_crowbill/imperial_05/*"
-	"textures/cwv_launcher/launcher_01/*"
 ]

@@ -245,7 +245,7 @@ Last updated: 2026-07-17.
 | Fix version(s) | ct_dev v0.7.260-dev (#564) |
 | Category | UNIT |
 | Repro | Open Mod Options with CT dev enabled and inspect the Single Mission Loader's Run Progress dropdown. |
-| Expected post-fix | All five labels render with one literal `%`; startup contains no `Invalid string format` exception for `ctdm_p_1` through `ctdm_p_5`. |
+| Expected post-fix | All five labels render with one literal `%`; startup contains no `Invalid string format` exception for `ctdm_p_1` through `ctdm_p_5`. The final label is `Deepest (99.9%)`, matching vanilla's strict `< 1.0` engine boundary. |
 | Detection | `/ct_regression_test`: `localization_format_safe` and `mission_catalog_localization_format_safe_564` both pass. |
 
 ### single-mission-loader-context-and-composition - Loader exposes invalid controls or launches outside the chamber

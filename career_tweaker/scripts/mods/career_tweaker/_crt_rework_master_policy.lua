@@ -3,8 +3,56 @@
 
 local M = {}
 
-M.MASTER_ENSRICK = "rework_master_ensrick"
-M.MASTER_TOURNEY = "rework_master_tourney"
+-- One metadata owner serves runtime policy, localization, and engine-free QA.
+-- Keeping the player-facing attribution beside the setting-family matcher
+-- prevents a new rework from joining a master catalog while missing its label.
+M.FAMILIES = {
+    ensrick = {
+        master_id = "rework_master_ensrick",
+        setting_prefix = "rework_",
+        label_prefix = "[Ensrick]",
+    },
+    tourney = {
+        master_id = "rework_master_tourney",
+        setting_prefix = "trn_",
+        label_prefix = "[Tourney Balance]",
+    },
+}
+
+M.MASTER_ENSRICK = M.FAMILIES.ensrick.master_id
+M.MASTER_TOURNEY = M.FAMILIES.tourney.master_id
+
+function M.family_for_setting(setting_id)
+    if type(setting_id) ~= "string" then return nil end
+    for family, metadata in pairs(M.FAMILIES) do
+        if setting_id ~= metadata.master_id
+                and setting_id:sub(1, #metadata.setting_prefix) == metadata.setting_prefix then
+            return family, metadata
+        end
+    end
+    return nil
+end
+
+function M.is_leaf_localization_key(key)
+    local family = M.family_for_setting(key)
+    return family ~= nil
+        and not key:find("_group$")
+        and not key:find("_description$")
+        and not key:find("_tooltip$")
+end
+
+function M.decorate_label(setting_id, text)
+    local _, metadata = M.family_for_setting(setting_id)
+    if not metadata or type(text) ~= "string" then return text end
+
+    -- Normalize the superseded 0.3.69 suffix form as well as the current
+    -- prefix. This makes the transform idempotent under localization reloads.
+    text = text:gsub(" %[Ensrick's Reworks%]$", "")
+    text = text:gsub(" %[Tourney Balance%]$", "")
+    text = text:gsub("^%[Ensrick%]%s+", "")
+    text = text:gsub("^%[Tourney Balance%]%s+", "")
+    return metadata.label_prefix .. " " .. text
+end
 
 local function sorted_ids(source)
     local ids, seen = {}, {}

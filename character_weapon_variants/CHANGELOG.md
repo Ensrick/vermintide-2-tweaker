@@ -1,5 +1,31 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.456-dev (2026-07-18) - restore Outrider blunderbuss (#762) [verify-fix-coop]
+
+- Reverted #627's rejected imported launcher presentation. The Outrider now
+  uses vanilla's resident `wpn_empire_blunderbuss_t1` unit again, matching the
+  exact unit authored by `ItemMasterList.es_blunderbuss` and its base skin.
+- Removed the custom launcher's preview/wire policy, package entries, converted
+  mesh and textures, conversion pipeline, and third-party notice after a full
+  consumer search proved the Outrider was their only runtime owner.
+- Preserved the Outrider's Trollhammer-derived gameplay, right-hand mounting,
+  ammo-unit suppression, generated skin key, inventory icon, and #760's separate
+  Saltzpyre animation work. Added engine-free coverage that locks the canonical
+  unit across the definition/generated-skin owner and forbids dead launcher
+  resources from returning to the active bundle.
+
+**Co-op verification:** Equip an existing and a newly crafted Outrider Grenade
+Launcher. Confirm the vanilla Kruber blunderbuss model appears in owner 1P/3P,
+inventory character preview, and illusion preview, persists into a mission, and
+is visible on a second CWV player's remote view without a custom launcher or
+Trollhammer mesh appearing.
+
+**DoD:** Re-walked U-4 shared appearance ownership, U-7 forward-reference
+safety, U-8 build hygiene, G-RANGED retained ammo/projectile identity,
+G-CROSS-CHAR resident vanilla-unit provenance, G-BLACKSMITH generated-skin
+identity, and G-APPEARANCE preview/husk consumers. The owner/remote in-game
+matrix remains pending on #762.
+
 ## 0.1.454-dev (2026-07-18) - coherent pistol-less Rapier contract (#807) [verify-fix-coop]
 
 - Removed the inherited left-hand ammunition contract from Kruber's pistol-less

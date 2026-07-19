@@ -6,7 +6,7 @@ local Curses = require("scripts/mods/event_tweaker/event_tweaker_curses")
 local function en(s) return { en = s } end
 
 local loc = {
-    mod_description = en("Host-side picker for turning any built-in game mutator on for your lobby: difficulty modifiers, extra specials and hordes, winds of magic, dormant event mutators like Geheimnisnacht ritual sites and Khorne skull pickups, and the full adventure-safe Chaos Wastes set. Most of these only the host needs, but the Cursed Adventure curses bring Chaos Wastes curse mechanics and themed lighting onto normal missions, and those need every player in the lobby to run the mod."),
+    mod_description = en("Host-side picker for turning built-in game mutators on for your lobby: difficulty modifiers, extra specials and hordes, winds of magic, dormant event mutators like Geheimnisnacht ritual sites and Khorne skull pickups, and the adventure-safe Chaos Wastes set. Most only need the host modded. Adventure Shadow and Cursed Adventure require every current player to run the compatible Tweaker: Events capability."),
 
     -- Event presets (handle the active_events string magic some
     -- mutators inspect inside their server_start_function)
@@ -49,6 +49,7 @@ local loc = {
     -- "[Events] Peer-parity: disabled Cursed Adventure curses. Missing Tweaker:
     -- Events: <peer>. ...". Kept short so the one-line notice stays readable.
     peer_parity_curse_feature_label = en("Cursed Adventure curses"),
+    peer_parity_shadow_feature_label = en("Adventure Shadow"),
 
     -- Issue 626: dormant event missions are grouped separately from mutators.
     cat_event_missions = en("Dormant Event Missions"),
@@ -149,7 +150,7 @@ local loc = {
     mut_light             = en("Wind: Light"),
     mut_light_tooltip     = en("Adds truesight effects."),
     mut_shadow            = en("Wind: Shadow"),
-    mut_shadow_tooltip    = en("Adds stealth effects."),
+    mut_shadow_tooltip    = en("Enemies farther than six metres from the team fade from view and take 90%% less damage. On Adventure maps this uses an asset-free safe adapter and requires every current player to run a Shadow-capable Tweaker: Events build; new joins remain closed while active."),
     mut_fire              = en("Wind: Fire"),
     mut_fire_tooltip      = en("Adds burning effects."),
     mut_death             = en("Wind: Death"),

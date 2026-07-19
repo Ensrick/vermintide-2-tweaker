@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.299-dev"
+local MOD_VERSION = "0.7.300-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -470,6 +470,7 @@ _rt_register("single_mission_loader_redesign_505", function()
     end
     local cat = mod._ct_dev_mission_catalog
     if type(cat) ~= "table" or type(cat.compose_level_key) ~= "function" then return "mission catalog/composer missing" end
+    if not (cat.sanitize_progress and cat.MAX_RUN_PROGRESS == 0.999 and cat.PROGRESS[#cat.PROGRESS] == 0.999 and cat.sanitize_progress(1) == 0.999) then return "unsafe run progress" end
     if type(cat.MISSIONS) ~= "table" or #cat.MISSIONS <= #AdventurePool.CW_SCENARIOS then
         return "mission catalog does not include Adventure plus CW missions"
     end
@@ -2207,38 +2208,13 @@ local GRAPH_FIELD_MAP = {
 
 local _ct_host_graph_snapshot = nil  -- { session = N, nodes = { [node_key] = { l=..., ... } } }
 local _ct_graph_inbound = {}
+local CT_GRAPH_SNAPSHOT_LIVE_APPLY_MARKER = "graph_snapshot_live_apply_before_mission_select_v0.7.299"
+local _ct_graph_live_apply_log_count = 0
 
 -- Walk the snapshot and copy synced fields onto each node in `graph_data` in place.
--- In-place mutation preserves the table identity that `_path_graph` holds onto and
--- the `next` pointers that link nodes — neither is shipped, so neither is clobbered.
---
--- v0.7.123-dev (Issue #53 — REAL root cause):
--- SKIP the node identified by `_run_state:get_arena_belakor_node()`. Reason:
--- vanilla `DeusRunController._get_graph_data()` (deus_run_controller.lua:2035-2056)
--- mutates the chosen node's `level = "arena_belakor"`, `theme = "belakor"`,
--- `base_level = "arena_belakor"`, `minor_modifier_group = {}`, etc., once
--- `arena_belakor_node` is set in SharedState. That swap is what makes the map
--- scene spawn ARENA_NODE_UNIT (the visual temple) for that node — without it,
--- the node renders as TRAVEL/SHRINE_NODE_UNIT (no temple).
---
--- The vanilla call order is:
---   1. DeusMapView.start() → calls deus_run_controller:get_graph_data() → triggers
---      _get_graph_data()'s in-place swap. _path_graph now has the swapped node.
---   2. DeusMapView.start() → scene:on_enter(graph_data, ...) with the swapped table.
---   3. ct's DeusMapScene.on_enter hook → apply_graph_snapshot(graph_data) → was
---      overlaying host's PRE-swap snapshot fields onto the just-swapped node,
---      reverting level="arena_belakor" back to (e.g.) level="bell_belakor_path1".
---   4. Vanilla on_enter saw the reverted level → spawned wrong unit → no temple.
---
--- This was a CLIENT-ONLY bug because `_ct_host_graph_snapshot` is only populated
--- on peers that RECEIVED the broadcast (clients); the host itself never has a
--- snapshot stored locally, so the apply was a no-op on host. Matches user's
--- exact Issue #53 report: "host sees temple, client does not."
---
--- Fix: don't apply the snapshot's level/base_level/theme/etc. fields to the
--- arena_belakor node — let the vanilla swap stand. All other nodes still get
--- the host's resolved values (the original purpose of this snapshot — see
--- comments at line ~770 above for why we ship the graph at all).
+-- In-place mutation preserves `_path_graph` identity and `next` links. #53: skip
+-- `_run_state:get_arena_belakor_node()` so vanilla's Belakor-temple swap from
+-- DeusRunController._get_graph_data() is not reverted by the host snapshot.
 local function apply_graph_snapshot(graph_data)
     if not (_ct_host_graph_snapshot and _ct_host_graph_snapshot.nodes and graph_data) then
         return 0
@@ -2273,19 +2249,8 @@ local function apply_graph_snapshot(graph_data)
                         end
                     end
                 end
-                -- #68 FIX (v0.7.144-dev): make the CLIENT recognize the host's injected
-                -- adventure maps. The client builds IS_INJECTED_ADVENTURE_LEVEL from its
-                -- OWN per-map toggle selection, which can be empty or differ from the
-                -- host's -- so adventure_base_from_level_key() returns nil for every
-                -- host-injected node and the client renders them ALL as SHRINE_NODE_UNIT
-                -- with no curse halo, AND ct's adventure-map curse sky/lighting tint is
-                -- skipped (on_injected_adventure_level() is false on the client). Proven
-                -- 2026-06-18: client logged DeusMapScene seen=15 rewritten=0 skipped=13 on
-                -- every map open while the host had injected those maps. Cure: register
-                -- the host's synced base_level into the client's recognition table,
-                -- validated against the full static catalog MISSION_BY_KEY (built at load
-                -- on BOTH peers, so a hit is a genuine adventure base -- never a vanilla CW
-                -- node like arena_belakor). Idempotent; persists for the run once seen.
+                -- #68: make the client recognize host-injected adventure maps for UI
+                -- icon/tint gates even when its own per-map toggle list differs.
                 local bl = node.base_level
                 if type(bl) ~= "string" and type(node.level) == "string" then
                     -- Fallback when the host didn't ship base_level: derive the base
@@ -2310,6 +2275,42 @@ local function apply_graph_snapshot(graph_data)
             skipped, tostring(arena_node_key))
     end
     return applied
+end
+
+-- #136: mission/loadout code also reads DeusRunController directly, so clients
+-- apply the host graph snapshot to the live run graph as soon as chunks assemble.
+local function apply_host_graph_snapshot_to_live_run(reason)
+    if not _ct_host_graph_snapshot then
+        return 0, "no_snapshot"
+    end
+    local mechanism = Managers and Managers.mechanism and Managers.mechanism.game_mechanism
+        and Managers.mechanism:game_mechanism()
+    local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
+    if not (rc and rc.get_graph_data) then
+        if _ct_graph_live_apply_log_count < 8 then
+            _ct_graph_live_apply_log_count = _ct_graph_live_apply_log_count + 1
+            _dbg("[ct:136] live snapshot apply deferred reason=%s status=no_run_controller marker=%s",
+                tostring(reason), CT_GRAPH_SNAPSHOT_LIVE_APPLY_MARKER)
+        end
+        return 0, "no_run_controller"
+    end
+    local ok, graph_data = pcall(function() return rc:get_graph_data() end)
+    if not ok or type(graph_data) ~= "table" then
+        if _ct_graph_live_apply_log_count < 8 then
+            _ct_graph_live_apply_log_count = _ct_graph_live_apply_log_count + 1
+            _dbg("[ct:136] live snapshot apply deferred reason=%s status=%s marker=%s",
+                tostring(reason), tostring(graph_data), CT_GRAPH_SNAPSHOT_LIVE_APPLY_MARKER)
+        end
+        return 0, "no_graph_data"
+    end
+    local applied = apply_graph_snapshot(graph_data)
+    if applied > 0 or _ct_graph_live_apply_log_count < 8 then
+        _ct_graph_live_apply_log_count = _ct_graph_live_apply_log_count + 1
+        _dbg("[ct:136] live snapshot apply reason=%s applied=%d session=%s marker=%s",
+            tostring(reason), applied, tostring(_ct_host_graph_snapshot.session),
+            CT_GRAPH_SNAPSHOT_LIVE_APPLY_MARKER)
+    end
+    return applied, "applied"
 end
 
 mod:network_register("ct_graph_snapshot_chunk", function(sender_peer_id, schema_version, session, seq, total, chunk_str)
@@ -2354,6 +2355,7 @@ mod:network_register("ct_graph_snapshot_chunk", function(sender_peer_id, schema_
     for _ in pairs(payload) do node_count = node_count + 1 end
     _dbg("[ct_graph] received host graph snapshot from %s (session %s, %d chunks, %d bytes, %d nodes)",
         tostring(sender_peer_id), tostring(session), entry.total, #json, node_count)
+    apply_host_graph_snapshot_to_live_run("ct_graph_snapshot_chunk")
 end)
 
 -- Encode the host's resolved graph_data into the short-key wire shape and
