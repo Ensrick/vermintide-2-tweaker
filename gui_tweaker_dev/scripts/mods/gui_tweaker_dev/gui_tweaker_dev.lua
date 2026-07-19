@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.297-dev"
+local MOD_VERSION = "0.2.298-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -348,6 +348,17 @@ _rt_register("all_languages_defer_340", function()
     end
     if t.case ~= "custom_font_resource_case2" then
         return "#340 regression: all-languages case changed from custom_font_resource_case2 (the ported mod ships its own font bundle -- re-verify before changing the port shape)"
+    end
+    if type(t.inspect_fonts) ~= "function" or type(t.inspect_player_names) ~= "function"
+        or type(t.utf8_metrics) ~= "function" or type(t.glyph_samples) ~= "table"
+        or #t.glyph_samples ~= 6 then
+        return "#340 regression: bounded font/glyph/player-name diagnostics are incomplete"
+    end
+    for _, sample in ipairs(t.glyph_samples) do
+        local metrics = t.utf8_metrics(sample.text)
+        if type(sample.label) ~= "string" or type(metrics) ~= "table" or metrics.valid ~= true then
+            return "#340 regression: glyph diagnostic sample is not valid UTF-8"
+        end
     end
     -- Source guard (io-safe; nil in retail => skip, runs under tools/CI): the module must
     -- not contain a live Fonts[1] assignment. Needle split so this line can't self-match.
