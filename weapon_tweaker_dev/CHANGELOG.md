@@ -1,5 +1,50 @@
 # Weapon Tweaker Changelog
 
+## 0.12.279-dev (2026-07-18) - #661 Saltzpyre CWV ranged career actions [verify-fix]
+
+- Runtime-parity mirror of Weapon Tweaker `0.12.278-beta`: WT-owned Saltzpyre
+  access to CWV's Empire Old Musket and Outrider Grenade Launcher now installs
+  the standard Witch Hunter career action rows, including Bounty Hunter's
+  Locked and Loaded action.
+- Kruber remains the default authored owner for both items; Saltzpyre remains
+  optional WT-controlled compatibility and Warrior Priest remains excluded.
+- Mirrored regression coverage proves the two rows include Bounty Hunter as a
+  conditional WT receiver without making him part of the default career list.
+
+**Solo verify:** Confirm `[wt] v0.12.279-dev loaded`, then follow the
+`0.12.278-beta` verification above. `/wt_regression_test` should also include
+the `issue661 Saltzpyre CWV ranged ports receive career actions` coverage.
+
+## 0.12.278-dev (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix-coop]
+
+- Runtime-parity mirror of Weapon Tweaker `0.12.277-beta`: Kruber's regular
+  Saltzpyre Crossbow receives the exact additive left-unit third-person grip
+  correction `+0.100` Y / `+0.025` Z.
+- Owner, bot, remote-husk, and inventory-preview renderers consume the same
+  receiver-scoped baked descriptor; first person, native Saltzpyre, Volley
+  Crossbow, shared attachment tables, and network payloads remain unchanged.
+- Added bounded retained-position readback and mirrored runtime regression
+  coverage; the dev Hold-Pose tuner remains a local transient overlay.
+
+**Co-op verify:** Confirm `[wt:LOAD] v0.12.278-dev` on both peers, then follow
+the `0.12.277-beta` verification above. `/wt_regression_test` must pass
+`issue701_kruber_crossbow_left_grip_offset`.
+
+## 0.12.277-dev (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
+
+- Runtime-parity mirror of Weapon Tweaker `0.12.276-beta`: CWV's Infantry
+  Combat Style effective template now shares the elf-spear donor's 3P remap
+  and wield contracts by identity.
+- This routes the observed Saltzpyre first-light event
+  `attack_swing_down_left_axe` to the donor's receiver-safe
+  `attack_swing_stab` target while retaining the native Kerillian branch.
+- Offline and `/wt_regression_test` coverage lock the clone/donor identity,
+  all three standard Saltzpyre wield routes, and the crash event mapping.
+
+**Solo verify:** Confirm `[wt:LOAD] v0.12.277-dev`, then follow the
+`0.12.276-beta` verification above. `/wt_regression_test` must pass
+`issue732_cwv_infantry_spear_saltzpyre_remap`.
+
 ## 0.12.276-dev (2026-07-18) - #724 release/source reconciliation [tooling]
 
 - Rebuilt the friends-only development stream from the current merged source

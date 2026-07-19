@@ -1,18 +1,35 @@
 return function(H, repo_root)
     local source = require("cwv_source").combined(repo_root)
+	local policy_path = repo_root
+		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua"
+	local policy_file = assert(io.open(policy_path, "rb"))
+	local policy_source = policy_file:read("*a")
+	policy_file:close()
 
     H.test("Old Musket mode uses one event-driven state channel", function()
+        -- The channel implementation lives in _cwv_old_musket_wire.lua
+        -- (extracted 0.1.449-dev); the entry keeps the dofile + call sites.
         local start = assert(source:find('local CHANNEL, SCHEMA = "cwv_old_musket_mode_v1", 1', 1, true))
-        local finish = assert(source:find('-- v0.1.293 approach A:', start, true))
+        local finish = assert(source:find('_om._old_musket_mode_channel = CHANNEL', start, true))
         local channel = source:sub(start, finish)
         H.truthy(source:find('mod:network_register(CHANNEL', 1, true))
         H.truthy(source:find('send("others", "query")', 1, true))
         H.truthy(source:find('_om._old_musket_record_and_publish(player_unit, wielded_slot', 1, true))
         H.equal(channel:find('mod.update = function(dt)', 1, true), nil)
+        -- #474 (2026-07-18): stance and shot report ALSO ride the delivering
+        -- cwv_item_identity channel through ONE shared acceptor pair.
+        H.truthy(channel:find('_om._old_musket_accept_mode = accept_mode', 1, true))
+        H.truthy(channel:find('_om._old_musket_play_remote_fire = play_remote_fire', 1, true))
+        H.truthy(source:find('payload.musket_mode = mode', 1, true))
+        H.truthy(source:find('payload.slot == "cwv_musket_fire"', 1, true))
+        H.truthy(source:find('slot = "cwv_musket_fire"', 1, true))
     end)
 
     H.test("Old Musket consumers share cached owner and backend state", function()
-        H.truthy(source:find('_om._old_musket_mode_for_owner(owner_unit_3p, wielded_slot)', 1, true))
+        -- Husk stance is keyed by the PRESENTED slot (the owner publishes it
+        -- that way); equipment.wielded_slot lags the wield RPC (#474).
+        H.truthy(source:find('_om._old_musket_mode_for_owner(owner_unit_3p, slot_name)', 1, true))
+        H.equal(source:find('_om._old_musket_mode_for_owner(owner_unit_3p, wielded_slot)', 1, true), nil)
         H.truthy(source:find('_om._old_musket_modes_by_backend[info.backend_id]', 1, true))
         H.truthy(source:find('Weapons.old_musket_template_melee', 1, true))
         H.truthy(source:find('pcall(Unit.animation_event, self.character_unit, wield_event)', 1, true))
@@ -24,7 +41,7 @@ return function(H, repo_root)
         local dispatch = source:sub(start, finish)
         H.truthy(dispatch:find('_om._old_musket_publish_fire', 1, true))
         H.equal(dispatch:find('rawget(sounds', 1, true), nil)
-        H.truthy(source:find('WwiseUtils.trigger_unit_event, world, mode, owner_unit, 0', 1, true))
+        H.truthy(source:find('WwiseUtils.trigger_unit_event, world, event_name, owner_unit, 0', 1, true))
     end)
 
     H.test("Old Musket transform writes full saved triplets and re-buckets units", function()
@@ -36,15 +53,13 @@ return function(H, repo_root)
     end)
 
     H.test("Old Musket paints CIM and browser previews per unit", function()
-        local helper_start = assert(source:find('_om._apply_old_musket_textures = function', 1, true))
-        local helper_finish = assert(source:find('_om._old_musket_preview_texture_targets = function', helper_start, true))
-        local helper = source:sub(helper_start, helper_finish)
-        H.truthy(helper:find('Unit.set_texture_for_materials', 1, true))
-        H.equal(helper:find('pcall(Material.set_texture', 1, true), nil)
-        H.truthy(helper:find('_om._old_musket_texture_resources_ready', 1, true))
-        H.truthy(helper:find('Application and Application.can_get', 1, true))
-        H.truthy(helper:find('_om._prepare_old_musket_preview_material', 1, true))
-        H.truthy(source:find('Unit.set_all_materials', 1, true))
+		H.truthy(policy_source:find('function M.apply_textures(unit, preview_world)', 1, true))
+		H.truthy(policy_source:find('Unit.set_texture_for_materials', 1, true))
+		H.equal(policy_source:find('pcall(Material.set_texture', 1, true), nil)
+		H.truthy(policy_source:find('M.texture_resources_ready(Application and Application.can_get)', 1, true))
+		H.truthy(policy_source:find('M.prepare_preview_material(unit)', 1, true))
+		H.truthy(policy_source:find('Unit.set_all_materials', 1, true))
+		H.truthy(source:find('_om._apply_old_musket_textures = _om.old_musket_preview.apply_textures', 1, true))
 
         local hook_start = assert(source:find('mod:hook("LootItemUnitPreviewer", "spawn_units"', 1, true))
         local hook_finish = assert(source:find('-- ============================================================\n-- Init', hook_start, true))
@@ -68,7 +83,7 @@ return function(H, repo_root)
 
         -- (2) remote husk 3P: stance resolved from the bounded channel, not the wire.
         H.truthy(source:find('pcall(_om._apply_old_musket_transform, weapon_unit_3p, "3p", mode)', 1, true))
-        H.truthy(source:find('_om._old_musket_mode_for_owner(owner_unit_3p, wielded_slot)', 1, true))
+        H.truthy(source:find('_om._old_musket_mode_for_owner(owner_unit_3p, slot_name)', 1, true))
 
         -- (3) inventory / hero character preview: transform + stance wield-anim replay.
         H.truthy(source:find('_om._apply_old_musket_transform(slot.right, "3p", _stance)', 1, true))
@@ -96,9 +111,12 @@ return function(H, repo_root)
     end)
 
     H.test("Old Musket texture C-call fails closed", function()
-        H.truthy(source:find('Old Musket paint SKIP reason=%s detail=%s chat=false', 1, true))
-        H.truthy(source:find('return false, 0\n\tend\n\tif preview_world then', 1, true))
-        H.equal(source:find('pcall(Material.set_texture', 1, true), nil)
+		H.truthy(policy_source:find('Old Musket paint SKIP reason=%s detail=%s chat=false', 1, true))
+		H.equal(policy_source:find('pcall(Material.set_texture', 1, true), nil)
+		local census_at = assert(policy_source:find('M.unit_materials_ready(unit)', 1, true))
+		local paint_at = assert(policy_source:find('Unit.set_texture_for_materials(unit, binding.slot, binding.texture)', 1, true))
+		H.truthy(census_at < paint_at)
+		H.truthy(source:find('issue742_old_musket_texture_material_preflight', 1, true))
         H.truthy(source:find('issue617_old_musket_preview_texture_consumer', 1, true))
         H.truthy(source:find('resource preflight must fail closed on one missing texture', 1, true))
     end)

@@ -1,5 +1,39 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.248-dev (2026-07-18) -- #731 VOIP disconnect channel guard
+
+- Source inspection confirmed that `Voip._ensure_left_voip_room` clears its local room and then sends `rpc_voip_room_request(false)`. During disconnect, the server's `PEER_ID_TO_CHANNEL` entry can already be gone, so vanilla passes `nil` to the engine RPC and crashes on `Channel must be an integer`.
+- Added an exact preflight gate for only that VOIP request. It drops the teardown message when the server peer or numeric channel is already absent, and a narrow race guard contains the same engine assertion if the channel closes between preflight and send. All other RPC names and all other failures preserve the vanilla path.
+- Consolidated the existing noclip `rpc_suicide` decision and the new VOIP decision behind one `NetworkTransmit.send_rpc_server` hook owner. This avoids introducing duplicate hooks on a shared engine seam.
+- Added Lua 5.1 coverage for live/missing channels, server/local paths, exact error matching, singleton hook ownership, and noclip composition.
+
+### Co-op verify
+
+Join another player's lobby as a client, then leave or disconnect during a transition and repeat several times. The client must return without a crash. If the server channel closed before VOIP teardown, the log may contain one `[gt:731][WARN] Dropped stale VOIP leave-room RPC` line for the session; unrelated RPC failures must not be swallowed.
+
+## v0.2.247-dev (2026-07-18) -- #659 extension-ready keep-pet reconciliation [diagnostics-armed]
+
+- The failed 2026-07-18 verification ran GT Dev `v0.2.245-dev`; the live Necromancer extension reached vanilla `warm_up_skeletons`, but GT emitted no `[gt:659]` lifecycle decision. The offline truth-table passing therefore did not prove that the live initialized extension consumed the policy.
+- Reused one idempotent, engine-free reconciliation policy at two distinct vanilla lifecycle edges: `_on_talents_changed`, where the hub flag is written, and `extensions_ready`, after the passive extension has finished initialization. This is the issue's pre-recorded fallback 2 and preserves later talent refreshes without duplicate hooks on either method.
+- Replaced mutation-only evidence with at most four phase/before/after records per passive extension. Direct Lua coverage now exercises human reconciliation, bot gating, missing owners, idempotence, and singleton hook ownership.
+
+### Solo diagnostic verify
+
+Enter the keep as Necromancer with **Allow Bots in Keep** disabled. Before using Raise Dead, the log must contain `[gt:659] phase=talents_changed` and/or `phase=extensions_ready` with `owner=human` and `after=false`. Then use Raise Dead. If skeletons still do not spawn, that evidence falsifies the hub-ban hypothesis and the next diagnostic belongs at the action/spawn entry rather than another lifecycle hook.
+
+## v0.2.246-dev (2026-07-18) -- #693 client Creature Spawner [verify-fix-coop]
+
+- Release reconciliation: aligned the Workshop descriptor title with the already-merged `MOD_VERSION` before the atomic `0.2.246-dev` bundle build. The source-only merge was never uploaded.
+
+- Clients can now use the Creature Spawner. Spawning is host-authoritative (only the host drains the ConflictDirector spawn queue, `state_ingame.lua:950-958`), and the old host gate silently swallowed every client spawn/destroy press with no feedback. A client now sends a schema-tagged request over the mod's own VMF network channel (`gt_cs_request`, `mod.GT_CS_RPC_SCHEMA` v1); the host validates the breed against its live `Breeds` table and performs the spawn at the client's crosshair position, facing the client, with the client's own grudge-mark configuration. `gt_cs_ack` relays the host's result line back to the requesting client.
+- Breed cycling, the unit-list dropdown, save slots, and `/selectedcreatures` now work locally on a client instead of no-oping; `/savecreature` slots feed the client's spawn requests.
+- Wire safety: VMF `network_send` rides the vanilla `rpc_mod_user_data` mod-manager RPC (`mod_manager.lua:595-621`); a receiving peer dispatches only into callbacks it registered itself, so vanilla peers and peers without gt drop the payload inside vanilla code - no modded `NetworkLookup` keys, no custom vanilla RPCs (the issue 278/371 crash class is untouched). When the host lacks the mod, the request degrades silently and the client-side message says the host must run the mod.
+- Added `/gt_regression_test` checks `gt_cs_rpc_schema_present` and `gt693_cs_client_request_wired`.
+
+### Co-op verify
+
+Both peers on gt_dev. CLIENT: cycle breeds (next/previous keys or the dropdown; the selection line must echo), aim, and press Spawn Creature - the enemy must appear at the CLIENT's crosshair and the client chat must show the host's "[Spawn]: Created ..." ack; Destroy Spawned Creatures must clear enemies and ack "Removed all enemies (host)". HOST: spawn/destroy/cycling must behave exactly as before, and the host log must show one `[gt_cs:693] client spawn request from=... ok=true` line per client spawn. Regression: a client whose host does NOT run the mod must see only the "needs this mod on the host" line, with no crash on any peer.
+
 ## v0.2.245-dev (2026-07-17) -- runtime module boundaries (#2) [tooling]
 
 - Extracted the runtime regression catalogue from the entry point without changing registration order or command ownership.

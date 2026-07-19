@@ -20,6 +20,7 @@ function M.install(mod, _rt_register, deps)
     local _wt_master_toggles = deps.master_toggles
     local _WIELD_PATCHES_MODULE = deps.wield_patches_module
     local _is_sp_crossbow_presentation_item = deps.is_sp_crossbow_presentation_item
+    local _wt_grip_offset_policy = deps.grip_offset_policy
     local weapon_backend = deps.weapon_backend
 
     -- ============================================================
@@ -138,6 +139,32 @@ function M.install(mod, _rt_register, deps)
         if #failures > 0 then return table.concat(failures, "; ") end
     end)
 
+    _rt_register("issue732_cwv_infantry_spear_saltzpyre_remap", function()
+        local donor = _3p_template_remaps
+            and _3p_template_remaps.two_handed_spears_elf_template_1
+        local clone = _3p_template_remaps
+            and _3p_template_remaps.cwv_infantry_spear_template
+        if type(donor) ~= "table" or clone ~= donor then
+            return "CWV Infantry spear does not share the elf-spear 3P remap contract"
+        end
+        if type(clone.wh_) ~= "table"
+            or clone.wh_.attack_swing_down_left_axe ~= "attack_swing_stab" then
+            return "Saltzpyre first-light event is not remapped to attack_swing_stab"
+        end
+
+        local patches = _WIELD_PATCHES_MODULE and _WIELD_PATCHES_MODULE.patches
+        local donor_wield = patches and patches.two_handed_spears_elf_template_1
+        local clone_wield = patches and patches.cwv_infantry_spear_template
+        if type(donor_wield) ~= "table" or clone_wield ~= donor_wield then
+            return "CWV Infantry spear does not share the elf-spear 3P wield contract"
+        end
+        for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+            if clone_wield[career] ~= "to_2h_billhook" then
+                return career .. " Infantry spear wield is not routed to billhook vocabulary"
+            end
+        end
+    end)
+
     _rt_register("issue603_ranger_dual_axes_inventory_preview_pose", function()
         return _wt603_post_spawn_preview_event(
                 "dr_dual_wield_axes", "dr_ranger", "to_dual_axes") == "to_dual_hammers"
@@ -220,9 +247,37 @@ function M.install(mod, _rt_register, deps)
         local native = plan("es_handgun", "es_huntsman")
         assert(native.offset == nil and native.durable,
             "Kruber's native Empire Handgun must not receive Saltzpyre's offset")
-        local control = plan("wh_crossbow", "wh_captain")
+        local control = plan("wh_crossbow_repeater", "wh_captain")
         assert(control.offset == nil and control.durable == false,
             "unmodified Saltzpyre ranged control must remain untouched")
+    end)
+
+    _rt_register("issue701_kruber_crossbow_left_grip_offset", function()
+        local plan = mod._wt587_baked_transform_plan
+        local policy = _wt_grip_offset_policy
+        assert(type(plan) == "function" and policy and policy.contract,
+            "crossbow transform policy missing")
+        for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
+            local crossbow = plan("wh_crossbow", career)
+            assert(crossbow.durable and crossbow.offset
+                and crossbow.offset[1] == 0
+                and crossbow.offset[2] == 0.100
+                and crossbow.offset[3] == 0.025
+                and crossbow.offset.hand == "left",
+                "Kruber crossbow left-hand durable offset drifted on " .. career)
+        end
+        local native = plan("wh_crossbow", "wh_captain")
+        assert(native.offset == nil, "Saltzpyre's native Crossbow grip changed")
+        local control = plan("wh_crossbow_repeater", "es_knight")
+        assert(control.offset == nil and control.durable == false,
+            "Kruber Volley Crossbow control must remain unmodified")
+        assert(policy.preview_slot_field({ left_hand_unit = "" }) == "left_unit_3p"
+            and policy.preview_slot_field({ right_hand_unit = "" }) == "right_unit_3p"
+            and policy.preview_slot_field({ left_hand_unit = "", right_hand_unit = "" }) == "right_unit_3p",
+            "preview hand routing no longer distinguishes left-only Crossbow safely")
+        assert(policy.contract.retained_evidence == "post_write_engine_readback"
+            and policy.contract.first_person == "unchanged",
+            "#701 retained-state/first-person contract drifted")
     end)
 
     _rt_register("issue112_saltzpyre_kruber_shield_baked_rotation", function()

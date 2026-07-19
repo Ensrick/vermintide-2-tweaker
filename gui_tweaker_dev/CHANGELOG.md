@@ -1,5 +1,22 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.291-dev (2026-07-18) -- #700 localize the in-mission vote title [verify-fix-coop]
+
+- **Observed after the popup fix:** the client vote HUD is functional, but its title renders the internal `game_settings_vote` localization key with underscores.
+- **Source-backed cause:** `IngameVotingUI.start_vote` localizes `template.text` only when `modify_title_text` exists (`ingame_voting_ui.lua:116-121`). Vanilla `game_settings_vote` has no modifier because its ordinary keep presentation localizes the title independently (`mission_voting_ui.lua:256-264`). Promoting that template to an ingame vote without supplying the missing title seam therefore exposes the raw key.
+- **Fix:** the already-bounded per-vote copy now receives an identity `modify_title_text` only when the source template has no authored modifier. This makes the native HUD perform exactly one localization lookup, preserves authored modifiers, and still leaves the shared vanilla template, keep votes, RPC payload, and unrelated votes untouched.
+- **Regression coverage:** pure Lua tests prove the copy is non-mutating, the localized title passes through unchanged, malformed templates fail closed, and an authored modifier is preserved. Runtime regression now checks the same title contract.
+- **Co-op verify:** host and client enter an Adventure mission and start the in-mission map vote. The client must see normal localized title text with no internal key/underscores, accept or decline normally, and both logs must contain one `[gut:700] mission vote promoted to localized IngameVotingUI` line. Keep and unrelated votes remain unchanged.
+
+## 0.2.290-dev (2026-07-18) -- #717 keep Mod Tweaker gear rows lost their tan accent [verify-fix]
+
+- **Symptom:** in the Mod Tweaker menu most entries render plain white/grey while some keep their intended color (user report, 2026-07-17 evening). The white rows are the gear-parent rows - every "Enable All ..." Weapon Availability master (issue 611) plus every advanced-options parent - in the KEEP Mod Tweaker; group headers (orange) and tabs/buttons (tan/gold) keep their colors.
+- **Root cause:** twin-parity break, not the issue-694 tag strip. Commit 7d31174 (issue 611 gear-style masters) added the warm-tan gear-parent accent `{255,160,146,101}` only to the mission twin (`_mod_tweaker_view.lua:_append_row`); the keep twin (`_mod_tweaker_state.lua:_append_row`) never got it, so the same rows render default `font_default` there. The same commit rebuilt the Equipment tab so masters ARE the bulk of its rows, which turned a one-liner divergence into "most entries are white". No entry color ever rode on the stripped lifecycle tags: repo-wide grep at 9f0c11e~1 shows zero `{#color(...)}` markup and no tag-to-color code path in gut history.
+- **Fix:** ported the identical accent block (enabled gear parents tan, disabled VMF rows stay grey, `_advanced_parent_accent` marker) into the keep twin's `_append_row`. Build-time style write on the existing label style - no new widget pass, no per-frame driver.
+- **Surviving color classes (catalogued for the issue):** group headers / section titles `font_title` orange (shared `_mod_tweaker_definitions.lua`), tabs and Apply/Default/profile buttons via per-frame drivers in both interaction twins, disabled rows grey 128 in both twins. All intact; only the keep gear accent was missing.
+- **Regression guard:** new `qa/lua/tests/test_gut_gear_accent_parity.lua` asserts BOTH twins carry the accent block (marker + exact color + disabled guard).
+- **Verify (keep):** open the Mod Tweaker from the keep, Equipment tab, expand a character then Melee/Ranged: every "ENABLE ALL <CHARACTER> ..." master row and every gear-bearing row should now read in the same warm tan as the tabs; disabled rows stay grey. Cross-check the same rows from the in-mission ESC Mod Tweaker - identical colors in both.
+
 ## 0.2.289-dev (2026-07-18) -- #700 in-mission mission-vote client popup [verify-fix-coop]
 
 - **Symptom:** selecting a new mission from GUT's in-mission map starts a team vote, but clients receive no accept/decline HUD. Their undecided vote becomes the template's timeout "no", so the selection never advances in co-op.

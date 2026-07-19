@@ -6,6 +6,7 @@ local mod = get_mod("crt")
 -- The policy module is engine-free and stateless; each consumer instantiates
 -- its own copy via mod:dofile (same pattern as _crt_foot_knight.lua).
 local foot_knight_policy = mod:dofile("scripts/mods/career_tweaker/_crt_foot_knight_policy")
+local wire_policy = mod._crt.wire_policy
 
 local _HELLBORGS_CRIT_PENALTY = 0.10
 
@@ -430,6 +431,71 @@ mod:hook(_G, "Localize", function(func, key, ...)
 end)
 
 -- ============================================================
+-- Issue 776: rpc_add_buff receiver floor (UNCONDITIONAL)
+-- ============================================================
+-- The three attached crash logs received positive server ids 12, 13, and 9 at
+-- numeric lookup id 1574, which resolved locally to the timed Impetuous AS buff.
+-- Current ProcFunctions.add_buff can only send server id 0, proving this was an
+-- unrelated/older sender's numeric-id collision rather than the Impetuous proc
+-- itself. The #425 presence beacon could not distinguish that catalog drift.
+--
+-- This floor owns only ids that resolve LOCALLY to CRT's registered names. It
+-- drops them before vanilla when the sender has not proved the exact name+index
+-- fingerprint, and independently enforces vanilla's positive-server-id rule:
+-- timed sub-buffs are never legal server-controlled buffs. Unrelated names pass
+-- through unchanged. Logs are bounded once per reason/template per session.
+local _crt_rpc_floor_logged = {}
+local function _crt_rpc_floor_log_once(reason, sender_peer_id, template_name,
+        lookup_id, server_buff_id)
+    local key = tostring(reason) .. ":" .. tostring(template_name)
+    if _crt_rpc_floor_logged[key] then return end
+    _crt_rpc_floor_logged[key] = true
+    pcall(printf,
+        "[crt:776] rpc_add_buff dropped reason=%s sender=%s template=%s lookup_id=%s server_buff_id=%s",
+        tostring(reason), tostring(sender_peer_id), tostring(template_name),
+        tostring(lookup_id), tostring(server_buff_id))
+end
+
+mod:hook("BuffSystem", "rpc_add_buff", function(func, self, channel_id, unit_id,
+        buff_template_name_id, attacker_unit_id, server_buff_id, send_to_sender)
+    local lookup = rawget(_G, "NetworkLookup")
+    local buff_lookup = lookup and lookup.buff_templates
+    local template_name = buff_lookup and rawget(buff_lookup, buff_template_name_id)
+    local registry = mod._crt_mod_registered_buff_names
+    local resolves_to_crt = type(template_name) == "string"
+        and ((registry and registry[template_name]) or template_name:sub(1, 4) == "crt_")
+
+    if resolves_to_crt and wire_policy then
+        local channel_peers = rawget(_G, "CHANNEL_TO_PEER_ID")
+        local sender_peer_id = channel_peers and channel_peers[channel_id]
+        local parity = mod._crt_peer_parity
+        local peer_catalog_exact = false
+        if type(sender_peer_id) == "string" and parity ~= nil
+                and type(parity.peer_has) == "function" then
+            local ok, exact = pcall(parity.peer_has, parity, sender_peer_id)
+            peer_catalog_exact = ok and exact == true
+        end
+        local templates = rawget(_G, "BuffTemplates")
+        local template = templates and rawget(templates, template_name)
+        local decision = wire_policy.rpc_add_buff_decision({
+            resolves_to_crt = true,
+            peer_catalog_exact = peer_catalog_exact,
+            server_buff_id = server_buff_id,
+            template = template,
+        })
+        if decision ~= "accept" then
+            _crt_rpc_floor_log_once(decision, sender_peer_id, template_name,
+                buff_template_name_id, server_buff_id)
+            return
+        end
+    end
+
+    return func(self, channel_id, unit_id, buff_template_name_id,
+        attacker_unit_id, server_buff_id, send_to_sender)
+end)
+mod._crt_rpc_add_buff_floor_installed = true
+
+-- ============================================================
 -- Issue 425: hot-join replay filter (sender-side, UNCONDITIONAL)
 -- ============================================================
 -- BuffSystem.hot_join_sync (buff_system.lua:66-97) replays EVERY entry in
@@ -441,8 +507,8 @@ end)
 -- crt_* entries from the one replay pass. A crt-running joiner merely misses
 -- the replayed crt stacks; the wire-safe driver strips + re-adds them when
 -- parity re-establishes (broadcast reaches the joiner), so state self-heals.
--- Pre-flight (NON-NEGOTIABLE 8): grep confirms crt has no other hook on
--- BuffSystem (career_tweaker mod-wide, 2026-07-11).
+-- The receiver floor above is the only other CRT BuffSystem hook; the two own
+-- distinct methods and are installed once by this load-once module.
 mod:hook("BuffSystem", "hot_join_sync", function(func, self, peer_id)
     if not self.is_server then
         return func(self, peer_id)

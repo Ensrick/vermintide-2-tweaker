@@ -1,5 +1,53 @@
 # Crafting in Modded Changelog
 
+## 0.8.95-dev (2026-07-18): #703 CWV rows no longer render locked in the Athanor picker
+
+- The Athanor weapon list's lock badge is a vanilla OWNERSHIP gate: vanilla
+  `_sync_backend_loadout` resolves each row through
+  `backend_interface_items:get_item_from_key(item_key)` and stamps
+  `content.locked = not backend_id` (`hero_window_weave_forge_weapons.lua:555`
+  + `:565`), which draws the `hero_icon_locked` pass and saturates the icon.
+  CWV entries are registration-only definitions with no owned backend instance
+  (issue 592), so the lookup could never succeed and every CWV row drew a false
+  padlock - while selecting and crafting kept working because CIM already
+  overrides `_present_item` / `_on_list_index_selected`.
+- Fix rides the existing consolidated `_sync_backend_loadout` hook (no new hook
+  registration): rows vanilla just locked are re-classified through the issue
+  628 contract's `provider_for` ladder and cleared only when the key resolves
+  to provider=cwv. Vanilla and non-cwv provider rows keep their vanilla lock
+  state, so genuinely unavailable vanilla items stay locked.
+- Added `/cim_regression_test` check `issue703_athanor_cwv_rows_unlocked`
+  pinning the classifier boundary (cwv-prefixed true; vanilla, woc, and
+  empty/nil keys false) and the contract dependency.
+
+**Verification:** open the Athanor weapon picker on a career with CWV variants
+(e.g. Kruber melee): CWV rows show no padlock and no desaturated icon; a vanilla
+weapon you own no instance of still shows its lock. Run `/cim_regression_test`
+and require `issue703_athanor_cwv_rows_unlocked` PASS.
+
+## 0.8.94-dev (2026-07-18): #404 ranged Athanor properties preview centering
+
+- Replaced the non-diagnostic root-node position probe with a source-backed
+  correction at the owning `HeroWindowWeaveProperties._create_item_previewer`
+  boundary. The July 18 log confirmed ranged previews still spawned at
+  `x=-0.8`; the sibling native forge weapon browser authors centered `x=0`.
+- CIM now uses that exact native centered x only for ranged weapons in the
+  properties editor, while preserving the properties surface's y/z, vanilla
+  melee placement, ordinary Weave behavior, and every non-CIM preview.
+- The correction updates both the live link unit and the previewer's boxed
+  start position, so zoom cannot restore the old far-left placement. It runs
+  once per preview construction and sends no network traffic.
+- Added engine-free and `/cim_regression_test` coverage for slot scoping,
+  caller-owned position immutability, malformed input, hook ownership, active
+  surface gating, and zoom durability. The runtime seam lives in its own module
+  so the already-baselined CIM entry does not grow.
+
+**Verification:** confirm `[cim:LOAD] v0.8.94-dev`, open CIM's Athanor, select a
+ranged weapon and enter its properties/traits editor. The weapon should be
+centered rather than far-left; a single `[cim:404] ranged properties preview
+centered` line should name the selected item. Repeat with a melee weapon and
+confirm its established placement is unchanged.
+
 ## 0.8.93-dev (2026-07-18): exact acquisition-row ownership (#524) [verify-fix]
 
 - Traced the native source contract: `can_craft_with` admits only default-rarity

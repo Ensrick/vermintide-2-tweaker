@@ -1,5 +1,62 @@
 # Weapon Tweaker Changelog
 
+## 0.12.278-beta (2026-07-18) - #661 Saltzpyre CWV ranged career actions [verify-fix]
+
+- Fixed WT-owned Saltzpyre access to CWV's Empire Old Musket and Outrider
+  Grenade Launcher so standard Witch Hunter careers receive their native
+  weapon-bound career action rows when those items are enabled through WT.
+- Kept Kruber as the default authored owner for both weapons. Saltzpyre access
+  remains optional WT-controlled availability, not a CWV default grant and not
+  a Warrior Priest grant.
+- Added regression coverage proving Bounty Hunter is present in the effective
+  conditional career set for both weapons while remaining out of the default
+  crafted/owned career list.
+
+**Solo verify:** Confirm `[wt] v0.12.278-beta loaded`. With CWV active, enable
+Old Musket and Outrider Grenade Launcher for Bounty Hunter through WT, equip
+each weapon, and fire Locked and Loaded. Repeat after swapping away/back and
+after loading into a mission. The career skill must trigger normally and the log
+must not contain `[wt:career-actions] incomplete` for either item.
+
+## 0.12.277-beta (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix-coop]
+
+- Added the user-tuned additive third-person grip correction for Kruber using
+  Saltzpyre's regular Crossbow: `+0.100` Y and `+0.025` Z on its left-hand unit.
+- Kept the transform receiver-scoped and renderer-local across owner, bot,
+  remote husk, and inventory-preview creation paths. Native Saltzpyre, first
+  person, Volley Crossbow, shared attachment tables, and network payloads are
+  unchanged.
+- Added one bounded post-write engine-position readback per tracked Crossbow,
+  focused offline/runtime coverage, and a structural appearance contract.
+
+**Co-op verify:** Confirm `[wt:LOAD] v0.12.277-beta` on both peers. On Kruber,
+equip Saltzpyre's regular Crossbow and check owner third person plus inventory
+preview while the observer checks the remote husk. Fire/reload, swap away and
+back, transition into a mission, and hot-join once. The Crossbow must retain
+the corrected grip everywhere, `[wt:701] retained` must show retained and
+target positions, and `/wt_regression_test` must pass
+`issue701_kruber_crossbow_left_grip_offset`.
+
+## 0.12.276-beta (2026-07-18) - #732 CWV Infantry spear Saltzpyre crash guard [verify-fix]
+
+- CWV's Infantry Combat Style reports its deep-cloned effective template as
+  `cwv_infantry_spear_template`, while WT's receiver-safe Saltzpyre 3P remap
+  and wield contracts were keyed only by the elf-spear donor template. The
+  first light therefore reached Saltzpyre's animation graph as
+  `attack_swing_down_left_axe` and faulted in `Unit.animation_event`.
+- The effective clone now shares the donor's remap and wield tables by identity,
+  preserving all three standard Saltzpyre billhook-vocabulary routes and the
+  native Kerillian no-remap branch without duplicating data.
+- Offline and `/wt_regression_test` coverage lock table identity, the first-light
+  target `attack_swing_stab`, and WHC/Bounty Hunter/Zealot wield routing.
+
+**Solo verify:** Confirm `[wt:LOAD] v0.12.276-beta`. On Witch Hunter Captain,
+Bounty Hunter, or Zealot, equip Tuskgor Spear, select Infantry Combat Style,
+then perform the first light and the complete light/heavy/block/push chains.
+The game must not crash and `/wt_regression_test` must pass
+`issue732_cwv_infantry_spear_saltzpyre_remap`. One player is sufficient for
+the reported owner-side crash.
+
 ## 0.12.275-beta (2026-07-18) - #724 release/source reconciliation [tooling]
 
 - Rebuilt the public beta from the current merged source so its tracked bundle,

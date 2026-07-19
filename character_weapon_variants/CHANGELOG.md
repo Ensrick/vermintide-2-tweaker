@@ -1,5 +1,108 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.452-dev (2026-07-18) - acknowledged hot-join identity replay (#660) [diagnostics-armed]
+
+- Added a bounded acknowledgement handshake to the existing schema-2
+  `cwv_item_identity` channel. A hot-joining same-mod peer now acknowledges an
+  exact slot fingerprint only after reconstructing and accepting that descriptor
+  locally; the owner retries the same descriptor at most once per 0.5 seconds,
+  for at most eight attempts, until that matching acknowledgement arrives.
+- The retry ledger is keyed by peer, slot, and semantic fingerprint. Stale or
+  mismatched acknowledgements cannot clear a newer identity, native slots do not
+  enter the retry path, and old/mixed-version peers time out without receiving a
+  modded vanilla lookup id or causing unbounded traffic.
+- This addresses the initial hot-join readiness gap proven in the paired #660
+  logs. It does not claim to fix the separate #474 remote Old Musket animation
+  failure: those logs already prove the stance payload arrived after identity
+  convergence, so that downstream renderer/animation boundary remains under
+  diagnostics.
+- Extended engine-free lifecycle and source-contract coverage for successful
+  acknowledgement, wrong-peer/slot/fingerprint rejection, retry cadence, retry
+  exhaustion, native suppression, and the eight-attempt upper bound.
+
+**Co-op diagnostics:** Equip a CWV weapon before the second CWV player hot-joins.
+Without swapping, the observer should reconstruct the authored model and emit a
+matching identity acknowledgement; the owner must stop retrying that slot. Repeat
+with roles reversed and across a mission transition. Logs may show no more than
+eight sends for one unchanged peer/slot/fingerprint and must show no continuing
+retry after acknowledgement. Old Musket stance/animation remains owned by #474.
+
+## 0.1.451-dev (2026-07-18) - Old Musket remote-material crash guard (#742) [verify-fix-coop]
+
+- Fixed the native access violation when a remote player's Old Musket was
+  spawned or wielded during hot join. Both attached logs prove that all three
+  custom textures were resident, but the spawned unit's material lookup failed
+  immediately before `Unit.set_texture_for_materials` dereferenced address
+  `0x8`; Lua `pcall` cannot contain that engine fault.
+- The shared Old Musket painter now requires two independent proofs before its
+  native write: all authored texture resources must be resident, and every mesh
+  on the actual spawned unit must expose at least one real, non-null material
+  handle. Introspection is read-only and pcall-contained. Any absent API, mesh,
+  material, or Stingray `#ID[00000000]` sentinel skips the entire paint
+  transaction, leaves the donor appearance intact, and emits one bounded
+  `[cwv:742] ... SKIP` diagnostic instead of risking a crash.
+- This composes with #474's new Old Musket stance/fire identity wire and remains
+  separate from #491's mixed-lobby package shadow: no package list, RPC,
+  peer-parity, stance, fire, or fallback identity behavior changed here. The
+  only active bespoke CWV texture writer is the Old Musket; unrelated appearance
+  consumers were audited but not broadened.
+- Added an engine-free material-residency policy suite covering fully bound,
+  missing, empty, null-sentinel, multi-mesh atomic, and throwing-introspection
+  cases. `/cwv_regression_test` adds
+  `issue742_old_musket_texture_material_preflight`, while the source contract
+  proves the census executes before the native paint loop.
+
+**Coop verify:** With CWV enabled on both players, equip Old Musket, join/hot
+join in both directions, swap away/back, toggle bayonet stance, fire, then enter
+a mission. Repeat once with the observer lacking CWV to retain #491 coverage.
+Require no crash and no material-warning -> custom-texture -> access-violation
+sequence; the same-mod observer should see the authored texture, stance change,
+and hear the shot. If the engine still reports one unresolved material, it must
+be followed by one fail-closed `[cwv:742] ... SKIP`, the donor appearance must
+remain visible, and play must continue. Run `/cwv_regression_test` and require
+the #742 and #474 checks PASS.
+
+**DoD:** Universal walkthrough complete. Trait gates: G-APPEARANCE and
+G-CUSTOM-ILLUSION (per-unit material consumer), G-CROSS-CHAR (remote husk spawn),
+and G-CALL-FATAL (native write cannot be pcall-contained). Owner 1P/3P,
+inventory, Athanor, remote husk, transition, hot join, same-mod, mixed-mod, and
+failure fallback are covered by the shared painter plus offline/runtime tests;
+live two-peer visual/crash confirmation remains the explicit verification step.
+
+## 0.1.450-dev (2026-07-18) - #474 Old Musket stance/fire ride the delivering wire [verify-fix-coop]
+
+- **Stance + shot report re-homed onto `cwv_item_identity`** (#474). The paired 2026-07-18 logs (host v0.1.445, client v0.1.444) prove `cwv_old_musket_mode_v1` NEVER delivered: 4 state-tx and 2 fire-tx across both peers, zero rx either direction, while `cwv_item_identity` and `cwv_combat_style_v1` (same shape, same mod, same minute) delivered. VMF-layer cause undetermined; the mode channel stays registered as belt-and-suspenders and both wires now route into ONE shared acceptor pair (`_om._old_musket_accept_mode` / `_om._old_musket_play_remote_fire`).
+  - Identity payloads for the Old Musket carry `musket_mode`; a stance toggle force-replays the owner's slots over the identity channel (one bounded send per toggle/wield edge). Receivers apply the stance BEFORE accept()'s changed-gate (a toggle changes mode while the identity signature is unchanged).
+  - The shot mirrors as a sentinel `slot = "cwv_musket_fire"` identity payload; receivers trigger the compiled `player_combat_weapon_rifle_fire` on the shooter's husk via `WwiseUtils.trigger_unit_event`. Builds without this code reject the sentinel at `valid_slot()` - mixed-version lobbies stay safe.
+- **Husk stance lookup keyed by the presented slot** (#474). `_cwv_husk_path.lua` fed the owner's lagging `equipment.wielded_slot` into the stance cache (paired log: presentation printed `slot=slot_melee` during a `slot_ranged` wield); it now uses the slot of the unit being presented, which is how the owner publishes the state.
+- **Parity-replay traffic bounded** (#474 acceptance "no unbounded RPC"). The 0.5s transition poll force-re-sent the full identity replay every tick (~300 `parity_replay` identity sends in 50s in the client log); force now applies only on the parity-enable edge, the poll's unchanged sends dedupe to zero, and a poll cycle with no cwv-skinned slot left consumes the pending record instead of re-polling for 60s.
+- **Regression `issue484_crafted_old_musket_identity` un-broken**: it asserted the crafted payload positionally, but payload_for now emits an explicit native record for the empty melee slot first (appearance wave 1), so it false-FAILED on both peers' live runs; it selects by slot now. `issue474_old_musket_hot_join_identity_and_remote_fire` additionally asserts the identity-channel stance/fire consumers.
+- **Entry decomposition**: the whole Old Musket wire block (mode channel + both-wire acceptors + publish/query/fire) moved verbatim into new `_cwv_old_musket_wire.lua` (dofiled at the same load position); the entry drops to 10,969 non-blank lines, back under the frozen 11,084 baseline. Offline source guards updated to the new module layout and to the corrected slot-keying/`event_name` patterns.
+- Known residuals, tracked separately: engine `[MeshObject] Failed looking up material #ID[b6d0945a]` fires on every musket unit spawn from first equip (one submesh renders untextured; possible overlap with issue 742 residency work); host-side `issue412` regression FAIL (`action_career_es_4.default toggle count=0`) is the cwv:661/wt career-action conflict, owned by issue 412/issue 661.
+
+**Verify (2 players, both on v0.1.450-dev):** owner equips Old Musket (ranged slot), observer sees custom mesh; owner toggles bayonet stance - observer's log must show `[cwv:474] state rx ... source=identity_channel` and the husk pose flip; owner fires - observer hears the rifle report and logs `[cwv:474] remote fire ... source=identity_channel`; repeat with roles swapped, after weapon swap, and after a hot join; `/cwv_regression_test`: `issue484_crafted_old_musket_identity` and both `issue474_*` checks PASS; client log must NOT show repeating `parity_replay` sends every 0.5s.
+
+## 0.1.449-dev (2026-07-18) - mixed-lobby fallback package parity (#491) [verify-fix-coop]
+
+- Fixed the remaining non-CWV peer crash when a CWV wearer spawns or wields a
+  pairing weapon. The loadout and equipment RPCs already substituted the
+  variant's vanilla `base_weapon`, but `ProfileSynchronizer` still advertised
+  the variant's different third-person unit packages. Remote package collection
+  now borrows the same vanilla base identity, so an unmodded peer loads the
+  fallback units before `rpc_add_equipment` / `rpc_wield_equipment` can spawn
+  them. Owner first-person packages and CWV rendering remain unchanged.
+- Added an engine-free policy and regression coverage for the reported Sword
+  and Mace -> vanilla Mace and Sword fallback, career unit overrides, local 1P
+  preservation, native pass-through, and missing-base fail-closed behavior.
+
+**Coop verify:** CWV host equips Sword and Mace; a client with CWV disabled joins
+in the Keep, enters a mission, observes a swap away/back, and hot-joins once.
+Repeat with owner/client roles reversed. Require `[cwv:491] profile package
+shadow: cwv_es_sword_and_mace -> es_dual_wield_hammer_sword`, no
+`World.spawn_unit returned nil`, and no missing `slot_data` fatal. The non-CWV
+observer should see vanilla Mace and Sword; a CWV observer should retain the
+curated pairing through the existing appearance channel.
+
 ## 0.1.448-dev (2026-07-18) - OOP W5: husk-path module extraction [untested]
 
 - Structural only, zero behavior change: the husk render path (mesh re-key, hand preselect, ammo-strip, transform apply, stale-unit ledger, [cwv:huskpath] postcondition - 0.1.447's fresh code included) moved verbatim into `_cwv_husk_path.lua` (15 _om._husk_* exports, printf markers byte-identical); entry shrinks 11,791 -> 11,084. The three husk hooks stay in the entry (the spawn_inventory_unit hook is fused with Old Musket code; keeping the trio together preserves install timing). Guard test extended; 1,024-test suite, strict lint (69 hooks unchanged), bundle build green.

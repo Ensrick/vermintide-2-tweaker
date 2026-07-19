@@ -327,6 +327,14 @@ career-prefix matching with `_default` fallback, and `false` to
 explicitly skip a career (e.g. `we_ = false` means Kerillian uses
 native animations).
 
+CWV Combat Styles report an effective template name at wield time. When a
+style inherits a donor action graph under a new clone name, alias both the
+clone's `_3p_template_remaps` row and `wt_wield_patches.lua` row to the donor
+table **by identity**. Copying permits later receiver-safety fixes to drift;
+omitting the clone key lets raw donor events reach a foreign skeleton (#732).
+Preserve deliberate native `false` branches and cover owner plus husk state in
+the same regression contract.
+
 ### Remap-table gotchas
 
 - **Remap tables need both 1P and 3P event name variants.** Charge

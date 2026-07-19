@@ -41,6 +41,8 @@ local mod = get_mod("gt_dev")
 -- Extracted from general_tweaker_dev.lua (Phase 3 refactor, no behavior change).
 
 local _dbg = mod._gt_dbg
+local _necro_keep_policy = mod:dofile(
+    "scripts/mods/general_tweaker_dev/_gt_necro_keep_policy")
 
 -- ============================================================
 -- Bots in Keep (host fills party with bots while in any inn-type level)
@@ -308,45 +310,62 @@ GT_BIK_CRASHFIX_MARKER_v0_2_146 = "gt-bik-cleanup-and-host-slot-gate"
 -- host inside _on_talents_changed) preloads the skeleton breed packages.
 --
 -- hook_safe (post): vanilla computes _pets_forbidden_in_level first, then we
--- clear it. NO duplicate-hook risk: grepped gt_dev — nothing else hooks
--- PassiveAbilityNecromancerCharges (this is the only hook on that class).
+-- clear it. The extensions_ready post-hook is the lifecycle fallback recorded
+-- on #659: the 2026-07-18 failed-verification log proved the live extension ran
+-- warm_up_skeletons, but the original policy site emitted no live decision.
+-- Reconciliation is idempotent and shared by both lifecycle edges, so a later
+-- talent change cannot restore the keep ban. NO duplicate-hook risk: each
+-- (Class, method) pair is registered once in gt_dev.
 -- VMF hook_safe CHAINS across mods, so this coexists with any other necromancer
 -- mod. EXPERIMENTAL: if skeletons spawning in the keep proves unstable in-game,
 -- fall back to suppressing the bot's raise-dead loop instead.
-local function _bik_necro_should_clear_keep_ban(is_bot, bots_in_keep, pets_forbidden)
-    return pets_forbidden == true and (is_bot ~= true or bots_in_keep == true)
-end
+local _bik_necro_should_clear_keep_ban = _necro_keep_policy.should_clear
 mod._gt_necro_should_clear_keep_ban = _bik_necro_should_clear_keep_ban
+mod._gt_necro_reconcile_keep_ban = _necro_keep_policy.reconcile
 
-local function _bik_necro_allow_keep_pets(self, unit, talent_extension)   -- luacheck: ignore unit talent_extension
-    -- Vanilla assigns `_player` in init before extensions_ready invokes
-    -- _on_talents_changed (source lines 13-16, 56-76). Reading it directly
-    -- avoids the unit->player reverse-association timing gap at player spawn.
-    local player = self._player
-    if not player then return end
-
-    local is_bot = player.bot_player == true
+local function _bik_necro_reconcile(self, phase)
     local bots_in_keep = _bik_active()
-    if not _bik_necro_should_clear_keep_ban(is_bot, bots_in_keep, self._pets_forbidden_in_level) then
-        return
-    end
+    local changed, before, after, owner =
+        _necro_keep_policy.reconcile(self, bots_in_keep)
 
-    self._pets_forbidden_in_level = false
-    if rawget(_G, "printf") then
+    -- Four records per extension is enough to cover initialization plus a
+    -- talent refresh without turning a recurrent event into log spam. Unlike
+    -- the v0.2.243 line, this records no-op decisions too, distinguishing a
+    -- dead lifecycle site from an already-clear vanilla flag.
+    local log_count = self._gt_659_policy_log_count or 0
+    if rawget(_G, "printf") and log_count < 4 then
+        self._gt_659_policy_log_count = log_count + 1
         printf(
-            "[gt:659] necromancer keep pets allowed owner=%s bots_in_keep=%s server=%s local=%s",
-            is_bot and "bot" or "human",
+            "[gt:659] phase=%s owner=%s bots_in_keep=%s before=%s after=%s changed=%s server=%s local=%s",
+            tostring(phase),
+            tostring(owner),
             tostring(bots_in_keep),
+            tostring(before),
+            tostring(after),
+            tostring(changed),
             tostring(self._is_server == true),
             tostring(self._is_local == true)
         )
     end
+
+    return changed
+end
+
+
+local function _bik_necro_allow_keep_pets(self, unit, talent_extension)   -- luacheck: ignore unit talent_extension
+    _bik_necro_reconcile(self, "talents_changed")
 end
 mod:hook_safe("PassiveAbilityNecromancerCharges", "_on_talents_changed", _bik_necro_allow_keep_pets)
+
+local function _bik_necro_extensions_ready(self, world, unit)   -- luacheck: ignore world unit
+    _bik_necro_reconcile(self, "extensions_ready")
+end
+mod:hook_safe("PassiveAbilityNecromancerCharges", "extensions_ready", _bik_necro_extensions_ready)
 
 -- Regression marker for the v0.2.242-dev human + bot keep-skeleton policy
 -- (read by necromancer_keep_pet_policy_659 in the main file).
 GT_NECRO_KEEP_PETS_MARKER_v0_2_242 = "gt-necro-human-and-bot-keep-pets"
+GT_NECRO_KEEP_PETS_LIFECYCLE_MARKER_659 = "gt-necro-extension-ready-reconcile"
 
 mod:command("bots_in_keep", "Toggle 'Allow Bots in Keep' (host fills the heroes party with bots while in the keep / CW hub / Versus inn).", function()
     mod:set("gt_bots_in_keep", not mod:get("gt_bots_in_keep"))

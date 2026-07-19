@@ -156,6 +156,27 @@ _rt_register("forge_preview_accepts_resident_3p_unit", function()
     end
 end)
 
+_rt_register("issue404_ranged_properties_preview_centered", function()
+    local policy = mod._cim_forge_preview_policy
+    local fn = policy and policy.properties_preview_position
+    if type(fn) ~= "function" then
+        return "#404 ranged properties preview policy is missing"
+    end
+
+    local native = { -0.85, 3, 0 }
+    local ranged = fn("ranged", native)
+    if type(ranged) ~= "table" or ranged[1] ~= 0
+            or ranged[2] ~= 3 or ranged[3] ~= 0 then
+        return "#404 ranged preview no longer composes the native centered x with properties y/z"
+    end
+    if native[1] ~= -0.85 then
+        return "#404 preview policy mutated the caller-owned native position"
+    end
+    if fn("melee", native) ~= nil then
+        return "#404 preview policy must leave melee on the vanilla path"
+    end
+end)
+
 _rt_register("forge_preview_la_diagnostics_armed", function()
     -- (#481, round 2) The user's 0.8.58 retest showed two residual defects on
     -- LA-skinned shields in the Athanor: (1) shield ABSENT on the first forge
@@ -720,6 +741,38 @@ _rt_register("issue524_render_diagnostics_armed", function()
     local selector = mod._cim_template_selector
     if type(selector) ~= "table" or type(selector.canonical_family) ~= "function" then
         return "#524 render probe lost its canonical_family classifier"
+    end
+end)
+
+_rt_register("issue703_athanor_cwv_rows_unlocked", function()
+    -- #703: vanilla `_sync_backend_loadout` stamps `content.locked = not
+    -- backend_id` from a backend-items OWNERSHIP lookup
+    -- (hero_window_weave_forge_weapons.lua:555/:565). CWV rows are
+    -- registration-only definitions (issue 592) so ownership never resolves and
+    -- every CWV row drew a false padlock. The consolidated hook clears the lock
+    -- for provider=cwv keys only; this check pins the classifier's boundary so
+    -- vanilla/other-provider locks can never be swept up with it.
+    local classify = (mod._cim_synthetic_item_contract or {}).is_cwv_provider_key
+    if type(classify) ~= "function" then
+        return "#703 CWV lock-clear classifier (contract.is_cwv_provider_key) not exposed"
+    end
+    if classify("cwv_rt_unregistered_variant") ~= true then
+        return "#703 cwv-prefixed key no longer classified as provider=cwv (rows re-lock)"
+    end
+    if classify("es_bastard_sword") ~= false then
+        return "#703 vanilla key classified as cwv - would clear genuine vanilla locks"
+    end
+    if classify("woc_rt_unregistered_relic") ~= false then
+        return "#703 non-cwv provider key classified as cwv - scope widened past issue scope"
+    end
+    if classify(nil) ~= false or classify("") ~= false then
+        return "#703 empty/nil key must never classify as cwv"
+    end
+    -- The clear must ride the ONE consolidated (HeroWindowWeaveForgeWeapons,
+    -- _sync_backend_loadout) hook; the issue 628 contract owns the ladder.
+    local contract = mod._cim_synthetic_item_contract
+    if type(contract) ~= "table" or type(contract.provider_for) ~= "function" then
+        return "#703 issue 628 provider ladder (contract.provider_for) missing"
     end
 end)
 

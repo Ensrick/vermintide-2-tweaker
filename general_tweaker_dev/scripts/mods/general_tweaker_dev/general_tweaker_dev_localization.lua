@@ -286,13 +286,13 @@ return {
     gt_cs_unit_list_all     = { en = "All" },
 
     gt_cs_spawn = { en = "Keybind: Spawn Creature" },
-    gt_cs_spawn_tooltip = { en = "Drops the currently selected enemy at wherever your crosshair points, ignoring the usual spawn limits. Works only when you are the host." },
+    gt_cs_spawn_tooltip = { en = "Drops the currently selected enemy at wherever your crosshair points, ignoring the usual spawn limits. As the host it spawns directly; as a client it asks the host to place it for you, so the host must also run this mod." },
     gt_cs_next = { en = "Keybind: Next Creature" },
     gt_cs_next_tooltip = { en = "Moves the selection forward by one in the active list, skipping any you cannot spawn such as DLC you do not own." },
     gt_cs_prev = { en = "Keybind: Previous Creature" },
     gt_cs_prev_tooltip = { en = "Moves the selection back by one in the active list." },
     gt_cs_destroy = { en = "Keybind: Destroy Spawned Creatures" },
-    gt_cs_destroy_tooltip = { en = "Clears the whole level of enemies, not just the ones you placed. Works only when you are the host." },
+    gt_cs_destroy_tooltip = { en = "Clears the whole level of enemies, not just the ones you placed. As the host it happens directly; as a client it asks the host to do it, so the host must also run this mod." },
 
     gt_cs_spawn_slot_1 = { en = "Keybind: Spawn Saved Slot 1" },
     gt_cs_spawn_slot_1_tooltip = { en = "Whatever enemy you saved to slot 1 appears at your crosshair." },

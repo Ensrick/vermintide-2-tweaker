@@ -73,6 +73,18 @@
 
 ---
 
+## #732 - CWV Infantry spear on Saltzpyre first-light crash
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.276-beta / 0.12.277-dev |
+| Automated | Offline `test_wt_cwv_effective_template` proves the effective clone shares the donor remap and wield tables in both streams. `/wt_regression_test`: `issue732_cwv_infantry_spear_saltzpyre_remap`. |
+| Solo crash path | On WHC, Bounty Hunter, or Zealot, equip Tuskgor Spear, select Infantry Combat Style, and perform the first light. `attack_swing_down_left_axe` must resolve to `attack_swing_stab`; no `Unit.animation_event` fault. |
+| Chain coverage | Exercise complete light, heavy, block, push, weapon-swap, and re-wield chains. All three standard Saltzpyre careers retain the `to_2h_billhook` receiver vocabulary. |
+| Boundaries | Native Kerillian remains on the donor's deliberate no-remap branch. First-person actions, CWV balance, sound-bank residency, and Warrior Priest are unchanged. |
+
+---
+
 ## #112 - Saltzpyre Kruber shield rotation
 
 | Field | Check |
@@ -106,6 +118,18 @@
 | Solo repro | On Witch Hunter Captain, Bounty Hunter, or Zealot, equip Kruber's Empire Handgun and inspect the third-person model after wielding, firing, swapping away, and swapping back. |
 | Expected | Handgun root position retains Y `-0.17` and Z `-0.05` relative to its canonical pose. X, rotation, and scale remain canonical/baked; animation ticks do not erase or compound the correction. First person and native Kruber Handgun remain unchanged. |
 | Renderer scope | The source-baked durable table is consumed by owner, bot, remote-husk, and inventory-preview paths without transform RPC traffic. The position is solo-verifiable locally; #587 separately guards renderer fan-out. |
+
+---
+
+## #701 - Kruber Crossbow left-hand grip offset
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.277-beta / 0.12.278-dev |
+| Automated | Offline `test_wt_crossbow_offset` locks the exact `es_`-scoped `{0, 0.100, 0.025, hand="left"}` row, durable membership, left-only preview routing, owner/bot/husk adapter fan-out, retained-position readback, native Saltzpyre exclusion, and the generated #109 census row. `/wt_regression_test`: `issue701_kruber_crossbow_left_grip_offset`. |
+| Two-player repro | Both peers enable the same WT build. Kruber equips Saltzpyre's regular Crossbow; the owner checks inventory preview and local 3P while the observer checks the remote husk. Fire/reload, swap away/back, transition into a mission, and hot-join once. |
+| Expected | The left 3P Crossbow unit retains additive Y `+0.100`, Z `+0.025` on every exercised renderer and replay edge. `[wt:701] retained ...` reports retained and target positions, not setter success. First person, Saltzpyre's native Crossbow, and Kruber's Volley Crossbow control remain unchanged. |
+| Tuner boundary | Transient Hold-Pose values stay local to the dev tool. Its identity sliders defer to the baked baseline; non-default live tuning composes over that baseline and is not transported to bots or husks. |
 
 ---
 
@@ -951,6 +975,7 @@ Last updated: 2026-07-13.
 - feedback-workshop-upload-without-deploy
 - gated-registration-divergence
 - inventory-preview-hook-menuworldpreviewer
+- issue701-kruber-crossbow-left-grip-offset
 - issue290-billhook-bake-merge
 - issue587-baked-transform-husk-fanout
 - issue594-saltzpyre-hammer-shield-ownership

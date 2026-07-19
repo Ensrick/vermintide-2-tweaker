@@ -966,6 +966,17 @@ full pipeline is:
    The merged source is PART of the ship, not an optional follow-up. Branch
    protection applies to administrators and must not be bypassed for routine work.
 
+**Atomic source/root-bundle gate (issue #724).** A PR that changes an active
+mod's runtime source, `itemV2.cfg`, or newest CHANGELOG release identity must
+also change that mod's exact root `.mod_bundle`, identified by the canonical
+`RootBundle` field in `tools/mod-inventory.psd1`. A common VMF bundle or custom
+asset sidecar cannot stand in for the root. `qa/check_release_bundle_atomicity.ps1`
+enforces this in pre-commit, Quick/full QA, and hosted PR QA. Docs/tests-only and
+bundle-only reconciliation changes remain valid. The existing `VT2-Promotion`
+sanction permits only stable metadata-only promotion diffs; it never exempts a
+runtime source delta. This closes the PR #759/#765/#766/#767/#769 class where
+source/version/config merged first and its compiled artifact followed later.
+
 Do NOT downgrade a `-dev` update to deploy-only "to be safe". For a mod the
 user is subscribed to, Steam re-syncs the Workshop bundle over any local
 deploy, so the upload is the ONLY path that reaches the user's game; and
@@ -1817,6 +1828,28 @@ skipped. Explicit `[docs]` / `[tooling]` entries are also skipped because their 
 are verified and closed autonomously. The advisory `qa/check_issue_status_labels.ps1`
 guard backs this up by comparing top CHANGELOG references with GitHub lifecycle labels.
 
+### Tracker lifecycle discipline (binding, issue #750)
+
+A 2026-07 out-of-repo reconciliation sweep ran targeted `gh issue edit
+--remove-label` calls: each lifecycle label was removed alone (no paired add, no
+comment), leaving 10 open issues bare and downgrading verified fixes blindly.
+These rules prevent a repeat; the CI guard below makes the bare state
+un-mergeable.
+
+| Rule | Detail |
+|---|---|
+| One edit, add-then-remove | Every lifecycle change goes through `tools/ship/ship.ps1` `Get-LifecycleEditPlan` (ship.ps1:490) or an equivalent single `gh issue edit` that adds the target label AND removes every competing lifecycle label together. A bare `--remove-label` on a lifecycle label with no paired add is forbidden. |
+| Never leave an issue bare | Cardinality stays exactly 1 on every open issue at every instant. If you don't know the right target, the answer is `not-started`, not nothing. |
+| Never downgrade without failed-verify evidence | `verify-fix` / `verify-fix-coop` / `Fixed` may only move backward when a comment cites the failed verification (user/playtester log or report). A merged fix-PR, or an existing verify-* label plus its test-method comment, is do-not-downgrade evidence - a reconciliation that cannot see the fix must leave the label alone. |
+| Comment every change | Each lifecycle edit gets an issue comment naming the evidence that drove it (shipped version, failed-verify log, user confirmation). An uncommented label change is presumed wrong and gets reverted to the last evidenced state. |
+
+**CI enforcement:** `tools/github/check-lifecycle-cardinality.ps1` runs as a
+blocking step in `.github/workflows/qa.yml` (issues:read only, one list call)
+and fails the required `qa-gate` when any open issue's lifecycle cardinality is
+not exactly 1, printing the offending numbers and labels. The advisory
+`qa/check_issue_status_labels.ps1` sweep remains the local nudge; the CI step is
+the backstop that the #750 sweep proved necessary.
+
 **Player-facing localization is not an issue tracker.** Stable, beta, and dev streams
 all omit issue/lifecycle prefixes such as `[Issue N]`, `[working]`, `[untested]`,
 `[verify-fix]`, `[diag]`, and `(Experimental)`. Keep that state in GitHub labels,
@@ -1870,8 +1903,9 @@ see what was open on a given date.
 | `check_stale_docs.ps1` | `qa/` | audit/review markdowns >14 days without SUPERSEDED banner | `.\qa\check_stale_docs.ps1 [-Fix]` |
 | `run_selftests.ps1` | `qa/` | regression in any QA check's own parsing/decision logic + ship.ps1 step-6 labeling logic (runs every script's `-SelfTest`; blocking) | `.\qa\run_selftests.ps1` |
 | `check_lua_unit_tests.ps1` | `qa/` + `qa/lua/` | deterministic pure-Lua transformations under a pinned offline Lua 5.1.5 runtime; harness self-test includes a planted failure | `.\qa\check_lua_unit_tests.ps1 [-SelfTest]` |
+| `check_release_bundle_atomicity.ps1` | `qa/` + `qa/fixtures/release_bundle_atomicity/` | runtime/version/config/newest-release diff without the owning exact root bundle (#724) | `.\qa\check_release_bundle_atomicity.ps1 [-Staged] [-Range <range>] [-SelfTest]` |
 | `run_all.ps1` | `qa/` | all of the above | `.\qa\run_all.ps1 [-Quick] [-SkipLua]` |
-| GitHub Action | `.github/workflows/qa.yml` | runs `run_all.ps1` (full policy engine) + an all-mods `lint-mod.ps1` step on push + PR | automatic |
+| GitHub Action | `.github/workflows/qa.yml` | runs `run_all.ps1` (full policy engine) + an all-mods `lint-mod.ps1` step + the blocking `tools/github/check-lifecycle-cardinality.ps1` tracker guard (issue #750) on push + PR | automatic |
 
 Full check-to-bug-class map: [`qa/CHECKS.md`](qa/CHECKS.md).
 

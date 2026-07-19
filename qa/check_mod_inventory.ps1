@@ -21,7 +21,7 @@ function Test-InventoryModel {
     )
     $errors = @()
     $seenDir = @{}; $seenId = @{}; $seenWorkshop = @{}
-    $required = @('Dir', 'ModId', 'WorkshopId', 'Visibility', 'Stream', 'Public', 'Name')
+    $required = @('Dir', 'ModId', 'WorkshopId', 'Visibility', 'Stream', 'Public', 'Name', 'RootBundle')
 
     foreach ($mod in @($Mods)) {
         foreach ($field in $required) {
@@ -61,20 +61,22 @@ function Test-InventoryModel {
 }
 
 function Invoke-SelfTest {
-    $mods = @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha' })
+    $mods = @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle' })
     $cfg = @{ alpha = @{ WorkshopId='123'; Visibility='public'; ModId='a' } }
     $readme = '| [`alpha`](./alpha/) |'
     $good = @(Test-InventoryModel $mods @('alpha', 'stale') $cfg $readme @{ stale=$true })
     if ($good.Count -ne 0) { throw "valid inventory rejected: $($good -join '; ')" }
 
     $badMods = @(
-        @{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$false; Name='Alpha' },
-        @{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='friends_only'; Stream='wrong'; Public=$false; Name='Duplicate' }
+        @{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$false; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle' },
+        @{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='friends_only'; Stream='wrong'; Public=$false; Name='Duplicate'; RootBundle='bbbbbbbbbbbbbbbb.mod_bundle' }
     )
     $bad = @(Test-InventoryModel $badMods @('alpha', 'beta') $cfg '' @{})
     foreach ($needle in @('duplicate inventory directory', 'duplicate VMF mod id', 'duplicate Workshop id', 'active root mod', 'README', 'Public flag', 'invalid stream')) {
         if (-not ($bad -match $needle)) { throw "planted inventory failure not detected: $needle" }
     }
+    $missingRoot = @(Test-InventoryModel @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha' }) @('alpha') $cfg $readme @{})
+    if (-not ($missingRoot -match 'missing RootBundle')) { throw 'planted RootBundle omission not detected' }
     Write-Host '[check_mod_inventory -SelfTest] OK'
     return 0
 }
@@ -90,6 +92,14 @@ if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
 try { $inventory = Import-PowerShellDataFile -Path $inventoryPath } catch {
     Write-Host "[check_mod_inventory] ERROR - inventory cannot be imported: $_" -ForegroundColor Red
     exit 2
+}
+
+foreach ($entry in @($inventory.Mods)) {
+    $bundlePath = Join-Path $root "$($entry.Dir)\bundleV2\$($entry.RootBundle)"
+    if (-not (Test-Path -LiteralPath $bundlePath -PathType Leaf)) {
+        Write-Host "[check_mod_inventory] ERROR - RootBundle missing for $($entry.Dir): $($entry.RootBundle)" -ForegroundColor Red
+        exit 2
+    }
 }
 
 $cfgByDir = @{}

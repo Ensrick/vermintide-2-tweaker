@@ -222,7 +222,7 @@ mod:hook("PlayerUnitHealthExtension", "entered_kill_volume", function(func, self
     return func(self, t)
 end)
 
-mod:hook("NetworkTransmit", "send_rpc_server", function(func, self, rpc_name, ...)
+mod._gt_noclip_server_rpc_guard = function(rpc_name, ...)
     if rpc_name == "rpc_suicide" and _noclip_active then
         local go_id = ...
         local unit = _local_player_unit()
@@ -233,11 +233,11 @@ mod:hook("NetworkTransmit", "send_rpc_server", function(func, self, rpc_name, ..
         if BoundaryPolicy.should_suppress_rpc(
                 _noclip_active, rpc_name, go_id, local_go_id) then
             _log_boundary_suppression("client out-of-bounds suicide RPC", "local rpc_suicide blocked")
-            return
+            return true
         end
     end
-    return func(self, rpc_name, ...)
-end)
+    return false
+end
 
 mod._gt241_boundary_suppression_wired = true
 printf("[gt][noclip] issue #241: boundary-safety suppression armed (ledge-grab + kill-volume + host/client out-of-bounds death)")

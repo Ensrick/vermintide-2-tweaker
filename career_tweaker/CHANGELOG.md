@@ -1,5 +1,15 @@
 # Career Tweaker Changelog
 
+## 0.4.6-beta - 2026-07-18 - #776 exact buff-wire identity and timed sync [verify-fix-coop]
+
+- Corrected the initial diagnosis using all three attached client crashes. Each receiver got positive server buff id `12`, `13`, or `9` at numeric lookup id `1574`, which resolved locally to timed `crt_questingknight_impetuous_as`. Vanilla `ProcFunctions.add_buff` can only send server id `0`; the repeated positive ids prove a different server-controlled name collided with the client's process-local CRT lookup assignment.
+- Strengthened #425's fail-closed beacon from mod presence alone to exact wire-catalog parity. The fingerprint covers every CRT-registered network name and its actual `NetworkLookup.buff_templates` numeric id. Missing identity, older schema, changed names, changed order, or changed base indices keep all CRT network-unsafe reworks at vanilla.
+- Added one unconditional `BuffSystem.rpc_add_buff` receiver floor. A numeric id resolving locally to a CRT template is dropped before vanilla when the sender lacks the exact fingerprint; even an exact peer cannot deliver a positive server id to a CRT template containing `duration`, matching vanilla's explicit server-controlled contract. Unrelated names pass through unchanged, and drop diagnostics are bounded once per reason/template.
+- Routed Virtue of Impetuous's attack-speed and power effects through vanilla `add_buff_synced(..., BuffSyncType.LocalAndServer)`. The #425 parity check runs first and dependency failure has no generic RPC fallback. Both effects retain one 20-second stack whose duration refreshes on a later kill.
+- Preserved the #425 hot-join replay filter and added offline/runtime coverage for exact and mismatched catalogs, all three observed positive ids, unrelated-host collisions, duration rejection, 20-second expiry/refresh, bounded logging, and one receiver/timed writer.
+
+**Co-op verify:** first run both peers on 0.4.6-beta with Virtue of Impetuous and its rework enabled. Kill repeatedly as host and client; both 20-second effects must apply once, refresh from the latest kill, expire, and neither peer may crash. `/crt_regression_test` must pass `crt_wire_catalog_identity_exact_776`, `crt_rpc_add_buff_receiver_floor_776`, and `crt_impetuous_timed_sync_contract_776`. Then deliberately pair 0.4.6-beta with an older CRT build: the exact-catalog gate must keep networked reworks at vanilla and the 0.4.6 peer must remain connected if an old/colliding numeric id arrives; retain the bounded `[crt:776] rpc_add_buff dropped` evidence.
+
 ## 0.4.5-beta - 2026-07-17 - #687 Foot Knight tooltip CTD hotfix
 
 - Fixed a crash-to-desktop when hovering the reworked Foot Knight ROCK/TEAMWORK talent descriptions: the 0.4.4-beta extraction moved the `CRT_DESC_OVERRIDES` enabled-predicates into `_career_tweaker_balance_hooks.lua` but left the `foot_knight_policy` module declaration behind in the catalogue, so the hooks file dereferenced a nil global on first tooltip draw (`attempt to index global 'foot_knight_policy'`). The hooks module now instantiates the engine-free policy module itself, matching `_crt_foot_knight.lua`.

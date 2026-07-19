@@ -157,6 +157,33 @@ local function _has_texture(path)
     return Application.can_get("texture", path) and true or false
 end
 
+-- #696: parallel material-residency guard. replace_textures binds vanilla
+-- `mat_to_use` / `mat_list` materials via Unit.set_material with unit,
+-- package, and texture (issue 199) all preflighted but never the material
+-- itself; when the owning vanilla package is outside the unit's spawn-time
+-- resource scope the engine warns ("Failed looking up material") and renders
+-- fallback. Mirror _has_texture: skip the set, keep the unit's current
+-- material. The skip line is bounded to once per unit+slot+material so it
+-- also serves as the diagnostic separating this emitter from engine-side
+-- baked-material resolution at husk spawn (which logs with no [cos:696]).
+local function _has_material(path)
+    if not path or type(path) ~= "string" then return false end
+    if not rawget(_G, "Application") or not Application.can_get then return true end
+    return Application.can_get("material", path) and true or false
+end
+
+local _mh_mat_skip_logged = {}
+local function _mat_resident_or_log(unit, mat_slot, mat)
+    if _has_material(mat) then return true end
+    local k = tostring(unit) .. "|" .. tostring(mat_slot) .. "|" .. tostring(mat)
+    if not _mh_mat_skip_logged[k] then
+        _mh_mat_skip_logged[k] = true
+        pcall(printf, "[cos:696] skipped non-resident material '%s' (slot '%s') on unit %s - kept current material",
+            tostring(mat), tostring(mat_slot), tostring(unit))
+    end
+    return false
+end
+
 -- v0.9.76-dev (issue #282): exactly-once package loading with a symmetric
 -- lifecycle release. PackageManager.load() INCREMENTS a per-(package,
 -- reference_name) refcount on every call (package_manager.lua:26-27) and
@@ -299,7 +326,9 @@ local function replace_textures(unit)
         end
 
         for mat_slot, texture in pairs(dict) do
-            unit_set_material(unit, mat_slot, mat)
+            if _mat_resident_or_log(unit, mat_slot, mat) then
+                unit_set_material(unit, mat_slot, mat)
+            end
             local num_meshes = unit_num_meshes(unit)
             for i = 0, num_meshes - 1, 1 do
                 local mesh = unit_mesh(unit, i)
@@ -326,7 +355,9 @@ local function replace_textures(unit)
         for i = 1, num_mats, 1 do
             local mat_slot = unit_get_data(unit, "mat_slots", "slot" .. tostring(i))
             local mat      = unit_get_data(unit, "mat_list", "slot" .. tostring(i))
-            unit_set_material(unit, mat_slot, mat)
+            if _mat_resident_or_log(unit, mat_slot, mat) then
+                unit_set_material(unit, mat_slot, mat)
+            end
         end
     end
 end

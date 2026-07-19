@@ -4,7 +4,7 @@ Audience: maintainers and AI agents working on crt / ct / bt-descendant code. Ev
 cites a file:line. Vanilla paths are relative to
 `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`; our paths are relative to
 `C:\Users\danjo\source\repos\vermintide-2-tweaker`. Line numbers are against the decompile
-as of 2026-07-11; re-verify after a game patch. Anything not verified is tagged
+as of 2026-07-18; re-verify after a game patch. Anything not verified is tagged
 `[unverified]`.
 
 ---
@@ -248,15 +248,17 @@ only because the same code builds them at boot. Mod appends therefore MUST be:
    (`career_tweaker_balance.lua:40-74`, order marked load-bearing); bt's BR list is the
    same doctrine at 328-entry scale
    (`_archive/buff_tweaker_v0.1.12-alpha/.../buff_tweaker_registrations.lua:40-41`).
-3. **Present on every peer** - this is the open gap. Ordering discipline inside one mod
-   does not help a peer who lacks the mod (or loads mods in a different order - the
-   cross-MOD append order follows VMF load order [unverified that VMF load order can
-   differ per peer; treat as hostile]). Host sends `rpc_add_buff(N)`; the non-parity peer
-   resolves N to a different name, or the strict `__index` throws
-   ("Table buff_templates does not contain key", `network_lookup.lua:2360-2367`).
-   That is issues #425 (crt) / #426 (ct): gameplay axes requiring the WS1.5 peer-parity
-   gate (`docs/OOP_REFACTOR_PLAN.md:49-60`), NOT silent substitution - and per
-   BUG_CLASSES 31, the eventual safety must never be gated on a feature toggle.
+3. **Numerically identical on every peer** - presence alone is not proof. Ordering
+   discipline inside one mod does not help a peer who lacks the mod or whose global
+   cross-mod append order differs. Host sends `rpc_add_buff(N)`; the receiver may resolve
+   N to a different name, or the strict `__index` throws ("Table buff_templates does not
+   contain key", `network_lookup.lua:2360-2367`). Issue #425 added a presence/schema
+   gate; issue #776 proved it incomplete when three clients acknowledged schema 1 but
+   local ID 1574 resolved to timed `crt_questingknight_impetuous_as` for positive host
+   server IDs 12, 13, and 9. The gameplay gate must fingerprint every registered name
+   with its ACTUAL forward/reverse numeric ID and fail closed on any mismatch. The
+   receiver must independently drop a locally CRT-resolving collision before vanilla.
+   This safety is never gated on a feature toggle (BUG_CLASSES 31).
 
 ### 4.3 Strict NetworkLookup metatable - BUG_CLASSES 4
 
@@ -269,6 +271,11 @@ Any read of a missing key on ANY `NetworkLookup.*` table errors
 
 - Durations are FORBIDDEN on server-controlled buffs - boot-time fassert
   (`buff_system.lua:259`).
+- Timed buffs that must exist on the proc owner and server use
+  `BuffSystem:add_buff_synced(..., BuffSyncType.LocalAndServer)` rather than
+  `BuffSystem:add_buff(..., true)`. Vanilla uses this exact path in
+  `morris_buff_settings.lua:4618-4627`; its sync dispatch is
+  `buff_system.lua:803-812,849-879`.
 - server_buff_ids are a finite pool; exceeding `NetworkConstants.server_controlled_buff_id.max`
   is a hard `ferror` (`buff_system.lua:219-233`). A proc/AoE loop that spam-adds
   server-controlled buffs can exhaust it (memory
@@ -350,16 +357,15 @@ claims. Career Tweaker's `_crt_foot_knight.lua` is the reference for issue #663.
 
 Ranked candidates; each names our code, the engine-idiomatic alternative, and the payoff.
 
-1. **P0 - crt/ct networked buff names still lack a peer-parity gate (issues #425/#426).**
-   `career_tweaker_balance.lua:83-103` and `chaos_wastes_tweaker_dev.lua:10192-10336`
-   guarantee determinism only among peers running the same mods. A vanilla peer in the
-   lobby still CTDs on the strict lookup when our int rides `rpc_add_buff`
-   (`buff_system.lua:302-305` -> `network_lookup.lua:2360-2367`). Engine-idiomatic
-   endpoint: buffs whose only consumer is the owner should never enter the wire at all -
-   apply them via `BuffExtension.add_buff` locally (no `BuffSystem.add_buff`) so no
-   lookup int is sent; buffs that MUST sync go behind the WS1.5 `all_peers_have(mod_id)`
-   gate (`docs/OOP_REFACTOR_PLAN.md:55-60`), never behind silent substitution and never
-   toggle-coupled (BUG_CLASSES 31).
+1. **P0 - every networked custom lookup needs exact peer identity plus a receiver floor.**
+   CRT #425's presence gate prevented absent-mod sends, but #776 proved that matching
+   mod presence and payload schema can coexist with different global numeric lookup
+   assignments. CRT now fingerprints every registered name+actual numeric ID, gates
+   every custom-buff emission on an exact peer fingerprint, filters hot-join replay,
+   and drops locally CRT-resolving collisions before `BuffSystem.rpc_add_buff` reaches
+   vanilla. Apply the same design to CT #426: local-only effects should avoid the wire;
+   effects that must sync require exact identity, unconditional lifecycle safety, and a
+   receiver-side ownership boundary (BUG_CLASSES 31 and 64).
 
 2. **P1 - crt armor/overcharge shims monkey-patch live extension methods per call.**
    `career_tweaker_armor_overcharge.lua:237-240` (replace `be.has_buff_type`), :253-256

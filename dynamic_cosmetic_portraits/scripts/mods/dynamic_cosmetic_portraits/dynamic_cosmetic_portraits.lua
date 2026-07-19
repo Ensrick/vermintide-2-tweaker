@@ -13,7 +13,7 @@ end
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.26-dev"
+local MOD_VERSION = "0.1.27-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -533,7 +533,11 @@ end
 -- branch rendered without chat spam or a manual command.
 local _scope_probe = mod:dofile("scripts/mods/dynamic_cosmetic_portraits/_dcp_player_scope_probe")
 local _scope_probe_state = _scope_probe.new(24)
+local _score_record = mod:dofile("scripts/mods/dynamic_cosmetic_portraits/_dcp_score_record")
 local function _scope_subject(player)
+    -- Score rows resolve from their own record rather than a Player object;
+    -- callers pass the already-bounded record subject string here (#435).
+    if type(player) == "string" then return player end
     if not player then return "unknown" end
     local kind = player.local_player and "local" or (player.bot_player and "bot" or "remote")
     local local_id = nil
@@ -1089,14 +1093,20 @@ end)
 -- (#435) End-of-round score screen. _setup_player_scores resolves each row's
 -- portrait from the global career_settings entry at widget-build time
 -- (end_view_state_score.lua:504-514). Post-correct every non-local
--- es_mercenary row: resolve the Player object back from the score record's
--- peer_id (player_from_peer_id, player_manager.lua:463) and use THEIR
--- cosmetics. Bots and departed players fall back to the vanilla original --
--- a bot cannot be disambiguated from its score record (bots share the host's
--- peer_id). Runs once per score-screen build. self.peer_id is the LOCAL peer
--- (context.peer_id <- Network.peer_id(), state_ingame.lua:181/260).
+-- es_mercenary row from that score record's own cosmetics. Vanilla records
+-- each subject's resolved slot_skin and slot_hat, including bots
+-- (scoreboard_helper.lua:348-405), and clients rebuild those records locally
+-- before replacing only the score numbers received from the host
+-- (game_mechanism_manager.lua:1054-1100). This avoids the old peer lookup:
+-- bots share the host peer id and cannot be resolved through local player id
+-- 1. Untracked/default cosmetic keys fall through to the vanilla portrait.
+-- Runs once per score-screen build. self.peer_id is the local peer
+-- (end_view_state_score.lua:23-36).
 mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, players_session_scores)
     if not _original_portrait_image then return end  -- swap never activated; nothing can have leaked
+    -- A custom Gui material before residency is a Material-not-found crash.
+    -- If readiness failed, no custom score correction is safe to draw.
+    if not _check_portrait_materials_ready() then return end
     local records = self._players_by_widget_index
     local widgets = self._hero_widgets
     if not records or not widgets then return end
@@ -1109,13 +1119,10 @@ mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, player
         if content and rec and rec.profile_index == 5 and rec.career_index == 1 then
             local is_local_human = rec.is_player_controlled and rec.peer_id == my_peer_id
             if not is_local_human then
-                local that_player = nil
-                if rec.is_player_controlled and rec.peer_id and Managers.player then
-                    that_player = Managers.player:player_from_peer_id(rec.peer_id, 1)
-                end
-                local set = that_player and _resolve_portrait_set_for_player(that_player)
+                local set = _score_record.resolve_portrait_set(
+                    rec, _skin_portrait_map, _hat_portrait_map)
                 local resolved = (set and set.hud) or _original_portrait_image
-                _scope_evidence("score", that_player, resolved, set ~= nil)
+                _scope_evidence("score", _score_record.subject(rec), resolved, set ~= nil)
                 if content.portrait ~= resolved then
                     content.portrait = resolved
                 end
@@ -1147,8 +1154,10 @@ _rt_register("portrait_override_player_scoped", function()
           "Tab player-list per-player seam hook missing (leak on player list)" },
         { 'mod:hook_safe("EndViewStateScore", ' .. '"_setup_player_scores"',
           "end-of-round score per-player seam hook missing (leak on score screen)" },
-        { 'pm:local_' .. 'player()',
+        { '_local_player_safe(' .. 'pm)',
           "local override detection must key off the LOCAL player, not a players() scan" },
+        { '_score_record.resolve_' .. 'portrait_set(',
+          "score rows must resolve from their own hero_skin/hat record" },
     }
     for _, n in ipairs(needles) do
         if not txt:find(n[1], 1, true) then return n[2] end

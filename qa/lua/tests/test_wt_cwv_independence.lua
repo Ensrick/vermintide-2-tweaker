@@ -146,6 +146,20 @@ return function(H, repo_root)
         H.truthy(availability:find("_cwv_replacement_ready(weapon_key)", 1, true))
     end)
 
+    H.test("issue661 Saltzpyre CWV ranged ports receive career actions", function()
+        local by_key = {}
+        for _, row in ipairs(catalog) do by_key[row.key] = row end
+        for _, key in ipairs({ "cwv_es_outrider_grenade_launcher", "cwv_es_musket_old" }) do
+            local row = by_key[key]
+            H.truthy(row, key)
+            H.equal(contains(row.careers, "wh_bountyhunter"), true, key .. "/wh_bountyhunter")
+            H.equal(contains(row.conditional_careers, "wh_bountyhunter"), true,
+                key .. "/conditional/wh_bountyhunter")
+            H.equal(contains(row.default_careers, "wh_bountyhunter"), false,
+                key .. "/default/wh_bountyhunter")
+        end
+    end)
+
     H.test("issue391 policy composes legacy item master with exact career choice", function()
         local values = {
             unlock_cwv_variant_cwv_es_dual_axes = true,

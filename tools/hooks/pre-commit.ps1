@@ -10,17 +10,20 @@
 #      Runs before the docs-skip filter because a stable CHANGELOG edit is
 #      still a stable edit. Instant. Bypass a real promotion with env
 #      VT2_PROMOTION=1.
-#   1. Read `git diff --cached --name-only`. If no staged file matches
+#   1. Run `qa/check_release_bundle_atomicity.ps1 -Staged` on EVERY non-empty
+#      commit. Runtime/version/config/newest-release deltas without the exact
+#      owning root bundle are rejected before a source-only commit can land.
+#   2. Read `git diff --cached --name-only`. If no staged file matches
 #      `*.lua`, `*.cfg`, `*.ps1`, or `*.mod`, skip the remaining gates — pure
 #      docs / asset commits don't need them.
-#   2. Run `qa/run_all.ps1 -Quick -SkipLua` (the -Quick always-run set: cfg +
+#   3. Run `qa/run_all.ps1 -Quick -SkipLua` (the -Quick always-run set: cfg +
 #      published-ids + version + unpack + widget-type + event-register +
 #      cross-mod-deps; skips slow luacheck and the full-pass scans CI runs).
 #      Any non-zero exit blocks the commit.
-#   3. Run `tools/mod-lint/lint-mod.ps1`. Exit 2 (duplicate-hook errors)
+#   4. Run `tools/mod-lint/lint-mod.ps1`. Exit 2 (duplicate-hook errors)
 #      blocks the commit; exit 1 (warnings — forward-ref / late-local /
 #      save-restore / network-bound) prints the warning but continues.
-#   4. Run `qa/check_hook_test_coverage.ps1 -Staged` (issue #429) WARN-ONLY:
+#   5. Run `qa/check_hook_test_coverage.ps1 -Staged` (issue #429) WARN-ONLY:
 #      a staged mod:hook / NetworkLookup-write add with no regression marker is
 #      surfaced but never blocks (we gather signal first). Escape: a
 #      `-- hook-test: <check>` comment on the added line.
@@ -79,6 +82,24 @@ if (Test-Path $devOnlyScript) {
     }
 }
 
+# --- Step 1: source/root-bundle atomicity guard (every staged commit) -------
+# This must run before the extension filter: a newest CHANGELOG release header
+# or itemV2.cfg delta is itself release intent, while a generated root bundle
+# has no extension that the ordinary source gate would otherwise select.
+$atomicityScript = Join-Path $repoRoot 'qa\check_release_bundle_atomicity.ps1'
+if (Test-Path $atomicityScript) {
+    Write-Host "[pre-commit] step 1: qa/check_release_bundle_atomicity.ps1 -Staged" -ForegroundColor Cyan
+    $atomicityOut = & pwsh -NoProfile -File $atomicityScript -Staged 2>&1
+    $atomicityExit = $LASTEXITCODE
+    $atomicityOut | ForEach-Object { Write-Host $_ }
+    if ($atomicityExit -ge 2) {
+        Write-Host ""
+        Write-Host "Pre-commit blocked by check_release_bundle_atomicity (exit $atomicityExit)." -ForegroundColor Red
+        Write-Host "Commit the exact VMB root bundle with the releasable source, or split this into a docs/tests-only change." -ForegroundColor Yellow
+        exit 1
+    }
+}
+
 $relevant = @($staged | Where-Object {
     $ext = [System.IO.Path]::GetExtension($_).ToLowerInvariant()
     $relevantExts -contains $ext
@@ -99,7 +120,7 @@ if (-not (Test-Path $qaScript)) {
 }
 
 Write-Host ""
-Write-Host "[pre-commit] step 2/3: qa/run_all.ps1 -Quick -SkipLua" -ForegroundColor Cyan
+Write-Host "[pre-commit] step 3/5: qa/run_all.ps1 -Quick -SkipLua" -ForegroundColor Cyan
 $qaOutput = & pwsh -NoProfile -File $qaScript -Quick -SkipLua 2>&1
 $qaExit = $LASTEXITCODE
 $qaOutput | ForEach-Object { Write-Host $_ }
@@ -119,7 +140,7 @@ if (-not (Test-Path $lintScript)) {
 }
 
 Write-Host ""
-Write-Host "[pre-commit] step 3/3: tools/mod-lint/lint-mod.ps1" -ForegroundColor Cyan
+Write-Host "[pre-commit] step 4/5: tools/mod-lint/lint-mod.ps1" -ForegroundColor Cyan
 $lintOutput = & pwsh -NoProfile -File $lintScript 2>&1
 $lintExit = $LASTEXITCODE
 $lintOutput | ForEach-Object { Write-Host $_ }
@@ -143,7 +164,7 @@ if ($lintExit -eq 1) {
 $hookCovScript = Join-Path $repoRoot 'qa\check_hook_test_coverage.ps1'
 if (Test-Path $hookCovScript) {
     Write-Host ""
-    Write-Host "[pre-commit] step 4/4: qa/check_hook_test_coverage.ps1 -Staged (advisory)" -ForegroundColor Cyan
+    Write-Host "[pre-commit] step 5/5: qa/check_hook_test_coverage.ps1 -Staged (advisory)" -ForegroundColor Cyan
     $covOut = & pwsh -NoProfile -File $hookCovScript -Staged 2>&1
     $covOut | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -eq 1) {

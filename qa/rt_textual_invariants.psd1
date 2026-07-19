@@ -176,7 +176,12 @@
     # -- #574: exact variant persistence plus bounded hot-join convergence.
     #    Behavioral runtime checks exercise matching; these source gates retain
     #    the durable identity and no-network-retry lifecycle at ship time.
-    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua'; needle='return string.format("backend:%s|skin:%s", tostring(backend_id), tostring(skin or ""))'; literal=$true; polarity='present'; issueRef='#574'; note='per-item glow identity cannot collapse distinct inventory instances or illusions.' }
+    # #48: the exact-instance key builder moved into the shared policy module so
+    # the picker and the renderer cannot drift apart. Same invariant, new owner,
+    # plus a gate proving the picker delegates instead of re-deriving.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy.lua'; needle='return string.format("backend:%s|skin:%s", tostring(backend_id), tostring(skin or ""))'; literal=$true; polarity='present'; issueRef='#574'; note='per-item glow identity cannot collapse distinct inventory instances or illusions.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua'; needle='return INSTANCE_POLICY.identity_key(backend_id, slot_data)'; literal=$true; polarity='present'; issueRef='#48'; note='the picker delegates exact-instance identity to the shared policy module.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy.lua'; needle='if expected_skin == nil then return false end'; literal=$true; polarity='present'; issueRef='#48'; note='an unconstrained peer payload fails closed instead of matching every glow-capable unit on the wearer.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua'; needle='if not GlowPicker._open or not GlowPicker._dirty then return false end'; literal=$true; polarity='present'; issueRef='#574'; note='Apply remains the sole dirty transaction and repeated Apply stays a no-op.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='state_pull = "piggyback_cos_la_state_req"'; literal=$true; polarity='present'; issueRef='#574'; note='join recovery reuses the acknowledged post-ingame state pull.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='retry_network = false'; literal=$true; polarity='present'; issueRef='#574'; note='the bounded join retry repaints locally and cannot create an RPC stream.' }

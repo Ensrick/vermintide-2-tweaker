@@ -14,7 +14,7 @@ line; the remaining `[src:]` citations are carried from the cited `gt_dev`
 module comments, which cite the decompile in turn).
 
 **Dev/stable relationship.** This documents `general_tweaker_dev` (`gt_dev`,
-MOD_VERSION `0.2.243-dev`, friends-only Workshop 3733367409), the ACTIVE working
+MOD_VERSION `0.2.248-dev`, friends-only Workshop 3733367409), the ACTIVE working
 stream. `general_tweaker/` (`gt`, public Workshop 3713619122) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gt_dev`
@@ -23,7 +23,8 @@ is engineered to survive the dev->stable promotion `sed`, so every always-on
 diagnostic disables itself in the stable clone.
 
 `gt` is a **broad utility bundle**, not a deep render mod: ~30 `_gt_*` feature
-modules covering bot-AI gap fixes, a host-side creature spawner, in-world debug
+modules covering bot-AI gap fixes, a host-executed creature spawner (clients
+request over the mod's `gt_cs_request` RPC, #693), in-world debug
 draw, host-side lobby moderation, godmode/noclip/cheat toggles, and combat/QoL
 tweaks. Unlike `cwv`/`wt`/`cosmetics` it barely touches the item/mesh/wire path;
 its engine contact clusters into four surfaces - the bot behaviour tree, the
@@ -88,7 +89,7 @@ melee-action crash guard remains ungated.
 |---|---|---|---|
 | `GameModeInn.server_update` / `GameModeInnDeus.server_update` [safe] `_gt_bots_keep.lua:261-262` | Inn/CW-hub tick; does NOT call `_handle_bots`, so keep slots stay empty | Bots-in-Keep FILL: drive `_bik_fill` post-call (revived v0.2.146 by porting Photo Mode's inn-bot lifecycle) | Both classes carry their own copy of the inherited method (`class()` copies at definition, `docs/engine/01`) so each is hooked; fires only once the session is running so the old slot-1 startup race (Bug 2) cannot recur |
 | `GameModeInn.cleanup_game_mode_units` / `GameModeInnDeus.` [safe] `_gt_bots_keep.lua:273-274` | Called by `StateIngame.on_exit` before `check_venture_end` destroys venture stats [src: `scripts/game_state/state_ingame.lua:1911`,`:2119`] | TEARDOWN: `_remove_bot_instant` unregisters each keep bot's stat in time (fixes the "Stat id not unregistered" fassert, Bug 1) | UNCONDITIONAL (not toggle-gated) so bots are always cleaned even if the setting is flipped off mid-session |
-| `PassiveAbilityNecromancerCharges._on_talents_changed` [safe] `_gt_bots_keep.lua` | Sets `_pets_forbidden_in_level = pets_forbidden_in_hub and is_in_inn_level`; `spawn_pet` then early-returns [src: `scripts/settings/dlcs/shovel/passive_ability_necromancer_charges.lua:108-110,201-203`] | Necromancer keep skeletons: clear the hub gate for human owners; clear it for bot owners only while Bots in Keep is enabled | One pure truth-table policy owns all four cases (#659); mission/non-hub state remains unchanged; `hook_safe` chains with other Necromancer mods |
+| `PassiveAbilityNecromancerCharges._on_talents_changed` / `.extensions_ready` [safe] `_gt_bots_keep.lua` | `extensions_ready` registers events and immediately invokes `_on_talents_changed`; that method sets `_pets_forbidden_in_level = pets_forbidden_in_hub and is_in_inn_level`, and `spawn_pet` then early-returns [src: `scripts/settings/dlcs/shovel/passive_ability_necromancer_charges.lua:56-78,108-110,201-203`] | Necromancer keep skeletons: reconcile the initialized extension at both the vanilla flag-write and the completed extension lifecycle; clear the hub gate for humans, and for bots only while Bots in Keep is enabled | One engine-free idempotent policy owns all cases (#659). Each `(Class,method)` pair is hooked once; bounded phase/before/after evidence distinguishes a missed callback from an already-clear flag; mission/non-hub state remains unchanged |
 | `GameModeAdventure._handle_bots` / `GameModeDeus.` / `GameModeWeave.` [hook] `_gt_bots_keep.lua:425-427` | Reads `script_data.ai_bots_disabled` at the top; clears bots and early-returns when true [src: `game_mode_adventure.lua:371`] | Disable-Bots (Solo) enforce: re-assert the flag from the live setting every tick | Never write the bare `script_data` NAME (`= script_data or {}` shadows the real `_G.script_data` in the VMF env, #194) - `rawget(_G,"script_data")` then field-mutate |
 | `AdventureSpawning.force_update_spawn_positions` [hook] `_gt_bots_keep.lua:434` | Positions bot units; can fatal when no bots exist | Crash guard: `pcall(func, ...)` while Disable-Bots is on | The crash was latent pre-fix (the flag never actually suppressed bots); host-only |
 
@@ -106,6 +107,7 @@ resolved after main, most wrapped in `if <Class> then`.
 | `BTLootRatFleeAction.enter/run/leave` / `NavigationGroupManager.a_star_cached_between_positions` / `LocomotionUtils.pos_on_mesh` / `GwNavQueries.inside_position_from_outside_position` / `BTSkulkAroundAction.get_new_skulk_goal` [hook,tbl] `:966-995` | Loot-rat flee, A* pathfind, navmesh snap/query, skulk goal | Keep-nav crash suite: short-circuit each in the keep (no navmesh exists there) and return the safe sentinel | The five-hook crash chain documented upstream; each returns vanilla's expected shape (`false`/`"running"`/`nil`) |
 | `BuffSystem.add_buff` [hook,tbl] `:1038` / `EnemyPackageLoader.request_breed` [hook,tbl] `:1063` | Add buff (allocates a server-controlled buff id) / request a breed package | Server buff-cap detector (back off grudge-mark modifiers near `NetworkConstants.server_controlled_buff_id.max`); force `ignore_breed_limits=true` so debug spawns load packages on demand | Guarded on `NetworkConstants.server_controlled_buff_id` |
 | `AiUtils.update_aggro` / `AiBreedSnippets.reward_boss_kill_loot` / `ProjectileEtherealSkullLocomotionExtension.init` / `BTEnterHooks.warlord_defensive_on_enter` / `BTSpawnAllies.*` / `Utility.get_action_utility` [hook,tbl] `:662-737,:1007` | Aggro/loot/summon/spawn-allies/utility ticks that assume mission-only blackboard state | Defensive init + POSITION_LOOKUP nil-guards so a keep-spawned or homeless unit does not fatal on a nil field | `reward_boss_kill_loot` gates its `POSITION_LOOKUP[unit].z` read in a `pcall`; `Utility.get_action_utility` instantiates missing `utility_actions[name]` data |
+| `gt_cs_request` / `gt_cs_ack` [rpc] `_gt_creature_spawner.lua` | - | Client->host creature spawn/destroy requests, run host-authoritative (only the host drains the CD spawn queue, `state_ingame.lua:950-958`); host re-validates breed/numbers/grudge keys and acks the result line back to the requester (#693) | Schema-tagged `mod.GT_CS_RPC_SCHEMA`; sent to the mechanism-resolved host peer (literal `"server"` is a no-op, `docs/VMF_RECIPES.md` §3); degrades silently when the host lacks gt |
 
 ### Surface 2b - Boss spawn-anywhere + first-tick BT health nil-guards (`_gt_creature_spawner.lua`)
 
@@ -370,13 +372,14 @@ hooking classes:
   in registration order; it re-registers on every game-state transition because
   `Managers.state.event` is rebuilt each transition.
 
-The three mod-to-mod RPC channels (`gt_lobby_motd_show`, `gt_ai_toggle_request`,
-`gt_level_control`/`gt_respawn_request`) are all keyed by mod-id, so dev and
-stable are automatically isolated - a session must pin every peer to the SAME
-stream or the lobby/MOTD/slot surface cannot talk (repo `CLAUDE.md` "per-mod-id
-RPC channels" caveat). MOTD and AI tag `mod.GT_LOBBY_RPC_SCHEMA` /
-`mod.GT_AI_RPC_SCHEMA` as the first positional arg and drop schema mismatches
-(`docs/VMF_RECIPES.md` §10).
+The mod-to-mod RPC channels (`gt_lobby_motd_show`, `gt_ai_toggle_request`,
+`gt_level_control`/`gt_respawn_request`, `gt_cs_request`/`gt_cs_ack`) are all
+keyed by mod-id, so dev and stable are automatically isolated - a session must
+pin every peer to the SAME stream or the lobby/MOTD/slot/creature-spawner
+surface cannot talk (repo `CLAUDE.md` "per-mod-id RPC channels" caveat). MOTD,
+AI, and the creature spawner tag `mod.GT_LOBBY_RPC_SCHEMA` /
+`mod.GT_AI_RPC_SCHEMA` / `mod.GT_CS_RPC_SCHEMA` as the first positional arg
+and drop schema mismatches (`docs/VMF_RECIPES.md` §10).
 
 ### Godmode is networked damage-suppression, not a health flag (owner: `docs/engine/10`)
 
