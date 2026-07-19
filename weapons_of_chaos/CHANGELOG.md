@@ -1,5 +1,16 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.38-dev (2026-07-19) - #782 validate Shyish spirit positions [verify-fix]
+
+- Replaced direct `POSITION_LOOKUP` arithmetic in the Blightreaper spirit chase
+  with one validated position boundary. It reads the live unit node first and
+  accepts the lookup only as an engine-validated fallback.
+- Invalid or stale engine userdata now expires the affected spirit through the
+  existing bounded diagnostic path instead of throwing a full call stack every
+  frame.
+- Added regression coverage for live-position preference, safe fallback, and
+  rejection of stale userdata before any Vector3 arithmetic.
+
 ## 0.1.37-dev (2026-07-19) - Blightreaper moveset swapped to Crowbill [untested]
 
 - Author request 2026-07-19: the Blightreaper's combat template now clones Sienna's Crowbill graph (`one_handed_crowbill`, bw_1h_crowbill) instead of Kerillian's 1H Sword (`we_one_hand_sword_template_1`). The crowbill graph natively ships four chained lights, three heavies, and the push-attack follow-up, so the Sword era's four-light chain surgery (Empire Sword overhead donor, stab-fourth splice, heavy retargeting) is removed outright; native crowbill chain transitions are preserved. SPEED_MULTIPLIER stays 0.83 and now multiplies the crowbill's own per-action timings; the +15 percent intrinsic crit, light/heavy damage-profile overrides, Hagbane poison, Shyish curse, and property/trait rows carry over unchanged.
