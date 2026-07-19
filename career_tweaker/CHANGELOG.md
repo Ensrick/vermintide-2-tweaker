@@ -1,5 +1,24 @@
 # Career Tweaker Changelog
 
+## 0.4.11-beta - 2026-07-19 - #728 refresh the live career picker [verify-fix-coop]
+
+- Moved career-unlock ownership into one module that preserves vanilla's four
+  return values and continues to respect DLC ownership and peer reservations.
+- Refreshes both the Hero View summary and the in-keep character picker after
+  an unlock or level-override setting changes, without requesting or spawning
+  a profile during the refresh.
+- Reapplies vanilla occupancy after rebuilding the picker and emits bounded
+  diagnostics that distinguish a career level lock from another player
+  reserving Kruber.
+- Added offline contracts covering hook ownership, return preservation,
+  no-spawn refresh behavior, reservation safety, and diagnostic bounds.
+
+**Two-player verify:** join a lobby where another player reserves one Kruber
+career, enable **Unlock All Careers**, and confirm Kruber's other careers unlock
+without making the occupied career selectable. Disable the setting and confirm
+the vanilla level locks return. Require bounded `[crt:728]` rows in the log and
+no profile request, forced spawn, or repeated per-frame diagnostics.
+
 ## 0.4.10-beta - 2026-07-19 - #283 preserve Job Well Done stacks [verify-fix]
 
 - Added one dedicated talent-menu guard owning the desktop/controller
