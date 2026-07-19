@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.32-dev"
+local MOD_VERSION = "0.2.33-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -267,6 +267,7 @@ end
 local Dailies = mod:dofile("scripts/mods/modded_progression/mp_dailies")
 local ShillingUI = mod:dofile("scripts/mods/modded_progression/_mp_shilling_ui_policy")
 local Emporium = mod:dofile("scripts/mods/modded_progression/_mp_emporium_policy")
+local FreshProfileCensus = mod:dofile("scripts/mods/modded_progression/_mp_diag_fresh_profile")
 local _local_quest_rewards = {}
 local _local_poll_serial = 0
 
@@ -1315,6 +1316,44 @@ mod:command("mp_dump", "Modded Progression: dump current state", function()
     end
 end)
 
+-- #840 diagnostics only. Vanilla's three narrow override routes (loadout,
+-- talents, and total power) cannot isolate general interface/mirror consumers.
+-- Census the live topology without invoking a mutator or enabling the stub.
+local function _mp840_emit_fresh_profile_census(origin)
+    local backend = Managers and Managers.backend
+    local report = FreshProfileCensus.audit(backend)
+    local summary = FreshProfileCensus.summary(report)
+    printf("[mp:840] census origin=%s realm=%s interfaces=%d/%d methods_missing=%d manager_methods_missing=%d mirror_mismatch=%d topology_complete=%s shared_native_mirror=%s",
+        tostring(origin), _is_mp_realm() and "modded" or "official",
+        summary.present, summary.audited, summary.methods_missing, summary.manager_methods_missing,
+        summary.mirror_mismatch, tostring(summary.topology_complete), tostring(summary.all_share_canonical))
+    for _, row in ipairs(report.rows) do
+        printf("[mp:840] interface=%s present=%s table_shape=%s same_native_mirror=%s missing=%s slice=%s",
+            row.name, tostring(row.present), tostring(row.table_shape), tostring(row.same_mirror),
+            table.concat(row.missing, ","), row.slice)
+    end
+    if #report.manager_missing > 0 then
+        printf("[mp:840] manager_methods_missing=%s", table.concat(report.manager_missing, ","))
+    end
+    return backend
+end
+
+mod:command("mp_fresh_profile_census", "Audit fresh-profile backend interface coverage", function()
+    _mp840_emit_fresh_profile_census("command")
+end)
+
+local _mp840_census_backend
+
+local function _mp840_capture_when_backend_ready()
+    if not _is_mp_realm() then return end
+    local backend = Managers and Managers.backend
+    if type(backend) ~= "table" or backend == _mp840_census_backend
+            or type(backend.interfaces_ready) ~= "function" then return end
+    local ok, ready = pcall(backend.interfaces_ready, backend)
+    if not ok or not ready then return end
+    _mp840_census_backend = _mp840_emit_fresh_profile_census("backend_ready")
+end
+
 mod:command("mp_reset", "Modded Progression: wipe local store (does NOT touch PlayFab)", function()
     mod:set("currency", {}, false)
     mod:set("unlocks", {}, false)
@@ -1339,6 +1378,7 @@ end
 -- transition; unchanged frames allocate nothing.
 function mod.update(dt)
     _mp577_sync_overlay()
+    _mp840_capture_when_backend_ready()
 end
 
 mod:info("[mem-probe] mp boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_MP) / 1024)
