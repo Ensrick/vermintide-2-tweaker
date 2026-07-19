@@ -290,6 +290,13 @@ function Invoke-WithBoundLauncherProjectRoot {
         $restoreFailure = $null
         try {
             $originalText = [System.Text.Encoding]::UTF8.GetString($originalBytes)
+            # ConvertFrom-Json treats a decoded U+FEFF as payload under some
+            # PowerShell/.NET combinations. Accept the ordinary UTF-8 BOM at
+            # the machine-owned settings boundary, while still restoring the
+            # original bytes exactly after the temporary ProjectRoot binding.
+            if ($originalText.Length -gt 0 -and $originalText[0] -eq [char]0xFEFF) {
+                $originalText = $originalText.Substring(1)
+            }
             try { $settings = $originalText | ConvertFrom-Json }
             catch { throw "VMBLauncher settings are not valid JSON: $SettingsPath ($($_.Exception.Message))" }
 
@@ -658,7 +665,7 @@ function Invoke-ShipSelfTest {
         $settingsPath = Join-Path $bindingDir 'settings.json'
         $mutexProbePath = Join-Path $bindingDir 'mutex-probe.ps1'
         $testMutexName = 'Local\Ensrick.VT2Tweaker.ShipSelfTest.' + [guid]::NewGuid().ToString('N')
-        $originalSettings = "{`r`n  `"ProjectRoot`": `"C:\\old-root`",`r`n  `"Sentinel`": `"preserve exactly`"`r`n}`r`n"
+        $originalSettings = [string][char]0xFEFF + "{`r`n  `"ProjectRoot`": `"C:\\old-root`",`r`n  `"Sentinel`": `"preserve exactly`"`r`n}`r`n"
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         [System.IO.File]::WriteAllText($settingsPath, $originalSettings, $utf8NoBom)
         $mutexProbeSource = @'

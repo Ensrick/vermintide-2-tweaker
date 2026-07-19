@@ -6,26 +6,38 @@ return function(H, repo_root)
         return source
     end
 
-    local function load_wire()
+    local function load_wire(with_cosmetic_utils)
         local hooks = {}
         local mock_mod = {
             _cos = { custom_skin_keys = { ct_test_skin = true } },
         }
-        function mock_mod:hook(target, method, wrapper)
-            hooks[tostring(target) .. ":" .. method] = wrapper
-        end
-
         local chunk = assert(loadfile(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_wire.lua"))
         -- Match VMF dofile: no injected file-global `mod`. The returned module
         -- must receive its owner explicitly from the entry point.
-        local env = setmetatable({ printf = function() end }, { __index = _G })
+        local env = { printf = function() end }
+        if with_cosmetic_utils then
+            env.CosmeticUtils = {
+                is_weapon_slot = function(slot)
+                    return slot == "slot_melee" or slot == "slot_ranged"
+                end,
+                get_weapon_skin_name = function(slot, optional_skin_id)
+                    local weapon_skins = env.NetworkLookup.weapon_skins
+                    return weapon_skins[optional_skin_id or 1]
+                end,
+            }
+        end
+        setmetatable(env, { __index = _G })
+        function mock_mod:hook(target, method, wrapper)
+            local target_name = target == env.CosmeticUtils and "CosmeticUtils" or tostring(target)
+            hooks[target_name .. ":" .. method] = wrapper
+        end
         setfenv(chunk, env)
         local wire = chunk()
         H.equal(type(wire), "table")
         H.equal(type(wire.install), "function")
         H.truthy(wire.install(mock_mod))
-        return mock_mod, hooks, wire
+        return mock_mod, hooks, wire, env
     end
 
     H.test("Cosmetics wire module is manifest-ordered after illusion registration", function()
@@ -64,6 +76,18 @@ return function(H, repo_root)
         H.equal(count, 3)
     end)
 
+    H.test("Cosmetics wire module registers session-score skin decode floor when CosmeticUtils exists", function()
+        local mock_mod, hooks, wire = load_wire(true)
+        H.truthy(hooks["CosmeticUtils:get_weapon_skin_name"])
+        H.truthy(mock_mod._cos_skin_wire_surfaces.get_weapon_skin_name)
+        H.equal(type(mock_mod._cos_wire_safe_get_weapon_skin_name), "function")
+
+        H.truthy(wire.install(mock_mod))
+        local count = 0
+        for _ in pairs(hooks) do count = count + 1 end
+        H.equal(count, 4)
+    end)
+
     H.test("Cosmetics wire wrapper nulls only custom skins and restores all state", function()
         local mock_mod = load_wire()
         local custom = { skin = "ct_test_skin" }
@@ -86,5 +110,45 @@ return function(H, repo_root)
         H.equal(b, "b")
         H.equal(c, "c")
         H.equal(d, "d")
+    end)
+
+    H.test("Cosmetics receiver floor degrades unknown weapon skin index to nil", function()
+        local mock_mod, hooks, wire, env = load_wire(true)
+        env.NetworkLookup = {
+            weapon_skins = {
+                [1] = "n/a",
+                [2] = "vanilla_skin",
+            },
+        }
+
+        local called = false
+        local result = hooks["CosmeticUtils:get_weapon_skin_name"](
+            function()
+                called = true
+                error("strict vanilla decode should not run for an unknown id")
+            end,
+            "slot_melee",
+            924
+        )
+        H.equal(result, nil)
+        H.equal(called, false)
+
+        local vanilla = hooks["CosmeticUtils:get_weapon_skin_name"](
+            function(slot, optional_skin_id)
+                return env.NetworkLookup.weapon_skins[optional_skin_id or 1]
+            end,
+            "slot_melee",
+            2
+        )
+        H.equal(vanilla, "vanilla_skin")
+
+        local pose = hooks["CosmeticUtils:get_weapon_skin_name"](
+            function()
+                return "pose-path-still-vanilla"
+            end,
+            "slot_pose",
+            924
+        )
+        H.equal(pose, "pose-path-still-vanilla")
     end)
 end
