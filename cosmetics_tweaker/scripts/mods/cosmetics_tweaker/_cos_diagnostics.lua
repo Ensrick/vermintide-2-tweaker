@@ -22,6 +22,88 @@ mod:command("flush_log", "Force-flush the engine console log to disk", function(
     mod:echo("[flush_log] attempted")
 end)
 
+-- #421: bounded four-boundary census. Run before/after the mixed-lobby repro;
+-- the transition itself emits one [cos:421] line at every exercised sender.
+mod:command("cos_421_diag", "Audit custom illusion wire safety", function()
+    local custom_skin_keys = COS.custom_skin_keys or {}
+    local lookup = NetworkLookup and NetworkLookup.weapon_skins
+    local catalog_ok = type(lookup) == "table"
+    local catalog_count = 0
+
+    local keys = {}
+    for skin_key in pairs(custom_skin_keys) do keys[#keys + 1] = skin_key end
+    table.sort(keys)
+    for _, skin_key in ipairs(keys) do
+        catalog_count = catalog_count + 1
+        local index = type(lookup) == "table" and rawget(lookup, skin_key) or nil
+        local reverse = index and rawget(lookup, index) or nil
+        local row_ok = type(index) == "number" and reverse == skin_key
+        catalog_ok = catalog_ok and row_ok
+        pcall(printf, "[cos:421:diag] catalog key=%s index=%s reverse=%s ok=%s",
+            tostring(skin_key), tostring(index), tostring(reverse), tostring(row_ok))
+    end
+    catalog_ok = catalog_ok and catalog_count > 0
+
+    local expected_surfaces = {
+        "game_object_initialized", "spawn_resynced_loadout", "hot_join_sync",
+        "update_cosmetic_slot",
+    }
+    local surfaces = mod._cos_skin_wire_surfaces or {}
+    local surfaces_ok = true
+    for _, surface in ipairs(expected_surfaces) do
+        local installed = surfaces[surface] == true
+        surfaces_ok = surfaces_ok and installed
+        pcall(printf, "[cos:421:diag] surface=%s installed=%s",
+            surface, tostring(installed))
+    end
+
+    local policy_ok = false
+    local restore_ok = false
+    local fake_key = "_cos_421_diag_custom_skin"
+    local had = custom_skin_keys[fake_key]
+    custom_skin_keys[fake_key] = true
+    if type(mod._cos_wire_safe_custom_skin) == "function" then
+        local safe, subbed = mod._cos_wire_safe_custom_skin(fake_key, "diagnostic GameSession")
+        policy_ok = safe == "n/a" and subbed == true
+    end
+    if type(mod._cos_wire_null_custom_skins) == "function" then
+        local slot = { skin = fake_key }
+        local nil_at_send = false
+        local ok = pcall(mod._cos_wire_null_custom_skins, { slot }, function()
+            nil_at_send = slot.skin == nil
+        end, "diagnostic rpc_add_equipment")
+        restore_ok = ok and nil_at_send and slot.skin == fake_key
+    end
+    if not had then custom_skin_keys[fake_key] = nil end
+
+    local live_custom = 0
+    local ok_player, player = pcall(function()
+        local player_manager = Managers and Managers.player
+        return player_manager and player_manager.local_player_safe
+            and player_manager:local_player_safe()
+    end)
+    local unit = ok_player and player and player.player_unit
+    local inventory = unit and ScriptUnit and ScriptUnit.has_extension
+        and ScriptUnit.has_extension(unit, "inventory_system")
+    local slots = inventory and inventory._equipment and inventory._equipment.slots or {}
+    for slot_name, slot_data in pairs(slots) do
+        local skin = slot_data and slot_data.skin
+        if skin and custom_skin_keys[skin] then
+            live_custom = live_custom + 1
+            pcall(printf, "[cos:421:diag] live slot=%s skin=%s custom=true",
+                tostring(slot_name), tostring(skin))
+        end
+    end
+
+    pcall(printf,
+        "[cos:421:diag] summary catalog=%s catalog_count=%d surfaces=%s policy=%s restore=%s live_custom=%d",
+        catalog_ok and "PASS" or "FAIL", catalog_count,
+        surfaces_ok and "PASS" or "FAIL", policy_ok and "PASS" or "FAIL",
+        restore_ok and "PASS" or "FAIL", live_custom)
+    _flush_log()
+    mod:echo("[cosmetics] #421 wire audit written to the console log")
+end)
+
 -- #641: emit the live, deduplicated offhand-weapon and shield naming queue. Runtime
 -- WeaponSkins includes DLC and sibling-mod additions that a checked-in static
 -- list cannot reliably predict, so the selectable picker pools are the source

@@ -462,9 +462,20 @@ Last updated: 2026-07-16.
 | Fix version(s) | cosmetics_tweaker v0.9.74-dev (goi), v0.9.76-dev (resync + hot-join + sync-data axes) |
 | Category | UNIT + MULTIPLAYER MANUAL |
 | Repro | 1. Cosmetics user equips `ct_es_mace_gk_shield_01` (or a heavy-spear deus illusion). 2. A NON-mod peer is in the lobby (or hot-joins). 3. Spawn into mission, then ALSO re-apply the illusion mid-session. |
-| Expected post-fix | Non-mod peer never crashes on any of the three events; owner keeps the custom visual locally; `[cos:421] wire skin null (<surface>)` logs on each send. |
-| Detection | (a) `/cos_regression_test` — `wire_skin_null_ungated` + `wire_skin_null_all_senders` must pass. (b) 2-player manual per Repro. |
+| Expected post-fix | Non-mod peer never crashes on any RPC or GameSession event; owner keeps the custom visual locally; `[cos:421] wire skin null (<surface>)` logs on each exercised sender. |
+| Detection | (a) `/cos_regression_test` — `wire_skin_null_ungated` + `wire_skin_null_all_senders` must pass. (b) `/cos_421_diag` must report `catalog=PASS surfaces=PASS policy=PASS restore=PASS live_custom=1`. (c) 2-player manual per Repro. |
 | Tracking | GitHub issue #421 (refs issue 371 / BUG_CLASSES 31). |
+
+`/cos_421_diag` distinguishes four falsifiable paths without mutating inventory:
+
+- `catalog=FAIL` means at least one custom skin key is not bidirectionally present in
+  the local `NetworkLookup.weapon_skins` table.
+- `surfaces=FAIL`, `policy=FAIL`, or `restore=FAIL` means a local hook/policy contract
+  failed before a peer was involved.
+- `live_custom=0` means the captured run did not exercise #421 at all.
+- All fields passing while a peer still crashes outside `weapon_skins` falsifies the
+  #421 wire-skin path and should be routed to the independently named failing asset or
+  lookup axis rather than weakening this guard.
 
 
 ---

@@ -87,7 +87,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.153-dev"
+local MOD_VERSION = "0.9.154-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -6230,13 +6230,9 @@ if CosmeticUtils then
         -- Substitute the universal vanilla "n/a" key (peers see no illusion; the
         -- local visual never reads sync data). UNCONDITIONAL - never toggle-gated
         -- (issue 371 / BUG_CLASSES 31).
-        local ct_skin_subbed = false
-        if effective_skin_name and _custom_skin_keys[effective_skin_name] then
-            pcall(printf, "[cos:421] wire skin null (update_cosmetic_slot %s): %s -> n/a",
-                tostring(slot), tostring(effective_skin_name))
-            effective_skin_name = "n/a"
-            ct_skin_subbed = true
-        end
+        local ct_skin_subbed
+        effective_skin_name, ct_skin_subbed = mod._cos_wire_safe_custom_skin(
+            effective_skin_name, "update_cosmetic_slot " .. tostring(slot))
 
         -- v0.8.64-dev: peer-replay path for armor (slot_skin). slot_skin is
         -- "cosmetic" category, NOT "attachment", so it doesn't flow through
@@ -6369,6 +6365,10 @@ if CosmeticUtils then
         end
         return func(player, slot, item_name, skin_name)
     end)
+    -- Fourth #421 encode surface. The three rpc_add_equipment senders are
+    -- owned by _cos_wire; this GameSession sender shares its pure policy and
+    -- publishes the same regression/diagnostic ownership registry.
+    mod._cos_skin_wire_surfaces.update_cosmetic_slot = true
 end
 
 -- v0.8.60-dev: SECOND sync path. SimpleInventoryExtension.add_equipment

@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.154-dev - 2026-07-18 - four-surface custom-skin wire contract (#421) [diagnostics-armed] [coop-required]
+
+- Correlated both 2026-07-18 attachments: the host ran Cosmetics v0.9.147-dev, the non-Cosmetics client crashed in the Old Musket albedo texture path tracked by #742, and neither log exercised a `ct_*` skin or emitted `[cos:421]`. Those logs therefore neither verify nor refute #421.
+- Consolidated the fourth, GameSession, `CosmeticUtils.update_cosmetic_slot` surface onto the same pure custom-skin-to-`n/a` policy used by the three `rpc_add_equipment` wrappers. Runtime coverage now fails unless all four surfaces register.
+- Made the temporary slot substitution exception-safe: the live custom skin is restored even if a wrapped vanilla sender raises a Lua error.
+- Added `/cos_421_diag`, which separately proves catalog symmetry, four-surface registration, custom-skin substitution, restoration, and whether the live reproduction actually has a custom skin equipped.
+- Routed that diagnostic's player lookup through the existing teardown-safe player boundary, so gathering evidence cannot itself call the engine network backend during title/transition teardown.
+- Added Lua regression coverage for custom and vanilla policy behavior, source wiring, exception restoration, and the bounded diagnostic discriminators.
+
+**Co-op diagnostic:** on the Cosmetics peer, equip `ct_es_mace_gk_shield_01` (or a `ct_es_heavy_spear_deus_*` skin), run `/cos_421_diag`, then have a non-Cosmetics peer join and transition keep → mission → keep. Expected: `catalog=PASS surfaces=PASS policy=PASS restore=PASS live_custom=1`, `[cos:421] wire skin null (<surface>)` for each exercised surface, and no client `NetworkLookup.weapon_skins` failure. Attach both logs.
+
 ## 0.9.153-dev - 2026-07-18 - strict LA texture residency gate (#749) [verify-fix-coop]
 
 - #749: the active Loremaster offhand paint path now fails closed before `Unit.set_texture_for_materials`. Missing/throwing `Application.can_get`, non-resident textures, malformed slot/path data, or a non-live unit all skip the native C setter and emit one bounded `[cos:749]` diagnostic instead of trusting `pcall` to catch a renderer crash it cannot catch.
