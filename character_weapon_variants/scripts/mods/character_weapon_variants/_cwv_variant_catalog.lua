@@ -339,6 +339,13 @@ local _variant_definitions = {
 		skin_display_name = "Outrider Grenade Launcher",
 		rarity          = "exotic",
 		template        = "outrider_grenade_launcher_template",
+		-- #661: declare every runtime-effective template plus its canonical
+		-- donor. Career-action integration consumes this family instead of
+		-- assuming ItemMasterList.template is the only executable template.
+		effective_templates = {
+			{ name = "outrider_grenade_launcher_template",
+				source_template = "dr_deus_01_template_1" },
+		},
 		traits          = { "ranged_replenish_ammo_headshot" },
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
 		item_type       = "cwv_es_outrider_grenade_launcher",
@@ -440,6 +447,15 @@ local _variant_definitions = {
 		skin_display_name = "Old Musket",
 		rarity          = "exotic",
 		template        = "old_musket_template",
+		-- The stance key swaps BackendUtils.get_item_template between these
+		-- two templates. Both therefore own the complete live can_wield career
+		-- action set, including Bounty Hunter's action_career_wh_2.
+		effective_templates = {
+			{ name = "old_musket_template",
+				source_template = "handgun_template_1" },
+			{ name = "old_musket_template_melee",
+				source_template = "two_handed_heavy_spears_template" },
+		},
 		traits          = { "ranged_increase_power_level_vs_armour_crit" },
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
 		item_type       = "cwv_es_musket_old",
@@ -1056,4 +1072,3 @@ return {
 	definitions = _variant_definitions,
 }
 end
-

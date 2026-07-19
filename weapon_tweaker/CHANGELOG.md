@@ -1,5 +1,23 @@
 # Weapon Tweaker Changelog
 
+## 0.12.279-beta (2026-07-18) - #661 effective runtime career actions [verify-fix]
+
+- Expanded the initial Saltzpyre catalog fix to every effective runtime
+  template. Old Musket now reconciles both rifle and bayonet stance templates;
+  Outrider follows the same family contract.
+- Career actions now follow the item's live `can_wield` set rather than a stale
+  catalog declaration. The existing sole local wield hook performs one
+  idempotent last-mile check against `BackendUtils.get_item_template`, covering
+  late availability and stance changes without per-frame work or new RPCs.
+- Claims are tracked by template identity and released provider-safely. WT no
+  longer clobbers foreign non-canonical action rows.
+
+**Solo verify:** Confirm `[wt] v0.12.279-beta loaded`, enable both CWV ranged
+ports for Bounty Hunter, and fire Locked and Loaded with Outrider and Old Musket
+in both stances. Repeat after slot swaps and a mission transition. The log must
+show bounded `[wt:661] effective-action ... result=ok` entries and no incomplete
+career-action error.
+
 ## 0.12.278-beta (2026-07-18) - #661 Saltzpyre CWV ranged career actions [verify-fix]
 
 - Fixed WT-owned Saltzpyre access to CWV's Empire Old Musket and Outrider

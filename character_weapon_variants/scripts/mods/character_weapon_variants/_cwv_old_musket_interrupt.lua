@@ -17,6 +17,11 @@ local function _canonicalize(entry)
     entry.clear_input = nil -- not an engine-consumed chain field
 end
 
+local function _is_weapon_action(action_name)
+	return type(action_name) == "string"
+		and action_name:sub(1, 14) ~= "action_career_"
+end
+
 function M.install(template, action_name)
     action_name = action_name or "action_three"
     local actions = template and template.actions
@@ -24,7 +29,8 @@ function M.install(template, action_name)
 
     local installed = 0
     for current_action, sub_actions in pairs(actions) do
-        if current_action ~= action_name and type(sub_actions) == "table" then
+		if current_action ~= action_name and _is_weapon_action(current_action)
+				and type(sub_actions) == "table" then
             for _, sub_action in pairs(sub_actions) do
                 if type(sub_action) == "table" and type(sub_action.kind) == "string" then
                     local chains = sub_action.allowed_chain_actions
@@ -67,7 +73,8 @@ function M.audit(template, action_name)
 
     local covered = 0
     for current_action, sub_actions in pairs(actions) do
-        if current_action ~= action_name and type(sub_actions) == "table" then
+		if current_action ~= action_name and _is_weapon_action(current_action)
+				and type(sub_actions) == "table" then
             for sub_name, sub_action in pairs(sub_actions) do
                 if type(sub_action) == "table" and type(sub_action.kind) == "string" then
                     local matches = 0

@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.280-dev (2026-07-18) - #661 effective runtime career actions [verify-fix]
+
+- Runtime-parity mirror of Weapon Tweaker `0.12.279-beta`: Old Musket's rifle
+  and bayonet templates plus Outrider consume the live `can_wield` career set.
+- The sole wield boundary idempotently reconciles the actual effective template
+  and emits a deduplicated log-only `[wt:661] effective-action` result. No new
+  hook owner, frame loop, chat message, or RPC was added.
+- Provider ownership and foreign action conflicts remain fail-closed.
+
+**Solo verify:** Confirm `[wt] v0.12.280-dev loaded`, then follow the
+`0.12.279-beta` verification above. Run `/wt_regression_test` and require the
+issue 661 catalog/family checks to pass.
+
 ## 0.12.279-dev (2026-07-18) - #661 Saltzpyre CWV ranged career actions [verify-fix]
 
 - Runtime-parity mirror of Weapon Tweaker `0.12.278-beta`: WT-owned Saltzpyre

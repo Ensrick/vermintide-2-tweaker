@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.96-dev (2026-07-18): #661 preserve provider-owned weapon availability
+
+- Removed CIM's independent `can_wield` append from the adventure-visibility
+  helper. Crafting visibility still clears non-Adventure `mechanisms`, but
+  weapon availability remains owned by native data, WT, or CWV together with
+  their paired career-action reconciliation.
+- Replaced the runtime regression with a byte-for-byte `can_wield` preservation
+  check plus the existing mechanism-clear assertion. This closes the known CIM
+  boundary that could make a weapon selectable while its effective template
+  lacked the new career's `action_career_*` row.
+
 ## 0.8.95-dev (2026-07-18): #703 CWV rows no longer render locked in the Athanor picker
 
 - The Athanor weapon list's lock badge is a vanilla OWNERSHIP gate: vanilla
