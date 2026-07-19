@@ -1,6 +1,6 @@
 # Cosmetics Tweaker — Changelog
 
-## 0.9.159-dev - 2026-07-19 - #154 #373 #650 log-sweep defect fixes [untested]
+## 0.9.160-dev - 2026-07-19 - #154 #373 #650 log-sweep defect fixes [untested]
 
 ### #154 husk cache never populated for cross-char weapon slots [untested]
 
