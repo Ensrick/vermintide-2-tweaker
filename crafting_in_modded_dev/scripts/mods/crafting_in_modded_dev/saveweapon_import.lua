@@ -175,19 +175,33 @@ mod._cim_saveweapon_import = function()
                 local backend_id = Application.guid()
                 local contract = mod._cim_synthetic_item_contract
                 local master = rawget(ItemMasterList, item_key)
-                local record, record_err = contract and contract.normalize_record(backend_id, {
-                    item_key = item_key,
-                    properties = valid_props,
-                    traits = valid_traits,
-                    trait = valid_traits[1],
-                    skin = parsed.skin,
-                    power_level = 300,
-                    rarity = "modded",
-                    via_mirror = true,
-                }, master)
+                -- issue 682: `contract and contract.normalize_record(...)`
+                -- collapsed the multi-return (Lua and/or truncation), so a
+                -- rejection logged a nil reason. gate_record classifies every
+                -- rejection; the import writes into the same mirror boundary.
+                local record, record_err
+                if contract then
+                    record, record_err = contract.gate_record("mirror_injection", backend_id, {
+                        item_key = item_key,
+                        properties = valid_props,
+                        traits = valid_traits,
+                        trait = valid_traits[1],
+                        skin = parsed.skin,
+                        power_level = 300,
+                        rarity = "modded",
+                        via_mirror = true,
+                    }, master)
+                else
+                    record_err = "contract_unavailable"
+                end
                 local encoder = cjson_mod and cjson_mod.encode
-                local item, payload_err = record
-                    and contract.build_mirror_payload(record, master, encoder)
+                -- issue 682: same and/or multi-return collapse class as above
+                -- (`record and contract.build_mirror_payload(...)` truncated
+                -- payload_err to nil). Branch explicitly.
+                local item, payload_err
+                if record then
+                    item, payload_err = contract.build_mirror_payload(record, master, encoder)
+                end
                 if not item then
                     skipped_bad = skipped_bad + 1
                     mod:info("[saveweapon-import] contract rejected %s: %s",

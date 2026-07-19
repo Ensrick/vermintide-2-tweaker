@@ -11,6 +11,78 @@ local M = {}
 M.SCHEMA_VERSION = 1
 M.OWNER = "cim"
 
+-- ============================================================
+-- issues 628/682/793: the REGISTERED provider gate
+-- ============================================================
+-- One validator boundary for every acquisition enumerator and restorer.
+-- Independent ItemMasterList walks re-created the #793 bypass (the Athanor
+-- list offered `woc_blightreaper`, an immutable WOC relic, then the craft
+-- died at mirror injection with an unclassifiable `reason=nil` - issue 682's
+-- confirmed boundary). Every enumerator routes rows through `gate_item` and
+-- every record boundary routes through `gate_record`; both self-register the
+-- surface so `unrouted_surfaces()`/`report_unrouted()` can name any walk that
+-- still bypasses the schema. Install sites additionally call
+-- `register_enumerator` at load so the census is deterministic at boot.
+M.PROVIDER_GATE_SURFACES = {
+    "athanor_list",     -- HeroWindowWeaveForgeWeapons._setup_weapon_list walk (crafting_in_modded_dev.lua)
+    "blacksmith_list",  -- standard-forge acquisition template catalog (_cim_template_catalog via standard_forge.lua)
+    "mirror_restore",   -- _forge_load saved-record normalize + legacy MIL re-inject (crafting_in_modded_dev.lua)
+    "mirror_injection", -- backend-mirror add_item boundaries: Athanor/standard-forge/import crafts + registration
+    "salvage",          -- BackendInterfaceCommon.filter_items salvage adapter (_cim_inventory_filter.lua)
+    "cw_conversion",    -- Chaos Wastes weapon-pool conversion: NO cim enumerator routes provider
+                        -- validation here yet (modded_rarities.lua only scrubs rarity keys).
+                        -- Deliberately unrouted; named by the self-report until a consumer exists.
+}
+
+local _routed_surfaces = {}
+
+function M.register_enumerator(surface)
+    if type(surface) ~= "string" or surface == "" then return false end
+    _routed_surfaces[surface] = true
+    return true
+end
+
+-- Variadic install-time registration so an entry can declare its routed
+-- surfaces in one line (the entry file is under a decomposition ceiling).
+function M.register_enumerators(...)
+    for i = 1, select("#", ...) do
+        M.register_enumerator((select(i, ...)))
+    end
+end
+
+function M.is_surface_routed(surface)
+    return _routed_surfaces[surface] == true
+end
+
+function M.unrouted_surfaces()
+    local missing = {}
+    for i = 1, #M.PROVIDER_GATE_SURFACES do
+        local surface = M.PROVIDER_GATE_SURFACES[i]
+        if not _routed_surfaces[surface] then missing[#missing + 1] = surface end
+    end
+    return missing
+end
+
+-- Capped self-report (issue 628 scope 3): one line naming every expected
+-- surface that is not routed through the gate. `printer` is injected
+-- (engine printf at runtime; a capture in tests) so the module stays
+-- engine-free. Emits at most `cap` lines per session (default 3), nothing
+-- when every expected surface is routed.
+local _unrouted_report_emits = 0
+
+function M.report_unrouted(printer, cap)
+    if type(printer) ~= "function" then return false end
+    cap = tonumber(cap) or 3
+    if _unrouted_report_emits >= cap then return false end
+    local missing = M.unrouted_surfaces()
+    if #missing == 0 then return false end
+    _unrouted_report_emits = _unrouted_report_emits + 1
+    local total = #M.PROVIDER_GATE_SURFACES
+    printer(string.format("[cim:628] provider gate unrouted walks=%s routed=%d/%d",
+        table.concat(missing, ","), total - #missing, total))
+    return true
+end
+
 local SALVAGE_SLOTS = {
     melee = true,
     ranged = true,
@@ -157,6 +229,60 @@ function M.normalize_record(backend_id, input, master)
         rerolled_trait_indices = copy_array(input.rerolled_trait_indices),
         custom_glow = input.custom_glow,
     }
+end
+
+-- Enumerator-row boundary of the registered gate (issues 628/793). Same
+-- return contract as `validate_provider` - `(ok, problems_array, provider)` -
+-- so existing catalog report plumbing consumes it unchanged. Self-registers
+-- the surface as routed.
+function M.gate_item(surface, item_key, master)
+    M.register_enumerator(surface)
+    return M.validate_provider(item_key, master)
+end
+
+-- One-call form for engine enumerator walks: gate the row and, on rejection,
+-- append `{ key, problems }` to the caller's collection for the capped log.
+-- Returns false ONLY on an explicit provider rejection.
+function M.gate_enumerated_row(surface, item_key, master, rejected)
+    local ok, problems = M.gate_item(surface, item_key, master)
+    if ok == false then
+        if type(rejected) == "table" then
+            rejected[#rejected + 1] = { key = tostring(item_key), problems = problems or {} }
+        end
+        return false
+    end
+    return true
+end
+
+-- Capped, sorted rejection log for one enumerator surface, then the
+-- unrouted-walk self-report (issue 628 scope 3). `printer` is injected
+-- (engine printf at runtime) so the module stays engine-free.
+function M.log_gate_rejections(printer, surface, rejected, cap)
+    if type(printer) ~= "function" or type(rejected) ~= "table" then return end
+    table.sort(rejected, function(a, b) return a.key < b.key end)
+    cap = tonumber(cap) or 8
+    local limit = #rejected < cap and #rejected or cap
+    for i = 1, limit do
+        printer(string.format("[cim:628] provider rejected before UI surface=%s key=%s missing=%s",
+            tostring(surface), rejected[i].key, table.concat(rejected[i].problems, ",")))
+    end
+    if #rejected > limit then
+        printer(string.format("[cim:628] provider_rejected_more surface=%s count=%d",
+            tostring(surface), #rejected - limit))
+    end
+    M.report_unrouted(printer)
+end
+
+-- Record boundary of the registered gate (issue 682). Wraps
+-- `normalize_record` and guarantees a NON-NIL string reason on rejection:
+-- the confirmed 682 failure logged `reason=nil` because call sites collapsed
+-- the multi-return through `contract and contract.normalize_record(...)`
+-- (Lua's and/or truncates to one value) - an unclassifiable rejection.
+function M.gate_record(surface, backend_id, input, master)
+    M.register_enumerator(surface)
+    local record, reason = M.normalize_record(backend_id, input, master)
+    if record then return record, nil end
+    return nil, reason or "unclassified"
 end
 
 function M.build_mirror_payload(record, master, json_encode)
