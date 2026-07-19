@@ -87,7 +87,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.156-dev"
+local MOD_VERSION = "0.9.157-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -936,10 +936,10 @@ local function _committed_glow_badge_color(backend_id, skin)
 end
 
 local function _enrich_illusion_glow_badge(widget)
-    if not widget or widget._ct_glow_badge_enriched or not _glow_badge_texture_available() then return end
-    local passes = widget.element and widget.element.passes
-    local icon_style = widget.style and widget.style.icon_texture
-    if type(passes) ~= "table" or type(icon_style) ~= "table" then return end
+    if not GLOW_BADGE.is_illusion_definition(widget) or widget._ct_glow_badge_enriched
+            or not _glow_badge_texture_available() then return false end
+    local passes, icon_style = widget.element and widget.element.passes, widget.style and widget.style.icon_texture
+    if type(passes) ~= "table" or type(icon_style) ~= "table" then return false end
     widget._ct_glow_badge_enriched = true
     passes[#passes + 1] = {
         pass_type = "texture",
@@ -955,13 +955,13 @@ local function _enrich_illusion_glow_badge(widget)
         color = { 255, 255, 255, 255 },
     }
     widget.style.ct_glow_badge.offset[3] = (widget.style.ct_glow_badge.offset[3] or 0) + 8
+    return true
 end
 
 local function _refresh_illusion_glow_badges(self)
     if not self or not self._illusion_widgets then return end
     _glow_badge_customization_windows[self] = true
     for _, widget in ipairs(self._illusion_widgets) do
-        _enrich_illusion_glow_badge(widget)
         local skin = widget.content and widget.content.skin_key
         local color = _committed_glow_badge_color(self._item_backend_id, skin)
         if widget.content then widget.content.ct_glow_badge = color and _GLOW_BADGE_TEXTURE or nil end
@@ -1158,14 +1158,16 @@ local function _refresh_item_grid_glow_badges(self)
     _refresh_item_grid_composite_icons(self)
 end
 
--- Both layered-grid features add render passes. They must decorate the widget
--- definition inside this pre-hook, before vanilla UIWidget.init constructs the
--- positional element.pass_data array (ui_widget.lua:17-38). Doing this from the
--- ItemGridUI.init post-hook caused the v0.9.133-dev item_tooltip nil crash.
+-- Add render passes before UIWidget.init constructs positional pass_data
+-- (ui_widget.lua:17-38); late insertion caused the v0.9.133 item_tooltip crash.
 mod:hook("UIWidget", "init", function(func, widget_definition, ui_renderer)
+    -- #795: enrich the shared illusion definition before its live clones exist.
+    local illusion_added = _enrich_illusion_glow_badge(widget_definition)
     local glow_added = _enrich_item_grid_glow_badges(widget_definition)
     local composite_added = _enrich_item_grid_composite_icons(widget_definition)
-    if composite_added then
+    if illusion_added then
+        printf("[cosmetics:795] glow-badge illusion pass initialized before pass_data")
+    elseif composite_added then
         printf("[cosmetics:650] layered item-grid passes initialized before pass_data")
     elseif glow_added then
         printf("[cosmetics:377] glow-badge item-grid passes initialized before pass_data")
@@ -1183,9 +1185,7 @@ mod:hook_safe("ItemGridUI", "_populate_inventory_page", function(self)
     _refresh_item_grid_glow_badges(self)
 end)
 
--- Apply is the only transaction that changes badge state. Refresh each live
--- inventory/customization surface once; sliders and dirty previews never call
--- this seam, so there is no per-frame persistence decode or UI churn.
+-- Apply alone refreshes live surfaces once; dirty previews never use this seam.
 mod._cos_glow_badges_refresh = function(backend_id, slot_data, revision)
     COMPOSITE_ICONS.invalidate(backend_id)
     for grid in pairs(_glow_badge_grids) do _refresh_item_grid_glow_badges(grid) end
@@ -10400,7 +10400,7 @@ end)
 mod:hook_safe("HeroWindowItemCustomization", "update", function(self, dt, t)
     _glow_hook_trace("HeroWindowItemCustomization", "update")
     if not GlowPicker.is_open() then return end
-    GlowPicker.handle_input(_resolve_input_service(self))
+    GlowPicker.handle_input(_resolve_input_service(self), self)
 end)
 
 mod:hook_safe("HeroWindowItemCustomization", "_draw", function(self, input_service, dt)
@@ -10416,7 +10416,7 @@ mod:hook_safe("HeroWindowItemCustomization", "_draw", function(self, input_servi
     -- lookup returned nil.
     local ui_renderer = self._ui_top_renderer or self._ui_renderer
         or self.ui_top_renderer or self.ui_renderer
-    GlowPicker.draw(ui_renderer, input_service, dt)
+    GlowPicker.draw(ui_renderer, input_service, dt, self)
 end)
 
 mod:command("glow_picker_hooks", "List which cosmetic-screen draw hooks have fired this session", function()

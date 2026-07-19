@@ -40,4 +40,35 @@ return function(H, repo_root)
         H.equal(absent.available, false)
         H.equal(absent.selected, false)
     end)
+
+    H.test("Cosmetics glow badge recognizes only pre-init illusion definitions", function()
+        local definition = {
+            scenegraph_id = "illusions_root",
+            element = {
+                passes = {
+                    { pass_type = "hotspot", style_id = "hotspot" },
+                    {
+                        pass_type = "texture",
+                        style_id = "icon_texture",
+                        texture_id = "icon_texture",
+                    },
+                },
+            },
+            content = { button_hotspot = {} },
+            style = { icon_texture = { offset = { 0, 0, 1 } } },
+        }
+
+        H.truthy(Policy.is_illusion_definition(definition))
+
+        definition.element.pass_data = {}
+        H.equal(Policy.is_illusion_definition(definition), false)
+        definition.element.pass_data = nil
+
+        definition.scenegraph_id = "inventory_root"
+        H.equal(Policy.is_illusion_definition(definition), false)
+        definition.scenegraph_id = "illusions_root"
+
+        definition.content.button_hotspot = nil
+        H.equal(Policy.is_illusion_definition(definition), false)
+    end)
 end

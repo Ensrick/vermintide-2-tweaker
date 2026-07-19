@@ -1,5 +1,51 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.157-dev - 2026-07-19 - #794 #795 #796 glow editor geometry, badge, and live preview [verify-fix]
+
+### #794 glow slider track geometry
+
+- Fixed the glow editor's horizontally displaced click/drag values. VT2 passes
+  the style selected by a UI pass directly to `held_function`; the slider
+  selected `track` but then incorrectly searched for a nested `track` style,
+  dropping the rendered track's 90px label/gap offset.
+- Moved cursor normalization, padded hotspot bounds, and thumb-centre placement
+  onto one pure track-geometry helper. The offline Lua suite covers both
+  endpoints, quartiles, clamping, translated/scaled geometry, and malformed
+  zero-width tracks.
+- In-game verification: open Edit Glow and click/drag the visible left edge,
+  quarter points, midpoint, and right edge at multiple UI scales/resolutions.
+  Each RGB/intensity slider must select the matching value and keep its thumb
+  centred under the cursor; labels and value text must not change a slider.
+
+### #795 committed glow badge on the illusion selector
+
+- Moved the illusion selector's committed-glow badge pass to the existing
+  `UIWidget.init` pre-hook. Vanilla creates every illusion button with
+  `UIWidget.init` inside `_setup_illusions`; appending the pass afterward left
+  the live widget's positional `pass_data` shorter than its pass list, so the
+  new badge could not render reliably after Apply.
+- Added an exact pure classifier for the `illusions_root` weapon-illusion
+  definition. Unrelated icon widgets and already-initialized widgets fail
+  closed, while every button cloned from the shared definition receives the
+  badge pass before `pass_data` is built.
+- In-game verification: Apply a custom glow and confirm its tinted badge appears
+  immediately on the exact selected illusion, survives close/reopen and restart,
+  does not leak to another instance/skin, and disappears on Restore Default.
+
+### #796 live glow on the customization preview model
+
+- Routed dirty glow-slider state to the exact `LootItemUnitPreviewer` units
+  rendered by `HeroWindowItemCustomization`. The previous live helper repainted
+  only the local player's inventory-extension units, which cannot reach the
+  customization pane's separate preview world.
+- Added a pure backend-item + illusion ownership policy. Stale previewers,
+  asynchronous rebuilds, dead units, and a newly selected illusion fail closed
+  instead of receiving another item's transient glow.
+- Apply and Cancel now repaint the same preview target. Cancel/Restore copies
+  the selected illusion's registered native material vectors back immediately;
+  slider movement performs local material writes only and creates no RPC or
+  per-frame network retry.
+
 ## 0.9.156-dev - 2026-07-19 - #835 callable Vector3 constructor [verify-fix]
 
 - Synchronized the shared appearance primitive's protected callable constructor

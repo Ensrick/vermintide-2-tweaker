@@ -1663,6 +1663,15 @@ not create a network retry loop. Do not synchronously purge peer caches on
 `PlayerManager.remove_player`, which also fires during level transitions (bug
 class 24).
 
+The weapon customization pane is another independent consumer: it owns a
+`LootItemUnitPreviewer` and its own preview-world hand units. A slider callback
+that only walks the local player's inventory extension cannot update that
+model. Bind the pane's returned spawned units to the exact backend item plus
+selected illusion, repaint them from the transient state, and reject stale
+backend/skin ownership after an asynchronous rebuild. Cancel/Restore must
+repaint registered native material vectors on that same target; preview paint
+is local-only and must not add network traffic (#796).
+
 Related coverage: Cosmetics runtime `glow_picker_apply_transaction_574` and
 `glow_picker_render_fanout_574`; offline `test_cos_glow_lifecycle.lua`; tier-a
 source invariants for exact identity, explicit Apply, acknowledged state pull,
