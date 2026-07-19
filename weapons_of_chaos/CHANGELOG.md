@@ -1,5 +1,8 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.42-dev (2026-07-19) - union: load-fix over the 0.1.39-0.1.41 chain [untested]
+
+- Reconciliation ship. The Workshop timeline interleaved: 0.1.41 (boss-weapon catalogue chain) uploaded 06:38 BUILT ON the 0.1.37 data file whose single-option dropdown kills the whole mod at options init (issue 822), then the 0.1.38 load-fix uploaded 11:20 without the 0.1.39-0.1.41 content. This build carries BOTH: the dropdown arity guard + reader fallback + data-widget regression test, and the issue 835 canonical constructor fix, Skarrik dual-sword closure, and boss-weapon resource catalogue. Supersedes every prior 0.1.3x upload.
 ## 0.1.41-dev (2026-07-19) - #614 #615 #642 boss-weapon resource catalogue [diagnostics-armed]
 
 - Adds compiled first- and third-person Skarrik halberd units that reuse the
@@ -42,6 +45,9 @@
   frame.
 - Added regression coverage for live-position preference, safe fallback, and
   rejection of stale userdata before any Vector3 arithmetic.
+## 0.1.38-dev (2026-07-19) - fix mod-killing single-option dropdown (issue 822) [untested]
+
+- The 0.1.37 attack-order picker registered the push follow-up dropdown with ONE option; VMF hard-rejects dropdowns with fewer than two, which aborts the ENTIRE mod's options init - WOC never loaded and the Blightreaper vanished from every inventory. The widget is now registered only when the descriptor carries two or more follow-up units; the selections reader falls back to the native unit so the light/heavy pickers stay live. New suite test loads the real data file under a stub and enforces VMF dropdown arity for every widget (test_woc_data_widgets.lua).
 
 ## 0.1.37-dev (2026-07-19) - Blightreaper moveset swapped to Crowbill [untested]
 

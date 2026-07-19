@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.41-dev"
+local MOD_VERSION = "0.1.42-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -678,7 +678,13 @@ local function _attack_order_selections()
 			mod:get("woc_blightreaper_heavy_2"),
 			mod:get("woc_blightreaper_heavy_3"),
 		},
-		push = { mod:get("woc_blightreaper_push_follow") },
+		-- The push dropdown is not registered while the crowbill graph has only
+		-- one follow-up unit (VMF rejects single-option dropdowns; the 0.1.37
+		-- widget aborted the whole mod's options init - issue 822). Fall back
+		-- to the native unit so a nil setting can never fail the plan closed.
+		push = { mod:get("woc_blightreaper_push_follow")
+			or (_chain_descriptor.push_positions
+				and _chain_descriptor.push_positions[1]) },
 	}
 end
 
