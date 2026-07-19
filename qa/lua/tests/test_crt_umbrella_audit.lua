@@ -48,7 +48,15 @@ return function(H, repo_root)
         end
 
         local source = read("career_tweaker.lua")
-        H.truthy(source:find("crt_umbrella_audit", 1, true))
+        H.truthy(source:find('mod._crt.ISSUE221_UMBRELLA_AUDIT_ARMED = true', 1, true))
+        H.truthy(source:find('mod:command("crt_umbrella_audit"', 1, true))
         H.truthy(source:find("umbrella_audit.snapshot", 1, true))
+        local audit_start = assert(source:find("-- #221's remaining Career Tweaker subgroup proposal", 1, true))
+        local audit_finish = assert(source:find("local function _rework_master_snapshot", audit_start, true))
+        local audit_block = source:sub(audit_start, audit_finish - 1)
+        H.equal(audit_block:find("mod:set(", 1, true), nil,
+            "#221 census must never write settings")
+        H.equal(audit_block:find("mod:hook", 1, true), nil,
+            "#221 census must not add a gameplay lifecycle owner")
     end)
 end

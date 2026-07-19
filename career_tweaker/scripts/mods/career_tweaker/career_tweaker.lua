@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.12-beta"
+local MOD_VERSION = "0.4.13-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -151,12 +151,35 @@ end
 
 local _rework_master_batch = false
 
--- Public-beta boundary: the #221 ownership census is an investigation probe,
--- not player-facing behavior. Its policy source remains available for future
--- development, but the beta neither loads it nor registers its command.
--- Former development call retained only as an audit breadcrumb:
--- umbrella_audit.snapshot(...), exposed through /crt_umbrella_audit.
-mod._crt.PUBLIC_BETA_UMBRELLA_AUDIT_DISABLED = true
+-- #221's remaining Career Tweaker subgroup proposal crosses independent
+-- template-patch and live-hook owners. Re-arm the existing observation-only
+-- census instead of exposing a master whose OFF state cannot yet promise one
+-- complete reversible owner. It reads settings once at startup or on command,
+-- performs no mod:set/table mutation, and emits one bounded engine-log row.
+local ok_umbrella, umbrella_audit = pcall(mod.dofile, mod,
+    "scripts/mods/career_tweaker/_crt_umbrella_audit_policy")
+if ok_umbrella and type(umbrella_audit) == "table"
+        and type(umbrella_audit.snapshot) == "function"
+        and type(umbrella_audit.format) == "function" then
+    mod._crt.umbrella_audit_policy = umbrella_audit
+    mod._crt.umbrella_audit = function()
+        local snapshot = umbrella_audit.snapshot(
+            rework_master_policy.ensrick_ids,
+            rework_master_policy.tourney_ids,
+            function(id) return mod:get(id) and true or false end)
+        pcall(printf, "%s", umbrella_audit.format(snapshot))
+        return snapshot
+    end
+    mod._crt.ISSUE221_UMBRELLA_AUDIT_ARMED = true
+    mod._crt.umbrella_audit()
+    mod:command("crt_umbrella_audit", "Log the bounded umbrella ownership census", function()
+        mod._crt.umbrella_audit()
+    end)
+else
+    mod._crt.ISSUE221_UMBRELLA_AUDIT_ARMED = false
+    pcall(printf, "[crt:221] audit_load=false error=%s mutation=false",
+        tostring(umbrella_audit))
+end
 
 local function _rework_master_snapshot()
     local state = {}

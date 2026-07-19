@@ -89,8 +89,9 @@ pool_status, force_inject_pool, cw_status
 
 ### `crt` (career_tweaker)
 ```
-ct_status
+ct_status, crt_dump_talents, crt_umbrella_audit, crt_regression_test
 ```
+*(crt section refreshed 2026-07-19; `crt_umbrella_audit` is the bounded read-only #221 ownership census.)*
 
 ### `cos` (cosmetics_tweaker)
 ```

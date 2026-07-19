@@ -1,5 +1,11 @@
 # Career Tweaker Changelog
 
+## 0.4.13-beta - 2026-07-19 - #221 deferred menu ownership census [diagnostics-armed]
+
+- Re-arms the dormant Career Tweaker family audit as a bounded, read-only startup census and `/crt_umbrella_audit` command.
+- Reports whether the whole deferred family is present, how many of its four cluster gates are active, and proves `mutation=false`; it installs no gameplay hook and changes no setting.
+- Adds public-beta, command, documentation, and regression contracts so the diagnostic cannot silently become a partial master-toggle implementation.
+
 ## 0.4.12-beta - 2026-07-19 - #699 Foot Knight HUD icon identity diagnostics [verify-fix-coop]
 
 - Replaced the generic power-increase art on the Rock shield-power and Teamwork great-weapon buffs with the exact resident icons for Rock of Reikland and That's Bloody Teamwork. Both Rock effects now share their talent's authored identity; Teamwork no longer reuses Rock's generic power art.

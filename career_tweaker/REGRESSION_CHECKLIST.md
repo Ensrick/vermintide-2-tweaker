@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-> **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. In 0.4.0-beta it also locks the casting/transposition and issue-probe exclusion boundary.
+> **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. It locks the casting/transposition and #440 probe exclusion boundaries while requiring the read-only #221 census.
 
 Last updated: 2026-07-17.
 
@@ -56,6 +56,16 @@ Last updated: 2026-07-17.
 | Detection | Offline `test_crt_rework_master_policy.lua` + `test_gut_exclusive_radio.lua`; runtime `/crt_regression_test` checks `issue445_rework_family_masters` and `crt_mod_tweaker_exclusive_groups_registered`; solo UI walk in CHANGELOG 0.4.8-beta plus #446 radio verification. |
 
 ---
+## Deferred subgroup-master census (#221)
+
+| Field | Value |
+|-------|-------|
+| Scope | Remaining Unchained, Engineer, armor, per-career, and Tourney subgroup-master proposal after GT #297, CT's deployed umbrellas, and CRT #445's complete family controls. |
+| Boundary | Native/Tourney template owners and live armor/overcharge hook reads do not share one reversible lifecycle. No subgroup checkbox is exposed until an exact owner can preserve child choices while master-off and apply/restore each owner once. |
+| Expected | Startup and `/crt_umbrella_audit` each emit one bounded `[crt:221]` row with `whole_family=present`, `cluster_gates=0/4`, and `mutation=false`. No setting changes and no gameplay hooks originate from the census. |
+| Detection | Offline `test_crt_umbrella_audit.lua`; beta contract `career_tweaker/tests/check_public_beta.ps1`; runtime `/crt_regression_test` check `issue221_umbrella_audit_armed`. |
+
+---
 ## Bardin disabler dodge investigation (#440)
 
 | Field | Value |
@@ -64,7 +74,7 @@ Last updated: 2026-07-17.
 | Source boundary | All profiles clone one dodge table. Packmaster/Lifeleech use common dodge status; Gutter uses root+0.2 trajectory, 1m trigger overlap, and `j_neck` tracking. Compiled player trigger geometry remains unverified. |
 | Fix version(s) | 0.3.68-dev diagnostic source; excluded from 0.4.0-beta |
 | Expected | The public beta installs no disabler/dodge hooks and emits no `[crt:440]` rows. |
-| Detection | `/crt_regression_test` must report `PASS: public_beta_issue_probes_disabled`. Re-arm the dormant source only in a future diagnostic build before collecting co-op evidence. |
+| Detection | `/crt_regression_test` must report `PASS: public_beta_issue_probes_disabled`; the name is retained for output stability and now covers the gameplay-affecting #440 probe only. Re-arm that dormant source only in a future co-op diagnostic build. |
 
 ---
 ## No-op talent-menu close preserves live buffs (#283)
