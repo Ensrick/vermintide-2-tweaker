@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.301-dev (2026-07-19) - trial cost and collectible presentation corrections (#63, #571, #825, #826, #827) [verify-fix]
+
+- Replaces the trial-cost enable/amount pair with one absolute 0-1000 amount. Zero is a strict vanilla pass-through; positive values snap to 25 coins, preserve existing numeric values, and migrate the legacy enable flag to its former 100-coin behavior.
+- Keeps the host-authoritative reserve/commit/refund boundary and updates the prompt/localization to describe the effective absolute price without charging reward collection.
+- Ports vanilla's fixed widget-local collectible offset loop for injected Chaos Wastes rows and adds a hook-order recovery constructor for GUI Tweaker Dev, preventing banner animation coordinates from feeding back into the child layout.
+- Adds bounded runtime evidence plus Lua 5.1 regression coverage for the cost policy, localization contract, native collectible geometry, and cross-mod recovery path.
+
 ## 0.7.300-dev (2026-07-18) - four root-cause clusters: linked pickups, meta-ammo client sync, Anath Raema, trial-chest cap [untested]
 
 One combined fix wave (session fable-fix-wave); every cluster ships [untested] pending in-game confirmation.

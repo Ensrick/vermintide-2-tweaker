@@ -42,12 +42,12 @@ Last updated: 2026-07-17.
 
 | Field | Value |
 |---|---|
-| Default/scope | Off is vanilla. Enabled charges only the human who starts WAITING -> RUNNING; completion and rewards remain free. |
+| Default/scope | Absolute cost 0 is a strict vanilla pass-through. Positive values charge only the human who starts WAITING -> RUNNING; completion and rewards remain free. |
 | Authority | Host resolves the actual interactor unit. No buyer id or new RPC comes from the client. Both settings use the existing host-effective broadcast. |
 | Transaction | Reserve exact buyer balance, call vanilla once, commit only if state leaves WAITING; otherwise refund the exact prior balance. Missing authority and insufficient coins fail closed. |
-| Bounds | 25-1000, rounded to the nearest 25; default 100. Prompt displays the effective host cost. |
+| Bounds | 0-1000, rounded to the nearest 25; fresh default 0. Legacy boolean/100-coin state migrates to the absolute value without changing an authored numeric value. Prompt displays the effective host cost. |
 | Detection | Offline `test_ct_cot_cost`; `/ct_regression_test`: `issue63_cot_cost_transaction`; bounded `[ct:63]` reject/charge rows. |
-| Lifecycle | `verify-fix-coop` only. Test exact/insufficient balance, activation race, native and injected chests, #350 early reward, and default-off control. |
+| Lifecycle | `verify-fix` solo. Test cost 0, exact/insufficient balance, native and injected chests, #350 early reward, and migration. |
 
 ### weave-wind curse feasibility - issue #253
 
@@ -224,11 +224,11 @@ Last updated: 2026-07-17.
 | Symptom | Chests-of-Trials / Pilgrim's-Coin rows injected into the Chaos Wastes hold-Tab pane extend beyond the screen or safe rectangle. |
 | Root cause | The #533 copy of vanilla's widget forced 0.6 icon scale at pre-scenegraph build time while retaining unscaled text and offsets; it did not measure localized labels or consume resolution, UI scale, banner bounds, or the safe rectangle. |
 | Mod(s) | chaos_wastes_tweaker_dev |
-| Fix version(s) | ct_dev v0.7.262-dev (#571) |
+| Fix version(s) | Pending next ct_dev deployment (#571) |
 | Category | INTEGRATION |
 | Repro | Enter an injected Adventure mission in a CW run; hold Tab at 16:9 and ultrawide, then repeat with non-default HUD/UI scale and safe rectangle. Collect enough coins/chests to change both counts. |
-| Expected post-fix | The native right-banner bound is preserved. Two measured cells share a row when they fit and wrap to one column otherwise; lower safe inset and Collectibles divider are respected. Counts remain live. Vanilla CW content and stock Adventure collectible widgets are unchanged. |
-| Detection | `[ct:571] collectible layout` reports the active contract. `/ct_regression_test`: `issue533_cw_tab_collectibles_wired` and `issue571_cw_tab_collectibles_safe_reflow` pass. |
+| Expected post-fix | CT uses vanilla's fixed widget-local collectible loop: two entries per row, longest-title spacing, and the native first-row Y offset. Opening/closing banner animation, resolution, UI scale, and safe rectangle affect only vanilla's parent scenegraph transform and never feed back into the child offsets. Counts remain live. Vanilla CW content and stock Adventure collectible widgets are unchanged. |
+| Detection | `[ct:571] native collectible offsets` reports the active contract. The automatic `[ct:571-native]` census waits for the right-banner animation to settle, classifies native-DEUS versus injected-Adventure context, and records the final native nodes plus each CT row's offsets/style bounds. Repeat with GUI Tweaker Dev enabled to exercise the cross-mod `_setup_mission_data` hook-order fence; `[ct:533] ... source=draw_recovery` is acceptable and the rows must still render. `/ct_regression_test`: `issue533_cw_tab_collectibles_wired`, `issue533_native_tab_diagnostics_armed`, and `issue571_cw_tab_collectibles_safe_reflow` pass. |
 
 ---
 ## Localization
