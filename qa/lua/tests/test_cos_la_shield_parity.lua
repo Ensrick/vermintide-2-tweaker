@@ -80,6 +80,116 @@ return function(Harness, repo_root)
             "receiver policy must not guess from a generic magic suffix")
     end)
 
+    Harness.test("cos LA weave/runed receiver rows cover every shield family (#373)", function()
+        -- Complete decompile-derived inventory (scripts/settings skin tables).
+        -- Every magic/runed shield unit maps to its same-directory plain
+        -- sibling within its authored family.
+        local expected = {
+            breton = {
+                ["units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01_magic_01"] =
+                    "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01",
+                ["units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02_runed_01"] =
+                    "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02",
+            },
+            empire = {
+                ["units/weapons/player/wpn_empire_shield_04/wpn_emp_shield_04_magic_01"] =
+                    "units/weapons/player/wpn_empire_shield_04/wpn_emp_shield_04",
+                ["units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02_magic"] =
+                    "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02",
+                ["units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02_runed_01"] =
+                    "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02",
+                ["units/weapons/player/wpn_empire_shield_03/wpn_emp_shield_03_runed_01"] =
+                    "units/weapons/player/wpn_empire_shield_03/wpn_emp_shield_03",
+                ["units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02_runed"] =
+                    "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02",
+                ["units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03_runed"] =
+                    "units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03",
+            },
+            dwarf = {
+                ["units/weapons/player/wpn_dw_shield_04_t1/wpn_dw_shield_04_magic_01"] =
+                    "units/weapons/player/wpn_dw_shield_04_t1/wpn_dw_shield_04",
+                ["units/weapons/player/wpn_dw_shield_02_t1/wpn_dw_shield_02_runed_01"] =
+                    "units/weapons/player/wpn_dw_shield_02_t1/wpn_dw_shield_02",
+                ["units/weapons/player/wpn_dw_shield_02_t1/wpn_dw_e_shield_02_runed_01"] =
+                    "units/weapons/player/wpn_dw_shield_02_t1/wpn_dw_e_shield_02",
+                ["units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_shield_05_runed_01"] =
+                    "units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_shield_05",
+                ["units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_e_shield_05_runed_01"] =
+                    "units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_e_shield_05",
+            },
+            wood_elf = {
+                ["units/weapons/player/wpn_we_shield_02/wpn_we_shield_02_magic_01"] =
+                    "units/weapons/player/wpn_we_shield_02/wpn_we_shield_02",
+                ["units/weapons/player/wpn_we_shield_01/wpn_we_shield_01_runed_01"] =
+                    "units/weapons/player/wpn_we_shield_01/wpn_we_shield_01",
+            },
+            imperial = {
+                ["units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_magic"] =
+                    "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1",
+                ["units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_runed"] =
+                    "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1",
+            },
+        }
+        for family, rows in pairs(expected) do
+            for unit, receiver in pairs(rows) do
+                Harness.equal(policy.magic_texture_receiver(family, unit), receiver,
+                    family .. " row missing/wrong for " .. unit)
+                -- Same-directory suffix-strip invariant: geometrically
+                -- identical receiver, never a cross-mesh guess.
+                local dir = unit:match("^(.*)/[^/]+$")
+                Harness.equal(receiver:match("^(.*)/[^/]+$"), dir,
+                    "receiver left its unit directory: " .. receiver)
+            end
+        end
+        -- Cross-family isolation stays absolute (the #204/#266 rule).
+        Harness.equal(policy.magic_texture_receiver("empire",
+            "units/weapons/player/wpn_we_shield_02/wpn_we_shield_02_magic_01"), nil)
+        Harness.equal(policy.magic_texture_receiver("dwarf",
+            "units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_magic"), nil)
+    end)
+
+    Harness.test("cos LA receiver-gap validator flags dead-ends and passes covered rows (#373)", function()
+        local family_for_item_type = function(item_type)
+            return ({ es_1h_sword_shield_breton = "breton",
+                      es_1h_mace_shield = "empire" })[item_type]
+        end
+        local item_type_for_skin = function(skin_key)
+            local prefix = tostring(skin_key):match("^(.-)_skin_")
+            if prefix == "es_sword_shield_breton" then
+                return "es_1h_sword_shield_breton"
+            end
+            return prefix
+        end
+        local skins = {
+            -- Covered weave row: no gap.
+            es_sword_shield_breton_skin_04_magic_01 = {
+                left_hand_unit = "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01_magic_01",
+            },
+            -- Magic unit with NO receiver row in its family: flagged.
+            es_1h_mace_shield_skin_09_magic_09 = {
+                left_hand_unit = "units/weapons/player/wpn_fake/wpn_fake_magic_09",
+            },
+            -- Plain unit: never flagged.
+            es_1h_mace_shield_skin_02 = {
+                left_hand_unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02",
+            },
+            -- Magic unit outside any mapped family: not this validator's call.
+            wh_flail_skin_01_magic_01 = {
+                left_hand_unit = "units/weapons/player/wpn_x/wpn_x_magic_01",
+            },
+            -- data-wrapped skin records resolve identically.
+            es_1h_mace_shield_skin_10_runed_09 = {
+                data = { left_hand_unit = "units/weapons/player/wpn_fake2/wpn_fake2_runed_09" },
+            },
+        }
+        local gaps = policy.find_receiver_gaps(skins, family_for_item_type, item_type_for_skin)
+        Harness.equal(#gaps, 2)
+        Harness.equal(gaps[1].skin, "es_1h_mace_shield_skin_09_magic_09")
+        Harness.equal(gaps[1].family, "empire")
+        Harness.equal(gaps[2].skin, "es_1h_mace_shield_skin_10_runed_09")
+        Harness.equal(policy.find_receiver_gaps(nil, family_for_item_type, item_type_for_skin)[1], nil)
+    end)
+
     Harness.test("CWV Axe+Shield receives vanilla Empire pool before LA merge", function()
         local f = assert(io.open(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua", "rb"))

@@ -57,13 +57,54 @@ end)
 Harness.test("#650 detailed resolver exposes bounded diagnostic outcomes", function()
     local compositor = Factory.new(Catalog)
     local args = proof_args()
-    args.skin = "es_1h_mace_shield_skin_01"
+    -- skin_04 uses the different wpn_emp_mace_03 mesh; it stays unmapped
+    -- until its own layer is authored (stated #650 closure split).
+    args.skin = "es_1h_mace_shield_skin_04"
     local descriptor, reason = compositor.resolve_detailed(args)
     Harness.equal(descriptor, nil)
     Harness.equal(reason, "unmapped-primary")
     descriptor, reason = compositor.resolve_detailed(proof_args())
     Harness.truthy(descriptor)
     Harness.equal(reason, "composed")
+end)
+
+Harness.test("#650 mace_02 family closure maps skin_01 and skin_02_runed_06", function()
+    local compositor = Factory.new(Catalog)
+    for _, skin in ipairs({
+        "es_1h_mace_shield_skin_01",
+        "es_1h_mace_shield_skin_02_runed_06",
+    }) do
+        local args = proof_args("closure-" .. skin)
+        args.skin = skin
+        local descriptor, reason = compositor.resolve_detailed(args)
+        Harness.truthy(descriptor, "expected composed descriptor for " .. skin)
+        Harness.equal(reason, "composed")
+        Harness.equal(descriptor.primary_texture, "icon_cos_empire_mace_shield_primary_01")
+    end
+    -- The mace_03 family stays fail-closed (no authored layer yet).
+    for _, skin in ipairs({
+        "es_1h_mace_shield_skin_04",
+        "es_1h_mace_shield_skin_04_magic_01",
+        "es_1h_mace_shield_skin_04_magic_02",
+        "es_1h_mace_shield_skin_05",
+    }) do
+        local args = proof_args("tail-" .. skin)
+        args.skin = skin
+        local descriptor, reason = compositor.resolve_detailed(args)
+        Harness.equal(descriptor, nil)
+        Harness.equal(reason, "unmapped-primary")
+    end
+end)
+
+Harness.test("#650/#373 weavebound breton shield unit composes with gk_shield_01 art", function()
+    local args = proof_args("weave")
+    args.offhand_unit =
+        "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01_magic_01"
+    local descriptor = Factory.new(Catalog).resolve(args)
+    Harness.truthy(descriptor)
+    Harness.equal(descriptor.offhand_texture, "icon_cos_breton_shield_03")
+    Harness.equal(descriptor.glow_texture, nil,
+        "weave unit carries no authored rune glow style")
 end)
 
 Harness.test("#650 descriptors fail closed without exact instance", function()
@@ -106,11 +147,76 @@ end)
 Harness.test("#650 unsupported primary or shield mappings preserve native presentation", function()
     local compositor = Factory.new(Catalog)
     local args = proof_args()
-    args.skin = "es_1h_mace_shield_skin_01"
+    args.skin = "es_1h_mace_shield_skin_05"
     Harness.equal(compositor.resolve(args), nil)
     args = proof_args()
     args.offhand_unit = "units/weapons/player/wpn_emp_gk_shield_05/wpn_emp_gk_shield_05"
     Harness.equal(compositor.resolve(args), nil)
+end)
+
+Harness.test("#650 icon availability separates transient atlas lag from missing resources", function()
+    local atlas_known = { icon_known = true }
+    local atlas = { has_texture_by_name = function(name) return atlas_known[name] == true end }
+    local resident = { ["materials/ui/icon_shipped"] = true, ["materials/ui/icon_known"] = true }
+    local can_get = function(kind, path) return kind == "material" and resident[path] == true end
+
+    local ok, class = Factory.ui_icon_availability("icon_known", atlas, can_get)
+    Harness.truthy(ok)
+    Harness.equal(class, "ready")
+    ok, class = Factory.ui_icon_availability("icon_shipped", atlas, can_get)
+    Harness.equal(ok, false)
+    Harness.equal(class, "transient-ui")
+    ok, class = Factory.ui_icon_availability("icon_absent", atlas, can_get)
+    Harness.equal(ok, false)
+    Harness.equal(class, "missing-resource")
+    ok, class = Factory.ui_icon_availability(nil, atlas, can_get)
+    Harness.equal(ok, false)
+    Harness.equal(class, "missing-resource")
+    -- No atlas helper at all (boot window) + shipped material = transient.
+    ok, class = Factory.ui_icon_availability("icon_shipped", nil, can_get)
+    Harness.equal(ok, false)
+    Harness.equal(class, "transient-ui")
+end)
+
+Harness.test("#650 icon_ready reports transient atlas lag distinctly from missing", function()
+    local compositor = Factory.new(Catalog)
+    local descriptor = compositor.resolve(proof_args("transient"))
+    local ready, reason = compositor.icon_ready(descriptor, function(name)
+        if name == descriptor.primary_texture then return false, "transient-ui" end
+        return true, "ready"
+    end)
+    Harness.equal(ready, false)
+    Harness.equal(reason, "transient-primary-ui")
+    -- Legacy boolean-only availability keeps the missing-* contract.
+    ready, reason = compositor.icon_ready(descriptor, function(name)
+        return name ~= descriptor.primary_texture
+    end)
+    Harness.equal(ready, false)
+    Harness.equal(reason, "missing-primary-resource")
+end)
+
+Harness.test("#650 diagnostic dedup collapses per distinct gap, not per instance", function()
+    local compositor = Factory.new(Catalog)
+    local first = proof_args("bid-1")
+    first.offhand_unit = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02"
+    Harness.truthy(compositor.claim_diagnostic("unmapped-offhand", first))
+    -- Same offhand unit, different bid/skin/glow: no second row.
+    local second = proof_args("bid-2")
+    second.offhand_unit = first.offhand_unit
+    second.skin = "es_1h_mace_shield_skin_02"
+    second.glow_source = "native"
+    Harness.equal(compositor.claim_diagnostic("unmapped-offhand", second), false)
+    -- A DIFFERENT missing offhand still self-reports once.
+    local third = proof_args("bid-3")
+    third.offhand_unit = "units/weapons/player/wpn_empire_shield_05/wpn_emp_shield_05"
+    Harness.truthy(compositor.claim_diagnostic("unmapped-offhand", third))
+    -- Resource/transient classes collapse to one row per session per class.
+    Harness.truthy(compositor.claim_diagnostic("missing-primary-resource", proof_args("bid-4")))
+    local fifth = proof_args("bid-5")
+    fifth.skin = "es_1h_mace_shield_skin_02"
+    Harness.equal(compositor.claim_diagnostic("missing-primary-resource", fifth), false)
+    Harness.truthy(compositor.claim_diagnostic("transient-primary-ui", proof_args("bid-6")))
+    Harness.equal(compositor.claim_diagnostic("transient-primary-ui", proof_args("bid-7")), false)
 end)
 
 Harness.test("#650 ordinary Bretonnian shield never inherits rune glow", function()

@@ -49,6 +49,29 @@ local function _byte(value)
     return math.floor(value + 0.5)
 end
 
+-- #650 fail-closed availability with a residency floor. The UI atlas lookup
+-- (VMF custom-texture injection into UIAtlasHelper) can lag mod boot, while
+-- the mod-shipped icon material is already engine-resident. Distinguish:
+--   true,  "ready"        - the renderer can draw it now
+--   false, "transient-ui" - shipped material resident (Application.can_get)
+--                           but the atlas lookup is not serving it yet; fail
+--                           closed to the native icon THIS draw, self-heals
+--                           on a later grid refresh
+--   false, "missing-resource" - genuinely absent; fail closed permanently
+-- Pure: both engine seams are injected.
+function M.ui_icon_availability(icon, ui_atlas_helper, can_get)
+    if type(icon) ~= "string" or icon == "" then return false, "missing-resource" end
+    if ui_atlas_helper and ui_atlas_helper.has_texture_by_name
+            and ui_atlas_helper.has_texture_by_name(icon) == true then
+        return true, "ready"
+    end
+    if type(can_get) == "function"
+            and can_get("material", "materials/ui/" .. icon) == true then
+        return false, "transient-ui"
+    end
+    return false, "missing-resource"
+end
+
 function M.new(catalog)
     catalog = type(catalog) == "table" and catalog or {}
     local cache = {}
@@ -74,10 +97,26 @@ function M.new(catalog)
         if type(args) ~= "table" or args.item_type ~= "es_1h_mace_shield" then
             return false
         end
-        local key = table.concat({
-            tostring(reason), tostring(args.skin), tostring(args.offhand_unit),
-            tostring(args.offhand_armoury_key), tostring(args.glow_source),
-        }, "|")
+        -- #650: collapse the dedup key per failure class so the log carries
+        -- one row per DISTINCT catalog/resource gap, not one per instance
+        -- tuple (the 38-rows-per-file sweep finding). A mapping gap is a
+        -- property of the skin or the offhand identity alone; a resource
+        -- gap is a property of the session.
+        local key
+        if reason == "unmapped-primary" then
+            key = reason .. "|" .. tostring(args.skin)
+        elseif reason == "unmapped-offhand" then
+            key = reason .. "|" .. tostring(args.offhand_unit)
+                .. "|" .. tostring(args.offhand_armoury_key)
+        elseif type(reason) == "string"
+                and (reason:find("^missing%-") or reason:find("^transient%-")) then
+            key = reason
+        else
+            key = table.concat({
+                tostring(reason), tostring(args.skin), tostring(args.offhand_unit),
+                tostring(args.offhand_armoury_key), tostring(args.glow_source),
+            }, "|")
+        end
         if diagnostic_seen[key] or diagnostic_count >= 32 then return false end
         diagnostic_seen[key] = true
         diagnostic_count = diagnostic_count + 1
@@ -186,18 +225,25 @@ function M.new(catalog)
     -- Renderer residency is a consumer concern, not part of the canonical
     -- exact-instance appearance. Held material application must not disappear
     -- merely because a particular Gui cannot draw one of the icon layers.
+    -- `available` may return a plain boolean (legacy) or the
+    -- (ok, class) pair from M.ui_icon_availability; a "transient-ui" class
+    -- reports as transient-<layer>-ui so a shipped-but-not-yet-injected icon
+    -- is never miscounted as a missing resource (#650 sweep finding).
     function api.icon_ready(descriptor, available)
         if type(descriptor) ~= "table" then return false, "missing-descriptor" end
         if type(available) ~= "function" then return false, "missing-resource-check" end
-        if available(descriptor.primary_texture) ~= true then
-            return false, "missing-primary-resource"
+        local function check(texture, layer)
+            local ok, class = available(texture)
+            if ok == true then return nil end
+            if class == "transient-ui" then
+                return "transient-" .. layer .. "-ui"
+            end
+            return "missing-" .. layer .. "-resource"
         end
-        if available(descriptor.offhand_texture) ~= true then
-            return false, "missing-offhand-resource"
-        end
-        if descriptor.glow_texture and available(descriptor.glow_texture) ~= true then
-            return false, "missing-glow-resource"
-        end
+        local reason = check(descriptor.primary_texture, "primary")
+            or check(descriptor.offhand_texture, "offhand")
+            or (descriptor.glow_texture and check(descriptor.glow_texture, "glow"))
+        if reason then return false, reason end
         return true, "ready"
     end
 
