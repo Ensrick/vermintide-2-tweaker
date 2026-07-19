@@ -4,6 +4,7 @@ return function(H, repo_root)
 
     local families = {
         cwv_es_dual_axes = "icon_wpn_axe_hatchet_t1_dual_cwv",
+        cwv_wh_dual_axes = "icon_wpn_axe_hatchet_t1_dual_cwv",
         cwv_es_imperial_crowbill = "icon_cwv_imperial_crowbill_01",
         cwv_dr_dawi_crowbill = "icon_cwv_dawi_crowbill_01",
         cwv_es_greataxe = "icon_cwv_es_greataxe_01",
@@ -28,7 +29,7 @@ return function(H, repo_root)
             craftable_slot_types = { melee = true },
             base_power = 300,
         })
-        H.equal(report.cwv, 4)
+        H.equal(report.cwv, 5)
         for key, icon in pairs(families) do
             local row = cache["cim_template_" .. key]
             H.truthy(row)

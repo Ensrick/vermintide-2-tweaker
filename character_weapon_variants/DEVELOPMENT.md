@@ -54,6 +54,15 @@ material in CWV's `custom_gui_textures` does not make it valid in another mod's
 renderer. `_cwv_inventory_icons.lua` is the cross-mod contract: it lists exact
 injected renderers and a resident vanilla fallback for each custom icon.
 Consumers must resolve through it or fail closed to their own proven icon.
+The Athanor weapon list draws through `ingame_ui_context.ui_top_renderer`, whose
+VMF creator key is the already-injected `ingame_ui` renderer—not the separate
+`hero_view_state_weave_forge` preview renderer [src:
+`hero_window_weave_forge_weapons.lua:38,1005-1058`; `ingame_ui.lua:75-77,95`].
+VMF's six-argument `custom_atlas` API does not populate
+`masked_saturated_material_name`, so CWV idempotently fills only that absent
+field for its nine owned rows [src: VMF `custom_textures.lua:67-101`]. CIM still
+proves the resulting material in the exact live Gui before retaining a paired
+icon; any failed proof continues to select the vanilla fallback (#617/#787).
 
 Do not infer ownership from a `cwv_` prefix. A CWV item is owned only when its
 exact backend ID exists in CIM's persisted craft table. Migration code may

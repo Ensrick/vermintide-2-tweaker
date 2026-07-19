@@ -34,6 +34,7 @@ return function(H, repo_root)
                 "missing atlas entry: " .. dual_icon)
         end
         H.truthy(data:find('"cwv_weapon_icons"', 1, true))
+		H.truthy(data:find('"ingame_ui", "materials/character_weapon_variants/cwv_weapon_icons"', 1, true))
         H.truthy(data:find('"hero_view", "materials/character_weapon_variants/cwv_weapon_icons"', 1, true))
     end)
 
@@ -52,9 +53,55 @@ return function(H, repo_root)
 			local hero_icon, custom = contract.resolve(dual_icon, "hero_view")
 			H.equal(hero_icon, dual_icon)
 			H.equal(custom, true)
-			local athanor_icon = contract.resolve(dual_icon, "athanor_top_renderer")
-			H.equal(athanor_icon, source_icon)
+			local athanor_icon = contract.resolve(dual_icon, "ingame_ui")
+			H.equal(athanor_icon, dual_icon)
+			local unknown_icon = contract.resolve(dual_icon, "unknown_renderer")
+			H.equal(unknown_icon, source_icon)
 		end
-		H.equal(contract.resolve("vanilla_icon", "athanor_top_renderer"), "vanilla_icon")
+		H.equal(contract.resolve("vanilla_icon", "unknown_renderer"), "vanilla_icon")
+	end)
+
+	H.test("CWV completes the VMF-missing masked saturated atlas variant", function()
+		local rows = {}
+		for _, dual_icon in pairs(icon_pairs) do
+			rows[dual_icon] = {
+				material_name = "cwv_weapon_icons",
+				masked_material_name = "cwv_weapon_icons_masked",
+			}
+		end
+		local helper = {
+			get_atlas_settings_by_texture_name = function(icon) return rows[icon] end,
+		}
+		H.equal(contract.complete_masked_saturated(helper), 9)
+		for _, row in pairs(rows) do
+			H.equal(row.masked_saturated_material_name, "cwv_weapon_icons_masked")
+		end
+		local authored = rows.icon_wpn_axe_hatchet_t1_dual_cwv
+		authored.masked_saturated_material_name = "cwv_weapon_icons_authored_variant"
+		H.equal(contract.complete_masked_saturated(helper), 9)
+		H.equal(authored.masked_saturated_material_name,
+			"cwv_weapon_icons_authored_variant")
+	end)
+
+	H.test("CWV atlas completion ignores unavailable and foreign rows", function()
+		H.equal(contract.complete_masked_saturated(nil), 0)
+		H.equal(contract.complete_masked_saturated({}), 0)
+		local foreign = {
+			material_name = "another_mod",
+			masked_material_name = "another_mod_masked",
+		}
+		local helper = {
+			get_atlas_settings_by_texture_name = function()
+				return foreign
+			end,
+		}
+		H.equal(contract.complete_masked_saturated(helper), 0)
+		H.equal(foreign.masked_saturated_material_name, nil)
+		local throwing = {
+			get_atlas_settings_by_texture_name = function()
+				error("lookup unavailable")
+			end,
+		}
+		H.equal(contract.complete_masked_saturated(throwing), 0)
 	end)
 end

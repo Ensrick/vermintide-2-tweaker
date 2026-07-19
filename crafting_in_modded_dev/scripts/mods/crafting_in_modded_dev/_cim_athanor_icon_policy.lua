@@ -8,7 +8,11 @@
 
 local M = {}
 
-M.RENDERER_NAME = "athanor_top"
+-- The weapon list takes `self._ui_top_renderer` from ingame_ui_context; that
+-- shared renderer is created by ingame_ui, not by the separate Weave Forge
+-- preview renderer. The live Gui proof below remains authoritative if VMF's
+-- creator inference or material residency ever drifts.
+M.RENDERER_NAME = "ingame_ui"
 M.PLACEHOLDERS = {
     melee = "icons_placeholder_melee_01",
     ranged = "icons_placeholder_ranged_01",

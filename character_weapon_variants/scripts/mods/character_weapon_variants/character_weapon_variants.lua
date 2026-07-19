@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.459-dev"
+local MOD_VERSION = "0.1.460-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -67,6 +67,12 @@ _om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_in
 _om.outrider_animation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_outrider_animation")
 -- Public sibling-renderer contract: call resolve(icon, renderer), never guess atlas residency.
 mod._cwv_inventory_icons = _om.inventory_icons
+-- #787: mod data registered the private atlas before this script runs. Finish
+-- its VMF-missing masked+saturated variant so the exact Athanor Gui may prove
+-- and retain the paired icon instead of taking the single-axe fallback.
+_om.icon_variants = _om.inventory_icons.complete_masked_saturated(rawget(_G, "UIAtlasHelper"))
+pcall(printf, "[cwv:787] paired icon atlas variants=%d expected=%d",
+	_om.icon_variants, 9)
 mod._cwv_crowbill_family = _om.crowbill_family
 mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode
 mod._cwv_crowbill_presentation = _om.crowbill_presentation

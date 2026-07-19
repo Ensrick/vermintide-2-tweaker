@@ -1,5 +1,11 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.460-dev (2026-07-19) - authored Dual Axes Athanor icon contract (#787) [verify-fix]
+
+- Publishes the paired Dual Axes authored icon through CWV's existing inventory-icon provider for both Kruber and Saltzpyre variants.
+- Keeps the provider data-only and exact-family scoped so CIM can render the authored result without duplicating CWV's weapon catalogue.
+- Adds cross-mod appearance-contract and Lua 5.1 coverage for both variants and the vanilla fallback.
+
 ## 0.1.459-dev (2026-07-19) - universal Crowbill mode (#798) [verify-fix-coop]
 
 - Removed the Sienna-only preference gate: native, Imperial, and Dawi

@@ -34,6 +34,7 @@ return function(context)
 _rt_register("issue277_bulk_cleanup_exact_owner_transaction", function()
     local core = mod._cim277_bulk_core
     if type(core) ~= "table" or type(core.classify) ~= "function"
+            or type(core.snapshot_signature) ~= "function"
             or type(core.partition_equipped) ~= "function"
             or type(core.clear_loadout_refs) ~= "function"
             or type(mod._cim277_delete_owned_ids) ~= "function"
@@ -41,19 +42,65 @@ _rt_register("issue277_bulk_cleanup_exact_owner_transaction", function()
         return "#277 cleanup policy/runtime wiring missing"
     end
 
-    local weapons, retained, unresolved = core.classify({
-        owned_weapon = { item_key = "weapon" },
-        owned_accessory = { item_key = "accessory" },
-        owned_missing = { item_key = "missing" },
-    }, {
+    local contract = mod._cim_synthetic_item_contract
+    local function owned(item_key, via_mirror)
+        return {
+            owner = "cim", schema_version = 1, item_key = item_key,
+            via_mirror = via_mirror,
+        }
+    end
+    local records = {
+        owned_weapon = owned("weapon", true),
+        owned_accessory = owned("accessory", true),
+        owned_out_of_scope = owned("cosmetic", true),
+        owned_missing = owned("missing", true),
+        owned_unstamped = { item_key = "weapon" },
+    }
+    local masters = {
         weapon = { slot_type = "melee" },
         accessory = { slot_type = "necklace" },
+        cosmetic = { slot_type = "hat" },
         rarity_only_not_owned = { slot_type = "ranged", rarity = "modded" },
-    })
-    if #weapons ~= 1 or weapons[1] ~= "owned_weapon"
-            or #retained ~= 1 or retained[1] ~= "owned_accessory"
-            or #unresolved ~= 1 or unresolved[1] ~= "owned_missing" then
-        return "exact-owner weapon classification failed"
+    }
+    local crafts, retained, unresolved = core.classify(records, masters, contract)
+    if #crafts ~= 2 or crafts[1] ~= "owned_accessory" or crafts[2] ~= "owned_weapon"
+            or #retained ~= 1 or retained[1] ~= "owned_out_of_scope"
+            or #unresolved ~= 2 or unresolved[1] ~= "owned_missing"
+            or unresolved[2] ~= "owned_unstamped" then
+        return "exact-owner craft classification failed"
+    end
+    local no_contract = core.classify({ owned_weapon = owned("weapon", true) },
+        masters, nil)
+    if #no_contract ~= 0 then
+        return "classify must delete nothing without the identity contract"
+    end
+
+    local snapshot = core.snapshot_signature(crafts, records, masters, contract)
+    records.owned_weapon.item_key = "accessory"
+    local changed = core.snapshot_signature(crafts, records, masters, contract)
+    if not snapshot or not changed or snapshot == changed then
+        return "same-id canonical identity changes must invalidate cleanup preview"
+    end
+    records.owned_weapon.item_key = "weapon"
+    records.owned_weapon.via_mirror = false
+    changed = core.snapshot_signature(crafts, records, masters, contract)
+    if snapshot == changed then
+        return "same-id deletion-route changes must invalidate cleanup preview"
+    end
+
+    local entry = _rt_src_read(
+        "scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua")
+    if entry then
+        for _, marker in ipairs({
+            "core.classify(_forged_weapons, ItemMasterList, contract)",
+            "core.snapshot_signature(deletable, _forged_weapons,",
+            "pcall(contract.classify_owned_record,",
+            "type(current) ~= \"table\" or type(saved) ~= \"table\"",
+        }) do
+            if not entry:find(marker, 1, true) then
+                return "#277 runtime wiring marker missing: " .. marker
+            end
+        end
     end
 
     local deletable, blocked, uncertain = core.partition_equipped(
@@ -832,10 +879,10 @@ _rt_register("issue617_athanor_icon_resource_closure", function()
     local registry = ok and provider and provider._cwv_inventory_icons
     if type(registry) == "table" and type(registry.resolve) == "function"
         and type(registry.FALLBACKS) == "table" then
-        for icon, expected in pairs(registry.FALLBACKS) do
+        for icon in pairs(registry.FALLBACKS) do
             local resolved, was_custom = registry.resolve(icon, policy.RENDERER_NAME)
-            if not was_custom or resolved ~= expected then
-                return "#617 CWV icon not fail-closed for Athanor: " .. tostring(icon)
+            if not was_custom or resolved ~= icon then
+                return "#787 CWV icon capability missing for Athanor: " .. tostring(icon)
             end
         end
     end
@@ -844,6 +891,35 @@ _rt_register("issue617_athanor_icon_resource_closure", function()
     if live and (live.omitted or 0) > 0 then
         return string.format("#617 live Athanor catalog omitted %d rows with no renderer-safe icon",
             live.omitted)
+    end
+end)
+
+_rt_register("issue787_cim_dual_axes_authored_icon", function()
+    local policy = mod._cim_athanor_icon_policy
+    local ok, provider = pcall(get_mod, "character_weapon_variants")
+    local registry = ok and provider and provider._cwv_inventory_icons
+    if type(policy) ~= "table" or type(registry) ~= "table"
+        or type(registry.FALLBACKS) ~= "table" then
+        return -- CWV is optional; no custom row exists without it.
+    end
+    local atlas = rawget(_G, "UIAtlasHelper")
+    if type(atlas) ~= "table"
+        or type(atlas.get_atlas_settings_by_texture_name) ~= "function" then
+        return "#787 UIAtlasHelper unavailable"
+    end
+    for icon in pairs(registry.FALLBACKS) do
+        local got, settings = pcall(atlas.get_atlas_settings_by_texture_name, icon)
+        if not got or type(settings) ~= "table"
+            or type(settings.masked_saturated_material_name) ~= "string"
+            or settings.masked_saturated_material_name == "" then
+            return "#787 masked+saturated atlas row incomplete: " .. tostring(icon)
+        end
+    end
+    local live = mod._cim_athanor_icon_report
+    for _, change in ipairs(live and live.changes or {}) do
+        if registry.FALLBACKS[change.original] and change.replacement ~= change.original then
+            return "#787 live CWV paired icon fell back: " .. tostring(change.original)
+        end
     end
 end)
 

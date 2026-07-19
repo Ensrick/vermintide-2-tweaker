@@ -1,6 +1,8 @@
 return function(H, repo_root)
     local cim_root = repo_root .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
     local Policy = assert(loadfile(cim_root .. "_cim_athanor_icon_policy.lua"))()
+    local Provider = assert(loadfile(repo_root
+        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_inventory_icons.lua"))()
     local atlas_path = repo_root
         .. "/character_weapon_variants/materials/character_weapon_variants/cwv_weapon_icons.lua"
     local live_cwv_icons = assert(loadfile(atlas_path))()
@@ -69,6 +71,34 @@ return function(H, repo_root)
             H.equal(row.item_data.inventory_icon, CwvIcons.FALLBACKS[original])
             H.equal(originals[original].inventory_icon, original)
             H.equal(row.item_data == originals[original], false)
+        end
+    end)
+
+    H.test("renderer-owned CWV Dual Axes icons remain authored in Athanor", function()
+        local layout = {}
+        local safe = {}
+        for icon in pairs(Provider.FALLBACKS) do
+            safe[icon] = true
+            layout[#layout + 1] = {
+                key = "row_" .. icon,
+                item_data = { inventory_icon = icon, slot_type = "melee", cwv_variant = true },
+            }
+        end
+        local sanitized, report = Policy.sanitize_layout(layout, {
+            item_master_list = {},
+            provider_resolve = Provider.resolve,
+            has_texture = function(icon) return safe[icon] == true end,
+        })
+        H.equal(Policy.RENDERER_NAME, "ingame_ui")
+        H.equal(report.total, 9)
+        H.equal(report.verified, 9)
+        H.equal(report.fallback, 0)
+        H.equal(report.omitted, 0)
+        for i = 1, #sanitized do
+			H.equal(sanitized[i], layout[i])
+			H.equal(sanitized[i].item_data, layout[i].item_data)
+            H.equal(sanitized[i].item_data.inventory_icon,
+                layout[i].item_data.inventory_icon)
         end
     end)
 
