@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.304-dev"
+local MOD_VERSION = "0.7.305-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -5607,21 +5607,22 @@ do
     if _gmh and type(_gmh.get_object_sets) == "function" then
         mod:hook(_gmh, "get_object_sets", function(func, level_name, game_mode_key)
             local object_sets, spawned_object_sets = func(level_name, game_mode_key)
+            local skull52_observed = false
+            -- #52 diagnostics must observe BOTH the normal-Adventure baseline and
+            -- injected Deus. The module scopes itself to dlc_wizards_tower (and
+            -- rejects hero sublevels), so unrelated get_object_sets calls stay inert.
+            if type(object_sets) == "table" and type(spawned_object_sets) == "table"
+                and mod._ct_diag_skull52 and mod._ct_diag_skull52.observe_object_sets
+            then
+                local ok, observed = pcall(mod._ct_diag_skull52.observe_object_sets, level_name, game_mode_key,
+                    object_sets, spawned_object_sets, adventure_base_from_level_key)
+                skull52_observed = ok and observed == true
+            end
+
             if game_mode_key == "deus"
                 and type(object_sets) == "table"
                 and type(spawned_object_sets) == "table"
             then
-                -- #52 DIAGNOSTIC ([ct:skull52]): Tower of Treachery's skulls
-                -- are source-confirmed level-flow interactables
-                -- (`flow_callback_on_tower_skull_found`), not the portals
-                -- `gargoyle_head` pickup. The binary-owned object-set name must
-                -- be identified by comparing this census in Adventure vs injected
-                -- Deus; behavior remains unchanged until that set is named.
-                if mod._ct_diag_skull52 and mod._ct_diag_skull52.census then
-                    pcall(mod._ct_diag_skull52.census, level_name, game_mode_key,
-                        object_sets, spawned_object_sets, adventure_base_from_level_key)
-                end
-
                 -- #156 fix (behavior unchanged): enable the 'adventure' object set on the
                 -- injected MAIN adventure level if present and not already spawning.
                 if object_sets.adventure and not table.contains(spawned_object_sets, "adventure") then
@@ -5633,6 +5634,9 @@ do
                             tostring(level_key))
                     end
                 end
+            end
+            if skull52_observed and mod._ct_diag_skull52.finalize_selection then
+                pcall(mod._ct_diag_skull52.finalize_selection, spawned_object_sets)
             end
             return object_sets, spawned_object_sets
         end)
