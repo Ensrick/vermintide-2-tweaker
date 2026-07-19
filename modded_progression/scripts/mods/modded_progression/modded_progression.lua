@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.30-dev"
+local MOD_VERSION = "0.2.32-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -549,21 +549,39 @@ local function _mp577_apply_item(mirror, item)
     if type(key) ~= "string" or type(backend_id) ~= "string" or type(data) ~= "table" then
         return nil, "item_definition_missing"
     end
-    local actual_id, kind
+    local actual_id, kind, preexisting
     if WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[key] then
-        local ids = mirror:add_unlocked_weapon_skin(key, backend_id)
-        actual_id, kind = ids and ids[1], "weapon_skin"
+        kind = "weapon_skin"
+        actual_id = mirror._unlocked_weapon_skins and mirror._unlocked_weapon_skins[key]
+        preexisting = actual_id ~= nil and actual_id ~= false
+        if not preexisting then
+            local ids = mirror:add_unlocked_weapon_skin(key, backend_id)
+            actual_id = ids and ids[1]
+        end
     elseif CosmeticUtils and CosmeticUtils.is_cosmetic_item(data.slot_type) then
-        actual_id, kind = mirror:add_unlocked_cosmetic(key, backend_id), "cosmetic"
+        kind = "cosmetic"
+        actual_id = mirror._unlocked_cosmetics and mirror._unlocked_cosmetics[key]
+        preexisting = actual_id ~= nil and actual_id ~= false
+        if not preexisting then actual_id = mirror:add_unlocked_cosmetic(key, backend_id) end
     elseif CosmeticUtils and CosmeticUtils.is_weapon_pose(data) then
-        actual_id, kind = mirror:add_unlocked_weapon_pose(key, backend_id), "weapon_pose"
+        kind = "weapon_pose"
+        local poses = mirror._unlocked_weapon_poses and mirror._unlocked_weapon_poses[data.parent]
+        actual_id = poses and poses[key]
+        preexisting = actual_id ~= nil and actual_id ~= false
+        if not preexisting then actual_id = mirror:add_unlocked_weapon_pose(key, backend_id) end
     else
-        mirror:add_item(backend_id, _mp577_copy(item), true, true)
-        actual_id, kind = backend_id, "item"
+        kind = "item"
+        actual_id = mirror._inventory_items and mirror._inventory_items[backend_id] and backend_id
+        preexisting = actual_id ~= nil
+        if not preexisting then
+            mirror:add_item(backend_id, _mp577_copy(item), true, true)
+            actual_id = backend_id
+        end
     end
     if not actual_id then return nil, "mirror_grant_failed" end
     _mp577_runtime.applied[backend_id] = {
         actual_id = actual_id, item_key = key, kind = kind, parent = data.parent,
+        preexisting = preexisting == true,
     }
     return actual_id
 end
@@ -572,17 +590,10 @@ local function _mp577_cleanup_overlay()
     local mirror = _mp577_runtime.mirror
     if type(mirror) == "table" then
         for _, record in pairs(_mp577_runtime.applied) do
-            local id, key = record.actual_id, record.item_key
-            if mirror._inventory_items then mirror._inventory_items[id] = nil end
-            if mirror._fake_inventory_items then mirror._fake_inventory_items[id] = nil end
-            if record.kind == "weapon_skin" and mirror._unlocked_weapon_skins then
-                mirror._unlocked_weapon_skins[key] = nil
-            elseif record.kind == "cosmetic" and mirror._unlocked_cosmetics then
-                mirror._unlocked_cosmetics[key] = nil
-            elseif record.kind == "weapon_pose" and mirror._unlocked_weapon_poses then
-                local poses = mirror._unlocked_weapon_poses[record.parent]
-                if poses then poses[key] = nil end
-            end
+            -- Official ownership may already exist for the same cosmetic. Such
+            -- rows are borrowed, never MP-created; deleting them here would
+            -- corrupt the live official mirror on the realm transition.
+            Emporium.cleanup_overlay_record(mirror, record)
         end
     end
     _mp577_runtime.applied = {}
@@ -621,23 +632,107 @@ local function _mp577_sync_overlay(peddler)
     return true
 end
 
-local function _mp577_owned(item_key, offer)
-    if offer and offer.owned or Dailies.emporium_unlocked(item_key)
-            or get_unlock_store()[item_key] == true then return true end
-    local inventory = get_inventory_store()
-    for _, item in pairs(inventory) do
-        if type(item) == "table" and item.ItemId == item_key then return true end
-    end
-    local backend = Managers and Managers.backend
-    local ok_interface, items = backend and pcall(backend.get_interface, backend, "items")
-    items = ok_interface and items
-    if items then
-        local ok_item, has_item = pcall(items.has_item, items, item_key)
-        local ok_skin, has_skin = pcall(items.has_weapon_illusion, items, item_key)
-        if ok_item and has_item or ok_skin and has_skin then return true end
-    end
-    return false
+local _mp577_ui = { ownership_depth = 0, ownership_keys = {} }
+
+function _mp577_ui.local_owned(item_key)
+    if Dailies.emporium_unlocked(item_key) then return true end
+    return Emporium.is_locally_owned(item_key, get_unlock_store(), get_inventory_store())
 end
+
+function _mp577_ui.project_stock(stock)
+    return Emporium.project_stock(stock, Dailies.REWARD_KIND, _mp577_ui.local_owned)
+end
+
+-- Vanilla stamps peddler rows with ownership from the official mirror while
+-- constructing the stock [src: backend_interface_peddler_playfab.lua:152-191].
+-- Project only plain SM rows onto MP's local ownership store. The original
+-- table remains untouched, so returning to official play exposes byte-for-byte
+-- vanilla state and platform/bundle/non-SM offers keep their native contract.
+mod:hook("BackendInterfacePeddlerPlayFab", "get_peddler_stock", function(func, self, ...)
+    local stock = func(self, ...)
+    if not _is_mp_realm() then return stock end
+    return _mp577_ui.project_stock(stock)
+end)
+
+mod:hook("BackendInterfacePeddlerPlayFab", "get_filtered_items", function(func, self, filter, params, ...)
+    if not _is_mp_realm() then return func(self, filter, params, ...) end
+    local backend = Managers and Managers.backend
+    local common = backend and backend:get_interface("common")
+    if not common or type(common.filter_items) ~= "function" then
+        return func(self, filter, params, ...)
+    end
+    return common:filter_items(_mp577_ui.project_stock(self._peddler_stock), filter, params or {})
+end)
+
+-- The product widgets, featured grid, selected-item preview, list refresh,
+-- pose widget, and purchase popup re-query the
+-- official item interface even after receiving a projected peddler row
+-- [src: hero_view_state_store.lua:1844-1974,2123-2143;
+-- store_window_featured.lua:608-659; store_window_item_preview.lua:883-964;
+-- store_window_item_list.lua:280-317; store_item_purchase_popup.lua:1612-1688].
+-- Scope a false-ownership facade to those synchronous presentation calls
+-- only; inventory/loadout consumers outside this bracket remain native.
+function _mp577_ui.collect_local_keys()
+    local keys = {}
+    local backend = Managers and Managers.backend
+    local interfaces = backend and backend._interfaces
+    local peddler = interfaces and interfaces.peddler
+    for _, offer in ipairs(peddler and peddler._peddler_stock or {}) do
+        if Emporium.is_local_offer(offer, Dailies.REWARD_KIND) then keys[offer.key] = true end
+    end
+    return keys
+end
+
+function _mp577_ui.with_local_ownership(func, self, ...)
+    if not _is_mp_realm() then return func(self, ...) end
+    local argc, args = select("#", ...), { ... }
+    local prior_keys = _mp577_ui.ownership_keys
+    _mp577_ui.ownership_keys = _mp577_ui.collect_local_keys()
+    _mp577_ui.ownership_depth = _mp577_ui.ownership_depth + 1
+    local n, results = _capture(pcall(function()
+        return func(self, unpack(args, 1, argc))
+    end))
+    _mp577_ui.ownership_depth = _mp577_ui.ownership_depth - 1
+    _mp577_ui.ownership_keys = prior_keys
+    if not results[1] then error(results[2], 0) end
+    return unpack(results, 2, n)
+end
+
+mod:hook("BackendInterfaceItemPlayfab", "has_item", function(func, self, item_key, ...)
+    if _mp577_ui.ownership_depth > 0 and _mp577_ui.ownership_keys[item_key] then
+        return _mp577_ui.local_owned(item_key)
+    end
+    return func(self, item_key, ...)
+end)
+
+mod:hook("BackendInterfaceItemPlayfab", "has_weapon_illusion", function(func, self, item_key, ...)
+    if _mp577_ui.ownership_depth > 0 and _mp577_ui.ownership_keys[item_key] then
+        return _mp577_ui.local_owned(item_key)
+    end
+    return func(self, item_key, ...)
+end)
+
+mod:hook("HeroViewStateStore", "_populate_item_widget", _mp577_ui.with_local_ownership)
+mod:hook("HeroViewStateStore", "_populate_pose_item", _mp577_ui.with_local_ownership)
+mod:hook("StoreWindowFeatured", "_get_default_featured_grid_content", _mp577_ui.with_local_ownership)
+mod:hook("StoreWindowItemPreview", "_sync_presentation_item", _mp577_ui.with_local_ownership)
+mod:hook("StoreWindowItemList", "_update_item_list", _mp577_ui.with_local_ownership)
+mod:hook("StoreItemPurchasePopup", "_populate_item_widget", _mp577_ui.with_local_ownership)
+
+_rt_register("mp577_store_ownership_facade_restores", function()
+    local saved_flag = script_data["eac-untrusted"]
+    local depth0, keys0 = _mp577_ui.ownership_depth, _mp577_ui.ownership_keys
+    script_data["eac-untrusted"] = true
+    local a, b, c = _mp577_ui.with_local_ownership(function() return 1, nil, 3 end, nil)
+    local raised = not pcall(_mp577_ui.with_local_ownership,
+        function() error("mp577_rt_boom") end, nil)
+    script_data["eac-untrusted"] = saved_flag
+    if a ~= 1 or b ~= nil or c ~= 3 then return "ownership facade collapsed return values" end
+    if not raised then return "ownership facade swallowed a presentation error" end
+    if _mp577_ui.ownership_depth ~= depth0 or _mp577_ui.ownership_keys ~= keys0 then
+        return "ownership facade leaked its depth or eligible-key context"
+    end
+end)
 
 -- Issue #578: preserve the native Silver Shilling presentation while keeping
 -- the SM ledger isolated behind the modded-realm backend boundary. Vanilla
@@ -848,7 +943,8 @@ end)
 
 mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips", function(func, self, item_id, chip_type, price, callback_fn, ...)
     if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then
-        local offer = Emporium.find_offer(self._peddler_stock, item_id)
+        local native_offer = Emporium.find_offer(self._peddler_stock, item_id)
+        local offer = Emporium.project_offer(native_offer, Dailies.REWARD_KIND, _mp577_ui.local_owned)
         local data = offer and offer.data
         local dlc_owned = true
         if data and data.required_dlc then
@@ -863,7 +959,7 @@ mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips", function(func, self
             currency = chip_type,
             expected_price = price,
             balance = Dailies.balance(),
-            owned = offer and _mp577_owned(item_id, offer),
+            owned = offer and _mp577_ui.local_owned(item_id),
             available = mirror_ready and offer ~= nil,
             dlc_owned = dlc_owned,
         })
@@ -880,7 +976,6 @@ mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips", function(func, self
             if callback_fn then callback_fn(false) end
             return
         end
-        offer.owned = true
         local overlaid, overlay_reason = _mp577_sync_overlay(self)
         mod._mp577_last_purchase = {
             item_key = item_id,
@@ -909,6 +1004,22 @@ _rt_register("mp577_backend_free_emporium_purchase", function()
         balance = 10, owned = false, available = true, dlc_owned = true })
     if not plan or plan.item.ItemId ~= offer.key or plan.price ~= 10 then
         return "local offer did not produce a complete exact grant plan"
+    end
+    local official_owned_offer = {}
+    for key, value in pairs(offer) do official_owned_offer[key] = value end
+    official_owned_offer.owned = true
+    local projected = Emporium.project_offer(official_owned_offer, "SM", function() return false end)
+    if projected == official_owned_offer or projected.owned ~= false
+            or official_owned_offer.owned ~= true then
+        return "official ownership was not isolated by a non-mutating MP projection"
+    end
+    local fake_mirror = { _unlocked_cosmetics = { mp577_rt_hat = "official_bid" } }
+    local removed = Emporium.cleanup_overlay_record(fake_mirror, {
+        item_key = "mp577_rt_hat", actual_id = "official_bid",
+        kind = "cosmetic", preexisting = true,
+    })
+    if removed or fake_mirror._unlocked_cosmetics.mp577_rt_hat ~= "official_bid" then
+        return "official unlock was deleted or replaced by local overlay cleanup"
     end
 end)
 

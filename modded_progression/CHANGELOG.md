@@ -1,5 +1,18 @@
 # Modded Progression — Changelog
 
+## 0.2.32-dev (2026-07-19) - #577 isolate Emporium ownership [verify-fix]
+
+- Replaced the Emporium's official-account ownership reads with a presentation-scoped local ownership facade for plain Silver Shilling offers. An account that owns every official cosmetic can now see and buy items that its Modded Progression profile has not earned.
+- Projected peddler stock is cloned before its `owned` field changes. The native stock remains untouched for official play; platform, bundle, non-SM, and DLC ownership behavior remains vanilla.
+- Scoped the false-ownership facade to the six synchronous store presentation consumers that re-query the item interface: product and pose widgets, featured grid, selected preview, list refresh, and purchase popup. Inventory, loadouts, crafting, and official-realm consumers never see the facade.
+- The purchase boundary now validates only durable MP unlock/inventory state and no longer mutates the native offer after purchase. The existing atomic debit/grant/idempotency transaction and zero-PlayFab request contract remain unchanged.
+- Hardened overlay cleanup for official/local identity collisions. If an official weapon skin, cosmetic, pose, or deterministic item id already exists, MP records it as borrowed and never deletes or replaces it when returning to official play.
+- Added engine-free coverage for stock projection, native-table immutability, official-only ownership isolation, and the presentation/request boundary. Runtime check remains `mp577_backend_free_emporium_purchase`.
+
+**Source audit:** `backend_interface_peddler_playfab.lua:152-191` stamps stock ownership from the official mirror. `hero_view_state_store.lua:1844-1974,2123-2143`, `store_window_featured.lua:608-659`, `store_window_item_preview.lua:883-964`, `store_window_item_list.lua:280-317`, and `store_item_purchase_popup.lua:1612-1688` re-query the official item interface. The new facade is bounded to those synchronous calls and restores after errors.
+
+**Test:** In modded play on an account that owns the official Emporium, earn or credit at least one local purchase price and open Lohner's store. Plain SM cosmetics not yet bought in MP must appear unowned and purchasable. Buy one; the local balance falls once and the item becomes owned immediately and after restart. Double-click/rebuy cannot debit twice. Run `/mp_regression_test` and expect `mp577_backend_free_emporium_purchase`. Enter official play and confirm official stock, ownership, balance, and purchase behavior are unchanged.
+
 ## 0.2.30-dev (2026-07-18) - complete stranded ship pipeline
 
 - No source change. The pipeline-state ladder (PROJECT_STANDARDS 11b) flagged this mod UPLOAD-BEHIND: the 0.2.29-dev bundle was rebuilt after its last Workshop upload, so subscribers were behind the repo. This build re-runs the full pipeline to reconcile. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
