@@ -160,6 +160,7 @@ local suites = {
     "test_cim_tab_preview",
     "test_cim_regression_module",
     "test_woc_wire_policy",
+	"test_woc_boss_weapon_catalog",
 	"test_cim_external_trait_policy",
     "test_woc_relic_policy",
 	"test_woc_blightreaper_moveset",

@@ -1,5 +1,17 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.41-dev (2026-07-19) - #614 #615 #642 boss-weapon resource catalogue [diagnostics-armed]
+
+- Adds compiled first- and third-person Skarrik halberd units that reuse the
+  single shared Skarrik material/texture owner from the dual-sword tranche.
+- Unifies two previously overlapping catalogue concepts under one module:
+  source/residency audit rows and separate authored-resource readiness
+  descriptors. `/woc_boss_catalog` reports both facets without loading,
+  spawning, registering, or mutating an item.
+- The command is bounded and read-only. Missing resources fail closed with an
+  exact row/reason so runtime weapon registration is not attempted until the
+  compiled asset boundary is proven.
+
 ## 0.1.40-dev (2026-07-19) - #615 Skarrik dual-sword asset closure
 
 - Adds explicit left/right first- and third-person FBX/unit sources for

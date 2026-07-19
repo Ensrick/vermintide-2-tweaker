@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.40-dev"
+local MOD_VERSION = "0.1.41-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -195,6 +195,22 @@ local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_p
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
+local _boss_weapon_catalog = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_woc_boss_weapon_catalog")
+mod._woc_boss_catalog_snapshot = _boss_weapon_catalog.runtime_snapshot
+mod:command("woc_boss_catalog",
+	"Write the source-backed boss weapon catalogue to the console log",
+	function()
+		_boss_weapon_catalog.emit_runtime()
+		_boss_weapon_catalog.emit_authored_runtime()
+	end)
+_rt_register("issue642_boss_weapon_catalog_source_mapped",
+	_boss_weapon_catalog.runtime_check)
+
+-- Automatic and bounded: seven rows once at WOC load. Re-run manually with
+-- /woc_boss_catalog after entering a boss mission to compare residency.
+_boss_weapon_catalog.emit_runtime()
+_boss_weapon_catalog.emit_authored_runtime()
 -- Issue 712 / 835: retail Stingray exposes Vector3 as a callable TABLE, but
 -- the shared library's default api guards its stored constructor with
 -- `type(...) == "function"`, so every position/scale channel silently

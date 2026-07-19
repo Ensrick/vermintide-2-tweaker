@@ -1,6 +1,7 @@
 lua = [
 	"scripts/mods/weapons_of_chaos/_woc_appearance_policy"
 	"scripts/mods/weapons_of_chaos/_woc_attack_order"
+	"scripts/mods/weapons_of_chaos/_woc_boss_weapon_catalog"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_audio"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_power"
@@ -33,6 +34,8 @@ unit = [
 	"units/woc_skarrik_dual_swords/skarrik_sword_left_3p"
 	"units/woc_skarrik_dual_swords/skarrik_sword_right"
 	"units/woc_skarrik_dual_swords/skarrik_sword_right_3p"
+	"units/woc_skarrik_halberd/skarrik_halberd"
+	"units/woc_skarrik_halberd/skarrik_halberd_3p"
 ]
 
 texture = [

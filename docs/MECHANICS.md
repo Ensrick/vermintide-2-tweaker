@@ -77,6 +77,12 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 ## Domain: Inventory / Equipment
 
+- Named enemy weapons are resolved by following a boss breed's
+  `default_inventory_template` into `InventoryConfigurations`, whose item
+  categories hold concrete enemy `unit_name` paths; Rasknitt is a grounded
+  exception because the Grey Seer breed declares `has_inventory = false`.
+  [src: scripts/settings/breeds/breed_chaos_exalted_champion.lua:49; scripts/settings/breeds/breed_skaven_grey_seer.lua:25; scripts/settings/ai_inventory_templates.lua:579-582,690-700,2002-2008,2255-2266]
+
 - `SimpleInventoryExtension.init` sets `self._career_name = career_name` at line 47,
   BEFORE `extensions_ready` fires — so in-mission spawn hooks should read career
   from this field, not from `Managers.player:owner(unit):career_name()` (the

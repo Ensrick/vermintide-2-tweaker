@@ -134,6 +134,7 @@ Run-Check "check_shared_lib_drift"            { & (Join-Path $here "check_shared
 Run-Check "check_wt_stream_parity"            { & (Join-Path $here "check_wt_stream_parity.ps1")            -Quiet:$Quiet }
 Run-Check "check_dofile_package_coverage"      { & (Join-Path $here "check_dofile_package_coverage.ps1")      -Quiet:$Quiet }
 Run-Check "check_woc_skarrik_asset_sources"    { & (Join-Path $here "check_woc_skarrik_asset_sources.ps1")    -Quiet:$Quiet }
+Run-Check "check_woc_skarrik_halberd_sources" { & (Join-Path $here "check_woc_skarrik_halberd_sources.ps1") -Quiet:$Quiet }
 if (-not $SkipCustomUnitBundleReachability) {
     Run-Check "check_custom_unit_bundle_reachability" { & (Join-Path $here "check_custom_unit_bundle_reachability.ps1") -Quiet:$Quiet }
 }
