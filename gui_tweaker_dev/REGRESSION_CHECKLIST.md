@@ -259,3 +259,15 @@ Last updated: 2026-07-17.
 | Repro | Edit one/multi-digit, negative, and decimal slider values; click every boundary and use Left/Right/Home/End plus insert/delete at multiple UI scales. |
 | Expected post-fix | The caret uses `UIFontByResolution` and `UIRenderer.text_size` full/prefix metrics, remains at the intended insertion boundary, and commit/cancel/highlight behavior is unchanged. |
 | Detection | `/gut_regression_test`: `mod_tweaker_numeric_caret_geometry`; offline `test_mod_tweaker_numeric_editor.lua`; tier-a manifest locks native metric resolution and both `_mod_tweaker_view` / `_mod_tweaker_state` click call sites. |
+
+### issue340-all-language-glyph-diagnostics — distinguish bytes from atlas coverage
+
+| Field | Value |
+|-------|-------|
+| Symptom | Non-Latin player names and chat can render as square blocks even when their UTF-8 bytes reach the UI intact. |
+| Root cause | Vanilla chat copies sender/message strings into a UTF-8-aware widget, but the active font material only renders glyphs present in its compiled atlas. The reference mod supplies a proprietary custom atlas that this repository cannot redistribute. |
+| Fix version(s) | Pending next gui_tweaker_dev diagnostic bundle (#340) |
+| Category | UI / FONT RESOURCE / DIAGNOSTICS |
+| Repro | Run `/gut_all_languages_status` with and without the standalone Support All Languages mod enabled. |
+| Expected post-fix | The command reports all eight font rows, prints six visual language-family samples, and logs bounded per-player UTF-8 metrics without logging or rewriting names. |
+| Detection | Offline `test_gut_all_languages_diagnostics.lua`; `/gut_regression_test`: `all_languages_defer_340`; solo visual confirmation required after deployment. |

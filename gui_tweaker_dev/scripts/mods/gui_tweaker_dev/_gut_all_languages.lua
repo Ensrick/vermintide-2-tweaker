@@ -44,6 +44,7 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 
 local STANDALONE_NAME = "support-all-languages"
 local UNICODE_MATERIAL = "fonts/ArialUnicodeMS"
+local VANILLA_MATERIAL = "materials/fonts/arial"
 local FONT_KEYS = {
     "arial",
     "arial_masked",
@@ -77,6 +78,7 @@ local function _inspect_fonts()
     local result = {
         total = #FONT_KEYS,
         unicode = 0,
+        vanilla = 0,
         other = 0,
         missing = 0,
         materials = {},
@@ -88,6 +90,8 @@ local function _inspect_fonts()
         result.materials[key] = material
         if material == UNICODE_MATERIAL then
             result.unicode = result.unicode + 1
+        elseif material == VANILLA_MATERIAL then
+            result.vanilla = result.vanilla + 1
         elseif type(material) == "string" then
             result.other = result.other + 1
         else
@@ -101,10 +105,131 @@ local function _inspect_fonts()
         result.state = "partial_swap"
     elseif result.missing > 0 then
         result.state = "font_rows_missing"
+    elseif result.vanilla == result.total then
+        result.state = "vanilla_font_active"
+    elseif result.other == result.total then
+        result.state = "custom_provider_active"
     else
-        result.state = "vanilla_or_other_provider"
+        result.state = "mixed_provider"
     end
     return result
+end
+
+-- Lua strings already carry the UTF-8 bytes used by chat/player names. The
+-- renderer decides whether those code points have glyphs. Keep this validator
+-- pure so the diagnostic can distinguish malformed input from a missing atlas
+-- without touching the chat pipeline or rewriting names.
+local function _utf8_metrics(value)
+    if type(value) ~= "string" then
+        return { valid = false, bytes = 0, codepoints = 0, non_ascii = 0, reason = "not_string" }
+    end
+
+    local bytes, codepoints, non_ascii = #value, 0, 0
+    local i = 1
+    while i <= bytes do
+        local b1 = string.byte(value, i)
+        local width, minimum
+        if b1 <= 0x7F then
+            width, minimum = 1, 0
+        elseif b1 >= 0xC2 and b1 <= 0xDF then
+            width, minimum = 2, 0x80
+        elseif b1 >= 0xE0 and b1 <= 0xEF then
+            width, minimum = 3, 0x800
+        elseif b1 >= 0xF0 and b1 <= 0xF4 then
+            width, minimum = 4, 0x10000
+        else
+            return { valid = false, bytes = bytes, codepoints = codepoints,
+                non_ascii = non_ascii, reason = "invalid_lead", offset = i }
+        end
+
+        if i + width - 1 > bytes then
+            return { valid = false, bytes = bytes, codepoints = codepoints,
+                non_ascii = non_ascii, reason = "truncated", offset = i }
+        end
+
+        local cp = b1
+        if width > 1 then
+            cp = b1 % (2 ^ (8 - width - 1))
+            for j = 2, width do
+                local continuation = string.byte(value, i + j - 1)
+                if continuation < 0x80 or continuation > 0xBF then
+                    return { valid = false, bytes = bytes, codepoints = codepoints,
+                        non_ascii = non_ascii, reason = "invalid_continuation", offset = i + j - 1 }
+                end
+                cp = cp * 64 + (continuation - 0x80)
+            end
+            if cp < minimum or cp > 0x10FFFF or (cp >= 0xD800 and cp <= 0xDFFF) then
+                return { valid = false, bytes = bytes, codepoints = codepoints,
+                    non_ascii = non_ascii, reason = "invalid_codepoint", offset = i }
+            end
+            non_ascii = non_ascii + 1
+        end
+
+        codepoints = codepoints + 1
+        i = i + width
+    end
+
+    return { valid = true, bytes = bytes, codepoints = codepoints,
+        non_ascii = non_ascii, reason = "ok" }
+end
+
+local function _utf8_encode(codepoints)
+    local out = {}
+    for _, cp in ipairs(codepoints) do
+        if cp <= 0x7F then
+            out[#out + 1] = string.char(cp)
+        elseif cp <= 0x7FF then
+            out[#out + 1] = string.char(0xC0 + math.floor(cp / 0x40), 0x80 + cp % 0x40)
+        elseif cp <= 0xFFFF then
+            out[#out + 1] = string.char(0xE0 + math.floor(cp / 0x1000),
+                0x80 + math.floor(cp / 0x40) % 0x40, 0x80 + cp % 0x40)
+        else
+            out[#out + 1] = string.char(0xF0 + math.floor(cp / 0x40000),
+                0x80 + math.floor(cp / 0x1000) % 0x40,
+                0x80 + math.floor(cp / 0x40) % 0x40, 0x80 + cp % 0x40)
+        end
+    end
+    return table.concat(out)
+end
+
+-- Construct samples from code points rather than source-file glyphs. This
+-- keeps the probe deterministic across editors while exercising the same UTF-8
+-- bytes the vanilla chat renderer receives.
+local GLYPH_SAMPLES = {
+    { label = "Latin", text = _utf8_encode({ 0x00C1, 0x00C9, 0x00CD, 0x00D3, 0x00DA, 0x00F1, 0x00F8, 0x0142 }) },
+    { label = "Greek", text = _utf8_encode({ 0x0393, 0x03B5, 0x03B9, 0x03AC }) },
+    { label = "Cyrillic", text = _utf8_encode({ 0x041F, 0x0440, 0x0438, 0x0432, 0x0435, 0x0442 }) },
+    { label = "Japanese", text = _utf8_encode({ 0x65E5, 0x672C, 0x8A9E }) },
+    { label = "Chinese", text = _utf8_encode({ 0x4E2D, 0x6587, 0x7E41, 0x9AD4 }) },
+    { label = "Korean", text = _utf8_encode({ 0xD55C, 0xAD6D, 0xC5B4 }) },
+}
+
+local function _inspect_player_names()
+    local report = { total = 0, valid = 0, invalid = 0, non_ascii = 0, rows = {} }
+    local managers = rawget(_G, "Managers")
+    local player_manager = managers and managers.player
+    if not player_manager or type(player_manager.human_players) ~= "function" then
+        report.state = "player_manager_unavailable"
+        return report
+    end
+
+    local ok, players = pcall(player_manager.human_players, player_manager)
+    if not ok or type(players) ~= "table" then
+        report.state = "player_roster_unavailable"
+        return report
+    end
+
+    for _, player in pairs(players) do
+        report.total = report.total + 1
+        local ok_name, name = pcall(player.name, player)
+        local metrics = _utf8_metrics(ok_name and name or nil)
+        metrics.slot = report.total
+        report.rows[#report.rows + 1] = metrics
+        if metrics.valid then report.valid = report.valid + 1 else report.invalid = report.invalid + 1 end
+        if metrics.non_ascii > 0 then report.non_ascii = report.non_ascii + 1 end
+    end
+    report.state = report.invalid == 0 and "utf8_intact" or "malformed_name_bytes"
+    return report
 end
 
 -- Marker read by the /gut_regression_test check `all_languages_defer_340`. Its shape
@@ -119,6 +244,9 @@ mod._GUT_ALL_LANGUAGES = {
     unicode_material = UNICODE_MATERIAL,
     font_keys = FONT_KEYS,
     inspect_fonts = _inspect_fonts,
+    utf8_metrics = _utf8_metrics,
+    glyph_samples = GLYPH_SAMPLES,
+    inspect_player_names = _inspect_player_names,
 }
 
 if mod._GUT_ALL_LANGUAGES.standalone_enabled then
@@ -136,6 +264,7 @@ mod:command("gut_all_languages_status", "Diagnose issue #340 all-language font s
     local present = _standalone() ~= nil
     local enabled = _standalone_enabled()
     local scan = _inspect_fonts()
+    local names = _inspect_player_names()
     mod:echo("[gut:340] standalone present=%s enabled=%s; fonts=%s (%d/%d Unicode, %d missing)",
         tostring(present), tostring(enabled), scan.state,
         scan.unicode, scan.total, scan.missing)
@@ -143,6 +272,17 @@ mod:command("gut_all_languages_status", "Diagnose issue #340 all-language font s
         mod:echo("[gut:340] standalone is enabled but its eight-font swap is incomplete; check its load/package state.")
     elseif not enabled and scan.state ~= "unicode_active" then
         mod:echo("[gut:340] no Unicode atlas is active; use Workshop 3232229691 or a future redistributable atlas provider.")
+    end
+    mod:echo("[gut:340] glyph probe: each line should render as letters, not square blocks")
+    for _, sample in ipairs(GLYPH_SAMPLES) do
+        mod:echo("[gut:340] %s: %s", sample.label, sample.text)
+    end
+    _printf("[gut:340] player-name UTF-8: state=%s total=%d valid=%d invalid=%d non_ascii=%d",
+        names.state, names.total, names.valid, names.invalid, names.non_ascii)
+    for _, row in ipairs(names.rows) do
+        _printf("[gut:340] player-name slot=%d utf8=%s bytes=%d codepoints=%d non_ascii=%d reason=%s offset=%s",
+            row.slot, tostring(row.valid), row.bytes, row.codepoints, row.non_ascii,
+            row.reason, tostring(row.offset or "-"))
     end
 end)
 

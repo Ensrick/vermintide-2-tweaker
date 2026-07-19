@@ -1,5 +1,20 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.298-dev (2026-07-19) -- #340 language glyph diagnostics [diagnostics-armed]
+
+- Extended `/gut_all_languages_status` to classify all eight active font rows
+  as vanilla, custom, mixed, partial, or missing without mutating them.
+- Added six bounded visual samples for Latin, Greek, Cyrillic, Japanese,
+  Chinese, and Korean glyph coverage.
+- Logs privacy-preserving UTF-8 metrics for human player names—byte,
+  code-point, non-ASCII, and validity counts—without logging the names.
+- Added source-backed documentation and regression coverage distinguishing an
+  intact UTF-8 string path from a missing compiled glyph atlas.
+
+**Solo diagnostic:** run `/gut_all_languages_status` with and without the
+standalone Support All Languages mod. Capture the six rendered sample lines and
+the bounded status records from a log containing `[gut:LOAD] v0.2.298-dev`.
+
 ## 0.2.297-dev (2026-07-19) -- #285 anchor respawn timers to live portraits [verify-fix]
 
 - Removed the duplicated team-frame scenegraph and world-position conversion
