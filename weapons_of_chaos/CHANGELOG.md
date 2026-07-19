@@ -1,5 +1,17 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.40-dev (2026-07-19) - #615 Skarrik dual-sword asset closure
+
+- Adds explicit left/right first- and third-person FBX/unit sources for
+  Skarrik's dual swords, plus the authored albedo, normal, metallic, and
+  roughness descriptors.
+- Makes this tranche the single owner of the shared Skarrik material/texture
+  closure. The halberd/catalogue tranche reuses that material instead of
+  duplicating textures or introducing a second asset owner.
+- Adds a pinned source/provenance gate for package membership, material-slot
+  identity, texture colour space, and zero-byte-source exclusion. Runtime item
+  registration remains deliberately separate.
+
 ## 0.1.39-dev (2026-07-19) - #835 callable Vector3 constructor [verify-fix]
 
 - The shared appearance primitive now invokes engine vector constructors through

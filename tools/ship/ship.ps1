@@ -941,6 +941,8 @@ finally {
     Assert ($selfTxt -match '(?m)^\s*\[switch\]\$NoClaim\b') "ship exposes the -NoClaim solo-session escape hatch"
     Assert ($selfTxt -match '(?m)^\s*\[switch\]\$BuildOnly\b') "ship exposes the canonical hidden build-only path"
     Assert ($selfTxt.IndexOf('-SkipBundleAtomicity:$BuildOnly') -ge 0) "build-only preflight defers bundle atomicity until after generation"
+    Assert ($selfTxt.IndexOf('-SkipCustomUnitBundleReachability:$BuildOnly') -ge 0) "build-only preflight defers compiled custom-unit reachability until after generation"
+    Assert ($selfTxt.IndexOf('qa\check_custom_unit_bundle_reachability.ps1') -ge 0) "build-only runs custom-unit reachability after generation"
     Assert ($selfTxt.IndexOf("@('build', `$Mod, '--clean')") -ge 0) "build-only invokes VMBLauncher's clean build action"
     Assert ($selfTxt.IndexOf('BUILD-ONLY COMPLETE') -ge 0) "build-only exits before deploy/upload/release handling"
 
@@ -1110,7 +1112,7 @@ if (-not (Test-Path $quickGate)) {
 
 Write-Host ""
 Write-Host "==> Headless preflight (fast QA + Lua 5.1 units)" -ForegroundColor Cyan
-& $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -Quiet
+& $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -SkipCustomUnitBundleReachability:$BuildOnly -Quiet
 if ($LASTEXITCODE -ne 0) {
     Fail "Headless QA FAILED -- no build, deploy, or upload was attempted (issue #591)."
 }
@@ -1227,8 +1229,16 @@ if ($BuildOnly) {
     if ($LASTEXITCODE -ne 0) {
         Fail "Build completed, but the generated root bundle did not satisfy release atomicity. No deploy or upload was attempted."
     }
+    $unitReachabilityGate = Join-Path $repoRoot 'qa\check_custom_unit_bundle_reachability.ps1'
+    if (-not (Test-Path -LiteralPath $unitReachabilityGate -PathType Leaf)) {
+        Fail "Post-build custom-unit reachability gate not found: $unitReachabilityGate"
+    }
+    & $unitReachabilityGate -Quiet
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Build completed, but one or more custom unit resources are still absent from the compiled bundle. No deploy or upload was attempted."
+    }
     Write-Host ""
-    Write-Host "BUILD-ONLY COMPLETE -- bundle generated and atomicity verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
+    Write-Host "BUILD-ONLY COMPLETE -- bundle generated; atomicity and custom-unit reachability verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
     exit 0
 }
 

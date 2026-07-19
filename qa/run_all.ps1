@@ -13,6 +13,7 @@ param(
     [switch]$Quick,
     [switch]$FixStale,
     [switch]$SkipBundleAtomicity,
+    [switch]$SkipCustomUnitBundleReachability,
     [switch]$Quiet
 )
 
@@ -132,7 +133,15 @@ Run-Check "check_cross_mod_deps"              { & (Join-Path $here "check_cross_
 Run-Check "check_shared_lib_drift"            { & (Join-Path $here "check_shared_lib_drift.ps1")            -Quiet:$Quiet }
 Run-Check "check_wt_stream_parity"            { & (Join-Path $here "check_wt_stream_parity.ps1")            -Quiet:$Quiet }
 Run-Check "check_dofile_package_coverage"      { & (Join-Path $here "check_dofile_package_coverage.ps1")      -Quiet:$Quiet }
-Run-Check "check_custom_unit_bundle_reachability" { & (Join-Path $here "check_custom_unit_bundle_reachability.ps1") -Quiet:$Quiet }
+Run-Check "check_woc_skarrik_asset_sources"    { & (Join-Path $here "check_woc_skarrik_asset_sources.ps1")    -Quiet:$Quiet }
+if (-not $SkipCustomUnitBundleReachability) {
+    Run-Check "check_custom_unit_bundle_reachability" { & (Join-Path $here "check_custom_unit_bundle_reachability.ps1") -Quiet:$Quiet }
+}
+elseif (-not $Quiet) {
+    Write-Host "===== check_custom_unit_bundle_reachability =====" -ForegroundColor Cyan
+    Write-Host "[check_custom_unit_bundle_reachability] SKIP - build-only pipeline compiles new unit resources, then runs this gate." -ForegroundColor DarkYellow
+    Write-Host ""
+}
 Run-Check "check_appearance_contracts"          { & (Join-Path $here "check_appearance_contracts.ps1")          -Quiet:$Quiet }
 Run-Check "check_level_lookup_budget"          { & (Join-Path $here "check_level_lookup_budget.ps1")          -Quiet:$Quiet }
 Run-Check "check_retired_big_rebalance"        { & (Join-Path $here "check_retired_big_rebalance.ps1")        -Quiet:$Quiet }
