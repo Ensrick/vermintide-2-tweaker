@@ -19,6 +19,7 @@ local tab_labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_lab
 local ordering = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_ordering")
 local DialogueUI = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")
 local label_policy = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_label_policy")
+local ExclusiveLayout = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_exclusive_layout")
 local dx12_diag_module = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dx12_fence630")
 local dx12_diag = mod._gut_dx12_fence630
 
@@ -1317,6 +1318,34 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth, display
             row.content.flag = self:get_staged(category, setting_id, live) and true or false
             row._last_flag = row.content.flag
         else err = r end
+    elseif wtype == "radio" then
+        local ok, r = pcall(defs.create_radio, label, base_offset, depth)
+        if ok and r then
+            row = r
+            local group_id = _nf(w, "_mt_exclusive_group")
+            local is_none = _nf(w, "_mt_exclusive_none") == true
+            local selected = false
+            if is_none then
+                selected = true
+                local MT = _mt()
+                local members = MT and MT:get_exclusive_members(group_id)
+                for i = 1, #(members or {}) do
+                    local member = members[i]
+                    local live = _cat_get(category, member.setting_id)
+                    if self:get_staged(category, member.setting_id, live) then
+                        selected = false
+                        break
+                    end
+                end
+            else
+                local live = _cat_get(category, setting_id)
+                selected = self:get_staged(category, setting_id, live) and true or false
+            end
+            row.content.selected = selected
+            row._mt_radio_group = group_id
+            row._mt_radio_none = is_none
+            row._mt_radio_member_mod = _nf(w, "_mt_exclusive_member_mod")
+        else err = r end
     elseif wtype == "slider" or wtype == "numeric" then
         local ok, r = pcall(defs.create_slider, label, "", base_offset, depth)
         if ok and r then
@@ -1687,6 +1716,26 @@ function ModTweakerView:_build_rows(category)
         for i = 1, #category.widgets do _walk_nested(category.widgets[i], nodes, depths, 0) end
     end
     nodes, depths = _order_category_nodes(category, nodes, depths)
+    -- (#446) Upgrade a complete same-parent exclusive cluster from scattered VMF
+    -- checkbox rows to one synthetic collapsible with a None/default radio row and
+    -- one radio row per real setting. The pure planner fails closed for cross-mod,
+    -- incomplete, or structurally scattered clusters, preserving checkbox behavior.
+    local MT = _mt()
+    if MT and type(MT.get_exclusive_group_id) == "function"
+        and type(MT.get_exclusive_members) == "function"
+        and type(MT.get_exclusive_presentation) == "function" then
+        nodes, depths = ExclusiveLayout.plan(nodes, depths, {
+            mod_id = category.mod_id,
+            field = _nf,
+            get_group_id = function(mod_id, setting_id)
+                return MT:get_exclusive_group_id(mod_id, setting_id)
+            end,
+            get_members = function(group_id) return MT:get_exclusive_members(group_id) end,
+            get_presentation = function(group_id)
+                return MT:get_exclusive_presentation(group_id)
+            end,
+        })
+    end
     -- (#163) Keep the flat node/depth arrays for the auto-collapse handler — sibling + descendant
     -- detection needs the tree shape; the group toggle in _handle_input reads these.
     self._build_nodes, self._build_depths, self._build_category = nodes, depths, category
@@ -2514,6 +2563,7 @@ Interaction.install(ModTweakerView, {
     format_keybind_value = _format_keybind_value,
     poll_keybind_combo = _poll_keybind_combo,
     cat_set = _cat_set,
+    cat_get = _cat_get,
     play_click = _play_click,
     play_hover = _play_hover,
     printf = _printf,

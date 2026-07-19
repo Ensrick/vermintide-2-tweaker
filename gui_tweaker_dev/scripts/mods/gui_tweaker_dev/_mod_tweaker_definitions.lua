@@ -743,6 +743,63 @@ local function create_checkbox(text, base_offset, depth)
     })
 end
 
+-- (#446) Multiple-choice radio row. The marker is drawn from plain rect passes so it
+-- needs no extra atlas/material on the borrowed renderer: eight short segments form an
+-- 18px octagonal ring and a selected-only center forms the filled bubble. This is a
+-- presentation over real VMF boolean settings; persistence stays in the view/controller.
+local function create_radio(text, base_offset, depth)
+    local y = base_offset[2] - ROW_H
+    base_offset[2] = y
+    local ind = INDENT_PER_DEPTH * (depth or 0)
+    local bubble_x = LABEL_BASE_X + ind
+    local bubble_y = y + math.floor((ROW_H - 18) / 2)
+    local label_x = bubble_x + 30
+    local ring = Colors.get_color_table_with_alpha("font_default", 220)
+    local fill = Colors.get_color_table_with_alpha("font_default", 255)
+
+    local passes = {
+        { pass_type = "hotspot", content_id = "hotspot", style_id = "hotspot" },
+        { pass_type = "text", style_id = "label", text_id = "label" },
+    }
+    local style = {
+        hotspot = { size = { ROW_W, ROW_H }, offset = { 0, y, 0 } },
+        label = _text_style(label_x, y, DEC_ARROW_X - label_x - 12, 16),
+    }
+    local content = { hotspot = {}, label = text, selected = false }
+
+    local segments = {
+        { "radio_top",    bubble_x + 4,  bubble_y + 16, 10, 2 },
+        { "radio_bottom", bubble_x + 4,  bubble_y,      10, 2 },
+        { "radio_left",   bubble_x,      bubble_y + 4,   2, 10 },
+        { "radio_right",  bubble_x + 16, bubble_y + 4,   2, 10 },
+        { "radio_bl",     bubble_x + 2,  bubble_y + 2,   2, 2 },
+        { "radio_br",     bubble_x + 14, bubble_y + 2,   2, 2 },
+        { "radio_tl",     bubble_x + 2,  bubble_y + 14,  2, 2 },
+        { "radio_tr",     bubble_x + 14, bubble_y + 14,  2, 2 },
+    }
+    for i = 1, #segments do
+        local s = segments[i]
+        passes[#passes + 1] = { pass_type = "rect", style_id = s[1] }
+        style[s[1]] = { offset = { s[2], s[3], 3 }, size = { s[4], s[5] }, color = ring }
+    end
+    passes[#passes + 1] = {
+        pass_type = "rect",
+        style_id = "radio_fill",
+        content_check_function = function(c) return c.selected end,
+    }
+    style.radio_fill = { offset = { bubble_x + 5, bubble_y + 5, 4 }, size = { 8, 8 }, color = fill }
+    _append_highlight(passes, style, content, y)
+    _append_separator(passes, style, y)
+
+    return UIWidget.init({
+        scenegraph_id = LIST_SG,
+        element = { passes = passes },
+        content = content,
+        style = style,
+        offset = { 0, 0, 0 },
+    })
+end
+
 -- Slider/numeric/dropdown: label + rect track + rect fill (proportion) + atlas
 -- thumb that TRACKS internal_value + native texture arrows ([<]/[>] textures, the
 -- right one flipped) + value text. The view adjusts content.value on
@@ -2170,6 +2227,7 @@ return {
     },
     search_icon_visible = search_icon_visible,
     create_checkbox = create_checkbox,
+    create_radio = create_radio,
     create_slider = create_slider,
     create_stepper = create_stepper,
     create_dropdown = create_dropdown,

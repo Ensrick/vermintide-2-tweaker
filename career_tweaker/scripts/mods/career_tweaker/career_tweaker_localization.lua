@@ -13,6 +13,9 @@ local localization = {
     rework_master_ensrick_description = { en = "Enables every active native Career Tweaker rework and disables every Tourney Balance port. Turn it off to clear that family; individual edits return the controls to a custom state." },
     rework_master_tourney = { en = "Enable all Tourney Balance Reworks" },
     rework_master_tourney_description = { en = "Enables every active Tourney Balance career port and disables every native Career Tweaker rework. Turn it off to clear that family; individual edits return the controls to a custom state." },
+    rework_family_master_choice_radio_group = { en = "Rework Family" },
+    zealot_thp_conversions_radio_group = { en = "Zealot THP Conversions" },
+    rework_choice_none_default = { en = "None [Default]" },
 
     -- ============================================================
     -- Armor & Overcharge (hook-based; v0.3.32-dev)
