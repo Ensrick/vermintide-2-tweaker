@@ -1,5 +1,16 @@
 # General Tweaker Changelog
 
+## v0.2.177 (2026-07-19) -- #724 canonical public bundle reissue [diag]
+
+- Reissues stable General Tweaker from protected clean `master` under a fresh
+  version because the `0.2.176` Workshop manifest could not be tied
+  byte-for-byte to its recorded committed source. Runtime behavior is
+  unchanged from the current `0.2.176` source.
+- The new version binds source, cfg metadata, root bundle, GitHub release, and
+  Workshop manifest in one auditable transaction. Issue #724 remains
+  diagnostics-armed because claim ownership and pre-merge publication still
+  require the separately documented pipeline hardening.
+
 ## v0.2.176 (2026-07-13) -- Stable world-liveness hardening (#490)
 
 - Ported the #459 native-world safety class to stable: cached debug draw handles are never dispatched through a destroyed/replaced world, all level-world lookups use `has_world`, and screen GUI creation uses resident `materials/fonts/gw_fonts` rather than the text-only Arial material.
