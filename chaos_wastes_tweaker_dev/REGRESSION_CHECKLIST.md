@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-17.
+Last updated: 2026-07-19.
 
 ### boon-runtime module ownership - issue #2
 
@@ -119,17 +119,29 @@ Last updated: 2026-07-17.
 | Expected post-fix | Host rewrites both identities to `deus_soft_currency` before network creation; both peers see and collect Pilgrim's Coins. Stock Adventure remains vanilla. |
 | Detection | Offline `test_ct_collectible_conversion.lua`; `/ct_regression_test`: `cw_collectible_and_big_casket`; bounded host `[ct:351]` rows distinguish `source=pickup_system` art from `source=unit_spawner` chest dice. Client has no authority conversion row. |
 
-### mission-of-mercy-chest-count-audit - issue #349
+### mission-of-mercy-chest-cap-reconciliation - issue #349
 
 | Field | Value |
 |---|---|
 | Symptom | Mission of Mercy may contain more physical Chests of Trials than the host's per-mission setting. |
-| Root cause | Unconfirmed. The visible Lua path budgets all five book conversions, while compiled level-unit flags are absent from the source dump. The old extension/census comparison occurred before `_spawn_pickup` returned and was not decisive. |
-| Fix version(s) | ct_dev 0.7.271-dev (diagnostics only; not deployed) |
-| Category | SOLO / HOST AUTHORITY / DIAGNOSTIC |
-| Repro | As host, set Chests of Trials per Mission to 2, load Mission of Mercy (`dlc_dwarf_interior`) through Single Mission Loader, and wait eight seconds after mission entry. |
-| Expected post-fix | No behavior change. One settled `[ct:349] chest_count_audit` line reports actual extension count, host cap, final pickup census, and a cause classification. |
-| Detection | `over_cap_raw_level_units` identifies a compiled level-unit bypass; `over_cap_pickup_path` identifies a shared-budget leak; any `within_cap_*` classification disproves over-spawn for that run. Solo host evidence is decisive; coop is optional. |
+| Root cause | The earlier settled census only classified the final live population; it did not enforce the explicit host cap after every population path had completed. The deployed reconciliation now plans against that settled population and deletes excess, still-WAITING pickup-path chests through the engine deletion path. Raw baked units and activated chests remain unprunable and are reported rather than guessed at. |
+| Fix version(s) | ct_dev 0.7.300-dev |
+| Category | SOLO / HOST AUTHORITY / VERIFY-FIX |
+| Repro | As host in the Pilgrimage Chamber, set Chests of Trials per Mission to 2, run `/ct_load_mission dlc_dwarf_interior`, and wait at least eight seconds after mission entry. Count the remaining physical chests, then run `/ct_regression_test`. |
+| Expected post-fix | At most two Chests of Trials remain standing. In-budget chests remain usable; an activated chest is never removed. The runtime suite reports `PASS: cursed_chest_reconcile_132`. |
+| Detection | The pre-reconciliation `[ct:349] chest_count_audit` line always preserves `actual`, `cap`, `pickup_census`, and `class`. When `actual > cap`, a following `[ct:132] reconcile` receipt reports `over`, `pruned`, and `unprunable`; a passing over-cap run has `pruned=over`, `unprunable=0`, and no more than two visible chests. An already-in-cap run legitimately has no reconcile receipt. Solo host evidence is decisive; coop is optional. |
+
+### belakor-beacons-chest-cap-reconciliation - issue #60
+
+| Field | Value |
+|---|---|
+| Symptom | The Be'lakor variant of Khazukan Kazakit-ha could retain five Chests of Trials against an explicit host cap of three. The Be'lakor shadow locus is a separate acceptance condition and must remain present. |
+| Root cause | The campaign-geometry mission could finish population with more live pickup-path chests than the explicit host cap. The settled post-populate reconciliation now applies the same bounded plan used by issue #349 without pruning raw baked units, activated chests, or the `deus_02` locus. |
+| Fix version(s) | ct_dev 0.7.300-dev |
+| Category | SOLO / HOST AUTHORITY / VERIFY-FIX |
+| Repro | As host in the Pilgrimage Chamber, set Chests of Trials per Mission to 3, run `/ct_load_mission dlc_dwarf_beacons 0 curse_belakor_totems`, and wait at least eight seconds after mission entry. Count the remaining physical chests, confirm the Be'lakor shadow locus is present, then run `/ct_regression_test`. |
+| Expected post-fix | At most three Chests of Trials remain standing and the Be'lakor shadow locus remains present. In-budget chests remain usable; an activated chest is never removed. The runtime suite reports `PASS: cursed_chest_reconcile_132`. |
+| Detection | The `[ct:349] chest_count_audit` line records the pre-reconciliation population on every run. When `actual > cap`, one `[ct:132] reconcile level=dlc_dwarf_beacons_belakor_path1` receipt reports `alive`, `cap`, `over`, `pruned`, and `unprunable`; a passing over-cap run has `pruned=over`, `unprunable=0`, and no more than three visible chests. An already-in-cap run legitimately has no reconcile receipt. Solo host evidence is decisive; coop is optional. |
 
 ### chest-of-trials-early-reward - issue #350
 
