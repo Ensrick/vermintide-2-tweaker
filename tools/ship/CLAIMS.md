@@ -38,7 +38,7 @@ on-disk format.
 # VT2 ship/version claim -- see tools/ship/CLAIMS.md
 mod = weapon_tweaker
 version = 0.12.274-beta
-session = <CLAUDE_SESSION_ID, or pid<PID>-<rand> when unset>
+session = <explicit/Claude/Codex owner id, or deterministic worktree id>
 created = 2026-07-18T04:12:33Z
 ```
 
@@ -46,6 +46,12 @@ created = 2026-07-18T04:12:33Z
 `MOD_VERSION` with `PATCH + 1`, preserving the `-dev` / `-beta` / `-alpha` /
 `-rc` suffix. 4-segment versions are rejected (normalize per the `CLAUDE.md`
 "Format: 3-segment semver only" rule before claiming).
+
+`session` is an enforced owner credential. Resolution order is
+`VT2_SHIP_SESSION_ID`, `CLAUDE_SESSION_ID`, `CODEX_THREAD_ID`, then a stable
+fingerprint of the invoking worktree for a normal manual shell. Verification
+and release both require the exact same owner; a foreign task cannot consume or
+erase a same-version live claim.
 
 ## Usage (claim -> bump -> ship -> release)
 
@@ -62,7 +68,7 @@ created = 2026-07-18T04:12:33Z
 #    MOD_VERSION, then (on success) auto-releases the claim.
 .\tools\ship\ship.ps1 -Mod weapon_tweaker
 
-# Free a claim manually (abandoned work, or ship never ran):
+# Free your own claim manually (abandoned work, or ship never ran):
 .\tools\ship\claim.ps1 -Mod weapon_tweaker -Release
 ```
 
@@ -81,8 +87,11 @@ when the claim is:
 - **mismatched** -- the claim's version is not the source `MOD_VERSION` being
   shipped (another session likely allocated a different number).
 - **stale** -- the claim is older than the stale window and no longer valid.
+- **foreign-owned** -- the version matches, but another Claude/Codex/manual
+  worktree owner created the claim.
 
-On a fully successful ship, `ship.ps1` releases the claim automatically.
+On a fully successful ship, `ship.ps1` releases its own claim automatically.
+Foreign releases fail closed and leave the original claim intact.
 
 ### `-NoClaim` escape hatch
 
@@ -100,10 +109,10 @@ forever. A stale claim never authorizes a ship -- `ship.ps1` treats it as absent
 
 ## Caveats
 
-- **Same-checkout coordination.** The lock lives at the repo root, so it
-  serializes sessions operating on the **same** working tree. Separate git
-  worktrees have separate `.ship_claims/` directories; ship.ps1's own worktree
-  identity guards (issue #647) cover that dimension.
+- **Same-checkout coordination.** The lock lives at the repo root, and owner
+  verification prevents a foreign orchestrator task in that checkout from
+  spending it. Separate git worktrees also derive different manual owner IDs;
+  ship.ps1's source/worktree identity guards (issue #647) cover publication.
 - **Advisory sibling: `.in_progress/`.** Claims are about version allocation;
   `.in_progress/` sentinels are about who is editing which files. They are
   complementary -- keep dropping a sentinel for multi-step work.
@@ -113,6 +122,7 @@ forever. A stale claim never authorizes a ship -- `ship.ps1` treats it as absent
 `claim.ps1 -SelfTest` runs offline fixtures: allocate-increment (with 4-segment
 rejection), timestamp round-trip + staleness, idempotent re-claim vs contention,
 stale-break, release (own + idempotent), the ship.ps1 verify contract, and a
-real two-process race asserting exactly one process acquires. It is wired into
+foreign-owner verify/release refusal, plus a real two-process race asserting
+exactly one process acquires. It is wired into
 `qa/run_selftests.ps1` (and therefore `qa/run_all.ps1` full pass + CI). Exit
 codes: 0 pass, 2 regression.

@@ -937,6 +937,8 @@ finally {
     Assert ($claimGatePos -ge 0) "ship source contains the ship/version claim gate (parallel-session collision guard)"
     Assert ($claimGatePos -ge 0 -and $launcherMainPos -ge 0 -and $claimGatePos -lt $launcherMainPos) "claim gate precedes launcher build/deploy/upload"
     Assert ($selfTxt.IndexOf('-Verify -ExpectedVersion $modVersion') -ge 0) "claim gate verifies the claim against the source MOD_VERSION"
+    Assert ($selfTxt.IndexOf('6 { Fail "Ship claim for') -ge 0) "claim gate rejects a same-version foreign owner"
+    Assert ($selfTxt.IndexOf('Claim broker missing') -ge 0) "missing claim broker fails closed"
     Assert ($selfTxt.IndexOf('-Mod $Mod -Release -Quiet') -ge 0) "ship auto-releases the claim on success"
     Assert ($selfTxt -match '(?m)^\s*\[switch\]\$NoClaim\b') "ship exposes the -NoClaim solo-session escape hatch"
     Assert ($selfTxt -match '(?m)^\s*\[switch\]\$BuildOnly\b') "ship exposes the canonical hidden build-only path"
@@ -1015,12 +1017,13 @@ if (Test-Path $luaPath) {
 # MOD_VERSION and uploaded competing bundles (cosmetics 0.9.143 + 0.9.145, wt
 # 0.12.273-beta, wt_dev 0.12.274-dev), each forcing a reconciliation build.
 # claim.ps1 is an atomic per-mod lock that also records the allocated version;
-# this gate refuses to ship unless a LIVE claim exists whose version EQUALS the
-# source MOD_VERSION about to ship. The claim is auto-released on ship success.
+# this gate refuses to ship unless a LIVE claim exists whose version and owner
+# match the source MOD_VERSION and current task. Its own claim is auto-released
+# on ship success.
 #
-# -NoClaim skips the gate (loud warning) for a solo session or an urgent fix, so
-# rolling this out can never brick a ship. A MISSING claim.ps1 (tooling absent)
-# also fails open with a warning; only the coordination STATE fails closed.
+# -NoClaim skips the gate (loud warning) for a solo session or an urgent fix.
+# Without that explicit override, missing tooling and every coordination-state
+# failure are fail-closed before VMB can build, deploy, or upload.
 # ---------------------------------------------------------------------------
 if ($NoClaim) {
     Write-Host ""
@@ -1031,9 +1034,7 @@ if ($NoClaim) {
 else {
     $claimScript = Join-Path $PSScriptRoot 'claim.ps1'
     if (-not (Test-Path -LiteralPath $claimScript)) {
-        Write-Host ""
-        Write-Host "  !! claim.ps1 not found at $claimScript -- cannot enforce the ship/version" -ForegroundColor Yellow
-        Write-Host "     claim gate; proceeding UNGUARDED. Reinstall tools/ship/claim.ps1." -ForegroundColor Yellow
+        Fail "Claim broker missing at $claimScript. Refusing an unguarded ship; restore tools/ship/claim.ps1 or use the explicit -NoClaim emergency override."
     }
     else {
         & $claimScript -Mod $Mod -Verify -ExpectedVersion $modVersion -Quiet
@@ -1043,6 +1044,7 @@ else {
             3 { Fail "No live ship claim for '$Mod'. Run:  .\tools\ship\claim.ps1 -Mod $Mod  (it allocates the next version -- set MOD_VERSION to the value it prints, then re-ship). Solo session: re-run ship.ps1 with -NoClaim. See tools/ship/CLAIMS.md." }
             4 { Fail "Ship claim for '$Mod' does not match the source MOD_VERSION ($modVersion). Another session likely allocated a different version. Reconcile: .\tools\ship\claim.ps1 -Mod $Mod -Release  then re-claim and re-bump. See tools/ship/CLAIMS.md." }
             5 { Fail "Ship claim for '$Mod' is STALE (older than 2h). Re-claim with .\tools\ship\claim.ps1 -Mod $Mod (a fresh claimant breaks a stale claim), set MOD_VERSION to the printed value, then re-ship. See tools/ship/CLAIMS.md." }
+            6 { Fail "Ship claim for '$Mod' has the right version but belongs to another task/worktree. This process cannot consume it. Coordinate with the owner or wait for stale recovery; do not use -NoClaim while parallel work is active." }
             default { Fail "Ship claim verification failed (claim.ps1 exit $claimExit). See tools/ship/CLAIMS.md; -NoClaim overrides in a solo session." }
         }
     }
@@ -1576,7 +1578,7 @@ if (-not $NoClaim) {
         }
         else {
             Write-Host ""
-            Write-Host ("  NOTE: could not auto-release the ship claim for {0}; free it with .\tools\ship\claim.ps1 -Mod {0} -Release." -f $Mod) -ForegroundColor Yellow
+            Write-Host ("  NOTE: could not auto-release the ship claim for {0}. A foreign owner is never removed; inspect it with .\tools\ship\claim.ps1 -Mod {0}." -f $Mod) -ForegroundColor Yellow
         }
     }
 }

@@ -23,14 +23,15 @@ directory name), containing:
 # VT2 ship/version claim -- see tools/ship/CLAIMS.md
 mod = weapon_tweaker
 version = 0.12.274-beta
-session = <CLAUDE_SESSION_ID, or pid<PID>-<rand> when unset>
+session = <explicit/Claude/Codex owner id, or deterministic worktree id>
 created = 2026-07-18T04:12:33Z
 ```
 
 - `mod`     -- the claimed mod's directory name.
 - `version` -- the allocated next patch version (current `MOD_VERSION`,
   `PATCH + 1`, suffix preserved).
-- `session` -- the claiming session's identifier.
+- `session` -- the enforced claiming owner. Verify and release require an exact
+  match; foreign tasks cannot spend or delete a live claim.
 - `created` -- ISO-8601 UTC timestamp; claims older than 2 hours are stale and
   may be broken by a new claimant.
 
@@ -42,5 +43,6 @@ created = 2026-07-18T04:12:33Z
 ```
 
 `tools/ship/ship.ps1` requires a live, version-matching claim before it will
-build/deploy/upload, and releases the claim automatically on a successful ship.
+build/deploy/upload. The owner must also match, and only that owner can release
+the claim automatically on a successful ship.
 `-NoClaim` bypasses the gate for solo sessions (see `tools/ship/CLAIMS.md`).
