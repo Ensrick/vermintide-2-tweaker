@@ -19,6 +19,10 @@
 
 ## Character Dialogue media controls (#605)
 
+- [ ] An open character section closes on its next mouse/controller activation;
+      its virtual line rows disappear and owned preview audio stops.
+- [ ] Per-line state cycles Default -> Enabled -> Disabled -> Default without
+      skipping the false/Disabled state.
 - [ ] Every visible dialogue row has one fixed media button, not separate Play and Pause buttons.
 - [ ] Stopped/paused displays a play triangle; active playback displays two pause bars.
 - [ ] The active-row progress track advances, freezes while paused, resumes, and resets on replacement/cleanup.

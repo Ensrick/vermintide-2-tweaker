@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.3-dev"
+local MOD_VERSION = "0.1.4-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
@@ -236,11 +236,16 @@ mod:command("cd_pause", "Pause or resume the local preview", function()
 end)
 mod:command("cd_stop", "Stop the local dialogue preview", stop_preview)
 mod:command("cd_line", "Set a line: /cd_line <event> enable|disable|default", function(event, state)
-    local value = state == "enable" and true or state == "disable" and false or nil
+    local value = Policy.parse_override_state(state)
     local ok, err = set_override(event, value); if not ok then mod:echo("Character Dialogue: " .. tostring(err)) end
 end)
 mod:command("cd_regression_test", "Character Dialogue self-check", function()
     local failures = 0
+    if Policy.parse_override_state("enable") ~= true
+       or Policy.parse_override_state("disable") ~= false
+       or Policy.parse_override_state("default") ~= nil then
+        failures = failures + 1
+    end
     local entries = catalogue()
     local seen = {}
     for i = 1, #entries do

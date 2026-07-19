@@ -1153,11 +1153,11 @@ gt_dev `_gt_bot_fixes.lua` blanket veto in `BTConditions.should_teleport` (v0.2.
 
 ---
 
-## 26. Collapsing `and`/`or` guard in a hook wrapper (condition/flag reads as a stuck constant)
+## 26. Collapsing `and`/`or` pseudo-ternary (condition/state reads as a stuck constant)
 
 **First seen:** 2026-07-06 (gt_dev #275 Creature Spawner Drachenfels/Nurgloth phase hook; fix v0.2.191-dev, closed v0.2.193-dev)
 **Canonical Issue:** [#275](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) (Nurgloth final-phase-at-full-health softlock on The Enchanter's Lair)
-**Lives in:** any `mod:hook(C, m, ...)` whose body is `return (in_scope and func(...)) or fallback` when vanilla `C.m` legitimately returns `false`/`nil` (BT conditions, ownership/eligibility predicates, any boolean-returning vanilla fn)
+**Lives in:** any hook wrapper or state assignment using `condition and true_value or false_value` when `true_value` can legitimately be `false`/`nil` (BT conditions, ownership/eligibility predicates, tri-state UI state, collapsible selection)
 
 ### Symptoms
 - A hooked system behaves as if a condition/flag is stuck at a constant value — a vanilla-IMPOSSIBLE state (e.g. a boss BT branch entered with its gating condition provably `false`; a phase machine that never advances or advances instantly).
@@ -1168,6 +1168,10 @@ gt_dev `_gt_bot_fixes.lua` blanket veto in `BTConditions.should_teleport` (v0.2.
 1. When a boss / AI **phase machine** misbehaves, grep the ENTIRE active mod stack for `mod:hook(BTConditions` / `"BTConditions"` FIRST — BT conditions are name-resolved on EVERY evaluation (`bt_node.lua:55-57`), so a single collapsed guard poisons every tick with no caching to mask it.
 2. Read the hook body. The tell is a boolean tail: `return (in_scope and func(...)) or <literal>`. Look up the wrapped vanilla fn in `Vermintide-2-Source-Code` — if it legitimately returns `false`/`nil` as a MEANINGFUL result, the `or <literal>` overwrites it with the literal every time that case fires.
 3. Two failure sub-modes fold into one idiom: (a) the boolean collapse above; (b) multi-RETURN truncation — `(cond and func(...))` only forwards `func`'s FIRST return into the `and`, dropping the rest (distinct precedent: class 2, "Hook wrapper multi-return collapse").
+4. For non-hook state machines, inspect assignments that intend to clear or
+   disable state. `closing and nil or speaker` can never clear to nil, and
+   `enabled and false or nil` can never retain false. Use an explicit branch and
+   lock every member of the truth table in an engine-free test.
 
 ### Fix template
 Branch explicitly; never lean on `and`/`or` to route a vanilla return you care about.
@@ -1189,6 +1193,7 @@ Then sweep the repo for the idiom: `\(.*and func\(.*\)\) or ` across every activ
 
 ### Related Issues / commits
 - Issue [#275](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) — misattributed to cutscene skipping for ~13 attempts; root cause was this collapse in `_gt_creature_spawner.lua`. Fix commit `b166251`.
+- Issue [#605](https://github.com/Ensrick/vermintide-2-tweaker/issues/605) — Character Dialogue's `closing and nil or speaker` made open character groups permanently open; the same feature's `true and false or nil` state transition also made Disabled unreachable.
 - Probe evidence (`[et:275]` breed-field-wrapped blackboard probe, 2026-07-06 author log): `[et:275] HOOK sorcerer_drachenfels_go_offensive_intense | hp_pct=1.000 ... two_thirds_done=nil one_third_done=nil` — final-offense phase entered at full health, transitions never flagged.
 - `general_tweaker_dev/CHANGELOG.md` v0.2.191-dev (fix + repo idiom sweep + `gt_cs_transitioned_one_third_not_forced` check), v0.2.193-dev (#275 close-out).
 - `general_tweaker_dev/POSTMORTEMS.md` — full #275 timeline (why the probe had to be breed-field-wrapped; why BT hooks must wrap before `create_all_trees`).
