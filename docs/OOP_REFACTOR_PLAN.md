@@ -7,7 +7,12 @@
 > (external backup: `..\_vt2-tweaker-archive\2026-07-07\oop-audit\`).
 > Update the workstream tables here as items land; close via the referenced issues.
 
-## Scoreboard (1 = worst, 5 = best)
+## Baseline scoreboard (2026-07-07; 1 = worst, 5 = best)
+
+This table is the immutable audit baseline, not a claim about current source. The
+execution inventory below is the current status surface. Re-score only through a
+new whole-repository audit; do not silently edit baseline scores as individual
+slices land.
 
 Dimensions: 1 Decomposition, 2 Encapsulation, 3 Duplication, 4 Hook hygiene,
 5 Wire/shared-state safety, 6 Error handling, 7 Dead code, 8 Data-driven-ness,
@@ -30,13 +35,36 @@ Dimensions: 1 Decomposition, 2 Encapsulation, 3 Duplication, 4 Hook hygiene,
 | verminious_dreams_lighting_dev | 5 | 4 | 4 | 5 | 5 | 3 | 4 | 5 | 4 | 4 |
 | weapons_of_chaos | 5 | 5 | 3 | 5 | 5 | 4 | 3 | 4 | **1** | 4 |
 
-**Read of the results.** Hook hygiene is uniformly strong (the duplicate-hook doctrine
-worked - zero duplicate `(Class, method)` pairs found anywhere). The systemic weaknesses
-are: (a) god-file decomposition (six mods at 2-4x the 2500-line hard limit), (b) three
-mods with open cross-peer wire gaps, and (c) per the docs/gates audit: **0 of 9 binding
-rules are fully machine-enforced** -
-pre-commit runs `-Quick` (skips ~10 of 18 checks), CI runs 7 checks with 5
-`continue-on-error`, and the duplicate-hook lint is absent from CI entirely.
+**Baseline read.** Hook hygiene was uniformly strong (zero duplicate
+`(Class, method)` pairs), while decomposition, cross-peer wire safety, and machine
+enforcement were the systemic weaknesses. The original finding that zero binding
+rules were fully enforced is historical: #429 and #540 subsequently put the full QA
+gate on protected `master`. Remaining decomposition debt is still real because the
+size gate ratchets nine over-limit files instead of treating them as compliant.
+
+## Current execution inventory (2026-07-19)
+
+Measured on `origin/master` `c80f704b` with the same
+`(Get-Content | Measure-Object -Line).Lines` metric used by
+`qa/check_file_sizes.ps1`:
+
+| Scope | State | Current evidence | Owning issue |
+|---|---|---|---|
+| Event Tweaker | Structural phase complete | 62-line entry manifest; 17 `_evt_*` modules; `ee3fe837` | #504 |
+| Enemy Tweaker | Structural phase complete | 95-line entry manifest; 33 `_et_*` modules; `c24c0f84` | #504 |
+| Cosmetics | Partial | Four phase slices plus runtime-owner/wire extractions; entry remains 10,191 lines | #504 / #2 |
+| Weapon Tweaker | Partial | animation, runtime-check, and feature-owner slices landed; beta/dev entries remain 4,186/4,338 lines. PR #783 is not on `master` | #504 / #2 |
+| Career Tweaker | Partial | talent/diagnostic and hook-owner slices landed; balance owner remains 3,889 lines | #504 / #2 |
+| CIM Dev | Partial | forge/inventory/diagnostic owners and regression suite extracted; entry remains 5,741 lines | #504 / #2 |
+| CT Dev | Partial | combat, boon, and regression owners extracted; entry remains 11,330 lines | #504 / #2 |
+| CWV | Partial | catalog, commands, regression, exact-appearance, and husk owners extracted; entry remains 10,935 lines | #504 / #2 |
+| Shared copied libraries | Partial | exact-byte sync gate is green for five manifested libraries; roadmap items remain under #428 | #428 |
+| Appearance consistency | Separate architecture program | descriptor/census work and live diagnostics are owned by #660; module splitting alone does not prove render-surface consistency | #660 |
+
+#504 owns the staged structural decomposition and its module contracts. #2 owns
+the executable hard-limit gate, #428 owns cross-mod copied-library migration, and
+#660 owns appearance descriptors/adapters across render and lifecycle surfaces.
+Completion evidence from one of those issues must not be used to close another.
 
 ## Workstreams
 
@@ -59,6 +87,10 @@ notify the user which features are off and which peer lacks the mod. NEVER gate
 sender-side substitution on it (BUG_CLASSES 31).
 
 ### WS2 - Enforcement machinery (the "rules without gates" fix)
+
+> **STATUS: COMPLETE 2026-07-17.** #429 installed the full policy engine in CI;
+> #540 verified a green remote run and applied protected-branch enforcement. #2
+> remains open for ratcheted size debt, not because CI is unprotected or absent.
 
 | Item | Issue | Effort |
 |---|---|---|
@@ -85,6 +117,14 @@ sender-side substitution on it (BUG_CLASSES 31).
 
 ### WS4 - Shared-lib extraction (#428, respects the standalone invariant: copied `_lib_*.lua`, build-time sync, never `get_mod` deps)
 
+> **STATUS: PARTIAL 2026-07-19.** `tools/shared_lib/manifest.psd1` currently
+> enforces exact copies for `_lib_peer_parity`, `_lib_debug`,
+> `_lib_weapon_appearance`, `_lib_career_weapon_actions`, and
+> `_lib_effective_weapon_templates`. `_lib_netlookup`, wire substitution,
+> DLC ownership, the regression harness, and MIL/build-entry consolidation remain
+> roadmap items. Canonical files that are not in the manifest are not migrated
+> consumers and do not count as completion.
+
 Priority order by crash-risk: `_lib_dbg` (fixes #427 chat-spam, ~18 mods) ->
 `_lib_peer_parity` (WS1.5) -> `_lib_netlookup` (the append idiom is copy-pasted 15+
 times in cwv alone) -> wire-substitution helper (cosmetics has 4 inline copies) ->
@@ -102,12 +142,14 @@ times in cwv alone) -> wire-substitution helper (cosmetics has 4 inline copies) 
 > per-mod OOP pass. The reusable conventions are codified in PROJECT_STANDARDS
 > §2.2a; the doc deliverables per decomposition are WS8.
 
-Worst offenders with the auditors' identified extraction seams (all staged,
-behavior-preserving, in-game-verifiable steps; hooks stay in the entry file per §2.2):
-ct_dev 14,328 lines; cwv 11,808 (do after WS1 lands to avoid churn); cosmetics 10,499
-(cleanest seams: wire-safety block ~500 lines, force-load block ~1,200); cim_dev 8,173;
-crt balance file 3,815; enemy 3,396; wt 3.1x limit. Rule: every WS1/WS4 change that
-touches a god file extracts its seam as part of the change, never "later".
+Enemy and Event are the only phases in this umbrella whose entry points now meet
+the manifest-only target. Cosmetics, WT, CRT, CIM Dev, CT Dev, and CWV have real,
+tested extraction slices but remain partial at the sizes recorded in the current
+execution inventory. PR #744 extracted CT's regression owner and CWV's husk path;
+its title's "two remaining god files" means two remaining targets in that batch,
+not completion of either entire entry point. Rule: every WS1/WS4 change that
+touches a god file extracts its natural owner seam as part of the change, never
+"later", without mixing behavior changes into the structural move.
 
 ### WS6 - Hygiene sweep (small, high count)
 
@@ -148,11 +190,16 @@ that section, not this plan, is where the standard lives across sessions.
 
 ## Sequencing
 
-1. **Wave 1 (now):** WS1 cosmetic axes (#424, #422) + mp pcall fix + em-dash sweep +
-   mem-probe namespacing + WS7 quick checks + WS2 CI parity (#429).
-2. **Wave 2:** WS1.5 parity framework, then the gameplay axes (#423/#425/#426/#430/#431).
-3. **Wave 3:** WS4 libs in crash-risk order; WS3 docs consolidation.
-4. **Continuous:** WS5 extraction rides every touch of a god file; WS6/WS7 fill agent idle time.
+1. Preserve the completed #429/#540 enforcement and #432 documentation work;
+   these are closed prerequisites, not active waves.
+2. Address crash-risk wire and authority defects before optional structural churn.
+   #660 owns appearance consistency; #504 must not absorb its behavior fixes.
+3. Continue #428 migrations one canonical library at a time with exact-copy drift
+   coverage and standalone-mod verification.
+4. Continue #504/#2 by extracting one natural owner boundary at a time. Each slice
+   keeps registration/hook order, adds an engine-free boundary test, updates module
+   contracts, and ratchets the measured size downward. Do not batch unrelated mods
+   merely to call a phase complete.
 
 ## Verification protocol
 
