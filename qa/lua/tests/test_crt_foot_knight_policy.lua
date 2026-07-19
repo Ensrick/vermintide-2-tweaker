@@ -212,6 +212,23 @@ return function(H, repo_root)
         end
         H.equal(final_icons, 1)
 
+        local diagnostics_path = repo_root
+            .. "/career_tweaker/scripts/mods/career_tweaker/_crt_diagnostics.lua"
+        local diagnostics_file = assert(io.open(diagnostics_path, "rb"))
+        local diagnostics_source = diagnostics_file:read("*a")
+        diagnostics_file:close()
+        H.truthy(diagnostics_source:find("[crt:699] icon active=true", 1, true))
+        H.truthy(diagnostics_source:find("UIAtlasHelper.has_atlas_settings_by_texture_name", 1, true))
+        H.truthy(diagnostics_source:find('_buff_name_to_widget[active_template.name]', 1, true))
+        H.truthy(diagnostics_source:find('#hud._unused_buff_widgets', 1, true))
+        H.truthy(diagnostics_source:find('hud_capacity=%d', 1, true))
+        H.truthy(diagnostics_source:find('_crt_fk_icon_hidebuffs_disposition', 1, true))
+        H.truthy(diagnostics_source:find('_crt_fk_icon_probe_accumulator < 0.25', 1, true))
+        H.truthy(diagnostics_source:find('_CRT_FK_ICON_LOG_CAP = 64', 1, true))
+        H.truthy(diagnostics_source:find('_crt_fk_icon_log_count >= _CRT_FK_ICON_LOG_CAP', 1, true))
+        H.truthy(diagnostics_source:find('hud._is_spectator and hud._spectated_player_unit', 1, true))
+        H.truthy(diagnostics_source:find('subject=%s', 1, true))
+
         local balance_path = repo_root
             .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua"
         local balance_file = assert(io.open(balance_path, "rb"))
@@ -238,15 +255,24 @@ return function(H, repo_root)
         vanilla_source = vanilla_file:read("*a")
         vanilla_file:close()
     end
-    H.test_if(vanilla_source ~= nil,
+    local atlas_path = repo_root
+        .. "/../Vermintide-2-Source-Code/scripts/ui/atlas_settings/gui_icons_atlas.lua"
+    local atlas_file = io.open(atlas_path, "rb")
+    local atlas_source
+    if atlas_file then
+        atlas_source = atlas_file:read("*a")
+        atlas_file:close()
+    end
+    H.test_if(vanilla_source ~= nil and atlas_source ~= nil,
         "CRT #619 buff icons are resident vanilla Foot Knight atlas keys", function()
             for _, icon in ipairs({
                 "markus_knight_ability_invulnerability",
                 "markus_knight_passive_block_cost_aura",
-                "markus_knight_passive_power_increase",
+                "markus_knight_damage_taken_ally_proximity",
                 "markus_knight_movement_speed_on_incapacitated_allies",
             }) do
                 H.truthy(vanilla_source:find('icon = "' .. icon .. '"', 1, true), icon)
+                H.truthy(atlas_source:find(icon .. ' = {', 1, true), icon)
             end
         end)
 end

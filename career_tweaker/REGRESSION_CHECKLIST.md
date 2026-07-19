@@ -19,9 +19,9 @@ Last updated: 2026-07-17.
 | Authority/network | Host reconciles humans/bots; client reconciles local owner. Custom templates remain local-only and never enter `NetworkLookup` or a vanilla RPC. |
 | Final March | Requires a nonempty roster of other allies whose exact status is dead. Downed/disabled is false. One mission latch; 60 seconds; disabler stagger is server-only. |
 | Talent text | Rock uses the authored `_desc_2` key and composes range/shield toggles per lookup; Teamwork uses its authored `_desc_2` key. All-off delegates to vanilla localization exactly. |
-| Buff-bar feedback | Stable local effect buffs use resident vanilla Foot Knight icons. Rock/Teamwork conditional bonuses and Final March expose icons only for their active lifetime; Final March owns one icon-bearing sub-buff, and the internal Teamwork DR canceller has no icon. |
+| Buff-bar feedback | Stable local effect buffs use their exact resident vanilla Foot Knight talent icons. Both Rock effects use Rock of Reikland; Teamwork uses That's Bloody Teamwork. Conditional bonuses and Final March expose icons only for their active lifetime; Final March owns one icon-bearing sub-buff, and the internal Teamwork DR canceller has no icon. |
 | Secondary slot | Reconciles both backend `CareerSettings` and menu `SPProfiles` carriers in place to include `{ "melee", "ranged" }`; removes only its owned melee insertion and abandons ownership after foreign array replacement. Inventory category creation rechecks the carrier before caching its filter. |
-| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` check `issue619_foot_knight_contract`; transition-only `[crt:619] secondary-slot` diagnostic; solo walk in CHANGELOG 0.4.2-beta. |
+| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` checks `issue619_foot_knight_contract` and `issue699_foot_knight_icon_census`; transition-only `[crt:619] secondary-slot` and `[crt:699]` live HUD diagnostics; local and spectated subjects mirror BuffUI. Full #699 acceptance is co-op: client-local Foot Knight plus host spectating a Foot Knight bot, while preserving #663's two-Foot-Knight no-flicker behavior. |
 
 ---
 ## Foot Knight multi-source aura ownership (#663)
