@@ -105,7 +105,7 @@ function Get-LatestTestComment($Issue) {
         # version/manifest while declaring that the procedure above remains
         # authoritative.  It is metadata for that method, not a replacement
         # scope declaration; continue to the preceding runnable method.
-        if ($body -match '(?i)(?:procedure|method) above remains authoritative') {
+        if ($body -match '(?i)(?:procedure|method)(?:/acceptance criteria)? above remains authoritative') {
             continue
         }
         if ($body -match '(?i)test[- ]method|diagnostics? method|verification|verify solo|solo diagnostic|co-?op diagnostics?|next repro|needs? 2 (?:players|testers|humans)|two-player|host\s*\+\s*client|host and client|expected') {
@@ -925,7 +925,7 @@ function Invoke-SelfTest {
     $floorCorrectionWording = [PSCustomObject]@{
         comments = @(
             [PSCustomObject]@{ body = "## Test method (co-op)`nBoth peers exercise the path. Expected: PASS." },
-            [PSCustomObject]@{ body = "## Current deployed-floor correction`nThe newest issue-specific verification procedure above remains authoritative; this comment supersedes only older version references. Expected banner v2." }
+            [PSCustomObject]@{ body = "## Current deployed-floor correction`nThe newest issue-specific verification procedure/acceptance criteria above remains authoritative; this comment supersedes only older version references. Expected banner v2." }
         )
     }
     if (-not (Test-CommentRequiresCoop $floorCorrectionWording)) { throw "floor-only correction displaced the authoritative co-op method" }
