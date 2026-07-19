@@ -400,6 +400,80 @@
             )
         }
         @{
+            Id = 'cwv-cim.issue787.dual-axes-athanor-icon'
+            Issue = 787
+            Claim = 'structural-only'
+            Owners = @(
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_inventory_icons.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants_data.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_athanor_icon_policy.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'icon'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'first-person weapon units do not render inventory icons' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'third-person weapon units do not render inventory icons' }
+                        bot_3p = @{ Disposition = 'not-applicable'; Reason = 'bot weapon units do not render inventory icons' }
+                        remote_husk_3p = @{ Disposition = 'not-applicable'; Reason = 'remote husk units do not render inventory icons' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'CWV hero_view injection already owns and advertises the paired atlas' }
+                        cosmetic_preview = @{ Disposition = 'deferred'; Reason = 'the cosmetic browser has a separate renderer and is outside the CIM selector claim' }
+                        athanor_preview = @{ Disposition = 'covered'; Evidence = 'the shared ingame_ui top-renderer capability plus exact masked-saturated live-Gui proof retains the paired icon' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'the ordinary crafting picker does not consume the Athanor sanitizer' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'lobby item-card icon residency is owned by its renderer-specific contract' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'score-screen item-card icon residency is owned by its renderer-specific contract' }
+                        hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab item-card icon residency is owned by its peer-safe renderer contract' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the authored icon is immutable provider data, not per-instance state' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'weapon spawn does not create item-list icons' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'equip does not create the Athanor selector' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'wield does not create the Athanor selector' }
+                        customization_change = @{ Disposition = 'not-applicable'; Reason = 'the synthetic base crafting row has no exact backend-instance identity and must not enter the Cosmetics primary/offhand/glow compositor' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style does not change the base Dual Axes selector icon' }
+                        career_change = @{ Disposition = 'covered'; Evidence = 'the catalog rebuild preserves the authored icon for both Kruber and Saltzpyre variants' }
+                        mission_transition = @{ Disposition = 'not-applicable'; Reason = 'renderer capability is registered at mod initialization and each list open performs a fresh live-Gui proof' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not create the Athanor selector' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'the local selector sends no custom icon identity to peers' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the local selector sends no custom icon identity to peers' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the local renderer reads only locally registered resources' }
+                        rejoin = @{ Disposition = 'not-applicable'; Reason = 'the local selector sends no custom icon identity to peers' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'every Athanor list build sanitizes against the exact current ui_top_renderer Gui' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'every Athanor list rebuild repeats the exact live-Gui material proof' }
+                        lobby_score_create = @{ Disposition = 'not-applicable'; Reason = 'the candidate changes only the Athanor selector renderer capability' }
+                        mod_disable_restore = @{ Disposition = 'covered'; Evidence = 'CIM falls back to vanilla provider/base icons when CWV is absent' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_dual_icons.lua'
+                            Names = @(
+                                'CWV Dual Axes has a packaged atlas entry for every primary axe icon'
+                                'CWV custom icon contract fails closed outside injected renderers'
+                                'CWV completes the VMF-missing masked saturated atlas variant'
+                            )
+                            Surfaces = @('inventory_preview', 'athanor_preview')
+                            ReplayEdges = @()
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cim_athanor_icon_policy.lua'
+                            Names = @(
+                                'renderer-owned CWV Dual Axes icons remain authored in Athanor'
+                                'every live CWV custom inventory icon closes to vanilla in Athanor'
+                            )
+                            Surfaces = @('athanor_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen', 'mod_disable_restore')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cim_cwv_template_catalog.lua'
+                            Names = @('every CWV family keeps exact definition and authored icon')
+                            Surfaces = @('athanor_preview')
+                            ReplayEdges = @('career_change')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'woc.issue712.blightreaper-transform'
             Issue = 712
             Claim = 'structural-only'

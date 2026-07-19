@@ -1,5 +1,34 @@
 # Crafting in Modded Changelog
 
+## 0.8.100-dev (2026-07-19): #277 accessory cleanup and #787 authored Dual Axes icons [verify-fix]
+
+- Extended `/forge_delete_all` from melee/ranged weapons to the complete
+  synthetic craft scope already owned by the issue 628 contract: melee,
+  ranged, necklace, ring (Charm), and trinket. Exact `_forged_weapons`
+  membership plus the normalized owner/schema stamp remains mandatory;
+  ordinary inventory, rarity/prefix lookalikes, out-of-scope rows, and
+  unresolved provider definitions remain untouched.
+- Kept the destructive path fail-closed when any candidate is equipped in a
+  current or saved loadout or when equip state cannot be read. Execution now
+  revalidates every requested record through the same contract before making
+  any mutation.
+- Hardened preview/confirm against same-ID replacement. The snapshot now
+  fingerprints canonical item identity, owner/schema, live slot/provider, and
+  mirror-vs-MIL cleanup route rather than only backend IDs. Cosmetic/property
+  edits do not change cleanup identity and do not invalidate the preview.
+- Updated command, preview, completion, list, log, checklist, and Workshop copy
+  that incorrectly described the forged store as weapons-only.
+
+**Solo verification after integration/deployment:** craft a weapon plus one
+necklace, Charm, and trinket; keep ordinary equivalents; unequip every CIM
+craft from current and saved loadouts; preview and confirm `/forge_delete_all`.
+Only the four CIM crafts should disappear and stay absent after restart. Then
+repeat with one CIM accessory equipped and confirm the entire batch refuses.
+
+- The Athanor icon resolver now requests the complete masked-and-saturated atlas material pair from the active `ingame_ui` renderer instead of assuming the weave-forge state supplies it.
+- CWV Dual Axes rows consume CWV's paired authored icon for both Kruber and Saltzpyre; missing providers or atlas materials fail closed to the native icon.
+- Added cross-mod appearance-contract coverage and kept stable CIM untouched pending its normal promotion path.
+
 ## 0.8.99-dev (2026-07-19): #823 prevent regression checks from rehooking live modules [verify-fix]
 
 - Made the modded-rarity owner idempotent so an accidental second load returns
