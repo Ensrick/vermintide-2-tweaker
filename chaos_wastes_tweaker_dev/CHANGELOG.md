@@ -1,8 +1,21 @@
 # Chaos Wastes Tweaker Changelog
 
-## 0.7.296-dev (2026-07-18) - reconciliation build: parallel 0.7.295-dev streams
+## 0.7.297-dev (2026-07-18) - reconciliation build: parallel 0.7.296-dev streams
+
+- Second same-day version collision: two sessions independently minted 0.7.296-dev - one as the reconciliation upload below (on the Workshop since 20:58), one carrying the issue 52 Tower skull diagnostics (landed in git 21:06, never uploaded). This build ships the union so the Workshop item finally carries issue 406 + issue 52 + the stranded-pipeline completion. Root cause of the repeated collisions: ships from pre-claim-broker worktrees bypass the tools/ship claim gate. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
+
+## 0.7.296-dev (2026-07-18) - reconciliation build: parallel 0.7.295-dev streams [superseded by 0.7.297-dev]
 
 - Two sessions independently shipped 0.7.295-dev: one carried the issue 406 Khaine's Communion heal fix (uploaded 19:17), the other a no-change stranded-pipeline completion (uploaded 20:00, which unknowingly clobbered the 406 build on the Workshop item). This build re-ships the union - the 406 source below is included - so subscribers get the fix back. No new source beyond the merge. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
+
+## 0.7.296-dev (2026-07-19) - #52 Tower skull object-set diagnostics hardened [never uploaded; shipped via 0.7.297-dev]
+
+- Replaced the stale inline Tower skull census with `_ct_diag_skull52.lua`, an observation-only module scoped to `dlc_wizards_tower`.
+- Corrected the diagnostic premise: Tower of Treachery skulls are source-backed level-flow interactables (`flow_callback_on_tower_skull_found` -> `on_tower_skull_found`), not the Drachenfels/portals `gargoyle_head` pickup path.
+- The census now logs `mode=`, level key/base, object-set counts, spawned state, unit counts, set kind, suspicion score, and capped `LevelResource.unit_data` samples for suspect or unspawned populated sets. Output is deduplicated, log-only, and hard-capped.
+- Behavior is unchanged: the #156 injected-adventure `adventure` object-set fix still owns the only mutation. #52 remains diagnostics-armed until a normal Adventure vs injected Deus log pair names the missing binary object set.
+
+**Solo diagnostic:** run `dlc_wizards_tower` once as a normal Adventure map, then via `/ct_load_mission dlc_wizards_tower` as an injected CW mission. Attach both logs and grep `[ct:skull52]`; the fix target is any populated set with `spawned=true` in Adventure and `spawned=false` in injected Deus, especially one with `suspect>0` or relevant unit samples.
 
 ## 0.7.295-dev (2026-07-19) - #406 Khaine's Communion functional heal diagnostics
 

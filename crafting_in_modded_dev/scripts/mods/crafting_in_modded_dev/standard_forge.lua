@@ -1368,6 +1368,21 @@ end
 -- Exposed for the consolidated `on_enter` hook above to invoke at call time.
 mod._cim_rebuild_template_cache = _build_template_cache
 
+local function _single_slot_filter(filter)
+    if type(filter) ~= "string" then return nil end
+    local found = {}
+    for slot in filter:gmatch("slot_type%s*==%s*([%w_]+)") do
+        found[slot] = true
+    end
+    local only
+    for slot in pairs(found) do
+        if only then return nil end
+        only = slot
+    end
+    if not only then return nil end
+    return { [only] = true }
+end
+
 -- Called from the shared `get_filtered_items` hook in crafting_in_modded.lua
 -- once it's finished its modded-only filtering pass. Returns the same items
 -- table with a synthetic template appended for every craftable weapon KEY not
@@ -1398,7 +1413,9 @@ mod._cim_inject_templates = function(items, filter)
     if not next(_template_cache) then _build_template_cache() end
 
     local pre_inject = type(items) == "table" and #items or 0
-    local result = template_selector.inject(items, _template_cache)
+    local result = template_selector.inject(items, _template_cache, {
+        allowed_slots = _single_slot_filter(filter),
+    })
     -- #524 render-seam probe: dump the FINAL rendered list (what the user sees),
     -- classified per row + grouped for hard/soft duplicates. The catalog probe
     -- above ([cim:524] acquisition_templates) only sees CIM's synthetic list, not

@@ -45,6 +45,22 @@ local function _is_craftable_row(item)
         or slot_type == "ring" or slot_type == "necklace" or slot_type == "trinket"
 end
 
+local function _slot_type(item)
+    local data = type(item) == "table" and type(item.data) == "table" and item.data or nil
+    return data and data.slot_type or (type(item) == "table" and item.slot_type)
+end
+
+local function _allowed_slots(options)
+    if type(options) ~= "table" then return nil end
+    local slots = type(options.allowed_slots) == "table" and options.allowed_slots or nil
+    return slots and next(slots) and slots or nil
+end
+
+local function _slot_allowed(item, allowed)
+    if not allowed then return true end
+    return allowed[_slot_type(item)] == true
+end
+
 local function _craft_picker_role(item)
     if _craft_picker_role_resolver then return _craft_picker_role_resolver(item) end
     if not _is_craftable_row(item) then return "other" end
@@ -107,15 +123,18 @@ function M.canonical_family(item)
     return key and ("key:" .. key) or nil
 end
 
-function M.inject(items, templates)
+function M.inject(items, templates, options)
     if type(items) ~= "table" or type(templates) ~= "table" then return items end
+    local allowed = _allowed_slots(options)
 
     -- A real default-rarity row wins over CIM's synthetic selector. Modded
     -- crafted instances never count: vanilla can_craft_with excludes them,
     -- and this guard preserves the contract even if an upstream filter leaks.
     local real_families = {}
     for _, item in ipairs(items) do
-        if not item.cim_acquisition_template and _craft_picker_role(item) == "selector" then
+        if _slot_allowed(item, allowed)
+                and not item.cim_acquisition_template
+                and _craft_picker_role(item) == "selector" then
             local family = M.canonical_family(item)
             if family then
                 local current = real_families[family]
@@ -143,7 +162,10 @@ function M.inject(items, templates)
             keep = false
         elseif item and item.cim_acquisition_template then
             local family = M.canonical_family(item)
-            if not family or real_families[family] or synthetic_families[family] then
+            if not _slot_allowed(item, allowed)
+                    or not family
+                    or real_families[family]
+                    or synthetic_families[family] then
                 keep = false
             else
                 synthetic_families[family] = true
@@ -168,7 +190,10 @@ function M.inject(items, templates)
     for _, template in pairs(templates) do
         local key = M.canonical_key(template)
         local family = M.canonical_family(template)
-        if key and family and not real_families[family] and not synthetic_families[family] then
+        if key and family
+                and _slot_allowed(template, allowed)
+                and not real_families[family]
+                and not synthetic_families[family] then
             pending[#pending + 1] = { key = key, family = family, template = template }
             synthetic_families[family] = true
         end

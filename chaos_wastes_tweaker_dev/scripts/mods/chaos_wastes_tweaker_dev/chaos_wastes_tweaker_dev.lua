@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.296-dev"
+local MOD_VERSION = "0.7.297-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -444,6 +444,13 @@ mod._ct_freeze487 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_f
 -- header for why this seam (spawn-path-independent ground truth) is not covered
 -- by the existing [ct-probe]/[ct-spawn-tally] count probes.
 mod._ct_chest132 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132")
+
+-- #52 Tower of Treachery skull diagnostics. Stored on mod._ to keep the
+-- GameModeHelper hook below small and to keep the source-backed finding in one
+-- place: Tower skulls are level-flow interactables, not the portals
+-- `gargoyle_head` pickup path. See _ct_diag_skull52.lua.
+mod._ct_diag_skull52 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_skull52")
+pcall(mod._ct_diag_skull52.install)
 
 -- #505 Single Mission Loader. Registers /ct_load_mission + friends and the
 -- ct_dev_load_selected_mission menu keybind target. No hooks - it forces a run via
@@ -5758,30 +5765,15 @@ do
                 and type(object_sets) == "table"
                 and type(spawned_object_sets) == "table"
             then
-                -- #52 DIAGNOSTIC ([ct:skull52]): census every object set for each
-                -- get_object_sets call during an injected-adventure load (main world AND
-                -- hero sublevels). Tower of Treachery (dlc_wizards_tower) gargoyle-skull
-                -- collectibles are the `gargoyle_head` level_event pickup, which that
-                -- level's pickup_settings does NOT list, so they are object-set / flow
-                -- spawned via placed pickup-spawner units; #156's 'adventure' enable may
-                -- be targeting the wrong set. This lists every set + whether it will spawn
-                -- under deus so we can identify the skull-bearing set. printf = visible with
-                -- mod-logging OFF. Gate on the CURRENT injected level key (looser than the
-                -- #156 level_name match, so sublevel calls are captured).
-                local lth = Managers and Managers.level_transition_handler
-                local cur_key = lth and lth.get_current_level_keys and lth:get_current_level_keys()
-                if type(cur_key) == "string" and adventure_base_from_level_key(cur_key) then
-                    local spawned_lookup = {}
-                    for _, s in ipairs(spawned_object_sets) do spawned_lookup[s] = true end
-                    local names = {}
-                    for set_name in pairs(object_sets) do names[#names + 1] = set_name end
-                    table.sort(names)
-                    pcall(printf, "[ct:skull52] key=%s level_name=%s object_sets=%d spawned=%d",
-                        tostring(cur_key), tostring(level_name), #names, #spawned_object_sets)
-                    for _, set_name in ipairs(names) do
-                        pcall(printf, "[ct:skull52]   set=%s spawned=%s",
-                            tostring(set_name), tostring(spawned_lookup[set_name] == true))
-                    end
+                -- #52 DIAGNOSTIC ([ct:skull52]): Tower of Treachery's skulls
+                -- are source-confirmed level-flow interactables
+                -- (`flow_callback_on_tower_skull_found`), not the portals
+                -- `gargoyle_head` pickup. The binary-owned object-set name must
+                -- be identified by comparing this census in Adventure vs injected
+                -- Deus; behavior remains unchanged until that set is named.
+                if mod._ct_diag_skull52 and mod._ct_diag_skull52.census then
+                    pcall(mod._ct_diag_skull52.census, level_name, game_mode_key,
+                        object_sets, spawned_object_sets, adventure_base_from_level_key)
                 end
 
                 -- #156 fix (behavior unchanged): enable the 'adventure' object set on the
