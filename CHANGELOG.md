@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-18 - Headless VMB process boundary (#829)
+
+`tools/ship/ship.ps1` now starts VMBLauncher with explicit no-window process flags and redirected output instead of PowerShell's raw native call operator. Both the identity probe and full release preserve exit-code/output handling without allocating visible console windows in desktop automation. The ship self-test executes the boundary and passes under Windows PowerShell 5.1 and PowerShell 7.
+
 ## 2026-07-17 - Cross-provider career-action clone ownership
 
 Issue #661's live `action_career_dr_3` / `action_career_es_4` conflicts came

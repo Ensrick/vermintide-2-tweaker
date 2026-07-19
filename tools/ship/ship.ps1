@@ -114,6 +114,86 @@ function Invoke-NativeCapture {
     return [pscustomobject]@{ ExitCode = $code; Lines = $lines }
 }
 
+# Issue #829: a console-subsystem executable launched from a desktop agent process can ask
+# Windows to allocate a visible console even when the executable selected its
+# own headless code path. Start VMBLauncher with explicit no-window process
+# flags and redirected streams so `ship.ps1` remains genuinely unattended in
+# terminals, CI, and desktop automation. Output is replayed after exit; the
+# launcher's exit code remains authoritative.
+function ConvertTo-ShipWindowsArgument {
+    param([AllowEmptyString()][string]$Value)
+    if ($null -eq $Value -or $Value.Length -eq 0) { return '""' }
+    if ($Value -notmatch '[\s"]') { return $Value }
+
+    $builder = New-Object System.Text.StringBuilder
+    [void]$builder.Append('"')
+    $backslashes = 0
+    foreach ($character in $Value.ToCharArray()) {
+        if ($character -eq '\') {
+            $backslashes++
+            continue
+        }
+        if ($character -eq '"') {
+            [void]$builder.Append(('\' * (($backslashes * 2) + 1)))
+            [void]$builder.Append('"')
+            $backslashes = 0
+            continue
+        }
+        if ($backslashes -gt 0) {
+            [void]$builder.Append(('\' * $backslashes))
+            $backslashes = 0
+        }
+        [void]$builder.Append($character)
+    }
+    if ($backslashes -gt 0) {
+        [void]$builder.Append(('\' * ($backslashes * 2)))
+    }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
+function Invoke-ShipLauncherNoWindow {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string[]]$ArgumentList,
+        [switch]$ReplayOutput
+    )
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $FilePath
+    $startInfo.Arguments = (($ArgumentList | ForEach-Object { ConvertTo-ShipWindowsArgument ([string]$_) }) -join ' ')
+    $workingRoot = if (-not [string]::IsNullOrWhiteSpace([string]$repoRoot)) {
+        $repoRoot
+    } else {
+        (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+    }
+    $startInfo.WorkingDirectory = $workingRoot
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { throw "Failed to start headless launcher: $FilePath" }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+        $stdout = $stdoutTask.GetAwaiter().GetResult()
+        $stderr = $stderrTask.GetAwaiter().GetResult()
+        $lines = @()
+        if (-not [string]::IsNullOrEmpty($stdout)) { $lines += @($stdout -split "`r?`n" | Where-Object { $_ -ne '' }) }
+        if (-not [string]::IsNullOrEmpty($stderr)) { $lines += @($stderr -split "`r?`n" | Where-Object { $_ -ne '' }) }
+        if ($ReplayOutput) { $lines | ForEach-Object { Write-Host $_ } }
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; Lines = $lines }
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
 function Test-ShipPathEqual {
     param([string]$Left, [string]$Right)
     if ([string]::IsNullOrWhiteSpace($Left) -or [string]::IsNullOrWhiteSpace($Right)) { return $false }
@@ -655,6 +735,18 @@ function Invoke-ShipSelfTest {
     $legacyTagUpload = 'gh release ' + 'upload $tag'
     Assert ($shipSource.IndexOf($legacyTagProbe, [System.StringComparison]::Ordinal) -lt 0) "ship wrapper has no duplicate release-by-tag existence probe (issue #651)"
     Assert ($shipSource.IndexOf($legacyTagUpload, [System.StringComparison]::Ordinal) -lt 0) "ship wrapper delegates existing-release mutation to release-id tooling (issue #651)"
+    Assert ($shipSource -match 'CreateNoWindow\s*=\s*\$true') "VMBLauncher process creation explicitly suppresses visible console windows"
+    Assert ($shipSource -match 'ProcessWindowStyle\]::Hidden') "VMBLauncher process window style is hidden"
+    Assert ($shipSource -match 'Invoke-ShipLauncherNoWindow -FilePath \$launcher') "identity and release calls use the no-window launcher boundary"
+    $rawLauncherCall = '& $' + 'launcher @launcherArgs'
+    Assert ($shipSource.IndexOf($rawLauncherCall, [System.StringComparison]::Ordinal) -lt 0) "release path never invokes VMBLauncher through the raw PowerShell call operator"
+
+    $hostExe = (Get-Process -Id $PID).Path
+    $hiddenProbe = Invoke-ShipLauncherNoWindow -FilePath $hostExe -ArgumentList @(
+        '-NoProfile', '-Command', '[Console]::Out.Write("ship-hidden-probe")'
+    )
+    Assert ($hiddenProbe.ExitCode -eq 0) "no-window process boundary preserves native exit code"
+    Assert (($hiddenProbe.Lines -join '') -eq 'ship-hidden-probe') "no-window process boundary captures redirected output"
 
     # Issue #647: multiple worktrees share one VMBLauncher settings file. The
     # ship wrapper must bind ProjectRoot only for the launcher window, restore
@@ -825,7 +917,8 @@ finally {
     $selfTxt = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
     $quickPos = $selfTxt.IndexOf('& $quickGate -Quick -SkipLua -Quiet')
     $lintPos = $selfTxt.IndexOf('& $modLint $Mod -Quiet')
-    $launcherPos = $selfTxt.IndexOf('& $launcher @launcherArgs')
+    $launcherCallMarker = 'Invoke-ShipLauncherNoWindow -FilePath $' + 'launcher'
+    $launcherPos = $selfTxt.LastIndexOf($launcherCallMarker)
     Assert ($quickPos -ge 0) "ship source invokes the fast headless QA gate (issue #591)"
     Assert ($lintPos -ge 0) "ship source invokes target-mod lint (issue #591)"
     Assert ($launcherPos -ge 0 -and $quickPos -lt $launcherPos -and $lintPos -lt $launcherPos) "both headless gates precede launcher build/deploy/upload"
@@ -837,8 +930,8 @@ finally {
     $claimGateMarker = 'SHIP/VERSION ' + 'CLAIM GATE'
     $claimGatePos = $selfTxt.IndexOf($claimGateMarker)
     # LastIndexOf: compare against the MAIN-BODY launcher call, not the earlier
-    # IndexOf-literal in this self-test block (the launcher marker occurs twice).
-    $launcherMainPos = $selfTxt.LastIndexOf('& $launcher @launcherArgs')
+    # self-test assertions.
+    $launcherMainPos = $selfTxt.LastIndexOf($launcherCallMarker)
     Assert ($claimGatePos -ge 0) "ship source contains the ship/version claim gate (parallel-session collision guard)"
     Assert ($claimGatePos -ge 0 -and $launcherMainPos -ge 0 -and $claimGatePos -lt $launcherMainPos) "claim gate precedes launcher build/deploy/upload"
     Assert ($selfTxt.IndexOf('-Verify -ExpectedVersion $modVersion') -ge 0) "claim gate verifies the claim against the source MOD_VERSION"
@@ -1063,7 +1156,8 @@ try {
             # Ask the launcher which mod it resolved while the temporary binding is
             # active. Abort before `all` (therefore before deploy/upload) if root,
             # version, source commit, or Workshop identity differs from Step 1.
-            $info = Invoke-NativeCapture { & $launcher info $Mod --no-banner --config $launcherSettings }
+            $info = Invoke-ShipLauncherNoWindow -FilePath $launcher `
+                -ArgumentList @('info', $Mod, '--no-banner', '--config', $launcherSettings)
             if ($info.ExitCode -ne 0) {
                 throw "VMBLauncher identity probe failed (exit $($info.ExitCode)): $($info.Lines -join ' | ')"
             }
@@ -1100,8 +1194,9 @@ try {
             }
             Write-Host "  OK -- ProjectRoot, MOD_VERSION, source commit, and published_id match the invoking checkout." -ForegroundColor Green
 
-            & $launcher @launcherArgs
-            $launcherExit = $LASTEXITCODE
+            $launcherRun = Invoke-ShipLauncherNoWindow -FilePath $launcher `
+                -ArgumentList $launcherArgs -ReplayOutput
+            $launcherExit = $launcherRun.ExitCode
             if ($launcherExit -ne 0) {
                 throw "VMBLauncher 'all $Mod' exited $launcherExit (build/deploy/upload failed -- see output above)."
             }
