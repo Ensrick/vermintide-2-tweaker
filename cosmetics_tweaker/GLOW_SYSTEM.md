@@ -182,17 +182,26 @@ opening/closing/switching cannot paint or persist.
 
 Slider widget anatomy (`_widget_slider` in `_glow_picker.lua`):
 
-* `hotspot` pass — explicit `style.hotspot` with size/offset matching
-  the track (v0.9.7 fix)
+The engine contract is empirical: VT2's `UIPasses.held` invokes the callback
+with the already-selected style (`scripts/ui/ui_passes.lua:4621-4635`), and
+VMF's native-style slider reads `ui_style.offset` and `ui_style.size` directly
+(`vmf_options_view.lua:2472-2488`). Therefore a pass with
+`style_id = "track"` receives the track style itself, never an aggregate table
+containing `ui_style.track`.
+
+* `hotspot` pass — `_cos_glow_slider_geometry.hotspot_style` derives its
+  size/offset from the rendered track, with a 2px interaction pad
 * `text` pass — label on the left
 * `rect` pass — 200×16 track
 * `held` pass — `held_function` fires every frame while held; reads
   cursor X via `input_service:get("cursor")` and
-  `UIInverseScaleVectorToResolution`, computes normalized 0–1 value,
+  `UIInverseScaleVectorToResolution`, then passes the direct `track` style
+  (the style selected by the pass) to the shared geometry helper to compute
+  the normalized 0–1 value,
   updates `content.internal_value` and `content.value`, calls
   `content.on_change(real)`
-* `local_offset` pass — `offset_function` positions the thumb based on
-  `internal_value`
+* `local_offset` pass — `offset_function` positions the thumb centre on the
+  same rendered-track rectangle based on `internal_value`
 * `rect` pass — 12×16 thumb
 * `text` pass — value display on the right
 

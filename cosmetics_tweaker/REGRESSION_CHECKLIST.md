@@ -87,7 +87,19 @@ Last updated: 2026-07-16.
 | Color | Rune uses committed RGB. Magic uses the deterministic intensity-weighted lower/upper/dots blend. |
 | Refresh | One Apply callback refreshes weakly tracked live grids/windows once; no per-frame decode or RPC traffic. |
 | Asset safety | Authored PNG is packaged unchanged and runtime tinted. Missing atlas/material fails closed with one bounded warning. |
-| Detection | Offline `test_cos_glow_badge_policy.lua` and `test_cos_glow_lifecycle.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
+| Slider geometry | The rendered track, padded hotspot, cursor normalization, and thumb centre derive from one track-style rectangle. The held pass consumes the selected `track` style directly; label/value regions never become slider coordinates. |
+| Slider detection | Offline `test_cos_glow_slider_geometry.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
+| Manual #794 | At multiple UI scales/resolutions, click and drag each visible track at both endpoints, quartiles, and midpoint. Values and thumb centres must match the visible cursor position. |
+| Illusion selector | Enrich the shared `illusions_root` definition only inside the `UIWidget.init` pre-hook. Never append render passes after a widget owns `element.pass_data`; Apply/Restore only update existing content/style. |
+| Badge detection | Offline `test_cos_glow_badge_policy.lua` and `test_cos_glow_lifecycle.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
+| Manual #795 | Apply a glow on one exact item/skin, then close/reopen and restart. Its selector badge appears immediately and persists; another instance/skin remains unchanged; Restore Default removes the badge. |
+
+## Live glow on the customization preview model (#796)
+
+| Contract | Slider edits repaint both the local wielded units and the exact `HeroWindowItemCustomization._previewer._spawned_units` owned by the same backend item + selected illusion. |
+| Failure floor | A stale backend ID, a different preview skin, an unspawned preview, or a dead unit fails closed. `LootItemUnitPreviewer` is never inferred from the gameplay inventory extension. |
+| Transaction | Slider movement remains transient and local. Apply persists/emits once; Cancel restores the committed state, and Cancel/Restore without a commit copies the registered native material vectors back onto the preview units. |
+| Detection | Offline `test_cos_glow_lifecycle.lua` covers exact ownership, stale rejection, both-hand filtering, Slider/Apply/Restore/Cancel wiring, and absence of networking from the preview-paint module. In-game: move every channel and observe the standalone customization model change immediately; Cancel and Restore return it immediately without switching weapons or reopening the menu. |
 
 ---
 ## Authored heroic weapon poses (#485)

@@ -45,6 +45,7 @@ local _is_unit = mod._cos.is_unit
 -- #48: exact-instance glow policy, shared with _glow_picker.lua. Pure and
 -- stateless, so a per-consumer dofile instance is safe.
 local GLOW_INSTANCE_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy")
+local GLOW_PREVIEW_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_preview_policy")
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md section 3.6). Byte-identical
 -- copies of the entry's _dbg / _dbg_alert so the moved glow functions keep calling
@@ -431,6 +432,45 @@ mod._reapply_glow_on_wielded = function()
             pcall(_apply_glow_to_unit, u, _glow_local_peer_id())
         end
     end
+end
+
+-- #796: the customization pane is a LootItemUnitPreviewer, not the local
+-- player's inventory extension. Repaint its exact spawned units from the same
+-- transient runtime state as the wielded weapon. The pure policy rejects stale
+-- backend/skin ownership after an illusion switch or asynchronous rebuild.
+mod._reapply_glow_on_customization_preview = function(host, backend_id, slot_data)
+    local target = GLOW_PREVIEW_POLICY.resolve(host, backend_id, slot_data, _is_unit)
+    if not target then return 0 end
+    local painted = 0
+    for _, unit in ipairs(target.units) do
+        _bind_glow_unit(unit, backend_id, target.skin, nil,
+            target.item_name, target.item_template)
+        _apply_glow_to_unit(unit, nil)
+        painted = painted + 1
+    end
+    return painted
+end
+
+-- Cancel/Restore must remove a dirty preview immediately. Copy the selected
+-- illusion's registered native vectors onto the exact preview units; unknown
+-- templates fail closed and the normal preview respawn remains authoritative.
+mod._repaint_native_glow_on_customization_preview = function(host, backend_id, slot_data, mat_name)
+    local templates = rawget(_G, "MaterialSettingsTemplates")
+    local template = type(mat_name) == "string" and templates and templates[mat_name] or nil
+    if type(template) ~= "table" then return 0 end
+    local target = GLOW_PREVIEW_POLICY.resolve(host, backend_id, slot_data, _is_unit)
+    if not target then return 0 end
+    local painted = 0
+    for _, unit in ipairs(target.units) do
+        for var_name, entry in pairs(template) do
+            if type(entry) == "table" and entry.type == "vector3" then
+                pcall(Unit.set_vector3_for_materials, unit, var_name,
+                    Vector3(tonumber(entry.x) or 0, tonumber(entry.y) or 0, tonumber(entry.z) or 0))
+            end
+        end
+        painted = painted + 1
+    end
+    return painted
 end
 
 -- #610 Restore-to-Default helper. Repaints the illusion's NATIVE material
