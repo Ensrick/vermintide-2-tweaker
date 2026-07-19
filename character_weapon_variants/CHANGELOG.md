@@ -1,5 +1,25 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.454-dev (2026-07-18) - coherent pistol-less Rapier contract (#807) [verify-fix-coop]
+
+- Removed the inherited left-hand ammunition contract from Kruber's pistol-less
+  Rapier clone at the same boundary that disables its pistol action. The stock
+  equipment HUD can no longer request `ammo_system` from the deliberately absent
+  left-hand unit when Grail Knight carries the Rapier in his second weapon slot.
+- Kept Saltzpyre's native Rapier donor unchanged and retained every non-pistol
+  Rapier action. Added engine-free coverage for donor isolation, action disabling,
+  nil safety, production-constructor wiring, and removal of the contradictory ammo
+  contract.
+- Marked the Rapier definition `no_ammo_unit = true` alongside `no_left_hand = true`,
+  keeping the item-entry/no-skin/crafted contract aligned with the pistol-less
+  template.
+
+**Co-op verification:** As Grail Knight, equip the CWV Rapier in each weapon slot,
+leave and re-enter Hero View, swap between both weapons, then enter a mission,
+repeat after death/respawn, hot join, and repeat with host/client roles reversed.
+The equipment HUD must not crash and must not display an ammunition counter for
+the Rapier.
+
 ## 0.1.453-dev (2026-07-18) - effective-template career actions (#661) [verify-fix]
 
 - Declared Old Musket's ranged and bayonet templates as one effective family,
