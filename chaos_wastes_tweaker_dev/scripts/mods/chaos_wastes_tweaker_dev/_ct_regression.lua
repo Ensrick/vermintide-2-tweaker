@@ -452,12 +452,13 @@ _rt_register("progressive_difficulty_installed", function()
 end)
 
 _rt_register("replacement_player_compensation_installed", function()
-    if CT_REPLACEMENT_COMPENSATION_MARKER ~= "replacement_compensation:host_state_handoff_v0.7.277" then
+    if CT_REPLACEMENT_COMPENSATION_MARKER ~= "replacement_compensation:ordered_projection_readback_v2" then
         return "replacement compensation marker missing or stale"
     end
     local policy = mod._ct_replacement_policy
     if type(policy) ~= "table" or type(policy.capture) ~= "function"
-        or type(policy.apply) ~= "function" or type(policy.wire_safe_copy) ~= "function" then
+        or type(policy.apply) ~= "function" or type(policy.wire_safe_copy) ~= "function"
+        or type(policy.prepare_for_target) ~= "function" or type(policy.progression_equal) ~= "function" then
         return "replacement compensation policy incomplete"
     end
     if type(mod._ct_replacement_filtered) ~= "function" then
@@ -467,6 +468,15 @@ _rt_register("replacement_player_compensation_installed", function()
     if cls and (type(cls.player_left_game_session) ~= "function"
         or type(cls._add_bot) ~= "function" or type(cls.remove_bot) ~= "function") then
         return "GameModeDeus replacement lifecycle seam missing"
+    end
+    local run_controller = rawget(_G, "DeusRunController")
+    if run_controller and type(run_controller.rpc_deus_set_initial_setup) ~= "function" then
+        return "DeusRunController initial-setup ordering seam missing"
+    end
+    if type(mod._ct_replacement_apply_handoff) ~= "function"
+        or type(mod._ct_replacement_refresh_bot) ~= "function"
+        or type(mod._ct_bot_equip_weapon) ~= "function" then
+        return "replacement compensation live/backend refresh missing"
     end
 end)
 
