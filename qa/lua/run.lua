@@ -216,6 +216,7 @@ local suites = {
     "test_ct_progressive_difficulty",
     "test_ct_replacement_compensation",
     "test_ct_weave_curse_policy",
+    "test_ct_start_shrine_contract",
     "test_ct_modifier_stack_policy",
     "test_ct_progressive_elite_policy",
     "test_ct_resume_policy",
