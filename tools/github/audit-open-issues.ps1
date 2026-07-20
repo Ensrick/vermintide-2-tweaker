@@ -18,13 +18,21 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Exactly one of these belongs on every open issue.  `coop-required` is NOT a
+# lifecycle label: it is an orthogonal qualifier ("testing needs 2+ players")
+# that may accompany any lifecycle state.  `verify-fix-coop` was retired in
+# favour of verify-fix + coop-required; it is read only as legacy evidence of
+# co-op scope and is reported as a finding wherever it still appears.
 $LifecycleLabels = @(
     "not-started",
     "verify-fix",
-    "verify-fix-coop",
     "diagnostics-armed",
     "Fixed"
 )
+
+$DeadLifecycleLabels = @("verify-fix-coop")
+
+$CoopQualifierLabel = "coop-required"
 
 $TypeLabels = @("bug", "enhancement", "feature")
 
@@ -152,24 +160,25 @@ function Get-IssueFindings($Issue) {
         $findings.Add("title_over_8_words")
     }
 
+    if (@($labels | Where-Object { $DeadLifecycleLabels -contains $_ }).Count -gt 0) {
+        $findings.Add("retired_lifecycle_label")
+    }
+
     $humanLifecycle = @($lifecycle | Where-Object {
-        $_ -in @("verify-fix", "verify-fix-coop", "diagnostics-armed")
+        $_ -in @("verify-fix", "diagnostics-armed")
     })
     if ($humanLifecycle.Count -gt 0 -and -not (Test-HasMethodAndExpected $Issue)) {
         $findings.Add("missing_test_method_comment")
     }
 
+    # Co-op scope is carried by the orthogonal qualifier, so the same rule now
+    # applies to EVERY human-verified lifecycle state rather than diagnostics
+    # alone: the qualifier must agree with the posted test method.
     $requiresCoop = Test-CommentRequiresCoop $Issue
-    if ($requiresCoop -and $lifecycle -contains "verify-fix") {
-        $findings.Add("solo_label_but_coop_test")
-    }
-    if (-not $requiresCoop -and $lifecycle -contains "verify-fix-coop") {
-        $findings.Add("coop_label_without_coop_test_evidence")
-    }
-    if ($lifecycle -contains "diagnostics-armed") {
-        $hasQualifier = $labels -contains "coop-required"
+    if ($humanLifecycle.Count -gt 0) {
+        $hasQualifier = $labels -contains $CoopQualifierLabel
         if ($requiresCoop -and -not $hasQualifier) {
-            $findings.Add("coop_diagnostics_missing_qualifier")
+            $findings.Add("coop_test_missing_qualifier")
         }
         if (-not $requiresCoop -and $hasQualifier) {
             $findings.Add("coop_qualifier_without_test_evidence")
@@ -196,7 +205,10 @@ function Get-VerificationScope($Issue) {
     if (@($labels | Where-Object { $ToolingLabels -contains $_ }).Count -gt 0) {
         return "maintainer-offline"
     }
-    if ($labels -contains "verify-fix-coop" -or $labels -contains "coop-required") {
+    # The retired verify-fix-coop label is still read as co-op evidence so a
+    # not-yet-reconciled issue is not silently downgraded to a solo walk.
+    if ($labels -contains $CoopQualifierLabel -or
+        @($labels | Where-Object { $DeadLifecycleLabels -contains $_ }).Count -gt 0) {
         return "coop"
     }
     return "solo"
@@ -220,10 +232,17 @@ function Get-RiskTier($Issue) {
 
 function Get-RecommendedAction($Issue) {
     $labels = Get-LabelNames $Issue
+    $coop = (Get-VerificationScope $Issue) -eq "coop"
     if ($labels -contains "Fixed") { return "post-fix hardening, regression coverage, then close" }
-    if ($labels -contains "verify-fix-coop") { return "two-player in-game verification" }
-    if ($labels -contains "verify-fix") { return "solo in-game verification" }
-    if ($labels -contains "diagnostics-armed") { return "run documented repro and collect bounded diagnostics" }
+    if ($labels -contains "verify-fix" -or
+        @($labels | Where-Object { $DeadLifecycleLabels -contains $_ }).Count -gt 0) {
+        if ($coop) { return "two-player in-game verification" }
+        return "solo in-game verification"
+    }
+    if ($labels -contains "diagnostics-armed") {
+        if ($coop) { return "run documented repro with 2+ players and collect bounded diagnostics" }
+        return "run documented repro and collect bounded diagnostics"
+    }
     return "scope against source, then implement or arm diagnostics"
 }
 
@@ -232,7 +251,14 @@ function Get-EmpiricalFallbacks($Issue) {
     $lifecycle = @($labels | Where-Object { $LifecycleLabels -contains $_ }) | Select-Object -First 1
     $number = [int]$Issue.number
 
-    if ($lifecycle -eq "verify-fix-coop") {
+    # A retired verify-fix-coop label leaves no lifecycle match; treat it as the
+    # verify-fix it now maps to so the recovery paths stay peer-aware.
+    if (-not $lifecycle -and @($labels | Where-Object { $DeadLifecycleLabels -contains $_ }).Count -gt 0) {
+        $lifecycle = "verify-fix"
+    }
+    # Co-op recovery paths are selected by the orthogonal qualifier, not by a
+    # separate lifecycle state.
+    if ($lifecycle -eq "verify-fix" -and (Get-VerificationScope $Issue) -eq "coop") {
         return @(
             [ordered]@{ trigger = "The posted host/client verification for #$number fails and paired logs identify the first divergent peer/state."; change = "Repair that first owner/husk/RPC/lookup divergence at the existing issue-scoped boundary."; falsifier = "Both peers log identical authoritative state before the visible failure." },
             [ordered]@{ trigger = "Paired evidence shows authority or replay occurs on the wrong peer/lifecycle edge."; change = "Move ownership to the source-backed vanilla authority and transmit only bounded lookup-safe identity/state."; falsifier = "Authority, sender authentication, and lifecycle replay are already identical on both peers." },
@@ -789,7 +815,7 @@ function Invoke-SelfTest {
     $fixture = @(
         [PSCustomObject]@{
             number = 1; title = "Blightreaper husk transform"; body = "**Symptom:** remote husk drifts after #90, #92, #93, #94, #95, #96, and #97. ``SimpleHuskInventoryExtension._wield_slot`` differs."; url = "u1"
-            labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" }, @{ name = "WOC" }, @{ name = "0-critical" })
+            labels = @(@{ name = "bug" }, @{ name = "verify-fix" }, @{ name = "coop-required" }, @{ name = "WOC" }, @{ name = "0-critical" })
             comments = @(@{ body = "Test method: host + client. Expected: remote peer keeps the Blightreaper transform." })
         },
         [PSCustomObject]@{
@@ -833,6 +859,7 @@ function Invoke-SelfTest {
     if ($result.issues[0].applicable_lessons -notcontains "network_peer_parity") { throw "coop lesson not classified" }
     if ($result.issues[0].verification_scope -ne "coop") { throw "coop verification scope drift" }
     if ($result.issues[0].recommended_next_action -ne "two-player in-game verification") { throw "coop action drift" }
+    if ($result.issues[0].findings -contains "coop_test_missing_qualifier") { throw "verify-fix + coop-required was rejected as a legal pairing" }
     if ($result.issues[1].risk_tier -notin @("low", "moderate", "high", "critical")) { throw "risk classification drift" }
     if ($result.closed_issue_count -ne 8) { throw "closed fixture count drift" }
     $related = @($result.issues[0].related_closed_issues)
@@ -905,6 +932,35 @@ function Invoke-SelfTest {
         comments = @([PSCustomObject]@{ body = "### Verification after deployment`nThis local score-screen defect does not require a second player. Remote-player coverage remains useful. Expected: local outfit persists." })
     }
     if (Test-CommentRequiresCoop $soloDoesNotRequireSecond) { throw "explicit does-not-require-second-player wording was misclassified as co-op" }
+
+    # verify-fix-coop is retired: it must be reported, never accepted as a
+    # lifecycle state, and its co-op scope must survive until reconciled.
+    $retired = [PSCustomObject]@{
+        number = 800; title = "Retired coop lifecycle"; body = "**Symptom:** x"; url = "u800"
+        labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" }, @{ name = "1-major" })
+        comments = @(@{ body = "Test method (co-op): host + client. Expected: PASS." })
+    }
+    $retiredFindings = @(Get-IssueFindings $retired)
+    if ($retiredFindings -notcontains "retired_lifecycle_label") { throw "retired verify-fix-coop label was not reported" }
+    if ($retiredFindings -notcontains "lifecycle_count_0") { throw "retired verify-fix-coop must not satisfy lifecycle cardinality" }
+    if ((Get-VerificationScope $retired) -ne "coop") { throw "retired coop label lost its co-op verification scope" }
+    if ((Get-RecommendedAction $retired) -ne "two-player in-game verification") { throw "retired coop label lost its two-player action" }
+
+    # A coop-required qualifier is legal on diagnostics AND on verify-fix, but
+    # must still agree with the posted method.
+    $coopFix = [PSCustomObject]@{
+        number = 801; title = "Coop fix"; body = "**Symptom:** x"; url = "u801"
+        labels = @(@{ name = "bug" }, @{ name = "verify-fix" }, @{ name = "1-major" })
+        comments = @(@{ body = "Test method (co-op): host + client. Expected: PASS." })
+    }
+    if (@(Get-IssueFindings $coopFix) -notcontains "coop_test_missing_qualifier") { throw "co-op method without the qualifier was not reported" }
+    $soloFixWithQualifier = [PSCustomObject]@{
+        number = 802; title = "Solo fix"; body = "**Symptom:** x"; url = "u802"
+        labels = @(@{ name = "bug" }, @{ name = "verify-fix" }, @{ name = "coop-required" }, @{ name = "1-major" })
+        comments = @(@{ body = "Test method (solo): open the menu. Expected: PASS." })
+    }
+    if (@(Get-IssueFindings $soloFixWithQualifier) -notcontains "coop_qualifier_without_test_evidence") { throw "stale coop qualifier on a solo method was not reported" }
+
     Write-Host "[audit-open-issues -SelfTest] OK"
 }
 

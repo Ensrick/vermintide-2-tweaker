@@ -188,7 +188,7 @@
 | Co-op visual | With matching WT builds, equip Kruber's Longbow on Mercenary, Foot Knight, and Grail Knight. For each career, a second player observes partial draw, full draw/hold, release, return, weapon swap, and mission transition; reverse roles. Huntsman is the unchanged native control. |
 | Negative controls | First-person aim and camera zoom remain unchanged. Saltzpyre's non-Priest careers still use the Crossbow model and `to_zoom` presentation substitution. |
 | Log evidence | Public beta emits no issue-specific live probe rows. In the development stream, `[wt:316] ... remap=native_draw_bow` proves policy selection and camera rows deliberately report `visible_draw=unverified`; neither is accepted as proof that the owner or remote-husk clip visibly played. |
-| Authority | The fix uses WT's existing per-unit 3P event funnel for owner bodies and remote husks and adds no custom RPC. Visible remote playback still requires two-player verification, so `verify-fix-coop` is the sole verification label. |
+| Authority | The fix uses WT's existing per-unit 3P event funnel for owner bodies and remote husks and adds no custom RPC. Visible remote playback still requires two-player verification, so it carries `verify-fix` plus the `coop-required` qualifier. |
 
 ## #585 - Moonfire energy bar clears after ranged replacement
 

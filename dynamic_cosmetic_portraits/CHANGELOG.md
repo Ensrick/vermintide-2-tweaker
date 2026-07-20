@@ -1,6 +1,6 @@
 # Changelog — Dynamic Cosmetic Portraits
 
-## 0.1.27-dev (2026-07-18) -- #435 score rows use recorded cosmetics [verify-fix-coop]
+## 0.1.27-dev (2026-07-18) -- #435 score rows use recorded cosmetics [verify-fix; coop-required]
 
 - The attached client log had Dynamic Cosmetic Portraits disabled and no
   `[dcp:LOAD]` rows; its only Mercenary was a host-owned bot. The previous score
@@ -45,7 +45,7 @@ Run `/dcp_regression_test`; `local_player_safe_network_lifecycle_609` must pass.
 - Kept the corrected vanilla-conformant PNG alpha masks. All 36 portrait materials and the generator now use the previously visible `gui:DIFFUSE_MAP` path; offline/runtime regression coverage rejects reintroducing the blank-material shader.
 - The original score-screen corner clipping in #526 remains open for a different solution. Portrait visibility takes precedence over that cosmetic overflow.
 
-## 0.1.23-dev (2026-07-14) -- #435 bounded player-scoped portrait evidence [verify-fix-coop]
+## 0.1.23-dev (2026-07-14) -- #435 bounded player-scoped portrait evidence [verify-fix; coop-required]
 
 - Added automatic `[dcp:435]` INFO evidence at the primary per-player HUD, Tab-list, and score-screen seams. Records identify subject class, custom/vanilla resolution, and portrait without peer/account identifiers.
 - Evidence is exact-result deduplicated and hard-capped at 24 records per session. It does not poll, send RPCs, or write to chat.

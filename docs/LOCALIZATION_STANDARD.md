@@ -645,7 +645,7 @@ labels must not expose engineering lifecycle or GitHub issue state.
 Do not add square-bracket or parenthesized status markers such as:
 
 - `[working]`, `[confirmed working]`, `[untested]`, `[fixed]`, `[unverified]`;
-- `[Issue N]`, `[verify-fix]`, `[verify-fix-coop]`;
+- `[Issue N]`, `[verify-fix]`, `[coop-required]`;
 - `[diag]`, `[diagnostics-armed]`, `[crash]`;
 - `[needs animations]`, `[needs offsets]`;
 - `[WIP]`, `(Experimental)`, `(Work in Progress)`, `(Testing)`, or similar.
@@ -683,8 +683,8 @@ plain player-facing names.
 
 Log prefixes such as `[diag]` are permitted when they are actually emitted to
 the log and not reused as menu localization. GitHub lifecycle-label automation
-(`not-started`, `verify-fix`, `verify-fix-coop`, `diagnostics-armed`, `Fixed`)
-remains unchanged.
+(`not-started`, `verify-fix`, `diagnostics-armed`, `Fixed`, plus the orthogonal
+`coop-required` qualifier) remains unchanged.
 
 ### 13.4 QA enforcement
 

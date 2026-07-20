@@ -11,7 +11,7 @@
 
 - `[gut:605] media_click` printf receipt on every dialogue-row media click captures the event id and the toggle_pause result, so a click that never reaches Character Dialogue's preview transport is distinguishable from a play that failed inside it.
 
-## 0.2.303-dev (2026-07-19) -- reconcile newly added settings into existing profiles (#828) [verify-fix-coop]
+## 0.2.303-dev (2026-07-19) -- reconcile newly added settings into existing profiles (#828) [verify-fix; coop-required]
 
 - Upgrades sparse saved profiles from the current declared defaults while preserving every explicit saved value, including `false` and explicit opt-ins.
 - Applies only missing members through the existing bounded owner transaction and persists the upgraded snapshot only after every addition succeeds.
@@ -138,7 +138,7 @@ contain `[gut:LOAD] v0.2.297-dev`; the timer should not drift or duplicate.
 2. In the modded realm, open Hero View and run `/gut_loadout_status es_questingknight` or the affected career. Expected: `slots_v2=true` and `slot_integrity_failures=0` after the hero view has opened.
 3. In the official realm, run `/scrub_official_loadouts` before applying. Expected: it reports any broken outfit/hat/frame/pose/accessory slots, not just weapons/frame. If it reports broken slots, run `/scrub_official_loadouts apply`, restart, and confirm official frame/outfit/accessory slots are no longer blank while modded selections stay separate.
 
-## 0.2.291-dev (2026-07-18) -- #700 localize the in-mission vote title [verify-fix-coop]
+## 0.2.291-dev (2026-07-18) -- #700 localize the in-mission vote title [verify-fix; coop-required]
 
 - **Observed after the popup fix:** the client vote HUD is functional, but its title renders the internal `game_settings_vote` localization key with underscores.
 - **Source-backed cause:** `IngameVotingUI.start_vote` localizes `template.text` only when `modify_title_text` exists (`ingame_voting_ui.lua:116-121`). Vanilla `game_settings_vote` has no modifier because its ordinary keep presentation localizes the title independently (`mission_voting_ui.lua:256-264`). Promoting that template to an ingame vote without supplying the missing title seam therefore exposes the raw key.
@@ -155,7 +155,7 @@ contain `[gut:LOAD] v0.2.297-dev`; the timer should not drift or duplicate.
 - **Regression guard:** new `qa/lua/tests/test_gut_gear_accent_parity.lua` asserts BOTH twins carry the accent block (marker + exact color + disabled guard).
 - **Verify (keep):** open the Mod Tweaker from the keep, Equipment tab, expand a character then Melee/Ranged: every "ENABLE ALL <CHARACTER> ..." master row and every gear-bearing row should now read in the same warm tan as the tabs; disabled rows stay grey. Cross-check the same rows from the in-mission ESC Mod Tweaker - identical colors in both.
 
-## 0.2.289-dev (2026-07-18) -- #700 in-mission mission-vote client popup [verify-fix-coop]
+## 0.2.289-dev (2026-07-18) -- #700 in-mission mission-vote client popup [verify-fix; coop-required]
 
 - **Symptom:** selecting a new mission from GUT's in-mission map starts a team vote, but clients receive no accept/decline HUD. Their undecided vote becomes the template's timeout "no", so the selection never advances in co-op.
 - **Root cause:** AdventureMechanism reuses vanilla `game_settings_vote`; the vote template and `NetworkLookup.voting_types` entry already exist on every peer, disproving a modded-key registration failure. Vanilla deliberately sets `game_settings_vote.ingame_vote = false` (`vote_templates.lua:306-319`) because it normally runs in the keep. `IngameVotingUI.update` draws only when `VoteManager.is_ingame_vote()` returns true (`ingame_voting_ui.lua:267-301`), so closing the mid-mission Start Game view leaves clients with no voting surface.
@@ -491,7 +491,7 @@ Open the native loadout-selection window once, run `/gut_loadout_capacity_probe`
 
 Enable **Surface Hidden Career Passives**, open Witch Hunter Captain's Talents screen, and confirm both named bonuses appear under the passive description. Switch careers and confirm their normal descriptions are unchanged; toggle the option off and reopen the screen to confirm the added lines disappear. Run `/gut_regression_test` and confirm `issue153_hidden_passives_display_only` passes.
 
-## 0.2.264-dev (2026-07-14) -- #272 expanded native scoreboard [verify-fix-coop]
+## 0.2.264-dev (2026-07-14) -- #272 expanded native scoreboard [verify-fix; coop-required]
 
 - Promoted #272 from inventory-only diagnostics to a bounded first implementation: the default-off **Expanded Scoreboard** shows all eleven native Adventure statistics both while the existing player-list/Tab view is open and on the Adventure end screen.
 - Reuses `ScoreboardHelper.get_grouped_topic_statistics` and vanilla hot-join transport. The detached presentation model is capped to four players, refreshed at most four times per second, and can sort by name, total damage, damage taken, elite kills, special kills, or total kills.
@@ -524,7 +524,7 @@ Load Tweaker: GUI and Tweaker: Cosmetics without CIM, enter an Adventure mission
 
 Attach both `[gut:442]` lines from startup and run `/gut_regression_test`. The expected current result is 20 hero careers, two dedicated holders (`dr_engineer`, `wh_priest`), eighteen fallbacks, and zero malformed entries. Asset production can proceed against the contract in `CAREER_HUD_HOLDER_RESEARCH_442.md`.
 
-## 0.2.261-dev (2026-07-14) -- #437 preserve Adventure scores across reconnect [verify-fix-coop]
+## 0.2.261-dev (2026-07-14) -- #437 preserve Adventure scores across reconnect [verify-fix; coop-required]
 
 - Confirmed the ownership gap in vanilla source: `StatisticsDatabase.unregister` deletes the departing player's row, and Adventure has no counterpart to Chaos Wastes' `save_persisted_score` / `restore_persisted_score` lifecycle.
 - Added an on-by-default host option that captures only the exact statistic leaf paths consumed by `ScoreboardHelper`, immediately before Adventure unregisters a player, then restores those values when the same `stats_id` is registered on rejoin.
@@ -548,7 +548,7 @@ Enter one Adventure mission, hold Tab once, and run `/gut_scoreboard_probe`. Att
 
 ## 0.2.259-dev (2026-07-14) -- #345 localization lifecycle sync [verify-fix]
 
-- Re-derived the GUT status-tag slice from current GitHub state instead of applying the stale July 5 audit literally. Third-Person Camera (#209) and the in-mission crafting bench (#80) now show `[verify-fix]`; the generic menu tag also correctly represents #287's `verify-fix-coop` lifecycle.
+- Re-derived the GUT status-tag slice from current GitHub state instead of applying the stale July 5 audit literally. Third-Person Camera (#209) and the in-mission crafting bench (#80) now show `[verify-fix]`; the generic menu tag also correctly represents #287's `verify-fix` + `coop-required` lifecycle.
 - Removed the orphan `[diag]` tags from cutscene skip #126 and readonly-loadout #287 because neither issue currently carries `diagnostics-armed`.
 - Removed closed crash #193 and its crash marker from **Enable In-Mission Inventory Access**, retaining open verification issue #87. The sibling menu-tabs row continues to carry `[crash]` because open crash #155 still applies there.
 - Added retail-safe runtime regression `issue345_gut_loc_status_sync`; the repository-wide advisory checker remains the cross-surface source of truth.
@@ -712,7 +712,7 @@ Install Simple UI plus UI Tweaks, drag its windows through all screen edges, res
 - Now matches `HeroWindowCraftingInventoryConsole` exactly: 128x128 texture size, x=-80/y=-4 offset, and search text beginning at x=47. The transparent tile may extend outside the 30px field, while its visible magnifier remains inside it.
 - Updated offline and runtime regression contracts to lock the atlas-aware geometry rather than a guessed visible-glyph size.
 
-### #287 preserve CWV instances under non-modded loadouts [verify-fix-coop]
+### #287 preserve CWV instances under non-modded loadouts [verify-fix; coop-required]
 
 - Paired host/client logs isolate the failure to Tweaker's read-only boundary: with `gut_use_non_modded_loadouts` on, the client successfully built and wielded `cwv_es_dual_axes_001`, but every matching `slot_melee` write was blocked and immediately retried through the loadout resync path. The same instance equipped cleanly as soon as the setting committed off.
 - Generalized #287's cosmetic-only readonly overlay to preserve exact CWV-owned backend instances (`cwv_*_NNN`) in melee/ranged slots. Ordinary weapons, jewelry, talents, loadout selection, and bot designation remain official-read-only; choosing an ordinary weapon clears a prior CWV overlay and falls back to the untouched official row.

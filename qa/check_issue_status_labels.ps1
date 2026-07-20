@@ -4,15 +4,20 @@
 # type + mod. The lifecycle STATUS labels are:
 #   not-started        - no fix or diagnostic work attempted yet.
 #   diagnostics-armed  - a diagnostic/probe shipped; user repros to capture data.
-#   verify-fix         - a code fix shipped; the user tests it in-game solo.
-#   verify-fix-coop    - a code fix shipped; needs 2+ testers in-game.
+#   verify-fix         - a code fix shipped; the user tests it in-game.
 #   Fixed              - user-verified; post-fix pass (hardening/docs/tests) owed.
+# `coop-required` is an ORTHOGONAL qualifier, not a lifecycle state: it means
+# "testing needs 2+ players" and may accompany ANY lifecycle label (including
+# verify-fix and diagnostics-armed). It never counts toward the cardinality.
+# `verify-fix-coop` is DEAD (retired in favour of verify-fix + coop-required);
+# it is no longer a lifecycle state and its presence on any issue is drift that
+# this check reports.
 # When work ships for an issue, the matching status label must be added (and
 # not-started removed) in the SAME pass as the CHANGELOG entry (rule #5 /
 # CLAUDE.md #13). This check catches the recurring miss where a fix/probe ships
 # in the latest CHANGELOG entry but the issue still says not-started / nothing.
 # A second pass (issue #498) sweeps ALL open issues for a missing lifecycle
-# state entirely - every open issue must carry exactly one of the five.
+# state entirely - every open issue must carry exactly one of the four.
 #
 # This is a WARNING-ONLY, NON-BLOCKING advisory scan (wired into run_all.ps1
 # under -Policy 'Advisory', exactly like check_loc_tags.ps1). It NEVER fails the
@@ -80,11 +85,19 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 $repoRoot = (Resolve-Path $RepoRoot).Path
 
 # ---- the status-label lifecycle (§ 11; user rules 2026-07-11/12) ----
-# verify-fix (solo-verifiable fix) | verify-fix-coop (needs 2+ testers) |
-# diagnostics-armed (probe) | Fixed (user-verified; post-fix pass owed).
-# not-started marks zero work; it does NOT count as a worked status here.
-$StatusLabels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed', 'Fixed')
+# verify-fix (a fix shipped) | diagnostics-armed (probe) | Fixed (user-verified;
+# post-fix pass owed). not-started marks zero work; it does NOT count as a
+# worked status here.
+$StatusLabels = @('verify-fix', 'diagnostics-armed', 'Fixed')
 $LifecycleLabels = $StatusLabels + @('not-started')
+
+# NOTE: `coop-required` is deliberately absent from both lists above. It is an
+# orthogonal qualifier ("testing needs 2+ players"), legal alongside ANY
+# lifecycle label, and must never count toward lifecycle cardinality.
+#
+# Retired lifecycle labels. `verify-fix-coop` was replaced by the pair
+# verify-fix + coop-required; any issue still carrying it is drift to reconcile.
+$DeadLifecycleLabels = @('verify-fix-coop')
 
 # ---- active mods whose CHANGELOG.md is authored newest-first ----
 # Mirrors the ship-doctrine active set: single-stream mods, five promotion-pair
@@ -157,6 +170,12 @@ function Get-LifecycleStateCount {
     return @($Labels | Where-Object { $LifecycleLabels -contains $_ }).Count
 }
 
+# Retired lifecycle labels still present on an issue (see $DeadLifecycleLabels).
+function Get-DeadLifecycleLabels {
+    param([string[]]$Labels)
+    return @($Labels | Where-Object { $DeadLifecycleLabels -contains $_ })
+}
+
 function Test-IsOfflineOnlyIssue {
     param([string[]]$Labels)
     return (($Labels -contains 'tooling') -or ($Labels -contains 'documentation'))
@@ -225,6 +244,10 @@ function Invoke-SelfTest {
 
     Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'tooling')) -eq 1) "one lifecycle label is valid (issue #498)"
     Assert ((Get-LifecycleStateCount @('bug', 'diagnostics-armed', 'coop-required')) -eq 1) "coop-required is orthogonal, not a second lifecycle label"
+    Assert ((Get-LifecycleStateCount @('bug', 'verify-fix', 'coop-required')) -eq 1) "verify-fix + coop-required is legal (coop qualifier is not a lifecycle state)"
+    Assert ((Get-LifecycleStateCount @('bug', 'verify-fix-coop')) -eq 0) "retired verify-fix-coop no longer satisfies the lifecycle requirement"
+    Assert ((Get-DeadLifecycleLabels @('bug', 'verify-fix-coop', 'wt')).Count -eq 1) "retired verify-fix-coop is detected as dead-label drift"
+    Assert ((Get-DeadLifecycleLabels @('bug', 'verify-fix', 'coop-required')).Count -eq 0) "the replacement pair is not flagged as dead"
     Assert ((Get-LifecycleStateCount @('bug', 'tooling')) -eq 0) "zero lifecycle labels is detected"
     Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'verify-fix')) -eq 2) "multiple lifecycle labels are detected"
     Assert ((Get-LifecycleStateCount @('tooling')) -eq 0) "tooling issue without not-started is lifecycle drift"
@@ -302,8 +325,11 @@ foreach ($c in ($candidates | Sort-Object Issue, Mod)) {
 }
 
 # Pass 3 (issue #498): EVERY open issue must carry exactly one lifecycle state -
-# one of the four worked statuses or not-started. Zero OR multiple = drift.
+# one of the three worked statuses or not-started. Zero OR multiple = drift.
+# The same sweep reports any issue still carrying a RETIRED lifecycle label
+# (verify-fix-coop), which must be reconciled to verify-fix + coop-required.
 $lifecycleDrift = @()
+$deadLabelDrift = @()
 $openJson = & gh issue list --state open --limit 400 --json number,labels 2>$null
 if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($openJson)) {
     try {
@@ -321,6 +347,14 @@ if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($openJson)) {
                     LifecycleCount = $lifecycleCount
                 }
             }
+            $dead = @(Get-DeadLifecycleLabels $lbls)
+            if ($dead.Count -gt 0) {
+                $deadLabelDrift += [pscustomobject]@{
+                    Issue = $o.number
+                    Labels = ($lbls -join ',')
+                    Dead = ($dead -join ',')
+                }
+            }
         }
     } catch {}
 }
@@ -331,13 +365,21 @@ if ($hardError) {
     exit 2
 }
 
-if ($findings.Count -eq 0 -and $lifecycleDrift.Count -eq 0) {
-    Write-Host "[check_issue_status_labels] OK -- CHANGELOG-referenced issues carry status labels; every open issue carries exactly one lifecycle state." -ForegroundColor Green
+if ($findings.Count -eq 0 -and $lifecycleDrift.Count -eq 0 -and $deadLabelDrift.Count -eq 0) {
+    Write-Host "[check_issue_status_labels] OK -- CHANGELOG-referenced issues carry status labels; every open issue carries exactly one lifecycle state; no retired labels in use." -ForegroundColor Green
     exit 0
 }
 
+if ($deadLabelDrift.Count -gt 0) {
+    Write-Host ("[check_issue_status_labels] {0} open issue(s) still carry the RETIRED 'verify-fix-coop' label:" -f $deadLabelDrift.Count) -ForegroundColor Yellow
+    foreach ($s in ($deadLabelDrift | Sort-Object Issue)) {
+        Write-Host ("  ! #{0} carries {1} [{2}]" -f $s.Issue, $s.Dead, $s.Labels) -ForegroundColor Yellow
+    }
+    Write-Host "  Fix: replace it with the lifecycle label 'verify-fix' PLUS the orthogonal qualifier 'coop-required' in one gh issue edit." -ForegroundColor DarkYellow
+}
+
 if ($lifecycleDrift.Count -gt 0) {
-    Write-Host ("[check_issue_status_labels] {0} open issue(s) do not carry EXACTLY ONE lifecycle state (not-started / diagnostics-armed / verify-fix / verify-fix-coop / Fixed):" -f $lifecycleDrift.Count) -ForegroundColor Yellow
+    Write-Host ("[check_issue_status_labels] {0} open issue(s) do not carry EXACTLY ONE lifecycle state (not-started / diagnostics-armed / verify-fix / Fixed):" -f $lifecycleDrift.Count) -ForegroundColor Yellow
     foreach ($s in ($lifecycleDrift | Sort-Object Issue)) {
         $lbl = if ($s.Labels) { $s.Labels } else { '(no labels)' }
         Write-Host ("  ! #{0} [count={1}; {2}]" -f $s.Issue, $s.LifecycleCount, $lbl) -ForegroundColor Yellow

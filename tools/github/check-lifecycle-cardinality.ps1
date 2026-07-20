@@ -6,10 +6,16 @@
 # (exit 1) whenever any OPEN issue carries a lifecycle-label cardinality != 1.
 #
 # Doctrine: PROJECT_STANDARDS.md section 11 "Labels" + "Tracker lifecycle
-# discipline". The five lifecycle labels below must stay in lockstep with
+# discipline". The four lifecycle labels below must stay in lockstep with
 # $LifecycleLabels in tools/github/audit-open-issues.ps1 and tools/ship/ship.ps1
 # (the taxonomy is closed: CLAUDE.md NON-NEGOTIABLE #13 forbids new status
 # labels, so this list should never drift).
+#
+# `coop-required` is NOT a lifecycle label. It is an orthogonal qualifier
+# meaning "testing needs 2+ players" and may accompany any lifecycle state, so
+# it never counts toward cardinality. The former `verify-fix-coop` lifecycle
+# was retired in favour of verify-fix + coop-required; it is now a DEAD label
+# and this guard fails on any issue still carrying it.
 #
 # HARD FAIL by deliberate design. The advisory qa/check_issue_status_labels.ps1
 # pass-3 sweep already warned on bare issues and did not stop the #750 strip
@@ -19,7 +25,7 @@
 # edits labels, needs only issues:read (works with the default GITHUB_TOKEN).
 #
 # Exit codes:
-#   0 = every open issue carries exactly one lifecycle label.
+#   0 = every open issue carries exactly one lifecycle label and no dead label.
 #   1 = one or more violations (offending numbers + labels are printed).
 #   throws = gh unavailable or the list call failed (CI step fails; a transient
 #            GitHub API error is resolved by re-running the job).
@@ -39,9 +45,15 @@ $ErrorActionPreference = "Stop"
 $LifecycleLabels = @(
     "not-started",
     "verify-fix",
-    "verify-fix-coop",
     "diagnostics-armed",
     "Fixed"
+)
+
+# Retired lifecycle labels. Their presence is a violation on its own, no matter
+# what the cardinality count says, so the reconciliation instruction printed to
+# the maintainer names the replacement pair instead of a generic "bare issue".
+$DeadLifecycleLabels = @(
+    "verify-fix-coop"
 )
 
 function Get-LifecycleViolations($Issues) {
@@ -49,12 +61,14 @@ function Get-LifecycleViolations($Issues) {
     foreach ($issue in @($Issues)) {
         $labels = @($issue.labels | ForEach-Object { [string]$_.name })
         $lifecycle = @($labels | Where-Object { $LifecycleLabels -contains $_ })
-        if ($lifecycle.Count -ne 1) {
+        $dead = @($labels | Where-Object { $DeadLifecycleLabels -contains $_ })
+        if ($lifecycle.Count -ne 1 -or $dead.Count -gt 0) {
             $violations += [PSCustomObject][ordered]@{
                 number = [int]$issue.number
                 title = [string]$issue.title
                 lifecycle_count = $lifecycle.Count
                 lifecycle_labels = @($lifecycle)
+                dead_labels = @($dead)
             }
         }
     }
@@ -65,18 +79,24 @@ function Invoke-SelfTest {
     $fixture = @(
         [PSCustomObject]@{ number = 1; title = "clean solo verify"; labels = @(@{ name = "bug" }, @{ name = "verify-fix" }, @{ name = "wt" }) },
         [PSCustomObject]@{ number = 2; title = "bare after strip sweep"; labels = @(@{ name = "bug" }, @{ name = "2-moderate" }) },
-        [PSCustomObject]@{ number = 3; title = "competing lifecycle pair"; labels = @(@{ name = "verify-fix" }, @{ name = "verify-fix-coop" }) },
-        [PSCustomObject]@{ number = 4; title = "clean coop verify"; labels = @(@{ name = "verify-fix-coop" }) },
-        [PSCustomObject]@{ number = 5; title = "no labels at all"; labels = @() }
+        [PSCustomObject]@{ number = 3; title = "competing lifecycle pair"; labels = @(@{ name = "verify-fix" }, @{ name = "diagnostics-armed" }) },
+        [PSCustomObject]@{ number = 4; title = "clean coop verify"; labels = @(@{ name = "verify-fix" }, @{ name = "coop-required" }) },
+        [PSCustomObject]@{ number = 5; title = "no labels at all"; labels = @() },
+        [PSCustomObject]@{ number = 6; title = "retired coop lifecycle"; labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" }) },
+        [PSCustomObject]@{ number = 7; title = "clean coop diagnostics"; labels = @(@{ name = "diagnostics-armed" }, @{ name = "coop-required" }) }
     )
     $violations = @(Get-LifecycleViolations $fixture)
-    if ($violations.Count -ne 3) { throw "expected 3 violations, got $($violations.Count)" }
+    if ($violations.Count -ne 4) { throw "expected 4 violations, got $($violations.Count)" }
     if (@($violations | Where-Object { $_.number -eq 2 -and $_.lifecycle_count -eq 0 }).Count -ne 1) { throw "bare issue not flagged" }
     if (@($violations | Where-Object { $_.number -eq 3 -and $_.lifecycle_count -eq 2 }).Count -ne 1) { throw "competing lifecycle pair not flagged" }
     if (@($violations | Where-Object { $_.number -eq 5 }).Count -ne 1) { throw "label-less issue not flagged" }
-    if (@($violations | Where-Object { $_.number -in @(1, 4) }).Count -ne 0) { throw "clean issue was misflagged" }
+    if (@($violations | Where-Object { $_.number -in @(1, 4, 7) }).Count -ne 0) { throw "clean issue was misflagged" }
     $double = @($violations | Where-Object { $_.number -eq 3 })[0]
-    if (($double.lifecycle_labels -join ",") -ne "verify-fix,verify-fix-coop") { throw "violation must name the competing labels" }
+    if (($double.lifecycle_labels -join ",") -ne "verify-fix,diagnostics-armed") { throw "violation must name the competing labels" }
+    # coop-required is orthogonal: it must never satisfy or inflate cardinality.
+    $retired = @($violations | Where-Object { $_.number -eq 6 })
+    if ($retired.Count -ne 1) { throw "retired verify-fix-coop label not flagged" }
+    if (($retired[0].dead_labels -join ",") -ne "verify-fix-coop") { throw "violation must name the retired label" }
     Write-Host "[check-lifecycle-cardinality -SelfTest] OK"
 }
 
@@ -108,9 +128,12 @@ $isActions = $env:GITHUB_ACTIONS -eq "true"
 Write-Host "[check-lifecycle-cardinality] FAIL: $($violations.Count) open issue(s) violate lifecycle cardinality (exactly 1 of: $($LifecycleLabels -join ', ')):"
 foreach ($violation in $violations) {
     $labelText = if ($violation.lifecycle_count -eq 0) { "NO lifecycle label" } else { $violation.lifecycle_labels -join " + " }
+    if (@($violation.dead_labels).Count -gt 0) {
+        $labelText += " plus RETIRED $($violation.dead_labels -join ' + ')"
+    }
     $message = "issue #$($violation.number) has $labelText - `"$($violation.title)`""
     if ($isActions) { Write-Host "::error::Lifecycle cardinality: $message" }
     Write-Host "  - $message"
 }
-Write-Host "[check-lifecycle-cardinality] Fix: route every lifecycle edit through tools/ship/ship.ps1 Get-LifecycleEditPlan (add the target + remove competing labels in ONE gh issue edit). See PROJECT_STANDARDS.md section 11 'Tracker lifecycle discipline' and issue #750."
+Write-Host "[check-lifecycle-cardinality] Fix: route every lifecycle edit through tools/ship/ship.ps1 Get-LifecycleEditPlan (add the target + remove competing labels in ONE gh issue edit). Replace a retired 'verify-fix-coop' with 'verify-fix' + the orthogonal 'coop-required' qualifier. See PROJECT_STANDARDS.md section 11 'Tracker lifecycle discipline' and issue #750."
 exit 1

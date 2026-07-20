@@ -275,7 +275,7 @@ craft, inventory, salvage, exact-delete, and restart matrix.
 **Offline verification:** run `qa/check_file_sizes.ps1`,
 `qa/check_lua_unit_tests.ps1`, and `qa/run_all.ps1 -Quick`.
 
-## 0.8.88-dev (2026-07-17): #484 persist crafted provider identity [verify-fix-coop]
+## 0.8.88-dev (2026-07-17): #484 persist crafted provider identity [verify-fix; coop-required]
 
 - Preserved `cim_acquisition_key`, `cim_provider`, and the CWV `cwv_key` in the
   one synthetic mirror payload. Reconstructed backend/menu wrappers can now
@@ -293,7 +293,7 @@ in inventory, preview, equip, mission transition, salvage, and the CWV co-op
 test described in CWV `v0.1.438-dev`. `issue484_crafted_old_musket_identity`
 must pass in `/cim_regression_test`.
 
-## 0.8.87-dev (2026-07-16): #655 optional WOC poison trait provider [verify-fix-coop]
+## 0.8.87-dev (2026-07-16): #655 optional WOC poison trait provider [verify-fix; coop-required]
 
 - Added an exact optional-provider capability boundary for WOC's reusable
   `Poisoned Edge` melee trait. CIM validates provider id, capability, trait row,
@@ -352,7 +352,7 @@ must pass in `/cim_regression_test`.
 5. Run `/cim_regression_test` and require `issue628_identity_resolvers_unified`,
    `issue628_provider_contract`, and `issue628_saved_instance_contract` PASS.
 
-## 0.8.85-dev (2026-07-16): #629/#639/#641 Cosmetics Tab presentation precedence [verify-fix-coop]
+## 0.8.85-dev (2026-07-16): #629/#639/#641 Cosmetics Tab presentation precedence [verify-fix; coop-required]
 
 - Hold-Tab now asks the installed Cosmetics mod for its locally resolved
   component presentation before applying CIM's exact-primary-skin correction.
@@ -486,7 +486,7 @@ Open the standard Salvage page with at least ten Modded-rarity items, click the 
 
 Open the standard Craft Item page on Kruber and confirm Blacksmith/base rows are present for Dual Axes, Infantry Spear, Imperial Crowbill, and Greataxe, using their authored icons. Craft one, reopen the page, and confirm exactly one base selector remains while the crafted instance remains separately in inventory. Run `/cim_regression_test`; require `issue524_cwv_selector_bounded` and `issue524_all_cwv_blacksmith_selectors` PASS.
 
-## 0.8.75-dev (2026-07-14): #598 safe modded TAB frames [verify-fix-coop]
+## 0.8.75-dev (2026-07-14): #598 safe modded TAB frames [verify-fix; coop-required]
 
 - Restored CIM's modded rarity frame/background in the hold-TAB equipment preview through a same-mod, schema-gated boolean presentation side channel. Vanilla loadout RPCs continue to transmit the safe `unique` rarity.
 - Custom icons render only when the receiving peer's local atlas confirms the texture. No custom icon, model, material, package, or skin resource identifier is added to the wire; peers missing CIM or the owning appearance mod retain a vanilla-safe fallback.
@@ -543,7 +543,7 @@ Verify the intended modded frame in hold-TAB with two CIM-capable peers, then re
 - Runtime regression `issue521_tooltip_follows_hovered_weapon` locks both anchors, their 1090px separation, and any live applied position.
 - **Verify:** hover primary and secondary weapon viewports in the Athanor overview. Exactly one card should appear beside the matching hovered viewport and clear on mouse-out. No co-op player is required.
 
-## 0.8.70-dev (2026-07-13): #246 Hold-Tab exact illusion icon [verify-fix-coop] [not deployed]
+## 0.8.70-dev (2026-07-13): #246 Hold-Tab exact illusion icon [verify-fix; coop-required] [not deployed]
 
 - Source audit confirmed that Hold-Tab renders `Managers.player:player_loadouts()`, but vanilla `rpc_sync_loadout_slot` omits weapon-skin identity and reconstructs only the base item. The separately synchronized live inventory equipment does retain the exact `skin` key from `rpc_add_equipment`.
 - After the player-list refresh, CIM now reconciles only the melee and ranged icons from each live inventory slot's exact registered skin. The same item receives that skin for the existing tooltip path. Default skins clear stale preview state; missing slots or unregistered icons fail closed.

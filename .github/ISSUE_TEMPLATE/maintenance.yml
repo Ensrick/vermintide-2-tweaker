@@ -10,7 +10,7 @@ body:
       value: |
         Keep the title to eight words after the `[area]` prefix. Apply one area/mod label, one severity label, and optional `documentation`, `audit`, or `refactor` modifiers after filing.
 
-        Maintenance starts `not-started`. Documentation, QA, and tooling work never uses `verify-fix`, `verify-fix-coop`, `diagnostics-armed`, or `Fixed`; validate it autonomously and close it with evidence. Runtime source investigations may move to `diagnostics-armed` only after a probe ships with reproduction steps and expected output.
+        Maintenance starts `not-started`. Documentation, QA, and tooling work never uses `verify-fix`, `diagnostics-armed`, or `Fixed`; validate it autonomously and close it with evidence. Runtime source investigations may move to `diagnostics-armed` only after a probe ships with reproduction steps and expected output.
   - type: dropdown
     id: area
     attributes:

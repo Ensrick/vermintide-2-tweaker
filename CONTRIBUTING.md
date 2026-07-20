@@ -55,14 +55,19 @@ bug classes each check covers.
 Every open issue has exactly one tracker lifecycle label:
 
 - `not-started` until the first code or diagnostic work ships.
-- `verify-fix` after a complete solo-verifiable fix ships with an in-game test
-  comment and expected result.
-- `verify-fix-coop` instead when verification requires two or more people.
+- `verify-fix` after a complete fix ships with an in-game test comment and
+  expected result.
 - `diagnostics-armed` after a runtime probe ships with reproduction steps and
   expected output.
 - `Fixed` only after the maintainer or designated playtester confirms the fix
   in game. It remains open until hardening, documentation, and regression work
   are complete.
+
+Separately, the orthogonal `coop-required` qualifier marks an issue whose
+verification needs two or more players. It is not a lifecycle label: it pairs
+with whichever lifecycle applies (most often `verify-fix` or
+`diagnostics-armed`) and does not count toward the one-lifecycle rule. A fix
+needing co-op verification is labeled `verify-fix` + `coop-required`.
 
 Documentation and tooling issues do not use the in-game verification labels;
 they are validated autonomously and closed with evidence. The complete taxonomy

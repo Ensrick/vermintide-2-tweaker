@@ -8,9 +8,11 @@
 .DESCRIPTION
     Improvement #3a from the 2026-07 standards review.
 
-    Reads open issues labeled `verify-fix`, `verify-fix-coop`, and `diagnostics-armed`
-    (the three lifecycle labels that mean "fix/probe shipped, a human must now confirm it
-    in-game"). For each issue it extracts the most recent comment that carries an actual
+    Reads open issues labeled `verify-fix` or `diagnostics-armed` (the two lifecycle
+    labels that mean "fix/probe shipped, a human must now confirm it in-game"), plus the
+    retired `verify-fix-coop` so a not-yet-reconciled issue is not dropped from the walk.
+    Co-op scope comes from the orthogonal `coop-required` qualifier, which may accompany
+    either lifecycle label. For each issue it extracts the most recent comment that carries an actual
     TEST METHOD (heuristic score over 'TEST' / 'Test method' / 'verify' + imperative steps,
     with bookkeeping/xref comments penalized). Issues whose newest method-bearing comment
     cannot be found are flagged MISSING-METHOD (a doctrine violation: every ship owes a
@@ -156,11 +158,12 @@ function Get-VtCoopTier {
 function Get-VtLocation {
     param([string]$Method, [string]$Title, [string[]]$LabelNames)
     $hay = (($Title + " `n " + $Method)).ToLower()
-    # verify-fix-coop is the mutually-exclusive shipped-fix lifecycle. Armed
-    # diagnostics keep diagnostics-armed as their sole lifecycle and use the
-    # orthogonal coop-required qualifier (PROJECT_STANDARDS section 11).
-    $isCoop = ($LabelNames -contains 'verify-fix-coop') -or
-        ($LabelNames -contains 'coop-required') -or
+    # coop-required is the orthogonal qualifier that routes a check to the co-op
+    # walk; it may accompany ANY lifecycle label (verify-fix or diagnostics-armed).
+    # The retired verify-fix-coop lifecycle is still honoured as legacy co-op
+    # evidence until those issues are reconciled (PROJECT_STANDARDS section 11).
+    $isCoop = ($LabelNames -contains 'coop-required') -or
+        ($LabelNames -contains 'verify-fix-coop') -or
         ($hay -match '(both peers|both players|two players|2 players|3 players|three players|3\+ players|2\+ players|second player|other player|host and client|client husk|no-?cwv peer|remote (player|peer)|co-?op|cold[ -]?join|another player|second tester|host bot)')
     if ($isCoop) { return (Get-VtCoopTier $hay) }
 
@@ -308,9 +311,10 @@ function Invoke-SelfTest {
 
     # classification
     Assert ((Get-VtLocation -Method $m -Title 'crt tooltip' -LabelNames @('verify-fix')) -eq 'KEEP-MENU') 'talent tooltip -> KEEP-MENU'
-    Assert ((Get-VtLocation -Method $inline -Title 'score sync' -LabelNames @('verify-fix-coop')) -eq 'COOP-2P') 'coop label -> COOP-2P'
+    Assert ((Get-VtLocation -Method $inline -Title 'score sync' -LabelNames @('verify-fix', 'coop-required')) -eq 'COOP-2P') 'coop-required on a shipped fix -> COOP-2P'
     Assert ((Get-VtLocation -Method 'Open the menu and attach the resulting log.' -Title 'bounded probe' -LabelNames @('diagnostics-armed', 'coop-required')) -eq 'COOP-2P') 'coop-required routes armed diagnostics to co-op without relying on prose'
-    Assert ((Get-VtLocation -Method 'Test (3 players + host bot): host cosmetics visible on client husks at cold join.' -Title 'host cosmetics' -LabelNames @('verify-fix-coop')) -eq 'COOP-3P') '3 players -> COOP-3P'
+    Assert ((Get-VtLocation -Method 'Open the menu and attach the resulting log.' -Title 'legacy coop fix' -LabelNames @('verify-fix-coop')) -eq 'COOP-2P') 'retired verify-fix-coop still routes to co-op until reconciled'
+    Assert ((Get-VtLocation -Method 'Test (3 players + host bot): host cosmetics visible on client husks at cold join.' -Title 'host cosmetics' -LabelNames @('verify-fix', 'coop-required')) -eq 'COOP-3P') '3 players -> COOP-3P'
     Assert ((Get-VtLocation -Method 'Load a Chaos Wastes expedition, grab a boon at the shrine.' -Title 'boon' -LabelNames @('verify-fix')) -eq 'MISSION-CW') 'chaos wastes -> MISSION-CW'
     Assert ((Get-VtLocation -Method 'Start an Adventure mission on Righteous Stand, watch for the horde.' -Title 'spawn' -LabelNames @('verify-fix')) -eq 'MISSION-ADVENTURE') 'adventure -> MISSION-ADVENTURE'
     Assert ((Get-VtLocation -Method 'Boot the game and confirm no warning flood in the console log.' -Title 'boot flood' -LabelNames @('verify-fix')) -eq 'SHUTDOWN') 'boot flood -> SHUTDOWN'
@@ -347,7 +351,11 @@ if (-not $OutDir) { $OutDir = Join-Path $repo 'docs' }
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Force -Path $OutDir | Out-Null }
 
 Write-Host 'Fetching open verify-state issues from GitHub...' -ForegroundColor Cyan
-$labels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed')
+# The two live lifecycle labels, plus the retired verify-fix-coop so any issue
+# not yet reconciled to verify-fix + coop-required still reaches the tester. A
+# label that no longer exists in the repo returns nothing and is reported as
+# "(none)" rather than failing the run.
+$labels = @('verify-fix', 'diagnostics-armed', 'verify-fix-coop')
 $byNumber = [ordered]@{}
 foreach ($lbl in $labels) {
     $raw = & gh issue list --state open --label $lbl --json number,title,labels,comments,updatedAt --limit $Limit 2>$null | Out-String
@@ -419,7 +427,7 @@ $L = New-Object System.Collections.Generic.List[string]
 $L.Add('# Playtest Script (verify-state issues)')
 $L.Add('')
 $L.Add("> GENERATED by ``tools/verify/generate_playtest.ps1`` on $now. Do NOT hand-edit - rerun the tool.")
-$L.Add('> Source: open issues labeled `verify-fix`, `verify-fix-coop`, `diagnostics-armed`.')
+$L.Add('> Source: open issues labeled `verify-fix` or `diagnostics-armed`; the co-op sections are driven by the orthogonal `coop-required` qualifier.')
 $L.Add('> Ordered for one session: solo keep -> solo adventure -> solo Chaos Wastes -> scoreboard -> boot/log, then co-op.')
 $L.Add('> Each box confirms one issue in-game. Every check owes a method comment; `[MISSING-METHOD]` rows violate doctrine - post a test comment on that issue.')
 $L.Add('')

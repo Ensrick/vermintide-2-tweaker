@@ -26,7 +26,7 @@ Last updated: 2026-07-19.
 | Unknown/mixed fallback | Immediately strip CT player/party power-ups, persistent buff names, and live CT buffs from the full synchronized state, then run vanilla sync. No wait. Strip failure rejects through the bounded vanilla kick path rather than sending a custom lookup id. |
 | Leave/rejoin | Real `remove_peer` forgets the ack. Same-id rejoin is unknown until a fresh acknowledgement; level-transition roster gaps retain the bounded same-session proof. |
 | Detection | Offline `test_peer_parity_transition.lua` covers missing, pre-roster unknown, all-acked, and leave/rejoin states plus hook order. `/ct_regression_test`: `peer_parity_beacon_installed`, `peer_parity_gate_classify`, `issue426_hot_join_fence`, `ct_wire_strip_name_predicate`. |
-| Lifecycle | `verify-fix-coop`; test one current-CT hot join and one no-CT hot join into an in-progress run with a CT boon active. |
+| Lifecycle | `verify-fix` + `coop-required`; test one current-CT hot join and one no-CT hot join into an in-progress run with a CT boon active. |
 
 ### expedition save/resume readiness - issue #141
 
@@ -36,7 +36,7 @@ Last updated: 2026-07-19.
 | Inventory | 7 run-config getters, 4 progress getters, SharedState full sync, and power-up/currency/loadout read-write families. |
 | Runtime evidence | At most two `[ct:141]` lines per session; `/ct_resume_audit` captures the current lifecycle point. |
 | Detection | Offline `test_ct_resume_policy.lua`; `/ct_regression_test`: `issue141_resume_surface_inventory`. |
-| Lifecycle | `diagnostics-armed` solo. Any actual restore becomes `verify-fix-coop`. |
+| Lifecycle | `diagnostics-armed` solo. Any actual restore becomes `verify-fix` + `coop-required`. |
 
 ### Chest of Trials activation cost - issue #63
 
@@ -57,7 +57,7 @@ Last updated: 2026-07-19.
 | Expected catalog | 8 settings, templates and wire entries; 8 context-bound, 2 objective-bound, 6 resource-bound, 0 declared package lists. |
 | Runtime evidence | At most two `[ct:253]` snapshots (two lines each): startup and first `StateIngame`; the latter reports six sampled resource-residency results. |
 | Detection | Offline `test_ct_weave_curse_policy.lua`; `/ct_regression_test`: `issue253_weave_curse_feasibility`. |
-| Future verification | Each implemented wind is `verify-fix-coop`; test host/client, hot join, transition, respawn, stacking and cleanup independently. |
+| Future verification | Each implemented wind is `verify-fix` + `coop-required`; test host/client, hot join, transition, respawn, stacking and cleanup independently. |
 
 ### dev-localization-status-sync - issue #345
 

@@ -43,14 +43,14 @@ the bar refills at the native rate with draw/charge FX and sounds (#388).
 - Corrected the separately owned inventory-preview entry without changing the
   first-person presentation or Warrior Priest behavior.
 
-## 0.12.282-beta (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
+## 0.12.282-beta (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix; coop-required]
 
 - Extended the existing declarative animation-remap owner with the missing
   CWV animation vocabulary used by Outrider and cross-character weapon states.
 - Kept one wield hook and fail-closed donor fallback; added regression evidence
   for recognized events and bounded unknown-event diagnostics.
 
-## 0.12.281-beta (2026-07-19) - #735 shield-only rotation routing [verify-fix-coop]
+## 0.12.281-beta (2026-07-19) - #735 shield-only rotation routing [verify-fix; coop-required]
 
 - Added an explicit hand discriminator to baked transform descriptors so the
   Saltzpyre shield seating rotation targets only the left-hand shield and never
@@ -102,7 +102,7 @@ each weapon, and fire Locked and Loaded. Repeat after swapping away/back and
 after loading into a mission. The career skill must trigger normally and the log
 must not contain `[wt:career-actions] incomplete` for either item.
 
-## 0.12.277-beta (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix-coop]
+## 0.12.277-beta (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix; coop-required]
 
 - Added the user-tuned additive third-person grip correction for Kruber using
   Saltzpyre's regular Crossbow: `+0.100` Y and `+0.025` Z on its left-hand unit.
@@ -258,7 +258,7 @@ must pass without `conflict:action_career_dr_3` or
 - Added `/wt_regression_test` check `issue635_public_beta_dev_surface_absent` for the public runtime export boundary.
 - Removed the retired Kruber Longbow zoom-controls claim from the Workshop feature list; the native draw behavior remains owned by the shipped #316 animation fix, not a user-facing zoom setting.
 
-## 0.12.264-beta (2026-07-15) - #316 Kruber Longbow native draw playback [verify-fix-coop]
+## 0.12.264-beta (2026-07-15) - #316 Kruber Longbow native draw playback [verify-fix; coop-required]
 
 - Fixed the live-evidence regression where Mercenary successfully entered
   `ActionAim` zoom but WT replaced `draw_bow` with the generic `to_zoom` body
@@ -309,7 +309,7 @@ Enable the Hold-Pose master and Third Person channel, wield a weapon in the keep
 
 Run `/wt_regression_test`, then walk the verification steps attached to the open Tweaker: Weapons issues. This beta changes only the release suffix from the already-shipped 0.12.261-dev candidate, so its behavior should be byte-equivalent apart from version/reporting metadata.
 
-## 0.12.261-dev (2026-07-15) - #620 CWV Tuskgor Combat Style default [verify-fix-coop]
+## 0.12.261-dev (2026-07-15) - #620 CWV Tuskgor Combat Style default [verify-fix; coop-required]
 
 - Kept WT-alone Foot Knight Tuskgor Spear default-off. When active CWV positively marks the native Tuskgor Combat Style family ready, WT seeds that exact Foot Knight setting on once per profile; late load and hot reload converge without repeatedly overriding later user choices.
 - The normal WT setting remains the final control after its one-time default seed. No hard dependency, per-frame check, item grant, or new transport was added.
@@ -353,7 +353,7 @@ Open Dev: Weapon Hold Pose Tuner, confirm Scale X/Y/Z appear under both hands, c
 
 Open Bardin's inventory character preview with Sienna's original Crowbill and confirm the one-handed idle is restored. Separately, preview Dual Axes on Ranger Veteran and confirm the pose matches the subtle non-Slayer dual-wield family rather than Slayer's stance; Dual Hammers must remain unchanged.
 
-## 0.12.256-dev (2026-07-14) - #604 Crowbill catalog and #597 Greataxe ownership [verify-fix-coop]
+## 0.12.256-dev (2026-07-14) - #604 Crowbill catalog and #597 Greataxe ownership [verify-fix; coop-required]
 
 - Added the CWV Imperial and Dawi Crowbill families to WT's bounded career catalog so their authored owners remain default-on and every optional receiver remains independently controllable.
 - With CWV active and its replacement ready, Kruber and Saltzpyre use CWV's Kruber Greataxe instead of Bardin's native Greataxe. WT preserves saved native values but cedes menu, runtime, cache, and final-write ownership; the Bardin fallback returns when CWV is absent or not ready.
@@ -382,7 +382,7 @@ On Ranger Veteran, open the inventory-screen character preview with Dual Axes an
 
 Confirm the three axe balance toggles appear under Weapon Tweaks and work with WT alone; with CWV installed, its Greataxe joins the same policy. On Witch Hunter Captain with CWV active, Bardin Axe & Shield must be absent and the CWV Empire/Kruber Axe & Shield option must be present. Disable/re-enable CWV and confirm ownership reconciles without duplicate or stale rows.
 
-## 0.12.254-dev (2026-07-14) - #602 Dawi Mace family availability [verify-fix-coop]
+## 0.12.254-dev (2026-07-14) - #602 Dawi Mace family availability [verify-fix; coop-required]
 
 - Added all three CWV Dawi Mace variants to WT's bounded career catalog. Their source-backed Bardin careers keep the CWV defaults; every other career is exposed as an independent default-off option.
 - Catalog tests now derive their bounds from the declared rows and verify every authored/default/conditional career split rather than relying on stale hard-coded totals.
@@ -399,7 +399,7 @@ With CWV `0.1.411-dev`, confirm all three Dawi variants appear for their default
 
 Open Ranger Veteran's inventory preview with Dual Hammers, then Dual Axes. The newest log should contain one `[wt:603]` row per distinct weapon/event; attach those rows to #603 so the correct native idle can be selected without guessing.
 
-## 0.12.253-dev (2026-07-14) - #597 #576 Greataxe availability and Axe+Shield Heavy 3 [verify-fix-coop]
+## 0.12.253-dev (2026-07-14) - #597 #576 Greataxe availability and Axe+Shield Heavy 3 [verify-fix; coop-required]
 
 - Replaced the retired CWV Poleaxe row with the Kruber Greataxe. All four Kruber careers default on; every other supported career is an independent default-off WT opt-in. Disable/removal restores only CWV's authored owners.
 - Corrected Axe+Shield's three-heavy donor chain over Saltzpyre's two-heavy Axe+Falchion vocabulary: H1 maps to target H1, H2 to target H2, and H3 commits through the target-H1 cycle restart. Diagnostics now distinguish Heavy 3 wind-up from the committed release, so a charge-only false positive cannot pass.
@@ -408,13 +408,13 @@ Open Ranger Veteran's inventory preview with Dual Hammers, then Dual Axes. The n
 
 Confirm Greataxe career toggles and per-model transform tuning. On Axe+Shield, perform H1, H2, and H3 repeatedly while a second player observes; both owner 3P and remote husk must show every charge and release. With the dev picker enabled, require separate `[wt:576]` phases for `h3_charge` and `h3_committed_attack`. Run `/wt_regression_test`.
 
-## 0.12.252-dev (2026-07-14) - #596 Infantry Spear availability [verify-fix-coop]
+## 0.12.252-dev (2026-07-14) - #596 Infantry Spear availability [verify-fix; coop-required]
 
 - Added CWV Infantry Spear to WT's bounded availability catalog. Mercenary, Huntsman, and Foot Knight are default-on and independently disableable; Grail Knight and all other careers are exposed default-off.
 - WT removes only its 17 optional receivers when CWV/WT is disabled and restores the three CWV-authored careers. Every enabled receiver receives its career-ability action on the live custom template.
 - Extended the pure availability policy and offline tests for per-career defaults, all 20 careers, Grail Knight opt-in, lifecycle restoration, and the 30-item CWV catalog.
 
-## 0.12.251-dev (2026-07-14) - #112 tune Saltzpyre Kruber shield rotation [verify-fix-coop]
+## 0.12.251-dev (2026-07-14) - #112 tune Saltzpyre Kruber shield rotation [verify-fix; coop-required]
 
 - Baked the requested local Euler correction `{X=25, Y=-17.5, Z=-15}` for Empire Mace & Shield, Empire Sword & Shield, Bretonnian Sword & Shield, and the CWV Empire Axe & Shield family on Witch Hunter Captain, Bounty Hunter, and Zealot. These are the Kruber-derived shield ports currently seated on Saltzpyre's Axe+Falchion third-person vocabulary.
 - Explicitly excluded Kruber Spear & Shield (`es_deus_01`), Warrior Priest, and native Kruber renderers. The live CWV clone-name boundary is covered through `dr_shield_axe`, while both intended `cwv_es_axe_shield` identities are also catalogued so a future identity repair does not silently lose the correction.
@@ -541,7 +541,7 @@ With CWV active, open Weapon Availability -> Career Weapon Variants. Expand Krub
 
 With CWV enabled, enter the keep and confirm the three Saltzpyre weapons remain available on each Kruber career and the Career Weapon Variants availability group defaults on. Disable one vanilla overlap and one CWV clone, transition keep-to-mission and back, and confirm only those choices remain unavailable. Re-enable them and confirm availability returns. Repeat once with CWV absent: the three cross-character WT rows must retain their standalone opt-in defaults.
 
-## 0.12.239-dev (2026-07-14) - #388 Deepwood cross-career overcharge presentation [verify-fix-coop]
+## 0.12.239-dev (2026-07-14) - #388 Deepwood cross-career overcharge presentation [verify-fix; coop-required]
 
 - Corrected the issue's original mechanism: Deepwood Staff uses `overcharge_system`, not Moonfire's `energy_system`. Vanilla binds its green HUD palette, thorn screen particles, warning sounds, decay, and non-exploding policy to `OverchargeData.we_thornsister` when the player extension is created, so a Kruber port receives generic defaults before equipment is considered.
 - Added a reversible owner-side profile while `we_life_staff` occupies the ranged slot on a non-Sister career. It projects the native Sister values into the existing extension, clears stale screen particles on each ownership transition, and restores every captured field/sound when the staff leaves or WT is disabled. Existing owner-authoritative overcharge replication remains unchanged; no RPC, NetworkLookup value, or remote-husk mutation was added.
@@ -552,12 +552,12 @@ With CWV enabled, enter the keep and confirm the three Saltzpyre weapons remain 
 
 Both players run this build. Player A equips Deepwood Staff on a Kruber career, generates low/medium/high overcharge, then swaps to another ranged weapon and back while Player B observes and briefly spectates A. The owner and spectator bars must use the native Sister green palette; A must hear the life-staff warning progression and see thorn screen effects; the staff must decay and lock out without a generic overcharge explosion. After removal, a Sienna staff and Moonfire Bow must retain their own presentation. Repeat with B as owner. Expect one bounded profile apply/restore line per equipment transition and no RPC/desync errors.
 
-## 0.12.239-dev (2026-07-14) - #400 cross-career Flamestorm 3P aim [verify-fix-coop]
+## 0.12.239-dev (2026-07-14) - #400 cross-career Flamestorm 3P aim [verify-fix; coop-required]
 
 - Corrected the observer-side Flamestorm Staff flame stream on non-Sienna careers. The particle still begins at the authored 3P staff-tip `fx_muzzle`, but its orientation now follows the wearer's replicated `aim_direction` instead of the receiver-native substitute pose.
 - Vanilla splits the surfaces: the owner action uses the universal first-person rig for both its local particle and damage direction (`action_flamethrower.lua:64-89,226-228`), while `WeaponSystem` creates and repositions the replicated 3P particle from the weapon muzzle rotation (`weapon_system.lua:470-487,744-774`). WT changes only that replicated observer surface; damage, the owner-local first-person stream, native Sienna careers, Drakegun, and weapon transforms remain untouched.
 - Both replicated creation and continuous update seams use the same correction helper. A one-time `[wt:400] applied` line confirms each observed wielder without per-frame logging. Offline policy/wiring tests and `/wt_regression_test` lock target scope, both hooks, and the replicated-aim contract.
-- `[verify-fix-coop]`: one player equips Flamestorm Staff on Kruber, Kerillian, or Saltzpyre and aims horizontally, upward, and downward while firing; a second player confirms the 3P stream begins at the staff tip and follows the crosshair direction. Repeat once on Sienna as the unchanged native control.
+- `[verify-fix; coop-required]`: one player equips Flamestorm Staff on Kruber, Kerillian, or Saltzpyre and aims horizontally, upward, and downward while firing; a second player confirms the 3P stream begins at the staff tip and follows the crosshair direction. Repeat once on Sienna as the unchanged native control.
 
 ## 0.12.237-dev (2026-07-13) - #341 Bolt Staff primary overcharge option [not deployed]
 
@@ -620,7 +620,7 @@ Both players run this build. Player A equips Deepwood Staff on a Kruber career, 
 - Added host and runtime coverage for WT-only, WT+CWV, disable/removal, re-enable, UI persistence, and runtime `can_wield` parity.
 - **Verify:** enable one Kruber `Bardin: Axe and Shield` WT toggle. With CWV disabled, native Axe+Shield must equip. Enable CWV: the native item must stop resolving and both CWV variants must remain. Disable CWV without restarting: the native WT option must return. Re-enable CWV and repeat; no duplicate item, stale loadout, or restart requirement.
 
-## 0.12.229-dev (2026-07-13) - #587 baked weapon transforms on remote husks [verify-fix-coop]
+## 0.12.229-dev (2026-07-13) - #587 baked weapon transforms on remote husks [verify-fix; coop-required]
 
 - Vanilla remote wield is a separate renderer: `SimpleHuskInventoryExtension._wield_slot` resolves the replicated base item/career and calls `GearUtils.spawn_inventory_unit` directly, never `GearUtils.create_equipment` (`simple_husk_inventory_extension.lua:641-782`). WT now applies the same shipped scale/grip tables to those populated 3P husk units at wield time.
 - Durable offsets now weak-track owner, bot, and remote-husk 3P units at spawn/wield and reconstruct `boxed canonical position + baked delta` after animation stomps. The Scythe (`bw_ghost_scythe`, Kruber +0.6 Z) and Glaive (`we_2h_axe`, Kruber +0.285 Z) therefore persist on every renderer and across re-wields/respawns.
@@ -740,7 +740,7 @@ Closes the wire-safety-audit finding in issue #536: the not-loaded/no-ammo wield
 - **Wire verdict (PROJECT_STANDARDS §9.3).** This IS the wire-safety fix: it is a sender-side swap of an UNregistered anim name for a vanilla-REGISTERED one BEFORE the `rpc_anim_event` send, applied UNCONDITIONALLY at load (not toggle-gated), matching the #278/#371 sender-swap doctrine. It adds NO `NetworkLookup` registration (the fallback indices already exist on every peer, vanilla) and repoints no damage profile, so the `#431` peer-parity floor (`_wt431_damage_profile_parity.lua`) is not applicable. The RPC now carries a lookup index every peer (wt or not) resolves.
 - **Regression:** `repeater_empty_wield_network_patch_all_careers` in `/wt_regression_test` - asserts the live `Weapons.repeating_crossbow_elf_template.wield_anim_not_loaded_career` / `wield_anim_no_ammo_career` route all four Kruber careers to `to_repeating_handgun`/`_noammo` AND all three wh careers to `to_repeating_crossbow`/`_noammo`, and that wh_priest is NOT patched.
 - **Diagnostics:** existing `[wt:dbg] [wt:tpl_patch] event=applied template=repeating_crossbow_elf_template not_loaded/no_ammo careers=7` at load (was 4), printf/debug-log-only per rule 9.
-- **Verify (cross-peer, verify-fix-coop, needs a wt host + a NON-wt client = 2 people).** Load line `[wt:LOAD] v0.12.216-dev`; `/wt_regression_test` all-pass. Repro: on any non-WP Saltzpyre career (WHC / BH / Zealot), enable `we_crossbow_repeater` availability, equip Kerillian's Repeater Crossbow, fire it to empty (or swap to it while its clip is empty) so the empty-clip wield/reload fires while a NON-wt client is in the mission. Expected: no crash on either machine (baseline: pre-fix this crashed the wt wielder's own client). Files: `weapon_tweaker.lua` (MOD_VERSION; patch table -> per-group form + apply loop + regression check).
+- **Verify (cross-peer, verify-fix + coop-required, needs a wt host + a NON-wt client = 2 people).** Load line `[wt:LOAD] v0.12.216-dev`; `/wt_regression_test` all-pass. Repro: on any non-WP Saltzpyre career (WHC / BH / Zealot), enable `we_crossbow_repeater` availability, equip Kerillian's Repeater Crossbow, fire it to empty (or swap to it while its clip is empty) so the empty-clip wield/reload fires while a NON-wt client is in the mission. Expected: no crash on either machine (baseline: pre-fix this crashed the wt wielder's own client). Files: `weapon_tweaker.lua` (MOD_VERSION; patch table -> per-group form + apply loop + regression check).
 
 ## 0.12.215-dev (2026-07-13) - #535: register the moonfire AoE template into NetworkLookup.explosion_templates (latent CTD class, wire-inert)
 
@@ -751,7 +751,7 @@ Closes the wire-safety-audit finding in issue #535: the pre-nerf Moonfire Bow Ao
 - **Wire-safe fallback recorded.** `mod._wt535_explosion_template_fallback[wt_moonfire_aoe_revert] = "machinegun_poison_arrow"` - the closest vanilla explosion template (identical shape: `damage_profile "poison_aoe"`, sound `arrow_hit_poison_cloud`, `no_prop_damage`, `use_attacker_power_level` [src: `scripts/settings/explosion_templates.lua:6-15`]). This is the substitute a sender-side floor WOULD coerce to; no active floor hook is installed because moonfire has no `NetworkLookup` send path (analysis above) and hooking the hot vanilla `AreaDamageSystem.create_explosion` would tax every vanilla explosion for a path moonfire never uses. Same map shape as the #431 damage-profile fallback.
 - **Regression:** `wt_535_moonfire_explosion_registered` in `/wt_regression_test` - asserts the template is present in `ExplosionTemplates` with its `.name`, that `NetworkLookup.explosion_templates` resolves it both directions (name->idx, idx->name), and that the recorded vanilla fallback is a real vanilla name that resolves in the lookup.
 - **Diagnostics:** `[wt:535]` printf on registration (index + wire-inert note), log-only per rule 9.
-- **Verify (cross-peer, verify-fix-coop, needs a wt host + a NON-wt client = 2 people).** Load line `[wt:LOAD] v0.12.215-dev` + `[wt:535] registered wt_moonfire_aoe_revert...`; `/wt_regression_test` all-pass. Repro the AoE: enable `moonfire_aoe_revert` (Weapon Tweaks), the wt host equips a Moonfire Bow (`we_deus_01*` on any Kerillian career) and fires charged shots into enemy packs and props while the non-wt client is in the lobby. Expected: pre-nerf poison-puff AoE detonation on impact, damage host-side, FX on both screens, NO crash on either machine (baseline confirmation the encode path stays unreached). Files: `weapon_tweaker.lua` (MOD_VERSION; NetworkLookup registration + fallback map + regression check), `ENGINE_SURFACE.md` (wire-path trace).
+- **Verify (cross-peer, verify-fix + coop-required, needs a wt host + a NON-wt client = 2 people).** Load line `[wt:LOAD] v0.12.215-dev` + `[wt:535] registered wt_moonfire_aoe_revert...`; `/wt_regression_test` all-pass. Repro the AoE: enable `moonfire_aoe_revert` (Weapon Tweaks), the wt host equips a Moonfire Bow (`we_deus_01*` on any Kerillian career) and fires charged shots into enemy packs and props while the non-wt client is in the lobby. Expected: pre-nerf poison-puff AoE detonation on impact, damage host-side, FX on both screens, NO crash on either machine (baseline confirmation the encode path stays unreached). Files: `weapon_tweaker.lua` (MOD_VERSION; NetworkLookup registration + fallback map + regression check), `ENGINE_SURFACE.md` (wire-path trace).
 
 ## 0.12.214-dev (2026-07-13) - #348: opt-in revert of the 6.11.0 Kruber 1h sword push-attack combo
 

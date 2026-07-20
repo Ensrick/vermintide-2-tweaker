@@ -2,7 +2,8 @@
 #
 # CANONICAL one-shot RELEASE path for a single VT2 mod in this monorepo:
 #   build + deploy + Workshop upload + GitHub release + hash/upload verification
-#   + GitHub-issue status labeling (verify-fix[-coop] / diagnostics-armed, issue #326).
+#   + GitHub-issue status labeling (verify-fix / diagnostics-armed + the
+#     orthogonal coop-required qualifier, issue #326).
 #
 # Prefer this over hand-chaining `VMBLauncher.exe all <mod>` and
 # `tools\publish-release\publish-release.ps1` separately. It runs both, then
@@ -550,9 +551,13 @@ function Get-TopChangelogEntry {
 #     verified and closed autonomously, never routed to human in-game testing.
 #   * Label choice is ENTRY-level via header markers; a mixed fix+probe entry
 #     gets one label for all refs -- the caller prints it for hand-correction.
-#   * Explicit `[verify-fix-coop]` selects that lifecycle label. Explicit
-#     `[coop-required]` adds the orthogonal qualifier to diagnostics-armed.
-#     The Coop smell remains a reminder when neither explicit marker is present.
+#   * `coop-required` is an ORTHOGONAL qualifier ("testing needs 2+ players"),
+#     never a lifecycle state. It may accompany ANY lifecycle label. A header
+#     marked `[verify-fix; coop-required]`, `[coop-required]`, or the LEGACY
+#     `[verify-fix-coop]` requests that qualifier alongside its lifecycle
+#     label; the legacy marker maps to verify-fix + coop-required rather than
+#     being dropped. The Coop smell remains a reminder when no explicit marker
+#     is present.
 function Get-ShipLabelPlan {
     param([string]$Header, [string]$Entry)
     if ($Header -match '(?i)(localization|loc sweep|status-tag doctrine|menu wording|localization audit|loc audit)') {
@@ -561,9 +566,13 @@ function Get-ShipLabelPlan {
     if ($Header -match '(?i)\[(docs|documentation|tooling)\]') {
         return @{ Skip = 'non-runtime'; Label = $null; Refs = @(); Coop = $false; CoopRequired = $false }
     }
-    $coopRequired = [bool]($Header -match '(?i)\[(verify-fix-coop|coop-required)\]')
+    # Match coop-required inside any bracketed marker so a combined
+    # `[verify-fix; coop-required]` header is honoured, and keep the retired
+    # `[verify-fix-coop]` spelling parsing to the same intent.
+    $coopRequired = [bool](($Header -match '(?i)\[[^\]]*\bcoop-required\b[^\]]*\]') -or
+                           ($Header -match '(?i)\[[^\]]*\bverify-fix-coop\b[^\]]*\]'))
     $diagnostic = [bool]($Header -match '(?i)\[diag\]|diagnostic|probe|instrument')
-    $label = if ($diagnostic) { 'diagnostics-armed' } elseif ($Header -match '(?i)\[verify-fix-coop\]') { 'verify-fix-coop' } else { 'verify-fix' }
+    $label = if ($diagnostic) { 'diagnostics-armed' } else { 'verify-fix' }
     $coop = [bool]($Entry -match '(?i)(host *[/+] *(1 *)?client|non-\w+ +peer|husk|hot.join|2\+? *(player|tester|people)|two player|both peers|client CTD|CTDs? +a +client|desync|wire.safe|send.queue)')
     $numSet = @{}
     foreach ($m in [regex]::Matches($Entry, '#(\d+)')) { $numSet[[int]$m.Groups[1].Value] = $true }
@@ -572,17 +581,24 @@ function Get-ShipLabelPlan {
     return @{ Skip = $null; Label = $label; Refs = $refs; Coop = $coop; CoopRequired = $coopRequired }
 }
 
-$LifecycleLabels = @('not-started', 'verify-fix', 'verify-fix-coop', 'diagnostics-armed', 'Fixed')
+$LifecycleLabels = @('not-started', 'verify-fix', 'diagnostics-armed', 'Fixed')
+
+# Retired lifecycle labels: always removed, never a target. `verify-fix-coop`
+# was replaced by verify-fix + the orthogonal `coop-required` qualifier, so an
+# issue still carrying it is reconciled on the next ship that touches it.
+$DeadLifecycleLabels = @('verify-fix-coop')
 
 # Return the one lifecycle label that should survive and every competing label
-# to remove in the same `gh issue edit` invocation. Fixed always wins; an
-# existing coop verification is never downgraded by an unmarked later ship.
+# (including any retired one) to remove in the same `gh issue edit` invocation.
+# Fixed always wins. Coop-ness is NOT a lifecycle concern any more: it rides on
+# the orthogonal `coop-required` qualifier, so no lifecycle target is chosen or
+# preserved on account of it.
 function Get-LifecycleEditPlan {
     param([string[]]$Existing, [string]$Requested)
-    $target = if ($Existing -contains 'Fixed') { 'Fixed' }
-              elseif ($Requested -eq 'verify-fix' -and $Existing -contains 'verify-fix-coop') { 'verify-fix-coop' }
-              else { $Requested }
-    $remove = @($Existing | Where-Object { $LifecycleLabels -contains $_ -and $_ -ne $target } | Select-Object -Unique)
+    $target = if ($Existing -contains 'Fixed') { 'Fixed' } else { $Requested }
+    $remove = @($Existing | Where-Object {
+        ($LifecycleLabels -contains $_ -or $DeadLifecycleLabels -contains $_) -and $_ -ne $target
+    } | Select-Object -Unique)
     return @{ Target = $target; Remove = $remove; Add = -not ($Existing -contains $target) }
 }
 
@@ -630,9 +646,17 @@ function Invoke-ShipSelfTest {
     $planD = Get-ShipLabelPlan -Header '## 0.7.225-dev - #144 retire trace, add [ct:vaul] probe' -Entry 'probe work for #144'
     Assert ($planD.Label -eq 'diagnostics-armed') "probe-marker header labels diagnostics-armed"
 
-    $planC = Get-ShipLabelPlan -Header '## 0.7.226-dev - #586 [verify-fix-coop] peer fix' -Entry 'host/client work for #586'
-    Assert ($planC.Label -eq 'verify-fix-coop') "explicit coop marker labels verify-fix-coop"
-    Assert ($planC.CoopRequired) "explicit coop marker records coop verification intent"
+    $planC = Get-ShipLabelPlan -Header '## 0.7.226-dev - #586 [verify-fix; coop-required] peer fix' -Entry 'host/client work for #586'
+    Assert ($planC.Label -eq 'verify-fix') "combined coop marker keeps verify-fix as the lifecycle label"
+    Assert ($planC.CoopRequired) "combined coop marker requests the orthogonal coop-required qualifier"
+
+    $planLegacy = Get-ShipLabelPlan -Header '## 0.7.226-dev - #586 [verify-fix-coop] peer fix' -Entry 'host/client work for #586'
+    Assert ($planLegacy.Label -eq 'verify-fix') "legacy [verify-fix-coop] marker maps to the verify-fix lifecycle"
+    Assert ($planLegacy.CoopRequired) "legacy [verify-fix-coop] marker still requests coop-required (not dropped)"
+
+    $planQ = Get-ShipLabelPlan -Header '## 0.7.226-dev - #587 [coop-required] peer fix' -Entry 'client fix for #587'
+    Assert ($planQ.Label -eq 'verify-fix') "bare [coop-required] on a fix entry keeps verify-fix"
+    Assert ($planQ.CoopRequired) "bare [coop-required] requests the qualifier"
 
     $planDC = Get-ShipLabelPlan -Header '## 0.7.227-dev - #600 [diag] [coop-required] wire probe' -Entry 'probe #600'
     Assert ($planDC.Label -eq 'diagnostics-armed') "coop diagnostic keeps diagnostics-armed as its lifecycle"
@@ -642,16 +666,17 @@ function Invoke-ShipSelfTest {
     Assert ($planSmell.Label -eq 'verify-fix') "coop-smelling prose alone does not silently change lifecycle intent"
     Assert ($planSmell.Coop -and -not $planSmell.CoopRequired) "coop smell remains a review reminder"
 
-    $life = Get-LifecycleEditPlan -Existing @('bug', 'not-started', 'verify-fix') -Requested 'verify-fix-coop'
-    Assert ($life.Target -eq 'verify-fix-coop') "explicit coop request becomes the sole lifecycle target"
-    Assert (($life.Remove -join ',') -eq 'not-started,verify-fix') "coop transition removes all competing lifecycle labels"
+    $life = Get-LifecycleEditPlan -Existing @('bug', 'not-started', 'diagnostics-armed') -Requested 'verify-fix'
+    Assert ($life.Target -eq 'verify-fix') "requested lifecycle becomes the sole target"
+    Assert (($life.Remove -join ',') -eq 'not-started,diagnostics-armed') "transition removes all competing lifecycle labels"
     Assert ($life.Add) "missing lifecycle target is added"
 
-    $keepCoop = Get-LifecycleEditPlan -Existing @('verify-fix', 'verify-fix-coop', 'not-started') -Requested 'verify-fix'
-    Assert ($keepCoop.Target -eq 'verify-fix-coop') "plain ship never downgrades existing coop verification"
-    Assert (($keepCoop.Remove -join ',') -eq 'verify-fix,not-started') "stronger lifecycle cleanup still restores cardinality one"
+    $deadLife = Get-LifecycleEditPlan -Existing @('bug', 'verify-fix-coop', 'coop-required') -Requested 'verify-fix'
+    Assert ($deadLife.Target -eq 'verify-fix') "retired verify-fix-coop is never a lifecycle target"
+    Assert (($deadLife.Remove -join ',') -eq 'verify-fix-coop') "retired verify-fix-coop is removed on the next ship"
+    Assert ($deadLife.Remove -notcontains 'coop-required') "the orthogonal coop-required qualifier is never removed as a lifecycle label"
 
-    $keepFixed = Get-LifecycleEditPlan -Existing @('Fixed', 'verify-fix', 'diagnostics-armed') -Requested 'verify-fix-coop'
+    $keepFixed = Get-LifecycleEditPlan -Existing @('Fixed', 'verify-fix', 'diagnostics-armed') -Requested 'verify-fix'
     Assert ($keepFixed.Target -eq 'Fixed') "verified Fixed lifecycle is never downgraded"
     Assert (($keepFixed.Remove -join ',') -eq 'verify-fix,diagnostics-armed') "Fixed cleanup removes stale competing lifecycle labels"
 
@@ -1388,7 +1413,7 @@ switch ($uploadStatus) {
 # Step 6: STATUS-LABEL the shipped issues (issue #326 mechanization)
 # ---------------------------------------------------------------------------
 # Doctrine (PROJECT_STANDARDS section 11): when a fix or probe ships, the
-# matching status label (verify-fix[-coop] / diagnostics-armed) goes on the issue in
+# matching status label (verify-fix / diagnostics-armed) goes on the issue in
 # the SAME pass. This step mechanizes it: harvest every #N referenced in the
 # CHANGELOG entry just shipped and add the label via gh. Heuristics, printed
 # per issue so the user can correct a misjudgment by hand:
@@ -1401,10 +1426,13 @@ switch ($uploadStatus) {
 #     verified and closed, never assigned a human-verification lifecycle.
 #   * Label choice is ENTRY-level: a header carrying a [diag] / diagnostic /
 #     probe / instrument marker = instrumentation-only ship -> diagnostics-armed;
-#     explicit [verify-fix-coop] -> verify-fix-coop; anything else -> verify-fix.
-#     Explicit [coop-required] adds that non-lifecycle qualifier to diagnostics.
-#     A MIXED entry (fix for one issue, probe for
+#     anything else -> verify-fix. A MIXED entry (fix for one issue, probe for
 #     another) gets one label for all refs -- correct the odd one out by hand.
+#   * [coop-required] (or the combined [verify-fix; coop-required], or the
+#     LEGACY [verify-fix-coop]) additionally adds the orthogonal coop-required
+#     qualifier, which is legal alongside ANY lifecycle label. The qualifier is
+#     never auto-removed: whether a check needs 2+ players is a human call that
+#     a changelog header omitting the marker must not silently revoke.
 #   * CLOSED and non-existent numbers are skipped (footnote "#2"-style false
 #     positives resolve to nothing).
 # This step NEVER fails the ship -- the upload already succeeded. Any labeling
@@ -1465,7 +1493,7 @@ try {
                     else {
                         Write-Host "  entry : $clHeader"
                         Write-Host "  label : $statusLabel (entry-level intent -- correct by hand if the entry is mixed fix+diag)"
-                        if ($statusLabel -eq 'diagnostics-armed' -and $plan.CoopRequired) {
+                        if ($plan.CoopRequired) {
                             # Idempotently ensure the repository-level qualifier exists before
                             # issue edits use it. This is not a lifecycle label.
                             & gh label create 'coop-required' --repo $ghRepo --color 'D93F0B' --description 'Testing or diagnostics requires 2+ players' --force 2>$null | Out-Null
@@ -1491,9 +1519,12 @@ try {
                             if ($meta.labels) { $existing = @($meta.labels | ForEach-Object { $_.name }) }
                             $edit = Get-LifecycleEditPlan -Existing $existing -Requested $statusLabel
                             $removeLabels = @($edit.Remove)
-                            # coop-required is meaningful for armed diagnostics only.
-                            $wantCoopQualifier = ($edit.Target -eq 'diagnostics-armed' -and $plan.CoopRequired)
-                            if (-not $wantCoopQualifier -and $existing -contains 'coop-required') { $removeLabels += 'coop-required' }
+                            # coop-required is orthogonal: legal alongside ANY lifecycle
+                            # label, and never stripped here. An issue carrying the
+                            # RETIRED verify-fix-coop is reconciled by keeping its coop
+                            # intent as the qualifier while the dead label is removed
+                            # (dropping it silently would lose the 2+-tester signal).
+                            $wantCoopQualifier = ($plan.CoopRequired -or ($existing -contains 'verify-fix-coop'))
                             $editArgs = @()
                             if ($edit.Add) { $editArgs += @('--add-label', $edit.Target) }
                             if ($wantCoopQualifier -and -not ($existing -contains 'coop-required')) { $editArgs += @('--add-label', 'coop-required') }
@@ -1507,8 +1538,8 @@ try {
                                 $qualifierText = if ($wantCoopQualifier) { " + 'coop-required'" } else { '' }
                                 Write-Host ("  + #{0}: lifecycle '{1}'{2}; competing lifecycle labels removed" -f $n, $edit.Target, $qualifierText) -ForegroundColor Green
                                 Write-Host ("      REMINDER: #{0} needs a test-method comment (how to test + expected result) or the label is invalid (user rule 2026-07-12, PROJECT_STANDARDS s11)." -f $n) -ForegroundColor Yellow
-                                if ($edit.Target -eq 'verify-fix' -and $plan.Coop -and -not $plan.CoopRequired) {
-                                    Write-Host ("      COOP? entry smells like a 2+-tester verification. Mark the changelog header [verify-fix-coop] and correct this issue before assigning testers." -f $n) -ForegroundColor Magenta
+                                if ($edit.Target -eq 'verify-fix' -and $plan.Coop -and -not $wantCoopQualifier) {
+                                    Write-Host ("      COOP? entry smells like a 2+-tester verification. Mark the changelog header [verify-fix; coop-required] and add the coop-required qualifier to this issue before assigning testers." -f $n) -ForegroundColor Magenta
                                     $labelSummary += ("#{0} +{1} (CHECK COOP + test comment)" -f $n, $edit.Target)
                                     continue
                                 }

@@ -74,14 +74,14 @@
 - Upgraded the 15-modifier audit from root identifiers to each bounded child-buff chain and every named apply/update/event/remove callback. Missing child templates, asymmetric child wire ids, missing functions, and a 32-template traversal cap now fail closed.
 - Reused the single existing `ConflictDirector._post_spawn_unit` hook for mutation-free live evidence. It samples at most two distinct breeds per Special/Elite/Boss/Lord category and reports extensions, blackboard/navigation, position, side, race, game-object id, existing enhancements, native breed bans, and eligible/rejected modifier counts.
 - Added source-derived prerequisite and vanilla-ban policy tests plus runtime `issue453_live_prerequisite_probe_bounded`. No modifier, attribute, terror event, setting, RPC, or shared table is changed.
-- Lifecycle: `[diagnostics-armed]` for solo evidence. Any actual modifier application requires `[verify-fix-coop]`.
+- Lifecycle: `[diagnostics-armed]` for solo evidence. Any actual modifier application requires `[verify-fix; coop-required]`.
 
 ## 0.7.48-dev (2026-07-14): #452 live AI skeleton compatibility census [not deployed]
 
 - Extended the five-skin structure audit to cover the ordinary breed's behavior tree, inventory template, network lookup, base unit, and the premium attachment's complete owner/source-node map.
 - Reused the single existing `ConflictDirector._post_spawn_unit` hook to observe naturally spawned target specials without spawning or attaching anything. Each breed logs once per session, reporting exact node totals and at most eight missing node names; total live output is capped at five rows.
 - Added pure owner-node contract extraction and failure tests plus runtime `issue452_live_probe_bounded`. The source boundary remains diagnostics-only: no new breed, setting, buff, RPC, package request, cosmetic link, or gameplay mutation.
-- Lifecycle: `[diagnostics-armed]` for the solo structure/live-node census. A later rendered appearance and breed-replacement slice must use `[verify-fix-coop]`.
+- Lifecycle: `[diagnostics-armed]` for the solo structure/live-node census. A later rendered appearance and breed-replacement slice must use `[verify-fix; coop-required]`.
 
 ## 0.7.47-dev (2026-07-14): #451 actionable boss portability census [not deployed]
 
@@ -89,14 +89,14 @@
 - Added `/et_boss_idea_audit` for a second bounded capture after entering a representative mission. It writes six detailed engine-log rows and only one summary to chat, making missing level-specific packages distinguishable from missing behavior or network registration.
 - Kept all behavior unchanged. The two Chosen prototypes still use regular `chaos_raider` AI as their safe starting point; Deathrattler, Rasknitt, Halescourge, and the Troll Chieftain remain blocked on their detected arena contracts.
 - Added an engine-free catalog/census core, four offline tests, stronger runtime regression `issue451_boss_ideas_safely_decomposed`, and refreshed feasibility/engine/regression documentation.
-- Lifecycle: `[diagnostics-armed]`; the asset census is solo, but any spawnable prototype must move to `[verify-fix-coop]` for package, model, behavior, and network verification.
+- Lifecycle: `[diagnostics-armed]`; the asset census is solo, but any spawnable prototype must move to `[verify-fix; coop-required]` for package, model, behavior, and network verification.
 
 ## 0.7.46-dev (2026-07-14): #61 host-authoritative personal combat handicap [not deployed]
 
 - Added a per-human Personal difficulty dropdown from Auto through Cataclysm 3. A selection above the host difficulty increases hostile-AI damage to that player and reduces that player's damage to hostile AI; Auto and selections at/below the host remain vanilla.
 - Kept authority on the host. Clients send only their preset, the host keys it by VMF's authenticated sender peer, schema-gates it, and applies the bounded base factor once at `DamageUtils.apply_buffs_to_damage` before vanilla buff/proc handling. There is no custom buff, lookup mutation, per-hit RPC, or client-side simulation claim.
 - Explicitly excluded spawns, enemy health/AI, healing, friendly fire, self/environment damage, bots, pets, and scoreboard adjustment from this first slice. Added engine-free policy/authority tests, runtime regression `issue61_personal_handicap_authoritative`, and `PERSONAL_DIFFICULTY.md`.
-- Lifecycle: `[verify-fix-coop]`; host plus one client must verify both damage directions and the vanilla exclusions.
+- Lifecycle: `[verify-fix; coop-required]`; host plus one client must verify both damage directions and the vanilla exclusions.
 
 ## 0.7.45-dev (2026-07-14): #433 remove dead Big Rebalance payload [not deployed]
 
@@ -109,14 +109,14 @@
 - Resolved the requested catalog to 15 native templates: 13 standard Chaos Wastes grudge marks, Geheimnisnacht Repulse (`shockwave` / `grudge_mark_shockwave_attacks`), and Devious Delvings Berserk (`termite_base` / `grudge_mark_termite_boss_raging`).
 - Added a bounded template/wire/enhancement/category census. Startup writes one readiness line; `/et_modifier_audit` writes the 15 detail rows to the log and only one summary to chat. No modifier is applied yet.
 - Preserved the one-hook invariant: `_et_boss_grudge.lua` already owns `ConflictDirector._post_spawn_unit`, so the later host-side category/rate implementation must consolidate there instead of registering a duplicate hook.
-- Added pure catalog/category tests, runtime regression `issue453_modifier_catalog_wire_ready`, and `ENEMY_MODIFIERS_FEASIBILITY.md`. Lifecycle: `[diagnostics-armed]` for solo census; future behavior requires `[verify-fix-coop]`.
+- Added pure catalog/category tests, runtime regression `issue453_modifier_catalog_wire_ready`, and `ENEMY_MODIFIERS_FEASIBILITY.md`. Lifecycle: `[diagnostics-armed]` for solo census; future behavior requires `[verify-fix; coop-required]`.
 
 ## 0.7.43-dev (2026-07-14): #452 premium-skin special feasibility diagnostics [not deployed]
 
 - Confirmed all five requested appearances are Versus player cosmetics, not spawn-ready AI breed units. Their `skin_1001` definitions link attachment meshes onto dark-pact player bases; directly substituting those mesh paths as AI `base_unit` values would omit the enemy actor/extension/hit-zone contract.
 - Added a bounded read-only census: one `[et:452]` summary plus five candidate lines at mod load. It checks each ordinary base breed/action set, premium item/cosmetic row, exact third-person attachment, and current unit residency. No hook, spawn, buff, setting, or shared game table is changed.
 - Added `issue452_special_variant_assets_classified` to `/et_regression_test`, engine-free census tests, and `SPECIAL_VARIANTS_FEASIBILITY.md` with the common clone/attachment/peer-parity foundation and staged behavior slices.
-- Lifecycle: `[diagnostics-armed]` for the solo asset census. Any eventual implementation must move to `[verify-fix-coop]` because new breeds and their cosmetics are rendered across peers.
+- Lifecycle: `[diagnostics-armed]` for the solo asset census. Any eventual implementation must move to `[verify-fix; coop-required]` because new breeds and their cosmetics are rendered across peers.
 
 ## 0.7.42-dev (2026-07-14): #451 boss-idea feasibility diagnostics [not deployed]
 
@@ -130,7 +130,7 @@
 - Added a 0.1x-5.0x health slider, defaulting to vanilla 1.0x, to every Recruit-through-Cataclysm-3 difficulty block.
 - The host scales the final health passed into `GenericHealthExtension`; shared breed arrays are not mutated, so spawn modifiers and boss-balance settings compose safely. Regular enemies, specials, monsters, and lords are included; player units, critters, and friendly necromancer skeletons are excluded.
 - Changing the active difficulty's slider rescales living tracked enemies once at the bounded settings-transaction boundary and preserves each enemy's current health percentage. Vanilla max-health and damage replication keeps clients synchronized.
-- Added engine-free boundary/policy/rescale tests plus static wiring coverage. Tag `[verify-fix-coop]`: host and one client should verify a regular enemy and monster at 0.5x/2.0x, including one live slider change.
+- Added engine-free boundary/policy/rescale tests plus static wiring coverage. Tag `[verify-fix; coop-required]`: host and one client should verify a regular enemy and monster at 0.5x/2.0x, including one live slider change.
 
 ## 0.7.40-dev (2026-07-13): #321 retire stale Big Rebalance product surface [not deployed]
 

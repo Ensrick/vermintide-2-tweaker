@@ -7,14 +7,14 @@
 - Placement logic is extracted engine-free into `_ct_cot_placement_policy.lua` (pass planning + shortfall draining), pinned by the new offline suite `qa/lua/tests/test_ct_cot_placement.lua` and runtime marker check `cot471_placement_topup`.
 - The `[ct:471]` line now proves delivery per wave: `placed` (final) vs `built_req`, plus `vanilla_placed`, `topup`, `passes`, and `residual` naming any remaining engine-limit shortfall.
 
-## 0.7.303-dev (2026-07-19) - progressive difficulty lifecycle hardening (#460) [verify-fix-coop]
+## 0.7.303-dev (2026-07-19) - progressive difficulty lifecycle hardening (#460) [verify-fix; coop-required]
 
 - Scoped the captured starting difficulty and both bounded log throttles to the active `DeusRunController`; controller replacement and a later run can no longer inherit another run's ramp state.
 - Source audit found that vanilla hot join serializes the already-stepped `get_run_difficulty()` result. The host now sends the immutable original tier in one schema-gated message immediately before vanilla's setup RPC; the joining client consumes it once when constructing its controller.
 - Custom tiers must now be contiguous. A partial provider that registers Cataclysm 5 without Cataclysm 4 cannot make map five jump across the missing tier.
 - Extends offline and runtime regressions for the lifecycle marker, per-controller capture, hot-join preservation, and sparse-tier behavior.
 
-## 0.7.302-dev (2026-07-19) - preserve progression across bot substitutions (#465) [verify-fix-coop]
+## 0.7.302-dev (2026-07-19) - preserve progression across bot substitutions (#465) [verify-fix; coop-required]
 
 - Transfers the departing human's Chaos Wastes setup through the existing bot substitution and deferred human-rejoin lifecycle instead of rebuilding from an unrelated profile.
 - Preserves coins, boons, and weapon tiers across same-career and cross-career handoffs, with bounded readback, rollback, and live bot refresh handling.
@@ -40,7 +40,7 @@ One combined fix wave (session fable-fix-wave); every cluster ships [untested] p
   - New rt check `cursed_chest_reconcile_132` + offline reconcile-plan and difficulty-key suites in `test_ct_chest_count_audit.lua`.
 
 **Verify (host, full restart, LOAD banner shows 0.7.300-dev):** (1) issue 249/256 coop: client takes Quiver Cascade boons, compares HUD vs firing-revealed ammo - host log should show no `[ct:256]` clamp beyond legit partial-spawn cases and the client's stack count should match the host's (`/verify_meta_ammo` on both peers). (2) issue 288/464: wield the trait weapon with the Rework on; `[ct:288] add ... stat=reload_speed mult=-0.5 event=nil` in the log plus visibly faster reload = pass. (3) issues 60/132: set Chests of Trials Per Mission = 3, run a `*_belakor_path1` campaign-geometry mission; expect at most 3 chests standing and one `[ct:132] reconcile` line when the map over-spawned. (4) issue 251: Blood in the Darkness at Cataclysm; the `[populate_pickups]` line must show `diff_has_entry=true` and no `NO MATCH` fallback.
-## 0.7.299-dev (2026-07-18) - #136 live host graph reconciliation [verify-fix-coop]
+## 0.7.299-dev (2026-07-18) - #136 live host graph reconciliation [verify-fix; coop-required]
 
 - Clients now apply the completed host `ct_graph_snapshot_chunk` payload to the live `DeusRunController` graph immediately after chunk assembly, so direct current-node and mission consumers no longer wait for the Chaos Wastes map UI to open before seeing the host-authoritative mission graph.
 - The existing `DeusMapScene.on_enter` snapshot application remains as a late visual safety path. This adds no RPC, per-frame stream, or unpaced chunk send; the existing #97 paced transport remains the only graph-snapshot carrier.
@@ -101,7 +101,7 @@ One combined fix wave (session fable-fix-wave); every cluster ships [untested] p
 - Updated source-contract tests that previously assumed all boon behavior lived in the entry file, and added focused checks for the frozen line baseline, one-load dependency order, and bounded module exports.
 - Validation: 907 Lua 5.1 tests pass; strict mod lint reports 115 hooks with no duplicate, forward-reference, late-local, save/restore, or network-bound errors. The monorepo size gate still reports unrelated pre-existing regressions outside this change; CT's entry-file ratchet now passes.
 
-## 0.7.291-dev (2026-07-16) - #426 close the pre-roster hot-join wire race [verify-fix-coop]
+## 0.7.291-dev (2026-07-16) - #426 close the pre-roster hot-join wire race [verify-fix; coop-required]
 
 - Source-confirmed the residual in the original parity gate: vanilla calls `GameNetworkManager.hot_join_sync(peer_id)` before `PlayerManager:add_remote_player`, so the poll-only beacon could not see a late joiner before BuffSystem and Deus SharedState serialized live CT buff/power-up lookup ids.
 - Added a synchronous pending-peer fence at the native hot-join boundary. A positively acknowledged CT peer passes unchanged. Unknown or non-CT peers immediately disable CT boons/miracles and strip player power-ups, party power-ups, persistent buff names, and live CT buffs before vanilla sync runs.
@@ -161,7 +161,7 @@ During a Chaos Wastes expedition run `/ct_resume_audit` and retain the `[ct:141]
 
 **Diagnostics:** host and client enter the same Chaos Wastes mission, then each runs `/ct_modifier_stack_audit`. Compare the `[ct:289]` `effective` and `active` signatures; both peers must match with `missing_template=0`, `missing_wire=0`, and `duplicates=0`. Run `/ct_regression_test` and require `PASS: issue289_modifier_stack_feasibility`.
 
-## 0.7.284-dev (2026-07-14) - #63 optional Chest of Trials activation cost [verify-fix-coop; not deployed]
+## 0.7.284-dev (2026-07-14) - #63 optional Chest of Trials activation cost [verify-fix; coop-required; not deployed]
 
 - Added default-off host settings for a 25-1000 Pilgrim's Coin cost to start native and CT-injected Chests of Trials. The interaction prompt shows the effective host price; runtime rounds to the nearest 25.
 - The host gates the exact human interactor at vanilla's sole WAITING-to-RUNNING server boundary. It reserves the buyer's existing Deus soft-currency row, calls vanilla once, commits only after the transition, and restores the exact balance on failure. Insufficient or missing authority fails closed.
@@ -185,7 +185,7 @@ During a Chaos Wastes expedition run `/ct_resume_audit` and retain the `[ct:141]
 
 **Verification:** run `/ct_regression_test` and require `PASS: issue345_ct_localization_status_sync`. The offline Lua suite and `qa/check_issue_tag_sync.ps1` must report no #345 CT-row stale or label-missing findings. No gameplay behavior changes.
 
-## 0.7.281-dev (2026-07-14) - #361 Rotten Miasma customization [verify-fix-coop; not deployed]
+## 0.7.281-dev (2026-07-14) - #361 Rotten Miasma customization [verify-fix; coop-required; not deployed]
 
 - Added a Rotten Miasma subgroup under Curses with an opt-in permanent purifying-torch carrier, a 2-30 metre safe-area radius slider (vanilla 8), and a 0.1-5 second stack-interval slider (vanilla 1.3).
 - Permanent mode remembers the living player who last picked up the relic. Dropping it frees the level-event slot while the existing protection sphere continues following that player; a later pickup transfers ownership to the new carrier.
@@ -209,7 +209,7 @@ During a Chaos Wastes expedition run `/ct_resume_audit` and retain the `[ct:141]
 - Added the optional `/ct_boon_price_audit` re-run convenience, runtime check `boon_price_audit_armed`, pure policy/plan validation tests, and `BOON_PRICE_REWORK.md` documenting every consumer a future individual-price manifest must update atomically.
 - The requested balance mutation remains intentionally deferred: issue #467 does not yet specify the new hierarchy or individual values. Applying invented tiers/prices would be an unreviewed balance change and could desynchronize UI, local purchase, host RPC validation, telemetry, and the #466 bot economy.
 
-## 0.7.278-dev (2026-07-14) - #466 independent bot boon/weapon economy [verify-fix-coop; not deployed]
+## 0.7.278-dev (2026-07-14) - #466 independent bot boon/weapon economy [verify-fix; coop-required; not deployed]
 
 - Gave every host-owned bot an independent vanilla Deus soft-currency row. Fresh bots seed from the host's live balance; positive host coin pickups credit every current bot by the same final multiplier-adjusted amount. #465 departure handoffs may replace the seed with the departing human's balance.
 - Purchased boon altars now charge each bot the exact displayed/scaled altar cost and skip bots with insufficient funds. Chest of Trials and end-of-level grants remain free, matching the game source.
@@ -218,7 +218,7 @@ During a Chaos Wastes expedition run `/ct_resume_audit` and retain the `[ct:141]
 - Preserved disabled-boon and peer-parity gates, added a shared random-choice helper, bounded `[ct:466]` transaction evidence to 64 rows per run, and added the runtime check `bot_boon_economy_installed`.
 - Added pure offline policy tests and `BOT_BOON_ECONOMY.md`. Career/talent/weapon weighting remains intentionally deferred until the project owner supplies the curated priority list; this release provides its economy and source-coverage substrate.
 
-## 0.7.277-dev (2026-07-14) - #465 replacement-player progression compensation [verify-fix-coop; not deployed]
+## 0.7.277-dev (2026-07-14) - #465 replacement-player progression compensation [verify-fix; coop-required; not deployed]
 
 - Added enabled-by-default, host-controlled replacement compensation at vanilla's exact `GameModeDeus` human-leave, bot-add, and bot-remove lifecycle seams.
 - A departure-created bot inherits the human's granted boons, persistent buffs, Pilgrim's Coin, and serialized melee/ranged Chaos Wastes weapons. A human replacing a bot inherits that bot's boon/buff/weapon state and receives the host's current coin balance.
@@ -228,7 +228,7 @@ During a Chaos Wastes expedition run `/ct_resume_audit` and retain the `[ct:141]
 - Preserves #426 wire safety: until every peer proves CT parity, CT-owned power-up and persistent-buff identifiers are filtered from the handoff rather than exposing an unknown network lookup index.
 - Added pure offline policy coverage and `REPLACEMENT_COMPENSATION.md` with a disconnect/rejoin co-op verification script.
 
-## 0.7.276-dev (2026-07-14) - #460 progressive difficulty advanced settings [verify-fix-coop; not deployed]
+## 0.7.276-dev (2026-07-14) - #460 progressive difficulty advanced settings [verify-fix; coop-required; not deployed]
 
 - Corrected the existing partial ramp to the requested schedule: only maps 3 and 5 add one difficulty tier. Maps 1-2 retain the starting tier, maps 3-4 use +1, and map 5 onward uses +2.
 - Added an enabled-by-default difficulty-increase sub-toggle beneath the off-by-default Progressive Difficulty master.
@@ -236,7 +236,7 @@ During a Chaos Wastes expedition run `/ct_resume_audit` and retain the `[ct:141]
 - The ceiling dynamically admits Cataclysm 4/5 if another installed system registers them. Stock VT2 defines only through Cataclysm 3, so it caps there and never crosses into `versus_base`.
 - Added a pure progression policy, four offline regression cases, updated runtime assertions, and `PROGRESSIVE_DIFFICULTY.md`. Both advanced settings use host-effective values; verify with two players.
 
-## 0.7.275-dev (2026-07-14) - #358 Manann's Tempest cooldown HUD timers [verify-fix-coop; not deployed]
+## 0.7.275-dev (2026-07-14) - #358 Manann's Tempest cooldown HUD timers [verify-fix; coop-required; not deployed]
 
 - **Fix.** When the existing `tweak_manann_tempest_cooldown` gate allows a real critical-hit chain, the proc owner now sees the native Manann's Tempest trait icon count down for the exact eight-second cooldown. With the toggle off, ineligible damage, or a rejected proc, no display is created and vanilla behavior is unchanged.
 - **Independent sources.** The mod-boon and weapon-trait variants already own separate timestamp buckets and can become ready at different times. They therefore use two distinct client-local timer templates with the same native icon; one source cannot refresh or replace the other's timer.
@@ -247,7 +247,7 @@ During a Chaos Wastes expedition run `/ct_resume_audit` and retain the `[ct:141]
 
 **Verify after deployment (two players):** enable the cooldown and test the weapon trait on one peer and the mod boon on the other. A successful eligible chain must show an eight-second native-icon timer only to its owner; rejected crits during the gate must not refresh it. On one player with both sources, stagger their procs and confirm two independently progressing icons. Disable the toggle and confirm neither gating nor timers. Require `issue358_manann_tempest_cooldown_display` to pass in `/ct_regression_test`.
 
-## 0.7.274-dev (2026-07-14) - #357 bomb-bubble cooldown HUD timer [verify-fix-coop; not deployed]
+## 0.7.274-dev (2026-07-14) - #357 bomb-bubble cooldown HUD timer [verify-fix; coop-required; not deployed]
 
 - **Fix.** When the existing host-authoritative `grenade_explode_buff_area` gate allows one of the concentration, critical-chance, healing, or speed bomb bubbles, CT now shows that boon's native icon as a cooldown timer on the affected player's buff bar for exactly the configured interval. An interval of zero remains vanilla and creates no display.
 - **Wire safety.** The four presentation-only templates are registered only in the local runtime `BuffTemplates` table and never in vanilla `NetworkLookup`. The host applies directly for its local owner or sends one bounded VMF event to the remote owner. The receiver requires the current `CT_RPC_SCHEMA`, requires the sender to be the resolved host, allowlists the four boon ids, and rejects zero, NaN, or out-of-range durations. Other players do not receive the timer.

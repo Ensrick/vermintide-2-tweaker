@@ -17,7 +17,7 @@ Last updated: 2026-07-15.
 | Unit lifetime | Before owner or breed lookup, nil/deleted units fail the `Unit.alive` gate. A lingering area effect with no living hostile source preserves vanilla damage; a neutral factor does not inspect attacker units. |
 | Offline | `test_et_personal_handicap` covers policy bounds, damage math, authenticated RPC/static authority, nil/live/deleted unit boundaries, lingering Globadier source behavior, settings, and no lookup/buff registration. |
 | Runtime | `/et_regression_test`: `issue61_personal_handicap_authoritative` and `issue640_personal_handicap_unit_lifetime` pass. |
-| Lifecycle | `verify-fix-coop` only. Host Champion, client Cataclysm; verify both damage directions, then Auto, friendly fire, barrel/fall, bot, and pet controls. |
+| Lifecycle | `verify-fix` + `coop-required` only. Host Champion, client Cataclysm; verify both damage directions, then Auto, friendly fire, barrel/fall, bot, and pet controls. |
 
 ---
 ## Boss balance behaviors (#450)
@@ -42,7 +42,7 @@ Last updated: 2026-07-15.
 | Optional mission census | Run `/et_boss_idea_audit` once in a representative mission. Compare boot/mission `model_resident`; the command adds only one chat summary and never spawns a boss. |
 | Offline | `test_et_boss_ideas` covers catalog bounds, complete structure, package residency separation, and absent-global failure. |
 | Runtime check | `/et_regression_test`: `issue451_boss_ideas_safely_decomposed` reports PASS with six complete source contracts and four arena-risk markers detected. |
-| Lifecycle | `diagnostics-armed`. Convert to `verify-fix-coop` only after one portable clone has an explicit spawn option and peer-safe asset/package coverage. |
+| Lifecycle | `diagnostics-armed`. Convert to `verify-fix` + `coop-required` only after one portable clone has an explicit spawn option and peer-safe asset/package coverage. |
 
 ---
 ## Premium-skin special variants (#452)
@@ -54,7 +54,7 @@ Last updated: 2026-07-15.
 | Natural-spawn audit | The existing `_post_spawn_unit` hook calls a read-only observer. Each target ordinary special logs once per session, with all owner/source nodes counted and at most eight missing names sampled; five rows maximum. |
 | Offline | `test_et_special_variants` covers five-candidate uniqueness, structure readiness, behavior/inventory/wire/node failure, owner-node de-duplication, and absence of spawn/network mutation. |
 | Runtime | `/et_regression_test`: `issue452_special_variant_assets_classified` and `issue452_live_probe_bounded` pass. Normal play should eventually report `compatible=true` for encountered targets. |
-| Lifecycle | `diagnostics-armed` (solo). Do not move to a gameplay fix until owner-node compatibility is known; any rendered appearance or replacement then requires `verify-fix-coop`. |
+| Lifecycle | `diagnostics-armed` (solo). Do not move to a gameplay fix until owner-node compatibility is known; any rendered appearance or replacement then requires `verify-fix` + `coop-required`. |
 
 ---
 ## Enemy special modifiers (#453)
@@ -66,7 +66,7 @@ Last updated: 2026-07-15.
 | Natural-spawn audit | The singleton `_post_spawn_unit` hook samples two distinct breeds per requested category (eight rows maximum). Rows report required extensions/state, vanilla breed bans, existing enhancements, and eligible/rejected modifier counts without applying anything. |
 | Offline | `test_et_enemy_modifiers` covers catalog, wire/enhancement drift, child/function chains, category precedence, capability rejection, breed bans, and hook ownership. |
 | Runtime | `/et_regression_test`: `issue453_modifier_catalog_wire_ready` and `issue453_live_prerequisite_probe_bounded` pass. Capture representative `[et:453] live` rows. |
-| Lifecycle | `diagnostics-armed` (solo). Actual modifier application changes combat and replication and must move to `verify-fix-coop`. |
+| Lifecycle | `diagnostics-armed` (solo). Actual modifier application changes combat and replication and must move to `verify-fix` + `coop-required`. |
 
 ---
 ## Per-difficulty enemy health multiplier (#369)
@@ -78,7 +78,7 @@ Last updated: 2026-07-15.
 | Spawn path | Host wraps `GenericHealthExtension.init` and scales its final `extension_init_data.health`; never mutates shared `Breeds.max_health`. |
 | Live apply | A queued settings transaction rescales tracked living enemies once, preserving damage percentage and using vanilla max-health/damage replication. |
 | Offline | `test_et_health_multiplier` passes boundary, target-policy, percentage, and single-hook wiring checks. |
-| In-game | `[verify-fix-coop]` Host at 0.5x and 2.0x; verify a regular enemy and monster on both peers, then move the slider while one is damaged and confirm its health percentage is unchanged. |
+| In-game | `[verify-fix; coop-required]` Host at 0.5x and 2.0x; verify a regular enemy and monster on both peers, then move the slider while one is damaged and confirm its health percentage is unchanged. |
 
 ---
 ## ConflictDirector tick fault containment (#479)

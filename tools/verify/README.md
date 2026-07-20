@@ -26,14 +26,16 @@ Read-only against GitHub; writes only the two docs; **does not commit**.
 
 Open issues labeled any of:
 
-- `verify-fix` - fix shipped, confirm in-game (solo).
-- `verify-fix-coop` - fix shipped, needs 2+ people to confirm.
+- `verify-fix` - fix shipped, confirm in-game.
 - `diagnostics-armed` - a probe is armed; trigger it and read the log.
+- `verify-fix-coop` - RETIRED. Still queried so an unreconciled issue is not
+  dropped from the walk; treated as `verify-fix` + `coop-required`.
 
-`verify-fix` and `verify-fix-coop` are mutually exclusive lifecycle labels.
-Diagnostics that need multiple players retain `diagnostics-armed` as their sole
-lifecycle and add the orthogonal `coop-required` qualifier; the generator routes
-that combination to the co-op checklist even when the method prose is terse.
+Co-op scope is carried by `coop-required`, an **orthogonal qualifier** that may
+accompany any lifecycle label - `verify-fix` for a shipped fix that needs 2+
+people to confirm, `diagnostics-armed` for a probe that needs 2+ people to
+trigger. The generator routes any issue carrying it to the co-op checklist even
+when the method prose is terse.
 
 Issues are de-duplicated by number (an issue under two labels appears once).
 
@@ -64,7 +66,7 @@ checks into one run each:
 | `MISSION-CW` | chaos wastes, citadel, shrine, boon, curse, deus, pilgrim, expedition - one CW run. |
 | `SCORE-END` | scoreboard, score sync, round end, results/victory/defeat screen. |
 | `SHUTDOWN` | boot flood, warning flood, on/at boot, quit to desktop, restart, read the log. |
-| `COOP-2P` / `COOP-3P` | the `verify-fix-coop` lifecycle, `diagnostics-armed` plus `coop-required`, or method text naming 2+/3+ players, both peers, host+client, cold-join, remote husk. 3 players / host-bot + clients -> 3P, else 2P. |
+| `COOP-2P` / `COOP-3P` | the `coop-required` qualifier on any lifecycle label (legacy `verify-fix-coop` too), or method text naming 2+/3+ players, both peers, host+client, cold-join, remote husk. 3 players / host-bot + clients -> 3P, else 2P. |
 
 When a check lands in the wrong section, the fix is to make the issue's method comment
 clearer (name the location) or to adjust the keyword lists at the top of the script -

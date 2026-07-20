@@ -49,7 +49,7 @@ at-or-below-host factors skip attacker classification completely. Crash session
 
 ## Verification
 
-Lifecycle: `verify-fix-coop` (mutually exclusive with `verify-fix`).
+Lifecycle: `verify-fix` plus the orthogonal `coop-required` qualifier.
 
 1. Host a Champion mission with one client; both run Enemy Tweaker 0.7.46-dev.
 2. Leave the host on Auto. Set the client to Cataclysm.

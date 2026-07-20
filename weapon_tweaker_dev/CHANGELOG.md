@@ -19,12 +19,12 @@
 - Preserves the hidden tome, first-person presentation, illusion/material data,
   and native Warrior Priest behavior.
 
-## 0.12.283-dev (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix-coop]
+## 0.12.283-dev (2026-07-19) - #748 complete 3P animation vocabulary [verify-fix; coop-required]
 
 - Mirrors the beta track's expanded declarative remap vocabulary, single wield
   owner, donor fallback, and bounded unknown-event evidence.
 
-## 0.12.282-dev (2026-07-19) - #735 shield-only rotation routing [verify-fix-coop]
+## 0.12.282-dev (2026-07-19) - #735 shield-only rotation routing [verify-fix; coop-required]
 
 - Mirrors WT beta's explicit hand discriminator and receiver policy so the
   Saltzpyre shield rotation applies only to the left-hand shield across owner,
@@ -65,7 +65,7 @@ issue 661 catalog/family checks to pass.
 `0.12.278-beta` verification above. `/wt_regression_test` should also include
 the `issue661 Saltzpyre CWV ranged ports receive career actions` coverage.
 
-## 0.12.278-dev (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix-coop]
+## 0.12.278-dev (2026-07-18) - #701 Kruber Crossbow left-hand grip [verify-fix; coop-required]
 
 - Runtime-parity mirror of Weapon Tweaker `0.12.277-beta`: Kruber's regular
   Saltzpyre Crossbow receives the exact additive left-unit third-person grip

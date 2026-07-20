@@ -4,6 +4,9 @@ return function(H, repo_root)
 
     H.test("Mod Tweaker strips stale leading verification prefixes", function()
         H.equal(Policy.clean("[working] [Issue 694] Feature"), "Feature")
+        H.equal(Policy.clean("[verify-fix] Feature"), "Feature")
+        -- verify-fix-coop is a retired lifecycle label (now verify-fix +
+        -- coop-required), but an older sibling bundle can still emit it.
         H.equal(Policy.clean("[verify-fix-coop] Feature"), "Feature")
         H.equal(Policy.clean("[diagnostics-armed] Feature"), "Feature")
         H.equal(Policy.clean("[Needs Animations -> elf_sword] Feature"), "Feature")

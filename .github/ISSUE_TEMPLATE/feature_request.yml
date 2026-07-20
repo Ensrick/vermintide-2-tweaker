@@ -10,7 +10,7 @@ body:
       value: |
         Keep the title to eight words after the `[mod]` prefix. Describe observable behavior, not a broad wishlist. Apply one mod label and one severity label after filing.
 
-        New issues start `not-started`. Replace it only after the complete feature ships: `verify-fix` for one-player testing or `verify-fix-coop` for 2+ people, each with a test-method comment and expected result. Use `diagnostics-armed` only when a shipped probe must answer a runtime unknown. `Fixed` requires human in-game confirmation and a post-fix hardening/docs/regression pass.
+        New issues start `not-started`. Replace it only after the complete feature ships: `verify-fix`, with a test-method comment and expected result, plus the orthogonal `coop-required` qualifier when testing needs 2+ people. Use `diagnostics-armed` only when a shipped probe must answer a runtime unknown. `Fixed` requires human in-game confirmation and a post-fix hardening/docs/regression pass.
   - type: dropdown
     id: mod
     attributes:

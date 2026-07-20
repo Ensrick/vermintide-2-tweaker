@@ -199,7 +199,7 @@ This fix is offline-verified only until that in-game evidence is attached.
 
 **Solo verify:** equip the Blightreaper on at least two careers, use every career ability before and after a weapon swap, and run `/woc_regression_test`. The career-action check must pass.
 
-## 0.1.26-dev (2026-07-17) - #613/#632 mission replay, Shyish, and career actions [verify-fix-coop]
+## 0.1.26-dev (2026-07-17) - #613/#632 mission replay, Shyish, and career actions [verify-fix; coop-required]
 
 - Preserved 0.1.25-dev's atomic `Unit.set_local_pose` linked-root transform and
   durable retained-state owner. Added exact-relic `BackendUtils.get_item_units`
@@ -220,7 +220,7 @@ This fix is offline-verified only until that in-game evidence is attached.
   damage-heal behavior, and the complete career-action matrix. In-game and
   two-peer confirmation remain required; this commit is not deployed.
 
-## 0.1.25-dev (2026-07-17) - #613 atomic linked-root transform [verify-fix-coop]
+## 0.1.25-dev (2026-07-17) - #613 atomic linked-root transform [verify-fix; coop-required]
 
 - Fixed the log-proven residual in `0.1.24-dev`: an immediate read after the
   three nominally successful node-0 setters retained rotation but left position
@@ -242,7 +242,7 @@ and mission transition. The log's `[WOC:613] transform proof` must report
 `mode=atomic-local-pose`, position Z `-0.300`, scale `0.900` on every axis, and
 never `drift-unrepaired`.
 
-## 0.1.24-dev (2026-07-16) - #613 Blightreaper durable grip transform [verify-fix-coop]
+## 0.1.24-dev (2026-07-16) - #613 Blightreaper durable grip transform [verify-fix; coop-required]
 
 - Fixed the Blightreaper grip transform being reset after its successful
   spawn-time application. Source and prior WT runtime evidence show that node 0
@@ -266,7 +266,7 @@ person, and the peer's remote view; also confirm inventory preview. The log must
 show `[WOC:613] transform proof` with numeric before/after/target values and a
 retained or repaired result, never `drift-unrepaired`.
 
-## 0.1.23-dev (2026-07-16) - #655 Blightreaper intrinsic and reusable traits [verify-fix-coop]
+## 0.1.23-dev (2026-07-16) - #655 Blightreaper intrinsic and reusable traits [verify-fix; coop-required]
 
 - Added intrinsic `Poisoned Edge` and `Shyish Health Curse` trait rows to the
   Blightreaper. Poisoned Edge is now the sole owner of the native Hagbane DOT,
@@ -307,7 +307,7 @@ Verification: equip the Blightreaper, swap away and back, transition into an
 Adventure mission, and repeat once with a peer who does not have WOC. Neither
 peer may crash; the local item still displays both intrinsic property rows.
 
-## 0.1.21-dev (2026-07-16) - Blightreaper combat completion and resident Shyish spirits [verify-fix-coop]
+## 0.1.21-dev (2026-07-16) - Blightreaper combat completion and resident Shyish spirits [verify-fix; coop-required]
 
 - Fixed the empirically observed Shyish failure. The latest test log repeatedly
   recorded `[WOC:632] native Shyish unit not resident; spawn skipped`; the WOC
@@ -344,7 +344,7 @@ and poison kill from both host and client. Every qualifying kill must create a
 visible spirit that reaches its owner and converts green health to temporary
 health. Run `/woc_regression_test` and require zero failures.
 
-## 0.1.20-dev (2026-07-16) - #632 Blightreaper Shyish spirits and axe audio [verify-fix-coop]
+## 0.1.20-dev (2026-07-16) - #632 Blightreaper Shyish spirits and axe audio [verify-fix; coop-required]
 
 - Added the missing host-authoritative kill listener. Direct Blightreaper kills
   now spawn the native Shyish death-spirit unit at the victim, wait three
@@ -413,7 +413,7 @@ run `/woc_audio_probe` once in the keep and once in a mission and retain every
 `[WOC:633]` line. The ambient feature is diagnostic, not yet a verified fix;
 do not expect other peers to hear it until mission residency is proven.
 
-## 0.1.18-dev (2026-07-16) - #613 Blightreaper presentation scale [verify-fix-coop]
+## 0.1.18-dev (2026-07-16) - #613 Blightreaper presentation scale [verify-fix; coop-required]
 
 - Reduced the authored Blightreaper model uniformly to `0.9` scale on X, Y,
   and Z while preserving its existing `{-90, -90, -90}` rotation and
@@ -438,7 +438,7 @@ score/team and item/Athanor previews, then run `/woc_regression_test` and requir
 `issue613_blightreaper_appearance_contract` PASS with zero failures. A peer
 without WOC must still see only the stable vanilla-sword fallback.
 
-## 0.1.17-dev (2026-07-16) - #632 Cursed Blightreaper combat identity [verify-fix-coop]
+## 0.1.17-dev (2026-07-16) - #632 Cursed Blightreaper combat identity [verify-fix; coop-required]
 
 - Replaced the inherited Kruber Sword behavior with a private deep clone of
   Kerillian's one-handed Sword action graph. Only attack action timing is scaled
@@ -475,7 +475,7 @@ Chaos Wastes expedition with it equipped: verify 900 power, unchanged maximum
 quality, no temper purchase, and no replacement by an ordinary sword. A peer
 without WOC must receive only the vanilla sword fallback without errors.
 
-## 0.1.16-dev (2026-07-16) - #613 authored Blightreaper icon [verify-fix-coop]
+## 0.1.16-dev (2026-07-16) - #613 authored Blightreaper icon [verify-fix; coop-required]
 
 - Added the supplied transparent 80x80 Blightreaper inventory icon as a
   WOC-owned GUI texture and material.
@@ -569,7 +569,7 @@ appear in Craft Item, Salvage, Athanor, Upgrade, Reroll, or Illusion choices.
 Restart after any historical duplicate is unequipped, then require
 `issue637_unique_immutable_relic_inventory` PASS in `/woc_regression_test`.
 
-## 0.1.13-dev (2026-07-15) - #613 actual Blightreaper model and complete appearance path [verify-fix-coop]
+## 0.1.13-dev (2026-07-15) - #613 actual Blightreaper model and complete appearance path [verify-fix; coop-required]
 
 ### Changed
 - Recovered the actual Blightreaper sword placed beside the cage in the

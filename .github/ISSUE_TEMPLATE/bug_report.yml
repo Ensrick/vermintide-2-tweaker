@@ -10,7 +10,7 @@ body:
       value: |
         Keep the title to eight words after the `[mod]` prefix. Use empirical evidence and keep the body concise. Apply one mod label and one severity label after filing.
 
-        New issues start `not-started`. Replace it only when work ships: `verify-fix` for a complete one-player fix, `verify-fix-coop` for a complete fix requiring 2+ people, or `diagnostics-armed` for a live probe. Those labels require a comment with test steps and the expected result. `Fixed` requires human in-game confirmation and remains open for hardening, docs, and regression coverage. Tooling/docs issues are verified and closed autonomously instead.
+        New issues start `not-started`. Replace it only when work ships: `verify-fix` for a complete fix, or `diagnostics-armed` for a live probe. Those labels require a comment with test steps and the expected result. Add the orthogonal `coop-required` qualifier alongside either one when testing needs 2+ people. `Fixed` requires human in-game confirmation and remains open for hardening, docs, and regression coverage. Tooling/docs issues are verified and closed autonomously instead.
   - type: dropdown
     id: mod
     attributes:

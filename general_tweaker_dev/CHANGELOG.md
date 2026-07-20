@@ -1,6 +1,6 @@
 ﻿# General Tweaker Changelog
 
-## v0.2.252-dev (2026-07-19) -- client-owned ragdoll retention (#332) [verify-fix-coop]
+## v0.2.252-dev (2026-07-19) -- client-owned ragdoll retention (#332) [verify-fix; coop-required]
 
 - Snapshot dead client AI husks into bounded, static, non-colliding visual
   clones before authoritative destroy or BreedFreezer reuse removes them.
@@ -71,7 +71,7 @@ Join another player's lobby as a client, then leave or disconnect during a trans
 
 Enter the keep as Necromancer with **Allow Bots in Keep** disabled. Before using Raise Dead, the log must contain `[gt:659] phase=talents_changed` and/or `phase=extensions_ready` with `owner=human` and `after=false`. Then use Raise Dead. If skeletons still do not spawn, that evidence falsifies the hub-ban hypothesis and the next diagnostic belongs at the action/spawn entry rather than another lifecycle hook.
 
-## v0.2.246-dev (2026-07-18) -- #693 client Creature Spawner [verify-fix-coop]
+## v0.2.246-dev (2026-07-18) -- #693 client Creature Spawner [verify-fix; coop-required]
 
 - Release reconciliation: aligned the Workshop descriptor title with the already-merged `MOD_VERSION` before the atomic `0.2.246-dev` bundle build. The source-only merge was never uploaded.
 
@@ -100,7 +100,7 @@ Both peers on gt_dev. CLIENT: cycle breeds (next/previous keys or the dropdown; 
 
 ### Co-op diagnostic capture
 
-Host with two humans and bots, enable Bot Behavior Improvements, aid priority, Split follow mode, and a 15 m snap-back distance. Down or disable the human beside one bot while the other human remains over 15 m away. The next log should contain one connected `[gt:139:chain] FOLLOW` / `VETO` / `TELEPORT` sequence naming the same bot and aid ally; `TELEPORT` must show whether the state cleared, changed ally, or was deliberately released by `bailout=true`. Lifecycle intent: #139 remains `diagnostics-armed` + `coop-required`; #384 retains `verify-fix-coop` until this capture disproves the v0.2.212 behavior.
+Host with two humans and bots, enable Bot Behavior Improvements, aid priority, Split follow mode, and a 15 m snap-back distance. Down or disable the human beside one bot while the other human remains over 15 m away. The next log should contain one connected `[gt:139:chain] FOLLOW` / `VETO` / `TELEPORT` sequence naming the same bot and aid ally; `TELEPORT` must show whether the state cleared, changed ally, or was deliberately released by `bailout=true`. Lifecycle intent: #139 remains `diagnostics-armed` + `coop-required`; #384 retains `verify-fix` + `coop-required` until this capture disproves the v0.2.212 behavior.
 
 ## v0.2.243-dev (2026-07-17) -- #659 human Necromancer keep skeletons [verify-fix]
 
@@ -143,7 +143,7 @@ Host a mission with bots and repeat the prior bot-follow/heal/rescue sequence. T
 
 Host an Adventure mission with at least one bot, enable **Bot command wheel**, aim at navigable ground several metres away, and choose **Wait**. The nearest bot should move to that aimed point, remain held around it for 30 seconds, then resume following. Run `/gt_regression_test` and confirm `issue600_wait_aim_and_duration` passes; the log should contain one `[gt:600] wait applied` row with `source=wheel_aim` and `duration=30.0`.
 
-## v0.2.239-dev (2026-07-14) -- #247 keep-slot bot takeover [verify-fix-coop]
+## v0.2.239-dev (2026-07-14) -- #247 keep-slot bot takeover [verify-fix; coop-required]
 
 - Replaced the hard-disabled owner-destructive swap with a source-backed keep-slot transaction for Adventure, Chaos Wastes, and Weaves. The human `Player`, peer/profile assignment, and party slot remain authoritative while one temporary same-profile bot uses a free slot or safely replaces one remembered native bot.
 - Reclaim removes only the recorded takeover bot, restores the displaced bot to its exact profile/career/slot, and returns the human through native `force_respawn`; the retired `remove_player`, human party/profile reassignment, and locomotion-override path is absent.
@@ -172,7 +172,7 @@ Host an Adventure mission with at least one bot, enable **Bot command wheel**, a
 
 Enable **Disable Enemy Spawns** before starting a mission and play through a full level. No ambient enemies, hordes, specials, patrols, monsters, or critters should spawn. Disable it and confirm pacing resumes. Run `/gt_regression_test` and require `issue242_all_spawn_classes_blocked` to pass.
 
-## v0.2.235-dev (2026-07-14) -- #333 offline Twitch mode and event allow-list [verify-fix-coop]
+## v0.2.235-dev (2026-07-14) -- #333 offline Twitch mode and event allow-list [verify-fix; coop-required]
 
 - Added a default-off **Offline Twitch Mode** that lets the host run ordinary Twitch votes without an account, channel, or stream. It reuses Fatshark's native Twitch game-mode object, timers, random tie resolution, effects, vote UI, game objects, and RPCs.
 - Added default-on category controls for buffs/effects, item giveaways, mutators, and enemy spawns. They compose with vanilla's game-mode whitelist at its single candidate gate and also apply when a real Twitch account is connected.
@@ -264,7 +264,7 @@ Host with bots, enable Improved Bot Combat, and toggle each child independently.
 3. As non-wounded Zealot below the ordinary threshold, confirm the default exclusion preserves low permanent health. Become wounded and confirm the default wounded-Zealot toggle permits healing; turn that toggle off and confirm it no longer does.
 4. A revive/rescue and nearby enemies must retain vanilla priority/safety. Run `/gt_regression_test` and confirm `issue523_bot_heal_allies_policy` passes.
 
-## v0.2.227-dev (2026-07-14) -- #549 Godmode power and ammo children [verify-fix-coop]
+## v0.2.227-dev (2026-07-14) -- #549 Godmode power and ammo children [verify-fix; coop-required]
 
 - Added two default-off child toggles beneath Godmode: **9999 Damage Per Strike** and **Unlimited Ammo**. Both are inert while the Godmode parent is off.
 - Outgoing damage uses the existing `gt_godmode_state` heartbeat's optional trailing flag so a client's setting reaches the authoritative host. The single new `DamageUtils.apply_buffs_to_damage` hook calls vanilla first, preserves its victim/mitigation side effects, then raises only positive enemy damage from the opted-in human to 9999. Friendly fire, self damage, immune zero-damage results, bots, and players without the child toggle stay vanilla.
@@ -290,7 +290,7 @@ Host with bots, enable Improved Bot Combat, and toggle each child independently.
 
 As solo host with bots and a 15 m follow distance, reproduce the geometry/path-failure location that previously caused repeated close-range teleports. The first unstick may occur, but no bot may teleport repeatedly within five seconds while below 15 m. D1 must name `vanilla_no_path` or `backward_no_path`, and suppressed repeats must emit one bounded `[gt:385]` line.
 
-## v0.2.225-dev (2026-07-13) -- #241 cover every noclip boundary-death route [verify-fix-coop]
+## v0.2.225-dev (2026-07-13) -- #241 cover every noclip boundary-death route [verify-fix; coop-required]
 
 - The latest attached reproduction was a solo listen host, but never emitted the existing `HealthSystem.suicide` suppression record. Source audit identified the missing route: authored kill volumes call `PlayerUnitHealthExtension.entered_kill_volume`, which sends `rpc_request_insta_kill` even on a listen host.
 - Noclip now suppresses that local kill-volume callback before it queues or sends the instant-kill request. The existing host `z < -240` suicide gate remains in place.
@@ -492,7 +492,7 @@ The failed-join reveal (`_gt_lobby_failed_join_reveal.lua`) only triggers when a
 ### Regression
 - New `/gt_regression_test` check `gt_lobby378_watchdog_abort_reroutes_to_menu`: drives the exported `_wd_reroute_to_menu` against a stub StateLoading and asserts it delegates to `_destroy_lobby_client` (the `_wanted_state` -> menu redirect) and is nil / missing-method safe, so a refactor that force-tears-down WITHOUT the reroute is caught at load.
 
-### Test method (coop, 2 humans -- verify-fix-coop)
+### Test method (coop, 2 humans -- verify-fix, coop-required)
 1. Human A hosts a lobby with a required (hash-neutral) mod that Human B does NOT have installed -- e.g. enemy_tweaker or a breed/buff mod that changes shared state but adds no level_key/DLC. Human B keeps gt_dev enabled.
 2. Human B joins A's lobby. Previously: indefinite loading screen, alt-F4 only exit. Now: within the timeout (default 60s) a popup lists the missing mod(s) with Open Workshop + Leave, OR (if A is not broadcasting its mod list) a "Join timed out" notice with Leave; clicking Leave returns to the main menu.
 3. Confirm a NORMAL join (B has all of A's mods) still completes well within the window and shows no watchdog popup.
@@ -570,7 +570,7 @@ The leash lines are the ONE gt overlay whose data is HOST-EXCLUSIVE. Bots exist 
 - Reset `mod._gt_shared_draw` + handles + throttles at the mission boundary in `_reset_mission_state` (mod-table fields, so the above-first-use reset can't hit the class-6 forward-ref-to-global trap).
 - Regression checks `gt_draw_rpc_schema_present` + `gt534_leash_share_wired` (runtime-only, no io).
 
-### Test method (needs 2 gt_dev peers: you host + RainReligion client) -- verify-fix-coop
+### Test method (needs 2 gt_dev peers: you host + RainReligion client) -- verify-fix, coop-required
 1. Both pin gt_dev (per-mod-id RPC channel; dev and stable can't share it).
 2. Host: Dev Tools -> Bot leash lines ON + Share debug draws ON. Play with bots present.
 3. Client: Dev Tools -> Share debug draws ON.

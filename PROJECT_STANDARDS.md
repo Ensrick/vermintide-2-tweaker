@@ -766,7 +766,7 @@ those, throttled once per (slot, hand, def, retained-fingerprint). Copy that
 shape at any new appearance apply site: read back, log the readback, never the
 setter return.
 
-A `verify-fix` / `verify-fix-coop` label on an appearance issue additionally
+A `verify-fix` label on an appearance issue additionally
 requires the census row context per `docs/APPEARANCE_UNIFICATION_PLAN.md` § 4:
 the family's census row must be green across cells, and the test-method comment
 (§11 test-method prerequisite) must name the cells exercised. A setter-success
@@ -1731,25 +1731,14 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   issue #498; how the user sees the untouched backlog at a glance). Applied by
   the #498 audit to every open issue with zero work evidence; REMOVE it in the
   same pass that ships the first work and adds a real status label.
-- `verify-fix` — a code fix shipped; the user tests it in-game (solo-verifiable).
-  Reserved for HUMAN in-game verification — see the scope rule below.
-- `verify-fix-coop` — a code fix shipped whose verification needs **2+ people**
-  (cross-peer wire safety, host/client desync, hot-join races). REPLACES
-  `verify-fix`, never coexists with it. Mark the shipped CHANGELOG header
-  `[verify-fix-coop]`; ship.ps1 then applies it directly and removes every
-  competing lifecycle label in the same issue edit (user rule 2026-07-11).
-  **The tester count in the test-method comment DECIDES the label** (user rule
-  2026-07-12, caught on issues 280/278): a comment that says "needs 2 players" /
-  "host + client" / "a non-mod peer" on an issue labeled plain `verify-fix` is a
-  doctrine violation — whoever posts or reads such a comment swaps the label in
-  the same pass. Also sanity-check the test itself: a crash class that only
-  exists with a remote peer (send-queue overflow, husk resolution) cannot have
-  a solo test method (issue 205 correction). ship.ps1 prints a `COOP?` warning
-  when a shipped entry smells cross-peer but lacks the explicit marker.
+- `verify-fix` — a code fix shipped; a human tests it in-game. This is the ONLY
+  fix-verification lifecycle label, whether the test is solo or co-op. Reserved
+  for HUMAN in-game verification — see the scope rule below. When the test needs
+  2+ people, keep `verify-fix` and add the orthogonal `coop-required` qualifier
+  (see below); there is no separate co-op lifecycle label.
 - `diagnostics-armed` — a diagnostic/probe shipped; repro in-game to capture data.
   If collection needs 2+ players, keep this as the sole lifecycle label and add
-  the orthogonal `coop-required` qualifier. Mark the CHANGELOG header
-  `[coop-required]` so ship.ps1 creates/applies the qualifier. Do not invent a
+  the orthogonal `coop-required` qualifier. Do not invent a
   `diagnostics-armed-coop` lifecycle label.
 - `Fixed` — the fix is **verified** (in-game confirmation by the user OR the
   designated playtester, GitHub user RainReligion — his issue comments are
@@ -1761,8 +1750,27 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   regression test (`_rt_register` / QA check) that locks the invariant. Close the
   issue only when the post-fix pass is done (or explicitly judged not applicable —
   say so in a comment).
+- **Co-op qualifier (policy 2026-07-20, replaces the retired `verify-fix-coop`):**
+  `coop-required` is an ORTHOGONAL qualifier, not a lifecycle state. It means
+  verification needs **2+ people** (cross-peer wire safety, host/client desync,
+  hot-join races) and it may accompany ANY lifecycle label - most often
+  `verify-fix` and `diagnostics-armed`, and legitimately `not-started` when a
+  known future repro will need a second player. It never replaces a lifecycle
+  label and never counts toward lifecycle cardinality. A co-op-verified fix is
+  therefore `verify-fix` + `coop-required`.
+  **The tester count in the test-method comment DECIDES the qualifier** (user
+  rule 2026-07-12, caught on issues 280/278): a comment that says "needs 2
+  players" / "host + client" / "a non-mod peer" on an issue lacking
+  `coop-required` is a doctrine violation - whoever posts or reads such a
+  comment adds the qualifier in the same pass. Also sanity-check the test
+  itself: a crash class that only exists with a remote peer (send-queue
+  overflow, husk resolution) cannot have a solo test method (issue 205
+  correction). Mark the shipped CHANGELOG header `[verify-fix; coop-required]`
+  so ship.ps1 applies both; it prints a `COOP?` warning when a shipped entry
+  smells cross-peer but lacks the marker. Legacy `[verify-fix-coop]` headers are
+  still parsed for backward compatibility but MUST NOT be written in new entries.
 - **Test-method prerequisite (user rule 2026-07-12, set on issue #479):**
-  `verify-fix`, `verify-fix-coop`, and `diagnostics-armed` may only be applied
+  `verify-fix` and `diagnostics-armed` may only be applied
   once the issue carries a comment stating HOW to test (chat command / repro
   steps) and the EXPECTED result (the printed line, the behavior, the absence
   of the crash). A status label without that comment is invalid and gets
@@ -1774,8 +1782,8 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   issue carries NO verify-* label until the spec is complete or the user
   explicitly re-scopes it - a tester filtering verify-fix must find only things
   that can pass in full. Partial progress lives in comments, not the label.
-- **Human-verification scope (user rule 2026-07-12):** `verify-fix` / `verify-fix-coop`
-  / `Fixed` are RESERVED for issues whose verification needs a human in-game -
+- **Human-verification scope (user rule 2026-07-12):** `verify-fix` / `Fixed`
+  are RESERVED for issues whose verification needs a human in-game -
   generating a log with evidence of the fix, or eyes-on testing/oversight. The user
   filters by verify-* to find things HE can test, so each must carry an in-game
   test method (the prerequisite above). Documentation and script/tooling issues
@@ -1787,6 +1795,11 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   must stay open, e.g. `blocked` on a promotion).
 - **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
   merged into `diagnostics-armed`. Do not recreate them.
+- **Retired 2026-07-20:** `verify-fix-coop` → split into `verify-fix` (lifecycle) +
+  `coop-required` (qualifier). Do not recreate it. It was a lifecycle label that
+  also encoded a tester-count fact, which forced a second co-op state for every
+  future lifecycle (the `diagnostics-armed-coop` that we kept having to forbid).
+  Encoding the tester count once, as a qualifier, scales to all four states.
 - `qa/check_issue_status_labels.ps1` pass 3 sweeps all open issues and warns on
   any carrying zero lifecycle labels (advisory, issue #498).
 
@@ -1807,10 +1820,10 @@ merge had repurposed it onto enemy_tweaker issues. Do NOT recreate `et`.)
 
 **Optional modifiers (informational, never a substitute for a type or lifecycle):**
 `regression` (a fix that broke a working feature), `audit`, `refactor`, `blocked`,
-`deferred`, `coop-required`. The last is a tester-routing qualifier primarily for
-`diagnostics-armed` (and optionally `not-started` when a known future repro needs
-2+ players). `verify-fix-coop` already conveys that requirement, so it does not
-also carry `coop-required`.
+`deferred`, `coop-required`. The last is the tester-routing qualifier defined in
+the status section above: it is orthogonal to the lifecycle, pairs with any
+lifecycle label (most often `verify-fix` and `diagnostics-armed`), and never
+substitutes for one.
 
 When you ship a fix or a diagnostic for an issue, add the matching status label (and
 remove `not-started`) in the **same pass** as the CHANGELOG entry (rule #5 territory).
@@ -1821,11 +1834,13 @@ for a real status label only once you have actually shipped work.
 automatically on every dev-stream ship: it parses the `#N` refs out of the CHANGELOG entry
 being shipped and runs `gh issue edit N --add-label` — `diagnostics-armed` when the entry
 header carries a `[diag]`/diagnostic/probe/instrument marker (instrumentation-only ship),
-`verify-fix-coop` when it carries `[verify-fix-coop]`, and `verify-fix` otherwise.
-`[coop-required]` adds the non-lifecycle qualifier to `diagnostics-armed`; the script
-idempotently creates that label if needed. Each issue edit chooses one effective lifecycle
-(`Fixed` and an existing coop verification are never downgraded), removes all competing
-lifecycle labels, and removes stale `coop-required` outside armed diagnostics. Every
+and `verify-fix` otherwise. `[coop-required]` in the header adds the non-lifecycle
+qualifier alongside whichever lifecycle was chosen; the script idempotently creates that
+label if needed. A legacy `[verify-fix-coop]` header is still parsed as
+`verify-fix` + `coop-required` for backward compatibility, but new entries write
+`[verify-fix; coop-required]`. Each issue edit chooses one effective lifecycle
+(`Fixed` is never downgraded) and removes all competing
+lifecycle labels; the `coop-required` qualifier is left alone by that sweep. Every
 decision is printed so a mixed entry (fix + probe in one) can
 be corrected by hand; loc-sweep entries, closed issues, and non-existent numbers are
 skipped. Explicit `[docs]` / `[tooling]` entries are also skipped because their issues
@@ -1844,7 +1859,7 @@ un-mergeable.
 |---|---|
 | One edit, add-then-remove | Every lifecycle change goes through `tools/ship/ship.ps1` `Get-LifecycleEditPlan` (ship.ps1:490) or an equivalent single `gh issue edit` that adds the target label AND removes every competing lifecycle label together. A bare `--remove-label` on a lifecycle label with no paired add is forbidden. |
 | Never leave an issue bare | Cardinality stays exactly 1 on every open issue at every instant. If you don't know the right target, the answer is `not-started`, not nothing. |
-| Never downgrade without failed-verify evidence | `verify-fix` / `verify-fix-coop` / `Fixed` may only move backward when a comment cites the failed verification (user/playtester log or report). A merged fix-PR, or an existing verify-* label plus its test-method comment, is do-not-downgrade evidence - a reconciliation that cannot see the fix must leave the label alone. |
+| Never downgrade without failed-verify evidence | `verify-fix` / `Fixed` may only move backward when a comment cites the failed verification (user/playtester log or report). A merged fix-PR, or an existing verify-* label plus its test-method comment, is do-not-downgrade evidence - a reconciliation that cannot see the fix must leave the label alone. |
 | Comment every change | Each lifecycle edit gets an issue comment naming the evidence that drove it (shipped version, failed-verify log, user confirmation). An uncommented label change is presumed wrong and gets reverted to the last evidenced state. |
 
 **CI enforcement:** `tools/github/check-lifecycle-cardinality.ps1` runs as a
@@ -1878,8 +1893,9 @@ hides as N unrelated-looking tickets and the same fix gets re-investigated from 
 different symptoms.
 
 **Lifecycle-label integrity.** Exactly ONE lifecycle label per open issue (the
-Labels status set above: `not-started` / `verify-fix` / `verify-fix-coop` /
-`diagnostics-armed` / `Fixed`). The ship.ps1 status-label mechanization (issue
+Labels status set above: `not-started` / `verify-fix` / `diagnostics-armed` /
+`Fixed`). `coop-required` is a qualifier, not a lifecycle label, so it never
+counts toward that cardinality. The ship.ps1 status-label mechanization (issue
 #326) already enforces one-lifecycle on ship; manual edits must not reintroduce a
 second. Any batch label-cleanup session MUST log what it removed and why, in an
 issue comment on each affected issue. Silent stripping is banned: correct

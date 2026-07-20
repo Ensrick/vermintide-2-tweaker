@@ -35,7 +35,7 @@
 - Keeps the provider data-only and exact-family scoped so CIM can render the authored result without duplicating CWV's weapon catalogue.
 - Adds cross-mod appearance-contract and Lua 5.1 coverage for both variants and the vanilla fallback.
 
-## 0.1.459-dev (2026-07-19) - universal Crowbill mode (#798) [verify-fix-coop]
+## 0.1.459-dev (2026-07-19) - universal Crowbill mode (#798) [verify-fix; coop-required]
 
 - Removed the Sienna-only preference gate: native, Imperial, and Dawi
   Crowbills now share one exact-instance pick/hammer style owner and preserve
@@ -56,7 +56,7 @@
   function-only type check.
 - Nil, non-callable, throwing, and nil-returning constructors still fail closed.
 
-## 0.1.457-dev (2026-07-19) - unconditional CWV skin wire safety (#741) [verify-fix-coop]
+## 0.1.457-dev (2026-07-19) - unconditional CWV skin wire safety (#741) [verify-fix; coop-required]
 
 - Retired the issue-495 all-CWV parity exception. Presence and schema agreement
   do not prove numeric `NetworkLookup.weapon_skins` identity when another mod
@@ -84,7 +84,7 @@ checks `issue741_cwv_skin_wire_unconditional`,
 `issue416_483_transition_generated_skin_identity`, and
 `issue579_dual_axes_preview_and_husk_skin_continuity` pass.
 
-## 0.1.456-dev (2026-07-18) - restore Outrider blunderbuss (#762) [verify-fix-coop]
+## 0.1.456-dev (2026-07-18) - restore Outrider blunderbuss (#762) [verify-fix; coop-required]
 
 - Reverted #627's rejected imported launcher presentation. The Outrider now
   uses vanilla's resident `wpn_empire_blunderbuss_t1` unit again, matching the
@@ -110,7 +110,7 @@ G-CROSS-CHAR resident vanilla-unit provenance, G-BLACKSMITH generated-skin
 identity, and G-APPEARANCE preview/husk consumers. The owner/remote in-game
 matrix remains pending on #762.
 
-## 0.1.454-dev (2026-07-18) - coherent pistol-less Rapier contract (#807) [verify-fix-coop]
+## 0.1.454-dev (2026-07-18) - coherent pistol-less Rapier contract (#807) [verify-fix; coop-required]
 
 - Removed the inherited left-hand ammunition contract from Kruber's pistol-less
   Rapier clone at the same boundary that disables its pistol action. The stock
@@ -177,7 +177,7 @@ with roles reversed and across a mission transition. Logs may show no more than
 eight sends for one unchanged peer/slot/fingerprint and must show no continuing
 retry after acknowledgement. Old Musket stance/animation remains owned by #474.
 
-## 0.1.451-dev (2026-07-18) - Old Musket remote-material crash guard (#742) [verify-fix-coop]
+## 0.1.451-dev (2026-07-18) - Old Musket remote-material crash guard (#742) [verify-fix; coop-required]
 
 - Fixed the native access violation when a remote player's Old Musket was
   spawned or wielded during hot join. Both attached logs prove that all three
@@ -219,7 +219,7 @@ inventory, Athanor, remote husk, transition, hot join, same-mod, mixed-mod, and
 failure fallback are covered by the shared painter plus offline/runtime tests;
 live two-peer visual/crash confirmation remains the explicit verification step.
 
-## 0.1.450-dev (2026-07-18) - #474 Old Musket stance/fire ride the delivering wire [verify-fix-coop]
+## 0.1.450-dev (2026-07-18) - #474 Old Musket stance/fire ride the delivering wire [verify-fix; coop-required]
 
 - **Stance + shot report re-homed onto `cwv_item_identity`** (#474). The paired 2026-07-18 logs (host v0.1.445, client v0.1.444) prove `cwv_old_musket_mode_v1` NEVER delivered: 4 state-tx and 2 fire-tx across both peers, zero rx either direction, while `cwv_item_identity` and `cwv_combat_style_v1` (same shape, same mod, same minute) delivered. VMF-layer cause undetermined; the mode channel stays registered as belt-and-suspenders and both wires now route into ONE shared acceptor pair (`_om._old_musket_accept_mode` / `_om._old_musket_play_remote_fire`).
   - Identity payloads for the Old Musket carry `musket_mode`; a stance toggle force-replays the owner's slots over the identity channel (one bounded send per toggle/wield edge). Receivers apply the stance BEFORE accept()'s changed-gate (a toggle changes mode while the identity signature is unchanged).
@@ -232,7 +232,7 @@ live two-peer visual/crash confirmation remains the explicit verification step.
 
 **Verify (2 players, both on v0.1.450-dev):** owner equips Old Musket (ranged slot), observer sees custom mesh; owner toggles bayonet stance - observer's log must show `[cwv:474] state rx ... source=identity_channel` and the husk pose flip; owner fires - observer hears the rifle report and logs `[cwv:474] remote fire ... source=identity_channel`; repeat with roles swapped, after weapon swap, and after a hot join; `/cwv_regression_test`: `issue484_crafted_old_musket_identity` and both `issue474_*` checks PASS; client log must NOT show repeating `parity_replay` sends every 0.5s.
 
-## 0.1.449-dev (2026-07-18) - mixed-lobby fallback package parity (#491) [verify-fix-coop]
+## 0.1.449-dev (2026-07-18) - mixed-lobby fallback package parity (#491) [verify-fix; coop-required]
 
 - Fixed the remaining non-CWV peer crash when a CWV wearer spawns or wields a
   pairing weapon. The loadout and equipment RPCs already substituted the
@@ -259,7 +259,7 @@ curated pairing through the existing appearance channel.
 
 **Verify:** the 0.1.447-dev coop matrix applies unchanged - same [cwv:huskpath]/[cwv:395]/[cwv:423] log lines must fire; `/cwv_regression_test` all PASS.
 
-## 0.1.447-dev (2026-07-18) - husk-path cluster + score-wire fix [verify-fix-coop]
+## 0.1.447-dev (2026-07-18) - husk-path cluster + score-wire fix [verify-fix; coop-required]
 
 - #737 score-sync CTD fix: `CosmeticUtils.update_cosmetic_slot` was the fourth (and only unhooked) vanilla sender able to carry a live modded weapon_skins INDEX onto the wire - the 2026-07-18 scoreboard crash (index 924 absent on a diverged peer). New `_cwv_cosmetic_skin_wire.lua` nulls any cwv skin to "n/a" unconditionally on that sender; apply-site log correlates with the [gut:272] probe.
 - #399 husk ammo-strip is now descriptor-primary (same evidence as the mesh/transform husk adapters; falls back to base+career only without an exact descriptor) - crafted no-skin copies no longer show a torpedo on the remote view.
@@ -327,12 +327,12 @@ husk-on-CWV-peer render and rotation correctness pending user in-game verify
 the affected Bardin and Kruber abilities with a CWV weapon before and after a
 weapon swap. `/cwv_regression_test` must report no career-action failure.
 
-## 0.1.444-dev - 2026-07-17 - sibling-renderer exact identity contract (#583/#660) [verify-fix-coop]
+## 0.1.444-dev - 2026-07-17 - sibling-renderer exact identity contract (#583/#660) [verify-fix; coop-required]
 
 - Exposed CWV's existing fingerprint-validated remote appearance descriptor through a read-only sibling-renderer contract. Tweaker: Cosmetics uses the exact variant key to validate independently selected dual offhands after vanilla husk equipment reduces the item to its base key.
 - The contract adds no network channel or payload: it reads the same bounded `cwv_item_identity` lifecycle state already used by CWV's husk renderer and fails closed unless provider, exact item, base item, skin, and descriptor fingerprint were reconstructed locally.
 
-## 0.1.443-dev - 2026-07-17 - #604 remote Dawi transform selection [verify-fix-coop]
+## 0.1.443-dev - 2026-07-17 - #604 remote Dawi transform selection [verify-fix; coop-required]
 
 - Made the production remote-husk transform boundary consume schema-2's exact
   locally reconstructed Crowbill unit before the base-variant fallback. Dawi
@@ -345,7 +345,7 @@ weapon swap. `/cwv_regression_test` must report no career-action failure.
   it covers the tuned Dawi model, a mismatched-unit safety case, and an untuned
   Imperial Crowbill control that must remain unchanged.
 
-## 0.1.442-dev - 2026-07-17 - #604 Dawi Crowbill perspective correction [verify-fix-coop]
+## 0.1.442-dev - 2026-07-17 - #604 Dawi Crowbill perspective correction [verify-fix; coop-required]
 
 - Reconciled the still-valid part of the stranded `1c256ec` candidate onto the
   current schema-2 exact-appearance lifecycle: Dawi Crowbill Model 01 now owns
@@ -434,7 +434,7 @@ contract changed. Lua suite, mod lint, and file-size QA must pass before merge.
 4. Run `/cwv_regression_test`; `issue396_imperial_longsword_identity_and_remote_husk`
    and `issue660_world_identity_lifecycle_replay` must pass. Attach both logs.
 
-## 0.1.438-dev - 2026-07-17 - #484 crafted Old Musket canonical identity [verify-fix-coop]
+## 0.1.438-dev - 2026-07-17 - #484 crafted Old Musket canonical identity [verify-fix; coop-required]
 
 - Root-caused the crafted-only failure against closed fixes #390, #397, #409,
   #617, and the later #628 synthetic-item contract. The generic CWV resolver
@@ -499,7 +499,7 @@ contract changed. Lua suite, mod lint, and file-size QA must pass before merge.
    `browser_meshswap_guards` must pass. Full #660 co-op/lifecycle verification
    remains pending.
 
-## 0.1.436-dev - 2026-07-17 - #645 Saltzpyre Greatsword Combat Styles [verify-fix-coop]
+## 0.1.436-dev - 2026-07-17 - #645 Saltzpyre Greatsword Combat Styles [verify-fix; coop-required]
 
 - Added Saltzpyre's native `wh_2h_sword` to the canonical Greatsword Combat
   Style family, so the existing equipment-row style control and hotkey now
@@ -523,7 +523,7 @@ contract changed. Lua suite, mod lint, and file-size QA must pass before merge.
 3. Restart and hot join, then confirm the exact instance retains its style and
    `/cwv_regression_test` passes `issue620_per_instance_combat_styles`.
 
-## 0.1.435-dev - 2026-07-16 - #423 damage-profile wire gate fails closed [verify-fix-coop]
+## 0.1.435-dev - 2026-07-16 - #423 damage-profile wire gate fails closed [verify-fix; coop-required]
 
 - Hardened the existing client-to-host `rpc_attack_hit` gate so negative or
   unknown CWV parity has no path that can return the original `cwv_*`
@@ -553,7 +553,7 @@ contract changed. Lua suite, mod lint, and file-size QA must pass before merge.
    the tuned CWV damage must remain active.
 3. Run `/cwv_regression_test`; `cwv_wire_safe_damage_profile_gate` must PASS.
 
-## 0.1.434-dev - 2026-07-16 - #644/#648 Greatsword style deduplication [verify-fix-coop]
+## 0.1.434-dev - 2026-07-16 - #644/#648 Greatsword style deduplication [verify-fix; coop-required]
 
 - Removed Imperial Longsword from the native Greatsword's public cycle because
   it shares the exact Kruber Greatsword action graph with the default style.
@@ -613,7 +613,7 @@ contract changed. Lua suite, mod lint, and file-size QA must pass before merge.
    requested slower, stronger package.
 3. Run `/cwv_regression_test`; `issue620_per_instance_combat_styles` must PASS.
 
-## 0.1.432-dev - 2026-07-16 - #604 Dawi Crowbill relative 3P scale [verify-fix-coop]
+## 0.1.432-dev - 2026-07-16 - #604 Dawi Crowbill relative 3P scale [verify-fix; coop-required]
 
 - Corrected Dawi Crowbill Model 01's `0.5` tune from an absolute unit-root
   scale to a multiplier of each spawned 3P/presentation unit's settled scale.
@@ -696,7 +696,7 @@ diagnostics, and U-8 build hygiene. Co-op visual confirmation remains pending.
    repeating Bretonnian attacks.
 3. Run `/cwv_regression_test`; `issue620_per_instance_combat_styles` must PASS.
 
-## 0.1.429-dev - 2026-07-16 - issue 474 Old Musket presentation surface audit + fan-out guard [verify-fix-coop]
+## 0.1.429-dev - 2026-07-16 - issue 474 Old Musket presentation surface audit + fan-out guard [verify-fix; coop-required]
 
 Issue 474's real complaint is process, not one weapon: "if we're using consistent
 and proper abstraction... we shouldn't have individual weapons breaking the norms".
@@ -772,7 +772,7 @@ lobby/score, item/Athanor previews), U-7 (forward-reference audit of the new
 G-3P-ANIM husk melee-moveset parity is explicitly DEFERRED (needs paired in-game
 data). Live co-op verification of the behavioral fixes remains owed on issue 474.
 
-## 0.1.428-dev - 2026-07-15 - #604 durable Crowbill transforms [verify-fix-coop]
+## 0.1.428-dev - 2026-07-15 - #604 durable Crowbill transforms [verify-fix; coop-required]
 
 - **#620 P0 menu crash:** bounded the Combat Style controller legend to the
   seven widgets allocated by `HeroWindowLoadoutConsole`. A full seven-action
@@ -808,7 +808,7 @@ inventory preview, and on the other peer. Repeat with Imperial Model 05: scale
 - CIM's forge crash guard consumes that descriptor before inspecting the inherited `es_handgun` entry. Custom-ready and fallback-ready states render safely; missing fallback resources fail closed.
 - Added Lua coverage for visible/textured Old Musket previews, CIM UUID identity, package readiness, safe fallback, missing companion/resource behavior, a resident Loremaster shield control, and a vanilla weapon control.
 
-## 0.1.426-dev - 2026-07-15 - #620 atomic Combat Style transitions [verify-fix-coop]
+## 0.1.426-dev - 2026-07-15 - #620 atomic Combat Style transitions [verify-fix; coop-required]
 
 - Fixed the equipment-row switch crash. Every authored target style now owns
   its exact vanilla first-person state-machine resource; a bounded asynchronous
@@ -840,7 +840,7 @@ and Hunter/Infantry persist on that exact instance. Verify the moveset and
 weapon appearance on a second peer, then repeat after a career/slot change and
 confirm ordinary rows' gear cogs never move.
 
-## 0.1.425-dev - 2026-07-15 - #620 equipment-row Combat Style control [verify-fix-coop]
+## 0.1.425-dev - 2026-07-15 - #620 equipment-row Combat Style control [verify-fix; coop-required]
 
 - Fixed the missing Combat Style control on the actual console-style equipment
   screen. The earlier implementation only patched `HeroWindowLoadout`; VT2
@@ -866,7 +866,7 @@ the Infantry moveset locally and on the other peer, leave/rejoin, and confirm
 the exact spear instance retained its style. Repeat with an ordinary Handgun
 and confirm no style button appears.
 
-## 0.1.424-dev - 2026-07-15 - #604 Crowbill transform delivery [verify-fix-coop]
+## 0.1.424-dev - 2026-07-15 - #604 Crowbill transform delivery [verify-fix; coop-required]
 
 - Fixed the shipped `0.1.423-dev` no-op: its Dawi tune existed only under the
   generated skin key, while default-rarity/CIM blacksmith instances are
@@ -888,7 +888,7 @@ identity, owner 1P/3P, bot/husk, inventory/lobby/score, item/Athanor, bounded
 diagnostics, and U-8 build hygiene. In-game/co-op visual confirmation remains
 pending on #604.
 
-## 0.1.423-dev - 2026-07-15 - #604 Dawi Crowbill Model 01 rotation [verify-fix-coop]
+## 0.1.423-dev - 2026-07-15 - #604 Dawi Crowbill Model 01 rotation [verify-fix; coop-required]
 
 - Baked the user-reviewed Dawi Crowbill Model 01 transform as absolute scale
   `{0.5, 0.5, 0.5}` and Euler rotation `{-90, -90, -90}` degrees on the
@@ -900,7 +900,7 @@ pending on #604.
 - Added offline and runtime regression coverage for exact values, 1P exclusion,
   and shared transform-map wiring.
 
-## 0.1.422-dev - 2026-07-15 - #620 per-instance Combat Styles [verify-fix-coop]
+## 0.1.422-dev - 2026-07-15 - #620 per-instance Combat Styles [verify-fix; coop-required]
 
 - Added one contextual Combat Style button to the equipment/loadout screen and an optional mid-mission `Cycle Combat Style` hotkey. The choice persists against the exact crafted backend item, so cosmetics, glow, properties, traits, and the inventory identity stay on that instance.
 - Native Greatsword-family items use a deterministic four-style cycle, rotated to their native default: Greatsword, Imperial Longsword, Bretonnian, and Kerillian. Greathammers cycle their Kruber and Warrior Priest packages.
@@ -925,7 +925,7 @@ pending on #604.
 
 **DoD:** Re-walked G-CUSTOM-ILLUSION preview rendering, U-8 build hygiene, and the custom-resource C-call safety boundary. In-game visual confirmation remains pending on #617.
 
-## 0.1.420-dev - 2026-07-14 - #482 #604 persisted identity and Crowbill tune [verify-fix-coop]
+## 0.1.420-dev - 2026-07-14 - #482 #604 persisted identity and Crowbill tune [verify-fix; coop-required]
 
 - Symptom: a previously crafted Imperial Longsword/Black Guard Blade could retain its CWV inventory identity and mesh but lose the family's canonical scale and grip after later builds. Recrafting must never be required to receive current authored transforms.
 - Root cause: #482's UUID resolver only recognized the newer `cwv_key` stamp. Legacy CIM records already preserve the exact authored `item_key`, and the reconstructed backend item exposes that as `item.key`, but old instances can lack the newer stamp. Preview reconstruction can also briefly run while the backend interface is unavailable.
@@ -947,7 +947,7 @@ pending on #604.
 
 **DoD:** Re-walked U-8 build hygiene, G-CUSTOM-ILLUSION preview rendering, and G-APPEARANCE texture ownership across Athanor and illusion-browser consumers. Owner equipment and inventory character preview retain their existing shared-helper coverage. In-game visual confirmation remains deferred to #617's `verify-fix` check.
 
-## 0.1.417-dev - 2026-07-14 - #597 Greataxe Model 01 transform [verify-fix-coop]
+## 0.1.417-dev - 2026-07-14 - #597 Greataxe Model 01 transform [verify-fix; coop-required]
 
 - Baked the final Kruber third-person transform recovered from the latest Hold-Pose tuning session into Greataxe Model 01: absolute scale `{0.5, 0.5, 0.5}`, offset `{-0.010, 0.153, -0.309}`, and Euler rotation `{-90, 180, -90}` degrees.
 - Kept the transform model-specific. The generated base-skin identity and explicit Model 01 identity share the reviewed values, while Models 02-05 receive explicit transform-control records so they cannot inherit Model 01's correction.
@@ -955,23 +955,23 @@ pending on #604.
 - Added engine-free and in-game regression assertions for the exact values, base-skin alias, and unmodified-model controls.
 - Verification: confirm `[cwv:LOAD] v0.1.417-dev`; equip Greataxe Model 01 on Kruber and inspect owner third person plus the inventory character preview, then have another player inspect the remote weapon. Confirm Models 02-05 retain their own native transforms.
 
-**DoD:** Re-walked U-4 scale/grip, U-7 forward references, U-8 build hygiene, G-CUSTOM-ILLUSION identity, and G-APPEARANCE shared render-surface coverage. U-9 owner/remote visual confirmation remains deferred to #597's `verify-fix-coop` in-game verification.
-## 0.1.416-dev - 2026-07-14 - #604 Crowbill default model correction [verify-fix-coop]
+**DoD:** Re-walked U-4 scale/grip, U-7 forward references, U-8 build hygiene, G-CUSTOM-ILLUSION identity, and G-APPEARANCE shared render-surface coverage. U-9 owner/remote visual confirmation remains deferred to #597's `verify-fix` + `coop-required` in-game verification.
+## 0.1.416-dev - 2026-07-14 - #604 Crowbill default model correction [verify-fix; coop-required]
 
 - Corrected the provisional model assignment after in-game review: Kruber and Saltzpyre's Imperial Crowbill Model 01 now uses Parelaxel's Medieval War Hammer, while Bardin's Dawi Crowbill Model 01 uses soidev's heavier War Hammer. The previous build assigned these two downloaded models to the opposite weapon families.
 - Corrected the reproducible conversion manifest and attribution tables so future asset regeneration preserves that assignment instead of silently restoring the regression.
 - Added engine-free regression coverage tying each default variant to its reviewed source-asset identity as well as its semantic unit path.
 - Verification: confirm `[cwv:LOAD] v0.1.416-dev`; inspect Imperial Crowbill Model 01 on Kruber and Dawi Crowbill Model 01 on Bardin in CIM, the inventory character preview, and a mission. Kruber must show the former Dawi-labeled model, Bardin must show the former Imperial-labeled model, and another player must see the same selected models.
 
-**DoD:** Re-walked U-4 model identity, U-6 documentation, U-8 build hygiene, G-MESH-FAMILY asset provenance, and G-APPEARANCE registration coverage. Owner and remote visual confirmation remains deferred to #604's `verify-fix-coop` in-game verification.
+**DoD:** Re-walked U-4 model identity, U-6 documentation, U-8 build hygiene, G-MESH-FAMILY asset provenance, and G-APPEARANCE registration coverage. Owner and remote visual confirmation remains deferred to #604's `verify-fix` + `coop-required` in-game verification.
 
-## 0.1.415-dev - 2026-07-14 - #604 Inventory character-preview package crash [verify-fix-coop]
+## 0.1.415-dev - 2026-07-14 - #604 Inventory character-preview package crash [verify-fix; coop-required]
 
 - Fixed the second Imperial Crowbill preview crash after crafting/equipping it. The keep inventory uses `MenuWorldPreviewer`, whose `_load_packages` method is a copied derived-class method and therefore bypassed CWV's `HeroPreviewer` hook. CWV now applies the same bounded vanilla-package alias policy to both preview classes.
 - Added host regression coverage proving both independent preview-class hooks translate the custom package path before it reaches `PackageManager`, while retaining the custom spawn unit when it is resident.
 - Verification: confirm `[cwv:LOAD] v0.1.415-dev`, craft/equip an Imperial Crowbill, then view it on the inventory character preview and leave/re-enter inventory. Repeat with another player present. Neither game may crash, and the Crowbill must remain visible on all applicable preview and in-world surfaces.
 
-## 0.1.414-dev - 2026-07-14 - #604 Crowbill Athanor teardown crash [verify-fix-coop]
+## 0.1.414-dev - 2026-07-14 - #604 Crowbill Athanor teardown crash [verify-fix; coop-required]
 
 - Fixed the current-version Athanor crash after crafting an Imperial Crowbill and leaving the weapon window. Tweaker: Cosmetics can validly recognize the resident custom unit first and short-circuit `LootItemUnitPreviewer.load_package`; CWV now repairs that cross-mod ordering by acquiring one real vanilla Crowbill package lease before translating the custom teardown key.
 - The preview bridge now shares one borrowed alias lease per previewer, handles both pending and completed (`false`) load-state entries, drops an unowned custom unload key if lease repair itself fails, and ignores repeated teardown of the same previewer.
@@ -981,9 +981,9 @@ pending on #604.
 
 Confirm the newest log contains `[cwv:LOAD] v0.1.414-dev`. Open CIM's Athanor, select and craft the Imperial Crowbill, then leave the weapon window. The game must remain running; `/verify_cwv_preview_bridge` must report `repair_failures=0` and PASS. The log should contain `[cwv:604-preview] repaired bypassed lease` when Cosmetics owns the resident-unit load shortcut. Full #604 model, mode, persistence, and remote-view verification still requires two players.
 
-**DoD:** Re-walked U-7 forward references, U-8 build hygiene, G-CUSTOM-ILLUSION preview loading, and G-APPEARANCE illusion/Athanor presentation. U-9 and the remaining owner/remote presentation matrix remain deferred to #604's `verify-fix-coop` in-game verification.
+**DoD:** Re-walked U-7 forward references, U-8 build hygiene, G-CUSTOM-ILLUSION preview loading, and G-APPEARANCE illusion/Athanor presentation. U-9 and the remaining owner/remote presentation matrix remain deferred to #604's `verify-fix` + `coop-required` in-game verification.
 
-## 0.1.413-dev - 2026-07-14 - #604 Imperial and Dawi Crowbill family [verify-fix-coop]
+## 0.1.413-dev - 2026-07-14 - #604 Imperial and Dawi Crowbill family [verify-fix; coop-required]
 
 - Added CIM-crafted Imperial Crowbills for Kruber and Saltzpyre and a Dawi Crowbill for Bardin, using Sienna's Crowbill moveset. Six approved CC BY 4.0 models ship as placeholder illusions through a reproducible, hash-gated conversion pipeline; the excluded Italian Free Standard model is not distributed.
 - Weapon Special switches an exact weapon instance between pick and hammer faces. Hammer mode rotates the model exactly 180 degrees around its haft, adds 60% attack and impact cleave, reduces direct damage by 15%, and removes armor piercing from light attacks without changing timing or moveset. Vanilla Sienna Crowbill participation is an independent default-off option.
@@ -994,7 +994,7 @@ Confirm the newest log contains `[cwv:LOAD] v0.1.414-dev`. Open CIM's Athanor, s
 
 Craft each family through CIM. Toggle Weapon Special repeatedly in the Keep and a mission, then verify the face, stats, persistence, inventory character preview, lobby, score screen, hot join, and both players' remote views. Repeat with one unmodified Crowbill as a control and confirm no accumulating rotation or RPC/log spam.
 
-## 0.1.412-dev - 2026-07-14 - #273 preserve CWV identities in Chaos Wastes [verify-fix-coop]
+## 0.1.412-dev - 2026-07-14 - #273 preserve CWV identities in Chaos Wastes [verify-fix; coop-required]
 
 - Added one dedicated Chaos Wastes/Deus item row per concrete CWV weapon. Property and trait generation are borrowed from the authored vanilla base, while the CWV template, item type, skin family, and render identity remain individualized through run setup, serialization, upgrades, transitions, and reconstruction.
 - Mixed or unknown-parity lobbies fall back to the equivalent vanilla weapon family rather than a career-default single weapon. CWV Dual Axes therefore degrade to vanilla Dual Axes, never a one-handed axe, without transmitting custom identifiers to peers that cannot resolve them.
@@ -1009,7 +1009,7 @@ Enter Chaos Wastes with a CWV Dual Axes instance equipped. In an all-CWV lobby i
 - Removed the general Greataxe and Dual Axes balance controls from CWV. They are now owned and presented by Weapon Tweaker under Weapon Tweaks; CWV only supplies its optional Kruber Greataxe template when installed.
 - Renamed the bomb-slot option to exactly `Javelin` and normalized generated item descriptions so a title is not repeated as the first line of its own description.
 
-## 0.1.411-dev - 2026-07-14 - #597 Greataxe ProfileSynchronizer package crash [verify-fix-coop]
+## 0.1.411-dev - 2026-07-14 - #597 Greataxe ProfileSynchronizer package crash [verify-fix; coop-required]
 
 - Fixed the remaining post-craft crash after `0.1.410-dev`: `ProfileSynchronizer` used `WeaponUtils.get_weapon_packages` and queued a resident custom Greataxe unit path as a standalone package, causing `Resource ... was not found` in `PackageManager._pop_queue`.
 - Package collection now substitutes the vanilla Bardin Greataxe 1P/3P package identities. Backend item units, skins, and spawn paths remain custom, so this changes residency bookkeeping without replacing the rendered model.
@@ -1019,7 +1019,7 @@ Enter Chaos Wastes with a CWV Dual Axes instance equipped. In an all-CWV lobby i
 
 Craft a Greataxe through CIM with automatic equip enabled. Confirm no crash during the following loadout resync, then swap weapons, enter a mission, and have a second player inspect the model. The newest log must show `[cwv:LOAD] v0.1.411-dev` and must not queue `units/cwv_es_greataxe/...` through `PackageManager` under `ProfileSynchronizer`.
 
-## 0.1.411-dev - 2026-07-14 - #602 Dawi Mace family [verify-fix-coop]
+## 0.1.411-dev - 2026-07-14 - #602 Dawi Mace family [verify-fix; coop-required]
 
 - Added `Dawi Mace`, `Dawi Mace and Shield`, and `Dawi Dual Maces` as craftable CWV families using safe resident vanilla placeholder models while downloaded custom-model licensing remains under review.
 - The single and shield variants use Kruber mace behavior; the dual variant uses CWV's isolated Dual Maces behavior. Bardin's source-backed default careers are enabled, while Weapon Tweaker exposes default-off controls for every other career.
@@ -1029,7 +1029,7 @@ Craft a Greataxe through CIM with automatic equip enabled. Confirm no crash duri
 
 Craft all three variants through CIM. Verify attacks, inventory preview, first person, local third person, score view, mission transitions, and a second player's view. Customize both Dual Mace hands independently and change the shield separately; confirm the primary owns the dual icon and the shield owns the shield-family icon.
 
-## 0.1.410-dev - 2026-07-14 - #597 Greataxe craft/equip wire crash [verify-fix-coop]
+## 0.1.410-dev - 2026-07-14 - #597 Greataxe craft/equip wire crash [verify-fix; coop-required]
 
 - Fixed the second Greataxe crash boundary exposed after Athanor preview residency was repaired. Crafting and auto-equipping succeeded, but `ProfileSynchronizer` then attempted to serialize the custom `_3p` unit through strict `NetworkLookup.inventory_packages` and crashed.
 - All five models' first- and third-person custom paths now borrow the corresponding vanilla Bardin Greataxe indices on the forward name-to-index side only. Reverse decoding remains vanilla, while CWV-capable peers restore the exact custom appearance through the existing bounded appearance channel.
@@ -1039,7 +1039,7 @@ Craft all three variants through CIM. Verify attacks, inventory preview, first p
 
 Craft each Greataxe model through CIM with automatic equip enabled. Confirm crafting, loadout resync, weapon swaps, mission entry, and a second player's view do not crash; both peers should see the selected custom model where supported. Run `/cwv_regression_test` and require all #597 checks to pass.
 
-## 0.1.409-dev - 2026-07-14 - #597 Greataxe Athanor resource crash [verify-fix-coop]
+## 0.1.409-dev - 2026-07-14 - #597 Greataxe Athanor resource crash [verify-fix; coop-required]
 
 - Flattened all five Greataxe models' first- and third-person units, materials, and textures into CWV's mod-scoped master package. The prior forwarding bundles existed on disk but were not runtime load roots, causing Athanor to crash on `f4c81c97baad78f8` when selecting Model 01.
 - Added a preview bridge that borrows a vanilla Bardin Greataxe package only for PackageManager lifetime tracking while spawning the resident custom model. If residency is genuinely absent, preview rendering fails closed to the vanilla anchor rather than crashing.
@@ -1060,7 +1060,7 @@ Craft/select every Greataxe model through CIM's Athanor, then inspect each in in
 
 Toggle each axe option independently and compare Greataxe lights, Dual Axes lights, and all Dual Axes light/heavy sweeps. Confirm crit never compounds across toggles, cleave changes do not change damage or stagger, and disabling restores vanilla behavior. Run `/cwv_regression_test` and require all #601 checks to pass.
 
-## 0.1.408-dev - 2026-07-14 - #597 #579 Greataxe and exact paired appearance [verify-fix-coop]
+## 0.1.408-dev - 2026-07-14 - #597 #579 Greataxe and exact paired appearance [verify-fix; coop-required]
 
 - Replaced the retired Poleaxe with a Bardin-parity Kruber Greataxe. Five deduplicated CC BY 4.0 models ship as provisional illusions through the proven custom-FBX pipeline, with complete attribution and reproducible conversion tooling. All four Kruber careers are authored owners; WT controls every optional receiver.
 - Added one exact-instance appearance resolver for Dual Axes and other paired variants. Inventory mannequin, customization preview, owner 3P, score preview, and remote reconstruction now consume the same saved right/offhand plan instead of rebuilding Dual Axes from the base recipe.
@@ -1079,7 +1079,7 @@ Craft the Greataxe through CIM and inspect all five placeholder illusions in fir
 
 Toggle mace/hammer identity off/on and compare a single, shielded, and dual representative from each family. Confirm the exact included families change, excluded two-handed/mixed weapons do not, and repeated toggles never compound. Run `/cwv_regression_test` and require every #599 check to pass.
 
-## 0.1.407-dev - 2026-07-14 - #596 Infantry Spear [verify-fix-coop]
+## 0.1.407-dev - 2026-07-14 - #596 Infantry Spear [verify-fix; coop-required]
 
 - Added **Infantry Spear** for Mercenary, Huntsman, and Foot Knight, using Kerillian's two-handed Spear moveset and only the spear half of Kruber's native Chaos Wastes Spear+Shield models. Grail Knight is excluded from CWV's authored defaults.
 - Independently applied 0.85 attack timing, 1.075 direct-hit damage, 1.15 impact/stagger, and 1.15 cleave. Only `melee_start` and `sweep` timing is slowed; block, ordinary push, wield, and inspect stay untouched. Only direct `damage_profile` rows are cloned, so push inner/outer profiles are not tuned.
@@ -1088,7 +1088,7 @@ Toggle mace/hammer identity off/on and compare a single, shielded, and dual repr
 
 **DoD:** Universal, G-CROSS-CHAR, G-3P-ANIM, G-CUSTOM-ILLUSION, and G-APPEARANCE walked structurally. Deferrals: inventory/illusion rendering, attack feel, package residency for every DLC illusion, and owner/remote visible animation quality require live verification.
 
-## 0.1.406-dev - 2026-07-14 - #583 primary-owned Dual Axes inventory icons [verify-fix-coop]
+## 0.1.406-dev - 2026-07-14 - #583 primary-owned Dual Axes inventory icons [verify-fix; coop-required]
 
 - Added the nine user-authored paired-axe thumbnails as a packaged CWV atlas, covering every current Saltzpyre one-handed axe cosmetic used by Kruber's and Saltzpyre's CWV Dual Axes.
 - Generated Dual Axes illusions now select their inventory thumbnail from the primary/right-hand axe cosmetic. Independently changing the offhand through Tweaker: Cosmetics therefore does not replace the item icon. Runed skins that intentionally share the same primary icon reuse the matching paired thumbnail.
@@ -1125,7 +1125,7 @@ Enter the keep or a mission, then attach the automatically emitted `[cwv:343]` l
 
 **DoD:** Source preflight and the G-THROWN/G-NETWORK risk gates were walked for diagnostics only. Deferrals: actual item/pickup registration, impact-area actuation, anisotropic smoke FX, and the complete Universal/G-CROSS-CHAR/G-APPEARANCE live matrix remain in `TODO.md`.
 
-## 0.1.403-dev - 2026-07-14 - #317 career-scoped 3P animation picker [verify-fix-coop]
+## 0.1.403-dev - 2026-07-14 - #317 career-scoped 3P animation picker [verify-fix; coop-required]
 
 - Added a new **Dev Options → 3P Animation Picker** with live, persisted controls for CWV Dual Axes on Saltzpyre and Kruber. Each attack can be routed only to events authored by the receiver-native Axe and Falchion or Mace and Sword animation vocabulary; resetting a row or disabling the picker restores the existing baked/default behavior.
 - Applied picks through CWV's existing owner-side `WeaponUnitExtension._play_3p_anim` seam before vanilla's animation RPC encode. This keeps first-person behavior untouched, avoids mutating Bardin's shared Dual Axes template, and lets vanilla replicate the chosen receiver event and its authored audio timeline to observers without a new RPC.
@@ -1135,7 +1135,7 @@ Enter the keep or a mission, then attach the automatically emitted `[cwv:343]` l
 
 **DoD:** Universal walked. Trait gates: G-CROSS-CHAR, G-3P-ANIM, receiver-scoped shared-template ownership, remote husk replication. Deferral: visible chain-context quality of arbitrary user-selected events requires the two-player tuning matrix above.
 
-## 0.1.402-dev - 2026-07-14 - #412 Old Musket universal special interrupt [verify-fix-coop]
+## 0.1.402-dev - 2026-07-14 - #412 Old Musket universal special interrupt [verify-fix; coop-required]
 
 - Made the Old Musket's special stance swap reachable from frame zero of every running ranged and melee sub-action. A pure, idempotent template policy appends one native `allowed_chain_actions` edge to attack startup/release, firing/recovery, reload, aim, block, push, sweep, and all other cloned handgun/Tuskgor-spear actions while preserving their authored chains.
 - Used the source-recognized `clear_buffer` field rather than the issue draft's inert `clear_input` field. `WeaponUnitExtension:start_action` performs the canonical `new_interupting_action` finish before entering `action_three`; the existing owner-side destroy/re-add path retains exact chamber/reserve/reload state, and the existing bounded mode channel publishes only the resulting stance edge. No RPC or `NetworkLookup` shape changed.
@@ -1202,7 +1202,7 @@ Enter the keep or a mission, then attach the automatically emitted `[cwv:343]` l
 - The migration removes only the exact historical auto-grant ledger (`_001`, plus authored `_002` instances). An exact ID in CIM's persisted craft table is always preserved; `_100`+ and UUID crafts are outside the migration set.
 - **Verify:** before crafting, no CWV weapons appear as owned inventory. Each CWV definition appears once in CIM's Craft Item selector. Craft one into Primary and one into Secondary; each exact item auto-equips in the selected slot and survives restart. Both regression commands must pass their #592 checks.
 
-## 0.1.396-dev - 2026-07-13 - #586 generated dual-weapon first-person residency [verify-fix-coop]
+## 0.1.396-dev - 2026-07-13 - #586 generated dual-weapon first-person residency [verify-fix; coop-required]
 
 - Rain's client crash `c41fc284-f1cf-42b7-b519-bddc52aed4cf` proves #586 was a generated dual-weapon class, not a Dual Axes exception. A synchronized `cwv_es_dual_maces` loadout reached `SimpleInventoryExtension:_wield_slot` with the prior loadout's first-person package snapshot, then C-fataled when `PlayerUnitFirstPerson:set_state_machine` requested non-resident `.../melee/dual_hammers`. The new Cosmetics/CWV paired illusions had already rendered correctly and are not the crash source.
 - Replaced the one-path Dual Axes lease with a closed, source-verified catalog covering every generated CWV dual owner: Imperial Dual Swords, Sword and Mace, both Dual Axes, both Dual Maces, and Dual Warrior-Priest Hammers. Their five vanilla state-machine packages are acquired synchronously once, held under distinct CWV references, retried only after a cold package-manager boundary, and released on disable/unload.
@@ -1451,7 +1451,7 @@ Per repo doctrine (diagnose-before-mitigate; blindly removing the gate would rei
   hung on `_om` (no new file-scope locals — the chunk is at the Lua 5.1 200-local ceiling). No behavior
   change: the fast-path early-return is preserved; the probe only observes.
 
-### Verify (needs a SECOND player — the failure is on the REMOTE view; `verify-fix-coop`)
+### Verify (needs a SECOND player — the failure is on the REMOTE view; `verify-fix` + `coop-required`)
 Host + client, both on cwv v0.1.383-dev (full Steam restart). One player equips the Imperial Longsword
 & Shield, applies a non-default illusion, and enters the keep/mission; the OTHER player looks at them.
 Read the WIELDER's log for the `[cwv:476]` line at equip:
@@ -1584,7 +1584,7 @@ BUG_CLASSES 31 class; issue 371 axis map — GAMEPLAY axis).
   under confirmed parity, and never substitutes on the `is_server` path.
 
 ### Verify
-Needs a SECOND player (`verify-fix-coop`): a NON-cwv player HOSTS, a cwv player joins as
+Needs a SECOND player (`verify-fix` + `coop-required`): a NON-cwv player HOSTS, a cwv player joins as
 CLIENT and lands melee/ranged hits with a profile-cloning variant (Imperial Longsword,
 Elven Sword+Shield, the musket). The host must NOT crash/drop; the client log should
 show `[cwv:423] wire dmg-profile sub: cwv_...( ) -> ...` and the variant does base-weapon
@@ -1636,7 +1636,7 @@ weapon spawn. Async C-assert risk on a harder-missing package (BUG_CLASSES 28, u
   native-scope guard (no resolved def -> never suppress).
 
 ### Verify
-Needs a SECOND player (`verify-fix-coop`): host a non-Chaos-Wastes map, have a client Kruber
+Needs a SECOND player (`verify-fix` + `coop-required`): host a non-Chaos-Wastes map, have a client Kruber
 equip the Outrider Grenade Launcher in the ranged slot, and confirm on the HOST the client
 renders the blunderbuss (right hand, no floating Trollhammer, no invisible weapon) with no
 `spawn_inventory_unit` error in the host log. Host log should show `[cwv:478] husk DEFER

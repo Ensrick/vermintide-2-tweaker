@@ -97,7 +97,7 @@
   owner, remote-husk, and score replay path; only the cape diffuse changes, and
   the vanilla normal/packed/first-person maps remain intact.
 
-### #658 Purpure/Azure cross-career availability [verify-fix-coop]
+### #658 Purpure/Azure cross-career availability [verify-fix; coop-required]
 
 - Adds independent, default-off Mercenary, Huntsman, and Foot Knight sharing controls while Grail Knight remains the native default owner.
 - Resolves the exact wearer's vanilla hat/outfit fallback for every outgoing peer appearance, persisted replay, and hot join; unknown careers fail closed instead of guessing a donor.
@@ -229,7 +229,7 @@ not, by itself, prove which other spawn or compiled-material boundary emitted it
 
 **Co-op diagnostic:** on the Cosmetics peer, equip `ct_es_mace_gk_shield_01` (or a `ct_es_heavy_spear_deus_*` skin), run `/cos_421_diag`, then have a non-Cosmetics peer join and transition keep → mission → keep. Expected: `catalog=PASS surfaces=PASS policy=PASS restore=PASS live_custom=1`, `[cos:421] wire skin null (<surface>)` for each exercised surface, and no client `NetworkLookup.weapon_skins` failure. Attach both logs.
 
-## 0.9.153-dev - 2026-07-18 - strict LA texture residency gate (#749) [verify-fix-coop]
+## 0.9.153-dev - 2026-07-18 - strict LA texture residency gate (#749) [verify-fix; coop-required]
 
 - #749: the active Loremaster offhand paint path now fails closed before `Unit.set_texture_for_materials`. Missing/throwing `Application.can_get`, non-resident textures, malformed slot/path data, or a non-live unit all skip the native C setter and emit one bounded `[cos:749]` diagnostic instead of trusting `pcall` to catch a renderer crash it cannot catch.
 - Added a byte-identical `_lib_resource_residency.lua` contract in `tools/shared_lib` and Cosmetics so future borrowed-renderer fixes have one strict resource-proof shape instead of another local `can_get` variation.
@@ -238,7 +238,7 @@ not, by itself, prove which other spawn or compiled-material boundary emitted it
 
 **Co-op verify:** with Cosmetics + Loremaster’s Armoury, have host/client preview/equip LA shield/offhand texture variants in lobby and mission, including a client viewing a host and a host viewing a client. Expected: no renderer/AV crash during customization preview, inventory preview, mission entry, or remote husk rendering. If a texture is not resident, the affected shield may degrade to no LA repaint and the log should contain at most one bounded `[cos:749] residency SKIP` line per reason/path/slot/context.
 
-## 0.9.152-dev - 2026-07-18 - session-score weapon skin crash floor (#734) [verify-fix-coop]
+## 0.9.152-dev - 2026-07-18 - session-score weapon skin crash floor (#734) [verify-fix; coop-required]
 
 - Added a Cosmetics-side receiver floor for the session-score/player-list weapon-skin read path. `CosmeticUtils.get_weapon_skin_name` now rawget-checks weapon-slot `NetworkLookup.weapon_skins` ids before vanilla's strict lookup can crash the client; an unknown id degrades to no skin and logs one bounded `[cos:734]` line.
 - Preserved the existing sender-side safe substitution model: custom/LA/CWV skin identity must travel through mod-owned channels, while vanilla profile/session-score sync receives only vanilla-safe ids such as `n/a`.
@@ -261,7 +261,7 @@ not, by itself, prove which other spawn or compiled-material boundary emitted it
 
 **Coop verify (2 players):** wearer applies a glow to one weapon and carries a second glow-capable weapon with none. The observer must see the custom glow on exactly the authored weapon and resident vanilla on the other, across a hot-join and a keep/mission transition.
 
-## 0.9.150-dev - 2026-07-18 - husk hat LA paint foreign-key guard (#697) [verify-fix-coop]
+## 0.9.150-dev - 2026-07-18 - husk hat LA paint foreign-key guard (#697) [verify-fix; coop-required]
 
 - #697: the husk-side hat create step (`PlayerHuskAttachmentExtension.create_attachment` wrap) fetched the LA mod handle unconditionally, so cosmetics-authored variants (GK Purpure/Azure hat, custom hats) fell through to `la.apply_new_skin_from_texture` with a key LA does not own - LA's `funcs.lua:65` indexes `SKIN_LIST[key]` and nil-derefs, logging `[husk-hat-create] paint err` on every such husk hat spawn (17 hits across the 2026-07-17/18 logs, all `cos_gk_purpure_azure_hat_variant`). Visual result was unaffected (GK_SET's own applier had already painted); the LA call was a misdirected no-op that errored.
 - The hook now derives `(variant, la)` through the shared `_resolve_la_variant` resolver - identical to the `_apply_la_on_unit` hat branch - so `la` is non-nil only when the armoury key actually resolved from LA's `SKIN_LIST`. Cosmetics-side variants skip the LA painter with a debug marker (`LA paint n/a ... cosmetics-side variant`); genuine LA hats paint exactly as before. Net-zero line delta in the frozen main file.
@@ -288,7 +288,7 @@ not, by itself, prove which other spawn or compiled-material boundary emitted it
 
 **Verify:** equip the Purpure/Azure outfit, complete at least three keep/mission or Chaos Wastes transitions, then quit immediately after the final return. The log must show `[cos:282] postcondition-ok` before manager destruction, with no `cosmetics_tweaker_mh` delayed package at `PackageManager.destroy`, no `#ID[...] not unloaded` fatal, and no shutdown fence stall attributable to this package.
 
-## 0.9.147-dev - 2026-07-18 - exact dual-illusion persistence lifecycle (#702) [verify-fix-coop]
+## 0.9.147-dev - 2026-07-18 - exact dual-illusion persistence lifecycle (#702) [verify-fix; coop-required]
 
 - Dual/offhand Apply now commits its durable owner record by exact backend item and hand before any live-model or peer delivery work. The previous save was nested under `player_unit` liveness and the LA sender's availability, so a valid inventory Apply could update the session preview while silently omitting the disk write.
 - Selection queuing no longer requires a live keep player unit. When delivery is temporarily unavailable, the existing bounded self-rebroadcast path carries the already-persisted state after the owner equipment exists.
@@ -297,13 +297,13 @@ not, by itself, prove which other spawn or compiled-material boundary emitted it
 - The bounded commit-and-peer-delivery transaction lives in `_cos_offhand_commit_policy.lua`; the frozen main-file size remains below its existing QA baseline rather than expanding the monolith.
 - In-game check: customize the offhand of one dual weapon, press Apply, fully restart the game, and confirm that exact inventory instance keeps both its primary illusion and independently selected offhand while a second copy remains unchanged.
 
-## 0.9.146-dev - 2026-07-17 - reconciliation build: #698 + #713 [verify-fix-coop]
+## 0.9.146-dev - 2026-07-17 - reconciliation build: #698 + #713 [verify-fix; coop-required]
 
 - Reconciliation reship: two different builds were briefly uploaded as `0.9.145-dev` by parallel sessions. This unambiguous version carries BOTH the #698 career-scoped remote appearance identity (below) and #713's unlock-injection log demotion: the per-second `[unlock_all_frames]`/`[unlock_cosmetics]` lines now fire only on the first pass or when counts change (the injection still runs per mirror rebuild; `/cos frames_status` keeps live counters).
 
 **Test:** #698 co-op checklist below, plus solo: idle in the keep 2+ minutes and confirm at most one line of each unlock marker in the newest log.
 
-## 0.9.145-dev - 2026-07-17 - career-scoped remote appearance identity (#698) [verify-fix-coop]
+## 0.9.145-dev - 2026-07-17 - career-scoped remote appearance identity (#698) [verify-fix; coop-required]
 
 - Fixed the host-side Grail Knight armor repaint recorded after a remote player changed to Foot Knight: `_la_equips_by_peer` was keyed only by Steam peer, while the husk armor replay accepted every cached `slot_skin` without proving that the record belonged to the husk's current career.
 - Every LA material/mesh record now carries the exact human wearer's career from the live inventory/player identity. Host requests, authoritative broadcasts, deferred sends, acknowledged state pulls, hot-join replay, receivers, reconcile, and husk wield all preserve or validate that field. The shared RPC schema is now 2 so legacy unstamped state is dropped instead of guessed.
@@ -341,7 +341,7 @@ not, by itself, prove which other spawn or compiled-material boundary emitted it
 
 **Co-op diagnostic verify:** with two parity-matched players, select The Blood-Bloomed Bouclier and confirm owner inventory/equipment/customization item cards show the shield description, not the primary weapon description. Repeat with a dual offhand that has only source illusion text, restart, transition keep -> mission -> keep, and confirm Hold-Tab titles and mixed-mod parity remain vanilla-safe. Draft PR evidence is structural; no in-game verification is claimed.
 
-## 0.9.140-dev - 2026-07-17 - CWV dual-offhand remote identity (#583/#660) [verify-fix-coop]
+## 0.9.140-dev - 2026-07-17 - CWV dual-offhand remote identity (#583/#660) [verify-fix; coop-required]
 
 - Fixed the exact failure recorded in `console-2026-07-17-04.34.02-36c165bb-5404-48cb-9b75-d8301c460b79.log`: Rain's Dual Axes offhand reached the host, but the husk validator compared its Saltzpyre axe unit with Bardin's vanilla `dr_dual_axes` pool and logged `SKIP(incompatible-hand-mesh)`.
 - Cosmetics now consumes CWV's already fingerprint-validated per-peer/per-slot appearance descriptor and validates the offhand against `cwv_es_dual_axes` (or the corresponding exact CWV dual family). Missing providers, schema drift, stale bases, non-exact identity, and unregistered variants retain the vanilla family and fail closed.
@@ -349,7 +349,7 @@ not, by itself, prove which other spawn or compiled-material boundary emitted it
 
 **Co-op verify:** customize the left/offhand of CWV Dual Axes on the client, Apply, and have the host observe it without another edit. The host log must show `decision=APPLIED-vanilla-mesh item_type=cwv_es_dual_axes identity=exact`, not `SKIP(incompatible-hand-mesh)`. Repeat with a second CWV dual family, transition, hot join, and reverse roles. A native Dual Axes control must continue to validate only against its native pool.
 
-## 0.9.139-dev - 2026-07-17 - persisted offhand peer-ready replay (#233/#267) [verify-fix-coop]
+## 0.9.139-dev - 2026-07-17 - persisted offhand peer-ready replay (#233/#267) [verify-fix; coop-required]
 
 - Kept the startup/state-change LA replay armed until the local inventory has a realized melee or ranged weapon slot. Previously the replay flag was consumed as soon as the player unit became alive, even when equipment was not ready, so a persisted pre-launch shield never entered the authoritative peer store and remained invisible to a joining client until a live cosmetic edit.
 - Preserved the existing bounded emit deduplication, acknowledged pull-on-ready RPC, exact-item persistence, and live-change transport. No new RPC, polling owner, or asset payload was added.
@@ -500,7 +500,7 @@ rune color, and confirm only that shield gains the same RGB overlay without
 reopening the game. Switch the same grid cell to an unmapped item and confirm
 its native icon is restored. Tracking: GitHub issue #650.
 
-## 0.9.132-dev - 2026-07-16 - #629/#639/#641 combined item presentation [verify-fix-coop]
+## 0.9.132-dev - 2026-07-16 - #629/#639/#641 combined item presentation [verify-fix; coop-required]
 
 ### Fixed
 
@@ -883,7 +883,7 @@ Confirm `[cosmetics:LOAD] v0.9.118-dev`, equip **Encarmine Helmet** on Foot Knig
 
 Confirm `[cosmetics:LOAD] v0.9.117-dev`, equip **Encarmine Helmet** on Foot Knight, and inspect both plume sides plus the helmet beside the Knights Encarmine armor in the inventory mannequin and live third person. Expected: the feather is visible as a clean dark-charcoal cutout with no rectangular film, and the helmet has a subtle metal highlight close to the outfit rather than reading flat/matte or mirror-like. Run `/cos_regression_test`; `issue612_encarmine_hat_contract` must pass.
 
-## 0.9.116-dev - 2026-07-15 - #612 Encarmine plume cutout correction [verify-fix-coop]
+## 0.9.116-dev - 2026-07-15 - #612 Encarmine plume cutout correction [verify-fix; coop-required]
 
 ### Changed
 
@@ -898,7 +898,7 @@ Confirm `[cosmetics:LOAD] v0.9.117-dev`, equip **Encarmine Helmet** on Foot Knig
 
 Confirm `[cosmetics:LOAD] v0.9.116-dev` on both Cosmetics peers. Equip **Encarmine Helmet** on Foot Knight and inspect the plume in inventory, keep/mission third person, hot join, and score presentation. Expected: a visible dark-charcoal feather silhouette with no translucent rectangle or black tape-like strip, visible detail on both sides, Laurel-like secondary motion while moving, and helmet fade matching the character when the third-person camera intersects him. The armor should retain its restrained Encarmine metal response. A peer without Cosmetics must still see Laurel. Run `/cos_regression_test`; `issue612_encarmine_hat_contract` must pass.
 
-## 0.9.115-dev - 2026-07-15 - #612 Encarmine plume and material correction [verify-fix-coop]
+## 0.9.115-dev - 2026-07-15 - #612 Encarmine plume and material correction [verify-fix; coop-required]
 
 ### Fixed
 
@@ -912,7 +912,7 @@ Confirm `[cosmetics:LOAD] v0.9.116-dev` on both Cosmetics peers. Equip **Encarmi
 
 Confirm `[cosmetics:LOAD] v0.9.115-dev` on both peers. Equip **Encarmine Helmet** on Foot Knight and inspect both sides of the plume in the inventory mannequin, keep/mission third person, a hot join, and the score screen. Expected: a feather-shaped black plume from both sides, no opaque rectangular background, brighter carmine paint, and restrained gloss with metal response confined to gold/silver regions. A peer without Cosmetics still sees Laurel. Run `/cos_regression_test`; `issue612_encarmine_hat_contract` must pass and neither log may contain a missing-resource error for `BD55DCA31255AAEC`.
 
-## 0.9.114-dev - 2026-07-15 - #612 Encarmine spawn-only renderer [verify-fix-coop]
+## 0.9.114-dev - 2026-07-15 - #612 Encarmine spawn-only renderer [verify-fix; coop-required]
 
 ### Fixed
 
@@ -937,7 +937,7 @@ Confirm `[cosmetics:LOAD] v0.9.114-dev` on both peers. Equip **Encarmine Helmet*
 
 Confirm `[cosmetics:LOAD] v0.9.113-dev`, start with **Encarmine Helmet** persisted, and switch to Foot Knight/open his inventory preview. The game must not request `units/cosmetics_tweaker/encarmine_hat/encarmine_hat` through PackageManager or crash. This guard build intentionally renders the vanilla Laurel Helm while the custom spawn-only path remains quarantined.
 
-## 0.9.112-dev - 2026-07-15 - #612 Encarmine compiled package/material repair [verify-fix-coop]
+## 0.9.112-dev - 2026-07-15 - #612 Encarmine compiled package/material repair [verify-fix; coop-required]
 
 ### Fixed
 
@@ -965,7 +965,7 @@ Confirm `[cosmetics:LOAD] v0.9.112-dev`, equip **Encarmine Helmet** on Foot Knig
 
 Launch with the helmet already selected, open Foot Knight's inventory and cosmetics screens, then equip the Encarmine item. The game must not crash and the item must display as `Encarmine Helmet`; this guard build intentionally renders the vanilla Laurel Helm while the custom resource contract is repaired.
 
-## 0.9.110-dev - 2026-07-14 - #612 Encarmine Helmet [verify-fix-coop]
+## 0.9.110-dev - 2026-07-14 - #612 Encarmine Helmet [verify-fix; coop-required]
 
 - Added the Encarmine Helmet as an independent Foot Knight cosmetic: a red-and-gold derivative of the hidden vanilla Laurel Helm mesh, with a black plume and authored icon. Its two mesh slots reuse the vanilla hat material contract and receive separate per-unit armor/cloth textures, avoiding global material mutation. It has no DLC ownership requirement.
 - Registered one stable item/network identity at startup. The enable toggle changes availability and rendering without mutating lookup order; disabled or non-Cosmetics peers receive the vanilla Laurel Helm fallback.
@@ -984,7 +984,7 @@ Equip the helmet on Foot Knight and inspect inventory, hero preview, lobby, miss
 
 Enter the keep, then return to the title screen normally. In the newest console log, Cosmetics must contribute zero `Network backend has not been set` callstacks. Run `/cos_regression_test`; `local_player_safe_network_lifecycle_609` must pass.
 
-## 0.9.108-dev - 2026-07-14 - #604 Crowbill cosmetic identity [verify-fix-coop]
+## 0.9.108-dev - 2026-07-14 - #604 Crowbill cosmetic identity [verify-fix; coop-required]
 
 - Registered the Imperial and Dawi Crowbill families with the shared exact-instance cosmetic contract. Primary illusion identity remains stable across pick/hammer mode changes without overwriting a player's selected model.
 - Added family ownership coverage for local equipment, remote husks, inventory character preview, lobby, score/team, and item/customization previews.
@@ -1002,7 +1002,7 @@ Apply different Crowbill illusions on host and client, toggle hammer mode, swap 
 
 Select several vanilla and CWV glow-capable illusions. `EDIT GLOW` must appear even if the optional badge texture is unavailable; non-glow illusions must keep it disabled. Open/close the editor, change RGB, press Apply, and confirm the committed color persists after a weapon swap.
 
-## 0.9.106-dev - 2026-07-14 - #373 Loremaster textures on Weavebound/Shyish shields [verify-fix-coop]
+## 0.9.106-dev - 2026-07-14 - #373 Loremaster textures on Weavebound/Shyish shields [verify-fix; coop-required]
 
 - Fixed compatible Weavebound/Shyish magic shield units rejecting Loremaster texture painting because those units do not expose the diffuse slot used by LA.
 - Added exact, UV-family-safe magic-to-base paint receivers for Bretonnian, Empire sword/mace shield, and Empire spear/shield families. The selected magic model remains equipped while its same-family base receiver supplies the paintable material boundary.
@@ -1012,7 +1012,7 @@ Select several vanilla and CWV glow-capable illusions. `EDIT GLOW` must appear e
 
 On each supported shield family, select a Weavebound/Shyish illusion and apply several Loremaster textures. Inspect customization/inventory preview, owner first/third person, and a second player's remote view before and after a weapon swap and mission transition. The magic model must remain selected, the texture must be visible, and no Bretonnian texture may wrap onto an Imperial shield or vice versa.
 
-## 0.9.105-dev - 2026-07-14 - #421 wire-safety installer startup failure [verify-fix-coop]
+## 0.9.105-dev - 2026-07-14 - #421 wire-safety installer startup failure [verify-fix; coop-required]
 
 - Fixed `_cos_wire.lua` reading a nonexistent file-global `mod`, which caused a startup error before its three custom-skin network sender guards could install.
 - Converted the module to an explicit, dependency-validated `install(owner)` contract. Installation is idempotent for hot reload, fails loudly if required state is missing, and preserves the existing frozen helper and regression surfaces.
@@ -1023,7 +1023,7 @@ On each supported shield family, select a Weavebound/Shyish illusion and apply s
 
 Start with Cosmetics enabled and confirm the newest log has no `_cos_wire.lua` error. Join a second player, equip and swap custom illusions, then transition into and out of a mission. Both peers should remain connected and see only wire-safe identities until Cosmetics replays the exact appearance. Run `/cos_regression_test` and require the wire-safety checks to pass.
 
-## 0.9.104-dev - 2026-07-14 - #204 CWV Axe+Shield pool and shield-family parity [verify-fix-coop]
+## 0.9.104-dev - 2026-07-14 - #204 CWV Axe+Shield pool and shield-family parity [verify-fix; coop-required]
 
 - Seeded CWV Empire Axe+Shield with its complete vanilla Empire shield pool before merging Loremaster options, fixing the LA-only picker.
 - Restricted texture-only Loremaster variants to their authored Empire/Bretonnian UV family. Cross-family options are allowed only when they carry their own replacement unit; any declared replacement mesh must match the spawned 1P/3P unit before paint. Bretonnian textures can no longer wrap onto Imperial geometry.
@@ -1042,7 +1042,7 @@ On CWV Empire Axe+Shield, confirm vanilla Empire shields and compatible Loremast
 
 - **Verify (solo):** open weapon customization and select/wield several glow-capable and ordinary skins; nothing should auto-open. Use the bottom-right glow control to open/close the editor. Change RGB without Apply and confirm no badge changes, then Apply and confirm only that exact item+skin gains the tinted badge in both inventory and illusion grids. Verify rune RGB, a multi-component magic blend, restart persistence, and no badge on an unmodified same-type item. Run `/cos_regression_test` and confirm `glow_manual_editor_button_377` passes.
 
-## 0.9.102-dev - 2026-07-14 - #504 OOP Phase 4a wire boundary [verify-fix-coop]
+## 0.9.102-dev - 2026-07-14 - #504 OOP Phase 4a wire boundary [verify-fix; coop-required]
 
 - Extracted the complete #421 custom weapon-skin wire boundary from the entry monolith into `_cos_wire.lua`: the null/restore helper and all three vanilla `rpc_add_equipment` sender hooks now have one owner and one load-bearing manifest edge after custom illusion registration.
 - Preserved the established `mod._cos_wire_null_custom_skins` and `mod._cos_skin_wire_surfaces` regression surfaces, hook targets, diagnostics, return arity, and unconditional never-crash policy. No setting, RPC, payload, or gameplay behavior changed.
@@ -1075,7 +1075,7 @@ On CWV Empire Axe+Shield, confirm vanilla Empire shields and compatible Loremast
 
 - **Verify (solo):** apply different LA cosmetics to two same-type weapons, restart the game, and open the loadout inventory. Only the modified instance must show the matching LA icon and render that illusion; the other instance keeps its vanilla icon. Salvage/delete the modified item, wait 10 seconds after returning to the keep, and confirm `[la-state] INSTANCE-PRUNE 1 missing item override(s) removed` without changing another item.
 
-## 0.9.98-dev - 2026-07-13 - #266 Kruber LA shield availability parity [verify-fix-coop]
+## 0.9.98-dev - 2026-07-13 - #266 Kruber LA shield availability parity [verify-fix; coop-required]
 
 - Every Loremaster's Armour shield illusion is now offered on the same seven Kruber shield item types: Sword and Shield, Mace and Shield, Bretonnian Sword and Shield, Spear and Shield, and CWV Axe, Longsword, and Warrior-Priest Hammer shield variants.
 - Replaced Kruber's Empire/Breton availability split with one shared catalogue. The existing generic apply path still swaps to each option's LA-authored shield mesh before painting, preserving its intended UV layout without per-weapon render exceptions.
@@ -1083,7 +1083,7 @@ On CWV Empire Axe+Shield, confirm vanilla Empire shields and compatible Loremast
 
 - **Verify (coop):** with Loremaster's Armour, Cosmetics Tweaker v0.9.98-dev, and CWV enabled on both peers, inspect all seven Kruber shield weapon families. Each offhand row must offer the identical LA armoury-key set. Equip representative Empire-, Breton-, and custom-mesh shields on native and CWV weapons; verify preview, local 1P/3P, weapon swapping, keep-to-mission transition, and the other peer's husk retain the selected authored mesh and texture.
 
-## 0.9.97-dev - 2026-07-13 - #583 independent native/CWV dual offhands [verify-fix-coop]
+## 0.9.97-dev - 2026-07-13 - #583 independent native/CWV dual offhands [verify-fix; coop-required]
 
 - The normal illusion row now owns the main/right hand for dual weapons and Cosmetics adds one independent left/offhand row. Its default `Follow Main Illusion` entry carries no mesh override, so changing the main illusion still changes the pair until the user explicitly chooses an offhand.
 - Added the missing native Warrior Priest Dual Skullsplitters (`wh_dual_hammer`) from vanilla's dedicated `wh_dual_hammer_skins` table and lazy exact-hand pools for all seven current CWV dual families: Imperial Dual Swords, Sword and Mace, Kruber/Saltzpyre Dual Axes, Kruber/Saltzpyre Dual Maces, and Dual Warrior-Priest Hammers.
@@ -1110,7 +1110,7 @@ On CWV Empire Axe+Shield, confirm vanilla Empire shields and compatible Loremast
 - User co-op verification confirms peer glow sync after weapon swaps, exact per-instance persistence across game exit, inventory-preview parity, and automatic reconstruction after a client leaves and rejoins.
 - Audited the shipped v0.9.92-dev through v0.9.94-dev transaction, identity, persistence, preview/equipment/husk fan-out, host-authoritative RPC, and bounded join replay. Added offline lifecycle coverage plus tier-a source gates and corrected stale architecture documentation. No gameplay behavior, mod version, or Workshop deployment changed.
 
-## 0.9.95-dev - 2026-07-13 - #513 isolate score-lineup wearer identity [verify-fix-coop]
+## 0.9.95-dev - 2026-07-13 - #513 isolate score-lineup wearer identity [verify-fix; coop-required]
 
 - The 0.9.93 client log proved that exact profile/career matching was still insufficient by itself: vanilla score rows for Sienna and Warrior Priest carried the host's `peer_id`, so the resolver opened the host's human-only LA store and explicitly swapped both bot helmets to Grail Knight's Loremaster mesh. Vanilla `ScoreboardHelper` records `is_player_controlled` beside that shared network-owner peer.
 - Added a pure score identity boundary that requires exact profile plus career, `is_player_controlled == true`, and a complete peer/local-player tuple. Bot and incomplete rows now fail closed and never receive `_cos_wearer_peer`; the non-score `TeamPreviewer` fallback also requires exact profile plus career.
@@ -1118,13 +1118,13 @@ On CWV Empire Axe+Shield, confirm vanilla Empire shields and compatible Loremast
 - Bounded diagnostics now classify rejected score bots as `role=bot source=score_snapshot_bot` and retained spawn aliases as `BOT-OWNER-ALIAS`. Runtime and offline regressions reproduce the observed Grail Knight human plus Sienna/Warrior Priest bots sharing one host peer. The independent generated Sword+Mace score rendering remains owned by #416/#483 and is not changed here. No Workshop deployment.
 - **Co-op verify:** finish a mission with the host wearing the Grail Knight Loremaster helmet and with Sienna/Warrior Priest bots present. Both peers must see the helmet only on Grail Knight, with its wearer-specific colour. Logs must show `BOT-OWNER-ALIAS retained`, the Grail Knight human as `role=local|remote source=score_snapshot`, bots as `role=bot source=score_snapshot_bot peer=nil`, and no `SCORE-HAT` swap/paint following a bot row.
 
-## 0.9.95-dev - 2026-07-13 - #483 individualized CWV sword/mace cosmetics [verify-fix-coop]
+## 0.9.95-dev - 2026-07-13 - #483 individualized CWV sword/mace cosmetics [verify-fix; coop-required]
 
 - Added independent right-hand sword and left-hand mace cosmetic rows for CWV's `cwv_es_sword_and_mace`. Each row is sourced from the exact vanilla `ItemMasterList` family (`es_1h_sword` or `es_1h_mace`), rather than the generated paired-skin table, so changing one hand no longer forces a pre-zipped partner onto the other.
 - Generalized dual-weapon pool registration with a deterministic, DLC-aware `matching_item_key` source selector. Existing skin-table registrations and all other weapon pools are unchanged.
 - The selections use Cosmetics' existing direct-unit `cos_la_apply` transport, host-authoritative per-peer/per-template/per-hand store, state replay, package readiness gate, and husk render path. No RPC name, schema, hook, or CWV source changed. Added `issue483_cwv_sword_mace_individualized_cosmetics` runtime coverage.
 - **Co-op verify:** with Cosmetics v0.9.95-dev and CWV enabled on both peers, equip Sword and Mace, open weapon customization, and choose visibly different right-sword and left-mace variants. Apply, wield, swap away/back, and re-open customization; both choices must remain independent locally. Join and hot-join a second peer; both viewers must see the same sword-right/mace-left pair without either player reopening the picker. Run `/cos_regression_test` and confirm `issue483_cwv_sword_mace_individualized_cosmetics` passes.
-## 0.9.94-dev - 2026-07-13 - #574 initial/hot-join glow convergence [verify-fix-coop]
+## 0.9.94-dev - 2026-07-13 - #574 initial/hot-join glow convergence [verify-fix; coop-required]
 
 - Fixed the remaining join race where the targeted `AttachmentUtils.hot_join_sync` glow push could arrive before the joining peer was an ingame recipient, or its cached glow could arrive before the remote husk had published wielded equipment. The joiner's existing acknowledged `cos_la_state_req` pull-on-ready now also receives the host's cached glow states through the existing `cos_glow_apply` channel; no RPC name, schema, or payload shape was added.
 - A received active glow with no ready equipment now arms one local material-only repaint job for that wearer. It checks at 0.25-second cadence, stops immediately when units exist (or when husk `_wield_slot` paints first), and is hard-capped at 40 attempts/10 seconds. The retry tick never sends network traffic.
@@ -1372,7 +1372,7 @@ Closes the offhand half of #416: a per-hand VANILLA shield / held-weapon unit pi
 `armoury_key`) applied only on the wearer's own body and showed as the base offhand on
 every other peer. LA armoury shields already synced; vanilla mesh picks had no networked
 representation. This adds the missing sync layer + a generic husk mesh-swap, both hands,
-both directions, with hot-join. NEEDS `verify-fix-coop` (2+ players, both with the mod).
+both directions, with hot-join. NEEDS `verify-fix` + `coop-required` (2+ players, both with the mod).
 
 - **Sync layer (reuses the existing `cos_la_apply` / `cos_la_apply_req` VMF mod channel — no new channel):** added one ADDITIVE optional payload field `offhand_unit` (a plain unit-path STRING, or `""` = clear/revert-to-base). Handled by a branch placed BEFORE the `armoury_key` gate in both receivers, mirroring the shipped `revert` branch. `COS_RPC_SCHEMA` is NOT bumped (additive-optional rule, same as v0.9.69's revert flag) — old peers ignore the field harmlessly.
 - **New parallel store `mod._offhand_mesh_by_peer[wearer][slot/template][hand_field] = unit_path`,** kept SEPARATE from `_la_equips_by_peer` so the armoury-key-centric reconcile / paint / revert machinery is byte-for-byte untouched (no LA-sync regression surface). Populated by the new `cos_la_apply` `offhand_unit` branch only.

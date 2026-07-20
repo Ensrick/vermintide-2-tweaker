@@ -16,7 +16,7 @@
 - Reports whether the whole deferred family is present, how many of its four cluster gates are active, and proves `mutation=false`; it installs no gameplay hook and changes no setting.
 - Adds public-beta, command, documentation, and regression contracts so the diagnostic cannot silently become a partial master-toggle implementation.
 
-## 0.4.12-beta - 2026-07-19 - #699 Foot Knight HUD icon identity diagnostics [verify-fix-coop]
+## 0.4.12-beta - 2026-07-19 - #699 Foot Knight HUD icon identity diagnostics [verify-fix; coop-required]
 
 - Replaced the generic power-increase art on the Rock shield-power and Teamwork great-weapon buffs with the exact resident icons for Rock of Reikland and That's Bloody Teamwork. Both Rock effects now share their talent's authored identity; Teamwork no longer reuses Rock's generic power art.
 - Added a bounded automatic `[crt:699]` census at effect transitions. It reports the active sub-template and icon, live atlas residency, vanilla BuffUI widget/icon result, active-widget count and total pool capacity, plus stock UI Tweaks/HideBuffs hidden-or-priority disposition. It follows BuffUI's own local-or-spectated unit selection so a host can diagnose a spectated bot, remains read-only and silent while state is unchanged, and is hard-capped at 64 rows per session.
@@ -24,9 +24,9 @@
 
 **Solo diagnostic:** play Foot Knight and activate each rework condition. The matching HUD icon should use the talent's own art. If an icon is absent, retain the `[crt:699]` line: `atlas=false` identifies residency, `widget=false` with `hud_widgets` equal to `hud_capacity` identifies capacity, and `hidden=true` or `priority=true` identifies UI Tweaks routing. A host may also spectate a Foot Knight bot; `subject=spectated` proves the census followed the same unit as BuffUI.
 
-**Full acceptance is co-op:** repeat as a client Foot Knight to cover the client's local-owner reconciliation path, then have the host spectate a Foot Knight bot. Preserve #663's two-Foot-Knight no-flicker behavior. This issue therefore requires `verify-fix-coop`, not the mutually exclusive solo label.
+**Full acceptance is co-op:** repeat as a client Foot Knight to cover the client's local-owner reconciliation path, then have the host spectate a Foot Knight bot. Preserve #663's two-Foot-Knight no-flicker behavior. This issue therefore carries `verify-fix` plus the `coop-required` qualifier.
 
-## 0.4.11-beta - 2026-07-19 - #728 refresh the live career picker [verify-fix-coop]
+## 0.4.11-beta - 2026-07-19 - #728 refresh the live career picker [verify-fix; coop-required]
 
 - Moved career-unlock ownership into one module that preserves vanilla's four
   return values and continues to respect DLC ownership and peer reservations.
@@ -85,7 +85,7 @@ be active and the corresponding boolean settings must persist correctly.
 
 **Solo verify:** open Mod Tweaker > Career Tweaker > Talent Reworks. Confirm **Master Toggles** is a nested group containing only **Enable all Ensrick's Reworks** and **Enable all Tourney Balance Reworks**. Confirm every individual rework begins with `[Ensrick]` or `[Tourney Balance]`, with no lifecycle/status tag and no trailing family suffix. Toggle each master, then make a partial individual selection and confirm both master indicators are off while the selected leaf stays on. Run `/crt_regression_test` and require `PASS: issue445_rework_family_masters` plus `PASS: crt_mod_tweaker_exclusive_groups_registered`.
 
-## 0.4.6-beta - 2026-07-18 - #776 exact buff-wire identity and timed sync [verify-fix-coop]
+## 0.4.6-beta - 2026-07-18 - #776 exact buff-wire identity and timed sync [verify-fix; coop-required]
 
 - Corrected the initial diagnosis using all three attached client crashes. Each receiver got positive server buff id `12`, `13`, or `9` at numeric lookup id `1574`, which resolved locally to timed `crt_questingknight_impetuous_as`. Vanilla `ProcFunctions.add_buff` can only send server id `0`; the repeated positive ids prove a different server-controlled name collided with the client's process-local CRT lookup assignment.
 - Strengthened #425's fail-closed beacon from mod presence alone to exact wire-catalog parity. The fingerprint covers every CRT-registered network name and its actual `NetworkLookup.buff_templates` numeric id. Missing identity, older schema, changed names, changed order, or changed base indices keep all CRT network-unsafe reworks at vanilla.
@@ -105,7 +105,7 @@ be active and the corresponding boolean settings must persist correctly.
 - Reduced `career_tweaker_balance.lua` from 4,475 to 3,890 lines without changing settings, buff definitions, hook targets, or lifecycle behavior. The package glob already includes the new module.
 - Added offline structure coverage that requires the load-once boundary, keeps the hook implementations out of the catalogue, and verifies all four hook targets remain present in the extracted module. Updated Foot Knight description coverage to consume the hook owner explicitly.
 
-## 0.4.3-beta - 2026-07-17 - #663 stable multi-Foot-Knight auras [verify-fix-coop]
+## 0.4.3-beta - 2026-07-17 - #663 stable multi-Foot-Knight auras [verify-fix; coop-required]
 
 - Replaced six source-blind Foot Knight aura drivers with one source-scoped claim coordinator. Vanilla searched the target by buff template alone, so one Foot Knight could remove or suppress the server-controlled instance supplied by another Foot Knight.
 - Preserved the intended non-stacking result: the first source creates or adopts one vanilla aura buff, intermediate sources add only ownership claims, and only the final source leaving removes the server buff. No custom buff name, lookup entry, RPC, or per-tick network traffic was added.
@@ -143,7 +143,7 @@ be active and the corresponding boolean settings must persist correctly.
 
 **Beta verify:** after a full restart, confirm the Career Ability & Talent Swapping group is absent, existing careers and talents remain unchanged on keep/mission transitions, and `/crt_regression_test` reports `PASS: public_beta_talent_swaps_disabled` plus `PASS: public_beta_issue_probes_disabled`. Then exercise the ordinary opt-in reworks relevant to your career.
 
-## 0.3.75-dev - 2026-07-15 - #619 Foot Knight feature suite [verify-fix-coop]
+## 0.3.75-dev - 2026-07-15 - #619 Foot Knight feature suite [verify-fix; coop-required]
 
 - Added six independent, default-off Foot Knight controls: uninterruptible heavy attacks; 10m Protective Presence with 20m Rock of Reikland; Rock shield offense; expanded That's Bloody Teamwork! great-weapon offense; Final March; and melee weapons in the secondary slot.
 - Rock shield offense now carries its requested tradeoff: a toggle-wide 10% reduction to effective dodge distance. With Rock selected and any live shield-capable melee template equipped, it grants 15% power and 30% more melee damage to Monsters and Berserkers. The capability policy includes vanilla's exceptional Flail & Shield type and inherited WT/CWV templates.
@@ -182,7 +182,7 @@ be active and the corresponding boolean settings must persist correctly.
 - Registered the hook-owned toggle in the native rework catalog so #445's Ensrick family control includes it. Declared the anticipated `zealot_thp_conversions` mutex cluster: Flagellation and the Holy Fervour green-to-THP rework are alternative conversion models and cannot be enabled together.
 - Reused Career Tweaker's consolidated Localize hook for the Flagellation title/description. Added no buff, RPC, or `NetworkLookup` entry. Added pure policy/structure tests, runtime check `issue447_flagellation_contract`, `FLAGELLATION_REWORK.md`, and engine-surface documentation.
 
-## 0.3.71-dev - 2026-07-14 - #473 Dance of Blades rework [verify-fix-coop; not deployed]
+## 0.3.71-dev - 2026-07-14 - #473 Dance of Blades rework [verify-fix; coop-required; not deployed]
 
 - Added an opt-in Handmaiden rework for the vanilla `kerillian_maidenguard_versatile_dodge` talent: each kill grants 2% damage dealt and 2% increased damage taken for two seconds, up to 15 stacks (30%/30%).
 - Every stack uses its own non-refreshing two-second lifetime. Rapid kills build the requested window; a later kill cannot extend an older stack.
