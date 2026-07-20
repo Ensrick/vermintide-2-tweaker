@@ -135,7 +135,8 @@ function Get-ScanFiles {
                        -and $p -notlike "*\sample_*\*" `
                        -and $p -notlike "*\Vermintide-2-Source-Code\*" `
                        -and $p -notlike "*\Darktide-Source-Code\*" `
-                       -and $p -notlike "*\_*_extract\*"
+                       -and $p -notlike "*\_*_extract\*" `
+                       -and $p -notlike "*\.claude\*"
             return $isActive -and $notExcluded
         }
 }

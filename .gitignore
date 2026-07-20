@@ -29,6 +29,12 @@ tools/vmb-launcher/
 upload/steam_appid.txt
 .temp/
 
+# Claude Code agent worktrees + local session state. Never tracked. Prior
+# sessions left orphaned git worktrees here (15k+ stale .lua files) that
+# inflated the static-scan file counts and timed out the pre-commit gate; the
+# qa/check_*.ps1 scanners also skip this path via their exclusion chains (#727).
+.claude/
+
 # Documentation policy (PROJECT_STANDARDS.md §7.3 + §7.4):
 # - Active investigation notes live in <mod>/_investigating/ and are ephemeral.
 #   Findings get distilled into POSTMORTEMS.md (tracked) on resolution.
