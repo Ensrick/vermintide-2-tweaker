@@ -8,9 +8,10 @@
 .DESCRIPTION
     Improvement #3a from the 2026-07 standards review.
 
-    Reads open issues labeled `verify-fix`, `verify-fix-coop`, and `diagnostics-armed`
-    (the three lifecycle labels that mean "fix/probe shipped, a human must now confirm it
-    in-game"). For each issue it extracts the most recent comment that carries an actual
+    Reads open issues labeled `verify-fix`, `verify-fix-coop`, and `diagnostics-armed`,
+    then excludes repository-only issues carrying the explicit `tooling` routing label. The
+    lifecycle is universal; those modifiers route work to autonomous verification rather
+    than a human in-game checklist. For each remaining issue it extracts the most recent comment that carries an actual
     TEST METHOD (heuristic score over 'TEST' / 'Test method' / 'verify' + imperative steps,
     with bookkeeping/xref comments penalized). Issues whose newest method-bearing comment
     cannot be found are flagged MISSING-METHOD (a doctrine violation: every ship owes a
@@ -26,22 +27,23 @@
       docs/PLAYTEST_SCRIPT.md   full solo+coop walk for the author/primary tester
       docs/PLAYTEST_COOP.md     compact coop-only variant in plain language for a second
                                 tester (RainReligion) with no repo context
+      docs/VERIFY_REPOSITORY.md autonomous repository-only verification queue
 
     Classification is best-effort keyword matching; when it misroutes a check, fix the
     method comment or the keyword lists here and regenerate - never hand-edit the docs.
 
 .EXAMPLE
-    pwsh tools/verify/generate_playtest.ps1              # pull live issues, write both docs
+    pwsh tools/verify/generate_playtest.ps1              # pull live issues, write all docs
     pwsh tools/verify/generate_playtest.ps1 -SelfTest    # offline unit test of the heuristics
     pwsh tools/verify/generate_playtest.ps1 -OutDir C:\tmp\pt  # write elsewhere
 
 .NOTES
     Requires the `gh` CLI authenticated for github.com as Ensrick. Read-only against
-    GitHub; writes only the two docs. Does not commit.
+    GitHub; writes only the three docs. Does not commit.
 #>
 [CmdletBinding()]
 param(
-    # Where to write the two docs. Default: <repo>/docs.
+    # Where to write the three docs. Default: <repo>/docs.
     [string]$OutDir,
     # Max issues fetched per label.
     [int]$Limit = 400,
@@ -51,95 +53,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+. (Join-Path $PSScriptRoot 'lifecycle_method_policy.ps1')
 
 # ---------------------------------------------------------------------------
 # Heuristics (tune these, then regenerate - never hand-edit the output docs)
 # ---------------------------------------------------------------------------
-
-# Explicit method headings are an issue author's authoritative replacement boundary.
-# Keep this narrow: deployed-floor/banner corrections that explicitly preserve the
-# procedure above must not replace that runnable procedure.
-function Test-VtExplicitMethodComment {
-    param([string]$Body)
-    if ([string]::IsNullOrWhiteSpace($Body)) { return $false }
-    return $Body -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:' +
-        'test\s+method\b|' +
-        '(?:diagnostic|verification)\s+method\b|' +
-        '(?:solo|co-?op|two-player)\s+verification\s*(?:\([^\r\n)]*\))?\s*:|' +
-        'verification\s*\([^\r\n)]*\)\s*:|' +
-        'verification\s+still\s+required\b|' +
-        '(?:authoritative|current|corrected|replacement|next)\b[^\r\n]{0,100}\b(?:method|test)\b' +
-        ')'
-}
-
-# Pick the newest explicitly headed runnable method. This is the lifecycle-safe
-# contract: a current diagnostic method must supersede an older TEST METHOD even when
-# the older comment has more numbered steps or formatting. If no explicit heading
-# exists, retain the legacy heuristic as a fallback for older issue history.
-function Get-VtMethodComment {
-    param($Comments)
-    if (-not $Comments -or @($Comments).Count -eq 0) { return $null }
-    $arr = @($Comments)
-    for ($i = $arr.Count - 1; $i -ge 0; $i--) {
-        $b = [string]$arr[$i].body
-        if (Test-VtExplicitMethodComment $b) { return $b }
-    }
-
-    $best = $null; $bestScore = 0
-    for ($i = $arr.Count - 1; $i -ge 0; $i--) {
-        $b = [string]$arr[$i].body
-        if ([string]::IsNullOrWhiteSpace($b)) { continue }
-        $score = 0
-        if ($b -match '(?i)test\s+method')                                   { $score += 5 }
-        if ($b -cmatch '\bTEST\b')                                           { $score += 4 }
-        if ($b -match '(?i)test\s+(with|as|in|solo|\()')                     { $score += 3 }
-        if ($b -match '(?i)to\s+verify|verify\s+(that|in-?game|by|each|the|no|this|it)') { $score += 2 }
-        if ($b -match '(?i)pass\s*(?:=|:)')                                  { $score += 3 }
-        if ($b -match '(?i)expected\s*:')                                    { $score += 2 }
-        $steps = ([regex]::Matches($b, '(?m)^\s*\d+\.\s')).Count
-        if ($steps -ge 2) { $score += [math]::Min($steps, 4) }
-        if ($b -match '\[[a-z][a-z0-9_]*:[A-Za-z0-9_.\-]+\]')                { $score += 1 }
-        # bookkeeping / label-sweep / xref comments are NOT test methods
-        if ($b -match '(?i)verify-fix\s+(was|label|set|stripped|re-?appl|applied|added|removed)') { $score -= 6 }
-        if ($b -match '(?i)^\s*(cross-?ref|xref|x-ref|re-?applying|label sweep|status sweep|reapplying)') { $score -= 5 }
-        if ($b.Length -lt 50) { $score -= 2 }
-        if ($score -gt $bestScore) { $bestScore = $score; $best = $b }
-    }
-    if ($bestScore -ge 3) { return $best } else { return $null }
-}
-
-# A correction after the selected method may update only its deployed version/banner
-# while explicitly preserving the runnable procedure. Keep it as row context instead
-# of letting it replace the method.
-function Get-VtMethodCorrection {
-    param($Comments, [string]$Method)
-    if (-not $Comments -or [string]::IsNullOrWhiteSpace($Method)) { return $null }
-    $arr = @($Comments)
-    $methodIndex = -1
-    for ($i = $arr.Count - 1; $i -ge 0; $i--) {
-        if ([string]$arr[$i].body -ceq $Method) { $methodIndex = $i; break }
-    }
-    if ($methodIndex -lt 0) { return $null }
-    for ($i = $arr.Count - 1; $i -gt $methodIndex; $i--) {
-        $b = [string]$arr[$i].body
-        if ($b -match '(?im)^\s*(?:#{1,6}\s+)?(?:verification\s+banner|current\s+deployed-floor)\s+correction\b') {
-            return $b
-        }
-    }
-    return $null
-}
-
-function Get-VtCorrectionVersion {
-    param([string]$Correction)
-    if ([string]::IsNullOrWhiteSpace($Correction)) { return $null }
-    if ($Correction -match '(?im)^\s*\|\s*Stream\s*\|') { return $null }
-    $versions = @([regex]::Matches($Correction, '(?i)\bv?(\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?)\b') |
-        ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
-    # Correction prose puts the deployed floor first; later versions commonly name
-    # a source-only or explicitly rejected build.
-    if ($versions.Count -ge 1) { return $versions[0] }
-    return $null
-}
 
 # One-line "what to do" from the method body; falls back to the issue title.
 function Get-VtCheckLine {
@@ -448,6 +366,18 @@ function Invoke-SelfTest {
     Assert ((Get-VtModTag @('bug', 'Tweaker: General', '2-moderate')) -eq 'General') 'mod tag extracted from label'
     Assert ((Get-VtPriorityRank @('bug', '1-major')) -eq 1) 'priority rank extracted from label'
     Assert ((Get-VtPriorityRank @('bug')) -eq 4) 'missing priority sorts last'
+    Assert (Test-VtRepositoryOnlyLabels @('enhancement', 'tooling', 'verify-fix')) 'tooling lifecycle routes to autonomous verification'
+    Assert (-not (Test-VtRepositoryOnlyLabels @('bug', 'documentation', 'regression', 'Tweaker: Weapons', 'CWV', 'cross-mod', 'verify-fix', '0-critical', 'WOC'))) '#661-shaped documentation modifier stays runtime'
+    Assert (Test-VtRepositoryOnlyLabels @('documentation', 'tooling', 'diagnostics-armed')) 'documentation plus tooling routes to autonomous verification'
+    Assert (-not (Test-VtRepositoryOnlyLabels @('bug', 'verify-fix'))) 'runtime verify remains in the in-game playtest queue'
+
+    $bodyOnlyDiagnostic = "### Diagnostic method (runnable now)`n1. Run the repository lifecycle fixture.`n`n### Expected result`nThe retired label is rejected."
+    $bodySelection = Get-VtLifecycleMethodSelection -Comments @() -Body $bodyOnlyDiagnostic -AllowBodyFallback
+    Assert ($bodySelection.Valid -and $bodySelection.Source -eq 'body') 'new diagnostics may use an explicit runnable issue-body method'
+    $verifySelection = Get-VtLifecycleMethodSelection -Comments @() -Body $bodyOnlyDiagnostic
+    Assert (-not $verifySelection.Valid) 'verify lifecycle never falls back to an issue-body method'
+    $coopBodySelection = Get-VtLifecycleMethodSelection -Comments @() -Body "### Diagnostic method (runnable now)`n1. Host plus one client reproduces the transition.`nExpected: both peers log the same state." -AllowBodyFallback
+    Assert ($coopBodySelection.Valid -and (Test-VtMethodRequiresCoop $coopBodySelection.Method)) 'body-only diagnostic and co-op routing use the same selected method'
 
     $ordered = Sort-VtRows @(
         [pscustomobject]@{ Number = 1; PriorityRank = 2; UpdatedAt = [datetime]'2026-07-19T03:00:00Z' }
@@ -475,7 +405,7 @@ Write-Host 'Fetching open verify-state issues from GitHub...' -ForegroundColor C
 $labels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed')
 $byNumber = [ordered]@{}
 foreach ($lbl in $labels) {
-    $raw = & gh issue list --state open --label $lbl --json number,title,labels,comments,updatedAt --limit $Limit 2>$null | Out-String
+    $raw = & gh issue list --state open --label $lbl --json number,title,body,labels,comments,url,updatedAt --limit $Limit 2>$null | Out-String
     if ([string]::IsNullOrWhiteSpace($raw)) { Write-Host "  (${lbl}: none)"; continue }
     $list = $raw | ConvertFrom-Json
     foreach ($it in $list) {
@@ -490,13 +420,33 @@ if ($byNumber.Count -eq 0) { throw 'No issues returned. Is gh authenticated? (gh
 # ---------------------------------------------------------------------------
 $rows = New-Object System.Collections.Generic.List[object]
 $missing = New-Object System.Collections.Generic.List[int]
+$repositoryRows = New-Object System.Collections.Generic.List[object]
+$repositoryMissing = New-Object System.Collections.Generic.List[int]
 foreach ($k in $byNumber.Keys) {
     $it = $byNumber[$k]
     $labelNames = @($it.labels | ForEach-Object { $_.name })
-    $method = Get-VtMethodComment $it.comments
-    $correction = Get-VtMethodCorrection -Comments $it.comments -Method $method
-    $correctionVersion = Get-VtCorrectionVersion $correction
-    $hasMethod = $null -ne $method
+    $isDiagnostic = $labelNames -contains 'diagnostics-armed'
+    $selection = Get-VtLifecycleMethodSelection -Comments $it.comments -Body ([string]$it.body) -AllowBodyFallback:$isDiagnostic
+    $method = $selection.Method
+    $correction = $selection.Correction
+    $correctionVersion = $selection.CorrectionVersion
+    if (Test-VtRepositoryOnlyLabels $labelNames) {
+        if (-not $selection.Valid) { $repositoryMissing.Add([int]$it.number) }
+        $repositoryRows.Add([pscustomobject]@{
+            Number = [int]$it.number
+            Title = [string]$it.title
+            Lifecycle = @($labelNames | Where-Object { $_ -in @('diagnostics-armed', 'verify-fix', 'verify-fix-coop') }) -join ','
+            Check = Get-VtCheckLine -Method $method -Title $it.title -CorrectionVersion $correctionVersion
+            Evidence = Get-VtEvidence -Method $method -Correction $correction -CorrectionVersion $correctionVersion
+            HasMethod = $selection.Valid
+            MethodSource = $selection.Source
+            Url = if ($it.url) { [string]$it.url } else { "https://github.com/Ensrick/vermintide-2-tweaker/issues/$($it.number)" }
+            PriorityRank = Get-VtPriorityRank $labelNames
+            UpdatedAt = [datetime]$it.updatedAt
+        })
+        continue
+    }
+    $hasMethod = $selection.Valid
     if (-not $hasMethod) { $missing.Add([int]$it.number) }
     $rows.Add([pscustomobject]@{
         Number   = [int]$it.number
@@ -546,7 +496,7 @@ $L = New-Object System.Collections.Generic.List[string]
 $L.Add('# Playtest Script (verify-state issues)')
 $L.Add('')
 $L.Add("> GENERATED by ``tools/verify/generate_playtest.ps1`` on $now. Do NOT hand-edit - rerun the tool.")
-$L.Add('> Source: open issues labeled `verify-fix`, `verify-fix-coop`, `diagnostics-armed`.')
+$L.Add('> Source: open issues labeled `verify-fix`, `verify-fix-coop`, `diagnostics-armed`, excluding work with the explicit repository-routing label `tooling`.')
 $L.Add('> Ordered for one session: solo keep -> solo adventure -> solo Chaos Wastes -> scoreboard -> boot/log, then co-op.')
 $L.Add('> Each box confirms one issue in-game. Every check owes a method comment; `[MISSING-METHOD]` rows violate doctrine - post a test comment on that issue.')
 $L.Add('')
@@ -554,6 +504,7 @@ $total = $rows.Count
 $soloCount = @($rows | Where-Object { $_.Section -notlike 'COOP*' }).Count
 $coopCount = $total - $soloCount
 $L.Add("**$total checks** across ${soloCount} solo + ${coopCount} co-op. $($missing.Count) missing a test method.")
+$L.Add("Repository-only issues routed to ``VERIFY_REPOSITORY.md`` instead: $($repositoryRows.Count).")
 $L.Add('')
 $L.Add('---')
 $L.Add('')
@@ -671,14 +622,40 @@ $coopPath = Join-Path $OutDir 'PLAYTEST_COOP.md'
 $C -join "`n" | Set-Content -Path $coopPath -Encoding utf8
 
 # ---------------------------------------------------------------------------
+# Render repository-only autonomous verification queue
+# ---------------------------------------------------------------------------
+$R = New-Object System.Collections.Generic.List[string]
+$R.Add('# Repository Verification Queue')
+$R.Add('')
+$R.Add("> GENERATED by ``tools/verify/generate_playtest.ps1`` on $now. Do NOT hand-edit - rerun the tool.")
+$R.Add('> Source: open lifecycle issues carrying the explicit repository-routing label `tooling`. `documentation` alone is an orthogonal content modifier and does not move runtime work here.')
+$R.Add('')
+$R.Add("**$($repositoryRows.Count) checks**. $($repositoryMissing.Count) missing a current runnable method with an expected result.")
+$R.Add('')
+foreach ($row in (Sort-VtRows $repositoryRows)) {
+    $missingTag = if ($row.HasMethod) { '' } else { ' **[MISSING-METHOD]**' }
+    $R.Add("- [ ] [#$($row.Number) - $($row.Title)]($($row.Url))$missingTag")
+    $R.Add("  - Lifecycle: ``$($row.Lifecycle)``; method source: ``$($row.MethodSource)``")
+    $R.Add("  - Run/review: $($row.Check)")
+    $R.Add("  - Expected evidence: $($row.Evidence)")
+}
+if ($repositoryRows.Count -eq 0) {
+    $R.Add('No repository-only lifecycle issues are currently open.')
+}
+$repositoryPath = Join-Path $OutDir 'VERIFY_REPOSITORY.md'
+$R -join "`n" | Set-Content -Path $repositoryPath -Encoding utf8
+
+# ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'Generated:' -ForegroundColor Green
 Write-Host "  $scriptPath"
 Write-Host "  $coopPath"
+Write-Host "  $repositoryPath"
 Write-Host ''
 Write-Host "Total issues: $total   (solo $soloCount, coop $coopCount)   missing-method: $($missing.Count)"
+Write-Host "Repository-only autonomous queue: $($repositoryRows.Count)   missing-method: $($repositoryMissing.Count)"
 Write-Host 'Per-section counts:'
 foreach ($sec in ($sections + $coopSections)) {
     $c = @($rows | Where-Object { $_.Section -eq $sec.Key }).Count

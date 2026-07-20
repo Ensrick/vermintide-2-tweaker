@@ -683,8 +683,8 @@ plain player-facing names.
 
 Log prefixes such as `[diag]` are permitted when they are actually emitted to
 the log and not reused as menu localization. GitHub lifecycle-label automation
-(`not-started`, `verify-fix`, `verify-fix-coop`, `diagnostics-armed`, `Fixed`)
-remains unchanged.
+(`verify-fix`, `verify-fix-coop`, `diagnostics-armed`) remains separate from
+player-facing localization.
 
 ### 13.4 QA enforcement
 

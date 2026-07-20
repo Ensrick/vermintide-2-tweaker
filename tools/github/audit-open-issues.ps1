@@ -17,14 +17,15 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+. (Join-Path $repoRoot 'tools/verify/lifecycle_method_policy.ps1')
 
 $LifecycleLabels = @(
-    "not-started",
     "verify-fix",
     "verify-fix-coop",
-    "diagnostics-armed",
-    "Fixed"
+    "diagnostics-armed"
 )
+$RetiredLifecycleLabels = @('not-started', 'Fixed')
 
 $TypeLabels = @("bug", "enhancement", "feature")
 
@@ -50,7 +51,7 @@ $LessonRules = [ordered]@{
     backend_realm_isolation = '(?i)backend|progression|daily|quest|shilling|official realm|modded realm|EAC|PlayFab|forge.{0,25}(?:backend|realm|access)|crafting.{0,25}(?:backend|realm)'
 }
 
-$ToolingLabels = @("tooling", "documentation")
+$ToolingLabels = @("tooling")
 
 # Labels in this set describe workflow, severity, or issue shape rather than a
 # code-owning subsystem.  Everything else is eligible as an exact subsystem
@@ -81,69 +82,36 @@ function Get-LabelNames($Issue) {
     return @($Issue.labels | ForEach-Object { [string]$_.name })
 }
 
+function Test-IsRepositoryOnlyIssue($Issue) {
+    $labels = Get-LabelNames $Issue
+    return @($labels | Where-Object { $ToolingLabels -contains $_ }).Count -gt 0
+}
+
 function Get-TitleWordCount([string]$Title) {
     if (-not $Title) { return 0 }
     $normalized = $Title -replace '^\[[^]]+\]\s*', ''
     return @($normalized -split '\s+' | Where-Object { $_ }).Count
 }
 
-function Test-HasMethodAndExpected($Issue) {
-    $comments = @($Issue.comments | ForEach-Object { [string]$_.body })
-    foreach ($comment in $comments) {
-        $hasMethod = $comment -match '(?i)test[- ]method|diagnostics? method|verification|verify(?::|\s+(?:after|this|in|with))|to verify|steps?:|next repro|repro(?:duce|duction)?'
-        $hasExpected = $comment -match '(?i)expected|pass\s*(?:=|:)|must pass|should pass|result:|\bconfirm\b|\brequire\b.{0,24}\bpass|\bno (?:crash|error|warning|spam|desync)\b'
-        if ($hasMethod -and $hasExpected) { return $true }
-    }
-    return $false
+function Get-IssueMethodSelection($Issue, [switch]$IncludeBody) {
+    return Get-VtLifecycleMethodSelection -Comments $Issue.comments -Body ([string]$Issue.body) -AllowBodyFallback:$IncludeBody
 }
 
-function Get-LatestTestComment($Issue) {
-    $comments = @($Issue.comments)
-    for ($index = $comments.Count - 1; $index -ge 0; $index--) {
-        $body = [string]$comments[$index].body
-        # A deployed-floor correction may intentionally update only the valid
-        # version/manifest while declaring that the procedure above remains
-        # authoritative.  It is metadata for that method, not a replacement
-        # scope declaration; continue to the preceding runnable method.
-        if ($body -match '(?i)(?:procedure|method)(?:/acceptance criteria)? above remains authoritative') {
-            continue
-        }
-        if ($body -match '(?i)test[- ]method|diagnostics? method|verification|verify solo|solo diagnostic|co-?op diagnostics?|next repro|needs? 2 (?:players|testers|humans)|two-player|host\s*\+\s*client|host and client|expected') {
-            return $body
-        }
-    }
-    return ""
+function Test-HasMethodAndExpected($Issue, [switch]$IncludeBody) {
+    return (Get-IssueMethodSelection $Issue -IncludeBody:$IncludeBody).Valid
 }
 
 function Test-CommentRequiresCoop($Issue) {
-    # Historical comments often contain superseded test plans.  The newest
-    # explicit test/verification comment is authoritative for current scope.
-    $text = Get-LatestTestComment $Issue
-    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?authoritative\s+solo\s+test\b') {
-        return $false
-    }
-    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?authoritative\s+(?:co-?op|two[ -]player)\s+test\b') {
-        return $true
-    }
-    # Prefer an explicit method-header scope over incidental prose.  In
-    # particular, "a solo host cannot reproduce this" is co-op evidence, not a
-    # solo test declaration, while a solo diagnostic may mention that a later
-    # implementation will require co-op verification.
-    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:(?:corrected|authoritative|replacement)\s+)?(?:test|diagnostics?) method\s*\(\s*solo\b[^)\r\n]{0,80}\)') {
-        return $false
-    }
-    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:(?:corrected|authoritative|replacement)\s+)?(?:test|diagnostics?) method\s*\(\s*(?:co-?op\b|two[ -]players?\b[^)\r\n]{0,30}\bco-?op\b)[^)\r\n]{0,80}\)') {
-        return $true
-    }
-    if ($text -match '(?i)verify solo|solo verification|no (?:second|2nd) player|do(?:es)? not require (?:a )?(?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
-        return $false
-    }
-    return $text -match '(?i)two[ -]players?\b|two[^\r\n]{0,40}(?:players|testers|humans)|2\+? (?:players|testers|humans)|needs? 2 (?:players|testers|humans)|host\s*\+\s*client|host and client|second player|both peers|remote peer|non-mod peer|co-?op(?:/perspective)? (?:verification|diagnostics?|retest)'
+    $labels = Get-LabelNames $Issue
+    $allowBody = $labels -contains 'diagnostics-armed'
+    $selection = Get-IssueMethodSelection $Issue -IncludeBody:$allowBody
+    return Test-VtMethodRequiresCoop $selection.Method
 }
 
 function Get-IssueFindings($Issue) {
     $labels = Get-LabelNames $Issue
     $lifecycle = @($labels | Where-Object { $LifecycleLabels -contains $_ })
+    $retiredLifecycle = @($labels | Where-Object { $RetiredLifecycleLabels -contains $_ })
     $types = @($labels | Where-Object { $TypeLabels -contains $_ })
     $severities = @($labels | Where-Object { $SeverityLabels -contains $_ })
     $findings = New-Object System.Collections.Generic.List[string]
@@ -151,25 +119,30 @@ function Get-IssueFindings($Issue) {
     if ($lifecycle.Count -ne 1) {
         $findings.Add("lifecycle_count_$($lifecycle.Count)")
     }
+    if ($retiredLifecycle.Count -gt 0) {
+        $findings.Add("retired_lifecycle_present")
+    }
     if ($types.Count -ne 1) {
         $findings.Add("type_count_$($types.Count)")
     }
     if ($severities.Count -ne 1) {
         $findings.Add("severity_count_$($severities.Count)")
     }
-    if (@($labels | Where-Object { $ToolingLabels -contains $_ }).Count -gt 0 -and
-        @($lifecycle | Where-Object { $_ -ne "not-started" }).Count -gt 0) {
-        $findings.Add("tooling_uses_human_lifecycle")
-    }
     if ((Get-TitleWordCount $Issue.title) -gt 8) {
         $findings.Add("title_over_8_words")
     }
 
-    $humanLifecycle = @($lifecycle | Where-Object {
-        $_ -in @("verify-fix", "verify-fix-coop", "diagnostics-armed")
-    })
-    if ($humanLifecycle.Count -gt 0 -and -not (Test-HasMethodAndExpected $Issue)) {
+    # A newly filed diagnostic may carry its runnable method + expected result
+    # in the issue template body. A shipped verify lifecycle still requires the
+    # current method comment posted in the same pass as the label.
+    $includeIssueBody = $lifecycle -contains 'diagnostics-armed'
+    if ($lifecycle.Count -gt 0 -and -not (Test-HasMethodAndExpected $Issue -IncludeBody:$includeIssueBody)) {
         $findings.Add("missing_test_method_comment")
+    }
+
+    $repositoryOnly = Test-IsRepositoryOnlyIssue $Issue
+    if ($repositoryOnly -and $lifecycle -contains "verify-fix-coop") {
+        $findings.Add("repository_only_uses_coop_lifecycle")
     }
 
     $requiresCoop = Test-CommentRequiresCoop $Issue
@@ -206,8 +179,8 @@ function Get-IssueFindings($Issue) {
 
 function Get-VerificationScope($Issue) {
     $labels = Get-LabelNames $Issue
-    if (@($labels | Where-Object { $ToolingLabels -contains $_ }).Count -gt 0) {
-        return "maintainer-offline"
+    if (Test-IsRepositoryOnlyIssue $Issue) {
+        return "repository-only"
     }
     if ($labels -contains "verify-fix-coop" -or $labels -contains "coop-required") {
         return "coop"
@@ -233,7 +206,11 @@ function Get-RiskTier($Issue) {
 
 function Get-RecommendedAction($Issue) {
     $labels = Get-LabelNames $Issue
-    if ($labels -contains "Fixed") { return "post-fix hardening, regression coverage, then close" }
+    if (Test-IsRepositoryOnlyIssue $Issue) {
+        if ($labels -contains "verify-fix") { return "run the documented autonomous verification, record evidence, then close" }
+        if ($labels -contains "diagnostics-armed") { return "run the documented autonomous diagnostic and record its bounded evidence" }
+        if ($labels -contains "verify-fix-coop") { return "replace the invalid co-op lifecycle with repository-only verification routing" }
+    }
     if ($labels -contains "verify-fix-coop") { return "two-player in-game verification" }
     if ($labels -contains "verify-fix") { return "solo in-game verification" }
     if ($labels -contains "diagnostics-armed") { return "run documented repro and collect bounded diagnostics" }
@@ -244,6 +221,21 @@ function Get-EmpiricalFallbacks($Issue) {
     $labels = Get-LabelNames $Issue
     $lifecycle = @($labels | Where-Object { $LifecycleLabels -contains $_ }) | Select-Object -First 1
     $number = [int]$Issue.number
+
+    if (Test-IsRepositoryOnlyIssue $Issue) {
+        if ($lifecycle -eq "verify-fix") {
+            return @(
+                [ordered]@{ trigger = "The documented autonomous verification for #$number fails on current canonical source."; change = "Repair the first failing repository invariant and rerun the same deterministic check."; falsifier = "The named check passes from a clean current-master worktree." },
+                [ordered]@{ trigger = "The check passes locally but fails in CI or another supported shell/runtime."; change = "Reproduce the environment delta with a bounded fixture and make the tool deterministic across the supported environments."; falsifier = "The compared environments use identical inputs and produce identical results." },
+                [ordered]@{ trigger = "The claimed documentation or policy outcome is not enforced by code or a self-test."; change = "Add the smallest executable guard that fails on the retired behavior and update the owner documentation."; falsifier = "An existing blocking guard already proves the stated invariant." }
+            )
+        }
+        return @(
+            [ordered]@{ trigger = "The documented autonomous diagnostic for #$number identifies a specific repository-state divergence."; change = "Repair only the first divergent file, rule, or generated artifact and retain the diagnostic as regression coverage."; falsifier = "The diagnostic reports no divergence on current canonical source." },
+            [ordered]@{ trigger = "The diagnostic result differs between supported PowerShell/runtime environments."; change = "Reduce the difference to a deterministic fixture and normalize only the proven environment-dependent input."; falsifier = "Both environments receive identical normalized input and still disagree." },
+            [ordered]@{ trigger = "Insufficient evidence: the autonomous diagnostic cannot distinguish the remaining candidates."; change = "Add one bounded repository fixture at each adjacent boundary, then rerun without involving the game."; falsifier = "The existing diagnostic already names one causal boundary." }
+        )
+    }
 
     if ($lifecycle -eq "verify-fix-coop") {
         return @(
@@ -264,13 +256,6 @@ function Get-EmpiricalFallbacks($Issue) {
             [ordered]@{ trigger = "The issue's bounded armed repro records a first state divergence."; change = "Repair only the layer named by that trace."; falsifier = "The trace remains healthy through the observed symptom." },
             [ordered]@{ trigger = "Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract."; change = "Repair the first contract mismatch and retain the probe as regression evidence."; falsifier = "Captured state matches the source contract at every sampled boundary." },
             [ordered]@{ trigger = "Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates."; change = "Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix."; falsifier = "The existing probe already identifies one causal boundary." }
-        )
-    }
-    if ($lifecycle -eq "Fixed") {
-        return @(
-            [ordered]@{ trigger = "The documented closure test fails on the current named build."; change = "Repair the first regressed invariant covered by the existing issue regression."; falsifier = "The current closure test passes; close the stale issue instead." },
-            [ordered]@{ trigger = "The symptom returns after a known-good version."; change = "Bisect the documented introduction/fix range and patch the first regressing commit."; falsifier = "No commit in that range changes the failing path." },
-            [ordered]@{ trigger = "The current repair cannot be made safe on the present tree."; change = "Roll back the isolated issue fix and restore the last user-verified vanilla/mod behavior while preparing a current-tree repair."; falsifier = "The fix cannot be isolated without removing unrelated verified work." }
         )
     }
     return @(
@@ -403,7 +388,7 @@ function Get-ClosureEvidence($Issue) {
         }
     }
     if ((Get-LabelNames $Issue) -contains 'Fixed') {
-        $rows.Add([PSCustomObject][ordered]@{ kind = 'fixed_label'; source_url = [string]$Issue.url; excerpt = 'Closed issue carries the Fixed lifecycle label.' })
+        $rows.Add([PSCustomObject][ordered]@{ kind = 'fixed_label'; source_url = [string]$Issue.url; excerpt = 'Closed issue carries the historical Fixed label.' })
     }
     if ([string]$Issue.stateReason -eq 'COMPLETED') {
         $rows.Add([PSCustomObject][ordered]@{ kind = 'completed_state_reason'; source_url = [string]$Issue.url; excerpt = 'GitHub stateReason is COMPLETED.' })
@@ -803,17 +788,32 @@ function Invoke-SelfTest {
         [PSCustomObject]@{
             number = 1; title = "Blightreaper husk transform"; body = "**Symptom:** remote husk drifts after #90, #92, #93, #94, #95, #96, and #97. ``SimpleHuskInventoryExtension._wield_slot`` differs."; url = "u1"
             labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" }, @{ name = "WOC" }, @{ name = "0-critical" })
-            comments = @(@{ body = "Test method: host + client. Expected: remote peer keeps the Blightreaper transform." })
+            comments = @(@{ body = "Test method (co-op):`n1. Host equips the Blightreaper while one client observes.`nExpected: remote peer keeps the Blightreaper transform." })
         },
         [PSCustomObject]@{
             number = 2; title = "This title contains far too many words for doctrine"; body = "## Broken\\nBody"; url = "u2"
-            labels = @(@{ name = "bug" }, @{ name = "enhancement" })
+            labels = @(@{ name = "bug" }, @{ name = "enhancement" }, @{ name = "not-started" })
             comments = @()
         },
         [PSCustomObject]@{
             number = 3; title = "Missing method"; body = "**Symptom:** x"; url = "u3"
             labels = @(@{ name = "feature" }, @{ name = "verify-fix" }, @{ name = "2-moderate" })
             comments = @(@{ body = "Shipped today." })
+        },
+        [PSCustomObject]@{
+            number = 4; title = "Lifecycle checker migration"; body = "**Symptom:** retired lifecycle labels remain accepted."; url = "u4"
+            labels = @(@{ name = "enhancement" }, @{ name = "verify-fix" }, @{ name = "tooling" }, @{ name = "2-moderate" })
+            comments = @(@{ body = "Verification method (autonomous): run the lifecycle self-tests. Expected: all retired-label fixtures are rejected." })
+        },
+        [PSCustomObject]@{
+            number = 5; title = "Mixed retired lifecycle"; body = "**Symptom:** a retired label survived migration."; url = "u5"
+            labels = @(@{ name = "bug" }, @{ name = "diagnostics-armed" }, @{ name = "Fixed" }, @{ name = "cross-mod" }, @{ name = "2-moderate" })
+            comments = @(@{ body = "Diagnostic method: run the lifecycle audit. Expected: mixed retired labels are rejected." })
+        },
+        [PSCustomObject]@{
+            number = 6; title = "Runtime weapon documentation regression"; body = "**Symptom:** runtime weapon behavior regressed."; url = "u6"
+            labels = @(@{ name = "bug" }, @{ name = "documentation" }, @{ name = "regression" }, @{ name = "Tweaker: Weapons" }, @{ name = "CWV" }, @{ name = "cross-mod" }, @{ name = "verify-fix" }, @{ name = "0-critical" }, @{ name = "WOC" })
+            comments = @(@{ body = "Verification method (solo): launch the game and exercise the weapon regression. Expected: runtime behavior remains correct." })
         }
     )
     $closedFixture = @(
@@ -836,13 +836,18 @@ function Invoke-SelfTest {
         }
     }
     $result = Invoke-Audit $fixture $closedFixture
-    if ($result.open_issue_count -ne 3) { throw "fixture count drift" }
+    if ($result.open_issue_count -ne 6) { throw "fixture count drift" }
     if (-not $result.issues[0].clean) { throw "valid coop issue was rejected" }
-    if ($result.issues[1].findings -notcontains "lifecycle_count_0") { throw "missing lifecycle not found" }
+    if ($result.issues[1].findings -notcontains "lifecycle_count_0") { throw "retired not-started was incorrectly accepted as lifecycle" }
     if ($result.issues[1].findings -notcontains "type_count_2") { throw "duplicate type not found" }
     if ($result.issues[1].findings -notcontains "severity_count_0") { throw "missing severity not found" }
     if ($result.issues[1].findings -notcontains "literal_escaped_newline_in_body") { throw "escaped newline not found" }
     if ($result.issues[2].findings -notcontains "missing_test_method_comment") { throw "missing method not found" }
+    if (-not $result.issues[3].clean) { throw "repository-only issue with one lifecycle and autonomous method was rejected" }
+    if ($result.issues[3].verification_scope -ne "repository-only") { throw "repository-only verification scope drift" }
+    if ($result.issues[3].recommended_next_action -ne "run the documented autonomous verification, record evidence, then close") { throw "repository-only action drift" }
+    if ($result.issues[4].findings -notcontains "retired_lifecycle_present") { throw "mixed retired + canonical lifecycle was accepted" }
+    if ($result.issues[5].verification_scope -eq "repository-only") { throw "#661-shaped documentation modifier was incorrectly routed repository-only" }
     if ($result.issues[0].applicable_lessons -notcontains "network_peer_parity") { throw "coop lesson not classified" }
     if ($result.issues[0].verification_scope -ne "coop") { throw "coop verification scope drift" }
     if ($result.issues[0].recommended_next_action -ne "two-player in-game verification") { throw "coop action drift" }
@@ -886,7 +891,7 @@ function Invoke-SelfTest {
     }
     if (Test-CommentRequiresCoop $soloWording) { throw "explicit no-second-player wording was misclassified as co-op" }
     $coopWording = [PSCustomObject]@{
-        comments = @([PSCustomObject]@{ body = "## Co-op diagnostics method`nHost with two humans. Expected: bounded evidence." })
+        comments = @([PSCustomObject]@{ body = "## Diagnostic method (co-op)`n1. Host with two humans and capture the result.`nExpected: bounded evidence." })
     }
     if (-not (Test-CommentRequiresCoop $coopWording)) { throw "co-op diagnostics/two-humans wording was missed" }
     $scopedCoopWording = [PSCustomObject]@{
@@ -914,12 +919,12 @@ function Invoke-SelfTest {
     }
     if (-not (Test-CommentRequiresCoop $qualifiedScopedCoopWording)) { throw "qualified co-op method header was missed" }
     $twoPlayerScopedCoopWording = [PSCustomObject]@{
-        comments = @([PSCustomObject]@{ body = "**TEST METHOD (two-player co-op)**`nReverse roles once.`n`n**PASS =** both peers agree." })
+        comments = @([PSCustomObject]@{ body = "**TEST METHOD (two-player co-op)**`n1. Reverse roles once.`n`n**PASS =** both peers agree." })
     }
     if (-not (Test-CommentRequiresCoop $twoPlayerScopedCoopWording)) { throw "two-player co-op method header was missed" }
     if (-not (Test-HasMethodAndExpected $twoPlayerScopedCoopWording)) { throw "PASS-equals expected-result wording was missed" }
     $coopRetestWording = [PSCustomObject]@{
-        comments = @([PSCustomObject]@{ body = "Probe extension shipped. Next co-op retest localizes the first divergent peer. Expected identities are logged." })
+        comments = @([PSCustomObject]@{ body = "Probe extension shipped. Next co-op test method: capture both peers and localize the first divergence. Expected identities are logged." })
     }
     if (-not (Test-CommentRequiresCoop $coopRetestWording)) { throw "co-op retest wording was missed" }
     $floorCorrectionWording = [PSCustomObject]@{
@@ -933,6 +938,19 @@ function Invoke-SelfTest {
         comments = @([PSCustomObject]@{ body = "TEST METHOD (solo)`n1. Exercise the control.`n2. Repeat it.`n**PASS:** the replacement path remains bounded." })
     }
     if (-not (Test-HasMethodAndExpected $passColonWording)) { throw "PASS-colon expected-result wording was missed" }
+    $templateBodyDiagnostic = [PSCustomObject]@{
+        body = "### Diagnostic method (runnable now)`n1. Run the lifecycle checker against the retired-label fixture.`n### Expected result`nThe fixture is rejected."
+        comments = @()
+    }
+    if (-not (Test-HasMethodAndExpected $templateBodyDiagnostic -IncludeBody)) { throw "new diagnostic template body was not accepted as its initial method" }
+    if (Test-HasMethodAndExpected $templateBodyDiagnostic) { throw "verify lifecycle incorrectly accepted a body without a current method comment" }
+    $staleThenIncomplete = [PSCustomObject]@{
+        comments = @(
+            [PSCustomObject]@{ body = "TEST METHOD (solo)`n1. Run the old check.`nExpected: old pass." },
+            [PSCustomObject]@{ body = "Diagnostic method:`n1. Run the replacement probe; output contract pending." }
+        )
+    }
+    if (Test-HasMethodAndExpected $staleThenIncomplete) { throw "older valid method masked an incomplete current replacement" }
     $soloCannotRepro = [PSCustomObject]@{
         comments = @([PSCustomObject]@{ body = "Test method corrected: a solo host cannot reproduce this reliable queue; use a remote peer. Expected: no crash." })
     }

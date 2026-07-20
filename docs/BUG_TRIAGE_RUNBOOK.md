@@ -247,41 +247,39 @@ UPLOAD - a local deploy alone is silently clobbered.
   9).** Shipping a fix or diagnostic is what flips an issue into "ready to test",
   and that signal is a GitHub label, not just a comment. `PROJECT_STANDARDS.md`
   §11 requires it "in the same pass as the CHANGELOG entry":
-  - **PREREQ (user rule 2026-07-12, issue #479): post the test-method comment
-    FIRST** - how to test (command / repro steps) + the expected result. A
-    status label on an issue without that comment is invalid and will be
-    removed. No test method you can state = the issue is not ready for a
-    verify/diagnostics label.
-  - **SCOPE (user rule 2026-07-12): verify-* labels are for HUMAN in-game
-    verification only** - log evidence of the fix, or eyes-on testing. A
-    documentation or script/tooling issue (docs, qa/ checks, tools/, pipeline)
-    never takes verify-*/diagnostics-armed/Fixed: Claude verifies it autonomously
-    and CLOSES it directly, posting the verification evidence in the closing
-    comment (`PROJECT_STANDARDS.md` §11 human-verification scope).
-  - `gh issue edit <N> --add-label verify-fix` when you shipped a **code fix**
-    the user now confirms in-game (this is the common case).
+  - **PREREQ (user rule 2026-07-12, issue #479): establish the selected method
+    FIRST** - how to test (command / repro steps) + the expected result, runnable
+    now. A new diagnostic may use the issue template's explicit diagnostic-method
+    body field; a verify lifecycle requires a current method comment. Never strip
+    an existing lifecycle alone while correcting invalid metadata.
+  - **ROUTING (user rule 2026-07-19):** all open issues use the same three
+    lifecycle labels. Runtime work is human/in-game; repository-only work uses
+    the explicit `tooling` routing label and is excluded from generated playtest
+    scripts. `documentation` is content-only and does not route by itself. Post
+    the autonomous command/review and expected output.
+  - `gh issue edit <N> --add-label verify-fix` when a **complete fix** is ready:
+    the user confirms runtime work in-game; the maintainer runs the documented
+    autonomous check for repository-only work.
   - `gh issue edit <N> --remove-label verify-fix --add-label verify-fix-coop`
     when the verification needs **2+ people** (cross-peer wire safety, host/client
-    desync, hot-join). ship.ps1 auto-applies plain `verify-fix`; the swap is your
-    manual follow-up in the same pass (user rule 2026-07-11). **The tester count
+    desync, hot-join). Mark the CHANGELOG entry `[verify-fix-coop]`; ship.ps1
+    rejects an unmarked or contradictory transition. **The tester count
     in the test-method comment decides the label** (user rule 2026-07-12, issues
     280/278): if your test method says 2+ people, the label is coop, full stop —
     and a peer-dependent crash class (send-queue overflow, husk resolution) can
-    never carry a solo test method. ship.ps1 prints a `COOP?` hint on cross-peer-
-    smelling entries.
-  - `gh issue edit <N> --add-label diagnostics-armed` when you shipped
-    **instrumentation only** (no behavior change) and need a repro to capture data.
-  - `--remove-label not-started` in the same command if the issue carried it -
-    the first shipped work retires that marker (issue #498, user rule 2026-07-12).
+    never carry a solo test method.
+  - `gh issue edit <N> --add-label diagnostics-armed` when bounded runtime
+    instrumentation/evidence capture or an autonomous repository diagnostic is ready.
+  - Remove every competing lifecycle in the same `gh issue edit`; also remove
+    retired `not-started` / `Fixed` labels when encountered.
   - Never more than one status label at a time, never invent a new one. Every open
-    issue carries exactly one lifecycle label (`not-started` until work ships) -
+    issue carries exactly one lifecycle label -
     a shipped-but-unlabeled fix is invisible to the user's backlog view. Label every
     issue the ship addressed (here: the primary Issue AND any it corroborates/fixes
     together).
-  - If the fix touched a dev-build menu option, also move its `_localization.lua`
-    GitHub lifecycle label (`not-started` -> `verify-fix`/`diagnostics-armed`) in the same pass
-    (issue #301; `LOCALIZATION_STANDARD.md` §13) - unless another session owns
-    that file right now, in which case note it and leave the tag to them.
+  - If the fix touched player-facing localization, run the localization leak gate
+    and keep lifecycle metadata exclusively on the GitHub issue. Localization
+    values never carry GitHub lifecycle labels (`LOCALIZATION_STANDARD.md` §13).
 - [ ] **Refresh by tester role.** The author on PC-A tests the hash-verified
   local deploy without restarting Steam. Volunteer testers unsubscribe and
   resubscribe through the designated dev collection, then confirm the loaded
@@ -293,27 +291,28 @@ UPLOAD - a local deploy alone is silently clobbered.
 
 ## STEP 8 - VERIFY
 
-- [ ] **Hand the user ONE concrete in-game check.** Name the screen, the action,
-  and the expected result: "load the keep, wield the scythe, and in third person
-  the blade should point down, not sideways." One check, not a checklist.
-- [ ] **NEVER claim "fixed" until the user confirms in-game.** Compile success
-  and a structural code review are not verification. Say "shipped v0.12.152-dev,
-  please check X" - not "fixed".
+- [ ] **Provide ONE concrete verification.** For runtime work, name the screen,
+  action, and expected in-game result. For repository-only work, name the exact
+  autonomous command/review and expected output. One bounded method, not a vague
+  checklist.
+- [ ] **NEVER claim a runtime issue "fixed" until the user confirms in-game.**
+  Compile success and structural review are not runtime verification. Say
+  "shipped v0.12.152-dev, please check X" - not "fixed". Repository-only work
+  may close after its documented autonomous verification passes.
 - [ ] **If it is still broken, believe them.** Return to STEP 2 with the NEW
   log (they must be on the version you just shipped - re-verify the echoed
   version first). Do not re-defend the previous diagnosis.
-- [ ] **When the user confirms the fix in-game:** swap the verify-* label for
-  `Fixed` (`gh issue edit <N> --remove-label verify-fix --add-label Fixed`).
-  `Fixed` is NOT a close signal - it means the **post-fix pass is still owed**:
+- [ ] **When verification passes:** record the human or autonomous evidence,
+  keep the existing verify lifecycle while completing the **post-fix pass**:
   harden the code path (guard the CLASS, not just the instance), write/extend the
   BUG_CLASSES.md entry and the owning mod doc, and add a regression test
-  (`_rt_register` / QA check) locking the invariant. Close only when that pass is
-  done or explicitly judged not applicable (say so in a comment). Taxonomy:
-  `PROJECT_STANDARDS.md` §11.
+  (`_rt_register` / QA check) locking the invariant. Then close when that pass is
+  done or explicitly judged not applicable (say so in a comment); do not move an
+  open issue to the retired `Fixed` label. Taxonomy: `PROJECT_STANDARDS.md` §11.
 
 ---
 
-## STEP 9 - CLOSE (after the user confirms the fix)
+## STEP 9 - CLOSE (after human or autonomous verification)
 
 - [ ] **`_rt_register` regression marker** where the repo pattern applies. Add a
   runtime assertion that would FAIL if the bug returned, registered into the

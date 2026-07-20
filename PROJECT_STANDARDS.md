@@ -1659,8 +1659,9 @@ gh issue list --repo Ensrick/vermintide-2-tweaker --state all # incl. closed
    `gh issue create` it with appropriate labels.
 2. Reference the issue number from the code (`-- See #N`) and any docs that
    describe the work.
-3. When the fix ships, close the issue on GitHub with a comment linking to
-   the commit / CHANGELOG entry.
+3. When work ships, keep the issue open under its validated verify lifecycle.
+   Close only after the named human/autonomous verification passes and the
+   post-fix hardening pass is complete (or explicitly documented not applicable).
 4. Run `gh issue list` at the start of a session if you want a picture of
    what's open before diving in.
 
@@ -1727,12 +1728,10 @@ status. This was ad-hoc "wild west" through 2026-07-03 (four overlapping status
 labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix.
 
 **Status (exactly 1 of these on every OPEN issue) — the lifecycle signal:**
-- `not-started` — no fix or diagnostic work attempted yet (added 2026-07-12,
-  issue #498; how the user sees the untouched backlog at a glance). Applied by
-  the #498 audit to every open issue with zero work evidence; REMOVE it in the
-  same pass that ships the first work and adds a real status label.
-- `verify-fix` — a code fix shipped; the user tests it in-game (solo-verifiable).
-  Reserved for HUMAN in-game verification — see the scope rule below.
+- `verify-fix` — a complete candidate fix is ready for verification. Runtime
+  work uses the documented one-player/in-game method; repository-only work
+  (explicitly routed by `tooling`) uses its documented autonomous check and is
+  excluded from generated in-game playtest scripts.
 - `verify-fix-coop` — a code fix shipped whose verification needs **2+ people**
   (cross-peer wire safety, host/client desync, hot-join races). REPLACES
   `verify-fix`, never coexists with it. Mark the shipped CHANGELOG header
@@ -1744,51 +1743,52 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   doctrine violation — whoever posts or reads such a comment swaps the label in
   the same pass. Also sanity-check the test itself: a crash class that only
   exists with a remote peer (send-queue overflow, husk resolution) cannot have
-  a solo test method (issue 205 correction). ship.ps1 prints a `COOP?` warning
-  when a shipped entry smells cross-peer but lacks the explicit marker.
-- `diagnostics-armed` — a diagnostic/probe shipped; repro in-game to capture data.
-  If collection needs 2+ players, keep this as the sole lifecycle label and add
-  the orthogonal `coop-required` qualifier. Mark the CHANGELOG header
-  `[coop-required]` so ship.ps1 creates/applies the qualifier. Do not invent a
-  `diagnostics-armed-coop` lifecycle label.
-- `Fixed` — the fix is **verified** (in-game confirmation by the user OR the
-  designated playtester, GitHub user RainReligion — his issue comments are
-  first-class verification input, user rule 2026-07-12).
-  Replaces the verify-* label. NOT a close signal: `Fixed` means the **post-fix pass
-  is still owed** — harden the code path (guards, fail-safes on the class, not just
-  the instance), update the docs that would have prevented it (BUG_CLASSES.md entry,
-  owning DEVELOPMENT.md/recipe doc, CLAUDE.md gotcha if repo-wide), and add a
-  regression test (`_rt_register` / QA check) that locks the invariant. Close the
-  issue only when the post-fix pass is done (or explicitly judged not applicable —
-  say so in a comment).
+  a solo test method (issue 205 correction). ship.ps1 rejects a lifecycle whose
+  selected method topology disagrees with the requested solo/co-op state.
+- `diagnostics-armed` — a bounded evidence path is ready. Runtime work may use
+  shipped instrumentation or an existing reproducible log path; repository-only
+  work uses a deterministic script/doc/source audit. If runtime collection needs
+  2+ players, keep this as the sole lifecycle and add the orthogonal
+  `coop-required` qualifier. Mark the CHANGELOG header `[coop-required]` so
+  ship.ps1 creates/applies it. Do not invent `diagnostics-armed-coop`.
+- **No untouched holding lifecycle.** A newly filed issue starts
+  `diagnostics-armed` only when its body already states the runnable evidence
+  method and expected result. Before work stops, either retain that actionable
+  diagnostic or replace it with the appropriate complete-fix lifecycle.
 - **Test-method prerequisite (user rule 2026-07-12, set on issue #479):**
-  `verify-fix`, `verify-fix-coop`, and `diagnostics-armed` may only be applied
-  once the issue carries a comment stating HOW to test (chat command / repro
-  steps) and the EXPECTED result (the printed line, the behavior, the absence
-  of the crash). A status label without that comment is invalid and gets
-  removed on sight - the user did exactly that on #479. Post the test comment
-  in the same pass as the label.
+  every lifecycle may only be applied once the selected method states HOW to
+  verify/diagnose and the EXPECTED result and is runnable now. A newly filed
+  `diagnostics-armed` issue may use its explicit `Diagnostic method (runnable
+  now)` body field; verify lifecycles require a current explicit method comment.
+  Runtime methods name the chat command/repro and visible/log result;
+  repository-only methods name the deterministic command/review and expected
+  output. Audit, ship, and queue generation consume the same selector policy.
 - **Complete-feature prerequisite (user rule 2026-07-12, set on issue #505):**
   `verify-fix` NEVER goes on a partially-delivered feature. If any spec item is
   unbuilt (deferred sub-feature, blocked dependency, "part 2 in flight"), the
-  issue carries NO verify-* label until the spec is complete or the user
+  issue stays `diagnostics-armed` until the spec is complete or the user
   explicitly re-scopes it - a tester filtering verify-fix must find only things
   that can pass in full. Partial progress lives in comments, not the label.
-- **Human-verification scope (user rule 2026-07-12):** `verify-fix` / `verify-fix-coop`
-  / `Fixed` are RESERVED for issues whose verification needs a human in-game -
-  generating a log with evidence of the fix, or eyes-on testing/oversight. The user
-  filters by verify-* to find things HE can test, so each must carry an in-game
-  test method (the prerequisite above). Documentation and script/tooling issues
-  (docs, qa/ checks, tools/, build pipeline) NEVER take verify-* / diagnostics-armed
-  / Fixed: Claude verifies them autonomously (run the script, review the doc against
-  its claims) and walks them from open to CLOSED, posting the verification evidence
-  in the closing comment. While such an issue is open it carries `not-started` until
-  work ships; once work ships, verify and close in the same pass (or comment why it
-  must stay open, e.g. `blocked` on a promotion).
+- **Verification routing (user rule 2026-07-19):** lifecycle and test channel are
+  separate. Runtime issues enter the generated in-game playtest queue.
+  Documentation and script/tooling issues carry the same universal lifecycle.
+  The explicit `tooling` modifier routes them to autonomous verification and
+  excludes them from `PLAYTEST_SCRIPT.md` / `PLAYTEST_COOP.md`; `documentation`
+  is an orthogonal content modifier and never changes routing on its own.
+  `verify-fix-coop` is invalid for repository-only work.
+- **Verified closure:** human confirmation by the user or designated playtester
+  RainReligion is first-class verification input. After verification, harden the
+  path, update the owning prevention docs, add regression coverage, and close.
+  If that post-fix pass cannot finish immediately, the open issue keeps its
+  existing verify lifecycle and a comment records the remaining closure work.
 - **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
   merged into `diagnostics-armed`. Do not recreate them.
+- **Retired for OPEN issues 2026-07-19:** `not-started` and `Fixed`. Closed
+  history may retain them as evidence; neither counts toward open cardinality.
 - `qa/check_issue_status_labels.ps1` pass 3 sweeps all open issues and warns on
-  any carrying zero lifecycle labels (advisory, issue #498).
+  zero/multiple canonical lifecycles or any retired lifecycle mixed with a
+  canonical one (advisory, issue #498). The blocking CI cardinality guard rejects
+  the same states.
 
 **Type (exactly 1):**
 - `bug` — something is broken.
@@ -1808,29 +1808,29 @@ merge had repurposed it onto enemy_tweaker issues. Do NOT recreate `et`.)
 **Optional modifiers (informational, never a substitute for a type or lifecycle):**
 `regression` (a fix that broke a working feature), `audit`, `refactor`, `blocked`,
 `deferred`, `coop-required`. The last is a tester-routing qualifier primarily for
-`diagnostics-armed` (and optionally `not-started` when a known future repro needs
-2+ players). `verify-fix-coop` already conveys that requirement, so it does not
+`diagnostics-armed`. `verify-fix-coop` already conveys that requirement, so it does not
 also carry `coop-required`.
 
-When you ship a fix or a diagnostic for an issue, add the matching status label (and
-remove `not-started`) in the **same pass** as the CHANGELOG entry (rule #5 territory).
-Filing a new issue: give it a type + mod + `not-started` immediately; swap `not-started`
-for a real status label only once you have actually shipped work.
+When you ship a fix or diagnostic, add the matching status label and remove every
+competing/retired lifecycle in the **same pass** as the CHANGELOG entry. Filing a
+new issue: give it type + mod + `diagnostics-armed` with a runnable evidence method
+and expected result; replace that lifecycle only when a complete fix is ready.
 
-**Mechanized (issue #326).** `tools/ship/ship.ps1` step 6 now applies the status label
-automatically on every dev-stream ship: it parses the `#N` refs out of the CHANGELOG entry
-being shipped and runs `gh issue edit N --add-label` — `diagnostics-armed` when the entry
-header carries a `[diag]`/diagnostic/probe/instrument marker (instrumentation-only ship),
-`verify-fix-coop` when it carries `[verify-fix-coop]`, and `verify-fix` otherwise.
-`[coop-required]` adds the non-lifecycle qualifier to `diagnostics-armed`; the script
-idempotently creates that label if needed. Each issue edit chooses one effective lifecycle
-(`Fixed` and an existing coop verification are never downgraded), removes all competing
-lifecycle labels, and removes stale `coop-required` outside armed diagnostics. Every
-decision is printed so a mixed entry (fix + probe in one) can
-be corrected by hand; loc-sweep entries, closed issues, and non-existent numbers are
-skipped. Explicit `[docs]` / `[tooling]` entries are also skipped because their issues
-are verified and closed autonomously. The advisory `qa/check_issue_status_labels.ps1`
-guard backs this up by comparing top CHANGELOG references with GitHub lifecycle labels.
+**Mechanized (issue #326).** `tools/ship/ship.ps1` step 6 parses the `#N` refs
+from the shipped CHANGELOG entry, but it mutates no issue unless the header names
+exactly one explicit lifecycle marker: `[verify-fix]`, `[verify-fix-coop]`, or
+`[diagnostics-armed]`/`[diag]`. Before mutation it selects the current method via
+the shared lifecycle policy, verifies that it is runnable and names expected
+evidence, and checks method topology against the requested lifecycle.
+`[coop-required]` is valid only for co-op diagnostics. `[docs]` adds both
+`tooling` (repository routing) and `documentation` (content), while `[tooling]`
+adds only the routing label; repository `verify-fix-coop` remains invalid. A
+verify-to-diagnostics downgrade is blocked unless the selected replacement method
+cites failed-verification evidence. A validated transition receives an evidence
+comment, adds its target, and removes competing/retired lifecycles in the same
+edit. Loc sweeps, missing/ambiguous intent, invalid methods, closed issues, and
+non-issues are skipped without mutation. The advisory local scan and blocking CI
+cardinality guard backstop the transaction.
 
 ### Tracker lifecycle discipline (binding, issue #750)
 
@@ -1842,15 +1842,16 @@ un-mergeable.
 
 | Rule | Detail |
 |---|---|
-| One edit, add-then-remove | Every lifecycle change goes through `tools/ship/ship.ps1` `Get-LifecycleEditPlan` (ship.ps1:490) or an equivalent single `gh issue edit` that adds the target label AND removes every competing lifecycle label together. A bare `--remove-label` on a lifecycle label with no paired add is forbidden. |
-| Never leave an issue bare | Cardinality stays exactly 1 on every open issue at every instant. If you don't know the right target, the answer is `not-started`, not nothing. |
-| Never downgrade without failed-verify evidence | `verify-fix` / `verify-fix-coop` / `Fixed` may only move backward when a comment cites the failed verification (user/playtester log or report). A merged fix-PR, or an existing verify-* label plus its test-method comment, is do-not-downgrade evidence - a reconciliation that cannot see the fix must leave the label alone. |
+| One edit, add-then-remove | Every lifecycle change goes through `tools/ship/ship.ps1` `Get-ShipIssueTransitionDecision` / `Get-LifecycleEditPlan` or an equivalent single `gh issue edit` that adds the target label AND removes every competing lifecycle label together. A bare `--remove-label` on a lifecycle label with no paired add is forbidden. |
+| Never leave an issue bare | Cardinality stays exactly 1 on every open issue at every instant. If no complete fix is ready, keep `diagnostics-armed` only with a runnable bounded evidence method; do not create an untouched holding state. |
+| Never downgrade without failed-verify evidence | `verify-fix` / `verify-fix-coop` may move back to diagnostics only when a comment cites the failed verification (user/playtester log or autonomous check). A merged fix PR, or an existing verify-* label plus its method comment, is do-not-downgrade evidence - a reconciliation that cannot see the fix must leave the label alone. |
 | Comment every change | Each lifecycle edit gets an issue comment naming the evidence that drove it (shipped version, failed-verify log, user confirmation). An uncommented label change is presumed wrong and gets reverted to the last evidenced state. |
 
 **CI enforcement:** `tools/github/check-lifecycle-cardinality.ps1` runs as a
 blocking step in `.github/workflows/qa.yml` (issues:read only, one list call)
 and fails the required `qa-gate` when any open issue's lifecycle cardinality is
-not exactly 1, printing the offending numbers and labels. The advisory
+  not exactly 1 or carries any retired open lifecycle alongside a canonical
+  lifecycle, printing the offending numbers and labels. The advisory
 `qa/check_issue_status_labels.ps1` sweep remains the local nudge; the CI step is
 the backstop that the #750 sweep proved necessary.
 
@@ -1878,8 +1879,8 @@ hides as N unrelated-looking tickets and the same fix gets re-investigated from 
 different symptoms.
 
 **Lifecycle-label integrity.** Exactly ONE lifecycle label per open issue (the
-Labels status set above: `not-started` / `verify-fix` / `verify-fix-coop` /
-`diagnostics-armed` / `Fixed`). The ship.ps1 status-label mechanization (issue
+Labels status set above: `verify-fix` / `verify-fix-coop` /
+`diagnostics-armed`). The ship.ps1 status-label mechanization (issue
 #326) already enforces one-lifecycle on ship; manual edits must not reintroduce a
 second. Any batch label-cleanup session MUST log what it removed and why, in an
 issue comment on each affected issue. Silent stripping is banned: correct
@@ -2157,7 +2158,7 @@ Per the chest-of-trials root-cause analysis (`DORMANT_BOON_RARITY` indexed by cl
 
 ---
 
-*Last updated: 2026-07-18 - added §11b zero-warning policy (fix/baseline/checker-defect within one week + pre-crash-probe-needs-a-consumer corollary), §11 umbrella doctrine + lifecycle-label-cleanup integrity, §8.7 session hygiene (git/worktree/branch closeout), §5.1c retained-state verification (read-back not setter-success), and three §14 card rows (claim.ps1 / check_pipeline_state.ps1 / generate_playtest.ps1). Prior update 2026-07-16 - reconciled cfg-owned visibility, suffix-owned ship approval, enabled-remote deployment, GitHub-only current status, and empirical issue fallback comments. Prior update 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
+*Last updated: 2026-07-19 - made `verify-fix` / `verify-fix-coop` / `diagnostics-armed` the universal three-state OPEN lifecycle, retired open `not-started` / `Fixed`, and separated repository-only autonomous routing from in-game playtest generation. Prior update 2026-07-18 - added §11b zero-warning policy (fix/baseline/checker-defect within one week + pre-crash-probe-needs-a-consumer corollary), §11 umbrella doctrine + lifecycle-label-cleanup integrity, §8.7 session hygiene (git/worktree/branch closeout), §5.1c retained-state verification (read-back not setter-success), and three §14 card rows (claim.ps1 / check_pipeline_state.ps1 / generate_playtest.ps1). Prior update 2026-07-16 - reconciled cfg-owned visibility, suffix-owned ship approval, enabled-remote deployment, GitHub-only current status, and empirical issue fallback comments. Prior update 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
 pre-authorized for the full pipeline + git commit/push; stable promotions need a
 fresh per-build signal), sec. 8.5a gate semantics (errors block, warnings
 report), sec. 14 card gained the approval axis + AFTER-shipping steps.

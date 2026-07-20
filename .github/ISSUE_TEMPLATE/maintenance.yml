@@ -1,16 +1,17 @@
-name: Maintenance or source investigation
-description: Propose documentation, QA, refactoring, or engine-source tracing work.
+name: Repository maintenance
+description: Propose documentation, QA, tooling, or repository-only refactoring work.
 title: "[area] "
 labels:
   - enhancement
-  - not-started
+  - diagnostics-armed
+  - tooling
 body:
   - type: markdown
     attributes:
       value: |
-        Keep the title to eight words after the `[area]` prefix. Apply one area/mod label, one severity label, and optional `documentation`, `audit`, or `refactor` modifiers after filing.
+        Keep the title to eight words after the `[area]` prefix. This template applies the repository-only `tooling` routing modifier. Apply one owning area/mod label, one severity label, and optional `documentation`, `audit`, or `refactor` modifiers after filing.
 
-        Maintenance starts `not-started`. Documentation, QA, and tooling work never uses `verify-fix`, `verify-fix-coop`, `diagnostics-armed`, or `Fixed`; validate it autonomously and close it with evidence. Runtime source investigations may move to `diagnostics-armed` only after a probe ships with reproduction steps and expected output.
+        Every open maintenance issue has exactly one lifecycle. This template starts `diagnostics-armed`; document the autonomous audit/check and expected result. Move complete repository-only work to `verify-fix`, run the named autonomous verification, record evidence, and close. Repository-only work never uses `verify-fix-coop` and is excluded from in-game playtest docs.
   - type: dropdown
     id: area
     attributes:
@@ -55,8 +56,19 @@ body:
   - type: textarea
     id: outcome
     attributes:
-      label: Completion criteria
+      label: Expected result and completion criteria
       description: Commands, checks, generated output, or reviewed claims that prove the work complete.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostic_method
+    attributes:
+      label: Diagnostic method (runnable now)
+      description: Exact autonomous command, source audit, or deterministic review that can be run immediately.
+      placeholder: |
+        1. Run the named checker or inspect the named owner files.
+        2. Compare the output against the stated repository invariant.
+        3. Record the exact first mismatch and command exit status.
     validations:
       required: true
   - type: textarea

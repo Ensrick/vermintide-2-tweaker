@@ -39,14 +39,14 @@ Use `N/A` with a reason for documentation or repository-only work.
 
 ## Issue lifecycle
 
-Every open issue has exactly one lifecycle label. New work stays `not-started`
-until something ships. A complete in-game fix moves to `verify-fix`, or
+Every open issue has exactly one lifecycle label: `diagnostics-armed`,
+`verify-fix`, or `verify-fix-coop`. A complete fix moves to `verify-fix`, or
 `verify-fix-coop` when 2+ people are required, only after a comment states the
 test and expected result. A live diagnostic moves to `diagnostics-armed` with
-the same prerequisite. Human confirmation moves it to `Fixed`; close only after
-hardening, documentation, and regression coverage. Documentation/tooling work
-is verified autonomously and closes with evidence instead of using those
-in-game labels.
+the same prerequisite. Documentation/tooling work uses the same lifecycle but
+is verified autonomously and excluded from in-game playtest scripts. After
+verification, complete hardening/documentation/regression coverage and close;
+`not-started` and `Fixed` are retired for open issues.
 
 ## Risks and rollback
 
