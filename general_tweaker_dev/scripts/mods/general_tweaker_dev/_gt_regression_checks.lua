@@ -2144,6 +2144,23 @@ function M.install(mod, _rt_register, deps)
         if mod._gt548_buff_probe_wired ~= true then
             return "bounded godmode buff observer is not wired"
         end
+        local deny = mod._gt548_should_deny_buff
+        if type(deny) ~= "function" then return "#548 debuff deny predicate absent" end
+        if not deny("troll_bile_ground", true) then return "Troll Bile not denied under godmode" end
+        if not deny("troll_bile_face", true) then return "vomit-in-face not denied under godmode" end
+        if not deny("movement_volume_generic_slowdown", true) then return "generic slow volume not denied under godmode" end
+        if deny("troll_bile_ground", false) then return "debuff denied with godmode off (must be vanilla)" end
+        if deny("heal_self", true) then return "godmode over-stripped a non-listed buff" end
+    end)
+
+    _rt_register("issue380_downed_mood_swallow_complete", function()
+        local moods = mod._gt_downed_moods
+        if type(moods) ~= "table" then return "#380 downed-mood swallow set absent" end
+        for _, name in ipairs({ "knocked_down", "bleeding_out", "wounded" }) do
+            if moods[name] ~= true then
+                return "#380 downed-mood swallow set missing " .. name
+            end
+        end
     end)
 
     _rt_register("issue939_godmode_ledge_boundary", function()

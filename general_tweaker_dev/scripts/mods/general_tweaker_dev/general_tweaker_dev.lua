@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.258-dev"
+local MOD_VERSION = "0.2.259-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1084,14 +1084,44 @@ mod._gt548_stagger_gate_wired = true
 local _gt548_seen_buffs = {}
 local _gt548_seen_count = 0
 local _GT548_MAX_BUFF_RECORDS = 24
+
+-- Issue #548 (debuff immunity): godmode's HP hooks (add_damage_network*) zero
+-- damage, but debuffs ride the SEPARATE buff funnel (BuffExtension:add_buff), so
+-- Troll Bile's slow/DoT, the vomit-in-face blind, and generic slow volumes still
+-- affect a protected human. Suppress a CURATED, cite-verified set of DEBUFFS
+-- while godmode is on. CURATED (never blanket) so godmode can never strip an
+-- unrelated status such as a heal or a friendly buff. Skipping the add is safe:
+-- the later BuffExtension.remove_buff(nil) bookkeeping is a no-op
+-- [src: scripts/entity_system/systems/buff/buff_extension.lua:890-892], and the
+-- generic-slow volume's volume_buffs[unit][name] = nil write reads back cleanly
+-- [src: buff_system.lua add_volume_buff]. Gas/warpfire stay OUT until the probe
+-- above captures their authored template names (observe-then-catalogue).
+mod._gt548_godmode_debuff_denylist = {
+    movement_volume_generic_slowdown = true,  -- generic slow volume [src: buff_templates.lua:5781]
+    troll_bile_ground                = true,  -- Troll Bile pool DoT+slow [src: buff_templates.lua:7490]
+    troll_bile_face                  = true,  -- vomit-in-face blind/slow [src: buff_templates.lua:8472]
+}
+-- Pure truth table shared by the live hook and /gt_regression_test. godmode off
+-- => always false (vanilla), so the cheat toggle fully governs the behaviour.
+mod._gt548_should_deny_buff = function(template_name, godmode_on)
+    return godmode_on == true and mod._gt548_godmode_debuff_denylist[template_name] == true
+end
+
 mod:hook("BuffExtension", "add_buff", function(func, self, template_name, ...)
     local unit = self and self._unit
-    if unit and _gt_godmode_active(unit) and _gt548_seen_count < _GT548_MAX_BUFF_RECORDS
+    local godmode_on = (unit and _gt_godmode_active(unit)) or false
+    if godmode_on and _gt548_seen_count < _GT548_MAX_BUFF_RECORDS
        and not _gt548_seen_buffs[template_name] then
         _gt548_seen_buffs[template_name] = true
         _gt548_seen_count = _gt548_seen_count + 1
         pcall(printf, "[gt:548] godmode buff observed template=%s count=%d/%d",
             tostring(template_name), _gt548_seen_count, _GT548_MAX_BUFF_RECORDS)
+    end
+    -- Curated debuff immunity: block the add for a protected human. remove_buff(nil)
+    -- later is a no-op (buff_extension.lua:890), so no bookkeeping faults.
+    if mod._gt548_should_deny_buff(template_name, godmode_on) then
+        pcall(printf, "[gt:548] godmode denied debuff template=%s", tostring(template_name))
+        return
     end
     return func(self, template_name, ...)
 end)
