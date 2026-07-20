@@ -63,6 +63,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$lifecycleMethodPolicy = Join-Path $PSScriptRoot '..\verify\lifecycle_method_policy.ps1'
+if (-not (Test-Path -LiteralPath $lifecycleMethodPolicy -PathType Leaf)) {
+    throw "Shared lifecycle method policy not found: $lifecycleMethodPolicy"
+}
+. $lifecycleMethodPolicy
 
 $launcherPathHelpers = Join-Path $PSScriptRoot '..\vmb-launcher-path.ps1'
 if (-not (Test-Path -LiteralPath $launcherPathHelpers -PathType Leaf)) {
@@ -517,7 +522,8 @@ function Test-DeployFileEquivalent {
 }
 
 # Dev-stream = MOD_VERSION carries a release-track suffix. Only dev-stream
-# ships auto-label; a clean stable promotion re-ships already-labeled work.
+# ships run explicit lifecycle-transition automation; a clean stable promotion
+# re-ships already-labeled work.
 function Test-DevStreamVersion {
     param([string]$Version)
     return [bool]($Version -match '-(dev|alpha|beta|rc)\b')
@@ -542,48 +548,68 @@ function Get-TopChangelogEntry {
 }
 
 # Decide what (if anything) to label from a shipped entry. Returns
-# @{ Skip; Label; Refs; Coop; CoopRequired }. `CoopRequired` is the explicit
-# changelog intent; `Coop` is only the legacy heuristic/reminder.
+# @{ Skip; Label; Refs; Coop; CoopRequired }. `CoopRequired` is only the
+# orthogonal diagnostics qualifier; `verify-fix-coop` carries its own topology.
+# `Coop` is only the legacy heuristic/reminder.
 #   * loc-sweep headers are skipped: their #N refs are tag CONTEXT, not
 #     shipped work (same heuristic as qa/check_issue_status_labels.ps1).
-#   * Explicit [docs] / [tooling] headers are skipped because those issues are
-#     verified and closed autonomously, never routed to human in-game testing.
-#   * Label choice is ENTRY-level via header markers; a mixed fix+probe entry
-#     gets one label for all refs -- the caller prints it for hand-correction.
+#   * Explicit [docs] / [documentation] headers add both the `documentation`
+#     content modifier and the `tooling` repository-routing label. `[tooling]`
+#     adds only `tooling`.
+#   * Label choice is ENTRY-level via exactly one explicit lifecycle marker;
+#     missing or mixed intent fails closed before any GitHub mutation.
 #   * Explicit `[verify-fix-coop]` selects that lifecycle label. Explicit
 #     `[coop-required]` adds the orthogonal qualifier to diagnostics-armed.
 #     The Coop smell remains a reminder when neither explicit marker is present.
 function Get-ShipLabelPlan {
     param([string]$Header, [string]$Entry)
     if ($Header -match '(?i)(localization|loc sweep|status-tag doctrine|menu wording|localization audit|loc audit)') {
-        return @{ Skip = 'loc-sweep'; Label = $null; Refs = @(); Coop = $false; CoopRequired = $false }
+        return @{ Skip = 'loc-sweep'; Label = $null; Refs = @(); Coop = $false; CoopRequired = $false; RepositoryLabels = @() }
     }
-    if ($Header -match '(?i)\[(docs|documentation|tooling)\]') {
-        return @{ Skip = 'non-runtime'; Label = $null; Refs = @(); Coop = $false; CoopRequired = $false }
-    }
-    $coopRequired = [bool]($Header -match '(?i)\[(verify-fix-coop|coop-required)\]')
-    $diagnostic = [bool]($Header -match '(?i)\[diag\]|diagnostic|probe|instrument')
-    $label = if ($diagnostic) { 'diagnostics-armed' } elseif ($Header -match '(?i)\[verify-fix-coop\]') { 'verify-fix-coop' } else { 'verify-fix' }
+    $explicit = @()
+    if ($Header -match '(?i)\[verify-fix\]') { $explicit += 'verify-fix' }
+    if ($Header -match '(?i)\[verify-fix-coop\]') { $explicit += 'verify-fix-coop' }
+    if ($Header -match '(?i)\[(?:diagnostics-armed|diag)\]') { $explicit += 'diagnostics-armed' }
+    $explicit = @($explicit | Select-Object -Unique)
+    $repositoryLabels = if ($Header -match '(?i)\[(?:docs|documentation)\]') { @('tooling', 'documentation') }
+        elseif ($Header -match '(?i)\[tooling\]') { @('tooling') }
+        else { @() }
+    $coopRequired = [bool]($Header -match '(?i)\[coop-required\]')
     $coop = [bool]($Entry -match '(?i)(host *[/+] *(1 *)?client|non-\w+ +peer|husk|hot.join|2\+? *(player|tester|people)|two player|both peers|client CTD|CTDs? +a +client|desync|wire.safe|send.queue)')
     $numSet = @{}
     foreach ($m in [regex]::Matches($Entry, '#(\d+)')) { $numSet[[int]$m.Groups[1].Value] = $true }
     $refs = @($numSet.Keys | Sort-Object)
-    if ($refs.Count -eq 0) { return @{ Skip = 'no-refs'; Label = $label; Refs = @(); Coop = $coop; CoopRequired = $coopRequired } }
-    return @{ Skip = $null; Label = $label; Refs = $refs; Coop = $coop; CoopRequired = $coopRequired }
+    if ($refs.Count -eq 0) { return @{ Skip = 'no-refs'; Label = $null; Refs = @(); Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels } }
+    if ($explicit.Count -eq 0) { return @{ Skip = 'missing-lifecycle-marker'; Label = $null; Refs = $refs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels } }
+    if ($explicit.Count -ne 1) { return @{ Skip = 'ambiguous-lifecycle-marker'; Label = $null; Refs = $refs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels } }
+    $label = $explicit[0]
+    if ($coopRequired -and $label -ne 'diagnostics-armed') {
+        return @{ Skip = 'invalid-coop-qualifier'; Label = $label; Refs = $refs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels }
+    }
+    return @{ Skip = $null; Label = $label; Refs = $refs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels }
 }
 
-$LifecycleLabels = @('not-started', 'verify-fix', 'verify-fix-coop', 'diagnostics-armed', 'Fixed')
+$LifecycleLabels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed')
+$RetiredLifecycleLabels = @('not-started', 'Fixed')
 
 # Return the one lifecycle label that should survive and every competing label
-# to remove in the same `gh issue edit` invocation. Fixed always wins; an
-# existing coop verification is never downgraded by an unmarked later ship.
+# to remove in the same `gh issue edit` invocation. Retired lifecycle labels
+# are removed opportunistically. An existing coop verification is never
+# downgraded by an unmarked later ship.
 function Get-LifecycleEditPlan {
-    param([string[]]$Existing, [string]$Requested)
-    $target = if ($Existing -contains 'Fixed') { 'Fixed' }
-              elseif ($Requested -eq 'verify-fix' -and $Existing -contains 'verify-fix-coop') { 'verify-fix-coop' }
+    param([string[]]$Existing, [string]$Requested, [bool]$FailedVerificationEvidence = $false)
+    $existingVerify = if ($Existing -contains 'verify-fix-coop') { 'verify-fix-coop' }
+        elseif ($Existing -contains 'verify-fix') { 'verify-fix' }
+        else { $null }
+    if ($Requested -eq 'diagnostics-armed' -and $existingVerify -and -not $FailedVerificationEvidence) {
+        return @{ Target = $existingVerify; Remove = @(); Add = $false; BlockedDowngrade = $true }
+    }
+    $target = if ($Requested -eq 'verify-fix' -and $Existing -contains 'verify-fix-coop') { 'verify-fix-coop' }
               else { $Requested }
-    $remove = @($Existing | Where-Object { $LifecycleLabels -contains $_ -and $_ -ne $target } | Select-Object -Unique)
-    return @{ Target = $target; Remove = $remove; Add = -not ($Existing -contains $target) }
+    $remove = @($Existing | Where-Object {
+        (($LifecycleLabels -contains $_) -and $_ -ne $target) -or ($RetiredLifecycleLabels -contains $_)
+    } | Select-Object -Unique)
+    return @{ Target = $target; Remove = $remove; Add = -not ($Existing -contains $target); BlockedDowngrade = $false }
 }
 
 # Preserve an existing co-op routing qualifier when a later diagnostics ship
@@ -598,6 +624,65 @@ function Get-CoopQualifierEditPlan {
         Want = $want
         Add = $want -and -not $hasExisting
         Remove = $hasExisting -and $LifecycleTarget -ne 'diagnostics-armed'
+    }
+}
+
+# Pure, combined issue-transition decision. This is the single pre-mutation
+# boundary used by live ship and offline fixtures: selected method, repository
+# routing, topology, downgrade evidence, lifecycle edit, and qualifier edit are
+# evaluated together so independently-correct helpers cannot compose unsafely.
+function Get-ShipIssueTransitionDecision {
+    param(
+        [string[]]$Existing,
+        [string]$Requested,
+        [bool]$CoopRequired,
+        [string[]]$RepositoryLabels,
+        $Comments,
+        [string]$Body
+    )
+
+    $effectiveLabels = @($Existing) + @($RepositoryLabels)
+    $isRepositoryOnly = Test-VtRepositoryOnlyLabels $effectiveLabels
+    $allowBody = $Requested -eq 'diagnostics-armed'
+    $selection = Get-VtLifecycleMethodSelection -Comments $Comments -Body $Body -AllowBodyFallback:$allowBody
+    if (-not $selection.Valid) {
+        return @{ Ok = $false; Reason = 'invalid-current-method'; Selection = $selection; IsRepositoryOnly = $isRepositoryOnly }
+    }
+
+    $failedVerification = Test-VtFailedVerificationEvidence $selection.Method
+    $edit = Get-LifecycleEditPlan -Existing $Existing -Requested $Requested -FailedVerificationEvidence $failedVerification
+    if ($edit.BlockedDowngrade) {
+        return @{ Ok = $false; Reason = 'unevidenced-verify-downgrade'; Selection = $selection; Edit = $edit; IsRepositoryOnly = $isRepositoryOnly }
+    }
+
+    $target = $edit.Target
+    if ($isRepositoryOnly -and $target -eq 'verify-fix-coop') {
+        return @{ Ok = $false; Reason = 'repository-coop-lifecycle'; Selection = $selection; Edit = $edit; IsRepositoryOnly = $true }
+    }
+
+    $methodRequiresCoop = Test-VtMethodRequiresCoop $selection.Method
+    if ($target -eq 'verify-fix-coop' -and -not $methodRequiresCoop) {
+        return @{ Ok = $false; Reason = 'coop-label-with-solo-method'; Selection = $selection; Edit = $edit; IsRepositoryOnly = $isRepositoryOnly }
+    }
+    if ($target -eq 'verify-fix' -and $methodRequiresCoop) {
+        return @{ Ok = $false; Reason = 'solo-label-with-coop-method'; Selection = $selection; Edit = $edit; IsRepositoryOnly = $isRepositoryOnly }
+    }
+    if ($target -eq 'diagnostics-armed') {
+        $effectiveCoopRequired = $CoopRequired -or ($Existing -contains 'coop-required')
+        if ($methodRequiresCoop -ne $effectiveCoopRequired) {
+            return @{ Ok = $false; Reason = 'diagnostic-topology-mismatch'; Selection = $selection; Edit = $edit; IsRepositoryOnly = $isRepositoryOnly }
+        }
+    }
+
+    $coopEdit = Get-CoopQualifierEditPlan -Existing $Existing -LifecycleTarget $target -ExplicitlyRequired $CoopRequired
+    return @{
+        Ok = $true
+        Reason = $null
+        Selection = $selection
+        Edit = $edit
+        CoopEdit = $coopEdit
+        IsRepositoryOnly = $isRepositoryOnly
+        MethodRequiresCoop = $methodRequiresCoop
     }
 }
 
@@ -637,23 +722,23 @@ function Invoke-ShipSelfTest {
     Assert ($top.Entry -notmatch '#288') "entry text does not bleed into the second entry"
     Assert ($null -eq (Get-TopChangelogEntry -Lines @('no headers', 'here'))) "changelog without '## ' headers returns null"
 
-    $plan = Get-ShipLabelPlan -Header $top.Header -Entry $top.Entry
+    $plan = Get-ShipLabelPlan -Header ($top.Header + ' [verify-fix]') -Entry $top.Entry
     Assert ($null -eq $plan.Skip) "fix entry is not skipped"
     Assert ($plan.Label -eq 'verify-fix') "fix entry labels verify-fix"
     Assert (($plan.Refs -join ',') -eq '294,322') "refs harvested, deduped, sorted (294,322)"
 
-    $planD = Get-ShipLabelPlan -Header '## 0.7.225-dev - #144 retire trace, add [ct:vaul] probe' -Entry 'probe work for #144'
+    $planD = Get-ShipLabelPlan -Header '## 0.7.225-dev - #144 [diag] retire trace, add [ct:vaul] probe' -Entry 'probe work for #144'
     Assert ($planD.Label -eq 'diagnostics-armed') "probe-marker header labels diagnostics-armed"
 
     $planC = Get-ShipLabelPlan -Header '## 0.7.226-dev - #586 [verify-fix-coop] peer fix' -Entry 'host/client work for #586'
     Assert ($planC.Label -eq 'verify-fix-coop') "explicit coop marker labels verify-fix-coop"
-    Assert ($planC.CoopRequired) "explicit coop marker records coop verification intent"
+    Assert (-not $planC.CoopRequired) "verify-fix-coop does not duplicate the diagnostics-only coop-required qualifier"
 
     $planDC = Get-ShipLabelPlan -Header '## 0.7.227-dev - #600 [diag] [coop-required] wire probe' -Entry 'probe #600'
     Assert ($planDC.Label -eq 'diagnostics-armed') "coop diagnostic keeps diagnostics-armed as its lifecycle"
     Assert ($planDC.CoopRequired) "coop diagnostic requests the orthogonal coop-required qualifier"
 
-    $planSmell = Get-ShipLabelPlan -Header '## 0.7.228-dev - #601 peer fix' -Entry 'host/client fix for #601'
+    $planSmell = Get-ShipLabelPlan -Header '## 0.7.228-dev - #601 [verify-fix] peer fix' -Entry 'host/client fix for #601'
     Assert ($planSmell.Label -eq 'verify-fix') "coop-smelling prose alone does not silently change lifecycle intent"
     Assert ($planSmell.Coop -and -not $planSmell.CoopRequired) "coop smell remains a review reminder"
 
@@ -666,9 +751,14 @@ function Invoke-ShipSelfTest {
     Assert ($keepCoop.Target -eq 'verify-fix-coop') "plain ship never downgrades existing coop verification"
     Assert (($keepCoop.Remove -join ',') -eq 'verify-fix,not-started') "stronger lifecycle cleanup still restores cardinality one"
 
-    $keepFixed = Get-LifecycleEditPlan -Existing @('Fixed', 'verify-fix', 'diagnostics-armed') -Requested 'verify-fix-coop'
-    Assert ($keepFixed.Target -eq 'Fixed') "verified Fixed lifecycle is never downgraded"
-    Assert (($keepFixed.Remove -join ',') -eq 'verify-fix,diagnostics-armed') "Fixed cleanup removes stale competing lifecycle labels"
+    $retiredCleanup = Get-LifecycleEditPlan -Existing @('Fixed', 'not-started', 'diagnostics-armed') -Requested 'verify-fix-coop'
+    Assert ($retiredCleanup.Target -eq 'verify-fix-coop') "requested canonical lifecycle replaces retired labels"
+    Assert (($retiredCleanup.Remove -join ',') -eq 'Fixed,not-started,diagnostics-armed') "retired and competing lifecycle labels are removed atomically"
+
+    $blockedDowngrade = Get-LifecycleEditPlan -Existing @('verify-fix') -Requested 'diagnostics-armed'
+    Assert ($blockedDowngrade.BlockedDowngrade -and $blockedDowngrade.Target -eq 'verify-fix') "verify-to-diagnostics downgrade requires failed-verification evidence"
+    $allowedDowngrade = Get-LifecycleEditPlan -Existing @('verify-fix-coop') -Requested 'diagnostics-armed' -FailedVerificationEvidence $true
+    Assert (-not $allowedDowngrade.BlockedDowngrade -and $allowedDowngrade.Target -eq 'diagnostics-armed') "evidenced failed verification permits diagnostics transition"
 
     $keepDiagCoop = Get-CoopQualifierEditPlan -Existing @('diagnostics-armed', 'coop-required') -LifecycleTarget 'diagnostics-armed' -ExplicitlyRequired $false
     Assert ($keepDiagCoop.Want -and -not $keepDiagCoop.Add -and -not $keepDiagCoop.Remove) "unmarked diagnostics ship preserves existing coop-required routing"
@@ -679,11 +769,44 @@ function Invoke-ShipSelfTest {
     $removeStaleCoop = Get-CoopQualifierEditPlan -Existing @('coop-required') -LifecycleTarget 'verify-fix' -ExplicitlyRequired $false
     Assert (-not $removeStaleCoop.Want -and -not $removeStaleCoop.Add -and $removeStaleCoop.Remove) "leaving diagnostics removes stale coop-required qualifier"
 
+    $combinedBody = "### Diagnostic method (runnable now)`n1. Run the lifecycle fixture.`n### Expected result`nThe fixture passes."
+    $combinedDiagnostic = Get-ShipIssueTransitionDecision -Existing @('diagnostics-armed', 'tooling') -Requested 'diagnostics-armed' -CoopRequired $false -RepositoryLabels @('tooling') -Comments @() -Body $combinedBody
+    Assert ($combinedDiagnostic.Ok -and $combinedDiagnostic.Selection.Source -eq 'body' -and $combinedDiagnostic.IsRepositoryOnly) "combined transition accepts a runnable repository diagnostic body"
+
+    $combinedVerifyBodyOnly = Get-ShipIssueTransitionDecision -Existing @('diagnostics-armed') -Requested 'verify-fix' -CoopRequired $false -Comments @() -Body $combinedBody
+    Assert (-not $combinedVerifyBodyOnly.Ok -and $combinedVerifyBodyOnly.Reason -eq 'invalid-current-method') "combined transition forbids verify body fallback"
+
+    $soloMethod = @([pscustomobject]@{ body = "TEST METHOD (solo)`n1. Run the local verification.`nExpected: PASS." })
+    $combinedRepositoryCoop = Get-ShipIssueTransitionDecision -Existing @('verify-fix', 'tooling') -Requested 'verify-fix-coop' -CoopRequired $false -RepositoryLabels @('tooling') -Comments $soloMethod -Body ''
+    Assert (-not $combinedRepositoryCoop.Ok -and $combinedRepositoryCoop.Reason -eq 'repository-coop-lifecycle') "combined transition rejects repository-only co-op verification"
+
+    $coopMethod = @([pscustomobject]@{ body = "TEST METHOD (co-op)`n1. Host plus one client run the verification.`nExpected: both peers pass." })
+    $combinedPreserveCoop = Get-ShipIssueTransitionDecision -Existing @('verify-fix-coop') -Requested 'verify-fix' -CoopRequired $false -Comments $coopMethod -Body ''
+    Assert ($combinedPreserveCoop.Ok -and $combinedPreserveCoop.Edit.Target -eq 'verify-fix-coop') "combined transition preserves existing co-op verify and validates its co-op method"
+
+    $failedDiagnostic = @([pscustomobject]@{ body = "Diagnostic method (solo): verification still fails on the deployed build.`n1. Run the replacement probe.`nExpected: capture the first divergence." })
+    $combinedDowngrade = Get-ShipIssueTransitionDecision -Existing @('verify-fix') -Requested 'diagnostics-armed' -CoopRequired $false -Comments $failedDiagnostic -Body ''
+    Assert ($combinedDowngrade.Ok -and $combinedDowngrade.Edit.Target -eq 'diagnostics-armed') "combined transition permits an evidenced failed-verification downgrade"
+
+    $existingCoopDiagnostic = Get-ShipIssueTransitionDecision -Existing @('diagnostics-armed', 'coop-required') -Requested 'diagnostics-armed' -CoopRequired $false -Comments $coopMethod -Body ''
+    Assert ($existingCoopDiagnostic.Ok -and $existingCoopDiagnostic.CoopEdit.Want) "combined transition preserves an existing co-op diagnostic qualifier"
+
     $planL = Get-ShipLabelPlan -Header '## 0.12.204-dev - Localization: applied dev status-tag doctrine (#301)' -Entry 'refs #74 #108 as tag context'
     Assert ($planL.Skip -eq 'loc-sweep') "loc-sweep header is skipped"
 
-    $planT = Get-ShipLabelPlan -Header '## 0.1.3-dev - #602 [tooling] release check' -Entry 'tool-only work #602'
-    Assert ($planT.Skip -eq 'non-runtime') "explicit tooling/docs work is never sent to human verification"
+    $planT = Get-ShipLabelPlan -Header '## 0.1.3-dev - #602 [tooling] [verify-fix] release check' -Entry 'tool-only work #602'
+    Assert ($null -eq $planT.Skip -and $planT.Label -eq 'verify-fix' -and ($planT.RepositoryLabels -join ',') -eq 'tooling' -and ($planT.Refs -join ',') -eq '602') "explicit tooling work receives lifecycle and routing intent"
+    $planDocs = Get-ShipLabelPlan -Header '## 0.1.4-dev - #661 [docs] [verify-fix] lifecycle documentation' -Entry 'documentation work #661'
+    Assert (($planDocs.RepositoryLabels -join ',') -eq 'tooling,documentation') "docs marker adds repository routing and documentation content labels"
+    $runtimeDocumentation = Get-ShipIssueTransitionDecision -Existing @('bug', 'documentation', 'verify-fix', 'Tweaker: Weapons', 'CWV', 'cross-mod', '0-critical', 'WOC') -Requested 'verify-fix' -CoopRequired $false -RepositoryLabels @() -Comments $soloMethod -Body ''
+    Assert ($runtimeDocumentation.Ok -and -not $runtimeDocumentation.IsRepositoryOnly) "#661-shaped runtime issue stays in the playtest route"
+
+    $missingIntent = Get-ShipLabelPlan -Header '## 0.1.4-dev - #603 partial implementation' -Entry 'partial work #603'
+    Assert ($missingIntent.Skip -eq 'missing-lifecycle-marker') "unmarked work cannot receive an inferred verify lifecycle"
+    $ambiguousIntent = Get-ShipLabelPlan -Header '## 0.1.5-dev - #604 [diag] [verify-fix] mixed' -Entry 'mixed work #604'
+    Assert ($ambiguousIntent.Skip -eq 'ambiguous-lifecycle-marker') "mixed lifecycle markers fail closed"
+    $explicitBeatsProse = Get-ShipLabelPlan -Header '## 0.1.6-dev - #605 [verify-fix-coop] fix diagnostic output' -Entry 'host/client #605'
+    Assert ($explicitBeatsProse.Label -eq 'verify-fix-coop') "diagnostic prose cannot override explicit lifecycle intent"
 
     $planN = Get-ShipLabelPlan -Header '## 0.1.2-dev - housekeeping' -Entry 'no issue references here'
     Assert ($planN.Skip -eq 'no-refs') "entry without #N refs is a no-op"
@@ -1423,11 +1546,11 @@ switch ($uploadStatus) {
 #   * Loc-sweep entries (header matches the localization-doctrine pattern) are
 #     skipped: their #N refs are tag CONTEXT, not shipped work (same heuristic
 #     as qa/check_issue_status_labels.ps1).
-#   * [docs] / [tooling] entries are skipped: those issues are autonomously
-#     verified and closed, never assigned a human-verification lifecycle.
-#   * Label choice is ENTRY-level: a header carrying a [diag] / diagnostic /
-#     probe / instrument marker = instrumentation-only ship -> diagnostics-armed;
-#     explicit [verify-fix-coop] -> verify-fix-coop; anything else -> verify-fix.
+#   * [docs] entries add `tooling` plus `documentation`; [tooling] adds only
+#     `tooling`. The explicit tooling label routes autonomous verification.
+#   * Label choice is ENTRY-level and explicit: exactly one of [verify-fix],
+#     [verify-fix-coop], or [diagnostics-armed]/[diag]. Prose never supplies a
+#     default, and missing/mixed intent fails closed.
 #     Explicit [coop-required] adds that non-lifecycle qualifier to diagnostics.
 #     A MIXED entry (fix for one issue, probe for
 #     another) gets one label for all refs -- correct the odd one out by hand.
@@ -1476,31 +1599,27 @@ try {
             else {
                 $clHeader = $top.Header
                 $plan = Get-ShipLabelPlan -Header $top.Header -Entry $top.Entry
-                if ($plan.Skip -in @('loc-sweep', 'non-runtime')) {
-                    $reason = if ($plan.Skip -eq 'loc-sweep') { 'its refs are tag context, not shipped work' } else { 'docs/tooling work is verified and closed autonomously' }
-                    Write-Host "  $($plan.Skip) entry ($clHeader) -- $reason; skipping." -ForegroundColor DarkGray
+                if ($plan.Skip) {
+                    $reason = switch ($plan.Skip) {
+                        'loc-sweep' { 'its refs are tag context, not shipped work' }
+                        'no-refs' { 'the entry has no issue references' }
+                        'missing-lifecycle-marker' { 'the header must name exactly one of [verify-fix], [verify-fix-coop], or [diagnostics-armed]/[diag]' }
+                        'ambiguous-lifecycle-marker' { 'the header names more than one lifecycle' }
+                        'invalid-coop-qualifier' { '[coop-required] is valid only with [diagnostics-armed]/[diag]' }
+                        default { 'unknown label-plan rejection' }
+                    }
+                    $color = if ($plan.Skip -in @('loc-sweep', 'no-refs')) { 'DarkGray' } else { 'Yellow' }
+                    Write-Host "  $($plan.Skip) entry ($clHeader) -- $reason; no issue labels mutated." -ForegroundColor $color
                     $labelSummary += "skipped ($($plan.Skip) entry)"
                 }
                 else {
                     $statusLabel = $plan.Label
                     $issueRefs = $plan.Refs
-                    if ($plan.Skip -eq 'no-refs') {
-                        Write-Host "  no #N refs in the shipped entry ($clHeader) -- nothing to label." -ForegroundColor DarkGray
-                        $labelSummary += 'no issue refs in entry'
-                    }
-                    else {
+                    if ($issueRefs.Count -gt 0) {
                         Write-Host "  entry : $clHeader"
                         Write-Host "  label : $statusLabel (entry-level intent -- correct by hand if the entry is mixed fix+diag)"
-                        if ($statusLabel -eq 'diagnostics-armed' -and $plan.CoopRequired) {
-                            # Idempotently ensure the repository-level qualifier exists before
-                            # issue edits use it. This is not a lifecycle label.
-                            & gh label create 'coop-required' --repo $ghRepo --color 'D93F0B' --description 'Testing or diagnostics requires 2+ players' --force 2>$null | Out-Null
-                            if ($LASTEXITCODE -ne 0) {
-                                Write-Host "  WARNING: could not create/update 'coop-required'; issue edits may need manual follow-up." -ForegroundColor Yellow
-                            }
-                        }
                         foreach ($n in $issueRefs) {
-                            $json = & gh issue view $n --repo $ghRepo --json state,labels 2>$null
+                            $json = & gh issue view $n --repo $ghRepo --json state,labels,body,comments,url 2>$null
                             $meta = $null
                             if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($json)) {
                                 try { $meta = $json | ConvertFrom-Json } catch { $meta = $null }
@@ -1515,37 +1634,66 @@ try {
                             }
                             $existing = @()
                             if ($meta.labels) { $existing = @($meta.labels | ForEach-Object { $_.name }) }
-                            $edit = Get-LifecycleEditPlan -Existing $existing -Requested $statusLabel
+                            $decision = Get-ShipIssueTransitionDecision -Existing $existing -Requested $statusLabel -CoopRequired ([bool]$plan.CoopRequired) -RepositoryLabels @($plan.RepositoryLabels) -Comments $meta.comments -Body ([string]$meta.body)
+                            if (-not $decision.Ok) {
+                                $reasonText = switch ($decision.Reason) {
+                                    'invalid-current-method' { 'current lifecycle method is missing, non-runnable, or lacks expected evidence' }
+                                    'unevidenced-verify-downgrade' { 'verify-to-diagnostics downgrade lacks failed-verification evidence in the selected replacement method' }
+                                    'repository-coop-lifecycle' { 'repository-only work cannot use verify-fix-coop' }
+                                    'coop-label-with-solo-method' { 'verify-fix-coop conflicts with the selected non-co-op method' }
+                                    'solo-label-with-coop-method' { 'verify-fix conflicts with the selected co-op method; use [verify-fix-coop]' }
+                                    'diagnostic-topology-mismatch' { 'diagnostic method topology and the effective coop-required qualifier disagree' }
+                                    default { "transition policy rejected '$($decision.Reason)'" }
+                                }
+                                Write-Host ("  ! #{0}: {1}; no labels mutated" -f $n, $reasonText) -ForegroundColor Yellow
+                                $labelSummary += ("#{0} BLOCKED {1}" -f $n, $decision.Reason)
+                                continue
+                            }
+
+                            $selection = $decision.Selection
+                            $edit = $decision.Edit
+                            $isRepositoryOnly = $decision.IsRepositoryOnly
                             $removeLabels = @($edit.Remove)
                             # coop-required is meaningful for armed diagnostics only. Preserve
                             # an existing qualifier when a later diagnostic entry omits the
                             # redundant marker; otherwise ordinary re-ships can misroute a
                             # known co-op capture into the solo playtest queue.
-                            $coopEdit = Get-CoopQualifierEditPlan -Existing $existing -LifecycleTarget $edit.Target -ExplicitlyRequired $plan.CoopRequired
+                            $coopEdit = $decision.CoopEdit
                             $wantCoopQualifier = $coopEdit.Want
                             if ($coopEdit.Remove) { $removeLabels += 'coop-required' }
                             $editArgs = @()
                             if ($edit.Add) { $editArgs += @('--add-label', $edit.Target) }
                             if ($coopEdit.Add) { $editArgs += @('--add-label', 'coop-required') }
+                            foreach ($repositoryLabel in @($plan.RepositoryLabels)) {
+                                if (-not ($existing -contains $repositoryLabel)) {
+                                    $editArgs += @('--add-label', $repositoryLabel)
+                                }
+                            }
                             foreach ($labelToRemove in ($removeLabels | Select-Object -Unique)) { $editArgs += @('--remove-label', $labelToRemove) }
                             $editOk = $true
                             if ($editArgs.Count -gt 0) {
-                                & gh issue edit $n --repo $ghRepo @editArgs 2>$null | Out-Null
-                                $editOk = ($LASTEXITCODE -eq 0)
+                                if ($coopEdit.Add) {
+                                    & gh label create 'coop-required' --repo $ghRepo --color 'D93F0B' --description 'Testing or diagnostics requires 2+ players' --force 2>$null | Out-Null
+                                    if ($LASTEXITCODE -ne 0) { $editOk = $false }
+                                }
+                                if ($editOk) {
+                                    $transitionEvidence = "Lifecycle transition evidence: shipped entry '$clHeader' validated a runnable $($selection.Source)-based method with expected output; target lifecycle '$($edit.Target)'."
+                                    & gh issue comment $n --repo $ghRepo --body $transitionEvidence 2>$null | Out-Null
+                                    $editOk = ($LASTEXITCODE -eq 0)
+                                }
+                                if ($editOk) {
+                                    & gh issue edit $n --repo $ghRepo @editArgs 2>$null | Out-Null
+                                    $editOk = ($LASTEXITCODE -eq 0)
+                                }
                             }
                             if ($editOk) {
                                 $qualifierText = if ($wantCoopQualifier) { " + 'coop-required'" } else { '' }
                                 Write-Host ("  + #{0}: lifecycle '{1}'{2}; competing lifecycle labels removed" -f $n, $edit.Target, $qualifierText) -ForegroundColor Green
-                                Write-Host ("      REMINDER: #{0} needs a test-method comment (how to test + expected result) or the label is invalid (user rule 2026-07-12, PROJECT_STANDARDS s11)." -f $n) -ForegroundColor Yellow
-                                if ($edit.Target -eq 'verify-fix' -and $plan.Coop -and -not $plan.CoopRequired) {
-                                    Write-Host ("      COOP? entry smells like a 2+-tester verification. Mark the changelog header [verify-fix-coop] and correct this issue before assigning testers." -f $n) -ForegroundColor Magenta
-                                    $labelSummary += ("#{0} +{1} (CHECK COOP + test comment)" -f $n, $edit.Target)
-                                    continue
-                                }
-                                $labelSummary += ("#{0} ->{1}{2} (needs test comment)" -f $n, $edit.Target, $(if ($wantCoopQualifier) { '+coop-required' } else { '' }))
+                                $methodSummary = if ($isRepositoryOnly) { 'autonomous method validated' } else { 'runtime method validated' }
+                                $labelSummary += ("#{0} ->{1}{2} ({3})" -f $n, $edit.Target, $(if ($wantCoopQualifier) { '+coop-required' } else { '' }), $methodSummary)
                             } else {
-                                Write-Host ("  ! #{0}: gh issue edit failed -- set sole lifecycle '{1}' by hand" -f $n, $edit.Target) -ForegroundColor Yellow
-                                $labelSummary += ("#{0} FAILED -- set {1} by hand" -f $n, $edit.Target)
+                                Write-Host ("  ! #{0}: lifecycle evidence comment or issue edit failed; inspect before retry" -f $n) -ForegroundColor Yellow
+                                $labelSummary += ("#{0} FAILED lifecycle transition" -f $n)
                             }
                         }
                     }

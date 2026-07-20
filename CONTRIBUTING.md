@@ -54,19 +54,20 @@ bug classes each check covers.
 
 Every open issue has exactly one tracker lifecycle label:
 
-- `not-started` until the first code or diagnostic work ships.
-- `verify-fix` after a complete solo-verifiable fix ships with an in-game test
-  comment and expected result.
+- `verify-fix` after a complete solo-verifiable or repository-only fix is ready
+  with a test method and expected result.
 - `verify-fix-coop` instead when verification requires two or more people.
-- `diagnostics-armed` after a runtime probe ships with reproduction steps and
-  expected output.
-- `Fixed` only after the maintainer or designated playtester confirms the fix
-  in game. It remains open until hardening, documentation, and regression work
-  are complete.
+- `diagnostics-armed` while a bounded runtime or autonomous evidence path is
+  ready with reproduction/check steps and expected output.
 
-Documentation and tooling issues do not use the in-game verification labels;
-they are validated autonomously and closed with evidence. The complete taxonomy
-and prerequisites live in
+Issues carrying the explicit `tooling` routing label use the same lifecycle
+labels but are routed to autonomous verification and do not appear in generated
+in-game playtests. `documentation` is an orthogonal content modifier and does
+not make runtime work repository-only by itself.
+`not-started` and `Fixed` are retired for open issues. After verification,
+complete hardening/documentation/regression work and close.
+
+The complete taxonomy and prerequisites live in
 [PROJECT_STANDARDS section 11](./PROJECT_STANDARDS.md#11-pending-work-tracking).
 
 ## Stable, dev, and single streams

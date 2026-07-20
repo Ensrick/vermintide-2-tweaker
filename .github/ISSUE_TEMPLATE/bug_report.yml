@@ -3,14 +3,14 @@ description: Report a reproducible defect or crash with engine and test context.
 title: "[mod] "
 labels:
   - bug
-  - not-started
+  - diagnostics-armed
 body:
   - type: markdown
     attributes:
       value: |
         Keep the title to eight words after the `[mod]` prefix. Use empirical evidence and keep the body concise. Apply one mod label and one severity label after filing.
 
-        New issues start `not-started`. Replace it only when work ships: `verify-fix` for a complete one-player fix, `verify-fix-coop` for a complete fix requiring 2+ people, or `diagnostics-armed` for a live probe. Those labels require a comment with test steps and the expected result. `Fixed` requires human in-game confirmation and remains open for hardening, docs, and regression coverage. Tooling/docs issues are verified and closed autonomously instead.
+        Every open issue has exactly one lifecycle. This template starts `diagnostics-armed`, so the evidence/reproduction and expected-result fields must define a runnable diagnostic. Replace it with `verify-fix` only when a complete solo/autonomously verifiable fix is ready, or `verify-fix-coop` when runtime verification requires 2+ people. Tooling/docs carry the same lifecycle but are routed to autonomous verification.
   - type: dropdown
     id: mod
     attributes:
@@ -31,7 +31,6 @@ body:
         - "Tweaker: Weapons"
         - WOC
         - cross-mod
-        - tooling
     validations:
       required: true
   - type: dropdown
@@ -64,6 +63,17 @@ body:
         Runtime lifecycle: registration / creation / update / RPC / teardown / UI render
         Native seam: narrowest safe hook, data mutation, or API
         Runtime unknown: timing, asset, package, geometry, or live-state fact source cannot prove
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostic_method
+    attributes:
+      label: Diagnostic method (runnable now)
+      description: Exact steps or command that can be run immediately on the reported state. State player count and host/client roles when applicable.
+      placeholder: |
+        1. Confirm the affected mod version in the newest log.
+        2. Reproduce the symptom or run the bounded diagnostic command.
+        3. Attach the resulting log and note the first divergent visible state.
     validations:
       required: true
   - type: dropdown

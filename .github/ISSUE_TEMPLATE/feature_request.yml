@@ -3,14 +3,14 @@ description: Propose a new player capability with a source-native integration se
 title: "[mod] "
 labels:
   - feature
-  - not-started
+  - diagnostics-armed
 body:
   - type: markdown
     attributes:
       value: |
         Keep the title to eight words after the `[mod]` prefix. Describe observable behavior, not a broad wishlist. Apply one mod label and one severity label after filing.
 
-        New issues start `not-started`. Replace it only after the complete feature ships: `verify-fix` for one-player testing or `verify-fix-coop` for 2+ people, each with a test-method comment and expected result. Use `diagnostics-armed` only when a shipped probe must answer a runtime unknown. `Fixed` requires human in-game confirmation and a post-fix hardening/docs/regression pass.
+        Every open issue has exactly one lifecycle. This template starts `diagnostics-armed`, so include a runnable evidence method and expected result. Keep it until the complete feature is ready; then use `verify-fix` for solo/autonomous verification or `verify-fix-coop` for runtime verification needing 2+ people. Partial features never enter a verify queue.
   - type: dropdown
     id: mod
     attributes:
@@ -31,7 +31,6 @@ body:
         - "Tweaker: Weapons"
         - WOC
         - cross-mod
-        - tooling
     validations:
       required: true
   - type: dropdown
@@ -55,8 +54,19 @@ body:
   - type: textarea
     id: acceptance
     attributes:
-      label: Acceptance evidence
+      label: Expected result and acceptance evidence
       description: Concrete pass conditions, including disabled/default behavior and failure handling.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostic_method
+    attributes:
+      label: Diagnostic method (runnable now)
+      description: A bounded source/runtime check that can be run before implementation to establish the current behavior and first unknown boundary.
+      placeholder: |
+        1. Run or inspect the named current behavior.
+        2. Capture the current output/state at the proposed integration boundary.
+        3. Record the first unsupported or divergent condition.
     validations:
       required: true
   - type: textarea
