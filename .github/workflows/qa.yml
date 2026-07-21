@@ -100,9 +100,10 @@ jobs:
         # left 10 open issues with zero lifecycle labels, and the advisory
         # check_issue_status_labels.ps1 warning did not stop it. This step FAILS
         # on cardinality drift, retired open labels, blocked/coop leakage, or an
-        # invalid newest CURRENT LIVE TEST card on a ready issue. Read-only: needs
-        # only the issues:read permission above; ONE gh list call, no per-issue
-        # calls, never edits labels. No skip label - a red run is fixed by
+        # invalid/unpinned newest CURRENT LIVE TEST card on a ready issue, or
+        # multiple pinned exact cards. Read-only: pages issue labels and fetches
+        # full comments only for ready issues via GraphQL isPinned; never edits
+        # labels or comments. No skip label - a red run is fixed by
         # repairing the tracker (ship.ps1 Get-LifecycleEditPlan), not the gate.
         run: |
           ./tools/github/check-lifecycle-cardinality.ps1 -SelfTest

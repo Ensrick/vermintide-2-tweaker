@@ -10,7 +10,7 @@ body:
       value: |
         Keep the title to eight words after the `[mod]` prefix. Describe observable behavior, not a broad wishlist. Apply one mod label and one severity label after filing.
 
-        Every new issue starts `not-started`. Partial features and design work never enter the in-game queue. Add `diagnostics-armed` or `verify-fix` only with a valid `## CURRENT LIVE TEST` comment; finish useful solo testing before adding `coop-required`.
+        Every new issue starts `not-started`. Partial features and design work never enter the in-game queue. Add `diagnostics-armed` or `verify-fix` only with a valid pinned `## CURRENT LIVE TEST` comment that is the only pinned exact card; finish useful solo testing before adding `coop-required`.
   - type: dropdown
     id: mod
     attributes:

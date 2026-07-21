@@ -10,7 +10,7 @@ body:
       value: |
         Keep the title to eight words after the `[mod]` prefix. Use empirical evidence and keep the body concise. Apply one mod label and one severity label after filing.
 
-        Every new issue starts `not-started` and stays outside the in-game queue. Add `diagnostics-armed` or `verify-fix` only after posting a valid `## CURRENT LIVE TEST` comment. Complete useful solo testing first; add `coop-required` only when the current card records solo as passed or exhausted and the remaining test is co-op.
+        Every new issue starts `not-started` and stays outside the in-game queue. Add `diagnostics-armed` or `verify-fix` only after posting and pinning a valid `## CURRENT LIVE TEST` comment; it must be the only pinned exact card. Complete useful solo testing first; add `coop-required` only when the current card records solo as passed or exhausted and the remaining test is co-op.
   - type: dropdown
     id: mod
     attributes:

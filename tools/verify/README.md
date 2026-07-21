@@ -27,7 +27,9 @@ Every open issue carries exactly one lifecycle:
 orthogonal qualifier on a ready lifecycle, not a lifecycle itself. Blocked and
 tooling/repository-only issues remain `not-started` and never enter these docs.
 
-Every ready issue must have a latest comment in this exact shape:
+Every ready issue must have a latest comment in this exact shape. Pin it and
+unpin every older exact card; the newest exact card must be the one and only
+pinned exact card on the issue.
 
 ```markdown
 ## CURRENT LIVE TEST
@@ -71,4 +73,8 @@ the run and names every invalid issue. Invalid candidates are never silently
 published into a tester checklist.
 
 The same policy is consumed by ship automation, the open-issue audit, and the
-blocking CI tracker guard.
+blocking CI tracker guard. The blocking guard is the pin authority: it pages
+ready-issue comments through GitHub GraphQL and reads `IssueComment.isPinned`.
+It runs during code QA and in a lightweight issue/label/comment-event workflow,
+plus manual and daily checks. GitHub has no comment-pin workflow activity, so a
+pin-only change is caught by the next manual/daily run.
