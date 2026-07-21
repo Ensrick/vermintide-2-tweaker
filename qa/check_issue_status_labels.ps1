@@ -2,9 +2,9 @@
 #
 # Doctrine: PROJECT_STANDARDS.md § 11 "Labels". Every issue carries status +
 # type + mod. The lifecycle STATUS labels are:
-#   diagnostics-armed  - a bounded runtime/autonomous evidence path is ready.
-#   verify-fix         - a fix is ready for solo or autonomous verification.
-#   verify-fix-coop    - a code fix shipped; needs 2+ testers in-game.
+#   not-started        - not ready for in-game testing.
+#   diagnostics-armed  - a bounded in-game evidence path is ready.
+#   verify-fix         - a complete fix is ready for in-game verification.
 # When work ships for an issue, the matching status label must be added (and
 # every competing lifecycle removed) in the SAME pass as the CHANGELOG entry
 # (rule #5 / CLAUDE.md #13). This check catches the recurring miss where a
@@ -78,12 +78,12 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
 $repoRoot = (Resolve-Path $RepoRoot).Path
 
 # ---- the status-label lifecycle (§ 11; user rules 2026-07-11/12) ----
-# Universal open-issue lifecycle (user rule 2026-07-19). Repository-only work
-# uses the same lifecycle labels; its explicit tooling modifier routes it to
-# autonomous verification. Documentation alone is content-only and does not route.
-$StatusLabels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed')
+# Universal open-issue lifecycle. Live-test labels are exclusively human,
+# in-game queue states; tooling remains not-started until closed from autonomous
+# evidence.
+$StatusLabels = @('not-started', 'verify-fix', 'diagnostics-armed')
 $LifecycleLabels = $StatusLabels
-$RetiredLifecycleLabels = @('not-started', 'Fixed')
+$RetiredLifecycleLabels = @('Fixed', 'verify-fix-coop')
 
 # ---- active mods whose CHANGELOG.md is authored newest-first ----
 # Mirrors the ship-doctrine active set: single-stream mods, five promotion-pair
@@ -222,14 +222,14 @@ function Invoke-SelfTest {
     $noHdr = "just a title line`nno version headers here"
     Assert ($null -eq (Get-TopEntry $noHdr)) "a changelog with no ## header returns null (no crash)"
 
-    Assert ((Get-LifecycleStateCount @('bug', 'verify-fix', 'tooling')) -eq 1) "repository-only verify-fix is one valid lifecycle"
+    Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'tooling')) -eq 1) "repository-only work remains not-started while open"
     Assert ((Get-LifecycleStateCount @('bug', 'diagnostics-armed', 'coop-required')) -eq 1) "coop-required is orthogonal, not a second lifecycle label"
     Assert ((Get-LifecycleStateCount @('bug', 'tooling')) -eq 0) "zero lifecycle labels is detected"
     Assert ((Get-LifecycleStateCount @('bug', 'diagnostics-armed', 'verify-fix')) -eq 2) "multiple lifecycle labels are detected"
-    Assert ((Get-LifecycleStateCount @('tooling', 'verify-fix')) -eq 1) "tooling issues obey universal lifecycle cardinality"
-    Assert ((Get-LifecycleStateCount @('documentation', 'diagnostics-armed')) -eq 1) "documentation issues obey universal lifecycle cardinality"
-    Assert ((Get-LifecycleStateCount @('not-started')) -eq 0) "retired not-started is not a lifecycle label"
-    Assert ((Get-LifecycleStateCount @('Fixed')) -eq 0) "retired Fixed is not an open-issue lifecycle label"
+    Assert ((Get-LifecycleStateCount @('tooling', 'not-started')) -eq 1) "tooling issues obey universal lifecycle cardinality"
+    Assert ((Get-LifecycleStateCount @('documentation', 'not-started')) -eq 1) "documentation issues obey universal lifecycle cardinality"
+    Assert ((Get-LifecycleStateCount @('not-started')) -eq 1) "not-started is the canonical non-ready lifecycle"
+    Assert ((Get-LifecycleStateCount @('Fixed')) -eq 0) "Fixed is not an open-issue lifecycle label"
     Assert ((Get-RetiredLifecycleLabels @('diagnostics-armed', 'Fixed')).Count -eq 1) "canonical plus retired lifecycle is detected"
 
     Write-Host ""
@@ -337,7 +337,7 @@ if ($findings.Count -eq 0 -and $lifecycleDrift.Count -eq 0) {
 }
 
 if ($lifecycleDrift.Count -gt 0) {
-    Write-Host ("[check_issue_status_labels] {0} open issue(s) do not carry EXACTLY ONE lifecycle state (diagnostics-armed / verify-fix / verify-fix-coop):" -f $lifecycleDrift.Count) -ForegroundColor Yellow
+    Write-Host ("[check_issue_status_labels] {0} open issue(s) do not carry EXACTLY ONE lifecycle state (not-started / diagnostics-armed / verify-fix):" -f $lifecycleDrift.Count) -ForegroundColor Yellow
     foreach ($s in ($lifecycleDrift | Sort-Object Issue)) {
         $lbl = if ($s.Labels) { $s.Labels } else { '(no labels)' }
         $retired = if ($s.RetiredLabels) { "; retired=$($s.RetiredLabels)" } else { '' }
@@ -353,5 +353,5 @@ foreach ($f in ($findings | Sort-Object Issue)) {
     $lbl = if ($f.Labels) { $f.Labels } else { '(no labels)' }
     Write-Host ("  ! #{0} [{1}] referenced in {2} ({3})" -f $f.Issue, $lbl, $f.Mod, $f.Ver) -ForegroundColor Yellow
 }
-Write-Host "  Review each: add verify-fix (a fix is ready) or diagnostics-armed (a runnable evidence path is ready). A context-only reference is not shipped work, but the open issue must still carry exactly one lifecycle." -ForegroundColor DarkYellow
+Write-Host "  Review each: use not-started unless a strict CURRENT LIVE TEST card makes diagnostics-armed or verify-fix runnable now." -ForegroundColor DarkYellow
 exit 1

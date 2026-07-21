@@ -1,143 +1,216 @@
-# Shared GitHub lifecycle-method policy.
+# Shared GitHub live-test queue policy.
 #
-# This file is function-only so audit, playtest generation, and ship automation
-# consume one method-selection contract. Keep the explicit-heading/correction
-# behavior in lockstep with the regression coverage added by PR #908.
+# `diagnostics-armed` and `verify-fix` are invitations to test in VT2 now.
+# Their only accepted procedure is the newest comment whose heading is exactly
+# `## CURRENT LIVE TEST`.  Keeping selection and validation here prevents ship,
+# audit, CI, and generated playtest documents from disagreeing.
 
-function Test-VtExplicitMethodComment {
+$script:VtOpenLifecycleLabels = @('not-started', 'diagnostics-armed', 'verify-fix')
+$script:VtReadyLifecycleLabels = @('diagnostics-armed', 'verify-fix')
+$script:VtInvalidOpenLifecycleLabels = @('Fixed', 'verify-fix-coop')
+
+function Get-VtLabelNames {
+    param($Issue)
+    return @($Issue.labels | ForEach-Object { [string]$_.name })
+}
+
+function Test-VtCurrentLiveTestCard {
     param([string]$Body)
     if ([string]::IsNullOrWhiteSpace($Body)) { return $false }
-    return $Body -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:' +
-        'test\s+method\b|' +
-        '(?:diagnostic|verification)\s+method\b|' +
-        '(?:solo|co-?op|two-player)\s+verification\s*(?:\([^\r\n)]*\))?\s*:|' +
-        'verification\s*\([^\r\n)]*\)\s*:|' +
-        'verification\s+still\s+required\b|' +
-        '(?:authoritative|current|corrected|replacement|next)\b[^\r\n]{0,100}\b(?:method|test)\b' +
-        ')'
+    return $Body -match '(?m)^## CURRENT LIVE TEST\s*$'
 }
 
-function Get-VtMethodComment {
+function Get-VtCurrentLiveTestCard {
     param($Comments)
-    if (-not $Comments -or @($Comments).Count -eq 0) { return $null }
+    if (-not $Comments) { return $null }
     $arr = @($Comments)
-    for ($i = $arr.Count - 1; $i -ge 0; $i--) {
-        $b = [string]$arr[$i].body
-        if (Test-VtExplicitMethodComment $b) { return $b }
-    }
-
-    $best = $null; $bestScore = 0
-    for ($i = $arr.Count - 1; $i -ge 0; $i--) {
-        $b = [string]$arr[$i].body
-        if ([string]::IsNullOrWhiteSpace($b)) { continue }
-        $score = 0
-        if ($b -match '(?i)test\s+method')                                   { $score += 5 }
-        if ($b -cmatch '\bTEST\b')                                           { $score += 4 }
-        if ($b -match '(?i)test\s+(with|as|in|solo|\()')                     { $score += 3 }
-        if ($b -match '(?i)to\s+verify|verify\s+(that|in-?game|by|each|the|no|this|it)') { $score += 2 }
-        if ($b -match '(?i)pass\s*(?:=|:)')                                  { $score += 3 }
-        if ($b -match '(?i)expected\s*:')                                    { $score += 2 }
-        $steps = ([regex]::Matches($b, '(?m)^\s*\d+\.\s')).Count
-        if ($steps -ge 2) { $score += [math]::Min($steps, 4) }
-        if ($b -match '\[[a-z][a-z0-9_]*:[A-Za-z0-9_.\-]+\]')                { $score += 1 }
-        if ($b -match '(?i)verify-fix\s+(was|label|set|stripped|re-?appl|applied|added|removed)') { $score -= 6 }
-        if ($b -match '(?i)^\s*(cross-?ref|xref|x-ref|re-?applying|label sweep|status sweep|reapplying)') { $score -= 5 }
-        if ($b.Length -lt 50) { $score -= 2 }
-        if ($score -gt $bestScore) { $bestScore = $score; $best = $b }
-    }
-    if ($bestScore -ge 3) { return $best }
-    return $null
-}
-
-function Get-VtMethodCorrection {
-    param($Comments, [string]$Method)
-    if (-not $Comments -or [string]::IsNullOrWhiteSpace($Method)) { return $null }
-    $arr = @($Comments)
-    $methodIndex = -1
-    for ($i = $arr.Count - 1; $i -ge 0; $i--) {
-        if ([string]$arr[$i].body -ceq $Method) { $methodIndex = $i; break }
-    }
-    if ($methodIndex -lt 0) { return $null }
-    for ($i = $arr.Count - 1; $i -gt $methodIndex; $i--) {
-        $b = [string]$arr[$i].body
-        if ($b -match '(?im)^\s*(?:#{1,6}\s+)?(?:verification\s+banner|current\s+deployed-floor)\s+correction\b') {
-            return $b
+    $selected = $null
+    $selectedAt = [datetime]::MinValue
+    $selectedIndex = -1
+    for ($i = 0; $i -lt $arr.Count; $i++) {
+        $body = [string]$arr[$i].body
+        if (-not (Test-VtCurrentLiveTestCard $body)) { continue }
+        $createdAt = [datetime]::MinValue
+        # GitHub returns PSCustomObject comments, while offline fixtures often
+        # use hashtables. Dot-key lookup works for both; PSObject.Properties
+        # does not expose hashtable keys and would silently fall back to array
+        # order in the guard's own regression tests.
+        $rawCreatedAt = $arr[$i].createdAt
+        if ($rawCreatedAt) {
+            [datetime]::TryParse([string]$rawCreatedAt, [ref]$createdAt) | Out-Null
+        }
+        if ($createdAt -gt $selectedAt -or ($createdAt -eq $selectedAt -and $i -gt $selectedIndex)) {
+            $selected = $body
+            $selectedAt = $createdAt
+            $selectedIndex = $i
         }
     }
+    return $selected
+}
+
+function Get-VtCardField {
+    param([string]$Card, [string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Card)) { return $null }
+    $escaped = [regex]::Escape($Name)
+    $match = [regex]::Match($Card, "(?im)^\s*(?:\*\*)?$escaped\s*:\s*(?:\*\*)?\s*(.+?)\s*$")
+    if ($match.Success) { return $match.Groups[1].Value.Trim() }
     return $null
 }
 
-function Get-VtCorrectionVersion {
-    param([string]$Correction)
-    if ([string]::IsNullOrWhiteSpace($Correction)) { return $null }
-    if ($Correction -match '(?im)^\s*\|\s*Stream\s*\|') { return $null }
-    $versions = @([regex]::Matches($Correction, '(?i)\bv?(\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?)\b') |
-        ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
-    if ($versions.Count -ge 1) { return $versions[0] }
-    return $null
+function Get-VtNumberedStepText {
+    param([string]$Card)
+    if ([string]::IsNullOrWhiteSpace($Card)) { return @() }
+    return @([regex]::Matches($Card, '(?m)^\s*\d+\.\s+(.+?)\s*$') |
+        ForEach-Object { $_.Groups[1].Value.Trim() })
 }
 
-function Test-VtMethodHasExpected {
-    param([string]$Method)
-    if ([string]::IsNullOrWhiteSpace($Method)) { return $false }
-    return $Method -match '(?i)expected|pass\s*(?:=|:)|must pass|should pass|result:|\bconfirm\b|\brequire\b.{0,24}\bpass|\bno (?:crash|error|warning|spam|desync)\b'
+function Test-VtBuildBannerField {
+    param([string]$BuildBanner)
+    if ([string]::IsNullOrWhiteSpace($BuildBanner)) { return $false }
+
+    $versionPattern = '\bv?\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?\b'
+    if ($BuildBanner -notmatch "(?i)$versionPattern") { return $false }
+
+    # Most mods emit the canonical [name:LOAD] marker. A small number have a
+    # different exact runtime banner (for example WOC), which is accepted only
+    # when the card explicitly labels and reproduces the whole versioned banner.
+    if ($BuildBanner -match '\[[A-Za-z][A-Za-z0-9_]*:LOAD\]') { return $true }
+    return [bool]($BuildBanner -match '(?i)\bexact\s+banner\s*:\s*(?:\x60)?\[[A-Za-z][A-Za-z0-9_-]*\]\s+v?\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?\s+loaded\b(?:\x60)?')
 }
 
-function Test-VtMethodIsRunnable {
-    param([string]$Method)
-    if ([string]::IsNullOrWhiteSpace($Method)) { return $false }
-    return $Method -match '(?im)^\s*\d+\.\s+|(?:^|\b)(?:run|open|launch|load|equip|enter|start|restart|execute|invoke|inspect|compare|reproduce|repeat|click|select|enable|disable|review|confirm|attach)\b'
-}
-
-function Get-VtLifecycleMethodSelection {
-    param(
-        $Comments,
-        [string]$Body,
-        [switch]$AllowBodyFallback
-    )
-    $method = Get-VtMethodComment $Comments
-    $source = if ($method) { 'comment' } else { 'none' }
-    if (-not $method -and $AllowBodyFallback -and (Test-VtExplicitMethodComment $Body)) {
-        $method = $Body
-        $source = 'body'
+function Test-VtCardHasInternalKeys {
+    param([string]$Card)
+    foreach ($step in @(Get-VtNumberedStepText $Card)) {
+        # Player actions use localized names. Snake-case identifiers belong in
+        # diagnostics/log expectations, never in the numbered player steps.
+        # A backticked slash command is itself the exact player-facing action,
+        # so remove those tokens before looking for leaked internal item keys.
+        $playerProse = $step -replace '(?i)\x60/[a-z0-9_:-]+\x60', ''
+        if ($playerProse -match '(?i)(?<![/A-Za-z0-9])(?:[a-z][a-z0-9]*_){1,}[a-z0-9_]+\b') {
+            return $true
+        }
     }
-    $correction = if ($source -eq 'comment') {
-        Get-VtMethodCorrection -Comments $Comments -Method $method
-    } else { $null }
+    return $false
+}
+
+function Get-VtLiveTestCardSelection {
+    param($Comments)
+
+    $card = Get-VtCurrentLiveTestCard $Comments
+    $build = Get-VtCardField -Card $card -Name 'Build/banner'
+    $topology = Get-VtCardField -Card $card -Name 'Topology'
+    $soloStatus = Get-VtCardField -Card $card -Name 'Solo status'
+    $expected = Get-VtCardField -Card $card -Name 'Expected'
+    $steps = @(Get-VtNumberedStepText $card)
+    $errors = New-Object System.Collections.Generic.List[string]
+
+    if (-not $card) {
+        $errors.Add('missing-current-live-test-card')
+    }
+    else {
+        if (-not (Test-VtBuildBannerField $build)) {
+            $errors.Add('missing-build-version-or-runtime-banner')
+        }
+        if ($topology -notmatch '(?i)^(Solo|Co-?op)(?:\s|$)') {
+            $errors.Add('invalid-topology')
+        }
+        if ($steps.Count -eq 0) {
+            $errors.Add('missing-numbered-steps')
+        }
+        if (-not $expected) {
+            $errors.Add('missing-expected-result')
+        }
+        if (Test-VtCardHasInternalKeys $card) {
+            $errors.Add('internal-key-in-player-steps')
+        }
+        if ($topology -match '(?i)^Co-?op(?:\s|$)' -and $soloStatus -notmatch '(?i)\b(?:passed|complete|completed|exhausted)\b') {
+            $errors.Add('coop-before-solo-passed-or-exhausted')
+        }
+    }
+
     return [PSCustomObject][ordered]@{
-        Method = $method
-        Source = $source
-        Correction = $correction
-        CorrectionVersion = Get-VtCorrectionVersion $correction
-        HasExpected = Test-VtMethodHasExpected $method
-        Runnable = Test-VtMethodIsRunnable $method
-        Valid = (-not [string]::IsNullOrWhiteSpace($method)) -and
-            (Test-VtMethodHasExpected $method) -and
-            (Test-VtMethodIsRunnable $method)
+        Card = $card
+        BuildBanner = $build
+        Topology = $topology
+        SoloStatus = $soloStatus
+        Steps = @($steps)
+        Expected = $expected
+        RequiresCoop = [bool]($topology -match '(?i)^Co-?op(?:\s|$)')
+        Errors = @($errors)
+        Valid = $errors.Count -eq 0
     }
 }
 
-function Test-VtMethodRequiresCoop {
-    param([string]$Method)
-    if ([string]::IsNullOrWhiteSpace($Method)) { return $false }
-    if ($Method -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:authoritative\s+)?solo\s+(?:test|verification)\b') { return $false }
-    if ($Method -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:authoritative\s+)?(?:co-?op|two[ -]player)\s+(?:test|verification|method)\b') { return $true }
-    if ($Method -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:(?:corrected|authoritative|replacement|current)\s+)?(?:test|diagnostics?|verification) method\s*\(\s*solo\b[^)\r\n]{0,80}\)') { return $false }
-    if ($Method -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:(?:corrected|authoritative|replacement|current)\s+)?(?:test|diagnostics?|verification) method\s*\(\s*(?:co-?op\b|two[ -]players?\b)[^)\r\n]{0,80}\)') { return $true }
-    if ($Method -match '(?i)verify solo|solo verification|no (?:second|2nd) player|do(?:es)? not require (?:a )?(?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') { return $false }
-    return $Method -match '(?i)two[ -]players?\b|two[^\r\n]{0,40}(?:players|testers|humans)|2\+? (?:players|testers|humans)|needs? 2 (?:players|testers|humans)|host\s*\+\s*client|host and client|host plus one|second player|both peers|remote peer|non-mod peer|co-?op(?:/perspective)? (?:verification|diagnostics?|retest)'
+function Get-VtOpenIssueLifecycleDecision {
+    param($Issue)
+
+    $labels = @(Get-VtLabelNames $Issue)
+    $lifecycle = @($labels | Where-Object { $script:VtOpenLifecycleLabels -contains $_ })
+    $invalid = @($labels | Where-Object { $script:VtInvalidOpenLifecycleLabels -contains $_ })
+    $ready = @($lifecycle | Where-Object { $script:VtReadyLifecycleLabels -contains $_ })
+    $blocked = $labels -contains 'blocked'
+    $coop = $labels -contains 'coop-required'
+    $card = Get-VtLiveTestCardSelection $Issue.comments
+    $errors = New-Object System.Collections.Generic.List[string]
+
+    if ($lifecycle.Count -ne 1) { $errors.Add("lifecycle-count-$($lifecycle.Count)") }
+    foreach ($name in $invalid) { $errors.Add("invalid-open-lifecycle-$name") }
+
+    if ($blocked) {
+        if ($lifecycle.Count -ne 1 -or $lifecycle[0] -ne 'not-started') { $errors.Add('blocked-must-be-not-started') }
+        if ($coop) { $errors.Add('blocked-forbids-coop-required') }
+    }
+
+    if ($ready.Count -eq 1) {
+        if ($labels -contains 'tooling') { $errors.Add('tooling-cannot-enter-live-test-queue') }
+        foreach ($cardError in @($card.Errors)) { $errors.Add("live-card-$cardError") }
+        if ($coop -ne $card.RequiresCoop) { $errors.Add('coop-label-topology-mismatch') }
+    }
+    elseif ($coop) {
+        $errors.Add('coop-required-without-ready-state')
+    }
+
+    return [PSCustomObject][ordered]@{
+        Labels = $labels
+        Lifecycle = $lifecycle
+        Ready = $ready.Count -eq 1
+        Blocked = $blocked
+        CoopRequired = $coop
+        Card = $card
+        Errors = @($errors | Select-Object -Unique)
+        Valid = $errors.Count -eq 0
+    }
 }
 
+# Compatibility wrappers retained for audit/generator call sites while their
+# output shape moves to the strict card contract.
+function Get-VtMethodComment { param($Comments) return Get-VtCurrentLiveTestCard $Comments }
+function Test-VtExplicitMethodComment { param([string]$Body) return Test-VtCurrentLiveTestCard $Body }
+function Test-VtMethodHasExpected { param([string]$Method) return -not [string]::IsNullOrWhiteSpace((Get-VtCardField $Method 'Expected')) }
+function Test-VtMethodIsRunnable { param([string]$Method) return @(Get-VtNumberedStepText $Method).Count -gt 0 }
+function Test-VtMethodRequiresCoop { param([string]$Method) return [bool]((Get-VtCardField $Method 'Topology') -match '(?i)^Co-?op(?:\s|$)') }
+function Get-VtMethodCorrection { return $null }
+function Get-VtCorrectionVersion { return $null }
+function Get-VtLifecycleMethodSelection {
+    param($Comments, [string]$Body, [switch]$AllowBodyFallback)
+    $selection = Get-VtLiveTestCardSelection $Comments
+    return [PSCustomObject][ordered]@{
+        Method = $selection.Card
+        Source = if ($selection.Card) { 'current-live-test-comment' } else { 'none' }
+        Correction = $null
+        CorrectionVersion = $null
+        HasExpected = -not [string]::IsNullOrWhiteSpace($selection.Expected)
+        Runnable = $selection.Steps.Count -gt 0
+        Valid = $selection.Valid
+        Errors = $selection.Errors
+    }
+}
 function Test-VtFailedVerificationEvidence {
     param([string]$Method)
     if ([string]::IsNullOrWhiteSpace($Method)) { return $false }
-    return $Method -match '(?i)(?:verification|retest|test)\s+(?:failed|still fails)|(?:still|again)\s+(?:broken|crash(?:es|ed)?|fails?|reproduc(?:es|ed|ible))|no\s+(?:change|improvement)|not\s+(?:fixed|working)|persists?\s+(?:after|on|in)\s+(?:the\s+)?(?:deployed|current|tested)'
+    return $Method -match '(?i)(?:verification|retest|test)\s+(?:failed|still fails)|(?:still|again)\s+(?:broken|crash(?:es|ed)?|fails?|reproduc(?:es|ed|ible))|no\s+(?:change|improvement)|not\s+(?:fixed|working)'
 }
-
 function Test-VtRepositoryOnlyLabels {
     param([string[]]$LabelNames)
-    # `documentation` describes content and may accompany runtime regressions
-    # (for example #661). Only the explicit `tooling` routing label identifies
-    # work that belongs in the autonomous repository queue.
     return $LabelNames -contains 'tooling'
 }

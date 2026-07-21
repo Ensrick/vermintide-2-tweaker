@@ -3,7 +3,7 @@ description: Propose documentation, QA, tooling, or repository-only refactoring 
 title: "[area] "
 labels:
   - enhancement
-  - diagnostics-armed
+  - not-started
   - tooling
 body:
   - type: markdown
@@ -11,7 +11,7 @@ body:
       value: |
         Keep the title to eight words after the `[area]` prefix. This template applies the repository-only `tooling` routing modifier. Apply one owning area/mod label, one severity label, and optional `documentation`, `audit`, or `refactor` modifiers after filing.
 
-        Every open maintenance issue has exactly one lifecycle. This template starts `diagnostics-armed`; document the autonomous audit/check and expected result. Move complete repository-only work to `verify-fix`, run the named autonomous verification, record evidence, and close. Repository-only work never uses `verify-fix-coop` and is excluded from in-game playtest docs.
+        Every open maintenance issue uses `not-started`. The live-test labels are reserved for work the user can run in VT2 now, so repository-only work is verified autonomously and closed directly with evidence.
   - type: dropdown
     id: area
     attributes:
@@ -63,8 +63,8 @@ body:
   - type: textarea
     id: diagnostic_method
     attributes:
-      label: Diagnostic method (runnable now)
-      description: Exact autonomous command, source audit, or deterministic review that can be run immediately.
+      label: Autonomous verification
+      description: Exact command, source audit, or deterministic review that will prove completion before this issue is closed.
       placeholder: |
         1. Run the named checker or inspect the named owner files.
         2. Compare the output against the stated repository invariant.

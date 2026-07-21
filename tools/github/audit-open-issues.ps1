@@ -21,11 +21,11 @@ $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repoRoot 'tools/verify/lifecycle_method_policy.ps1')
 
 $LifecycleLabels = @(
+    "not-started",
     "verify-fix",
-    "verify-fix-coop",
     "diagnostics-armed"
 )
-$RetiredLifecycleLabels = @('not-started', 'Fixed')
+$RetiredLifecycleLabels = @('Fixed', 'verify-fix-coop')
 
 $TypeLabels = @("bug", "enhancement", "feature")
 
@@ -116,12 +116,8 @@ function Get-IssueFindings($Issue) {
     $severities = @($labels | Where-Object { $SeverityLabels -contains $_ })
     $findings = New-Object System.Collections.Generic.List[string]
 
-    if ($lifecycle.Count -ne 1) {
-        $findings.Add("lifecycle_count_$($lifecycle.Count)")
-    }
-    if ($retiredLifecycle.Count -gt 0) {
-        $findings.Add("retired_lifecycle_present")
-    }
+    $decision = Get-VtOpenIssueLifecycleDecision $Issue
+    foreach ($error in @($decision.Errors)) { $findings.Add("lifecycle_$error") }
     if ($types.Count -ne 1) {
         $findings.Add("type_count_$($types.Count)")
     }
@@ -130,36 +126,6 @@ function Get-IssueFindings($Issue) {
     }
     if ((Get-TitleWordCount $Issue.title) -gt 8) {
         $findings.Add("title_over_8_words")
-    }
-
-    # A newly filed diagnostic may carry its runnable method + expected result
-    # in the issue template body. A shipped verify lifecycle still requires the
-    # current method comment posted in the same pass as the label.
-    $includeIssueBody = $lifecycle -contains 'diagnostics-armed'
-    if ($lifecycle.Count -gt 0 -and -not (Test-HasMethodAndExpected $Issue -IncludeBody:$includeIssueBody)) {
-        $findings.Add("missing_test_method_comment")
-    }
-
-    $repositoryOnly = Test-IsRepositoryOnlyIssue $Issue
-    if ($repositoryOnly -and $lifecycle -contains "verify-fix-coop") {
-        $findings.Add("repository_only_uses_coop_lifecycle")
-    }
-
-    $requiresCoop = Test-CommentRequiresCoop $Issue
-    if ($requiresCoop -and $lifecycle -contains "verify-fix") {
-        $findings.Add("solo_label_but_coop_test")
-    }
-    if (-not $requiresCoop -and $lifecycle -contains "verify-fix-coop") {
-        $findings.Add("coop_label_without_coop_test_evidence")
-    }
-    if ($lifecycle -contains "diagnostics-armed") {
-        $hasQualifier = $labels -contains "coop-required"
-        if ($requiresCoop -and -not $hasQualifier) {
-            $findings.Add("coop_diagnostics_missing_qualifier")
-        }
-        if (-not $requiresCoop -and $hasQualifier) {
-            $findings.Add("coop_qualifier_without_test_evidence")
-        }
     }
 
     if ([string]$Issue.body -match '\\n') {
@@ -179,10 +145,7 @@ function Get-IssueFindings($Issue) {
 
 function Get-VerificationScope($Issue) {
     $labels = Get-LabelNames $Issue
-    if (Test-IsRepositoryOnlyIssue $Issue) {
-        return "repository-only"
-    }
-    if ($labels -contains "verify-fix-coop" -or $labels -contains "coop-required") {
+    if ($labels -contains "coop-required") {
         return "coop"
     }
     return "solo"
@@ -206,14 +169,10 @@ function Get-RiskTier($Issue) {
 
 function Get-RecommendedAction($Issue) {
     $labels = Get-LabelNames $Issue
-    if (Test-IsRepositoryOnlyIssue $Issue) {
-        if ($labels -contains "verify-fix") { return "run the documented autonomous verification, record evidence, then close" }
-        if ($labels -contains "diagnostics-armed") { return "run the documented autonomous diagnostic and record its bounded evidence" }
-        if ($labels -contains "verify-fix-coop") { return "replace the invalid co-op lifecycle with repository-only verification routing" }
-    }
-    if ($labels -contains "verify-fix-coop") { return "two-player in-game verification" }
+    if ($labels -contains "verify-fix" -and $labels -contains 'coop-required') { return "co-op in-game verification after solo passed or was exhausted" }
+    if ($labels -contains "diagnostics-armed" -and $labels -contains 'coop-required') { return "co-op in-game diagnostics after solo passed or was exhausted" }
     if ($labels -contains "verify-fix") { return "solo in-game verification" }
-    if ($labels -contains "diagnostics-armed") { return "run documented repro and collect bounded diagnostics" }
+    if ($labels -contains "diagnostics-armed") { return "run the solo in-game diagnostic" }
     return "scope against source, then implement or arm diagnostics"
 }
 
@@ -237,7 +196,7 @@ function Get-EmpiricalFallbacks($Issue) {
         )
     }
 
-    if ($lifecycle -eq "verify-fix-coop") {
+    if ($lifecycle -eq "verify-fix" -and $labels -contains 'coop-required') {
         return @(
             [ordered]@{ trigger = "The posted host/client verification for #$number fails and paired logs identify the first divergent peer/state."; change = "Repair that first owner/husk/RPC/lookup divergence at the existing issue-scoped boundary."; falsifier = "Both peers log identical authoritative state before the visible failure." },
             [ordered]@{ trigger = "Paired evidence shows authority or replay occurs on the wrong peer/lifecycle edge."; change = "Move ownership to the source-backed vanilla authority and transmit only bounded lookup-safe identity/state."; falsifier = "Authority, sender authentication, and lifecycle replay are already identical on both peers." },
@@ -962,8 +921,24 @@ function Invoke-SelfTest {
     Write-Host "[audit-open-issues -SelfTest] OK"
 }
 
+function Invoke-StrictAuditSelfTest {
+    $soloCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Equip Kruber's Mace in the Keep.`n`n**Expected:** Kruber's Mace remains visible."
+    $fixture = @(
+        [pscustomobject]@{ number=1; title='Queued verification'; body='**Symptom:** weapon hidden'; url='u1'; labels=@(@{name='bug'},@{name='verify-fix'},@{name='2-moderate'}); comments=@(@{body=$soloCard}) },
+        [pscustomobject]@{ number=2; title='Blocked work'; body='**Symptom:** no licensed asset'; url='u2'; labels=@(@{name='feature'},@{name='blocked'},@{name='not-started'},@{name='2-moderate'}); comments=@() },
+        [pscustomobject]@{ number=3; title='Retired lifecycle'; body='**Symptom:** old state'; url='u3'; labels=@(@{name='bug'},@{name='verify-fix-coop'},@{name='2-moderate'}); comments=@() }
+    )
+    $result = Invoke-Audit $fixture @()
+    if (-not $result.issues[0].clean) { throw 'valid CURRENT LIVE TEST issue rejected' }
+    if (-not $result.issues[1].clean) { throw 'blocked not-started issue rejected' }
+    if ($result.issues[2].clean -or @($result.issues[2].findings | Where-Object { $_ -like 'lifecycle_*verify-fix-coop*' }).Count -eq 0) {
+        throw 'retired verify-fix-coop was accepted'
+    }
+    Write-Host '[audit-open-issues -SelfTest] OK'
+}
+
 if ($SelfTest) {
-    Invoke-SelfTest
+    Invoke-StrictAuditSelfTest
     exit 0
 }
 
