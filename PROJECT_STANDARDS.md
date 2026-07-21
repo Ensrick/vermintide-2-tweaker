@@ -1740,9 +1740,12 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
 - **Live-test card prerequisite:** before applying `diagnostics-armed` or
   `verify-fix`, post a high-visibility comment whose heading is exactly
   `## CURRENT LIVE TEST`. The newest such comment is authoritative and must
-  include `Build/banner:` with a semantic version and `[mod:LOAD]`, `Topology:`
+  include `Build/banner:` with a semantic version and either `[mod:LOAD]` or a
+  clearly labeled exact versioned banner (for example,
+  `exact banner: [WOC] v0.1.42-dev loaded`), `Topology:`
   (`Solo` or `Co-op`), numbered player-facing steps, and `Expected:`. Numbered
   steps use localized names players see in-game, never internal snake-case keys.
+  Exact player-entered slash commands are allowed when wrapped in backticks.
   An incomplete newer card invalidates an older valid card; issue-body text and
   legacy method headings are not fallbacks.
 - **Solo first:** `coop-required` is valid only beside `diagnostics-armed` or

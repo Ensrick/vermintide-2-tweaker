@@ -41,9 +41,15 @@ Every ready issue must have a latest comment in this exact shape:
 **Expected:** Kruber's Mace behaves normally and the game does not crash.
 ```
 
+When a mod does not emit a `[name:LOAD]` marker, reproduce and clearly label
+its whole versioned runtime banner instead, for example:
+`**Build/banner:** exact banner: [WOC] v0.1.42-dev loaded`.
+
 Use localized names visible to players. Snake-case internal keys are rejected
-inside numbered steps. The newest exact card is authoritative; a newer
-incomplete card invalidates an older complete card.
+inside numbered steps. Exact player-entered slash commands such as
+`/woc_pose_reset` are allowed when wrapped in backticks in the card. The newest
+exact card is authoritative; a newer incomplete card invalidates an older
+complete card.
 
 For co-op, finish useful solo testing first, then use:
 

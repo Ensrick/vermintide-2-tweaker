@@ -59,8 +59,9 @@ Every open issue has exactly one tracker lifecycle label:
 - `verify-fix` when a complete candidate fix is deployed and runnable now.
 
 The two ready states require the newest exact `## CURRENT LIVE TEST` comment
-with version/load banner, topology, numbered player-facing steps, and expected
-result. Test solo first. Add `coop-required` only after the card records solo as
+with a semantic version plus `[mod:LOAD]` or a clearly labeled exact versioned
+runtime banner, topology, numbered player-facing steps, and expected result.
+Test solo first. Add `coop-required` only after the card records solo as
 passed/exhausted and the remaining topology is co-op. Blocked and tooling issues
 stay `not-started`. `Fixed` and `verify-fix-coop` are invalid while open. After
 verification, complete hardening/documentation/regression work and close.

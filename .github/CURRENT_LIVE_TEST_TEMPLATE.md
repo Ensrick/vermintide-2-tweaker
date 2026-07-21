@@ -1,6 +1,7 @@
 ## CURRENT LIVE TEST
 
 **Build/banner:** v0.0.0-dev, confirm `[mod:LOAD]`
+<!-- If the mod has no :LOAD marker, reproduce its whole versioned banner instead: exact banner: [WOC] v0.1.42-dev loaded -->
 **Topology:** Solo
 
 1. Open the named menu or enter the named game area.
@@ -15,5 +16,6 @@ For co-op only after useful solo work is complete, replace Topology and add:
 **Topology:** Co-op (host and one client)
 **Solo status:** Passed; only the remote-player result remains.
 
-Then add the coop-required label. Never put internal keys in numbered steps.
+Then add the coop-required label. Never put internal keys in numbered steps;
+an exact player-entered slash command is allowed when wrapped in backticks.
 -->

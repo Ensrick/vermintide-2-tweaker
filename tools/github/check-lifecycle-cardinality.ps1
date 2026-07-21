@@ -35,6 +35,10 @@ function New-TestCard([string]$Topology = 'Solo', [string]$Steps = '1. Equip Kru
 
 function Invoke-SelfTest {
     $validSolo = New-TestCard
+    $validExactBanner = "## CURRENT LIVE TEST`n`n**Build/banner:** exact banner: [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
+    $unlabeledExactBanner = "## CURRENT LIVE TEST`n`n**Build/banner:** [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
+    $unversionedExactBanner = "## CURRENT LIVE TEST`n`n**Build/banner:** v0.1.42-dev, exact banner: [WOC] loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
+    $validSlashCommand = New-TestCard -Steps "1. Run ``/woc_pose_reset`` in chat.`n2. Run ``/gt_regression_test`` when it finishes.`n3. Run ``/scrub_official_loadouts`` and read the result."
     $validCoop = New-TestCard -Topology 'Co-op (host and one client)' -SoloStatus 'Passed; remote rendering remains.' -Steps "1. Host equips Kruber's Mace.`n2. The joining player observes it."
     $fixture = @(
         [pscustomobject]@{ number=1; title='waiting'; labels=@(@{name='not-started'}); comments=@() },
@@ -52,12 +56,16 @@ function Invoke-SelfTest {
         [pscustomobject]@{ number=13; title='timestamp newest wins'; labels=@(@{name='verify-fix'}); comments=@(
             @{body="## CURRENT LIVE TEST`n**Topology:** Solo`n1. Equip Kruber's Mace.`n**Expected:** Works."; createdAt='2026-07-22T00:00:00Z'},
             @{body=$validSolo; createdAt='2026-07-21T00:00:00Z'}
-        ) }
+        ) },
+        [pscustomobject]@{ number=14; title='versioned exact banner'; labels=@(@{name='verify-fix'}); comments=@(@{body=$validExactBanner}) },
+        [pscustomobject]@{ number=15; title='unlabeled exact banner'; labels=@(@{name='verify-fix'}); comments=@(@{body=$unlabeledExactBanner}) },
+        [pscustomobject]@{ number=16; title='unversioned exact banner'; labels=@(@{name='verify-fix'}); comments=@(@{body=$unversionedExactBanner}) },
+        [pscustomobject]@{ number=17; title='backticked slash command'; labels=@(@{name='diagnostics-armed'}); comments=@(@{body=$validSlashCommand}) }
     )
     $violations = @(Get-LifecycleViolations $fixture)
     $bad = @($violations.number | Sort-Object)
-    if (($bad -join ',') -ne '4,5,6,7,9,10,11,12,13') { throw "unexpected violations: $($bad -join ',')" }
-    foreach ($ok in 1,2,3,8) {
+    if (($bad -join ',') -ne '4,5,6,7,9,10,11,12,13,15,16') { throw "unexpected violations: $($bad -join ',')" }
+    foreach ($ok in 1,2,3,8,14,17) {
         if ($bad -contains $ok) { throw "valid fixture #$ok rejected" }
     }
     $coop = @($violations | Where-Object number -eq 9)[0]

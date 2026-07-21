@@ -398,10 +398,13 @@ function Invoke-StrictLiveTestSelfTest {
     }
     $script:strictFail = 0
     $soloCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Equip Kruber's Mace in the Keep.`n`n**Expected:** Kruber's Mace remains visible."
+    $exactBannerCard = "## CURRENT LIVE TEST`n`n**Build/banner:** exact banner: [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
     $coopCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Co-op (host and one client)`n**Solo status:** Passed; only the remote view remains.`n`n1. Host equips Kruber's Mace.`n2. The joining player observes it.`n`n**Expected:** Both players see Kruber's Mace."
     $solo = Get-VtLiveTestCardSelection @([pscustomobject]@{ body=$soloCard })
+    $exactBanner = Get-VtLiveTestCardSelection @([pscustomobject]@{ body=$exactBannerCard })
     $coop = Get-VtLiveTestCardSelection @([pscustomobject]@{ body=$coopCard })
     Assert-Strict $solo.Valid 'strict solo card accepted'
+    Assert-Strict $exactBanner.Valid 'clearly labeled exact versioned banner accepted'
     Assert-Strict ($coop.Valid -and $coop.RequiresCoop) 'strict co-op card accepted after solo pass'
     Assert-Strict ((Get-VtCheckLine -Method $soloCard -Title 'fallback') -match "Kruber's Mace") 'localized numbered step becomes check line'
     Assert-Strict ((Get-VtEvidence -Method $soloCard) -match 'expected:') 'card Expected field becomes evidence'
@@ -409,6 +412,9 @@ function Invoke-StrictLiveTestSelfTest {
     Assert-Strict ((Get-VtLocation -Method $coopCard -Title 'weapon' -LabelNames @('verify-fix','coop-required')) -eq 'COOP-2P') 'coop-required routes co-op card'
     $invalid = Get-VtLiveTestCardSelection @([pscustomobject]@{ body=$soloCard.Replace("Kruber's Mace", 'em_mace') })
     Assert-Strict (-not $invalid.Valid -and $invalid.Errors -contains 'internal-key-in-player-steps') 'internal key in player step fails closed'
+    $commandCard = $soloCard.Replace("Equip Kruber's Mace in the Keep.", 'Run `/woc_pose_reset` in chat.')
+    $command = Get-VtLiveTestCardSelection @([pscustomobject]@{ body=$commandCard })
+    Assert-Strict $command.Valid 'backticked slash command is allowed in a player step'
     $stale = Get-VtLiveTestCardSelection @(
         [pscustomobject]@{ body=$soloCard },
         [pscustomobject]@{ body="## CURRENT LIVE TEST`n**Topology:** Solo`n1. Equip Kruber's Mace.`n**Expected:** Visible." }

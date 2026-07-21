@@ -64,12 +64,29 @@ function Get-VtNumberedStepText {
         ForEach-Object { $_.Groups[1].Value.Trim() })
 }
 
+function Test-VtBuildBannerField {
+    param([string]$BuildBanner)
+    if ([string]::IsNullOrWhiteSpace($BuildBanner)) { return $false }
+
+    $versionPattern = '\bv?\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?\b'
+    if ($BuildBanner -notmatch "(?i)$versionPattern") { return $false }
+
+    # Most mods emit the canonical [name:LOAD] marker. A small number have a
+    # different exact runtime banner (for example WOC), which is accepted only
+    # when the card explicitly labels and reproduces the whole versioned banner.
+    if ($BuildBanner -match '\[[A-Za-z][A-Za-z0-9_]*:LOAD\]') { return $true }
+    return [bool]($BuildBanner -match '(?i)\bexact\s+banner\s*:\s*(?:\x60)?\[[A-Za-z][A-Za-z0-9_-]*\]\s+v?\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?\s+loaded\b(?:\x60)?')
+}
+
 function Test-VtCardHasInternalKeys {
     param([string]$Card)
     foreach ($step in @(Get-VtNumberedStepText $Card)) {
         # Player actions use localized names. Snake-case identifiers belong in
         # diagnostics/log expectations, never in the numbered player steps.
-        if ($step -match '(?i)(?<![/A-Za-z0-9])(?:[a-z][a-z0-9]*_){1,}[a-z0-9_]+\b') {
+        # A backticked slash command is itself the exact player-facing action,
+        # so remove those tokens before looking for leaked internal item keys.
+        $playerProse = $step -replace '(?i)\x60/[a-z0-9_:-]+\x60', ''
+        if ($playerProse -match '(?i)(?<![/A-Za-z0-9])(?:[a-z][a-z0-9]*_){1,}[a-z0-9_]+\b') {
             return $true
         }
     }
@@ -91,8 +108,8 @@ function Get-VtLiveTestCardSelection {
         $errors.Add('missing-current-live-test-card')
     }
     else {
-        if (-not $build -or $build -notmatch '(?i)\bv?\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?\b' -or $build -notmatch '\[[A-Za-z][A-Za-z0-9_]*:LOAD\]') {
-            $errors.Add('missing-build-version-or-load-banner')
+        if (-not (Test-VtBuildBannerField $build)) {
+            $errors.Add('missing-build-version-or-runtime-banner')
         }
         if ($topology -notmatch '(?i)^(Solo|Co-?op)(?:\s|$)') {
             $errors.Add('invalid-topology')

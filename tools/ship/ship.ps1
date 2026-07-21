@@ -765,6 +765,9 @@ function Invoke-ShipSelfTest {
     Assert (-not $combinedVerifyBodyOnly.Ok -and $combinedVerifyBodyOnly.Reason -eq 'invalid-current-live-test-card') "live-test labels never accept an issue-body fallback"
 
     $soloMethod = @([pscustomobject]@{ body = $combinedBody })
+    $wocExactBannerCard = "## CURRENT LIVE TEST`n`n**Build/banner:** exact banner: [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper behaves normally."
+    $wocExactBannerDecision = Get-ShipIssueTransitionDecision -Existing @('not-started') -Requested 'verify-fix' -CoopRequired $false -Comments @([pscustomobject]@{ body = $wocExactBannerCard }) -Body ''
+    Assert ($wocExactBannerDecision.Ok) "ship accepts a clearly labeled exact versioned runtime banner"
     $combinedRepositoryCoop = Get-ShipIssueTransitionDecision -Existing @('verify-fix', 'tooling') -Requested 'verify-fix' -CoopRequired $false -RepositoryLabels @('tooling') -Comments $soloMethod -Body ''
     Assert (-not $combinedRepositoryCoop.Ok -and $combinedRepositoryCoop.Reason -eq 'tooling-issue-not-auto-labeled') "combined transition rejects repository-only live testing"
 

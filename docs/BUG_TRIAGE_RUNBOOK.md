@@ -248,7 +248,8 @@ UPLOAD - a local deploy alone is silently clobbered.
   and that signal is a GitHub label, not just a comment. `PROJECT_STANDARDS.md`
   §11 requires it "in the same pass as the CHANGELOG entry":
   - **PREREQ:** post the newest exact `## CURRENT LIVE TEST` card FIRST. It
-    names the semantic version and `[mod:LOAD]` banner, `Topology: Solo` or
+    names the semantic version and either `[mod:LOAD]` or a clearly labeled
+    exact versioned banner such as `[WOC] v0.1.42-dev loaded`, `Topology: Solo` or
     `Co-op`, numbered localized/player-facing steps, and `Expected:` result.
     Issue-body text and older method headings do not qualify.
   - `gh issue edit <N> --remove-label not-started --add-label verify-fix` only
