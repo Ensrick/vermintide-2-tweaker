@@ -46,6 +46,7 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_moreitemslibrary_embedded")
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local CUSTOM_HATS = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_custom_hats")
+mod._cos_attachment_link_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_attachment_link_policy")
 local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set"); mod._cos_reikland_provider_registered = GK_SET.add_outfit_provider(mod:dofile("scripts/mods/cosmetics_tweaker/_cos_reikland_griffin"))
 local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
 mod._cos_cwv_peer_identity = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_peer_identity")
@@ -88,7 +89,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.161-dev"
+local MOD_VERSION = "0.9.162-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -10162,51 +10163,9 @@ if rawget(_G, "AttachmentUtils") then
         end)
     end
 
-    -- issue #270 (crash B) -- Unit.node guard on the attachment LINK path.
-    -- Converted from hook_safe to a full wrapper so we can pre-validate nodes
-    -- BEFORE native runs. AttachmentUtils.link (attachment_utils.lua:70-71) calls
-    -- Unit.node(source|target, node_name), an ENGINE C-assert (c_api_unit.cpp:74,
-    -- `index != SceneGraph::NOT_FOUND`) that BYPASSES pcall when the node is
-    -- absent -- e.g. a hat unit that spawned wrong/nodeless (missing j_head), or a
-    -- nil target from a skipped spawn. Validate every source/target node with the
-    -- non-fatal Unit.has_node companion; if any is missing, abort the link cleanly
-    -- (no World.link_unit, no partial state). The prior hook_safe's LA-bridge
-    -- queue logic is preserved verbatim as the post-step after a successful link.
-    if AttachmentUtils.link then
-        mod:hook(AttachmentUtils, "link", function(func, world, source, target, node_linking)
-            local bad_node, bad_unit
-            if type(source) ~= "userdata" or not Unit.alive(source) then
-                bad_node, bad_unit = "<source-unit>", "source"
-            elseif type(target) ~= "userdata" or not Unit.alive(target) then
-                bad_node, bad_unit = "<target-unit>", "target"
-            elseif type(node_linking) == "table" then
-                for _, ld in ipairs(node_linking) do
-                    local sn, tn = ld.source, ld.target
-                    if type(sn) == "string" and not Unit.has_node(source, sn) then
-                        bad_node, bad_unit = sn, "source"
-                        break
-                    end
-                    if type(tn) == "string" and not Unit.has_node(target, tn) then
-                        bad_node, bad_unit = tn, "target"
-                        break
-                    end
-                end
-            end
-            if bad_node then
-                mod:info("[cos-hat] SKIP attach no-node=%s unit=%s (aborting link, no partial state)",
-                    tostring(bad_node), tostring(bad_unit))
-                return
-            end
-
-            func(world, source, target, node_linking)
-
-            -- Preserved LA-bridge post-logic (was the pre-#270 hook_safe body).
-            if not LA_BRIDGE.registered then return end
-            if type(target) ~= "userdata" then return end
-            if not Unit.has_data(target, "unit_name") then return end
-            LA_BRIDGE.maybe_queue_unit(world, target, Unit.get_data(target, "unit_name"))
-        end)
-    end
+    -- #270/#950: reject dead units before Unit.node's C assertion, but preserve
+    -- every valid pair when a custom mesh omits optional attachment nodes.
+    mod._cos_attachment_link_policy.install(mod, AttachmentUtils, LA_BRIDGE, Unit)
 end
 
 -- LA hooks World.link_unit too — some hats are linked via the lower-level

@@ -20,7 +20,7 @@
             State = 'partial'
             Entry = 'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
             CeilingLines = 10229
-            RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua')
+            RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua', '_cos_attachment_link_policy.lua')
         }
         @{
             Name = 'weapon_tweaker'
