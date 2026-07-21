@@ -16,6 +16,17 @@ distinct item-type/skin-table contracts and sources eligible vanilla illusions
 from `bw_1h_crowbill`. Chaos Wastes uses the generic dedicated CWV Deus identity
 so exact item type and cosmetics survive conversion when peer parity permits.
 
+## Shared combat contract
+
+Imperial and Dawi Crowbills use one private pick-mode clone. All eight direct
+light/heavy attacks have 10% more impact power than the Sienna donor. The donor's
+burning light thrust (`light_blunt_smiter_stab_burn`, authored at
+`weapon_templates/1h_crowbills.lua:682-693`) is replaced with the vanilla
+non-burning sibling `light_blunt_smiter_stab`, including ordinary Crowbill impact
+sounds. Sienna's native template and damage profiles are never mutated. Hammer
+mode derives from this same clone, so the two CWV characters cannot drift and
+switching modes cannot restore the fire damage-over-time effect.
+
 ## Hammer mode contract
 
 Weapon Special toggles between normal Crowbill mode (the default) and Hammer

@@ -52,6 +52,7 @@
 local mod = get_mod("gut_dev")
 local Policy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_native_loadout_policy")
 local WTTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_wt_loadout_trace_core")
+local SelectedLoadoutTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_selected_loadout_trace_core")
 local BackendCommit = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_backend_commit")
 local ExitSnapshotCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_exit_snapshot_core")
 
@@ -522,6 +523,61 @@ local function _trace_should_emit(career_name, key, idx, value, source)
     end
     return false
 end
+
+-- Issue #375 regression boundary.  A selected native-loadout row has been observed
+-- serving one weapon from a different row after a row switch.  The existing #387
+-- trace identifies each slot independently, but cannot prove which selected row and
+-- caller requested the pair.  Emit one atomic snapshot at the mirror read boundary:
+-- requested/resolved/selected indices, both weapons in the resolved row, both weapons
+-- in the canonical selected row, the value actually returned, and the caller surface.
+-- Reads are hot, so the pure trace core deduplicates per caller/row/slot and caps the
+-- cache at 128 entries.  No command or menu toggle is required to collect evidence.
+local _selected_loadout_trace = SelectedLoadoutTraceCore.new(128)
+
+local function _selected_read_caller()
+    if not (debug and debug.getinfo) then return "unknown" end
+    for level = 3, 10 do
+        local ok, info = pcall(debug.getinfo, level, "nS")
+        if not ok or not info then break end
+        local source = tostring(info.short_src or info.source or "unknown")
+        if not string.find(source, "_gut_native_loadouts", 1, true)
+            and not string.find(source, "vmf_hook", 1, true)
+        then
+            local name = info.name and (":" .. tostring(info.name)) or ""
+            return source .. name
+        end
+    end
+    return "unknown"
+end
+
+local function _trace_selected_read(entry, career_name, key, requested_index, resolved_index, served_value, source)
+    if not (entry and WEAPON_SLOT_SET[key]) then return end
+    local row = entry.loadouts and entry.loadouts[resolved_index]
+    local selected_row = entry.loadouts and entry.loadouts[entry.selected_index]
+    local caller = _selected_read_caller()
+    local snapshot = {
+        career = career_name,
+        slot = key,
+        requested_index = requested_index,
+        resolved_index = resolved_index,
+        selected_index = entry.selected_index,
+        row_melee = row and row.slot_melee,
+        row_ranged = row and row.slot_ranged,
+        selected_melee = selected_row and selected_row.slot_melee,
+        selected_ranged = selected_row and selected_row.slot_ranged,
+        served_value = served_value,
+        source = source,
+        caller = caller,
+    }
+    if _selected_loadout_trace:record(snapshot) then
+        printf("[gut_dev:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]",
+            tostring(career_name), tostring(caller), tostring(requested_index),
+            tostring(resolved_index), tostring(entry.selected_index),
+            tostring(snapshot.row_melee), tostring(snapshot.row_ranged),
+            tostring(snapshot.selected_melee), tostring(snapshot.selected_ranged),
+            tostring(key), tostring(served_value), tostring(source))
+    end
+end
 M.trace_should_emit = _trace_should_emit   -- exported for the /gut_regression_test throttle check
 local function _trace_gear_read(career_name, key, idx, value, source)
     if _trace_should_emit(career_name, key, idx, value, source) then
@@ -692,7 +748,10 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
     end
     local idx = optional_loadout_index or entry.selected_index
     local lo = entry.loadouts[idx]
-    if lo == nil then return nil end
+    if lo == nil then
+        _trace_selected_read(entry, career_name, key, optional_loadout_index, idx, nil, "store-row-missing")
+        return nil
+    end
     local value = lo[key]
     -- Non-destructive gear fallback (2026-07-02 v0.2.172 spawn-fatal burn): a gear id that
     -- is empty or unresolvable RIGHT NOW is served from the OFFICIAL value for this read
@@ -708,7 +767,9 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
         if value == nil then
             if WEAPON_SLOT_SET[key] then
                 _trace_gear_read(career_name, key, idx, value, "official-fallback-nil-weapon")  -- issue #387
-                return _official_gear_fallback(func, self, career_name, key, idx)
+                local served = _official_gear_fallback(func, self, career_name, key, idx)
+                _trace_selected_read(entry, career_name, key, optional_loadout_index, idx, served, "official-fallback-nil-weapon")
+                return served
             end
             _trace_gear_read(career_name, key, idx, value, "store-nil-jewelry")  -- issue #387
             return nil
@@ -722,7 +783,9 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
                 _trace_wt_loadout("apply", career_name, key, idx, value, "official-fallback-resolve-no")
             end
             _trace_gear_read(career_name, key, idx, value, "official-fallback-resolve-no")  -- issue #387
-            return _official_gear_fallback(func, self, career_name, key, idx)
+            local served = _official_gear_fallback(func, self, career_name, key, idx)
+            _trace_selected_read(entry, career_name, key, optional_loadout_index, idx, served, "official-fallback-resolve-no")
+            return served
         end
         -- issue #387: split YES vs UNKNOWN. Empirically (console-2026-07-06-21.28) a weapon
         -- served on UNKNOWN can still fail at PRESENTATION (get_item_from_id -> nil), leaving
@@ -736,6 +799,8 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
                 rstate == RESOLVE_YES and "served-store-yes" or "served-store-unknown")
         end
     end
+    _trace_selected_read(entry, career_name, key, optional_loadout_index, idx, value,
+        GEAR_SLOT_SET[key] and "store" or "store-non-gear")
     return value
 end)
 

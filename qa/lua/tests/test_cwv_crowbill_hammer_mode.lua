@@ -83,6 +83,44 @@ return function(H, repo_root)
 		H.equal(policy.DIRECT_ACTIONS.push, nil)
 	end)
 
+	H.test("CWV Crowbill pick clone removes fire and adds ten percent stagger", function()
+		local source, damage_profiles, power_levels = fixture()
+		local burn_action = source.actions.action_one.light_attack_left
+		burn_action.damage_profile = policy.BURNING_STAB_PROFILE
+		burn_action.armor_impact_sound_event = "fire_hit"
+		burn_action.impact_sound_event = "fire_hit"
+		burn_action.no_damage_impact_sound_event = "fire_hit_armour"
+		damage_profiles[policy.NONBURNING_STAB_PROFILE] = clone(damage_profiles.shared_burn_light)
+		for _, field in ipairs({ "cleave_distribution", "armor_modifier", "critical_strike",
+				"default_target", "targets" }) do
+			local old = damage_profiles.shared_burn_light[field]
+			local new = old:gsub("shared_burn_light", policy.NONBURNING_STAB_PROFILE)
+			damage_profiles[policy.NONBURNING_STAB_PROFILE][field] = new
+			power_levels[new] = clone(power_levels[old])
+		end
+
+		local source_copy = clone(source)
+		local pick, generated = policy.build_pick_template(source, damage_profiles,
+			power_levels, clone)
+		H.truthy(pick)
+		for action_name, info in pairs(generated) do
+			local profile = damage_profiles[info.generated]
+			H.equal(power_levels[profile.default_target].power_distribution.impact, 22)
+			H.equal(power_levels[profile.targets][1].power_distribution.impact, 44)
+			H.equal(pick.actions.action_one[action_name].anim_time_scale,
+				source.actions.action_one[action_name].anim_time_scale)
+		end
+		local stab_info = generated.light_attack_left
+		H.equal(stab_info.source, policy.BURNING_STAB_PROFILE)
+		H.equal(stab_info.donor, policy.NONBURNING_STAB_PROFILE)
+		H.equal(pick.actions.action_one.light_attack_left.impact_sound_event,
+			"crowbill_stab_hit")
+		H.equal(pick.actions.action_one.light_attack_left.armor_impact_sound_event, nil)
+		H.equal(pick.actions.action_one.light_attack_left.no_damage_impact_sound_event,
+			"blunt_hit_armour")
+		H.deep_equal(source, source_copy)
+	end)
+
 	H.test("CWV Crowbill hammer clone scales direct damage and both cleave axes", function()
 		local source, damage_profiles, power_levels = fixture()
 		local source_copy = clone(source)

@@ -45,6 +45,7 @@ return function(H, repo_root)
 	H.test("CWV #604 runtime owns transition hooks without polling or a vanilla RPC", function()
 		local source = read(runtime_path)
 		for _, marker in ipairs({
+			"policy.build_pick_template(",
 			"policy.build_hammer_template(",
 			"template.actions.action_three",
 			"mod:network_register(policy.CHANNEL",

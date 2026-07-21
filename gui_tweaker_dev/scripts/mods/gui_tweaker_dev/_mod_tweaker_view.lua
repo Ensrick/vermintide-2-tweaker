@@ -1424,7 +1424,12 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth, display
             -- value to the grid (anchored at range min). A pre-existing off-step value (e.g. a
             -- 324-coin value dialed in VMF's own fine-grained menu) is shown as-is here and
             -- only snaps once the user moves it. #152: this replaced the old ~range/40 over-jump.
-            local step = _resolve_step(w, category and category.mod_id, setting_id or _nf(w, "setting_id"), dec)
+            -- (#389) The synthesized Equipment category is owned by gut_dev, but each
+            -- row retains its real provider in category._owners.  Step policy belongs
+            -- to that provider (for example CIM's Base Power Level = 25), so resolving
+            -- against category.mod_id silently fell back to 1 for every merged row.
+            local _, owner_mod_id = _owner(category, setting_id)
+            local step = _resolve_step(w, owner_mod_id, setting_id or _nf(w, "setting_id"), dec)
             row.content.step = step
             mod:debug("[mt:num] '%s' bounds=%s..%s dec=%s step=%s val=%s",
                 tostring(setting_id), tostring(min), tostring(max), tostring(dec), tostring(step), tostring(val))

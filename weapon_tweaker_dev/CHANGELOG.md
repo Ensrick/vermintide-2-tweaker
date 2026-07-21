@@ -1,6 +1,15 @@
 # Weapon Tweaker Changelog
 
-## 0.12.285-dev (2026-07-19) - #664 dead parity tick + #374/#388 EnergyData seeding [untested]
+## 0.12.285-dev (2026-07-21) - parity/energy repairs + Imperial Crowbill animation tuner
+
+- The development 3P animation picker now exposes CWV's player-facing Imperial
+  Crowbill on Kruber, targeting the live `cwv_crowbill_pick_template` and the
+  receiver-native Empire Sword vocabulary.
+- The tool row carries all 13 source-backed Crowbill action events, including
+  charge, heavy, light, push, and block paths. It is deliberately tool-only and
+  does not alter the public WT port-status ledger or surface other CWV variants.
+- Added offline coverage for exact provider-template ownership, complete source
+  event vocabulary, and the tool-only gate.
 
 - Mirrors WT beta 0.12.283-beta: the backend's `mod.update` assignment now
   preserves the previously-installed peer-parity beacon wrapper instead of

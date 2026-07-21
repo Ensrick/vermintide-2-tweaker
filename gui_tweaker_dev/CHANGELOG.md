@@ -1,5 +1,19 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.308-dev (2026-07-21) -- merged slider ownership and selected-loadout evidence (#389 #375)
+
+- Numeric rows in the synthesized Equipment tab now resolve their snap/click
+  increment from the setting's real provider instead of the `gut_dev` category
+  owner. CIM Base Power Level therefore retains its authored 25-point step in
+  both Mod Tweaker presentation paths.
+- Added automatic, bounded #375 snapshots at the concrete native-loadout mirror
+  read boundary. Each changed weapon read records caller, requested/resolved/
+  selected indices, both weapons in the resolved and canonical selected rows,
+  and the value actually served. Identical hot reads are suppressed and the
+  cache is capped at 128 entries.
+- Added offline coverage for merged-owner resolution and trace deduplication,
+  row-change visibility, and the hard cache bound.
+
 ## 0.2.307-dev (2026-07-19) -- #630 Equipment-section DX12 diagnostics refinement [diagnostics-armed]
 
 - Refined the #630 diagnostics after live logs showed every captured Mod

@@ -11,6 +11,9 @@ M.MODE_PICK = "pick"
 M.MODE_HAMMER = "hammer"
 M.HAMMER_CLEAVE_MULT = 1.60
 M.HAMMER_DAMAGE_MULT = 0.85
+M.PICK_STAGGER_MULT = 1.10
+M.BURNING_STAB_PROFILE = "light_blunt_smiter_stab_burn"
+M.NONBURNING_STAB_PROFILE = "light_blunt_smiter_stab"
 M.MODEL_FLIP_AXIS = { 0, 0, 1 } -- local haft/longitudinal axis
 M.MODEL_FLIP_DEGREES = 180
 M.CHANNEL = "cwv_crowbill_mode_v1"
@@ -73,6 +76,17 @@ local function _scale_attack_power(row)
 	end
 end
 
+local function _scale_impact_power(row, multiplier)
+	if type(row) ~= "table" then return end
+	local power = row.power_distribution
+	if type(power) == "table" and type(power.impact) == "number" then
+		power.impact = power.impact * multiplier
+	end
+	for _, child in ipairs(row) do
+		_scale_impact_power(child, multiplier)
+	end
+end
+
 local function _remove_light_ap(row)
 	if type(row) ~= "table" then return end
 	local armor = row.armor_modifier
@@ -88,16 +102,47 @@ local function _remove_light_ap(row)
 	end
 end
 
-local function _clone_power_reference(value, field, source_profile, power_levels, clone)
+local function _clone_power_reference(value, namespace, field, source_profile, power_levels, clone)
 	if type(value) ~= "string" then
 		return clone(value)
 	end
 	local source = power_levels and power_levels[value]
 	if type(source) ~= "table" then return value end
-	local key = "cwv_crowbill_hammer_power_" .. _safe_key(source_profile)
+	local key = namespace .. "_power_" .. _safe_key(source_profile)
 		.. "_" .. field .. "_" .. _safe_key(value)
 	if not power_levels[key] then power_levels[key] = clone(source) end
 	return key
+end
+
+local function _pick_profile(source_name, damage_profiles, power_levels, clone,
+		record_source, register_profile)
+	local donor_name = source_name == M.BURNING_STAB_PROFILE
+		and M.NONBURNING_STAB_PROFILE or source_name
+	local source = damage_profiles and damage_profiles[donor_name]
+	if type(source) ~= "table" then
+		return nil, "missing damage profile: " .. tostring(donor_name)
+	end
+
+	local key = "cwv_crowbill_pick_" .. _safe_key(source_name)
+	if not damage_profiles[key] then
+		local profile = clone(source)
+		for _, field in ipairs(PROFILE_POWER_FIELDS) do
+			if profile[field] ~= nil then
+				profile[field] = _clone_power_reference(profile[field], key, field,
+					donor_name, power_levels, clone)
+			end
+		end
+		for _, field in ipairs({ "default_target", "targets", "critical_strike" }) do
+			local row = type(profile[field]) == "string" and power_levels[profile[field]]
+				or profile[field]
+			_scale_impact_power(row, M.PICK_STAGGER_MULT)
+		end
+		damage_profiles[key] = profile
+	end
+
+	if record_source then record_source(key, donor_name) end
+	if register_profile then register_profile(key, damage_profiles[key]) end
+	return key, donor_name
 end
 
 local function _hammer_profile(source_name, is_light, damage_profiles, power_levels,
@@ -110,7 +155,7 @@ local function _hammer_profile(source_name, is_light, damage_profiles, power_lev
 		local profile = clone(source)
 		for _, field in ipairs(PROFILE_POWER_FIELDS) do
 			if profile[field] ~= nil then
-				profile[field] = _clone_power_reference(profile[field], field, source_name,
+				profile[field] = _clone_power_reference(profile[field], key, field, source_name,
 					power_levels, clone)
 			end
 		end
@@ -145,6 +190,53 @@ local function _hammer_profile(source_name, is_light, damage_profiles, power_lev
 	if record_source then record_source(key, source_name) end
 	if register_profile then register_profile(key, damage_profiles[key]) end
 	return key
+end
+
+-- Build the shared non-Sienna Crowbill combat template.  Both Imperial and Dawi
+-- variants resolve to this exact clone, so their damage/stagger behavior cannot
+-- drift by character.  The donor's one burning thrust is replaced with its
+-- source-defined non-burning sibling, while every direct attack receives 10%
+-- more impact power.  The original Sienna template and all vanilla profiles stay
+-- untouched.
+function M.build_pick_template(source_template, damage_profiles, power_levels, clone,
+		record_source, register_profile)
+	if type(source_template) ~= "table" then return nil, "Crowbill source template missing" end
+	if type(clone) ~= "function" then return nil, "clone callback missing" end
+	local template = clone(source_template)
+	local generated = {}
+	local action_one = template.actions and template.actions.action_one
+	if type(action_one) ~= "table" then return nil, "Crowbill action_one missing" end
+
+	for action_name, class in pairs(M.DIRECT_ACTIONS) do
+		local action = action_one[action_name]
+		if type(action) ~= "table" or type(action.damage_profile) ~= "string" then
+			return nil, "Crowbill direct action missing: " .. action_name
+		end
+		local source_name = action.damage_profile
+		local key, donor_or_error = _pick_profile(source_name, damage_profiles,
+			power_levels, clone, record_source, register_profile)
+		if not key then return nil, donor_or_error end
+		action.damage_profile = key
+		generated[action_name] = {
+			source = source_name,
+			donor = donor_or_error,
+			generated = key,
+			class = class,
+		}
+	end
+
+	-- Source 1h_crowbills.lua:682-693 couples the burning thrust profile to fire
+	-- impact events.  Once the DoT profile is removed, use the Crowbill's own
+	-- ordinary stab/blunt events from its adjacent light attacks.
+	local stab = action_one.light_attack_left
+	if stab and generated.light_attack_left
+			and generated.light_attack_left.source == M.BURNING_STAB_PROFILE then
+		stab.armor_impact_sound_event = nil
+		stab.impact_sound_event = "crowbill_stab_hit"
+		stab.no_damage_impact_sound_event = "blunt_hit_armour"
+	end
+
+	return template, generated
 end
 
 function M.build_hammer_template(source_template, damage_profiles, power_levels, clone,
