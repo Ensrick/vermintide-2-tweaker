@@ -193,6 +193,87 @@ return function(H, repo_root)
         H.equal(attempts, 2, "ACK must stop every later retry")
     end)
 
+    H.test("CWV #401 #914 mission peer-ready pull is bounded and exact", function()
+        local owner_descriptor = descriptor("selected_skin", "skin_right", "skin_left")
+        local slots = {
+            slot_melee = { exact = owner_descriptor, base = "vanilla_base" },
+        }
+        local requester, owner
+        local owner_ready = false
+        local request_attempts = 0
+        local exact_replies = 0
+
+        owner = Policy.new({
+            resolve_local = function(slot)
+                return slot and slot.exact or nil, slot and slot.base or nil
+            end,
+            resolve_remote = function() return nil, "unused" end,
+            send = function(recipient, schema, payload)
+                local changed, exact = requester:accept("owner-peer", schema, payload)
+                H.truthy(changed, "peer-ready reply must update its exact slot state")
+                if payload.item_key ~= "" then
+                    exact_replies = exact_replies + 1
+                    H.truthy(exact, "peer-ready exact slot must reconstruct exactly")
+                    local ack = requester:ack_payload(payload)
+                    H.truthy(ack and owner:accept_ack(recipient, schema, ack),
+                        "peer-ready exact reply must use the existing ACK ledger")
+                end
+                return true
+            end,
+        })
+        requester = Policy.new({
+            resolve_local = function() return nil, nil end,
+            resolve_remote = function()
+                return descriptor("selected_skin", "skin_right", "skin_left")
+            end,
+            send = function(_, schema, payload)
+                request_attempts = request_attempts + 1
+                if owner_ready and owner:accept_request("joining-peer", schema, payload) then
+                    H.equal(owner:track_delivery(
+                        "joining-peer", slots, "peer_ready_reply"), 1)
+                    H.equal(owner:publish(
+                        slots, "peer_ready_reply", "joining-peer", true), 2)
+                end
+                return true
+            end,
+        })
+
+        H.equal(requester:begin_request(1, "mission_transition_ready"), true)
+        H.equal(request_attempts, 1, "first request is intentionally lost pre-ready")
+        owner_ready = true
+        H.equal(requester:step_request(Policy.RETRY_INTERVAL), 1)
+        H.equal(exact_replies, 1)
+        H.equal(owner:pending_delivery_count(), 0,
+            "ACK must retire the direct peer-ready reply immediately")
+        local exact, state = requester:descriptor(
+            "owner-peer", "slot_melee", "vanilla_base")
+        H.equal(state, "exact")
+        H.equal(exact.fingerprint, owner_descriptor.fingerprint)
+
+        -- The request itself remains capped because the requester does not know
+        -- how many same-mod peers exist. Receiver generation dedupe prevents the
+        -- later retries from multiplying direct replies.
+        for _ = 3, Policy.MAX_RETRY_ATTEMPTS do
+            requester:step_request(Policy.RETRY_INTERVAL)
+        end
+        local sent, expired = requester:step_request(Policy.RETRY_INTERVAL)
+        H.equal(sent, 0)
+        H.equal(expired, 1)
+        H.equal(request_attempts, Policy.MAX_RETRY_ATTEMPTS)
+        H.equal(exact_replies, 1)
+        H.equal(owner:accept_request("joining-peer", Policy.SCHEMA, {
+            slot = Policy.REQUEST_SLOT, generation = 1,
+        }), false, "same request generation must remain coalesced")
+        owner:clear_peer("joining-peer")
+        H.equal(owner:accept_request("joining-peer", Policy.SCHEMA, {
+            slot = Policy.REQUEST_SLOT, generation = 1,
+        }), true, "peer teardown must clear request-generation ownership")
+        H.equal(owner:accept_request("joining-peer", Policy.SCHEMA, {
+            slot = Policy.REQUEST_SLOT,
+            generation = Policy.MAX_REQUEST_GENERATION + 1,
+        }), false, "request generations must stay wire-bounded")
+    end)
+
     H.test("CWV #660 receiver reconstructs locally and replays once per fingerprint", function()
         local d = descriptor("selected_skin", "skin_right", "skin_left")
         local lifecycle = Policy.new({
@@ -367,6 +448,11 @@ return function(H, repo_root)
             '_om._husk_identity_descriptor',
             '_send_identity_slots(slots, "hot_join_sync", true, peer_id)',
             'lifecycle:track_delivery(peer_id, slots, "hot_join_retry")',
+            'lifecycle:begin_request(generation',
+            'lifecycle:accept_request(sender_peer_id, schema, payload)',
+            'lifecycle:track_delivery(sender_peer_id,',
+            '"peer_ready_reply", true, sender_peer_id)',
+            'lifecycle:step_request(dt)',
             'lifecycle:step_deliveries(dt)',
             'payload.slot == _om.appearance_lifecycle_policy.ACK_SLOT',
             '_om.cosmetic_skin_wire.with_safe_slots',

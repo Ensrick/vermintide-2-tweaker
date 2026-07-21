@@ -220,7 +220,7 @@
                         customization_change = @{ Disposition = 'deferred'; Reason = 'customization changes still publish through provider-specific state paths' }
                         style_change = @{ Disposition = 'deferred'; Reason = 'Combat Style identity and effective template are outside the migrated unit-identity descriptor' }
                         career_change = @{ Disposition = 'deferred'; Reason = 'career generation invalidation is not yet owned by the provider-neutral CWV exact-unit lifecycle' }
-                        mission_transition = @{ Disposition = 'covered'; Evidence = 'gameplay-state enter request/replay' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'post-vanilla local inventory initialization starts an eight-attempt peer-ready request; each direct exact reply uses the existing fingerprint ACK/retry ledger' }
                         respawn = @{ Disposition = 'deferred'; Reason = 'paired runtime respawn evidence is still required by open #660' }
                         hot_join = @{ Disposition = 'covered'; Evidence = 'targeted joining-peer descriptor replay' }
                         peer_ready = @{ Disposition = 'covered'; Evidence = 'acknowledged semantic identity delivery retries at 0.5-second cadence with an eight-attempt cap until the joining peer accepts the exact fingerprint' }
@@ -237,6 +237,7 @@
                             Names = @(
                                 'CWV #660 lifecycle publishes two bounded slots and coalesces duplicates'
                                 'CWV #660 receiver reconstructs locally and replays once per fingerprint'
+                                'CWV #401 #914 mission peer-ready pull is bounded and exact'
                                 'CWV #660 world lifecycle adapters are bounded and vanilla-wire safe'
                             )
                             Surfaces = @('owner_1p', 'owner_3p', 'bot_3p', 'remote_husk_3p')

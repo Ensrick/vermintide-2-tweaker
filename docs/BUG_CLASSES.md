@@ -1213,6 +1213,14 @@ Then sweep the repo for the idiom: `\(.*and func\(.*\)\) or ` across every activ
 1. The equipment RPC encodes an item by `NetworkLookup.item_names[item_data.name]`. A CWV clone keeps `entry.name = base_weapon`, so the wire carries the BASE key. The husk looks up the VANILLA `ItemMasterList[base_weapon]` and knows nothing about the CWV instance — no `cwv_variant` marker, no `cwv_<key>_001` backend_id, only whatever `slot.skin` (a real `NetworkLookup.weapon_skins` entry) happened to sync.
 2. Therefore **every owner-path fix is invisible to husks.** Owner/bot spawns go through `GearUtils.create_equipment` (1P rig present); husk spawns go through `SimpleHuskInventoryExtension._wield_slot -> GearUtils.spawn_inventory_unit` with `owner_unit_1p == nil`. A hook that only touches `create_equipment`, or reads `item_data.backend_id`/`.cwv_variant`, never fires for the husk.
 3. The ONLY husk-reachable signals are: the synced `item_units.skin` (present when a curated illusion is applied), and a POSITIVE base+career inference (a base weapon on a career that CANNOT natively wield it — e.g. dwarf-exclusive `dr_deus_01` on a Kruber can only be the CWV Outrider). `item_data.name` alone is NOT a usable signal — it collides with a genuine native wielder of the real base weapon.
+4. A successful `mod:network_send` is not proof that a peer handled the custom
+   identity. Paired #945 logs show the transition owner broadcasting the exact
+   Dual Axes descriptor while the observer initialized its husk from the vanilla
+   base and never recorded receipt. Hot-join ACK/retry does not cover ordinary
+   mission reconstruction. At the post-vanilla local inventory-ready edge, send
+   one attempt-bounded pull generation; peers reply directly through the same
+   fingerprint ACK/retry ledger. Deduplicate request retries by sender and
+   generation, clear them on peer teardown, and never poll indefinitely.
 
 ### Fix template
 Put husk fixes in the `GearUtils.spawn_inventory_unit` hook, gated on `not owner_unit_1p`, resolving the CWV def only via positive signals:
@@ -1235,6 +1243,9 @@ Residency is the other half: the mesh the husk will spawn (curated-skin override
 - Data-driven override-unit residency pass (`_om._husk_override_unit_needs_residency`) — issues 396/401, covers all 27 override-differ variants by construction.
 - `spawn_inventory_unit` husk block -> `_om._husk_strip_cwv_ammo` (issue 399) + `_om._husk_apply_cwv_transform` (issue 397), throttled `[cwv husk-transform] no cwv def resolved` log = the #392 evidence arm.
 - Regression tests `cwv_husk_override_residency`, `cwv_no_ammo_strip_coverage`, `cwv_husk_transform_coverage`.
+- Regression `CWV #401 #914 mission peer-ready pull is bounded and exact`
+  covers a dropped first request, direct exact reconstruction, ACK retirement,
+  strict retry caps, request deduplication, and peer teardown.
 
 ### Related Issues / commits
 - v0.1.366-dev ship commit `ff8fa2c`; hardening in v0.1.367-dev (`character_weapon_variants/CHANGELOG.md`).

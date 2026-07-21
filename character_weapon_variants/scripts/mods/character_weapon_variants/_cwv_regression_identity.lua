@@ -405,6 +405,14 @@ _rt_register("issue660_world_identity_lifecycle_replay", function()
 			or type(resolve) ~= "function" then
 		return "#660 exact world-identity lifecycle is not installed"
 	end
+	if type(lifecycle.begin_request) ~= "function"
+			or type(lifecycle.accept_request) ~= "function"
+			or type(lifecycle.step_request) ~= "function"
+			or type(_om._cwv_request_peer_identities) ~= "function"
+			or not (mod._cwv_identity_surfaces
+				and mod._cwv_identity_surfaces.mission_transition_peer_pull) then
+		return "#401/#914 bounded mission-transition peer-ready pull is not installed"
+	end
 	local payload = plan({
 		slot_melee = {
 			item_data = { name = "es_bastard_sword", cwv_key = "cwv_es_longsword" },
@@ -818,6 +826,10 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 		if type(_om[name]) ~= "function" then
 			return "shared Old Musket presentation resolver missing: _om." .. name
 		end
+	end
+	if not _om.old_musket_preview_pose
+			or type(_om.old_musket_preview_pose.take_when_stable) ~= "function" then
+		return "Old Musket final preview stability owner is missing"
 	end
 	-- Cross-mod bridge entrypoint the Cosmetics/CIM-Athanor previewers consume.
 	if type(mod._cwv_resolve_preview_descriptor) ~= "function" then

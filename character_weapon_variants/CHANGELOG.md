@@ -1,5 +1,21 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.466-dev (2026-07-21) - bounded transition identity pull (#401 #914 #660) and stable Musket preview transform (#474)
+
+- Closed the mission-transition readiness gap proven by the paired #945 logs.
+  Once Fatshark finishes initializing the local human inventory, CWV now emits
+  one attempt-bounded peer-ready request generation. Each peer replies directly
+  with its current two-slot semantic identity through the existing fingerprint
+  ACK/retry ledger; duplicate requests are coalesced and no per-frame traffic is
+  introduced.
+- Reapplied the Old Musket's canonical melee/ranged preview transform at
+  `HeroPreviewer`'s final loading-stable edge, after the delayed vanilla wield
+  pose. This keeps the inventory mannequin rotation aligned with the selected
+  stance without polling or retaining a stale preview unit.
+- Added Lua 5.1 regression coverage for a deliberately lost first request,
+  exact reply convergence, ACK retirement, retry bounds, request-generation
+  deduplication, peer teardown, and the final Musket transform writer.
+
 ## 0.1.465-dev (2026-07-21) - shared non-burning Crowbill combat contract (#604)
 
 - Imperial and Dawi Crowbills now resolve through one isolated pick-mode clone
@@ -20,7 +36,6 @@
 U-7 forward-reference audit, G-STANCE pick/hammer composition walked. G-3P-ANIM
 remains explicitly deferred to Tweaker: Weapons issue #946 and is not claimed
 complete by this release.
-
 ## 0.1.464-dev (2026-07-21) - canonical no-ammo appearance descriptor (#279 #660)
 
 - Carried each variant's authored ammo-mesh suppression through the same

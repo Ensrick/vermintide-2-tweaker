@@ -121,4 +121,44 @@ function M.take_when_stable(previewer, stable)
 	return pending, "ready"
 end
 
+function M.install(mod, apply_transform, print_fn, debug_fn)
+	-- `_spawn_item` runs inside `_poll_item_package_loading`, after vanilla's
+	-- visibility pass. Consume the exact pending record once on vanilla's final
+	-- `_loading_done` edge, then make both the pose and item transform the final
+	-- bounded writers for this preview generation.
+	mod:hook("HeroPreviewer", "_update_units_visibility", function(func, self, dt)
+		local was_loading_done = self._loading_done
+		local result = func(self, dt)
+		if not was_loading_done and self._loading_done then
+			local pending, reason = M.take_when_stable(self, true)
+			if pending then
+				if Unit.alive(pending.character_unit) then
+					pcall(Unit.animation_event, pending.character_unit, pending.wield_event)
+					local slot = self._equipment_units
+						and self._equipment_units[pending.slot_index]
+					local weapon_unit = type(slot) == "table" and slot.right
+					if weapon_unit and Unit.alive(weapon_unit) and apply_transform then
+						apply_transform(weapon_unit, "3p", pending.stance)
+						pcall(print_fn,
+							"[cwv:474/792] preview transform retained slot=%s bid=%s mode=%s edge=loading_done",
+							tostring(pending.slot_index), tostring(pending.backend_id),
+							tostring(pending.stance))
+					elseif debug_fn then
+						debug_fn("[cwv:474/792] preview transform skipped reason=weapon_missing")
+					end
+					pcall(print_fn,
+						"[cwv:792] preview pose retained slot=%s bid=%s mode=%s anim=%s edge=loading_done",
+						tostring(pending.slot_index), tostring(pending.backend_id),
+						tostring(pending.stance), tostring(pending.wield_event))
+				elseif debug_fn then
+					debug_fn("[cwv:792] preview pose skipped reason=character_dead")
+				end
+			elseif reason ~= "not_armed" and debug_fn then
+				debug_fn("[cwv:792] preview pose skipped reason=%s", tostring(reason))
+			end
+		end
+		return result
+	end)
+end
+
 return M

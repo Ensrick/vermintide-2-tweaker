@@ -90,6 +90,10 @@ return function(H, repo_root)
         -- (3) inventory / hero character preview: transform + stance wield-anim replay.
         H.truthy(source:find('_om._apply_old_musket_transform(slot.right, "3p", _stance)', 1, true))
 		H.truthy(source:find('pcall(Unit.animation_event, pending.character_unit, pending.wield_event)', 1, true))
+		H.truthy(source:find('apply_transform(weapon_unit, "3p", pending.stance)', 1, true),
+			"final preview stability edge must retain the same stance transform")
+		H.truthy(source:find('_om.old_musket_preview_pose.install(mod, _om._apply_old_musket_transform', 1, true))
+		H.truthy(source:find('[cwv:474/792] preview transform retained', 1, true))
 
         -- (4) illusion browser + CIM Athanor (LootItemUnitPreviewer): shared descriptor.
         H.truthy(source:find('_om._apply_old_musket_transform(unit, "3p", preview_mode)', 1, true))

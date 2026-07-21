@@ -8,8 +8,10 @@
 local M = {
     SCHEMA = 2,
     ACK_SLOT = "cwv_identity_ack",
+    REQUEST_SLOT = "cwv_identity_request",
     RETRY_INTERVAL = 0.5,
     MAX_RETRY_ATTEMPTS = 8,
+    MAX_REQUEST_GENERATION = 2147483647,
 }
 
 local SLOT_ORDER = { "slot_melee", "slot_ranged" }
@@ -37,6 +39,8 @@ function M.new(opts)
         _sent = {},
         _remote = {},
         _deliveries = {},
+        _accepted_requests = {},
+        _request_delivery = nil,
     }
 
     function self:payload_for(slot_name, slot_data)
@@ -122,6 +126,63 @@ function M.new(opts)
             end
         end
         return tracked
+    end
+
+    -- A mission transition can initialize the owner's inventory before another
+    -- peer's VMF channel is ready.  The newly ready peer therefore asks every
+    -- same-mod peer for its current two-slot semantic identity.  Both the
+    -- request and each exact reply are attempt-bounded; duplicate requests are
+    -- accepted once per sender generation, so retries cannot multiply replies.
+    function self:begin_request(generation, edge)
+        if type(generation) ~= "number" or generation < 1
+                or generation ~= math.floor(generation) then
+            return false
+        end
+        local payload = {
+            slot = M.REQUEST_SLOT,
+            generation = generation,
+        }
+        self._request_delivery = {
+            generation = generation,
+            payload = payload,
+            edge = edge or "peer_ready_request",
+            elapsed = 0,
+            attempts = 1,
+        }
+        return opts.send("others", M.SCHEMA, payload,
+            self._request_delivery.edge) == true
+    end
+
+    function self:step_request(dt)
+        local pending = self._request_delivery
+        if not pending then return 0, 0 end
+        dt = type(dt) == "number" and math.max(dt, 0) or 0
+        pending.elapsed = pending.elapsed + dt
+        if pending.elapsed < M.RETRY_INTERVAL then return 0, 0 end
+        if pending.attempts >= M.MAX_RETRY_ATTEMPTS then
+            self._request_delivery = nil
+            return 0, 1
+        end
+        pending.elapsed = 0
+        pending.attempts = pending.attempts + 1
+        local ok = opts.send("others", M.SCHEMA, pending.payload, pending.edge)
+        return ok and 1 or 0, 0
+    end
+
+    function self:accept_request(peer_id, schema, payload)
+        if schema ~= M.SCHEMA or not nonempty(peer_id)
+                or type(payload) ~= "table" or payload.slot ~= M.REQUEST_SLOT
+                or type(payload.generation) ~= "number"
+                or payload.generation < 1
+                or payload.generation > M.MAX_REQUEST_GENERATION
+                or payload.generation ~= math.floor(payload.generation) then
+            return false
+        end
+        if self._accepted_requests[peer_id] == payload.generation then
+            return false
+        end
+        self._accepted_requests[peer_id] = payload.generation
+        return true
     end
 
     function self:ack_payload(payload)
@@ -247,6 +308,7 @@ function M.new(opts)
 
     function self:clear_peer(peer_id)
         self._remote[peer_id] = nil
+        self._accepted_requests[peer_id] = nil
         if nonempty(peer_id) then
             local prefix = peer_id .. "|"
             for route in pairs(self._deliveries) do
