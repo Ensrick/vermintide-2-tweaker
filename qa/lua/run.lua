@@ -164,6 +164,7 @@ local suites = {
     "test_cim_salvage_autofill",
     "test_cim_synthetic_item_contract",
     "test_cim_provider_gate",
+    "test_cim_cw_trait_residency",
     "test_cim_trait_slot_policy",
     "test_cim_property_value_policy",
     "test_cim_tab_preview",
