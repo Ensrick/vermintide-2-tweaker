@@ -89,6 +89,57 @@ return function(H, repo_root)
             "surface adapters mutated the canonical descriptor")
     end)
 
+    H.test("CWV #279 no-ammo variants remove inherited preview ammo rows", function()
+        local descriptor = assert(Policy.resolve_spawn_descriptor({
+            variant = {
+                item_key = "cwv_es_outrider_grenade_launcher",
+                right_hand_unit = "launcher_right",
+                no_ammo_unit = true,
+            },
+            base = {
+                right_hand_unit = "trollhammer_right",
+            },
+        }))
+        H.equal(descriptor.no_ammo_unit, true)
+
+        local inventory = {
+            { right_hand = true, unit_name = "trollhammer_right_3p" },
+            { right_hand = true, is_ammo_unit = true,
+                unit_name = "trollhammer_torpedo_3p" },
+        }
+        local browser = {
+            { unit_name = "trollhammer_right_3p" },
+            { is_ammo_unit = true, unit_name = "trollhammer_torpedo_3p" },
+        }
+        local resident = function(unit) return unit .. "_3p" end
+        H.equal(Policy.apply_spawn_descriptor(
+            descriptor, inventory, resident, "hand_flags"), 2)
+        H.equal(Policy.apply_spawn_descriptor(
+            descriptor, browser, resident, "base_identity"), 2)
+        H.equal(#inventory, 1)
+        H.equal(#browser, 1)
+        H.equal(inventory[1].unit_name, "launcher_right_3p")
+        H.equal(browser[1].unit_name, "launcher_right_3p")
+        H.equal(Policy.apply_spawn_descriptor(
+            descriptor, inventory, resident, "hand_flags"), 0,
+            "descriptor application must be idempotent")
+    end)
+
+    H.test("CWV #279 no-ammo state participates in descriptor identity", function()
+        local function descriptor(no_ammo_unit)
+            return assert(Policy.resolve_spawn_descriptor({
+                variant = {
+                    item_key = "cwv_es_outrider_grenade_launcher",
+                    right_hand_unit = "launcher_right",
+                    no_ammo_unit = no_ammo_unit,
+                },
+                base = { right_hand_unit = "trollhammer_right" },
+            }))
+        end
+        H.truthy(descriptor(true).fingerprint ~= descriptor(false).fingerprint,
+            "remote identity must detect ammo-mesh suppression drift")
+    end)
+
     H.test("CWV #660 exact skin composes independent offhand on both preview adapters", function()
         local descriptor = assert(Policy.resolve_spawn_descriptor({
             explicit_skin = "skin_red",

@@ -1,5 +1,19 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.464-dev (2026-07-21) - canonical no-ammo appearance descriptor (#279 #660)
+
+- Carried each variant's authored ammo-mesh suppression through the same
+  immutable descriptor used by the inventory mannequin and the illusion/
+  Athanor preview adapters. Crafted Outrider Grenade Launchers can no longer
+  inherit the Trollhammer torpedo row after the item entry itself was corrected.
+- Included the suppression bit in the bounded descriptor fingerprint so peers
+  fail closed when their local appearance catalogs disagree, rather than
+  accepting two semantically different recipes as the same identity.
+- Added engine-free and in-game regression coverage for both preview adapters,
+  multiple inherited ammo rows, and idempotent replay. Runtime verification:
+  craft an Outrider Grenade Launcher, inspect it in both previews, equip it, and
+  confirm only the blunderbuss-shaped launcher is visible.
+
 ## 0.1.463-dev (2026-07-19) - truthful Crowbill transform lifecycle and #423 marker isolation (#604 #423) [diagnostics-armed] [coop-required]
 
 - Replaced the synchronous Crowbill scale baseline with a generation-aware
