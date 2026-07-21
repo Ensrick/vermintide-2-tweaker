@@ -410,6 +410,34 @@ cosmetic into a missing-resource crash.
 | Player A has cosmetics_tweaker + LA bridge, Player B doesn't | LA clone textures are client-local. Clone backend_ids never reach the server (loadout cache), so Player B sees the vanilla hat |
 | Player A has weapon_tweaker, Player B doesn't | Cross-career weapons visible to both (items exist in backend), but animations may look wrong to player B |
 
+### External compatibility target: Pusfume
+
+Pusfume owns its career registration, synchronized career identity, profile and
+loadout adapters, units, assets, packages, and configuration. Tweaker-family
+mods consume none of those surfaces unless the Pusfume project manager defines
+an explicit reviewed contract. In particular, a generic career hook must accept
+an appended career it does not recognize and preserve the original call chain.
+
+Optional Tweaker behavior fails toward vanilla when Pusfume is present. It must
+not delete or replace Pusfume registrations, force a donor career over it, send
+Pusfume-owned resource identities to peers without Pusfume, or make Pusfume
+depend on a Tweaker mod. When safe coexistence is not proven, disable only the
+conflicting Tweaker feature and report the boundary in the log.
+
+The release matrix for a career/profile/loadout/package/network change is:
+
+1. Tweaker set without Pusfume: existing behavior remains unchanged.
+2. Pusfume with the changed Tweaker set: Pusfume remains selectable, spawns,
+   equips its loadout, and returns to the Keep without a script/package error.
+3. Host and client on the same Pusfume build, with the changed Tweaker mod on
+   both peers: career identity, spawn, loadout, and transition remain stable.
+4. Pusfume with the changed Tweaker mod absent or disabled: Pusfume still works;
+   no Tweaker mod is a required Pusfume dependency.
+
+Pusfume itself currently requires the same Pusfume build on every peer. This
+matrix does not claim that an unmodded peer can resolve Pusfume; it verifies that
+Tweaker adds no new dependency or failure mode.
+
 ---
 
 ## Mod 4: modded_progression
