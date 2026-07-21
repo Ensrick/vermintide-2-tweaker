@@ -189,6 +189,7 @@ local suites = {
     "test_cos_husk_identity",
     "test_cos_husk_cache_bridge",
     "test_cos_custom_hats",
+    "test_cos_attachment_link_policy",
     "test_cos_grail_knight_set",
     "test_cos_reikland_griffin",
     "test_cos_resource_residency",

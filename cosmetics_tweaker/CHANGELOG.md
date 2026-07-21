@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.162-dev - 2026-07-21 - #950 partial attachment links
+
+- Preserve Cosmetics' pre-C-API dead-unit guard while filtering mixed-validity
+  attachment maps. Valid shared node pairs now reach vanilla linking; only
+  absent optional pairs are skipped, and zero-valid maps remain a clean no-op.
+- Added a pure attachment-link policy and Lua regression coverage for complete,
+  partial, numeric-index, and zero-valid maps. This prevents custom meshes such
+  as Pusfume's first-person arms from being stranded at world origin because an
+  unused fingertip node is absent.
+
 ## 0.9.161-dev - 2026-07-19 - reconciliation: issue 883 icons over the shipped 0.9.160
 
 - Version-number collision: the Workshop's 0.9.160 (uploaded 14:05) carries the issue 154/373/650 fixes but not issue 883; master's 0.9.160 carries both. This build ships the union under 0.9.161-dev.
