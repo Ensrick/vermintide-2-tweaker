@@ -27,6 +27,8 @@
 #      a staged mod:hook / NetworkLookup-write add with no regression marker is
 #      surfaced but never blocks (we gather signal first). Escape: a
 #      `-- hook-test: <check>` comment on the added line.
+#   6. Run `qa/check_native_resource_safety.ps1 -Staged` and BLOCK a new
+#      particle/material/Gui/package native boundary without an exact qa/ token.
 #
 # Bypass on a single commit with `git commit --no-verify`. See
 # PROJECT_STANDARDS.md § 8 for the escape-hatch convention.
@@ -120,7 +122,7 @@ if (-not (Test-Path $qaScript)) {
 }
 
 Write-Host ""
-Write-Host "[pre-commit] step 3/5: qa/run_all.ps1 -Quick -SkipLua" -ForegroundColor Cyan
+Write-Host "[pre-commit] step 3/6: qa/run_all.ps1 -Quick -SkipLua" -ForegroundColor Cyan
 $qaOutput = & pwsh -NoProfile -File $qaScript -Quick -SkipLua 2>&1
 $qaExit = $LASTEXITCODE
 $qaOutput | ForEach-Object { Write-Host $_ }
@@ -140,7 +142,7 @@ if (-not (Test-Path $lintScript)) {
 }
 
 Write-Host ""
-Write-Host "[pre-commit] step 4/5: tools/mod-lint/lint-mod.ps1" -ForegroundColor Cyan
+Write-Host "[pre-commit] step 4/6: tools/mod-lint/lint-mod.ps1" -ForegroundColor Cyan
 $lintOutput = & pwsh -NoProfile -File $lintScript 2>&1
 $lintExit = $LASTEXITCODE
 $lintOutput | ForEach-Object { Write-Host $_ }
@@ -164,11 +166,25 @@ if ($lintExit -eq 1) {
 $hookCovScript = Join-Path $repoRoot 'qa\check_hook_test_coverage.ps1'
 if (Test-Path $hookCovScript) {
     Write-Host ""
-    Write-Host "[pre-commit] step 5/5: qa/check_hook_test_coverage.ps1 -Staged (advisory)" -ForegroundColor Cyan
+    Write-Host "[pre-commit] step 5/6: qa/check_hook_test_coverage.ps1 -Staged (advisory)" -ForegroundColor Cyan
     $covOut = & pwsh -NoProfile -File $hookCovScript -Staged 2>&1
     $covOut | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -eq 1) {
         Write-Host "[pre-commit] hook-test coverage advisory (exit 1) — commit allowed; add an _rt_register or -- hook-test: comment." -ForegroundColor Yellow
+    }
+}
+
+# --- Step 6: native resource boundary coverage (BLOCKING) -----------------
+$nativeResourceScript = Join-Path $repoRoot 'qa\check_native_resource_safety.ps1'
+if (Test-Path $nativeResourceScript) {
+    Write-Host ""
+    Write-Host "[pre-commit] step 6/6: qa/check_native_resource_safety.ps1 -Staged" -ForegroundColor Cyan
+    $nativeOut = & pwsh -NoProfile -File $nativeResourceScript -Staged 2>&1
+    $nativeExit = $LASTEXITCODE
+    $nativeOut | ForEach-Object { Write-Host $_ }
+    if ($nativeExit -ne 0) {
+        Write-Host "[pre-commit] blocked: a new native resource boundary lacks linked qa/ evidence." -ForegroundColor Red
+        exit 1
     }
 }
 

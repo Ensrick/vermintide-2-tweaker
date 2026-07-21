@@ -235,6 +235,11 @@ Run-Check "check_logging" { & (Join-Path $here "check_logging.ps1") -Quiet:$Quie
 # on an indeterminate diff. See qa/CHECKS.md row 24a.
 Run-Check "check_hook_test_coverage" { & (Join-Path $here "check_hook_test_coverage.ps1") -Quiet:$Quiet } -Policy 'Advisory'
 
+# Native particle/material/Gui/package calls can terminate below Lua, so every
+# newly added boundary must carry a stable resource-safety token linked to qa/.
+# Unlike the broad hook-coverage advisory, this is a blocking change-time gate.
+Run-Check "check_native_resource_safety" { & (Join-Path $here "check_native_resource_safety.ps1") -Quiet:$Quiet }
+
 # check_stale_docs is Advisory (issue #429): staleness is TIME-based (a doc goes
 # stale at $StaleDays=14 with no edit), so it can't be baselined sensibly and must not
 # hard-block a commit/CI run on calendar drift — exactly the "gate that blocks on
