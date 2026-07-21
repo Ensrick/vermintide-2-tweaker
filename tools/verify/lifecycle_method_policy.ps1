@@ -20,7 +20,7 @@ function Test-VtCurrentLiveTestCard {
     return $Body -match '(?m)^## CURRENT LIVE TEST\s*$'
 }
 
-function Get-VtCurrentLiveTestCard {
+function Get-VtCurrentLiveTestComment {
     param($Comments)
     if (-not $Comments) { return $null }
     $arr = @($Comments)
@@ -40,12 +40,41 @@ function Get-VtCurrentLiveTestCard {
             [datetime]::TryParse([string]$rawCreatedAt, [ref]$createdAt) | Out-Null
         }
         if ($createdAt -gt $selectedAt -or ($createdAt -eq $selectedAt -and $i -gt $selectedIndex)) {
-            $selected = $body
+            $selected = $arr[$i]
             $selectedAt = $createdAt
             $selectedIndex = $i
         }
     }
     return $selected
+}
+
+function Get-VtCurrentLiveTestCard {
+    param($Comments)
+    $comment = Get-VtCurrentLiveTestComment $Comments
+    if (-not $comment) { return $null }
+    return [string]$comment.body
+}
+
+function Test-VtCommentHasPinState {
+    param($Comment)
+    if ($null -eq $Comment) { return $false }
+    if ($Comment -is [System.Collections.IDictionary]) {
+        return $Comment.Contains('isPinned')
+    }
+    return $null -ne $Comment.PSObject.Properties['isPinned']
+}
+
+function Get-VtPinnedCurrentLiveTestCardCount {
+    param($Comments)
+    $count = 0
+    foreach ($comment in @($Comments)) {
+        if ((Test-VtCurrentLiveTestCard ([string]$comment.body)) -and
+            (Test-VtCommentHasPinState $comment) -and
+            [bool]$comment.isPinned) {
+            $count++
+        }
+    }
+    return $count
 }
 
 function Get-VtCardField {
@@ -94,9 +123,10 @@ function Test-VtCardHasInternalKeys {
 }
 
 function Get-VtLiveTestCardSelection {
-    param($Comments)
+    param($Comments, [switch]$RequirePinnedCard)
 
-    $card = Get-VtCurrentLiveTestCard $Comments
+    $comment = Get-VtCurrentLiveTestComment $Comments
+    $card = if ($comment) { [string]$comment.body } else { $null }
     $build = Get-VtCardField -Card $card -Name 'Build/banner'
     $topology = Get-VtCardField -Card $card -Name 'Topology'
     $soloStatus = Get-VtCardField -Card $card -Name 'Solo status'
@@ -108,6 +138,19 @@ function Get-VtLiveTestCardSelection {
         $errors.Add('missing-current-live-test-card')
     }
     else {
+        if ($RequirePinnedCard) {
+            if (-not (Test-VtCommentHasPinState $comment)) {
+                $errors.Add('current-live-test-card-pin-state-unavailable')
+            }
+            elseif (-not [bool]$comment.isPinned) {
+                $errors.Add('current-live-test-card-not-pinned')
+            }
+
+            $pinnedExactCardCount = Get-VtPinnedCurrentLiveTestCardCount $Comments
+            if ($pinnedExactCardCount -ne 1) {
+                $errors.Add("pinned-current-live-test-card-count-$pinnedExactCardCount")
+            }
+        }
         if (-not (Test-VtBuildBannerField $build)) {
             $errors.Add('missing-build-version-or-runtime-banner')
         }
@@ -130,6 +173,9 @@ function Get-VtLiveTestCardSelection {
 
     return [PSCustomObject][ordered]@{
         Card = $card
+        Comment = $comment
+        Pinned = [bool]($comment -and (Test-VtCommentHasPinState $comment) -and [bool]$comment.isPinned)
+        PinnedExactCardCount = Get-VtPinnedCurrentLiveTestCardCount $Comments
         BuildBanner = $build
         Topology = $topology
         SoloStatus = $soloStatus
@@ -142,7 +188,7 @@ function Get-VtLiveTestCardSelection {
 }
 
 function Get-VtOpenIssueLifecycleDecision {
-    param($Issue)
+    param($Issue, [switch]$RequirePinnedCard)
 
     $labels = @(Get-VtLabelNames $Issue)
     $lifecycle = @($labels | Where-Object { $script:VtOpenLifecycleLabels -contains $_ })
@@ -150,7 +196,7 @@ function Get-VtOpenIssueLifecycleDecision {
     $ready = @($lifecycle | Where-Object { $script:VtReadyLifecycleLabels -contains $_ })
     $blocked = $labels -contains 'blocked'
     $coop = $labels -contains 'coop-required'
-    $card = Get-VtLiveTestCardSelection $Issue.comments
+    $card = Get-VtLiveTestCardSelection -Comments $Issue.comments -RequirePinnedCard:$RequirePinnedCard
     $errors = New-Object System.Collections.Generic.List[string]
 
     if ($lifecycle.Count -ne 1) { $errors.Add("lifecycle-count-$($lifecycle.Count)") }

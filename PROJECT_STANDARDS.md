@@ -1764,7 +1764,9 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   hardened and closed; co-op readiness is expressed with `coop-required`.
 - **Live-test card prerequisite:** before applying `diagnostics-armed` or
   `verify-fix`, post a high-visibility comment whose heading is exactly
-  `## CURRENT LIVE TEST`. The newest such comment is authoritative and must
+  `## CURRENT LIVE TEST`, pin that comment, and unpin every older exact card.
+  The newest exact card must be the one and only pinned exact card; a ready issue
+  with an unpinned newest card or multiple pinned exact cards fails policy. It must
   include `Build/banner:` with a semantic version and either `[mod:LOAD]` or a
   clearly labeled exact versioned banner (for example,
   `exact banner: [WOC] v0.1.42-dev loaded`), `Topology:`
@@ -1857,10 +1859,15 @@ un-mergeable.
 | Comment every change | Each lifecycle edit gets an issue comment naming the evidence that drove it (shipped version, failed-verify log, user confirmation). An uncommented label change is presumed wrong and gets reverted to the last evidenced state. |
 
 **CI enforcement:** `tools/github/check-lifecycle-cardinality.ps1` runs as a
-blocking step in `.github/workflows/qa.yml` (issues:read only, one list call)
-and fails the required `qa-gate` on cardinality, invalid open labels, blocked
-queue leakage, stale/mismatched co-op routing, tooling queue leakage, or an
-invalid newest current card. The advisory
+blocking step in `.github/workflows/qa.yml` and `.github/workflows/issue-lifecycle.yml`
+(contents:read + issues:read only). It pages open issues and fetches complete
+comment history only for ready issues through GraphQL so `IssueComment.isPinned`
+is authoritative. The lightweight lifecycle workflow runs on issue open/reopen/
+close and label/comment changes, manually, and daily. GitHub exposes comment
+pin state through GraphQL but no comment-pin workflow activity, so pin-only drift
+is caught by the next manual/daily run. Both workflows fail on cardinality,
+invalid open labels, blocked queue leakage, stale/mismatched co-op routing,
+tooling queue leakage, malformed newest cards, or invalid pin state. The advisory
 `qa/check_issue_status_labels.ps1` sweep remains the local nudge; the CI step is
 the backstop that the #750 sweep proved necessary.
 
@@ -1919,7 +1926,7 @@ see what was open on a given date.
 | `check_lua_unit_tests.ps1` | `qa/` + `qa/lua/` | deterministic pure-Lua transformations under a pinned offline Lua 5.1.5 runtime; harness self-test includes a planted failure | `.\qa\check_lua_unit_tests.ps1 [-SelfTest]` |
 | `check_release_bundle_atomicity.ps1` | `qa/` + `qa/fixtures/release_bundle_atomicity/` | runtime/version/config/newest-release diff without the owning exact root bundle (#724) | `.\qa\check_release_bundle_atomicity.ps1 [-Staged] [-Range <range>] [-SelfTest]` |
 | `run_all.ps1` | `qa/` | all of the above | `.\qa\run_all.ps1 [-Quick] [-SkipLua]` |
-| GitHub Action | `.github/workflows/qa.yml` | runs `run_all.ps1` (full policy engine) + an all-mods `lint-mod.ps1` step + the blocking `tools/github/check-lifecycle-cardinality.ps1` tracker guard (issue #750) on push + PR | automatic |
+| GitHub Actions | `.github/workflows/qa.yml`, `.github/workflows/issue-lifecycle.yml` | full code QA on push/PR plus a lightweight blocking tracker guard on issue/label/comment events, manual dispatch, and daily schedule; the tracker guard enforces true GraphQL pin state | automatic |
 
 Full check-to-bug-class map: [`qa/CHECKS.md`](qa/CHECKS.md).
 
@@ -2167,7 +2174,7 @@ Per the chest-of-trials root-cause analysis (`DORMANT_BOON_RARITY` indexed by cl
 
 ---
 
-*Last updated: 2026-07-21 - restored `not-started` as the non-ready OPEN lifecycle, retired open `Fixed` / `verify-fix-coop`, made live-test labels require the newest strict CURRENT LIVE TEST card, and enforced solo-first co-op routing. Prior update 2026-07-19 - introduced the universal lifecycle guard. Prior update 2026-07-18 - added §11b zero-warning policy (fix/baseline/checker-defect within one week + pre-crash-probe-needs-a-consumer corollary), §11 umbrella doctrine + lifecycle-label-cleanup integrity, §8.7 session hygiene (git/worktree/branch closeout), §5.1c retained-state verification (read-back not setter-success), and three §14 card rows (claim.ps1 / check_pipeline_state.ps1 / generate_playtest.ps1). Prior update 2026-07-16 - reconciled cfg-owned visibility, suffix-owned ship approval, enabled-remote deployment, GitHub-only current status, and empirical issue fallback comments. Prior update 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
+*Last updated: 2026-07-21 - made the newest exact CURRENT LIVE TEST comment the one and only truly pinned exact card, enforced GraphQL pin state, and added tracker-event/daily enforcement. Prior update: restored `not-started` as the non-ready OPEN lifecycle, retired open `Fixed` / `verify-fix-coop`, made live-test labels require the newest strict CURRENT LIVE TEST card, and enforced solo-first co-op routing. Prior update 2026-07-19 - introduced the universal lifecycle guard. Prior update 2026-07-18 - added §11b zero-warning policy (fix/baseline/checker-defect within one week + pre-crash-probe-needs-a-consumer corollary), §11 umbrella doctrine + lifecycle-label-cleanup integrity, §8.7 session hygiene (git/worktree/branch closeout), §5.1c retained-state verification (read-back not setter-success), and three §14 card rows (claim.ps1 / check_pipeline_state.ps1 / generate_playtest.ps1). Prior update 2026-07-16 - reconciled cfg-owned visibility, suffix-owned ship approval, enabled-remote deployment, GitHub-only current status, and empirical issue fallback comments. Prior update 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
 pre-authorized for the full pipeline + git commit/push; stable promotions need a
 fresh per-build signal), sec. 8.5a gate semantics (errors block, warnings
 report), sec. 14 card gained the approval axis + AFTER-shipping steps.

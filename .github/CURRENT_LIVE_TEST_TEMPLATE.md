@@ -1,5 +1,7 @@
 ## CURRENT LIVE TEST
 
+<!-- Pin this comment and unpin every older exact CURRENT LIVE TEST comment. -->
+
 **Build/banner:** v0.0.0-dev, confirm `[mod:LOAD]`
 <!-- If the mod has no :LOAD marker, reproduce its whole versioned banner instead: exact banner: [WOC] v0.1.42-dev loaded -->
 **Topology:** Solo
@@ -18,4 +20,5 @@ For co-op only after useful solo work is complete, replace Topology and add:
 
 Then add the coop-required label. Never put internal keys in numbered steps;
 an exact player-entered slash command is allowed when wrapped in backticks.
+The newest exact card must remain the only pinned exact card on the issue.
 -->

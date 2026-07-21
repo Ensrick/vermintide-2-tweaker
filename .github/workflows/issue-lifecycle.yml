@@ -1,0 +1,41 @@
+name: Issue lifecycle guard
+
+on:
+  issues:
+    types: [opened, reopened, closed, labeled, unlabeled]
+  issue_comment:
+    types: [created, edited, deleted]
+  workflow_dispatch:
+  schedule:
+    # GitHub exposes comment-pin state through GraphQL, but comment pin/unpin is
+    # not an issue_comment workflow activity. The daily read catches pin-only
+    # drift that has no opened/labeled/comment-created event.
+    - cron: '17 11 * * *'
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: issue-lifecycle-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  tracker-guard:
+    if: ${{ github.event_name != 'issue_comment' || !github.event.issue.pull_request }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout default-branch policy
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Validate tracker lifecycle and pinned test cards
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./tools/github/check-lifecycle-cardinality.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./tools/github/check-lifecycle-cardinality.ps1 -Repository '${{ github.repository }}'

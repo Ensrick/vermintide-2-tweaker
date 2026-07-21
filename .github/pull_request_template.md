@@ -39,14 +39,13 @@ Use `N/A` with a reason for documentation or repository-only work.
 
 ## Issue lifecycle
 
-Every open issue has exactly one lifecycle label: `diagnostics-armed`,
-`verify-fix`, or `verify-fix-coop`. A complete fix moves to `verify-fix`, or
-`verify-fix-coop` when 2+ people are required, only after a comment states the
-test and expected result. A live diagnostic moves to `diagnostics-armed` with
-the same prerequisite. Documentation/tooling work uses the same lifecycle but
-is verified autonomously and excluded from in-game playtest scripts. After
-verification, complete hardening/documentation/regression coverage and close;
-`not-started` and `Fixed` are retired for open issues.
+Every open issue has exactly one lifecycle label: `not-started`,
+`diagnostics-armed`, or `verify-fix`. A ready issue requires a strict
+`## CURRENT LIVE TEST` comment; the newest exact card must be the only pinned
+exact card. Complete useful solo testing before adding `coop-required` for a
+remaining co-op test. Blocked, partial, documentation, and tooling work stays
+`not-started`. `Fixed` and `verify-fix-coop` are invalid while open. After
+verification, complete hardening/documentation/regression coverage and close.
 
 ## Risks and rollback
 
