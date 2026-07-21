@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.467-dev (2026-07-21) - exact Crowbill effective-action ownership (#661)
+
+- Published CWV's existing definition-backed item identity resolver for the
+  WT wield boundary; no prefix inference or foreign-provider mutation is used.
+- Imperial and Dawi Crowbill now declare both private pick and hammer templates
+  with canonical Crowbill donor provenance, so every live receiver career gets
+  its complete weapon-bound ability action on either style.
+- Added engine-free coverage for alternate-template installation and provider
+  identity precedence.
+
 ## 0.1.466-dev (2026-07-21) - bounded transition identity pull (#401 #914 #660) and stable Musket preview transform (#474)
 
 - Closed the mission-transition readiness gap proven by the paired #945 logs.

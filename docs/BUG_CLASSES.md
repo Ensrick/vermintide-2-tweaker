@@ -1639,6 +1639,10 @@ Related coverage: WT `issue584_moonfire_stowed_native_regen_contract`, `issue585
 
 ### Related Issues / commits
 - weapon_tweaker v0.12.230-dev (#290), runtime `issue290_billhook_kruber_effective_3p_complete`, diagnostic `[wt:290]`.
+- The selected remap cache identity must include the receiver career as well as
+  the effective template/item. A character switch can reuse the unit and weapon
+  identity while changing the authored 3P vocabulary; template-only cache keys
+  retain the prior receiver's map. Issue #112 owns this lifecycle regression.
 
 ## 43. Durable owner customization is confused with ephemeral render state
 
@@ -2243,6 +2247,18 @@ whose activated ability declares `action_name`.
    Catalog declarations and menu defaults can lag a late writer. Audit every
    writer: CIM's former adventure-visibility stamp appended careers without a
    paired action reconciliation and was removed at this boundary.
+7. Resolve exact provider identity before consulting `ItemMasterList`. Crafted
+   instances may expose an inherited vanilla `key` even while exact provider
+   identity is stamped in nested item data. The provider's definition-backed
+   resolver must outrank that inherited key; unknown providers must remain
+   untouched. The #930 log proved Greataxe/Crowbill reached local wield while
+   the old direct-key resolver exited before its final `[wt:661]` seam.
+8. A direct `ItemMasterList` key does not establish WT ownership by itself.
+   Reconcile a direct-key item only when that exact key is declared in WT's
+   receiver-career unlock map; an exact provider resolver may opt its own item
+   into the contract. This is the Pusfume compatibility boundary: Pusfume owns
+   its items and action templates, and WT/CWV/CIM/WOC must fail open without
+   mutation unless an explicit compatibility contract is deliberately added.
 
 ### Fix template
 - Use `tools/shared_lib/_lib_career_weapon_actions.lua`; collect every declared
@@ -2264,6 +2280,10 @@ whose activated ability declares `action_name`.
   provenance for every deep-cloned member. Reconcile the full family from live
   `can_wield`, then repeat idempotently for the actual effective template at the
   bounded wield event. Never add a per-frame repair loop.
+- Make the actual wield reconciliation a gameplay lifecycle owner, not a side
+  effect of a diagnostic module. Run it before the underlying wield transition,
+  record every distinct success or early rejection under a hard cap, and keep
+  diagnostic dumping as a read-only optional consumer.
 - Availability consumers such as CIM must not append `can_wield` independently.
   Either leave it byte-for-byte provider-owned or invoke the same atomic
   availability-plus-action transaction; a visibility helper is not an

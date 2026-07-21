@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.466-dev"
+local MOD_VERSION = "0.1.467-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -8977,7 +8977,7 @@ _om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
             tostring(descriptor.source), tostring(def.right_hand_unit), tostring(def.left_hand_unit))
     end
 end
-mod._cwv_preview_meshswap_apply = _om._cwv_preview_meshswap_apply  -- exposed for /cwv regression (issue 237)
+mod._cwv_preview_meshswap_apply = _om._cwv_preview_meshswap_apply; mod._cwv_resolve_item_key = _om._cwv_key_for_item -- exact provider identity; #237 preview handle
 
 -- Illusion-browser mesh-swap pre-pass (issue 419) — WEAPON_APPEARANCE_STANDARD
 -- §3 path 4. The browser's data-level resolution is SUPPOSED to cover this:

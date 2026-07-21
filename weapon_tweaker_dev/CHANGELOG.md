@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.286-dev (2026-07-21) - receiver-stable remaps and exact wield actions (#112, #661)
+
+- Mirrors public beta `0.12.285-beta`: receiver career is part of each unit's
+  cached third-person animation remap identity, and local wield reconciles the
+  exact effective action template before the engine consumes it.
+- Exact CWV identity outranks inherited vanilla keys; direct WT items require
+  an exact receiver-career declaration. Unknown providers, including Pusfume,
+  remain provider-owned and pass through without mutation.
+- Imperial and Dawi Crowbill cover both pick and hammer effective templates.
+- The engine `_wield_slot` function executes exactly once even if WT's bounded
+  pre-wield reconciliation fails; regression coverage pins this contract.
+
 ## 0.12.285-dev (2026-07-21) - parity/energy repairs + Imperial Crowbill animation tuner
 
 - The development 3P animation picker now exposes CWV's player-facing Imperial

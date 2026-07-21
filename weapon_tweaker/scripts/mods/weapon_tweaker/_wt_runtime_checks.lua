@@ -99,6 +99,74 @@ function M.install(mod, _rt_register, deps)
         end
     end)
 
+    _rt_register("issue112_remap_identity_includes_receiver_career", function()
+        local policy = mod._wt and mod._wt.anim_state_policy
+        if type(policy) ~= "table" or type(policy.remap_identity) ~= "function" then
+            return "#112 animation state identity policy unavailable"
+        end
+        local mercenary = policy.remap_identity(
+            "two_handed_billhooks_template", "wh_2h_billhook", "es_mercenary")
+        local saltzpyre = policy.remap_identity(
+            "two_handed_billhooks_template", "wh_2h_billhook", "wh_bountyhunter")
+        if mercenary == saltzpyre then
+            return "#112 receiver career does not invalidate the cached remap"
+        end
+    end)
+
+    _rt_register("issue661_effective_wield_action_contract", function()
+        local ok, cwv = pcall(get_mod, "character_weapon_variants")
+        if not ok or type(cwv) ~= "table" then return "skip: CWV not loaded" end
+        if type(cwv._cwv_resolve_item_key) ~= "function" then
+            return "#661 CWV exact item identity provider unavailable"
+        end
+        local context_policy = mod._wt and mod._wt.weapon_action_context_policy
+        if type(context_policy) ~= "table" then
+            return "#661 wield-boundary context owner unavailable"
+        end
+        local item = rawget(_G, "ItemMasterList")
+            and rawget(ItemMasterList, "cwv_es_greataxe")
+        local template = rawget(_G, "Weapons")
+            and rawget(Weapons, "cwv_greataxe_template")
+        if type(item) ~= "table" or type(template) ~= "table" then
+            return "skip: #661 CWV Greataxe provider not registered"
+        end
+        local context, reason = context_policy.resolve({ item_data = {
+            key = "dr_2h_axe", backend_id = "wt-661-runtime-probe",
+            data = { cim_acquisition_key = "cwv_es_greataxe" },
+        } }, "wh_bountyhunter", {
+            identity_resolvers = { cwv._cwv_resolve_item_key },
+            item_master_list = ItemMasterList,
+            get_item_template = function() return template end,
+        })
+        if not context or context.item_key ~= "cwv_es_greataxe" then
+            return "#661 inherited-key identity did not resolve: " .. tostring(reason)
+        end
+        if not context_policy.is_managed(context, mod._wt.weapon_unlock_map) then
+            return "#661 exact CWV provider identity was not accepted as managed"
+        end
+        local cs = rawget(_G, "CareerSettings")
+            and rawget(CareerSettings, "wh_bountyhunter")
+        for _, ability in ipairs((cs and cs.activated_ability) or {}) do
+            local action_name = ability and ability.action_name
+            local canonical = action_name and rawget(_G, "ActionTemplates")
+                and rawget(ActionTemplates, action_name)
+            if canonical and (type(template.actions) ~= "table"
+                    or template.actions[action_name] ~= canonical) then
+                return "#661 Greataxe missing canonical " .. tostring(action_name)
+            end
+            for _, alternate in ipairs({
+                "cwv_crowbill_pick_template", "cwv_crowbill_hammer_template",
+            }) do
+                local candidate = rawget(Weapons, alternate)
+                if canonical and candidate and (type(candidate.actions) ~= "table"
+                        or candidate.actions[action_name] ~= canonical) then
+                    return "#661 " .. alternate .. " missing canonical "
+                        .. tostring(action_name)
+                end
+            end
+        end
+    end)
+
     _rt_register("wh_priest_no_bows", function()
         -- Per feedback_vt2_no_bows_on_warrior_priest: wh_priest must NOT receive
         -- bows / crossbows / longbows because his 3P body lacks the anims.
