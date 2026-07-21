@@ -1016,6 +1016,36 @@ _rt_register("issue660_preview_descriptor_adapter_parity", function()
     end
 end)
 
+_rt_register("issue279_no_ammo_preview_descriptor", function()
+    local policy = _om.exact_appearance
+    if type(policy) ~= "table" or type(policy.resolve_spawn_descriptor) ~= "function"
+            or type(policy.apply_spawn_descriptor) ~= "function" then
+        return "#279 canonical preview descriptor/adapter API missing"
+    end
+    local descriptor, reason = policy.resolve_spawn_descriptor({
+        variant = {
+            item_key = "cwv_es_outrider_grenade_launcher",
+            right_hand_unit = "rt_launcher",
+            no_ammo_unit = true,
+        },
+        base = { right_hand_unit = "rt_trollhammer" },
+    })
+    if not descriptor then return "#279 descriptor failed: " .. tostring(reason) end
+    local recipe = {
+        { right_hand = true, unit_name = "rt_trollhammer_3p" },
+        { right_hand = true, is_ammo_unit = true, unit_name = "rt_torpedo_3p" },
+    }
+    local changed = policy.apply_spawn_descriptor(descriptor, recipe,
+        function(unit) return unit .. "_3p" end, "hand_flags")
+    if changed ~= 2 or #recipe ~= 1 or recipe[1].unit_name ~= "rt_launcher_3p" then
+        return "#279 inherited preview ammo row survived the canonical descriptor"
+    end
+    if policy.apply_spawn_descriptor(descriptor, recipe,
+            function(unit) return unit .. "_3p" end, "hand_flags") ~= 0 then
+        return "#279 descriptor application is not idempotent"
+    end
+end)
+
 _rt_register("give_refuses_skin_only", function()
     -- Issue #538: /cwv_give must REFUSE skin_only (illusion-only) variants. Giving
     -- one builds a backend_id and mirrors the def into ItemMasterList, resurrecting

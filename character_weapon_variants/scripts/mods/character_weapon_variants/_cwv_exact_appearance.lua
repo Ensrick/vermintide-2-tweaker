@@ -96,6 +96,7 @@ local function descriptor_fingerprint(descriptor)
         descriptor.skin or "-",
         descriptor.right_hand_unit or "-",
         descriptor.left_hand_unit or "-",
+        descriptor.no_ammo_unit and "no-ammo" or "ammo",
     }, "|")
     -- VMF mod messages share Stingray's small string envelope. Never put the
     -- raw unit-path tuple on the wire: two independent bounded arithmetic
@@ -154,6 +155,11 @@ function M.resolve_spawn_descriptor(args)
         variant_left_hand_unit = unit_from(variant, "left_hand_unit"),
         base_right_hand_unit = unit_from(args.base, "right_hand_unit"),
         base_left_hand_unit = unit_from(args.base, "left_hand_unit"),
+        -- Some variants intentionally keep the base weapon's ammo mechanics
+        -- while replacing its authored ammo mesh.  This is appearance state,
+        -- not ammo-count state, so it belongs in the same immutable descriptor
+        -- as the hand-unit paths and must participate in its fingerprint.
+        no_ammo_unit = variant.no_ammo_unit == true,
     }
     if not descriptor.right_hand_unit and not descriptor.left_hand_unit then
         return nil, "units_missing"
@@ -175,8 +181,15 @@ function M.apply_spawn_descriptor(descriptor, spawn_data, resolve_3p, adapter)
     if adapter ~= "hand_flags" and adapter ~= "base_identity" then return 0 end
 
     local changed = 0
-    for _, entry in ipairs(spawn_data) do
-        if type(entry) == "table" and not entry.is_ammo_unit then
+    -- Iterate backwards because a no-ammo descriptor removes inherited recipe
+    -- rows.  This makes the operation safe for one or several base ammo rows
+    -- and idempotent when two presentation adapters see the same recipe.
+    for index = #spawn_data, 1, -1 do
+        local entry = spawn_data[index]
+        if type(entry) == "table" and entry.is_ammo_unit and descriptor.no_ammo_unit then
+            table.remove(spawn_data, index)
+            changed = changed + 1
+        elseif type(entry) == "table" and not entry.is_ammo_unit then
             local hand
             if adapter == "hand_flags" then
                 hand = entry.right_hand and "right" or (entry.left_hand and "left")
