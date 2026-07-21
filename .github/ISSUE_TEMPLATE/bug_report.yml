@@ -3,14 +3,14 @@ description: Report a reproducible defect or crash with engine and test context.
 title: "[mod] "
 labels:
   - bug
-  - diagnostics-armed
+  - not-started
 body:
   - type: markdown
     attributes:
       value: |
         Keep the title to eight words after the `[mod]` prefix. Use empirical evidence and keep the body concise. Apply one mod label and one severity label after filing.
 
-        Every open issue has exactly one lifecycle. This template starts `diagnostics-armed`, so the evidence/reproduction and expected-result fields must define a runnable diagnostic. Replace it with `verify-fix` only when a complete solo/autonomously verifiable fix is ready, or `verify-fix-coop` when runtime verification requires 2+ people. Tooling/docs carry the same lifecycle but are routed to autonomous verification.
+        Every new issue starts `not-started` and stays outside the in-game queue. Add `diagnostics-armed` or `verify-fix` only after posting a valid `## CURRENT LIVE TEST` comment. Complete useful solo testing first; add `coop-required` only when the current card records solo as passed or exhausted and the remaining test is co-op.
   - type: dropdown
     id: mod
     attributes:
@@ -68,8 +68,8 @@ body:
   - type: textarea
     id: diagnostic_method
     attributes:
-      label: Diagnostic method (runnable now)
-      description: Exact steps or command that can be run immediately on the reported state. State player count and host/client roles when applicable.
+      label: Investigation evidence needed
+      description: Source, log, or implementation evidence needed before this issue can become ready for an in-game test.
       placeholder: |
         1. Confirm the affected mod version in the newest log.
         2. Reproduce the symptom or run the bounded diagnostic command.

@@ -54,18 +54,16 @@ bug classes each check covers.
 
 Every open issue has exactly one tracker lifecycle label:
 
-- `verify-fix` after a complete solo-verifiable or repository-only fix is ready
-  with a test method and expected result.
-- `verify-fix-coop` instead when verification requires two or more people.
-- `diagnostics-armed` while a bounded runtime or autonomous evidence path is
-  ready with reproduction/check steps and expected output.
+- `not-started` while the issue is not ready for live in-game testing.
+- `diagnostics-armed` when an in-game diagnostic is deployed and runnable now.
+- `verify-fix` when a complete candidate fix is deployed and runnable now.
 
-Issues carrying the explicit `tooling` routing label use the same lifecycle
-labels but are routed to autonomous verification and do not appear in generated
-in-game playtests. `documentation` is an orthogonal content modifier and does
-not make runtime work repository-only by itself.
-`not-started` and `Fixed` are retired for open issues. After verification,
-complete hardening/documentation/regression work and close.
+The two ready states require the newest exact `## CURRENT LIVE TEST` comment
+with version/load banner, topology, numbered player-facing steps, and expected
+result. Test solo first. Add `coop-required` only after the card records solo as
+passed/exhausted and the remaining topology is co-op. Blocked and tooling issues
+stay `not-started`. `Fixed` and `verify-fix-coop` are invalid while open. After
+verification, complete hardening/documentation/regression work and close.
 
 The complete taxonomy and prerequisites live in
 [PROJECT_STANDARDS section 11](./PROJECT_STANDARDS.md#11-pending-work-tracking).

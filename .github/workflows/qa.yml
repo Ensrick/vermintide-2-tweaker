@@ -99,8 +99,8 @@ jobs:
         # BLOCKING by deliberate design (issue #750): an out-of-repo strip sweep
         # left 10 open issues with zero lifecycle labels, and the advisory
         # check_issue_status_labels.ps1 warning did not stop it. This step FAILS
-        # when any OPEN issue's lifecycle-label cardinality != 1, printing the
-        # offending numbers and their current lifecycle labels. Read-only: needs
+        # on cardinality drift, retired open labels, blocked/coop leakage, or an
+        # invalid newest CURRENT LIVE TEST card on a ready issue. Read-only: needs
         # only the issues:read permission above; ONE gh list call, no per-issue
         # calls, never edits labels. No skip label - a red run is fixed by
         # repairing the tracker (ship.ps1 Get-LifecycleEditPlan), not the gate.

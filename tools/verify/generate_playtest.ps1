@@ -8,14 +8,11 @@
 .DESCRIPTION
     Improvement #3a from the 2026-07 standards review.
 
-    Reads open issues labeled `verify-fix`, `verify-fix-coop`, and `diagnostics-armed`,
-    then excludes repository-only issues carrying the explicit `tooling` routing label. The
-    lifecycle is universal; those modifiers route work to autonomous verification rather
-    than a human in-game checklist. For each remaining issue it extracts the most recent comment that carries an actual
-    TEST METHOD (heuristic score over 'TEST' / 'Test method' / 'verify' + imperative steps,
-    with bookkeeping/xref comments penalized). Issues whose newest method-bearing comment
-    cannot be found are flagged MISSING-METHOD (a doctrine violation: every ship owes a
-    runnable test comment) and fall back to a link.
+    Reads open issues labeled `verify-fix` or `diagnostics-armed`. Every row must
+    pass the shared strict policy: the newest comment headed exactly
+    `## CURRENT LIVE TEST` carries a build/version banner, explicit topology,
+    numbered player-facing steps, and an expected result. Invalid candidates
+    abort generation before any output is written.
 
     Each check is classified by LOCATION with keyword heuristics over the method text so
     the walk is ordered for ONE efficient session: solo keep checks, then a solo adventure
@@ -27,7 +24,6 @@
       docs/PLAYTEST_SCRIPT.md   full solo+coop walk for the author/primary tester
       docs/PLAYTEST_COOP.md     compact coop-only variant in plain language for a second
                                 tester (RainReligion) with no repo context
-      docs/VERIFY_REPOSITORY.md autonomous repository-only verification queue
 
     Classification is best-effort keyword matching; when it misroutes a check, fix the
     method comment or the keyword lists here and regenerate - never hand-edit the docs.
@@ -125,7 +121,13 @@ function Get-VtEvidence {
     }
     $markers = @(($correctionMarkers + $baseMarkers) | Select-Object -Unique)
     if ($markers) { $parts += ('log ' + ($markers -join ' ')) }
-    if ($Method -match '(?i)pass\s*(?:=|:)\s*\**([^\r\n]+)') {
+    $cardExpected = Get-VtCardField -Card $Method -Name 'Expected'
+    if ($cardExpected) {
+        $p = ($cardExpected -replace '\*\*', '').Trim()
+        if ($p.Length -gt 110) { $p = $p.Substring(0, 107).TrimEnd() + '...' }
+        $parts += ('expected: ' + $p)
+    }
+    elseif ($Method -match '(?i)pass\s*(?:=|:)\s*\**([^\r\n]+)') {
         $p = ($Matches[1] -replace '\*\*', '').Trim()
         if ($p.Length -gt 110) { $p = $p.Substring(0, 107).TrimEnd() + '...' }
         $parts += ('pass: ' + $p)
@@ -152,12 +154,7 @@ function Get-VtCoopTier {
 function Get-VtLocation {
     param([string]$Method, [string]$Title, [string[]]$LabelNames)
     $hay = (($Title + " `n " + $Method)).ToLower()
-    # verify-fix-coop is the mutually-exclusive shipped-fix lifecycle. Armed
-    # diagnostics keep diagnostics-armed as their sole lifecycle and use the
-    # orthogonal coop-required qualifier (PROJECT_STANDARDS section 11).
-    $isCoop = ($LabelNames -contains 'verify-fix-coop') -or
-        ($LabelNames -contains 'coop-required') -or
-        ($hay -match '(both peers|both players|two players|2 players|3 players|three players|3\+ players|2\+ players|second player|other player|host and client|client husk|no-?cwv peer|remote (player|peer)|co-?op|cold[ -]?join|another player|second tester|host bot)')
+    $isCoop = ($LabelNames -contains 'coop-required')
     if ($isCoop) { return (Get-VtCoopTier $hay) }
 
     # solo, first match wins (ordered so mission-requiring checks batch together)
@@ -393,61 +390,79 @@ function Invoke-SelfTest {
     else { Write-Host "SELF-TEST FAIL ($script:fail)" -ForegroundColor Red; exit 1 }
 }
 
-if ($SelfTest) { Invoke-SelfTest }
+function Invoke-StrictLiveTestSelfTest {
+    $fail = 0
+    function Assert-Strict($condition, [string]$name) {
+        if ($condition) { Write-Host "  PASS $name" -ForegroundColor Green }
+        else { Write-Host "  FAIL $name" -ForegroundColor Red; $script:strictFail++ }
+    }
+    $script:strictFail = 0
+    $soloCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Equip Kruber's Mace in the Keep.`n`n**Expected:** Kruber's Mace remains visible."
+    $coopCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Co-op (host and one client)`n**Solo status:** Passed; only the remote view remains.`n`n1. Host equips Kruber's Mace.`n2. The joining player observes it.`n`n**Expected:** Both players see Kruber's Mace."
+    $solo = Get-VtLiveTestCardSelection @([pscustomobject]@{ body=$soloCard })
+    $coop = Get-VtLiveTestCardSelection @([pscustomobject]@{ body=$coopCard })
+    Assert-Strict $solo.Valid 'strict solo card accepted'
+    Assert-Strict ($coop.Valid -and $coop.RequiresCoop) 'strict co-op card accepted after solo pass'
+    Assert-Strict ((Get-VtCheckLine -Method $soloCard -Title 'fallback') -match "Kruber's Mace") 'localized numbered step becomes check line'
+    Assert-Strict ((Get-VtEvidence -Method $soloCard) -match 'expected:') 'card Expected field becomes evidence'
+    Assert-Strict ((Get-VtLocation -Method $soloCard -Title 'weapon' -LabelNames @('verify-fix')) -notlike 'COOP*') 'solo ready label stays solo'
+    Assert-Strict ((Get-VtLocation -Method $coopCard -Title 'weapon' -LabelNames @('verify-fix','coop-required')) -eq 'COOP-2P') 'coop-required routes co-op card'
+    $invalid = Get-VtLiveTestCardSelection @([pscustomobject]@{ body=$soloCard.Replace("Kruber's Mace", 'em_mace') })
+    Assert-Strict (-not $invalid.Valid -and $invalid.Errors -contains 'internal-key-in-player-steps') 'internal key in player step fails closed'
+    $stale = Get-VtLiveTestCardSelection @(
+        [pscustomobject]@{ body=$soloCard },
+        [pscustomobject]@{ body="## CURRENT LIVE TEST`n**Topology:** Solo`n1. Equip Kruber's Mace.`n**Expected:** Visible." }
+    )
+    Assert-Strict (-not $stale.Valid) 'newest incomplete card overrides older valid card'
+    if ($script:strictFail -gt 0) { throw "generate_playtest strict self-test failed ($script:strictFail)" }
+    Write-Host '[generate_playtest -SelfTest] OK'
+}
+
+if ($SelfTest) { Invoke-StrictLiveTestSelfTest; exit 0 }
 
 # ---------------------------------------------------------------------------
 # Fetch
 # ---------------------------------------------------------------------------
 if (-not $OutDir) { $OutDir = Join-Path $repo 'docs' }
-if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Force -Path $OutDir | Out-Null }
 
-Write-Host 'Fetching open verify-state issues from GitHub...' -ForegroundColor Cyan
-$labels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed')
+Write-Host 'Fetching open live-test candidates from GitHub...' -ForegroundColor Cyan
 $byNumber = [ordered]@{}
-foreach ($lbl in $labels) {
-    $raw = & gh issue list --state open --label $lbl --json number,title,body,labels,comments,url,updatedAt --limit $Limit 2>$null | Out-String
-    if ([string]::IsNullOrWhiteSpace($raw)) { Write-Host "  (${lbl}: none)"; continue }
-    $list = $raw | ConvertFrom-Json
-    foreach ($it in $list) {
-        if (-not $byNumber.Contains([string]$it.number)) { $byNumber[[string]$it.number] = $it }
+$raw = & gh issue list --state open --json number,title,body,labels,comments,url,updatedAt --limit $Limit 2>$null | Out-String
+if ([string]::IsNullOrWhiteSpace($raw)) { throw 'No issue data returned. Is gh authenticated? (gh auth status)' }
+$allOpen = @($raw | ConvertFrom-Json)
+$candidateLabels = @('diagnostics-armed', 'verify-fix', 'verify-fix-coop', 'Fixed', 'coop-required')
+foreach ($it in $allOpen) {
+    $names = @(Get-VtLabelNames $it)
+    if (@($names | Where-Object { $candidateLabels -contains $_ }).Count -gt 0) {
+        $byNumber[[string]$it.number] = $it
     }
-    Write-Host ("  {0}: {1}" -f $lbl, @($list).Count)
 }
-if ($byNumber.Count -eq 0) { throw 'No issues returned. Is gh authenticated? (gh auth status)' }
+Write-Host "  candidates: $($byNumber.Count)"
+
+$invalidCandidates = @()
+foreach ($k in $byNumber.Keys) {
+    $decision = Get-VtOpenIssueLifecycleDecision $byNumber[$k]
+    if (-not $decision.Valid) {
+        $invalidCandidates += "#$k ($($decision.Errors -join ', '))"
+    }
+}
+if ($invalidCandidates.Count -gt 0) {
+    throw "Live-test queue is invalid; no documents were written: $($invalidCandidates -join '; ')"
+}
+if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Force -Path $OutDir | Out-Null }
 
 # ---------------------------------------------------------------------------
 # Classify
 # ---------------------------------------------------------------------------
 $rows = New-Object System.Collections.Generic.List[object]
-$missing = New-Object System.Collections.Generic.List[int]
-$repositoryRows = New-Object System.Collections.Generic.List[object]
-$repositoryMissing = New-Object System.Collections.Generic.List[int]
 foreach ($k in $byNumber.Keys) {
     $it = $byNumber[$k]
     $labelNames = @($it.labels | ForEach-Object { $_.name })
-    $isDiagnostic = $labelNames -contains 'diagnostics-armed'
-    $selection = Get-VtLifecycleMethodSelection -Comments $it.comments -Body ([string]$it.body) -AllowBodyFallback:$isDiagnostic
+    $selection = Get-VtLifecycleMethodSelection -Comments $it.comments -Body ([string]$it.body)
     $method = $selection.Method
     $correction = $selection.Correction
     $correctionVersion = $selection.CorrectionVersion
-    if (Test-VtRepositoryOnlyLabels $labelNames) {
-        if (-not $selection.Valid) { $repositoryMissing.Add([int]$it.number) }
-        $repositoryRows.Add([pscustomobject]@{
-            Number = [int]$it.number
-            Title = [string]$it.title
-            Lifecycle = @($labelNames | Where-Object { $_ -in @('diagnostics-armed', 'verify-fix', 'verify-fix-coop') }) -join ','
-            Check = Get-VtCheckLine -Method $method -Title $it.title -CorrectionVersion $correctionVersion
-            Evidence = Get-VtEvidence -Method $method -Correction $correction -CorrectionVersion $correctionVersion
-            HasMethod = $selection.Valid
-            MethodSource = $selection.Source
-            Url = if ($it.url) { [string]$it.url } else { "https://github.com/Ensrick/vermintide-2-tweaker/issues/$($it.number)" }
-            PriorityRank = Get-VtPriorityRank $labelNames
-            UpdatedAt = [datetime]$it.updatedAt
-        })
-        continue
-    }
     $hasMethod = $selection.Valid
-    if (-not $hasMethod) { $missing.Add([int]$it.number) }
     $rows.Add([pscustomobject]@{
         Number   = [int]$it.number
         Title    = [string]$it.title
@@ -488,23 +503,21 @@ function Fmt-Row {
     param($r)
     $modTag = if ($r.Mod) { " ($($r.Mod))" } else { '' }
     $diag = if ($r.Diag) { ' [diag]' } else { '' }
-    $miss = if (-not $r.HasMethod) { ' **[MISSING-METHOD -> open issue]**' } else { '' }
-    return "- [ ] #$($r.Number)$modTag$diag - $($r.Check)$miss`n  _Evidence:_ $($r.Evidence)"
+    return "- [ ] #$($r.Number)$modTag$diag - $($r.Check)`n  _Evidence:_ $($r.Evidence)"
 }
 
 $L = New-Object System.Collections.Generic.List[string]
 $L.Add('# Playtest Script (verify-state issues)')
 $L.Add('')
 $L.Add("> GENERATED by ``tools/verify/generate_playtest.ps1`` on $now. Do NOT hand-edit - rerun the tool.")
-$L.Add('> Source: open issues labeled `verify-fix`, `verify-fix-coop`, `diagnostics-armed`, excluding work with the explicit repository-routing label `tooling`.')
+$L.Add('> Source: valid open issues labeled `verify-fix` or `diagnostics-armed`. `coop-required` routes a card to the co-op section after its solo stage is passed/exhausted.')
 $L.Add('> Ordered for one session: solo keep -> solo adventure -> solo Chaos Wastes -> scoreboard -> boot/log, then co-op.')
-$L.Add('> Each box confirms one issue in-game. Every check owes a method comment; `[MISSING-METHOD]` rows violate doctrine - post a test comment on that issue.')
+$L.Add('> Each box comes from the newest exact `## CURRENT LIVE TEST` comment. Generation aborts before writing if any candidate is invalid.')
 $L.Add('')
 $total = $rows.Count
 $soloCount = @($rows | Where-Object { $_.Section -notlike 'COOP*' }).Count
 $coopCount = $total - $soloCount
-$L.Add("**$total checks** across ${soloCount} solo + ${coopCount} co-op. $($missing.Count) missing a test method.")
-$L.Add("Repository-only issues routed to ``VERIFY_REPOSITORY.md`` instead: $($repositoryRows.Count).")
+$L.Add("**$total checks** across ${soloCount} solo + ${coopCount} co-op.")
 $L.Add('')
 $L.Add('---')
 $L.Add('')
@@ -553,15 +566,6 @@ $L.Add('')
 $L.Add('### Rough time estimate')
 foreach ($e in $secEstimates) { $L.Add("- $e") }
 $L.Add('')
-$L.Add('### MISSING-METHOD (no runnable test comment found - doctrine violation)')
-if ($missing.Count -eq 0) { $L.Add('- none') }
-else {
-    $L.Add("These $($missing.Count) issues carry a verify label but no method comment; post a TEST comment or they cannot be verified:")
-    $sortedMissing = $missing | Sort-Object
-    $L.Add('- ' + (($sortedMissing | ForEach-Object { "#$_" }) -join ', '))
-}
-$L.Add('')
-
 $scriptPath = Join-Path $OutDir 'PLAYTEST_SCRIPT.md'
 $L -join "`n" | Set-Content -Path $scriptPath -Encoding utf8
 
@@ -622,45 +626,16 @@ $coopPath = Join-Path $OutDir 'PLAYTEST_COOP.md'
 $C -join "`n" | Set-Content -Path $coopPath -Encoding utf8
 
 # ---------------------------------------------------------------------------
-# Render repository-only autonomous verification queue
-# ---------------------------------------------------------------------------
-$R = New-Object System.Collections.Generic.List[string]
-$R.Add('# Repository Verification Queue')
-$R.Add('')
-$R.Add("> GENERATED by ``tools/verify/generate_playtest.ps1`` on $now. Do NOT hand-edit - rerun the tool.")
-$R.Add('> Source: open lifecycle issues carrying the explicit repository-routing label `tooling`. `documentation` alone is an orthogonal content modifier and does not move runtime work here.')
-$R.Add('')
-$R.Add("**$($repositoryRows.Count) checks**. $($repositoryMissing.Count) missing a current runnable method with an expected result.")
-$R.Add('')
-foreach ($row in (Sort-VtRows $repositoryRows)) {
-    $missingTag = if ($row.HasMethod) { '' } else { ' **[MISSING-METHOD]**' }
-    $R.Add("- [ ] [#$($row.Number) - $($row.Title)]($($row.Url))$missingTag")
-    $R.Add("  - Lifecycle: ``$($row.Lifecycle)``; method source: ``$($row.MethodSource)``")
-    $R.Add("  - Run/review: $($row.Check)")
-    $R.Add("  - Expected evidence: $($row.Evidence)")
-}
-if ($repositoryRows.Count -eq 0) {
-    $R.Add('No repository-only lifecycle issues are currently open.')
-}
-$repositoryPath = Join-Path $OutDir 'VERIFY_REPOSITORY.md'
-$R -join "`n" | Set-Content -Path $repositoryPath -Encoding utf8
-
-# ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'Generated:' -ForegroundColor Green
 Write-Host "  $scriptPath"
 Write-Host "  $coopPath"
-Write-Host "  $repositoryPath"
 Write-Host ''
-Write-Host "Total issues: $total   (solo $soloCount, coop $coopCount)   missing-method: $($missing.Count)"
-Write-Host "Repository-only autonomous queue: $($repositoryRows.Count)   missing-method: $($repositoryMissing.Count)"
+Write-Host "Total issues: $total   (solo $soloCount, coop $coopCount)"
 Write-Host 'Per-section counts:'
 foreach ($sec in ($sections + $coopSections)) {
     $c = @($rows | Where-Object { $_.Section -eq $sec.Key }).Count
     Write-Host ("  {0,-18} {1}" -f $sec.Key, $c)
-}
-if ($missing.Count -gt 0) {
-    Write-Host ('Missing-method issues: ' + (($missing | Sort-Object | ForEach-Object { "#$_" }) -join ', ')) -ForegroundColor Yellow
 }

@@ -247,31 +247,22 @@ UPLOAD - a local deploy alone is silently clobbered.
   9).** Shipping a fix or diagnostic is what flips an issue into "ready to test",
   and that signal is a GitHub label, not just a comment. `PROJECT_STANDARDS.md`
   §11 requires it "in the same pass as the CHANGELOG entry":
-  - **PREREQ (user rule 2026-07-12, issue #479): establish the selected method
-    FIRST** - how to test (command / repro steps) + the expected result, runnable
-    now. A new diagnostic may use the issue template's explicit diagnostic-method
-    body field; a verify lifecycle requires a current method comment. Never strip
-    an existing lifecycle alone while correcting invalid metadata.
-  - **ROUTING (user rule 2026-07-19):** all open issues use the same three
-    lifecycle labels. Runtime work is human/in-game; repository-only work uses
-    the explicit `tooling` routing label and is excluded from generated playtest
-    scripts. `documentation` is content-only and does not route by itself. Post
-    the autonomous command/review and expected output.
-  - `gh issue edit <N> --add-label verify-fix` when a **complete fix** is ready:
-    the user confirms runtime work in-game; the maintainer runs the documented
-    autonomous check for repository-only work.
-  - `gh issue edit <N> --remove-label verify-fix --add-label verify-fix-coop`
-    when the verification needs **2+ people** (cross-peer wire safety, host/client
-    desync, hot-join). Mark the CHANGELOG entry `[verify-fix-coop]`; ship.ps1
-    rejects an unmarked or contradictory transition. **The tester count
-    in the test-method comment decides the label** (user rule 2026-07-12, issues
-    280/278): if your test method says 2+ people, the label is coop, full stop —
-    and a peer-dependent crash class (send-queue overflow, husk resolution) can
-    never carry a solo test method.
-  - `gh issue edit <N> --add-label diagnostics-armed` when bounded runtime
-    instrumentation/evidence capture or an autonomous repository diagnostic is ready.
-  - Remove every competing lifecycle in the same `gh issue edit`; also remove
-    retired `not-started` / `Fixed` labels when encountered.
+  - **PREREQ:** post the newest exact `## CURRENT LIVE TEST` card FIRST. It
+    names the semantic version and `[mod:LOAD]` banner, `Topology: Solo` or
+    `Co-op`, numbered localized/player-facing steps, and `Expected:` result.
+    Issue-body text and older method headings do not qualify.
+  - `gh issue edit <N> --remove-label not-started --add-label verify-fix` only
+    when a **complete deployed fix** is runnable in-game now.
+  - `gh issue edit <N> --remove-label not-started --add-label diagnostics-armed`
+    only when a bounded deployed in-game diagnostic is runnable now.
+  - Test useful solo paths first. Add `coop-required` only after the current
+    co-op card records `Solo status: Passed/Completed/Exhausted`. Both fix and
+    diagnostic co-op cards retain their ordinary lifecycle plus this qualifier.
+  - Blocked, partial, tooling, docs, and otherwise unready work uses
+    `not-started`, without `coop-required`. Verify tooling/docs autonomously and
+    close directly; never put them in the live in-game queue.
+  - Remove every competing lifecycle in the same `gh issue edit`; `Fixed` and
+    `verify-fix-coop` are invalid while open.
   - Never more than one status label at a time, never invent a new one. Every open
     issue carries exactly one lifecycle label -
     a shipped-but-unlabeled fix is invisible to the user's backlog view. Label every
@@ -291,14 +282,13 @@ UPLOAD - a local deploy alone is silently clobbered.
 
 ## STEP 8 - VERIFY
 
-- [ ] **Provide ONE concrete verification.** For runtime work, name the screen,
-  action, and expected in-game result. For repository-only work, name the exact
-  autonomous command/review and expected output. One bounded method, not a vague
-  checklist.
+- [ ] **Provide ONE current live-test card.** Name the build/banner, topology,
+  player-visible steps, and expected in-game result.
 - [ ] **NEVER claim a runtime issue "fixed" until the user confirms in-game.**
   Compile success and structural review are not runtime verification. Say
   "shipped v0.12.152-dev, please check X" - not "fixed". Repository-only work
-  may close after its documented autonomous verification passes.
+  closes after its documented autonomous verification passes without entering
+  the live-test queue.
 - [ ] **If it is still broken, believe them.** Return to STEP 2 with the NEW
   log (they must be on the version you just shipped - re-verify the echoed
   version first). Do not re-defend the previous diagnosis.
