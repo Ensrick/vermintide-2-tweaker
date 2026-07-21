@@ -1,5 +1,26 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.465-dev (2026-07-21) - shared non-burning Crowbill combat contract (#604)
+
+- Imperial and Dawi Crowbills now resolve through one isolated pick-mode clone
+  rather than Sienna's template directly. The donor's burning light thrust uses
+  the source-defined non-burning `light_blunt_smiter_stab` profile and ordinary
+  Crowbill impact sounds; Sienna's native Crowbill remains untouched.
+- Every direct Crowbill light and heavy attack receives exactly 10% more impact
+  power through private damage-profile and power-level clones. Kruber and Bardin
+  therefore consume the same combat values.
+- Hammer mode now derives from that balanced pick clone, preserving the existing
+  60% cleave, 15% damage reduction, and light-armour behavior without restoring
+  the removed burn. Damage-profile wire fallback records the final vanilla donor,
+  not an intermediate CWV profile.
+- Offline tests prove donor immutability, all-action impact scaling, fire-profile
+  and fire-sound removal, deterministic generated rows, and runtime composition.
+
+**DoD:** U-1 source template/profile chain, U-3 isolated template integrity,
+U-7 forward-reference audit, G-STANCE pick/hammer composition walked. G-3P-ANIM
+remains explicitly deferred to Tweaker: Weapons issue #946 and is not claimed
+complete by this release.
+
 ## 0.1.464-dev (2026-07-21) - canonical no-ammo appearance descriptor (#279 #660)
 
 - Carried each variant's authored ammo-mesh suppression through the same

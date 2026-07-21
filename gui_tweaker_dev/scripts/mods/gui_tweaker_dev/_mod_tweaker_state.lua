@@ -1226,7 +1226,11 @@ function HeroViewStateModTweaker:_build_node_row(w, category, base_offset, depth
             -- increment. The track gives fine/continuous control; after a commit we
             -- re-read the value so any mod-side snapping (ct rounds starting_coins to
             -- 25 in its on_setting_changed) is reflected — matching VMF's own slider.
-            local step = _resolve_step(w, category and category.mod_id, setting_id, dec)
+            -- (#389) Equipment is a merged category.  Its category owner is gut_dev,
+            -- while numeric policy (including CIM's 25-point Base Power Level step)
+            -- belongs to the setting's provider recorded in category._owners.
+            local _, owner_mod_id = _owner(category, setting_id)
+            local step = _resolve_step(w, owner_mod_id, setting_id, dec)
             row.content.step = step
             mod:debug("[mt:num] '%s' bounds=%s..%s dec=%s step=%s val=%s",
                 tostring(setting_id), tostring(min), tostring(max), tostring(dec), tostring(step), tostring(val))

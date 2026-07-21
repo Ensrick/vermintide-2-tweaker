@@ -160,6 +160,15 @@ local _WEAPON_NAME = {
     bw_flame_sword             = "Flaming Sword",
     wh_flail_shield            = "Flail & Shield",
     we_1h_axe                  = "Axe",
+    cwv_es_imperial_crowbill  = "Imperial Crowbill",
+}
+
+-- CWV variants are provider-owned and therefore do not belong in WT's release
+-- coverage ledger.  The dev picker may still expose an exact provider template
+-- when a cross-mod animation regression needs tuning (#946).  Keep this list
+-- explicit so no other CWV row leaks into the tool by default.
+local _TOOL_ONLY_NEEDS_ANIMS = {
+    kruber = { cwv_es_imperial_crowbill = true },
 }
 
 -- Lazy weapon_key -> a career that grants it, so we can look up the documented
@@ -208,6 +217,7 @@ local function _weapon_display_name(weapon_key)
             return (entry.en:gsub("^%s*%b[]%s*", ""))
         end
     end
+    if weapon_key == "cwv_es_imperial_crowbill" then return "Imperial Crowbill" end
     local qualifier = _SOURCE_QUALIFIER[weapon_key:sub(1, 2)] or "?"
     local name = _WEAPON_NAME[weapon_key]
     if name then return qualifier .. " " .. name end
@@ -258,6 +268,10 @@ local _WEAPON_SET = {
     wh_flail_shield            = "D",
     -- SET E — Witch Hunter 1H Axe
     we_1h_axe                  = "E",
+    -- #946: CWV's live pick-mode clone, rendered through Kruber's Empire Sword
+    -- vocabulary.  This is intentionally tool-only; the provider keeps ownership
+    -- of the variant and copies tuned values into its durable animation mapping.
+    cwv_es_imperial_crowbill  = "C",
     -- v0.12.201-dev: wh_hammer_book (SET F) BAKED (es_) -> _CONFIRMED.kruber; removed here.
 }
 
@@ -466,6 +480,7 @@ local _WEAPON_TEMPLATE = {
     bw_flame_sword             = "flaming_sword_template_1",
     wh_flail_shield            = "one_handed_flail_shield_template",
     we_1h_axe                  = "we_one_hand_axe_template",
+    cwv_es_imperial_crowbill  = "cwv_crowbill_pick_template",
     -- v0.12.201-dev: wh_hammer_book BAKED (es_) -> _CONFIRMED.kruber; removed (#181).
     -- v0.12.188-dev: dr_2h_cog_hammer, wh_2h_hammer, wh_fencing_sword and the 7
     -- Sienna staves + Deus were BAKED (es_) and removed here (see _WEAPON_SET note).
@@ -484,6 +499,23 @@ local _WEAPON_TEMPLATE = {
 -- them UNSET (falls through to the prior idle stance, no T-pose, no crash).
 local _WEAPON_ATTACKS = {
     -- SET A — Greathammer
+    -- #946 provider clone.  Events are source-backed from
+    -- scripts/settings/equipment/weapon_templates/1h_crowbills.lua:11-1432.
+    cwv_es_imperial_crowbill = {
+        "attack_swing_charge_left",
+        "attack_swing_charge_left_pose",
+        "attack_swing_charge_right_pose",
+        "attack_swing_heavy_left_up",
+        "attack_swing_heavy_right",
+        "attack_swing_heavy_left_diagonal",
+        "attack_swing_stab",
+        "attack_swing_right_diagonal",
+        "attack_swing_down",
+        "attack_swing_left",
+        "attack_swing_up_left",
+        "attack_push",
+        "parry_pose",
+    },
     dr_2h_pick = {
         "attack_push",
         "attack_swing_charge_left_down",
@@ -1262,7 +1294,9 @@ local function _ensure_catalog_built()
     for _, r in ipairs(_RECEIVERS) do
         local rd = _RECV[r]
         for weapon_key, set in pairs(rd.weapon_set) do
-            if _PORT_STATUS.needs_anims(rd.query_career, weapon_key) then
+            local tool_only = _TOOL_ONLY_NEEDS_ANIMS[r]
+                and _TOOL_ONLY_NEEDS_ANIMS[r][weapon_key]
+            if tool_only or _PORT_STATUS.needs_anims(rd.query_career, weapon_key) then
                 out[#out + 1] = {
                     weapon_key    = weapon_key,
                     set           = set,

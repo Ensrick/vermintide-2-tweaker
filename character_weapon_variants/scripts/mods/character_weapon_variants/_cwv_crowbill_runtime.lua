@@ -72,10 +72,20 @@ function M.install(mod, om)
 		rawset(lookup, name, index)
 	end
 	local source_template = weapons[policy.SOURCE_TEMPLATE_KEY]
-	local pick_template = clone(source_template)
+	local pick_sources = {}
+	local function record_pick_source(key, source)
+		pick_sources[key] = source
+		if om._record_cwv_dp_source then om._record_cwv_dp_source(key, source) end
+	end
+	local pick_template, pick_generated = policy.build_pick_template(
+		source_template, profiles, powers, clone, record_pick_source, register_profile)
+	if not pick_template then return nil, pick_generated end
+	local function record_hammer_source(key, source)
+		local vanilla_source = pick_sources[source] or source
+		if om._record_cwv_dp_source then om._record_cwv_dp_source(key, vanilla_source) end
+	end
 	local hammer_template, generated = policy.build_hammer_template(
-		source_template, profiles, powers, clone,
-		om._record_cwv_dp_source, register_profile)
+		pick_template, profiles, powers, clone, record_hammer_source, register_profile)
 	if not hammer_template then return nil, generated end
 	weapons[M.PICK_TEMPLATE_KEY] = pick_template
 	weapons[policy.HAMMER_TEMPLATE_KEY] = hammer_template
