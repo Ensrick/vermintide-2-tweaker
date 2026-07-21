@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.465-dev"
+local MOD_VERSION = "0.1.466-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -54,6 +54,7 @@ local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
+_om.identity_peer_pull = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_pull")
 _om.husk_transform_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_transform_policy")
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
 _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
@@ -10610,6 +10611,9 @@ do
 	end
 	_om._cwv_send_identity_slots = _send_identity_slots
 
+	local peer_pull = _om.identity_peer_pull.bind(lifecycle, _send_identity_slots, _om.appearance_lifecycle_policy, printf)
+	_om._cwv_request_peer_identities = peer_pull.request
+
 	mod:network_register("cwv_item_identity", function(sender_peer_id, schema, payload)
 		-- #474: the Old Musket shot report rides this channel (the dedicated
 		-- mode channel never delivered in the 2026-07-18 paired logs). The
@@ -10620,6 +10624,11 @@ do
 				_om._old_musket_play_remote_fire(sender_peer_id, payload.fire_event,
 					"identity_channel")
 			end
+			return
+		end
+		if type(payload) == "table"
+				and payload.slot == _om.appearance_lifecycle_policy.REQUEST_SLOT then
+			peer_pull.accept(sender_peer_id, schema, payload)
 			return
 		end
 		-- #660 cold-join delivery acknowledgement. A targeted send from inside
@@ -10723,11 +10732,16 @@ do
 		if _om._exact_pair_publish_inventory then
 			_om._exact_pair_publish_inventory(self, "game_object_initialized")
 		end
+		-- Fatshark initializes and sends the complete vanilla equipment snapshot
+		-- inside the wrapped function.  Request exact peer identities only after
+		-- that boundary, and only for this VM's local human unit.
+		peer_pull.request(unit, "game_object_initialized_ready")
 		return r1, r2, r3, r4
 	end)
 	mod._cwv_skin_wire_surfaces.game_object_initialized = true
 	mod._cwv_identity_surfaces.game_object_initialized = true
 	mod._cwv_identity_surfaces.mission_transition = true
+	mod._cwv_identity_surfaces.mission_transition_peer_pull = true
 
 	mod:hook("SimpleInventoryExtension", "_spawn_resynced_loadout", function(func, self, equipment_to_spawn, skip_wield)
 		if equipment_to_spawn and equipment_to_spawn.slot_id then
@@ -10831,6 +10845,7 @@ do
 			_om._cwv_durable_crowbill_owner:step()
 		end
 		local identity_sent, identity_expired = lifecycle:step_deliveries(dt)
+		peer_pull.step(dt)
 		if identity_sent > 0 then
 			pcall(printf,
 				"[cwv:660] lifecycle=hot_join_retry adapter=identity_send attempts=%d pending=%d",
@@ -11272,31 +11287,7 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 	end
 end
 
--- #792: `_spawn_item` runs inside `_poll_item_package_loading`, after vanilla's
--- visibility pass for that frame. A delayed menu pose may then run at the end of
--- the same poll and replace the Musket wield event. The next visibility pass is
--- vanilla's explicit final-stability edge (`_loading_done = true`). Consume the
--- pending record there once; never replay every frame.
-mod:hook("HeroPreviewer", "_update_units_visibility", function(func, self, dt)
-	local was_loading_done = self._loading_done
-	local result = func(self, dt)
-	if not was_loading_done and self._loading_done then
-		local pending, reason = _om.old_musket_preview_pose.take_when_stable(self, true)
-		if pending then
-			if Unit.alive(pending.character_unit) then
-				pcall(Unit.animation_event, pending.character_unit, pending.wield_event)
-				pcall(printf, "[cwv:792] preview pose retained slot=%s bid=%s mode=%s anim=%s edge=loading_done",
-					tostring(pending.slot_index), tostring(pending.backend_id),
-					tostring(pending.stance), tostring(pending.wield_event))
-			else
-				_dbg("[cwv:792] preview pose skipped reason=character_dead")
-			end
-		elseif reason ~= "not_armed" then
-			_dbg("[cwv:792] preview pose skipped reason=%s", tostring(reason))
-		end
-	end
-	return result
-end)
+_om.old_musket_preview_pose.install(mod, _om._apply_old_musket_transform, printf, _dbg)
 
 -- #604 TeamPreviewer identity bridge. Score rows preserve the peer in
 -- context.players_session_score even though LevelEndView._get_hero_from_score
