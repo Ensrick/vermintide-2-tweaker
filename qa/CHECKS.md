@@ -73,6 +73,14 @@ error). Checks that already hard-fail on exit 2 and never emit exit 1
 `check_cross_mod_deps`, `check_command_collisions`, `check_mechanics_citations`,
 `check_dev_only_edits`) keep blocking on their errors under this default.
 
+`check_pusfume_compatibility.ps1` is also Standard/blocking. It preserves the
+binding Pusfume non-interference clauses in `PROJECT_STANDARDS.md` and
+`docs/CROSS_MOD_ARCHITECTURE.md`, requires the release matrix in
+`docs/REGRESSION_CHECKLIST.md`, and rejects direct `pusfume` references in active
+Lua unless the line carries the explicit `pusfume-compat-reviewed` annotation.
+The annotation records review; the live matrix remains required for runtime
+compatibility claims.
+
 ### Ratchet baselines (issue #429)
 
 Two Standard-policy checks would otherwise be permanently red on pre-existing,

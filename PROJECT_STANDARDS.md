@@ -1608,6 +1608,31 @@ lib's header names its master path so drift is detectable by diff.
 
 ---
 
+## 9b. Pusfume non-interference (binding; user directive 2026-07-21)
+
+Pusfume is an externally owned compatibility target. Tweaker-family mods must
+not disable, rewrite, shadow, or assume ownership of Pusfume's career, profile,
+loadout, assets, packages, synchronized identities, or project configuration.
+The user-designated Pusfume project-manager Sol instance owns Pusfume changes;
+Tweaker work stays in this repository unless that manager explicitly requests a
+cross-repository change.
+
+Generic Tweaker hooks must preserve unknown/additional careers and call-chain
+behavior. If an optional Tweaker feature conflicts with Pusfume, the Tweaker
+feature yields or degrades to its vanilla behavior; it must not make Pusfume
+unselectable, unspawnable, invisible, or unsafe for peers. Direct Lua references
+to `pusfume` require an adjacent `pusfume-compat-reviewed` annotation and review
+against `docs/CROSS_MOD_ARCHITECTURE.md`; `qa/check_pusfume_compatibility.ps1`
+enforces that review boundary and the presence of this doctrine.
+
+Any change touching career enumeration, profile/career indices, loadout or
+backend adapters, package ownership, player-unit spawning, or synchronized
+registration must run the Pusfume compatibility matrix in
+`docs/REGRESSION_CHECKLIST.md` before release. No compatibility claim is valid
+from static inspection alone.
+
+---
+
 ## 10. Mod maturity tiers (different bars for different mods)
 
 ### 10.1 Alpha (`-alpha`, `-dev`)

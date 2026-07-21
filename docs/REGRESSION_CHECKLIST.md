@@ -31,6 +31,25 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 
 ## Multiplayer / Network Sync
 
+### Pusfume remains independent of Tweaker mods
+
+**[STATIC + SOLO + MULTIPLAYER]**
+
+- Run `qa/check_pusfume_compatibility.ps1`; unreviewed direct `pusfume`
+  references in active Lua must be absent.
+- With Pusfume absent, exercise the changed career/profile/loadout/package path
+  and confirm existing Tweaker behavior is unchanged.
+- With Pusfume and the changed Tweaker set enabled, select Pusfume, enter the
+  Adventure Keep, equip its loadout, enter and leave an Adventure mission, and
+  confirm no script, package, career-index, or missing-resource error occurs.
+- Repeat host/client with the same Pusfume build on both peers when the change
+  touches synchronized state. Confirm both peers resolve the same career and
+  loadout through mission transitions.
+- Disable or remove the changed Tweaker mod and confirm Pusfume still works. A
+  Tweaker mod must never become a Pusfume dependency.
+- If coexistence fails, fail only the conflicting optional Tweaker feature back
+  to vanilla behavior. Do not mutate or disable Pusfume to make Tweaker pass.
+
 ### gated-registration-divergence — Toggle-gated mod-load registration produces different network indices across peers
 
 **[MULTIPLAYER]**
