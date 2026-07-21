@@ -2629,3 +2629,42 @@ Weapons of Chaos issue #712).
   vector-consuming public operation, malformed constructors, and exact-byte
   synchronization of all standalone consumer copies. The canonical reference
   is `tools/shared_lib/_lib_weapon_appearance.lua` and issue #835.
+
+## 70. String-resolved particle executes outside the level that owns its package
+
+**First confirmed:** Weapon Tweaker #128 (cross-character fire explosions),
+reconfirmed by Crafting in Modded #947 (Chaos Wastes trait used in Adventure).
+**Lives in:** traits, buffs, and explosion templates that store an effect name as
+a string and can be carried into a career, mechanism, or level that does not load
+the particle's owning package.
+
+### Symptoms
+- Native fatal: `WorldApi create_particles failed, Particle effect '#ID[...]'
+  not loaded`, commonly below `DamageUtils.create_explosion`.
+- The weapon equips and ordinary attacks work; the crash occurs only when the
+  specific trait/proc resolves its effect string.
+- A pcall around the Lua proc does not prevent termination because the assertion
+  occurs inside the native World boundary.
+
+### Diagnosis pattern
+1. Resolve the reported particle hash against the unpacked bundle listing and
+   dictionary; do not infer its package from the weapon model.
+2. Confirm the source call chain and exact effect string in the relevant buff or
+   explosion template.
+3. Compare the native level package lists for the effect's home mechanism with
+   the level where the mod permits it to execute. A weapon/unit being resident
+   does not prove a string-resolved particle is resident.
+
+### Fix template
+- Acquire the smallest proven real `resource_packages/...` owner under one
+  mod-private reference before the proc can execute. Guard `has_loaded` and
+  `is_loading`, issue one asynchronous load, and retain it for as long as a
+  persisted item can still carry the effect.
+- Never load from the hit/proc/per-frame path, never use a shared `global`
+  reference, and never queue a guessed mod-bundled unit path (class 28).
+- Gate paid-DLC packages on resolved ownership. A package used by vanilla levels
+  available to every install still needs source/bundle provenance, but not a
+  fabricated ownership check.
+- Lock the exact path/reference, async flags, idempotence, lifecycle retry, and
+  absence of unload/action hooks in offline tests. Add a runtime resident check
+  and bounded transition-only diagnostics.

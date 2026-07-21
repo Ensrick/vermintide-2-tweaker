@@ -54,7 +54,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.101-dev"
+local MOD_VERSION = "0.8.102-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -242,6 +242,25 @@ mod:command("cim_regression_test", "Run regression smoke checks for past bugs", 
     mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
 end)
 mod:info("[regression-test-command] registered as /cim_regression_test")
+
+-- #947: persisted Chaos Wastes traits may execute in Adventure, where vanilla
+-- does not retain the Morris gameplay package that owns their hit-time particle
+-- strings. Acquire one exact, session-long package reference before any crafted
+-- weapon can trigger the native WorldApi boundary. The controller retries only
+-- on lifecycle edges if PackageManager was not ready at module evaluation.
+local _cim947_trait_residency = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_cw_trait_residency")({
+        mod = mod,
+        rt_register = _rt_register,
+        get_package_manager = function()
+            return Managers and Managers.package
+        end,
+        print_line = function(fmt, ...)
+            printf(fmt, ...)
+        end,
+    })
+mod._cim947_trait_residency = _cim947_trait_residency
+_cim947_trait_residency.ensure()
 
 -- Register the "modded" rarity (and any future custom rarities) BEFORE
 -- anything else loads — sibling modules will create items with this rarity.
@@ -5019,6 +5038,7 @@ end
 local _cim_loadout_restore_timer = nil
 
 mod.on_game_state_changed = function()
+    _cim947_trait_residency.ensure()
     _athanor_retry_pending()
     if mod._cim563_reset_vanilla_skin_rehydrate then
         mod._cim563_reset_vanilla_skin_rehydrate()

@@ -1,5 +1,19 @@
 # Crafting in Modded Changelog
 
+## 0.8.102-dev (2026-07-21): #947 Morris trait particle residency [untested]
+
+- Fixed the native crash when a CIM-crafted Chaos Wastes ranged critical-hit
+  trait executes in an Adventure mission and asks `WorldApi` for
+  `fx/cw_enemy_explosion` while its package is absent.
+- CIM now acquires one exact, private, session-long asynchronous reference to
+  `resource_packages/dlcs/morris_ingame` during initialization, retrying only on
+  game-state changes if the package manager was not ready. It never loads from
+  the hit/action path and never unloads while persisted crafted traits can fire.
+- Added bounded `[cim:947]` state diagnostics, a runtime residency check, the
+  optional `/verify_cim_cw_trait_residency` report command, and offline coverage
+  for exact path/reference, idempotence, async flags, late-manager retry, and the
+  absence of unload/action hooks.
+
 ## 0.8.101-dev (2026-07-19): #682 classified craft rejections + #628 registered provider gate [untested]
 
 - Fixed the confirmed issue 682 boundary (FS logs 2026-07-18/19, dr_ranger and

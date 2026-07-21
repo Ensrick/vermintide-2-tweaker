@@ -233,6 +233,25 @@ newly activated exact instances, and adds the poison trait to the melee pool
 once. Removing a trait through Athanor or reroll clears its parked copy so it
 cannot resurrect later.
 
+### Chaos Wastes trait particle residency
+
+CIM can deliberately persist vanilla Morris traits outside the Chaos Wastes.
+Some of those buffs resolve particle names only when their proc executes, so the
+weapon or trait table does not establish a package dependency. In particular,
+`deus_ranged_crit_explosion` calls `DamageUtils.create_explosion` with
+`fx/cw_enemy_explosion`; every vanilla Chaos Wastes level loads
+`resource_packages/dlcs/morris_ingame`, while an Adventure level does not.
+
+`_cim_cw_trait_residency.lua` therefore owns one private
+`cim_dev_cw_trait_fx` reference to that exact package for the CIM session. It
+loads asynchronously at initialization (or the next game-state edge if the
+package manager was not ready), guards both `has_loaded` and `is_loading`, and
+never acquires from an attack, proc, or update loop. The reference is not
+released while CIM is active because a persisted equipped item can retain the
+trait independently of the current menu setting. `[cim:947]` reports only state
+transitions. This is the class-70 native particle-residency boundary; Lua pcall
+cannot contain the later `WorldApi` assertion if the resource is absent.
+
 ### The Athanor = the vanilla weave forge, repurposed (owner: `docs/engine/09`, `/10`)
 
 `open_forge` transitions `hero_view_force` into the `weave_forge` menu state -
