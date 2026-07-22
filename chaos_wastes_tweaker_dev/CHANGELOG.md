@@ -1,5 +1,19 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.308-dev (2026-07-22) - configurable starting shrine (#458)
+
+- Adds an opt-in starting shrine at the exact `dlc_morris_map` / `start`
+  boundary without changing the map graph or affecting later shrines.
+- Host-authoritative controls set boon and miracle offer counts, a stepped
+  0-200% boon price, and an unlimited or 1-8 purchase limit per hero and run.
+- Prepares the synthetic shop configuration before vanilla full-state sync,
+  rejects malformed exact-start state without mutation, and shares the existing
+  purchase hook with bot-boon economy handling instead of registering a second
+  hook on the same engine method.
+- Adds 12 focused Lua 5.1 regressions for pricing, exact-node scope, bounded
+  accounting, UI/charge parity, client/host replay, fail-closed behavior, and
+  singleton-hook composition.
+
 ## 0.7.307-dev (2026-07-22) - #919 atomic profile/runtime evidence
 
 - Armed #919 with one bounded, atomic `[ct:919]` snapshot at profile commit,

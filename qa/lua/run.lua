@@ -85,6 +85,7 @@ local suites = {
     "test_event_curse_join_policy",
     "test_ct_mission_progress",
     "test_ct_profile_snapshot",
+    "test_ct_start_shrine_policy",
     "test_event_shadow_adventure",
     "test_gut_all_languages_diagnostics",
     "test_mod_tweaker_search",
