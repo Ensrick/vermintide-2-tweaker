@@ -19,7 +19,7 @@ in each mod's `CHANGELOG.md`; they are intentionally not duplicated here.
 | Directory | VMF ID | Stream | Workshop | Purpose |
 |---|---|---|---|---|
 | [`career_tweaker`](./career_tweaker/) | `crt` | Single | [3716286199](https://steamcommunity.com/sharedfiles/filedetails/?id=3716286199) | Swap and tune career talents and abilities. |
-| [`chaos_wastes_tweaker`](./chaos_wastes_tweaker/) | `ct` | Stable | [3712929235](https://steamcommunity.com/sharedfiles/filedetails/?id=3712929235) | Tune Chaos Wastes economy, curses, boons, altars, and traits. |
+| [`chaos_wastes_tweaker`](./chaos_wastes_tweaker/) | `ct` | Stable | [3712929235](http://web.archive.org/web/20260707130404/https://steamcommunity.com/sharedfiles/filedetails/?id=3712929235) | Tune Chaos Wastes economy, curses, boons, altars, and traits. |
 | [`chaos_wastes_tweaker_dev`](./chaos_wastes_tweaker_dev/) | `ct_dev` | Dev | [3733366926](https://steamcommunity.com/sharedfiles/filedetails/?id=3733366926) | Friends-only development stream for `ct`. |
 | [`character_weapon_variants`](./character_weapon_variants/) | `character_weapon_variants` | Single | [3716869446](https://steamcommunity.com/sharedfiles/filedetails/?id=3716869446) | Add new weapon variants built from cross-character templates and assets. |
 | [`character_dialogue`](./character_dialogue/) | `character_dialogue` | Single/private | [3765055148](https://steamcommunity.com/sharedfiles/filedetails/?id=3765055148) | Browse, preview, enable, and disable individual dialogue lines. |
