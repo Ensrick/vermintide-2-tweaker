@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-22 - Configurable Chaos Wastes starting shrine (#458)
+
+Chaos Wastes Tweaker Dev 0.7.308-dev adds an opt-in shrine at the exact start
+node. The host controls boon and miracle counts, a stepped 0-200% price, and an
+unlimited or 1-8 purchase limit per hero and run. The implementation prepares
+its synthetic shop before vanilla full-state sync, fails closed if that exact
+context is malformed, leaves every later shrine on the vanilla path, and
+composes with the existing bot-boon purchase hook. Twelve focused Lua tests pin
+the policy and lifecycle boundaries before in-game verification.
+
 ## 2026-07-22 - Atomic Chaos Wastes profile/runtime evidence (#919)
 
 The paired logs could not bind the active Mod Tweaker profile to the local and
