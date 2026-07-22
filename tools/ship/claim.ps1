@@ -16,12 +16,11 @@
 #   claim.ps1 -Mod <name> -Verify -ExpectedVersion <v>   ship.ps1 gate hook.
 #   claim.ps1 -SelfTest          offline contention/stale/allocate/release tests.
 #
-# THE LOCK: an atomic exclusive file create at .ship_claims/<mod>.claim. The OS
-# CREATE_NEW disposition guarantees exactly one racer's create succeeds; every
-# other gets IOException. That is the same principle as `New-Item -ItemType File`
-# failing on an existing path, but CREATE_NEW is OS-atomic (no check-then-create
-# TOCTOU) and lets us write the claim body through the exclusive handle, so a
-# reader never observes an empty claim mid-write.
+# THE LOCK: an atomic exclusive file create at the machine-global
+# %APPDATA%/VMBLauncher/ship_claims/<mod>.claim. Every worktree and the nested
+# VMBLauncher uploader reads that same authority. The OS CREATE_NEW disposition
+# guarantees exactly one racer's create succeeds; every other gets IOException.
+# -ClaimsDir remains an explicit test/diagnostic override only.
 #
 # STALE POLICY: a claim older than -StaleHours (default 2h) is stale and may be
 # broken by a new claimant (reported when it happens). Guards against a crashed
@@ -86,6 +85,18 @@ function Get-ClaimModVersion {
     $txt = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
     if ($txt -match 'MOD_VERSION\s*=\s*"([^"]+)"') { return $matches[1] }
     throw "No MOD_VERSION found in $luaPath."
+}
+
+function Get-MachineClaimsDir {
+    param([string]$AppDataRoot)
+    if ([string]::IsNullOrWhiteSpace($AppDataRoot)) {
+        $AppDataRoot = [Environment]::GetFolderPath(
+            [Environment+SpecialFolder]::ApplicationData)
+    }
+    if ([string]::IsNullOrWhiteSpace($AppDataRoot)) {
+        throw 'Cannot resolve the machine-global application-data directory for ship claims.'
+    }
+    return [System.IO.Path]::Combine($AppDataRoot, 'VMBLauncher', 'ship_claims')
 }
 
 function Get-ClaimSessionId {
@@ -355,12 +366,46 @@ function Invoke-ClaimSelfTest {
 
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-claim-" + [guid]::NewGuid().ToString('N'))
     $fixRepo = Join-Path $tmp 'repo'
+    $fixRepoB = Join-Path $tmp 'other-repo'
     $fixMod = 'fixturemod'
     $luaDir = Join-Path $fixRepo (Join-Path $fixMod "scripts\mods\$fixMod")
+    $luaDirB = Join-Path $fixRepoB (Join-Path $fixMod "scripts\mods\$fixMod")
     [System.IO.Directory]::CreateDirectory($luaDir) | Out-Null
+    [System.IO.Directory]::CreateDirectory($luaDirB) | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $luaDir "$fixMod.lua"), "local MOD_VERSION = `"0.1.5-dev`"`n", $utf8NoBom)
+    [System.IO.File]::WriteAllText((Join-Path $luaDirB "$fixMod.lua"), "local MOD_VERSION = `"0.1.5-dev`"`n", $utf8NoBom)
 
     try {
+        # --- one machine-global authority for every worktree + nested uploader ---
+        $fixtureAppData = Join-Path $tmp 'appdata'
+        $machineDir = Get-MachineClaimsDir -AppDataRoot $fixtureAppData
+        $expectedMachineDir = Join-Path (Join-Path $fixtureAppData 'VMBLauncher') 'ship_claims'
+        Assert ($machineDir -eq $expectedMachineDir) "default authority is VMBLauncher's machine-global claim directory"
+        Assert ($machineDir -ne (Join-Path $fixRepo '.ship_claims')) "default authority is not scoped to the invoking worktree"
+
+        # Reproduce the former split without touching live state: the outer broker
+        # could verify a repo-local claim while the nested launcher's global read
+        # returned absent. Then prove the shared authority closes that boundary.
+        $formerLocalDir = Join-Path $fixRepo '.ship_claims'
+        $split = Invoke-ClaimAcquire -ClaimsDir $formerLocalDir -Mod $fixMod `
+            -RepoRoot $fixRepo -Session 'outer-owner' -NowUtc $nowRef
+        $outerState = Test-ShipClaimState -ClaimsDir $formerLocalDir -Mod $fixMod `
+            -ExpectedVersion $split.Version -ExpectedSession 'outer-owner' -NowUtc $nowRef
+        $nestedBefore = Test-ShipClaimState -ClaimsDir $machineDir -Mod $fixMod `
+            -ExpectedVersion $split.Version -ExpectedSession 'outer-owner' -NowUtc $nowRef
+        Assert ($outerState.State -eq 'ok' -and $nestedBefore.State -eq 'absent') "former repo-local/global split reproduces outer OK plus nested no-claim"
+        Invoke-ClaimRelease -ClaimsDir $formerLocalDir -Mod $fixMod `
+            -Session 'outer-owner' | Out-Null
+
+        $shared = Invoke-ClaimAcquire -ClaimsDir $machineDir -Mod $fixMod `
+            -RepoRoot $fixRepo -Session 'outer-owner' -NowUtc $nowRef
+        $nestedAfter = Test-ShipClaimState -ClaimsDir $machineDir -Mod $fixMod `
+            -ExpectedVersion $shared.Version -ExpectedSession 'outer-owner' -NowUtc $nowRef
+        Assert ($shared.Ok -and $nestedAfter.State -eq 'ok') "nested uploader sees the outer claim through the shared authority"
+        $sharedRelease = Invoke-ClaimRelease -ClaimsDir $machineDir -Mod $fixMod `
+            -Session 'outer-owner'
+        Assert ($sharedRelease.Ok -and $sharedRelease.Removed) "outer owner releases the shared claim after nested publication"
+
         # --- stable owner identity across child processes/worktrees ---
         $savedExplicit = $env:VT2_SHIP_SESSION_ID
         $savedClaude = $env:CLAUDE_SESSION_ID
@@ -371,7 +416,7 @@ function Invoke-ClaimSelfTest {
             $env:CODEX_THREAD_ID = $null
             $ownerA1 = Get-ClaimSessionId -RepoRoot $fixRepo
             $ownerA2 = Get-ClaimSessionId -RepoRoot $fixRepo
-            $ownerB = Get-ClaimSessionId -RepoRoot (Join-Path $tmp 'other-repo')
+            $ownerB = Get-ClaimSessionId -RepoRoot $fixRepoB
             Assert ($ownerA1 -eq $ownerA2 -and $ownerA1 -match '^worktree:[0-9a-f]{16}$') "manual owner is stable for one worktree"
             Assert ($ownerA1 -ne $ownerB) "different worktrees derive different owners"
             $env:CODEX_THREAD_ID = 'thread-fixture'
@@ -442,18 +487,18 @@ function Invoke-ClaimSelfTest {
         Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod 'nonesuch' -ExpectedVersion $ver -ExpectedSession 'sess-v' -NowUtc $nowRef).State -eq 'absent') "verify reports absent when no claim"
         Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion $ver -ExpectedSession 'sess-v' -NowUtc $nowRef.AddHours(3)).State -eq 'stale') "verify treats a 3h-old claim as stale"
 
-        # --- atomic contention: two racing PROCESSES, exactly one wins ---
+        # --- atomic contention: two racing PROCESSES in distinct worktrees ---
         $raceDir = Join-Path $tmp 'race'
         $selfPath = $PSCommandPath
         $fmt = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Mod {1} -RepoRoot "{2}" -ClaimsDir "{3}" -Session {4} -Quiet'
         $p1 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepo, $raceDir, 'race-a')
-        $p2 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepo, $raceDir, 'race-b')
+        $p2 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepoB, $raceDir, 'race-b')
         $p1.WaitForExit(); $p2.WaitForExit()
         $codes = @($p1.ExitCode, $p2.ExitCode)
         $acquired = @($codes | Where-Object { $_ -eq 0 }).Count
         $contended = @($codes | Where-Object { $_ -eq 1 }).Count
-        Assert ($acquired -eq 1) ("exactly one racing process acquires (exit codes: {0})" -f ($codes -join ','))
-        Assert ($contended -eq 1) ("the other racing process reports contention exit 1 (exit codes: {0})" -f ($codes -join ','))
+        Assert ($acquired -eq 1) ("exactly one cross-worktree process acquires (exit codes: {0})" -f ($codes -join ','))
+        Assert ($contended -eq 1) ("the other cross-worktree process reports contention exit 1 (exit codes: {0})" -f ($codes -join ','))
     }
     finally {
         if (Test-Path -LiteralPath $tmp) {
@@ -480,7 +525,7 @@ function Invoke-ClaimSelfTest {
 if ($SelfTest) { exit (Invoke-ClaimSelfTest) }
 
 if (-not $RepoRoot)  { $RepoRoot  = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }
-if (-not $ClaimsDir) { $ClaimsDir = Join-Path $RepoRoot '.ship_claims' }
+if (-not $ClaimsDir) { $ClaimsDir = Get-MachineClaimsDir }
 $sessionId = if ($Session) { $Session } else { Get-ClaimSessionId -RepoRoot $RepoRoot }
 $nowUtc = (Get-Date).ToUniversalTime()
 

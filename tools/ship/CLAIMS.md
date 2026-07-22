@@ -21,16 +21,16 @@ that `ship.ps1` refuses to ship without.
 ## The lock
 
 Acquiring a claim is an **atomic exclusive file create** of
-`.ship_claims/<mod>.claim` at the repo root. The create uses the OS `CREATE_NEW`
-disposition: exactly one racer's create can succeed; every other racer gets
-`IOException` and reports contention. This is the same principle as
-`New-Item -ItemType File` failing when the path already exists, but `CREATE_NEW`
-is OS-atomic (no check-then-create race) and the claim body is written through
-the exclusive handle, so a reader never sees an empty claim mid-write.
+`%APPDATA%\VMBLauncher\ship_claims\<mod>.claim`. This is the one machine-global
+authority shared by every worktree, `ship.ps1`, and VMBLauncher's nested upload
+gate. The create uses the OS `CREATE_NEW` disposition: exactly one racer's
+create can succeed; every other racer gets `IOException` and reports
+contention. The claim body is written through the exclusive handle, so a reader
+never sees an empty claim mid-write.
 
-`.ship_claims/*.claim` files are gitignored (ephemeral per-session state, exactly
-like `.in_progress/*.md`); the tracked `.ship_claims/README.md` documents the
-on-disk format.
+The tracked repo-local `.ship_claims/README.md` remains a discovery and legacy
+transition note only. Current `claim.ps1` does not place live claims there.
+`-ClaimsDir` is reserved for isolated self-tests and diagnostics.
 
 ### Claim file format
 
@@ -109,10 +109,13 @@ forever. A stale claim never authorizes a ship -- `ship.ps1` treats it as absent
 
 ## Caveats
 
-- **Same-checkout coordination.** The lock lives at the repo root, and owner
-  verification prevents a foreign orchestrator task in that checkout from
-  spending it. Separate git worktrees also derive different manual owner IDs;
-  ship.ps1's source/worktree identity guards (issue #647) cover publication.
+- **Machine-global, not network-global.** Every worktree on this Windows user
+  account contends on one lock and VMBLauncher reads the same file. Another
+  computer still needs a future remote/GitHub-backed reservation layer.
+- **Owner handoff remains explicit.** Separate manual worktrees derive different
+  fallback owner IDs. A Claude/Codex identity or explicit
+  `VT2_SHIP_SESSION_ID` survives child processes; a future durable token can
+  authorize a deliberate cross-owner handoff without weakening ownership.
 - **Advisory sibling: `.in_progress/`.** Claims are about version allocation;
   `.in_progress/` sentinels are about who is editing which files. They are
   complementary -- keep dropping a sentinel for multi-step work.
@@ -120,9 +123,10 @@ forever. A stale claim never authorizes a ship -- `ship.ps1` treats it as absent
 ## Self-test
 
 `claim.ps1 -SelfTest` runs offline fixtures: allocate-increment (with 4-segment
-rejection), timestamp round-trip + staleness, idempotent re-claim vs contention,
-stale-break, release (own + idempotent), the ship.ps1 verify contract, and a
-foreign-owner verify/release refusal, plus a real two-process race asserting
-exactly one process acquires. It is wired into
+rejection), timestamp round-trip + staleness, the former repo-local/global split,
+nested-uploader visibility through the shared authority, idempotent re-claim vs
+contention, stale-break, release (own + idempotent), the ship.ps1 verify
+contract, foreign-owner verify/release refusal, and a real two-process,
+two-worktree race asserting exactly one process acquires. It is wired into
 `qa/run_selftests.ps1` (and therefore `qa/run_all.ps1` full pass + CI). Exit
 codes: 0 pass, 2 regression.

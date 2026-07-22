@@ -1,23 +1,24 @@
-# `.ship_claims/` -- ship/version claim locks
+# `.ship_claims/` -- legacy claim location
 
-Atomic mutual-exclusion locks that stop parallel sessions on this machine from
-allocating the **same** next `MOD_VERSION` and uploading competing bundles.
-Managed entirely by `tools/ship/claim.ps1`; you should not create or edit these
-files by hand.
+Live ship/version claims are stored at
+`%APPDATA%\VMBLauncher\ship_claims\<mod_name>.claim`, not in this worktree.
+That machine-global location is shared by every git worktree and by
+VMBLauncher's nested upload gate (issue #724).
 
 Full rationale, usage, and stale policy: **`tools/ship/CLAIMS.md`**.
 
 ## What's tracked vs ignored
 
-- `README.md` (this file) is **tracked** so the convention is discoverable.
-- Every `*.claim` file is **gitignored** (see `.gitignore`) -- claims are
-  ephemeral per-session coordination state, not commit history. This mirrors
-  the `.in_progress/*.md` sentinel convention.
+- `README.md` (this file) remains tracked so old worktrees and operators find
+  the current authority.
+- Repo-local `*.claim` files remain gitignored for compatibility with older
+  tooling, but current `claim.ps1` neither creates nor consumes them by default.
+- `-ClaimsDir` is an explicit isolated test/diagnostic override.
 
 ## Claim file format
 
-One file per claimed mod, named exactly `<mod_name>.claim` (the mod's repo-root
-directory name), containing:
+The machine-global authority contains one file per claimed mod, named exactly
+`<mod_name>.claim` (the mod's repo-root directory name), containing:
 
 ```
 # VT2 ship/version claim -- see tools/ship/CLAIMS.md
