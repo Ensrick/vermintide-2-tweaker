@@ -5,6 +5,23 @@ return function(H, repo_root)
     if not chunk then error(err) end
     local Policy = chunk()
 
+    H.test("LA replay resolves the wielded slot identically for local and husk inventory", function()
+        H.equal("slot_melee", Policy.wielded_slot({
+            _equipment = { wielded_slot = "slot_melee" },
+        }), "local SimpleInventoryExtension shape")
+        H.equal("slot_ranged", Policy.wielded_slot({
+            wielded_slot = "slot_ranged",
+        }), "legacy/husk direct-field fallback")
+        H.equal("slot_melee", Policy.wielded_slot({
+            wielded_slot = "slot_ranged",
+            _equipment = { wielded_slot = "slot_melee" },
+        }), "common equipment field must win over a stale direct mirror")
+        H.equal("slot_melee", Policy.wielded_slot({}, {
+            wielded_slot = "slot_melee",
+        }), "explicit equipment supplied by an existing caller")
+        H.equal(nil, Policy.wielded_slot(nil))
+    end)
+
     H.test("Cosmetics persisted LA replay waits for realized inventory", function()
         H.equal(false, Policy.inventory_ready(nil))
         H.equal(false, Policy.inventory_ready({}))
@@ -164,5 +181,21 @@ return function(H, repo_root)
         for _, rec in ipairs(scoped) do
             H.equal(rec.peer, "A")
         end
+    end)
+
+    H.test("Issue 149 mesh repair uses common slot resolution and retained apply", function()
+        local source_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
+        local f = assert(io.open(source_path, "rb"))
+        local source = f:read("*a")
+        f:close()
+        local _, resolver_calls = source:gsub(
+            "local orig_slot = LA_REPLAY_POLICY%.wielded_slot%(inv, equipment%)", "")
+        H.equal(resolver_calls, 2,
+            "both authored and native pulse helpers must use the shared slot resolver")
+        H.truthy(source:find("if not applied and repaired then", 1, true),
+            "replay can coalesce before repaired mesh paint succeeds")
+        H.truthy(source:find("return painted", 1, true),
+            "offhand paint still reports success after a mesh-mismatch skip")
     end)
 end

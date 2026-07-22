@@ -523,6 +523,23 @@ Pilgrimage exception. rt-check: `cos_la_deus_yield_active_mission_only`. Follow-
 into the deus skin pools (`WeaponSkins.skin_combinations`) per the issue's
 desired end state.
 
+### 6.11 Keep-to-mission offhand replay postcondition (#149)
+
+Vanilla stores the active slot at `equipment.wielded_slot` on both
+`SimpleInventoryExtension` and `SimpleHuskInventoryExtension`; only the husk
+extension also exposes `inventory.wielded_slot`. Transition repair therefore
+resolves the equipment-owned field first and uses the direct field only as a
+legacy/husk fallback. This is the same source-backed boundary already required
+by the #514 weapon-identity guard.
+
+A replay generation is retained as applied only after the selected authored
+mesh accepts its paint. A mesh-mismatch warp-guard skip is deferred: in a safe
+bounded edge, the reconciler verifies that the saved record belongs to the
+currently wielded weapon, pulses through an alternate slot and back, then
+re-runs paint and checks the result. Failed residency, cooldown, missing slot,
+or failed wield calls remain deferred for a later lifecycle edge; they are not
+coalesced as success. Wield-hook contexts still never pulse recursively.
+
 ---
 
 ## Key file paths

@@ -14,6 +14,19 @@
 
 local Policy = {}
 
+-- SimpleInventoryExtension stores the active slot on its equipment table;
+-- SimpleHuskInventoryExtension also exposes a legacy/direct mirror.  All
+-- replay and pulse callers must prefer the common equipment-owned field so a
+-- local wearer and a remote husk take the same transition-repair path.
+function Policy.wielded_slot(inventory, equipment)
+    equipment = equipment or (type(inventory) == "table"
+        and (inventory._equipment or inventory.equipment) or nil)
+    if type(equipment) == "table" and equipment.wielded_slot ~= nil then
+        return equipment.wielded_slot
+    end
+    return type(inventory) == "table" and inventory.wielded_slot or nil
+end
+
 function Policy.inventory_ready(inventory)
     local equipment = type(inventory) == "table"
         and (inventory._equipment or inventory.equipment) or nil
