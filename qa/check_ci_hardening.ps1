@@ -62,7 +62,8 @@ function Test-CiContract {
     }
     if ($Workflow -notmatch '(?m)^\s+-?\s*shell:\s*powershell\s*\r?$' -or
             $Workflow -notmatch 'check_promotion\.ps1\s+-SelfTest' -or
-            $Workflow -notmatch 'tools/ship/ship\.ps1\s+-SelfTest') {
+            $Workflow -notmatch 'tools/ship/ship\.ps1\s+-SelfTest' -or
+            $Workflow -notmatch 'check_ps51_compatibility\.ps1\s+-SelfTest') {
         $errors += "promised Windows PowerShell 5.1 release surfaces need CI self-tests"
     }
     if ($Workflow -notmatch 'check_promotion_authorization\.ps1\s+-WriteGitHubEnv' -or
@@ -193,6 +194,8 @@ jobs:
         run: ./qa/check_promotion.ps1 -SelfTest
       - shell: powershell
         run: ./tools/ship/ship.ps1 -SelfTest
+      - shell: powershell
+        run: ./qa/check_ps51_compatibility.ps1 -SelfTest
       - shell: pwsh
         run: ./qa/check_pr_autoclose.ps1
 '@

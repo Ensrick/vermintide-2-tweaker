@@ -1,4 +1,4 @@
-# check_event_register_signature.ps1 — static scan for Stingray
+﻿# check_event_register_signature.ps1 — static scan for Stingray
 # `event:register(object, "event_name", method)` calls whose third positional
 # argument is a function VALUE instead of a string METHOD NAME.
 #

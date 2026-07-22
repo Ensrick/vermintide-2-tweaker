@@ -1,4 +1,4 @@
-# check_cfg.ps1 — validates every itemV2.cfg in the repo.
+﻿# check_cfg.ps1 — validates every itemV2.cfg in the repo.
 # Catches: tags=[] (ugc_tool 0x2 error), missing preview file, accidental public
 # visibility, missing bug-reporting block, missing BMC link.
 #

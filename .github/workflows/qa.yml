@@ -69,6 +69,10 @@ jobs:
         shell: powershell
         run: ./tools/ship/ship.ps1 -SelfTest
 
+      - name: Windows PowerShell 5.1 - QA compatibility matrix
+        shell: powershell
+        run: ./qa/check_ps51_compatibility.ps1 -SelfTest
+
       - name: Validate PR issue-closure references
         if: github.event_name == 'pull_request'
         shell: pwsh

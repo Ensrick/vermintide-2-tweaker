@@ -1945,7 +1945,8 @@ see what was open on a given date.
 | `run_selftests.ps1` | `qa/` | regression in any QA check's own parsing/decision logic + ship.ps1 step-6 labeling logic (runs every script's `-SelfTest`; blocking) | `.\qa\run_selftests.ps1` |
 | `check_lua_unit_tests.ps1` | `qa/` + `qa/lua/` | deterministic pure-Lua transformations under a pinned offline Lua 5.1.5 runtime; harness self-test includes a planted failure | `.\qa\check_lua_unit_tests.ps1 [-SelfTest]` |
 | `check_release_bundle_atomicity.ps1` | `qa/` + `qa/fixtures/release_bundle_atomicity/` | runtime/version/config/newest-release diff without the owning exact root bundle (#724) | `.\qa\check_release_bundle_atomicity.ps1 [-Staged] [-Range <range>] [-SelfTest]` |
-| `run_all.ps1` | `qa/` | all of the above | `.\qa\run_all.ps1 [-Quick] [-SkipLua]` |
+| `check_ps51_compatibility.ps1` | `qa/` | non-ASCII bytes in the explicit Windows PowerShell 5.1 target set; PS5/pwsh divergence in sentinel parsing; advisory policy hiding a parser/host/tool failure (#85) | `.\qa\check_ps51_compatibility.ps1 [-SelfTest]` |
+| `run_all.ps1` | `qa/` | all of the above; reserved execution-failure exits 90-99 always block before per-check policy is applied | `.\qa\run_all.ps1 [-Quick] [-SkipLua] [-SelfTest]` |
 | GitHub Actions | `.github/workflows/qa.yml`, `.github/workflows/issue-lifecycle.yml` | full code QA on push/PR plus a lightweight blocking tracker guard on issue/label/comment events, manual dispatch, and daily schedule; the tracker guard enforces true GraphQL pin state | automatic |
 
 Full check-to-bug-class map: [`qa/CHECKS.md`](qa/CHECKS.md).

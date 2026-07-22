@@ -1,4 +1,4 @@
-# check_dev_only_edits.ps1 — guards the dev/stable split (issue #429).
+﻿# check_dev_only_edits.ps1 — guards the dev/stable split (issue #429).
 #
 # CLAUDE.md NON-NEGOTIABLE #3 + PROMOTION_PROCESS.md: for the five split mods,
 # edits go ONLY to the `*_dev/` directory. The unsuffixed STABLE directory is
@@ -124,11 +124,16 @@ function Invoke-SelfTest {
     $authorized = Get-AuthorizedPromotionDirs -Raw 'crafting_in_modded;gui_tweaker;not_a_mod'
     $exactAuth = $authorized.Count -eq 2 -and $authorized.Contains('crafting_in_modded') -and $authorized.Contains('gui_tweaker')
 
-    Write-Host ("  stable-dir edits flagged:        {0}" -f ($hitStable ? 'PASS' : 'FAIL')) -ForegroundColor ($hitStable ? 'Green' : 'Red')
-    Write-Host ("  exactly the 2 stable hits:       {0}" -f ($countRight ? 'PASS' : 'FAIL')) -ForegroundColor ($countRight ? 'Green' : 'Red')
-    Write-Host ("  `_dev` twins NOT flagged:         {0}" -f ($noDevTwin ? 'PASS' : 'FAIL')) -ForegroundColor ($noDevTwin ? 'Green' : 'Red')
-    Write-Host ("  single-stream mod NOT flagged:   {0}" -f ($noSingle ? 'PASS' : 'FAIL')) -ForegroundColor ($noSingle ? 'Green' : 'Red')
-    Write-Host ("  trusted promotion dirs exact:   {0}" -f ($exactAuth ? 'PASS' : 'FAIL')) -ForegroundColor ($exactAuth ? 'Green' : 'Red')
+    function Write-SelfTestResult([string]$label, [bool]$passed) {
+        $result = if ($passed) { 'PASS' } else { 'FAIL' }
+        $color = if ($passed) { 'Green' } else { 'Red' }
+        Write-Host ("{0}{1}" -f $label, $result) -ForegroundColor $color
+    }
+    Write-SelfTestResult "  stable-dir edits flagged:        " $hitStable
+    Write-SelfTestResult "  exactly the 2 stable hits:       " $countRight
+    Write-SelfTestResult "  `_dev` twins NOT flagged:         " $noDevTwin
+    Write-SelfTestResult "  single-stream mod NOT flagged:   " $noSingle
+    Write-SelfTestResult "  trusted promotion dirs exact:   " $exactAuth
 
     if ($hitStable -and $countRight -and $noDevTwin -and $noSingle -and $exactAuth) {
         Write-Host "[check_dev_only_edits] SELF-TEST PASSED" -ForegroundColor Green

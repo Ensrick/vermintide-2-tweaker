@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 # check_mechanics_citations.ps1 — provenance lint for docs/MECHANICS.md
 # ============================================================================
 #
@@ -216,13 +216,19 @@ Intro prose bullet that should be EXEMPT (outside any Domain section):
     # exactly the 2 planted uncited bullets should error
     $exactlyTwoErrors = ($res.errors.Count -eq 2)
 
+    function Write-SelfTestResult([string]$label, [bool]$passed, [string]$suffix) {
+        $result = if ($passed) { 'PASS' } else { 'FAIL' }
+        $color = if ($passed) { 'Green' } else { 'Red' }
+        Write-Host ("{0}{1}{2}" -f $label, $result, $suffix) -ForegroundColor $color
+    }
+
     Write-Host ""
-    Write-Host ("  Uncited Domain claim -> ERROR:          {0}" -f ($uncitedFired ? 'PASS' : 'FAIL')) -ForegroundColor ($uncitedFired ? 'Green' : 'Red')
-    Write-Host ("  Uncited Known-gaps claim -> ERROR:      {0}" -f ($knownGapUncitedFired ? 'PASS' : 'FAIL')) -ForegroundColor ($knownGapUncitedFired ? 'Green' : 'Red')
-    Write-Host ("  Cited [src] claim -> no error:          {0}" -f ($citedDidNotError ? 'PASS' : 'FAIL')) -ForegroundColor ($citedDidNotError ? 'Green' : 'Red')
-    Write-Host ("  Exempt framing bullet -> no error:      {0}" -f ($exemptDidNotError ? 'PASS' : 'FAIL')) -ForegroundColor ($exemptDidNotError ? 'Green' : 'Red')
-    Write-Host ("  [unverified] counted (expected 2):      {0} (got {1})" -f (($unverifiedCounted ? 'PASS' : 'FAIL'), $res.unverified)) -ForegroundColor ($unverifiedCounted ? 'Green' : 'Red')
-    Write-Host ("  Exactly 2 errors (no over/under-fire):  {0} (got {1})" -f (($exactlyTwoErrors ? 'PASS' : 'FAIL'), $res.errors.Count)) -ForegroundColor ($exactlyTwoErrors ? 'Green' : 'Red')
+    Write-SelfTestResult "  Uncited Domain claim -> ERROR:          " $uncitedFired ""
+    Write-SelfTestResult "  Uncited Known-gaps claim -> ERROR:      " $knownGapUncitedFired ""
+    Write-SelfTestResult "  Cited [src] claim -> no error:          " $citedDidNotError ""
+    Write-SelfTestResult "  Exempt framing bullet -> no error:      " $exemptDidNotError ""
+    Write-SelfTestResult "  [unverified] counted (expected 2):      " $unverifiedCounted (" (got {0})" -f $res.unverified)
+    Write-SelfTestResult "  Exactly 2 errors (no over/under-fire):  " $exactlyTwoErrors (" (got {0})" -f $res.errors.Count)
     Write-Host ""
     Write-Host "  Raised errors:" -ForegroundColor DarkGray
     foreach ($e in $res.errors) { Write-Host "    - $e" -ForegroundColor DarkGray }
@@ -258,7 +264,8 @@ Write-Host ""
 Write-Host "============ check_mechanics_citations ============" -ForegroundColor Cyan
 Write-Host ("Cited factual bullets:   {0}" -f $res.cited) -ForegroundColor Green
 Write-Host ("Known gaps [unverified]: {0}" -f $res.unverified) -ForegroundColor Yellow
-Write-Host ("Uncited (ERROR):         {0}" -f $res.errors.Count) -ForegroundColor ($res.errors.Count -gt 0 ? 'Red' : 'Green')
+$errorColor = if ($res.errors.Count -gt 0) { 'Red' } else { 'Green' }
+Write-Host ("Uncited (ERROR):         {0}" -f $res.errors.Count) -ForegroundColor $errorColor
 Write-Host ""
 
 if (-not $Quiet -and $res.domains.Count -gt 0) {

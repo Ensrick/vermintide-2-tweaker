@@ -1,4 +1,4 @@
-# check_versions.ps1 — verifies MOD_VERSION constants + cfg metadata sync.
+﻿# check_versions.ps1 — verifies MOD_VERSION constants + cfg metadata sync.
 # Catches: missing MOD_VERSION constant, cfg title/leading description banner
 # doesn't match the current MOD_VERSION, CHANGELOG entry missing for current
 # version.

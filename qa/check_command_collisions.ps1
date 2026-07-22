@@ -1,4 +1,4 @@
-# check_command_collisions.ps1 — flags chat command names registered by 2+ mods.
+﻿# check_command_collisions.ps1 — flags chat command names registered by 2+ mods.
 #
 # VT2 chat commands are GLOBAL (per memory reference_vt2_chat_command_syntax.md).
 # When two mods both call `mod:command("foo", ...)`, only the first wins; the

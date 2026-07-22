@@ -8,7 +8,7 @@
   2026-06-19 incident: gui_tweaker's itemV2.cfg carried general_tweaker_dev's
   published_id (3733367409). Because the launcher uploads to whatever
   published_id the cfg names, every `upload gui_tweaker` HIJACKED gt_dev's
-  Workshop item — overwriting "Tweaker: General (dev)" with "Tweaker: GUI".
+  Workshop item - overwriting "Tweaker: General (dev)" with "Tweaker: GUI".
   Result: gt_dev went missing and two "Tweaker: GUI" items appeared. A single
   wrong number in one cfg silently clobbers a published mod on every upload.
 
@@ -21,10 +21,10 @@
 #>
 param([string]$Root = (Split-Path $PSScriptRoot -Parent))
 
-# ── Canonical mod-directory -> Steam Workshop published_id. SOURCE OF TRUTH. ──
+# Canonical mod-directory -> Steam Workshop published_id. SOURCE OF TRUTH.
 # Cross-checked against vermintide-2-tweaker/CLAUDE.md "Mod Directory" table.
 # When you publish a NEW Workshop item, add its dir + id here IN THE SAME COMMIT
-# that introduces the cfg — an unknown cfg is a WARN, a wrong/dupe id is a FAIL.
+# that introduces the cfg - an unknown cfg is a WARN, a wrong/dupe id is a FAIL.
 $Canonical = [ordered]@{
     'weapon_tweaker'                 = '3712896117'  # Tweaker: Weapons
     'chaos_wastes_tweaker'           = '3712929235'  # Tweaker: Chaos Wastes (stable)
