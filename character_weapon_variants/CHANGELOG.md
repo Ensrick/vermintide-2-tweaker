@@ -1,6 +1,6 @@
 # Character Weapon Variants — Changelog
 
-## Unreleased - mixed-lobby Tuskgor Javelin containment (#424)
+## 0.1.471-dev (2026-07-22) - mixed-lobby Tuskgor Javelin containment (#424) [not-started]
 
 - Connected CWV's existing peer-capability protocol to the actual earliest
   hot-join senders: `TransientPackageLoader.hot_join_sync` during loading and
@@ -18,6 +18,9 @@
   vanilla fallback remains the final containment layer after the feature gate.
 - Added engine-free policy, inventory-filter, sender-order, and hot-join-order
   coverage plus expanded `/cwv_regression_test` assertions.
+- Extracted the live javelin sender and hot-join hook graph into its dedicated
+  gate owner so the CWV entry file remains below its enforced decomposition
+  ceiling without changing the fail-closed behavior.
 
 ## 0.1.470-dev (2026-07-22) - shared custom-model camera fade (#922) [not-started]
 
