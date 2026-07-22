@@ -1,5 +1,31 @@
 # Character Dialogue Changelog
 
+## 0.1.7-dev (2026-07-22) - #881 bounded Morris soundbank residency [verify-fix]
+
+- The #927/#940 logs prove silent `pes_morris_*` clicks reach Wwise but return
+  playing ID `0`. Bundle inspection then found every reported event ID in one
+  bank owned by Fatshark's `resource_packages/dlcs/morris_ingame` package.
+- Character Dialogue now loads that one audited package asynchronously on the
+  first Morris preview, holds exactly one private
+  `character_dialogue_preview` reference while the preview UI owns it, and
+  retries only the latest pending click after residency. Stop, collapse, view
+  exit, world transition, disable, and unload release the reference.
+- The loader never derives package names from arbitrary catalogue text, never
+  loads a whole level package, never queues the same reference twice, and
+  abandons a missing/stalled load after a bounded 30 seconds.
+- Added engine-free mapping, latest-click, timeout, and cleanup regressions;
+  `/cd_regression_test` also asserts the audited mapping at runtime.
+
+### Solo verify
+
+In the keep, open **Mod Tweaker > Dialogue > Markus Kruber** and search for
+`pes_morris_bardin_song_kruber_13`. Click Play once. The log must show one
+`[cd:881] package_queued`, then `package_ready`, followed by
+`[character_dialogue:preview] play ... id=<non-zero>`, and the line must be
+audible. Stop it, play it again, then leave the Dialogue tab; there must be no
+crash, repeated load loop, or package-reference warning. Run
+`/cd_regression_test`; failures must be zero.
+
 ## 0.1.6-dev (2026-07-19) - #881 diagnostics for silent preview clicks [diag]
 
 - printf every preview play rejection (validation error, missing level audio
