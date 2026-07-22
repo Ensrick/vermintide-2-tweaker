@@ -1,5 +1,16 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.314-dev (2026-07-22) -- detached bot loadout snapshots (#954) [not-started]
+
+- Assigning a saved loadout to a bot now persists a dedicated copy of that
+  row's equipment. Later edits to the player's saved row no longer mutate the
+  bot's live or persisted equipment through the same table identity.
+- Existing bot designations migrate once from their current designated row.
+  Every backend refresh receives another detached copy, so backend cache writes
+  cannot alias the persistent snapshot. Official-realm behavior remains native.
+- Added stable/dev Lua truth-table, deep-copy, runtime-wiring, and live
+  `/gut_regression_test` coverage.
+
 ## 0.2.313-dev (2026-07-22) -- Chaos Wastes exit identity isolation (#273) [not-started]
 
 - Exit-time loadout snapshots now read a slot only when the durable `items`

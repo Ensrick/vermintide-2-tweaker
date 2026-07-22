@@ -1,5 +1,16 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.281 (2026-07-22) -- detached bot loadout snapshots (#954) [not-started]
+
+- Assigning a saved loadout to a bot now persists a dedicated copy of that
+  row's equipment. Later edits to the player's saved row no longer mutate the
+  bot's live or persisted equipment through the same table identity.
+- Existing bot designations migrate once from their current designated row.
+  Every backend refresh receives another detached copy, so backend cache writes
+  cannot alias the persistent snapshot. Official-realm behavior remains native.
+- Added stable/dev Lua truth-table, deep-copy, runtime-wiring, and live
+  `/gut_regression_test` coverage.
+
 ## 0.2.280 (2026-07-19) — reconcile newly added settings into existing profiles (#828) [verify-fix-coop]
 
 - Upgrades sparse saved profiles from the current declared defaults while preserving every explicit saved value, including `false` and explicit opt-ins.

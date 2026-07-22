@@ -174,6 +174,7 @@ M._issue354_trace_wired = true
 --   _STORE[career_name] = {
 --       selected_index = <int>,
 --       bot_index      = <int or nil>,
+--       bot_loadout    = <detached slot snapshot or nil>,
 --       loadouts       = { [i] = { [slot_name] = backend_id, ..., talents = "1,2,.." } },
 --   }
 -- Each loadout entry mirrors `_career_data[career][i]` 1:1 (slots + "talents" key), so
@@ -1032,55 +1033,16 @@ end)
 -- BOT LOADOUTS -- resolve bot designation from the store (issue #175 requirement 9).
 -- ==================================================================
 
--- Overlay bot designations onto _bot_loadouts AFTER vanilla built it from _loadouts.
--- hook_safe (post) -- no other gut_dev hook targets refresh_bot_loadouts.
-mod:hook_safe("BackendInterfaceItemPlayfab", "refresh_bot_loadouts", function(self)
-    if _adventure_mode() ~= MODE_STORE then return end
-    local bot = self._bot_loadouts
-    if type(bot) ~= "table" then return end
-    for career_name, entry in pairs(_store()) do
-        local bi = entry.bot_index
-        if bi and entry.loadouts[bi] then
-            local slots = {}
-            for i = 1, #LOADOUT_SLOT_NAMES do
-                local s = LOADOUT_SLOT_NAMES[i]
-                slots[s] = entry.loadouts[bi][s]
-            end
-            bot[career_name] = slots
-        end
-    end
-end)
-
--- Bot checkbox: write bot_index to the store, SKIP the PlayerData.loadout_selection write
--- (hero_window_loadout_selection_console.lua:671-683), then refresh bot loadouts from the
--- store. Isolation: PlayerData.loadout_selection is realm-shared and not eac-gated, so we
--- never write it while modded.
-mod:hook("HeroWindowLoadoutSelectionConsole", "_save_bot_equipment", function(func, self)
-    local m = _adventure_mode()
-    if m == MODE_OFF then
-        return func(self)
-    end
-    if m == MODE_READONLY then
-        printf("[gut_dev:NATIVE_LOADOUTS] bot_equipment BLOCKED (read-only non-modded loadouts)")
-        return
-    end
-    local profile = SPProfiles and SPProfiles[self._profile_index]
-    local career_settings = profile and profile.careers and profile.careers[self._career_index]
-    local career_name = career_settings and career_settings.name
-    if not career_name then return end   -- can't resolve; skip (still no vanilla PlayerData write)
-    local store = _store()
-    local entry = store[career_name]
-    if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career_name] = entry end
-    entry.bot_index = self._context_menu_loadout_index
-    _persist()
-    printf("[gut_dev:NATIVE_LOADOUTS] bot_equipment career=%s bot_index=%s -> store (skipped PlayerData write)",
-        tostring(career_name), tostring(entry.bot_index))
-    local ok, iface = pcall(function() return Managers.backend:get_interface("items") end)
-    if ok and iface and iface.refresh_bot_loadouts then
-        pcall(function() iface:refresh_bot_loadouts() end)
-    end
-    -- NO-OP vanilla.
-end)
+-- #954 extracts both bot-specific hooks into one owner. It persists a detached
+-- designation snapshot so later edits to the player's source row cannot change
+-- the bot, while leaving official/readonly behavior on the vanilla boundary.
+local BotLoadoutSnapshot = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_bot_loadout_snapshot")
+BotLoadoutSnapshot.install(mod, {
+    mode = _adventure_mode, store = _store, persist = _persist,
+    policy = Policy, slot_names = LOADOUT_SLOT_NAMES,
+    mode_off = MODE_OFF, mode_store = MODE_STORE, mode_readonly = MODE_READONLY,
+    log_prefix = "gut_dev",
+})
 
 -- ==================================================================
 -- LOADOUT-PREVIEW CRASH GUARD (issue #372).
@@ -1110,7 +1072,7 @@ end)
 --
 -- Pre-flight (2026-07-06): grepped gui_tweaker_dev for hooks on
 -- (HeroWindowLoadoutSelectionConsole, _populate_context_menu_loadout) -- NONE. gut's
--- other hooks on this class target _save_bot_equipment (this file, above) and
+-- other hooks on this class target _save_bot_equipment (_gut_bot_loadout_snapshot.lua) and
 -- _show_context_menu (_gut_mission_inventory.lua) -- distinct methods.
 -- ==================================================================
 local EQUIPMENT_PREVIEW_SLOTS = { "slot_melee", "slot_ranged", "slot_necklace", "slot_ring", "slot_trinket_1" }
@@ -1639,6 +1601,9 @@ M.HOOK_TARGETS = {
 }
 
 M.rt_checks = {
+    { name = "issue954_bot_loadout_snapshot", fn = function()
+        return BotLoadoutSnapshot.contract_check(Policy, LOADOUT_SLOT_NAMES)
+    end },
     { name = "issue354_wt_loadout_lifecycle_trace", fn = function()
         if M._issue354_trace_wired ~= true then return "WT loadout lifecycle trace is not wired" end
         if type(WTTraceCore) ~= "table" or type(WTTraceCore.take) ~= "function" then
