@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## Unreleased -- Chaos Wastes exit identity isolation (#273)
+
+- Exit-time loadout snapshots now read a slot only when the durable `items`
+  interface currently owns it. Temporary Deus-owned melee/ranged backend ids
+  are skipped instead of being persisted into the Adventure loadout store;
+  items-owned cosmetic slots remain eligible during Chaos Wastes.
+- The bounded exit diagnostic now includes `foreign_slot_reads=<n>`. Added
+  pure ownership-policy, mixed gear/cosmetic, structural-order, and runtime
+  regression coverage.
+
 ## 0.2.312-dev (2026-07-22) — #925 shared presentation generation publisher [not-started]
 
 - Successful GUT loadout equips now publish a bounded, scalar-only local

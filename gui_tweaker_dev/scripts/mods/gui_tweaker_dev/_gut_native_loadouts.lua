@@ -1449,7 +1449,7 @@ mod:command("scrub_official_loadouts", "Repair modded/dangling OFFICIAL loadout 
 end)
 
 -- ==================================================================
--- EXIT-TIME SNAPSHOT BACKSTOP (issues #354, #353, #287, #175).
+-- EXIT-TIME SNAPSHOT BACKSTOP (issues #354, #353, #287, #175, #273).
 --
 -- The store above is captured on EQUIP EVENTS only (the mirror write hooks + the outer
 -- BackendUtils.set_loadout_item capture), each persisted immediately. Any loadout/cosmetic
@@ -1467,10 +1467,14 @@ end)
 -- and is driven by VMF lifecycle callbacks (mod.on_game_state_changed / mod.on_unload) chained
 -- in the entry point -- so there is no (Class, method) collision to clear (NON-NEGOTIABLE 8).
 --
--- ISOLATION. Reads go through BackendUtils.get_loadout_item_id / get_loadout_item -- the exact
--- readers the hero view uses, which dispatch per-slot to the (possibly LA-cloned) live
--- interface. These are NOT mirror-read hooks, so calling get_item_from_id underneath here does
--- NOT recurse (the v0.2.173 1 GiB burn was get_item_from_id called from INSIDE the
+-- ISOLATION. Before any BackendUtils read, the snapshot asks BackendManager which interface
+-- owns that slot and proceeds only when it is the durable `items` interface. A mechanism-owned
+-- slot (notably Deus melee/ranged) is a SKIP: its generated backend id is run-local and must
+-- never enter the Adventure store (#273). Cosmetics remain eligible in Deus because vanilla
+-- maps those slots to `items`. Eligible reads then go through BackendUtils.get_loadout_item_id /
+-- get_loadout_item -- the exact readers the hero view uses. These are NOT mirror-read hooks, so
+-- calling get_item_from_id underneath here does NOT recurse (the v0.2.173 1 GiB burn was
+-- get_item_from_id called from INSIDE the
 -- get_character_data hook; an exit edge is not a mirror read -- same safety /gut_loadout_status
 -- relies on). Gear reconciles only a value that resolves to a registered item RIGHT NOW
 -- (RESOLVE_YES); an unresolved live read is a SKIP, never a clear, so a late-registering
@@ -1479,10 +1483,27 @@ end)
 -- store/overlay are modded-only; #175 isolation guarantee is untouched).
 -- ==================================================================
 
+-- True only when the durable items interface currently owns `slot_name`. BackendManager's
+-- per-slot dispatch is the authoritative boundary; unknown/throwing resolution fails closed.
+local function _slot_owned_by_items(slot_name)
+    local backend = Managers and Managers.backend
+    if not (backend and backend.get_loadout_interface_by_slot and backend.get_interface) then
+        return false
+    end
+    local ok, slot_interface, items_interface = pcall(function()
+        return backend:get_loadout_interface_by_slot(slot_name), backend:get_interface("items")
+    end)
+    return ok and ExitSnapshotCore.slot_owned_by_items(slot_interface, items_interface)
+end
+
 -- Read one career+slot's LIVE equipped value, canonicalized to the store's format (gear = raw
 -- backend id; cosmetics = override_id or ItemId, the same identity the equip capture stores).
--- Returns nil to SKIP the slot (no live value / unresolved) -- a nil never overwrites the store.
+-- Returns nil + a reason to SKIP the slot (foreign owner / no live value / unresolved) -- a nil
+-- never overwrites the store.
 local function _live_slot_value(career_name, slot_name)
+    if not _slot_owned_by_items(slot_name) then
+        return nil, "foreign-loadout-interface"
+    end
     local BU = rawget(_G, "BackendUtils")
     if COSMETIC_SLOT_SET[slot_name] then
         if not (BU and BU.get_loadout_item) then return nil end
@@ -1507,12 +1528,16 @@ end
 -- Build the live selected-row values for one career over `slots` (nil entries omitted).
 local function _build_live_row(career_name, slots)
     local row = {}
+    local foreign_slot_reads = 0
     for i = 1, #slots do
         local slot = slots[i]
-        local v = _live_slot_value(career_name, slot)
+        local v, reason = _live_slot_value(career_name, slot)
         if v ~= nil then row[slot] = v end
+        if reason == "foreign-loadout-interface" then
+            foreign_slot_reads = foreign_slot_reads + 1
+        end
     end
-    return row
+    return row, foreign_slot_reads
 end
 
 -- Resolve the live Adventure mirror at an exit edge (mirror-less `self` here). Returns nil for
@@ -1535,12 +1560,14 @@ function M.exit_snapshot(edge_name)
         return 0, false
     end
 
-    local total, wrote = 0, false
+    local total, wrote, foreign_slot_reads = 0, false, 0
     if mode == MODE_STORE then
         local store = _store()
         local live_by_career = {}
         for career_name in pairs(store) do
-            live_by_career[career_name] = _build_live_row(career_name, LOADOUT_SLOT_NAMES)
+            local live, foreign = _build_live_row(career_name, LOADOUT_SLOT_NAMES)
+            live_by_career[career_name] = live
+            foreign_slot_reads = foreign_slot_reads + foreign
         end
         local diverged, merged_rows, per_career =
             ExitSnapshotCore.reconcile_selected(live_by_career, store, LOADOUT_SLOT_NAMES)
@@ -1566,7 +1593,8 @@ function M.exit_snapshot(edge_name)
             local idx = _official_index(mirror, career_name, nil)
             local stored_row = career_ov[idx]
             if type(stored_row) == "table" then
-                local live = _build_live_row(career_name, LOADOUT_SLOT_NAMES)
+                local live, foreign = _build_live_row(career_name, LOADOUT_SLOT_NAMES)
+                foreign_slot_reads = foreign_slot_reads + foreign
                 local filtered = {}
                 for slot, v in pairs(live) do
                     if Policy.readonly_action(slot, v) == "preserve" then filtered[slot] = v end
@@ -1587,7 +1615,8 @@ function M.exit_snapshot(edge_name)
         end
     end
 
-    printf("[gut:persist] edge=%s diverged=%d written=%s", tostring(edge_name), total, tostring(wrote))
+    printf("[gut:persist] edge=%s diverged=%d written=%s foreign_slot_reads=%d",
+        tostring(edge_name), total, tostring(wrote), foreign_slot_reads)
     return total, wrote
 end
 
@@ -1860,8 +1889,16 @@ M.rt_checks = {
         -- edge, RESOLVE_YES gate, raw reads) and covered by the offline harness.
         if type(M.exit_snapshot) ~= "function" then return "exit_snapshot not wired" end
         if type(ExitSnapshotCore) ~= "table" or type(ExitSnapshotCore.diff_row) ~= "function"
-            or type(ExitSnapshotCore.reconcile_selected) ~= "function" then
+            or type(ExitSnapshotCore.reconcile_selected) ~= "function"
+            or type(ExitSnapshotCore.slot_owned_by_items) ~= "function" then
             return "exit snapshot pure core missing"
+        end
+        local items_interface, deus_interface = {}, {}
+        if not ExitSnapshotCore.slot_owned_by_items(items_interface, items_interface) then
+            return "items-owned slot rejected"
+        end
+        if ExitSnapshotCore.slot_owned_by_items(deus_interface, items_interface) then
+            return "foreign mechanism-owned slot accepted"
         end
         local slots = { "slot_melee", "slot_ranged", "slot_hat" }
         -- nil live value must NOT clear a stored slot; a differing live value overwrites.

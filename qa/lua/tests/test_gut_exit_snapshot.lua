@@ -11,6 +11,38 @@ return function(H, repo_root)
         "slot_necklace", "slot_ring", "slot_trinket_1", "slot_frame", "slot_pose",
     }
 
+    H.test("exit-snapshot accepts only slots owned by the durable items interface", function()
+        local items_interface = {}
+        local deus_interface = {}
+        H.truthy(Core.slot_owned_by_items(items_interface, items_interface),
+            "the durable items interface must remain eligible")
+        H.equal(Core.slot_owned_by_items(deus_interface, items_interface), false,
+            "a Deus-owned weapon slot must be skipped")
+        H.equal(Core.slot_owned_by_items(nil, items_interface), false,
+            "unknown slot ownership must fail closed")
+        H.equal(Core.slot_owned_by_items(items_interface, nil), false,
+            "an unavailable items interface must fail closed")
+    end)
+
+    H.test("exit-snapshot mixed Deus ownership preserves cosmetics but rejects run-local gear", function()
+        local items_interface = {}
+        local deus_interface = {}
+        local live = {}
+        if Core.slot_owned_by_items(deus_interface, items_interface) then
+            live.slot_melee = "generated_deus_bid"
+        end
+        if Core.slot_owned_by_items(items_interface, items_interface) then
+            live.slot_hat = "durable_hat_key"
+        end
+        local merged, diverged = Core.diff_row(live,
+            { slot_melee = "stable_cwv_bid", slot_hat = "old_hat_key" }, SLOTS)
+        H.equal(diverged, 1)
+        H.equal(merged.slot_melee, "stable_cwv_bid",
+            "temporary Deus gear identity must not poison the durable row")
+        H.equal(merged.slot_hat, "durable_hat_key",
+            "items-owned cosmetics remain eligible during Deus")
+    end)
+
     H.test("exit-snapshot diff detects a diverged slot and overwrites only it", function()
         local stored = { slot_melee = "old_melee", slot_ranged = "keep_r", talents = "1,2,3" }
         local live = { slot_melee = "new_melee" }
@@ -138,9 +170,17 @@ return function(H, repo_root)
             "exit_snapshot entry not defined on the store module")
         H.truthy(src:find("ExitSnapshotCore.reconcile_selected(live_by_career, store, LOADOUT_SLOT_NAMES)", 1, true),
             "STORE reconcile does not go through the pure core")
+        local owner_gate = assert(src:find("if not _slot_owned_by_items(slot_name) then", 1, true))
+        local backend_read = assert(src:find("BU.get_loadout_item", owner_gate, true))
+        H.truthy(owner_gate < backend_read,
+            "slot owner gate must run before any BackendUtils live read")
+        H.truthy(src:find('return nil, "foreign-loadout-interface"', 1, true),
+            "foreign slot must fail closed with a bounded reason")
         H.truthy(src:find("_persist()", 1, true), "reconcile does not persist through the single store writer")
         H.truthy(src:find("[gut:persist] edge=%s diverged=%d written=%s", 1, true),
             "bounded persist diagnostic missing")
+        H.truthy(src:find("foreign_slot_reads=%d", 1, true),
+            "bounded foreign-owner diagnostic missing")
 
         local entry_path = repo_root
             .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua"

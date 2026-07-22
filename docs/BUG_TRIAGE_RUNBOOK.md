@@ -356,6 +356,7 @@ UPLOAD - a local deploy alone is silently clobbered.
 | Buff / damage / explosion crash on second peer joining | ct / wt / et (gated registration) | Confirm shared registration master toggle; check sorted-order registration | `PROJECT_STANDARDS.md` sec. 9.3; `DEVELOPMENT.md` "Gated registration diverges across peers" |
 | Crafting screen shows item player doesn't own DLC for | cim / cosmetics_tweaker / crt / event_tweaker | Grep for `_*_requires_unowned_dlc`; confirm the filter fires before enumeration | `CLAUDE.md` "DLC Ownership Gate" |
 | Settings differ between "the same setup" | any mod | Compare `settings_fp=<hash>` across peer logs | `PROJECT_STANDARDS.md` sec. 3.6 "Applied marker line" |
+| CWV weapon reverts after leaving Chaos Wastes | gut loadout persistence | Compare `[gut:persist]` ids before/after `old_loadout: deus new_loadout: nil`; temporary Deus ids must report as skipped foreign slot reads | `docs/engine/11`; `BUG_CLASSES.md` class 73 |
 | Game crashed with no `<<crashify-exception>>` | engine-level (Stingray) | Read `crash_dumps\<GUID>.dmp` | `PROJECT_STANDARDS.md` sec. 9.7 grep-first |
 
 ---

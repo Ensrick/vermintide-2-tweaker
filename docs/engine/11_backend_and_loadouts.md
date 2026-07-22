@@ -287,6 +287,19 @@ check pins all five write hooks, :1209-1224). Remaining friction:
    vanilla also validates `has_loadout(career, bot_index)` (backend_interface_item_playfab.lua:143-146),
    which gut's has_loadout hook already answers from the store (:567-577).
 
+**Exit-snapshot owner boundary (#273).** `BackendUtils.get_loadout_item_id` is not inherently a
+durable-store read: it dispatches through `get_loadout_interface_by_slot` [src:
+`backend_utils.lua:14-28`; `backend_manager_playfab.lua:329-341`]. Deus assigns melee/ranged to
+the `deus` interface while cosmetics remain on `items` [src:
+`backend_interface_deus_base.lua:7-14`], then resets and grants generated weapon instances at
+run setup [src: `deus_mechanism.lua:1120-1175`]. Consequently an exit backstop must compare the
+active per-slot interface by identity with the durable `items` interface *before* reading. A
+foreign or unknown owner is a non-destructive skip; an items-owned cosmetic remains eligible.
+Issue #273's 2026-07-20 log proves the failure signature: successive `[gut:persist] ... -> store`
+lines captured changing `cwv_es_maul<generated>` ids during the run, those ids became
+`official-fallback-resolve-no` after `old_loadout: deus new_loadout: nil`, and the player spawned
+with the prior native weapon. This is BUG_CLASSES class 73, not a renderer/husk identity fault.
+
 ### 5.2 cim (`crafting_in_modded_dev`)
 
 5. **Craft injection is on the right seam** (`mirror:add_item` + dirtify,

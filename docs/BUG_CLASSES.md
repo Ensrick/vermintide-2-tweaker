@@ -2788,3 +2788,44 @@ fallback path, especially live strings containing UTF-8 smart punctuation.
   Advisory policy only to legitimate check results such as sentinel exit 1/2.
 - Lock zero, fresh, stale, and malformed sentinel semantics under both PS5 and
   PowerShell 7, plus a planted BOM-less em-dash failure and BOM-safe control.
+
+## 73. Durable snapshot captures an ephemeral mode-specific backend identity
+
+**First confirmed:** issue #273 on 2026-07-20; earlier matching symptom #174.
+**Canonical Issue:** [#273](https://github.com/Ensrick/vermintide-2-tweaker/issues/273)
+**Lives in:** exit/transition persistence backstops that read through
+`BackendUtils` while a backend loadout-interface override is active.
+
+### Symptoms
+- A modded weapon is correct throughout Chaos Wastes, but leaving the run
+  restores a prior native weapon.
+- Exit diagnostics persist changing generated ids such as
+  `cwv_es_maul<suffix>`; after `old_loadout: deus new_loadout: nil`, those ids
+  report unresolved and the normal fallback wins.
+- Appearance and husk synchronization can be healthy; the first divergent
+  mutation is in the durable loadout store, not the renderer.
+
+### Diagnosis pattern
+1. Establish the active interface per slot with
+   `Managers.backend:get_loadout_interface_by_slot(slot)`. Do not infer durable
+   ownership from the underlying mirror's realm key.
+2. Follow the id across the bounded exit snapshot and the mechanism override
+   teardown. A changing generated id that becomes unresolved is ephemeral.
+3. Separate mixed ownership: Deus maps melee/ranged to `deus` but cosmetics to
+   `items` [src: `backend_interface_deus_base.lua:7-14`]. A whole-mode gate is
+   less precise than a per-slot gate.
+
+### Fix template
+- Before a persistence read, compare the active slot interface by identity with
+  the durable `items` interface. Only exact identity may enter the Adventure
+  store; foreign or unknown ownership fails closed as a non-destructive skip.
+- Preserve eligible cosmetics and existing stored weapon ids. Do not translate
+  or delete an unresolved id at teardown, and do not add polling or a second
+  restore writer.
+- Cover same-interface allow, foreign-interface reject, nil/throwing fail-closed,
+  mixed Deus gear/cosmetic ownership, and gate-before-read ordering. Emit one
+  bounded skipped-owner count per transition edge.
+
+**Related:** class 27 (husk base identity), class 43 (durable vs ephemeral
+render state), class 65 (partial-row loadouts), and class 68 (Deus identity and
+mechanism boundaries).
