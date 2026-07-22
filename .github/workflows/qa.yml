@@ -69,8 +69,19 @@ jobs:
         shell: powershell
         run: ./tools/ship/ship.ps1 -SelfTest
 
+      - name: Validate PR issue-closure references
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./qa/check_pr_autoclose.ps1
+
       - name: run_all.ps1 (full QA gate — the policy engine decides)
         shell: pwsh
+        env:
+          # Read-only metadata lets run_all validate an explicitly authorized
+          # closure receipt; ordinary PRs use Refs and make no API call.
+          GH_TOKEN: ${{ github.token }}
         run: ./qa/run_all.ps1
         # Exits non-zero only when a Standard-policy check hits exit >=2 or a
         # Blocking-policy check hits any non-zero. Advisory checks (luacheck,

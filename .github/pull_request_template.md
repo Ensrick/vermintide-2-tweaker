@@ -2,7 +2,8 @@
 
 <!-- What changed for the player, contributor, or repository? Keep this concise. -->
 
-Closes #
+Refs #
+<!-- Use Refs only. Auto-closing keywords require a trusted issue-local closure receipt. -->
 
 ## Evidence
 

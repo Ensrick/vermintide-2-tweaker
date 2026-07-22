@@ -22,6 +22,15 @@ It never executes incoming PR code. Ordinary PRs pass it without a grant; stable
 promotion PRs must satisfy the version- and SHA-bound maintainer process in
 `docs/PROMOTION_PROCESS.md`.
 
+`PR auto-close authorization / pr-autoclose-authorization` is the third
+required PR status. It also runs protected default-branch code under
+`pull_request_target` with read-only metadata permissions. It rejects GitHub
+auto-closing issue references unless the target issue contains the exact,
+trusted, PR-bound user-verification receipt defined in `PROJECT_STANDARDS.md`
+section 11. The separate `PR auto-close audit` trusted workflow has narrowly
+scoped `issues: write` permission and reopens an unauthorized closure after a
+merge if pre-merge metadata enforcement was unavailable.
+
 `qa/check_ci_hardening.ps1` enforces this contract locally and in CI. Its `-SelfTest`
 plants a mutable action reference, a fragile push path filter, and weakened protection to
 prove those failures are detected.
@@ -38,7 +47,8 @@ file-size ratchet backlog), then preview and apply:
 ```
 
 The tool refuses to apply unless the latest completed master QA run is `success`. The policy
-requires both `qa-gate` and `stable-promotion-authorization` on an up-to-date branch,
+requires `qa-gate`, `stable-promotion-authorization`, and
+`pr-autoclose-authorization` on an up-to-date branch,
 applies to administrators, requires PR conversations to be resolved, and disables
 force-push and branch deletion. It does not require an approving review, so a solo
 maintainer can merge after the automated gates pass.

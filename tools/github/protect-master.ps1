@@ -5,7 +5,7 @@
 param(
     [string]$Repository = "Ensrick/vermintide-2-tweaker",
     [string]$Branch = "master",
-    [string[]]$RequiredContexts = @("qa-gate", "stable-promotion-authorization"),
+    [string[]]$RequiredContexts = @("qa-gate", "stable-promotion-authorization", "pr-autoclose-authorization"),
     [switch]$Apply,
     [switch]$SelfTest
 )
@@ -57,11 +57,12 @@ function Invoke-GhCapture {
 }
 
 function Invoke-SelfTest {
-    $payload = New-ProtectionPayload -Contexts @("qa-gate", "stable-promotion-authorization")
+    $payload = New-ProtectionPayload -Contexts @("qa-gate", "stable-promotion-authorization", "pr-autoclose-authorization")
     if (-not $payload.required_status_checks.strict) { throw "status checks must require an up-to-date branch" }
-    if ($payload.required_status_checks.contexts.Count -ne 2 -or
+    if ($payload.required_status_checks.contexts.Count -ne 3 -or
             $payload.required_status_checks.contexts[0] -ne "qa-gate" -or
-            $payload.required_status_checks.contexts[1] -ne "stable-promotion-authorization") {
+            $payload.required_status_checks.contexts[1] -ne "stable-promotion-authorization" -or
+            $payload.required_status_checks.contexts[2] -ne "pr-autoclose-authorization") {
         throw "required QA/authorization contexts drift"
     }
     if (-not $payload.enforce_admins) { throw "administrators must not bypass protection" }
