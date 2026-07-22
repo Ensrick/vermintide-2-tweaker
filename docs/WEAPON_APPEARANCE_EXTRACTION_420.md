@@ -38,8 +38,12 @@ career, packages, ammo, network state, or render-path hooks. The API can be test
 offline through dependency injection, while production defaults bind VT2 globals.
 CWV v0.1.405-dev is the first runtime consumer. It replaces only the private WA
 implementation and preserves CWV's existing resolver/caller surface and exported
-compatibility handles. Cosmetics and WT carry synchronized copies but do not load
-them yet.
+compatibility handles. The next source slice adopts the primitive in Cosmetics'
+ordinary render-path scale/grip adapter. WT stable/dev must cut over together at
+the normal beta-promotion boundary so the enforced stream-parity contract remains
+exact. WT's durable per-frame pose owner remains separate because it owns
+animation-tick retention and canonical baseline recovery, not one-shot transform
+math.
 
 ## Loader proof
 
@@ -58,14 +62,16 @@ loads only its bundled copy after its own namespace exists. Therefore:
    handle and render-path resolution are unchanged.
 2. **CWV textures:** replace both musket `Material.set_texture` clusters with one
    texture spec passed to `apply_textures`; test owner, husk, preview, and browser.
-3. **Cosmetics transforms:** move only fresh-spawn scale/offset helpers first.
-   Durable/persisted or LA hand-selection policy remains with Cosmetics.
+3. **Cosmetics transforms (source candidate landed):** ordinary render-path
+   scale/offset helpers now delegate transform composition to the bundled WA
+   instance. Durable/persisted or LA hand-selection policy remains with Cosmetics.
 4. **Cosmetics texture fallback:** delete the mesh-material fallback only after
    the unit-local route is proven on every LA unit class. Never silently restore
    `Material.set_texture` as a compatibility fallback.
-5. **WT transforms:** migrate ordinary spawn-time transforms last. Keep durable
-   per-frame and #569 canonical rotation composition outside the primitive until
-   their base-capture contract has a dedicated API.
+5. **WT transforms (promotion boundary):** migrate ordinary spawn-time and menu
+   preview scale/offset helpers in stable and dev together during the normal beta
+   promotion. Durable per-frame and #569 canonical rotation composition stay
+   outside the primitive until their base-capture contract has a dedicated API.
 
 Each cutover requires existing four-render-path regression coverage and an
 in-game verification label appropriate to that consumer. The architecture phase

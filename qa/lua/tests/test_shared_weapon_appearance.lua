@@ -330,4 +330,28 @@ return function(H, repo_root)
         H.equal(source:find("function WA.apply_scale", 1, true), nil)
         H.equal(source:find("local _offset_applied", 1, true), nil)
     end)
+
+    H.test("#420 ordinary Cosmetics adapter consumes shared WeaponAppearance", function()
+        local function read(path)
+            local file = assert(io.open(repo_root .. path, "rb"))
+            local source = file:read("*a")
+            file:close()
+            return source
+        end
+        local cosmetics = read(
+            "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_render.lua")
+        H.truthy(cosmetics:find(
+            '"scripts/mods/cosmetics_tweaker/_lib_weapon_appearance"', 1, true))
+        H.truthy(cosmetics:find(
+            "mod._cos.weapon_appearance = _WEAPON_APPEARANCE", 1, true))
+        H.truthy(cosmetics:find(
+            "_WEAPON_APPEARANCE.apply(unit_3p, { scale = scale })", 1, true))
+        H.truthy(cosmetics:find(
+            "_WEAPON_APPEARANCE.apply(unit, descriptor)", 1, true))
+        H.equal(cosmetics:find(
+            "pcall(Unit.set_local_scale, unit_3p", 1, true), nil)
+        H.equal(cosmetics:find(
+            "pcall(Unit.set_local_position, unit, 0, current + pos)", 1, true), nil)
+
+    end)
 end

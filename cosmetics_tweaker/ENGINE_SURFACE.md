@@ -65,6 +65,9 @@ no override); `[tbl]` = table-form hook against a plain table (nil-guarded).
 > `LootItemUnitPreviewer.spawn_units` rows keep their hooks in the entry; the
 > "offhand mesh override + scale + LA paint + glow" work those rows describe now
 > reaches the scale/grip step via `mod._cos.{scale_units,offset_units,apply_unit_path_scale_hand}`.
+> #420 subsequently replaced the private setter math inside those three helpers
+> with one bundled, mod-local WeaponAppearance instance. Identity, hand, renderer,
+> and hook ownership remain here; only one-shot transform composition moved.
 
 > **v0.9.79-dev Phase 3 OOP split.** Two hook SITES moved from the entry to
 > `_cos_glow.lua` (those rows now name that file, not an entry line — match by
