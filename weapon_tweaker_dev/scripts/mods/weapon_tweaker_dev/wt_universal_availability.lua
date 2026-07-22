@@ -32,6 +32,32 @@ M.careers = {
     { key = "bw_necromancer",    character = "sienna",     name = "Necromancer" },
 }
 
+-- #948 groups live compatibility by the third-person body/state-machine that
+-- renders the weapon.  Career-level availability is still counted separately:
+-- a receiver cell cannot be promoted merely because one sibling career works.
+M.receiver_groups = {
+    { key = "kruber", name = "Kruber", careers = {
+        "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+    } },
+    { key = "bardin", name = "Bardin", careers = {
+        "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
+    } },
+    { key = "kerillian", name = "Kerillian", careers = {
+        "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
+    } },
+    { key = "saltzpyre", name = "Saltzpyre", careers = {
+        "wh_captain", "wh_bountyhunter", "wh_zealot",
+    } },
+    { key = "warrior_priest", name = "Warrior Priest", careers = {
+        "wh_priest",
+    } },
+    { key = "sienna", name = "Sienna", careers = {
+        "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
+    } },
+}
+
+M.initial_cell_state = "U"
+
 M.melee_weapons = {
     "bw_1h_crowbill", "bw_1h_flail_flaming", "bw_1h_mace", "bw_dagger",
     "bw_flame_sword", "bw_ghost_scythe", "bw_sword",
@@ -204,6 +230,88 @@ function M.ensure_base_localization(loc)
         end
     end
     return labels
+end
+
+local function _audit_list(list, expected)
+    local seen = {}
+    local duplicates = 0
+    for _, key in ipairs(type(list) == "table" and list or {}) do
+        if seen[key] then duplicates = duplicates + 1 end
+        seen[key] = true
+    end
+    local missing = 0
+    for _, key in ipairs(expected) do
+        if not seen[key] then missing = missing + 1 end
+    end
+    return missing, duplicates
+end
+
+-- Pure structural census for the #948 live-test surface.  Every cell is U by
+-- construction.  Static donor maps, native prefixes, picker membership, and
+-- historical wired rows are routing evidence only and are deliberately
+-- absent from this result.
+function M.census(unlock_map, cwv_catalog)
+    local result = {
+        state = M.initial_cell_state,
+        base_weapons = #M.all_weapons,
+        careers = #M.careers,
+        base_cells = 0,
+        untested = 0,
+        missing = 0,
+        duplicates = 0,
+        cwv_variants = type(cwv_catalog) == "table" and #cwv_catalog or 0,
+        cwv_cells = 0,
+        groups = {},
+    }
+
+    for _, group in ipairs(M.receiver_groups) do
+        local row = {
+            key = group.key,
+            name = group.name,
+            careers = #group.careers,
+            weapons = #M.all_weapons,
+            cells = #group.careers * #M.all_weapons,
+            state = M.initial_cell_state,
+            untested = #group.careers * #M.all_weapons,
+            missing = 0,
+            duplicates = 0,
+        }
+        for _, career in ipairs(group.careers) do
+            local missing, duplicates = _audit_list(
+                unlock_map and unlock_map[career], M.all_weapons)
+            row.missing = row.missing + missing
+            row.duplicates = row.duplicates + duplicates
+        end
+        result.groups[#result.groups + 1] = row
+        result.base_cells = result.base_cells + row.cells
+        result.untested = result.untested + row.untested
+        result.missing = result.missing + row.missing
+        result.duplicates = result.duplicates + row.duplicates
+    end
+
+    if type(cwv_catalog) == "table" then
+        local expected_careers = {}
+        for _, career in ipairs(M.careers) do
+            expected_careers[#expected_careers + 1] = career.key
+        end
+        for _, variant in ipairs(cwv_catalog) do
+            local missing, duplicates = _audit_list(
+                variant.careers, expected_careers)
+            result.missing = result.missing + missing
+            result.duplicates = result.duplicates + duplicates
+        end
+        result.cwv_cells = #cwv_catalog * #M.careers
+        result.untested = result.untested + result.cwv_cells
+    end
+
+    return result
+end
+
+function M.receiver_census(census, receiver_key)
+    for _, row in ipairs(census and census.groups or {}) do
+        if row.key == receiver_key then return row end
+    end
+    return nil
 end
 
 return M

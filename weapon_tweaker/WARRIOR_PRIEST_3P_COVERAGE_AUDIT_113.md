@@ -1,25 +1,15 @@
-# Warrior Priest cross-character 3P audit (#113)
+# Historical Warrior Priest routing ledger (#113)
 
-Warrior Priest is a separate melee-only receiver, not a fourth member of the
-ordinary Saltzpyre coverage bucket. Its live unlock catalog contains exactly
-seven weapons:
+The old exact-seven, melee-only catalog was a public-stream snapshot, not a
+valid invariant for the #948 dev laboratory. Universal availability exposes all
+83 base weapons to Warrior Priest, including 31 ranged rows, default-off. The
+six native-prefix rows and the historical Empire Flail event map are routing
+evidence only; every compatibility cell starts `U` (untested).
 
-| Kind | Count | Keys |
-|---|---:|---|
-| Native | 6 | `wh_1h_hammer`, `wh_2h_hammer`, `wh_dual_hammer`, `wh_flail_shield`, `wh_hammer_book`, `wh_hammer_shield` |
-| Cross-character | 1 | `es_1h_flail` |
+`/wt_audit_warrior_priest_3p` remains as a deprecated alias to the #948 census.
+It never runs automatically, enforces no seven-entry allow-list, and never
+reports Working.
 
-The Empire Flail is `[working]`. It keeps the flail wield vocabulary on the
-Warrior Priest body and uses the shipped per-unit push/heavy event correction;
-the dev label now describes this as the Warrior Priest flail event map. No model
-substitute is shipped or queued, and the row is not picker-visible.
-
-The catalog audit uses a fixed seven-key allow-list deliberately. A later
-unexpected entry is therefore reported rather than treated as acceptable merely
-because it shares Saltzpyre's `wh_` prefix. This protects the melee-only boundary
-against both ranged additions and ordinary-Saltzpyre availability drift.
-
-WT writes one bounded `[wt:113]` startup census. The optional
-`/wt_audit_warrior_priest_3p` command logs the single cross-character row with
-status, target, model, and picker state. Neither path mutates unlocks, templates,
-animation events, settings, or network state.
+If the universal approach fails: (1) restore a receiver-specific live matrix
+without a melee-only assumption, (2) verify melee and ranged in separate passes,
+or (3) quarantine unsafe rows default-off while preserving complete census data.

@@ -1,32 +1,14 @@
-# Saltzpyre non-Warrior-Priest cross-character 3P audit (#112)
+# Historical Saltzpyre routing ledger (#112)
 
-The live unlock source gives `wh_captain`, `wh_bountyhunter`, and `wh_zealot`
-the same 54 distinct non-`wh_` ports. The old issue snapshot counted 61 before
-later ownership and redundancy removals. At v0.12.247-dev the live split is:
+Issue #948 supersedes the broad receiver coverage part of #112. The historical
+54-row catalog still provides routing evidence: 37 wired routes and 17 candidate
+routes. All 54 begin `U` (untested) in the universal matrix.
 
-| State | Count | Meaning |
-|---|---:|---|
-| `[working]` | 37 | confirmed/baked or source-proven receiver behavior |
-| `[needs animations]` | 17 | visual verification or per-attack work remains |
-| `[untested]` | 0 | every live port has at least a recorded decision |
-| `[needs offsets]` | 0 | no offset-only row remains |
+`/wt_audit_saltzpyre_3p` remains as a deprecated alias to the #948 census. It
+never runs automatically or reports Working. Keep #112 only for its distinct
+hero-switch remap/cache regression; do not use its old counts as verification.
 
-The source-character composition is 17 Kruber, 10 Bardin, 15 Kerillian, and 12
-Sienna ports. Empire Mace, Empire Sword, and Kerillian 1H Axe are now explicitly
-working rather than falling through to the generic pending label. Bardin Dual
-Hammers is absent from every live non-WP unlock list and has no Saltzpyre picker
-catalog, so its stale status declaration was removed rather than preserved as an
-unreachable tuning row.
-
-Only two pending ports are picker-visible: Ensorcelled Reaper and Elf Spear,
-both reopened by #576 after visible animation failures. Thirteen additional
-pending rows have a source- or coverage-backed receiver target displayed for
-diagnostics, but no matching static picker catalog; they remain hidden to avoid
-empty or misleading controls. Shortbow and Hagbane are the final two pending
-rows without a shipped target: their Volley Crossbow model substitution is
-queued design work, not current runtime behavior.
-
-WT writes one bounded `[wt:112]` startup census that verifies all three careers'
-parity. `/wt_audit_saltzpyre_3p` logs only the 17 unresolved rows with target,
-picker, and shipped-model state. The audit is read-only and does not mutate
-unlocks, templates, animation events, settings, or network state.
+If the universal approach fails: (1) retain #112 as a focused hero-switch
+instrumentation lane, (2) split melee and ranged action verification, or
+(3) quarantine transition-unsafe rows default-off until current two-player
+evidence exists.

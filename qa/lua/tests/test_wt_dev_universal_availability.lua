@@ -173,6 +173,65 @@ return function(H, repo_root)
         H.equal(defaults.bw_necromancer, nil)
     end)
 
+    H.test("WT dev #948 census initializes every compatibility cell to U", function()
+        local map = {}
+        policy.expand_unlock_map(map)
+        local base = policy.census(map, nil)
+        H.equal(base.state, "U")
+        H.equal(base.base_weapons, 83)
+        H.equal(base.careers, 20)
+        H.equal(base.base_cells, 1660)
+        H.equal(base.cwv_variants, 0)
+        H.equal(base.cwv_cells, 0)
+        H.equal(base.untested, 1660)
+        H.equal(base.missing, 0)
+        H.equal(base.duplicates, 0)
+
+        local expected = {
+            kruber = 332,
+            bardin = 332,
+            kerillian = 332,
+            saltzpyre = 249,
+            warrior_priest = 83,
+            sienna = 332,
+        }
+        for receiver, cells in pairs(expected) do
+            local row = policy.receiver_census(base, receiver)
+            H.truthy(row, "missing receiver " .. receiver)
+            H.equal(row.state, "U")
+            H.equal(row.cells, cells)
+            H.equal(row.untested, cells)
+            H.equal(row.missing, 0)
+            H.equal(row.duplicates, 0)
+        end
+
+        local catalog = with_dev_mod(false, function()
+            return dofile(script_root .. "wt_cwv_variant_catalog.lua")
+        end)
+        policy.expand_cwv_catalog(catalog)
+        local combined = policy.census(map, catalog)
+        H.equal(combined.cwv_variants, 32)
+        H.equal(combined.cwv_cells, 640)
+        H.equal(combined.untested, 2300)
+        H.equal(combined.missing, 0)
+        H.equal(combined.duplicates, 0)
+    end)
+
+    H.test("WT dev #948 retires automatic receiver verification claims", function()
+        local file = assert(io.open(script_root .. "_wt_diagnostics.lua", "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(source:find('mod:command("wt_audit_universal_compatibility"', 1, true))
+        H.truthy(source:find("_LEGACY_AUDIT_ALIASES", 1, true))
+        H.truthy(source:find("deprecated_alias=%s", 1, true))
+        H.truthy(source:find("state=U", 1, true))
+        H.truthy(source:find("static_routes=not_verification", 1, true))
+        H.equal(source:find("_WP_EXPECTED", 1, true), nil)
+        H.equal(source:find("working=%d", 1, true), nil)
+        H.equal(source:find("_audit_kruber_3p(false)", 1, true), nil)
+        H.equal(source:find('mod:echo("[wt:948]', 1, true), nil)
+    end)
+
     H.test("WT dev #948 production menu evaluates with unique bounded rows", function()
         local result = with_dev_mod(true, function(mod)
             local loc = dofile(script_root .. "weapon_tweaker_dev_localization.lua")

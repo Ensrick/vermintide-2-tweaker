@@ -15,260 +15,84 @@
 
 local mod = get_mod("wt_dev")
 -- WT_DEV_OVERLAY_BEGIN:port-coverage-audits
--- #109: audit the live Kruber unlock source rather than maintaining another
--- hand-counted tracker.  This runs once at module load, writes only to the log,
--- and is also callable on demand.  "Hidden" means the port is correctly classified
--- needs_animations but lacks the static picker tables required to tune it.
-local function _audit_kruber_3p(log_rows)
-    local wt = mod._wt or {}
-    local status = wt.port_status
-    local unlocks = wt.weapon_unlock_map and wt.weapon_unlock_map.es_mercenary
-    if not status or type(status.audit_cross_character) ~= "function" or not unlocks then
-        mod:warning("[wt:109] Kruber 3P audit unavailable (status/unlock source missing)")
+-- #948 supersedes the five receiver ledgers (#109-#113). Their commands remain
+-- as explicit aliases so old tester notes do not become dead instructions, but
+-- they now report only the universal U-state census. No automatic receiver
+-- census runs at startup, and no static donor/picker table can emit Working.
+local _universal = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/wt_universal_availability")
+
+local function _active_cwv_catalog()
+    local ok, cwv = pcall(get_mod, "character_weapon_variants")
+    if not ok or type(cwv) ~= "table" or type(cwv.is_enabled) ~= "function" then
         return nil
     end
-
-    local rows, counts = status.audit_cross_character("es_mercenary", unlocks)
-    mod:info("[wt:109] Kruber 3P ports=%d working=%d needs_anims=%d untested=%d picker=%d hidden_needs_anims=%d",
-        counts.total, counts.working, counts.needs_animations, counts.untested,
-        counts.picker_visible, counts.hidden_needs_animations)
-    if log_rows then
-        for _, row in ipairs(rows) do
-            if row.state ~= "working" then
-                mod:info("[wt:109] key=%s state=%s target=%s picker=%s",
-                    row.weapon_key, row.state, tostring(row.redirect),
-                    tostring(row.picker_visible))
-            end
-        end
-    end
-    return counts
-end
-
-_audit_kruber_3p(false)
-
-mod:command("wt_audit_kruber_3p",
-    "Log the complete Kruber cross-character 3P coverage audit", function()
-        local counts = _audit_kruber_3p(true)
-        if counts then
-            mod:echo("[wt:109] audited %d Kruber ports; %d need animations and %d are untested (see log)",
-                counts.total, counts.needs_animations, counts.untested)
-        end
-    end)
-
--- #110: Bardin's surface is intentionally small. Keep a fixed receiver wrapper
--- so this audit cannot accidentally walk a different career's unlock list.
-local function _audit_bardin_3p(log_rows)
-    local wt = mod._wt or {}
-    local status = wt.port_status
-    local unlocks = wt.weapon_unlock_map and wt.weapon_unlock_map.dr_ranger
-    if not status or type(status.audit_cross_character) ~= "function" or not unlocks then
-        mod:warning("[wt:110] Bardin 3P audit unavailable (status/unlock source missing)")
+    local enabled_ok, enabled = pcall(cwv.is_enabled, cwv)
+    if not enabled_ok or not enabled then
         return nil
     end
-
-    local rows, counts = status.audit_cross_character("dr_ranger", unlocks)
-    mod:info("[wt:110] Bardin 3P ports=%d working=%d needs_anims=%d untested=%d picker=%d",
-        counts.total, counts.working, counts.needs_animations, counts.untested,
-        counts.picker_visible)
-    if log_rows then
-        for _, row in ipairs(rows) do
-            mod:info("[wt:110] key=%s state=%s target=%s model=%s",
-                row.weapon_key, row.state, tostring(row.redirect),
-                tostring(row.model_substitute))
-        end
-    end
-    return counts
+    local catalog = mod:dofile(
+        "scripts/mods/weapon_tweaker_dev/wt_cwv_variant_catalog")
+    return _universal.expand_cwv_catalog(catalog)
 end
 
-_audit_bardin_3p(false)
-
-mod:command("wt_audit_bardin_3p",
-    "Log the complete Bardin cross-character 3P coverage audit", function()
-        local counts = _audit_bardin_3p(true)
-        if counts then
-            mod:echo("[wt:110] audited %d Bardin ports; %d working (see log)",
-                counts.total, counts.working)
-        end
-    end)
-
--- #111: read-only census for Kerillian's large cross-character surface.
-local function _audit_kerillian_3p(log_rows)
+local function _issue948_census(receiver_key, alias)
     local wt = mod._wt or {}
-    local status = wt.port_status
-    local unlocks = wt.weapon_unlock_map and wt.weapon_unlock_map.we_waywatcher
-    if not status or type(status.audit_cross_character) ~= "function" or not unlocks then
-        mod:warning("[wt:111] Kerillian 3P audit unavailable (status/unlock source missing)")
-        return nil
-    end
-
-    local rows, counts = status.audit_cross_character("we_waywatcher", unlocks)
-    mod:info("[wt:111] Kerillian 3P ports=%d working=%d needs_anims=%d untested=%d picker=%d hidden_needs_anims=%d",
-        counts.total, counts.working, counts.needs_animations, counts.untested,
-        counts.picker_visible, counts.hidden_needs_animations)
-    if log_rows then
-        for _, row in ipairs(rows) do
-            if row.state ~= "working" then
-                mod:info("[wt:111] key=%s state=%s target=%s picker=%s",
-                    row.weapon_key, row.state, tostring(row.redirect),
-                    tostring(row.picker_visible))
-            end
-        end
-    end
-    return counts
-end
-
-_audit_kerillian_3p(false)
-
-mod:command("wt_audit_kerillian_3p",
-    "Log the complete Kerillian cross-character 3P coverage audit", function()
-        local counts = _audit_kerillian_3p(true)
-        if counts then
-            mod:echo("[wt:111] audited %d Kerillian ports; %d need animations and %d are untested (see log)",
-                counts.total, counts.needs_animations, counts.untested)
-        end
-    end)
-
--- #112: all three non-Warrior-Priest careers intentionally share one unlock
--- surface. Audit each to catch career drift, but log unresolved rows once.
-local function _audit_saltzpyre_3p(log_rows)
-    local wt = mod._wt or {}
-    local status = wt.port_status
     local unlock_map = wt.weapon_unlock_map
-    if not status or type(status.audit_cross_character) ~= "function" or not unlock_map then
-        mod:warning("[wt:112] Saltzpyre 3P audit unavailable (status/unlock source missing)")
+    if type(unlock_map) ~= "table" then
+        printf("[wt:948] census unavailable reason=unlock_map_missing alias=%s",
+            tostring(alias or "canonical"))
         return nil
     end
 
-    local careers = { "wh_captain", "wh_bountyhunter", "wh_zealot" }
-    local baseline_rows
-    local baseline_counts
-    local parity = true
-    for _, career in ipairs(careers) do
-        local unlocks = unlock_map[career]
-        if not unlocks then
-            mod:warning("[wt:112] Saltzpyre 3P audit unavailable (missing %s unlocks)", career)
+    local catalog = _active_cwv_catalog()
+    local census = _universal.census(unlock_map, catalog)
+    if receiver_key then
+        local row = _universal.receiver_census(census, receiver_key)
+        if not row then
+            printf("[wt:948] census unavailable reason=receiver_unknown receiver=%s",
+                tostring(receiver_key))
             return nil
         end
-        local rows, counts = status.audit_cross_character(career, unlocks)
-        if not baseline_rows then
-            baseline_rows = rows
-            baseline_counts = counts
-        else
-            if counts.total ~= baseline_counts.total then parity = false end
-            for i, row in ipairs(rows) do
-                local base = baseline_rows[i]
-                if not base or base.weapon_key ~= row.weapon_key or base.state ~= row.state then
-                    parity = false
-                    break
-                end
-            end
-        end
+        printf("[wt:948] deprecated_alias=%s receiver=%s careers=%d weapons=%d cells=%d state=U untested=%d missing=%d duplicates=%d static_routes=not_verification",
+            tostring(alias), row.name, row.careers, row.weapons, row.cells,
+            row.untested, row.missing, row.duplicates)
+        return census
     end
 
-    local target_count = 0
-    local no_target_count = 0
-    for _, row in ipairs(baseline_rows) do
-        if row.state ~= "working" then
-            if row.redirect then target_count = target_count + 1 else no_target_count = no_target_count + 1 end
-        end
+    printf("[wt:948] universal careers=%d base_weapons=%d base_cells=%d cwv_active=%s cwv_variants=%d cwv_cells=%d state=U untested=%d missing=%d duplicates=%d static_routes=not_verification",
+        census.careers, census.base_weapons, census.base_cells,
+        tostring(catalog ~= nil), census.cwv_variants, census.cwv_cells,
+        census.untested, census.missing, census.duplicates)
+    for _, row in ipairs(census.groups) do
+        printf("[wt:948] receiver=%s careers=%d weapons=%d cells=%d state=U untested=%d missing=%d duplicates=%d",
+            row.name, row.careers, row.weapons, row.cells, row.untested,
+            row.missing, row.duplicates)
     end
-    mod:info("[wt:112] Saltzpyre non-WP careers=3 parity=%s ports=%d working=%d needs_anims=%d untested=%d picker=%d hidden_needs_anims=%d targets=%d no_target=%d",
-        tostring(parity), baseline_counts.total, baseline_counts.working,
-        baseline_counts.needs_animations, baseline_counts.untested,
-        baseline_counts.picker_visible, baseline_counts.hidden_needs_animations,
-        target_count, no_target_count)
-    if log_rows then
-        for _, row in ipairs(baseline_rows) do
-            if row.state ~= "working" then
-                mod:info("[wt:112] key=%s state=%s target=%s picker=%s model=%s",
-                    row.weapon_key, row.state, tostring(row.redirect),
-                    tostring(row.picker_visible), tostring(row.model_substitute))
-            end
-        end
-    end
-    baseline_counts.parity = parity
-    baseline_counts.target_count = target_count
-    baseline_counts.no_target_count = no_target_count
-    return baseline_counts
+    return census
 end
 
-_audit_saltzpyre_3p(false)
-
-mod:command("wt_audit_saltzpyre_3p",
-    "Log non-Warrior-Priest Saltzpyre cross-character 3P coverage", function()
-        local counts = _audit_saltzpyre_3p(true)
-        if counts then
-            mod:echo("[wt:112] audited %d Saltzpyre ports; %d need animations (see log)",
-                counts.total, counts.needs_animations)
-        end
+mod:command("wt_audit_universal_compatibility",
+    "Log the unverified #948 universal compatibility census", function()
+        _issue948_census(nil, nil)
     end)
 
--- #113: Warrior Priest is a distinct melee-only receiver. Its seven-entry
--- catalog is intentionally closed so a future ordinary-Saltzpyre or ranged
--- leak is visible immediately rather than silently classified as native.
-local _WP_EXPECTED = {
-    es_1h_flail = true,
-    wh_1h_hammer = true,
-    wh_2h_hammer = true,
-    wh_dual_hammer = true,
-    wh_flail_shield = true,
-    wh_hammer_book = true,
-    wh_hammer_shield = true,
+local _LEGACY_AUDIT_ALIASES = {
+    wt_audit_kruber_3p = "kruber",
+    wt_audit_bardin_3p = "bardin",
+    wt_audit_kerillian_3p = "kerillian",
+    wt_audit_saltzpyre_3p = "saltzpyre",
+    wt_audit_warrior_priest_3p = "warrior_priest",
 }
-
-local function _audit_warrior_priest_3p(log_rows)
-    local wt = mod._wt or {}
-    local status = wt.port_status
-    local unlocks = wt.weapon_unlock_map and wt.weapon_unlock_map.wh_priest
-    if not status or type(status.audit_cross_character) ~= "function" or not unlocks then
-        mod:warning("[wt:113] Warrior Priest 3P audit unavailable (status/unlock source missing)")
-        return nil
-    end
-
-    local unique = {}
-    local total = 0
-    local unexpected = 0
-    for _, weapon_key in ipairs(unlocks) do
-        if type(weapon_key) == "string" and not unique[weapon_key] then
-            unique[weapon_key] = true
-            total = total + 1
-            if not _WP_EXPECTED[weapon_key] then unexpected = unexpected + 1 end
-        end
-    end
-    local missing = 0
-    for weapon_key in pairs(_WP_EXPECTED) do
-        if not unique[weapon_key] then missing = missing + 1 end
-    end
-
-    local rows, counts = status.audit_cross_character("wh_priest", unlocks)
-    local native = total - counts.total
-    mod:info("[wt:113] Warrior Priest catalog=%d native=%d cross=%d working=%d needs_anims=%d picker=%d unexpected=%d missing=%d",
-        total, native, counts.total, counts.working, counts.needs_animations,
-        counts.picker_visible, unexpected, missing)
-    if log_rows then
-        for _, row in ipairs(rows) do
-            mod:info("[wt:113] key=%s state=%s target=%s model=%s picker=%s",
-                row.weapon_key, row.state, tostring(row.redirect),
-                tostring(row.model_substitute), tostring(row.picker_visible))
-        end
-    end
-    counts.catalog_total = total
-    counts.native = native
-    counts.unexpected = unexpected
-    counts.missing = missing
-    return counts
+local function _register_legacy_alias(command_name, receiver_key)
+    mod:command(command_name,
+        "Deprecated alias: log the #948 unverified receiver census", function()
+            _issue948_census(receiver_key, command_name)
+        end)
 end
-
-_audit_warrior_priest_3p(false)
-
-mod:command("wt_audit_warrior_priest_3p",
-    "Log Warrior Priest melee-only 3P coverage", function()
-        local counts = _audit_warrior_priest_3p(true)
-        if counts then
-            mod:echo("[wt:113] audited %d Warrior Priest weapons; %d cross-character (see log)",
-                counts.catalog_total, counts.total)
-        end
-    end)
+for command_name, receiver_key in pairs(_LEGACY_AUDIT_ALIASES) do
+    _register_legacy_alias(command_name, receiver_key)
+end
 -- WT_DEV_OVERLAY_END:port-coverage-audits
 
 -- Keys are profile/character names. Warrior Priest (wh_priest career) shares

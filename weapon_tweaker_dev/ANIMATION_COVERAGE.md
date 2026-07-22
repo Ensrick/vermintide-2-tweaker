@@ -1,12 +1,17 @@
 # wt 3P Animation Coverage Matrix
 
+> **#948 RESET (2026-07-22):** this document is a historical routing aid, not
+> current verification. The universal compatibility matrix starts every
+> base/CWV receiver-group cell untested. Native prefixes, donor aliases, baked
+> event tables, and prior confirmation prove routing only; current owner and
+> remote-husk action coverage is required before a cell leaves `U`.
+
 > Generated 2026-06-11 from a full source audit (wt v0.12.118-dev) of
 > `wt_unlock_data.lua` (`weapon_unlock_map`) cross-referenced against every
 > remap layer, template patcher, and model-substitute hook in
 > `weapon_tweaker.lua`, plus `CROSS_CHARACTER_PORT_DECISIONS.md` (DECISIONS).
-> **This is the release walk list**: wt ships when every non-native row below
-> is WORKING or deliberately cut. Update statuses here as ports get verified
-> in-game — this file is the single source of truth for "what's left".
+> The tables below preserve that historical routing snapshot. They are not the
+> #948 release walk list or a source of current verification status.
 
 ## How to work a row (the tuning loop)
 
@@ -22,7 +27,7 @@
    WORKING. Model substitutes (column b) are a separate wiring pass — see
    "Model-substitute queue" at the bottom.
 
-**Legend** — ✅ WORKING (wired + verified) · 🔧 WIRED? (plumbing exists,
+**Historical legend** — ✅ formerly recorded working · 🔧 WIRED? (plumbing exists,
 needs in-game verify) · 📋 DECIDED (target chosen in DECISIONS, NOT wired —
 Wave 2/3 backlog) · ❓ UNDECIDED · 🔁 native (receiver's own vocab, no work) ·
 🧊 known issue.

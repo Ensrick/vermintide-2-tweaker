@@ -53,7 +53,8 @@ return function(H, repo_root)
             for _, row in ipairs(rows) do
                 if row.weapon_key == "wh_crossbow" then
                     found = found + 1
-                    H.equal(row.state, "needs_animations")
+                    H.equal(row.state, "untested")
+                    H.equal(row.routing_state, "needs_animations")
                 end
             end
             H.equal(found, 1, career .. " regular Crossbow census row drift")
