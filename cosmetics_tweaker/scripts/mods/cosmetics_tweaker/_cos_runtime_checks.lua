@@ -83,8 +83,12 @@ _rt_register("cos_replay_reconciler_wired", function()
     local P = mod._cos_replay.policy
     if type(P) ~= "table" or type(P.reconcile_edge) ~= "function"
         or type(P.build_records) ~= "function" or type(P.new_replay_state) ~= "function"
-        or type(P.invalidate_all) ~= "function" then
+        or type(P.invalidate_all) ~= "function" or type(P.wielded_slot) ~= "function" then
         return "replay policy API incomplete"
+    end
+    if P.wielded_slot({ _equipment = { wielded_slot = "slot_melee" } }) ~= "slot_melee"
+        or P.wielded_slot({ wielded_slot = "slot_ranged" }) ~= "slot_ranged" then
+        return "replay pulse cannot resolve both local and husk wielded-slot shapes (#149)"
     end
     -- Pure coalescing self-check (touches no engine state): apply once, then a
     -- repeated generation must coalesce (never per-frame), then an invalidation

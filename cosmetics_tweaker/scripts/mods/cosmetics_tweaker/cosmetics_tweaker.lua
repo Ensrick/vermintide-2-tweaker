@@ -7283,8 +7283,7 @@ end
 -- retry / next-wield reconcile re-applies once the matching weapon is in
 -- hand, so restrictive-by-default cannot strand a pick.
 function mod._la_wielded_item_matches(inv, equipment, slot_name, allow_slot_key)
-    local w_slot_name = (equipment and equipment.wielded_slot)
-        or (inv and inv.wielded_slot)
+    local w_slot_name = LA_REPLAY_POLICY.wielded_slot(inv, equipment)
     local w_slot_data = equipment and equipment.slots and w_slot_name
         and equipment.slots[w_slot_name]
     local w_item = w_slot_data and w_slot_data.item_data
@@ -7559,6 +7558,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         local targets = { left_unit }
         local left_1p = equipment and equipment.left_hand_wielded_unit
         if left_1p and Unit.alive(left_1p) then targets[#targets + 1] = left_1p end
+        local painted = false
         for _, target in ipairs(targets) do
             -- v0.9.54-dev (#204): MESH-MISMATCH WARP GUARD on the husk / peer /
             -- local re-apply paint. This path paints via the un-gated
@@ -7591,27 +7591,32 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
                 end
             else
                 LA_BRIDGE._bridge_active = true
-                local ok, err = pcall(_apply_authored_offhand_to_unit,
+                local call_ok, paint_result = pcall(_apply_authored_offhand_to_unit,
                     world, target, armoury_key, vanilla_key, "network_husk")
                 LA_BRIDGE._bridge_active = false
+                local ok = call_ok and paint_result == true
                 if PROBE then
                     PROBE.emit("cos:sync",
                         "husk_offhand/" .. tostring(armoury_key) .. "/" .. tostring(target),
                         string.format("peer=husk ctx=network_husk key=%s unit=%s decision=PAINT outcome=%s",
                             tostring(armoury_key), tostring(target), tostring(ok)))
                 end
-                if not ok then
+                if not call_ok then
                     _dbg_alert("[cos_la_apply offhand] %s on %s failed: %s",
-                        tostring(armoury_key), tostring(target), tostring(err))
+                        tostring(armoury_key), tostring(target), tostring(paint_result))
                 end
                 -- v0.9.43-dev PAINT trace (husk/network path). On the CLIENT this
                 -- paints the host's shield onto the husk's wielded left-hand unit,
                 -- which by this point has already been mesh-swapped to the LA mesh
                 -- by the husk get_item_units branch — so match=true is expected.
                 _trace_paint("network_husk", "network_husk", nil, target, armoury_key, ok)
+                painted = painted or ok
             end
         end
-        return true
+        -- A mesh-mismatch skip or a false paint result is not an applied
+        -- replay generation. The bounded reconciler retains it as deferred
+        -- until re-wield establishes the exact mesh and paint succeeds.
+        return painted
     end
 
     if kind == "illusion" then
@@ -7721,23 +7726,27 @@ local _offhand_reswap_state = setmetatable({}, { __mode = "k" })  -- owner_unit 
 local _OFFHAND_RESWAP_COOLDOWN = 1.5
 local _OFFHAND_RESWAP_MAX_TRIES = 3
 local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
-    if _offhand_reswap_active then return end
-    if not (owner_unit and armoury_key and Unit.alive(owner_unit)) then return end
+    if _offhand_reswap_active then return false, "pulse-active" end
+    if not (owner_unit and armoury_key and Unit.alive(owner_unit)) then
+        return false, "owner-not-ready"
+    end
     hand_field = hand_field or "left_hand_unit"
     local la = get_mod("Loremasters-Armoury")
     local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
     if not variant then
-        return
+        return false, "variant-missing"
     end
     local inv = ScriptUnit and ScriptUnit.has_extension and ScriptUnit.has_extension(owner_unit, "inventory_system")
     local equipment = inv and inv._equipment
-    if not (equipment and equipment.slots and inv.wield) then return end
+    if not (equipment and equipment.slots and inv.wield) then
+        return false, "inventory-not-ready"
+    end
     -- Already the LA mesh? -> nothing to do (the common healthy case; no flicker).
     local wielded_field = (hand_field == "right_hand_unit")
         and "right_hand_wielded_unit_3p" or "left_hand_wielded_unit_3p"
     local live = equipment[wielded_field]
     if live and Unit.alive(live) and _offhand_paint_mesh_ok(live, armoury_key) then
-        return
+        return true, "already-correct"
     end
     -- Package residency: custom-unit variants use the shared LA resolver;
     -- texture variants pulse only when the live mesh is one of #373's exact
@@ -7750,18 +7759,18 @@ local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
         la_unit = LA_BRIDGE.resolve_texture_receiver(armoury_key, _unit_mesh_name(live))
         mesh_ready = la_unit and _override_package_ready(la_unit) or false
     end
-    if not (la_unit and mesh_ready) then return end
+    if not (la_unit and mesh_ready) then return false, "mesh-not-resident" end
     -- Per-owner cooldown + hard try-cap so a per-frame caller can't pulse-storm and a
     -- non-converging mesh can't flicker forever.
     local st = _offhand_reswap_state[owner_unit]
     if st and st.key == armoury_key then
-        if st.tries >= _OFFHAND_RESWAP_MAX_TRIES then return end
-        if (os.clock() - st.t) < _OFFHAND_RESWAP_COOLDOWN then return end
+        if st.tries >= _OFFHAND_RESWAP_MAX_TRIES then return false, "try-cap" end
+        if (os.clock() - st.t) < _OFFHAND_RESWAP_COOLDOWN then return false, "cooldown" end
     end
     -- Need an alternate weapon slot to pulse through; end on the ORIGINAL wielded
     -- slot so nothing the player is holding visibly changes.
-    local orig_slot = inv.wielded_slot
-    if not orig_slot then return end
+    local orig_slot = LA_REPLAY_POLICY.wielded_slot(inv, equipment)
+    if not orig_slot then return false, "wielded-slot-missing" end
     local slots = equipment.slots
     local pulse_slot
     if orig_slot == "slot_melee" and slots["slot_ranged"] then
@@ -7776,7 +7785,7 @@ local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
             end
         end
     end
-    if not pulse_slot then return end
+    if not pulse_slot then return false, "alternate-slot-missing" end
     local from_mesh = (live and Unit.alive(live)) and _unit_mesh_name(live) or "<none>"
     local tries = (st and st.key == armoury_key) and (st.tries + 1) or 1
     _offhand_reswap_state[owner_unit] = { t = os.clock(), key = armoury_key, tries = tries }
@@ -7788,6 +7797,8 @@ local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
         tostring(tag), tostring(owner_unit), tostring(hand_field), tostring(armoury_key), tries,
         tostring(from_mesh), tostring(la_unit), tostring(orig_slot), tostring(pulse_slot),
         tostring(ok1), tostring(ok2))
+    if ok1 and ok2 then return true, "pulsed" end
+    return false, "wield-failed"
 end
 
 -- v0.9.69-dev (#265, LA_SYNC_CORE_AUDIT Slice 1): revert-side primitives.
@@ -7812,7 +7823,7 @@ mod._la_native_pulse = function(owner_unit, tag)
     if not (equipment and equipment.slots and inv.wield) then return end
     local st = _offhand_reswap_state[owner_unit]
     if st and st.key == "__native__" and (os.clock() - st.t) < _OFFHAND_RESWAP_COOLDOWN then return end
-    local orig_slot = inv.wielded_slot
+    local orig_slot = LA_REPLAY_POLICY.wielded_slot(inv, equipment)
     if not orig_slot then return end
     local slots = equipment.slots
     local pulse_slot
@@ -7959,10 +7970,26 @@ mod._la_reconcile = function(wearer_peer, slot_name, tag, allow_pulse)
         return false, career_reason
     end
     local applied = _apply_la_on_unit(wu, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key)
-    if applied and (eq.kind == "offhand" or eq.kind == "illusion") then
+    if eq.kind == "offhand" or eq.kind == "illusion" then
         if allow_pulse then
-            _ensure_offhand_mesh(wu, eq.hand_field, eq.armoury_key, tag)
-        else
+            -- Do not pulse a different wielded weapon merely because a saved
+            -- record exists. When the intended item is wielded, repair the
+            -- stale mesh and immediately re-run paint; only that retained
+            -- postcondition may be coalesced as applied by the replay ledger.
+            local inv = ScriptUnit and ScriptUnit.has_extension
+                and ScriptUnit.has_extension(wu, "inventory_system")
+            local equipment = inv and inv._equipment
+            local matches = mod._la_wielded_item_matches(
+                inv, equipment, slot_name, eq.kind == "illusion")
+            if matches then
+                local repaired = _ensure_offhand_mesh(
+                    wu, eq.hand_field, eq.armoury_key, tag)
+                if not applied and repaired then
+                    applied = _apply_la_on_unit(
+                        wu, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key)
+                end
+            end
+        elseif applied then
             -- Wield context: verify the just-spawned mesh against the store;
             -- if the in-wield get_item_units swap silently missed (#264's
             -- failure mode), hand the mesh repair to the pending drain.
