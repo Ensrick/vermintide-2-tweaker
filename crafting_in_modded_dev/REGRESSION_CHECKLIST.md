@@ -14,8 +14,8 @@ Last updated: 2026-07-15.
 | Root cause | Craft, mirror restore, inventory filtering, and salvage constructed or classified partial item records independently; the old salvage adapter explicitly bypassed vanilla safety exclusions. |
 | Fix version(s) | cim_dev 0.8.80-dev |
 | Category | SOLO |
-| Repro | Craft the three Dawi Maces, one older CWV weapon, and Blightreaper; inspect inventory/preview/restart/salvage, then repeat while equipped, favorited, or present in any saved loadout. |
-| Expected post-fix | Every surface consumes one exact CIM-owned identity; only an unequipped, unfavorited, no-loadout Modded instance appears; salvage deletes that exact mirror/save/reference set without PlayFab traffic. |
+| Repro | Craft the three Dawi Maces and one older CWV weapon; inspect inventory/preview/restart/salvage, then repeat while equipped, favorited, or present in any saved loadout. Equip Blightreaper and confirm it never appears on a CIM acquisition or edit surface. |
+| Expected post-fix | Every CIM surface consumes one exact CIM-owned identity; only an unequipped, unfavorited, no-loadout Modded instance appears. WOC trophy relics remain provider-owned singletons and are never crafted, edited, mirrored, or salvaged by CIM. |
 | Detection | Offline `test_cim_synthetic_item_contract.lua` passes and `/cim_regression_test` passes `issue628_provider_contract` plus `issue628_saved_instance_contract`. |
 
 ---

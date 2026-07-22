@@ -48,6 +48,13 @@ function M.is_instance(item)
 		and (custom[M.MARKER] == true or custom[M.MARKER] == "true")
 end
 
+-- UI policy shared by keyboard/gamepad and mouse customization boundaries.
+-- Definitions and stamped backend instances are equally immutable.
+function M.blocks_customization(item)
+	if M.is_instance(item) then return true end
+	return type(item) == "table" and M.is_definition(item.data)
+end
+
 -- MoreItemsLibrary deliberately overwrites every live mod item's rarity with
 -- `default` after copying mod_data.  Enforce the relic contract on the actual
 -- stored backend row after MIL registration; definition-only rarity is not

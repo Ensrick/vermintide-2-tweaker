@@ -1,5 +1,15 @@
 # Crafting in Modded Changelog
 
+## 0.8.103-dev (2026-07-21): #822 immutable WOC relic boundary [untested]
+
+- Purges stale CIM save records for every `woc_*` trophy even when WOC has not
+  registered its live ItemMasterList marker yet. WOC owns exactly one canonical
+  relic; CIM no longer restores, mirrors, or persists a second editable copy.
+- Filters both saved and Adventure-equipped WOC relic ids at the Athanor loadout
+  boundary, and rejects attempts to set one as the current Athanor edit target.
+- Added bounded `[cim:822]` evidence plus offline coverage for pre-registration
+  restore, Athanor list, equipped fallback, saved loadout, and set-loadout paths.
+
 ## 0.8.102-dev (2026-07-21): #947 Morris trait particle residency [untested]
 
 - Fixed the native crash when a CIM-crafted Chaos Wastes ranged critical-hit

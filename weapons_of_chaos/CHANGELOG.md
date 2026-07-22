@@ -1,5 +1,15 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.43-dev (2026-07-21) - #822 immutable relic customization boundary [untested]
+
+- Blightreaper remains a unique inventory trophy and cannot enter the standard
+  item-customization screen. Its loadout cog is hidden, and both mouse and
+  keyboard/gamepad customization entry points reject the same relic policy.
+- The presentation flag is cleared when an ordinary weapon replaces the relic,
+  so the guard cannot accidentally disable customization for normal equipment.
+- Added one bounded `[WOC:822]` rejection receipt and offline/runtime coverage
+  for marked definitions, live instances, and an unmodified melee control.
+
 ## 0.1.42-dev (2026-07-19) - union: load-fix over the 0.1.39-0.1.41 chain [untested]
 
 - Reconciliation ship. The Workshop timeline interleaved: 0.1.41 (boss-weapon catalogue chain) uploaded 06:38 BUILT ON the 0.1.37 data file whose single-option dropdown kills the whole mod at options init (issue 822), then the 0.1.38 load-fix uploaded 11:20 without the 0.1.39-0.1.41 content. This build carries BOTH: the dropdown arity guard + reader fallback + data-widget regression test, and the issue 835 canonical constructor fix, Skarrik dual-sword closure, and boss-weapon resource catalogue. Supersedes every prior 0.1.3x upload.

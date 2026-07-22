@@ -129,12 +129,14 @@ return function(H, repo_root)
         H.equal(ok, true, "complete cwv row rejected: " .. table.concat(problems, ","))
         H.equal(provider, "cwv")
 
-        -- Accept: ordinary (non-relic) WOC row.
+        -- Reject: every WOC row. WOC owns one immutable trophy instance per
+		-- weapon; CIM must never turn a provider definition into another copy.
         local woc = vanilla_master("es_mercenary")
         woc.woc_variant = true
         ok, problems, provider = contract.gate_item("rt_check", "woc_rt_weapon", woc)
-        H.equal(ok, true, "non-relic woc row rejected: " .. table.concat(problems, ","))
+		H.equal(ok, false)
         H.equal(provider, "woc")
+		H.deep_equal(problems, { "immutable_relic" })
 
         -- Reject: the immutable WOC relic (682's confirmed craft target).
         ok, problems, provider = contract.gate_item("rt_check",
@@ -149,6 +151,25 @@ return function(H, repo_root)
         H.equal(ok, false)
         H.deep_equal(problems,
             { "slot_type", "can_wield", "template", "item_type", "inventory_icon" })
+    end)
+
+    H.test("CIM #822 stale WOC save rejects before provider registration", function()
+        local contract = load_contract()
+        local record, reason = contract.gate_record("mirror_restore",
+            "woc_blightreaper_001", {
+                item_key = "woc_blightreaper",
+                rarity = "modded",
+                via_mirror = true,
+            }, nil)
+        H.equal(record, nil)
+        H.equal(reason, "provider:immutable_relic")
+
+        -- Backend-id classification also catches older records whose item key
+        -- was lost before the canonical WOC definition exists.
+        record, reason = contract.gate_record("mirror_restore",
+            "woc_blightreaper_001", { item_key = "es_1h_sword" }, nil)
+        H.equal(record, nil)
+        H.equal(reason, "provider:immutable_relic")
     end)
 
     H.test("CIM #628 routed-surface registry and capped self-report", function()
@@ -215,6 +236,25 @@ return function(H, repo_root)
         local logger_body = contract_source:sub(logger_start, logger_start + 1200)
         H.truthy(logger_body:find("M.report_unrouted(printer)", 1, true),
             "log_gate_rejections must emit the unrouted-walk self-report")
+    end)
+
+    H.test("CIM #822 Athanor edit/loadout boundary rejects immutable relics", function()
+        local entry = read("crafting_in_modded_dev.lua")
+        local ui = read("_cim_immutable_relic_ui.lua")
+        H.truthy(entry:find("_cim_immutable_relic_ui", 1, true))
+        H.truthy(ui:find("local function editable_backend_id", 1, true))
+        H.truthy(ui:find(
+            "contract.is_immutable_relic_identity(item_key, item or master,",
+            1, true))
+        H.truthy(ui:find(
+            'editable_backend_id(loadout[slot_name], "saved_loadout")',
+            1, true))
+        H.truthy(ui:find(
+            'editable_backend_id(bid, "equipped_fallback")',
+            1, true))
+        H.truthy(ui:find(
+            'editable_backend_id(item_backend_id, "set_loadout")',
+            1, true))
     end)
 
     H.test("CIM #628 gate_enumerated_row collects classified rejections", function()
