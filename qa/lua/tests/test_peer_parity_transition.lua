@@ -151,6 +151,30 @@ local function register(Harness, repo_root)
         Harness.truthy(source:find('mod:hook("GameNetworkManager", "remove_peer"', native_at, true) ~= nil,
             "real leave must forget peer proof")
     end)
+
+    Harness.test("ct issue 426 diagnostic separates gate catalog state and live coverage", function()
+        local path = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua"
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        local census_at = assert(source:find("local function _ct_census_modded_content()", 1, true))
+        local player_at = assert(source:find('_ct_each_server_state_row(run_state, "power_ups"', census_at, true))
+        local persist_at = assert(source:find('_ct_each_server_state_row(run_state, "persistent_buffs"', player_at, true))
+        local command_at = assert(source:find('mod:command("ct_426_diag"', persist_at, true))
+        local summary_at = assert(source:find("[ct:426:diag] summary", command_at, true))
+        Harness.truthy(census_at < player_at and player_at < persist_at
+            and persist_at < command_at and command_at < summary_at)
+        for _, marker in ipairs({
+            "installed=%s", "gate=%s", "catalog=%s", "state=%s",
+            "live_custom=%s", "roster_known=%s", "missing=%d",
+        }) do
+            Harness.truthy(source:find(marker, summary_at, true), "missing #426 discriminator: " .. marker)
+        end
+        Harness.truthy(source:find('audit_lookup("power_up"', command_at, true))
+        Harness.truthy(source:find('audit_lookup("buff"', command_at, true))
+        Harness.truthy(source:find("census.total == 0", command_at, true),
+            "mixed parity must require zero surviving CT state")
+    end)
 end
 
 return register

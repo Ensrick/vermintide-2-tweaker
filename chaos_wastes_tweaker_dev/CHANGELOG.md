@@ -1,5 +1,14 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.306-dev (2026-07-21) - #426 bounded mixed-lobby wire diagnostic
+
+- Re-audited the shipped v0.7.291 hot-join fence after the stale-row concern in the newest issue comment. Current source already traverses every composite row in `SharedState._server_state` for player power-ups and persistent buffs, so departed-player rows are covered; commits `e8d7ae7b` and `4b22feec` are both ancestors of current master.
+- Correlated the twelve newest local logs. CT v0.7.297-dev consistently installed the beacon, ejected all 12 modded boon pool entries, and restored them only after solo parity classified safe. None contains a remote join, `hot-join sync DEGRADED`, or a custom-state mixed-lobby exercise, so those logs do not verify the co-op boundary.
+- Added `/ct_426_diag`, an observation-only census of visible peer acknowledgements, gate state, bidirectional CT power-up/buff lookup registration, every synchronized player/party/persistent CT entry (including departed rows), and live server-controlled CT buffs.
+- Added regression and documentation coverage for four falsifiable results: beacon/gate failure, catalog failure, unsafe CT state surviving mixed parity, and a snapshot with no remote peer or live custom state.
+
+**Co-op diagnostic:** host an in-progress expedition with a CT boon active and run `/ct_426_diag` before the join (`live_custom=YES`). Hot-join once with current CT and once without CT, running the command after each join. The same-CT peer should reach `all_peers=true`, while the no-CT peer must produce automatic `[ct:426] hot-join sync DEGRADED`, then `all_peers=false applied=disabled state=PASS live_custom=NO`. Leave and rejoin without CT to prove the prior acknowledgement is not reused. Attach both logs.
+
 ## 0.7.305-dev (2026-07-19) - Tower skull lifecycle census (#52) [diagnostics-armed]
 
 - Replaced the selection-only Tower skull trace with a target-scoped lifecycle
@@ -68,7 +77,6 @@ One combined fix wave (session fable-fix-wave); every cluster ships [untested] p
 - Fixed the verified `DeusWeaponGeneration.get_random_rarity` crash after the Single Mission Loader launched with `Run Progress = 100%`. Vanilla requires `0 <= run_progress < 1` and its own ImGui loader caps the slider at `0.999`; CT had exposed and forwarded exactly `1.0`.
 - Added one canonical `sanitize_progress` boundary shared by menu presets, `/ct_load_mission`, and the final load primitive. Values below zero become `0`, values at/above the engine limit become `0.999`, and invalid numeric input cannot enter the seed.
 - Renamed the final preset to `Deepest (99.9%)` so the UI states the actual engine-safe value. Runtime and offline regressions prove neither the menu nor command path can reintroduce the `>= 1.0` assertion.
-
 ## 0.7.297-dev (2026-07-18) - reconciliation build: parallel 0.7.296-dev streams
 
 - Second same-day version collision: two sessions independently minted 0.7.296-dev - one as the reconciliation upload below (on the Workshop since 20:58), one carrying the issue 52 Tower skull diagnostics (landed in git 21:06, never uploaded). This build ships the union so the Workshop item finally carries issue 406 + issue 52 + the stranded-pipeline completion. Root cause of the repeated collisions: ships from pre-claim-broker worktrees bypass the tools/ship claim gate. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.
