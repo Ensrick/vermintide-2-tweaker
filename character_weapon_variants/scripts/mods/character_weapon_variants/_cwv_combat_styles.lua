@@ -841,6 +841,75 @@ local function build_modified_template(donor, clone, clone_damage_profile, prefi
 	return template
 end
 
+local function action_identity(extension)
+	local settings = extension and extension.current_action_settings
+	if not settings and extension and type(extension.get_current_action_settings) == "function" then
+		local ok, value = pcall(extension.get_current_action_settings, extension)
+		if ok then settings = value end
+	end
+	local lookup = settings and settings.lookup_data
+	return extension and extension.current_action_name or lookup and lookup.action_name,
+		settings and settings.kind
+end
+
+local function is_career_action(action_name, action_kind)
+	local function matches(value)
+		return type(value) == "string"
+			and (string.find(value, "^action_career") or string.find(value, "^career_"))
+	end
+	return matches(action_name) or matches(action_kind) or false
+end
+
+-- End the exact wielded weapon actions through the engine's canonical action
+-- lifecycle before a style rebuild. Both hands are preflighted before either is
+-- touched, and career actions fail closed rather than being cancelled by a
+-- presentation/moveset control. `extension_for_unit` keeps the policy testable
+-- without engine globals and lets the runtime own unit-extension lookup.
+function M.interrupt_equipment_actions(equipment, extension_for_unit)
+	if type(extension_for_unit) ~= "function" then
+		return false, "weapon extension resolver unavailable"
+	end
+	local active, seen = {}, {}
+	for _, hand in ipairs({ "right_hand_wielded_unit", "left_hand_wielded_unit" }) do
+		local unit = equipment and equipment[hand]
+		local extension = unit and extension_for_unit(unit)
+		if extension and not seen[extension] then
+			seen[extension] = true
+			local has_action = extension.current_action_settings ~= nil
+			if type(extension.has_current_action) == "function" then
+				local ok, value = pcall(extension.has_current_action, extension)
+				if not ok then return false, "action state unavailable" end
+				has_action = value == true
+			end
+			if has_action then
+				local action_name, action_kind = action_identity(extension)
+				if action_name == nil and action_kind == nil then
+					return false, "action identity unavailable"
+				end
+				if is_career_action(action_name, action_kind) then
+					return false, "career action active"
+				end
+				if type(extension.stop_action) ~= "function" then
+					return false, "weapon action cannot be interrupted"
+				end
+				active[#active + 1] = extension
+			end
+		end
+	end
+	for _, extension in ipairs(active) do
+		local ok = pcall(extension.stop_action, extension, "interrupted")
+		if not ok then return false, "weapon action interrupt failed" end
+		local still_active = extension.current_action_settings ~= nil
+		if type(extension.has_current_action) == "function" then
+			local checked, value = pcall(extension.has_current_action, extension)
+			if not checked then return false, "action state unavailable after interrupt" end
+			still_active = value == true
+		end
+		if still_active then return false, "weapon action remained active" end
+	end
+	return true, #active
+end
+
 function M.attack_range_signature(template)
 	local seen = {}
 	for _, action_group in pairs(type(template) == "table" and template.actions or {}) do
@@ -1264,17 +1333,11 @@ function M.install(mod, deps)
 		return ok and inventory or nil, unit
 	end
 
-	local function action_active(equipment)
-		for _, unit in ipairs({ equipment and equipment.right_hand_wielded_unit,
-				equipment and equipment.left_hand_wielded_unit }) do
-			if unit and Unit.alive(unit) and ScriptUnit.has_extension(unit, "weapon_system") then
-				local ok, extension = pcall(ScriptUnit.extension, unit, "weapon_system")
-				if ok and extension and extension.has_current_action and extension:has_current_action() then
-					return true
-				end
-			end
-		end
-		return false
+	local function weapon_extension(unit)
+		if not unit or not Unit.alive(unit)
+				or not ScriptUnit.has_extension(unit, "weapon_system") then return nil end
+		local ok, extension = pcall(ScriptUnit.extension, unit, "weapon_system")
+		return ok and extension or nil
 	end
 
 	function runtime:publish(inventory, slot_name, item, recipient, reason)
@@ -1299,9 +1362,17 @@ function M.install(mod, deps)
 			local slot = slot_name and equipment.slots and equipment.slots[slot_name]
 			live_item = slot and slot.item_data
 			local live = live_item and self:describe(live_item)
-			if live and live.identity == row.identity and action_active(equipment) then
-				pcall(printf, "[cwv:620] style deferred: active action item=%s", row.identity)
-				return false, "active action"
+			if live and live.identity == row.identity then
+				local interrupted, detail = M.interrupt_equipment_actions(equipment, weapon_extension)
+				if not interrupted then
+					pcall(printf, "[cwv:944] style interrupt rejected item=%s reason=%s",
+						row.identity, tostring(detail))
+					return false, detail
+				end
+				if detail > 0 then
+					pcall(printf, "[cwv:944] style interrupted actions item=%s count=%d",
+						row.identity, detail)
+				end
 			end
 		end
 		local changed, err = M.set(store, row.identity, row.item_key, desired)

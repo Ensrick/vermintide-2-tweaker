@@ -625,6 +625,102 @@ return function(H, repo_root)
 		H.equal(elven.wield_anim_career_3p, nil)
 	end)
 
+	H.test("CWV Combat Style interrupts active weapon actions before switching", function()
+		local stopped = {}
+		local function extension(action_name, kind)
+			local row = {
+				current_action_name = action_name,
+				current_action_settings = action_name and { kind = kind or "sweep" } or nil,
+			}
+			function row:has_current_action() return self.current_action_settings ~= nil end
+			function row:stop_action(reason)
+				stopped[#stopped + 1] = { extension = self, reason = reason }
+				self.current_action_settings = nil
+			end
+			return row
+		end
+		local right, left = extension("action_one", "sweep"), extension("action_two", "block")
+		local units = { right = right, left = left }
+		local ok, count = policy.interrupt_equipment_actions({
+			right_hand_wielded_unit = "right", left_hand_wielded_unit = "left",
+		}, function(unit) return units[unit] end)
+		H.equal(ok, true)
+		H.equal(count, 2)
+		H.equal(#stopped, 2)
+		H.equal(stopped[1].reason, "interrupted")
+		H.equal(stopped[2].reason, "interrupted")
+
+		stopped = {}
+		local left_only = extension("action_two", "block")
+		ok, count = policy.interrupt_equipment_actions({
+			left_hand_wielded_unit = "left",
+		}, function() return left_only end)
+		H.equal(ok, true)
+		H.equal(count, 1)
+		H.equal(#stopped, 1)
+
+		stopped = {}
+		local shared = extension("action_one", "sweep")
+		ok, count = policy.interrupt_equipment_actions({
+			right_hand_wielded_unit = "shared", left_hand_wielded_unit = "shared",
+		}, function() return shared end)
+		H.equal(ok, true)
+		H.equal(count, 1)
+		H.equal(#stopped, 1)
+
+		ok, count = policy.interrupt_equipment_actions({}, function() end)
+		H.equal(ok, true)
+		H.equal(count, 0)
+	end)
+
+	H.test("CWV Combat Style interruption fails closed before career or invalid actions", function()
+		local ordinary_stops = 0
+		local ordinary = {
+			current_action_name = "action_one",
+			current_action_settings = { kind = "sweep" },
+			has_current_action = function() return true end,
+			stop_action = function() ordinary_stops = ordinary_stops + 1 end,
+		}
+		local career = {
+			current_action_name = "action_career_release",
+			current_action_settings = { kind = "career_skill" },
+			has_current_action = function() return true end,
+			stop_action = function() error("career action must not stop") end,
+		}
+		local units = { right = ordinary, left = career }
+		local ok, reason = policy.interrupt_equipment_actions({
+			right_hand_wielded_unit = "right", left_hand_wielded_unit = "left",
+		}, function(unit) return units[unit] end)
+		H.equal(ok, false)
+		H.equal(reason, "career action active")
+		H.equal(ordinary_stops, 0)
+
+		local unknown = {
+			has_current_action = function() return true end,
+			stop_action = function() error("unknown action must not stop") end,
+		}
+		ok, reason = policy.interrupt_equipment_actions({
+			right_hand_wielded_unit = "unknown",
+		}, function() return unknown end)
+		H.equal(ok, false)
+		H.equal(reason, "action identity unavailable")
+	end)
+
+	H.test("CWV Combat Style interruption reports stop failures without committing", function()
+		local failing = {
+			current_action_name = "action_one",
+			current_action_settings = { kind = "sweep" },
+			has_current_action = function(self) return self.current_action_settings ~= nil end,
+			stop_action = function() error("synthetic stop failure") end,
+		}
+		local ok, reason = policy.interrupt_equipment_actions({
+			right_hand_wielded_unit = "right",
+		}, function() return failing end)
+		H.equal(ok, false)
+		H.equal(reason, "weapon action interrupt failed")
+		H.truthy(failing.current_action_settings)
+	end)
+
 	H.test("CWV Combat Style runtime resolves exact IDs and legacy defaults", function()
 		local saved
 		local registered
@@ -836,21 +932,41 @@ return function(H, repo_root)
 		local old_managers, old_unit, old_script_unit = _G.Managers, _G.Unit, _G.ScriptUnit
 		local ok, err = pcall(function()
 			local item = { backend_id = "owner_style_uuid", name = "es_2h_sword" }
+			local player_unit, weapon_unit = {}, {}
 			local equipment = {
 				wielded_slot = "slot_melee",
 				slots = { slot_melee = { item_data = item } },
+				right_hand_wielded_unit = weapon_unit,
 			}
-			local counts = { destroy = 0, add = 0, wield = 0 }
+			local counts = { destroy = 0, add = 0, wield = 0, stop = 0 }
 			local inventory = {
 				equipment = function() return equipment end,
 				destroy_slot = function() counts.destroy = counts.destroy + 1 end,
 				add_equipment = function() counts.add = counts.add + 1 end,
 				wield = function() counts.wield = counts.wield + 1 end,
 			}
-			local player_unit = {}
+			local weapon = {
+				current_action_name = "action_one",
+				current_action_settings = { kind = "sweep" },
+				has_current_action = function(self) return self.current_action_settings ~= nil end,
+				stop_action = function(self, reason)
+					H.equal(reason, "interrupted")
+					counts.stop = counts.stop + 1
+					self.current_action_settings = nil
+				end,
+			}
 			_G.Managers = { player = { local_player = function() return { player_unit = player_unit } end } }
 			_G.Unit = { alive = function() return true end }
-			_G.ScriptUnit = { extension = function() return inventory end }
+			_G.ScriptUnit = {
+				has_extension = function(unit, system)
+					return unit == weapon_unit and system == "weapon_system"
+				end,
+				extension = function(unit, system)
+					if unit == player_unit and system == "inventory_system" then return inventory end
+					if unit == weapon_unit and system == "weapon_system" then return weapon end
+					error("unexpected extension lookup")
+				end,
+			}
 
 			local runtime = policy.install({ get = function() end, set = function() end }, {
 				acquire_style_resource = function(_, complete) complete(true); return true end,
@@ -860,7 +976,52 @@ return function(H, repo_root)
 			H.equal(counts.destroy, 1)
 			H.equal(counts.add, 1)
 			H.equal(counts.wield, 1)
+			H.equal(counts.stop, 1)
 			H.equal(runtime:describe(item).style_id, "kerillian")
+		end)
+		_G.Managers, _G.Unit, _G.ScriptUnit = old_managers, old_unit, old_script_unit
+		if not ok then error(err) end
+	end)
+
+	H.test("CWV owner style transition does not persist after an interrupt failure", function()
+		local old_managers, old_unit, old_script_unit = _G.Managers, _G.Unit, _G.ScriptUnit
+		local ok, err = pcall(function()
+			local item = { backend_id = "owner_failed_uuid", name = "es_2h_sword" }
+			local player_unit, weapon_unit = {}, {}
+			local equipment = {
+				wielded_slot = "slot_melee",
+				slots = { slot_melee = { item_data = item } },
+				right_hand_wielded_unit = weapon_unit,
+			}
+			local writes = 0
+			local inventory = { equipment = function() return equipment end }
+			local weapon = {
+				current_action_name = "action_one",
+				current_action_settings = { kind = "sweep" },
+				has_current_action = function() return true end,
+				stop_action = function() error("synthetic stop failure") end,
+			}
+			_G.Managers = { player = { local_player = function() return { player_unit = player_unit } end } }
+			_G.Unit = { alive = function() return true end }
+			_G.ScriptUnit = {
+				has_extension = function(unit, system)
+					return unit == weapon_unit and system == "weapon_system"
+				end,
+				extension = function(unit, system)
+					if unit == player_unit and system == "inventory_system" then return inventory end
+					if unit == weapon_unit and system == "weapon_system" then return weapon end
+					error("unexpected extension lookup")
+				end,
+			}
+			local runtime = policy.install({
+				get = function() end,
+				set = function() writes = writes + 1 end,
+			}, {})
+			local changed, reason = runtime:set_item_style(item, nil, "kerillian", "test", true)
+			H.equal(changed, false)
+			H.equal(reason, "weapon action interrupt failed")
+			H.equal(writes, 0)
+			H.equal(runtime:describe(item).style_id, "greatsword")
 		end)
 		_G.Managers, _G.Unit, _G.ScriptUnit = old_managers, old_unit, old_script_unit
 		if not ok then error(err) end
