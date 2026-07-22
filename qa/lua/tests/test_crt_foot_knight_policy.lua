@@ -59,6 +59,55 @@ return function(H, repo_root)
         H.equal(owns, false)
     end)
 
+    H.test("CRT #935 finds sparse and detached inventory slot carriers", function()
+        local backend_types = { "ranged" }
+        local sparse_types = { "ranged" }
+        local menu_types = { "ranged" }
+        local backend = {
+            name = "es_knight",
+            item_slot_types_by_slot_name = { slot_ranged = backend_types },
+        }
+        local profiles = {
+            [5] = {
+                careers = {
+                    [1] = { name = "es_mercenary" },
+                    [3] = {
+                        name = "es_knight",
+                        item_slot_types_by_slot_name = { slot_ranged = sparse_types },
+                    },
+                },
+            },
+        }
+        local menu_career = {
+            name = "es_knight",
+            item_slot_types_by_slot_name = { slot_ranged = menu_types },
+        }
+
+        local carriers = Policy.secondary_slot_carriers(
+            backend, profiles, menu_career, "controller.career")
+        H.equal(#carriers, 3)
+        H.equal(carriers[1].slot_types, backend_types)
+        H.equal(carriers[2].slot_types, sparse_types)
+        H.equal(carriers[3].slot_types, menu_types)
+        H.equal(carriers[3].label, "controller.career")
+        for _, carrier in ipairs(carriers) do
+            local planned = Policy.plan_secondary_slot(carrier.slot_types, true, false)
+            H.deep_equal(planned, { "melee", "ranged" })
+        end
+
+        -- A stock alias is mutated only once even when reachable through all
+        -- three discovery paths.
+        profiles[5].careers[3] = backend
+        local deduped = Policy.secondary_slot_carriers(backend, profiles, backend)
+        H.equal(#deduped, 1)
+
+        local foreign = Policy.secondary_slot_carriers(backend, {}, {
+            name = "es_huntsman",
+            item_slot_types_by_slot_name = { slot_ranged = { "ranged" } },
+        })
+        H.equal(#foreign, 1)
+    end)
+
     H.test("CRT #619 talent descriptions compose live toggles and restore vanilla", function()
         local settings = {}
         local rock_key = Policy.ROCK_DESCRIPTION_KEY
@@ -187,8 +236,10 @@ return function(H, repo_root)
         H.truthy(foot_source:find('multiplier = 0.10', 1, true))
         H.truthy(foot_source:find('markus_knight_passive_damage_reduction', 1, true))
         H.truthy(foot_source:find('CareerSettings and CareerSettings.es_knight', 1, true))
-        H.truthy(foot_source:find('for profile_index, profile in pairs(SPProfiles or {})', 1, true))
-        H.truthy(foot_source:find('HeroWindowLoadoutInventory, "_create_item_categories"', 1, true))
+        H.truthy(foot_source:find('policy.secondary_slot_carriers', 1, true))
+        H.truthy(foot_source:find('_install_inventory_category_hook("HeroWindowLoadoutInventory",', 1, true))
+        H.truthy(foot_source:find('_install_inventory_category_hook("HeroWindowLoadoutInventoryConsole",', 1, true))
+        H.truthy(foot_source:find('[crt:935] menu-slot', 1, true))
         H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_UNINTERRUPTIBLE]', 1, true))
         H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_ROCK_DODGE]', 1, true))
         H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_ROCK_POWER]', 1, true))

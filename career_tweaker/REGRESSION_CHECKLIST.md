@@ -6,7 +6,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 > **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. It locks the casting/transposition and #440 probe exclusion boundaries while requiring the read-only #221 census.
 
-Last updated: 2026-07-17.
+Last updated: 2026-07-22.
 
 ---
 ## Foot Knight feature suite (#619)
@@ -20,8 +20,8 @@ Last updated: 2026-07-17.
 | Final March | Requires a nonempty roster of other allies whose exact status is dead. Downed/disabled is false. One mission latch; 60 seconds; disabler stagger is server-only. |
 | Talent text | Rock uses the authored `_desc_2` key and composes range/shield toggles per lookup; Teamwork uses its authored `_desc_2` key. All-off delegates to vanilla localization exactly. |
 | Buff-bar feedback | Stable local effect buffs use their exact resident vanilla Foot Knight talent icons. Both Rock effects use Rock of Reikland; Teamwork uses That's Bloody Teamwork. Conditional bonuses and Final March expose icons only for their active lifetime; Final March owns one icon-bearing sub-buff, and the internal Teamwork DR canceller has no icon. |
-| Secondary slot | Reconciles both backend `CareerSettings` and menu `SPProfiles` carriers in place to include `{ "melee", "ranged" }`; removes only its owned melee insertion and abandons ownership after foreign array replacement. Inventory category creation rechecks the carrier before caching its filter. |
-| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` checks `issue619_foot_knight_contract` and `issue699_foot_knight_icon_census`; transition-only `[crt:619] secondary-slot` and `[crt:699]` live HUD diagnostics; local and spectated subjects mirror BuffUI. Full #699 acceptance is co-op: client-local Foot Knight plus host spectating a Foot Knight bot, while preserving #663's two-Foot-Knight no-flicker behavior. |
+| Secondary slot | Reconciles both backend `CareerSettings` and menu `SPProfiles` carriers in place to include `{ "melee", "ranged" }`; removes only its owned melee insertion and abandons ownership after foreign array replacement. Both desktop and controller inventory category builders recheck the exact career object before caching its filter. Sparse profile/career arrays are traversed with `pairs` (#935). |
+| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` checks `issue619_foot_knight_contract`, both concrete inventory hooks, and `issue699_foot_knight_icon_census`; transition-only `[crt:619] secondary-slot`, `[crt:935] menu-slot`, and `[crt:699]` live HUD diagnostics. #935 is solo-testable on the controller inventory. Full #699 acceptance is co-op: client-local Foot Knight plus host spectating a Foot Knight bot, while preserving #663's two-Foot-Knight no-flicker behavior. |
 
 ---
 ## Foot Knight multi-source aura ownership (#663)

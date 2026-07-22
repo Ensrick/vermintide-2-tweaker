@@ -44,6 +44,8 @@ local _tick_accumulator = 0
 local _original_teamwork_range
 local _owned_secondary_slot_types = setmetatable({}, { __mode = "k" })
 local _last_secondary_slot_diagnostic
+local _last_menu_slot_diagnostics = {}
+local _inventory_hook_surfaces = {}
 local _aura_records = {}
 local _aura_patch_originals = {}
 local _aura_seen_units = setmetatable({}, { __mode = "k" })
@@ -707,29 +709,15 @@ function M.tick(dt)
     end
 end
 
-local function _secondary_slot_carriers()
-    local carriers = {}
+local function _secondary_slot_carriers(menu_career, menu_label)
+    local carriers = policy.secondary_slot_carriers(
+        CareerSettings and CareerSettings.es_knight,
+        SPProfiles,
+        menu_career,
+        menu_label)
     local seen = {}
-    local function add(career, label)
-        local slot_map = career and career.item_slot_types_by_slot_name
-        local slot_types = slot_map and slot_map.slot_ranged
-        if type(slot_types) == "table" and not seen[slot_types] then
-            seen[slot_types] = true
-            carriers[#carriers + 1] = { slot_types = slot_types, label = label }
-        end
-    end
-
-    -- Backend verification reads CareerSettings, while the hero inventory
-    -- builds its cached filter from SPProfiles. They alias in stock data, but
-    -- DLC reloads and other mods can replace either carrier independently.
-    add(CareerSettings and CareerSettings.es_knight, "CareerSettings.es_knight")
-    for profile_index, profile in pairs(SPProfiles or {}) do
-        for career_index, career in ipairs(profile.careers or {}) do
-            if career.name == "es_knight" then
-                add(career, string.format("SPProfiles[%s].careers[%s]",
-                    tostring(profile_index), tostring(career_index)))
-            end
-        end
+    for i = 1, #carriers do
+        seen[carriers[i].slot_types] = true
     end
     return carriers, seen
 end
@@ -739,8 +727,8 @@ local function _write_slot_plan(slot_types, planned)
     for i = 1, #planned do slot_types[i] = planned[i] end
 end
 
-local function _reconcile_secondary_slots(enabled)
-    local carriers, current = _secondary_slot_carriers()
+local function _reconcile_secondary_slots(enabled, menu_career, menu_label)
+    local carriers, current = _secondary_slot_carriers(menu_career, menu_label)
 
     -- If a carrier array was replaced, abandon the detached member exactly as
     -- the former single-carrier implementation did. Never delete another
@@ -767,6 +755,46 @@ local function _reconcile_secondary_slots(enabled)
         _last_secondary_slot_diagnostic = diagnostic
         pcall(printf, "[crt:619] secondary-slot %s", diagnostic)
     end
+end
+
+local function _menu_career(self, profile_index, career_index)
+    profile_index = self and self.profile_index or profile_index
+    career_index = self and self.career_index or career_index
+    local profile = SPProfiles and SPProfiles[profile_index]
+    return profile and profile.careers and profile.careers[career_index]
+end
+
+local function _log_menu_slot(surface, career, enabled)
+    if type(career) ~= "table" or career.name ~= "es_knight" then return end
+    local slot_map = career.item_slot_types_by_slot_name
+    local slot_types = slot_map and slot_map.slot_ranged or {}
+    local has_melee, has_ranged = false, false
+    for _, slot_type in pairs(slot_types) do
+        if slot_type == "melee" then has_melee = true end
+        if slot_type == "ranged" then has_ranged = true end
+    end
+    local diagnostic = string.format(
+        "surface=%s enabled=%s slot={%s} melee=%s ranged=%s",
+        surface, tostring(enabled), table.concat(slot_types, ","),
+        tostring(has_melee), tostring(has_ranged))
+    if _last_menu_slot_diagnostics[surface] ~= diagnostic then
+        _last_menu_slot_diagnostics[surface] = diagnostic
+        pcall(printf, "[crt:935] menu-slot %s", diagnostic)
+    end
+end
+
+local function _install_inventory_category_hook(surface, class)
+    if not class or not class._create_item_categories then return end
+    mod:hook(class, "_create_item_categories", function(func, self, ...)
+        local profile_index = self and self.profile_index or select(1, ...)
+        local career_index = self and self.career_index or select(2, ...)
+        local career = _menu_career(self, profile_index, career_index)
+        local enabled = mod:get(SETTING_SECONDARY_MELEE) == true
+        _reconcile_secondary_slots(enabled, career, surface .. ".career")
+        _log_menu_slot(surface, career, enabled)
+        return func(self, ...)
+    end)
+    _inventory_hook_surfaces[surface] = true
 end
 
 function M.apply_settings()
@@ -851,6 +879,7 @@ end
 
 M.policy = policy
 M.buff_icons = BUFF_ICONS
+M.inventory_hook_surfaces = _inventory_hook_surfaces
 M.aura_contract = {
     patches = AURA_PATCHES,
     update_proximity = AURA_UPDATE_PROXIMITY,
@@ -870,15 +899,11 @@ M.setting_ids = {
 _register_templates()
 M.apply_settings()
 
--- The inventory caches its OR-filter when categories are created. Reconcile
--- the exact SPProfiles carrier immediately before every menu build so a reopen
--- after a hot toggle cannot retain a ranged-only or melee-only stale filter.
-if HeroWindowLoadoutInventory and HeroWindowLoadoutInventory._create_item_categories then
-    mod:hook(HeroWindowLoadoutInventory, "_create_item_categories",
-        function(func, self, ...)
-            _reconcile_secondary_slots(mod:get(SETTING_SECONDARY_MELEE) == true)
-            return func(self, ...)
-        end)
-end
+-- The desktop and controller inventories are separate derived classes and each
+-- caches its OR-filter during category creation.  Hook both concrete surfaces,
+-- then reconcile the exact career object that surface is about to consume.
+_install_inventory_category_hook("HeroWindowLoadoutInventory", HeroWindowLoadoutInventory)
+_install_inventory_category_hook("HeroWindowLoadoutInventoryConsole",
+    HeroWindowLoadoutInventoryConsole)
 
 return M

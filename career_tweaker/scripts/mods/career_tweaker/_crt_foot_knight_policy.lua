@@ -86,6 +86,42 @@ function M.plan_secondary_slot(slot_types, enabled, owns_melee_entry)
     return planned, owns
 end
 
+-- Discover every live table that can author Foot Knight's secondary-slot
+-- filter.  `pairs` is deliberate: modded profile/career arrays may be sparse,
+-- and Lua 5.1's `ipairs` stops at the first hole.  The optional menu career is
+-- the exact object the inventory window is about to consume, closing the gap
+-- when a late UI/DLC rebuild detached it from both global catalogues.
+function M.secondary_slot_carriers(career_settings, profiles, menu_career, menu_label)
+    local carriers = {}
+    local seen = {}
+
+    local function add(career, label, known_foot_knight)
+        if type(career) ~= "table" then return end
+        if not known_foot_knight and career ~= career_settings
+            and career.name ~= "es_knight" then
+            return
+        end
+
+        local slot_map = career.item_slot_types_by_slot_name
+        local slot_types = slot_map and slot_map.slot_ranged
+        if type(slot_types) == "table" and not seen[slot_types] then
+            seen[slot_types] = true
+            carriers[#carriers + 1] = { slot_types = slot_types, label = label }
+        end
+    end
+
+    add(career_settings, "CareerSettings.es_knight", true)
+    for profile_index, profile in pairs(profiles or {}) do
+        for career_index, career in pairs(profile.careers or {}) do
+            add(career, string.format("SPProfiles[%s].careers[%s]",
+                tostring(profile_index), tostring(career_index)), false)
+        end
+    end
+    add(menu_career, menu_label or "inventory.career", false)
+
+    return carriers
+end
+
 local function _setting_enabled(settings, setting_id)
     if type(settings) == "function" then
         return settings(setting_id) == true
