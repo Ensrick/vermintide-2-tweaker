@@ -4,7 +4,21 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-15.
+Last updated: 2026-07-22.
+
+### accessory-property-layer-isolation - issue #959
+
+| Field | Value |
+|---|---|
+| Symptom | Filling Health on Necklace makes Health unavailable on Charm and Trinket; right-click or Clear can target the wrong accessory after the same property is used in multiple categories. |
+| Root cause | CIM widens each property key into every accessory category, but vanilla counts and removes by the aggregate property-key array without retaining the active category's ten-slot layer. |
+| Fix version(s) | Unreleased source candidate |
+| Category | SOLO |
+| Repro | In the Athanor accessory editor, set Necklace Health to five bubbles. Add Health to Charm and Trinket independently. Right-click Health in each category, then use Clear in one category. |
+| Expected post-fix | Each accessory shows and edits only its own Health bubbles. Right-click removes from the open accessory; Clear leaves the other two accessories unchanged. Weapon property editing remains unchanged. |
+| Detection | Offline `test_cim_accessory_property_policy.lua` passes and `/cim_regression_test` passes `issue959_accessory_property_layers_are_independent`. |
+
+---
 
 ### canonical-synthetic-item-salvage - issue #628
 

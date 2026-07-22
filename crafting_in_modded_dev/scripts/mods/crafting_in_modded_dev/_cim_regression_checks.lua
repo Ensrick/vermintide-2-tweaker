@@ -20,6 +20,7 @@ return function(context)
     local _forge_load = context.forge_load
     local _is_in_keep = context.is_in_keep
     local _store_property_slot = context.store_property_slot
+    local _accessory_property_policy = context.accessory_property_policy
     local _AccessoryPanel = context.accessory_panel
     local _OVERVIEW_BTN_RENDER_FIELD = context.overview_btn_render_field
     local _OVERVIEW_DRAWN_FIELDS = context.overview_drawn_fields
@@ -118,6 +119,43 @@ _rt_register("issue277_bulk_cleanup_exact_owner_transaction", function()
     end
     if core.signature({ "b", "a" }) ~= core.signature({ "a", "b" }) then
         return "confirmation signature changed with iteration order"
+    end
+end)
+
+_rt_register("issue959_accessory_property_layers_are_independent", function()
+    local policy = _accessory_property_policy
+    if type(policy) ~= "table"
+        or type(policy.count_slots) ~= "function"
+        or type(policy.last_slot) ~= "function"
+        or type(policy.collect_property_slots) ~= "function"
+        or mod.CIM959_ACCESSORY_PROPERTY_LAYER_MARKER ~= true
+    then
+        return "#959 accessory property layer policy/runtime wiring missing"
+    end
+
+    local properties = { weave_health = { 11, 12, 13, 14, 15 } }
+    if policy.count_slots(properties.weave_health, "defence_accessory", 10) ~= 5
+        or policy.count_slots(properties.weave_health, "offence_accessory", 10) ~= 0
+        or policy.count_slots(properties.weave_health, "utility_accessory", 10) ~= 0
+    then
+        return "Necklace Health usage leaked into another accessory layer"
+    end
+
+    properties.weave_health[#properties.weave_health + 1] = 1
+    if policy.count_slots(properties.weave_health, "offence_accessory", 10) ~= 1
+        or policy.count_slots(properties.weave_health, "defence_accessory", 10) ~= 5
+        or policy.last_slot(properties.weave_health, "offence_accessory", 10) ~= 1
+    then
+        return "Charm edit did not remain independent from Necklace usage"
+    end
+
+    local removals = policy.collect_property_slots(
+        properties, "offence_accessory", 10)
+    if #removals ~= 1
+        or removals[1].property_key ~= "weave_health"
+        or removals[1].slot_index ~= 1
+    then
+        return "active-category clear plan crossed an accessory layer"
     end
 end)
 

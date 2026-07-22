@@ -77,6 +77,13 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 ## Domain: Inventory / Equipment
 
+### Athanor accessory properties
+
+- The no-item Athanor layout assigns property slots 1-10 to `offence_accessory`, 11-20 to `defence_accessory`, and 21-30 to `utility_accessory`. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:24-65]
+- Vanilla computes a property row's used amount as the full length of the property-key slot-index array; it does not filter that array by the row's category. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:718-740]
+- Vanilla passes the active category to `_find_slot_by_key`, but the function accepts only the key and menu-option arguments and returns the last aggregate slot index for that key. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:2402-2423,2483-2501]
+- Vanilla Clear identifies properties by membership in the active category's property-key list, then removes every stored index under a matching key; it does not test whether each index belongs to the category's slot layer. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:2540-2632]
+
 - Named enemy weapons are resolved by following a boss breed's
   `default_inventory_template` into `InventoryConfigurations`, whose item
   categories hold concrete enemy `unit_name` paths; Rasknitt is a grounded

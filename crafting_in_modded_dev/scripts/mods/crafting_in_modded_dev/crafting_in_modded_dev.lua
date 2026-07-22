@@ -22,6 +22,8 @@ mod._cim_forge_preview_policy = _FORGE_PREVIEW_POLICY
 local _FORGE_PREVIEW = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_forge_preview")
 mod._cim_forge_preview = _FORGE_PREVIEW
+mod._cim959_accessory_property_policy = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_accessory_property_policy")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- ============================================================
@@ -2856,26 +2858,15 @@ mod:hook("HeroWindowWeaveProperties", "_sync_backend_loadout", function(func, se
     end
 end)
 
--- #239: the modded Athanor crafts for FREE (cim fakes all essence/mastery costs
--- to 0 via the BackendInterfaceWeavesPlayFab hooks), so the vanilla per-option
--- "Cost: 0" readout on every trait/property/talent row is meaningless clutter.
--- Blank it after vanilla populates each option widget. The cost NUMBER is
--- content.price_text (all three text passes share text_id="price_text"); the
--- mastery ICON is a SEPARATE texture pass gated independently of the text, so we
--- also zero its per-widget alpha. hook_safe (post) because vanilla rewrites these
--- every time _sync_backend_loadout re-populates the list. Modded forge only; each
--- entry owns its widget (UIWidget.init), so the per-widget style edit can't leak
--- to other rows. Row height is fixed, so blanking does not reflow the layout.
-mod:hook_safe("HeroWindowWeaveProperties", "_populate_menu_option_widget", function(self, entry_data, menu_option)
-    if not _custom_forge_active then return end
-    local widget = entry_data and entry_data.widget
-    if not widget then return end
-    if widget.content then
-        widget.content.price_text = ""
-    end
-    local pic = widget.style and widget.style.price_icon
-    if pic and pic.color then pic.color[1] = 0 end
-end)
+-- #239/#959: one extracted adapter owns the consolidated property-row cost,
+-- category-aware usage/removal, and Clear hooks. Keeping the seam together
+-- avoids VMF's same-mod duplicate-hook drop and keeps this oversized entry from
+-- growing further.
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_accessory_property_runtime")({
+    mod = mod,
+    policy = mod._cim959_accessory_property_policy,
+    is_custom_forge_active = function() return _custom_forge_active end,
+})
 
 -- --- Forge UI polish (runs each frame while forge is open) ---
 
@@ -6104,6 +6095,7 @@ _install_regression_checks({
     forge_load = _forge_load,
     is_in_keep = _is_in_keep,
     store_property_slot = _store_property_slot,
+    accessory_property_policy = mod._cim959_accessory_property_policy,
     accessory_panel = _AccessoryPanel,
     overview_btn_render_field = _OVERVIEW_BTN_RENDER_FIELD,
     overview_drawn_fields = _OVERVIEW_DRAWN_FIELDS,

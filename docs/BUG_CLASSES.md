@@ -2837,3 +2837,36 @@ fallback path, especially live strings containing UTF-8 smart punctuation.
 **Related:** class 27 (husk base identity), class 43 (durable vs ephemeral
 render state), class 65 (partial-row loadouts), and class 68 (Deus identity and
 mechanism boundaries).
+## 74. Widened category reuses a key whose state omits the category dimension
+
+**First confirmed:** issue #959 in CIM's Athanor accessory property picker.
+**Canonical Issue:** [#959](https://github.com/Ensrick/vermintide-2-tweaker/issues/959)
+**Lives in:** UI adapters that widen one engine key into multiple categories
+while the engine stores or presents that key as one aggregate record.
+
+### Symptoms
+- A value selected in one category appears used, capped, removable, or clearable
+  in another category even though the persisted records retain separate slots.
+- Logs show correct per-slot writes, so persistence looks healthy while the
+  picker prevents the same key from being selected independently.
+
+### Diagnosis pattern
+1. Prove the write records retain a category discriminator or disjoint index
+   range; do not rewrite storage merely because presentation looks shared.
+2. Trace every read/remove consumer of the aggregate key. In the confirmed
+   Athanor case, row population counts `#slot_indices`, key removal selects the
+   final aggregate index, and Clear removes all indices for any key present in
+   the category [src: `hero_window_weave_properties.lua:718-740,2483-2501,2540-2632`].
+3. Compare those consumers with the authored category layout. Accessory property
+   layers are disjoint ten-slot ranges [src: `hero_window_weave_properties.lua:24-65`].
+
+### Fix template
+- Preserve the category dimension at every presentation and mutation seam:
+  usage/count, single-row removal, clear eligibility, and clear execution.
+- Put the mapping and filtering in one pure policy rather than duplicating
+  arithmetic in hooks. Let unaffected categories and vanilla contexts fall
+  through unchanged.
+- Regression-test one fully occupied category, an empty sibling category, the
+  same key in two categories, single-row removal, and category Clear.
+
+**Related:** class 1 (duplicate hooks) and issue #414 (category-family scope).
