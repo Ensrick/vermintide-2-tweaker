@@ -50,4 +50,27 @@ function P.readonly_action(slot_name, backend_id)
     return "block"
 end
 
+local function copy_value(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for key, child in pairs(value) do
+        copy[key] = copy_value(child)
+    end
+    return copy
+end
+
+-- A bot designation is a point-in-time equipment choice, not an alias to the
+-- player's mutable saved row. Keep the copy limited to the canonical loadout
+-- slots so UI-only row metadata can never enter BackendInterfaceItemPlayfab's
+-- bot cache.
+function P.snapshot_bot_loadout(row, slot_names)
+    if type(row) ~= "table" or type(slot_names) ~= "table" then return nil end
+    local snapshot = {}
+    for i = 1, #slot_names do
+        local slot_name = slot_names[i]
+        snapshot[slot_name] = copy_value(row[slot_name])
+    end
+    return snapshot
+end
+
 return P

@@ -1,5 +1,16 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Detached bot loadouts (#954)
+
+- [ ] Prepare a Warrior Priest saved row with visibly distinct melee and ranged
+  weapons, assign that row to the bot, then switch to another player loadout.
+- [ ] Change the player's weapons. Refresh/respawn the Warrior Priest bot and
+  confirm its designated weapons remain unchanged.
+- [ ] Restart the game and repeat the player edit and bot refresh; both the bot
+  snapshot and player row must retain their independent values.
+- [ ] Run `/gut_regression_test` and require
+  `issue954_bot_loadout_snapshot` to pass.
+
 ## Mutually exclusive controls (#446)
 
 - [ ] A presented exclusive group renders as one collapsible with radio bubbles, not separate ON/OFF steppers.

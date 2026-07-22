@@ -22,6 +22,52 @@ return function(H, repo_root)
         H.equal(Policy.readonly_action("talents", "1,2,3,4,5,6"), "block")
     end)
 
+    H.test("issue 954 bot designation snapshots do not alias owner rows", function()
+        local slots = { "slot_melee", "slot_ranged", "slot_hat" }
+        local owner_row = {
+            slot_melee = "wp_hammer",
+            slot_ranged = "wp_hammer_shield",
+            slot_hat = { key = "wp_hat" },
+            talents = "1,2,3,4,5,6",
+        }
+        local bot = Policy.snapshot_bot_loadout(owner_row, slots)
+
+        H.equal(bot.slot_melee, "wp_hammer")
+        H.equal(bot.slot_ranged, "wp_hammer_shield")
+        H.equal(bot.slot_hat.key, "wp_hat")
+        H.equal(bot.talents, nil)
+
+        owner_row.slot_melee = "owner_changed"
+        owner_row.slot_hat.key = "owner_hat_changed"
+        H.equal(bot.slot_melee, "wp_hammer")
+        H.equal(bot.slot_hat.key, "wp_hat")
+    end)
+
+    H.test("issue 954 bot snapshot rejects absent rows and slot contracts", function()
+        H.equal(Policy.snapshot_bot_loadout(nil, { "slot_melee" }), nil)
+        H.equal(Policy.snapshot_bot_loadout({}, nil), nil)
+    end)
+
+    H.test("issue 954 stable and dev runtime use detached bot snapshots", function()
+        for _, stream in ipairs({ "gui_tweaker", "gui_tweaker_dev" }) do
+            local module_path = repo_root .. "/" .. stream .. "/scripts/mods/"
+                .. stream .. "/_gut_bot_loadout_snapshot.lua"
+            local file = assert(io.open(module_path, "rb"))
+            local module_source = file:read("*a")
+            file:close()
+            H.truthy(module_source:find("entry.bot_loadout = policy.snapshot_bot_loadout", 1, true))
+            H.truthy(module_source:find("bot[career_name] = policy.snapshot_bot_loadout(snapshot", 1, true))
+
+            local owner_path = repo_root .. "/" .. stream .. "/scripts/mods/"
+                .. stream .. "/_gut_native_loadouts.lua"
+            local owner = assert(io.open(owner_path, "rb"))
+            local owner_source = owner:read("*a")
+            owner:close()
+            H.truthy(owner_source:find("BotLoadoutSnapshot.install(mod", 1, true))
+            H.truthy(owner_source:find('name = "issue954_bot_loadout_snapshot"', 1, true))
+        end
+    end)
+
     H.test("native-loadout LA outer capture canonicalizes cosmetic identity", function()
         local value, source = Policy.canonical_equip_value("slot_hat", "la_inventory_uuid", {
             ItemId = "la_hat_masterlist",
