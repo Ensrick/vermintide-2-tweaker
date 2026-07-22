@@ -26,11 +26,11 @@ render concern. Its cloth material consumes color-map alpha and the FBX carries
 one reversed face for every source face; otherwise Stingray renders either the
 transparent PNG background as an opaque strip or culls the reverse side. Asset
 hash and face/material revision gates live with the #612 package-closure checks.
-The compiled custom unit carries a same-name 13-bone skeleton but no bundled
-controller: the SDK does not include the Laurel `.state_machine` source. At each
-bounded spawn surface, Cosmetics installs the already-resident Laurel controller
-onto that compatible skeleton. After live/husk attachment linking it also calls
-`FadeSystem.new_linked_units(owner, {hat})`; this is the same explicit enrollment
+The shipped helmet retains the exact Laurel donor geometry/controller and
+changes only per-instance material textures. Donor behavior does not imply
+engine-system membership: after live/husk attachment linking, Cosmetics calls
+the shared complete-snapshot adapter, which submits all current 3P inventory
+and attachment units to `FadeSystem.new_linked_units`. This is the same explicit enrollment
 boundary vanilla uses for newly wielded husk inventory units
 [`fade_system.lua:35-36`; `simple_husk_inventory_extension.lua:290-311`].
 
@@ -137,7 +137,8 @@ state fails closed (#698). See LA_SYNC §6.9.
 | `AttachmentUtils.create_attachment` [hook,tbl] `:9427` | Spawns `item_units.unit` for a hat/attachment slot via `UnitSpawner.spawn_local_unit` -> `World.spawn_unit`, then links it [src: `attachment_utils.lua:5`,`:16`] | Skip cleanly when the swapped headpiece package is not resident on a viewer, returning vanilla's empty `{unit=nil,...}` slot_data shape [src: `attachment_utils.lua:38-44`] (`:9427`, #270) | `item_units.unit` == `item_data.unit` (skin block only overrides hand/ammo units, [src: `backend_utils.lua:153`]) - gate on `item_data.unit`; non-resident spawn is a `World.spawn_unit` C-assert that bypasses `pcall` (`c_api_world.cpp:67`) |
 | `AttachmentUtils.link` [hook,tbl] `:9450` | Links source->target by `node_linking` via `Unit.node` per link [src: `attachment_utils.lua:66-73`] | Pre-validate every source/target node with `Unit.has_node`, abort the link if any is missing (`:9450`, #270 crash B); post-step queues the unit for LA re-paint | `Unit.node` on an absent node is an engine C-assert (`c_api_unit.cpp:74`) that bypasses `pcall` (CLAUDE.md Lua quirks); a nil target from a skipped spawn also faults here |
 | `PlayerHuskAttachmentExtension.create_attachment` [hook] `:8346` | Husk-side hat spawn; `remove_attachment` first if the slot has old data [src: `player_husk_attachment_extension.lua:45`,`:94`] | Pre-patch `item_data.unit = la_unit_path` from `_la_equips_by_peer` BEFORE delegating, then paint, so the late vanilla `rpc_create_attachment` is idempotent with cosmetics' earlier `cos_la_apply` (`:8346`, LA_SYNC §6.7, v0.9.0.9) | `slot_hat`-only today; `_la_equips_by_peer` must be populated on CLIENTS, not just host (v0.9.0.7 mirror write) |
-| `PlayerUnitAttachmentExtension.create_attachment` [hook] | Owner-side attachment spawn stores the linked unit in `_attachments.slots` [src: `player_unit_attachment_extension.lua:107-119`] | Install the Laurel plume controller on the custom skeleton and register the finished hat with the owner's FadeSystem once (#612) | Pass the actual player root (`self._unit`) to fade enrollment, not the third-person mesh parent used by `link_to_skin` |
+| `PlayerUnitAttachmentExtension.create_attachment` [hook] | Owner-side attachment spawn stores the linked unit in `_attachments.slots` [src: `player_unit_attachment_extension.lua:107-119`] | Paint authored donor instances, then register the complete inventory+attachment snapshot with the owner's FadeSystem (#612/#922) | Pass the actual player root (`self._unit`), not the third-person mesh parent used by `link_to_skin`; never replace membership with only `{hat}` |
+| `SimpleHuskInventoryExtension._reapply_fade` [hook] `_cos_appearance_fade_runtime.lua` | Replaces the husk's linked-unit list after wield with only four inventory fields [src: `simple_husk_inventory_extension.lua:290-311,353`] | After vanilla returns, recompose one complete inventory+attachment snapshot for an exact Cosmetics or live LA hat (#922) | This known replacement edge bypasses fingerprint dedup once; identity and live-career validation occur before the native call, and foreign hats pass through unchanged |
 | `World.link_unit` [safe,tbl] `:9490` | Engine C-API: links child unit/node to parent unit/node | Cover hats linked via the low-level `World` API (bypassing `AttachmentUtils`) - queue them for LA re-paint (`:9490`) | Fires for EVERY link in the world; gate on `Unit.has_data(child,"unit_name")` + `LA_BRIDGE.registered` before acting |
 | `UnitSpawner.spawn_local_unit` [hook] `_material_hijack_embedded.lua:418` | Vanilla spawns `World.spawn_unit(self.world, unit_name, ...)` UNCONDITIONALLY [src: `unit_spawner.lua:294`] | Refuse the spawn (return nil, do not delegate) when the unit is non-resident, else the C-assert CTDs the viewer (`:418`, #270 crash A); on success run MH `replace_textures`/`add_particles` | Returning `func(...)` still crashes - vanilla calls native regardless; every mod caller tolerates a nil unit (the two `AttachmentUtils` guards above) |
 

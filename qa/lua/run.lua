@@ -40,6 +40,7 @@ end
 
 local suites = {
 	"test_shared_weapon_appearance",
+	"test_shared_appearance_fade",
 	"test_shared_career_weapon_actions",
 	"test_shared_debug",
 	"test_wt_weapon_action_lifecycle",

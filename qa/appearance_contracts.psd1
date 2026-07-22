@@ -43,6 +43,7 @@
         'glow'
         'pose'
         'effective_template'
+        'fade'
         'icon'
         'name'
     )
@@ -135,6 +136,69 @@
                             )
                             Surfaces=@('owner_1p','owner_3p','remote_husk_3p','inventory_preview','cosmetic_preview')
                             ReplayEdges=@('initial_spawn','equip','customization_change','mission_transition','respawn','hot_join','rejoin','preview_open','preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
+            Id = 'shared.issue922.custom-unit-fade'
+            Issue = 922
+            Claim = 'structural-only'
+            Owners = @(
+                'tools/shared_lib/_lib_appearance_fade.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_appearance_fade.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_appearance_fade_runtime.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'fade'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'camera-proximity and invisibility fade target the third-person player presentation, not the first-person weapon rig' }
+                        owner_3p = @{ Disposition = 'covered'; Evidence = 'CWV and WOC submit complete inventory-plus-attachment snapshots after custom equipment creation and owner wield; Cosmetics does the same after owner attachment creation' }
+                        bot_3p = @{ Disposition = 'covered'; Evidence = 'the owner-equipment construction adapter receives bot bodies and enrolls their complete third-person snapshot without relying on a local player object' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'the consolidated CWV husk-wield edge, Cosmetics husk-attachment edge, and WOC husk spawn edge submit complete snapshots after custom render work' }
+                        inventory_preview = @{ Disposition = 'not-applicable'; Reason = 'preview mannequins do not participate in gameplay camera-proximity or player invisibility FadeSystem state' }
+                        cosmetic_preview = @{ Disposition = 'not-applicable'; Reason = 'the isolated cosmetic preview world does not use player FadeSystem state' }
+                        athanor_preview = @{ Disposition = 'not-applicable'; Reason = 'the isolated Athanor preview world does not use player FadeSystem state' }
+                        crafting_preview = @{ Disposition = 'not-applicable'; Reason = 'the isolated crafting preview world does not use player FadeSystem state' }
+                        lobby_preview = @{ Disposition = 'not-applicable'; Reason = 'lobby presentation is not a gameplay camera-proximity FadeSystem owner' }
+                        score_screen = @{ Disposition = 'not-applicable'; Reason = 'score presentation is not a gameplay camera-proximity FadeSystem owner' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards rather than linked player units' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'fade membership is ephemeral engine state and has no persisted instance payload' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'custom equipment and attachment construction submit a complete snapshot after vanilla returns' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'owner equipment creation and wield edges submit the finished third-person units' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'both owner and husk wield reconstruction run the idempotent complete-snapshot adapter' }
+                        customization_change = @{ Disposition = 'covered'; Evidence = 'weapon and attachment replacement flows through the same equipment or attachment construction seams' }
+                        style_change = @{ Disposition = 'covered'; Evidence = 'CWV style reconstruction reaches the consolidated owner or husk wield edge and unchanged snapshots are deduplicated' }
+                        career_change = @{ Disposition = 'covered'; Evidence = 'replacement player equipment and attachments are enrolled through their construction edges without player-object lookup' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'new mission player equipment and attachments re-enter the construction and wield edges' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'replacement player and husk units re-enter the construction and wield edges' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'late husk equipment and attachments re-enter the husk spawn, wield, and attachment edges' }
+                        peer_ready = @{ Disposition = 'covered'; Evidence = 'late exact-identity re-wields converge through the same husk-wield adapter' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'fade enrollment uses only already spawned local units and creates no numeric network identity' }
+                        rejoin = @{ Disposition = 'covered'; Evidence = 'a recreated husk receives a fresh weak-key owner ledger and re-enters spawn/wield enrollment' }
+                        preview_open = @{ Disposition = 'not-applicable'; Reason = 'preview worlds do not consume player FadeSystem state' }
+                        preview_reopen = @{ Disposition = 'not-applicable'; Reason = 'preview worlds do not consume player FadeSystem state' }
+                        lobby_score_create = @{ Disposition = 'not-applicable'; Reason = 'lobby and score models do not consume gameplay player FadeSystem state' }
+                        mod_disable_restore = @{ Disposition = 'not-applicable'; Reason = 'the adapter adds only live units to an engine-owned snapshot; destroyed custom units disappear with normal equipment teardown' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_shared_appearance_fade.lua'
+                            Names = @(
+                                'appearance fade collector submits one complete deterministic snapshot'
+                                'appearance fade enrollment dedupes unchanged lifecycle replays'
+                                'appearance fade failures stay fail-open and retryable'
+                                'all custom render owners load and invoke the canonical fade adapter'
+                            )
+                            Surfaces = @('owner_3p', 'bot_3p', 'remote_husk_3p')
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'customization_change', 'style_change', 'career_change', 'mission_transition', 'respawn', 'hot_join', 'peer_ready', 'rejoin')
                         }
                     )
                 }

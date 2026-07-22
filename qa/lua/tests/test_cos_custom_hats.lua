@@ -234,6 +234,7 @@ return function(H, repo_root)
             H.truthy(hats.DONOR_NORMAL_TANGENT_CONTRACT)
             H.truthy(hats.DONOR_CONTROLLER_CONTRACT)
             H.truthy(hats.DONOR_FADE_CONTRACT)
+            H.truthy(hats.DYNAMIC_FADE_ENROLLMENT_REQUIRED)
         end)
     end)
 
@@ -277,6 +278,10 @@ return function(H, repo_root)
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua", "rb"))
         local source = file:read("*a")
         file:close()
+        local runtime_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_appearance_fade_runtime.lua", "rb"))
+        source = source .. "\n" .. runtime_file:read("*a")
+        runtime_file:close()
         for _, surface in ipairs({
             "appearance-replay", "remote-husk", "local-attachment",
             "live-attachment", "hero-preview",

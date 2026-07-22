@@ -41,6 +41,14 @@
             )
         }
         @{
+            Source = "_lib_appearance_fade.lua"
+            Consumers = @(
+                "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_appearance_fade.lua"
+                "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_appearance_fade.lua"
+                "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_appearance_fade.lua"
+            )
+        }
+        @{
             Source = "_lib_career_weapon_actions.lua"
             Consumers = @(
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_career_weapon_actions.lua"

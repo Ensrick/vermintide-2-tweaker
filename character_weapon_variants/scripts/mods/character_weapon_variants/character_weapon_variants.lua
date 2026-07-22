@@ -55,7 +55,7 @@ _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inf
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
 _om.identity_peer_pull = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_pull")
-_om.husk_transform_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_transform_policy")
+_om.husk_transform_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_transform_policy"); _om.appearance_fade = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_fade")(mod)
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
 _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
 _om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_family")
@@ -3786,7 +3786,7 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
 	end
 	if _om.combat_styles and _om.combat_styles.on_husk_wield then
 		_om.combat_styles:on_husk_wield(self, slot_name)
-	end
+	end; if descriptor then _om.appearance_fade.husk_wield(self, equipment) end -- #922 complete post-adapter snapshot
 end)
 _cwv_husk_wield_diag_installed = true
 
@@ -4249,7 +4249,7 @@ mod:hook("SimpleInventoryExtension", "_wield_slot", function(orig, self, equipme
 		if slot_data.right_ammo_unit_3p and Unit.alive(slot_data.right_ammo_unit_3p) then
 			pcall(Unit.set_unit_visibility, slot_data.right_ammo_unit_3p, false)
 		end
-	end
+	end; local incoming_cwv_key = _om._cwv_key_for_item(incoming_bid, incoming_item_data); if incoming_cwv_key then _om.appearance_fade.owner_wield(self, equipment) end -- #922 owner 3P
 
 	return result
 end)
@@ -10979,7 +10979,7 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
 				"[cwv:660] lifecycle=world_spawn adapter=%s descriptor=DECLINED key=%s skin=%s reason=%s",
 				is_bot and "bot" or "owner", tostring(cwv_key),
 				tostring(result.skin), tostring(reason))
-			return result
+			_om.appearance_fade.created(unit_3p, result, is_bot); return result
 		end
 		local observed_unit = result.right_unit_3p or result.left_unit_3p
 		if observed_unit and not _om._appearance_world_seen[observed_unit] then
@@ -11067,7 +11067,7 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
 			is_bot and "bot" or "owner_3p", right_rot_3p)
 	end
 
-	return result
+	if cwv_key then _om.appearance_fade.created(unit_3p, result, is_bot) end; return result
 end)
 
 local function _find_preview_slot_info(self, item_name, spawn_data)

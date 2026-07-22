@@ -5,14 +5,14 @@ monorepo must satisfy. It exists to kill one recurring bug class: *an attribute
 (mesh / transform / texture / ammo) is correct in ONE render path or for ONE
 observer and wrong in another.* Issues #149, #203, #204, #227, #233, #237,
 #392, #394, #396, #397, #399, #401, #409, #415, #416, #419, #474, #481,
-#482, #483, #579, #587, #598, #613, #629, #645, #650, #657, and #660 are
+#482, #483, #579, #587, #598, #613, #629, #645, #650, #657, #660, and #922 are
 instances of it.
 
 The rule the whole document enforces:
 
 > **A weapon's appearance is a function of its variant definition, NOT of which
 > code path happens to be spawning it or who is looking at it.** Every render
-> path resolves the SAME six appearance concerns from the SAME source of truth,
+> path resolves the SAME seven rendered-unit concerns from the SAME source of truth,
 > through the SAME interface. No path may re-implement a concern inline.
 
 Applies to `character_weapon_variants` (CWV), `cosmetics_tweaker`, and
@@ -103,9 +103,9 @@ reconstructed item. `[src: scripts/managers/player/player_manager.lua:69-78]`
 
 ---
 
-## §2 The six rendered-unit concerns and UI presentation (the interface)
+## §2 The seven rendered-unit concerns and UI presentation (the interface)
 
-Every render path resolves these six concerns. This is the interface; the code
+Every render path resolves these seven concerns. This is the interface; the code
 module that owns each is named. New code calls the module — it never re-derives.
 
 | Concern | Owns | Source of truth | Module |
@@ -116,6 +116,7 @@ module that owns each is named. New code calls the module — it never re-derive
 | **Ammo** | attach / strip projectile+ammo units | `def.no_ammo_unit` | husk ammo-strip block |
 | **Residency** | force-load override units so the spawn yields a unit | data-driven walk of every def's override units | `_force_load_husk_override_units` |
 | **Pose/animation** | wield/idle state and attack playback on each 3P body | native template wield event plus canonical career/template remap data | weapon animation resolver; preview reuses the selected native event |
+| **Fade membership** | whether dynamic 3P weapons/attachments follow camera-proximity and invisibility fade | complete live inventory + attachment unit snapshot | shared `_lib_appearance_fade`; bounded spawn/wield/attachment adapters |
 
 Plus a cross-cutting concern:
 
@@ -126,7 +127,7 @@ mutation; it is the identity rendered around the unit:
 
 | Concern | Owns | Source of truth |
 |---|---|---|
-| **UI presentation** | primary and offhand display-name keys/text, their composition order, icon ownership, rarity/background, renderer-capability proof, and vanilla fallback | the same resolved item/variant/illusion identity used by the six concerns above |
+| **UI presentation** | primary and offhand display-name keys/text, their composition order, icon ownership, rarity/background, renderer-capability proof, and vanilla fallback | the same resolved item/variant/illusion identity used by the seven concerns above |
 
 ### Presentation descriptor boundary
 
@@ -186,7 +187,20 @@ explicitly swap. `—` = not applicable.
 | Ammo | data | ✓ (strip) | — | — |
 | Residency | ✓ (owner too — #415) | ✓ | n/a (preview world resident) | n/a |
 | Pose/animation (3P) | ✓ | ✓ | ✓ | preview-specific / n/a when no body |
+| Fade membership | ✓ | ✓ | — | — |
 | Sync | source | consumer (§5) | — | — |
+
+Fade enrollment is a replacement-style snapshot, not an append-only child-link
+operation. `AttachmentUtils.link` and `World.link_unit` do not enroll a dynamic
+unit. Every gameplay adapter must submit the complete current set: the four
+canonical 3P inventory fields, every live attachment slot, and any just-created
+extra unit not yet stored by its extension. Partial `{new_unit}` calls can make
+an earlier weapon or cosmetic stop fading. Submit only at bounded lifecycle
+edges and deduplicate unchanged owner fingerprints; never poll or stream it.
+The sole exception is a known post-vanilla replacement boundary such as husk
+`_reapply_fade`: re-submit once there even when the fingerprint is unchanged,
+because native code has just replaced the engine-owned list.
+`[src: fade_system.lua:35-36; simple_husk_inventory_extension.lua:290-311]`
 
 **The gaps this standard is closing** (as of 2026-07-07):
 - Units, path 3 (inventory preview): fixed v0.1.370-dev — `_cwv_preview_meshswap_apply`

@@ -1,5 +1,12 @@
 # Cosmetics Tweaker — Changelog
 
+## Unreleased - shared custom-model camera fade (#922)
+
+- Restored explicit FadeSystem enrollment for dynamically linked owner and husk
+  hats without reverting the exact-donor Encarmine plume/material fix.
+- Enrollment submits one complete inventory-and-attachment snapshot rather than
+  a partial hat-only list that could evict weapon membership.
+
 ## 0.9.165-dev - 2026-07-22 - #918 semantic custom-illusion peer sync [not-started]
 
 - Cosmetics-owned custom weapon illusions now reuse the bounded semantic

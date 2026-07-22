@@ -164,6 +164,24 @@ local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
 local _durable_transform_lib = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_woc_durable_transform")
+local _appearance_fade = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_lib_appearance_fade").new({
+	alive = function(unit) return Unit and Unit.alive and Unit.alive(unit) end,
+	get_extension = function(owner, name)
+		return ScriptUnit and ScriptUnit.has_extension
+			and ScriptUnit.has_extension(owner, name) or nil
+	end,
+	get_fade_system = function()
+		local entity = Managers and Managers.state and Managers.state.entity
+		return entity and entity:system("fade_system") or nil
+	end,
+	diag_budget = 16,
+	report = function(row)
+		pcall(printf, "[WOC:922] fade edge=%s result=%s linked=%d error=%s",
+			tostring(row.edge), tostring(row.reason), tonumber(row.count) or 0,
+			tostring(row.error))
+	end,
+})
 local _career_weapon_actions = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_lib_career_weapon_actions")
 local _career_action_owner = "weapons_of_chaos"
@@ -1962,8 +1980,30 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 			_wa.apply(unit_1p, _appearance.transform_for("1p"), "1p", surface)
 		end
 		_audio.observe_spawn(unit_3p, unit_1p, owner_unit_1p, owner_unit_3p)
+		-- #922: custom weapon units spawned after the player's initial fade
+		-- extension census must be explicitly enrolled. The adapter combines
+		-- this unit with every current 3P inventory/cosmetic unit and dedupes
+		-- repeated lifecycle replays.
+		_appearance_fade:enroll(owner_unit_3p,
+			owner_unit_1p and "owner_spawn" or "remote_husk_spawn", {
+				extra_units = { unit_3p, ammo_3p },
+			})
 	end
 	return unit_3p, ammo_3p, unit_1p, ammo_1p
+end)
+
+-- Owner/bot inventory has no husk-style fade replay. Enroll the final wielded
+-- fields after vanilla has committed them, not only while the unit is spawned.
+mod:hook("SimpleInventoryExtension", "_wield_slot", function(func, self,
+		equipment, slot_data, unit_1p, unit_3p, buff_extension)
+	local result = func(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
+	if slot_data and _power.is_relic(slot_data.item_data) then
+		_appearance_fade:enroll(self._unit,
+			self.is_bot and "bot_wield" or "owner_wield", {
+				inventory_extension = self, equipment = equipment,
+			})
+	end
+	return result
 end)
 
 -- #633: ActionInspect is the exact action used by the cloned Crowbill graph
