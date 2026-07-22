@@ -18,11 +18,19 @@ Plus one orthogonal switch:
 And one bounded mission-menu feature:
 
 4. **Dormant Event Missions** (issues 626 and 802, opt-in). Shows only `dlc_dwarf_fest`
-   and `dlc_celebrate_crawl` in Own Game. It temporarily exposes the stock
-   `celebrate` area while vanilla builds the area widgets, then replaces only the
+   and `dlc_celebrate_crawl` in Own Game. It temporarily substitutes a shallow
+   presentation copy of the stock `celebrate` area while vanilla builds the area
+   widgets, then replaces only the
    selected event-area menu instance's `act_celebrate` level list from a closed
    two-entry allowlist. Normal campaign/DLC menu instances remain identical to
-   vanilla; the event area is not injected into their mission lists.
+   vanilla; the event area is not injected into their mission lists. The copy
+   sorts after every visible vanilla area and uses the resident 168x168 Feast
+   level image. This is load-bearing: stock `celebrate` has
+   `sort_order=0` and Bogenhafen presentation fields, so simply unhiding it takes
+   the controller's first/special Campaign widget and labels the event route like
+   Bogenhafen. The stock descriptor is restored by identity after every build,
+   including the error path; the visible title/description are changed only on
+   the two view instances and read **Events** through Event Tweaker localization.
    The visibility gate requires only the tables the menus read (AreaSettings /
    ActSettings / LevelSettings). A load-time idempotent fallback appends a level
    vanilla's boot pass genuinely missed to the local `UnlockableLevels` /
@@ -307,8 +315,20 @@ Vanilla's level-unlock pass derives `GameActs`, `UnlockableLevels`,
 (`scripts/settings/level_unlock_settings.lua:101-129`), and network boot derives
 level/mission/act/unlockable lookups (`scripts/network_lookup/network_lookup.lua:
 1239-1259`). The missing boundary is presentation: both event areas are hidden;
-the stock `celebrate` area already points at `act_celebrate`. Desktop/controller
-area views skip `exclude_from_area_selection` areas (`start_game_window_area_selection.lua:
+the stock `celebrate` area already points at `act_celebrate`, but it is not a
+usable Events tile. Its `sort_order=0` precedes Helmgart's `sort_order=1` and its
+display name, description, icon, video, and sound are copied from Bogenhafen
+(`levels/honduras_dlcs/celebrate/level_unlock_settings_celebrate.lua:3-16`).
+The controller assigns the first sorted area to its special Campaign widget
+(`start_game_window_area_selection_console_v2.lua:100-137`), which is why the
+previous unhide-only adapter replaced Campaign with the event route. Event
+Tweaker now substitutes a shallow `celebrate` presentation only during the
+vanilla build, sorts it after all visible areas, and uses the resident
+`level_image_dlc_dwarf_fest` atlas entry
+(`scripts/ui/atlas_settings/gui_level_images_atlas.lua:914-925`).
+It then restores the stock table by identity and changes the Event title and
+description only in the selected view's widget content. Desktop/controller area
+views skip `exclude_from_area_selection` areas (`start_game_window_area_selection.lua:
 91-95`; console V2 `:100-105`), and mission views build their instance-local
 `_levels_by_act` from `UnlockableLevels` (`start_game_window_mission_selection.lua:
 108-129`; console `:98-125`). Desktop reads the current area through
@@ -325,6 +345,23 @@ it to `UnlockableLevels` / `GameActs.act_celebrate` / `MapPresentationActs` in
 the exact vanilla shape - local tables only, appended after the boot-time
 `NetworkLookup` builds, so the wire tables are provably untouched.
 
+If the top-level presentation still fails in-game, use these ordered empirical
+fallbacks rather than widening global mutation:
+
+1. Compare the `[event-missions:626] area observed` order with
+   `campaign_index=1` and exactly one later `event_index`. If the indices are
+   wrong, replace the transient sort calculation with a post-build view-local
+   widget reorder; do not modify `AreaSettings.helmgart`.
+2. If indices are correct but the wrong title/icon is visible, dump the selected
+   widget's `area_name`, icon, and view-local title after
+   `_set_area_presentation_info`. Adapt that view-local consumer only; do not
+   add a global `Localize` hook or persistent area descriptor.
+3. If the Events tile is correct but its mission list is not, compare the parent
+   selected-area key and `_levels_by_act` identity before/after
+   `_setup_level_acts`. Keep the exact `celebrate` gate and move the filter to
+   the earlier view-entry seam only if runtime proves the current post-build
+   assignment is overwritten later.
+
 ### Feast comparison and clean-room provenance
 
 Behavioral reference: Workshop item `3557074106`, “The Feast of Grimnir” by
@@ -339,8 +376,8 @@ adds legacy fallbacks to `GameActs`, `UnlockableLevels`,
 `UnlockableLevelsByGameMode`, `MapPresentationActs`, and `NetworkLookup`, loads a
 custom menu-video package, and guards its one-time writes with persistent state.
 The independent Event Tweaker implementation instead follows the current
-decompile contract above: a closed allowlist, a temporary area bit around vanilla
-widget construction, a view-local act list, fail-closed menu-read contract
+decompile contract above: a closed allowlist, a transient presentation copy around
+vanilla widget construction, a view-local act list, fail-closed menu-read contract
 diagnostics, no custom assets/packages, no network mutation, and a bounded
 idempotent campaign fallback (three local tables, vanilla shape, no-op on a
 healthy install) instead of the reference mod's persistent broad writes.
