@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-19.
+Last updated: 2026-07-21.
 
 ### boon-runtime module ownership - issue #2
 
@@ -25,8 +25,20 @@ Last updated: 2026-07-19.
 | Positive parity | A fresh VMF acknowledgement for the joining peer passes native sync without stripping. |
 | Unknown/mixed fallback | Immediately strip CT player/party power-ups, persistent buff names, and live CT buffs from the full synchronized state, then run vanilla sync. No wait. Strip failure rejects through the bounded vanilla kick path rather than sending a custom lookup id. |
 | Leave/rejoin | Real `remove_peer` forgets the ack. Same-id rejoin is unknown until a fresh acknowledgement; level-transition roster gaps retain the bounded same-session proof. |
-| Detection | Offline `test_peer_parity_transition.lua` covers missing, pre-roster unknown, all-acked, and leave/rejoin states plus hook order. `/ct_regression_test`: `peer_parity_beacon_installed`, `peer_parity_gate_classify`, `issue426_hot_join_fence`, `ct_wire_strip_name_predicate`. |
-| Lifecycle | `verify-fix-coop`; test one current-CT hot join and one no-CT hot join into an in-progress run with a CT boon active. |
+| Detection | Offline `test_peer_parity_transition.lua` covers missing, pre-roster unknown, all-acked, and leave/rejoin states plus hook order. `/ct_regression_test`: `peer_parity_beacon_installed`, `peer_parity_gate_classify`, `issue426_hot_join_fence`, `ct_wire_strip_name_predicate`. `/ct_426_diag` reports the live gate, catalog, synchronized-state census, and whether custom state is currently present. |
+| Test sequence | Complete the solo catalog/state census first. Only then test one current-CT hot join and one no-CT hot join into an in-progress run with a CT boon active. |
+
+Interpret `/ct_426_diag` without changing the run:
+
+- `installed=FAIL` or `gate=FAIL` isolates beacon/hook installation or state-transition drift.
+- `catalog=FAIL` isolates a missing/asymmetric local `deus_power_up_templates` or
+  `buff_templates` registration before a peer is involved.
+- `state=FAIL` with `all_peers=false` proves CT-owned state survived the mixed-lobby
+  strip and remains eligible for unsafe vanilla synchronization.
+- `peers=0`, `roster_known=false`, or `live_custom=NO` means that single snapshot
+  cannot demonstrate the requested active-custom-state co-op path. Run once before
+  the no-CT join (`live_custom=YES`) and once after it (`state=PASS`,
+  `live_custom=NO`) and retain the automatic `hot-join sync DEGRADED` row between.
 
 ### expedition save/resume readiness - issue #141
 

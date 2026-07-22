@@ -1605,6 +1605,163 @@ do
         end
         mod._ct_strip_modded_content = _ct_strip_modded_content
 
+        -- Observation-only counterpart to the destructive strip. It walks the
+        -- exact same full SharedState tree, including departed-player rows, so
+        -- #426 evidence can distinguish a gate failure from a run that never
+        -- carried CT state. No getter result is retained or mutated.
+        local function _ct_census_modded_content()
+            local result = {
+                ok = false,
+                run_state = false,
+                player_power_ups = 0,
+                party_power_ups = 0,
+                persistent_buffs = 0,
+                live_buffs = 0,
+            }
+            local ok, err = pcall(function()
+                local mechanism = Managers and Managers.mechanism and Managers.mechanism:game_mechanism()
+                local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
+                local run_state = rc and rc._run_state
+                result.run_state = run_state ~= nil
+
+                if run_state then
+                    _ct_each_server_state_row(run_state, "power_ups", function(_, _, _, _, values)
+                        local _, removed = _ct_filter_wire_entries(values, false)
+                        result.player_power_ups = result.player_power_ups + removed
+                    end)
+                    _ct_each_server_state_row(run_state, "persistent_buffs", function(_, _, _, _, values)
+                        local _, removed = _ct_filter_wire_entries(values, true)
+                        result.persistent_buffs = result.persistent_buffs + removed
+                    end)
+                    if run_state.get_party_power_ups then
+                        local _, removed = _ct_filter_wire_entries(run_state:get_party_power_ups(), false)
+                        result.party_power_ups = removed
+                    end
+                end
+
+                local buff_system = Managers and Managers.state and Managers.state.entity
+                    and Managers.state.entity:system("buff_system")
+                local scb = buff_system and buff_system.server_controlled_buffs
+                if type(scb) == "table" then
+                    for _, unit_buffs in pairs(scb) do
+                        if type(unit_buffs) == "table" then
+                            for _, entry in pairs(unit_buffs) do
+                                if entry and mod._ct_is_ct_buff_template(entry.template_name) then
+                                    result.live_buffs = result.live_buffs + 1
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+            result.ok = ok
+            if not ok then result.error = tostring(err) end
+            result.total = result.player_power_ups + result.party_power_ups
+                + result.persistent_buffs + result.live_buffs
+            return result
+        end
+        mod._ct_census_modded_content = _ct_census_modded_content
+
+        -- #426 bounded diagnostic. The existing fix is source-complete, but the
+        -- available logs only prove solo enablement. This command separates:
+        -- (1) beacon/hook installation, (2) local catalog registration, (3) an
+        -- unsafe CT state surviving while parity is absent, and (4) a test that
+        -- never established a remote peer or custom run state.
+        mod:command("ct_426_diag", "Audit modded boon and miracle peer wire safety", function()
+            local pp = mod._ct_peer_parity
+            local function pp_call(method, fallback, ...)
+                local fn = type(pp) == "table" and pp[method]
+                if type(fn) ~= "function" then return fallback end
+                local ok, value = pcall(fn, pp, ...)
+                if ok then return value end
+                return fallback
+            end
+            local installed = pp_call("is_installed", false) == true
+            local applied = pp_call("applied_state", "missing")
+            local all_peers = pp_call("all_peers_have", false) == true
+            local feature_count = pp_call("feature_count", 0)
+
+            local roster_known = false
+            local peers, missing = {}, 0
+            local me
+            pcall(function() me = Network and Network.peer_id and Network.peer_id() end)
+            local pm = Managers and Managers.player
+            if pm and type(pm.human_players) == "function" then
+                local ok_roster, humans = pcall(function() return pm:human_players() end)
+                if ok_roster and type(humans) == "table" then
+                    roster_known = true
+                    for _, player in pairs(humans) do
+                        local peer_id = player and player.peer_id
+                        if type(peer_id) == "string" and peer_id ~= me then
+                            peers[#peers + 1] = peer_id
+                        end
+                    end
+                end
+            end
+            table.sort(peers)
+            for i = 1, #peers do
+                local peer_id = peers[i]
+                local acked = pp_call("peer_has", false, peer_id) == true
+                if not acked then missing = missing + 1 end
+                pcall(printf, "[ct:426:diag] peer=%s acked=%s", tostring(peer_id), tostring(acked))
+            end
+
+            local power_lookup = NetworkLookup and rawget(NetworkLookup, "deus_power_up_templates")
+            local buff_lookup = NetworkLookup and rawget(NetworkLookup, "buff_templates")
+            local power_expected, buff_expected, catalog_mismatch = 0, 0, 0
+            local mismatch_rows = 0
+            local function audit_lookup(kind, lookup, name)
+                local index = type(lookup) == "table" and rawget(lookup, name) or nil
+                local reverse = type(lookup) == "table" and type(index) == "number"
+                    and rawget(lookup, index) or nil
+                if type(index) ~= "number" or reverse ~= name then
+                    catalog_mismatch = catalog_mismatch + 1
+                    if mismatch_rows < 24 then
+                        mismatch_rows = mismatch_rows + 1
+                        pcall(printf, "[ct:426:diag] catalog kind=%s name=%s index=%s reverse=%s ok=false",
+                            tostring(kind), tostring(name), tostring(index), tostring(reverse))
+                    end
+                end
+            end
+            for name in pairs(_injected_dormants) do
+                power_expected = power_expected + 1
+                audit_lookup("power_up", power_lookup, name)
+            end
+            local buff_templates = rawget(_G, "BuffTemplates")
+            if type(buff_templates) == "table" then
+                for name in pairs(buff_templates) do
+                    if mod._ct_is_ct_buff_template(name) then
+                        buff_expected = buff_expected + 1
+                        audit_lookup("buff", buff_lookup, name)
+                    end
+                end
+            end
+            if power_expected == 0 or buff_expected == 0 then
+                catalog_mismatch = catalog_mismatch + 1
+            end
+
+            local census = _ct_census_modded_content()
+            local gate_ok = installed and feature_count >= 1
+                and ((all_peers and applied == "enabled") or (not all_peers and applied == "disabled"))
+            local catalog_ok = catalog_mismatch == 0
+            local state_ok = census.ok and (all_peers or census.total == 0)
+            local live_custom = census.run_state and census.total > 0
+
+            pcall(printf,
+                "[ct:426:diag] state run_state=%s player_power_ups=%d party_power_ups=%d persistent_buffs=%d live_buffs=%d total=%d ok=%s error=%s",
+                tostring(census.run_state), census.player_power_ups, census.party_power_ups,
+                census.persistent_buffs, census.live_buffs, census.total,
+                tostring(census.ok), tostring(census.error))
+            pcall(printf,
+                "[ct:426:diag] summary installed=%s gate=%s catalog=%s state=%s live_custom=%s roster_known=%s peers=%d missing=%d all_peers=%s applied=%s features=%d power_catalog=%d buff_catalog=%d mismatches=%d",
+                installed and "PASS" or "FAIL", gate_ok and "PASS" or "FAIL",
+                catalog_ok and "PASS" or "FAIL", state_ok and "PASS" or "FAIL",
+                live_custom and "YES" or "NO", tostring(roster_known), #peers, missing,
+                tostring(all_peers), tostring(applied), feature_count,
+                power_expected, buff_expected, catalog_mismatch)
+            mod:echo("[ct] #426 diagnostic written to the console log")
+        end)
+
         -- Debounce: the beacon disables INSTANTLY when an un-acked peer appears (correct,
         -- crash-safe direction for the reversible gates above), but the strip is
         -- DESTRUCTIVE (granted boons do not come back). A ct-running friend hot-joining
