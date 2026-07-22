@@ -1,4 +1,5 @@
 local mod = get_mod("wt_dev")
+local ReworkFamily = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_rework_master_policy")
 
 local loc = {
     mod_name = { en = "Tweaker: Weapons" },
@@ -1060,6 +1061,10 @@ local loc = {
     -- Leaf entries sorted A->Z by display label to match _data.lua.
     weapon_overrides = { en = "Weapon Tweaks" },
     weapon_overrides_description = { en = "Optional changes to how certain weapons behave." },
+    wt_rework_master_group = { en = "Master Toggles" },
+    wt_rework_master_group_description = { en = "Turn the complete active Weapon Tweaker rework family on or off, or open this section to configure each change individually." },
+    wt_rework_master_ensrick = { en = "Enable all Ensrick's Weapon Tweaks" },
+    wt_rework_master_ensrick_description = { en = "Enables every active weapon tweak below as one bounded change. Some template changes require restarting the game. Turning this off clears the complete family; changing individual options returns the master to a custom off state." },
     authentic_brace_of_pistols = { en = "Authentic Brace of Pistols" },
     authentic_brace_of_pistols_description = { en = "Reworks the Brace of Pistols into a single-shot flintlock: shots pierce armor, break shields, and keep the same damage at any range, with no aim mode, rapid fire, or manual reload. Total ammo drops from 24 to 12 and the spread is much wider. Requires a restart. Multiplayer: the custom damage profile is only active while every player in the lobby runs this mod. If someone without it is present, damage falls back to the normal pistol profile (the ammo, spread, and speed changes stay) so their game cannot crash, and it returns automatically once everyone has the mod." },
     wt_dual_axes_cleave = { en = "Dual Axes: 10%% More Cleave" },
@@ -1398,6 +1403,16 @@ for career in pairs(_cwv_career_labels) do
             loc["wtmaster_" .. career .. "_" .. slot .. "_" .. src] = {
                 en = "Enable All " .. src_label .. " " .. slot_label .. " Weapons",
             }
+        end
+    end
+end
+
+-- Issue #445: derive every active tweak's attribution from the same exact
+-- membership catalog used by the master transaction and regression tests.
+for key, row in pairs(loc) do
+    if ReworkFamily.is_member(key) and type(row) == "table" then
+        for language, value in pairs(row) do
+            row[language] = ReworkFamily.decorate_label(key, value)
         end
     end
 end

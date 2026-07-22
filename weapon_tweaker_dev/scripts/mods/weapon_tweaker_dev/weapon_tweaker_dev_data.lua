@@ -1299,6 +1299,13 @@ local data = {
                 type = "group",
                 -- Leaves sorted A->Z by display label (repo standing sort rule).
                 sub_widgets = {
+                    {
+                        setting_id = "wt_rework_master_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "wt_rework_master_ensrick", type = "checkbox", default_value = false },
+                        },
+                    },
                     { setting_id = "authentic_brace_of_pistols", type = "checkbox", default_value = false },
                     { setting_id = "wt_one_hand_axe_cleave_nerf", type = "checkbox", default_value = false },
                     { setting_id = "wt_cog_hammer_heavy_speed_nerf", type = "checkbox", default_value = false },
