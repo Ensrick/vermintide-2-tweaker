@@ -403,6 +403,29 @@ local count_with_default_options = {
     { text = "10", value = 10 },
 }
 
+-- #458 uses dropdowns rather than VMF numeric widgets because numeric widgets
+-- have no step field. This makes the requested 10-percent price increments and
+-- the 0=unlimited purchase-limit sentinel explicit and serializable.
+local start_shrine_cost_options = {}
+for percent = 0, 200, 10 do
+    start_shrine_cost_options[#start_shrine_cost_options + 1] = {
+        text = "ct_start_shrine_cost_" .. tostring(percent),
+        value = percent,
+    }
+end
+
+local start_shrine_limit_options = {
+    { text = "ct_start_shrine_limit_unlimited", value = 0 },
+    { text = "1", value = 1 },
+    { text = "2", value = 2 },
+    { text = "3", value = 3 },
+    { text = "4", value = 4 },
+    { text = "5", value = 5 },
+    { text = "6", value = 6 },
+    { text = "7", value = 7 },
+    { text = "8", value = 8 },
+}
+
 -- Finale God dropdown options. value = index into FINALE_GODS (chaos_wastes_tweaker_dev.lua:481
 -- { "nurgle", "tzeentch", "khorne", "slaanesh" }); value 0 = no override, the `> 0` guard at
 -- ~L3989 leaves the game's weekly rotation in place. Stored value is the same integer the old
@@ -472,9 +495,7 @@ local data = {
             -- ============================================================
             -- Buy Starting Boons (#458): top-level like Progressive Difficulty
             -- (a run-start modifier, not one of the A-Z groups). The advanced
-            -- sub-options tune this shrine independently of normal ones. Cost
-            -- multiplier + pick limit are deferred (see chaos_wastes_tweaker_dev.lua
-            -- "#458 remaining scope") so only the wired knobs appear here.
+            -- sub-options tune this shrine independently of normal ones.
             -- ============================================================
             {
                 setting_id = "ct_buy_starting_boons",
@@ -483,6 +504,8 @@ local data = {
                 tooltip = "ct_buy_starting_boons_tooltip",
                 sub_widgets = {
                     { setting_id = "ct_start_shrine_boon_count",    type = "numeric", default_value = 4, range = { 0, 8 }, decimals_number = 0, tooltip = "ct_start_shrine_boon_count_tooltip" },
+                    { setting_id = "ct_start_shrine_cost_percent", type = "dropdown", default_value = 100, options = start_shrine_cost_options, tooltip = "ct_start_shrine_cost_percent_tooltip" },
+                    { setting_id = "ct_start_shrine_purchase_limit", type = "dropdown", default_value = 0, options = start_shrine_limit_options, tooltip = "ct_start_shrine_purchase_limit_tooltip" },
                     { setting_id = "ct_start_shrine_miracle_count", type = "numeric", default_value = 0, range = { 0, 3 }, decimals_number = 0, tooltip = "ct_start_shrine_miracle_count_tooltip" },
                     {
                         setting_id = "ct_start_shrine_miracle_pool_group",

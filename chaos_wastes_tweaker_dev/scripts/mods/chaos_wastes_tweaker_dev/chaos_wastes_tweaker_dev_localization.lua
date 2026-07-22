@@ -43,6 +43,11 @@ local loc = {
     ct_buy_starting_boons_tooltip = { en = "Host-controlled. When ON, a Chaos Wastes run begins at a shrine shop so each hero buys their starting boons (and miracles) with pilgrim coins before the first map choice. The start node keeps its normal map appearance. This STACKS with the free Starting Boons list below, so turn those off if you want a pure buy-your-own start. In co-op only the host's toggle decides whether the shrine appears, and the boon and miracle counts follow the host." },
     ct_start_shrine_boon_count = { en = "Start Shrine: Boons Offered" },
     ct_start_shrine_boon_count_tooltip = { en = "How many boons the starting shrine offers for purchase. Each hero sees their own personalized offer, exactly like a normal shrine. Set to 0 for no boons. Default 4 matches a vanilla shrine." },
+    ct_start_shrine_cost_percent = { en = "Start Shrine: Boon Price" },
+    ct_start_shrine_cost_percent_tooltip = { en = "Sets boon prices at the starting shrine from 0%% to 200%% of their normal price, in 10%% steps. This does not change any later shrine. Default 100%%." },
+    ct_start_shrine_purchase_limit = { en = "Start Shrine: Boon Purchase Limit" },
+    ct_start_shrine_purchase_limit_tooltip = { en = "Maximum boons each hero can buy at the starting shrine. Choose Unlimited to preserve the normal shop behavior. Miracles do not count toward this limit, and later shrines are unchanged." },
+    ct_start_shrine_limit_unlimited = { en = "Unlimited" },
     ct_start_shrine_miracle_count = { en = "Start Shrine: Miracles Offered" },
     ct_start_shrine_miracle_count_tooltip = { en = "How many miracles (blessings) the starting shrine offers, from 0 to 3. If more miracles are enabled in the pool below than this number, the shrine picks that many at random, and the whole lobby gets the same picks. Set to 0 for no miracles." },
     ct_start_shrine_miracle_pool_group = { en = "Start Shrine: Miracle Pool" },
@@ -1266,6 +1271,15 @@ local loc = {
     activate_dormant_squats_tooltip = { en = "Injects 'Squats' into the active CW boon pool at Common rarity. Dormant in vanilla (no description text, placeholder/easter-egg boon). Requires a new CW run to take effect." },
     --]]
 }
+
+-- VMF localizes dropdown option text through string.format, so the percent
+-- sign is doubled in the stored string. Keys are generated to match the data
+-- table's exact 0..200, step-10 option set.
+for percent = 0, 200, 10 do
+    loc["ct_start_shrine_cost_" .. tostring(percent)] = {
+        en = tostring(percent) .. "%%",
+    }
+end
 
 -- Per-mission and per-CW-scenario toggle labels. Generated from the catalogs in
 -- _adventure_pool.lua so adding a new mission/DLC group there auto-registers all

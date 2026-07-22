@@ -204,6 +204,23 @@ Interpret `/ct_426_diag` without changing the run:
 | Expected post-fix | Both peers open the same start shrine, can buy and Ready back to MAP_DECISION, and neither log contains `_shop_config` nil. No four-mod parity disable/re-enable chat cycle occurs during the transition. |
 | Detection | `/ct_regression_test` passes `issue458_start_shrine_config`; guard diagnostics `[ct:458] start shrine view blocked` are bounded to 4 and indicate fail-closed containment, not a successful verification. Offline Lua tests prove the 15-second same-peer ack retention boundary and that new/expired peers remain disabled. |
 
+### start-shrine-price-and-limit-policy - synthetic shop must not leak into later shrines
+
+| Field | Value |
+|---|---|
+| Symptom | The original #458 feature lacks its requested 0-200% boon-price control and maximum-purchases control, or an implementation changes normal later shrine prices. |
+| Source boundary | The view displays/checks prices through `DeusShopView._get_power_up_costs` (`deus_shop_view_v2.lua:826-846,1265-1273`), while the authoritative controller charges inside `_try_buy_power_up` (`deus_run_controller.lua:1725-1765`). Remote requests are revalidated by the host at `rpc_deus_shop_power_up_bought` (`deus_run_controller.lua:1062-1082`). |
+| Policy | A 21-value dropdown permits exactly 0-200% in 10% steps; 100% is the default. A per-run/per-player limit permits Unlimited or 1-8 boon purchases. Miracles are not counted. The exact start-node identity is level `dlc_morris_map`; all later shrines delegate unchanged. |
+| Automatic detection | `test_ct_start_shrine_policy` executes all 21 price settings, malformed values, displayed/charged rounding, run/peer/local-player ledger isolation, exact-node scoping, hook consolidation, and config-before-full-sync ordering. `/ct_regression_test` validates the realized settings and module contracts. |
+| Runtime evidence | `[ct:458] Buy Starting Boons applied` records configured price and limit. Every accepted purchase records buyer, boon, charged price, new count, limit, and host/client role. Limit and malformed-state rejections are bounded. |
+
+Falsifiable fallback paths if the live pass fails:
+
+1. If card text and deducted coins differ, capture the accepted-purchase row plus the displayed price; both call the same `price` function, so divergence isolates a later UI overwrite or a nonstandard purchase seam.
+2. If a hero exceeds the limit, compare host and client accepted rows by `(run_id, peer, local player)`. Matching rows falsify ledger drift and point to a bypass around `_try_buy_power_up`; divergent rows isolate prediction/host ordering.
+3. If a later Shrine of Strife, Harmony, or Fortune changes price or disables cards, capture its `self._shop_type`. Any value other than `dlc_morris_map` falsifies the identity gate and requires removing the leaking call site, not changing global `DeusCostSettings`.
+4. If the start shrine refuses to open and logs `config unavailable`, inspect the four config fields on both peers before full sync. A malformed price/limit must remain fail-closed in MAP_DECISION; valid but unequal fields route to host-settings synchronization rather than graph code.
+
 ---
 ## Startup and network lookup bounds
 
