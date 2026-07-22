@@ -1,6 +1,6 @@
 # Character Weapon Variants — Changelog
 
-## Unreleased - shared custom-model camera fade (#922)
+## 0.1.470-dev (2026-07-22) - shared custom-model camera fade (#922) [not-started]
 
 - Enroll complete owner, bot, and remote-husk 3P inventory/attachment snapshots
   after custom equipment construction and wield reconstruction.

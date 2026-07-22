@@ -1,6 +1,6 @@
 # Cosmetics Tweaker — Changelog
 
-## Unreleased — #925 live cosmetic presentation refresh
+## 0.9.166-dev (2026-07-22) — #922/#925 fade and live presentation refresh [not-started]
 
 - After Cosmetics applies an illusion, the retained top-left customization
   card is now refreshed from the same exact backend item and canonical
@@ -12,11 +12,9 @@
   normalized to their stable vanilla cosmetic key before another mod consumes
   them. No engine object, callback, custom resource, or network identity enters
   shared state.
-- Added bounded `[cos:925]` evidence and runtime/offline coverage. This entry is
-  a source candidate only; no version bump, Workshop upload, or verification
-  claim has been made.
+- Added bounded `[cos:925]` evidence and runtime/offline coverage.
 
-## Unreleased - shared custom-model camera fade (#922)
+### #922 shared custom-model camera fade
 
 - Restored explicit FadeSystem enrollment for dynamically linked owner and husk
   hats without reverting the exact-donor Encarmine plume/material fix.

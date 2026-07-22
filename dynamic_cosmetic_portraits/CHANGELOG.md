@@ -1,6 +1,6 @@
 # Changelog — Dynamic Cosmetic Portraits
 
-## Unreleased — #925 bounded live portrait invalidation
+## 0.1.28-dev (2026-07-22) — #526/#925 portrait atlas and live invalidation [not-started]
 
 - DCP now consumes the shared local presentation generation emitted by
   successful hat/outfit equips. It drains at most eight records per tick and
@@ -9,11 +9,9 @@
   synchronized player row catches up, then DCP returns to its existing
   `CosmeticUtils`/backend resolver. The bridge is bounded and does not become a
   second persistent loadout store.
-- Added bounded `[dcp:925]` evidence and runtime/offline coverage. This entry is
-  a source candidate only; no version bump, Workshop upload, or verification
-  claim has been made.
+- Added bounded `[dcp:925]` evidence and runtime/offline coverage.
 
-## Unreleased -- #526 vanilla-equivalent cutout atlas candidate [not built]
+### #526 vanilla-equivalent cutout atlas
 
 - Empirical correction: all 12 committed HUD PNG alpha channels are exactly
   equal to `tools/vanilla_hud_alpha_mask_86x108.png`, yet the attached
@@ -45,9 +43,6 @@
   now proves every one of the 24 atlas rows and all 12 medium materials before
   assigning a custom portrait. DCP still owns only `es_mercenary`; unknown or
   custom careers, including Pusfume, remain on their existing portrait path.
-
-This is source-complete at the pre-build boundary only. No VMB build, deploy,
-Workshop upload, lifecycle-label change, or live-test card has occurred.
 
 If the first built atlas still fails visually, use this evidence ladder rather
 than another guessed asset edit:

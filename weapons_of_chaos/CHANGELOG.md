@@ -1,6 +1,6 @@
 # Weapons of Chaos — Changelog
 
-## Unreleased - shared custom-model camera fade (#922)
+## 0.1.46-dev (2026-07-22) - shared custom-model camera fade (#922) [not-started]
 
 - Enroll the Blightreaper's completed 3P unit in the same bounded, complete
   FadeSystem snapshot used by CWV and Cosmetics custom renderers.
