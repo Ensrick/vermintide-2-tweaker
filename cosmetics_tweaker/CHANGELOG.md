@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.165-dev - 2026-07-22 - #918 semantic custom-illusion peer sync [not-started]
+
+- Cosmetics-owned custom weapon illusions now reuse the bounded semantic
+  per-hand transport for Cosmetics-capable peers while remaining absent from
+  unsafe vanilla numeric skin traffic.
+- The exact-family resolver rejects missing or cross-family definitions,
+  preserves committed per-instance hand choices, and emits explicit clears
+  across respawn, hot join, loadout sync, and state transitions.
+- Peers without Cosmetics retain the safe vanilla base model. Added pure policy,
+  wire-order, lifecycle, and runtime regression coverage without a new RPC.
+
 ## 0.9.164-dev - 2026-07-21 - #749 exact renderer-resource closure
 
 - Loremaster loot previews, live owners and remote husks; custom hats; the
