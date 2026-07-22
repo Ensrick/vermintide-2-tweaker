@@ -1051,6 +1051,19 @@ Multiple mods hooking the same writer chain safely: `force_default=true` is stic
 ### Reference fix
 cosmetics_tweaker v0.9.66-dev (`_create_preview_widget` re-point + `_update_environment` pin, cosmetics_tweaker.lua ~2619-2751); cim_dev v0.8.48-dev (`mod._cim_pick_mission_env` + variation pin, commit 2a4c2c7). Memory: `reference_vt2_shading_env_variation_blend_av`.
 
+### Presentation semantics lost with the substituted environment
+
+The environment name can also encode layout behavior, not only lighting. In
+the Athanor overview, vanilla marks viewport 3 as `invert_rendering` and gives
+it `ui_weave_forge_preview_inverted`; both equipped weapons otherwise receive
+the same x coordinate [src: `hero_window_weave_forge_overview.lua:202-221,332-348,385-397`].
+If a mission-safe fallback replaces both environments with the same resource,
+capture that viewport role before substitution and reproduce only the lost
+transform at the item-preview producer. Do not infer the viewport from
+`item.data.slot_type`: dual-melee careers and cross-slot loadouts can place a
+melee item in `slot_ranged` (#882). Test primary, ordinary ranged secondary,
+and melee secondary independently.
+
 ---
 
 ## 23. Keep-only Gui material drawn mid-mission ("Material 'X' not found in Gui" draw fatal)

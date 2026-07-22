@@ -241,7 +241,7 @@ _rt_register("forge_preview_accepts_resident_3p_unit", function()
     end
 end)
 
-_rt_register("issue404_ranged_properties_preview_centered", function()
+_rt_register("issue882_athanor_preview_placement", function()
     local policy = mod._cim_forge_preview_policy
     local fn = policy and policy.properties_preview_position
     if type(fn) ~= "function" then
@@ -260,11 +260,14 @@ _rt_register("issue404_ranged_properties_preview_centered", function()
     if fn("melee", native) ~= nil then
         return "#404 preview policy must leave melee on the vanilla path"
     end
-    if policy.overview_preview_x("ranged", -0.8, false) ~= 0.8 then
-        return "#404 mission overview no longer separates ranged from melee"
+    if policy.overview_preview_x(true, -0.8, false) ~= 0.8 then
+        return "#882 mission overview no longer separates secondary from primary"
     end
-    if policy.overview_preview_x("ranged", -0.8, true) ~= -0.8 then
-        return "#404 overview policy changed the native keep layout"
+    if policy.overview_preview_x(false, -0.8, false) ~= -0.8 then
+        return "#882 mission overview changed the primary viewport"
+    end
+    if policy.overview_preview_x(true, -0.8, true) ~= -0.8 then
+        return "#882 overview policy changed the native keep layout"
     end
     if mod._cim404_preview_install_ok ~= true then
         return "#404 properties preview runtime hook did not install"
