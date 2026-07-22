@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-21.
+Last updated: 2026-07-22.
 
 ### boon-runtime module ownership - issue #2
 
@@ -39,6 +39,17 @@ Interpret `/ct_426_diag` without changing the run:
   cannot demonstrate the requested active-custom-state co-op path. Run once before
   the no-CT join (`live_custom=YES`) and once after it (`state=PASS`,
   `live_custom=NO`) and retain the automatic `hot-join sync DEGRADED` row between.
+
+### Skulking Sorcerer rank-8 health contract - issue #470
+
+| Field | Value |
+|---|---|
+| Proven fault | The linked host log reaches `cataclysm_3` (difficulty rank 8), initializes `curse_skulking_sorcerer`, then fails `GenericHealthExtension.init` because the curse overwrote the breed's health array without an index 8. The later hit-reaction nil dereference is secondary damage from the half-created extension set. |
+| Source boundary | `MutatorHandler.initialize_mutators` is the first stable point after the curse's server initializer installs its sparse table. The CT hook fills only missing `[8]` with `150`; it does not alter valid entries or wrap the later hit-reaction symptom. |
+| Offline guard | `qa/rt_textual_invariants.psd1` requires the exported predicate, the single post-initialize hook, the bounded `[ct:470]` marker, and the runtime regression registration. The existing `curse_sorcerer_rank8_backfill` runtime test covers sparse, already-complete, and non-table inputs. |
+| Current gate | Keep #470 out of the tester queue until issue #505's current Single Mission Loader build is verified. This is a reachability gate, not an unresolved #470 root cause. |
+| Later test | From the Pilgrimage Chamber, use the localized Single Mission Loader to start a normal Chaos Wastes mission at Deepest difficulty with the Skulking Sorcerer curse. The command equivalent is `/ct_load_mission <normal-CW-level-key> 0.999 curse_skulking_sorcerer cataclysm_3`. Confirm one `[ct:470]` backfill marker, active sorcerer spawns, no `math.clamp` error, and no hit-reaction crash. |
+| Scope distinction | This is a local rank-indexed data-shape failure. It is not the outbound identifier fence in #424 or the pre-admission package fence in #430. A client-only recurrence must be split to those network/resource boundaries rather than folded into this fix. |
 
 ### expedition save/resume readiness - issue #141
 

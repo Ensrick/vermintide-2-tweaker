@@ -2837,3 +2837,44 @@ fallback path, especially live strings containing UTF-8 smart punctuation.
 **Related:** class 27 (husk base identity), class 43 (durable vs ephemeral
 render state), class 65 (partial-row loadouts), and class 68 (Deus identity and
 mechanism boundaries).
+
+## 74. Mod-added difficulty rank exposes a hole in vanilla rank-indexed data
+
+**First confirmed:** issue #470, Skulking Sorcerer at `cataclysm_3`.
+**Lives in:** mutators or breeds that replace a complete rank-indexed table with
+a sparse table written for the smaller vanilla-reachable difficulty set.
+
+### Symptoms
+- The run works at ordinary Chaos Wastes difficulties and fails only after a
+  mod raises the effective difficulty to a normally unreachable rank.
+- A primitive consumer such as `math.clamp` receives nil during extension
+  construction. A later system crashes through another extension that was
+  registered earlier in the same partially completed add sequence.
+- Guarding the later nil dereference hides the first invalid value and leaves an
+  orphaned unit; it does not repair the data contract.
+
+### Diagnosis pattern
+1. Resolve the active difficulty key to its numeric rank and record the exact
+   rank-indexed field consumed at the first error.
+2. Compare the base table with every mutator initializer that can overwrite it.
+   Duplicate numeric constants can silently shift an apparently complete Lua
+   table and leave the highest rank absent.
+3. Follow extension creation order from the first throw to any secondary crash.
+   Treat the earliest missing rank value as the root and later nil-extension
+   failures as consequences.
+4. Keep network/package investigations separate unless the failure is peer-only;
+   issue #470 occurred on the authoritative host before any custom wire payload.
+
+### Fix template
+- Repair the narrow table hole immediately after the overwriting initializer,
+  before any spawn can consume it. Preserve all populated ranks byte-for-byte.
+- Export the predicate for engine-free tests and cover sparse, complete, and
+  malformed inputs. Keep one bounded searchable marker at the repair boundary.
+- Sweep sibling mutators for the same unguarded rank lookup whenever the game or
+  a mod adds a reachable difficulty. Prefer vanilla fallbacks where source proves
+  them; never invent broad default values at the downstream consumer.
+- Do not catch and retry a non-idempotent director tick after partial mutation
+  (class 66), and do not paper over the later hit-reaction update.
+
+**Related:** class 59 (sparse/nil runtime inputs), class 66 (failed tick replay),
+and issue #505 (test-path reachability only).
