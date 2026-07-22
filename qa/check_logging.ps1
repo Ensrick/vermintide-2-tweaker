@@ -36,8 +36,10 @@
 #       NOT flagged — chat visibility is arguably wanted there. Suppress an
 #       intentional in-helper chat warning with `-- allow-warn-chat: <reason>`.
 #
-# ADVISORY by design (wired Advisory in run_all.ps1): a nonzero count is expected
-# and is the point — this gathers signal, it does not block. Exit 1 = findings.
+# Existing hygiene debt is advisory by result: ordinary findings exit 1, which
+# Standard policy reports without blocking. Issue #427's monotonic warn-chat
+# floor is blocking: any warning-backed diagnostic helper outside the exact
+# three public stable-stream promotion debts exits 2.
 #
 # Detection scope mirrors check_unpack_safety.ps1: `*.lua` under each active mod's
 # `scripts/` subtree; skips tweaker/ (legacy), _archive, *_extract, bundleV2,
@@ -52,7 +54,7 @@
 # Exit codes:
 #   0 - no findings
 #   1 - one or more advisory findings (echo / per-frame / warn-chat)
-#   2 - hard error (file read failure) or self-test failure
+#   2 - hard error, self-test failure, or new #427 warn-chat regression
 #
 # Self-test: `-SelfTest` runs the synthetic fixtures under qa/_test_fixtures/ and
 # asserts per-category finding counts. Auto-discovered by qa/run_selftests.ps1.
@@ -61,11 +63,23 @@
 param(
     [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
     [switch]$Quiet,
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$WarnChatRegression
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path $RepoRoot).Path
+
+# Issue #427 migration floor. These are the three public stable-stream helpers
+# whose dev twins are already console-only; they may disappear through an
+# authorized promotion, but no new warning-backed diagnostic helper may enter
+# any stream. Keying on both relative path and source text means an additional
+# helper in one of these files is not silently grandfathered.
+$legacyWarnChatDebt = @{
+    'chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua|mod:warning("[ct:dbg] " .. fmt, ...)' = $true
+    'general_tweaker/scripts/mods/general_tweaker/general_tweaker.lua|mod:warning("[gt:dbg] " .. fmt, ...)' = $true
+    'verminious_dreams_lighting/scripts/mods/verminious_dreams_lighting/verminious_dreams_lighting.lua|mod:warning("[vdl:dbg] " .. fmt, ...)' = $true
+}
 
 function Read-FileUtf8([string]$path) {
     return [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
@@ -292,6 +306,19 @@ function Get-ModName {
     return ($rel -split '/')[0]
 }
 
+function Get-UnexpectedWarnChatRows {
+    param([object[]]$Rows, [string]$Root)
+    $unexpected = @()
+    foreach ($row in @($Rows | Where-Object { $_.Category -eq 'warn-chat' })) {
+        $rel = $row.File
+        if ($rel.StartsWith($Root)) { $rel = $rel.Substring($Root.Length).TrimStart('\','/') }
+        $rel = $rel.Replace('\','/').ToLowerInvariant()
+        $key = $rel + '|' + $row.Text.Trim()
+        if (-not $legacyWarnChatDebt.ContainsKey($key)) { $unexpected += $row }
+    }
+    return $unexpected
+}
+
 # ---- self-test ----
 function Invoke-SelfTest {
     $fixDir = Join-Path $PSScriptRoot "_test_fixtures"
@@ -326,6 +353,19 @@ function Invoke-SelfTest {
             $verdict, $c.Path, $ge, $c.Echo, $gf, $c.Frame, $gw, $c.Warn) -ForegroundColor $colour
         if (-not $ok) { Write-Host "        $($c.Desc)" -ForegroundColor DarkYellow; $allPass = $false }
     }
+
+    # The #427 floor is monotonic: the exact three stable-stream debts are
+    # tolerated until promotion, their removal is clean, and either a new path
+    # or a second warning helper in a grandfathered file is blocking.
+    $knownPath = Join-Path $repoRoot 'general_tweaker\scripts\mods\general_tweaker\general_tweaker.lua'
+    $known = [pscustomobject]@{ File = $knownPath; Line = 49; Category = 'warn-chat'; Text = 'mod:warning("[gt:dbg] " .. fmt, ...)' }
+    $newText = [pscustomobject]@{ File = $knownPath; Line = 50; Category = 'warn-chat'; Text = 'mod:warning("[gt:new-diagnostic] " .. fmt, ...)' }
+    $newPath = [pscustomobject]@{ File = (Join-Path $repoRoot 'event_tweaker\scripts\mods\event_tweaker\event_tweaker.lua'); Line = 20; Category = 'warn-chat'; Text = 'mod:warning("[event:dbg] " .. fmt, ...)' }
+    $floorOk = (@(Get-UnexpectedWarnChatRows -Rows @($known) -Root $repoRoot).Count -eq 0) `
+        -and (@(Get-UnexpectedWarnChatRows -Rows @() -Root $repoRoot).Count -eq 0) `
+        -and (@(Get-UnexpectedWarnChatRows -Rows @($known, $newText, $newPath) -Root $repoRoot).Count -eq 2)
+    Write-Host ("  [{0}] warn-chat migration floor -- exact legacy accepted; removal accepted; new sites rejected" -f $(if ($floorOk) { 'PASS' } else { 'FAIL' })) -ForegroundColor $(if ($floorOk) { 'Green' } else { 'Red' })
+    if (-not $floorOk) { $allPass = $false }
     Write-Host ""
     if ($allPass) {
         Write-Host "[check_logging -SelfTest] OK -- all $($cases.Count) fixture verdicts match." -ForegroundColor Green
@@ -339,6 +379,44 @@ function Invoke-SelfTest {
 Write-Host "=== check_logging ===" -ForegroundColor Cyan
 
 if ($SelfTest) { exit (Invoke-SelfTest) }
+
+# The issue-specific gate does not need the echo/per-frame census. Pre-filter to
+# files that contain a live `mod:warning` token, then reuse the exact same scoped
+# scanner for warn-chat classification. This keeps pre-commit/targeted runs fast
+# without introducing a second, weaker parser.
+if ($WarnChatRegression) {
+    $warnRows = @()
+    $hardError = $false
+    foreach ($f in @(Get-ScanFiles -Root $repoRoot)) {
+        try {
+            $text = Read-FileUtf8 $f.FullName
+            if (-not $rxWarning.IsMatch($text)) { continue }
+            $rows = Scan-LoggingFile -Path $f.FullName
+            foreach ($row in $rows) {
+                if ($row.Category -eq 'warn-chat') { $warnRows += $row }
+            }
+        } catch {
+            Write-Host ("  X {0}: {1}" -f $f.FullName, $_) -ForegroundColor Red
+            $hardError = $true
+        }
+    }
+    if ($hardError) {
+        Write-Host "[check_logging -WarnChatRegression] ERROR -- one or more candidate files failed to scan." -ForegroundColor Red
+        exit 2
+    }
+    $unexpected = @(Get-UnexpectedWarnChatRows -Rows $warnRows -Root $repoRoot)
+    if ($unexpected.Count -gt 0) {
+        Write-Host "[check_logging -WarnChatRegression] FAILED -- $($unexpected.Count) new warning-backed diagnostic helper(s)." -ForegroundColor Red
+        foreach ($row in $unexpected) {
+            $rel = $row.File
+            if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
+            Write-Host ("  ! {0}:{1}`n      {2}" -f $rel, $row.Line, $row.Text) -ForegroundColor Red
+        }
+        exit 2
+    }
+    Write-Host "[check_logging -WarnChatRegression] OK -- no new warning-backed diagnostic helpers; legacy stable promotion debt remaining=$($warnRows.Count)." -ForegroundColor Green
+    exit 0
+}
 
 $all = @()
 $hardError = $false
@@ -359,6 +437,18 @@ foreach ($f in $files) {
 Write-Host ""
 if ($hardError) {
     Write-Host "[check_logging] ERROR -- one or more files failed to scan." -ForegroundColor Red
+    exit 2
+}
+
+$warnRows = @($all | Where-Object { $_.Category -eq 'warn-chat' })
+$unexpectedWarnRows = @(Get-UnexpectedWarnChatRows -Rows $warnRows -Root $repoRoot)
+if ($unexpectedWarnRows.Count -gt 0) {
+    Write-Host "[check_logging] FAILED -- $($unexpectedWarnRows.Count) new warning-backed diagnostic helper(s) exceed the #427 migration floor." -ForegroundColor Red
+    foreach ($row in $unexpectedWarnRows) {
+        $rel = $row.File
+        if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
+        Write-Host ("  ! {0}:{1}`n      {2}" -f $rel, $row.Line, $row.Text) -ForegroundColor Red
+    }
     exit 2
 }
 
