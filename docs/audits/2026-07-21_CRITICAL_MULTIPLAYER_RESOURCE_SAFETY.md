@@ -23,17 +23,20 @@ not rewrite, disable, or commandeer Pusfume-owned assets or behavior.
 
 ### #282 — package refcount leak / unload deadlock
 
-Evidence: recurring shutdown and in-mission package-lifetime failures name
-`cosmetics_tweaker_offhand` and `cwv_husk_override_units`. This is an
-architectural regression and remains `not-started`; the new QA gate is only a
-prevention floor.
+Evidence: #927/#937/#940 share the fatal `#ID[5ab1500d]`; #930 is a non-fatal
+control. Every session balances the named `cosmetics_tweaker_offhand` and
+`cwv_husk_override_units` references, and each fatal logs the Material-Hijack
+ledger's post-StateIngame release as complete with no delayed entry. The fatal
+sessions then stall in `PatchedResourcePackage::unload`. The current producer
+is therefore the manually released renderer-backed Material-Hijack donor
+package, not the ordinary multi-owner `NOT unloaded` lines.
 
 Candidate paths if the first repair fails:
 
-1. Centralize every shared package acquisition behind one owner/refcount ledger
-   and assert balanced release at level transition and shutdown.
-2. Replace unload-on-feature-disable with session-lifetime residency for the
-   bounded shared package set, then unload only after the world is gone.
+1. Keep one mod-owned reference per Material-Hijack donor package for the
+   process session and let `PackageManager.destroy` own final release.
+2. If that still fails, remove dynamic donor-package loading by compiling the
+   required material closure into a Cosmetics-owned package.
 3. Remove cross-mod ownership by assigning each package to one provider and
    making consumers request capabilities without calling load/unload directly.
 

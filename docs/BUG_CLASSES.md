@@ -1474,41 +1474,43 @@ end
 - gt_dev v0.2.202-dev (#492 rework: 4s path-fail + 8s no-progress + hysteresis latch; census printfs), v0.2.203-dev (#515: latch re-arm, backward bypass on the aid node, 492-bailout composition). Regression checks `gt_bot492_aid_stall_recovery`, `gt_bot515_teleport_latch_rearm`, `gt_bot515_cant_reach_backward_bypass`.
 - Related: #139/#142 (bot follow/teleport family), class 21 (stale state in mod-update phases).
 
-## 35. Force-loaded weapon `_3p` package under a shared "global" ref, never released — shutdown "not unloaded" deadlock + in-mission "locking a resource about to be unloaded"
+## 35. Package lifetime shorter than its native renderer consumers — shutdown "not unloaded" deadlock + in-mission "locking a resource about to be unloaded"
 
-**First seen:** 2026-07-03 (cross-mod CW session; cosmetics-owned slice fixed v0.9.76-dev)
-**Canonical Issue:** [#282](https://github.com/Ensrick/vermintide-2-tweaker/issues/282) (the single tracker — its title covers wt/cwv/cosmetics; cosmetics slice re-fixed v0.9.148-dev, wt/cwv/woc slice benign/deferred); [#477](https://github.com/Ensrick/vermintide-2-tweaker/issues/477) (owner-pin evidence)
-**Lives in:** any mod that force-loads a weapon/fx `_3p` package via `Managers.package:load(path, "global", ...)` on boot or cross-char wield without a paired release on level-exit/unwield/mod-unload — cosmetics Material-Hijack, wt/cwv cross-char force-loads.
+**First seen:** 2026-07-03 (cross-mod CW session; original cosmetics refcount leak fixed v0.9.76-dev; native-retirement regression isolated 2026-07-21)
+**Canonical Issue:** [#282](https://github.com/Ensrick/vermintide-2-tweaker/issues/282) (single tracker); [#477](https://github.com/Ensrick/vermintide-2-tweaker/issues/477) (owner-pin evidence); current incidents [#927](https://github.com/Ensrick/vermintide-2-tweaker/issues/927), [#930](https://github.com/Ensrick/vermintide-2-tweaker/issues/930), [#937](https://github.com/Ensrick/vermintide-2-tweaker/issues/937), [#940](https://github.com/Ensrick/vermintide-2-tweaker/issues/940).
+**Lives in:** packages force-loaded for weapon/fx/material render graphs whose Lua reference lifetime is either unbounded or shorter than native renderer retirement. The two proven producers are the original per-spawn Material-Hijack refcount leak and the later manual unload of its donor material package before process shutdown.
 
 ### Symptoms
 - Shutdown after a mission: thousands of `[PackageManager] Unload: <pkg>, global -> Package still referenced, NOT unloaded`, then crashify `'#ID[...]' not unloaded, this can potentially cause an deadlock!`, non-zero exit.
 - In-mission precursor at map transitions / weapon swaps: `[ResourceManager] Locking a resource that is about to be unloaded!`.
-- Refcount balloons (92 loads of one `_3p` package in a single host session) — each wield re-loads under the shared ref with no dedupe.
+- Original producer: refcount balloons (92 loads of one `_3p` package in a single host session) because each wield re-loads under the shared ref with no dedupe.
+- Current producer: refcounts and Lua's delayed-unload queue can both look clean, yet native `PatchedResourcePackage::unload` stalls after a manually released renderer-backed donor package. In #927/#937/#940 the bounded `[cos:282] release-complete` and `postcondition-ok` lines precede the same fatal `#ID[5ab1500d]`; #930 is the non-fatal timing control.
 
 ### Diagnosis pattern
 1. Grep the mod for `:load(` / `force_load` of `_3p` packages; the reference-name arg is the tell — a shared literal `"global"` shares one refcount across every consumer AND every mod, so nobody can safely unload.
 2. Count loads vs unloads per package key over a session (a `[<mod>:282]` load/dedupe/unload ledger). Loads >> unloads = leak.
-3. Confirm the release EDGE, not just its presence. Two distinct bugs live here: (a) NO release at all = a leak; (b) a release wired to the PRE-teardown `on_game_state_changed("exit","StateIngame")` notification is WORSE — that callback fires BEFORE `StateIngame.on_exit` destroys player/preview units and the world, so dropping the reference while units still consume the package parks the handle in `_delayed_packages_to_remove` (package_manager.lua:213-224). On quit-to-desktop there is no `PackageManager.update` frame between state teardown and `Managers:destroy`, so the delayed handle survives into `PackageManager.destroy` (:275-279) → the `#ID[...] not unloaded ... deadlock` crash. The release must be POST-teardown.
+3. Confirm the release EDGE, not just its presence. Three distinct bugs live here: (a) no dedupe = an unbounded refcount leak; (b) release at the PRE-teardown `on_game_state_changed("exit","StateIngame")` notification can park a live handle in `_delayed_packages_to_remove`; (c) for renderer-backed material graphs, even a POST-`StateIngame.on_exit` manual unload is not a proven native-retirement boundary. Lua's `can_unload`/delayed-queue state is necessary evidence, but it is not proof that the render thread retired every consumer.
+4. Correlate a named producer across fatal and control logs. Do not assign causality from generic `PackageManager.destroy` noise alone. For the current regression, all mod-owned offhand/CWV references balance in the fatal and control logs; the distinguishing actionable seam is Cosmetics manually releasing the `black_and_gold` Material-Hijack donor package before native shutdown.
 
 ### Fix template
-- Load exactly-once per path (a dedupe registry), under a MOD-OWNED reference name (`"<mod>_mh"`, not `"global"`), tracked in a table.
-- Release only at a POST-teardown edge: a `mod:hook_safe("StateIngame", "on_exit", ...)` post-call (vanilla has already destroyed units + world, so `can_unload` is true → immediate free, never delayed), plus `mod:on_unload` and previewer-destroy. NEVER release at the pre-teardown `on_game_state_changed("exit","StateIngame")` notification — that is the #282 regression (fixed cosmetics v0.9.148-dev).
+- Load exactly once per path under a mod-owned reference name (`"<mod>_mh"`, not `"global"`) and track it in a process-session ledger.
+- For the proven Material-Hijack donor graph, retain that one reference for the process session. `PackageManager.destroy` is the sole release owner. Do not unload it from `on_game_state_changed`, a `StateIngame.on_exit` hook, `mod.update`, or `mod.on_unload`; VMF reload is not native renderer shutdown.
+- If the ownership ledger is reinitialized while PackageManager persists, adopt the already-live exact mod reference instead of incrementing it again. This does not make an otherwise unsafe mod hot-reloadable.
 ```lua
-if _mh_loaded[path] then return end          -- exactly-once
-Managers.package:load(path, "cosmetics_tweaker_mh")
-_mh_loaded[path] = true
--- teardown (POST-world; StateIngame.on_exit is a post-call hook_safe):
-mod:hook_safe("StateIngame", "on_exit", function(self, application_shutdown)
-    for p in pairs(_mh_loaded) do
-        Managers.package:unload(p, "cosmetics_tweaker_mh"); _mh_loaded[p] = nil
-    end
-end)
+local count = Managers.package:reference_count(path, "cosmetics_tweaker_mh")
+if count > 0 then
+    _mh_loaded[path] = true                 -- adopt after ledger reinit
+elseif not _mh_loaded[path] then
+    Managers.package:load(path, "cosmetics_tweaker_mh")
+    _mh_loaded[path] = true                 -- exactly once per process session
+end
+-- No mod-owned unload. PackageManager.destroy drains the one reference.
 ```
-- Ledger the load state as `held` vs `release_pending` and reconcile against `_delayed_packages_to_remove` in `mod.update`, so a still-delayed handle stays observable until the engine actually frees it (postcondition: no mod-owned package remains delayed when `PackageManager.destroy` begins).
-- Regression: runtime check that the registry holds at most one reference per path (`mh_package_single_reference`) AND that nothing mod-owned is left in the delayed queue post-`StateIngame.on_exit`.
+- Ordinary packages that have a proven consumer-destroy boundary should still use symmetric unload. Session retention is the evidence-based exception for this material graph, not a blanket replacement for ownership discipline.
+- Regression: runtime check requires exactly one reference per registered path (`mh_package_single_reference`), forbids any early-release API, and logs a read-only `held/exact/over/missing` summary at every StateIngame exit.
 
 ### Related Issues / commits
-- cosmetics_tweaker v0.9.76-dev (#282 cosmetics slice, exactly-once load); **regressed 2026-07-18 (pre-teardown release edge) → re-fixed v0.9.148-dev by moving the release to `StateIngame.on_exit` post-hook.** wt/cwv/woc force-load slice tracked under **#282** (session-resident leaks that NEVER call `unload` mid-session, so they never enter the delayed queue and `destroy()` cleans them at shutdown — benign; hardening only, deferred).
+- cosmetics_tweaker v0.9.76-dev: exactly-once load; v0.9.148-dev: moved pre-teardown release to `StateIngame.on_exit` post-hook; **v0.9.163-dev supersedes both release edges after #927/#937/#940 proved the post-hook still precedes native renderer retirement.** The current contract is exactly one session-owned reference, adopted after any ledger reinitialization, released only by `PackageManager.destroy`.
 - Related: class 27/28 (residency half of the same cross-char force-loading).
 
 ## 36. Self-heal / seed-repair writes across the modded-official realm boundary (modded ids leak into the EAC-trusted store)

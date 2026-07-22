@@ -44,9 +44,10 @@ local _DORMANT_EXPORTS = {
     replace_textures      = function() end,
     add_particles         = function() end,
     attach_anim_extension = function() end,
-    release_packages      = function() end,   -- #282: no-op when dormant
-    reconcile_packages    = function() end,   -- #282: no-op when dormant
-    pending_release_paths = function() return {} end,
+    session_resident_paths = function() return {} end,
+    reference_summary     = function()
+        return { held = 0, exact = 0, over = 0, missing = 0 }
+    end,
     loaded_packages       = {},               -- #282: empty registry when dormant
     dormant               = true,
 }
@@ -253,8 +254,8 @@ local function _set_material_traced(unit, mat_slot, mat, convention)
     return true
 end
 
--- v0.9.76-dev (issue #282): exactly-once package loading with a symmetric
--- lifecycle release. PackageManager.load() INCREMENTS a per-(package,
+-- v0.9.76-dev (issue #282): exactly-once package loading under a private
+-- reference. PackageManager.load() INCREMENTS a per-(package,
 -- reference_name) refcount on every call (package_manager.lua:26-27) and
 -- unload() decrements by one (package_manager.lua:196-238), so the old
 -- per-call `load(path, "global")` here - invoked from replace_textures /
@@ -269,15 +270,12 @@ end
 -- keeps our references attributable (dump_reference_counter) and immune to
 -- collisions with vanilla's / LA's "global" refs on the same packages.
 --
--- Release point (v0.9.148-dev): the single StateIngame.on_exit hook_safe in
--- cosmetics_tweaker.lua runs AFTER vanilla has destroyed player machines,
--- units, entity systems, the level and world. The older game-state notification
--- runs BEFORE that teardown and repeatedly put the custom outfit package into
--- PackageManager's delayed queue. Boot shutdown has no package-update frame
--- between StateIngame.on_exit and PackageManager.destroy, so the delayed handle
--- survived into destruction (#282 comments 5009229761 / 5009325026). The
--- lifecycle ledger below retains `release_pending` until the engine queue
--- actually clears, rather than treating an unload request as completion.
+-- Lifetime correction (v0.9.163-dev): retain exactly one mod-owned reference
+-- for the process session and let PackageManager.destroy release it. Current
+-- logs #927/#937/#940 prove that even a post-StateIngame unload can report
+-- complete with an empty delayed queue while PatchedResourcePackage retirement
+-- still stalls and the package survives application shutdown. This material
+-- graph outlives Lua's observable world/unit teardown edge.
 local MH_PKG_REF = "cosmetics_tweaker_mh"
 local MH_LIFECYCLE = mod:dofile("scripts/mods/cosmetics_tweaker/_mh_package_lifecycle")
 local _mh_lifecycle
@@ -286,15 +284,11 @@ local _mh_skip_logged = {}
 local function _mh_lifecycle_event(event, path, reason, detail)
     if event == "first_load" then
         pcall(printf, "[cos:282] first-load ref=%s: %s", MH_PKG_REF, tostring(path))
-    elseif event == "release_complete" then
-        pcall(printf, "[cos:282] release-complete (%s): %s", tostring(reason), tostring(path))
-    elseif event == "release_delayed" then
-        pcall(printf, "[cos:282] release-DELAYED (%s): %s", tostring(reason), tostring(path))
+    elseif event == "adopted" then
+        pcall(printf, "[cos:282] adopted session ref=%s count=%s: %s",
+            MH_PKG_REF, tostring(detail), tostring(path))
     elseif event == "load_failed" then
         mod:warning("[mh_embed] package load FAILED for %s: %s", tostring(path), tostring(detail))
-    elseif event == "release_failed" then
-        pcall(printf, "[cos:282] unload FAILED (%s) for %s: %s",
-            tostring(reason), tostring(path), tostring(detail))
     end
 end
 
@@ -317,10 +311,6 @@ local function _safe_load_package(path)
         return
     end
     _mh_lifecycle:load(path)
-end
-
-local function release_packages(reason)
-    return _mh_lifecycle:release_all(reason)
 end
 
 -- ============================================================
@@ -573,14 +563,14 @@ end
 mod:info("[mh_embed] hooks installed (4) — embedded Material-Hijack (patched) active. create_equipment + _spawn_item_unit folded into cosmetics_tweaker's existing hooks (v0.9.5 de-dupe).")
 
 -- v0.9.5: module exports for cosmetics_tweaker.lua to call from its own hooks.
--- v0.9.148-dev (#282): release/reconcile exports and the held/pending registry
--- are consumed by the post-StateIngame hook and runtime regression check.
+-- v0.9.163-dev (#282): read-only session-residency exports are consumed by
+-- transition diagnostics and the runtime regression check. There is
+-- deliberately no unload export; PackageManager.destroy owns final release.
 return {
     replace_textures      = replace_textures,
     add_particles         = add_particles,
     attach_anim_extension = attach_anim_extension,
-    release_packages      = release_packages,
-    reconcile_packages    = function(reason) return _mh_lifecycle:reconcile(reason) end,
-    pending_release_paths = function() return _mh_lifecycle:pending_paths() end,
+    session_resident_paths = function() return _mh_lifecycle:held_paths() end,
+    reference_summary     = function() return _mh_lifecycle:reference_summary() end,
     loaded_packages       = _mh_loaded_packages,
 }

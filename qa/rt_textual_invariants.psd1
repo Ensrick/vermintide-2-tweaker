@@ -251,17 +251,19 @@
     #  docs/BUG_CLASSES.md; issueRef 'BC<n>' marks a class with no single GH issue.
     # =========================================================================
 
-    # -- BUG_CLASSES 35: force-loaded weapon _3p package release edge. The MH
-    #    skin-package release MUST live on the POST-teardown StateIngame.on_exit
-    #    hook_safe (NOT the pre-teardown on_game_state_changed notification) and be a
-    #    singleton for that (Class, method) pair. Burned: cosmetics v0.9.76-dev fix ->
-    #    regressed 2026-07-18 (pre-teardown edge) -> re-fixed v0.9.148-dev. Dropping
-    #    or duplicating it re-opens the #282 shutdown "not unloaded" deadlock.
-    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook_safe("StateIngame", "on_exit"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#282'; note='BUG_CLASSES 35: MH package release is the single POST-teardown StateIngame.on_exit hook_safe; a pre-teardown edge or a 2nd hook re-opens the shutdown deadlock.' }
+    # -- BUG_CLASSES 35: MH donor packages back native renderer consumers whose
+    #    lifetime has no proven Lua teardown boundary. Fatal #927/#937/#940 all
+    #    reached the old post-StateIngame release-complete/postcondition-ok state
+    #    before PatchedResourcePackage stalled. Any StateIngame manual-release hook
+    #    re-opens #282; one bounded process-session ref is released only by
+    #    PackageManager.destroy.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook_safe("StateIngame", "on_exit"'; literal=$true; polarity='absent'; issueRef='#282'; note='BUG_CLASSES 35: no StateIngame callback may manually release the renderer-backed MH donor graph.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='teardown_owner=PackageManager.destroy'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#282'; note='BUG_CLASSES 35: transition diagnostics preserve bounded session ownership without mutating package state.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; needle='manager_package(?:\.|:)unload'; literal=$false; polarity='absent'; issueRef='#282'; note='BUG_CLASSES 35: the MH embed exposes no direct manual unload seam; PackageManager.destroy is the sole release owner.' }
     # -- BUG_CLASSES 35: the force-load reference name must be mod-owned
     #    ("cosmetics_tweaker_mh"), never the shared "global" ref no consumer can
     #    safely unload.
-    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; needle='MH_PKG_REF = "cosmetics_tweaker_mh"'; literal=$true; polarity='present'; issueRef='#282'; note='BUG_CLASSES 35: MH package load/unload uses a mod-owned reference name, not the shared "global" refcount.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; needle='MH_PKG_REF = "cosmetics_tweaker_mh"'; literal=$true; polarity='present'; issueRef='#282'; note='BUG_CLASSES 35: MH session ownership uses a mod-owned reference name, not the shared "global" refcount.' }
 
     # -- BUG_CLASSES 3: Lua 5.1 unpack nil-hole truncation. safe_hook MUST pass an
     #    explicit j to unpack so nil holes survive. Burned wt v0.12.77 -> .78
