@@ -20,8 +20,8 @@ the beta line: its widget group is absent and its module is never loaded.
 
 ## Hook table
 
-34 authored registrations (`tools/mod-lint/lint-mod.ps1 -Mod career_tweaker`
-PASS = one hook per (Class, method) mod-wide), of which 25 are loaded by
+36 authored registrations (`tools/mod-lint/lint-mod.ps1 -Mod career_tweaker`
+PASS = one hook per (Class, method) mod-wide), of which 27 are loaded by
 the beta line. The nine hooks in the dormant swap and #440 probe modules remain
 source for later redesign/diagnostics but do not execute.
 `[hook]` = full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` =
@@ -46,6 +46,7 @@ issue-425 peer-parity beacon (`_lib_peer_parity.lua`) adds NO hooks - it POLLS
 | `CharacterSelectionStateCharacter.on_enter` / `on_exit` / `_setup_hero_selection_widgets` [safe] `_crt_career_unlock.lua` | The in-keep character picker independently builds career locks once, then combines them with live profile occupancy in `_update_available_profiles` [src: `scripts/ui/views/character_selection_view/states/character_selection_state_character.lua:223-288,322-367`] | Refresh the actual picker when the setting changes; restore its selected row without requesting/spawning a profile; log the Kruber career-lock rows and current reservation owner once per distinct state (#728) | Do not set `content.taken` or bypass `profile_available_for_peer`; another player reserving Kruber is valid occupancy, not a career-level lock. Diagnostics run only on grid rebuild, never in the per-frame availability update. |
 | `HeroWindowTalents.on_enter` / `on_exit` [safe/full] `_crt_talent_menu_guard.lua` | On enter, vanilla clones the backend's selected talent rows (`hero_window_talents.lua:106-115`). On exit it persists rows and calls `talents_changed()` plus ammo reapply (`:53-74`) even when no row changed. | Snapshot rows after entry. An identical close performs only vanilla's animator teardown, preserving accumulated talent buffs (#283); a changed or invalid close delegates fully. | Independent of dormant `_crt_talent_swap.lua`. One registration per method; no casting/transposition exports or saved state are read. |
 | `HeroWindowTalentsConsole.on_enter` / `on_exit` [safe/full] `_crt_talent_menu_guard.lua` | Controller talent picker has the same unconditional persistence/reapply close path (`hero_window_talents_console.lua:68-89`; initialization `:143`). | Apply the same #283 no-op boundary so controller input preserves the same live state. | Changed/invalid rows fail open to vanilla. No second Career Tweaker hook may target either pair. |
+| `HeroWindowLoadoutInventory._create_item_categories` / `HeroWindowLoadoutInventoryConsole._create_item_categories` [hook] `_crt_foot_knight.lua` | Desktop and controller inventory windows independently build and cache an OR-filter from the selected `SPProfiles[profile].careers[career].item_slot_types_by_slot_name` object [src: `hero_window_loadout_inventory.lua:119-187`; `hero_window_loadout_inventory_console.lua:129-161`]. | Immediately reconcile the exact Foot Knight career object so **Melee Weapon in Secondary Slot** accepts both `melee` and `ranged` before either concrete surface caches the lower-slot filter (#619/#935). | The classes are independent concrete UI surfaces; hooking desktop does not cover controller. Carrier discovery must tolerate sparse modded arrays, preserve array identity, and remove only CRT's owned `melee` member on restore. |
 
 ### Career ability / activated-cooldown (owner doc: `docs/engine/10`)
 

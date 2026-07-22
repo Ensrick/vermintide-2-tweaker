@@ -1,5 +1,13 @@
 # Career Tweaker Changelog
 
+## 0.4.15-beta (2026-07-22) - #935 Foot Knight secondary-slot concrete UI repair [verify-fix]
+
+- Repaired the #619 secondary-melee regression on the controller inventory used by the attached log. The log proves Career Tweaker changed only `CareerSettings.es_knight` to `{melee,ranged}`, then the player opened `HeroWindowLoadoutInventoryConsole`; the prior fix hooked only the separate desktop `HeroWindowLoadoutInventory` category builder.
+- Both concrete inventory classes now reconcile the exact `SPProfiles` career object immediately before vanilla caches its item filter. Carrier discovery also uses `pairs` so a sparse modded career array cannot hide Foot Knight after an earlier nil entry. Enabled state preserves both melee and ranged; disabled state removes only Career Tweaker's owned melee insertion.
+- Added bounded `[crt:935] menu-slot` evidence, pure Lua coverage for sparse profiles/detached menu careers/deduplication, and runtime coverage requiring every resident inventory surface to have its category hook.
+
+**Solo verify candidate:** play Foot Knight, enable **Melee Weapon in Secondary Slot**, reopen Inventory, and select the lower weapon slot. Confirm both Kruber melee weapons and ranged weapons are listed and equip one of each in turn. Disable the toggle, reopen Inventory, and confirm ranged weapons remain listed while melee weapons no longer appear in the lower slot. Run `/crt_regression_test`; retain `PASS: issue619_foot_knight_contract` and `[crt:935] menu-slot surface=HeroWindowLoadoutInventoryConsole enabled=true slot={melee,ranged} melee=true ranged=true`.
+
 ## 0.4.14-beta - 2026-07-19 - #447 revive inert Devotion resolution [untested]
 
 **NOT SHIPPED: awaits issue 625 reconciliation.** crt master is ship-frozen (behind the live Workshop build); this fix lands on master only and cannot reach players until the streams reconcile.

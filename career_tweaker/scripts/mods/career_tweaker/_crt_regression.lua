@@ -1041,23 +1041,28 @@ _rt_register("issue619_foot_knight_contract", function()
         end
     end
     if mod:get("rework_es_knight_secondary_melee") then
-        local carriers = { CareerSettings and CareerSettings.es_knight }
-        for _, profile in pairs(SPProfiles or {}) do
-            for _, career in ipairs(profile.careers or {}) do
-                if career.name == "es_knight" then carriers[#carriers + 1] = career end
-            end
-        end
-        for _, career in ipairs(carriers) do
-            local slot_map = career and career.item_slot_types_by_slot_name
-            local slot_types = slot_map and slot_map.slot_ranged or {}
+        local carriers = policy.secondary_slot_carriers(
+            CareerSettings and CareerSettings.es_knight, SPProfiles)
+        for _, carrier in ipairs(carriers) do
+            local slot_types = carrier.slot_types
             local has_melee, has_ranged = false, false
-            for _, slot_type in ipairs(slot_types) do
+            for _, slot_type in pairs(slot_types) do
                 if slot_type == "melee" then has_melee = true end
                 if slot_type == "ranged" then has_ranged = true end
             end
             if not has_melee or not has_ranged then
                 return "enabled secondary slot does not accept both melee and ranged"
             end
+        end
+    end
+    for surface, class in pairs({
+        HeroWindowLoadoutInventory = HeroWindowLoadoutInventory,
+        HeroWindowLoadoutInventoryConsole = HeroWindowLoadoutInventoryConsole,
+    }) do
+        if class and class._create_item_categories
+            and not (feature.inventory_hook_surfaces
+                and feature.inventory_hook_surfaces[surface]) then
+            return "Foot Knight inventory category hook missing: " .. surface
         end
     end
     if mod:get("rework_es_knight_teamwork_great_weapon_offense") then
