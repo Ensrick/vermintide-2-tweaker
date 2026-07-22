@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.308-dev"
+local MOD_VERSION = "0.7.309-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8142,13 +8142,12 @@ local DIFFICULTY_RECRUIT = "normal"
 -- in the same run can re-mark the same peer.
 local pending_chest_respawn = {}
 
--- #299: peer_id -> { lpid, anchor (Vector3Box of the chest pos), ttl }. Armed by the
--- chest hook for players it frees/respawns at a DISTANT beacon (awaiting-rescue or
--- dead), consumed by mod._ct_chest_teleport_tick (driven from mod.update) which
--- teleports them to a living teammate the instant they become controllable. Not a
--- main-chunk local (this file sits at the Lua 5.1 200-locals cap) -- a mod field so
--- both the hook and the tick reach it without adding to the chunk's local count.
+-- #299: peer/local-player keyed rescue jobs. Anchors are plain xyz numbers, never
+-- frame-pool vectors. The policy is engine-free and pins move-before-free ordering.
+-- These are mod fields because this file sits at Lua 5.1's 200-locals chunk cap.
 mod._ct_pending_team_teleport = mod._ct_pending_team_teleport or {}
+mod._ct_chest_revive_policy = mod:dofile(
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_chest_revive_policy")
 
 -- #350 early reward access is presentation-only while vanilla remains RUNNING;
 -- register its hooks and runtime policy check before the completion-only OPEN hook.
@@ -8191,23 +8190,24 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
     -- Now we port general_tweaker's proven per-player respawn primitive
     -- (_gt_level_control.lua `_gt_host_respawn`) and apply it to every party slot,
     -- covering all three downed states:
-    --   * awaiting-rescue (hanging)  -> StatusUtils.set_respawned_network (free w/ party)
+    --   * awaiting-rescue (hanging)  -> move beside party, then assisted-respawn
     --   * knocked-down (bleeding out) -> StatusUtils.set_revived_network (revive in place)
     --   * dead / queued for respawn   -> zero respawn_timer so RespawnHandler.server_update
     --                                    spawns them at the active beacon shortly
     -- Host-authoritative (already gated on is_server above).
     --
-    -- #299: capture the chest position ONCE. Players freed/respawned from a distant
-    -- beacon (awaiting-rescue or dead) stand up alone far from the group; we arm a
-    -- deferred teleport (mod._ct_chest_teleport_tick) that returns them to whichever
-    -- living teammate is nearest THIS chest once they're controllable. The team is
-    -- clustered at the chest when it opens, so it's the right "team" anchor.
-    local chest_pos_box
+    -- #299: capture the chest position ONCE as scalar data. It selects the living
+    -- teammate who was nearest the completed trial, but the rescued unit is moved
+    -- there while still disabled and is freed only after that move succeeds.
+    local chest_anchor
     do
         local chest_unit = self._unit
         if chest_unit and Unit.alive(chest_unit) then
             local ok, p = pcall(Unit.world_position, chest_unit, 0)
-            if ok and p then chest_pos_box = Vector3Box(p) end
+            if ok and p then
+                local copied, x, y, z = pcall(function() return p.x, p.y, p.z end)
+                if copied then chest_anchor = { x = x, y = y, z = z } end
+            end
         end
     end
 
@@ -8230,19 +8230,13 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
                 local action = "none"
 
                 if is_awaiting and rawget(_G, "StatusUtils") and StatusUtils.set_respawned_network then
-                    -- hanging at a respawn beacon -> free directly (helper = self).
-                    -- #299: they stand up AT that (distant) beacon, so arm the
-                    -- return-to-team teleport for once they're controllable.
-                    StatusUtils.set_respawned_network(unit, true, unit)
-                    action = "freed-awaiting-rescue"
-                    if chest_pos_box then
-                        -- freed=true: already freed here, so the tick must NOT re-free it.
-                        -- #299 rework: key by peer_id/local_player_id -- host-owned BOTS share
-                        -- the host peer_id, so a peer-only key made sibling entries overwrite
-                        -- each other. Store the stable player OBJECT so the tick re-reads
-                        -- player_unit across the respawn/recovery instead of a fragile relookup.
-                        mod._ct_pending_team_teleport[peer_id .. "/" .. tostring(local_player_id)] =
-                            { peer_id = peer_id, lpid = local_player_id, player = player, anchor = chest_pos_box, ttl = 30.0, freed = true }
+                    -- #299 regression: do NOT clear awaiting-rescue here. July 20 logs
+                    -- prove bots can select the newly-alive player at the temporary beacon
+                    -- before the old deferred teleport runs. Arm the job, then let its
+                    -- synchronous first pass MOVE the still-disabled player before FREE.
+                    action = "armed-move-before-free"
+                    if chest_anchor and mod._ct299_arm then
+                        mod._ct299_arm(peer_id, local_player_id, player, chest_anchor, true)
                     end
                 elseif is_knocked and not is_disabled_pact and StatusUtils and StatusUtils.set_revived_network then
                     -- bleeding out -> revive in place (skip disabler-held players).
@@ -8252,17 +8246,15 @@ mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
                 elseif data and (health_state == "dead" or data.respawn_timer ~= nil) then
                     -- fully dead / in the respawn queue -> spawn at the active beacon.
                     -- #299: that beacon is ~70m ahead of the front player, so arm the
-                    -- return-to-team teleport for once the respawned unit is controllable.
+                    -- move-before-free transaction for when the hanging unit exists.
                     data.respawn_timer = 0
                     pending_chest_respawn[peer_id] = true   -- arm THP/wounded post-respawn overrides
                     action = "respawn-timer-cleared"
-                    if chest_pos_box then
+                    if chest_anchor and mod._ct299_arm then
                         -- freed=nil: the unit spawns HANGING at the beacon a few frames later
-                        -- (RespawnHandler sends ready_for_assisted_respawn=true), so the tick
-                        -- frees it once it appears, then teleports once it stands. See the
-                        -- awaiting branch for the peer/lpid keying + stored-player rationale (#299).
-                        mod._ct_pending_team_teleport[peer_id .. "/" .. tostring(local_player_id)] =
-                            { peer_id = peer_id, lpid = local_player_id, player = player, anchor = chest_pos_box, ttl = 30.0 }
+                        -- (RespawnHandler sends ready_for_assisted_respawn=true). The tick
+                        -- then performs the same MOVE-before-FREE transaction.
+                        mod._ct299_arm(peer_id, local_player_id, player, chest_anchor, false)
                     end
                 end
 
@@ -8284,129 +8276,227 @@ end)
 -- ============================================================
 -- #299: return chest-revived players to the team
 -- ============================================================
--- A player freed from AWAITING-RESCUE stands up at the respawn beacon they were
--- hanging at; a DEAD player respawned by the chest spawns hanging at a beacon
--- ~70m ahead of the front player (RespawnHandler DEFAULT_RESPAWN_DISTANCE). Either
--- way the chest revive leaves them stranded far from the group. This deferred
--- host-side pass (driven from the single mod.update owner above) teleports each
--- armed player to a living teammate the instant they become controllable.
+-- July 20 host evidence disproved the previous diagnosis: the player DID become
+-- controllable, but the branch stopped before both its success and no-anchor logs.
+-- It read POSITION_LOOKUP from mod.update, where values can be dead frame-pool
+-- vectors (BUG_CLASSES section 21), and its pcall discarded the exception. The
+-- same trace showed a bot teleporting 62.7m toward the temporary rescue beacon
+-- immediately before the player's health_state became alive.
 --
--- WHY DEFERRED, not inline in the chest hook:
---   * awaiting-rescue: the freed unit is LINK-glued to its respawn flavour_unit
---     through the recovery animation (player_character_state_waiting_for_assisted_
---     respawn.lua:30 enable_linked_movement, :59 disable on exit -> "standing"), so
---     a teleport during recovery is overwritten every frame until it stands.
---   * dead: the unit does not even exist until RespawnHandler.server_update spawns
---     it a few frames after we zero respawn_timer.
--- Polling for "alive AND not status:is_disabled()" catches the exact frame the unit
--- is standing + script-driven-movement, when locomotion:teleport_to sticks. This is
--- also the ORDERING the reporter asked for: the human reaches the team as soon as
--- they can move, minimizing the window where a bot would leash out to the beacon.
--- Host-authoritative teleport mirrors RespawnHandler.server_update's own move
--- (respawn_handler.lua:398-407): locomotion:teleport_to + rpc_teleport_unit_to.
+-- Correct order: while still disabled, unlink and MOVE beside a living teammate,
+-- broadcast the move, then FREE. Dead players wait only until RespawnHandler has
+-- created their hanging unit. Once server health_state is alive, verify retention
+-- and permit one corrective move. Errors are visible and bounded.
 do
-    -- nearest ALIVE, controllable (not disabled) teammate to `anchor_pos`, excluding
-    -- `exclude_unit`. Human or bot -- either one anchors "the team". Returns unit/nil.
-    local function _nearest_controllable_teammate(anchor_pos, exclude_unit)
+    local policy = mod._ct_chest_revive_policy
+
+    local function _game_time()
+        local tm = Managers.time
+        if not (tm and tm.time) then return nil end
+        local ok, t = pcall(tm.time, tm, "game")
+        return ok and type(t) == "number" and t or nil
+    end
+
+    local function _world_xyz(unit)
+        local ok, x, y, z = pcall(function()
+            local p = Unit.world_position(unit, 0)
+            return p.x, p.y, p.z
+        end)
+        if ok and type(x) == "number" and type(y) == "number" and type(z) == "number" then
+            return x, y, z
+        end
+        return nil
+    end
+
+    local function _nearest_controllable_teammate(anchor, exclude_unit)
         local pm = Managers.player
         local players = pm and pm.human_and_bot_players and pm:human_and_bot_players()
         if not players then return nil end
-        local best, best_d
-        for _, p in pairs(players) do
-            local u = p and p.player_unit
-            if u and u ~= exclude_unit and Unit.alive(u) then
-                local st = ScriptUnit.has_extension(u, "status_system")
-                local pos = POSITION_LOOKUP[u]
-                if st and pos and not st:is_disabled() then
-                    local d = anchor_pos and Vector3.distance_squared(anchor_pos, pos) or 0
-                    if not best_d or d < best_d then best_d, best = d, u end
+        local best, best_d, best_x, best_y, best_z
+        for _, player in pairs(players) do
+            local unit = player and player.player_unit
+            if unit and unit ~= exclude_unit and Unit.alive(unit) then
+                local status = ScriptUnit.has_extension(unit, "status_system")
+                local valid, disabled = pcall(function() return status and status:is_disabled() end)
+                local x, y, z = _world_xyz(unit)
+                if valid and status and not disabled and x then
+                    local dx, dy, dz = x - anchor.x, y - anchor.y, z - anchor.z
+                    local distance = dx * dx + dy * dy + dz * dz
+                    if not best_d or distance < best_d then
+                        best, best_d, best_x, best_y, best_z = unit, distance, x, y, z
+                    end
                 end
             end
         end
-        return best
+        return best, best_x, best_y, best_z
+    end
+
+    local function _retained_near_team(entry, unit)
+        local _, tx, ty, tz = _nearest_controllable_teammate(entry.anchor, unit)
+        local ux, uy, uz = _world_xyz(unit)
+        if not (tx and ux) then return nil end
+        local dx, dy, dz = ux - tx, uy - ty, uz - tz
+        return dx * dx + dy * dy + dz * dz <= policy.RETAIN_DISTANCE_SQ
+    end
+
+    local function _move_to_team(entry, unit, unlink_first)
+        local teammate, x, y, z = _nearest_controllable_teammate(entry.anchor, unit)
+        if not teammate then return nil, "no-controllable-team-anchor" end
+        local locomotion = ScriptUnit.has_extension(unit, "locomotion_system")
+        if not (locomotion and locomotion.teleport_to) then
+            return false, "locomotion-extension-missing"
+        end
+
+        if unlink_first then
+            if not (rawget(_G, "LocomotionUtils") and LocomotionUtils.disable_linked_movement) then
+                return false, "disable-linked-movement-missing"
+            end
+            local unlinked, unlink_err = pcall(LocomotionUtils.disable_linked_movement, unit)
+            if not unlinked then return false, "unlink-failed: " .. tostring(unlink_err) end
+        end
+
+        local pos = Vector3(x, y, z)
+        local rot = Unit.local_rotation(teammate, 0)
+        local lookup = rawget(_G, "POSITION_LOOKUP")
+        if lookup then lookup[unit] = Vector3(x, y, z) end
+        local moved, move_err = pcall(locomotion.teleport_to, locomotion, pos, rot)
+        if not moved then return false, "teleport-failed: " .. tostring(move_err) end
+
+        local network = Managers.state and Managers.state.network
+        local go_id = network and network:unit_game_object_id(unit)
+        if not (go_id and network.network_transmit) then
+            return false, "network-game-object-missing"
+        end
+        local sent, send_err = pcall(network.network_transmit.send_rpc_clients,
+            network.network_transmit, "rpc_teleport_unit_to", go_id, pos, rot)
+        if not sent then return false, "teleport-rpc-failed: " .. tostring(send_err) end
+
+        local ux, uy, uz = _world_xyz(unit)
+        local retained = ux and ((ux - x) * (ux - x) + (uy - y) * (uy - y)
+            + (uz - z) * (uz - z) <= policy.RETAIN_DISTANCE_SQ)
+        return true, retained and "retained" or "readback-drift"
+    end
+
+    local function _health_alive(entry)
+        local party_manager = Managers.party
+        local status = party_manager and party_manager.get_player_status
+            and party_manager:get_player_status(entry.peer_id, entry.lpid)
+        return status and status.game_mode_data
+            and status.game_mode_data.health_state == "alive" or false
+    end
+
+    local function _process(key, entry, dt)
+        entry.elapsed = (entry.elapsed or 0) + (dt or 0)
+        local now = _game_time()
+        local timed_out = (now and entry.deadline and now >= entry.deadline)
+            or (not now and entry.elapsed >= policy.TIMEOUT_SECONDS)
+        local player = entry.player
+        if not (player and player.player_unit) then
+            player = Managers.player:player(entry.peer_id, entry.lpid) or player
+            entry.player = player or entry.player
+        end
+        local unit = player and player.player_unit
+        local alive = unit and Unit.alive(unit) and true or false
+        local status = alive and ScriptUnit.has_extension(unit, "status_system") or nil
+        local awaiting = status and status.is_ready_for_assisted_respawn
+            and status:is_ready_for_assisted_respawn() or false
+        local health_alive = _health_alive(entry)
+        local retained
+        if entry.moved and entry.freed and health_alive then
+            retained = _retained_near_team(entry, unit)
+        end
+        local action = policy.next_action(entry, {
+            alive = alive,
+            awaiting = awaiting,
+            health_alive = health_alive,
+            retained = retained,
+            timed_out = timed_out,
+        })
+        local sig = table.concat({ tostring(alive), tostring(awaiting),
+            tostring(health_alive), tostring(entry.moved), tostring(entry.freed),
+            tostring(retained), tostring(action) }, "/")
+        if entry._last_sig ~= sig then
+            entry._last_sig = sig
+            pcall(printf, "[ct:299] key=%s alive=%s awaiting=%s health_alive=%s moved=%s freed=%s retained=%s action=%s",
+                tostring(key), tostring(alive), tostring(awaiting), tostring(health_alive),
+                tostring(entry.moved), tostring(entry.freed), tostring(retained), action)
+        end
+
+        if action == "move_then_free" then
+            local moved, detail = _move_to_team(entry, unit, true)
+            if moved == nil then
+                if entry._last_wait ~= detail then
+                    entry._last_wait = detail
+                    pcall(printf, "[ct:299] key=%s waiting: %s", tostring(key), detail)
+                end
+                return false
+            end
+            if not moved then error(detail) end
+            entry.moved = true
+            pcall(printf, "[ct:299] key=%s pre-move complete (%s); now freeing", tostring(key), detail)
+            StatusUtils.set_respawned_network(unit, true, unit)
+            entry.freed = true
+            pcall(printf, "[ct:299] key=%s assisted-respawn recovery armed AFTER move", tostring(key))
+            return false
+        elseif action == "free" then
+            StatusUtils.set_respawned_network(unit, true, unit)
+            entry.freed = true
+            return false
+        elseif action == "correct_once" then
+            local moved, detail = _move_to_team(entry, unit, false)
+            if moved == nil then return false end
+            entry.corrections = (entry.corrections or 0) + 1
+            if not moved then error(detail) end
+            pcall(printf, "[ct:299] key=%s recovery drift corrected once (%s)", tostring(key), detail)
+            return false
+        elseif action == "complete" then
+            local result = retained == false and "DEGRADED" or "PASS"
+            pcall(printf, "[ct:299] key=%s %s move-before-free retained=%s corrections=%d",
+                tostring(key), result, tostring(retained), entry.corrections or 0)
+            return true
+        elseif action == "drop" then
+            pcall(printf, "[ct:299] key=%s DROPPED timeout=%s errors=%d state=%s",
+                tostring(key), tostring(timed_out), entry.errors or 0, tostring(sig))
+            return true
+        end
+        return false
+    end
+
+    mod._ct299_process = function(key, entry, dt)
+        local ok, drop_or_err = pcall(_process, key, entry, dt)
+        if ok then return drop_or_err end
+        entry.errors = (entry.errors or 0) + 1
+        pcall(printf, "[ct:299] FAILED key=%s error=%s attempt=%d/%d",
+            tostring(key), tostring(drop_or_err), entry.errors, policy.MAX_ERRORS)
+        return entry.errors >= policy.MAX_ERRORS
+    end
+
+    mod._ct299_arm = function(peer_id, local_player_id, player, anchor, process_now)
+        local entry = policy.new_entry(peer_id, local_player_id, player, anchor, _game_time())
+        if not entry then
+            pcall(printf, "[ct:299] arm rejected peer=%s lpid=%s (missing scalar chest anchor)",
+                tostring(peer_id), tostring(local_player_id))
+            return nil
+        end
+        mod._ct_pending_team_teleport[entry.key] = entry
+        pcall(printf, "[ct:299] armed key=%s deadline=%s process_now=%s",
+            entry.key, tostring(entry.deadline), tostring(process_now))
+        if process_now and mod._ct299_process(entry.key, entry, 0) then
+            mod._ct_pending_team_teleport[entry.key] = nil
+        end
+        return entry
     end
 
     mod._ct_pending_team_teleport = mod._ct_pending_team_teleport or {}
-
     mod._ct_chest_teleport_tick = function(dt)
         local pending = mod._ct_pending_team_teleport
         if not pending or next(pending) == nil then return end
         if not (Managers.player and Managers.player.is_server) then
-            -- lost authority (mission end / became client): drop everything.
-            for k in pairs(pending) do pending[k] = nil end
+            for key in pairs(pending) do pending[key] = nil end
             return
         end
         for key, entry in pairs(pending) do
-            local drop = false
-            pcall(function()
-                entry.ttl = (entry.ttl or 0) - (dt or 0)
-
-                -- #299 rework: resolve the unit via the STORED player object first (stable
-                -- across the respawn/recovery unit swap); only relookup by peer/lpid if the
-                -- stored handle has no unit yet (dead-branch: unit spawns a few frames later).
-                -- The prior code re-looked-up every tick and, per the 2026-07-05 host log,
-                -- never observed the freed unit as alive+controllable -> teleport never fired.
-                local player = entry.player
-                if not (player and player.player_unit) then
-                    player = Managers.player:player(entry.peer_id, entry.lpid) or player
-                    entry.player = player or entry.player
-                end
-                local unit = player and player.player_unit
-                local alive = (unit and Unit.alive(unit)) and true or false
-                local st = alive and ScriptUnit.has_extension(unit, "status_system") or nil
-                local awaiting = (st and st.is_ready_for_assisted_respawn and st:is_ready_for_assisted_respawn()) and true or false
-                local disabled = (st and st:is_disabled()) and true or false
-
-                -- Per-eval diagnostic, throttled to state CHANGES (armed always in dev per the
-                -- diagnostics doctrine). If a teleport still fails to fire, this prints the exact
-                -- reason (player missing / unit dead / stuck disabled / stuck awaiting).
-                local sig = tostring(player ~= nil) .. tostring(alive) .. tostring(disabled) .. tostring(awaiting)
-                if entry._last_sig ~= sig then
-                    entry._last_sig = sig
-                    pcall(printf, "[ct-chest-revive] tick key=%s found=%s alive=%s disabled=%s awaiting=%s ttl=%.1f (#299)",
-                        tostring(key), tostring(player ~= nil), tostring(alive), tostring(disabled), tostring(awaiting), entry.ttl or -1)
-                end
-
-                -- Dead-branch case: the respawned unit spawns HANGING at the beacon
-                -- (ready_for_assisted_respawn) and would wait for a manual rescue. Free it
-                -- ONCE (starts the same recovery the awaiting branch used), then fall
-                -- through to the controllable check. `freed` guards against re-sending.
-                if st and not entry.freed and awaiting
-                    and rawget(_G, "StatusUtils") and StatusUtils.set_respawned_network then
-                    StatusUtils.set_respawned_network(unit, true, unit)
-                    entry.freed = true
-                    pcall(printf, "[ct-chest-revive] freed respawned-hanging key=%s at beacon; awaiting stand to teleport (#299)", tostring(key))
-                end
-
-                if st and not disabled then
-                    -- controllable now -> send them to the team.
-                    local anchor_pos = entry.anchor and entry.anchor:unbox()
-                    local teammate = _nearest_controllable_teammate(anchor_pos, unit)
-                    if teammate then
-                        local loco = ScriptUnit.has_extension(unit, "locomotion_system")
-                        local pos = Unit.local_position(teammate, 0)
-                        local rot = Unit.local_rotation(teammate, 0)
-                        if loco and pos then
-                            loco:teleport_to(pos, rot)
-                            local nm = Managers.state and Managers.state.network
-                            local go_id = nm and nm:unit_game_object_id(unit)
-                            if go_id then
-                                nm.network_transmit:send_rpc_clients("rpc_teleport_unit_to", go_id, pos, rot)
-                            end
-                            pcall(printf, "[ct-chest-revive] teleported key=%s back to the team (#299)", tostring(key))
-                        end
-                    else
-                        pcall(printf, "[ct-chest-revive] no controllable teammate to anchor key=%s -- left in place (#299)", tostring(key))
-                    end
-                    drop = true
-                elseif entry.ttl <= 0 then
-                    -- Log the FINAL state so a repeat failure is self-diagnosing.
-                    pcall(printf, "[ct-chest-revive] team-teleport TTL expired for key=%s (found=%s alive=%s disabled=%s awaiting=%s) (#299)",
-                        tostring(key), tostring(player ~= nil), tostring(alive), tostring(disabled), tostring(awaiting))
-                    drop = true
-                end
-            end)
-            if drop then pending[key] = nil end
+            if mod._ct299_process(key, entry, dt) then pending[key] = nil end
         end
     end
 end
@@ -8609,9 +8699,11 @@ end)
 --     "reward_divider" too and stack them below the header with per-row offsets
 --     (2 columns x 9 rows, 28px pitch, "+N more" overflow) inside the band that is
 --     empty in the gated context (no deed rewards, no collectibles in the keep).
--- (2) "shows all over the keep": now gated on the party actually QUEUING a Chaos
---     Wastes expedition -- see mod._ct_preparing_cw_expedition below.
-CT_BOON_PREVIEW_461_MARKER = "boon_preview_ingame_playerlist_v0.7.258"
+-- (2) "shows all over the keep": the queue gate shipped in v0.7.258 was too
+--     late. July 20 v0.7.305 logs prove the desired pre-queue context already
+--     reports level=morris_hub, while the queue predicate remains false. The
+--     preview now shares #505's exact native chamber-level predicate.
+CT_BOON_PREVIEW_461_MARKER = "boon_preview_pilgrimage_context"
 
 -- TRUE while this peer's party is queued for a Chaos Wastes expedition (host pressed
 -- host/start on a CW journey; not yet transitioned out of the keep). Direct port of
@@ -8799,27 +8891,44 @@ function mod._ct_build_boon_preview_widgets(boons)
 end
 
 -- Build point: vanilla calls _setup_deed_reward_data on EVERY panel activation
--- (set_active(true), ingame_player_list_ui_v2.lua:1224), so all three gates below
--- re-evaluate per Tab press. Gates: keep-only (self._is_in_inn), local display toggle
--- preview_starting_boons, and (v0.7.258, the user's "should only show while the team
--- prepares an expedition" report) a queued Chaos Wastes expedition. Builds onto the
--- instance so the per-frame _draw hook only draws (zero per-frame allocation).
+-- (set_active(true), ingame_player_list_ui_v2.lua:1224), so all gates below
+-- re-evaluate per Tab press. Gates: keep UI, the local display toggle, and the
+-- exact `morris_hub` Pilgrimage Chamber level shared with #505. Queue state is
+-- diagnostic only: the requested preparation window begins before queueing.
+-- Builds onto the instance so the per-frame _draw hook only draws (zero
+-- per-frame allocation).
 mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data", function(self)
     self._ct_boon_preview_widgets = nil
     self._ct_boon_header_widget = nil
-    if not self._is_in_inn then return end
-    if not mod:get("preview_starting_boons") then return end
-    if not mod._ct_preparing_cw_expedition() then
-        pcall(printf, "[ct:461] boon preview suppressed: no Chaos Wastes expedition queued")
+    local local_enabled = mod:get("preview_starting_boons") == true
+    local level_key = mod._ct_pilgrimage_context
+        and mod._ct_pilgrimage_context.current_level_key(Managers) or nil
+    local in_chamber = mod._ct_in_pilgrimage_chamber
+        and mod._ct_in_pilgrimage_chamber(level_key) or false
+    local queued = mod._ct_preparing_cw_expedition()
+    if not self._is_in_inn or not in_chamber or not local_enabled then
+        pcall(printf,
+            "[ct:461] boon preview suppressed context=%s level=%s keep_ui=%s local_enabled=%s host_effective_enabled=%s source=%s queued=%s",
+            in_chamber and "pilgrimage_chamber" or "outside_pilgrimage_chamber",
+            tostring(level_key), tostring(self._is_in_inn == true), tostring(local_enabled),
+            tostring(mod._ct_effective_setting("preview_starting_boons") == true),
+            tostring(mod._ct_effective_setting_source()), tostring(queued))
         return
     end
     local ok, err = pcall(function()
         local boons = mod._ct_collect_start_boons()
-        if #boons == 0 then return end
+        if #boons == 0 then
+            pcall(printf,
+                "[ct:461] boon preview suppressed context=pilgrimage_chamber level=%s reason=no_configured_boons source=%s queued=%s",
+                tostring(level_key), tostring(mod._ct_effective_setting_source()), tostring(queued))
+            return
+        end
         self._ct_boon_preview_widgets = mod._ct_build_boon_preview_widgets(boons)
         self._ct_boon_header_widget = mod._ct_build_boon_preview_header(
             string.format("%s (%d)", mod:localize("ct_boon_preview_header"), #boons))
-        pcall(printf, "[ct:461] boon preview built: %d boons (CW expedition queued)", #boons)
+        pcall(printf,
+            "[ct:461] boon preview built context=pilgrimage_chamber level=%s boons=%d source=%s queued=%s",
+            tostring(level_key), #boons, tostring(mod._ct_effective_setting_source()), tostring(queued))
     end)
     if not ok then
         self._ct_boon_preview_widgets = nil
@@ -8894,21 +9003,23 @@ mod:command("ct_preview_boons", "List the starting boons this run will grant (ho
         mod:echo("[ct] No starting boons configured. Enable some under Starting Boons in the ct menu.")
         return
     end
-    mod:echo("%s", string.format("[ct] Starting Boons preview (%d) -- shown on the Tab panel while a CW expedition is queued in the keep:", #boons))
+    mod:echo("%s", string.format("[ct] Starting Boons preview (%d) -- shown on the Tab panel in the Pilgrimage Chamber:", #boons))
     for i = 1, #boons do
         local b = boons[i]
         mod:echo("%s", string.format("  %d. %s [%s]%s", i, b.display or b.name, tostring(b.rarity),
             b.modded and " (modded -- wire-gated for non-ct peers)" or ""))
     end
-    mod:echo("%s", mod._ct_preparing_cw_expedition()
-        and "[ct] CW expedition queued: the Tab panel shows this list now."
-        or "[ct] No CW expedition queued: the Tab panel stays vanilla until the host starts one.")
+    local level_key = mod._ct_pilgrimage_context
+        and mod._ct_pilgrimage_context.current_level_key(Managers) or nil
+    mod:echo("%s", mod._ct_in_pilgrimage_chamber and mod._ct_in_pilgrimage_chamber(level_key)
+        and "[ct] Pilgrimage Chamber active: the Tab panel shows this list now."
+        or string.format("[ct] Outside the Pilgrimage Chamber (level=%s): enter it through the Chaos Wastes keep door to show this list.", tostring(level_key)))
 end)
 
 -- #461 regression: the marker + both build helpers + the display toggle stay wired, so a
 -- future refactor can't silently drop the Tab-hold boon preview.
 _rt_register("issue461_boon_preview_wired", function()
-    if CT_BOON_PREVIEW_461_MARKER ~= "boon_preview_ingame_playerlist_v0.7.258" then
+    if CT_BOON_PREVIEW_461_MARKER ~= "boon_preview_pilgrimage_context" then
         return "#461 REGRESSION: CT_BOON_PREVIEW_461_MARKER missing/mismatch; got " .. tostring(CT_BOON_PREVIEW_461_MARKER)
     end
     if type(mod._ct_collect_start_boons) ~= "function" then
@@ -8923,15 +9034,15 @@ _rt_register("issue461_boon_preview_wired", function()
     if type(mod:get("preview_starting_boons")) ~= "boolean" then
         return "#461 REGRESSION: preview_starting_boons checkbox not registered (mod:get non-boolean)"
     end
-    -- v0.7.258 follow-ups: the CW-queue gate must exist and be callable anywhere
-    -- (returns plain false outside a queued expedition, never throws), and no row
-    -- widget may ever anchor on the sizeless "reward_item" node again (the off-screen
-    -- bug class: header visible, zero rows).
-    if type(mod._ct_preparing_cw_expedition) ~= "function" then
-        return "#461 REGRESSION: mod._ct_preparing_cw_expedition missing (CW-queue gate)"
+    -- #461 chamber follow-up: use the same exact level-key boundary as #505.
+    -- The queue probe remains diagnostic, never a display gate.
+    if type(mod._ct_in_pilgrimage_chamber) ~= "function" then
+        return "#461 REGRESSION: shared Pilgrimage Chamber gate missing"
     end
-    if type(mod._ct_preparing_cw_expedition()) ~= "boolean" then
-        return "#461 REGRESSION: _ct_preparing_cw_expedition must return a boolean"
+    if not mod._ct_in_pilgrimage_chamber("morris_hub")
+        or mod._ct_in_pilgrimage_chamber("inn_level")
+        or mod._ct_in_pilgrimage_chamber("dlc_morris_map") then
+        return "#461 REGRESSION: preview chamber gate must accept only morris_hub"
     end
     local sample = mod._ct_build_boon_preview_widgets({ { name = "rt_probe", display = "rt probe", icon = nil } })
     if type(sample) ~= "table" or #sample == 0 then
@@ -9828,14 +9939,19 @@ _rt_register("spawn_pickup_returns_both_values", function()
     end
 end)
 
--- #299 chest-revive team-teleport wiring: the deferred return-to-team pass must be
--- present (function + pending table) so a chest-revived player can't be left stranded
--- at a distant respawn beacon. The tick is driven from the single mod.update owner
--- (verified separately by the paced-send drainer check); here we just assert the
--- callable + its pending table exist and the feature toggle is registered.
-_rt_register("chest_revive_team_teleport_wired", function()
+-- #299 ordered rescue transaction. Presence alone is insufficient: July 20 logs
+-- proved the old tick existed but died silently before teleporting. Pin the pure
+-- policy marker plus the arm/process/tick adapters that enforce MOVE before FREE.
+_rt_register("issue299_chest_revive_team_teleport_ordered", function()
+    local policy = mod._ct_chest_revive_policy
+    if type(policy) ~= "table" or policy.MARKER ~= "ct299:move_before_free_v1" then
+        return "#299 REGRESSION: move-before-free policy marker missing/mismatch"
+    end
+    if type(mod._ct299_arm) ~= "function" or type(mod._ct299_process) ~= "function" then
+        return "#299 REGRESSION: ordered rescue arm/process adapters missing"
+    end
     if type(mod._ct_chest_teleport_tick) ~= "function" then
-        return "#299 REGRESSION: mod._ct_chest_teleport_tick missing (chest-revive return-to-team teleport)"
+        return "#299 REGRESSION: ordered rescue deferred tick missing"
     end
     if type(mod._ct_pending_team_teleport) ~= "table" then
         return "#299 REGRESSION: mod._ct_pending_team_teleport table missing (teleport arm store)"

@@ -1,5 +1,5 @@
 -- _gut_exit_snapshot_core.lua -- pure, engine-free divergence diff for the exit-time
--- loadout/cosmetic persistence backstop (issues #354, #353, #287, #175).
+-- loadout/cosmetic persistence backstop (issues #354, #353, #287, #175, #273).
 --
 -- WHY THIS EXISTS. The modded native-loadout store (_gut_native_loadouts.lua) is captured
 -- on EQUIP EVENTS only -- the mirror write hooks plus the outer BackendUtils.set_loadout_item
@@ -23,8 +23,20 @@
 -- verbatim. So a slot the live read could not resolve (a late-registering synthetic id) can
 -- never blank out a legitimately stored id, and re-running the diff on a merged row diverges 0
 -- (idempotent).
+--
+-- OWNER INVARIANT (#273). A live slot is durable only when the items interface owns that slot.
+-- Mode-specific interfaces (notably Deus for slot_melee/slot_ranged) mint run-local backend ids;
+-- persisting those ids into the Adventure store makes them unresolvable after the mechanism
+-- tears down. The engine-facing caller therefore checks interface identity before every read.
 
 local Core = {}
+
+-- slot_owned_by_items(slot_interface, items_interface) -> bool
+-- Interface identity is the engine's authoritative per-slot ownership boundary. Fail closed
+-- when either side is unavailable: an unknown owner must never be treated as durable.
+function Core.slot_owned_by_items(slot_interface, items_interface)
+    return slot_interface ~= nil and items_interface ~= nil and slot_interface == items_interface
+end
 
 -- diff_row(live, stored, slot_names) -> merged_or_nil, diverged, changes
 --   live       : { [slot] = value }  values already canonicalized to the store's format;
