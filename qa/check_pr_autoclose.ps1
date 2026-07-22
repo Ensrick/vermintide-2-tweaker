@@ -130,6 +130,15 @@ function Invoke-SelfTest {
     $comments[0].body = "## CLOSURE AUTHORIZATION`nVerification: user-confirmed`nAuthorized PR: #123"
     $comments[0].user.login = 'untrusted'
     if (Test-TrustedClosureReceipt $comments @('Ensrick') 123) { throw 'untrusted author was accepted' }
+    $tempBody = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-pr-body-" + [guid]::NewGuid().ToString('N') + '.md')
+    try {
+        [System.IO.File]::WriteAllText($tempBody, 'Refs #12', (New-Object System.Text.UTF8Encoding($false)))
+        $hostExe = (Get-Process -Id $PID).Path
+        $null = & $hostExe -NoProfile -File $PSCommandPath -BodyPath $tempBody -Repository 'owner/repo' -Quiet 2>&1
+        if ($LASTEXITCODE -ne 0) { throw '-BodyPath clean-reference command path failed' }
+    } finally {
+        if (Test-Path -LiteralPath $tempBody) { Remove-Item -LiteralPath $tempBody -Force }
+    }
     Write-Host "[check_pr_autoclose -SelfTest] OK - $($cases.Count) keyword/case fixtures plus reference, receipt, and false-positive fixtures passed."
     return 0
 }
@@ -137,6 +146,7 @@ function Invoke-SelfTest {
 if ($SelfTest) { exit (Invoke-SelfTest) }
 
 $event = $null
+$hasBodyContext = $PSBoundParameters.ContainsKey('Body')
 if (-not $EventPath -and $env:GITHUB_EVENT_PATH) { $EventPath = $env:GITHUB_EVENT_PATH }
 if ($EventPath) {
     if (-not (Test-Path -LiteralPath $EventPath)) {
@@ -150,7 +160,10 @@ if ($EventPath) {
     }
     if (-not $Repository) { $Repository = "$($event.repository.full_name)" }
     if (-not $PullRequestNumber -and $event.pull_request.number) { $PullRequestNumber = [int]$event.pull_request.number }
-    if (-not $PSBoundParameters.ContainsKey('Body') -and $event.pull_request) { $Body = "$($event.pull_request.body)" }
+    if (-not $hasBodyContext -and $event.pull_request) {
+        $Body = "$($event.pull_request.body)"
+        $hasBodyContext = $true
+    }
     if ($PostMergeAudit -and (-not $event.pull_request.merged)) {
         if (-not $Quiet) { Write-Host '[check_pr_autoclose] SKIP - closed pull request was not merged.' -ForegroundColor DarkGray }
         exit 0
@@ -162,8 +175,9 @@ if ($BodyPath) {
         exit 2
     }
     $Body = Get-Content -LiteralPath $BodyPath -Raw
+    $hasBodyContext = $true
 }
-if (-not $PSBoundParameters.ContainsKey('Body') -and -not $event) {
+if (-not $hasBodyContext) {
     if ($env:GITHUB_ACTIONS -eq 'true') {
         Write-Host '[check_pr_autoclose] ERROR - GitHub CI supplied no pull-request body context.' -ForegroundColor Red
         exit 2
