@@ -985,12 +985,12 @@ end)
 -- (cim-installed OR vanilla), because cim only APPENDS to the rarities
 -- table — vanilla ids 1..N are unchanged.
 --
--- Downstream effect on cim clients: they see the modded item as "unique"
--- in their loadout view. This is the stated user requirement ("modded
--- rarity should show up as regular unique/veteran rarity for the client").
--- The host still sees "modded" because we restore item.rarity after the
--- sync call, and the host's own UI reads item.rarity locally — not via
--- the RPC pipeline.
+-- Downstream safety effect on clients without CIM: they retain `unique` and
+-- never resolve a custom rarity id. CIM installations separately restore
+-- presentation from a boolean-only side channel. The owner's Hold-Tab row is
+-- also reconstructed from PlayerManager loadout data, so it needs the same
+-- boolean mirrored locally; restoring the backend item alone is insufficient
+-- (#598, source: ingame_player_list_ui_v2.lua:1500-1512).
 --
 -- This is the minimum-risk patch: a single wrap-hook on one function
 -- catches every call site (`simple_inventory_extension.lua:885` on equip,
@@ -1004,11 +1004,28 @@ end)
 -- the packet silently — they keep the "unique" rarity baked in by the host's
 -- wire-rewrite hook and never crash.
 --
--- Keyed by unique_id (peer_id .. ":" .. local_player_id) → slot_name → true.
+-- Keyed by unique_id (peer_id .. ":" .. local_player_id) → slot_name →
+-- exact boolean. False is retained deliberately: it is newer evidence that a
+-- vanilla item replaced a formerly-modded slot, not the same thing as an
+-- unknown/not-yet-synchronized slot.
 local _cim_modded_slot_state = {}
 
 local function _cim_unique_id(peer_id, local_player_id)
     return tostring(peer_id) .. ":" .. tostring(local_player_id)
+end
+
+local function _cim_record_modded_slot(peer_id, local_player_id, slot_name, is_modded)
+    if type(slot_name) ~= "string" or type(is_modded) ~= "boolean" then
+        return nil
+    end
+    local uid = _cim_unique_id(peer_id, local_player_id)
+    local slots = _cim_modded_slot_state[uid]
+    if not slots then
+        slots = {}
+        _cim_modded_slot_state[uid] = slots
+    end
+    slots[slot_name] = is_modded
+    return uid
 end
 
 -- ============================================================
@@ -1068,6 +1085,10 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
         do
             local peer_id = player:network_id()
             local local_player_id = player:local_player_id()
+            -- `others` intentionally excludes the sender. Mirror the exact
+            -- boolean locally before sending so the owner's Hold-Tab row uses
+            -- the same safe presentation state as receiving CIM peers (#598).
+            _cim_record_modded_slot(peer_id, local_player_id, slot_name, is_modded)
             -- Send even is_modded=false so equipping a non-modded item clears any stale
             -- modded flag on that slot. CIM_RPC_SCHEMA is the FIRST positional arg after
             -- the target (VMF_RECIPES § 10); the receiver gate drops shape mismatches.
@@ -1105,9 +1126,9 @@ local function _rpc_cim_modded_slot(sender_peer_id, schema_version, peer_id, loc
             tostring(sender_peer_id), tostring(schema_version), tostring(CIM_RPC_SCHEMA))
         return
     end
-    local uid = _cim_unique_id(peer_id, local_player_id)
-    _cim_modded_slot_state[uid] = _cim_modded_slot_state[uid] or {}
-    _cim_modded_slot_state[uid][slot_name] = is_modded and true or nil
+    local uid = _cim_record_modded_slot(peer_id, local_player_id, slot_name,
+        is_modded)
+    if not uid then return end
 
     -- Retroactive patch: if PlayerManager._player_loadouts already has the
     -- "unique"-coerced item for this slot, upgrade it back to "modded" so the
@@ -1119,7 +1140,8 @@ local function _rpc_cim_modded_slot(sender_peer_id, schema_version, peer_id, loc
         if stored then
             stored.rarity = mod._cim246_tab_preview_core
                 and mod._cim246_tab_preview_core.resolve_rarity(stored.rarity, true, is_modded)
-                or (is_modded and "modded" or stored.rarity)
+                or (is_modded and "modded"
+                    or (stored.rarity == "modded" and "unique" or stored.rarity))
         end
     end
 end
@@ -1180,12 +1202,14 @@ mod:hook("PlayerManager", "rpc_sync_loadout_slot", function(func, self, channel_
     local slot_state = _cim_modded_slot_state[uid]
     if not slot_state then return end
     local slot_name = NL and NL.equipment_slots and NL.equipment_slots[slot_id]
-    if not slot_name or not slot_state[slot_name] then return end
+    if not slot_name or type(slot_state[slot_name]) ~= "boolean" then return end
     local stored = self._player_loadouts and self._player_loadouts[uid] and self._player_loadouts[uid][slot_name]
     if stored then
         stored.rarity = mod._cim246_tab_preview_core
-            and mod._cim246_tab_preview_core.resolve_rarity(stored.rarity, true, true)
-            or "modded"
+            and mod._cim246_tab_preview_core.resolve_rarity(stored.rarity, true,
+                slot_state[slot_name])
+            or (slot_state[slot_name] and "modded"
+                or (stored.rarity == "modded" and "unique" or stored.rarity))
     end
 end)
 mod._cim_rpc_loadout_guard_installed = true

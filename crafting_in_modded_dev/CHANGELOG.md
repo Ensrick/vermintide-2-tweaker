@@ -10,6 +10,14 @@
 
 **Verify:** Open Salvage on Bounty Hunter after equipping and then replacing Dual Maces; the unequipped exact item must appear. Switch to Kruber and reopen Salvage. The console log must contain bounded `[cim:628] salvage_state` rows naming the exact eligibility or rejection reason and saved loadout owners for each crafted item.
 
+## Unreleased - #598 owner/peer Hold-Tab rarity parity [not-started]
+
+- Mirror the boolean-only modded-slot side channel into the sender's local
+  presentation state because VMF's `others` target correctly excludes it.
+- Retain explicit `false` slot state so replacing a modded weapon clears stale
+  chrome, and repair the already-rendered Hold-Tab rarity texture in the same
+  post-hook cycle. Custom icon/material identifiers remain off the wire.
+
 ## 0.8.105-dev (2026-07-21) - #592/#928 bounded CWV Blacksmith seed contract [not-started]
 
 - Reconciled the Craft Item selector and runtime diagnostics with CWV's current

@@ -140,6 +140,16 @@ Last updated: 2026-07-22.
 | Expected post-fix | Icons and hover tooltips match the live equipped skins in both host-to-client directions, update after swaps, and clear to the base icon for default skin. |
 | Detection | Run the offline Lua suite and `/cim_regression_test`; require `issue246_tab_preview_exact_skin_icon` PASS. Unknown registered identity emits one bounded `[cim:246]` line. |
 
+### issue598-tab-preview-rarity-parity - Owner and CIM peers use the same safe modded frame
+
+| Field | Value |
+|-------|-------|
+| Scope | Hold-Tab melee/ranged rarity frames only; custom icon/model/material names never enter this RPC. |
+| Solo repro first | Equip a Career Weapon Variants weapon, hold Tab, then equip the Blightreaper and hold Tab. Replace either with a vanilla weapon and hold Tab again. |
+| Expected post-fix | The local player's CWV weapon and Blightreaper use the Modded/Cursed presentation registered on that installation; replacing the item clears stale modded chrome immediately. A vanilla item remains vanilla. |
+| Co-op follow-up | Only after solo passes: host and client reverse roles, inspect their own and each other's Hold-Tab rows, then repeat with one peer lacking CIM. The CIM peer may restore local modded chrome; the peer without CIM receives vanilla-safe `unique` and no custom resource identity. |
+| Detection | Offline `CIM #598` tests prove sender-local mirroring, explicit-false clearing, same-cycle texture repair, and separation from custom resources. Run `/cim_regression_test` in the exact live build before visual checks. |
+
 ---
 
 ## Custom Rarity UI

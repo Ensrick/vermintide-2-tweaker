@@ -43,6 +43,13 @@ end
 -- may locally restore the frame without sending an atlas/material name.
 Core.resolve_rarity = function(wire_rarity, cim_metadata_capable, is_modded)
     if cim_metadata_capable == true and is_modded == true then return "modded" end
+    -- An explicit false is newer slot state, not missing metadata. Undo a
+    -- previously restored local frame when that slot is replaced by a vanilla
+    -- item. The network-safe representation of every CIM rarity is `unique`.
+    if cim_metadata_capable == true and is_modded == false
+            and wire_rarity == "modded" then
+        return "unique"
+    end
     return wire_rarity
 end
 
