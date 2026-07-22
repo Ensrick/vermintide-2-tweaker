@@ -1,5 +1,18 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## Unreleased — #925 bounded live portrait invalidation
+
+- DCP now consumes the shared local presentation generation emitted by
+  successful hat/outfit equips. It drains at most eight records per tick and
+  performs one portrait-settings synchronization for the batch.
+- The writer's exact cosmetic key bridges at most sixteen resolver passes while the
+  synchronized player row catches up, then DCP returns to its existing
+  `CosmeticUtils`/backend resolver. The bridge is bounded and does not become a
+  second persistent loadout store.
+- Added bounded `[dcp:925]` evidence and runtime/offline coverage. This entry is
+  a source candidate only; no version bump, Workshop upload, or verification
+  claim has been made.
+
 ## Unreleased -- #526 vanilla-equivalent cutout atlas candidate [not built]
 
 - Empirical correction: all 12 committed HUD PNG alpha channels are exactly

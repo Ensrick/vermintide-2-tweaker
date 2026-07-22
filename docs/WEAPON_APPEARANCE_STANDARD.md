@@ -169,6 +169,15 @@ registered in the renderer that will draw the pass; otherwise it must choose a
 resident vanilla fallback or omit the optional pass. See bug classes 47 and 48
 and issues #420/#481.
 
+Presentation state also has an invalidation requirement. A successful
+appearance/loadout write must publish the bounded local generation described in
+`docs/CROSS_MOD_ARCHITECTURE.md`; a visible retained adapter must consume it,
+re-resolve through the owning provider, and update once for a bounded batch.
+The ledger is not authority and cannot carry engine objects or network state.
+Opening/reopening a view is an acceptance edge, not the mechanism required to
+make a stale card correct (#925; vanilla writer
+`HeroWindowItemCustomization._present_item`, source lines 1347-1381).
+
 ---
 
 ## §3 Concern × Path matrix — what each path MUST apply

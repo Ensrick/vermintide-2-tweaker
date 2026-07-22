@@ -65,5 +65,13 @@
                 "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_effective_weapon_templates.lua"
             )
         }
+        @{
+            Source = "_lib_ui_presentation_refresh.lua"
+            Consumers = @(
+                "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_ui_presentation_refresh.lua"
+                "dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/_lib_ui_presentation_refresh.lua"
+                "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_lib_ui_presentation_refresh.lua"
+            )
+        }
     )
 }

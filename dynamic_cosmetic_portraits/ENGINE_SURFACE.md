@@ -37,6 +37,19 @@ mutation and a VMF data API respectively) and are covered in the subsystem notes
 |---|---|---|---|
 | `UnitFrameUI.draw` [safe] `:734` | Draws a player HUD unit frame each frame [src: `scripts/ui/hud_ui/unit_frame_ui.lua:326`] | Call `_sync_portrait_settings()` so the career_settings swap activates on the first frame after the custom resources are resident and the hat/skin is detected (`:734`) | PER-FRAME row, but a cheap no-op once `_portrait_settings_active` flips: `_sync_portrait_settings` early-returns until `_check_portrait_materials_ready()` proves all 24 HUD/small `UIAtlasHelper` rows, the shared atlas material, and all 12 medium standalone materials on one injected Gui. Missing resources fail open to vanilla. `Gui.material(gui, name)` returns nil silently on a missing material in this build (NOT a throw), so the probe MUST inspect the return, not just `pcall` success. This is a readiness TICK only - the actual swap targets the shared `career_settings` table, so player scope is corrected at the consumer seams (issue 435) |
 
+### Local presentation invalidation (non-hook seam)
+
+#925 attaches DCP to the bounded copied library
+`_lib_ui_presentation_refresh.lua`. Cosmetics or GUT Dev publishes a successful
+local hat/outfit write; DCP drains at most eight events per VMF `mod.update`,
+HUD draw, or game-state edge, then performs one `_sync_portrait_settings` call.
+Only Mercenary `slot_hat`/`slot_skin` rows are accepted. The writer's exact key
+bridges at most sixteen resolver passes while `CosmeticUtils` catches up, after
+which the existing resolver owns state again. This adds no engine hook, network
+message, persistent loadout cache, or dependency on a sibling mod; absence or
+schema conflict preserves prior behavior. See `docs/CROSS_MOD_ARCHITECTURE.md`
+"Local presentation invalidation".
+
 ## Subsystem notes (how the vanilla flow runs end-to-end, for dcp's cases)
 
 Each note is the minimum needed to read the hook above; the owning `docs/engine`

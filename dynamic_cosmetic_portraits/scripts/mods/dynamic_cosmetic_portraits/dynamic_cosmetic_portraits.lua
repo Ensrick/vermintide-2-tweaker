@@ -1,5 +1,13 @@
 local mod = get_mod("dynamic_cosmetic_portraits")
 
+-- #925: consume the same bounded local-process presentation generations that
+-- Cosmetics and GUI Dev publish. The byte-identical copied library keeps DCP
+-- standalone and introduces no mod load-order, callback, or network coupling.
+mod._ui_presentation_refresh_lib = mod:dofile(
+    "scripts/mods/dynamic_cosmetic_portraits/_lib_ui_presentation_refresh")
+mod._ui_presentation_refresh, mod._ui_presentation_refresh_error =
+    mod._ui_presentation_refresh_lib.attach(_G, "dcp", 32)
+
 -- #609: local_player() calls Network.peer_id() and faults after teardown.
 -- Vanilla's safe accessor returns nil unless a live network game exists.
 local function _local_player_safe(player_manager)
@@ -354,6 +362,19 @@ local _original_portrait_image = nil
 local _original_picking_image = nil
 local _last_known_hat_key = nil
 local _last_known_skin_key = nil
+local _presentation_hints = {}
+
+-- A loadout writer can publish before CosmeticUtils' synchronized player row
+-- catches up. Prefer the writer's exact local item key for at most sixteen DCP
+-- resolver passes, then fall back to the ordinary live/backend resolver. This is a
+-- bounded bridge, not another persistent presentation store.
+local function _take_presentation_hint(slot_name)
+    local hint = _presentation_hints[slot_name]
+    if not hint then return nil end
+    hint.remaining = hint.remaining - 1
+    if hint.remaining <= 0 then _presentation_hints[slot_name] = nil end
+    return hint.item_key
+end
 
 -- Collect ALL gui handles from every UIRenderer we can find.
 local function _collect_all_guis()
@@ -470,6 +491,11 @@ local function _player_career_name(player)
 end
 
 local function _get_kruber_merc_hat_key()
+    local hinted = _take_presentation_hint("slot_hat")
+    if hinted then
+        _last_known_hat_key = hinted
+        return hinted
+    end
     local pm = Managers.player
     if not pm then return _last_known_hat_key end
 
@@ -504,6 +530,11 @@ local function _get_kruber_merc_hat_key()
 end
 
 local function _get_kruber_merc_skin_key()
+    local hinted = _take_presentation_hint("slot_skin")
+    if hinted then
+        _last_known_skin_key = hinted
+        return hinted
+    end
     local pm = Managers.player
     if not pm then return _last_known_skin_key end
 
@@ -643,6 +674,55 @@ local function _sync_portrait_settings()
         _restore_portrait_settings()
     end
 end
+
+-- #925 adapter: drain only local Mercenary hat/outfit invalidations. The
+-- producer already resolved the backend instance to an item key; no UI widget,
+-- renderer, or engine object crosses the shared boundary. One sync after the
+-- bounded batch updates the global source that existing per-player adapters
+-- consume on their normal dirty-check paths.
+mod._dcp925_reports = mod._dcp925_reports or 0
+local function _drain_presentation_refresh()
+    local client = mod._ui_presentation_refresh
+    if not (client and client:has_pending()) then return end
+    local allowed_slots = { slot_hat = true, slot_skin = true }
+    local accepted = 0
+    local report = client:drain(function(row)
+        local slot_name, item_key = mod._ui_presentation_refresh_lib
+            .classify_loadout_event(row, "es_mercenary", allowed_slots)
+        if not slot_name then return false end
+        _presentation_hints[slot_name] = {
+            item_key = item_key,
+            remaining = 16,
+            generation = row.generation,
+        }
+        accepted = accepted + 1
+        return true
+    end, 8)
+    if accepted > 0 then
+        _sync_portrait_settings()
+        if mod._dcp925_reports < 16 then
+            mod._dcp925_reports = mod._dcp925_reports + 1
+            pcall(printf, "[dcp:925] presentation refresh handled=%d seen=%d dropped=%d pending=%d record=%d/16",
+                accepted, report.seen, report.dropped, report.pending,
+                mod._dcp925_reports)
+        end
+    end
+end
+
+_rt_register("issue925_live_portrait_invalidation", function()
+    if not mod._ui_presentation_refresh then
+        return "shared presentation ledger unavailable: "
+            .. tostring(mod._ui_presentation_refresh_error)
+    end
+    if type(_drain_presentation_refresh) ~= "function"
+            or type(_take_presentation_hint) ~= "function" then
+        return "DCP generation consumer/hint adapter missing"
+    end
+    local stats = mod._ui_presentation_refresh:stats()
+    if stats.capacity > 128 or stats.retained > stats.capacity then
+        return "shared presentation ledger exceeded its bounded capacity"
+    end
+end)
 
 -- ============================================================
 -- Regression checks (issue 509). Registered HERE, after the portrait maps and
@@ -1092,6 +1172,7 @@ end)
 -- activates as soon as materials are ready and hat is detected. Once
 -- _portrait_settings_active is true, this is a cheap no-op.
 mod:hook_safe("UnitFrameUI", "draw", function(self, dt)
+    _drain_presentation_refresh()
     _sync_portrait_settings()
 end)
 
@@ -1245,7 +1326,15 @@ _rt_register("portrait_override_player_scoped", function()
 end)
 
 mod.on_game_state_changed = function()
+    _drain_presentation_refresh()
     _sync_portrait_settings()
+end
+
+-- Inventory/cosmetics views can suppress HUD drawing. Drain the generation
+-- ledger from the normal VMF update too so a just-equipped portrait never
+-- waits for a UnitFrame draw or a game-state transition.
+function mod.update(dt)
+    _drain_presentation_refresh()
 end
 
 -- No mod.on_setting_changed: this mod has no VMF settings page (removed

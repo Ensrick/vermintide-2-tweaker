@@ -162,6 +162,35 @@ Key ours:
   draw; read `on_release` / `is_hover` AFTER the pass and set consumed edges
   false (memory `reference_vt2_ui_button_sound_use_window_play_sound`).
 
+### 2.4a Retained presentation refresh after a write
+
+Retained widget content is a snapshot, not a live projection of backend state.
+For the illusion browser, `HeroWindowItemCustomization._present_item` is the
+single vanilla writer of the top-left `item_setting` card: it resolves
+`input_text`, `sub_title`, `icon_texture`, `icon_bg`, and `item`
+(`hero_window_item_customization.lua:1347-1381`). Vanilla's craft completion
+sets the loadout item and then calls `_present_item`
+(`hero_window_item_customization.lua:2532-2548`). A mod that commits additional
+appearance ownership after that final call has made the retained card stale.
+
+The #925 contract is a bounded local generation ledger, with the master copy at
+`tools/shared_lib/_lib_ui_presentation_refresh.lua`:
+
+1. Publish only after a successful canonical loadout/appearance write.
+2. Carry whitelisted scalar identity (`career`, `slot`, backend/item/skin key)
+   only. Never retain a widget, renderer, engine object, callback, unit path, or
+   network identity in the ledger.
+3. The active surface re-resolves through its canonical presentation resolver
+   and updates only the fields vanilla owns. Do not recreate a viewport or
+   append passes to a live widget.
+4. Consumers drain a bounded batch and coalesce to one surface refresh. A
+   missing library, schema conflict, absent sibling mod, or rejected event must
+   preserve the existing vanilla/mod behavior.
+
+This is invalidation, not a second presentation store. A provider still owns
+the item/illusion identity; each screen remains an adapter for its own engine
+surface.
+
 ### 2.5 Materials and atlases - two-stage resolution
 
 1. At GUI CREATE time, `UIRenderer.create(world, "material", path, ...)`

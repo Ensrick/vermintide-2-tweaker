@@ -406,6 +406,31 @@ material, or package path into a peer/renderer that has not proved it can resolv
 that resource. A consumer may degrade presentation; it may not turn an optional
 cosmetic into a missing-resource crash.
 
+### Local presentation invalidation (#925)
+
+Presentation providers and adapters coordinate successful local writes through
+the bounded generation ledger in
+`tools/shared_lib/_lib_ui_presentation_refresh.lua`. Cosmetics is the canonical
+publisher when installed because it already owns the singleton
+`BackendUtils.set_loadout_item` hook. GUT Dev publishes only when the generation
+did not advance during its synchronous write, so it supplies the event when
+Cosmetics is absent without double-publishing when Cosmetics is present. DCP is
+currently a consumer for Mercenary hat/outfit invalidations.
+
+The event is a hint to re-read the owning provider; it is not authoritative
+presentation state. Payloads are whitelist-only strings, the ring and drain are
+hard-bounded, consumers keep independent cursors, handler failures are isolated,
+and schema conflict fails open. Nothing is sent over the network. A sibling mod
+that is absent, older, or cannot attach simply keeps its existing behavior. This
+also preserves the Pusfume boundary: an unknown career or provider is ignored,
+never replaced or disabled.
+
+When adding an adapter, reuse the ledger but keep the engine-specific render
+operation at that surface. Publish only after success, consume exact identity,
+coalesce a batch into one refresh, and add a bounded diagnostic plus an offline
+fixture. Do not add polling, a second `BackendUtils.set_loadout_item` hook in the
+same mod, or another persistent loadout cache.
+
 ---
 
 ## Multiplayer Compatibility Matrix

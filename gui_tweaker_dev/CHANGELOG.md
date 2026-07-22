@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## Unreleased — #925 shared presentation generation publisher
+
+- Successful GUT loadout equips now publish a bounded, scalar-only local
+  presentation invalidation. If Cosmetics' inner singleton hook already
+  published the same synchronous write, GUT observes the generation advance
+  and does not duplicate it; if Cosmetics is absent, GUT supplies the event.
+- Removed the obsolete instruction to reopen Hero View to refresh the visual
+  model. This source candidate does not alter stable GUT, bump a version, or
+  claim Workshop deployment/verification.
+
 ## 0.2.311-dev (2026-07-22) -- bounded profile-commit observer (#919)
 
 - Added a bounded, owner-registered profile-commit diagnostic API for #919.

@@ -1466,6 +1466,7 @@ mod:hook_safe("HeroWindowItemCustomization", "_apply_weapon_skin_craft_complete"
         mod._offhand_committed = mod._offhand_committed or {}
         mod._offhand_committed[self._item_backend_id] = true
         _trace("CRAFT apply_weapon_skin_craft_complete committed offhand bid=%s", tostring(self._item_backend_id))
+        if mod._cos925_publish_and_refresh then pcall(mod._cos925_publish_and_refresh, self, "weapon-skin-apply") end
     end
 end)
 
@@ -3341,6 +3342,11 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
         return inventory_icon, display_name, description, store_icon
     end)
 end
+
+-- #925: extracted retained-card refresh/publisher; callers compose singleton seams.
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_ui_presentation_refresh").install(mod, {
+    la_bridge = LA_BRIDGE, rt_register = _rt_register,
+})
 
 local function _get_offhand_options(item_key)
     if mod._ensure_independent_dual_pool then
@@ -5996,6 +6002,7 @@ local function _install_skin_loadout_safety()
             if LA_PERSIST and career_name then
                 LA_PERSIST.save_cosmetic(career_name, slot_name, backend_id)
             end
+            mod._cos925_publish_loadout(items_iface, backend_id, career_name, slot_name, "cosmetic-equip")
             return
         end
         if (slot_name == "slot_hat" or slot_name == "slot_skin") and mod.loadout_cache[career_name] then
@@ -6008,7 +6015,10 @@ local function _install_skin_loadout_safety()
                 LA_PERSIST.clear_cosmetic(career_name, slot_name)
             end
         end
-        return func(backend_id, career_name, slot_name)
+        local result_n, results; local function capture(...) result_n = select("#", ...); results = { ... } end
+        capture(func(backend_id, career_name, slot_name))
+        mod._cos925_publish_loadout(items_iface, backend_id, career_name, slot_name, "loadout-equip")
+        return unpack(results, 1, result_n)
     end)
 
     mod:hook(items_iface, "get_loadout", function(func, self)

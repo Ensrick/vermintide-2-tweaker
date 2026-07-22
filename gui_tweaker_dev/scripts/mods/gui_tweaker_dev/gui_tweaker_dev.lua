@@ -1,4 +1,35 @@
 local mod = get_mod("gut_dev")
+-- #925: attach to the copied shared local-process presentation generation
+-- ledger. GUT publishes only when no inner provider (normally Cosmetics'
+-- existing BackendUtils hook) already published the same set_loadout action.
+mod._ui_presentation_refresh_lib = mod:dofile(
+    "scripts/mods/gui_tweaker_dev/_lib_ui_presentation_refresh")
+mod._ui_presentation_refresh, mod._ui_presentation_refresh_error =
+    mod._ui_presentation_refresh_lib.attach(_G, "gut_dev", 32)
+mod._gut925_generation = function()
+    local client = mod._ui_presentation_refresh
+    local stats = client and client:stats()
+    return stats and stats.generation or nil
+end
+mod._gut925_publish_if_unobserved = function(before_generation, career_name,
+        slot_name, backend_id, item)
+    local client = mod._ui_presentation_refresh
+    if not client then return end
+    local stats = client:stats()
+    if not mod._ui_presentation_refresh_lib.generation_unchanged(
+            before_generation, stats.generation) then
+        return -- an inner provider already published this exact mutation
+    end
+    local item_data = item and item.data
+    client:publish({
+        kind = "loadout",
+        reason = "saved-loadout-restore",
+        career_name = career_name,
+        slot_name = slot_name,
+        backend_id = backend_id,
+        item_key = item and (item.key or (item_data and item_data.name)),
+    })
+end
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic). Namespaced under
 -- the mod table (v0.2.216-dev) so it no longer leaks into _G; read at the boot readout near
 -- the end of this file.
@@ -147,6 +178,21 @@ _rt_register("dbg_helpers_two_channel", function()
     if not ok then return "_dbg raised" end
     ok = pcall(_dbg_alert, "smoke test")
     if not ok then return "_dbg_alert raised" end
+end)
+
+_rt_register("issue925_loadout_presentation_publish", function()
+    if not mod._ui_presentation_refresh then
+        return "shared presentation ledger unavailable: "
+            .. tostring(mod._ui_presentation_refresh_error)
+    end
+    if type(mod._gut925_generation) ~= "function"
+            or type(mod._gut925_publish_if_unobserved) ~= "function" then
+        return "GUT saved-loadout presentation publisher missing"
+    end
+    local stats = mod._ui_presentation_refresh:stats()
+    if stats.capacity > 128 or stats.retained > stats.capacity then
+        return "shared presentation ledger exceeded its bounded capacity"
+    end
 end)
 
 _rt_register("lifecycle_chain_integrity", function()
@@ -665,8 +711,11 @@ local function _apply_loadout(loadout, current_career_name)
                             tostring(slot_name), tostring(reason))
                         errors = errors + 1
                     else
+                        local generation_before = mod._gut925_generation()
                         local ok_set, err = pcall(BackendUtils.set_loadout_item, backend_id, current_career_name, slot_name)
                         if ok_set then
+                            mod._gut925_publish_if_unobserved(generation_before,
+                                current_career_name, slot_name, backend_id, item)
                             gear_count = gear_count + 1
                             -- _dbg: loadout_apply_item
                             pcall(_dbg, "[gui_tweaker] loadout_apply_item: slot_name=%s item=%s",
@@ -710,8 +759,11 @@ local function _apply_loadout(loadout, current_career_name)
                             tostring(slot_name), tostring(reason))
                         errors = errors + 1
                     else
+                        local generation_before = mod._gut925_generation()
                         local ok_set, err = pcall(BackendUtils.set_loadout_item, backend_id, current_career_name, slot_name)
                         if ok_set then
+                            mod._gut925_publish_if_unobserved(generation_before,
+                                current_career_name, slot_name, backend_id, item)
                             cos_count = cos_count + 1
                             pcall(_dbg, "[gui_tweaker] loadout_apply_item: slot_name=%s item=%s",
                                 tostring(slot_name), tostring(backend_id))
@@ -814,7 +866,6 @@ mod:command("load_loadout", "Load loadout from slot N (1-30) for current career"
     local gear_n, cos_n, talents_ok, err_n = _apply_loadout(loadout, career_name)
     mod:echo(string.format("Loaded slot %d for %s -- applied %d gear, %d cosmetics, talents %s, %d errors",
         n, _career_display_name(career), gear_n, cos_n, talents_ok and "yes" or "no", err_n))
-    mod:echo("(Open the hero view to refresh the visual model in the keep.)")
     -- _dbg: loadout_apply
     pcall(_dbg, "[gui_tweaker] loadout_apply: slot=%d career=%s gear_applied=%d cosmetics_applied=%d talents_set=%s errors=%d",
         n, tostring(career_name), gear_n, cos_n, talents_ok and "yes" or "no", err_n)
