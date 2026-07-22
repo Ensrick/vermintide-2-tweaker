@@ -34,7 +34,7 @@ $CANONICAL_REPLAY_EDGES = @(
 )
 $CANONICAL_CONCERNS = @(
     'unit_identity', 'transform', 'material', 'glow', 'pose',
-    'effective_template', 'icon', 'name'
+    'effective_template', 'fade', 'icon', 'name'
 )
 
 function Test-MapKey($Map, [string]$Key) {

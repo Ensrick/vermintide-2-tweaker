@@ -1,5 +1,13 @@
 local mod = get_mod("dynamic_cosmetic_portraits")
 
+-- #925: consume the same bounded local-process presentation generations that
+-- Cosmetics and GUI Dev publish. The byte-identical copied library keeps DCP
+-- standalone and introduces no mod load-order, callback, or network coupling.
+mod._ui_presentation_refresh_lib = mod:dofile(
+    "scripts/mods/dynamic_cosmetic_portraits/_lib_ui_presentation_refresh")
+mod._ui_presentation_refresh, mod._ui_presentation_refresh_error =
+    mod._ui_presentation_refresh_lib.attach(_G, "dcp", 32)
+
 -- #609: local_player() calls Network.peer_id() and faults after teardown.
 -- Vanilla's safe accessor returns nil unless a live network game exists.
 local function _local_player_safe(player_manager)
@@ -13,7 +21,7 @@ end
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.27-dev"
+local MOD_VERSION = "0.1.28-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -224,58 +232,52 @@ end
 --
 --   .\tools\add_portrait.ps1 -SourcePng "<110x130 PNG>" -HatKey "kruber_<key>"
 --
--- DO NOT add entries to _PORTRAIT_MATERIALS / _hat_portrait_map /
+-- DO NOT add entries to the portrait render-path tables / _hat_portrait_map /
 -- _skin_portrait_map without first running the script to produce the
--- corresponding .png/.texture/.material files. The maps below are LOOKUP
+-- corresponding source PNGs, atlas, and medium metadata. The maps below are LOOKUP
 -- tables that assume the assets already exist on disk — adding a key here
 -- without the assets crashes "Material not found in Gui" in-game.
 --
 -- See DEVELOPMENT.md "Adding a new portrait" for the full step-by-step.
 -- =============================================================================
 
--- Custom portrait textures: each portrait size has its own .material file so
--- that Stingray creates a Gui material whose name matches the texture name
--- (file-based naming). No UIAtlasHelper hooks needed — standalone textures
--- bypass atlas lookup and the UI uses Gui.bitmap with the material name.
+-- Renderer contract (#526): medium portraits remain standalone because the
+-- 110x130 hero-select path is proven and intentionally full-bleed. HUD and
+-- small portraits MUST resolve through DCP's private atlas so UIRenderer takes
+-- vanilla's Gui.bitmap_uv path. Standalone cutout portraits take Gui.bitmap;
+-- the attached score-screen evidence proves that branch exposes the full
+-- rectangle even though the PNG alpha exactly matches the canonical mask.
+local _PORTRAIT_ATLAS_MATERIAL = "dcp_portrait_atlas"
+local _PORTRAIT_ATLAS_MATERIAL_PATH = "materials/dynamic_cosmetic_portraits/dcp_portrait_atlas"
+local _portrait_atlas_rows = {}
+local _atlas_load_ok, _atlas_load_value = pcall(
+    mod.dofile, mod, _PORTRAIT_ATLAS_MATERIAL_PATH)
+if _atlas_load_ok and type(_atlas_load_value) == "table" then
+    _portrait_atlas_rows = _atlas_load_value
+else
+    _dbg_alert("portrait atlas descriptor unavailable; preserving vanilla portraits")
+end
 
-local _PORTRAIT_MATERIALS = {
-    "materials/ui/portrait_kruber_mercenary_hat_0004",
+local _PORTRAIT_STANDALONE_MATERIALS = {
     "materials/ui/medium_portrait_kruber_mercenary_hat_0004",
-    "materials/ui/small_portrait_kruber_mercenary_hat_0004",
-    "materials/ui/portrait_kruber_mercenary_hat_0009",
     "materials/ui/medium_portrait_kruber_mercenary_hat_0009",
-    "materials/ui/small_portrait_kruber_mercenary_hat_0009",
-    "materials/ui/portrait_kruber_mercenary_hat_1001",
     "materials/ui/medium_portrait_kruber_mercenary_hat_1001",
-    "materials/ui/small_portrait_kruber_mercenary_hat_1001",
-    "materials/ui/portrait_kruber_mercenary_hat_1002",
     "materials/ui/medium_portrait_kruber_mercenary_hat_1002",
-    "materials/ui/small_portrait_kruber_mercenary_hat_1002",
-    "materials/ui/portrait_kruber_mercenary_hat_1003",
     "materials/ui/medium_portrait_kruber_mercenary_hat_1003",
-    "materials/ui/small_portrait_kruber_mercenary_hat_1003",
-    "materials/ui/portrait_kruber_mercenary_hat_0006",
     "materials/ui/medium_portrait_kruber_mercenary_hat_0006",
-    "materials/ui/small_portrait_kruber_mercenary_hat_0006",
-    "materials/ui/portrait_kruber_mercenary_hat_0007",
     "materials/ui/medium_portrait_kruber_mercenary_hat_0007",
-    "materials/ui/small_portrait_kruber_mercenary_hat_0007",
-    "materials/ui/portrait_kruber_skin_es_mercenary_1003",
     "materials/ui/medium_portrait_kruber_skin_es_mercenary_1003",
-    "materials/ui/small_portrait_kruber_skin_es_mercenary_1003",
-    "materials/ui/portrait_kruber_skin_es_default",
     "materials/ui/medium_portrait_kruber_skin_es_default",
-    "materials/ui/small_portrait_kruber_skin_es_default",
-    "materials/ui/portrait_kruber_mercenary_hat_0001",
     "materials/ui/medium_portrait_kruber_mercenary_hat_0001",
-    "materials/ui/small_portrait_kruber_mercenary_hat_0001",
-    "materials/ui/portrait_kruber_mercenary_hat_0003",
     "materials/ui/medium_portrait_kruber_mercenary_hat_0003",
-    "materials/ui/small_portrait_kruber_mercenary_hat_0003",
-    "materials/ui/portrait_kruber_mercenary_hat_0005",
     "materials/ui/medium_portrait_kruber_mercenary_hat_0005",
-    "materials/ui/small_portrait_kruber_mercenary_hat_0005",
 }
+
+local _PORTRAIT_ATLAS_TEXTURES = {}
+for texture_name in pairs(_portrait_atlas_rows) do
+    _PORTRAIT_ATLAS_TEXTURES[#_PORTRAIT_ATLAS_TEXTURES + 1] = texture_name
+end
+table.sort(_PORTRAIT_ATLAS_TEXTURES)
 
 -- _hat_portrait_map: cosmetic-key (slot_hat) -> texture name set.
 -- Adding an entry here REQUIRES the matching asset files to exist
@@ -360,6 +362,19 @@ local _original_portrait_image = nil
 local _original_picking_image = nil
 local _last_known_hat_key = nil
 local _last_known_skin_key = nil
+local _presentation_hints = {}
+
+-- A loadout writer can publish before CosmeticUtils' synchronized player row
+-- catches up. Prefer the writer's exact local item key for at most sixteen DCP
+-- resolver passes, then fall back to the ordinary live/backend resolver. This is a
+-- bounded bridge, not another persistent presentation store.
+local function _take_presentation_hint(slot_name)
+    local hint = _presentation_hints[slot_name]
+    if not hint then return nil end
+    hint.remaining = hint.remaining - 1
+    if hint.remaining <= 0 then _presentation_hints[slot_name] = nil end
+    return hint.item_key
+end
 
 -- Collect ALL gui handles from every UIRenderer we can find.
 local function _collect_all_guis()
@@ -403,11 +418,58 @@ end
 
 local function _check_portrait_materials_ready()
     if _portrait_materials_ready then return true end
+
+    -- VMF rejects registering the same identifier as both a standalone
+    -- texture and an atlas sprite. Prove both cutout variants entered the
+    -- atlas before allowing any custom career_settings assignment; otherwise
+    -- fail open to vanilla instead of drawing the known-bad standalone quad.
+    if not (UIAtlasHelper
+        and type(UIAtlasHelper.has_atlas_settings_by_texture_name) == "function"
+        and type(UIAtlasHelper.get_atlas_settings_by_texture_name) == "function") then
+        return false
+    end
+    if #_PORTRAIT_ATLAS_TEXTURES ~= 24
+        or #_PORTRAIT_STANDALONE_MATERIALS ~= 12 then
+        return false
+    end
+    local function atlas_row_ready(texture_name, width, height)
+        local ok_has, has = pcall(UIAtlasHelper.has_atlas_settings_by_texture_name, texture_name)
+        if not ok_has or not has then return false end
+        local ok_get, settings = pcall(UIAtlasHelper.get_atlas_settings_by_texture_name, texture_name)
+        return ok_get
+            and type(settings) == "table"
+            and settings.material_name == _PORTRAIT_ATLAS_MATERIAL
+            and type(settings.size) == "table"
+            and settings.size[1] == width
+            and settings.size[2] == height
+    end
+    for _, texture_name in ipairs(_PORTRAIT_ATLAS_TEXTURES) do
+        local is_small = texture_name:find("small_portrait_", 1, true) == 1
+        if not atlas_row_ready(texture_name,
+            is_small and 60 or 86, is_small and 70 or 108) then
+            return false
+        end
+    end
+
+    local function gui_has_all_portrait_materials(gui)
+        if not _gui_has_material(gui, _PORTRAIT_ATLAS_MATERIAL) then
+            return false
+        end
+        for _, material_path in ipairs(_PORTRAIT_STANDALONE_MATERIALS) do
+            local material_name = material_path:match("([^/]+)$")
+            if not material_name or not _gui_has_material(gui, material_name) then
+                return false
+            end
+        end
+        return true
+    end
+
     local guis = _collect_all_guis()
     for _, entry in ipairs(guis) do
-        if _gui_has_material(entry.gui, "portrait_kruber_mercenary_hat_1002") then
+        if gui_has_all_portrait_materials(entry.gui) then
             _portrait_materials_ready = true
-            mod:info("[portrait] materials confirmed on %s", entry.label)
+            mod:info("[portrait] 24 atlas rows + 12 medium materials confirmed on %s",
+                entry.label)
             return true
         end
     end
@@ -429,6 +491,11 @@ local function _player_career_name(player)
 end
 
 local function _get_kruber_merc_hat_key()
+    local hinted = _take_presentation_hint("slot_hat")
+    if hinted then
+        _last_known_hat_key = hinted
+        return hinted
+    end
     local pm = Managers.player
     if not pm then return _last_known_hat_key end
 
@@ -463,6 +530,11 @@ local function _get_kruber_merc_hat_key()
 end
 
 local function _get_kruber_merc_skin_key()
+    local hinted = _take_presentation_hint("slot_skin")
+    if hinted then
+        _last_known_skin_key = hinted
+        return hinted
+    end
     local pm = Managers.player
     if not pm then return _last_known_skin_key end
 
@@ -603,6 +675,55 @@ local function _sync_portrait_settings()
     end
 end
 
+-- #925 adapter: drain only local Mercenary hat/outfit invalidations. The
+-- producer already resolved the backend instance to an item key; no UI widget,
+-- renderer, or engine object crosses the shared boundary. One sync after the
+-- bounded batch updates the global source that existing per-player adapters
+-- consume on their normal dirty-check paths.
+mod._dcp925_reports = mod._dcp925_reports or 0
+local function _drain_presentation_refresh()
+    local client = mod._ui_presentation_refresh
+    if not (client and client:has_pending()) then return end
+    local allowed_slots = { slot_hat = true, slot_skin = true }
+    local accepted = 0
+    local report = client:drain(function(row)
+        local slot_name, item_key = mod._ui_presentation_refresh_lib
+            .classify_loadout_event(row, "es_mercenary", allowed_slots)
+        if not slot_name then return false end
+        _presentation_hints[slot_name] = {
+            item_key = item_key,
+            remaining = 16,
+            generation = row.generation,
+        }
+        accepted = accepted + 1
+        return true
+    end, 8)
+    if accepted > 0 then
+        _sync_portrait_settings()
+        if mod._dcp925_reports < 16 then
+            mod._dcp925_reports = mod._dcp925_reports + 1
+            pcall(printf, "[dcp:925] presentation refresh handled=%d seen=%d dropped=%d pending=%d record=%d/16",
+                accepted, report.seen, report.dropped, report.pending,
+                mod._dcp925_reports)
+        end
+    end
+end
+
+_rt_register("issue925_live_portrait_invalidation", function()
+    if not mod._ui_presentation_refresh then
+        return "shared presentation ledger unavailable: "
+            .. tostring(mod._ui_presentation_refresh_error)
+    end
+    if type(_drain_presentation_refresh) ~= "function"
+            or type(_take_presentation_hint) ~= "function" then
+        return "DCP generation consumer/hint adapter missing"
+    end
+    local stats = mod._ui_presentation_refresh:stats()
+    if stats.capacity > 128 or stats.retained > stats.capacity then
+        return "shared presentation ledger exceeded its bounded capacity"
+    end
+end)
+
 -- ============================================================
 -- Regression checks (issue 509). Registered HERE, after the portrait maps and
 -- the sync/restore functions are defined, NOT up with the generic checks near
@@ -614,15 +735,17 @@ end
 
 _rt_register("portrait_maps_have_registered_materials", function()
     -- CHANGELOG v0.1.0/.1/.2 + CLAUDE.md: adding a _hat_portrait_map /
-    -- _skin_portrait_map key whose texture set is NOT also registered in
-    -- _PORTRAIT_MATERIALS crashes "Material not found in Gui" the instant that
-    -- portrait is selected. Lock it: every hud/medium/small texture referenced by
-    -- either map must have a matching "materials/ui/<name>" entry. Pure runtime
-    -- (no source read) so it gives real signal on a deployed install.
-    local registered = {}
-    for _, mat in ipairs(_PORTRAIT_MATERIALS) do
+    -- _skin_portrait_map key whose texture set has no registered render path
+    -- crashes "Material not found in Gui" on selection. Medium entries must be
+    -- standalone; HUD/small entries must be atlas sprites (#526).
+    local standalone = {}
+    for _, mat in ipairs(_PORTRAIT_STANDALONE_MATERIALS) do
         local tex = mat:match("([^/]+)$")   -- strip the "materials/ui/" prefix
-        if tex then registered[tex] = true end
+        if tex then standalone[tex] = true end
+    end
+    local atlas = {}
+    for _, tex in ipairs(_PORTRAIT_ATLAS_TEXTURES) do
+        atlas[tex] = true
     end
     local function check_map(map, label)
         for key, set in pairs(map) do
@@ -631,10 +754,12 @@ _rt_register("portrait_maps_have_registered_materials", function()
                 if type(tex) ~= "string" then
                     return string.format("%s[%s].%s is not a string", label, tostring(key), size)
                 end
-                if not registered[tex] then
+                local registered = size == "medium" and standalone[tex] or atlas[tex]
+                if not registered then
                     return string.format(
-                        "%s[%s].%s = '%s' has no matching _PORTRAIT_MATERIALS entry (Material-not-found crash on select)",
-                        label, tostring(key), size, tex)
+                        "%s[%s].%s = '%s' has no matching %s render path (Material-not-found crash on select)",
+                        label, tostring(key), size, tex,
+                        size == "medium" and "standalone" or "atlas")
                 end
             end
         end
@@ -697,19 +822,11 @@ _rt_register("career_settings_swap_saves_and_restores", function()
 end)
 
 _rt_register("hud_alpha_mask_conformance_pipeline", function()
-    -- (#526) HUD portraits bled outside the octagonal frame on the
-    -- mission-completion score screen: the hud-size (86x108) alpha mask was
-    -- content-derived and wider than the vanilla portrait silhouette (it even
-    -- touched the canvas top edge), so opaque pixels poked past the frame
-    -- ring drawn on top (end_view_state_score.lua:514 -> ui_widgets_honduras
-    -- create_portrait_frame, portrait at layer 1 / frame at layer 10). The
-    -- fix re-masked every hud png against the vanilla silhouette
-    -- (tools/vanilla_hud_alpha_mask_86x108.png) and gated add_portrait.ps1 on
-    -- silhouette conformance. Texture alpha is not readable from Lua, so the
-    -- runtime half of this bug class lives in the pipeline gate; this check
-    -- (io-safe, retail => skip; real signal under modding tools / CI) locks
-    -- the gate: the canonical mask must exist and add_portrait.ps1 must
-    -- enforce conformance against it.
+    -- (#526) The canonical alpha mask is necessary even though the first
+    -- remask alone was insufficient: the attached post-remask screenshot and
+    -- byte-for-byte alpha comparison isolated the remaining difference to the
+    -- standalone Gui.bitmap renderer path. Lock the authoring invariant here;
+    -- the atlas-render-path invariant is checked separately below.
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
@@ -734,22 +851,60 @@ end)
 
 _rt_register("portrait_materials_use_visible_shader_526", function()
     -- The masked-gradient experiment compiled but rendered the custom
-    -- portraits fully transparent. Every standalone material stays on the
-    -- previously proven visible Gui shader while #526's clipping investigation
-    -- continues at the widget/material-contract boundary.
+    -- portraits fully transparent. Medium standalone materials and the atlas
+    -- normal material stay on the previously proven visible Gui shader.
+    if #_PORTRAIT_STANDALONE_MATERIALS ~= 12 then
+        return string.format("portrait standalone material count is %d; expected 12",
+            #_PORTRAIT_STANDALONE_MATERIALS)
+    end
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local root, n = src_path:gsub(
         "scripts[/\\]mods[/\\]dynamic_cosmetic_portraits[/\\]dynamic_cosmetic_portraits%.lua$", "")
     if n == 0 then return end
-    for _, material_path in ipairs(_PORTRAIT_MATERIALS) do
+    for _, material_path in ipairs(_PORTRAIT_STANDALONE_MATERIALS) do
         local name = material_path:match("([^/]+)$")
         if name then
             local txt = _rt_src_read(root .. "materials/ui/" .. name .. ".material")
             if txt and not txt:find('shader = "gui:DIFFUSE_MAP"', 1, true) then
                 return name .. " does not use the proven visible Gui shader"
             end
+        end
+    end
+    local atlas_txt = _rt_src_read(root .. _PORTRAIT_ATLAS_MATERIAL_PATH .. ".material")
+    if atlas_txt and not atlas_txt:find('dcp_portrait_atlas = {', 1, true) then
+        return "portrait atlas normal material is missing"
+    end
+    if atlas_txt and not atlas_txt:find('shader = "gui:DIFFUSE_MAP"', 1, true) then
+        return "portrait atlas normal material does not use the proven visible Gui shader"
+    end
+end)
+
+_rt_register("portrait_cutouts_use_atlas_path_526", function()
+    if not (UIAtlasHelper
+        and type(UIAtlasHelper.has_atlas_settings_by_texture_name) == "function"
+        and type(UIAtlasHelper.get_atlas_settings_by_texture_name) == "function") then
+        return "UIAtlasHelper unavailable; cutout portrait render path cannot be proven"
+    end
+    if #_PORTRAIT_ATLAS_TEXTURES ~= 24 then
+        return string.format("portrait atlas descriptor has %d rows; expected 24",
+            #_PORTRAIT_ATLAS_TEXTURES)
+    end
+    for _, texture_name in ipairs(_PORTRAIT_ATLAS_TEXTURES) do
+        local ok_has, has = pcall(UIAtlasHelper.has_atlas_settings_by_texture_name, texture_name)
+        if not ok_has or not has then
+            return texture_name .. " is not registered as an atlas sprite"
+        end
+        local ok_get, settings = pcall(UIAtlasHelper.get_atlas_settings_by_texture_name, texture_name)
+        local expected_width = texture_name:find("small_portrait_", 1, true) == 1 and 60 or 86
+        local expected_height = expected_width == 60 and 70 or 108
+        if not ok_get or type(settings) ~= "table"
+            or settings.material_name ~= _PORTRAIT_ATLAS_MATERIAL
+            or type(settings.size) ~= "table"
+            or settings.size[1] ~= expected_width
+            or settings.size[2] ~= expected_height then
+            return texture_name .. " has an invalid DCP atlas contract"
         end
     end
 end)
@@ -789,7 +944,13 @@ mod:command("portrait_diag", "Diagnose portrait texture registration + hat state
             local get_result = "nil"
             if UIAtlasHelper.get_atlas_settings_by_texture_name then
                 local ok, val = pcall(UIAtlasHelper.get_atlas_settings_by_texture_name, tex_name)
-                if ok then get_result = tostring(val) end
+                if ok and type(val) == "table" then
+                    local size = val.size or {}
+                    get_result = string.format("material=%s size=%sx%s",
+                        tostring(val.material_name), tostring(size[1]), tostring(size[2]))
+                elseif ok then
+                    get_result = tostring(val)
+                end
             end
             emit("  '%s': has_atlas=%s get_atlas=%s", tex_name, tostring(has_atlas), get_result)
         end
@@ -803,9 +964,8 @@ mod:command("portrait_diag", "Diagnose portrait texture registration + hat state
     emit("local skin key: %s", tostring(skin_key))
 
     local material_probes = {
-        "portrait_kruber_mercenary_hat_1002",
+        _PORTRAIT_ATLAS_MATERIAL,
         "medium_portrait_kruber_mercenary_hat_1002",
-        "small_portrait_kruber_mercenary_hat_1002",
     }
     local guis = _collect_all_guis()
     emit("found %d gui handles", #guis)
@@ -1012,6 +1172,7 @@ end)
 -- activates as soon as materials are ready and hat is detected. Once
 -- _portrait_settings_active is true, this is a cheap no-op.
 mod:hook_safe("UnitFrameUI", "draw", function(self, dt)
+    _drain_presentation_refresh()
     _sync_portrait_settings()
 end)
 
@@ -1165,7 +1326,15 @@ _rt_register("portrait_override_player_scoped", function()
 end)
 
 mod.on_game_state_changed = function()
+    _drain_presentation_refresh()
     _sync_portrait_settings()
+end
+
+-- Inventory/cosmetics views can suppress HUD drawing. Drain the generation
+-- ledger from the normal VMF update too so a just-equipped portrait never
+-- waits for a UnitFrame draw or a game-state transition.
+function mod.update(dt)
+    _drain_presentation_refresh()
 end
 
 -- No mod.on_setting_changed: this mod has no VMF settings page (removed

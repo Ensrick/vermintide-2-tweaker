@@ -1885,8 +1885,10 @@ class 27 covers husk identity; issue #420 owns the shared library extraction.
 
 ## 49. Visual-only custom unit drops vanilla behavioral contracts
 
-**First seen:** 2026-07-15 (Encarmine helmet, issue #612; verified fixed by
-retaining the exact Laurel donor and overriding only per-instance textures).
+**First seen:** 2026-07-15 (Encarmine helmet, issue #612). The donor-geometry
+and plume behavior were verified, but issue #922 later proved that retaining a
+donor unit does not automatically enroll a dynamically linked attachment in
+the player's `FadeSystem`.
 **Lives in:** imported or rebuilt hats, outfits, weapons, and props that replace
 a vanilla unit rather than only its textures/materials.
 
@@ -1898,6 +1900,8 @@ a vanilla unit rather than only its textures/materials.
   joints.
 - Material replacement changes fade/dither behavior even when geometry is
   otherwise identical.
+- The owner fades locally but the same attachment or weapon stays opaque on a
+  remote husk, or a third-person-camera owner exposes a local-only gap.
 
 ### Fix template
 - Inventory the donor unit's nonvisual contract before importing: skeleton,
@@ -1906,8 +1910,18 @@ a vanilla unit rather than only its textures/materials.
 - Prefer retaining the vanilla donor unit and replacing instance materials or
   textures. If geometry must change, use a rig-preserving pipeline and prove
   every contract item survived compilation.
+- Treat engine-system membership as a separate behavioral contract. After a
+  dynamic weapon/attachment is stored, submit one **complete** live snapshot
+  (four canonical 3P inventory fields + all attachment slots + the just-created
+  unit) to `FadeSystem.new_linked_units`. Do not submit only `{new_unit}`: the
+  API is replacement-style and a partial list can drop earlier members.
+- Own enrollment through a shared, fail-open adapter at spawn/wield/attachment
+  lifecycle edges. Deduplicate unchanged snapshots and never poll per frame.
 - Regression-test structure offline; verify jiggle, near-camera fade, remote
   rendering, preview rendering, and transition respawn in game.
+
+**Related:** #612 (donor/material/plume behavior), #660 (appearance consumer
+matrix), #922 (shared dynamic-unit fade enrollment).
 
 ## 50. Texture conversion preserves haze outside intended alpha
 

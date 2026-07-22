@@ -105,10 +105,10 @@ their internals alone.
   validate metallic/roughness statistics and pin every derived response map. Rigged
   custom attachments also need a same-name textual `.bones` source; the current SDK
   rejects inline `animation_blender_bones`. When a vanilla controller source is absent
-  from the Mod Tools, keep the package-safe vanilla base resident and install its
-  compiled controller once on the skeleton-compatible custom unit after spawn. Register
-  newly linked player attachments once with `FadeSystem.new_linked_units`; ordinary
-  `AttachmentUtils.link` does not enroll hats in camera fade. The complete reproducible
+  from the Mod Tools, retain the exact package-safe donor geometry and replace only its
+  per-instance textures. Register newly linked player attachments through the shared
+  complete-snapshot FadeSystem adapter; ordinary `AttachmentUtils.link` does not enroll
+  hats in camera fade, and a partial `{hat}` snapshot can discard weapon membership. The complete reproducible
   Encarmine recipe lives in `tools/encarmine_asset_pipeline/README.md`.
 - **New weapon-model scale or grip-offset override** → `_cos_render.lua`. Add a
   `_unit_path_scale_overrides` entry (keyed by unit-path substring) or a

@@ -31,18 +31,22 @@ The script encodes the only correct workflow:
    from `portrait_kruber_mercenary_hat_0001.png` (Estalia HUD).
 3. **Small (60×70)**: same as HUD, alpha from
    `small_portrait_kruber_mercenary_hat_0001.png`.
+4. **Atlas**: rebuild the private HUD/small atlas so those cutout portraits
+   follow vanilla's `UIAtlasHelper` -> `Gui.bitmap_uv` render path (#526).
 
 The alpha mask shape is identical for every portrait at a given size —
 it's defined by the in-game frame widget's hex cutout, not by portrait
 content. Borrowing alpha from any working portrait yields the correct mask.
 
 After the script writes the assets, you still manually wire up:
-- `dynamic_cosmetic_portraits.lua` → `_PORTRAIT_MATERIALS` + `_hat_portrait_map`
+- `dynamic_cosmetic_portraits.lua` → medium in
+  `_PORTRAIT_STANDALONE_MATERIALS`, plus `_hat_portrait_map`
   (or `_skin_portrait_map` for outfits — see comments at those tables).
-- `dynamic_cosmetic_portraits_data.lua` → `custom_gui_textures.textures`
-  + `custom_gui_textures.ui_renderer_injections`.
+  HUD/small identifiers are derived from the generated atlas descriptor.
+- `dynamic_cosmetic_portraits_data.lua` → add only the medium identifier to
+  the standalone texture list. The shared atlas registration stays singular.
 - `resource_packages/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.package`
-  → `material = [ … ]` and `texture = [ … ]` lines (3 each).
+  → add only the medium material and texture paths; atlas rows already exist.
 - Bump `MOD_VERSION` in the main lua.
 
 The script's "NEXT STEPS" output reminds you of all four. See
@@ -89,7 +93,7 @@ Three console commands are registered (in-game chat):
 
 | Command | Purpose |
 |---|---|
-| `/portrait_diag` | State + material readiness check across every Gui handle. Reports current `career_settings.portrait_image` / `picking_image`, detected hat & skin keys, registered materials. |
+| `/portrait_diag` | State + atlas/material readiness check across every Gui handle. Reports current `career_settings.portrait_image` / `picking_image`, detected hat & skin keys, atlas rows, and resident materials. |
 | `/portrait_dump` | Deep-walks every UI surface and dumps every widget with `character_portrait` or `portrait` in its content. Use to map which surfaces use which textures. |
 | `/test_portrait` | Force a `_sync_portrait_settings()` call and report the resulting state. |
 
@@ -106,5 +110,5 @@ paste the output before guessing.
   here rather than imported from cosmetics_tweaker. Don't try to share —
   this mod is intentionally standalone.
 - **Hot-reload is unfixable.** Don't add `mod.on_reload` handlers.
-- **Settings are read via `mod:get("dynamic_portraits")`.** That setting
-  lives in this mod, not in cosmetics_tweaker (post-split).
+- **There is no DCP settings page.** Portrait swapping is always on; do not
+  reintroduce the removed `dynamic_portraits` setting or UI lifecycle tags.

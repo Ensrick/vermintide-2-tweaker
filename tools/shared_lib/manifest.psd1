@@ -41,6 +41,14 @@
             )
         }
         @{
+            Source = "_lib_appearance_fade.lua"
+            Consumers = @(
+                "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_appearance_fade.lua"
+                "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_appearance_fade.lua"
+                "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_appearance_fade.lua"
+            )
+        }
+        @{
             Source = "_lib_career_weapon_actions.lua"
             Consumers = @(
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_career_weapon_actions.lua"
@@ -55,6 +63,14 @@
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_effective_weapon_templates.lua"
                 "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_effective_weapon_templates.lua"
                 "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_effective_weapon_templates.lua"
+            )
+        }
+        @{
+            Source = "_lib_ui_presentation_refresh.lua"
+            Consumers = @(
+                "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_ui_presentation_refresh.lua"
+                "dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/_lib_ui_presentation_refresh.lua"
+                "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_lib_ui_presentation_refresh.lua"
             )
         }
     )

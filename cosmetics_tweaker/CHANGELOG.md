@@ -1,5 +1,26 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.166-dev (2026-07-22) — #922/#925 fade and live presentation refresh [not-started]
+
+- After Cosmetics applies an illusion, the retained top-left customization
+  card is now refreshed from the same exact backend item and canonical
+  `UIUtils.get_ui_information_from_item` resolver that vanilla uses. The
+  adapter mutates only vanilla's five owned content fields; it does not rebuild
+  the viewport or widget.
+- Cosmetics' existing singleton loadout-write hook now publishes bounded,
+  scalar-only local presentation invalidations. Loremaster clone identities are
+  normalized to their stable vanilla cosmetic key before another mod consumes
+  them. No engine object, callback, custom resource, or network identity enters
+  shared state.
+- Added bounded `[cos:925]` evidence and runtime/offline coverage.
+
+### #922 shared custom-model camera fade
+
+- Restored explicit FadeSystem enrollment for dynamically linked owner and husk
+  hats without reverting the exact-donor Encarmine plume/material fix.
+- Enrollment submits one complete inventory-and-attachment snapshot rather than
+  a partial hat-only list that could evict weapon membership.
+
 ## 0.9.165-dev - 2026-07-22 - #918 semantic custom-illusion peer sync [not-started]
 
 - Cosmetics-owned custom weapon illusions now reuse the bounded semantic

@@ -1,5 +1,12 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.46-dev (2026-07-22) - shared custom-model camera fade (#922) [not-started]
+
+- Enroll the Blightreaper's completed 3P unit in the same bounded, complete
+  FadeSystem snapshot used by CWV and Cosmetics custom renderers.
+- Missing foreign extensions or engine state remain a no-op; no new RPC or
+  per-frame work is introduced.
+
 ## 0.1.45-dev (2026-07-21) - #712 Blightreaper pose evidence reconciliation [diagnostics-armed]
 
 - Corrected the live appearance regression check to the sight-verified

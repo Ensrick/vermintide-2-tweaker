@@ -16,8 +16,8 @@ M.CUSTOM_UNIT = M.BASE_UNIT
 
 -- #612: do not re-export Laurel. The donor's compiled unit is the behavioral
 -- contract: 8 meshes, three LOD steps, its authored normals/tangents, two
--- shadow proxies, 13-bone plume rig, animation controller, and native fade
--- registration. Replacing the unit dropped those contracts and caused the
+-- shadow proxies, 13-bone plume rig, animation controller, and fade-compatible
+-- material graph. Replacing the unit dropped those contracts and caused the
 -- faceted armor, alpha-card haze, missing jiggle, and camera-fade regression.
 M.RENDER_MODE = "vanilla_laurel_material_instance_override"
 M.DONOR_MATERIALS = {
@@ -90,7 +90,8 @@ M.MATERIAL_RESPONSE_REVISION = 6
 M.DONOR_ALPHA_CONTRACT = true
 M.DONOR_NORMAL_TANGENT_CONTRACT = true
 M.DONOR_CONTROLLER_CONTRACT = true
-M.DONOR_FADE_CONTRACT = true
+M.DONOR_FADE_CONTRACT = true -- shader/controller capability, not enrollment
+M.DYNAMIC_FADE_ENROLLMENT_REQUIRED = true
 
 M.registered = false
 M._painted_units = setmetatable({}, { __mode = "k" })
@@ -230,15 +231,21 @@ function M.spawn_unit(_application, _surface)
     return M.BASE_UNIT, false
 end
 
--- Compatibility no-ops while callers migrate. The exact donor already owns
--- its controller and participates in vanilla FadeSystem registration.
+-- The exact donor owns its plume controller. Fade enrollment is separate:
+-- AttachmentUtils.link does not register dynamically attached units with the
+-- player's FadeSystem, so the caller supplies the shared complete-snapshot
+-- adapter after attachment creation (#922).
 function M.install_native_plume_controller(unit)
     return unit and Unit and Unit.alive and Unit.alive(unit) or false
 end
 
-function M.register_fade_link(owner_unit, attachment_unit)
-    return owner_unit and attachment_unit and Unit and Unit.alive
-        and Unit.alive(owner_unit) and Unit.alive(attachment_unit) or false
+function M.register_fade_link(owner_unit, attachment_unit, adapter, edge,
+        attachment_extension)
+    if not adapter or type(adapter.enroll) ~= "function" then return false end
+    return adapter:enroll(owner_unit, edge or "custom_hat_attachment", {
+        attachment_extension = attachment_extension,
+        extra_units = { attachment_unit },
+    })
 end
 
 function M.refresh_runtime_resources(application)

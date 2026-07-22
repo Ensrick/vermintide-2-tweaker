@@ -50,6 +50,9 @@ local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local CUSTOM_HATS = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_custom_hats")
 mod._cos_attachment_link_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_attachment_link_policy")
 local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set"); mod._cos_reikland_provider_registered = GK_SET.add_outfit_provider(mod:dofile("scripts/mods/cosmetics_tweaker/_cos_reikland_griffin"))
+local APPEARANCE_FADE_RUNTIME = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_appearance_fade_runtime").new(mod,
+    { custom_hats = CUSTOM_HATS, gk_set = GK_SET, la_bridge = LA_BRIDGE })
+mod._cos_appearance_fade = APPEARANCE_FADE_RUNTIME.adapter
 local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
 mod._cos_cwv_peer_identity = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_peer_identity")
 local OFFHAND_NAMES = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_names")
@@ -93,7 +96,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.165-dev"
+local MOD_VERSION = "0.9.166-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -1463,6 +1466,7 @@ mod:hook_safe("HeroWindowItemCustomization", "_apply_weapon_skin_craft_complete"
         mod._offhand_committed = mod._offhand_committed or {}
         mod._offhand_committed[self._item_backend_id] = true
         _trace("CRAFT apply_weapon_skin_craft_complete committed offhand bid=%s", tostring(self._item_backend_id))
+        if mod._cos925_publish_and_refresh then pcall(mod._cos925_publish_and_refresh, self, "weapon-skin-apply") end
     end
 end)
 
@@ -3338,6 +3342,11 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
         return inventory_icon, display_name, description, store_icon
     end)
 end
+
+-- #925: extracted retained-card refresh/publisher; callers compose singleton seams.
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_ui_presentation_refresh").install(mod, {
+    la_bridge = LA_BRIDGE, rt_register = _rt_register,
+})
 
 local function _get_offhand_options(item_key)
     if mod._ensure_independent_dual_pool then
@@ -5993,6 +6002,7 @@ local function _install_skin_loadout_safety()
             if LA_PERSIST and career_name then
                 LA_PERSIST.save_cosmetic(career_name, slot_name, backend_id)
             end
+            mod._cos925_publish_loadout(items_iface, backend_id, career_name, slot_name, "cosmetic-equip")
             return
         end
         if (slot_name == "slot_hat" or slot_name == "slot_skin") and mod.loadout_cache[career_name] then
@@ -6005,7 +6015,10 @@ local function _install_skin_loadout_safety()
                 LA_PERSIST.clear_cosmetic(career_name, slot_name)
             end
         end
-        return func(backend_id, career_name, slot_name)
+        local result_n, results; local function capture(...) result_n = select("#", ...); results = { ... } end
+        capture(func(backend_id, career_name, slot_name))
+        mod._cos925_publish_loadout(items_iface, backend_id, career_name, slot_name, "loadout-equip")
+        return unpack(results, 1, result_n)
     end)
 
     mod:hook(items_iface, "get_loadout", function(func, self)
@@ -9424,27 +9437,14 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
     elseif not la then
         _dbg("[husk-hat-create] LA paint n/a for %s (cosmetics-side variant, #697)", tostring(cached.armoury_key))
     end
+    APPEARANCE_FADE_RUNTIME.enroll_husk_attachment(husk_unit, self, spawned_hat)
 end)
 
--- #612: owner-side Encarmine attachments retain the vanilla Laurel unit and
--- therefore its native controller/fade registration. Paint only the spawned
--- material instances after AttachmentUtils has stored the slot.
-mod:hook("PlayerUnitAttachmentExtension", "create_attachment", function(func, self, slot_name, item_data)
-    local r1, r2, r3, r4 = func(self, slot_name, item_data)
-    if slot_name == "slot_hat" and item_data and item_data.name == GK_SET.HAT_ITEM_KEY then
-        local slot = self._attachments and self._attachments.slots and self._attachments.slots[slot_name]
-        local hat_unit = slot and slot.unit
-        if hat_unit then GK_SET.apply_variant_to_unit(GK_SET.HAT_VARIANT_KEY, hat_unit, "local_attachment") end
-    end
-    if slot_name == "slot_hat" and item_data
-        and CUSTOM_HATS.is_custom_identity(item_data.name) then
-        local slot = self._attachments and self._attachments.slots
-            and self._attachments.slots[slot_name]
-        local hat_unit = slot and slot.unit
-        CUSTOM_HATS.apply_surface(hat_unit, "local-attachment")
-    end
-    return r1, r2, r3, r4
-end)
+APPEARANCE_FADE_RUNTIME.install({
+    identity = mod._cos_husk_identity,
+    get_store = function() return _la_equips_by_peer end,
+    la_persist = LA_PERSIST,
+})
 
 -- v0.9.8.7: the v0.9.8.4 + v0.9.8.6 PlayerHuskAttachmentExtension.remove_attachment
 -- guard pair has been removed entirely.
@@ -10606,7 +10606,8 @@ _cos_runtime_checks.install(mod, _rt_register, {
     la_persist = LA_PERSIST, score_identity = SCORE_IDENTITY,
     husk_identity = mod._cos_husk_identity,
     rpc_schema = COS_RPC_SCHEMA, composite_icons = COMPOSITE_ICONS,
-    custom_hats = CUSTOM_HATS, la_bridge = LA_BRIDGE, gk_set = GK_SET,
+    custom_hats = CUSTOM_HATS, appearance_fade = mod._cos_appearance_fade,
+    la_bridge = LA_BRIDGE, gk_set = GK_SET,
     glow_picker = GlowPicker, weapon_poses = WEAPON_POSES,
     shield_icon_owner_item_types = _SHIELD_ICON_OWNER_ITEM_TYPES,
     offhand_options = _offhand_options, multi_mount_item_types = _MULTI_MOUNT_ITEM_TYPES,

@@ -10,6 +10,7 @@ function M.install(mod, rt_register, deps)
     local COS_RPC_SCHEMA = deps.rpc_schema
     local COMPOSITE_ICONS = deps.composite_icons
     local CUSTOM_HATS = deps.custom_hats
+    local APPEARANCE_FADE = deps.appearance_fade
     local LA_BRIDGE = deps.la_bridge
     local GK_SET = deps.gk_set
     local GlowPicker = deps.glow_picker
@@ -532,11 +533,14 @@ _rt_register("issue612_encarmine_hat_contract", function()
         or scene.lod_steps ~= 3
         or scene.rig_bones ~= 13
         or scene.dynamic_plume_bones ~= 6
-        or CUSTOM_HATS.MATERIAL_RESPONSE_REVISION ~= 5
+        or CUSTOM_HATS.MATERIAL_RESPONSE_REVISION ~= 6
         or CUSTOM_HATS.DONOR_ALPHA_CONTRACT ~= true
         or CUSTOM_HATS.DONOR_NORMAL_TANGENT_CONTRACT ~= true
         or CUSTOM_HATS.DONOR_CONTROLLER_CONTRACT ~= true
-        or CUSTOM_HATS.DONOR_FADE_CONTRACT ~= true then
+        or CUSTOM_HATS.DONOR_FADE_CONTRACT ~= true
+        or CUSTOM_HATS.DYNAMIC_FADE_ENROLLMENT_REQUIRED ~= true
+        or not APPEARANCE_FADE
+        or type(APPEARANCE_FADE.enroll) ~= "function" then
         return "Encarmine exact-Laurel material-instance contract drifted"
     end
     -- Package-facing identity is invariant even when all custom resources are

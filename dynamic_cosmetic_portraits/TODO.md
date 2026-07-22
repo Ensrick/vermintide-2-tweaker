@@ -48,8 +48,8 @@ Each one follows the verbatim-110×130 workflow (see `DEVELOPMENT.md`).
 Not started. Each requires:
 
 1. Authoring the source 110×130 PNGs (Photoshop / AI character-consistency
-   pipeline) — the engine handles HUD/small scaling, no per-size variants
-   needed.
+   pipeline), then generating the HUD/small masked variants and rebuilding the
+   private portrait atlas through `tools/add_portrait.ps1`.
 2. Generalising `_get_kruber_merc_hat_key()` / `_get_kruber_merc_skin_key()`
    to accept a career name and the corresponding `SPProfiles[idx].careers[idx]`
    pointer.
@@ -65,10 +65,9 @@ of Ubersreik" outfits — natural starting point):
 
 ## Code cleanup
 
-- [ ] **`_PORTRAIT_MATERIALS` Lua list is informational only.** Defined but
-  never read at runtime — the actual injection happens via
-  `custom_gui_textures.ui_renderer_injections` in `_data.lua`. Either drop
-  it or wire something to assert parity at startup.
+- [x] **Portrait render-path lists assert parity.** Issue #526 split medium
+  standalone materials from HUD/small atlas sprites; runtime and offline tests
+  now reject a map entry with no matching render path.
 - [ ] **Generalise `_get_kruber_merc_*_key()`** to a single helper that
   takes a `career_name` and a profile/career index pair. Required before
   adding any other career.

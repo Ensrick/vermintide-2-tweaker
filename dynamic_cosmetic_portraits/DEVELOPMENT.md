@@ -88,8 +88,8 @@ SPProfiles[5].careers[1]                   -- Mercenary (es_mercenary)
 Plain Lua tables — fully mutable. The mod saves the originals once, then
 swaps to a custom `portrait_kruber_mercenary_<key>` and
 `medium_portrait_kruber_mercenary_<key>` pair when a tracked hat/outfit is
-equipped, and restores the originals when the toggle is off or no portrait
-matches.
+equipped, and restores the originals when no portrait matches or the mod
+unloads. DCP has no settings page; swapping is always on.
 
 ### Skin-over-hat priority
 
@@ -101,7 +101,6 @@ equipped, so the `_skin_portrait_map` lookup runs first; the
 ### Where `_sync_portrait_settings()` is called
 
 - `mod.on_game_state_changed` — keep load, mission load, menu transitions.
-- `mod.on_setting_changed("dynamic_portraits")` — user toggles the setting.
 - `UnitFrameUI.draw` (`hook_safe`) — catches the first frame after materials
   are ready. Becomes a cheap no-op once the swap is active.
 - `mod.on_unload` calls `_restore_portrait_settings()` on cleanup.
@@ -110,9 +109,12 @@ equipped, so the `_skin_portrait_map` lookup runs first; the
 
 `_check_portrait_materials_ready()` walks every UIRenderer it can find
 (`Managers.ui`, `Managers.matchmaking`, `Managers.transition`, `_ingame_ui`,
-`_hud`, `unit_frames_handler`) and probes `Gui.material()` for the canonical
-`portrait_kruber_mercenary_hat_1002` material. Once any GUI has it, the flag
-flips and stays flipped for the session.
+`_hud`, `unit_frames_handler`). It first proves representative HUD/small
+identifiers resolve through the private atlas at their exact dimensions, then
+probes `Gui.material()` for the shared atlas and representative standalone
+medium material. Once one GUI satisfies the complete contract, the flag flips
+and stays flipped for the session; otherwise DCP leaves the vanilla portrait
+active.
 
 This replaced the v0.7.52 approach of hooking `UIRenderer.create` — VMF
 destroys+recreates the renderer in its own hook, so the user-mod hook never
@@ -205,11 +207,12 @@ $sourceBmp.Dispose()
 ### Why this works
 
 The in-game HUD and matchmaking surfaces draw a frame widget on top of
-the portrait at a fixed position. The frame artwork is opaque around its
-hex cutout but the cutout itself is open — anything in the portrait that
-falls inside the cutout shows through. With shaped alpha on the portrait
-PNG, only the hex-silhouette of the face/headgear is rendered; the
-corners are invisible and don't poke past the frame.
+the portrait at a fixed position. The frame does not perform clipping, so
+the PNG needs shaped alpha. In addition, the alpha-sensitive HUD/small
+identifiers must resolve through `UIAtlasHelper`: vanilla then draws them
+with `Gui.bitmap_uv`. Issue #526 proved that the former standalone
+`Gui.bitmap` branch exposed the rectangular quad even when the committed
+PNG alpha was byte-for-byte identical to the canonical mask.
 
 Without the alpha mask, the resized RGB content fills the entire
 86×108 / 60×70 rectangle. The frame's hex cutout is smaller than the
@@ -217,10 +220,22 @@ rectangle, so RGB pixels at the canvas corners aren't covered by the
 frame artwork — they show as visible "overflow" past the frame edge.
 This was the v0.1.1 / v0.1.2 Plumed Horseshoe bug.
 
-### 4 — Generate the matching `.texture` and `.material` files
+### 4 — Generate the medium metadata and rebuild the shared atlas
 
-Each PNG gets a sibling `.texture` file (Stingray pre-processing config) and
-a `.material` file (Gui material declaration). Templates:
+Only the 110x130 medium PNG gets standalone `.texture` and `.material`
+metadata. HUD and small PNGs are source sprites for the shared private atlas:
+
+```powershell
+.\tools\rebuild_portrait_atlas.ps1
+```
+
+That deterministic script rewrites:
+
+- `textures/dynamic_cosmetic_portraits/dcp_portrait_atlas.png`
+- `materials/dynamic_cosmetic_portraits/dcp_portrait_atlas.lua`
+
+The atlas-wide `.texture` and `.material` definitions are stable, checked-in
+files beside those generated outputs. The medium templates are:
 
 `<prefix>portrait_<key>.texture`:
 ```
@@ -267,15 +282,16 @@ The block name inside the `.material` file MUST match the filename
 (without extension) — Stingray names Gui materials after the file, not after
 the block name, but mismatched names break the loader silently.
 
-The same PowerShell snippet in step 3 can be extended to write these
-templates with substituted `<prefix>portrait_<key>` strings (see what was
-done for `mercenary_hat_0003` in the v0.1.1 commit).
+`tools/add_portrait.ps1` writes the medium templates and invokes the atlas
+rebuild automatically. Do not author HUD/small standalone metadata: VMF does
+not allow one identifier to be both a standalone texture and an atlas sprite.
 
 ### 5 — Wire up the lua
 
 In `scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua`:
 
-- Add three lines to `_PORTRAIT_MATERIALS` (one per size) — informational.
+- Add the medium path to `_PORTRAIT_STANDALONE_MATERIALS`. The HUD/small
+  identifier list is derived from the generated atlas descriptor at runtime.
 - Add an entry to `_hat_portrait_map` (for hats) or `_skin_portrait_map`
   (for outfits) keyed by the cosmetic key:
 
@@ -291,19 +307,19 @@ mercenary_hat_0003 = {  -- Plumed Horseshoe
 
 In `scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits_data.lua`:
 
-- Add three entries to `custom_gui_textures.textures` (the bare texture names).
-- Add three entries to the inner table of `ui_renderer_injections[1]` (the
-  `materials/ui/...` paths). The first element of that inner table is the
-  UI script name (`"ingame_ui"`); everything after is a material path. **This
-  must remain a nested-table form** (per the v0.7.51 fix) — flat strings are
-  silently dropped by VMF.
+- Add only the medium identifier to `_texture_names`. HUD/small names are
+  discovered by VMF from the generated atlas descriptor and must not appear in the
+  standalone list.
+- The existing atlas registration and `_build_injections()` add one shared
+  atlas material plus all medium materials to each renderer creator. Keep the
+  injection entries nested; flat strings are silently dropped by VMF.
 
 ### 7 — Wire up the package
 
 In `resource_packages/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.package`:
 
-- Add three `material = [ ... ]` lines for the new material paths.
-- Add three `texture = [ ... ]` lines for the new texture paths.
+- Add only the new medium material and texture paths. The shared atlas package
+  rows are already present and the rebuild script updates their contents.
 
 ### 8 — Bump version, build, deploy
 
@@ -324,8 +340,7 @@ removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps
 1. Launch VT2.
 2. Equip the hat/outfit on Kruber Mercenary.
 3. Verify HUD portrait, hero-select medium, and matchmaking small all swap.
-4. Toggle `dynamic_portraits` off — portraits should revert to vanilla.
-5. Run `portrait_diag` if anything's wrong: it dumps career_settings state,
+4. Run `portrait_diag` if anything's wrong: it dumps career_settings state,
    material readiness on every GUI handle, and the current detected hat/skin
    key.
 
@@ -458,9 +473,11 @@ will burn a session.
 6. **Multi-definition `.material` files** — Stingray creates exactly one Gui
    material per file, named after the filename. Multiple `name = { … }`
    blocks inside one file are ignored.
-7. **UIAtlasHelper hooks** — standalone single-textures don't need atlas
-   settings; the UI falls through to `Gui.bitmap` using the material name
-   directly when the atlas lookup returns false.
+7. **Hand-written UIAtlasHelper hooks** — VMF already owns the helper hooks.
+   Register the private atlas through `custom_gui_textures.atlases`; a second
+   mod hook would duplicate ownership. Conversely, do not return HUD/small
+   portraits to standalone registration: #526 proves their `Gui.bitmap`
+   fallback is not equivalent to vanilla's `Gui.bitmap_uv` atlas path.
 
 ## Authoring notes
 
@@ -482,12 +499,12 @@ per-portrait content. The `mercenary_hat_0001` (Estalia) HUD and small
 files are good reference sources to copy alpha from when authoring new
 portraits.
 
-All standalone portrait `.material` files use `gui:DIFFUSE_MAP`. The attempted
-`gui_gradient:DIFFUSE_MAP:MASKED` correction for #526 compiled successfully and
-passed `Gui.material` readiness checks, but rendered the HUD portrait fully
-transparent in-game. Do not infer visible output from material lookup alone.
-The PNGs retain their canonical alpha silhouettes; score-screen clipping still
-needs a verified widget/material solution that preserves portrait visibility.
+Medium standalone portraits and the private atlas's normal material use
+`gui:DIFFUSE_MAP`. The attempted `gui_gradient:DIFFUSE_MAP:MASKED` standalone
+correction for #526 compiled and passed `Gui.material` readiness, but rendered
+the HUD portrait fully transparent. Do not infer visible output from material
+lookup alone. HUD/small portraits now retain canonical alpha inside the atlas
+and follow vanilla's `Gui.bitmap_uv` renderer path.
 
 **(#526) The HUD mask must conform to the VANILLA silhouette, not a
 content-derived cutout.** Pre-0.1.20-dev the hud-size mask was derived
@@ -501,7 +518,9 @@ The canonical silhouette now ships as
 draw rect), and `add_portrait.ps1` throws if a generated HUD png has any
 opaque pixel outside it. Note the frame ring drawn on top is a thin
 octagonal OUTLINE with a transparent exterior — it does not cover
-overflow the way the hero-select frame does at medium size.
+overflow the way the hero-select frame does at medium size. The mask gate is a
+necessary authoring invariant, while the atlas contract is the renderer
+invariant; both are covered by offline and runtime checks.
 
 Hero selection renders the medium 110×130 file at native size, with the
 frame widget drawn on top. The frame artwork is opaque around its hex

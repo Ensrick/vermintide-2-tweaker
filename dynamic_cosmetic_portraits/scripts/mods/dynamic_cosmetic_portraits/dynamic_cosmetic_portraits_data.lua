@@ -1,7 +1,9 @@
 local mod = get_mod("dynamic_cosmetic_portraits")
 
 -- =========================================================================
--- Texture / material list — keep in sync with _PORTRAIT_MATERIALS in
+-- Standalone texture/material list. HUD and small portraits are sprites in
+-- the private dcp_portrait_atlas; only medium portraits remain standalone.
+-- Keep this list in sync with _PORTRAIT_STANDALONE_MATERIALS in
 -- dynamic_cosmetic_portraits.lua and with the .package file.
 -- DO NOT hand-add entries without first running tools/add_portrait.ps1
 -- to generate the .png / .texture / .material files. Free-handing the
@@ -9,43 +11,21 @@ local mod = get_mod("dynamic_cosmetic_portraits")
 -- See DEVELOPMENT.md "Adding a new portrait" before editing.
 -- =========================================================================
 local _texture_names = {
-    "portrait_kruber_mercenary_hat_0004",
     "medium_portrait_kruber_mercenary_hat_0004",
-    "small_portrait_kruber_mercenary_hat_0004",
-    "portrait_kruber_mercenary_hat_0009",
     "medium_portrait_kruber_mercenary_hat_0009",
-    "small_portrait_kruber_mercenary_hat_0009",
-    "portrait_kruber_mercenary_hat_1001",
     "medium_portrait_kruber_mercenary_hat_1001",
-    "small_portrait_kruber_mercenary_hat_1001",
-    "portrait_kruber_mercenary_hat_1002",
     "medium_portrait_kruber_mercenary_hat_1002",
-    "small_portrait_kruber_mercenary_hat_1002",
-    "portrait_kruber_mercenary_hat_1003",
     "medium_portrait_kruber_mercenary_hat_1003",
-    "small_portrait_kruber_mercenary_hat_1003",
-    "portrait_kruber_mercenary_hat_0007",
     "medium_portrait_kruber_mercenary_hat_0007",
-    "small_portrait_kruber_mercenary_hat_0007",
-    "portrait_kruber_mercenary_hat_0006",
     "medium_portrait_kruber_mercenary_hat_0006",
-    "small_portrait_kruber_mercenary_hat_0006",
-    "portrait_kruber_skin_es_mercenary_1003",
     "medium_portrait_kruber_skin_es_mercenary_1003",
-    "small_portrait_kruber_skin_es_mercenary_1003",
-    "portrait_kruber_skin_es_default",
     "medium_portrait_kruber_skin_es_default",
-    "small_portrait_kruber_skin_es_default",
-    "portrait_kruber_mercenary_hat_0001",
     "medium_portrait_kruber_mercenary_hat_0001",
-    "small_portrait_kruber_mercenary_hat_0001",
-    "portrait_kruber_mercenary_hat_0003",
     "medium_portrait_kruber_mercenary_hat_0003",
-    "small_portrait_kruber_mercenary_hat_0003",
-    "portrait_kruber_mercenary_hat_0005",
     "medium_portrait_kruber_mercenary_hat_0005",
-    "small_portrait_kruber_mercenary_hat_0005",
 }
+
+local _atlas_material_path = "materials/dynamic_cosmetic_portraits/dcp_portrait_atlas"
 
 -- =========================================================================
 -- Renderer creators we inject into. The "creator" string must match the
@@ -98,7 +78,7 @@ local _renderer_creators = {
 }
 
 local function _build_material_paths()
-    local out = {}
+    local out = { _atlas_material_path }
     for _, name in ipairs(_texture_names) do
         out[#out + 1] = "materials/ui/" .. name
     end
@@ -132,13 +112,24 @@ local data = {
 
     custom_gui_textures = {
         textures = _texture_names,
+        atlases = {
+            {
+                _atlas_material_path,
+                "dcp_portrait_atlas",
+                "dcp_portrait_atlas_masked",
+                nil,
+                nil,
+                "dcp_portrait_atlas",
+            },
+        },
         ui_renderer_injections = _build_injections(),
     },
 }
 
-mod:info("[data] returning with custom_gui_textures=%s, textures=%d, injections=%d",
+mod:info("[data] returning with custom_gui_textures=%s, textures=%d, atlases=%d, injections=%d",
     tostring(data.custom_gui_textures ~= nil),
     data.custom_gui_textures and #data.custom_gui_textures.textures or 0,
+    data.custom_gui_textures and #data.custom_gui_textures.atlases or 0,
     data.custom_gui_textures and #data.custom_gui_textures.ui_renderer_injections or 0)
 
 return data

@@ -35,7 +35,20 @@ mutation and a VMF data API respectively) and are covered in the subsystem notes
 
 | Class.method (kind) | Vanilla behavior at the seam | Why dcp hooks it | Trap / invariant |
 |---|---|---|---|
-| `UnitFrameUI.draw` [safe] `:734` | Draws a player HUD unit frame each frame [src: `scripts/ui/hud_ui/unit_frame_ui.lua:326`] | Call `_sync_portrait_settings()` so the career_settings swap activates on the first frame after the custom materials are resident and the hat/skin is detected (`:734`) | PER-FRAME row, but a cheap no-op once `_portrait_settings_active` flips: `_sync_portrait_settings` early-returns until `_check_portrait_materials_ready()` confirms the material via a `Gui.material()` probe, then re-checks the equipped cosmetic. `Gui.material(gui, name)` returns nil silently on a missing material in this build (NOT a throw), so the probe MUST inspect the return, not just `pcall` success (`:138`). This is a readiness TICK only - the actual swap targets the shared `career_settings` table, so two players on the same career collide (issue 435, row below) |
+| `UnitFrameUI.draw` [safe] `:734` | Draws a player HUD unit frame each frame [src: `scripts/ui/hud_ui/unit_frame_ui.lua:326`] | Call `_sync_portrait_settings()` so the career_settings swap activates on the first frame after the custom resources are resident and the hat/skin is detected (`:734`) | PER-FRAME row, but a cheap no-op once `_portrait_settings_active` flips: `_sync_portrait_settings` early-returns until `_check_portrait_materials_ready()` proves all 24 HUD/small `UIAtlasHelper` rows, the shared atlas material, and all 12 medium standalone materials on one injected Gui. Missing resources fail open to vanilla. `Gui.material(gui, name)` returns nil silently on a missing material in this build (NOT a throw), so the probe MUST inspect the return, not just `pcall` success. This is a readiness TICK only - the actual swap targets the shared `career_settings` table, so player scope is corrected at the consumer seams (issue 435) |
+
+### Local presentation invalidation (non-hook seam)
+
+#925 attaches DCP to the bounded copied library
+`_lib_ui_presentation_refresh.lua`. Cosmetics or GUT Dev publishes a successful
+local hat/outfit write; DCP drains at most eight events per VMF `mod.update`,
+HUD draw, or game-state edge, then performs one `_sync_portrait_settings` call.
+Only Mercenary `slot_hat`/`slot_skin` rows are accepted. The writer's exact key
+bridges at most sixteen resolver passes while `CosmeticUtils` catches up, after
+which the existing resolver owns state again. This adds no engine hook, network
+message, persistent loadout cache, or dependency on a sibling mod; absence or
+schema conflict preserves prior behavior. See `docs/CROSS_MOD_ARCHITECTURE.md`
+"Local presentation invalidation".
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for dcp's cases)
 
@@ -74,15 +87,20 @@ banner; `CLAUDE.md`).
 The end-of-round score creates each row with `UIWidgets.create_portrait_frame`
 and passes `career_settings.portrait_image` directly [src:
 `scripts/ui/views/level_end/states/end_view_state_score.lua:479-516`]. The
-widget draws that material as an 86x108 texture pass [src:
-`scripts/ui/ui_widgets_honduras.lua:13766-13869`]. DCP's standalone materials
-use the proven visible `gui:DIFFUSE_MAP` shader. The attempted
-`gui_gradient:DIFFUSE_MAP:MASKED` resource correction made the compiled custom
-portrait fully transparent even though `Gui.material` returned it, so #526's
-remaining score-frame clipping cannot be solved by that shader substitution.
+widget draws that identifier as an 86x108 texture pass [src:
+`scripts/ui/ui_widgets_honduras.lua:13766-13869`]. The widget has no clipping
+pass. `UIRenderer.script_draw_bitmap` checks `UIAtlasHelper`: atlas sprites use
+`Gui.bitmap_uv`, while standalone identifiers fall through to `Gui.bitmap`
+[src: `scripts/ui/ui_renderer.lua:60-118`]. Vanilla portraits are atlas sprites;
+the #526 screenshot plus exact-alpha comparison proved DCP's standalone branch
+was not equivalent. DCP therefore registers HUD/small cutouts in one private
+atlas and keeps medium portraits standalone. Both normal paths use the proven
+visible `gui:DIFFUSE_MAP`; the earlier standalone
+`gui_gradient:DIFFUSE_MAP:MASKED` experiment rendered fully transparent.
 
-The custom portrait materials are registered through VMF's `custom_gui_textures`
-in `_data.lua` (a data API, not a hook). VMF's `inject_materials` reads the
+The private atlas, standalone medium textures, and renderer materials are
+registered through VMF's `custom_gui_textures` in `_data.lua` (a data API, not
+a mod-owned hook). VMF's `inject_materials` reads the
 `ui_renderer_creator` from `debug.traceback()` at frame 4 and matches it against
 the basename of the `.lua` file that initiated the renderer-creation chain
 [src: VMF `custom_textures.lua:191` per `DEVELOPMENT.md`]. Lua 5.1 tail-call
@@ -113,11 +131,13 @@ these.
   `UIRenderer.create` hook never runs. A direct `Gui.material()` return-value
   probe across every discoverable renderer is the only reliable readiness check
   (`_check_portrait_materials_ready`, `:349`).
-- **Multi-definition `.material` files and UIAtlasHelper hooks are wrong.**
+- **Multi-definition standalone `.material` files and user-owned
+  UIAtlasHelper hooks are wrong.**
   Stingray creates exactly one Gui material per file, named after the FILENAME
-  (extra `name = {}` blocks are ignored), and standalone single-textures bypass
-  the atlas entirely (the UI falls through to `Gui.bitmap` on the material name),
-  so no `UIAtlasHelper` registration is needed or effective.
+  (extra `name = {}` blocks are ignored). VMF already owns the helper hooks and
+  exposes `custom_gui_textures.atlases`; DCP uses that API instead of installing
+  another hook. Do not register a HUD/small identifier as both standalone and
+  atlas: VMF explicitly rejects the collision.
 - **Issue 435 player scope.** The local source swap still writes the shared
   `career_settings` entry, but other-player HUD, Tab, and score consumers resolve
   at their per-player draw/build seams from synced cosmetics, falling back to
