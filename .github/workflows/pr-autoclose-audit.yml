@@ -1,0 +1,39 @@
+name: PR auto-close audit
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+
+# Trusted default-branch code only. This never checks out or executes PR code.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: pr-autoclose-audit-${{ github.repository }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  post-merge-audit:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted default-branch policy
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Reopen unauthorized auto-closed issues
+        if: github.event_name == 'pull_request_target'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./qa/check_pr_autoclose.ps1 -PostMergeAudit -Repair
+
+      - name: Offline parser and receipt self-test
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: ./qa/check_pr_autoclose.ps1 -SelfTest

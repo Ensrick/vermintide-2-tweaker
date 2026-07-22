@@ -111,6 +111,11 @@ the Workshop). Manual equivalent for one mod:
 Use FULL mode (no `-Mods`) only for a deliberate whole-set refresh of a release-clean tree —
 e.g. after retiring/adding a mod, or to restore a dropped carry-forward entry.
 
+Source pull requests created after publishing must link tracker work with
+`Refs #N`. Do not use GitHub auto-closing keywords: a successful release or
+merge is not the user-verification receipt required to close an in-game issue.
+Repository-only issues are closed after their named deterministic check passes.
+
 ## Manifest schema
 
 ```json

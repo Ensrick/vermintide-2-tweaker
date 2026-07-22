@@ -145,8 +145,11 @@ Before requesting review:
 - Run the full QA and mod-lint commands shown above.
 - Complete the engine trace and verification sections in the pull request
   template; use `N/A` with a reason when no game runtime is involved.
-- Link the issue, but do not close an in-game issue before user verification and
-  its post-fix pass.
+- Link issues with `Refs #N`. Do not use GitHub auto-closing keywords in a pull
+  request body: merge is not user verification. The sole exception is an issue
+  comment by a trusted verifier containing the exact lines
+  `## CLOSURE AUTHORIZATION`, `Verification: user-confirmed`, and
+  `Authorized PR: #N`; the post-fix pass must already be complete.
 - Do not commit local settings, credentials, investigation notes, or manually
   generated Workshop-directory content.
 

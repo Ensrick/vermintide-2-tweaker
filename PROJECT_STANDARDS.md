@@ -1871,6 +1871,26 @@ tooling queue leakage, malformed newest cards, or invalid pin state. The advisor
 `qa/check_issue_status_labels.ps1` sweep remains the local nudge; the CI step is
 the backstop that the #750 sweep proved necessary.
 
+**Pull-request closure integrity:** PR bodies use `Refs #N`, never GitHub's
+auto-closing keyword forms. A merge proves source integration, not user
+verification or completion of the post-fix pass. `qa/check_pr_autoclose.ps1`
+blocks every supported GitHub closing keyword/reference form unless the target
+issue already carries a comment by a trusted verifier with the exact lines
+`## CLOSURE AUTHORIZATION` and `Verification: user-confirmed`, plus
+`Authorized PR: #N` naming that exact PR. The exception is explicit,
+issue-local, and single-PR-bound; a PR author cannot self-authorize in the PR
+body or reuse a stale receipt after an issue is reopened.
+
+The base-owned `pr-autoclose-authorization.yml` workflow fails closed when its
+PR body or required receipt metadata is unavailable, executes only trusted
+default-branch policy, and is a required protected-branch status. A local run
+without PR context reports a skip and must be paired with an explicit `-Body`
+or `-BodyPath` check before opening the PR. The base-owned
+`pr-autoclose-audit.yml` workflow is the post-merge fallback: it reopens an
+issue GitHub closed without the receipt and leaves a tracker comment. This is
+the PR #969 / issue #592 regression path; it is separate from lifecycle-label
+cardinality and must remain covered independently.
+
 **Player-facing localization is not an issue tracker.** Stable, beta, and dev streams
 all omit issue/lifecycle prefixes such as `[Issue N]`, `[working]`, `[untested]`,
 `[verify-fix]`, `[diag]`, and `(Experimental)`. Keep that state in GitHub labels,
