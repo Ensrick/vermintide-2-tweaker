@@ -1,5 +1,24 @@
 # Character Weapon Variants — Changelog
 
+## Unreleased - mixed-lobby Tuskgor Javelin containment (#424)
+
+- Connected CWV's existing peer-capability protocol to the actual earliest
+  hot-join senders: `TransientPackageLoader.hot_join_sync` during loading and
+  `GameNetworkManager.set_peer_synchronizing` immediately before
+  `GameSession.add_peer`. Modded projectile/husk refs are shadowed to registered
+  vanilla javelin refs (or omitted when no fallback resolves), and any live CWV
+  recovery pickups are removed before object replay. A cleanup failure keeps
+  the peer outside `GameSession` while the native bounded kick path completes.
+- Tuskgor Javelins are omitted from the ranged loadout picker while capability
+  is unproven. An already-equipped copy cannot fire a projectile or consume
+  ammunition until the gate returns to enabled. Native Kerillian Javelins are
+  excluded by exact CWV backend/skin identity.
+- Guarded the dormant grenade-slot variant's separate
+  `ActionUtils.spawn_pickup_projectile` sender. The existing pickup/projectile
+  vanilla fallback remains the final containment layer after the feature gate.
+- Added engine-free policy, inventory-filter, sender-order, and hot-join-order
+  coverage plus expanded `/cwv_regression_test` assertions.
+
 ## 0.1.470-dev (2026-07-22) - shared custom-model camera fade (#922) [not-started]
 
 - Enroll complete owner, bot, and remote-husk 3P inventory/attachment snapshots

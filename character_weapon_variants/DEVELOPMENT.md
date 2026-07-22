@@ -1782,6 +1782,33 @@ when peer parity is confirmed, and use the vanilla fallback only while parity
 is unconfirmed. Never increase its tiny throwing-weapon `spawn_weighting` to
 make it ordinary map loot; normal ammo crates already refill the finite stack.
 
+Issue #424 adds the feature-level half of that contract. Exact CWV Javelin rows
+are absent from the ranged picker until `peer_parity:applied_state()` is
+`enabled`; an already-equipped copy is stopped at
+`ActionThrownProjectile._fire`, paired with `_use_ammo` suppression. Do not use
+the inherited `item_data.name == "we_javelin"` as identity, because that would
+disable Kerillian's native weapon. `_cwv_javelin_gate.lua` recognizes only the
+CWV backend/item/skin identities and explicitly rejects the javelin+shield
+family.
+
+Polling is not enough for hot join. The exact source order is earlier than
+`GameNetworkManager.hot_join_sync`: `PeerStates.Loading` first calls
+`TransientPackageLoader.hot_join_sync`, which directly encodes tracked
+`projectile_units` and `husks` numeric ids. Shadow CWV refs to registered
+vanilla javelin refs (or omit them) around that sender and call
+`peer_parity:require_peer(peer_id)` there. Later,
+`GameNetworkManager.set_peer_synchronizing` runs immediately before
+`GameSession.add_peer`; fence again and remove/commit recovery pickups created
+in the earlier all-CWV state, because their GameObjects already contain a
+custom `pickup_names` field. If cleanup cannot be proven, reject the join rather
+than letting strict decode crash the other process. The caller ignores the
+setter's return value, so a cleanup-failed peer must also make
+`NetworkServer.is_network_state_fully_synced_for_peer` return false until the
+bounded kick path disconnects it. `remove_peer` must call
+`forget_peer` so the same Steam peer id cannot reuse a stale acknowledgement.
+The sender-side pickup/projectile fallback remains mandatory after all of this:
+UI and action gates are policy, not substitutes for a last wire boundary.
+
 ## Build discipline — don't fabricate breakpoints
 
 When proposing trait/property combos for new variants:

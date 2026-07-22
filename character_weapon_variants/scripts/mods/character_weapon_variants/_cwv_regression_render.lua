@@ -520,6 +520,35 @@ _rt_register("cwv_wire_safe_thrown_variant_installed", function()
     if _om._projectile_wire_hook_installed ~= true then
         return "in-flight projectile wire-safety hook not installed (issue 424 boar-spear husk CTD regression)"
     end
+    if _om._cwv424_throw_gate_installed ~= true then
+        return "mixed-lobby thrown-action gate not installed"
+    end
+    if _om._cwv424_actionutils_sender_guard_installed ~= true then
+        return "grenade-slot ActionUtils sender guard not installed"
+    end
+    if _om._cwv424_transient_sender_guard_installed ~= true then
+        return "transient projectile/husk hot-join sender guard not installed"
+    end
+    if _om._cwv424_hot_join_fence_installed ~= true then
+        return "pre-roster hot-join fence not installed"
+    end
+    if _om._cwv424_feature_registered ~= true then
+        return "Tuskgor Javelin parity feature not registered"
+    end
+    if type(_om.javelin_gate) ~= "table"
+            or type(_om.javelin_gate.should_block) ~= "function" then
+        return "Tuskgor Javelin pure gate policy missing"
+    end
+    local fake_cwv = { item_data = { mod_data = { backend_id = "cwv_es_javelin_001" } } }
+    if not _om.javelin_gate.should_block(fake_cwv, "disabled") then
+        return "unconfirmed parity did not disable a concrete Tuskgor Javelin"
+    end
+    if _om.javelin_gate.should_block(fake_cwv, "enabled") then
+        return "confirmed parity did not restore a concrete Tuskgor Javelin"
+    end
+    if _om.javelin_gate.should_block({ item_data = { name = "we_javelin" } }, "disabled") then
+        return "mixed-lobby gate disabled the native Kerillian Javelin control"
+    end
     if type(_om._wire_safe_pickup_name) ~= "function" then
         return "_om._wire_safe_pickup_name helper missing"
     end

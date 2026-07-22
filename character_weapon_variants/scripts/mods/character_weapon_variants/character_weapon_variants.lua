@@ -52,6 +52,7 @@ local CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 = "cwv-slot-extension-scoped-to-cros
 -- refactor is a pure `_om.` prefix with no behavior change.
 local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
+_om.javelin_gate = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_gate")
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
 _om.identity_peer_pull = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_pull")
@@ -3160,6 +3161,25 @@ end
 mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, self, filter, params)
 	local items = func(self, filter, params)
 	if not items or type(filter) ~= "string" then return items end
+
+	-- #424: a Tuskgor Javelin is a genuine modded thrown-resource feature, not
+	-- merely an alternate icon. Keep it out of the ranged loadout picker until
+	-- the peer-parity feature is positively enabled. Persisted/equipped items are
+	-- not deleted; the action gate below covers that hot-join state.
+	if string.find(filter, "slot_type == ranged", 1, true) then
+		local gate = mod._cwv_peer_parity
+		local state = "disabled"
+		if gate and type(gate.applied_state) == "function" then
+			local ok, applied = pcall(gate.applied_state, gate)
+			if ok then state = applied end
+		end
+		local hidden
+		items, hidden = _om.javelin_gate.filter_unavailable(items, state)
+		if hidden > 0 then
+			_dbg("[cwv:424] hid %d Tuskgor Javelin row(s): peer capability is %s",
+				hidden, tostring(state))
+		end
+	end
 	-- Only run for the melee-slot filter.
 	if not string.find(filter, "slot_type == melee", 1, true) then return items end
 
@@ -4962,9 +4982,12 @@ function _om._wire_safe_pickup_name(pickup_name, parity_override)
 	local all_have = parity_override
 	if all_have == nil then
 		local pp = mod._cwv_peer_parity
-		if pp and type(pp.all_peers_have) == "function" then
-			local ok, result = pcall(pp.all_peers_have, pp)
-			all_have = ok and result == true
+		if pp and type(pp.applied_state) == "function" then
+			-- Use the committed feature state, not the raw roster classifier. This
+			-- includes the enable-settle window and the synchronous hot-join fence
+			-- installed below; both must keep the sender on its vanilla fallback.
+			local ok, result = pcall(pp.applied_state, pp)
+			all_have = ok and result == "enabled"
 		else
 			all_have = false
 		end
@@ -5864,6 +5887,203 @@ end
 
 _register_tuskgor_javelin_assets()
 _create_tuskgor_javelin_template()
+
+-- ============================================================================
+-- issue 424: fail-closed mixed-lobby Tuskgor Javelin feature gate
+-- ============================================================================
+-- The pickup-name substitution above is the final sender crash floor. The
+-- product behavior is stricter: while CWV capability is unknown or absent, do
+-- not offer the weapon in the ranged picker and do not let an already-equipped
+-- copy emit a thrown projectile. This preserves saved inventory while making
+-- the unsafe behavior inert. Synchronous transient-package and pre-GameSession
+-- fences close the interval before the arriving peer can receive custom ids.
+do
+	local function _gate_state()
+		local pp = mod._cwv_peer_parity
+		if not (pp and type(pp.applied_state) == "function") then return "disabled" end
+		local ok, state = pcall(pp.applied_state, pp)
+		return ok and state or "disabled"
+	end
+
+	local function _wielded_javelin(owner_unit)
+		if not (owner_unit and Unit.alive(owner_unit)) then return false end
+		local inv = ScriptUnit.has_extension(owner_unit, "inventory_system")
+		if not inv then return false end
+		local ok, slot_data = pcall(function() return inv:get_wielded_slot_data() end)
+		return ok and _om.javelin_gate.is_cwv_javelin(slot_data) or false
+	end
+
+	local function _block_throw(self)
+		return self and _wielded_javelin(self.owner_unit)
+			and not _om.javelin_gate.feature_enabled(_gate_state())
+	end
+
+	-- Existing/equipped item containment. Blocking at _fire is late enough that
+	-- no projectile or lookup-bearing RPC exists yet. The paired _use_ammo guard
+	-- prevents the blocked attempt from consuming ammunition. Vanilla javelins
+	-- are excluded by the positive CWV backend/skin identity classifier.
+	mod:hook("ActionThrownProjectile", "_fire", function(func, self, add_spread)
+		if _block_throw(self) then
+			self._cwv424_throw_blocked = true
+			if not self._cwv424_notice_shown then
+				self._cwv424_notice_shown = true
+				mod:echo("[cwv] Tuskgor Javelin is unavailable until every player in the lobby has Career Weapon Variants.")
+				pcall(printf, "[cwv:424] throw BLOCKED before projectile spawn: peer capability=%s",
+					tostring(_gate_state()))
+			end
+			return
+		end
+		self._cwv424_throw_blocked = nil
+		self._cwv424_notice_shown = nil
+		return func(self, add_spread)
+	end)
+	mod:hook("ActionThrownProjectile", "_use_ammo", function(func, self)
+		if self._cwv424_throw_blocked then
+			self._cwv424_throw_blocked = nil
+			return
+		end
+		return func(self)
+	end)
+	_om._cwv424_throw_gate_installed = true
+
+	-- The currently dormant grenade-slot variant can also be force-dropped by
+	-- ActionUtils, whose vanilla body encodes pickup_names/husks/item_names before
+	-- sending. Suppress that custom item at the sender whenever the feature gate
+	-- is not enabled. This remains installed while _TJB_FEATURE_ON is false so a
+	-- future re-enable cannot silently reopen the distinct drop RPC path.
+	mod:hook("ActionUtils", "spawn_pickup_projectile", function(func, world, weapon_unit,
+			projectile_unit_name, projectile_unit_template_name, current_action,
+			owner_unit, position, rotation, velocity, angular_velocity, item_name, spawn_type)
+		if item_name == "cwv_grenade_tuskgor_javelin" and _gate_state() ~= "enabled" then
+			pcall(printf, "[cwv:424] grenade-slot javelin drop BLOCKED before ActionUtils wire encode")
+			return
+		end
+		return func(world, weapon_unit, projectile_unit_name, projectile_unit_template_name,
+			current_action, owner_unit, position, rotation, velocity, angular_velocity,
+			item_name, spawn_type)
+	end)
+	_om._cwv424_actionutils_sender_guard_installed = true
+
+	-- Remove any all-CWV recovery pickups before an unconfirmed hot joiner's
+	-- native object sync. They carry a custom pickup_names GameObject field even
+	-- though future sends have already switched to the vanilla fallback.
+	local function _remove_live_recovery_pickups()
+		local state = Managers and Managers.state
+		local entity = state and state.entity
+		local spawner = state and state.unit_spawner
+		if not entity or not spawner then return true, 0 end
+		local ok, removed_or_err = pcall(function()
+			local pickup_system = entity:system("pickup_system")
+			if not pickup_system then return 0 end
+			local removed = 0
+			for _, pickup_name in ipairs({ _TJ_PICKUP_KEY, _TJ_LINK_PICKUP_KEY }) do
+				local units = pickup_system:get_pickups_by_type(pickup_name) or {}
+				local snapshot = {}
+				for _, unit in pairs(units) do snapshot[#snapshot + 1] = unit end
+				for _, unit in ipairs(snapshot) do
+					if unit and Unit.alive(unit) and not spawner:is_marked_for_deletion(unit) then
+						spawner:mark_for_deletion(unit)
+						removed = removed + 1
+					end
+				end
+			end
+			if removed > 0 then spawner:commit_and_remove_pending_units() end
+			return removed
+		end)
+		if not ok then return false, tostring(removed_or_err) end
+		return true, removed_or_err
+	end
+	_om._cwv424_remove_live_recovery_pickups = _remove_live_recovery_pickups
+
+	local pp = mod._cwv_peer_parity
+	if pp and type(pp.register_gated_feature) == "function" then
+		pp:register_gated_feature("cwv_tuskgor_javelin_throw", {
+			label = "cwv_gated_tuskgor_javelin_throw",
+		})
+		_om._cwv424_feature_registered = true
+	end
+
+	-- This is the FIRST hot-join sender for the projectile axis. PeerStates.Loading
+	-- calls it before GameSession.add_peer and before GameNetworkManager's later
+	-- hot_join_sync. Vanilla serializes the raw tracked ref keys through numeric
+	-- NetworkLookup.projectile_units / .husks ids. Numeric index equality is not
+	-- proven even between two CWV installs, so shadow both CWV refs to their
+	-- boot-stable vanilla javelin equivalents unconditionally around the sender.
+	mod:hook("TransientPackageLoader", "hot_join_sync", function(func, self, peer_id)
+		local parity = mod._cwv_peer_parity
+		if parity and type(parity.require_peer) == "function" then
+			parity:require_peer(peer_id)
+		end
+		local projectile_refs = self and self._tracked_projectiles and self._tracked_projectiles.refs
+		local unit_refs = self and self._tracked_units and self._tracked_units.refs
+		local safe_units = rawget(_G, "ProjectileUnits")
+		local safe_template = safe_units and safe_units[_om._TJ_INFLIGHT_SAFE_TEMPLATE]
+		local safe_unit = safe_template and safe_template.projectile_unit_name
+		local lookups = rawget(_G, "NetworkLookup")
+		local safe_projectile_registered = lookups and lookups.projectile_units
+			and rawget(lookups.projectile_units, _om._TJ_INFLIGHT_SAFE_TEMPLATE)
+		local safe_unit_registered = safe_unit and lookups and lookups.husks
+			and rawget(lookups.husks, safe_unit)
+		local restore_projectile = _om.javelin_gate.begin_ref_shadow(
+			projectile_refs, _TJ_PROJECTILE_KEY, _om._TJ_INFLIGHT_SAFE_TEMPLATE,
+			safe_projectile_registered ~= nil)
+		local restore_unit = _om.javelin_gate.begin_ref_shadow(
+			unit_refs, _TJ_BOAR_SPEAR_UNIT, safe_unit, safe_unit_registered ~= nil)
+		local ok, err = pcall(func, self, peer_id)
+		restore_unit()
+		restore_projectile()
+		if not ok then error(err) end
+	end)
+	_om._cwv424_transient_sender_guard_installed = true
+
+	-- PeerStates.WaitingForEnterGame calls set_peer_synchronizing immediately
+	-- before GameSession.add_peer starts native GameObject replication. This is
+	-- the last point where existing custom recovery-pickup objects can be removed
+	-- from the session before the new peer sees their pickup_names field.
+	local rejected_peers = {}
+	mod:hook("GameNetworkManager", "set_peer_synchronizing", function(func, self, peer_id)
+		local parity = mod._cwv_peer_parity
+		if type(peer_id) == "string" and parity
+				and type(parity.require_peer) == "function"
+				and type(parity.peer_has) == "function" then
+			local confirmed = parity:peer_has(peer_id)
+			parity:require_peer(peer_id)
+			if not confirmed then
+				local safe, detail = _remove_live_recovery_pickups()
+				if not safe then
+					rejected_peers[peer_id] = true
+					pcall(printf, "[cwv:424] hot-join sync REJECTED peer=%s: recovery pickup cleanup failed: %s",
+						tostring(peer_id), tostring(detail))
+					local server = self and self.network_server
+					if server and type(server.kick_peer) == "function" then
+						pcall(server.kick_peer, server, peer_id)
+					end
+					return
+				end
+				rejected_peers[peer_id] = nil
+				pcall(printf, "[cwv:424] hot-join preflight peer=%s gate=disabled removed_pickups=%d",
+					tostring(peer_id), detail)
+			end
+		end
+		return func(self, peer_id)
+	end)
+	-- The vanilla caller ignores set_peer_synchronizing's return value and tests
+	-- this predicate immediately before GameSession.add_peer. Keep a cleanup-
+	-- failed peer outside the session until NetworkServer's bounded kick path
+	-- disconnects it; otherwise returning above would still permit object replay.
+	mod:hook("NetworkServer", "is_network_state_fully_synced_for_peer", function(func, self, peer_id)
+		if rejected_peers[peer_id] then return false end
+		return func(self, peer_id)
+	end)
+	mod:hook_safe("GameNetworkManager", "remove_peer", function(self, peer_id)
+		rejected_peers[peer_id] = nil
+		local parity = mod._cwv_peer_parity
+		if parity and type(parity.forget_peer) == "function" then
+			parity:forget_peer(peer_id)
+		end
+	end)
+	_om._cwv424_hot_join_fence_installed = true
+end
 
 -- ============================================================================
 -- Tuskgor Javelin (BOMB SLOT) — single-use thrown spear "grenade"  (v0.1.352-dev)
