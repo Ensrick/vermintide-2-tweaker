@@ -96,7 +96,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.166-dev"
+local MOD_VERSION = "0.9.167-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -7555,10 +7555,9 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         -- FIRST PERSON, and the 0.9.53 trace showed create_equipment's working
         -- "ingame" paint hits both units (3P `..._mesh_3p` AND 1P `..._mesh`).
         -- Painting only the 3P would never restore what the user actually sees.
-        local targets = { left_unit }
+        local targets, painted = { left_unit }, false
         local left_1p = equipment and equipment.left_hand_wielded_unit
         if left_1p and Unit.alive(left_1p) then targets[#targets + 1] = left_1p end
-        local painted = false
         for _, target in ipairs(targets) do
             -- v0.9.54-dev (#204): MESH-MISMATCH WARP GUARD on the husk / peer /
             -- local re-apply paint. This path paints via the un-gated
@@ -7613,9 +7612,6 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
                 painted = painted or ok
             end
         end
-        -- A mesh-mismatch skip or a false paint result is not an applied
-        -- replay generation. The bounded reconciler retains it as deferred
-        -- until re-wield establishes the exact mesh and paint succeeds.
         return painted
     end
 
@@ -7727,20 +7723,14 @@ local _OFFHAND_RESWAP_COOLDOWN = 1.5
 local _OFFHAND_RESWAP_MAX_TRIES = 3
 local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
     if _offhand_reswap_active then return false, "pulse-active" end
-    if not (owner_unit and armoury_key and Unit.alive(owner_unit)) then
-        return false, "owner-not-ready"
-    end
+    if not (owner_unit and armoury_key and Unit.alive(owner_unit)) then return false, "owner-not-ready" end
     hand_field = hand_field or "left_hand_unit"
     local la = get_mod("Loremasters-Armoury")
     local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
-    if not variant then
-        return false, "variant-missing"
-    end
+    if not variant then return false, "variant-missing" end
     local inv = ScriptUnit and ScriptUnit.has_extension and ScriptUnit.has_extension(owner_unit, "inventory_system")
     local equipment = inv and inv._equipment
-    if not (equipment and equipment.slots and inv.wield) then
-        return false, "inventory-not-ready"
-    end
+    if not (equipment and equipment.slots and inv.wield) then return false, "inventory-not-ready" end
     -- Already the LA mesh? -> nothing to do (the common healthy case; no flicker).
     local wielded_field = (hand_field == "right_hand_unit")
         and "right_hand_wielded_unit_3p" or "left_hand_wielded_unit_3p"
@@ -7797,8 +7787,7 @@ local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
         tostring(tag), tostring(owner_unit), tostring(hand_field), tostring(armoury_key), tries,
         tostring(from_mesh), tostring(la_unit), tostring(orig_slot), tostring(pulse_slot),
         tostring(ok1), tostring(ok2))
-    if ok1 and ok2 then return true, "pulsed" end
-    return false, "wield-failed"
+    return ok1 and ok2, (ok1 and ok2) and "pulsed" or "wield-failed"
 end
 
 -- v0.9.69-dev (#265, LA_SYNC_CORE_AUDIT Slice 1): revert-side primitives.
@@ -7972,21 +7961,14 @@ mod._la_reconcile = function(wearer_peer, slot_name, tag, allow_pulse)
     local applied = _apply_la_on_unit(wu, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key)
     if eq.kind == "offhand" or eq.kind == "illusion" then
         if allow_pulse then
-            -- Do not pulse a different wielded weapon merely because a saved
-            -- record exists. When the intended item is wielded, repair the
-            -- stale mesh and immediately re-run paint; only that retained
-            -- postcondition may be coalesced as applied by the replay ledger.
             local inv = ScriptUnit and ScriptUnit.has_extension
                 and ScriptUnit.has_extension(wu, "inventory_system")
             local equipment = inv and inv._equipment
-            local matches = mod._la_wielded_item_matches(
-                inv, equipment, slot_name, eq.kind == "illusion")
+            local matches = mod._la_wielded_item_matches(inv, equipment, slot_name, eq.kind == "illusion")
             if matches then
-                local repaired = _ensure_offhand_mesh(
-                    wu, eq.hand_field, eq.armoury_key, tag)
+                local repaired = _ensure_offhand_mesh(wu, eq.hand_field, eq.armoury_key, tag)
                 if not applied and repaired then
-                    applied = _apply_la_on_unit(
-                        wu, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key)
+                    applied = _apply_la_on_unit(wu, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key)
                 end
             end
         elseif applied then

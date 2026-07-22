@@ -1,5 +1,17 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.167-dev (2026-07-22) — #149 retained Loremaster shield transition repair [not-started]
+
+- Keep-to-mission replay now resolves the active weapon slot from the common
+  equipment-owned field used by both local and husk inventory extensions,
+  preserving the direct husk field only as a compatibility fallback.
+- A mesh-mismatch paint skip is no longer recorded as a successful replay.
+  The bounded reconciler verifies the wielded item, re-wields only from a safe
+  lifecycle edge, repaints the realized authored shield, and coalesces the
+  generation only after that retained postcondition succeeds.
+- Added pure Lua, runtime, and source-contract regressions for local/husk slot
+  shapes, bounded replay, and the no-false-success invariant.
+
 ## 0.9.166-dev (2026-07-22) — #922/#925 fade and live presentation refresh [not-started]
 
 - After Cosmetics applies an illusion, the retained top-left customization
