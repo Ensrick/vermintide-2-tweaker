@@ -136,6 +136,25 @@ function Invoke-SelfTest {
         $hostExe = (Get-Process -Id $PID).Path
         $null = & $hostExe -NoProfile -File $PSCommandPath -BodyPath $tempBody -Repository 'owner/repo' -Quiet 2>&1
         if ($LASTEXITCODE -ne 0) { throw '-BodyPath clean-reference command path failed' }
+
+        $previousActions = $env:GITHUB_ACTIONS
+        $previousEventName = $env:GITHUB_EVENT_NAME
+        $previousEventPath = $env:GITHUB_EVENT_PATH
+        try {
+            $env:GITHUB_ACTIONS = 'true'
+            $env:GITHUB_EVENT_NAME = 'push'
+            $env:GITHUB_EVENT_PATH = $null
+            $null = & $hostExe -NoProfile -File $PSCommandPath -Quiet 2>&1
+            if ($LASTEXITCODE -ne 0) { throw 'non-PR GitHub Actions command path did not skip cleanly' }
+
+            $env:GITHUB_EVENT_NAME = 'pull_request'
+            $null = & $hostExe -NoProfile -File $PSCommandPath -Quiet 2>&1
+            if ($LASTEXITCODE -ne 2) { throw 'PR GitHub Actions command path did not fail closed without metadata' }
+        } finally {
+            $env:GITHUB_ACTIONS = $previousActions
+            $env:GITHUB_EVENT_NAME = $previousEventName
+            $env:GITHUB_EVENT_PATH = $previousEventPath
+        }
     } finally {
         if (Test-Path -LiteralPath $tempBody) { Remove-Item -LiteralPath $tempBody -Force }
     }
@@ -178,11 +197,11 @@ if ($BodyPath) {
     $hasBodyContext = $true
 }
 if (-not $hasBodyContext) {
-    if ($env:GITHUB_ACTIONS -eq 'true') {
-        Write-Host '[check_pr_autoclose] ERROR - GitHub CI supplied no pull-request body context.' -ForegroundColor Red
+    if ($env:GITHUB_ACTIONS -eq 'true' -and $env:GITHUB_EVENT_NAME -in @('pull_request', 'pull_request_target')) {
+        Write-Host '[check_pr_autoclose] ERROR - pull-request CI supplied no pull-request body context.' -ForegroundColor Red
         exit 2
     }
-    if (-not $Quiet) { Write-Host '[check_pr_autoclose] SKIP - local run has no PR body; pass -Body or -BodyPath. Hosted PR CI and post-merge audit remain authoritative.' -ForegroundColor DarkGray }
+    if (-not $Quiet) { Write-Host '[check_pr_autoclose] SKIP - current context has no PR body; pass -Body or -BodyPath. Hosted PR CI and post-merge audit remain authoritative.' -ForegroundColor DarkGray }
     exit 0
 }
 if (-not $Repository) {
