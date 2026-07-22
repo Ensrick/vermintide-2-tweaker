@@ -2118,6 +2118,9 @@ is inferred from `PlayerManager` or a mod handshake triggered by player creation
 3. Audit deactivation/stop contracts for every feature member. A missing general
    stop function means late teardown is not proof that all replicated units are
    gone.
+4. Keep read-only UI projections out of the admission state machine. A preview
+   may mirror the current parity decision, but must not call the selector that
+   arms/releases the pre-admission lock merely because a panel rendered.
 
 ### Fix template
 - Prefer vanilla-resident units/templates so no peer capability is required.
@@ -2131,6 +2134,9 @@ is inferred from `PlayerManager` or a mod handshake triggered by player creation
   hot join, lock release, unknown network state, and unchanged vanilla
   non-joinability. Event Tweaker's `event_tweaker_curse_join_policy.lua` is the
   reference.
+- Separately verify each catalog member's runtime dependencies. Package preload
+  proves residency, not that named terror events, missions/objectives, special
+  pickups, or economy callbacks are valid in the target mechanism.
 
 ## 57. Successful one-shot weapon transform is reset by animation
 

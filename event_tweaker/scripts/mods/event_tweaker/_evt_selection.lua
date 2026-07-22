@@ -37,10 +37,11 @@ local EVENT_PRESETS   = Catalog.EVENT_PRESETS
 -- + CHANGELOG 0.4.14-dev). These curses normally run only inside the Chaos
 -- Wastes / Deus realm because their unit/decal resource PACKAGE is loaded only
 -- by DeusRunState.set_event_mutators (deus_run_state.lua:438-453); the
--- mechanics themselves use only standard mission managers and every DLC entity
--- system is registered into EVERY mission at boot (entity_system.lua:176 +
--- :424-435). So once _evt_cursed_adventure.lua preloads the package on every
--- peer, they run on a plain adventure map. NB: clients ALSO need the package
+-- most mechanics have no direct Deus-run-controller dependency and every DLC
+-- entity system is registered into EVERY mission at boot (entity_system.lua:176
+-- + :424-435). Package preload removes one proven crash boundary; it does not
+-- prove each curse's objective/economy behavior in Adventure (see DEVELOPMENT.md
+-- source census). NB: clients ALSO need the package
 -- (spawn_network_unit replicates a husk), so unlike the host-only "Other
 -- Mutators" group, the Cursed Adventure group requires event_tweaker on EVERY peer.
 local Curses                     = require("scripts/mods/event_tweaker/event_tweaker_curses")
@@ -130,11 +131,10 @@ local function displayable_registered_mutators()
     return out
 end
 
--- Package-bearing curse mutators whose checkbox is on. DLC-owned (free CW /
--- Be'lakor content, so always true) + actually registered in MutatorTemplates.
--- These ride the SAME live-event injection as everything else, but additionally
--- trigger per-peer package preload + cursed-sky lighting (_evt_cursed_adventure.lua).
-local function selected_curse_mutators()
+-- Read-only candidate collector shared by injection and preview. It must not arm
+-- or release the issue-430 session lock: merely opening the Tab preview is not a
+-- commitment to inject package-bearing gameplay.
+local function selected_curse_candidates()
     local out = {}
     local MT = rawget(_G, "MutatorTemplates")
     for i = 1, #MANAGED_CURSES do
@@ -144,6 +144,15 @@ local function selected_curse_mutators()
             out[#out + 1] = c.id
         end
     end
+    return out
+end
+
+-- Package-bearing curse mutators whose checkbox is on. DLC-owned (free CW /
+-- Be'lakor content, so always true) + actually registered in MutatorTemplates.
+-- These ride the SAME live-event injection as everything else, but additionally
+-- trigger per-peer package preload + cursed-sky lighting (_evt_cursed_adventure.lua).
+local function selected_curse_mutators()
+    local out = selected_curse_candidates()
     -- Lock the session BEFORE evaluating the final safety predicate. Vanilla's
     -- Connecting state consults GameModeBase.is_joinable before it can advance
     -- toward GameSession.add_peer/game-object replication. If the selection is
@@ -339,26 +348,26 @@ local function preview_selection()
         consider(individual[i], false)
     end
 
-    -- selected_curse_mutators() already applies the issue 430 floor (returns {}
-    -- when a peer lacks the mod), so anything it hands back genuinely activates.
-    local curses = selected_curse_mutators()
-    for i = 1, #curses do
-        consider(curses[i], true)
+    -- Preview the same candidates and parity decision as injection, but do not call
+    -- selected_curse_mutators(): that function owns the issue-430 session lock and
+    -- is deliberately side-effecting. UI rendering must never change joinability.
+    local curse_candidates = selected_curse_candidates()
+    local curse_safe = curse_wire_safe and curse_wire_safe()
+    if curse_safe then
+        for i = 1, #curse_candidates do
+            consider(curse_candidates[i], true)
+        end
     end
 
     -- Floor-dropped curses: the user checked them and owns the DLC, but the
     -- parity floor removed them (a lobby peer lacks event_tweaker). Enumerated
     -- separately so the panel can list them greyed instead of silently vanishing.
-    if not (curse_wire_safe and curse_wire_safe()) then
-        local MT = rawget(_G, "MutatorTemplates")
-        for i = 1, #MANAGED_CURSES do
-            local c = MANAGED_CURSES[i]
-            if mod:get("mut_" .. c.id) and owns_dlc(c.dlc)
-               and (not MT or rawget(MT, c.id)) then
-                if not dropped_seen[c.id] then
-                    dropped_seen[c.id] = true
-                    dropped[#dropped + 1] = c.id
-                end
+    if not curse_safe then
+        for i = 1, #curse_candidates do
+            local name = curse_candidates[i]
+            if not dropped_seen[name] then
+                dropped_seen[name] = true
+                dropped[#dropped + 1] = name
             end
         end
     end
