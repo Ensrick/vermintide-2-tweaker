@@ -431,7 +431,7 @@ gold/intensity/pulse values. Missing resources fail closed before Stingray C
 calls; there is no polling or RPC. Full hashes, bindings, source citations, and
 the rejected compiler paths live in `tools/BLIGHTREAPER_ASSET_PIPELINE.md`.
 The canonical held transform uses uniform XYZ baseline multiplier
-`{0.9, 0.9, 0.9}`, Euler XYZ rotation `{-90, -90, -90}`, and linked-position
+`{0.9, 0.9, 0.9}`, Euler XYZ rotation `{-180, -90, -90}`, and linked-position
 offset `{0, 0, -0.3}`. Live `0.1.33-dev` evidence measured the named render
 node's native scale as `{100,100,100}`; the durable owner must therefore resolve
 the multiplier to absolute `{90,90,90}` before invoking the shared appearance
@@ -443,6 +443,14 @@ prunes dead units, emits no RPC, and yields to an intentional non-identity WT
 development-tuner edit. A successful spawn-time `pcall` is not retention proof
 (issue #613, v0.1.24-dev), and a retained setter state is not visual success if
 its scale semantics changed with the target node (issue #712, v0.1.33-dev).
+
+`/woc_pose_audit` is the non-mutating diagnostic boundary for this owner. It
+logs at most eight tracked units with surface, perspective, final readback,
+retention result, and explicit Weapon Tweaker hold-pose ownership. Use it after
+`/woc_pose_reset` when a visual report disagrees with the initial transform
+proof; the two reports distinguish a stale descriptor, a rejected/stomped
+write, and an intentional development-tuner override without another guessed
+pose change.
 
 The inherited `entry.name` remains required for vanilla equip safety. Every
 exact Blightreaper backend instance is therefore canonicalized at
