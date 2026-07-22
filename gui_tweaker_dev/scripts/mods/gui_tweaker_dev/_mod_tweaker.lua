@@ -20,6 +20,7 @@ function ModTweaker.init_dbg(dbg, dbg_alert)
 end
 
 local Settings = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_settings")
+local RuntimeGates = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_runtime_gates")
 
 -- ---------------------------------------------------------------
 -- Public API — addressed via get_mod("gut_dev").mod_tweaker:<method>(...).
@@ -51,6 +52,37 @@ end
 
 function ModTweaker:set(mod_id, setting_id, value)
     return Settings.set(mod_id, setting_id, value)
+end
+
+-- (#371) Live safety gates for settings whose owning feature cannot operate in
+-- the current lobby. This API affects Mod Tweaker presentation and interaction;
+-- the owner remains responsible for fail-closed runtime/network enforcement.
+function ModTweaker:register_runtime_gate(gate_id, spec)
+    local ok, err = RuntimeGates.register(gate_id, spec)
+    if not ok then
+        _dbg_alert("[mt:runtime-gate] registration rejected: %s", tostring(err))
+    end
+    return ok, err
+end
+
+function ModTweaker:unregister_runtime_gate(gate_id)
+    return RuntimeGates.unregister(gate_id)
+end
+
+function ModTweaker:runtime_gate_status(mod_id, setting_id)
+    return RuntimeGates.status(mod_id, setting_id)
+end
+
+function ModTweaker:apply_runtime_gate(row, mod_id, setting_id)
+    return RuntimeGates.apply_row(row, mod_id, setting_id)
+end
+
+function ModTweaker:prune_runtime_gated_pending(pending_by_mod, mod_ids)
+    local blocked = RuntimeGates.prune_pending(pending_by_mod, mod_ids)
+    if blocked > 0 then
+        _dbg_alert("[mt:runtime-gate] discarded %d newly blocked pending edit(s)", blocked)
+    end
+    return blocked
 end
 
 -- (#446) Mutually-exclusive group API. A sibling mod declares that a set of its own
@@ -119,6 +151,7 @@ end
 function ModTweaker.install(dbg, dbg_alert)
     ModTweaker.init_dbg(dbg, dbg_alert)
     Settings.init_dbg(dbg, dbg_alert)
+    RuntimeGates.init_dbg(dbg, dbg_alert)
     _dbg("[mt] installed")
     return ModTweaker
 end

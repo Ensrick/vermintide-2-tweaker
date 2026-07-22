@@ -1,5 +1,22 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.309-dev (2026-07-21) -- live mixed-lobby setting gates (#371)
+
+- Added an owner-registered runtime gate API for Mod Tweaker settings. A gate
+  predicate is evaluated from live lobby state; unknown, malformed, or throwing
+  results fail closed.
+- Both the keep and in-mission Mod Tweaker presentations now make blocked rows
+  read-only, grey their labels, and replace the normal tooltip with the owner's
+  player-facing explanation. Rows restore their exact prior state as soon as
+  the live gate becomes available again, without changing saved settings.
+- Pending edits are filtered again on Apply, closing the race where a peer
+  joins after an edit is staged but before the user commits it.
+- No gameplay feature is registered in this release. Runtime/network emission
+  guards remain mandatory in each owning mod; this is the shared UI and input
+  foundation only.
+- Added offline coverage for composed gates, predicate failures, live row-state
+  restoration, and both presentation paths.
+
 ## 0.2.308-dev (2026-07-21) -- merged slider ownership and selected-loadout evidence (#389 #375)
 
 - Numeric rows in the synthesized Equipment tab now resolve their snap/click
