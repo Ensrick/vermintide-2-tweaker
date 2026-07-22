@@ -2360,6 +2360,37 @@ _rt_register("rpc_schema_gate_drops_on_mismatch", function()
     return result_err
 end)
 
+_rt_register("issue921_tab_rarity_state_is_tristate", function()
+    local apply = mod._cim_apply_modded_slot_metadata
+    local state = mod._cim_modded_slot_state
+    local core = mod._cim246_tab_preview_core
+    if type(apply) ~= "function" or type(state) ~= "table"
+            or type(core) ~= "table" or type(core.resolve_rarity) ~= "function" then
+        return "#921 rarity metadata policy/runtime wiring missing"
+    end
+
+    local peer_id, local_player_id, slot_name = "rt_issue921_peer", 7, "slot_melee"
+    local uid = tostring(peer_id) .. ":" .. tostring(local_player_id)
+    local saved = state[uid]
+    state[uid] = nil
+
+    local result_err
+    if apply(peer_id, local_player_id, slot_name, true, "regression") ~= true
+            or not (state[uid] and state[uid][slot_name] == true) then
+        result_err = "modded=true metadata was not retained"
+    elseif apply(peer_id, local_player_id, slot_name, false, "regression") ~= true
+            or not state[uid] or state[uid][slot_name] ~= false then
+        result_err = "modded=false metadata collapsed to absence; stale frame can survive"
+    elseif core.resolve_rarity("modded", true, false) ~= "unique" then
+        result_err = "authoritative false did not clear a cached modded rarity"
+    elseif core.resolve_rarity("modded", true, nil) ~= "modded" then
+        result_err = "missing metadata did not fail closed"
+    end
+
+    state[uid] = saved
+    return result_err
+end)
+
 _rt_register("issue88_inventory_access_flip_is_scoped", function()
     -- Issue #88: open_standard_crafting must NOT permanently mutate
     -- InventorySettings.inventory_loadout_access_supported_game_modes (that

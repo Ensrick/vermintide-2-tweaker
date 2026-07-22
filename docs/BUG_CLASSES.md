@@ -2920,3 +2920,42 @@ vanilla function has produced a dense result array.
 
 **Related:** class 5 (identity layers), class 39 (shape/contract drift), class
 65 (loadout row shapes), and class 73 (backend ownership boundaries).
+
+## 78. Boolean side-channel state collapses false into absence
+
+**First confirmed:** issues #598 and #921 on 2026-07-22.
+**Canonical Issue:** [#598](https://github.com/Ensrick/vermintide-2-tweaker/issues/598)
+**Lives in:** peer/slot presentation caches where a mod-only side-channel
+restores information intentionally stripped from a vanilla-safe RPC.
+
+### Symptoms
+- A slot is rendered correctly while it contains the custom item, but a common
+  replacement inherits the prior item's frame after a mode transition.
+- The owner and observer disagree because a broadcast target such as `others`
+  updates only remote peers while the server also queues the vanilla RPC
+  locally [src: `network_transmit.lua:508-524`; `loadout_utils.lua:36-42`].
+- No custom icon or model key crossed the wire; only cached presentation state
+  is wrong.
+
+### Diagnosis pattern
+1. Treat `true`, `false`, and `nil` as three states: custom, explicitly ordinary,
+   and not-yet-received. Search for `flag and true or nil` and truthy-only
+   consumers that erase the explicit clear.
+2. Drive both packet orders: vanilla RPC before side-channel and side-channel
+   before vanilla RPC. The receiver must converge in either order.
+3. Check whether the sender belongs to the transport target. `send_rpc_all`
+   queues a local RPC, while a mod-channel `others` send excludes its sender.
+
+### Fix template
+- Retain explicit `false` in the per-identity slot cache and consume it with an
+  `== nil` absence test. On false, normalize any cached custom presentation to
+  the known vanilla-safe substitute.
+- Prime the same metadata through the local policy before dispatch when the
+  network recipient excludes the sender. Reuse one apply helper for local and
+  remote paths so their semantics cannot drift.
+- Keep resource identity out of the side-channel. Test true-to-false, nil
+  fail-closed, local-owner priming, both arrival orders, transition, hot join,
+  and a peer without the mod.
+
+**Related:** class 24 (transition lifecycle), class 43 (durable versus render
+state), class 48 (presentation adapters), and class 64 (numeric lookup parity).

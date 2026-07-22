@@ -140,15 +140,16 @@ Last updated: 2026-07-22.
 | Expected post-fix | Icons and hover tooltips match the live equipped skins in both host-to-client directions, update after swaps, and clear to the base icon for default skin. |
 | Detection | Run the offline Lua suite and `/cim_regression_test`; require `issue246_tab_preview_exact_skin_icon` PASS. Unknown registered identity emits one bounded `[cim:246]` line. |
 
-### issue598-tab-preview-rarity-parity - Owner and CIM peers use the same safe modded frame
+### issue598/921-hold-tab-rarity-convergence - Modded frames follow the current slot item
 
 | Field | Value |
 |-------|-------|
-| Scope | Hold-Tab melee/ranged rarity frames only; custom icon/model/material names never enter this RPC. |
+| Scope | Hold-Tab rarity backgrounds for the owner and every CIM observer; resource/icon identity remains separately renderer-gated. |
+| Source boundary | The vanilla server queues `rpc_sync_loadout_slot` locally as well as sending it to clients, but CIM's `network_send(..., "others", ...)` excludes the sender [src: `network_transmit.lua:508-524`; `loadout_utils.lua:13-42`]. The side-channel cache must therefore be primed locally and retain explicit `false` as distinct from not-yet-received metadata. |
 | Solo repro first | Equip a Career Weapon Variants weapon, hold Tab, then equip the Blightreaper and hold Tab. Replace either with a vanilla weapon and hold Tab again. |
-| Expected post-fix | The local player's CWV weapon and Blightreaper use the Modded/Cursed presentation registered on that installation; replacing the item clears stale modded chrome immediately. A vanilla item remains vanilla. |
-| Co-op follow-up | Only after solo passes: host and client reverse roles, inspect their own and each other's Hold-Tab rows, then repeat with one peer lacking CIM. The CIM peer may restore local modded chrome; the peer without CIM receives vanilla-safe `unique` and no custom resource identity. |
-| Detection | Offline `CIM #598` tests prove sender-local mirroring, explicit-false clearing, same-cycle texture repair, and separation from custom resources. Run `/cim_regression_test` in the exact live build before visual checks. |
+| Expected post-fix | A Modded item uses the Modded frame for its owner and observer. A common replacement immediately uses its ordinary frame on both peers; no prior slot occupant leaks through a transition. A peer without CIM still receives only the vanilla-safe `unique` rarity. |
+| Co-op follow-up | Only after solo passes: host and client inspect their own and each other's rows, enter the Chaos Wastes so the slot becomes a common-rarity weapon, and repeat in the opposite direction with the Imperial Crowbill. Then repeat with one peer lacking CIM. |
+| Detection | Run the offline Lua suite and `/cim_regression_test`; require `issue921_tab_rarity_state_is_tristate` PASS. The bounded `[cim:921]` lines must show `current=false` on the common replacement and no custom resource name on the side-channel path. |
 
 ---
 

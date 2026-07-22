@@ -81,7 +81,9 @@ return function(H, repo_root)
             "issue 959 accessory property layer check missing")
         H.truthy(seen.issue628_salvage_state_diagnostic,
             "issue 628 exact salvage-state diagnostic check missing")
-        H.equal(#names, 81, "regression registration set changed")
+        H.truthy(seen.issue921_tab_rarity_state_is_tristate,
+            "issue 921 Hold-Tab rarity convergence check missing")
+        H.equal(#names, 82, "regression registration set changed")
         local ok, result = pcall(checks[1])
         H.truthy(ok, "registered checks did not close over the supplied mod object")
         H.equal(type(result), "string")
