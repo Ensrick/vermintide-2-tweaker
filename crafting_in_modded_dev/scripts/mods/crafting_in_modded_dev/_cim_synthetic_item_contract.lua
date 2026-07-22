@@ -141,6 +141,17 @@ function M.is_immutable_relic(item)
         and (custom.woc_unique_relic == true or custom.woc_unique_relic == "true")
 end
 
+-- WOC owns trophy acquisition and guarantees exactly one canonical backend
+-- instance.  Classify that ownership from the stable provider identity as well
+-- as the live marker: CIM restores its save before WOC necessarily registers
+-- ItemMasterList, so a stale `woc_*` record must remain rejectable even when
+-- `master` is not available yet (issue 822).
+function M.is_immutable_relic_identity(item_key, item, backend_id)
+    if M.is_immutable_relic(item) then return true end
+    if M.provider_for(item_key, item) == "woc" then return true end
+    return type(backend_id) == "string" and backend_id:sub(1, 4) == "woc_"
+end
+
 -- Returns true for ordinary vanilla rows (they remain vanilla-owned), or for a
 -- complete provider row. A malformed mod-provider definition returns false and
 -- a bounded problem list so acquisition selectors can reject it before draw.
@@ -151,7 +162,7 @@ function M.validate_provider(item_key, master)
     -- WOC trophy weapons are deterministic one-per-account local relics.  The
     -- provider marker is the sole cross-mod boundary: no CIM acquisition path
     -- may turn one into a second crafted/editable instance.
-    if M.is_immutable_relic(master) then
+    if M.is_immutable_relic_identity(item_key, master) then
         return false, { "immutable_relic" }, provider
     end
 
@@ -196,6 +207,10 @@ function M.normalize_record(backend_id, input, master)
     local item_key = _canonical_item_key(input, backend_id)
     if type(item_key) ~= "string" or item_key == "" then
         return nil, "item_key"
+    end
+
+    if M.is_immutable_relic_identity(item_key, master, backend_id) then
+        return nil, "provider:immutable_relic"
     end
 
     if master ~= nil then

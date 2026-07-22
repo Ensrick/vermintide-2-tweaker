@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.42-dev"
+local MOD_VERSION = "0.1.43-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -195,6 +195,50 @@ local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_p
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
+
+-- Issue 822: trophy relics are inventory rewards, never customization inputs.
+-- One presentation owner drives the native flags consumed by both mouse and
+-- gamepad paths.  GUT already owns the two query hooks, so WOC must not register
+-- competing hooks on those same class methods.
+local _customization_rejection_seen = {}
+local function _log_relic_customization_block(item)
+	local backend_id = type(item) == "table"
+		and (item.backend_id or item.ItemInstanceId or item.ItemId) or "unknown"
+	local key = tostring(backend_id)
+	if not _customization_rejection_seen[key] then
+		_customization_rejection_seen[key] = true
+		printf("[WOC:822] immutable relic customization disabled bid=%s",
+			tostring(backend_id))
+	end
+end
+
+mod:hook_safe("HeroWindowLoadoutConsole", "_equip_item_presentation",
+		function(self, item, slot)
+	local slot_index = type(slot) == "table" and slot.slot_index
+	local widget = self._widgets_by_name and self._widgets_by_name.loadout_grid
+	local content = widget and widget.content
+	if slot_index and content then
+		local suffix = "_" .. tostring(slot_index) .. "_1"
+		local blocked = _relic_policy.blocks_customization(item)
+		content["item" .. suffix .. "_disabled"] = blocked and true or nil
+		local hotspot = content["customize_hotspot" .. suffix]
+		if hotspot then
+			hotspot.disable_button = blocked
+			if blocked then hotspot.on_pressed = false end
+		end
+		if blocked then _log_relic_customization_block(item) end
+	end
+end)
+
+_rt_register("issue822_relic_customization_policy", function()
+	local relic = { data = { woc_unique_relic = true } }
+	if not _relic_policy.blocks_customization(relic) then
+		return "marked relic remained customizable"
+	end
+	if _relic_policy.blocks_customization({ data = { slot_type = "melee" } }) then
+		return "ordinary melee weapon was blocked"
+	end
+end)
 local _boss_weapon_catalog = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_woc_boss_weapon_catalog")
 mod._woc_boss_catalog_snapshot = _boss_weapon_catalog.runtime_snapshot

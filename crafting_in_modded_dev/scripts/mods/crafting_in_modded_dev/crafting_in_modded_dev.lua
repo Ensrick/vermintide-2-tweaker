@@ -54,7 +54,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.102-dev"
+local MOD_VERSION = "0.8.103-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -3752,30 +3752,15 @@ end)
 
 -- --- Forge loadout (redirect weave loadout to our own table) ---
 
-mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_item_id", function(func, self, career_name, slot_name)
-    if _custom_forge_active then
-        local loadout = _forge_loadout[career_name]
-        if loadout and loadout[slot_name] then
-            return loadout[slot_name]
-        end
-        local items_backend = Managers.backend:get_interface("items")
-        if items_backend then
-            local ok, bid = pcall(items_backend.get_loadout_item_id, items_backend, career_name, slot_name)
-            if ok then return bid end
-        end
-        return nil
-    end
-    return func(self, career_name, slot_name)
-end)
-
-mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_item", function(func, self, item_backend_id, career_name, slot_name)
-    if _custom_forge_active then
-        _forge_loadout[career_name] = _forge_loadout[career_name] or {}
-        _forge_loadout[career_name][slot_name] = item_backend_id
-        return true
-    end
-    return func(self, item_backend_id, career_name, slot_name)
-end)
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_immutable_relic_ui").install({
+    mod = mod,
+    contract = mod._cim_synthetic_item_contract,
+    is_active = function() return _custom_forge_active end,
+    get_loadout = function() return _forge_loadout end,
+    get_items_backend = function()
+        return Managers and Managers.backend and Managers.backend:get_interface("items")
+    end,
+})
 
 -- --- Property/trait/talent storage (redirect to our own data) ---
 

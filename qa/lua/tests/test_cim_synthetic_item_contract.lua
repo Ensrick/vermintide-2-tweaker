@@ -41,19 +41,24 @@ return function(H, repo_root)
         return row
     end
 
-    H.test("CIM #628 provider contract covers Dawi, older CWV, and WOC keys", function()
+    H.test("CIM #628 provider contract accepts CWV and reserves WOC relic keys", function()
         local providers = {
             cwv_dr_dawi_mace = master("cwv_variant"),
             cwv_dr_dawi_mace_shield = master("cwv_variant"),
             cwv_dr_dawi_dual_maces = master("cwv_variant"),
             cwv_es_longsword = master("cwv_variant"),
-            woc_blightreaper = master("woc_variant"),
         }
         for key, row in pairs(providers) do
             local ok, problems, provider = contract.validate_provider(key, row)
             H.truthy(ok, key .. " rejected: " .. table.concat(problems, ","))
-            H.truthy(provider == "cwv" or provider == "woc")
+            H.equal(provider, "cwv")
         end
+
+		local ok, problems, provider = contract.validate_provider(
+			"woc_blightreaper", master("woc_variant"))
+		H.equal(ok, false)
+		H.equal(provider, "woc")
+		H.deep_equal(problems, { "immutable_relic" })
     end)
 
     H.test("CIM #628 malformed provider rows fail before catalog UI", function()
@@ -76,9 +81,9 @@ return function(H, repo_root)
     end)
 
     H.test("CIM #628 canonical rebuild is idempotent", function()
-        local row = master("woc_variant")
+        local row = master("cwv_variant")
         local first = assert(contract.normalize_record("owned_1", {
-            item_key = "woc_blightreaper",
+            item_key = "cwv_dr_dawi_mace",
             properties = { power_vs_chaos = 1 },
             traits = { "melee_attack_speed_on_crit" },
             rarity = "modded",
@@ -87,11 +92,11 @@ return function(H, repo_root)
         H.deep_equal(second, first)
         H.equal(second.schema_version, contract.SCHEMA_VERSION)
         H.equal(second.owner, "cim")
-        H.equal(second.provider, "woc")
+        H.equal(second.provider, "cwv")
         H.equal(second.slot_type, "melee")
 
         local args = {
-            item_master_list = { woc_blightreaper = row },
+            item_master_list = { cwv_dr_dawi_mace = row },
             career_name = "dr_ranger",
             craftable_slot_types = { melee = true },
             validate_provider = function(key, candidate)

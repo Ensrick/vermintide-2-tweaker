@@ -1,6 +1,10 @@
 return function(H, repo_root)
 	local policy = dofile(repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_relic_policy.lua")
+	local main_file = assert(io.open(repo_root
+		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua", "rb"))
+	local main_source = main_file:read("*a")
+	main_file:close()
 
 	local function definition(key, backend_id)
 		local row = {
@@ -46,6 +50,23 @@ return function(H, repo_root)
 		H.equal(live.CustomData.rarity, "cursed")
 		H.equal(live.skin, nil)
 		H.equal(live.CustomData.skin, nil)
+	end)
+
+	H.test("WOC #822 immutable relics block every customization surface", function()
+		local row = definition("woc_one", "woc_one_001")
+		H.truthy(policy.blocks_customization(row.mod_data))
+		H.truthy(policy.blocks_customization({ data = row }))
+		H.equal(policy.blocks_customization({ data = { slot_type = "melee" } }), false)
+		H.truthy(main_source:find('hotspot.disable_button = blocked', 1, true))
+		H.truthy(main_source:find(
+			'content["item" .. suffix .. "_disabled"] = blocked and true or nil',
+			1, true))
+		H.equal(main_source:find(
+			'mod:hook("HeroWindowLoadoutConsole", "_is_customize_item_pressed"',
+			1, true), nil)
+		H.equal(main_source:find(
+			'mod:hook("HeroWindowLoadoutConsole", "_is_selected_item_customizable"',
+			1, true), nil)
 	end)
 
 	H.test("WOC #637 reconciliation is generic and never deletes canonical ids", function()
