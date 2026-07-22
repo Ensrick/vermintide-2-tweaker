@@ -1,5 +1,14 @@
 # Crafting in Modded Changelog
 
+## 0.8.105-dev (2026-07-21) - #592/#928 bounded CWV Blacksmith seed contract [not-started]
+
+- Reconciled the Craft Item selector and runtime diagnostics with CWV's current
+  acquisition policy: one real 5-power Blacksmith seed suppresses its synthetic
+  twin, while CIM still owns every additional crafted instance.
+- Kept provider definitions distinct from CIM persistence/ownership so salvage,
+  Athanor locks, and cleanup cannot claim an unpersisted `cwv_` prefix as a CIM
+  craft.
+
 ## 0.8.104-dev (2026-07-21): #749 exact Athanor renderer closure
 
 - Athanor icon submission now proves that the requested material exists in the

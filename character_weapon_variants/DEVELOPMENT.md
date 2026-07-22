@@ -28,11 +28,26 @@ load order should read the entry file directly.
 
 ## Registration and acquisition contract
 
-CWV owns weapon definitions: `ItemMasterList` rows, templates, skins, packages,
-and network lookup entries. It must never add a player-owned instance to a
-local/backend inventory. Crafting in Modded is the sole acquisition owner: it
-mints the backend ID, persists that exact ID, and equips the Primary or
+CWV owns weapon definitions (`ItemMasterList` rows, templates, skins, packages,
+and network lookup entries) plus exactly one vanilla-shaped **Blacksmith seed**
+per active weapon definition. That seed is default rarity, power 5, unskinned,
+and has no rolled traits or properties. It exists in the ordinary inventory
+before crafting, just like a vanilla Blacksmith weapon. CWV must never mint a
+second provider seed. Crafting in Modded owns every additional crafted
+instance: it mints and persists the exact backend ID and equips the Primary or
 Secondary slot the player chose.
+
+The preferred seed identity is `<cwv_item_key>_001`, which preserves the shared
+three-digit CWV resolver contract. If CIM already owns that exact historical ID,
+CWV must preserve the craft and use `<cwv_item_key>_000` for the seed. The
+provider fails closed without a seed if exact CIM crafts occupy both bounded
+IDs; it never overwrites player state. An unselected provider-owned `_000`
+fallback is part of the exact migration ledger, so returning to `_001` cannot
+leave duplicate seeds after a hot reload. The
+MoreItemsLibrary backend is an exact-ID map, so re-registering the chosen seed
+is idempotent across reloads. CIM's native Craft Item adapter must prefer this
+real default-rarity row and suppress only its synthetic twin; Modded-rarity
+crafted instances remain separate inventory and salvage records (#524).
 
 For alternate movesets on one existing item, use the per-instance package
 contract in [COMBAT_STYLES.md](COMBAT_STYLES.md) instead of registering a new
@@ -64,10 +79,13 @@ field for its nine owned rows [src: VMF `custom_textures.lua:67-101`]. CIM still
 proves the resulting material in the exact live Gui before retaining a paired
 icon; any failed proof continues to select the vanilla fallback (#617/#787).
 
-Do not infer ownership from a `cwv_` prefix. A CWV item is owned only when its
-exact backend ID exists in CIM's persisted craft table. Migration code may
-remove only the finite historical auto-grant IDs derived from authored
-`instances` counts; broad prefix or numeric-range deletion is forbidden.
+Do not infer crafted ownership from a `cwv_` prefix. A crafted CWV item is
+CIM-owned only when its exact backend ID exists in CIM's persisted craft table;
+the one provider-owned Blacksmith seed is identified separately by the bounded
+seed planner. Migration code may remove only finite historical extra auto-grant
+IDs derived from authored `instances` counts, while protecting the selected
+seed and every exact CIM-owned ID. Broad prefix or numeric-range deletion is
+forbidden.
 
 Private template clones also require an explicit career-action ownership
 boundary. Vanilla writes canonical career actions onto parsed weapon templates

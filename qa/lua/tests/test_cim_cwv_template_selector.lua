@@ -232,5 +232,17 @@ return function(H, repo_root)
         H.truthy(source:find("_single_slot_filter(filter)", 1, true))
         H.truthy(source:find("local result = template_selector.inject(items, _template_cache, {", 1, true))
         H.truthy(source:find("return result", 1, true))
+		H.truthy(source:find("mod._cim592_cwv_bounded_seed = true", 1, true))
+		H.equal(source:find("mod._cim592_cwv_registration_only", 1, true), nil)
+
+		local stable_path = repo_root
+			.. "/crafting_in_modded/scripts/mods/crafting_in_modded/standard_forge.lua"
+		local stable_file = assert(io.open(stable_path, "rb"))
+		local stable_source = stable_file:read("*a")
+		stable_file:close()
+		-- Stable remains promotion-only; this dev contract moves with the next
+		-- explicitly authorized CIM promotion rather than leaking into stable.
+		H.truthy(stable_source:find("mod._cim592_cwv_registration_only = true", 1, true))
+		H.equal(stable_source:find("mod._cim592_cwv_bounded_seed", 1, true), nil)
     end)
 end

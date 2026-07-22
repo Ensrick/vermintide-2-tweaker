@@ -1431,9 +1431,10 @@ end
 -- template for them -- they stay correctly non-craftable (get the look via the
 -- real family member + the Nordland illusion in the cosmetic picker).
 mod._cim390_inject_key_keyed = true
--- #592: CWV contributes definitions, never owned blacksmith items. Therefore
--- CIM's one key-keyed synthetic template is the sole acquisition selector.
-mod._cim592_cwv_registration_only = true
+-- #592/#928: CWV contributes one real 5-power Blacksmith seed per definition.
+-- The selector policy below prefers that default-rarity row and suppresses its
+-- synthetic twin; CIM continues to own every additional crafted instance.
+mod._cim592_cwv_bounded_seed = true
 -- #524: the render-seam probe is wired into the inject seam below. The armed
 -- regression check asserts both this flag and the diag module stay present, so
 -- the rendered-list evidence can't be silently stripped while #524 is open.

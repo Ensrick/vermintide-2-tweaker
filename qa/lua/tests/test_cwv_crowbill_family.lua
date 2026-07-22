@@ -249,7 +249,7 @@ return function(H, repo_root)
         end
     end)
 
-    H.test("CWV Crowbills are CIM definitions not automatic grants", function()
+    H.test("CWV Crowbills receive one bounded Blacksmith seed", function()
         local main = require("cwv_source").combined(repo_root)
         for _, variant in ipairs(family.VARIANTS) do
             H.truthy(main:find('item_key        = "' .. variant.key .. '"', 1, true))
@@ -258,7 +258,8 @@ return function(H, repo_root)
         H.truthy(main:find("entry.cwv_definition = backend_id == nil", 1, true))
         H.truthy(main:find("entry.crowbill_mode_family = def.crowbill_mode_family", 1, true))
         H.truthy(main:find("mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode", 1, true))
-        H.equal(main:find('add_mod_items_to_local_backend(entries, "character_weapon_variants")', 1, true), nil)
+        H.truthy(main:find("mod._cwv_acquisition.register_seed_interfaces(", 1, true))
+		H.truthy(main:find('#entries, mil, backend_items, "character_weapon_variants"', 1, true))
     end)
 
     H.test("WT owns all-career Crowbill controls with exact defaults", function()
