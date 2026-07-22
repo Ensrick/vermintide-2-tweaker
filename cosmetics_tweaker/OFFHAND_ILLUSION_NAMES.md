@@ -20,6 +20,9 @@ after Tweaker: Cosmetics loads.
 - Localization ownership is explicit: authored `cos_*` keys resolve through
   `mod:localize`, while vanilla source-illusion description keys resolve only
   through `_G.Localize`. These resolvers are never substituted for each other.
+- Provider pools merge by `(component kind, component identity, hand)`, never
+  by row order or mesh. An authored record wins a duplicate generic provider
+  row, while distinct components sharing the same receiver mesh remain valid.
 
 Changing a name changes presentation only. The saved selection, unit path,
 source skin key, exact backend-item identity, and network payload stay intact.

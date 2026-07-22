@@ -1523,18 +1523,29 @@ _rt_register("issue641_independent_offhand_names", function()
         return "name-only legacy component leaked the primary description"
     end
     local native_routed = false
-    for _, pool in pairs(_offhand_options) do
-        for _, option in ipairs(pool) do
-            if option.source_description_key then
-                if option.component_description_source ~= "source"
-                        or option.description == option.source_description_key then
-                    return "vanilla source description did not use _G.Localize"
+    local seen_components = {}
+    for item_type, hand_pools in pairs(_offhand_options) do
+        for hand_field, pool in pairs(hand_pools) do
+            for _, option in ipairs(pool) do
+                if option.source_description_key then
+                    if option.component_description_source ~= "source"
+                            or option.description == option.source_description_key then
+                        return "vanilla source description did not use _G.Localize"
+                    end
+                    native_routed = true
                 end
-                native_routed = true
-                break
+                if option.component_kind and option.component_identity then
+                    local identity = OFFHAND_NAMES.identity(option.component_kind,
+                        option.component_identity, hand_field)
+                    local scoped = identity and tostring(item_type) .. "|" .. identity
+                    if scoped and seen_components[scoped] then
+                        return "duplicate component identity in selectable pool: "
+                            .. scoped
+                    end
+                    if scoped then seen_components[scoped] = true end
+                end
             end
         end
-        if native_routed then break end
     end
     if not native_routed then return "no production source-description option found" end
     if type(mod._cos.offhand_name_inventory) ~= "function" then

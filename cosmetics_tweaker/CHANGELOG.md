@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.181-dev (2026-08-01) — #641 semantic offhand identity merge [not-started]
+
+- Loremaster shield rows now merge into each hand pool by the same semantic
+  component identity used by presentation, instead of blindly appending.
+- A Cosmetics-authored component wins over a generic provider row with the
+  same identity, preserving its independent name, flavor text, and icon while
+  leaving distinct shield identities and saved/network data unchanged.
+
 ## 0.9.180-dev (2026-08-01) — publish reviewed #504 extraction [not-started]
 
 - Re-staged the already-reviewed contextual glow-button owner extraction after
@@ -157,7 +165,6 @@ CIM notice when Cosmetics is absent remain separate work.
   Equipment DEFAULT/profile restore now coalesces hat, Grail Knight set,
   cosmetic-unlock, glow-sync, and TPE-flush work to at most one call each.
 - Added bounded `[cos:1002]` evidence and shared Equipment transaction coverage.
-
 ## 0.9.167-dev (2026-07-22) — #149 retained Loremaster shield transition repair [not-started]
 
 - Keep-to-mission replay now resolves the active weapon slot from the common

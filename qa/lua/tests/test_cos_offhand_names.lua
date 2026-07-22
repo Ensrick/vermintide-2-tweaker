@@ -136,6 +136,51 @@ return function(H, repo_root)
         H.equal(combined, "Sword + Shield A")
     end)
 
+    H.test("LA merge preserves one authored component per semantic identity", function()
+        local authored = {
+            component_kind = "shield",
+            component_identity = "cos_gk_purpure_azure_shield_variant",
+            la_armoury_key = "cos_gk_purpure_azure_shield_variant",
+            name = "The Blood-Bloomed Bouclier",
+            description = "Authored shield flavor.",
+            inventory_icon = "icon_authored_shield",
+            cos_authored = true,
+        }
+        local generic = {
+            component_kind = "shield",
+            component_identity = "cos_gk_purpure_azure_shield_variant",
+            la_armoury_key = "cos_gk_purpure_azure_shield_variant",
+            name = "Generic LA Shield",
+        }
+        local options = { authored }
+        local added, reason = policy.merge_unique(options, generic,
+            "left_hand_unit")
+        H.equal(added, false)
+        H.equal(reason, "preserved_authored")
+        H.equal(#options, 1)
+        H.equal(options[1].description, "Authored shield flavor.")
+        H.equal(options[1].inventory_icon, "icon_authored_shield")
+
+        options = { generic }
+        added, reason = policy.merge_unique(options, authored,
+            "left_hand_unit")
+        H.equal(added, true)
+        H.equal(reason, "replaced_with_authored")
+        H.equal(#options, 1)
+        H.equal(options[1], authored)
+
+        local distinct = {
+            component_kind = "shield",
+            component_identity = "another_shield",
+            unit = authored.unit,
+        }
+        added, reason = policy.merge_unique(options, distinct,
+            "left_hand_unit")
+        H.equal(added, true)
+        H.equal(reason, "appended")
+        H.equal(#options, 2)
+    end)
+
     H.test("decorated weapon and shield records remain presentation-only", function()
         local weapon = { unit = "units/example/offhand", skin_key = "skin_01", rarity = "rare" }
         policy.decorate(weapon, "skin_01", "left_hand_unit", "Source Illusion",
@@ -175,6 +220,8 @@ return function(H, repo_root)
         H.truthy(entry:find("_decorate_shield_option", 1, true))
         H.truthy(entry:find("OFFHAND_NAMES.compose", 1, true))
         H.truthy(entry:find("OFFHAND_NAMES.description_presentation_key", 1, true))
+        H.truthy(entry:find("OFFHAND_NAMES.merge_unique", 1, true))
+        H.truthy(entry:find("duplicate component identity in selectable pool", 1, true))
         H.truthy(entry:find("presentation_localization[description_key]", 1, true))
         H.truthy(entry:find('nil, nil, rawget(_G, "Localize")', 1, true))
         H.truthy(entry:find("description_key or base_description", 1, true))
