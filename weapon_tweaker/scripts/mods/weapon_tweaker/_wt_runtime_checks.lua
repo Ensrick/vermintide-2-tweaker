@@ -18,6 +18,8 @@ function M.install(mod, _rt_register, deps)
     local _dbg = deps.dbg
     local _dbg_alert = deps.dbg_alert
     local _wt_master_toggles = deps.master_toggles
+    local _wt_rework_master = mod._wt and mod._wt.rework_master_policy
+    local _wt_rework_runtime = mod._wt and mod._wt.rework_master_runtime
     local _WIELD_PATCHES_MODULE = deps.wield_patches_module
     local _is_sp_crossbow_presentation_item = deps.is_sp_crossbow_presentation_item
     local _wt_grip_offset_policy = deps.grip_offset_policy
@@ -993,6 +995,45 @@ function M.install(mod, _rt_register, deps)
         if master_count == 0 or leaf_count == 0 then
             return string.format("no master toggles were built (masters=%d leaves=%d)",
                 master_count, leaf_count)
+        end
+    end)
+
+    _rt_register("issue445_rework_master_contract", function()
+        if type(_wt_rework_master) ~= "table"
+                or type(_wt_rework_master.plan) ~= "function"
+                or type(_wt_rework_master.derive_master) ~= "function" then
+            return "#445 pure rework-master policy is unavailable"
+        end
+        if type(_wt_rework_runtime) ~= "table"
+                or type(_wt_rework_runtime.on_master_changed) ~= "function"
+                or type(_wt_rework_runtime.sync_for_leaf) ~= "function" then
+            return "#445 bounded rework-master runtime is unavailable"
+        end
+        if _wt_rework_master.MASTER_ID ~= "wt_rework_master_ensrick"
+                or #(_wt_rework_master.LEAF_IDS or {}) ~= 13 then
+            return "#445 master identity or exact 13-member catalog drifted"
+        end
+        local seen = {}
+        for i = 1, #_wt_rework_master.LEAF_IDS do
+            local id = _wt_rework_master.LEAF_IDS[i]
+            if seen[id] or id:find("^br_") then
+                return "#445 duplicate or retired member: " .. tostring(id)
+            end
+            seen[id] = true
+            local row = mod._wt_loc_raw and mod._wt_loc_raw[id]
+            local label = type(row) == "table" and row.en
+            if type(label) ~= "string" or label:sub(1, 10) ~= "[Ensrick] " then
+                return "#445 active tweak lacks authorship prefix: " .. tostring(id)
+            end
+        end
+        local all_on = {}
+        for id in pairs(seen) do all_on[id] = true end
+        if not _wt_rework_master.derive_master(all_on) then
+            return "#445 exact-family master derivation failed"
+        end
+        all_on[_wt_rework_master.LEAF_IDS[1]] = false
+        if _wt_rework_master.derive_master(all_on) then
+            return "#445 partial family incorrectly reports master enabled"
         end
     end)
 

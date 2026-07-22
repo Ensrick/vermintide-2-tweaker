@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.287-dev"
+local MOD_VERSION = "0.12.288-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -307,6 +307,15 @@ local revert_trait_pools  = mod._wt.revert_trait_pools
 local _wt_master_toggles = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_master_toggles")
 _wt_master_toggles.install_refresh_hook(mod)
 _wt_master_toggles.seed(mod)
+
+-- Issue #445: one master for the exact active Weapon Tweaks family. The pure
+-- policy is also consumed by localization and engine-free QA, preventing the
+-- menu, runtime cascade, and authorship labels from drifting apart.
+local _wt_rework_master = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/_wt_rework_master_policy")
+local _wt_rework_master_runtime_module = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/_wt_rework_master_runtime")
+mod._wt.rework_master_policy = _wt_rework_master
 
 -- Read-only diagnostic dump/probe commands (leaf consumers of game globals;
 -- no entry-state dependency and no gameplay mutation).
@@ -4081,7 +4090,18 @@ mod.on_disabled = function()
     mod:info("Weapon Tweaker disabled — cross-career unlocks, ability action injections, and trait-pool filters reverted")
 end
 
+local _wt_rework_runtime = _wt_rework_master_runtime_module.new(
+    mod, _wt_rework_master, function()
+        if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
+        if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
+        _wt_bolt_staff_overcharge_runtime.apply()
+        if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+    end)
+mod._wt.rework_master_runtime = _wt_rework_runtime
+
 mod.on_setting_changed = function(setting_id)
+    if _wt_rework_runtime:is_batching() then return end
+    if _wt_rework_runtime:on_master_changed(setting_id) then return end
     if setting_id and setting_id:find("^wtmaster_") then
         -- issue 611: a master toggle was clicked. Cascade its new value to every
         -- child availability toggle (notify = false), then re-apply the unlocks
@@ -4127,6 +4147,7 @@ mod.on_setting_changed = function(setting_id)
             or setting_id == _wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
         mod._wt_apply_axe_balance(setting_id, false)
     end
+    _wt_rework_runtime:sync_for_leaf(setting_id)
 end
 
 do
@@ -4199,6 +4220,10 @@ do
     end
     mod._wt_apply_axe_balance(nil, false)
 end
+
+-- Normalize a stale master flag from an older/custom settings file without
+-- mutating any leaf. Programmatic write is non-notifying and bounded to one.
+_wt_rework_runtime:sync()
 
 -- #664 hook pre-flight: repository grep on 2026-07-17 found no other WT hook
 -- on DamageUtils.calculate_damage. Vanilla computes and returns the complete

@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.288-dev (2026-07-22) - #445 Weapon Tweaks family controls [not-started]
+
+- Mirrors the public-beta source: a nested **Master Toggles** control owns all
+  13 active Weapon Tweaks as one bounded transaction, while individual options
+  remain available for custom combinations.
+- Active tweak titles derive their `[Ensrick]` prefix from the same pure catalog
+  used by runtime and QA. Retired `br_*` Big Rebalance settings remain dormant.
+- Live-capable owners apply once after a master batch; restart-only template
+  changes remain explicitly documented. Offline and runtime contracts cover
+  membership, labels, bounded writes, and both WT streams.
+
 ## 0.12.287-dev (2026-07-21) - #948 universal compatibility laboratory
 
 - Exposes the exact 83-base-weapon roster as independent availability choices

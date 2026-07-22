@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.287-beta (2026-07-22) - #445 Weapon Tweaks family controls [not-started]
+
+- Added a nested **Master Toggles** control for all 13 active Weapon Tweaks.
+  A master click writes the complete family without firing one full apply per
+  setting, then dispatches each live-capable owner once; options documented as
+  restart-only retain that requirement.
+- Active tweak titles now carry the `[Ensrick]` prefix from the same pure
+  membership catalog used by the menu, runtime cascade, and tests. Retired
+  `br_*` Big Rebalance settings remain hidden and outside the family.
+- Individual edits automatically return the master indicator to its exact
+  custom state. Added offline and in-game regression coverage for membership,
+  labeling, bounded writes, and stable/dev parity.
+
 ## 0.12.286-beta (2026-07-21) - #948 Imperial Longsword donor parity
 
 - Imperial Longsword combat style now shares Kruber Greatsword's exact
