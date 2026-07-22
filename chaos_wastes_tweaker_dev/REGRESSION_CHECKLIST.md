@@ -289,6 +289,21 @@ Falsifiable fallback paths if the live pass fails:
 | Expected post-fix | All five labels render with one literal `%`; startup contains no `Invalid string format` exception for `ctdm_p_1` through `ctdm_p_5`. The final label is `Deepest (99.9%)`, matching vanilla's strict `< 1.0` engine boundary. |
 | Detection | `/ct_regression_test`: `localization_format_safe` and `mission_catalog_localization_format_safe_564` both pass. |
 
+### starting-boon-preview-chamber-context - Preview misses the pre-queue preparation window
+
+**[INTEGRATION]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Holding Tab in the Pilgrimage Chamber before queueing logs `boon preview suppressed: no Chaos Wastes expedition queued`; the preview appears only after the host starts matchmaking. |
+| Root cause | The display used matchmaking state as a proxy for physical location. The July 20 v0.7.305 host log proves the desired state was already `mechanism=deus level=morris_hub in_keep=true` while the queue predicate was false. |
+| Mod(s) | chaos_wastes_tweaker_dev |
+| Fix version(s) | Unreleased (#461; release serialized by #149) |
+| Category | INTEGRATION |
+| Repro | Select several Starting Boons, enter the Pilgrimage Chamber through the Chaos Wastes keep door without queueing, and hold Tab. Repeat in Taal's Horn Keep, after queueing in the chamber, and after entering a mission. |
+| Expected post-fix | The preview appears only in the `morris_hub` Pilgrimage Chamber, both before and after queueing. It is absent in `inn_level`, `dlc_morris_map`, and missions. Local display preference remains local; boon rows use the host-effective configuration. |
+| Detection | Each Tab activation emits one bounded `[ct:461]` line containing `context`, `level`, `local_enabled`, `host_effective_enabled`, `source`, `queued`, and (when built) `boons`. `/ct_regression_test` passes `issue461_boon_preview_wired`; offline `test_ct_boon_preview_context` locks the context truth table and the single shared `_draw` hook. |
+
 ### single-mission-loader-context-and-composition - Loader exposes invalid controls or launches outside the chamber
 
 **[INTEGRATION]**

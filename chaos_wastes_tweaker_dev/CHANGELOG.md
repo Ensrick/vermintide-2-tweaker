@@ -1,5 +1,35 @@
 # Chaos Wastes Tweaker Changelog
 
+## Unreleased - #461 Pilgrimage Chamber starting-boon preview
+
+- Replaced the too-late "expedition queued" display gate with the exact native
+  Pilgrimage Chamber level (`morris_hub`). The July 20 v0.7.305 host log records
+  `mechanism=deus level=morris_hub in_keep=true` immediately before #461 reports
+  `suppressed: no Chaos Wastes expedition queued`, proving the old predicate
+  excluded the requested pre-queue preparation window.
+- Centralized the chamber predicate in `_ct_pilgrimage_context.lua`; both #461
+  and the Single Mission Loader (#505) now consume that one fail-closed policy.
+  It excludes Taal's Horn Keep (`inn_level`), the expedition map
+  (`dlc_morris_map`), and playable missions.
+- Added bounded per-Tab diagnostics for chamber context, native level, local
+  display toggle, host-effective toggle/source, queue state, and displayed boon
+  count. Queue state is retained as evidence only and no longer gates display.
+- Preserved the one consolidated `IngamePlayerListUI._draw` hook shared with
+  #533/#571 and added offline regressions for the exact context truth table,
+  unavailable-engine fail-closed behavior, #505 sharing, queue-gate removal,
+  diagnostic fields, and singleton draw-hook composition.
+
+**After #149 releases this candidate, verify solo first:** enter the Pilgrimage
+Chamber through the Chaos Wastes keep door without queueing an expedition, select
+several Starting Boons, and hold Tab. The panel must show `Starting Boons (N)`
+with the selected icons/names and log `[ct:461] ... context=pilgrimage_chamber
+level=morris_hub ... boons=N ... queued=false`. Return to Taal's Horn Keep and
+hold Tab: no preview, with `context=outside_pilgrimage_chamber level=inn_level`.
+Then queue an expedition while still in the chamber and confirm the same list
+remains visible with `queued=true`. Turn the preview option off and confirm the
+panel remains vanilla. Run `/ct_regression_test` and require
+`PASS: issue461_boon_preview_wired`.
+
 ## 0.7.308-dev (2026-07-22) - configurable starting shrine (#458)
 
 - Adds an opt-in starting shrine at the exact `dlc_morris_map` / `start`

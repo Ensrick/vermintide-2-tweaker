@@ -8699,9 +8699,11 @@ end)
 --     "reward_divider" too and stack them below the header with per-row offsets
 --     (2 columns x 9 rows, 28px pitch, "+N more" overflow) inside the band that is
 --     empty in the gated context (no deed rewards, no collectibles in the keep).
--- (2) "shows all over the keep": now gated on the party actually QUEUING a Chaos
---     Wastes expedition -- see mod._ct_preparing_cw_expedition below.
-CT_BOON_PREVIEW_461_MARKER = "boon_preview_ingame_playerlist_v0.7.258"
+-- (2) "shows all over the keep": the queue gate shipped in v0.7.258 was too
+--     late. July 20 v0.7.305 logs prove the desired pre-queue context already
+--     reports level=morris_hub, while the queue predicate remains false. The
+--     preview now shares #505's exact native chamber-level predicate.
+CT_BOON_PREVIEW_461_MARKER = "boon_preview_pilgrimage_context"
 
 -- TRUE while this peer's party is queued for a Chaos Wastes expedition (host pressed
 -- host/start on a CW journey; not yet transitioned out of the keep). Direct port of
@@ -8889,27 +8891,44 @@ function mod._ct_build_boon_preview_widgets(boons)
 end
 
 -- Build point: vanilla calls _setup_deed_reward_data on EVERY panel activation
--- (set_active(true), ingame_player_list_ui_v2.lua:1224), so all three gates below
--- re-evaluate per Tab press. Gates: keep-only (self._is_in_inn), local display toggle
--- preview_starting_boons, and (v0.7.258, the user's "should only show while the team
--- prepares an expedition" report) a queued Chaos Wastes expedition. Builds onto the
--- instance so the per-frame _draw hook only draws (zero per-frame allocation).
+-- (set_active(true), ingame_player_list_ui_v2.lua:1224), so all gates below
+-- re-evaluate per Tab press. Gates: keep UI, the local display toggle, and the
+-- exact `morris_hub` Pilgrimage Chamber level shared with #505. Queue state is
+-- diagnostic only: the requested preparation window begins before queueing.
+-- Builds onto the instance so the per-frame _draw hook only draws (zero
+-- per-frame allocation).
 mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data", function(self)
     self._ct_boon_preview_widgets = nil
     self._ct_boon_header_widget = nil
-    if not self._is_in_inn then return end
-    if not mod:get("preview_starting_boons") then return end
-    if not mod._ct_preparing_cw_expedition() then
-        pcall(printf, "[ct:461] boon preview suppressed: no Chaos Wastes expedition queued")
+    local local_enabled = mod:get("preview_starting_boons") == true
+    local level_key = mod._ct_pilgrimage_context
+        and mod._ct_pilgrimage_context.current_level_key(Managers) or nil
+    local in_chamber = mod._ct_in_pilgrimage_chamber
+        and mod._ct_in_pilgrimage_chamber(level_key) or false
+    local queued = mod._ct_preparing_cw_expedition()
+    if not self._is_in_inn or not in_chamber or not local_enabled then
+        pcall(printf,
+            "[ct:461] boon preview suppressed context=%s level=%s keep_ui=%s local_enabled=%s host_effective_enabled=%s source=%s queued=%s",
+            in_chamber and "pilgrimage_chamber" or "outside_pilgrimage_chamber",
+            tostring(level_key), tostring(self._is_in_inn == true), tostring(local_enabled),
+            tostring(mod._ct_effective_setting("preview_starting_boons") == true),
+            tostring(mod._ct_effective_setting_source()), tostring(queued))
         return
     end
     local ok, err = pcall(function()
         local boons = mod._ct_collect_start_boons()
-        if #boons == 0 then return end
+        if #boons == 0 then
+            pcall(printf,
+                "[ct:461] boon preview suppressed context=pilgrimage_chamber level=%s reason=no_configured_boons source=%s queued=%s",
+                tostring(level_key), tostring(mod._ct_effective_setting_source()), tostring(queued))
+            return
+        end
         self._ct_boon_preview_widgets = mod._ct_build_boon_preview_widgets(boons)
         self._ct_boon_header_widget = mod._ct_build_boon_preview_header(
             string.format("%s (%d)", mod:localize("ct_boon_preview_header"), #boons))
-        pcall(printf, "[ct:461] boon preview built: %d boons (CW expedition queued)", #boons)
+        pcall(printf,
+            "[ct:461] boon preview built context=pilgrimage_chamber level=%s boons=%d source=%s queued=%s",
+            tostring(level_key), #boons, tostring(mod._ct_effective_setting_source()), tostring(queued))
     end)
     if not ok then
         self._ct_boon_preview_widgets = nil
@@ -8984,21 +9003,23 @@ mod:command("ct_preview_boons", "List the starting boons this run will grant (ho
         mod:echo("[ct] No starting boons configured. Enable some under Starting Boons in the ct menu.")
         return
     end
-    mod:echo("%s", string.format("[ct] Starting Boons preview (%d) -- shown on the Tab panel while a CW expedition is queued in the keep:", #boons))
+    mod:echo("%s", string.format("[ct] Starting Boons preview (%d) -- shown on the Tab panel in the Pilgrimage Chamber:", #boons))
     for i = 1, #boons do
         local b = boons[i]
         mod:echo("%s", string.format("  %d. %s [%s]%s", i, b.display or b.name, tostring(b.rarity),
             b.modded and " (modded -- wire-gated for non-ct peers)" or ""))
     end
-    mod:echo("%s", mod._ct_preparing_cw_expedition()
-        and "[ct] CW expedition queued: the Tab panel shows this list now."
-        or "[ct] No CW expedition queued: the Tab panel stays vanilla until the host starts one.")
+    local level_key = mod._ct_pilgrimage_context
+        and mod._ct_pilgrimage_context.current_level_key(Managers) or nil
+    mod:echo("%s", mod._ct_in_pilgrimage_chamber and mod._ct_in_pilgrimage_chamber(level_key)
+        and "[ct] Pilgrimage Chamber active: the Tab panel shows this list now."
+        or string.format("[ct] Outside the Pilgrimage Chamber (level=%s): enter it through the Chaos Wastes keep door to show this list.", tostring(level_key)))
 end)
 
 -- #461 regression: the marker + both build helpers + the display toggle stay wired, so a
 -- future refactor can't silently drop the Tab-hold boon preview.
 _rt_register("issue461_boon_preview_wired", function()
-    if CT_BOON_PREVIEW_461_MARKER ~= "boon_preview_ingame_playerlist_v0.7.258" then
+    if CT_BOON_PREVIEW_461_MARKER ~= "boon_preview_pilgrimage_context" then
         return "#461 REGRESSION: CT_BOON_PREVIEW_461_MARKER missing/mismatch; got " .. tostring(CT_BOON_PREVIEW_461_MARKER)
     end
     if type(mod._ct_collect_start_boons) ~= "function" then
@@ -9013,15 +9034,15 @@ _rt_register("issue461_boon_preview_wired", function()
     if type(mod:get("preview_starting_boons")) ~= "boolean" then
         return "#461 REGRESSION: preview_starting_boons checkbox not registered (mod:get non-boolean)"
     end
-    -- v0.7.258 follow-ups: the CW-queue gate must exist and be callable anywhere
-    -- (returns plain false outside a queued expedition, never throws), and no row
-    -- widget may ever anchor on the sizeless "reward_item" node again (the off-screen
-    -- bug class: header visible, zero rows).
-    if type(mod._ct_preparing_cw_expedition) ~= "function" then
-        return "#461 REGRESSION: mod._ct_preparing_cw_expedition missing (CW-queue gate)"
+    -- #461 chamber follow-up: use the same exact level-key boundary as #505.
+    -- The queue probe remains diagnostic, never a display gate.
+    if type(mod._ct_in_pilgrimage_chamber) ~= "function" then
+        return "#461 REGRESSION: shared Pilgrimage Chamber gate missing"
     end
-    if type(mod._ct_preparing_cw_expedition()) ~= "boolean" then
-        return "#461 REGRESSION: _ct_preparing_cw_expedition must return a boolean"
+    if not mod._ct_in_pilgrimage_chamber("morris_hub")
+        or mod._ct_in_pilgrimage_chamber("inn_level")
+        or mod._ct_in_pilgrimage_chamber("dlc_morris_map") then
+        return "#461 REGRESSION: preview chamber gate must accept only morris_hub"
     end
     local sample = mod._ct_build_boon_preview_widgets({ { name = "rt_probe", display = "rt probe", icon = nil } })
     if type(sample) ~= "table" or #sample == 0 then

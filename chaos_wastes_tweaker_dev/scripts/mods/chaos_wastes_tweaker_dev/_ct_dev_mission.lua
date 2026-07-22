@@ -1,5 +1,6 @@
 local mod = get_mod("ct_dev")
 local Cat = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission_catalog")
+local PilgrimageContext = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_pilgrimage_context")
 
 -- _ct_dev_mission.lua - Single Mission Loader (issue 505).
 --
@@ -60,16 +61,16 @@ local function is_host()
     return (Managers and Managers.player and Managers.player.is_server) and true or false
 end
 
--- Exact physical-location gate. A queued expedition or an active CW mission is
--- intentionally insufficient: only the keep chamber level is `morris_hub`.
+-- Exact physical-location gate, shared with #461's Tab preview. A queued
+-- expedition or an active CW mission is intentionally insufficient: only the
+-- keep chamber level is `morris_hub`.
 local function in_pilgrimage_chamber(level_override)
-    if level_override ~= nil then return level_override == "morris_hub" end
-    local lth = Managers and Managers.level_transition_handler
-    local ok, key = pcall(function()
-        return lth and lth:get_current_level_key()
-    end)
-    return ok and key == "morris_hub"
+    return PilgrimageContext.is_current(Managers, level_override)
 end
+mod._ct_pilgrimage_context = PilgrimageContext
+mod._ct_in_pilgrimage_chamber = in_pilgrimage_chamber
+-- Compatibility name retained for the #505 runtime assertion and any external
+-- diagnostic scripts written against the original loader seam.
 mod._ct505_in_pilgrimage_chamber = in_pilgrimage_chamber
 
 -- Returns the active DeusMechanism (only that class carries debug_load_deus_level),

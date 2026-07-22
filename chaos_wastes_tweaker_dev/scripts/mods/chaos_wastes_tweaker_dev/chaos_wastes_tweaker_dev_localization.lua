@@ -401,7 +401,7 @@ local loc = {
     -- ============================================================
     -- Option title and ct_boon_preview_header are both player-facing and untagged.
     preview_starting_boons = { en = "Preview Starting Boons on Tab" },
-    preview_starting_boons_tooltip = { en = "While a Chaos Wastes expedition is queued (the host has started it from the expedition map) and you hold Tab in the keep, show the starting boons this run will grant (icon and name) on the right-hand pop-out panel. Reflects the host's configuration. Applies to your own screen only." },
+    preview_starting_boons_tooltip = { en = "While you are in the Pilgrimage Chamber and hold Tab, show the starting boons this run will grant (icon and name) on the right-hand pop-out panel. This works before or after an expedition is queued, reflects the host's configuration, and applies to your own screen only." },
     ct_boon_preview_header = { en = "Starting Boons" },
 
     -- ============================================================

@@ -2621,12 +2621,13 @@ across preview worlds, owner units, or remote husks.
 ## 68. Per-template override storage leaks onto generated item instances (deus); mechanism name over-scopes the yield boundary
 
 **First seen:** 2026-07-12 (cosmetics_tweaker 0.9.84-dev deus-yield gate; staging-hub over-scope regression fixed 0.9.89-dev)
-**Canonical Issue:** [#518](https://github.com/Ensrick/vermintide-2-tweaker/issues/518) (root-cause per-`backend_id` descriptor work continues under the [#660](https://github.com/Ensrick/vermintide-2-tweaker/issues/660) umbrella)
+**Canonical Issue:** [#518](https://github.com/Ensrick/vermintide-2-tweaker/issues/518) (root-cause per-`backend_id` descriptor work continues under the [#660](https://github.com/Ensrick/vermintide-2-tweaker/issues/660) umbrella; inverse context-gate example: [#461](https://github.com/Ensrick/vermintide-2-tweaker/issues/461))
 **Lives in:** any per-weapon customization store keyed by TEMPLATE (or item key) confronted with GENERATED item instances. Chaos Wastes deus weapons clone the base item - `create_item` sets `key = deus_item_data.base_item`, same weapon template [src: `deus_weapon_generation.lua:185-202`] - and re-roll `item.skin` on generation [src: `:246-249`] and every shrine upgrade [src: `:318-321`]; the skin change IS the upgrade's visual feedback.
 
 ### Symptoms
 - A keep-committed cosmetic re-appears on every CW starting/upgraded weapon sharing the template; the rolled upgrade skin is stomped on every wield (log tell: the re-apply firing with `mechanism=deus`).
 - The over-scoped first fix: gating on `mechanism == "deus"` ALONE also suppressed the cosmetic in the Pilgrimage Chamber - the deus MECHANISM owns the staging hub and route map too, not just missions.
+- The inverse error: gating a chamber UI on "a Deus expedition is queued" excludes the valid pre-queue preparation window even though the native level is already `morris_hub` (#461, July 20 v0.7.305 host log).
 
 ### Diagnosis pattern
 1. Store key is a template / item key; the CW item is a FRESH instance with the SAME key. Any per-instance intent stored per-template will match every generated sibling.
@@ -2634,12 +2635,13 @@ across preview worlds, owner units, or remote husks.
 
 ### Fix template
 - Gate on mechanism AND game mode: yield only when both are `"deus"` (`mod._la_weapon_yield_for_context`). Read live per call so returning to a hub re-asserts with no state loss.
+- For chamber-only UI/actions, prefer the exact `morris_hub` level key. Share one pure context predicate across features (#461 preview and #505 Single Mission Loader) instead of re-deriving matchmaking state.
 - Resolve the game mode with fallbacks - `GameModeManager.game_mode_key` [src: `game_mode_manager.lua:915-917`] -> `LevelTransitionHandler.get_current_game_mode` [src: `level_transition_handler.lua:387-389`] -> level-key classification - with the fail direction "staging never yields; a starting mission never briefly repaints".
 - Put the terminal gate at the single apply funnel every trigger routes through, and make the retry queue treat the yield as a TERMINAL reason so pending applies don't spin to their deadline.
 - Owner doc: `cosmetics_tweaker/LA_SYNC_MODEL.md` section 6.10. Pins: in-game `cos_la_deus_yield_active_mission_only` truth table; offline `qa/lua/tests/test_cos_deus_yield_policy.lua`.
 
 ### Related Issues / commits
-- [#518](https://github.com/Ensrick/vermintide-2-tweaker/issues/518), [#660](https://github.com/Ensrick/vermintide-2-tweaker/issues/660); cosmetics_tweaker CHANGELOG v0.9.84-dev / v0.9.89-dev; kin: class 27 (husk resolves BASE item_data - same "shared identity, different instance" root on the husk axis).
+- [#461](https://github.com/Ensrick/vermintide-2-tweaker/issues/461), [#505](https://github.com/Ensrick/vermintide-2-tweaker/issues/505), [#518](https://github.com/Ensrick/vermintide-2-tweaker/issues/518), [#660](https://github.com/Ensrick/vermintide-2-tweaker/issues/660); cosmetics_tweaker CHANGELOG v0.9.84-dev / v0.9.89-dev; kin: class 27 (husk resolves BASE item_data - same "shared identity, different instance" root on the husk axis).
 ## 69. Callable engine constructor is rejected as a non-function
 
 **First confirmed:** 2026-07-19 (shared appearance issue #835; exposed by
