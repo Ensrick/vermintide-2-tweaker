@@ -6,6 +6,17 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-19.
 
+## #932 Primary-slot Old Musket shared ammo
+
+| Field | Contract |
+|---|---|
+| Symptom | A melee-slot Old Musket has no reliable independent ammo presentation; equipping Old Musket in both melee and ranged does not produce the promised doubled shared reserve. |
+| Root cause | The legacy set was process-global and copied one extension's `_available_ammo` to every member. It neither separated player owners nor stored a pool total, so two 10-round extensions still exposed only 10 reserve rounds. |
+| Fix | `_cwv_musket_ammo_pool.lua` owns reserve state by player and exact melee/ranged slot, keeps native one-round chambers, covers every source-proven reserve mutation, and adapts the public maximum without widening `_max_ammo`. |
+| Repro | Equip Old Musket only in the primary slot and fire/reload. Then equip a second Old Musket in the secondary slot, fire/reload from each, swap repeatedly, toggle both stances, take a partial ammo pickup, and replace one slot with a non-Musket. Run `/cwv_musket_ammo_diag` after each edge. |
+| Expected post-fix | One Musket shows 10 shared reserve; two show 20. Reloading either decrements the same reserve while each chamber remains independent. Swaps/stance changes grant no ammo, a pickup changes the pool once, replacing one Musket clamps capacity to 10, and another player's ammo never enters the pool. The native counter follows the currently wielded Musket. |
+| Detection | `/cwv_regression_test` passes `issue932_primary_slot_musket_ammo_pool_contract`; diagnostics show one owner per pool and `pool=reserve/capacity`; offline tests cover owner isolation, doubled capacity, consumption, replacement, unregister, pickup, and the no-`_max_ammo`-write invariant. |
+
 ## #798 Universal Crowbill hammer mode
 
 - [ ] No Sienna Crowbill Hammer Mode checkbox appears; both legacy saved values

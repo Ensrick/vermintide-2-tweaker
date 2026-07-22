@@ -3112,3 +3112,45 @@ continues to identify the same object in an older persistence surface.
 **Related:** class 43 (durable identity versus render state), class 51 (build is
 not deployment), class 73 (ephemeral identity in a durable snapshot), and #375
 (selected player-row resolution is a different identity dimension).
+---
+
+## 81. Shared gameplay resource is represented by mirroring independent extension fields
+
+**First confirmed:** issue #932 on 2026-07-22 (Old Musket in both equipment
+slots).
+**Lives in:** modded weapons or abilities that retain multiple native resource
+extensions but intend them to consume one logical pool.
+
+### Symptoms
+- Two equipped items are documented to double and share a reserve, but the
+  counter never exceeds one item's capacity.
+- One player's resource changes another player's matching item, because a
+  process-global weak set has no owner boundary.
+- Stance/unit replacement refills or loses the resource, while pickups and
+  buff refreshes disagree with ordinary reload consumption.
+
+### Diagnosis pattern
+1. Identify every native resource-extension instance by player owner and exact
+   logical slot; an extension/unit is a transient consumer, not pool identity.
+2. Enumerate every source-backed mutation seam, including direct field writes
+   during update/reload and inventory pickup traversal across multiple slots.
+3. Prove whether the implementation stores a pool total. Copying one member's
+   capped field to its peers cannot represent capacity greater than that member.
+4. Separate a logical slot replacement from a newly contributed slot, or a
+   stance rebuild becomes a free refill.
+
+### Fix template
+- Own one bounded controller per player and logical slot set. Keep native
+  extension chambers, but store one explicit reserve total and synchronize only
+  the active members for that owner.
+- Cover the complete mutation set and collapse one inventory pickup traversal
+  to one pooled transaction. Preserve state across same-slot unit replacement;
+  unregister and clamp when a non-member replaces the slot.
+- Never widen engine `_max_*` fields. Adapt public queries for HUD/status callers
+  and keep the underlying native maximum unchanged.
+- Test multiple owners, one/two slots, consumption, reload, replacement,
+  unregister, partial/full pickups, reset/buff refresh, and exact no-write
+  invariants. Emit bounded edge diagnostics, never per-frame pool logs.
+
+**Related:** class 7 (reload/wield lifecycle), class 50 (owner authority),
+class 65 (logical row identity), and issue #932.

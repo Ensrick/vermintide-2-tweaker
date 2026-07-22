@@ -96,11 +96,11 @@ return function(H, repo_root)
         for name in (identity .. "\n" .. render):gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 75)
+        H.equal(#names, 76)
         H.equal(names[1], "cwv_variant_flag_present")
-        H.equal(names[34], "cwv_husk_transform_coverage")
-        H.equal(names[35], "cwv_husk_stale_unit_and_postcondition")
-        H.equal(names[36], "cwv_unit_bearing_variants_registered")
+        H.equal(names[35], "cwv_husk_transform_coverage")
+        H.equal(names[36], "cwv_husk_stale_unit_and_postcondition")
+        H.equal(names[37], "cwv_unit_bearing_variants_registered")
         H.equal(names[#names], "issue567_skin_reverse_index_valid")
         H.truthy(entry:find("mod_version = MOD_VERSION", 1, true))
         H.truthy(entry:find("dbg = _dbg", 1, true))
