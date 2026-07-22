@@ -1072,7 +1072,7 @@ _rt_register("give_refuses_skin_only", function()
     end
 end)
 
-_rt_register("issue592_registration_not_acquisition", function()
+_rt_register("issue592_bounded_blacksmith_acquisition", function()
 	local ownership = mod._cwv_acquisition
 	if type(ownership) ~= "table" then return "#592 acquisition helper missing" end
 	local legacy = ownership.legacy_auto_grant_ids(_variant_definitions)
@@ -1088,13 +1088,39 @@ _rt_register("issue592_registration_not_acquisition", function()
 	if ownership.should_remove("cwv_es_musket_old_100", legacy, function() return false end) ~= false then
 		return "#592 CIM craft range was captured by migration"
 	end
+	local seeds = mod._cwv_blacksmith_seed_ids
+	if type(seeds) ~= "table" then return "#592 seed ledger missing" end
+	local expected, observed = 0, 0
+	for _ in pairs(seeds) do observed = observed + 1 end
+	local backend_items = Managers.backend and Managers.backend:get_interface("items")
 	for _, def in ipairs(_variant_definitions) do
-		if not def.skin_only and _registered_keys[def.item_key] then
+		if ownership.is_seed_eligible(def) and _registered_keys[def.item_key] then
+			expected = expected + 1
+			-- The runtime ledger is authoritative when a CIM-owned _001 forced
+			-- the collision fallback; accept exactly one of the two bounded ids.
+			if not seeds[def.item_key .. "_001"] and not seeds[def.item_key .. "_000"] then
+				return "#592 Blacksmith seed missing: " .. tostring(def.item_key)
+			end
+			local seed_id = seeds[def.item_key .. "_001"] and def.item_key .. "_001"
+				or def.item_key .. "_000"
+			local item
+			if backend_items then
+				pcall(function() item = backend_items:get_item_from_id(seed_id) end)
+			end
+			if not item then return "#592 live Blacksmith item missing: " .. tostring(seed_id) end
+			if item.rarity ~= "default" or tonumber(item.power_level) ~= 5
+					or item.skin ~= nil then
+				return "#592 malformed Blacksmith seed: " .. tostring(seed_id)
+			end
 			local row = ItemMasterList and rawget(ItemMasterList, def.item_key)
 			if not row or row.cwv_definition ~= true or row.mod_data ~= nil then
-				return "#592 definition acquired backend identity: " .. tostring(def.item_key)
+				return "#592 definition row acquired backend identity: " .. tostring(def.item_key)
 			end
 		end
+	end
+	if observed ~= expected or mod._cwv_blacksmith_seed_count ~= expected then
+		return string.format("#592 seed cardinality drift expected=%d ledger=%d built=%s",
+			expected, observed, tostring(mod._cwv_blacksmith_seed_count))
 	end
 end)
 
@@ -1114,7 +1140,7 @@ _rt_register("cwv_crowbill_family_registration_contract", function()
 		local entry = ItemMasterList and rawget(ItemMasterList, variant.key)
 		if type(entry) ~= "table" or entry.cwv_variant ~= true
 				or entry.cwv_definition ~= true or entry.mod_data ~= nil then
-			return variant.key .. " is not a registration-only CIM definition"
+			return variant.key .. " definition row acquired backend identity"
 		end
 		if entry.template ~= family.SOURCE_TEMPLATE
 				or entry.item_type ~= variant.key

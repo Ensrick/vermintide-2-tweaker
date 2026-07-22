@@ -832,7 +832,7 @@ return function(H, repo_root)
 		H.truthy(main:find('style_target_item = "es_2h_sword"', 1, true))
 		H.truthy(main:find('if def.skin_only or def.cwv_retired then', 1, true))
 		H.equal(main:find('item_key        = "cwv_es_infantry_spear"', 1, true), nil)
-		H.truthy(main:find('legacy_ids[_om.infantry_spear.ITEM_KEY .. "_001"] = true', 1, true))
+		H.truthy(main:find('{ [_om.infantry_spear.ITEM_KEY .. "_001"] = true }', 1, true))
 		H.equal(select(2, main:gsub('mod:hook%("BackendUtils", "get_item_template"', "")), 1)
 	end)
 end

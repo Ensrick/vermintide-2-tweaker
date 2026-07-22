@@ -643,14 +643,14 @@ _rt_register("inventory_property_count_within_cap", function()
     end
 end)
 
-_rt_register("cwv_registration_is_not_acquisition", function()
-    -- #592 supersedes #524's two-template workaround. CWV now owns only the
-    -- ItemMasterList definition; CIM injects exactly one synthetic selector.
+_rt_register("cwv_bounded_seed_is_single_acquisition_selector", function()
+    -- #592/#928: CWV owns one real 5-power seed; CIM suppresses its synthetic
+    -- twin and owns every additional crafted instance.
     if type(mod._cim_inject_templates) ~= "function" then
         return "standard-forge template injector (_cim_inject_templates) not exposed"
     end
-    if mod._cim592_cwv_registration_only ~= true then
-        return "#592 regression: CIM/CWV registration-only contract marker missing"
+    if mod._cim592_cwv_bounded_seed ~= true then
+        return "#592 regression: CIM/CWV bounded-seed contract marker missing"
     end
     if mod._cim_is_modded_backend_id("cwv_rt_unpersisted_definition_001") then
         return "#592 regression: unpersisted CWV prefix still treated as acquired"
@@ -848,9 +848,10 @@ end)
 _rt_register("issue703_athanor_cwv_rows_unlocked", function()
     -- #703: vanilla `_sync_backend_loadout` stamps `content.locked = not
     -- backend_id` from a backend-items OWNERSHIP lookup
-    -- (hero_window_weave_forge_weapons.lua:555/:565). CWV rows are
-    -- registration-only definitions (issue 592) so ownership never resolves and
-    -- every CWV row drew a false padlock. The consolidated hook clears the lock
+    -- (hero_window_weave_forge_weapons.lua:555/:565). CWV's provider definition
+    -- identity is distinct from CIM craft ownership (#592/#928); the one
+    -- Blacksmith seed does not make every Athanor provider row CIM-owned. The
+    -- consolidated hook clears the lock
     -- for provider=cwv keys only; this check pins the classifier's boundary so
     -- vanilla/other-provider locks can never be swept up with it.
     local classify = (mod._cim_synthetic_item_contract or {}).is_cwv_provider_key

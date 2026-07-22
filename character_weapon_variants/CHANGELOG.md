@@ -1,5 +1,22 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.469-dev (2026-07-21) - one bounded Blacksmith seed per CWV definition (#592) [not-started]
+
+- Reversed the earlier definition-only acquisition policy per the current
+  product request: each active, non-illusion CWV weapon now receives exactly
+  one default-rarity, 5-power Blacksmith inventory instance. It is unskinned
+  and carries no rolled traits or properties.
+- Preserved CIM as the sole owner of every additional crafted instance. The
+  seed uses `_001` unless CIM already owns that exact historical ID, in which
+  case `_000` avoids overwriting persisted player state. If both bounded IDs
+  are CIM-owned, registration fails closed rather than replacing either craft;
+  an unselected old `_000` provider fallback is removed by the exact ledger.
+- Historical extra `_002+` auto-grants remain bounded by the authored legacy
+  ledger and are removed only when they are neither the chosen seed nor an
+  exact CIM-persisted craft. WOC relic acquisition is unchanged.
+- Added engine-free coverage for eligibility, exact seed cardinality,
+  collision fallback, protected migration, and the 5-power/default contract.
+
 ## 0.1.468-dev (2026-07-21) - strict borrowed-preview residency (#749)
 
 - Old Musket preview painting now proves the complete texture set, parent

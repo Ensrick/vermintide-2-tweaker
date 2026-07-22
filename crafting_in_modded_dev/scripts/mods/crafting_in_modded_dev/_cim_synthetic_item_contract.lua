@@ -493,10 +493,10 @@ end
 -- `backend_interface_items:get_item_from_key(item_key)` and stamps
 -- `content.locked = not backend_id` (hero_window_weave_forge_weapons.lua:555 +
 -- :565), which draws the `hero_icon_locked` pass (definitions :776-778) and
--- saturates the icon (`_animate_list_widget` :1424-1425). CWV rows are
--- registration-only definitions with no owned backend instance (issue 592), so
--- that lookup can never succeed and every CWV row rendered a false padlock even
--- though selecting and crafting worked. Classify through this contract's
+-- saturates the icon (`_animate_list_widget` :1424-1425). CWV provider
+-- definitions remain distinct from CIM craft ownership (#592/#928); the one
+-- provider-owned Blacksmith seed does not make every Athanor row a persisted
+-- CIM craft. Classify through this contract's
 -- provider ladder so provider=cwv rows are unlocked by definition while vanilla
 -- and any other provider keep their vanilla lock state.
 function M.is_cwv_provider_key(key)

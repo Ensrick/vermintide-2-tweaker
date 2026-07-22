@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.468-dev"
+local MOD_VERSION = "0.1.469-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -9051,8 +9051,6 @@ local function _give_variant(item_key)
 		mod:echo("%s is an illusion-only variant - use the illusion browser", def.display_name)
 		return
 	end
-	-- #592: CWV never acquires weapons. CIM's crafting surface owns creation,
-	-- persistence, and the selected primary/secondary equip destination.
 	mod:echo("Craft %s through Crafting in Modded", def.display_name)
 end
 
@@ -9066,8 +9064,7 @@ local _auto_registered = false
 -- concrete CWV owner receives a dedicated DeusWeapons identity whose base_item
 -- remains that CWV row; borrowing only the vanilla generation contract keeps
 -- properties/traits valid without collapsing template, item_type, skin pool,
--- or render units to def.base_weapon. This mutates no inventory and therefore
--- preserves #592's registration-only/no-auto-grant boundary.
+-- or render units to def.base_weapon; #592 acquisition remains separately bounded.
 _om.install_deus_identities = function(reason)
 	local exact_identity_allowed = false
 	local parity = mod._cwv_peer_parity
@@ -9153,13 +9150,17 @@ local function _auto_register_all()
 	end
 
 	local mil = get_mod("MoreItemsLibrary")
+	local cim_dev, cim_public = get_mod("cim_dev"), get_mod("cim")
+	local is_cim_owned = mod._cwv_acquisition.owner_probe(cim_dev, cim_public)
 
 	local entries = {}
+	local seed_entries, protected_seed_ids = {}, {}
 	local pending_defs = {}
 	local n_skipped_skin_only = 0
 	local n_skipped_already_registered = 0
 	local n_built_ok = 0
 	local n_build_failed = 0
+	local n_seed_failed = 0
 	for _, def in ipairs(_variant_definitions) do
 		if def.skin_only or def.cwv_retired then
 			n_skipped_skin_only = n_skipped_skin_only + 1
@@ -9182,15 +9183,24 @@ local function _auto_register_all()
 			entries[#entries + 1] = entry
 			pending_defs[#pending_defs + 1] = { def = def, entry = entry }
 			_registered_keys[def.item_key] = def.item_key
+
+			local seed_entry, seed_id, seed_error = mod._cwv_acquisition.build_seed(
+				def, _build_entry, function(value) return table.clone(value, true) end, is_cim_owned)
+			if seed_entry then
+				seed_entries[#seed_entries + 1] = seed_entry
+				protected_seed_ids[seed_id] = true
+			else
+				n_seed_failed = n_seed_failed + 1
+				printf("[cwv:592] seed unavailable for %s; preserving old rows: %s", tostring(def.item_key), tostring(seed_error))
+			end
 		else
 			n_build_failed = n_build_failed + 1
 		end
 		::continue::
 	end
 
+	local seed_registration_ok = false
 	if #entries > 0 then
-		-- Register owner definitions only. Acquisition belongs exclusively to CIM;
-		-- no CWV row is added to MIL's local backend (#592).
 		if ItemMasterList then
 			for _, pending in ipairs(pending_defs) do
 				local key = pending.def.item_key
@@ -9286,38 +9296,38 @@ local function _auto_register_all()
 			end
 		end
 
-		_dbg("Registered %d variant definitions (zero inventory instances)", #entries)
+		local backend_items
+		if Managers and Managers.backend then
+			pcall(function() backend_items = Managers.backend:get_interface("items") end)
+		end
+		local seed_report = mod._cwv_acquisition.register_seed_interfaces(seed_entries,
+			#entries, mil, backend_items, "character_weapon_variants")
+		seed_registration_ok = seed_report.ok and n_seed_failed == 0
+		n_seed_failed = n_seed_failed + seed_report.failed
+		if not seed_report.ok then
+			printf("[cwv:592] Blacksmith seed registration incomplete; preserving old rows: %s",
+				tostring(seed_report.error))
+		end
+
+		_dbg("Registered %d variant definitions and %d bounded Blacksmith seeds",
+			#entries, #seed_entries)
 	end
 
-	-- One-time-compatible migration for sessions/hot-reloads that still contain
-	-- CWV's historical auto-grants. The allowlist is derived from the authored
-	-- old instance counts, and exact CIM persistence wins. IDs minted by CIM
-	-- start at _100 today, but the ownership callback makes the boundary robust
-	-- even if a legitimate saved craft reused _001 in an older/manual build.
-	local legacy_ids = mod._cwv_acquisition.legacy_auto_grant_ids(_variant_definitions)
 	-- Infantry Spear is no longer a variant definition at all (#620), but its
 	-- historical deterministic auto-grant id still needs one final cleanup.
-	legacy_ids[_om.infantry_spear.ITEM_KEY .. "_001"] = true
-	local cim_dev = get_mod("cim_dev")
-	local cim_public = get_mod("cim")
-	local function is_cim_owned(backend_id)
-		return (cim_dev and cim_dev._cim_get_craft and cim_dev._cim_get_craft(backend_id) ~= nil)
-			or (cim_public and cim_public._cim_get_craft and cim_public._cim_get_craft(backend_id) ~= nil)
-	end
-	local purge = {}
-	for backend_id in pairs(legacy_ids) do
-		if mod._cwv_acquisition.should_remove(backend_id, legacy_ids, is_cim_owned) then
-			purge[#purge + 1] = backend_id
-		end
-	end
-	table.sort(purge)
+	local purge = seed_registration_ok and mod._cwv_acquisition.plan_removals(
+		_variant_definitions,
+		{ [_om.infantry_spear.ITEM_KEY .. "_001"] = true },
+		is_cim_owned, protected_seed_ids) or {}
 	local removed = 0
 	if #purge > 0 and mil and type(mil.remove_mod_items_from_local_backend) == "function" then
 		mil:remove_mod_items_from_local_backend(purge, "character_weapon_variants")
 		removed = #purge
 	end
-	mod:info("[cwv:592] registration_only=%d legacy_ids_purged=%d cim_exact_ids_preserved=true",
-		#entries, removed)
+	mod:info("[cwv:592] definitions=%d blacksmith_seeds=%d seed_failed=%d legacy_ids_purged=%d cim_exact_ids_preserved=true",
+		#entries, #seed_entries, n_seed_failed, removed)
+	_om._cwv_blacksmith_seed_ids = seed_registration_ok and protected_seed_ids or {}
+	_om._cwv_blacksmith_seed_count = seed_registration_ok and #seed_entries or 0
 
 	_auto_registered = true
 	-- v0.1.356-dev: VISIBLE (mod:info, not _dbg) registration summary so the
