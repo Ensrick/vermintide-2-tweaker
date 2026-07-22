@@ -1,6 +1,6 @@
 # Tweaker: GUI dev — Changelog
 
-## Unreleased -- Chaos Wastes exit identity isolation (#273)
+## 0.2.313-dev (2026-07-22) -- Chaos Wastes exit identity isolation (#273) [not-started]
 
 - Exit-time loadout snapshots now read a slot only when the durable `items`
   interface currently owns it. Temporary Deus-owned melee/ranged backend ids

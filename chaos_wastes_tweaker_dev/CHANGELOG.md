@@ -1,6 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
-## Unreleased - #461 Pilgrimage Chamber starting-boon preview
+## 0.7.309-dev (2026-07-22) - Chest rescue ordering and Pilgrimage Chamber boon preview (#299, #461) [not-started]
+
+- Chest of Trials rescue jobs now move a still-disabled player beside the
+  living teammate nearest the completed chest before beginning assisted
+  respawn. Position reads are copied to scalar coordinates, jobs use
+  peer-plus-local-player identity, and bounded terminal diagnostics report
+  `PASS`, `FAILED`, `DROPPED`, or `DEGRADED` instead of swallowing errors.
+- Dead-player jobs wait for the hanging unit, verify the move after the server
+  reports the player alive, and permit at most one corrective teleport. This
+  removes the interval in which bots could select a newly alive teammate at a
+  distant temporary rescue beacon.
 
 - Replaced the too-late "expedition queued" display gate with the exact native
   Pilgrimage Chamber level (`morris_hub`). The July 20 v0.7.305 host log records
@@ -19,8 +29,8 @@
   unavailable-engine fail-closed behavior, #505 sharing, queue-gate removal,
   diagnostic fields, and singleton draw-hook composition.
 
-**After #149 releases this candidate, verify solo first:** enter the Pilgrimage
-Chamber through the Chaos Wastes keep door without queueing an expedition, select
+**Verify solo first:** enter the Pilgrimage Chamber through the Chaos Wastes
+keep door without queueing an expedition, select
 several Starting Boons, and hold Tab. The panel must show `Starting Boons (N)`
 with the selected icons/names and log `[ct:461] ... context=pilgrimage_chamber
 level=morris_hub ... boons=N ... queued=false`. Return to Taal's Horn Keep and
