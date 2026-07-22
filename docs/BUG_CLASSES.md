@@ -2870,3 +2870,40 @@ while the engine stores or presents that key as one aggregate record.
   same key in two categories, single-row removal, and category Clear.
 
 **Related:** class 1 (duplicate hooks) and issue #414 (category-family scope).
+
+## 75. Keyed backend collection is silently treated as a dense array
+
+**First confirmed:** issue #628 on 2026-07-22.
+**Canonical Issue:** [#628](https://github.com/Ensrick/vermintide-2-tweaker/issues/628)
+**Lives in:** adapters that reconsider or augment engine filter input after the
+vanilla function has produced a dense result array.
+
+### Symptoms
+- The vanilla grid works, but a post-filter recovery adapter never re-admits
+  eligible modded rows and emits none of its per-item diagnostics.
+- Aggregate diagnostics prove that records exist in the mirror, yet the
+  canonical ownership or eligibility function appears never to run.
+- The bug is silent: `ipairs` over a string/backend-id keyed table performs
+  zero iterations without raising an error.
+
+### Diagnosis pattern
+1. Read the engine producer or callee and record the exact collection shape at
+   every boundary; do not infer it from the result shape.
+2. Distinguish the raw keyed inventory map from the dense filtered result. In
+   `BackendInterfaceCommon.filter_items`, the former is enumerated with
+   `pairs`, while accepted rows are appended to the latter [src:
+   `backend_interface_common.lua:648-669`].
+3. Add a source-contract test for the required iterator and a keyed-table unit
+   fixture. An empty array fixture cannot expose this class.
+
+### Fix template
+- Preserve the engine collection shape and use `pairs` for backend-id keyed
+  maps. Use `ipairs` only where the producer guarantees a dense sequence.
+- Keep output deduplication keyed by the stable backend id; never depend on map
+  iteration order.
+- Lock the production adapter's iterator, exact ownership checks, and bounded
+  diagnostics under engine-free tests, then verify one eligible and each
+  rejected state in game.
+
+**Related:** class 5 (identity layers), class 39 (shape/contract drift), class
+65 (loadout row shapes), and class 73 (backend ownership boundaries).

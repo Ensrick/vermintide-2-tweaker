@@ -872,15 +872,32 @@ _rt_register("issue682_provider_gate_routing", function()
     if type(reason) ~= "string" or reason == "" then
         return "record-gate rejection reason is nil/empty (issue 682 regression)"
     end
-    -- Routed-surface census: every expected enumerator surface except the
-    -- deliberately-unrouted cw_conversion must be registered by its install
-    -- site (athanor_list / blacksmith_list / mirror_restore /
-    -- mirror_injection from the entry + standard_forge, salvage from
-    -- _cim_inventory_filter).
+    -- Routed-surface census: every real provider-item enumerator must register
+    -- its install site. `cw_conversion` is a rarity-exclude scrub only, not an
+    -- item enumerator, and is documented separately by the contract.
     local missing = contract.unrouted_surfaces()
-    if #missing ~= 1 or missing[1] ~= "cw_conversion" then
+    if #missing ~= 0 then
         return "unrouted provider-gate surfaces: [" .. table.concat(missing, ",") .. "]"
     end
+    if type(contract.NON_ENUMERATOR_BOUNDARIES) ~= "table"
+            or contract.NON_ENUMERATOR_BOUNDARIES.cw_conversion ~= "rarity-exclude-scrub-only" then
+        return "cw_conversion boundary lost its non-enumerator classification"
+    end
+end)
+
+_rt_register("issue628_salvage_state_diagnostic", function()
+    local contract = mod._cim_synthetic_item_contract
+    if type(contract) ~= "table" or type(contract.salvage_trace_fingerprint) ~= "function" then
+        return "#628 salvage trace fingerprint policy missing"
+    end
+    if mod._cim628_salvage_trace_wired ~= true then
+        return "#628 exact salvage-state diagnostic not wired"
+    end
+    local clean = contract.salvage_trace_fingerprint("rt_bid", true, true, nil, {})
+    local saved = contract.salvage_trace_fingerprint("rt_bid", false, false, "loadout", {
+        is_equipped_by_any_loadout = true,
+    })
+    if clean == saved then return "#628 loadout rejection does not change trace state" end
 end)
 
 _rt_register("issue703_athanor_cwv_rows_unlocked", function()

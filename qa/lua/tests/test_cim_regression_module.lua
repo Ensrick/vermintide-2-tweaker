@@ -79,7 +79,9 @@ return function(H, repo_root)
             "issue 682 provider-gate routing check missing")
         H.truthy(seen.issue959_accessory_property_layers_are_independent,
             "issue 959 accessory property layer check missing")
-        H.equal(#names, 80, "regression registration set changed")
+        H.truthy(seen.issue628_salvage_state_diagnostic,
+            "issue 628 exact salvage-state diagnostic check missing")
+        H.equal(#names, 81, "regression registration set changed")
         local ok, result = pcall(checks[1])
         H.truthy(ok, "registered checks did not close over the supplied mod object")
         H.equal(type(result), "string")

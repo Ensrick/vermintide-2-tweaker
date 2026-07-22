@@ -115,6 +115,15 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 - The full cim recipe→synth→craft→mirror→persistence flow (including
   `_forged_weapons` + `_modded_loadout` and the cross-mod API) is mapped in its
   memory note; read it before touching the craft path. [memory: reference_cim_weapon_crafting_flow]
+- Adventure salvage uses two distinct ownership queries: `equipped_by` scans
+  the active loadout for every career, while `is_equipped_by_any_loadout` scans
+  every cached saved-loadout row for every career; the salvage recipe requires
+  both to be empty before admitting an item. [src: scripts/managers/backend_playfab/backend_interface_item_playfab.lua:747-801; scripts/settings/crafting/crafting_recipes.lua:13]
+- `BackendInterfaceCommon.filter_items` receives the source inventory as a
+  backend-id keyed map and enumerates it with `pairs`, then returns a dense
+  result array. A post-filter adapter that reconsiders excluded source rows
+  must preserve that map shape instead of iterating it with `ipairs`. [src:
+  scripts/managers/backend/backend_interface_common.lua:648-669]
 - A base `ItemMasterList` weapon-TYPE key's own `display_name` / `localized_name`
   is the DEFAULT COSMETIC SKIN's name, NOT the weapon-type name: e.g.
   `ItemMasterList.dr_2h_pick.display_name = "dw_2h_pick_skin_01_name"` ("…Azdrek")

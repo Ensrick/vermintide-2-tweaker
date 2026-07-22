@@ -25,12 +25,12 @@ Last updated: 2026-07-22.
 | Field | Value |
 |---|---|
 | Symptom | CIM-crafted provider weapons can craft/equip/persist but disappear from Salvage, or unsafe rows are admitted independently of equip, favorite, and saved-loadout state. |
-| Root cause | Craft, mirror restore, inventory filtering, and salvage constructed or classified partial item records independently; the old salvage adapter explicitly bypassed vanilla safety exclusions. |
+| Root cause | Craft, mirror restore, inventory filtering, and salvage constructed or classified partial item records independently; after those identities were unified, the salvage adapter still iterated vanilla's backend-id keyed input map with `ipairs`, silently visiting zero real items. |
 | Fix version(s) | cim_dev 0.8.80-dev |
 | Category | SOLO |
 | Repro | Craft the three Dawi Maces and one older CWV weapon; inspect inventory/preview/restart/salvage, then repeat while equipped, favorited, or present in any saved loadout. Equip Blightreaper and confirm it never appears on a CIM acquisition or edit surface. |
 | Expected post-fix | Every CIM surface consumes one exact CIM-owned identity; only an unequipped, unfavorited, no-loadout Modded instance appears. WOC trophy relics remain provider-owned singletons and are never crafted, edited, mirrored, or salvaged by CIM. |
-| Detection | Offline `test_cim_synthetic_item_contract.lua` passes and `/cim_regression_test` passes `issue628_provider_contract` plus `issue628_saved_instance_contract`. |
+| Detection | Offline `test_cim_synthetic_item_contract.lua` locks `pairs(items)` at the raw backend-map boundary and `/cim_regression_test` passes `issue628_provider_contract`, `issue628_saved_instance_contract`, and `issue628_salvage_state_diagnostic`. Bounded `[cim:628] salvage_state` rows name the exact instance, rejecting guard, active careers, saved loadouts, favorite, and backend dirty state. |
 
 ---
 
