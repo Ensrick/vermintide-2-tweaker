@@ -74,7 +74,7 @@ return function(H, repo_root)
         module.install(mod, function(name, fn)
             checks[#checks + 1] = { name = name, fn = fn }
         end, deps)
-        H.equal(#checks, 57)
+        H.equal(#checks, 58)
         H.equal(checks[1].name, "cos_la_reconcile_and_pull_wired")
         H.equal(checks[2].name, "cos_replay_reconciler_wired")
         local score_identity_index, score_replay_index

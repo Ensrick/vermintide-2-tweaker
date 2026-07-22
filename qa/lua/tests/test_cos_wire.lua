@@ -10,7 +10,13 @@ return function(H, repo_root)
         local hooks = {}
         local mock_mod = {
             _cos = { custom_skin_keys = { ct_test_skin = true } },
+            _semantic_calls = {},
         }
+        mock_mod._cos_send_custom_skin_hands = function(unit, item, skin, edge)
+            mock_mod._semantic_calls[#mock_mod._semantic_calls + 1] = {
+                unit = unit, item = item, skin = skin, edge = edge,
+            }
+        end
         local chunk = assert(loadfile(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_wire.lua"))
         -- Match VMF dofile: no injected file-global `mod`. The returned module
@@ -111,6 +117,50 @@ return function(H, repo_root)
         H.equal(b, "b")
         H.equal(c, "c")
         H.equal(d, "d")
+    end)
+
+    H.test("Cosmetics wire publishes semantic custom identity before numeric null", function()
+        local mock_mod, hooks = load_wire()
+        local slot = {
+            skin = "ct_test_skin",
+            item_data = { key = "es_test_weapon" },
+        }
+        local equipment = { slots = { slot_melee = slot } }
+        local seen_during_vanilla
+        hooks["SimpleInventoryExtension:game_object_initialized"](
+            function(_, _, _)
+                seen_during_vanilla = slot.skin
+            end,
+            { _equipment = equipment }, "owner-unit", 17)
+
+        H.equal(#mock_mod._semantic_calls, 1)
+        H.equal(mock_mod._semantic_calls[1].unit, "owner-unit")
+        H.equal(mock_mod._semantic_calls[1].item, slot.item_data)
+        H.equal(mock_mod._semantic_calls[1].skin, "ct_test_skin")
+        H.equal(mock_mod._semantic_calls[1].edge, "game_object_initialized")
+        H.equal(seen_during_vanilla, nil)
+        H.equal(slot.skin, "ct_test_skin")
+    end)
+
+    H.test("Cosmetics resync publishes vanilla state so stale custom hands clear", function()
+        local mock_mod, hooks = load_wire()
+        local extension = { _unit = "respawned-unit" }
+        local equipment = {
+            skin = nil,
+            item_data = { key = "es_test_weapon" },
+        }
+        local vanilla_called = false
+        hooks["SimpleInventoryExtension:_spawn_resynced_loadout"](
+            function()
+                vanilla_called = true
+            end,
+            extension, equipment, false)
+
+        H.equal(vanilla_called, true)
+        H.equal(#mock_mod._semantic_calls, 1)
+        H.equal(mock_mod._semantic_calls[1].unit, "respawned-unit")
+        H.equal(mock_mod._semantic_calls[1].skin, nil)
+        H.equal(mock_mod._semantic_calls[1].edge, "spawn_resynced_loadout")
     end)
 
     H.test("Cosmetics wire policy owns the GameSession custom-skin substitution", function()

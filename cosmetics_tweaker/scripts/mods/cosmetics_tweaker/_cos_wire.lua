@@ -99,6 +99,23 @@ function M.install(owner)
         return _wire_null_custom_skins(custom_skin_keys, slots, send_fn, context)
     end
 
+    -- Publish the semantic mod-peer descriptor before the vanilla continuation
+    -- sees its mandatory nil skin. This is fail-open: semantic appearance must
+    -- never block the safe vanilla equipment RPC.
+    local function publish_custom_skin_hands(unit, slots, context)
+        local publish = owner._cos_send_custom_skin_hands
+        if type(publish) ~= "function" then return end
+        for _, slot_data in pairs(slots or {}) do
+            local ok, err = pcall(publish, unit,
+                slot_data and (slot_data.item_data or slot_data),
+                slot_data and slot_data.skin, context)
+            if not ok then
+                pcall(printf, "[cos:918] semantic publish failed (%s): %s",
+                    tostring(context or "?"), tostring(err))
+            end
+        end
+    end
+
     -- These established mod fields are frozen regression/documentation surface.
     owner._cos_wire_null_custom_skins = null_custom_skins
     owner._cos_wire_safe_custom_skin = function(skin_name, context)
@@ -113,6 +130,7 @@ function M.install(owner)
         if not slots then
             return func(self, unit, unit_go_id)
         end
+        publish_custom_skin_hands(unit, slots, "game_object_initialized")
         return null_custom_skins(slots, function()
             return func(self, unit, unit_go_id)
         end, "game_object_initialized")
@@ -122,7 +140,12 @@ function M.install(owner)
     -- Mid-session equip/loadout respawn broadcast. equipment_to_spawn is one
     -- slot-shaped table, so wrap it for the shared pairs() traversal.
     owner:hook("SimpleInventoryExtension", "_spawn_resynced_loadout", function(func, self, equipment_to_spawn, skip_wield)
-        if not (equipment_to_spawn and equipment_to_spawn.skin) then
+        if not equipment_to_spawn then
+            return func(self, equipment_to_spawn, skip_wield)
+        end
+        publish_custom_skin_hands(self and self._unit,
+            { equipment_to_spawn }, "spawn_resynced_loadout")
+        if not equipment_to_spawn.skin then
             return func(self, equipment_to_spawn, skip_wield)
         end
         return null_custom_skins({ equipment_to_spawn }, function()
@@ -137,6 +160,7 @@ function M.install(owner)
         if not slots then
             return func(peer_id, unit, equipment, additional_items)
         end
+        publish_custom_skin_hands(unit, slots, "hot_join_sync")
         return null_custom_skins(slots, function()
             return func(peer_id, unit, equipment, additional_items)
         end, "hot_join_sync")

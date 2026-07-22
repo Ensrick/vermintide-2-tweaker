@@ -65,6 +65,8 @@ local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
 local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
 local OFFHAND_COMMIT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy")
+local CUSTOM_ILLUSION_SYNC = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_custom_illusion_sync")
 local LA_REPLAY_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_policy")
 mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_instance_policy")
 mod._la_icon_provider = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_inventory_icon").new(mod._la_instance_policy, printf, 32)
@@ -91,7 +93,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.164-dev"
+local MOD_VERSION = "0.9.165-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -6414,6 +6416,10 @@ end
 -- pitfall as the previous version.
 if LoadoutUtils then
     mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
+        if mod._cos_send_custom_skin_hands then
+            mod._cos_send_custom_skin_hands(player and player.player_unit,
+                item, item and item.skin, "sync_loadout_slot")
+        end
         if item and item.key
             and LA_BRIDGE and LA_BRIDGE.registered
             and LA_BRIDGE.backend_to_armoury
@@ -7028,6 +7034,29 @@ mod._send_offhand_mesh = function(unit, slot_name, hand_field, unit_path)
         slot = slot_name, kind = "offhand", offhand_unit = unit_path, hand_field = hand_field,
     })
 end
+
+-- #918: ct_* skin ids cannot safely use vanilla's numeric weapon-skin wire
+-- (#421), so send their authored hand meshes through the already-established
+-- semantic offhand channel. State is keyed by wearer + weapon template so a
+-- respawn can explicitly clear a previously published custom mesh. Committed
+-- per-instance offhand picks remain the final writer for any claimed hand.
+assert(CUSTOM_ILLUSION_SYNC.install(mod, {
+    custom_skin_keys = mod._cos.custom_skin_keys,
+    item_master = ItemMasterList,
+    weapon_skins = WeaponSkins and WeaponSkins.skins,
+    unit_alive = function(unit) return Unit.alive(unit) end,
+    owner_for_unit = function(unit)
+        local pm = Managers and Managers.player
+        return pm and pm.owner and pm:owner(unit) or nil
+    end,
+    wearer_is_human = mod._cos_husk_identity.wearer_is_human,
+    selection_for = function(backend_id)
+        _migrate_legacy_offhand_selection(backend_id)
+        return _offhand_selection[backend_id]
+    end,
+    send = mod._send_offhand_mesh,
+    log = printf,
+}) == true, "custom illusion semantic transport failed to install")
 
 local function _resolve_la_variant(armoury_key)
     if GK_SET and GK_SET.resolve_variant then
@@ -8281,6 +8310,8 @@ if rawget(_G, "PlayerManager") then
         if not peer_id then return end
         local has_state = (_la_equips_by_peer and _la_equips_by_peer[peer_id]) ~= nil
             or (mod._glow_by_peer and mod._glow_by_peer[peer_id]) ~= nil
+            or (mod._cos_custom_illusion_sent
+                and mod._cos_custom_illusion_sent[tostring(peer_id)]) ~= nil
         if not has_state then return end
         mod._la_peer_purge_at = mod._la_peer_purge_at or {}
         if not mod._la_peer_purge_at[peer_id] then
@@ -8335,6 +8366,9 @@ mod._la_tick_peer_purges = function()
             -- v0.9.82-dev (#416): drop the disconnected peer's vanilla offhand meshes too.
             if mod._offhand_mesh_by_peer and mod._offhand_mesh_by_peer[peer_id] then
                 mod._offhand_mesh_by_peer[peer_id] = nil
+            end
+            if mod._cos_custom_illusion_sent then
+                mod._cos_custom_illusion_sent[tostring(peer_id)] = nil
             end
             if printf then printf("[la-state] PEER-PURGE executed peer=%s (no re-add within 30s - genuine leave)",
                 tostring(peer_id)) end
@@ -9762,6 +9796,25 @@ mod.update = function(dt)
                     end
                 end
             end
+            -- (C) #918: custom weapon illusions use the same semantic hand
+            -- transport. Re-publish from the authoritative equipped slots on
+            -- every game-state edge; vanilla/non-custom skins also drive the
+            -- explicit CLEAR needed after a respawn or illusion removal.
+            do
+                local inv = ScriptUnit and ScriptUnit.has_extension
+                    and ScriptUnit.has_extension(pu, "inventory_system") or nil
+                if not mod._la_rebroadcast_inventory_ready(inv) then
+                    replay_ready = false
+                else
+                    for _, slot_data in pairs(inv._equipment.slots) do
+                        local item_data = slot_data and slot_data.item_data
+                        local _, _, emitted = mod._cos_send_custom_skin_hands(
+                            pu, item_data, slot_data and slot_data.skin,
+                            "game_state_rebroadcast")
+                        n = n + (emitted or 0)
+                    end
+                end
+            end
             if replay_ready then
                 mod._la_self_rebroadcast_pending = false
                 if n > 0 then
@@ -10562,6 +10615,7 @@ _cos_runtime_checks.install(mod, _rt_register, {
     shield_pools_by_item_type = _SHIELD_POOLS_BY_ITEM_TYPE,
     dbg = _dbg, dbg_alert = _dbg_alert, ui_dump = UI_DUMP,
     custom_skin_keys = _custom_skin_keys,
+    custom_illusion_sync = CUSTOM_ILLUSION_SYNC,
     offhand_preload_lifecycle = OFFHAND_PRELOAD_LIFECYCLE, mh_embed = MH_EMBED,
     cwv_peer_identity = mod._cos_cwv_peer_identity,
     la_instance_policy = mod._la_instance_policy,

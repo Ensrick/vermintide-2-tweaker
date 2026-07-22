@@ -152,16 +152,16 @@ return {
 		--   create_equipment; injected into WeaponSkins.skins (_cos_illusions.lua).
 		-- inventory_preview/illusion_browser: get_unlocked_weapon_skins marks ct_*
 		--   unlocked (_cos_illusions.lua); previewers spawn from the skin data.
-		-- husk: WIRE-NULLED. Every skin sender nulls ct_* to "n/a"
-		--   (_cos_wire_null_custom_skins, :6146) for #421 crash-safety, so remote
-		--   husks -- even mod peers -- spawn the base weapon mesh (#233).
+		-- husk: every vanilla sender still nulls ct_* to "n/a" for #421 safety;
+		--   _cos_send_custom_skin_hands publishes exact authored hand units over
+		--   the #416 semantic channel for Cosmetics peers. Non-mod peers keep base.
 		-- ================================================================
 		custom_weapon_illusions = {
 			cells = {
 				owner_1p          = "implemented",
 				owner_3p          = "implemented",
 				bot               = "unsupported",
-				husk              = "unsupported",
+				husk              = "implemented",
 				inventory_preview = "implemented",
 				illusion_browser  = "implemented",
 				cim_preview       = "unsupported",
@@ -181,7 +181,6 @@ return {
 			},
 			unsupported_fallback = {
 				bot         = "Bots wield the default loadout and never carry a ct_* illusion selection; render vanilla. Safe by design.",
-				husk        = "ct_* skin ids are nulled to 'n/a' on every wire sender for #421 crash-safety (_cos_wire_null_custom_skins, :6146); remote husks -- even mod peers -- spawn the base weapon mesh, not the custom illusion. Only a paired offhand mesh rides the #416 channel. Tracked #233 (custom illusion on client).",
 				cim_preview = "ct_* illusions surface in the Athanor via the shared get_unlocked_weapon_skins unlock, but cosmetics installs no Athanor previewer hook and there is no in-game confirmation the forge renders the ct_* mesh/paint. Unverified; tracked as the cim-preview illusion gap.",
 				lobby       = "No lobby-card previewer hook, and the wire-null means remote lobby husks show the base weapon anyway. Tracked as the lobby-preview gap / #233.",
 				score_team  = "Score apply is hat/armor only; ct_* illusions are wire-nulled and not applied on the score lineup. Tracked #513-class weapon-on-score gap / #233.",

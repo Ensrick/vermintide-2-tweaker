@@ -25,6 +25,7 @@ function M.install(mod, rt_register, deps)
     local _dbg_alert = deps.dbg_alert
     local UI_DUMP = deps.ui_dump
     local _custom_skin_keys = deps.custom_skin_keys
+    local CUSTOM_ILLUSION_SYNC = deps.custom_illusion_sync
     local OFFHAND_PRELOAD_LIFECYCLE = deps.offhand_preload_lifecycle
     local MH_EMBED = deps.mh_embed
     local CWV_PEER_IDENTITY = deps.cwv_peer_identity
@@ -101,6 +102,46 @@ _rt_register("cos_replay_reconciler_wired", function()
     local r3 = P.reconcile_edge(st, "rt", recs, apply)
     if not (r3.applied == 1 and calls == 2) then
         return "replay reconciler did not re-apply after invalidation"
+    end
+end)
+
+-- #918: Cosmetics-owned ct_* identities remain absent from vanilla numeric
+-- skin traffic (#421), so remote peers depend on this exact-family semantic
+-- adapter and the existing bounded per-hand channel. Keep this check entirely
+-- table-driven: it proves the runtime owner, resolver floor, and explicit CLEAR
+-- plan without sending an RPC or touching a live unit.
+_rt_register("issue918_custom_illusion_semantic_sync", function()
+    if mod._cos_custom_illusion_runtime_installed ~= true then
+        return "custom illusion semantic runtime is not installed"
+    end
+    if type(mod._cos_send_custom_skin_hands) ~= "function" then
+        return "custom illusion semantic publisher is missing"
+    end
+    if type(CUSTOM_ILLUSION_SYNC) ~= "table"
+        or type(CUSTOM_ILLUSION_SYNC.resolve) ~= "function"
+        or type(CUSTOM_ILLUSION_SYNC.plan) ~= "function" then
+        return "custom illusion semantic policy API is incomplete"
+    end
+    local skin_key = "ct_es_heavy_spear_deus_01"
+    local template, hands, reason = CUSTOM_ILLUSION_SYNC.resolve(
+        _custom_skin_keys, ItemMasterList, WeaponSkins and WeaponSkins.skins,
+        { name = "es_2h_heavy_spear", template = "two_handed_heavy_spears_template" },
+        skin_key)
+    if reason ~= "exact-family" or template ~= "two_handed_heavy_spears_template"
+        or type(hands) ~= "table" or not hands.right_hand_unit then
+        return "known custom spear did not resolve to its exact semantic hand"
+    end
+    local operations = CUSTOM_ILLUSION_SYNC.plan(
+        { right_hand_unit = hands.right_hand_unit }, nil, nil)
+    if #operations ~= 1 or operations[1].hand ~= "right_hand_unit"
+        or operations[1].unit ~= "" then
+        return "custom illusion removal did not plan one explicit hand clear"
+    end
+    local surfaces = mod._cos_skin_wire_surfaces
+    for _, surface in ipairs({ "game_object_initialized", "spawn_resynced_loadout", "hot_join_sync" }) do
+        if not (surfaces and surfaces[surface]) then
+            return "custom illusion semantic sender missing at " .. surface
+        end
     end
 end)
 
