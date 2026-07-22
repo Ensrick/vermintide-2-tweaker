@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.470-dev"
+local MOD_VERSION = "0.1.471-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -52,6 +52,7 @@ local CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 = "cwv-slot-extension-scoped-to-cros
 -- refactor is a pure `_om.` prefix with no behavior change.
 local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
+_om.javelin_gate = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_gate")
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
 _om.identity_peer_pull = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_pull")
@@ -3160,6 +3161,25 @@ end
 mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, self, filter, params)
 	local items = func(self, filter, params)
 	if not items or type(filter) ~= "string" then return items end
+
+	-- #424: a Tuskgor Javelin is a genuine modded thrown-resource feature, not
+	-- merely an alternate icon. Keep it out of the ranged loadout picker until
+	-- the peer-parity feature is positively enabled. Persisted/equipped items are
+	-- not deleted; the action gate below covers that hot-join state.
+	if string.find(filter, "slot_type == ranged", 1, true) then
+		local gate = mod._cwv_peer_parity
+		local state = "disabled"
+		if gate and type(gate.applied_state) == "function" then
+			local ok, applied = pcall(gate.applied_state, gate)
+			if ok then state = applied end
+		end
+		local hidden
+		items, hidden = _om.javelin_gate.filter_unavailable(items, state)
+		if hidden > 0 then
+			_dbg("[cwv:424] hid %d Tuskgor Javelin row(s): peer capability is %s",
+				hidden, tostring(state))
+		end
+	end
 	-- Only run for the melee-slot filter.
 	if not string.find(filter, "slot_type == melee", 1, true) then return items end
 
@@ -4894,60 +4914,10 @@ local _TJ_VISUAL_PULL_BACK_M    = 0
 -- ============================================================================
 -- issue 424 (BUG_CLASSES 31): thrown-variant NetworkLookup wire-safety
 -- ============================================================================
--- The Tuskgor Javelin family appends cwv-only keys to networked lookup tables
--- (pickup_names, husks, projectile_units) at a LOCAL `#tbl+1` index. Those
--- indices ride VANILLA projectile/pickup spawn RPCs, so a peer WITHOUT cwv
--- cold-decodes an index its own table lacks -> strict `__index` fatal
--- (network_lookup.lua). Verified SEND sites in the decompiled source:
---
---   PICKUP (thrown-impact) -- the thrower (always a cwv peer) encodes and sends:
---     * Path A (sticks in a wall/enemy): PlayerProjectileUnitExtension
---       ._spawn_linked_pickup_projectile encodes
---       `pickup_name_id = NetworkLookup.pickup_names[pickup_name]` then
---       `send_rpc_server("rpc_spawn_linked_pickup", pickup_name_id, ...)`
---       (player_projectile_unit_extension.lua:1354-1359). The server relays the
---       spawn as a networked pickup GameObject whose pickup_name field is
---       `NetworkLookup.pickup_names[pickup_name]` (game_object_initializers_
---       extractors.lua:1795/1816); every client extracts it back.
---     * Path B (bounces/drops): PlayerProjectileUnitExtension
---       ._spawn_pickup_projectile encodes the same pickup_name_id (+ a husk id
---       for the pickup unit, which is already a vanilla key) then
---       `send_rpc_server("rpc_spawn_pickup_projectile", ...)`
---       (player_projectile_unit_extension.lua:1376-1395).
---   Substituting the `pickup_name` ARG at these two senders cascades: the
---   vanilla name re-encodes to a vanilla pickup_names index AND makes the
---   server spawn the vanilla pickup, so the GameObject a non-cwv peer extracts
---   is vanilla end to end. Sender-side (not the receiver hooks at 6036/6051)
---   is what protects a non-cwv HOST too (a cwv client throwing into a vanilla
---   host's game).
---
---   IN-FLIGHT PROJECTILE (Tuskgor Javelin BOMB) -- the boar-spear in-flight
---   unit is a cwv-appended husks key (_TJ_BOAR_SPEAR_UNIT, injected ~5646):
---     * ProjectileSystem.spawn_player_projectile spawns it via
---       `unit_spawner:spawn_network_unit(projectile_unit_name, ...)` where
---       `projectile_unit_name = _get_projectile_units_names(...).projectile_unit_name`
---       (projectile_system.lua:159-176, 247-249); the projectile GameObject
---       encodes that unit through NetworkLookup.husks, so a non-cwv client
---       cold-decodes it (projectile_system.lua:442 on the pickup path is the
---       same reverse-lookup shape). The SAME cwv projectile_units_template
---       (_TJ_PROJECTILE_KEY) also rides TransientPackageLoader.hot_join_sync to
---       a joining peer as `NetworkLookup.projectile_units[name]`
---       (transient_package_loader.lua:187-193). Substituting the resolved
---       projectile_units to the vanilla "javelin" entry makes BOTH the GO husk
---       and the transient projectile_units index encode vanilla. Cosmetic only:
---       impact_data / damage come from the action, untouched.
---
--- The pickup is a GAMEPLAY axis: the vanilla throwing-axe substitute below is
--- wire-safe, but its interaction callback only accepts ammo_type
--- "throwing_axe". Tuskgor Javelin advertises "throwing_javelin", so the old
--- unconditional substitution made every recovered spear inert even in solo.
--- Keep the real pickup only after peer parity is positively confirmed (solo is
--- vacuously safe); otherwise degrade to the vanilla key so a non-CWV peer can
--- never cold-decode the appended lookup index.
--- NOTE (not closed here): the BOMB's world/pool pickup (_TJB_PICKUP_KEY, ~6708)
--- is a GAMEPLAY axis -- coercing it to a vanilla grenade would change what a
--- cwv player picks up -- so it is left for the issue 371 peer-parity gate, per
--- memory `project_vt2_cross_peer_wire_safety` (which lists #424 under it).
+-- The Tuskgor Javelin appends pickup, husk, and projectile lookup keys.
+-- The full sender/hot-join containment rationale and hooks live in
+-- _cwv_javelin_gate.lua; this entry file retains only the configured map.
+
 _om._tj_pickup_wire_map = {
 	-- cwv thrown-impact pickup key -> a base-game pickup with a boot-stable
 	-- pickup_names index on every peer (throwing axe: same pup_ unit, and the
@@ -4962,9 +4932,12 @@ function _om._wire_safe_pickup_name(pickup_name, parity_override)
 	local all_have = parity_override
 	if all_have == nil then
 		local pp = mod._cwv_peer_parity
-		if pp and type(pp.all_peers_have) == "function" then
-			local ok, result = pcall(pp.all_peers_have, pp)
-			all_have = ok and result == true
+		if pp and type(pp.applied_state) == "function" then
+			-- Use the committed feature state, not the raw roster classifier. This
+			-- includes the enable-settle window and the synchronous hot-join fence
+			-- installed below; both must keep the sender on its vanilla fallback.
+			local ok, result = pcall(pp.applied_state, pp)
+			all_have = ok and result == "enabled"
 		else
 			all_have = false
 		end
@@ -5864,6 +5837,18 @@ end
 
 _register_tuskgor_javelin_assets()
 _create_tuskgor_javelin_template()
+
+-- ============================================================================
+-- issue 424: fail-closed mixed-lobby Tuskgor Javelin feature gate
+_om.javelin_gate.install({
+	mod = mod,
+	om = _om,
+	pickup_key = _TJ_PICKUP_KEY,
+	link_pickup_key = _TJ_LINK_PICKUP_KEY,
+	projectile_key = _TJ_PROJECTILE_KEY,
+	inflight_unit = _TJ_BOAR_SPEAR_UNIT,
+	safe_template_key = _om._TJ_INFLIGHT_SAFE_TEMPLATE,
+})
 
 -- ============================================================================
 -- Tuskgor Javelin (BOMB SLOT) — single-use thrown spear "grenade"  (v0.1.352-dev)

@@ -206,7 +206,8 @@ Last updated: 2026-07-19.
 | Category | MULTIPLAYER / GAMEPLAY |
 | Repro | In solo and an all-CWV two-player lobby, throw into floor and wall, then recover the landed/stuck spear. Repeat host/client roles; also verify a mixed lobby does not crash. |
 | Expected post-fix | Confirmed-CWV lobbies retain the functional CWV pickup. Unconfirmed/mixed parity substitutes the boot-stable vanilla key and never sends a CWV-only lookup index. Ordinary ammo crates refill without creating natural javelin loot. |
-| Detection | Offline `test_cwv_javelin_pickup.lua`; runtime `cwv_wire_safe_thrown_variant_installed`. |
+| Mixed-lobby policy | While capability is unproven, exact CWV Tuskgor Javelin rows are hidden from the ranged picker and already-equipped copies cannot emit a projectile or consume ammo. `TransientPackageLoader.hot_join_sync` fences and shadows numeric projectile/husk refs during loading; `GameNetworkManager.set_peer_synchronizing` removes live custom recovery pickups before `GameSession.add_peer`. Native `we_javelin` is unchanged. |
+| Detection | Offline `test_cwv_javelin_pickup.lua`; runtime `cwv_wire_safe_thrown_variant_installed`. The runtime check also requires the action gate, dormant-bomb ActionUtils sender guard, registered parity feature, and pre-roster hot-join fence. |
 
 ---
 

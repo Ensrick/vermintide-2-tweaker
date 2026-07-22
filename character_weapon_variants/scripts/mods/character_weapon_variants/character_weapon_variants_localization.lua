@@ -33,6 +33,7 @@ local loc = {
 	-- notice when the bomb pool injection is auto-disabled because a lobby peer
 	-- lacks cwv, and again when it re-enables. No em dashes (menu-facing string).
 	cwv_gated_javelin_bomb_pool = { en = "Tuskgor Javelin bomb world spawns" },
+	cwv_gated_tuskgor_javelin_throw = { en = "Tuskgor Javelin throwing" },
 
 	-- ============================================================
 	-- cwv_es_crossbow variant (v0.1.347-dev)
