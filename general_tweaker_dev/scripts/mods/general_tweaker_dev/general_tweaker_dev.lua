@@ -1474,6 +1474,10 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_client_ragdolls")
 -- drive both via the mod._* fields; the _bik_* + no_bots regression tests in
 -- main read those fields too.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_bots_keep")
+-- #659: observation-only trace across Raise Dead targeting, finish, passive,
+-- and authoritative spawn boundaries. The prior lifecycle flag hypothesis was
+-- falsified by log #940; this module identifies the first actual failing seam.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_necro_keep_trace")
 -- Level control + reservation-side fixes: Level Control (win/fail/restart RPC) +
 -- End-of-level profile fallback / score-screen fix + gt_kill_bots / gt_die +
 -- /respawn RPC + gt_fix_sound + gt_bot_toggle + Duplicate Careers. Co-locates
