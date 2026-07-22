@@ -282,6 +282,39 @@ function M.new(api)
 		return count
 	end
 
+	-- Read-only, command-driven evidence for issue #712. The normal update path
+	-- stays quiet; this bounded snapshot makes tuner ownership and final retained
+	-- state visible together when the authored pose looks wrong despite a
+	-- successful initial write.
+	function owner:audit(limit)
+		limit = math.floor(tonumber(limit) or 8)
+		limit = math.max(1, math.min(limit, 16))
+		local report = { live = 0, rows = {}, limit = limit, truncated = 0 }
+		for unit, record in pairs(records) do
+			if not alive(unit) then
+				records[unit] = nil
+			else
+				report.live = report.live + 1
+				if #report.rows < limit then
+					local current = read(unit, record.node)
+					report.rows[#report.rows + 1] = {
+						surface = record.surface,
+						perspective = record.perspective,
+						node = record.node,
+						current = current,
+						target = record.target,
+						retained = M.matches(current, record.target),
+						tuner_claims = type(api.should_yield) == "function"
+							and api.should_yield(record) == true or false,
+						write_report = record.write_report,
+					}
+				end
+			end
+		end
+		report.truncated = math.max(0, report.live - #report.rows)
+		return report
+	end
+
 	return owner
 end
 

@@ -1,5 +1,18 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.45-dev (2026-07-21) - #712 Blightreaper pose evidence reconciliation [diagnostics-armed]
+
+- Corrected the live appearance regression check to the sight-verified
+  `{-180,-90,-90}` rotation; it was still asserting the superseded
+  `{-90,-90,-90}` value and falsely reporting descriptor drift.
+- Added `/woc_pose_audit`, a bounded read-only report of the baked descriptor,
+  final retained pose on every tracked surface, and whether Weapon Tweaker's
+  development hold-pose tuner currently owns that unit.
+- Corrected the cursed-combat runtime check to inspect the live backend item's
+  intrinsic traits rather than the ItemMasterList definition's MIL payload.
+- Preserved explicit `false` values from Weapon Tweaker's perspective switches
+  so the audit cannot falsely claim that its 3P tuner owns a disabled channel.
+
 ## 0.1.44-dev (2026-07-21) - #749 strict Blightreaper pulse residency
 
 - Blightreaper's pulse unit now proves its material, complete texture set, and

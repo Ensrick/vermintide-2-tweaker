@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.44-dev"
+local MOD_VERSION = "0.1.45-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -345,7 +345,11 @@ local function _dev_tuner_claims(record)
 	end
 	local function setting(key, fallback)
 		local ok, value = pcall(wt.get, wt, key)
-		return ok and value ~= nil and value or fallback
+		-- Preserve an explicit false. The compact `and/or` form turns false into
+		-- the fallback and would incorrectly report 3P tuner ownership when its
+		-- perspective switch is disabled (the 3P fallback is true).
+		if ok and value ~= nil then return value end
+		return fallback
 	end
 	return _durable_transform_lib.dev_tuner_claims(record, setting)
 end
@@ -373,10 +377,10 @@ local _transform_owner = _durable_transform_lib.new({
 local _wa = _pulse_lib.new(
 	_appearance, _transform_owner, nil, mod._woc_resource_residency)
 
--- Issue 712 live pose tuner. The canonical numbers in M.TRANSFORM are a
--- prescription that has never been sight-verified; this command lets the
--- author dial the pose on the live weapon and paste the result back for
--- baking. Mutates the shared TRANSFORM table in place (future spawns pick it
+-- Issue 712 live pose tuner. The canonical numbers in M.TRANSFORM are the
+-- sight-verified bake; this command lets the author dial a replacement pose on
+-- the live weapon and paste the result back for a later bake. Mutates the
+-- shared TRANSFORM table in place (future spawns pick it
 -- up at apply time) and retargets every tracked unit from its stored
 -- baseline so repeated calls never compound the offset.
 local _POSE_CANONICAL = {
@@ -443,6 +447,28 @@ mod:command("woc_pose_reset", "Restore the Blightreaper pose to the shipped cano
 		_POSE_CANONICAL.rotation[2], _POSE_CANONICAL.rotation[3],
 		_POSE_CANONICAL.scale[1], _POSE_CANONICAL.scale_1p)
 end)
+mod:command("woc_pose_audit",
+	"Log the baked Blightreaper pose, live readback, and Weapon Tweaker tuner ownership",
+	function()
+		local t = _appearance.TRANSFORM
+		local t1p = _appearance.TRANSFORM_1P
+		local report = _transform_owner:audit(8)
+		printf("[WOC:712] pose audit canonical offset={%.3f,%.3f,%.3f} rotation={%.1f,%.1f,%.1f} scale_3p={%.3f,%.3f,%.3f} scale_1p={%.3f,%.3f,%.3f} live=%d shown=%d truncated=%d",
+			t.offset[1], t.offset[2], t.offset[3],
+			t.rotation[1], t.rotation[2], t.rotation[3],
+			t.scale[1], t.scale[2], t.scale[3],
+			t1p.scale[1], t1p.scale[2], t1p.scale[3],
+			report.live, #report.rows, report.truncated)
+		for i, row in ipairs(report.rows) do
+			printf("[WOC:712] pose audit row=%d surface=%s perspective=%s node=%s retained=%s wt_tuner_claims=%s current=%s target=%s write={%s}",
+				i, tostring(row.surface), tostring(row.perspective),
+				tostring(row.node), tostring(row.retained),
+				tostring(row.tuner_claims), _pose_text(row.current),
+				_pose_text(row.target), _write_report_text(row.write_report))
+		end
+		mod:echo("[WOC pose] audit logged: %d live unit(s), %d shown, %d truncated",
+			report.live, #report.rows, report.truncated)
+	end)
 local _audio = type(_audio_lib) == "table" and type(_audio_lib.new) == "function"
 	and _audio_lib.new() or {
 		observe_spawn = function() end,
@@ -870,15 +896,20 @@ local function _backend_items()
 	return Managers and Managers.backend and Managers.backend:get_interface("items")
 end
 
-local function _stamp_live_relic(items, entry)
-	if not items then return false end
+local function _live_backend_item(items, backend_id)
+	if not items then return nil end
 	local live
-	local ok = pcall(function() live = items:get_item_from_id(BACKEND_ID) end)
-	if not ok or not live then
-		local all
-		pcall(function() all = items:get_all_backend_items() end)
-		live = type(all) == "table" and all[BACKEND_ID] or nil
-	end
+	local fetched = pcall(function()
+		live = items:get_item_from_id(backend_id)
+	end)
+	if fetched and live then return live end
+	local all
+	pcall(function() all = items:get_all_backend_items() end)
+	return type(all) == "table" and all[backend_id] or nil
+end
+
+local function _stamp_live_relic(items, entry)
+	local live = _live_backend_item(items, BACKEND_ID)
 	if not live then return false end
 	local enforced = _relic_policy.enforce_instance(live, entry, BACKEND_ID)
 	if enforced then _power.stamp(live, false) end
@@ -1216,9 +1247,14 @@ _rt_register("issue632_blightreaper_cursed_combat_contract", function()
 	if type(template) ~= "table" or type(donor) ~= "table" or template == donor then
 		return "private Crowbill clone is missing or aliases its donor"
 	end
-	if not _moveset.item_has_trait(entry, _moveset.POISON_TRAIT)
-			or not _moveset.item_has_trait(entry, _moveset.SHYISH_CURSE_TRAIT) then
-		return "intrinsic poison/Shyish trait ownership is incomplete"
+	-- MoreItemsLibrary copies `mod_data.traits` into the live backend row; the
+	-- ItemMasterList definition intentionally stores that acquisition payload
+	-- under `mod_data`. Test the actual runtime owner instead of the definition
+	-- table, which produced a false FAIL in the July 21 evidence log.
+	local live = _live_backend_item(_backend_items(), BACKEND_ID)
+	if not _moveset.item_has_trait(live, _moveset.POISON_TRAIT)
+			or not _moveset.item_has_trait(live, _moveset.SHYISH_CURSE_TRAIT) then
+		return "live relic is missing intrinsic poison/Shyish traits"
 	end
 	local actions = template.actions and template.actions.action_one
 	for _, required in ipairs({
@@ -1252,15 +1288,14 @@ _rt_register("issue632_blightreaper_cursed_combat_contract", function()
 		if dependency == _moveset.EXECUTIONER_WWISE_DEP then has_executioner_audio = true end
 	end
 	if not has_executioner_audio then return "Executioner Sword audio dependency is absent" end
-	if not (entry.properties and entry.properties[_moveset.CRIT_PROPERTY] == 1
-			and entry.properties[_moveset.ORDER_PROPERTY] == 1) then
-		return "intrinsic and cosmetic property rows are absent"
+	if not (live and live.properties and live.properties[_moveset.CRIT_PROPERTY] == 1
+			and live.properties[_moveset.ORDER_PROPERTY] == 1) then
+		return "live relic is missing intrinsic and cosmetic property rows"
 	end
 	local procs = rawget(_G, "ProcFunctions")
 	if type(procs) ~= "table" or type(procs[_moveset.POISON_PROC]) ~= "function" then
 		return "client-safe Hagbane poison proc is unavailable"
 	end
-	local live = _backend_items() and _backend_items():get_item_from_id(BACKEND_ID)
 	if not live or live.power_level ~= _power.NORMAL_POWER
 			or live.rarity ~= _cursed.NAME then
 		return string.format("live relic expected 600/Cursed, got power=%s rarity=%s",
@@ -2251,7 +2286,7 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 	local transform = _appearance.TRANSFORM
 	if not transform or transform.scale[1] ~= 0.9
 			or transform.scale[2] ~= 0.9 or transform.scale[3] ~= 0.9
-			or transform.rotation[1] ~= -90
+			or transform.rotation[1] ~= -180
 			or transform.rotation[2] ~= -90 or transform.rotation[3] ~= -90
 			or transform.offset[1] ~= 0 or transform.offset[2] ~= 0
 			or transform.offset[3] ~= -0.3 then
