@@ -221,7 +221,12 @@ texture id cannot create an uncompiled Stingray UI resource.
 label policy is engine-free presentation data shared by both presentations through
 `_mod_tweaker_tab_labels.lua`; its `mp` to `PROGRESSION` mapping (#525) changes neither
 Modded Progression's VMF name/settings nor the #573/#578 progression systems, and adds no
-localization or engine hook. The per-tab search bar (#497/#559) adds NO engine seam: it is a
+localization or engine hook. Profile persistence remains engine-free. For #919,
+`_mod_tweaker_profile_events.lua` adds one replaceable diagnostic observer per tab;
+both presentation owners emit `{tab_id, slot, phase}` only after the target profile
+transaction has applied. The owner then reads its own domain values. This API adds no
+hook, update callback, setting payload, or network traffic, and a throwing observer is
+contained. The per-tab search bar (#497/#559) adds NO engine seam: it is a
 fixed `mt_search` widget above the (shrunk)
 `list_mask`, focused on click, fed by `Keyboard.keystrokes()` (the same raw path the numeric
 type-to-edit uses, chat-blocked via `ChatManager.block_chat_input_for_one_frame`), and applied

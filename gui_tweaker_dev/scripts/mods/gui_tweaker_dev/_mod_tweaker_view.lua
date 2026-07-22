@@ -1085,8 +1085,8 @@ function ModTweakerView:_switch_profile(slot)
         end
     end
     if staged > 0 then self:apply_pending(category) else self:_build_rows(category) end
-    _printf("[gut:561] switched tab=%s profile=%d settings=%d",
-        tostring(tab_id), slot, staged)
+    _printf("[gut:561] switched tab=%s profile=%d settings=%d", tostring(tab_id), slot, staged)
+    local mt = _mt(); if mt and mt.emit_profile_diagnostic then mt:emit_profile_diagnostic(tab_id, "profile_switch") end
     _play_click()
 end
 

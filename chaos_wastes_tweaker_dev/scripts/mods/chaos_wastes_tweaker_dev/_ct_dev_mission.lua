@@ -285,7 +285,15 @@ end)
 -- without gut. No other file assigns mod.on_all_mods_loaded (grep-clean).
 mod.on_all_mods_loaded = function()
     local gut = get_mod("gut_dev") or get_mod("gut")
-    if not (gut and gut.mod_tweaker and gut.mod_tweaker.register_dropdown_categories) then return end
+    local mt = gut and gut.mod_tweaker
+    if mt and mt.register_profile_diagnostic and mod._ct919_log_profile_snapshot then
+        mt:register_profile_diagnostic("ct_dev", function(info)
+            mod._ct919_log_profile_snapshot(info and info.phase or "profile_switch",
+                info and info.slot)
+        end)
+        pcall(printf, "[ct:919] registered profile diagnostic with Mod Tweaker")
+    end
+    if not (mt and mt.register_dropdown_categories) then return end
     local MISSIONS = Cat.MISSIONS
     local categories = {}
     for _, category in ipairs(Cat.CATEGORIES) do
@@ -298,7 +306,7 @@ mod.on_all_mods_loaded = function()
             end,
         }
     end
-    gut.mod_tweaker:register_dropdown_categories("ct_dev", "ctdm_base", categories)
+    mt:register_dropdown_categories("ct_dev", "ctdm_base", categories)
     pcall(printf, "[ct:505] mission dropdown categories registered with gut filtered-dropdown API")
 end
 

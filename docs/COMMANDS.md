@@ -85,7 +85,8 @@ gut_video_profile_name,         -- name one of the five native Video profile slo
 peers, dump_spawners, dump_potions, dump_boon_loc, dump_boons,
 dump_buffs, dump_mutators, dump_traits, dump_adventure_names,
 pool_status, force_inject_pool, cw_status,
-ct_426_diag                    -- read-only modded-boon peer wire census
+ct_426_diag,                   -- read-only modded-boon peer wire census
+ct_profile_audit               -- one bounded local/effective profile snapshot (#919)
 ```
 
 ### `crt` (career_tweaker)

@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.306-dev"
+local MOD_VERSION = "0.7.307-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -1888,6 +1888,7 @@ mod.update = function(dt)
             end
         end
     end
+    if mod._ct919_profile_tick then mod._ct919_profile_tick(dt) end
     local q = _ct_chunk_send_queue
     if q[1] == nil then return end
     local budget = _CT_CHUNK_DRAIN_BUDGET
@@ -1973,6 +1974,7 @@ mod:network_register("ct_sync_host_settings_chunk", function(sender_peer_id, sch
     -- The helper is defined later in the file but populated by load time; this callback
     -- only fires at runtime, long after load, so the forward reference is safe.
     if mod._ct_dump_settings then mod._ct_dump_settings("host_sync") end
+    if mod._ct919_log_profile_snapshot then mod._ct919_log_profile_snapshot("host_sync") end
     -- Issue #6 auto-probe: log the four chest_*_count keys the host pushed so a
     -- client-side log diff can spot setting drift without /verify_altars. Only
     -- the altar-determinism-relevant keys are dumped (full payload is verbose).
@@ -2639,6 +2641,11 @@ end
 -- own chunk and can't see this file-scope local. Field assignment only -- adds no
 -- main-chunk local (keeps us under the Lua 5.1 200-locals-per-function cap).
 mod._ct_effective_setting = effective_setting
+mod._ct_effective_setting_source = function()
+    local is_server = Managers and Managers.player and Managers.player.is_server
+    if is_server then return "local_host" end
+    return _ct_host_sync_received and "host_sync" or "local_fallback"
+end
 
 -- #221: one bounded, observation-only summary of the five CT umbrella owners.
 -- Uses the realized synced setting inventory, so generated/additional leaves are
@@ -2919,6 +2926,7 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- is unchanged.
     local n = select("#", ...)
     local args = { ... }
+    if mod._ct919_log_profile_snapshot then mod._ct919_log_profile_snapshot("setup_run") end
     -- Progressive Difficulty: capture this run's TRUE starting difficulty (the
     -- setup_run `difficulty` arg = args[2]) so the get_run_difficulty ramp computes
     -- from a stable base, and reset the per-mission log throttle. At run start this is
@@ -11196,6 +11204,9 @@ local function is_pool_setting(setting_id)
 end
 
 mod.on_setting_changed = function(setting_id)
+    if mod._ct919_profile_setting_changed then
+        mod._ct919_profile_setting_changed(setting_id)
+    end
     -- Mutex cluster enforcement (v0.7.81 — see LOCALIZATION_STANDARD.md § 10).
     -- Runs BEFORE everything else so a cluster toggle-on programmatically
     -- unchecks its siblings before downstream apply logic dispatches on the
@@ -11880,5 +11891,9 @@ mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_modifier_stack_audit")
 -- no enhancement payload is injected until the compatibility gate is complete.
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_progressive_elite_audit")
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_resume_audit")
+
+-- #919: installed after all owner helpers exist; runtime boundaries above use
+-- mod-field forward references and therefore remain safe during file load.
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_profile_snapshot").install(mod)
 
 pcall(printf, "[mem-probe] ct boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CT) / 1024)
