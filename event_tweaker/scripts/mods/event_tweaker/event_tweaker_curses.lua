@@ -42,8 +42,8 @@ M.BROKEN_IN_ADVENTURE = {
 -- Package-bearing curses surfaced in the "Cursed Adventure" UI group. `god`
 -- drives the cursed-sky tint; `dlc` is the content pack (morris = Chaos Wastes,
 -- belakor = Trail of Treachery — both FREE updates, so owns_dlc() is a safe
--- no-op but kept for correctness). `experimental` = activates without crashing
--- but may be inert in adventure (no Deus economy / mission flow to pay off).
+-- no-op but kept for correctness). `experimental` = has an additional unproven
+-- Adventure objective/economy contract; it is not a claim of crash safety.
 -- Order is the deterministic priority for the single-god sky tint when several
 -- curses of different gods are active at once.
 M.MANAGED_CURSES = {

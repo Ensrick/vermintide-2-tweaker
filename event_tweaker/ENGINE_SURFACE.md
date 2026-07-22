@@ -87,6 +87,13 @@ broadcasts to clients (who need NO mod). Because everything an injected name tou
 runs on an unmodded client, crash-safety is enforced at `add()` - which is why a new
 injection route that bypasses `add()` silently bypasses every guard.
 
+The issue-532 Tab preview is a read-only projection, not an injection route.
+`selected_curse_candidates()` collects checkbox/DLC/registration state for both
+consumers, while only `selected_curse_mutators()` may arm or release the issue-430
+session lock. Calling the injection selector from a UI preview changes
+`GameModeBase.is_joinable` merely by rendering the panel, so that dependency is
+forbidden and covered by the offline curse-policy test.
+
 ### The four injected-mutator crash guards (owner: `docs/engine/07`)
 
 Issue 386 uses a mutator-handler hook; issue 430 uses the joinability hook above.
@@ -128,6 +135,12 @@ peer to `GameSession` at `peer_states.lua:393`, but only exposes it through
 `GameModeBase.is_joinable` for the complete selected/active cursed session, before
 the connecting state can advance. An already-pending server peer also fails the
 selection preflight. Unload remains ref-balanced on `StateIngame.on_exit`.
+
+Package residency is necessary but not a blanket proof that a curse functions in
+Adventure. The managed catalog also includes named terror-event, special-pickup,
+mission/objective, boss-setting, and pickup-economy consumers. The per-curse source
+census and required runtime observations live in `DEVELOPMENT.md`; issue #430 stays
+blocked until those contracts are tested individually.
 
 ## What the engine will NOT let us do (dead ends, already paid for)
 

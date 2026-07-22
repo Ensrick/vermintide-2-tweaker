@@ -1,5 +1,12 @@
 # Tweaker: Events — Changelog
 
+## Unreleased - issue #430 source audit and preview/session-lock separation
+
+- Split the read-only Cursed Adventure candidate collector from the injection-only selector. The Tab-hold preview now mirrors the peer-parity decision without arming or releasing `GameModeBase.is_joinable`; only an actual injection selection owns the issue-430 session lock.
+- Added offline regression coverage that fails if preview code calls the lock-owning selector or setter.
+- Corrected the stale claim that package residency was the only Adventure blocker. Documented the decompiled execution contract and required runtime evidence for all 11 managed curses. Nine are structural candidates with no direct Deus-run-controller dependency; Egg of Tzeentch has an additional mission/objective/boss-setting contract, and Greed Pinata has an additional breed/pickup-economy contract. None is called working without in-game evidence.
+- No version, bundle, deployment, Workshop upload, setting, or tester-readiness label change in this source-only pass. Issue #430 remains blocked pending per-curse runtime evidence.
+
 ## 0.4.39-dev (2026-07-19) - issue #626 active event-area diagnostics [diagnostics-armed]
 
 - Replaced the stale allocated-widget inference with bounded observation of vanilla's authoritative `_active_area_widgets` after successful desktop and controller area-selection builds. Failed native builds explicitly record `call_ok=false` and skip potentially stale widget state. Diagnostics record the rendered area keys, exact `celebrate` target count, temporary-setting restoration, hook counts, selected mission area, filter result, assignment readback, and assigned allowlisted mission IDs.

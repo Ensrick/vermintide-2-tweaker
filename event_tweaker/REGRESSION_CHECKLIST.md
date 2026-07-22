@@ -69,14 +69,14 @@ Last updated: 2026-07-19 (issues 626/802 dormant-event mission boundary).
 
 | Field | Value |
 |-------|-------|
-| Symptom | Player-list (Tab) panel blank/crashing, OR the "Active Mutators" block missing, OR a curse the parity floor drops advertised as active. |
-| Root cause | The preview appends into vanilla's UNguarded reward pass (a non-resident mutator-icon atlas asserts mid-loop and kills the panel), or `preview_selection()` calls `gather_mutators()` (fires `notify_weave_drop` chat spam + `_et455` template wrap every panel open), or the active list is built from raw checkbox state instead of the floor-applied selection (advertises a curse that won't inject). |
+| Symptom | Player-list (Tab) panel blank/crashing, OR the "Active Mutators" block missing, OR a curse the parity floor drops advertised as active, OR opening the preview unexpectedly locks/unlocks hot join. |
+| Root cause | The preview appends into vanilla's UNguarded reward pass (a non-resident mutator-icon atlas asserts mid-loop and kills the panel), calls an injection-time selector (`gather_mutators()` or `selected_curse_mutators()`) and fires chat/template/session-lock side effects, or builds the active list from raw checkbox state instead of the mirrored floor decision. |
 | Mod(s) | event_tweaker |
 | Fix version(s) | event_tweaker v0.4.30-dev (issue 532) |
 | Category | INTEGRATION |
 | Repro | 1. In the keep with mutators/preset selected, hold Tab: "Active Mutators (N)" block renders on the right panel, icon+name per row, no panel crash. 2. With `ct_dev` also active + `preview_starting_boons` on: both the Starting-Boons and Active-Mutators blocks render together, stacked, no overlap. 3. Coop with a non-ET peer + a curse checked: that curse shows greyed "(skipped: a peer lacks the mod)", NOT in the active list. 4. `/event_preview_mutators` lists the same active + skipped names. |
 | Expected post-fix | Preview draws in its OWN `begin_pass`/`end_pass` with every `draw_widget` pcall-wrapped (icon + name separate widgets); `preview_selection()` is side-effect-free; floor-dropped curses render greyed, never active. |
-| Detection | Runtime: `/event_tweaker_regression_test` check `issue532_mutator_preview_wired` (marker `EVT_MUTATOR_PREVIEW_532_MARKER` + `mod._evt.preview_selection` returns two tables + `mod._evt_mutator_display` + `preview_active_mutators` boolean). Source: two `hook_safe` on distinct `IngamePlayerListUI` methods (`_setup_deed_reward_data` build, `_draw` guarded pass) in `_evt_preview.lua`. |
+| Detection | Runtime: `/event_tweaker_regression_test` check `issue532_mutator_preview_wired` (marker `EVT_MUTATOR_PREVIEW_532_MARKER` + `mod._evt.preview_selection` returns two tables + `mod._evt_mutator_display` + `preview_active_mutators` boolean). Offline `test_event_curse_join_policy` proves preview consumes `selected_curse_candidates()` and cannot call the lock-owning selector/setter. Source: two `hook_safe` on distinct `IngamePlayerListUI` methods (`_setup_deed_reward_data` build, `_draw` guarded pass) in `_evt_preview.lua`. |
 
 
 ---
@@ -162,7 +162,7 @@ Last updated: 2026-07-19 (issues 626/802 dormant-event mission boundary).
 | Category | INTEGRATION |
 | Repro | 1. Assemble two players with Event Tweaker before selecting a Cursed Adventure curse. 2. Select Blood Storm and start Adventure; a third player without Event Tweaker attempts to hot-join. 3. The third player must not enter or crash. 4. Return to keep, uncheck every Cursed Adventure curse, and confirm the third player can join. 5. With a non-ET player already present, select a curse and load; it must be skipped. 6. Confirm `curse_bolt_of_change` / `curse_belakors_shadows` / `curse_empathy` appear in no group. |
 | Expected post-fix | Existing all-ET players run the curse without `Resource not found`; no new peer reaches game-object sync while a package-bearing curse is selected/active; an already-present non-ET peer makes the curse inert; unselecting reopens vanilla joinability; broken curses remain absent. |
-| Detection | Offline `test_event_curse_join_policy`; runtime `/event_tweaker_regression_test` passes all four `issue430_*` checks. Source: singleton `GameModeBase.is_joinable` hook in `_evt_guard430_curse_parity.lua`; request lock occurs before final safety evaluation; active lock occurs before `_maybe_preload_curse_package` and the vanilla mutator start; sync package load remains fourth arg `false`. Log: `[et:430] cursed-session hot-join contract LOCKED/OPEN`, no `Attempting to rehook active hook`. |
+| Detection | Offline `test_event_curse_join_policy`; runtime `/event_tweaker_regression_test` passes all four `issue430_*` checks. Source: singleton `GameModeBase.is_joinable` hook in `_evt_guard430_curse_parity.lua`; request lock occurs before final safety evaluation; preview cannot touch it; active lock occurs before `_maybe_preload_curse_package` and the vanilla mutator start; sync package load remains fourth arg `false`. Log: `[et:430] cursed-session hot-join contract LOCKED/OPEN`, no `Attempting to rehook active hook`. Package preload alone is not catalog verification: collect each curse's observable behavior listed in `DEVELOPMENT.md`. |
 
 
 ---

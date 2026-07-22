@@ -63,4 +63,27 @@ return function(H, repo_root)
         H.truthy(lock_at < preload_at and preload_at < original_at,
             "session lock must precede preload and vanilla start_function")
     end)
+
+    H.test("Event Tweaker mutator preview cannot mutate the cursed-session lock", function()
+        local selection = read(repo_root
+            .. "/event_tweaker/scripts/mods/event_tweaker/_evt_selection.lua")
+
+        local collector_at = assert(selection:find("local function selected_curse_candidates()", 1, true))
+        local selector_at = assert(selection:find("local function selected_curse_mutators()", collector_at, true))
+        local preview_at = assert(selection:find("local function preview_selection()", selector_at, true))
+        local preview_end = assert(selection:find("local function gather_active_events()", preview_at, true))
+        local selector_body = selection:sub(selector_at, preview_at - 1)
+        local preview_body = selection:sub(preview_at, preview_end - 1)
+
+        H.truthy(selector_body:find("selected_curse_candidates()", 1, true),
+            "injection selector must consume the read-only candidate collector")
+        H.truthy(selector_body:find("set_curse_requested(#out > 0)", 1, true),
+            "injection selector must retain ownership of the session lock")
+        H.truthy(preview_body:find("selected_curse_candidates()", 1, true),
+            "preview must consume the read-only candidate collector")
+        H.equal(preview_body:find("local%s+[%w_]+%s*=%s*selected_curse_mutators%s*%(", 1), nil,
+            "preview must not call the side-effecting injection selector")
+        H.equal(preview_body:find("set_curse_requested", 1, true), nil,
+            "preview must never arm or release the session lock")
+    end)
 end
