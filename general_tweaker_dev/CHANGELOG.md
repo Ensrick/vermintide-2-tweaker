@@ -1,5 +1,25 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.254-dev (2026-07-22) -- Godmode ledge repair and Raise Dead trace (#939, #659) [not-started]
+
+- Godmode now treats authored ledge-hang triggers as a boundary for the owning
+  player. When vanilla positively identifies a ledge, the player is restored
+  to the engine-maintained last on-ground navmesh position and the disabled
+  hanging state is rejected.
+- The fix composes through noclip's existing singleton ledge helper hook. If a
+  safe recovery sample or locomotion extension is unavailable, vanilla ledge
+  hanging is preserved instead of risking an uncontrolled fall.
+- Added offline truth-table/ownership coverage and a `/gt_regression_test`
+  structural check. The live diagnostic is transition-bounded to one line per
+  ledge encounter.
+- Added an observation-only Necromancer Raise Dead trace across projectile
+  targeting, action-finish gating, passive queueing, and authoritative server
+  spawn. It runs only for the local human Necromancer in the Keep and has
+  independent hard caps at every boundary.
+- The trace does not alter targeting, cooldowns, pet queues, navigation, RPCs,
+  or spawn results. Its first live capture will select the next repair from the
+  exact boundary that rejects or loses the summon.
+
 ## v0.2.253-dev (2026-07-21) -- strict debug-renderer residency (#749)
 
 - Bot Teleport Lab and Debug Highlights now require a positive shared V2

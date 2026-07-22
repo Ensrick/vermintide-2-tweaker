@@ -2146,6 +2146,15 @@ function M.install(mod, _rt_register, deps)
         end
     end)
 
+    _rt_register("issue939_godmode_ledge_boundary", function()
+        if mod._GT_939_GODMODE_LEDGE_MARKER ~= "gt-939-godmode-ledge-boundary" then
+            return "#939 singleton ledge-boundary composition is absent"
+        end
+        if type(mod._gt_godmode_active) ~= "function" then
+            return "#939 godmode predicate is unavailable"
+        end
+    end)
+
     _rt_register("issue549_godmode_power_and_ammo", function()
         if mod._GT_549_GODMODE_POWER_MARKER ~= "gt-549-godmode-power-and-ammo" then
             return "#549 structural marker absent"
