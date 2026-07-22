@@ -931,11 +931,6 @@ local function _paint_unit_is_live(unit, context)
     return RESIDENCY.live_unit(unit, Unit, _residency_diag_once, context)
 end
 
-local function _texture_bind_resident(slot, texture, context)
-    return RESIDENCY.texture_bind_resident(slot, texture, Application,
-        _residency_diag_once, context)
-end
-
 -- Texture-fallback map for `kind="unit"` LA shields whose textures live in
 -- the source `.unit` file's `colors / normals / MABs` fields (which LA's
 -- compiled bundle reads but the vanilla previewer's resource scope doesn't
@@ -1318,45 +1313,11 @@ end
 -- / parameter_type (those raise a resource_manager.cpp fault that bypasses
 -- pcall — see cosmetics_tweaker.lua:435-438).
 local function _kind_unit_paint_is_safe(unit, armoury_key, context)
-    if not (Unit and Unit.num_meshes and Unit.mesh and Mesh and Mesh.num_materials and Mesh.material) then
-        _plog("#149 paint SKIP %s ctx=%s: mesh/material API unavailable", tostring(armoury_key), tostring(context))
-        return false
-    end
-    local ok_n, n = pcall(Unit.num_meshes, unit)
-    if not ok_n or type(n) ~= "number" or n < 1 then
-        _plog("#149 paint SKIP %s ctx=%s: no meshes (ok=%s n=%s)",
-            tostring(armoury_key), tostring(context), tostring(ok_n), tostring(n))
-        return false
-    end
-    local saw_material, saw_real = false, false
-    for i = 0, n - 1 do
-        local ok_m, mesh = pcall(Unit.mesh, unit, i)
-        if ok_m and mesh then
-            local ok_nm, nm = pcall(Mesh.num_materials, mesh)
-            if ok_nm and type(nm) == "number" then
-                for j = 0, nm - 1 do
-                    local ok_mat, mat = pcall(Mesh.material, mesh, j)
-                    if ok_mat and mat then
-                        saw_material = true
-                        -- The null sentinel renders as a hash of all zeros; a
-                        -- real material carries a non-zero resource id.
-                        local ok_s, s = pcall(tostring, mat)
-                        if not ok_s or not s or not s:find("00000000") then
-                            saw_real = true
-                        end
-                    end
-                end
-            end
-        end
-    end
-    if not saw_material then
-        _plog("#149 paint SKIP %s ctx=%s: unit has meshes but no materials",
-            tostring(armoury_key), tostring(context))
-        return false
-    end
-    if not saw_real then
-        _plog("#149 paint SKIP %s ctx=%s: only null (#ID[00000000]) material(s) — would AV",
-            tostring(armoury_key), tostring(context))
+    local ok, reason, count = RESIDENCY.unit_materials_resident(
+        unit, Unit, Mesh, nil, context)
+    if not ok then
+        _plog("#149 paint SKIP %s ctx=%s: unit material closure failed reason=%s count=%s",
+            tostring(armoury_key), tostring(context), tostring(reason), tostring(count))
         return false
     end
     return true
@@ -1429,10 +1390,6 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key, conte
             -- husk LA mesh. NO set_all_materials, NO scale (previewer-only).
             -- AV-safety precheck so a null-material case degrades to "no paint"
             -- instead of a C-level access violation that bypasses pcall.
-            if not _kind_unit_paint_is_safe(unit, armoury_key, context) then
-                return false
-            end
-            _plog("#149 paint OK %s ctx=%s — applying heraldry", tostring(armoury_key), tostring(context))
             -- Fall through to the texture-painting code below.
         else
             -- "hero_previewer" or unknown: vanilla / LA's own hooks render it.
@@ -1469,77 +1426,38 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key, conte
         end
     end
 
-    if diff and _texture_bind_resident(SHIELD_DIFF_SLOT, diff, context) then
-        Unit.set_texture_for_materials(unit, SHIELD_DIFF_SLOT, diff)
-    end
-    if pack and _texture_bind_resident(SHIELD_PACK_SLOT, pack, context) then
-        Unit.set_texture_for_materials(unit, SHIELD_PACK_SLOT, pack)
-    end
-    if norm and _texture_bind_resident(SHIELD_NORM_SLOT, norm, context) then
-        Unit.set_texture_for_materials(unit, SHIELD_NORM_SLOT, norm)
-    end
-
+    local bindings = {}
+    if diff then bindings[#bindings + 1] = { slot = SHIELD_DIFF_SLOT, texture = diff } end
+    if pack then bindings[#bindings + 1] = { slot = SHIELD_PACK_SLOT, texture = pack } end
+    if norm then bindings[#bindings + 1] = { slot = SHIELD_NORM_SLOT, texture = norm } end
     if variant.special_textures then
         for _, tx in ipairs(variant.special_textures) do
-            if tx and _texture_bind_resident(tx.slot, tx.texture, context) then
-                Unit.set_texture_for_materials(unit, tx.slot, tx.texture)
-            end
+            if tx then bindings[#bindings + 1] = { slot = tx.slot, texture = tx.texture } end
         end
     end
 
-    return (diff or pack or norm or variant.special_textures) ~= nil
-end
-
--- Dead code retained for reference; the function above now handles painting.
--- Marked as `_legacy_*` so a grep for `_paint_offhand_textures_locally`
--- yields only the active implementation. Safe to delete after the focused-
--- triage Ostermark01 round confirms the new path works end-to-end.
-local function _legacy_paint_offhand_textures_via_shared_material(unit, variant)
-    if not unit or type(unit) ~= "userdata" then return false end
-    if not Unit.alive(unit) then return false end
-    if type(variant.textures) ~= "table" then return false end
-
-    local diff = variant.textures[1]
-    local pack = variant.textures[2]
-    local norm = variant.textures[3]
-    local skip_meshes = variant.skip_meshes or {}
-    local textures_other_mesh = variant.textures_other_mesh
-    local special_textures = variant.special_textures
-    local mat_to_skip = variant.mat_to_skip or {}
-
-    local num_meshes = Unit.num_meshes(unit)
-    for i = 0, num_meshes - 1 do
-        local skip_key = "skip" .. tostring(i)
-        local mesh_diff, mesh_pack, mesh_norm = diff, pack, norm
-        local skip_this = false
-        if skip_meshes[skip_key] then
-            local override = textures_other_mesh and textures_other_mesh[skip_key]
-            if override then
-                if override[1] then mesh_diff = override[1] end
-                if override[2] then mesh_pack = override[2] end
-                if override[3] then mesh_norm = override[3] end
-            else
-                skip_this = true
-            end
-        end
-        if not skip_this then
-            local mesh = Unit.mesh(unit, i)
-            local num_mats = Mesh.num_materials(mesh)
-            for j = 0, num_mats - 1 do
-                local mat = Mesh.material(mesh, j)
-                if mesh_diff then Material.set_texture(mat, SHIELD_DIFF_SLOT, mesh_diff) end
-                if mesh_pack then Material.set_texture(mat, SHIELD_PACK_SLOT, mesh_pack) end
-                if mesh_norm then Material.set_texture(mat, SHIELD_NORM_SLOT, mesh_norm) end
-                if special_textures and not mat_to_skip["skip" .. tostring(j)] then
-                    for _, tx in ipairs(special_textures) do
-                        if tx.slot and tx.texture then
-                            Material.set_texture(mat, tx.slot, tx.texture)
-                        end
-                    end
-                end
-            end
-        end
+    if #bindings < 1 then return false end
+    -- A globally resident texture set is unsafe if this exact spawned unit has
+    -- null/unresolved materials. Run the same closure for texture-only and
+    -- custom-mesh variants on every active consumer surface (#149/#742/#749).
+    if not _kind_unit_paint_is_safe(unit, armoury_key, context) then return false end
+    if variant.kind == "unit" then
+        _plog("#149 paint OK %s ctx=%s — applying heraldry",
+            tostring(armoury_key), tostring(context))
     end
+    local resident, reason = RESIDENCY.texture_set_resident(
+        bindings, Application, nil, context)
+    if not resident then
+        _plog("#749 paint SKIP %s ctx=%s: atomic texture closure failed reason=%s",
+            tostring(armoury_key), tostring(context), tostring(reason))
+        return false
+    end
+    for i = 1, #bindings do
+        local binding = bindings[i]
+        -- resource-safety: cos749-la-atomic-texture-closure
+        Unit.set_texture_for_materials(unit, binding.slot, binding.texture)
+    end
+
     return true
 end
 

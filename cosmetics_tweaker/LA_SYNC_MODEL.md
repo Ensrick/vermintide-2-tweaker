@@ -218,8 +218,9 @@ In (1) and (2), the LA mesh spawns with its `mat_to_use` material correctly reso
 Loading more packages does NOT fix this (v0.8.39 confirmed). Per-world material scope is the issue, not absence of the shader graph.
 
 **The fix: per-context material swap.** In `_paint_offhand_textures_locally(unit, variant, armoury_key, context)`:
-- For `context == "loot_previewer"`: call `Unit.set_all_materials(unit, parent_path)` to explicitly bind the vanilla material (the one LA's `mat_to_use` referenced). Engine binds the real material instead of `#ID[00000000]`. Then run `Unit.set_texture_for_materials` to paint LA's textures onto the now-real slots.
-- For `context == "ingame"` or `"hero_previewer"`: early-return. The vanilla rendering path already handles those correctly; running the swap there OVERWRITES correct bindings and breaks scale (v0.8.47 regression).
+- For `context == "loot_previewer"`: call `Unit.set_all_materials(unit, parent_path)` to explicitly bind the vanilla material (the one LA's `mat_to_use` referenced), then census every mesh/material handle. Only after that exact unit closure and one atomic texture-residency proof may `Unit.set_texture_for_materials` run.
+- For `context == "ingame"` or `"network_husk"`: do not replace materials or scale. Census the material handles already produced by the gameplay/husk pipeline, then paint only when the same V2 closure passes.
+- For `context == "hero_previewer"` or unknown: yield to the vanilla/LA owner; do not create a second painter.
 
 `context` is threaded from the three call sites → `_apply_la_offhand_to_units` → `LA_BRIDGE.apply_offhand_to_unit` → `_paint_offhand_textures_locally`.
 
@@ -250,6 +251,7 @@ Loading more packages does NOT fix this (v0.8.39 confirmed). Per-world material 
 - **v0.8.34 / v0.8.43** — Don't paint kind="unit" without first establishing a real material binding. Both crashed at AV 0x8 (GUIDs `a739e6e5`, `45a2a017`).
 - **v0.8.39 / v0.8.40** — Parent-package preload via `LootItemUnitPreviewer.load_package` hook makes the shader graph globally loaded but does NOT fix per-world material binding. Necessary for the v0.8.47+ swap to find the parent material, but insufficient on its own.
 - **v0.8.47** — Don't run the material swap in `"ingame"` or `"hero_previewer"` contexts. Overwriting correct material bindings with the handgun material causes massive in-game scale (different renderable metadata). Gate by call site, not by attempting to detect "is material null".
+- **#749 / V2** — Texture residency alone is insufficient. The preview, mission body, and remote husk now share one strict `unit_materials_resident` + atomic `texture_set_resident` proof immediately before the native writes. A failed proof retains the donor appearance and logs once; it never partially paints.
 
 **Engine APIs that matter (v0.8.46 surface dump):**
 - `Unit.set_all_materials(unit, material_path)` — replaces every material on the unit. Use for kind="unit" where the LA mesh has 1 mesh / 1 material slot.

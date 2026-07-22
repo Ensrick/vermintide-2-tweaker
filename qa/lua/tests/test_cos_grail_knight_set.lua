@@ -172,7 +172,8 @@ return function(H, repo_root)
 
     H.test("Grail Knight set uses per-unit texture bindings and wire fallbacks", function()
         H.truthy(module:find("scripts/mods/cosmetics_tweaker/_lib_resource_residency", 1, true))
-        H.truthy(module:find("texture_bind_resident", 1, true))
+        H.truthy(module:find("texture_set_resident", 1, true))
+        H.truthy(module:find("unit_materials_resident", 1, true))
         H.truthy(module:find("textures_ready(slots, textures", 1, true))
         H.truthy(module:find("pcall(Unit.set_texture_for_materials", 1, true))
         H.truthy(module:find("bridge.backend_to_vanilla[row[1]] = row[3]", 1, true))
@@ -538,7 +539,13 @@ return function(H, repo_root)
             _G.Application = { can_get = function() return true end }
             _G.Unit = {
                 alive = function(candidate) return candidate == unit end,
+                num_meshes = function() return 1 end,
+                mesh = function() return "shield_mesh" end,
                 set_texture_for_materials = function() end,
+            }
+            _G.Mesh = {
+                num_materials = function() return 1 end,
+                material = function() return "#ID[12345678]" end,
             }
             local variant = {
                 swap_hand = "left_hand_unit",
@@ -552,6 +559,26 @@ return function(H, repo_root)
             H.truthy(reports[1]:find("[cos:656] applied", 1, true))
             H.truthy(reports[1]:find("variant=cos_fk_reikland_griffin_skin_variant", 1, true))
             H.truthy(reports[1]:find("surface=remote_husk", 1, true))
+        end)
+    end)
+
+    H.test("Grail Knight shield rejects null spawned materials before texture writes", function()
+        with_loaded_module(function(set)
+            local unit, writes = {}, 0
+            _G.Application = { can_get = function() return true end }
+            _G.Unit = {
+                alive = function(candidate) return candidate == unit end,
+                num_meshes = function() return 1 end,
+                mesh = function() return "shield_mesh" end,
+                set_texture_for_materials = function() writes = writes + 1 end,
+            }
+            _G.Mesh = {
+                num_materials = function() return 1 end,
+                material = function() return "#ID[00000000]" end,
+            }
+            H.equal(set.apply_variant_to_unit(
+                set.SHIELD_VARIANT_KEY, unit, "network_husk"), false)
+            H.equal(writes, 0)
         end)
     end)
 

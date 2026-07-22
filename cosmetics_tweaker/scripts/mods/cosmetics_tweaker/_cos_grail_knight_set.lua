@@ -373,24 +373,22 @@ local function residency_diag(reason, resource_type, path, slot, context)
     end
 end
 
-local function texture_bind_resident(slot, texture, context)
-    if not (RESIDENCY and type(RESIDENCY.texture_bind_resident) == "function") then
-        residency_diag("missing_residency_helper", "texture", texture, slot, context)
+local function textures_ready(slots, textures, context)
+    if not (RESIDENCY and type(RESIDENCY.texture_set_resident) == "function") then
+        residency_diag("missing_residency_helper", "texture", nil, nil, context)
         return false
     end
-    return RESIDENCY.texture_bind_resident(slot, texture, Application, residency_diag, context) == true
-end
-
-local function textures_ready(slots, textures, context)
     if type(slots) ~= "table" or type(textures) ~= "table"
         or slots[4] ~= nil or textures[4] ~= nil then
         residency_diag("malformed_texture_set", "texture", nil, nil, context)
         return false
     end
+    local bindings = {}
     for i = 1, 3 do
-        if not texture_bind_resident(slots[i], textures[i], context) then return false end
+        bindings[i] = { slot = slots[i], texture = textures[i] }
     end
-    return true
+    return RESIDENCY.texture_set_resident(
+        bindings, Application, residency_diag, context) == true
 end
 
 -- The Grail Knight 3P attachment contains outfit, face, eyes, teeth, and hair
@@ -419,6 +417,9 @@ local function apply_armor_materials(unit, slots, textures, material_names)
             if has then
                 local ok_material, material = pcall(Mesh.material, mesh, material_name)
                 if not ok_material or not material then return false end
+                local ok_identity, identity = pcall(tostring, material)
+                if not ok_identity or not identity
+                        or identity:find("#ID[00000000]", 1, true) then return false end
                 targets[#targets + 1] = material
                 seen[material_name] = true
             end
@@ -463,6 +464,13 @@ function M.apply_variant_to_unit(key_or_variant, unit, surface)
     if variant.swap_hand == "armor" then
         if not apply_armor_materials(unit, slots, textures, material_names) then return false end
     else
+        if not (RESIDENCY and type(RESIDENCY.unit_materials_resident) == "function") then
+            residency_diag("missing_residency_helper", "unit_material", nil, nil, context)
+            return false
+        end
+        local material_ready = RESIDENCY.unit_materials_resident(
+            unit, Unit, Mesh, residency_diag, context)
+        if material_ready ~= true then return false end
         for i = 1, 3 do
             local ok = pcall(Unit.set_texture_for_materials, unit, slots[i], textures[i])
             if not ok then return false end

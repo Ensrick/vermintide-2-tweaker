@@ -1049,6 +1049,8 @@ local FONT_MTRL = "materials/fonts/arial"          -- Gui.text FONT-material arg
 -- passing it here was the #293/#295 "Gui material not found" C-fatal. gw_fonts is the
 -- engine's always-resident font atlas (the same self-test material the gut GUI guard uses).
 local GUI_MTRL  = "materials/fonts/gw_fonts"
+local RESOURCE_RESIDENCY = mod:dofile(
+    "scripts/mods/general_tweaker_dev/_lib_resource_residency")
 -- #511 runtime provenance marker: the material create_screen_gui uses (#293/#295
 -- root-cause guard). Set at LOAD to the value passed at the create site so
 -- /gt_regression_test can assert it is gw_fonts (never arial/FONT_MTRL) without an
@@ -1232,10 +1234,9 @@ local function _do_draw(want_hud, want_lines)
             -- frame instead of crashing. Fail CLOSED (skip) on any error -- a missing dev-HUD
             -- overlay is harmless, a CTD is not.
             local app = rawget(_G, "Application")
-            local ok, resident = pcall(function()
-                return app and app.can_get and app.can_get("material", GUI_MTRL)
-            end)
-            if ok and resident == true then
+            local resident = RESOURCE_RESIDENCY.material_resident(
+                GUI_MTRL, app, nil, "gt_bot_teleport_lab")
+            if resident == true then
                 -- Breadcrumb bracket: if the C call below ever hard-crashes (#295), the log
                 -- ends right after this line, pinpointing create_screen_gui as the fatal.
                 _pf("[gt:btlab] create_screen_gui: material '%s' resident -- creating HUD gui", GUI_MTRL)

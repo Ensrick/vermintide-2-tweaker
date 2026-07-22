@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.43-dev"
+local MOD_VERSION = "0.1.44-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -192,6 +192,8 @@ local function _registration_deferred(gate, reason, detail)
 end
 local _audio_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_audio")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
+mod._woc_resource_residency = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_lib_resource_residency")
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
@@ -368,7 +370,8 @@ local _transform_owner = _durable_transform_lib.new({
 			tostring(_appearance.TRANSFORM_NODE_NAME))
 	end,
 })
-local _wa = _pulse_lib.new(_appearance, _transform_owner)
+local _wa = _pulse_lib.new(
+	_appearance, _transform_owner, nil, mod._woc_resource_residency)
 
 -- Issue 712 live pose tuner. The canonical numbers in M.TRANSFORM are a
 -- prescription that has never been sight-verified; this command lets the

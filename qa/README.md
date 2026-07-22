@@ -37,6 +37,7 @@ bug-class-to-detection map.
 | `check_stale_docs.ps1`  | Audit/review markdowns >14 days old without SUPERSEDED banner | <1s | ✓ |
 | `check_published_ids.ps1`| Duplicate / mismatched Workshop `published_id` (the hijack class) | <1s | ✓ |
 | `check_shared_lib_drift.ps1` | Copied `_lib_*.lua` missing or not byte-identical to its canonical source | <1s | ✓ |
+| `check_native_resource_contracts.ps1` | New or drifted native renderer-resource boundaries missing from the exact #749 census | <10s | ✓ |
 | `luacheck`              | Forward-references, unused vars, undefined globals, Lua 5.1 syntax issues | <10s | ✓ |
 
 For the full roster (published-id integrity, command collisions, cross-mod deps,

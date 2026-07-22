@@ -392,6 +392,14 @@ Before emitting a custom presentation field, the adapter must prove all three:
 3. **renderer resource closure** — the target renderer has the required
    unit/texture/icon/material/package registered and resident.
 
+Renderer closure is consumer-local, not a synonym for package residency. A
+spawned unit must have real material handles; a UI material must exist in the
+exact Gui that draws it. Tweaker-owned optional calls fail closed on missing or
+unknown proof. Global wrappers preserve unknown vanilla/third-party/Pusfume
+inputs and may remove only a resource whose absence is positively proved. The
+shared contract is `tools/shared_lib/_lib_resource_residency.lua` V2 and the
+full-tree ratchet is `qa/native_resource_contracts.psd1` (#749).
+
 Failure of any proof selects the vanilla fallback or omits an optional overlay.
 Never send or inject a custom item key, localization key, unit, skin, icon,
 material, or package path into a peer/renderer that has not proved it can resolve

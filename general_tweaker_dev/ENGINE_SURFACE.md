@@ -448,6 +448,13 @@ Distilled from the module headers and `docs/BUG_CLASSES.md` - do not re-discover
   position before AND after the snap; `set_block_broken` is a full hook so it
   reads `self.block_broken` before vanilla flips it.
 
+## #749 borrowed-renderer residency boundary
+
+Both direct `World.create_screen_gui` owners (bot teleport lab and debug
+highlights) now require strict V2 proof for `materials/fonts/gw_fonts` in the
+current live world. Failure defers only the optional overlay; it never changes
+gameplay or a third-party renderer.
+
 ## Doc maintenance
 
 Follows `docs/engine/README.md` maintenance rules: if a gt hook moves, a guard is

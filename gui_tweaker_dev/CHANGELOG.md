@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.310-dev (2026-07-21) -- global renderer non-interference (#749)
+
+- The consolidated `UIRenderer.create` guard now uses the shared tri-state V2
+  contract: only positively absent material pairs are removed; unknown,
+  malformed, vanilla, third-party, and Pusfume inputs pass through unchanged.
+- GUT-owned pose, store, and area-video injections remain strict and are added
+  only after a positive material proof.
+- Added offline coverage for unknown/throwing probes, exact vararg preservation,
+  sparse input rejection, and bounded filtering.
+
 ## 0.2.309-dev (2026-07-21) -- live mixed-lobby setting gates (#371)
 
 - Added an owner-registered runtime gate API for Mod Tweaker settings. A gate

@@ -2,9 +2,13 @@ return function(H, repo_root)
 	local module_path = repo_root
 		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua"
 	local policy = assert(loadfile(module_path))()
+	local residency = assert(loadfile(repo_root
+		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_lib_resource_residency.lua"))()
+	policy.set_resource_residency(residency)
 
 	local function apis(meshes)
 		return {
+			alive = function() return true end,
 			num_meshes = function() return #meshes end,
 			mesh = function(_, index) return meshes[index + 1] end,
 		}, {

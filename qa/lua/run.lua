@@ -304,6 +304,7 @@ local suites = {
     "test_character_dialogue",
     "test_appearance_descriptor",
     "test_appearance_census",
+    "test_resource_residency_census",
 }
 
 for _, suite in ipairs(suites) do

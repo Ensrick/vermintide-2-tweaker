@@ -7,6 +7,12 @@
 -- Gui.bitmap_uv with a nil material and crashes the game (issue #617).
 
 local M = {}
+local RESIDENCY
+
+function M.set_resource_residency(contract)
+    RESIDENCY = contract
+    return type(RESIDENCY) == "table" and RESIDENCY.VERSION or nil
+end
 
 -- The weapon list takes `self._ui_top_renderer` from ingame_ui_context; that
 -- shared renderer is created by ingame_ui, not by the separate Weave Forge
@@ -58,12 +64,12 @@ function M.renderer_has_texture(renderer, texture_name, atlas_helper, gui_api, f
     if type(material_name) ~= "string" or material_name == "" then
         return false, material_name
     end
-    if type(renderer) ~= "table" or renderer.gui == nil
-        or type(gui_api) ~= "table" or type(gui_api.material) ~= "function" then
+    if not RESIDENCY or type(RESIDENCY.gui_material_resident) ~= "function" then
         return false, material_name
     end
-    local ok, material = pcall(gui_api.material, renderer.gui, material_name)
-    return ok and material ~= nil, material_name
+    local ready = RESIDENCY.gui_material_resident(
+        renderer, material_name, gui_api, nil, "cim_athanor_icon")
+    return ready == true, material_name
 end
 
 local function _append_unique(values, seen, value)

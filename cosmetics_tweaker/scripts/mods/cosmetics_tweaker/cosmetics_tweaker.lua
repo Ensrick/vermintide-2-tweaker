@@ -1,4 +1,6 @@
 local mod = get_mod("cosmetics_tweaker")
+local RESOURCE_RESIDENCY = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_lib_resource_residency")
 
 -- #609: PlayerManager.local_player() calls Network.peer_id() directly and
 -- faults once the network backend has been torn down. Vanilla's guarded API
@@ -89,7 +91,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.163-dev"
+local MOD_VERSION = "0.9.164-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2593,11 +2595,8 @@ mod:hook_safe("HeroWindowItemCustomization", "_create_preview_widget", function(
     -- or unavailable re-point leaves the world on ui_hdr and _update_environment falls
     -- back to forcing "default" (unlit but AV-safe). NEVER touches the keep path.
     local store_env = "environment/ui_store_preview"
-    local store_resident = false
-    do
-        local ok, r = pcall(function() return Application.can_get("shading_environment", store_env) end)
-        store_resident = (ok and r) and true or false
-    end
+    local store_resident = RESOURCE_RESIDENCY.shading_environment_resident(
+        store_env, Application, nil, "cos_mission_item_preview") == true
     if env and store_resident then
         local ok = pcall(World.set_shading_environment, world, env, store_env)
         if ok then

@@ -365,6 +365,13 @@ Distilled from `CHANGELOG.md`, `AUDIT_2026_05_22.md`, the cim memory docs, and
   survive a restart. Loadout persistence was removed entirely (2026-06-30, replaced by
   gut) after never working reliably.
 
+## #749 borrowed-renderer residency boundary
+
+The Athanor icon policy proves the resolved masked/saturated material against the
+exact live Gui through `_lib_resource_residency.lua` V2. The mission forge's
+shading-environment chooser uses the same strict contract; absent or unknown
+owned resources select the existing safe fallback and never reach a native draw.
+
 ## Doc maintenance
 
 Follows `docs/engine/README.md` maintenance rules: if a cim hook moves, a guard is

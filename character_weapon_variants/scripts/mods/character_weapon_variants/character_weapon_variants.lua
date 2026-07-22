@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.467-dev"
+local MOD_VERSION = "0.1.468-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -83,7 +83,9 @@ _om.cosmetic_skin_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv
 _om.profile_package_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_profile_package_wire")
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
+_om.resource_residency = mod:dofile("scripts/mods/character_weapon_variants/_lib_resource_residency")
 _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
+_om.old_musket_preview.set_resource_residency(_om.resource_residency)
 _om.old_musket_preview_pose = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview_pose")
 mod._cwv_preview_descriptor = _om.old_musket_preview
 _om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.profile_package_wire })

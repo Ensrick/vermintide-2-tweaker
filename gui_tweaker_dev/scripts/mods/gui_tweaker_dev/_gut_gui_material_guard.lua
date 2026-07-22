@@ -1,4 +1,5 @@
 local mod = get_mod("gut_dev")
+local RESIDENCY = mod:dofile("scripts/mods/gui_tweaker_dev/_lib_resource_residency")
 
 -- ============================================================================
 -- GUI material guard -- "Gui material not found" create_screen_gui CTD class
@@ -162,15 +163,15 @@ local function _prepare(n, ...)
     -- when the resource is actually resident (else adding it would fatal create_screen_gui).
     local append_pose = false
     if has_ingame_sig and not has_pose then
-        local ok, avail = pcall(can_get, "material", POSE_MAT)
-        append_pose = (ok and avail == true)
+        append_pose = RESIDENCY.material_resident(
+            POSE_MAT, Application, nil, "gut_pose_injection") == true
     end
     -- (#80) store atlas: same gate. It IS resident in-mission (dlcs/store force-loaded at
     -- boot), so this injection lands where the pose one self-skips.
     local append_store = false
     if has_ingame_sig and not has_store then
-        local ok, avail = pcall(can_get, "material", STORE_MAT)
-        append_store = (ok and avail == true)
+        append_store = RESIDENCY.material_resident(
+            STORE_MAT, Application, nil, "gut_store_injection") == true
     end
     -- (#336) area videos: same gate, one decision per AreaSettings entry. Also PUBLISH the
     -- per-material outcome (material_name -> in-Gui true/false) for the mission-map module's
@@ -184,8 +185,8 @@ local function _prepare(n, ...)
                 flags[vs.material_name] = true          -- keep context: vanilla already listed it
                 area_present = area_present + 1
             else
-                local ok, avail = pcall(can_get, "material", vs.resource)
-                if ok and avail == true then
+                if RESIDENCY.material_resident(
+                        vs.resource, Application, nil, "gut_area_injection") == true then
                     append_areas = append_areas or {}
                     append_areas[#append_areas + 1] = vs.resource
                     flags[vs.material_name] = true
@@ -202,27 +203,12 @@ local function _prepare(n, ...)
     end
 
     -- Pass 2: copy tokens, dropping any ("material", <unloadable>) pair (existing guard).
-    local out, oi = {}, 0
-    local dropped
-    local i = 1
-    while i <= n do
-        local tok = args[i]
-        if tok == "material" and i < n and type(args[i + 1]) == "string" then
-            local path = args[i + 1]
-            local ok, avail = pcall(can_get, "material", path)
-            if ok and avail == false then
-                dropped = dropped or {}
-                dropped[#dropped + 1] = path            -- would fatal create_screen_gui -> drop the pair
-            else
-                oi = oi + 1; out[oi] = tok
-                oi = oi + 1; out[oi] = path
-            end
-            i = i + 2
-        else
-            oi = oi + 1; out[oi] = tok                  -- preserve non-material tokens ("immediate", etc.)
-            i = i + 1
-        end
+    local out, oi, filter_report = RESIDENCY.filter_material_pairs(
+        n, args, Application, nil, "gut_ui_renderer_create")
+    if type(out) ~= "table" or type(filter_report) ~= "table" then
+        return nil
     end
+    local dropped = #filter_report.dropped > 0 and filter_report.dropped or nil
     if append_pose then
         oi = oi + 1; out[oi] = "material"
         oi = oi + 1; out[oi] = POSE_MAT                 -- (#155) resident -> add to the ingame Gui

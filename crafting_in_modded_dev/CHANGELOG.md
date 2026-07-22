@@ -1,5 +1,15 @@
 # Crafting in Modded Changelog
 
+## 0.8.104-dev (2026-07-21): #749 exact Athanor renderer closure
+
+- Athanor icon submission now proves that the requested material exists in the
+  exact renderer Gui; global `Application.can_get` is no longer treated as
+  evidence for that borrowed Gui.
+- Mission Forge shading-environment selection now uses the synchronized strict
+  V2 proof and retains its resident fallback when proof is unavailable.
+- Added offline coverage for nil/null Gui materials and strict fail-closed
+  resource behavior.
+
 ## 0.8.103-dev (2026-07-21): #822 immutable WOC relic boundary [untested]
 
 - Purges stale CIM save records for every `woc_*` trophy even when WOC has not

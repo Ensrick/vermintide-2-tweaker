@@ -1,4 +1,5 @@
 local mod = get_mod("gt_dev")
+local RESIDENCY = mod:dofile("scripts/mods/general_tweaker_dev/_lib_resource_residency")
 
 -- _gt_debug_highlights.lua -- in-world debug overlay (GitHub #302)
 --
@@ -285,10 +286,8 @@ local function _screen_gui(world)
     end
     if not mod._gt_dh_gui then
         local app = rawget(_G, "Application")
-        local ok, resident = pcall(function()
-            return app and app.can_get and app.can_get("material", GUI_MTRL)
-        end)
-        if ok and resident == true then
+        if RESIDENCY.material_resident(
+                GUI_MTRL, app, nil, "gt_debug_highlights") == true then
             mod._gt_dh_gui = World.create_screen_gui(world, "material", GUI_MTRL, "immediate")
         end
     end

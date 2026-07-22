@@ -3,6 +3,8 @@ return function(H, repo_root)
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_appearance_policy.lua")
 	local pulse = dofile(repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua")
+	local residency = dofile(repo_root
+		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_resource_residency.lua")
 	local durable = dofile(repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_durable_transform.lua")
 	local function copy(value)
@@ -11,7 +13,7 @@ return function(H, repo_root)
 		return out
 	end
 
-	local function fixture(missing)
+	local function fixture(missing, contract)
 		local calls = {
 			materials = {}, textures = {}, variables = {}, transforms = 0,
 			transform_specs = {}, transform_perspectives = {},
@@ -58,7 +60,7 @@ return function(H, repo_root)
 					and spec.rotation == policy.TRANSFORM.rotation
 			end,
 		}
-		return pulse.new(policy, transform, api), unit, calls
+		return pulse.new(policy, transform, api, contract), unit, calls
 	end
 
 	H.test("WOC #613 donor reproduces the native bounded pulse contract", function()
@@ -218,6 +220,65 @@ return function(H, repo_root)
 		H.equal(#calls.variables, 0)
 		H.equal(calls.transforms, 0)
 		H.equal(calls.diagnostics, 1)
+	end)
+
+	H.test("WOC #749 proves post-bind unit material closure before texture writes", function()
+		local unit, calls = {}, { materials = 0, textures = 0, transforms = 0 }
+		local material = "#ID[00000000]"
+		local api = {
+			unit = {
+				alive = function(value) return value == unit end,
+				has_node = function() return true end,
+				node = function() return 2 end,
+				num_meshes = function() return 1 end,
+				mesh = function() return "mesh" end,
+				set_all_materials = function()
+					calls.materials = calls.materials + 1
+					material = "#ID[12345678]"
+				end,
+				set_texture_for_materials = function()
+					calls.textures = calls.textures + 1
+				end,
+			},
+			mesh = {
+				num_materials = function() return 1 end,
+				material = function() return material end,
+			},
+			application = { can_get = function() return true end },
+			script_unit = { set_material_variable = function() end },
+		}
+		local transform = { apply = function() calls.transforms = calls.transforms + 1; return true end }
+		local runtime = pulse.new(policy, transform, api, residency)
+		H.truthy(runtime.apply(unit, policy.TRANSFORM, "3p", "husk-spawn"))
+		H.equal(calls.materials, 1)
+		H.equal(calls.textures, 6)
+		H.equal(calls.transforms, 1)
+
+		material = "#ID[00000000]"
+		calls = { materials = 0, textures = 0, transforms = 0 }
+		api.unit.set_all_materials = function() calls.materials = calls.materials + 1 end
+		runtime = pulse.new(policy, transform, api, residency)
+		local ok, reason = runtime.apply(unit, policy.TRANSFORM, "3p", "husk-spawn")
+		H.equal(ok, false)
+		H.equal(reason, "unit-material-unready")
+		H.equal(calls.materials, 1)
+		H.equal(calls.textures, 0)
+		H.equal(calls.transforms, 0)
+	end)
+
+	H.test("WOC #749 rejects an incomplete production residency contract before native writes", function()
+		local incomplete = {
+			resource_resident = function() return true end,
+			texture_set_resident = function() return true end,
+		}
+		local runtime, unit, calls = fixture(nil, incomplete)
+		local ok, reason = runtime.apply(unit, policy.TRANSFORM, "3p", "husk-spawn")
+		H.equal(ok, false)
+		H.equal(reason, "residency-contract-incomplete")
+		H.equal(#calls.materials, 0)
+		H.equal(#calls.textures, 0)
+		H.equal(#calls.variables, 0)
+		H.equal(calls.transforms, 0)
 	end)
 
 	H.test("WOC #613 pulse runtime has no update or RPC path", function()

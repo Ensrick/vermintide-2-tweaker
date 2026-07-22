@@ -1,5 +1,14 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.44-dev (2026-07-21) - #749 strict Blightreaper pulse residency
+
+- Blightreaper's pulse unit now proves its material, complete texture set, and
+  every realized unit-material handle before native material or texture writes.
+- Missing or indeterminate resources skip only the optional pulse visual with
+  bounded log-only evidence; the weapon and vanilla rendering continue.
+- Added offline coverage for atomic ordering, null handles, incomplete
+  contracts, and the synchronized V2 residency copy.
+
 ## 0.1.43-dev (2026-07-21) - #822 immutable relic customization boundary [untested]
 
 - Blightreaper remains a unique inventory trophy and cannot enter the standard

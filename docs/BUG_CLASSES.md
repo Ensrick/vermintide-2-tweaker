@@ -2701,3 +2701,41 @@ the particle's owning package.
 - Lock the exact path/reference, async flags, idempotence, lifecycle retry, and
   absence of unload/action hooks in offline tests. Add a runtime resident check
   and bounded transition-only diagnostics.
+
+## 71. Borrowed renderer receives a resource that is globally resident but not locally closed
+
+**First confirmed:** 2026-07-18 through 2026-07-21 (umbrella #749; related
+#83, #149, #155, #617, #742).
+**Lives in:** preview worlds, remote husks, custom hats, in-mission Gui reuse,
+and global `UIRenderer.create` wrappers.
+
+### Symptoms
+- A unit, texture, material, or shading environment is globally loadable, yet a
+  native bind/draw AVs, resolves `#ID[00000000]`, or reports a material absent
+  from the exact Gui.
+- One render surface works and another crashes or silently falls back.
+- `pcall` surrounds the native call but cannot catch the engine fault.
+
+### Diagnosis pattern
+1. Name the exact consumer world, unit, renderer/Gui, and lifecycle generation.
+2. Prove resource residency, unit material closure, and exact Gui registration
+   separately; none implies another.
+3. Distinguish owned optional work from a global wrapper. Owned Tweaker work may
+   fail closed. A global hook must preserve unknown vanilla/third-party inputs.
+4. Census every active native boundary, including stable/dev twins and copied
+   shared helpers. A one-surface fix is not an architectural fix.
+
+### Fix template
+- Use synchronized `_lib_resource_residency.lua` V2. Strict owned calls require
+  positive proof and skip atomically on absent/unknown. Global filters drop only
+  positively absent material pairs and preserve unknown inputs byte-for-byte.
+- After a source-backed parent-material bind, census every mesh/material handle
+  before the first texture write. Before UI draw, resolve the exact material in
+  the exact `renderer.gui` that will consume it.
+- Preserve vanilla/Pusfume call chains and resources. Disable only the optional
+  Tweaker feature when closure cannot be proved.
+- Keep `qa/native_resource_contracts.psd1` exact. The full-tree gate rejects new,
+  removed, moved, or count-drifted boundaries until policy/evidence is reviewed.
+
+**Related:** class 22 (shading environment), class 23/47 (Gui scope), class 32
+(destroyed world), class 63 (null unit material), and class 70 (particle owner).
