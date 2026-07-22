@@ -1,6 +1,6 @@
 # Career Tweaker Changelog
 
-## Unreleased candidate - #935 Foot Knight secondary-slot concrete UI repair
+## 0.4.15-beta (2026-07-22) - #935 Foot Knight secondary-slot concrete UI repair [verify-fix]
 
 - Repaired the #619 secondary-melee regression on the controller inventory used by the attached log. The log proves Career Tweaker changed only `CareerSettings.es_knight` to `{melee,ranged}`, then the player opened `HeroWindowLoadoutInventoryConsole`; the prior fix hooked only the separate desktop `HeroWindowLoadoutInventory` category builder.
 - Both concrete inventory classes now reconcile the exact `SPProfiles` career object immediately before vanilla caches its item filter. Carrier discovery also uses `pairs` so a sparse modded career array cannot hide Foot Knight after an earlier nil entry. Enabled state preserves both melee and ranged; disabled state removes only Career Tweaker's owned melee insertion.
