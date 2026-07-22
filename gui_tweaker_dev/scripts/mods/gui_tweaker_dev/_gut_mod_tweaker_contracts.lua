@@ -179,7 +179,9 @@ _rt_register("mod_tweaker_api_present", function()
     local MT = mod.mod_tweaker
     if not MT then return "mod.mod_tweaker not set; install path failed" end
     for _, name in ipairs({ "register_category", "is_registered", "list_categories",
-                            "get_category", "get", "set" }) do
+                            "get_category", "get", "set", "register_runtime_gate",
+                            "unregister_runtime_gate", "runtime_gate_status",
+                            "apply_runtime_gate", "prune_runtime_gated_pending" }) do
         if type(MT[name]) ~= "function" then
             return string.format("mod.mod_tweaker:%s is not a function (got %s)",
                 name, type(MT[name]))
@@ -204,6 +206,25 @@ _rt_register("mod_tweaker_api_present", function()
     if not MT:is_registered(probe_id) then return "is_registered() false after register" end
     MT:set(probe_id, "probe_flag", true)
     if MT:get(probe_id, "probe_flag") ~= true then return "get() did not reflect set()" end
+end)
+
+_rt_register("issue371_runtime_gate_api", function()
+    local MT = mod.mod_tweaker
+    if not MT then return "mod.mod_tweaker not set; install path failed" end
+    local gate_id = "__mt_rt_gate_probe__"
+    MT:unregister_runtime_gate(gate_id)
+    local ok, err = MT:register_runtime_gate(gate_id, {
+        mod_id = "__mt_rt_probe__",
+        setting_ids = { "probe_flag" },
+        evaluate = function() return false, "Peer safety probe." end,
+    })
+    if not ok then return "runtime gate registration failed: " .. tostring(err) end
+    local blocked, reason = MT:runtime_gate_status("__mt_rt_probe__", "probe_flag")
+    MT:unregister_runtime_gate(gate_id)
+    if not blocked or reason ~= "Peer safety probe." then
+        return "runtime gate did not return its exact blocked reason"
+    end
+    return nil
 end)
 
 -- (#525) Register the engine-free tab-label policy's live check once.

@@ -18,6 +18,7 @@ function M.install(HeroViewStateModTweaker, deps)
     local UIInverseScaleVectorToResolution = assert(deps.UIInverseScaleVectorToResolution,
         "Mod Tweaker state interaction requires inverse resolution scaling")
     local math = assert(deps.math, "Mod Tweaker state interaction requires math")
+    local _mt = assert(deps.mt, "Mod Tweaker state interaction requires mt")
     local _cat_set = assert(deps.cat_set, "Mod Tweaker state interaction requires category setter")
     local _play_click = assert(deps.play_click, "Mod Tweaker state interaction requires click sound")
     local _play_hover = assert(deps.play_hover, "Mod Tweaker state interaction requires hover sound")
@@ -409,6 +410,10 @@ function HeroViewStateModTweaker:_handle_input(input_service)
     -- the gut controller for the dogfood category).
     for i = 1, #self._rows do
         local row = self._rows[i]
+        local MT = _mt()
+        if MT and MT.apply_runtime_gate and row._setting_id then
+            MT:apply_runtime_gate(row, row._mod_id, row._setting_id)
+        end
         -- Skip rows culled this frame (outside the list_mask) so a click on a
         -- scrolled-away row can't register.
         if not row._readonly and row._middle_visible ~= false then

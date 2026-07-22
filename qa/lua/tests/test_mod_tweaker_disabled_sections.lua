@@ -97,4 +97,139 @@ return function(H, repo_root)
         H.equal("after", filtered[3].setting_id)
         H.equal(nil, widgets[2].disabled, "VMF source widgets must not be mutated")
     end)
+
+    local runtime_path = repo_root
+        .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_runtime_gates.lua"
+
+    H.test("Mod Tweaker runtime gates compose and fail closed", function()
+        local Gates = assert(loadfile(runtime_path))()
+        local alerts = {}
+        Gates.init_dbg(nil, function(fmt, ...)
+            alerts[#alerts + 1] = string.format(fmt, ...)
+        end)
+
+        local parity_ready = true
+        H.truthy(Gates.register("peer-presence", {
+            mod_id = "character_weapon_variants",
+            setting_ids = { "throwing_spear", "throwing_axe" },
+            evaluate = function()
+                return parity_ready, "Disabled while Rain lacks Career Weapon Variants."
+            end,
+        }))
+        H.truthy(Gates.register("catalog-proof", {
+            mod_id = "character_weapon_variants",
+            setting_ids = { "throwing_spear" },
+            evaluate = function() return true end,
+        }))
+
+        H.equal(false, Gates.status("character_weapon_variants", "throwing_spear"))
+        parity_ready = false
+        local blocked, reason, gate_id = Gates.status(
+            "character_weapon_variants", "throwing_spear")
+        H.equal(true, blocked)
+        H.equal("Disabled while Rain lacks Career Weapon Variants.", reason)
+        H.equal("peer-presence", gate_id)
+
+        H.truthy(Gates.register("catalog-proof", {
+            mod_id = "character_weapon_variants",
+            setting_ids = { "throwing_spear" },
+            evaluate = function() error("catalog unavailable") end,
+        }))
+        parity_ready = true
+        blocked, reason, gate_id = Gates.status(
+            "character_weapon_variants", "throwing_spear")
+        H.equal(true, blocked)
+        H.equal("Unavailable because multiplayer safety could not be confirmed.", reason)
+        H.equal("catalog-proof", gate_id)
+        H.equal(1, #alerts)
+        Gates.status("character_weapon_variants", "throwing_spear")
+        H.equal(1, #alerts, "repeated predicate failures must not spam logs per frame")
+    end)
+
+    H.test("Mod Tweaker drops edits gated after staging", function()
+        local Gates = assert(loadfile(runtime_path))()
+        Gates.register("late-join", {
+            mod_id = "character_weapon_variants",
+            setting_ids = { "throwing_spear" },
+            evaluate = function() return false, "A peer lacks CWV." end,
+        })
+        local pending = { character_weapon_variants = {
+            throwing_spear = true, local_visual = true,
+        } }
+        local blocked_count = Gates.prune_pending(
+            pending, { "character_weapon_variants" })
+        H.equal(1, blocked_count)
+        H.equal(nil, pending.character_weapon_variants.throwing_spear)
+        H.equal(true, pending.character_weapon_variants.local_visual)
+    end)
+
+    H.test("Mod Tweaker runtime-gated rows restore native state live", function()
+        local Gates = assert(loadfile(runtime_path))()
+        local available = false
+        Gates.register("live-peer-state", {
+            mod_id = "character_weapon_variants",
+            setting_ids = { "throwing_spear" },
+            evaluate = function()
+                return available, "Disabled while Rain lacks Career Weapon Variants."
+            end,
+        })
+        local row = {
+            _readonly = false,
+            _tip_desc = "Enable the throwing spear.",
+            style = { label = { text_color = { 255, 160, 146, 101 } } },
+        }
+
+        H.equal(true, Gates.apply_row(row,
+            "character_weapon_variants", "throwing_spear"))
+        H.equal(true, row._readonly)
+        H.equal(true, row._runtime_gate_disabled)
+        H.equal("Disabled while Rain lacks Career Weapon Variants.", row._tip_desc)
+        H.equal(128, row.style.label.text_color[1])
+
+        available = true
+        H.equal(false, Gates.apply_row(row,
+            "character_weapon_variants", "throwing_spear"))
+        H.equal(false, row._readonly)
+        H.equal(nil, row._runtime_gate_disabled)
+        H.equal("Enable the throwing spear.", row._tip_desc)
+        H.equal(255, row.style.label.text_color[1])
+        H.equal(160, row.style.label.text_color[2])
+        H.equal(146, row.style.label.text_color[3])
+        H.equal(101, row.style.label.text_color[4])
+    end)
+
+    H.test("both Mod Tweaker paths refresh runtime gates before row input", function()
+        local root = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
+        for _, filename in ipairs({
+            "_mod_tweaker_view.lua",
+            "_mod_tweaker_state.lua",
+            "_mod_tweaker_view_interaction.lua",
+            "_mod_tweaker_state_interaction.lua",
+        }) do
+            local file = assert(io.open(root .. filename, "rb"))
+            local source = file:read("*a")
+            file:close()
+            H.truthy(source:find("apply_runtime_gate", 1, true),
+                filename .. " must consume the shared runtime-gate API")
+        end
+    end)
+
+    H.test("GUT runtime suite pins the issue 371 public API", function()
+        local contract_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_contracts.lua"
+        local file = assert(io.open(contract_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(source:find('"issue371_runtime_gate_api"', 1, true))
+        for _, method in ipairs({
+            "register_runtime_gate",
+            "unregister_runtime_gate",
+            "runtime_gate_status",
+            "apply_runtime_gate",
+            "prune_runtime_gated_pending",
+        }) do
+            H.truthy(source:find('"' .. method .. '"', 1, true),
+                "runtime suite must require " .. method)
+        end
+    end)
 end

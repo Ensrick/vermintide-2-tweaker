@@ -815,7 +815,12 @@ end
 -- (#208) For the merged Equipment category, flush EACH member mod_id's buffer (each edit
 -- routes to its owner's mod_obj via _cat_set -> _owners), then clear them all.
 function HeroViewStateModTweaker:apply_pending(category)
+    local MT = _mt()
     local ids = category._owner_mod_ids
+    if MT and MT.prune_runtime_gated_pending
+            and MT:prune_runtime_gated_pending(self._pending, ids or { _cat_key(category) }) > 0 then
+        self:_update_apply_button()
+    end
     if ids then
         local any = false
         for i = 1, #ids do
@@ -1181,7 +1186,7 @@ function HeroViewStateModTweaker:_build_node_row(w, category, base_offset, depth
     local wtype = _nf(w, "type")
     -- (#208) Resolve the node's OWNER mod_obj for label/tooltip localization (the merged
     -- Equipment tab spans four mods); for a normal category _owner returns category.mod_obj.
-    local owner_mod_obj = _owner(category, setting_id)
+    local owner_mod_obj, row_owner_mod_id = _owner(category, setting_id)
     local label = category._flat and _vmf_label(w, owner_mod_obj)
                   or tostring(w.label or w.text or w.setting_id or "?")
     -- (#207) The node's localized tooltip DESCRIPTION (mod_obj may be nil for gut's own
@@ -1275,7 +1280,7 @@ function HeroViewStateModTweaker:_build_node_row(w, category, base_offset, depth
             local color = row.style and row.style.label and row.style.label.text_color
             if color then color[1], color[2], color[3], color[4] = 128, 128, 128, 128 end
         end
-        row._mod_id = category.mod_id
+        row._mod_id = row_owner_mod_id or category.mod_id
         row._setting_id = setting_id
         row._wtype = wtype
         row._category = category
@@ -1283,6 +1288,10 @@ function HeroViewStateModTweaker:_build_node_row(w, category, base_offset, depth
         -- (#207) Hover-popup text: TITLE = the row label, DESC = the localized tooltip.
         row._tip_title = label
         row._tip_desc = tooltip
+        local MT = _mt()
+        if MT and MT.apply_runtime_gate then
+            MT:apply_runtime_gate(row, row._mod_id, setting_id)
+        end
         -- (v0.2.157-dev diag, temp) Farm any residual "<...>" marker. If the RAW node data or the
         -- RESOLVED label/desc still contains a "<", printf it so the exact culprit + owning mod are
         -- named next time the menu opens. With the _vmf_label/_vmf_tooltip hardening this should
@@ -1902,6 +1911,7 @@ Interaction.install(HeroViewStateModTweaker, {
     UISceneGraph = UISceneGraph,
     UIInverseScaleVectorToResolution = UIInverseScaleVectorToResolution,
     math = math,
+    mt = _mt,
     cat_set = _cat_set,
     play_click = _play_click,
     play_hover = _play_hover,

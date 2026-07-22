@@ -763,6 +763,10 @@ function ModTweakerView:_handle_input(input_service)
     -- the gut controller for the dogfood category).
     for i = 1, #self._rows do
         local row = self._rows[i]
+        local runtime_mt = _mt()
+        if runtime_mt and runtime_mt.apply_runtime_gate and row._setting_id then
+            runtime_mt:apply_runtime_gate(row, row._mod_id, row._setting_id)
+        end
         -- Skip rows culled this frame (outside the list_mask) so a click on a scrolled-away row
         -- can't register. While a slider is dragging, ALSO skip every OTHER row (modal drag) so
         -- the cursor can't toggle/click anything else mid-drag.
