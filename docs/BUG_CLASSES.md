@@ -2753,3 +2753,38 @@ and global `UIRenderer.create` wrappers.
 
 **Related:** class 22 (shading environment), class 23/47 (Gui scope), class 32
 (destroyed world), class 63 (null unit material), and class 70 (particle owner).
+
+## 72. BOM-less UTF-8 breaks Windows PowerShell 5.1 parsing
+
+**First confirmed:** issue #85 in `qa/check_published_ids.ps1`; regressed in
+`qa/check_in_progress.ps1` on 2026-07-22.
+**Canonical Issue:** [#85](https://github.com/Ensrick/vermintide-2-tweaker/issues/85)
+**Lives in:** PowerShell scripts executed by the Windows PowerShell 5.1 CI or
+fallback path, especially live strings containing UTF-8 smart punctuation.
+
+### Symptoms
+- PowerShell 7 parses and runs the script, while `powershell.exe` reports an
+  unexpected ordinary word, unterminated string, and cascading missing braces.
+- The source is BOM-less UTF-8. An em dash decodes through the active ANSI code
+  page into bytes containing a smart quote, which PS5 treats as a delimiter.
+- If the failed child is Advisory, `run_all` can otherwise report exit 99 as a
+  non-blocking notice even though the check never executed.
+
+### Diagnosis pattern
+1. Run the exact script with both `powershell.exe -NoProfile -File` and
+   `pwsh.exe -NoProfile -File`; do not infer compatibility from PowerShell 7.
+2. Inspect the first three bytes. `EF BB BF` identifies a UTF-8 BOM; otherwise
+   PS5 may decode non-ASCII source through the ANSI code page.
+3. Parse the full QA/pre-commit invocation closure with PS5's own
+   `System.Management.Automation.Language.Parser`, not a PowerShell 7 parser.
+
+### Fix template
+- Keep the small bootstrap/release target set byte-ASCII. Where a larger script
+  intentionally retains Unicode, save it as UTF-8 with BOM and prove PS5 parses
+  it; runtime encoding assignments are too late to repair parser failure.
+- Run `qa/check_ps51_compatibility.ps1`: it guards the ASCII set and derives the
+  full script closure before calling the PS5 parser matrix.
+- Reserve exits 90–99 for execution/infrastructure failure in `run_all`; apply
+  Advisory policy only to legitimate check results such as sentinel exit 1/2.
+- Lock zero, fresh, stale, and malformed sentinel semantics under both PS5 and
+  PowerShell 7, plus a planted BOM-less em-dash failure and BOM-safe control.

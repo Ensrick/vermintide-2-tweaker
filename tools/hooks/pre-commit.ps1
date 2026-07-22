@@ -1,4 +1,4 @@
-# tools/hooks/pre-commit.ps1
+﻿# tools/hooks/pre-commit.ps1
 #
 # Actual body of the local pre-commit hook. Invoked via the bash shim that
 # `tools/install-hooks.ps1` writes to `.git/hooks/pre-commit`.

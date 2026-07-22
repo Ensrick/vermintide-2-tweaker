@@ -1,4 +1,4 @@
-# check_file_sizes.ps1 — flags Lua files exceeding PROJECT_STANDARDS §2.1 limits.
+﻿# check_file_sizes.ps1 — flags Lua files exceeding PROJECT_STANDARDS §2.1 limits.
 # Target: 1500 lines per file. Hard limit: 2500 lines.
 #
 # See qa/CHECKS.md row 52.

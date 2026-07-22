@@ -1,4 +1,4 @@
-# check_stale_docs.ps1 — scans audit/review markdown files, warns about
+﻿# check_stale_docs.ps1 — scans audit/review markdown files, warns about
 # docs older than $StaleDays (default 14) without a SUPERSEDED banner.
 #
 # See qa/CHECKS.md row 49.

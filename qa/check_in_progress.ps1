@@ -1,21 +1,21 @@
-# check_in_progress.ps1 — scans .in_progress/ for sentinel files and warns
+# check_in_progress.ps1 - scans .in_progress/ for sentinel files and warns
 # about stale claims (>24h old) or in-flight claims that collide with the
 # currently staged files in git.
 #
 # Convention is documented in `.in_progress/README.md` and CLAUDE.md
-# § "Multi-agent coordination". The sentinel files are advisory — this
+# section "Multi-agent coordination". The sentinel files are advisory - this
 # script never blocks; it only emits WARNINGs that other sessions / the
 # pre-commit hook can surface.
 #
 # Exit codes:
-#   0 = no warnings — directory empty, or all sentinels fresh + no staged
+#   0 = no warnings - directory empty, or all sentinels fresh + no staged
 #       collision.
 #   1 = stale sentinel (>24h old) or staged-file collision with an in-flight
-#       claim — review and either remove the sentinel or coordinate.
+#       claim - review and either remove the sentinel or coordinate.
 #   2 = malformed sentinel CONTENT (missing or unparseable Started timestamp).
 #
 # Sentinel names that do not match a mod directory (e.g. qa-tooling.md,
-# docs-audit.md) are ALLOWED — the coordination convention also covers
+# docs-audit.md) are ALLOWED - the coordination convention also covers
 # tooling/docs sessions (#215). They get the same content validation and
 # stale check, are reported as "(non-mod claim)", and are skipped by the
 # staged-file collision check (no mod directory to collide with). A typo'd
@@ -47,7 +47,7 @@ function Read-FileUtf8([string]$path) {
 
 if (-not (Test-Path $inProgressDir)) {
     if (-not $Quiet) {
-        Write-Host "[check_in_progress] no .in_progress/ directory — convention not in use." -ForegroundColor DarkGray
+        Write-Host "[check_in_progress] no .in_progress/ directory - convention not in use." -ForegroundColor DarkGray
     }
     exit 0
 }
@@ -58,7 +58,7 @@ $sentinels = @(Get-ChildItem -Path $inProgressDir -Filter "*.md" -File -ErrorAct
 
 if ($sentinels.Count -eq 0) {
     if (-not $Quiet) {
-        Write-Host "[check_in_progress] OK — no in-flight claims." -ForegroundColor Green
+        Write-Host "[check_in_progress] OK - no in-flight claims." -ForegroundColor Green
     }
     exit 0
 }
@@ -133,7 +133,7 @@ foreach ($sentinel in $sentinels) {
     }
 
     if ($ageHours -gt $staleThresholdHours) {
-        $warnings += "[in-progress] ${modName}: sentinel is $([math]::Round($ageHours,1))h old (>$staleThresholdHours h) — probably stale, remove if work is done"
+        $warnings += "[in-progress] ${modName}: sentinel is $([math]::Round($ageHours,1))h old (>$staleThresholdHours h) - probably stale, remove if work is done"
     }
 }
 
@@ -159,7 +159,7 @@ if (-not $SkipGitDiff -and $claimed.Count -gt 0) {
                 if ($claimed.ContainsKey($modName)) {
                     $c = $claimed[$modName]
                     $fileCount = $stagedMods[$modName].Count
-                    $warnings += "[in-progress] ${modName} is claimed by session '$($c.SessionId)' since $($c.Timestamp.ToString('u')) — $fileCount staged file(s) collide; consider coordinating"
+                    $warnings += "[in-progress] ${modName} is claimed by session '$($c.SessionId)' since $($c.Timestamp.ToString('u')) - $fileCount staged file(s) collide; consider coordinating"
                 }
             }
         }
@@ -173,7 +173,7 @@ if (-not $SkipGitDiff -and $claimed.Count -gt 0) {
 # Report.
 Write-Host ""
 if ($errors.Count -eq 0 -and $warnings.Count -eq 0) {
-    Write-Host "[check_in_progress] OK — $($claimed.Count) active claim(s), all fresh, no staged collision." -ForegroundColor Green
+    Write-Host "[check_in_progress] OK - $($claimed.Count) active claim(s), all fresh, no staged collision." -ForegroundColor Green
     exit 0
 }
 

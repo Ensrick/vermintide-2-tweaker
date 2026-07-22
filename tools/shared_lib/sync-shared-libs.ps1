@@ -1,4 +1,4 @@
-# Copies canonical _lib_*.lua sources into standalone mod bundles, or verifies
+﻿# Copies canonical _lib_*.lua sources into standalone mod bundles, or verifies
 # that every declared consumer is byte-for-byte identical. Issue #428.
 [CmdletBinding()]
 param(
@@ -52,8 +52,16 @@ foreach ($entry in @($manifest.Libraries)) {
             continue
         }
         $destinationBytes = [System.IO.File]::ReadAllBytes($destinationPath)
-        if ($sourceBytes.Length -ne $destinationBytes.Length -or
-            -not [System.Linq.Enumerable]::SequenceEqual[byte]($sourceBytes, $destinationBytes)) {
+        $bytesEqual = $sourceBytes.Length -eq $destinationBytes.Length
+        if ($bytesEqual) {
+            for ($i = 0; $i -lt $sourceBytes.Length; $i++) {
+                if ($sourceBytes[$i] -ne $destinationBytes[$i]) {
+                    $bytesEqual = $false
+                    break
+                }
+            }
+        }
+        if (-not $bytesEqual) {
             $errors += "drift: $relativePath differs from tools/shared_lib/$sourceName (run sync-shared-libs.ps1 -Apply)"
         } elseif (-not $Quiet) {
             Write-Host "[shared-lib] exact: $relativePath" -ForegroundColor DarkGray

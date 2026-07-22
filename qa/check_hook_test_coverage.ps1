@@ -1,4 +1,4 @@
-# check_hook_test_coverage.ps1 — hook / NetworkLookup diffs must ship a
+﻿# check_hook_test_coverage.ps1 — hook / NetworkLookup diffs must ship a
 # regression marker (issue #429).
 #
 # Rule: if a diff ADDS a `mod:hook(` / `mod:hook_safe(` line, or ADDS a

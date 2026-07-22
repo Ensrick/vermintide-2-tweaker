@@ -1,4 +1,4 @@
-# check_vmf_widget_types.ps1 — static scan for invalid VMF widget `type`
+﻿# check_vmf_widget_types.ps1 — static scan for invalid VMF widget `type`
 # values AND malformed numeric `range` fields in active-mod `*_data.lua` files.
 #
 # Bug class: VMF's options init (`new_mod`'s `mod_data`) does a strict

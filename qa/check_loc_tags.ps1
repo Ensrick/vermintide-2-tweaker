@@ -1,4 +1,4 @@
-# check_loc_tags.ps1 -- block lifecycle/issue metadata in player-facing text (#694).
+﻿# check_loc_tags.ps1 -- block lifecycle/issue metadata in player-facing text (#694).
 #
 # Verification state belongs in GitHub labels, issues, changelogs, logs, and
 # internal diagnostic data. It must not decorate player-facing option titles or

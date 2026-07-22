@@ -1,4 +1,4 @@
-# check_logging.ps1 — static logging-hygiene scan for active-mod Lua files.
+﻿# check_logging.ps1 — static logging-hygiene scan for active-mod Lua files.
 #
 # Encodes PROJECT_STANDARDS.md § 3.6 (Debug logging + "Chat-echo policy" matrix)
 # and docs/BUG_CLASSES.md § 17 (chat-echo spam + Variant B, Issue #240). Three

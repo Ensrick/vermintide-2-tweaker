@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 # check_name_integrity.ps1 — localization-integrity validator
 # ============================================================================
 #
@@ -407,13 +407,19 @@ entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rende
             'quit_menu_button_name'
         ) | ForEach-Object { $committedKeys.ContainsKey($_) } | Where-Object { -not $_ } | Measure-Object | Select-Object -ExpandProperty Count
 
+        function Write-SelfTestResult([string]$label, [bool]$passed) {
+            $result = if ($passed) { 'PASS' } else { 'FAIL' }
+            $color = if ($passed) { 'Green' } else { 'Red' }
+            Write-Host ("{0}{1}" -f $label, $result) -ForegroundColor $color
+        }
+
         Write-Host ""
-        Write-Host ("  CHECK 1 (missing setting_id loc entry) fired:        {0}" -f ($check1Fired ? 'PASS' : 'FAIL')) -ForegroundColor ($check1Fired ? 'Green' : 'Red')
-        Write-Host ("  CHECK 2 (unresolvable display_name) fired:           {0}" -f ($check2Fired ? 'PASS' : 'FAIL')) -ForegroundColor ($check2Fired ? 'Green' : 'Red')
-        Write-Host ("  CHECK 2 did NOT false-positive on vanilla item_type: {0}" -f (-not $check2FalsePos ? 'PASS' : 'FAIL')) -ForegroundColor ((-not $check2FalsePos) ? 'Green' : 'Red')
-        Write-Host ("  CHECK 2 ignores annotated fixtures and comments:       {0}" -f (-not $annotatedFalsePos ? 'PASS' : 'FAIL')) -ForegroundColor ((-not $annotatedFalsePos) ? 'Green' : 'Red')
-        Write-Host ("  Offline vanilla oracle has source-proven menu keys:    {0}" -f ($offlineOracleComplete -eq 0 ? 'PASS' : 'FAIL')) -ForegroundColor ($offlineOracleComplete -eq 0 ? 'Green' : 'Red')
-        Write-Host ("  CHECK 2 ratchet survives source-file moves:             {0}" -f ($movedCheck2MatchesBaseline ? 'PASS' : 'FAIL')) -ForegroundColor ($movedCheck2MatchesBaseline ? 'Green' : 'Red')
+        Write-SelfTestResult "  CHECK 1 (missing setting_id loc entry) fired:        " $check1Fired
+        Write-SelfTestResult "  CHECK 2 (unresolvable display_name) fired:           " $check2Fired
+        Write-SelfTestResult "  CHECK 2 did NOT false-positive on vanilla item_type: " (-not $check2FalsePos)
+        Write-SelfTestResult "  CHECK 2 ignores annotated fixtures and comments:       " (-not $annotatedFalsePos)
+        Write-SelfTestResult "  Offline vanilla oracle has source-proven menu keys:    " ($offlineOracleComplete -eq 0)
+        Write-SelfTestResult "  CHECK 2 ratchet survives source-file moves:             " $movedCheck2MatchesBaseline
         Write-Host ""
         Write-Host "  Raised errors:" -ForegroundColor DarkGray
         foreach ($e in $res.errors) { Write-Host "    - $e" -ForegroundColor DarkGray }

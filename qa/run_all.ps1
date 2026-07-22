@@ -14,7 +14,8 @@ param(
     [switch]$FixStale,
     [switch]$SkipBundleAtomicity,
     [switch]$SkipCustomUnitBundleReachability,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,6 +36,7 @@ $repoRoot = Split-Path $here -Parent
 # Everything else keeps the standard 0/1/2 convention.
 $script:blockingExit = 0        # ERRORS (and Blocking-policy failures) raise this; it is the gate's exit code
 $script:warnings     = @()      # advisory notices, surfaced loudly in the summary
+$script:infrastructureFailures = @()
 
 function Run-Check {
     [CmdletBinding()]
@@ -44,14 +46,27 @@ function Run-Check {
         [ValidateSet('Standard', 'Blocking', 'Advisory')][string]$Policy = 'Standard'
     )
     Write-Host "===== $name =====" -ForegroundColor Cyan
+    $executionFailed = $false
+    $global:LASTEXITCODE = 0
     try {
         & $action
         $code = $LASTEXITCODE
     } catch {
         Write-Host "[$name] CRASH: $_" -ForegroundColor Red
+        $executionFailed = $true
         $code = 99
     }
     Write-Host ""
+
+    # Codes 90-99 are reserved for a check that could not execute reliably.
+    # Policy controls a check's legitimate findings; it must never turn a
+    # parser, missing-host, or tool crash into an advisory success.
+    if ($executionFailed -or $code -ge 90) {
+        Write-Host "[$name] INFRASTRUCTURE FAILURE (exit $code) - blocking regardless of policy." -ForegroundColor Red
+        $script:infrastructureFailures += "$name (exit $code)"
+        if ($code -gt $script:blockingExit) { $script:blockingExit = $code }
+        return
+    }
 
     switch ($Policy) {
         'Advisory' {
@@ -78,6 +93,10 @@ function Run-Check {
 
 function Write-Summary {
     Write-Host "============================================" -ForegroundColor Cyan
+    if ($script:infrastructureFailures.Count -gt 0) {
+        Write-Host "INFRASTRUCTURE FAILURES (blocking) - $($script:infrastructureFailures.Count):" -ForegroundColor Red
+        foreach ($failure in $script:infrastructureFailures) { Write-Host "  X $failure" -ForegroundColor Red }
+    }
     if ($script:warnings.Count -gt 0) {
         Write-Host "WARNINGS (non-blocking) - $($script:warnings.Count):" -ForegroundColor Yellow
         foreach ($w in $script:warnings) { Write-Host "  ! $w" -ForegroundColor Yellow }
@@ -92,6 +111,46 @@ function Write-Summary {
         Write-Host "[run_all] FAILED - blocking errors (exit $($script:blockingExit)). Fix before shipping." -ForegroundColor Red
     }
 }
+
+function Invoke-PolicySelfTest {
+    $failures = @()
+
+    $script:blockingExit = 0
+    $script:warnings = @()
+    $script:infrastructureFailures = @()
+    Run-Check "fixture-advisory-warning" { $global:LASTEXITCODE = 1 } -Policy 'Advisory'
+    Run-Check "fixture-advisory-malformed" { $global:LASTEXITCODE = 2 } -Policy 'Advisory'
+    if ($script:blockingExit -ne 0 -or $script:warnings.Count -ne 2 -or $script:infrastructureFailures.Count -ne 0) {
+        $failures += "legitimate advisory exit 1/2 did not remain non-blocking"
+    }
+
+    $script:blockingExit = 0
+    $script:warnings = @()
+    $script:infrastructureFailures = @()
+    Run-Check "fixture-advisory-crash" { throw "planted parser/host failure" } -Policy 'Advisory'
+    if ($script:blockingExit -ne 99 -or $script:warnings.Count -ne 0 -or $script:infrastructureFailures.Count -ne 1) {
+        $failures += "caught advisory execution failure was not blocking"
+    }
+
+    $script:blockingExit = 0
+    $script:warnings = @()
+    $script:infrastructureFailures = @()
+    Run-Check "fixture-advisory-tool-exit" { $global:LASTEXITCODE = 99 } -Policy 'Advisory'
+    if ($script:blockingExit -ne 99 -or $script:warnings.Count -ne 0 -or $script:infrastructureFailures.Count -ne 1) {
+        $failures += "reserved tool-failure exit was flattened by advisory policy"
+    }
+
+    if ($failures.Count -gt 0) {
+        Write-Host "[run_all:selftest] FAILED" -ForegroundColor Red
+        foreach ($failure in $failures) { Write-Host "  X $failure" -ForegroundColor Red }
+        exit 2
+    }
+
+    Write-Host "[run_all:selftest] PASS - findings remain advisory and execution failures block." -ForegroundColor Green
+    exit 0
+}
+
+if ($SelfTest) { Invoke-PolicySelfTest }
 
 # Always run cfg + version + unpack-safety + widget-type checks (cheap, catch
 # most ship-blockers).
@@ -129,6 +188,7 @@ Run-Check "check_vmf_widget_types"            { & (Join-Path $here "check_vmf_wi
 Run-Check "check_event_register_signature"    { & (Join-Path $here "check_event_register_signature.ps1")    -Quiet:$Quiet }
 Run-Check "check_loc_description_titles"      { & (Join-Path $here "check_loc_description_titles.ps1")      -Quiet:$Quiet }
 Run-Check "check_ci_hardening"                { & (Join-Path $here "check_ci_hardening.ps1")                -Quiet:$Quiet }
+Run-Check "check_ps51_compatibility"          { & (Join-Path $here "check_ps51_compatibility.ps1")          -Quiet:$Quiet }
 Run-Check "check_pr_autoclose"                { & (Join-Path $here "check_pr_autoclose.ps1")                -Quiet:$Quiet }
 Run-Check "check_cross_mod_deps"              { & (Join-Path $here "check_cross_mod_deps.ps1")              -Quiet:$Quiet }
 Run-Check "check_pusfume_compatibility"       { & (Join-Path $here "check_pusfume_compatibility.ps1")       -Quiet:$Quiet }
@@ -190,7 +250,7 @@ Run-Check "check_localization" { & (Join-Path $here "check_localization.ps1") -Q
 # source of truth for verification state. See LOCALIZATION_STANDARD section 13.
 Run-Check "check_loc_tags"     { & (Join-Path $here "check_loc_tags.ps1")     -Quiet:$Quiet }
 # check_issue_status_labels is advisory-only (GitHub issue status-label doctrine,
-# PROJECT_STANDARDS.md § 11): it warns when the latest CHANGELOG entry references
+# PROJECT_STANDARDS.md section 11): it warns when the latest CHANGELOG entry references
 # an open issue that carries neither verify-fix nor diagnostics-armed (a shipped
 # fix/probe whose status label was forgotten). Pinned Advisory so no exit code it
 # returns ever blocks; it also self-exits 0 when gh is offline/unauthenticated.
@@ -222,17 +282,17 @@ Run-Check "check_rt_textual_invariants" { & (Join-Path $here "check_rt_textual_i
 Run-Check "check_dev_only_edits" { & (Join-Path $here "check_dev_only_edits.ps1") -Quiet:$Quiet }
 
 # check_logging is Advisory (issue #429): logging-hygiene scan encoding
-# PROJECT_STANDARDS § 3.6 + BUG_CLASSES § 17 — (a) mod:echo in a § 3.6 "NEVER"
+# PROJECT_STANDARDS section 3.6 + BUG_CLASSES section 17 - (a) mod:echo in a section 3.6 "NEVER"
 # context (module-load banner / on_setting_changed / on_enabled|on_disabled /
 # hook body), (b) mod:info|warning in a per-frame update() body, (c) mod:warning
-# in a dbg/alert helper (the Issue #240 chat-spam class). Nonzero by design —
+# in a dbg/alert helper (the Issue #240 chat-spam class). Nonzero by design -
 # this gathers signal, so it must NEVER block. Escapes: -- allow-echo /
 # -- allow-perframe / -- allow-warn-chat. See qa/CHECKS.md rows 58a/58b/58c.
 Run-Check "check_logging" { & (Join-Path $here "check_logging.ps1") -Quiet:$Quiet } -Policy 'Advisory'
 
 # check_hook_test_coverage is Advisory (issue #429): if the diff (HEAD~1..HEAD by
 # default, or origin/<base>...HEAD in a CI PR) ADDS a mod:hook / mod:hook_safe or
-# a NetworkLookup write in a mod's lua, it must ship a regression marker — a
+# a NetworkLookup write in a mod's lua, it must ship a regression marker - a
 # `_rt_register(` addition, a `-- hook-test: <check>` comment, or a pre-existing
 # suite. Warn-only here and in pre-commit (we gather signal first). Self-exits 0
 # on an indeterminate diff. See qa/CHECKS.md row 24a.
@@ -245,7 +305,7 @@ Run-Check "check_native_resource_safety" { & (Join-Path $here "check_native_reso
 
 # check_stale_docs is Advisory (issue #429): staleness is TIME-based (a doc goes
 # stale at $StaleDays=14 with no edit), so it can't be baselined sensibly and must not
-# hard-block a commit/CI run on calendar drift — exactly the "gate that blocks on
+# hard-block a commit/CI run on calendar drift - exactly the "gate that blocks on
 # noise -> sessions learn --no-verify" anti-pattern this file's header warns
 # against. This formalizes the old CI `continue-on-error` treatment ("stale audit
 # docs are warnings, not blockers"). Remediation is `run_all.ps1 -FixStale`.
@@ -269,8 +329,8 @@ if (-not $SkipLua) {
     if ($lcExe) {
         # luacheck is pinned Advisory (issue #429): the ~415-warning baseline is
         # driven down over time, not per-commit (CWV bare-globals cleanup tracked
-        # in PROJECT_STANDARDS §11). Making it Advisory REPORTS the full report as
-        # a non-blocking notice — the explicit, policy-engine version of the old
+        # in PROJECT_STANDARDS section 11). Making it Advisory REPORTS the full report as
+        # a non-blocking notice - the explicit, policy-engine version of the old
         # CI `|| true`. Flip back to Standard once the baseline is clean.
         Run-Check "luacheck" {
             Push-Location $repoRoot

@@ -1,4 +1,4 @@
-# check_decisions_wired.ps1 — cross-checks weapon_tweaker's CROSS_CHARACTER_PORT_DECISIONS.md
+﻿# check_decisions_wired.ps1 — cross-checks weapon_tweaker's CROSS_CHARACTER_PORT_DECISIONS.md
 # against the three implementation surfaces, so documented-but-unwired ports are
 # made VISIBLE and MECHANICAL instead of trusted to memory.
 #
