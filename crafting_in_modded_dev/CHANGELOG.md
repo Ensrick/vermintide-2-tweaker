@@ -1,6 +1,19 @@
 # Crafting in Modded Changelog
 
-## Unreleased (2026-07-22) - #628 restore the canonical salvage adapter
+## 0.8.106-dev (2026-07-22) - #959/#628/#882/#598 CIM identity and presentation repairs
+
+- #959: Accessory property usage, removal, and clear actions now preserve the
+  property category as part of their identity. Selecting a property for one
+  accessory category no longer makes the same property appear selected or
+  removable in a sibling category.
+- #882: Athanor weapon previews preserve the requested primary/secondary slot
+  identity through policy and mission-forge adapters, so ranged and secondary
+  previews retain the engine-authored placement instead of drifting left.
+- #598: The safe boolean-only Hold-Tab rarity side channel is mirrored for the
+  sender as well as receivers. Explicit ordinary-item state clears a stale
+  Modded frame without sending custom material or resource names.
+
+### #628 - restore the canonical salvage adapter
 
 - The attached #930 session ran CIM Dev `0.8.101-dev` and proved crafted Dual Maces remained in the backend mirror, but the old salvage probe reported only aggregate counts. It could not distinguish active equip, saved-loadout ownership, favorite state, stale backend cache, or an identity rejection.
 - Root cause: vanilla `BackendInterfaceCommon.filter_items` receives a backend-id keyed item map and enumerates it with `pairs`. CIM's recovery adapter used `ipairs`, so it silently visited zero real items. It now enumerates the same map shape as vanilla; exact eligible CIM instances can be restored to Salvage again.
@@ -9,14 +22,6 @@
 - Offline Lua coverage locks the keyed-map iteration contract, salvage-state fingerprint stability/change detection, and the production diagnostic marker. Runtime `/cim_regression_test` adds `issue628_salvage_state_diagnostic` and requires every real provider enumerator to be routed.
 
 **Verify:** Open Salvage on Bounty Hunter after equipping and then replacing Dual Maces; the unequipped exact item must appear. Switch to Kruber and reopen Salvage. The console log must contain bounded `[cim:628] salvage_state` rows naming the exact eligibility or rejection reason and saved loadout owners for each crafted item.
-
-## Unreleased - #598 owner/peer Hold-Tab rarity parity [not-started]
-
-- Mirror the boolean-only modded-slot side channel into the sender's local
-  presentation state because VMF's `others` target correctly excludes it.
-- Retain explicit `false` slot state so replacing a modded weapon clears stale
-  chrome, and repair the already-rendered Hold-Tab rarity texture in the same
-  post-hook cycle. Custom icon/material identifiers remain off the wire.
 
 ## 0.8.105-dev (2026-07-21) - #592/#928 bounded CWV Blacksmith seed contract [not-started]
 
