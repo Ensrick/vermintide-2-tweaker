@@ -194,6 +194,7 @@ local PROGRESS_LABEL = { "Start (0%%)", "Early (25%%)", "Mid (50%%)", "Late (75%
 -- ===========================================================================
 
 function _M.curse_key(name)    return "ctdm_c_" .. name end
+function _M.curse_label(name)  return CURSE_LABEL[name] or tostring(name) end
 function _M.modifier_key(name) return "ctdm_m_" .. name end
 function _M.difficulty_key(n)  return "ctdm_d_" .. n end
 function _M.base_key(name)     return "ctdm_l_" .. name end

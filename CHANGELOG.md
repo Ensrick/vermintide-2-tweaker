@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-22 - Atomic Chaos Wastes profile/runtime evidence (#919)
+
+The paired logs could not bind the active Mod Tweaker profile to the local and
+host-effective values consumed when a Chaos Wastes run starts; one was a client
+correctly consuming different host settings. Tweaker: GUI now exposes a bounded
+post-commit observer per tab, and Chaos Wastes Tweaker records one atomic line
+covering profile slot, peer role, effective source, starting coins, Rotten
+Miasma selection/disable state, and player-facing starting-boon lists at every
+relevant boundary. No gameplay behavior changes until this evidence identifies
+the failing layer.
+
 ## 2026-07-19 - Exact per-instance Loremaster inventory icons (#883)
 
 Cosmetics Tweaker 0.9.160-dev now resolves inventory-card icons from the exact

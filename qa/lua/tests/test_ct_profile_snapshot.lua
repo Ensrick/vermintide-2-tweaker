@@ -1,0 +1,99 @@
+return function(H, repo_root)
+    local path = repo_root
+        .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_profile_snapshot.lua"
+    local Snapshot = assert(loadfile(path))()
+
+    H.test("CT profile snapshot separates local profile from host-effective state", function()
+        local entries = {
+            { name = "boon_z" }, { name = "boon_a" }, { name = "boon_z" },
+        }
+        local local_values = {
+            starting_coins = 300,
+            disable_curse_rotten_miasma = false,
+            start_boon_boon_a = true,
+            start_boon_boon_z = false,
+        }
+        local effective_values = {
+            starting_coins = 3000,
+            disable_curse_rotten_miasma = true,
+            start_boon_boon_a = false,
+            start_boon_boon_z = true,
+        }
+        local snapshot = Snapshot.capture({
+            phase = "setup_run", role = "client", profile = 2,
+            effective_source = "host_sync", entries = entries,
+            local_get = function(key) return local_values[key] end,
+            effective_get = function(key) return effective_values[key] end,
+            boon_label = function(name) return name == "boon_a" and "Alpha Boon" or "Zulu Boon" end,
+            selected_curse = "curse_rotten_miasma",
+            curse_label = function() return "Rotten Miasma" end,
+        })
+        H.equal(snapshot.profile, 2)
+        H.equal(snapshot.coins_local, 300)
+        H.equal(snapshot.coins_effective, 3000)
+        H.equal(snapshot.miasma_disabled_local, false)
+        H.equal(snapshot.miasma_disabled_effective, true)
+        H.equal(snapshot.selected_conflict, true)
+        H.deep_equal(snapshot.boon_local, { "Alpha Boon" })
+        H.deep_equal(snapshot.boon_effective, { "Zulu Boon" })
+        local line = Snapshot.format(snapshot, 7)
+        H.truthy(string.find(line, "[ct:919] seq=7", 1, true))
+        H.truthy(string.find(line, "effective_source=host_sync", 1, true))
+        H.truthy(string.find(line, 'selected_curse="Rotten Miasma"', 1, true))
+        H.equal(string.find(line, "\n", 1, true), nil, "snapshot must be exactly one log line")
+    end)
+
+    H.test("CT profile snapshot bounds and sanitizes user-facing boon names", function()
+        local entries, enabled = {}, {}
+        for i = 1, 20 do
+            local name = "boon_" .. tostring(i)
+            entries[#entries + 1] = { name = name }
+            enabled["start_boon_" .. name] = true
+        end
+        local snapshot = Snapshot.capture({
+            entries = entries,
+            local_get = function(key) return enabled[key] end,
+            effective_get = function(key) return enabled[key] end,
+            boon_label = function(name)
+                return name .. '\n"' .. string.rep("x", 80)
+            end,
+        })
+        H.equal(snapshot.boon_local_count, 20)
+        H.equal(#snapshot.boon_local, 12)
+        H.equal(snapshot.boon_local_truncated, 8)
+        local line = Snapshot.format(snapshot, 1)
+        H.equal(string.find(line, "\n", 1, true), nil)
+        H.truthy(#line < 1800, "bounded snapshot unexpectedly exceeded 1800 bytes")
+    end)
+
+    H.test("CT #919 diagnostic is wired at each empirical boundary without a new hook", function()
+        local main_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
+        local file = assert(io.open(main_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        for _, marker in ipairs({
+            '_ct919_profile_tick(dt)',
+            '_ct919_log_profile_snapshot("host_sync")',
+            '_ct919_log_profile_snapshot("setup_run")',
+            '_ct919_profile_setting_changed(setting_id)',
+            '_ct_profile_snapshot").install(mod)',
+        }) do
+            H.truthy(string.find(source, marker, 1, true), "missing #919 boundary: " .. marker)
+        end
+        local module_file = assert(io.open(path, "rb"))
+        local module_source = module_file:read("*a")
+        module_file:close()
+        H.truthy(string.find(module_source,
+            '_ct_rt_register("issue919_profile_snapshot_installed"', 1, true))
+        local hook_count, cursor = 0, 1
+        local hook_text = 'mod:hook("DeusRunController", "setup_run"'
+        while true do
+            local found = string.find(source, hook_text, cursor, true)
+            if not found then break end
+            hook_count = hook_count + 1
+            cursor = found + #hook_text
+        end
+        H.equal(hook_count, 1, "#919 must reuse the existing setup_run hook")
+    end)
+end

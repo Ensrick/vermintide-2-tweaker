@@ -21,6 +21,12 @@ end
 
 local Settings = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_settings")
 local RuntimeGates = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_runtime_gates")
+local Profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles")
+local ProfileEventsModule = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profile_events")
+local ProfileEvents = ProfileEventsModule.new(Profiles, mod, function(...)
+    local printer = rawget(_G, "printf")
+    if printer then printer(...) end
+end)
 
 -- ---------------------------------------------------------------
 -- Public API — addressed via get_mod("gut_dev").mod_tweaker:<method>(...).
@@ -75,6 +81,33 @@ end
 
 function ModTweaker:apply_runtime_gate(row, mod_id, setting_id)
     return RuntimeGates.apply_row(row, mod_id, setting_id)
+end
+
+-- (#919) Owner-facing profile commit boundary. Mod Tweaker owns persistence,
+-- while the registered owner is responsible for one bounded, domain-specific
+-- snapshot of the values it will actually consume.
+function ModTweaker:get_active_profile(tab_id)
+    return ProfileEvents.get_active(tab_id)
+end
+
+function ModTweaker:register_profile_diagnostic(tab_id, callback)
+    local ok, err = ProfileEvents.register(tab_id, callback)
+    if not ok then _dbg_alert("[mt:profile-event] registration rejected: %s", tostring(err)) end
+    return ok, err
+end
+
+function ModTweaker:emit_profile_diagnostic(tab_id, phase)
+    return ProfileEvents.emit(tab_id, phase)
+end
+
+if type(mod._gut_rt_register) == "function" then
+    mod._gut_rt_register("issue919_profile_diagnostic_api", function()
+        if type(ModTweaker.get_active_profile) ~= "function"
+                or type(ModTweaker.register_profile_diagnostic) ~= "function"
+                or type(ModTweaker.emit_profile_diagnostic) ~= "function" then
+            return "profile diagnostic API is incomplete"
+        end
+    end)
 end
 
 function ModTweaker:prune_runtime_gated_pending(pending_by_mod, mod_ids)

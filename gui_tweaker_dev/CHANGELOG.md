@@ -1,5 +1,12 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.311-dev (2026-07-22) -- bounded profile-commit observer (#919)
+
+- Added a bounded, owner-registered profile-commit diagnostic API for #919.
+  Both Mod Tweaker presentations emit only after the target profile has been
+  applied, and each tab has at most one observer. The API carries only tab,
+  slot, and phase; the owning mod remains responsible for its runtime snapshot.
+
 ## 0.2.310-dev (2026-07-21) -- global renderer non-interference (#749)
 
 - The consolidated `UIRenderer.create` guard now uses the shared tri-state V2

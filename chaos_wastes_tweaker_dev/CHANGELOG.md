@@ -1,5 +1,14 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.307-dev (2026-07-22) - #919 atomic profile/runtime evidence
+
+- Armed #919 with one bounded, atomic `[ct:919]` snapshot at profile commit,
+  settled relevant edits, host-settings sync, and run setup. Each line binds
+  the active Mod Tweaker profile to local and host-effective starting coins,
+  Rotten Miasma state/selection, user-facing starting-boon names, and peer role.
+  `/ct_profile_audit` emits the same snapshot on demand. This is
+  observation-only pending empirical classification of the mixed-profile fault.
+
 ## 0.7.306-dev (2026-07-21) - #426 bounded mixed-lobby wire diagnostic
 
 - Re-audited the shipped v0.7.291 hot-join fence after the stale-row concern in the newest issue comment. Current source already traverses every composite row in `SharedState._server_state` for player power-ups and persistent buffs, so departed-player rows are covered; commits `e8d7ae7b` and `4b22feec` are both ancestors of current master.
