@@ -285,7 +285,10 @@ function M.install(mod, _rt_register, deps)
                 return clone_name .. " does not share donor 3P remap contract " .. donor_name
             end
         end
-        if count ~= 6 then return "CWV style alias catalogue expected 6 rows, got " .. count end
+        if count ~= 7 then return "CWV style alias catalogue expected 7 rows, got " .. count end
+        if aliases.imperial_longsword_template ~= "two_handed_swords_template_1" then
+            return "Imperial Longsword style is not tied to the Greatsword 3P donor"
+        end
         local clone = _3p_template_remaps
             and _3p_template_remaps.cwv_infantry_spear_template
         if type(clone) ~= "table" or type(clone.wh_) ~= "table"

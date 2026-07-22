@@ -259,6 +259,9 @@ M.bulk = {
 -- catalog is keyed by donor template name. Alias the clone keys to the donor
 -- wield tables so receiver bodies do not fall through to raw native events.
 local cwv_style_donors = {
+    -- Imperial Longsword changes balance/presentation, not its receiver-side
+    -- Greatsword event vocabulary. Share the exact donor table by identity.
+    imperial_longsword_template = "two_handed_swords_template_1",
     cwv_infantry_spear_template = "two_handed_spears_elf_template_1",
     cwv_combat_style_kerillian_greatsword = "two_handed_swords_wood_elf_template",
     cwv_combat_style_bretonnian_greatsword = "two_handed_swords_template_1",

@@ -1,5 +1,11 @@
 # wt 3P Animation Coverage Matrix
 
+> **#948 RESET (2026-07-21):** this document is a historical routing aid, not
+> current verification. The universal compatibility matrix on issue #948 starts
+> every base/CWV receiver-group cell untested, including formerly native or
+> confirmed rows. A donor alias or baked event table proves wiring only; a cell
+> changes status only after current in-game owner/remote-husk action coverage.
+
 > **CORRECTION 2026-07-03 (v0.12.203-dev):** the v0.12.201 claim below ("all 35 were
 > baked") was WRONG. The picker stores picks under two config namespaces (weapon-only
 > vs template-qualified); v0.12.201 read only weapon-only, capturing Kerillian but

@@ -21,9 +21,17 @@ brace_to_repeater_skin, brace_to_repeater_dump,
 dump, dump_actions, dump_weapons,
 wt_regression_test, wt_dump_wielded,
 wt_dump_anim_picks, wt_coverage,                  -- anim tuning loop (export + skeleton probe)
-wt_dev_hp_apply, wt_dev_hp_reset, wt_dump_hold_pose  -- hold-pose tuner
+wt_dev_hp_apply, wt_dev_hp_reset, wt_dump_hold_pose, -- hold-pose tuner
+wt_audit_universal_compatibility                  -- #948 U-state compatibility census
 ```
-*(wt section refreshed 2026-06-11 — added the 7 commands landed since the 2026-05-25 snapshot.)*
+
+The historical `/wt_audit_kruber_3p`, `/wt_audit_bardin_3p`,
+`/wt_audit_kerillian_3p`, `/wt_audit_saltzpyre_3p`, and
+`/wt_audit_warrior_priest_3p` names remain harmless deprecated aliases. They
+report the relevant #948 receiver census with every cell in `U` (untested);
+they no longer run at startup or infer Working from static routing tables.
+
+*(wt section refreshed 2026-07-22 for the #948 compatibility reset.)*
 
 ### `gt` (general_tweaker_dev)
 *(2026-07-13: ordinary commands omit the `gt_` prefix. `gt_regression_test` remains prefixed because bare `regression_test` collides with gui_tweaker's, and bounded issue-specific diagnostics such as `gt_chest_pickup_probe` keep the prefix for log clarity. `lobby_*` names retain their subsystem prefix.)*

@@ -1600,6 +1600,23 @@ local data = {
         },
     },
 }
+-- WT_DEV_OVERLAY_BEGIN:issue948-universal-base-widgets
+-- #948: the static tree predates universal receiver coverage. Add every
+-- missing base-weapon row (default-off) before sorting and master-toggle
+-- bucketing; this also creates Warrior Priest's ranged career leaf. The later
+-- #593/#597 strip still removes explicitly superseded #368 representatives.
+local _wt_universal_availability = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/wt_universal_availability")
+local _wt_universal_unlocks = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/wt_unlock_data").weapon_unlock_map
+local _wt_universal_rows_added = _wt_universal_availability.ensure_base_widgets(
+    data, _wt_universal_unlocks)
+if not mod._wt948_universal_rows_logged then
+    mod._wt948_universal_rows_logged = true
+    printf("[wt:948] universal dev availability added %d base weapon rows",
+        _wt_universal_rows_added)
+end
+-- WT_DEV_OVERLAY_END:issue948-universal-base-widgets
 -- WT_DEV_OVERLAY_BEGIN:dev-tool-widgets
 -- Dev tooling widget trees (appended after the static widget tree).
 --
@@ -1640,6 +1657,9 @@ if _hp_tree then data.options.widgets[#data.options.widgets + 1] = _hp_tree end
 -- `cwv_variant == true` entries. Persisted values override these defaults.
 if _cwv_present then
     local catalog = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_cwv_variant_catalog")
+    -- WT_DEV_OVERLAY_BEGIN:issue948-universal-cwv-widgets
+    _wt_universal_availability.expand_cwv_catalog(catalog)
+    -- WT_DEV_OVERLAY_END:issue948-universal-cwv-widgets
     local policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_cwv_availability_policy")
     local rows = policy.build_widgets(catalog)
     if #rows > 0 then

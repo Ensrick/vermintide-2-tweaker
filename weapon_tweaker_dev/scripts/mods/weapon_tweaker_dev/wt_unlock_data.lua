@@ -193,5 +193,16 @@ for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
         end
     end
 end
+-- WT_DEV_OVERLAY_BEGIN:issue948-universal-unlock-map
+-- #948: the friends-only dev stream is the exhaustive compatibility lab.
+-- Expand after the historical curation/removal pass so every base weapon is a
+-- selectable candidate on every career, including Warrior Priest ranged
+-- weapons and intentionally redundant families. The verified #368 conditional
+-- replacement map remains authoritative and may hide its explicitly chosen
+-- base representatives while CWV is active.
+local _universal = get_mod("wt_dev"):dofile(
+    "scripts/mods/weapon_tweaker_dev/wt_universal_availability")
+_universal.expand_unlock_map(DATA.weapon_unlock_map)
+-- WT_DEV_OVERLAY_END:issue948-universal-unlock-map
 
 return DATA

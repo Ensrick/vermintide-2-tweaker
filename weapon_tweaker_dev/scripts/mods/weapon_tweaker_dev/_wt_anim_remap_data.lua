@@ -1955,6 +1955,9 @@ end
 -- share the donor table by identity: fixes to a donor receiver contract cannot
 -- drift from its clone, and donor native `*_ = false` branches remain intact.
 local cwv_style_donors = {
+    -- Imperial Longsword changes balance/presentation, not its receiver-side
+    -- Greatsword event vocabulary. Share the exact donor table by identity.
+    imperial_longsword_template = "two_handed_swords_template_1",
     cwv_infantry_spear_template = "two_handed_spears_elf_template_1",
     cwv_combat_style_kerillian_greatsword = "two_handed_swords_wood_elf_template",
     cwv_combat_style_bretonnian_greatsword = "two_handed_swords_template_1",

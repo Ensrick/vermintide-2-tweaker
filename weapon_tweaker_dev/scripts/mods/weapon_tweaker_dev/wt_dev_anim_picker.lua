@@ -272,7 +272,7 @@ local _WEAPON_SET = {
     -- vocabulary.  This is intentionally tool-only; the provider keeps ownership
     -- of the variant and copies tuned values into its durable animation mapping.
     cwv_es_imperial_crowbill  = "C",
-    -- v0.12.201-dev: wh_hammer_book (SET F) BAKED (es_) -> _CONFIRMED.kruber; removed here.
+    -- v0.12.201-dev: wh_hammer_book (SET F) BAKED (es_) -> historical wired set; removed here.
 }
 
 -- Friendly SET label shown in each weapon's group title, e.g. "[Greathammer]".
@@ -481,7 +481,7 @@ local _WEAPON_TEMPLATE = {
     wh_flail_shield            = "one_handed_flail_shield_template",
     we_1h_axe                  = "we_one_hand_axe_template",
     cwv_es_imperial_crowbill  = "cwv_crowbill_pick_template",
-    -- v0.12.201-dev: wh_hammer_book BAKED (es_) -> _CONFIRMED.kruber; removed (#181).
+    -- v0.12.201-dev: wh_hammer_book BAKED (es_) -> historical wired set; removed (#181).
     -- v0.12.188-dev: dr_2h_cog_hammer, wh_2h_hammer, wh_fencing_sword and the 7
     -- Sienna staves + Deus were BAKED (es_) and removed here (see _WEAPON_SET note).
 }
@@ -704,7 +704,7 @@ local _WEAPON_ATTACKS = {
         "attack_swing_up",  -- vanilla carries anim_event_3p="attack_swing_up_left" here
         "parry_pose",
     },
-    -- v0.12.201-dev: wh_hammer_book (SET F) BAKED (es_) -> _CONFIRMED.kruber; removed here.
+    -- v0.12.201-dev: wh_hammer_book (SET F) BAKED (es_) -> historical wired set; removed here.
     -- v0.12.188-dev: the 7 Sienna staves + Deus (bw_skullstaff_beam/_fireball/
     -- _flamethrower/_geiser/_spear, bw_necromancy_staff, bw_deus_01) were BAKED
     -- (es_) and removed here (see _WEAPON_SET note).
@@ -1038,7 +1038,7 @@ local _SALTZ_SET_VOCAB = {
 -- _SALTZ_* picker tables are emptied to keep the mirror in lockstep. Re-populate
 -- with the next Saltzpyre batch. (_SALTZ_SET_LABEL/_SALTZ_SET_VOCAB left defined.)
 -- v0.12.194-dev (#160): re-populated with the Kruber Executioner Sword (SET G).
--- v0.12.201-dev: Executioner Sword BAKED (wh_) -> _CONFIRMED.saltzpyre; REPLACED here
+-- v0.12.201-dev: Executioner Sword BAKED (wh_) -> historical wired set; REPLACED here
 -- by the Saltzpyre batch-2 — 11 cross-character 3P ports queued for the tester's
 -- dev-picker tuning. SET A/B targets are Warrior-Priest weapons (bless DLC); their
 -- anims live on the shared Saltzpyre body but may be absent without the DLC (picker
@@ -1192,7 +1192,7 @@ local _KERI_SET_VOCAB = {
 -- SET per Kerillian port = the `we_*` wield redirect target (wt_wield_patches;
 -- the `to_*` event on each port's source template). Kept in lockstep with
 -- _NEEDS_ANIMS.kerillian (wt_port_status.lua).
--- v0.12.201-dev: Kerillian batch-1 fully BAKED (we_) -> _CONFIRMED.kerillian; emptied in lockstep.
+-- v0.12.201-dev: Kerillian batch-1 fully BAKED (we_) -> historical wired set; emptied in lockstep.
 local _KERI_WEAPON_SET = {}
 
 -- Source template per Kerillian port (where anim_event_3p is written). Confirmed

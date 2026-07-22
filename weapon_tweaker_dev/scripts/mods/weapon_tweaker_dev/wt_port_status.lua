@@ -1,43 +1,45 @@
 --[[
 ============================================================================
- wt_port_status.lua — shared (career, weapon_key) -> internal 3P port state
+ wt_port_status.lua — shared (career, weapon_key) -> internal 3P routing state
 ============================================================================
 
-Single source of truth for internal 3P picker/audit state. Player-facing Weapon
-Availability labels deliberately do not expose this engineering lifecycle.
+Single source of truth for internal 3P picker/routing metadata. Player-facing
+Weapon Availability labels deliberately do not expose this engineering state.
+Issue #948 resets every compatibility cell to U. A native prefix, donor alias,
+baked event table, or historical confirmation is routing evidence only; none of
+those facts can represent current live verification.
 
 3P-ONLY. State describes the THIRD-person animation port only — 1P is
 universal across all six characters and never needs cross-character work
 (feedback_1p_animations_universal).
 
-INTERNAL STATE VOCABULARY (aligned to
+INTERNAL ROUTING VOCABULARY (aligned to
 KRUBER_3P_ANIM_DECISIONS.md:14-20 + the picker):
-  working          — 3P confirmed (native, or a verified cross-character port).
-  needs_animations — a wield SET redirect is chosen + works at set level, but
-                     the per-attack animation mapping is still pending.
+  native           — receiver-native prefix/vocabulary lead.
+  wired            — a historical/baked receiver route exists.
+  needs_animations — a wield SET redirect candidate is recorded, but current
+                     per-attack behavior is not verified.
   needs_offsets    — set chosen, 3P grip offset still needed.
-  untested         — no decision captured yet.
+  unknown          — no routing decision captured yet.
 
-PROVENANCE of the confirmed/untested/offsets sets below: generated 2026-06-23
-from a parse of ANIMATION_COVERAGE.md (✅ WORKING / 🔁 native -> working;
-❓ -> untested; rows marked as grip work -> needs_offsets) merged
-with KRUBER_3P_ANIM_DECISIONS.md CONFIRMED rows and the picker's
-_COVERAGE_CONFIRMED_KRUBER / _PORT_STATUS_LABEL. The code does NOT parse the
-.md at runtime (mod sandbox can't reliably io.open repo files) — these are the
-generated mirror. When a COVERAGE row flips, regenerate or hand-edit here.
+PROVENANCE of the wired/unknown/offset sets below: generated 2026-06-23
+from a parse of historical ANIMATION_COVERAGE.md classifications merged
+with historical KRUBER_3P_ANIM_DECISIONS.md routing rows and the picker's old
+coverage mirrors. The code does NOT parse the .md at runtime (mod sandbox can't
+reliably io.open repo files). These tables may choose or display a route, but
+they never promote a #948 compatibility cell out of U.
 
 RECEIVER BUCKETS mirror the .md sections. Saltzpyre = the three non-WP careers
-(wh_captain/wh_bountyhunter/wh_zealot); wh_priest is its own bucket (all native
-or priest-specific redirects -> working per ANIMATION_COVERAGE.md:181-185);
-Sienna has zero cross-character ports (all native -> working).
+(wh_captain/wh_bountyhunter/wh_zealot); wh_priest is its own bucket. Sienna's
+base rows are prefix-native routing leads, not current verification.
 ============================================================================
 --]]
 
 local M = {}
 
--- char_key -> { weapon_key = true } : confirmed ports on that receiver
--- (cross-character verified; natives are handled separately by the prefix rule).
-local _CONFIRMED = {
+-- char_key -> { weapon_key = true } : historical/baked routing on that receiver.
+-- This table is not current verification evidence.
+local _WIRED = {
     kruber = {
         -- user-confirmed in-game 2026-06-28: Falchion (#176) + Crowbill (#177) on Kruber.
         wh_1h_falchion = true,      -- Saltzpyre "Falchion" rendered on Kruber
@@ -51,8 +53,8 @@ local _CONFIRMED = {
         -- redirect bw_1h_flail_flaming above; Crowbill held 🧊 — NOT confirmed).
         -- v0.12.149-dev: 4 ports BAKED career-scoped into _3p_template_remaps
         -- (weapon_tweaker.lua) after picker tuning was confirmed on Kruber —
-        -- moved out of _NEEDS_ANIMS into CONFIRMED so the Availability tag reads
-        -- [Working]. Per-attack picks live in the bake, not the picker.
+        -- moved out of _NEEDS_ANIMS into the historical wired set. Per-attack
+        -- picks live in the bake, not the picker.
         dr_2h_pick = true,          -- -> Empire Greathammer
         bw_dagger = true,           -- -> Empire 1H Sword
         bw_flame_sword = true,      -- -> Empire 1H Sword
@@ -82,7 +84,7 @@ local _CONFIRMED = {
         -- _3p_template_remaps (weapon_tweaker.lua) from the user's persisted
         -- dev-picker picks — the 7 Sienna staves + Deus, plus the re-tuned
         -- Coghammer (#182) and Saltzpyre Greathammer (#180) and the Rapier (#178).
-        -- Moved out of _NEEDS_ANIMS.kruber → tag now [Working].
+        -- Moved out of _NEEDS_ANIMS.kruber into the historical wired set.
         bw_skullstaff_beam = true,         -- -> Empire Greathammer
         bw_skullstaff_fireball = true,     -- -> Empire Greathammer
         bw_skullstaff_flamethrower = true, -- -> Empire Greathammer
@@ -114,7 +116,7 @@ local _CONFIRMED = {
         -- v0.12.201-dev: Kerillian batch-1 (33 ports) BAKED career-scoped (we_) into
         -- _3p_template_remaps (weapon_tweaker.lua) from the tester's persisted dev-picker
         -- picks (user_settings(4).config 2026-07-03) — every batch-1 port was fully tuned.
-        -- Moved out of _NEEDS_ANIMS.kerillian (now emptied) -> tag flips to [Working].
+        -- Moved out of _NEEDS_ANIMS.kerillian into the historical wired set.
         es_2h_hammer = true, wh_2h_hammer = true, dr_2h_cog_hammer = true,
         dr_2h_pick = true, bw_ghost_scythe = true, bw_skullstaff_beam = true,
         bw_skullstaff_fireball = true, bw_skullstaff_flamethrower = true,
@@ -139,7 +141,7 @@ local _CONFIRMED = {
         -- v0.12.188-dev: all 17 Saltzpyre batch-1/2/3 ports BAKED career-scoped
         -- (wh_) into _3p_template_remaps (weapon_tweaker.lua) from the user's
         -- persisted dev-picker picks — moved out of _NEEDS_ANIMS.saltzpyre (now
-        -- empty) → tag flips to [Working]. es_halberd + we_spear (the batch-3 #161
+        -- empty) into the historical wired set. es_halberd + we_spear (the batch-3 #161
         -- polearm regression) are among them, re-tuned and baked as Billhook.
         we_2h_axe = true,                  -- -> WP Greathammer
         es_dual_wield_hammer_sword = true, -- -> Dual Axe & Falchion
@@ -185,14 +187,14 @@ local _CONFIRMED = {
 -- char_key -> { weapon_key = true } : decided set, 3P GRIP OFFSET still needed.
 -- bw_ghost_scythe BAKED v0.12.150-dev: its +0.569 Z 3P grip offset (es_-scoped)
 -- now lives in _weapon_grip_offsets.bw_ghost_scythe.es_ (weapon_tweaker.lua), so
--- the offset is applied, not pending — removed from _NEEDS_OFFSETS so M.state
--- returns working. (The anim port is also baked into _3p_template_remaps
--- .staff_scythe.es_, and the key is moved to _CONFIRMED below.)
+-- the offset is applied, not pending — removed from _NEEDS_OFFSETS so routing_state
+-- retains a wired route. (The anim port is also baked into _3p_template_remaps
+-- .staff_scythe.es_, and the key is present in _WIRED below.)
 -- we_2h_axe (Elven 2H Axe/Glaive) GRIP OFFSET SET v0.12.152-dev: DURABLE +0.285 Z
 -- es_-scoped grip offset (_weapon_grip_offsets.we_2h_axe.es_ = {0,0,0.285} +
 -- _DURABLE_GRIP_OFFSETS.we_2h_axe = true). v0.12.156-dev: the anim IS now BAKED
 -- too (career-scoped _3p_template_remaps.two_handed_axes_template_2.es_ ->
--- Greathammer), so the Glaive moved to _CONFIRMED above and
+-- Greathammer), so the Glaive moved to _WIRED above and
 -- was removed from _NEEDS_ANIMS / the picker below.
 local _NEEDS_OFFSETS = {
     kruber = {},
@@ -215,7 +217,7 @@ local _UNTESTED = {
 -- display name used by internal diagnostics. Sourced from the `SET=` annotations
 -- in ANIMATION_COVERAGE.md "## Receiver: KRUBER" (lines 61-85) + the
 -- KRUBER_3P_ANIM_DECISIONS.md "Set chosen" column. The code does NOT parse the
--- .md at runtime — this is the generated mirror (same doctrine as _CONFIRMED).
+-- .md at runtime — this is the generated routing mirror.
 --
 -- Membership here is INTENTIONALLY a closed list, NOT a default: untested ports
 -- (Beam Staff bw_skullstaff_beam, Javelin, Deepwood Staff) are absent, so they
@@ -225,26 +227,26 @@ local _NEEDS_ANIMS = {
     -- v0.12.188-dev: the v0.12.157 Kruber staves/Coghammer/Greathammer/Rapier batch
     -- (10 ports) was BAKED career-scoped (es_) into _3p_template_remaps
     -- (weapon_tweaker.lua) from the user's persisted dev-picker picks and moved to
-    -- _CONFIRMED above. Only wh_hammer_book remains pending (no picks
+    -- _WIRED above. Only wh_hammer_book remains pending (no picks
     -- captured yet — its 3P is a mesh-swap, not an anim remap; #181).
     kruber = {
-        -- v0.12.201-dev: wh_hammer_book BAKED (es_) -> _CONFIRMED.kruber. Emptied.
+        -- v0.12.201-dev: wh_hammer_book BAKED (es_) -> _WIRED.kruber. Emptied.
         -- Next Kruber batch (if any) is queued here.
     },
     -- v0.12.188-dev: all 17 Saltzpyre batch-1/2/3 ports BAKED career-scoped (wh_)
     -- into _3p_template_remaps from the user's persisted dev-picker picks and moved
-    -- to _CONFIRMED above — this gate was emptied.
+    -- to _WIRED above — this gate was emptied.
     -- v0.12.194-dev (#160): re-surfaced the Kruber Executioner Sword for Saltzpyre
     -- per-attack tuning. VALUE = the picker SET label; kept in lockstep with
     -- _SALTZ_WEAPON_SET (wt_dev_anim_picker.lua).
     -- v0.12.201-dev: Saltzpyre batch-2 — 11 cross-character 3P ports queued for the
     -- tester's dev-picker tuning (es_2h_sword_executioner from batch-1 was BAKED (wh_)
-    -- -> _CONFIRMED.saltzpyre). VALUE = the picker SET display label (_SALTZ_SET_LABEL);
+    -- -> _WIRED.saltzpyre). VALUE = the picker SET display label (_SALTZ_SET_LABEL);
     -- kept in lockstep with _SALTZ_WEAPON_SET (wt_dev_anim_picker.lua). Every wield-render
     -- target has a wh_* redirect in _WIELD_ANIM_CAREER_3P_PATCHES_BULK (wt_wield_patches).
     -- v0.12.213-dev (#519): Saltzpyre batch-2 — 10 of the 11 ports were fully tuned
     -- by the tester and BAKED career-scoped (wh_) into _3p_template_remaps
-    -- (_wt_anim_remap.lua) -> moved to _CONFIRMED above. The former
+    -- (_wt_anim_remap.lua) -> moved to _WIRED above. The former
     -- dr_dual_wield_hammers row is no longer offered on Saltzpyre and was removed
     -- from this table under #112. Only the two #576 reopened ports remain live.
     saltzpyre = {
@@ -258,11 +260,11 @@ local _NEEDS_ANIMS = {
     -- v0.12.193-dev: Kerillian batch 1 — the "next group" of cross-character 3P ports
     -- surfaced for dev-picker tuning (mirrors the Saltzpyre batch-1 setup). Every
     -- non-`we_` port that appears in a `we_*` unlock list, is not already
-    -- _CONFIRMED.kerillian, and has a `we_*` wield-redirect target in wt_wield_patches.
+    -- _WIRED.kerillian, and has a `we_*` wield-redirect target in wt_wield_patches.
     -- VALUE = the Kerillian-native wield-redirect the port's 3P borrows (the picker SET
     -- label). Kept in lockstep with _KERI_WEAPON_SET (wt_dev_anim_picker.lua).
     kerillian = {
-        -- v0.12.201-dev: Kerillian batch-1 (all 33 ports) BAKED (we_) -> _CONFIRMED.kerillian
+        -- v0.12.201-dev: Kerillian batch-1 (all 33 ports) BAKED (we_) -> _WIRED.kerillian
         -- from the tester's fully-tuned picks. Emptied. Next Kerillian batch (if any) queued here.
     },
 }
@@ -288,7 +290,7 @@ local _DIAGNOSTIC_TARGET = {
     kerillian = {
         -- #111: coverage-ledger decisions for the remaining unbaked ranged
         -- surface. These labels describe the chosen receiver vocabulary only;
-        -- they do not promote the port to working or picker-ready.
+        -- they do not promote the port out of U or make it picker-ready.
         dr_crossbow = "Elf Repeater Crossbow",
         dr_deus_01 = "Elf Repeater Crossbow",
         dr_drake_pistol = "Elf Repeater Crossbow",
@@ -307,7 +309,7 @@ local _DIAGNOSTIC_TARGET = {
     saltzpyre = {
         -- #112: source/coverage-backed receiver targets for live ports which
         -- remain unbaked or visually unverified. These are diagnostic labels,
-        -- not promotions to working and not implicit picker membership.
+        -- not promotions out of U and not implicit picker membership.
         dr_1h_throwing_axes = "Saltzpyre 1H Axe",
         dr_deus_01 = "Saltzpyre Crossbow",
         dr_drake_pistol = "Brace of Pistols",
@@ -324,9 +326,9 @@ local _DIAGNOSTIC_TARGET = {
     },
 }
 
--- Issue #108: display-only mirror of confirmed, career-scoped 3P redirects.
--- `_CONFIRMED` deliberately remains a boolean status set; keeping presentation
--- names separate prevents a wording edit from changing availability status.
+-- Issue #108: display-only mirror of historical, career-scoped 3P redirects.
+-- `_WIRED` deliberately remains a boolean routing set; keeping presentation
+-- names separate prevents a wording edit from changing routing behavior.
 -- Pending ports still source their target from `_NEEDS_ANIMS` below.
 local _REDIRECT_DISPLAY = {
     kruber = {
@@ -478,22 +480,29 @@ local function _is_native(career, weapon_key)
     return false
 end
 
--- Public: internal state for a (career, weapon_key) pair. NEVER returns nil.
-function M.state(career, weapon_key)
-    if _is_native(career, weapon_key) then return "working" end
+-- Public: internal routing state for a (career, weapon_key) pair. This is not a
+-- verification lifecycle and must never be rendered as Working/Verified.
+function M.routing_state(career, weapon_key)
+    if _is_native(career, weapon_key) then return "native" end
     local recv = _char_key_for_career(career)
-    if not recv then return "untested" end
-    if _CONFIRMED[recv] and _CONFIRMED[recv][weapon_key] then return "working" end
+    if not recv then return "unknown" end
+    if _WIRED[recv] and _WIRED[recv][weapon_key] then return "wired" end
     if _NEEDS_OFFSETS[recv] and _NEEDS_OFFSETS[recv][weapon_key] then return "needs_offsets" end
-    if _UNTESTED[recv] and _UNTESTED[recv][weapon_key] then return "untested" end
+    if _UNTESTED[recv] and _UNTESTED[recv][weapon_key] then return "unknown" end
     -- Default for a surviving cross-character port: a set is decided (the unlock
     -- map only carries ports with a chosen 3P target) but per-attack picks pend.
     return "needs_animations"
 end
 
+-- Deprecated compatibility API. Under #948 every cell begins U regardless of
+-- static routing. Callers needing picker/donor metadata use routing_state().
+function M.state(_career, _weapon_key)
+    return "untested"
+end
+
 -- Public: redirect-target display name for a
 -- (career, weapon_key) pair, e.g. "Greathammer", or nil when none is on file.
--- Pending ports source `_NEEDS_ANIMS`; confirmed/baked ports source the #108
+-- Pending ports source `_NEEDS_ANIMS`; historical/baked ports source the #108
 -- display mirror so completing a port no longer discards its redirect label.
 function M.redirect_target(career, weapon_key)
     local recv = _char_key_for_career(career)
@@ -526,20 +535,20 @@ function M.needs_anims(career, weapon_key)
     return (row and row[weapon_key]) ~= nil
 end
 
--- Public (#109): bounded, pure inventory audit used by the automatic log probe,
--- `/wt_audit_kruber_3p`, and offline regression coverage.  It never mutates the
--- supplied unlock list.  Duplicate keys are ignored so counts describe distinct
--- cross-character ports rather than career-list implementation details.
+-- Historical receiver inventory audit retained for source-routing regressions.
+-- Every returned row is explicitly untested under #948; routing_state describes
+-- only the existing donor/picker lead. Duplicate keys are ignored.
 function M.audit_cross_character(career, weapon_keys)
     local rows, seen = {}, {}
     local counts = {
         total = 0,
-        working = 0,
-        needs_animations = 0,
-        needs_offsets = 0,
         untested = 0,
+        routing_native = 0,
+        routing_wired = 0,
+        routing_needs_animations = 0,
+        routing_needs_offsets = 0,
+        routing_unknown = 0,
         picker_visible = 0,
-        hidden_needs_animations = 0,
     }
 
     for _, weapon_key in ipairs(type(weapon_keys) == "table" and weapon_keys or {}) do
@@ -547,22 +556,23 @@ function M.audit_cross_character(career, weapon_keys)
                 and not seen[weapon_key]
                 and not _is_native(career, weapon_key) then
             seen[weapon_key] = true
-            local state = M.state(career, weapon_key)
+            local routing_state = M.routing_state(career, weapon_key)
             local picker_visible = M.needs_anims(career, weapon_key)
             local row = {
                 weapon_key = weapon_key,
-                state = state,
+                state = "untested",
+                verification_state = "untested",
+                routing_state = routing_state,
                 redirect = M.redirect_target(career, weapon_key),
                 model_substitute = M.model_substitute(career, weapon_key),
                 picker_visible = picker_visible,
             }
             rows[#rows + 1] = row
             counts.total = counts.total + 1
-            counts[state] = (counts[state] or 0) + 1
+            counts.untested = counts.untested + 1
+            local routing_key = "routing_" .. routing_state
+            counts[routing_key] = (counts[routing_key] or 0) + 1
             if picker_visible then counts.picker_visible = counts.picker_visible + 1 end
-            if state == "needs_animations" and not picker_visible then
-                counts.hidden_needs_animations = counts.hidden_needs_animations + 1
-            end
         end
     end
 

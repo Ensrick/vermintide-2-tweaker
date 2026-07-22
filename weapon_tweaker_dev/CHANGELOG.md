@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.287-dev (2026-07-21) - #948 universal compatibility laboratory
+
+- Exposes the exact 83-base-weapon roster as independent availability choices
+  on all 20 careers, including ranged weapons on Warrior Priest. Existing
+  authored/native defaults remain intact; every newly exposed cell defaults off.
+- Exposes all 32 bounded CWV variants to every career while preserving CWV's
+  authored/default receivers and making only the additional receivers default off.
+- Preserves #368's verified conditional representative ownership: while CWV is
+  active, its Axe and Shield and Greataxe variants still replace the fourteen
+  explicitly superseded base rows instead of displaying duplicates.
+- Generates missing rows and localized labels from one bounded policy, adds a
+  runtime 83 x 20 census, and evaluates the full active-CWV production menu
+  offline for 1,646 visible base cells plus 640 CWV career cells.
+- Mirrors public beta `0.12.286-beta`: Imperial Longsword style shares Kruber
+  Greatsword's exact third-person donor tables and the Crowbill parent labels
+  are complete.
+
 ## 0.12.286-dev (2026-07-21) - receiver-stable remaps and exact wield actions (#112, #661)
 
 - Mirrors public beta `0.12.285-beta`: receiver career is part of each unit's

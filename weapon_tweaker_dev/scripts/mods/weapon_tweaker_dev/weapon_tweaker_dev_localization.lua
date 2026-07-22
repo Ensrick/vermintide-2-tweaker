@@ -1279,6 +1279,14 @@ local loc = {
     -- toggle was deleted and the passive overcharge-vent / Moonfire-Bow-regen
     -- behavior is now implicit/always-on (mirrors native-career function).
 }
+-- WT_DEV_OVERLAY_BEGIN:issue948-universal-base-localization
+-- #948: fill the complete 83 x 20 dev availability surface from existing
+-- canonical per-weapon labels. This also authors Warrior Priest's previously
+-- absent ranged-career heading.
+local _wt_universal_availability = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/wt_universal_availability")
+_wt_universal_availability.ensure_base_localization(loc)
+-- WT_DEV_OVERLAY_END:issue948-universal-base-localization
 
 -- Publish raw labels for availability sorting and runtime owner verification;
 -- `mod:localize` is unavailable during this pre-registration phase (#197).
@@ -1329,6 +1337,8 @@ local _cwv_variant_labels = {
     cwv_dr_dawi_mace = "Bardin: Dawi Mace",
     cwv_dr_dawi_mace_shield = "Bardin: Dawi Mace and Shield",
     cwv_dr_dawi_dual_maces = "Bardin: Dawi Dual Maces",
+    cwv_es_imperial_crowbill = "Kruber: Imperial Crowbill",
+    cwv_dr_dawi_crowbill = "Bardin: Dawi Crowbill",
     cwv_es_dual_warpriest_hammers = "Kruber: Dual Warrior-Priest Hammers",
     cwv_es_warpriest_hammer_shield = "Kruber: Warrior-Priest Hammer and Shield",
 }
@@ -1355,6 +1365,9 @@ local _cwv_career_labels = {
     bw_necromancer = "Necromancer",
 }
 local _cwv_catalog = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_cwv_variant_catalog")
+-- WT_DEV_OVERLAY_BEGIN:issue948-universal-cwv-localization
+_wt_universal_availability.expand_cwv_catalog(_cwv_catalog)
+-- WT_DEV_OVERLAY_END:issue948-universal-cwv-localization
 local _cwv_availability_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_cwv_availability_policy")
 for key, label in pairs(_cwv_variant_labels) do
     loc["unlock_cwv_variant_" .. key] = { en = label }

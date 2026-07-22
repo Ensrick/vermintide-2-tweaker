@@ -1314,6 +1314,8 @@ local _cwv_variant_labels = {
     cwv_dr_dawi_mace = "Bardin: Dawi Mace",
     cwv_dr_dawi_mace_shield = "Bardin: Dawi Mace and Shield",
     cwv_dr_dawi_dual_maces = "Bardin: Dawi Dual Maces",
+    cwv_es_imperial_crowbill = "Kruber: Imperial Crowbill",
+    cwv_dr_dawi_crowbill = "Bardin: Dawi Crowbill",
     cwv_es_dual_warpriest_hammers = "Kruber: Dual Warrior-Priest Hammers",
     cwv_es_warpriest_hammer_shield = "Kruber: Warrior-Priest Hammer and Shield",
 }

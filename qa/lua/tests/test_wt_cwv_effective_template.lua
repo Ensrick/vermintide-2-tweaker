@@ -82,6 +82,7 @@ return function(H, repo_root)
             "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/",
         }
         local aliases = {
+            { "imperial_longsword_template", "two_handed_swords_template_1" },
             { "cwv_infantry_spear_template", "two_handed_spears_elf_template_1" },
             { "cwv_combat_style_kerillian_greatsword", "two_handed_swords_wood_elf_template" },
             { "cwv_combat_style_bretonnian_greatsword", "two_handed_swords_template_1" },
@@ -117,6 +118,13 @@ return function(H, repo_root)
             local clone_wield = wield.cwv_infantry_spear_template
             for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
                 H.equal(clone_wield[career], "to_2h_billhook")
+            end
+
+            local longsword_wield = bulk_wield.imperial_longsword_template
+            for _, career in ipairs({
+                "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
+            }) do
+                H.equal(longsword_wield[career], "to_2h_sword_we")
             end
         end
     end)
