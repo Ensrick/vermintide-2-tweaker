@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-16.
+Last updated: 2026-07-21.
 
 ---
 ## Athanor exact offhand preview ownership (#481)
@@ -487,14 +487,14 @@ Last updated: 2026-07-16.
 | Field | Value |
 |-------|-------|
 | Symptom | Shutdown: ~20 `Package still referenced, NOT unloaded` lines then crashify `'#ID[...]' not unloaded, this can potentially cause an deadlock` on BOTH peers; in-mission `Locking a resource that is about to be unloaded!` at map transitions. 92 loads of one `_3p` package in a single host session. |
-| Root cause | `_safe_load_package` called `Managers.package:load(path, "global")` on every replace_textures/add_particles event. `PackageManager.load` increments a per-(package, reference_name) count on EVERY call (package_manager.lua:26-27); nothing ever called unload. Same shape (slower): LootItemUnitPreviewer parent-package refs taken per browser open, never released. |
-| Mod(s) | cosmetics_tweaker (issue 282 cosmetics-owned slice; wt/cwv audit still open) |
-| Fix version(s) | cosmetics_tweaker v0.9.76-dev (dedupe registry); v0.9.148-dev (post-StateIngame teardown release + completion ledger) |
+| Root cause | Original: `_safe_load_package` called `Managers.package:load(path, "global")` on every replace_textures/add_particles event. Current regression: v0.9.148 moved release to a post-`StateIngame.on_exit` hook, but current #927/#937/#940 logs show that call reporting complete with an empty Lua delayed queue immediately before `PatchedResourcePackage::unload` stalls and the same `#ID[5ab1500d]` survives application shutdown. Renderer-backed material resources outlive that Lua teardown edge. |
+| Mod(s) | cosmetics_tweaker (issue 282 canonical owner; wt/cwv session-resident references are bounded controls, not this producer) |
+| Fix version(s) | cosmetics_tweaker v0.9.76-dev (dedupe registry); v0.9.148-dev (insufficient post-StateIngame release); v0.9.163-dev (one process-session reference, PackageManager-owned teardown) |
 | Category | UNIT + MANUAL |
 | Repro | 1. Equip a hijacked-material weapon (e.g. CWV custom musket). 2. Wield it repeatedly (10+ swaps). 3. Exit to keep, quit the game. 4. Without fix: repeated `[PackageManager] Load` refs and the shutdown crashify block. |
-| Expected post-fix | ONE `[cos:282] first-load` line per package per level, `[cos:282] dedupe-skip` on later wields, then `[cos:282] release-complete (StateIngame.on_exit post ...)` and `postcondition-ok`. After 3+ mission/keep cycles, quitting immediately must leave no `cosmetics_tweaker_mh` entry in `Delayed Unload` or `We have delayed packages during destroy`. |
-| Detection | (a) `/cos_regression_test` — `mh_package_single_reference` must pass and reports any retained delayed-ledger entry. (b) Console must contain `postcondition-ok` before manager destruction and no `[cos:282] POSTCONDITION FAILED`. (c) Offline lifecycle tests cover repeated transitions, immediate shutdown with no intervening update, and delayed completion reconciliation. |
-| Tracking | GitHub issue #282 (stays open for wt/cwv). |
+| Expected post-fix | ONE `[cos:282] first-load` line per package per process session and `[cos:282] dedupe-skip` on later wields. Every StateIngame exit reports `session-retained ... over=0 missing=0`; there is no Cosmetics unload for this reference before `PackageManager.destroy`. After 3+ mission/keep cycles, immediate shutdown has no `#ID[5ab1500d]` deadlock or `PatchedResourcePackage::unload` stall. |
+| Detection | (a) `/cos_regression_test` — `mh_package_single_reference` requires exactly one live reference and rejects any early-release API. (b) Console contains the bounded `session-retained` line. (c) Offline lifecycle tests cover repeated transitions, ledger reinitialization, no early release, and PackageManager-owned final drain. Cosmetics hot reload remains unsupported. |
+| Tracking | GitHub issue #282. |
 
 
 ---

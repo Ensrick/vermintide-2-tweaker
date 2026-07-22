@@ -64,8 +64,11 @@ references remain it only debug-prints `"Package still referenced, NOT unloaded"
 
 `destroy()` (shutdown) loops every package and calls `unload` once per remaining refcount
 (`:254-273`) - this is why a leaked refcount of N produces N-1 shutdown log lines of
-"still referenced" plus the engine's `'#ID[...]' not unloaded, this can potentially cause an
-deadlock!` when a delayed package survives (`:275-279`). That exact signature is our issue #282.
+"still referenced". A package still present after the drain produces the engine's
+`'#ID[...]' not unloaded, this can potentially cause an deadlock!` (`:275-279`). A Lua delayed
+package is one proven cause, but not the only one: current issue-282 logs #927/#937/#940 show an
+empty mod-owned delayed queue before a native `PatchedResourcePackage::unload` stall. Do not infer
+the producer from destroy noise alone; correlate the named package and its last ownership edge.
 
 ### 2.3 Queries
 
@@ -143,7 +146,7 @@ What counts as loadable:
 | # | Trap | Detail / citation |
 |---|---|---|
 | 1 | pcall cannot catch package fatals | `load()` returns after enqueue; the fatal fires in `PackageManager.update -> _pop_queue -> force_load` from `boot.lua`'s frame. Crash log shows `package_manager.lua:194/137`, no mod file. BUG_CLASSES 28 (`docs/BUG_CLASSES.md:1225`), same uncatchable family as class 22 (`:1015`). |
-| 2 | Refcounts are not idempotent | Every `load()` is +1 (`package_manager.lua:26-27`). Any per-spawn / per-frame / per-toggle call site leaks. Issue #282 is this class (see 5.1). |
+| 2 | Refcounts are not idempotent | Every `load()` is +1 (`package_manager.lua:26-27`). Any per-spawn / per-frame / per-toggle call site leaks. The original issue-282 producer was this class; its current regression is an early native-lifetime release (see 5.1). |
 | 3 | `"global"` is the engine's reference name | Boot and end-of-round content live under it (`boot.lua:1759-1781`, `state_ingame_running.lua:787`). A mod leaking under `"global"` is indistinguishable from engine state in `dump_reference_counter`, and its leak spam at shutdown looks like an engine bug. |
 | 4 | Sync load blocks the frame | First-reference sync = load+flush inline (`package_manager.lua:80-86`); sync on an in-flight async = force_load blocking flush (`:29-34`). 74 sync loads at boot is a boot stall (see 5.4). |
 | 5 | Unload asserts / errors | Unknown ref asserts (`:199`); never-loaded package nil-indexes (`:197`); a still-in-use package parks in delayed removal and warns `Locking a resource that is about to be unloaded!` if raced [log signature per issue #282]. |
@@ -152,34 +155,38 @@ What counts as loadable:
 | 8 | DLC packages on non-owners | A non-owner may not even have the bundle installed; force-load = async crash. Gate on ownership, with boot-package residency (`resource_packages/dlcs/<id>`) as the timing-safe owner proxy because `is_dlc_unlocked` can be unresolved at mod-init (`weapon_tweaker.lua:3958-3997`). |
 | 9 | Package memory is NOT the Lua heap | Force-loaded packages are C++ resource-pool memory; `collectgarbage("count")` never sees them (`cosmetics_tweaker.lua:3249-3254`). Blanket mission-load force-loads still contributed to the 1 GiB Lua-heap crash via bookkeeping + retention (memory `reference_vt2_lua_heap_1gib_crash`). Bounded boot-time sets are the pattern (`character_weapon_variants.lua:4494-4498`). |
 | 10 | Mutator `packages` field is Deus-only | Registering it on Adventure mutators crashes level load (memory `reference_vt2_mutator_packages_deus_only`). |
-| 11 | Session retention is legitimate - shutdown leaks are not | Keeping a bounded set resident for the session with ONE ref each is fine and sometimes required (gut rationale `_gut_mission_hero_select.lua:89-97`). Unbounded per-event refcount growth is the bug. `mod.on_unload` fires on VMF reload, not game exit [unverified], so "unload in on_unload" is not a shutdown fix - not leaking per-event is. |
+| 11 | Session retention is legitimate when it matches the consumer lifetime | Keeping a bounded set resident for the session with ONE ref each is sometimes required (gut rationale `_gut_mission_hero_select.lua:89-97`; Cosmetics Material-Hijack #282 v0.9.163). Unbounded per-event refcount growth is the bug. `mod.on_unload` is a mod callback boundary, not proof of native renderer shutdown, so it must not release a renderer-backed graph whose consumers have no proven earlier retirement fence. If the ownership ledger is recreated while PackageManager persists, adopt the existing exact reference; let `PackageManager.destroy` drain it once. |
 
 ---
 
 ## 5. Implications for our mods - concrete improvements
 
-### 5.1 P0 - cosmetics_tweaker MH embed: the issue #282 `"global"` reference leak (VERIFIED)
+### 5.1 P0 - cosmetics_tweaker MH embed: issue #282 has two proven lifetime failures
 
-`cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua:161` -
-`_safe_load_package` calls `manager_package:load(path, "global")` with NO has_loaded gate and NO
-unload anywhere in the file (grep-verified 2026-07-11: zero `unload` calls). `replace_textures`
-calls it once per spawned unit carrying `mat_to_use` data (`:167-184`), and `replace_textures` runs
-from the `UnitSpawner.spawn_local_unit` hook (`:354-393`, call at `:384`) plus cosmetics_tweaker's
-own `GearUtils.create_equipment` and `_spawn_item_unit` hooks via the module exports (`:341-348,
-395-402, 414-418`). Net effect: `_references[pkg]["global"]` grows by 1 per spawn for the whole
-session (`package_manager.lua:26-27`), which at `destroy()` produces exactly issue #282's thousands
-of `Unload: ... global -> Package still referenced, NOT unloaded` lines plus the
-`not unloaded ... deadlock` engine error (`package_manager.lua:254-279`).
+The original implementation called `load(path, "global")` on every hijacked wield/spawn. Because
+every call increments the reference count, one package reached 90+ references. v0.9.76 corrected
+that producer with a mod-owned `cosmetics_tweaker_mh` reference and exactly-once path ledger.
 
-Engine-idiomatic fix (two independent parts):
-1. Own reference name, never `"global"` - e.g. `"cosmetics_tweaker_mh"` - so leaks are attributable
-   via `dump_reference_counter` and never collide with boot state (trap 4.3).
-2. Load-once gate, exactly like the file's sibling `_preload_one` already does with
-   `_preloaded_offhand_packages` (`cosmetics_tweaker.lua:2044, 2086`):
-   `if loaded_set[path] then return end; loaded_set[path] = true;` before the load - or the vanilla
-   form `if not pm:has_loaded(path, REF) and not pm:is_loading(path, REF) then pm:load(...) end`
-   (`enemy_package_loader.lua:372-375`). Session retention of each package ONCE is correct here
-   (the textures stay in use); the per-spawn increment is the whole bug.
+The first teardown correction released that ledger after `StateIngame.on_exit`. Four current logs
+settle why this remained unsafe. Fatal #927/#937/#940 all report Cosmetics `release-complete` and
+an empty mod-owned delayed queue before the same `#ID[5ab1500d]` fatal and native
+`PatchedResourcePackage::unload` stall; #930 is the non-fatal control with the same Lua release
+edge. The named donor package is
+`units/beings/player/empire_soldier_breton/skins/black_and_gold/chr_empire_soldier_breton_black_and_gold`.
+Balanced Cosmetics offhand and CWV references occur in both fatal and control logs, so they are
+not the current producer.
+
+Current v0.9.163 contract:
+1. Load each donor path exactly once under `cosmetics_tweaker_mh`.
+2. On ledger reinitialization, use `reference_count(path, ref)` to adopt an existing exact reference
+   instead of incrementing it. Cosmetics hot reload remains unsupported.
+3. Retain that bounded reference for the process session. Do not manually unload it from game-state
+   callbacks, `mod.update`, or `mod.on_unload`; `PackageManager.destroy` is the sole release owner.
+4. At each StateIngame exit, report the read-only `held/exact/over/missing` summary. Any `over` or
+   `missing` count is a regression, but the diagnostic itself never changes package state.
+
+This is an evidence-scoped exception for a renderer-backed material graph, not permission to omit
+symmetric unload for ordinary packages with a proven consumer-destroy boundary.
 
 ### 5.2 P1 - career_tweaker BR toggle loads under `"global"`, restore is a no-op
 
@@ -227,13 +234,15 @@ vanilla-path / mod-bundle filter at `:4518-4532` and dedupe sets at `:4441, 4534
 unload, which is acceptable session residency (one ref each, trap 4.11) - do NOT "fix" them by
 adding unloads; the husk crash floor needs them resident all session (BUG_CLASSES 27).
 
-### 5.6 P2 - issue #282 diagnostics: use the engine's own tools first
+### 5.6 P2 - issue #282 diagnostics: separate Lua ownership from native retirement
 
-Before building the proposed custom ref ledger, arm what already exists: `script_data.package_debug`
-(`package_manager.lua:3-7`) and `Managers.package:dump_reference_counter("global")` /
-`("cosmetics_tweaker")` (`:396-408`) dumped at `game_round_ended` show per-ref counts directly. A
-diagnostics hook on `PackageManager.load`/`unload` (observe-and-delegate, table-form) is the
-escalation, not the first step.
+Use `script_data.package_debug` (`package_manager.lua:3-7`) and
+`Managers.package:dump_reference_counter("cosmetics_tweaker_mh")` (`:396-408`) to prove exact Lua
+ownership. The Cosmetics ledger adds a bounded `held/exact/over/missing` summary without changing
+state. Then correlate that with the final named unload and native shutdown stack. A clean refcount
+or delayed queue does not prove renderer retirement; conversely, generic destroy-time noise does
+not identify a mod producer. Hook `PackageManager.load`/`unload` only as an observe-and-delegate
+escalation after the engine counters and named-package timeline are insufficient.
 
 ### 5.7 Correct load/unload pairing idiom (the doctrine, in one block)
 

@@ -1,5 +1,32 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.163-dev - 2026-07-21 - #282 session-owned material packages
+
+- Re-read the four current logs attached through #927, #930, #937, and #940.
+  The three fatal sessions all emit `#ID[5ab1500d] not unloaded`, while the
+  previous lifecycle reports every `cosmetics_tweaker_mh` release complete and
+  its Lua delayed queue empty. The fatal sessions then stall in
+  `PatchedResourcePackage::unload`. The non-fatal control has the same balanced
+  mod references, disproving shutdown `NOT unloaded` volume as the producer.
+- Material-Hijack donor packages now hold one mod-owned reference for the
+  process session. Cosmetics no longer unloads them from the pre-state callback,
+  the post-`StateIngame.on_exit` hook, `mod.update`, or `mod.on_unload`;
+  `PackageManager.destroy` is the sole teardown owner after global consumers.
+- A reinitialized ownership ledger adopts an existing `cosmetics_tweaker_mh`
+  reference rather than incrementing it. This is a refcount safeguard, not a
+  claim that Cosmetics hot reload is supported. The bounded `[cos:282]
+  session-retained` line reports held, exact, over-count, and missing references
+  at every StateIngame exit.
+- Lua coverage locks repeated-transition dedupe, ledger reinitialization, absence
+  of early-release APIs/hooks, and final PackageManager-owned release.
+
+**Verify:** equip **Midnight Purpure and Azure**, enter and leave at least three
+missions (including one Chaos Wastes transition if available), then quit
+directly from the final keep or mission. The newest log must show
+`[cosmetics:LOAD] v0.9.163-dev`, each `[cos:282] session-retained` line must
+report `over=0 missing=0`, and shutdown must not emit `#ID[5ab1500d] not
+unloaded`, `PatchedResourcePackage::unload`, or a package deadlock error.
+
 ## 0.9.162-dev - 2026-07-21 - #950 partial attachment links
 
 - Preserve Cosmetics' pre-C-API dead-unit guard while filtering mixed-validity

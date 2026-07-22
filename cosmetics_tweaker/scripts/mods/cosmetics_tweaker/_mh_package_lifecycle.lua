@@ -1,9 +1,11 @@
 -- Material-Hijack package-reference lifecycle (issue #282).
 --
--- PackageManager.unload removes its public reference immediately, but may keep
--- the resource handle in `_delayed_packages_to_remove` while a unit still uses
--- the package. The caller therefore needs two distinct states: `held` and
--- `release_pending`. Keep the latter until the engine queue actually clears.
+-- These packages back materials used by player, preview, and renderer objects
+-- whose native lifetime extends beyond Lua's StateIngame teardown callbacks.
+-- Own exactly one PackageManager reference per path for the process session;
+-- PackageManager.destroy is the sole release owner. Manual level-exit or
+-- mod-unload release can race PatchedResourcePackage/renderer retirement even
+-- when PackageManager.can_unload reports true.
 
 local M = {}
 
@@ -21,31 +23,33 @@ function M.new(package_manager, reference_name, emit)
         if emit then emit(event, path, reason, detail) end
     end
 
-    local function _is_delayed(path)
-        local queue = package_manager._delayed_packages_to_remove
-        return type(queue) == "table" and queue[path] ~= nil
-    end
-
-    function ledger:reconcile(reason)
-        local completed = 0
-        for path, state in pairs(self.registry) do
-            if state == "release_pending" and not _is_delayed(path) then
-                self.registry[path] = nil
-                completed = completed + 1
-                _emit("release_complete", path, reason)
-            end
+    local function _reference_count(path)
+        if type(package_manager.reference_count) ~= "function" then
+            return nil
         end
-        return completed
+        local ok, count = pcall(package_manager.reference_count,
+            package_manager, path, reference_name)
+        if not ok then return nil end
+        return tonumber(count) or 0
     end
 
     function ledger:load(path)
-        self:reconcile("before_load")
         if self.registry[path] == "held" then
             return true, "dedupe"
         end
 
-        -- Loading while the prior handle is pending is valid: PackageManager
-        -- cancels delayed removal before establishing the fresh reference.
+        -- If this Lua ledger is reinitialized while PackageManager keeps the
+        -- process-owned reference, adopt it instead of incrementing it again.
+        -- (Cosmetics hot reload itself remains unsupported.) A pre-existing
+        -- count above one is preserved for PackageManager.destroy to drain;
+        -- never try to repair it while a native consumer may still be alive.
+        local existing = _reference_count(path)
+        if existing and existing > 0 then
+            self.registry[path] = "held"
+            _emit("adopted", path, nil, existing)
+            return true, "adopted"
+        end
+
         local ok, err = pcall(package_manager.load, package_manager, path,
             self.reference_name)
         if not ok then
@@ -58,42 +62,37 @@ function M.new(package_manager, reference_name, emit)
         return true, "loaded"
     end
 
-    function ledger:release_all(reason)
-        self:reconcile("before_release")
-        local requested = 0
-        for path, state in pairs(self.registry) do
-            if state == "held" then
-                local ok, err = pcall(package_manager.unload, package_manager,
-                    path, self.reference_name)
-                if ok then
-                    requested = requested + 1
-                    if _is_delayed(path) then
-                        self.registry[path] = "release_pending"
-                        _emit("release_delayed", path, reason)
-                    else
-                        self.registry[path] = nil
-                        _emit("release_complete", path, reason)
-                    end
-                else
-                    -- Retain ownership when unload fails so a later lifecycle
-                    -- boundary can retry; never erase a failed request.
-                    _emit("release_failed", path, reason, err)
-                end
-            end
-        end
-        return requested
-    end
-
-    function ledger:pending_paths()
-        self:reconcile("pending_query")
+    function ledger:held_paths()
         local paths = {}
         for path, state in pairs(self.registry) do
-            if state == "release_pending" or _is_delayed(path) then
+            if state == "held" then
                 paths[#paths + 1] = path
             end
         end
         table.sort(paths)
         return paths
+    end
+
+    function ledger:reference_summary()
+        local summary = { held = 0, exact = 0, over = 0, missing = 0 }
+        for path, state in pairs(self.registry) do
+            if state == "held" then
+                summary.held = summary.held + 1
+                local count = _reference_count(path)
+                if count == nil then
+                    -- Fail the health summary closed if the API drifts or
+                    -- throws. Never report exact ownership without evidence.
+                    summary.missing = summary.missing + 1
+                elseif count == 1 then
+                    summary.exact = summary.exact + 1
+                elseif count > 1 then
+                    summary.over = summary.over + 1
+                else
+                    summary.missing = summary.missing + 1
+                end
+            end
+        end
+        return summary
     end
 
     return ledger

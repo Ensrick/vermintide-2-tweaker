@@ -1886,27 +1886,25 @@ _rt_register("mh_package_single_reference", function()
     if type(reg) ~= "table" then
         return "loaded_packages registry missing from MH embed exports (issue 282 regression)"
     end
-    if type(MH_EMBED.release_packages) ~= "function" then
-        return "release_packages missing from MH embed exports (issue 282 regression)"
+    if type(MH_EMBED.session_resident_paths) ~= "function"
+        or type(MH_EMBED.reference_summary) ~= "function" then
+        return "MH session-residency ledger missing (issue 282 regression)"
     end
-    if type(MH_EMBED.reconcile_packages) ~= "function"
-        or type(MH_EMBED.pending_release_paths) ~= "function" then
-        return "MH release completion ledger missing (issue 282 regression)"
-    end
-    local pending = MH_EMBED.pending_release_paths()
-    if #pending > 0 then
-        return string.format(
-            "%d cosmetics_tweaker_mh package(s) remain in PackageManager delayed queue: %s",
-            #pending, table.concat(pending, ","))
+    -- There must be no callable early-release surface. Material graphs can
+    -- outlive StateIngame and VMF mod callbacks at the native renderer layer;
+    -- PackageManager.destroy is the only release owner.
+    if MH_EMBED.release_packages or MH_EMBED.reconcile_packages
+            or MH_EMBED.pending_release_paths then
+        return "MH early-release API present (issue 282 deadlock regression)"
     end
     if not (Managers and Managers.package and Managers.package.reference_count) then
         return nil  -- package manager not up yet: vacuous pass
     end
     for path in pairs(reg) do
         local n = Managers.package:reference_count(path, "cosmetics_tweaker_mh") or 0
-        if n > 1 then
+        if n ~= 1 then
             return string.format(
-                "package %s holds %d refs under cosmetics_tweaker_mh (must be exactly 1 - issue 282 leak shape)",
+                "package %s holds %d refs under cosmetics_tweaker_mh (must be exactly 1 for session ownership - issue 282)",
                 tostring(path), n)
         end
     end
