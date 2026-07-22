@@ -1,6 +1,8 @@
 return function(H, repo_root)
     local cim_root = repo_root .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
     local Policy = assert(loadfile(cim_root .. "_cim_athanor_icon_policy.lua"))()
+    local Residency = assert(loadfile(cim_root .. "_lib_resource_residency.lua"))()
+    Policy.set_resource_residency(Residency)
     local Provider = assert(loadfile(repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_inventory_icons.lua"))()
     local atlas_path = repo_root

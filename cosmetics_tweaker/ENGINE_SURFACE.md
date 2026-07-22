@@ -376,6 +376,21 @@ do not re-discover these.
   sender-side null/substitution takes no toggle argument by construction (§31 never-crash
   mandate, `:6146`).
 
+## #749 borrowed-renderer residency boundary
+
+`_la_bridge.lua`, `_cos_custom_hats.lua`, `_cos_grail_knight_set.lua`, and both
+embedded Material-Hijack texture writers consume the synchronized V2 residency
+contract. Texture writes are atomic and require both positive texture proof and
+real handles on every target material; LA preview parent rebinding happens
+before that census. Animated Material-Hijack frames resolve their material
+freshly instead of retaining a C handle across renderer lifecycle edges.
+The mission item-customization preview also proves
+`environment/ui_store_preview` through the same strict contract immediately
+before `World.set_shading_environment`; a missing or indeterminate resource
+leaves the existing `ui_hdr`/default fallback untouched.
+Failure retains the donor/vanilla appearance. The latent shared-appearance API
+is explicitly listed as non-active/deferred in `qa/native_resource_contracts.psd1`.
+
 ## Doc maintenance
 
 Follows `docs/engine/README.md` maintenance rules: if a cosmetics hook moves, a guard is

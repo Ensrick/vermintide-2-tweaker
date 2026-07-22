@@ -391,6 +391,37 @@ in a SINGLE shared constant + predicate, not re-inlined per site (issue #418).
 The data-driven override pass and preview adapters share
 `_om.HUSK_OVERRIDE_REF` / `_resident_override_3p`.
 
+#### §4.5.1 Borrowed renderer native-resource closure (#749)
+
+Package residency is only the outermost proof. Before a Tweaker-owned native
+bind or draw, the caller must prove the closure owned by the exact consumer:
+
+1. `Application.can_get(type, path) == true` for every owned resource;
+2. for unit texture writes, every mesh has at least one real material handle and
+   none stringifies as `#ID[00000000]`;
+3. for UI draws, the resolved material exists in the exact `renderer.gui` that
+   will draw it; and
+4. the world/unit/renderer still belongs to the current lifecycle generation.
+
+The canonical implementation is `tools/shared_lib/_lib_resource_residency.lua`
+V2. Owned Tweaker calls use its strict helpers and skip the whole transaction on
+missing or indeterminate proof. Global wrappers are different: an unavailable or
+throwing probe is `unknown`, so they preserve the original vanilla/third-party
+arguments and drop only resources whose absence is positively proved. This is a
+load-bearing Pusfume/non-mod interference boundary.
+
+Vanilla source demonstrates why the scopes differ: `UIRenderer.create` bakes two
+Gui instances at `scripts/ui/ui_renderer.lua:247-248`, later draws resolve a
+material from one exact Gui at `ui_renderer.lua:836` and `ui_passes.lua:636`,
+while resource existence checks precede unit/texture work at
+`pickup_system.lua:882,893,899`, `cosmetic_utils.lua:71`, and
+`gear_utils.lua:149`. None of those facts lets a global package check prove a
+spawned material handle or another renderer's material list.
+
+`qa/native_resource_contracts.psd1` is the full active-tree ratchet. Any new,
+moved, or removed native renderer boundary or V2 proof changes the exact census
+and blocks QA until its policy and evidence are reviewed.
+
 `_force_load_axe_shield_husk_units` is older and hand-authored, but current
 source and issue #280 history show that it serves a different crash floor: it
 loads the *vanilla base* Axe+Shield units for the no-skin wire path, while

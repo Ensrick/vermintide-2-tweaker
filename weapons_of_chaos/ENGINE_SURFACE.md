@@ -227,6 +227,13 @@ in-file header - do not re-discover these.
   `wpn_chaos_sorcerer_scythe_01` at `:699`). Cloning the statue gets you a
   diorama, not a sword.
 
+## #749 borrowed-renderer residency boundary
+
+Blightreaper pulse application proves its donor material and complete texture
+set, performs the source-backed material bind, then proves every live mesh
+material handle before the first native texture write. Owner, husk, character
+preview, and item preview all consume that one event-driven contract.
+
 ## Doc maintenance
 
 Follows `docs/engine/README.md` maintenance rules: if a WOC hook moves, a guard is

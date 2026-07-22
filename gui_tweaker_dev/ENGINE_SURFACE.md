@@ -281,6 +281,14 @@ Distilled from the module headers and `docs/BUG_CLASSES.md` - do not re-discover
 - **The ESC "Mod Tweaker" label cannot be fixed by hooking the localizer.** `_G.Localize` is rawset-replaced in `LocalizationManager.init`, and the button localizes through `simple_lookup` (a sibling of `lookup`), so both interception hooks miss a path. SUPPLY the string into `_backend_localizations` [src: `localization_manager.lua:50-51`], the shared bottom of both paths - data, not a wrapped closure.
 - **The `#194` `script_data` "mod-env shadow" class cannot fire in retail (#496 disproof).** The shadow needs `_G.script_data` to be nil when a mod first assigns the bare name - impossible: `boot.lua:4` dofiles `boot_init` which creates it [src: `boot_init.lua:79`; also `application_parameter.lua:5`] long before `ModManager:new` [src: `boot.lua:404`] loads any mod. Nor is there a sandbox to divert the write: the native loader is bare `loadstring`+`pcall` [src: `mod_manager.lua:375,386,162`] and VMF loads mod files via plain `dofile` with no `setfenv` anywhere (vmf `vmf_mod_manager.lua:39` -> `safe_calls.lua:71-79`) - proven empirically because VMF's own dofile'd `new_mod`/`get_mod` globals (`vmf_mod_manager.lua:74,110`) are visible to every `.mod` chunk. The only wholesale `script_data` replacement is boot-time, non-release + `-use-clean-settings` gated [src: `application_parameter.lua:152-158`]. So `_gut_monologue.lua:19-20` reliably mutates the table `state_loading.lua:585/:635` reads; #194's changelog root-cause narrative was wrong (its fix worked via the per-tick `_handle_bots` enforce hooks). `rawget(_G,"script_data")` remains fine style, but is not load-bearing.
 
+## #749 borrowed-renderer residency boundary
+
+The singleton `UIRenderer.create` hook is a global boundary, not an owned draw.
+Its V2 filter drops only material pairs whose absence is positively proved and
+preserves original vanilla/third-party/Pusfume arguments when the probe is
+missing, throwing, or indeterminate. GUT-owned injections still require strict
+positive material proof.
+
 ## Doc maintenance
 
 Follows `docs/engine/README.md` maintenance rules: if a gut hook moves, a guard is

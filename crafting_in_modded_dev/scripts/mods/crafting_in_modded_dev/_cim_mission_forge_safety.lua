@@ -83,8 +83,10 @@ local _FORGE_ENV_FALLBACK = "environment/blank"
 local _FORGE_ENV_CANDIDATES = { "environment/ui_store_preview", "environment/ui_hdr" }
 
 local function _cim_env_resident(name)
-    local ok, r = pcall(function() return Application.can_get("shading_environment", name) end)
-    return ok and r == true
+    local residency = mod._cim_resource_residency
+    return residency and type(residency.shading_environment_resident) == "function"
+        and residency.shading_environment_resident(
+            name, Application, nil, "cim_mission_forge") == true
 end
 
 -- Parameterized + exposed so /cim_regression_test can drive the preference

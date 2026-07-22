@@ -1,5 +1,12 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.253-dev (2026-07-21) -- strict debug-renderer residency (#749)
+
+- Bot Teleport Lab and Debug Highlights now require a positive shared V2
+  material proof immediately before their native screen-Gui creation calls.
+- Missing, throwing, or indeterminate resource probes skip the optional debug
+  overlay and preserve gameplay instead of crossing the native crash boundary.
+
 ## v0.2.252-dev (2026-07-19) -- client-owned ragdoll retention (#332) [verify-fix-coop]
 
 - Snapshot dead client AI husks into bounded, static, non-colliding visual

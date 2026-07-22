@@ -3,6 +3,9 @@
 -- the setting controls availability and painting, never NetworkLookup shape.
 
 local mod = get_mod("cosmetics_tweaker")
+local RESIDENCY = mod and type(mod.dofile) == "function"
+    and mod:dofile("scripts/mods/cosmetics_tweaker/_lib_resource_residency")
+    or nil
 local M = {}
 
 M.ITEM_KEY = "cos_encarmine_hat"
@@ -108,23 +111,62 @@ enabled = function()
     return not ok or value ~= false
 end
 
-local function resource_ready(application, resource_type, path)
-    if not (application and type(application.can_get) == "function") then
-        -- Tests and early registration do not expose Application. Painting is
-        -- called only after a live unit exists, when the root package is loaded.
-        return true
+local function texture_bindings()
+    local rows = {}
+    for _, textures in ipairs({ M.ARMOR_TEXTURES, M.PLUME_TEXTURES }) do
+        rows[#rows + 1] = { slot = M.TEXTURE_SLOTS.diffuse, texture = textures.diffuse }
+        rows[#rows + 1] = { slot = M.TEXTURE_SLOTS.normal, texture = textures.normal }
+        rows[#rows + 1] = { slot = M.TEXTURE_SLOTS.combined, texture = textures.combined }
     end
-    local ok, value = pcall(application.can_get, resource_type, path)
-    return ok and value == true
+    return rows
 end
 
 function M.runtime_resources_ready(application)
-    for _, textures in ipairs({ M.ARMOR_TEXTURES, M.PLUME_TEXTURES }) do
-        for _, path in pairs(textures) do
-            if not resource_ready(application, "texture", path) then return false end
-        end
+    local bindings = texture_bindings()
+    if RESIDENCY and type(RESIDENCY.texture_set_resident) == "function" then
+        return RESIDENCY.texture_set_resident(
+            bindings, application, nil, "encarmine_hat")
+    end
+    -- Unit-test fallback only. Production always consumes the synchronized
+    -- shared contract; the fallback keeps this pure module independently testable.
+    local can_get = application and application.can_get
+    if type(can_get) ~= "function" then return false end
+    for i = 1, #bindings do
+        local ok, ready = pcall(can_get, "texture", bindings[i].texture)
+        if not ok or ready ~= true then return false end
     end
     return true
+end
+
+local function unit_materials_ready(unit, surface)
+    if RESIDENCY and type(RESIDENCY.unit_materials_resident) == "function" then
+        return RESIDENCY.unit_materials_resident(
+            unit, Unit, Mesh, nil, surface or "encarmine_hat")
+    end
+    -- Unit-test fallback only; mirror the complete closure rather than trusting
+    -- pcall around Material.set_texture, whose native faults bypass Lua.
+    if not (Unit and Unit.alive and Unit.num_meshes and Unit.mesh
+            and Mesh and Mesh.num_materials and Mesh.material) then return false end
+    local ok_n, mesh_count = pcall(Unit.num_meshes, unit)
+    if not ok_n or type(mesh_count) ~= "number" or mesh_count < 1 then return false end
+    local total = 0
+    for mesh_index = 0, mesh_count - 1 do
+        local ok_mesh, mesh = pcall(Unit.mesh, unit, mesh_index)
+        if not ok_mesh or not mesh then return false end
+        local ok_m, material_count = pcall(Mesh.num_materials, mesh)
+        if not ok_m or type(material_count) ~= "number" or material_count < 1 then return false end
+        for material_index = 0, material_count - 1 do
+            local ok_material, material = pcall(Mesh.material, mesh, material_index)
+            local ok_text, identity = false, nil
+            if ok_material and material then
+                ok_text, identity = pcall(tostring, material)
+            end
+            if not ok_material or not material or not ok_text or not identity
+                    or identity:find("#ID[00000000]", 1, true) then return false end
+            total = total + 1
+        end
+    end
+    return total > 0
 end
 
 local function paint_meshes(unit, indices, textures)
@@ -155,6 +197,9 @@ function M.apply_surface(unit, surface)
     local mesh_count = Unit.num_meshes(unit)
     if mesh_count ~= M.LAUREL_SCENE_CONTRACT.mesh_count then
         return false, "donor_mesh_count_" .. tostring(mesh_count)
+    end
+    if not unit_materials_ready(unit, surface) then
+        return false, "unit_materials_unavailable"
     end
 
     local ok, err = pcall(function()

@@ -54,7 +54,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.103-dev"
+local MOD_VERSION = "0.8.104-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -312,8 +312,11 @@ if not _ok_sf then mod:error("Failed to load standard_forge: %s", tostring(_err_
 -- masked+saturated atlas path. Keep renderer/material proof in a pure module so
 -- no provider icon can reach Gui.bitmap_uv unless the exact live Gui owns the
 -- resolved material. Unknown/unavailable custom icons fall back fail-closed.
+mod._cim_resource_residency = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_lib_resource_residency")
 mod._cim_athanor_icon_policy = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_athanor_icon_policy")
+mod._cim_athanor_icon_policy.set_resource_residency(mod._cim_resource_residency)
 mod._cim83_forge_widget_policy = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_forge_widget_material_policy")
 

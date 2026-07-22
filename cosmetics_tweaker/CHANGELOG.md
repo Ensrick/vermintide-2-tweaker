@@ -1,5 +1,19 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.164-dev - 2026-07-21 - #749 exact renderer-resource closure
+
+- Loremaster loot previews, live owners and remote husks; custom hats; the
+  Grail Knight set; and both embedded Material-Hijack writers now share one
+  strict V2 residency contract. Texture transactions require every texture and
+  realized material handle before the first native write.
+- Animated Material-Hijack frames resolve a fresh live material instead of
+  retaining a C handle across renderer lifecycle edges. The mission item
+  preview also proves its shading environment before re-pointing the world.
+- Removed the obsolete executable shared-material LA painter. Any failed proof
+  now preserves the donor/vanilla appearance with bounded log-only evidence.
+- Added exhaustive offline coverage for null handles, sparse/malformed texture
+  sets, atomic write ordering, parent-material order, and every active writer.
+
 ## 0.9.163-dev - 2026-07-21 - #282 session-owned material packages
 
 - Re-read the four current logs attached through #927, #930, #937, and #940.

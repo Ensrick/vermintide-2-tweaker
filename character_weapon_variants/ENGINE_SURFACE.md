@@ -228,6 +228,13 @@ re-discover these.
   to cwv careers so vanilla wielders fall through (DEVELOPMENT "BASE template
   patching", crash `c847908d`).
 
+## #749 borrowed-renderer residency boundary
+
+Old Musket preview/owner/husk painting now delegates texture-set and spawned-unit
+material closure to `_lib_resource_residency.lua` V2 after its source-backed
+preview parent bind. The generic `_lib_weapon_appearance` texture seam remains
+censused as legacy rather than being falsely claimed covered.
+
 ## Doc maintenance
 
 Follows `docs/engine/README.md` maintenance rules: if a cwv hook moves, a guard is

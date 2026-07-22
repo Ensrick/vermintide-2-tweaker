@@ -180,6 +180,27 @@ return function(H, repo_root)
         end)
     end)
 
+    H.test("Encarmine rejects null donor materials before native texture writes", function()
+        isolated(function(hats)
+            local unit, writes = {}, 0
+            _G.Application = { can_get = function() return true end }
+            _G.Unit = {
+                alive = function(value) return value == unit end,
+                num_meshes = function() return 8 end,
+                mesh = function() return "mesh" end,
+            }
+            _G.Mesh = {
+                num_materials = function() return 1 end,
+                material = function() return "#ID[00000000]" end,
+            }
+            _G.Material = { set_texture = function() writes = writes + 1 end }
+            local ok, reason = hats.apply_surface(unit, "remote-husk")
+            H.equal(ok, false)
+            H.equal(reason, "unit_materials_unavailable")
+            H.equal(writes, 0)
+        end)
+    end)
+
     H.test("Encarmine toggle changes availability without changing lookup identity", function()
         isolated(function(hats, bridge, set_setting)
             H.truthy(hats.register_all(bridge))

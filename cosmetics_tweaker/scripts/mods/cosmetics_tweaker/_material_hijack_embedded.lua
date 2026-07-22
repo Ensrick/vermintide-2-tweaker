@@ -102,6 +102,7 @@ _G._cos_mh_embed_owner = "cosmetics_tweaker"
 
 mod.texture_animations = mod.texture_animations or {}
 mod:dofile("scripts/mods/cosmetics_tweaker/_material_hijack_embedded_anim")
+local RESIDENCY = mod:dofile("scripts/mods/cosmetics_tweaker/_lib_resource_residency")
 
 local unit_alive          = Unit.alive
 local unit_has_data       = Unit.has_data
@@ -112,7 +113,6 @@ local unit_num_meshes     = Unit.num_meshes
 local unit_mesh           = Unit.mesh
 local unit_world          = Unit.world
 local unit_world_pos      = Unit.world_position
-local mesh_num_materials  = Mesh.num_materials
 local mesh_has_matrerial  = Mesh.has_material   -- (sic — kept original spelling)
 local mesh_material       = Mesh.material
 local material_set_texture = Material.set_texture
@@ -152,25 +152,18 @@ end
 -- a missing one is SKIPPED, not fatal. Skipping is also the right visual — the
 -- unit keeps whatever real texture its mat_to_use material already carries
 -- instead of a flat default.
-local function _has_texture(path)
-    if not path or type(path) ~= "string" then return false end
-    if not rawget(_G, "Application") or not Application.can_get then return true end
-    return Application.can_get("texture", path) and true or false
-end
-
 -- #696: parallel material-residency guard. replace_textures binds vanilla
 -- `mat_to_use` / `mat_list` materials via Unit.set_material with unit,
 -- package, and texture (issue 199) all preflighted but never the material
 -- itself; when the owning vanilla package is outside the unit's spawn-time
 -- resource scope the engine warns ("Failed looking up material") and renders
--- fallback. Mirror _has_texture: skip the set, keep the unit's current
--- material. The skip line is bounded to once per unit+slot+material so it
+-- fallback. Use the strict shared proof: skip the set and keep the unit's
+-- current material. The skip line is bounded to once per unit+slot+material so it
 -- also serves as the diagnostic separating this emitter from engine-side
 -- baked-material resolution at husk spawn (which logs with no [cos:696]).
 local function _has_material(path)
-    if not path or type(path) ~= "string" then return false end
-    if not rawget(_G, "Application") or not Application.can_get then return true end
-    return Application.can_get("material", path) and true or false
+    return RESIDENCY.material_resident(
+        path, Application, nil, "material_hijack_material") == true
 end
 
 local _mh_mat_skip_logged = {}
@@ -252,6 +245,55 @@ local function _set_material_traced(unit, mat_slot, mat, convention)
             source, unit_name, tostring(mat_slot), tostring(mat))
     end
     return true
+end
+
+-- #749: prove one complete texture transaction and the exact spawned material
+-- handles before Material.set_texture. This is intentionally separate from the
+-- session package lease (#282): package residency does not establish renderer
+-- closure for this unit.
+local _mh_residency_skip_seen = {}
+local _mh_residency_skip_count = 0
+local MH_RESIDENCY_SKIP_CAP = 24
+
+local function _residency_skip_once(reason, context)
+    local key = tostring(reason) .. "|" .. tostring(context)
+    if _mh_residency_skip_seen[key]
+            or _mh_residency_skip_count >= MH_RESIDENCY_SKIP_CAP then return end
+    _mh_residency_skip_seen[key] = true
+    _mh_residency_skip_count = _mh_residency_skip_count + 1
+    pcall(printf, "[cos:749] Material-Hijack texture SKIP reason=%s context=%s evidence=%d/%d chat=false",
+        tostring(reason), tostring(context), _mh_residency_skip_count,
+        MH_RESIDENCY_SKIP_CAP)
+end
+
+local function _texture_bindings(unit, texture)
+    local bindings = {}
+    for text_slot, map in pairs(texture or {}) do
+        bindings[#bindings + 1] = {
+            slot = unit_get_data(unit, text_slot) or "texture_map",
+            texture = map,
+        }
+    end
+    return bindings
+end
+
+local function _resident_material_targets(unit, mat_slot)
+    local targets = {}
+    local num_meshes = unit_num_meshes(unit)
+    for i = 0, num_meshes - 1 do
+        local mesh = unit_mesh(unit, i)
+        if mesh_has_matrerial(mesh, mat_slot) then
+            local material = mesh_material(mesh, mat_slot)
+            local ok_identity, identity = pcall(tostring, material)
+            if not material or not ok_identity or not identity
+                    or identity:find("#ID[00000000]", 1, true) then
+                return nil, "target_material_unresolved"
+            end
+            targets[#targets + 1] = material
+        end
+    end
+    if #targets < 1 then return nil, "target_material_absent" end
+    return targets, "resident"
 end
 
 -- v0.9.76-dev (issue #282): exactly-once package loading under a private
@@ -384,21 +426,51 @@ local function replace_textures(unit)
             end
         end
 
+        local context = "material_hijack"
+        local plans, all_bindings = {}, {}
         for mat_slot, texture in pairs(dict) do
-            _set_material_traced(unit, mat_slot, mat, "mat_to_use")
-            local num_meshes = unit_num_meshes(unit)
-            for i = 0, num_meshes - 1, 1 do
-                local mesh = unit_mesh(unit, i)
-                local num_mats_m = mesh_num_materials(mesh)
-                for j = 0, num_mats_m - 1, 1 do
-                    if mesh_has_matrerial(mesh, mat_slot) then
-                        local mater = mesh_material(mesh, mat_slot)
-                        for text_slot, map in pairs(texture) do
-                            local tex_name = unit_get_data(unit, text_slot) or "texture_map"
-                            if _has_texture(map) then
-                                material_set_texture(mater, tex_name, map)
-                            else
-                                mod:warning("[mh_embed] #199: skipped missing texture '%s' (slot '%s') — kept material's existing map", tostring(map), tostring(tex_name))
+            local bindings = _texture_bindings(unit, texture)
+            plans[#plans + 1] = { mat_slot = mat_slot, bindings = bindings }
+            for _, binding in ipairs(bindings) do
+                all_bindings[#all_bindings + 1] = binding
+            end
+        end
+
+        -- One transaction for the complete unit: no texture write occurs until
+        -- every resource, material bind, spawned handle, and target slot passes.
+        local textures_ready, reason = RESIDENCY.texture_set_resident(
+            all_bindings, Application, nil, context)
+        if textures_ready ~= true then
+            _residency_skip_once(reason, context)
+        else
+            local materials_bound = true
+            for _, plan in ipairs(plans) do
+                if not _set_material_traced(
+                        unit, plan.mat_slot, mat, "mat_to_use") then
+                    materials_bound = false
+                end
+            end
+            local closure_ready, closure_reason = RESIDENCY.unit_materials_resident(
+                unit, Unit, Mesh, nil, context)
+            if not materials_bound then
+                _residency_skip_once("material_bind_unavailable", context)
+            elseif closure_ready ~= true then
+                _residency_skip_once(closure_reason, context)
+            else
+                local targets_ready = true
+                for _, plan in ipairs(plans) do
+                    plan.targets, reason = _resident_material_targets(
+                        unit, plan.mat_slot)
+                    if not plan.targets then
+                        targets_ready = false
+                        _residency_skip_once(reason, context .. ":" .. tostring(plan.mat_slot))
+                    end
+                end
+                if targets_ready then
+                    for _, plan in ipairs(plans) do
+                        for _, target in ipairs(plan.targets) do
+                            for _, binding in ipairs(plan.bindings) do
+                                material_set_texture(target, binding.slot, binding.texture)
                             end
                         end
                     end

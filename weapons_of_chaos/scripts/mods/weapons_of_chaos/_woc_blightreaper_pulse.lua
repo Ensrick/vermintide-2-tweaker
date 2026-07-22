@@ -15,9 +15,10 @@ local function defaults()
 	}
 end
 
-function M.new(policy, transform_appearance, injected)
+function M.new(policy, transform_appearance, injected, residency_contract)
 	local api = injected or defaults()
 	local unit_api = api.unit
+	local mesh_api = api.mesh or rawget(_G, "Mesh")
 	local application = api.application
 	local script_unit = api.script_unit
 	local print_fn = api.printf
@@ -39,6 +40,12 @@ function M.new(policy, transform_appearance, injected)
 	end
 
 	local function resource_ready(kind, name)
+		if residency_contract and type(residency_contract.resource_resident) == "function" then
+			return residency_contract.resource_resident(
+				kind, name, application, nil, "woc_blightreaper_pulse") == true
+		end
+		-- Unit-test compatibility. Production always receives the synchronized V2
+		-- contract from weapons_of_chaos.lua.
 		local can_get = application and application.can_get
 		if type(can_get) ~= "function" then return false end
 		local ok, ready = pcall(can_get, kind, name)
@@ -89,8 +96,17 @@ function M.new(policy, transform_appearance, injected)
 				tostring(descriptor.material))
 			return false, "material-not-resident"
 		end
+		local texture_ready = residency_contract
+			and type(residency_contract.texture_set_resident) == "function"
+			and residency_contract.texture_set_resident(
+				descriptor.textures, application, nil, "woc_blightreaper_pulse")
+		if residency_contract and texture_ready ~= true then
+			diagnostic_once("texture-set",
+				"[WOC:613] pulse SKIP reason=texture-set-not-resident chat=false")
+			return false, "texture-not-resident"
+		end
 		for _, binding in ipairs(descriptor.textures or {}) do
-			if not resource_ready("texture", binding.texture) then
+			if not residency_contract and not resource_ready("texture", binding.texture) then
 				diagnostic_once("texture:" .. tostring(binding.texture),
 					"[WOC:613] pulse SKIP reason=texture-not-resident resource=%s chat=false",
 					tostring(binding.texture))
@@ -104,9 +120,22 @@ function M.new(policy, transform_appearance, injected)
 				or type(script_unit.set_material_variable) ~= "function" then
 			return false, "material-api-unavailable"
 		end
+		if residency_contract and type(residency_contract.unit_materials_resident) ~= "function" then
+			return false, "residency-contract-incomplete"
+		end
 
 		local material_ok = pcall(unit_api.set_all_materials, unit, descriptor.material)
 		if not material_ok then return false, "material-bind-rejected" end
+		if residency_contract then
+			local closure_ok, closure_reason = residency_contract.unit_materials_resident(
+				unit, unit_api, mesh_api, nil, "woc_blightreaper_pulse")
+			if closure_ok ~= true then
+				diagnostic_once("unit-material:" .. tostring(closure_reason),
+					"[WOC:613] pulse SKIP reason=unit-material-unready detail=%s chat=false",
+					tostring(closure_reason))
+				return false, "unit-material-unready"
+			end
+		end
 		for _, binding in ipairs(descriptor.textures or {}) do
 			local ok = pcall(unit_api.set_texture_for_materials,
 				unit, binding.slot, binding.texture)

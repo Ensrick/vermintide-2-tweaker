@@ -1,5 +1,14 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.468-dev (2026-07-21) - strict borrowed-preview residency (#749)
+
+- Old Musket preview painting now proves the complete texture set, parent
+  material, and every realized unit-material handle before any native bind.
+- Missing or indeterminate renderer resources fail closed to the existing
+  vanilla/donor appearance instead of entering a native crash boundary.
+- Added the synchronized V2 residency contract and offline coverage for atomic
+  preflight, null handles, malformed sets, and the live preview call order.
+
 ## 0.1.467-dev (2026-07-21) - exact Crowbill effective-action ownership (#661)
 
 - Published CWV's existing definition-backed item identity resolver for the

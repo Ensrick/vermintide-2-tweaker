@@ -1,7 +1,8 @@
 -- ============================================================
 -- Embedded AnimTextureExtension (from Material-Hijack patched)
 -- ============================================================
--- Ported byte-for-byte from material_hijack_patched/anim_texture_extension.lua.
+-- Derived from material_hijack_patched/anim_texture_extension.lua, with strict
+-- renderer-residency and fresh material-handle validation (#199/#749).
 -- AnimTextureExtension is a GLOBAL class (vanilla MH defines it that way), so
 -- this file only assigns methods if the global hasn't been claimed by another
 -- copy of MH that loaded first. Idempotent — methods overwrite if re-declared
@@ -9,17 +10,45 @@
 
 local mod = get_mod("cosmetics_tweaker")
 if not mod then return end
+local RESIDENCY = mod:dofile("scripts/mods/cosmetics_tweaker/_lib_resource_residency")
 
 local unit_alive = Unit.alive
 local material_set_texture = Material.set_texture
+local residency_diag_seen = {}
+local residency_diag_count = 0
+local RESIDENCY_DIAG_CAP = 12
 
--- v0.9.50-dev (#199): never hand Material.set_texture a non-resident texture —
--- it's an engine-level fatal. Mirror the units/packages preflight used in the
--- main MH embed so a missing animated-frame texture is skipped, not crashed.
-local function _has_texture(path)
-    if not path or type(path) ~= "string" then return false end
-    if not rawget(_G, "Application") or not Application.can_get then return true end
-    return Application.can_get("texture", path) and true or false
+local function residency_diag(reason, resource_type, path, slot, context)
+    local key = table.concat({ tostring(reason), tostring(resource_type),
+        tostring(path), tostring(slot), tostring(context) }, "|")
+    if residency_diag_seen[key] or residency_diag_count >= RESIDENCY_DIAG_CAP then return end
+    residency_diag_seen[key] = true
+    residency_diag_count = residency_diag_count + 1
+    pcall(printf,
+        "[cos:749] animated texture SKIP reason=%s type=%s slot=%s path=%s context=%s evidence=%d/%d chat=false",
+        tostring(reason), tostring(resource_type), tostring(slot), tostring(path),
+        tostring(context), residency_diag_count, RESIDENCY_DIAG_CAP)
+end
+
+local function _resolved_material(unit, mat_slot)
+    local ready = RESIDENCY.unit_materials_resident(
+        unit, Unit, Mesh, residency_diag, "material_hijack_animation")
+    if ready ~= true then return nil end
+    local resolved
+    local num_meshes = Unit.num_meshes(unit)
+    for i = 0, num_meshes - 1 do
+        local mesh = Unit.mesh(unit, i)
+        if Mesh.has_material(mesh, mat_slot) then
+            local material = Mesh.material(mesh, mat_slot)
+            local ok_identity, identity = pcall(tostring, material)
+            if not material or not ok_identity or not identity
+                    or identity:find("#ID[00000000]", 1, true) then return nil end
+            -- Preserve the embedded extension's established last-matching-LOD
+            -- selection, but resolve it fresh rather than retaining a stale C handle.
+            resolved = material
+        end
+    end
+    return resolved
 end
 
 -- Class definition. If another instance of MH (standalone, or a sibling
@@ -157,7 +186,6 @@ AnimTextureExtension.update = function (self, dt, unit)
 
     local time_list = self.unit_time
     local frame_delay_list = self.frame_delay
-    local material_dict = self.unit_mat_dict
     local loop_list = self.loop_on_spawn
     local frame_numbers = self.frame_numbers
 
@@ -166,13 +194,16 @@ AnimTextureExtension.update = function (self, dt, unit)
             if loop_list[mat_slot][slot_type] then
                 local current_time = time_list[mat_slot][slot_type]
                 if delay_time <= current_time then
-                    local material = material_dict[mat_slot]
                     local max_frame_number = frame_numbers[mat_slot][slot_type].max_number
                     local frame_number = frame_numbers[mat_slot][slot_type].current_number % max_frame_number + 1
                     local texture = self.aniamted_channels[mat_slot][slot_type][frame_number]
                     local texure_slot_name = self.texture_slot_names[slot_type]
 
-                    if _has_texture(texture) then
+                    local texture_ready = RESIDENCY.texture_bind_resident(
+                        texure_slot_name, texture, Application, residency_diag,
+                        "material_hijack_animation")
+                    local material = texture_ready and _resolved_material(unit, mat_slot)
+                    if material then
                         material_set_texture(material, texure_slot_name, texture)
                     end
 

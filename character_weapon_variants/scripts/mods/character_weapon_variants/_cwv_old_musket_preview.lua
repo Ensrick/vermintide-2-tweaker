@@ -6,6 +6,12 @@
 -- lifetime anchor.  The render unit, material, textures and transform identity
 -- remain the authored Old Musket values.
 local M = {}
+local RESIDENCY
+
+function M.set_resource_residency(contract)
+	RESIDENCY = contract
+	return type(RESIDENCY) == "table" and RESIDENCY.VERSION or nil
+end
 
 M.ITEM_KEY = "cwv_es_musket_old"
 M.SKIN_KEY = "cwv_es_musket_old_skin"
@@ -126,12 +132,12 @@ function M.resource_mode(descriptor, can_get)
 end
 
 function M.texture_resources_ready(can_get)
-	if type(can_get) ~= "function" then return false, "Application.can_get unavailable" end
-	for _, binding in ipairs(M.TEXTURES) do
-		local ok, available = pcall(can_get, "texture", binding.texture)
-		if not ok or available ~= true then return false, binding.texture end
+	if not RESIDENCY or type(RESIDENCY.texture_set_resident) ~= "function" then
+		return false, "resource residency contract unavailable"
 	end
-	return true
+	local ready, reason = RESIDENCY.texture_set_resident(
+		M.TEXTURES, { can_get = can_get }, nil, "old_musket")
+	return ready, ready and nil or reason
 end
 
 function M.prepare_preview_material(unit, application_api, unit_api)
@@ -140,10 +146,12 @@ function M.prepare_preview_material(unit, application_api, unit_api)
 	if not unit_api or type(unit_api.set_all_materials) ~= "function" then
 		return false, "Unit.set_all_materials unavailable"
 	end
-	local can_get = application_api and application_api.can_get
-	if type(can_get) ~= "function" then return false, "Application.can_get unavailable" end
-	local ok_get, available = pcall(can_get, "material", M.PREVIEW_MATERIAL)
-	if not ok_get or available ~= true then return false, M.PREVIEW_MATERIAL end
+	if not RESIDENCY or type(RESIDENCY.material_resident) ~= "function" then
+		return false, "resource residency contract unavailable"
+	end
+	local available = RESIDENCY.material_resident(
+		M.PREVIEW_MATERIAL, application_api, nil, "old_musket_preview")
+	if not available then return false, M.PREVIEW_MATERIAL end
 	local ok_set = pcall(unit_api.set_all_materials, unit, M.PREVIEW_MATERIAL)
 	if not ok_set then return false, "Unit.set_all_materials rejected preview unit" end
 	return true
@@ -155,40 +163,15 @@ end
 function M.unit_materials_ready(unit, unit_api, mesh_api)
 	unit_api = unit_api or Unit
 	mesh_api = mesh_api or Mesh
-	if not unit then return false, "unit-missing" end
-	if not unit_api or type(unit_api.num_meshes) ~= "function"
-			or type(unit_api.mesh) ~= "function" then
-		return false, "unit-mesh-api-unavailable"
+	if not RESIDENCY or type(RESIDENCY.unit_materials_resident) ~= "function" then
+		return false, "resource-residency-contract-unavailable"
 	end
-	if not mesh_api or type(mesh_api.num_materials) ~= "function"
-			or type(mesh_api.material) ~= "function" then
-		return false, "mesh-material-api-unavailable"
-	end
-	local ok_mesh_count, mesh_count = pcall(unit_api.num_meshes, unit)
-	if not ok_mesh_count or type(mesh_count) ~= "number" or mesh_count < 1 then
-		return false, "unit-has-no-meshes"
-	end
-	local material_count = 0
-	for mesh_index = 0, mesh_count - 1 do
-		local ok_mesh, mesh = pcall(unit_api.mesh, unit, mesh_index)
-		if not ok_mesh or not mesh then return false, "mesh-unresolved-" .. tostring(mesh_index) end
-		local ok_count, count = pcall(mesh_api.num_materials, mesh)
-		if not ok_count or type(count) ~= "number" or count < 1 then
-			return false, "mesh-has-no-materials-" .. tostring(mesh_index)
-		end
-		for material_index = 0, count - 1 do
-			local ok_material, material = pcall(mesh_api.material, mesh, material_index)
-			if not ok_material or not material then
-				return false, string.format("material-unresolved-%d-%d", mesh_index, material_index)
-			end
-			local ok_string, material_id = pcall(tostring, material)
-			if not ok_string or not material_id or material_id:find("00000000", 1, true) then
-				return false, string.format("material-null-%d-%d", mesh_index, material_index)
-			end
-			material_count = material_count + 1
-		end
-	end
-	return material_count > 0, material_count > 0 and material_count or "unit-has-no-materials"
+	local ready, reason, count = RESIDENCY.unit_materials_resident(
+		unit, unit_api, mesh_api, nil, "old_musket")
+	if ready then return true, count end
+	-- Preserve the established #742 diagnostic vocabulary while delegating the
+	-- actual proof to the shared V2 contract.
+	return false, tostring(reason):gsub("_", "-")
 end
 
 local paint_diag_seen = {}

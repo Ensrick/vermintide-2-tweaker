@@ -50,6 +50,97 @@
 
     Contracts = @(
         @{
+            Id = 'shared.issue749.borrowed-renderer-residency'
+            Issue = 749
+            Claim = 'structural-only'
+            Owners = @(
+                'tools/shared_lib/_lib_resource_residency.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_custom_hats.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_grail_knight_set.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded_anim.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_athanor_icon_policy.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_mission_forge_safety.lua'
+                'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_gui_material_guard.lua'
+                'general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_teleport_lab.lua'
+                'general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_debug_highlights.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'material'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition='covered'; Evidence='CWV Old Musket and WOC owned binds use strict texture and post-bind unit-material closure' }
+                        owner_3p = @{ Disposition='covered'; Evidence='LA/CWV/WOC gameplay units use the same strict spawned-unit proof before native texture writes' }
+                        bot_3p = @{ Disposition='covered'; Evidence='bot weapon units enter the same CWV/WOC gameplay apply owners' }
+                        remote_husk_3p = @{ Disposition='covered'; Evidence='LA/CWV/WOC husk units prove their own material handles rather than inheriting owner or preview proof' }
+                        inventory_preview = @{ Disposition='covered'; Evidence='custom hats and supported weapon previews prove the spawned preview unit before native writes' }
+                        cosmetic_preview = @{ Disposition='covered'; Evidence='LA and Old Musket LootItemUnitPreviewer consumers prove parent bind, real handles, and textures atomically' }
+                        athanor_preview = @{ Disposition='covered'; Evidence='CIM proves the exact live Gui material and the shared Old Musket/WOC preview unit contract' }
+                        crafting_preview = @{ Disposition='deferred'; Reason='ordinary crafting preview boundaries remain in the full-tree legacy census without a migrated V2 consumer' }
+                        lobby_preview = @{ Disposition='deferred'; Reason='generic lobby preview native material ownership has not been migrated or empirically verified' }
+                        score_screen = @{ Disposition='deferred'; Reason='generic score preview native material ownership has not been migrated or empirically verified' }
+                        hold_tab = @{ Disposition='deferred'; Reason='Hold-Tab icon/material closure is tracked separately and has no migrated #749 exact-Gui consumer' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition='not-applicable'; Reason='residency is proved against each live consumer and stores no per-instance state' }
+                        initial_spawn = @{ Disposition='covered'; Evidence='every migrated unit seam proves closure at its event-driven initial apply' }
+                        equip = @{ Disposition='covered'; Evidence='replacement/equip unit applies enter the same strict material proof' }
+                        wield = @{ Disposition='covered'; Evidence='CWV/WOC gameplay and husk wield consumers prove the newly visible unit' }
+                        customization_change = @{ Disposition='covered'; Evidence='LA/custom-hat preview replacement units are proved before applying the selected texture set' }
+                        style_change = @{ Disposition='not-applicable'; Reason='the V2 contract validates native resources and does not own Combat Style state' }
+                        career_change = @{ Disposition='deferred'; Reason='a paired live career-change observation across every migrated material seam is not yet captured' }
+                        mission_transition = @{ Disposition='covered'; Evidence='replacement mission units and renderers perform fresh consumer-local proofs; no proof is cached across worlds' }
+                        respawn = @{ Disposition='covered'; Evidence='replacement units are distinct weak-key identities and perform fresh proofs' }
+                        hot_join = @{ Disposition='covered'; Evidence='new remote husk units prove their own handles before texture application' }
+                        peer_ready = @{ Disposition='not-applicable'; Reason='the residency contract is local and sends no transport' }
+                        parity_ready = @{ Disposition='not-applicable'; Reason='missing peer/provider capability yields to vanilla before a local native call is attempted' }
+                        rejoin = @{ Disposition='covered'; Evidence='recreated husk units perform fresh local closure without retaining the departed unit proof' }
+                        preview_open = @{ Disposition='covered'; Evidence='each supported preview constructs/proves the exact unit or Gui it will consume' }
+                        preview_reopen = @{ Disposition='covered'; Evidence='a replacement preview never inherits another Gui or unit proof' }
+                        lobby_score_create = @{ Disposition='deferred'; Reason='lobby and score preview owners remain outside the migrated V2 set' }
+                        mod_disable_restore = @{ Disposition='not-applicable'; Reason='the proof creates no persistent mutation owner; skipped optional work retains donor/vanilla state' }
+                    }
+                    Tests = @(
+                        @{
+                            Path='qa/lua/tests/test_cos_resource_residency.lua'
+                            Names=@(
+                                'Shared #749 texture sets are atomic before native writes'
+                                'Shared #749 unit material closure rejects unresolved handles'
+                                'Shared #749 exact Gui closure rejects absent renderer materials'
+                                'Shared #749 global material filter drops proved absence only'
+                                'Cosmetics #749 active LA bridge uses strict residency at native texture boundary'
+                                'Cosmetics #749 Material-Hijack writers prove atomic textures and live materials'
+                            )
+                            Surfaces=@('owner_1p','owner_3p','bot_3p','remote_husk_3p','inventory_preview','cosmetic_preview','athanor_preview')
+                            ReplayEdges=@('initial_spawn','equip','wield','customization_change','mission_transition','respawn','hot_join','rejoin','preview_open','preview_reopen')
+                        }
+                        @{
+                            Path='qa/lua/tests/test_woc_blightreaper_pulse.lua'
+                            Names=@(
+                                'WOC #749 proves post-bind unit material closure before texture writes'
+                                'WOC #749 rejects an incomplete production residency contract before native writes'
+                            )
+                            Surfaces=@('owner_1p','owner_3p','bot_3p','remote_husk_3p','inventory_preview','cosmetic_preview','athanor_preview')
+                            ReplayEdges=@('initial_spawn','equip','wield','mission_transition','respawn','hot_join','rejoin','preview_open','preview_reopen')
+                        }
+                        @{
+                            Path='qa/lua/tests/test_cos_grail_knight_set.lua'
+                            Names=@(
+                                'Grail Knight texture residency drift fails closed before any unit write'
+                                'Grail Knight armor texture residency drift fails closed before any material write'
+                                'Grail Knight shield rejects null spawned materials before texture writes'
+                            )
+                            Surfaces=@('owner_1p','owner_3p','remote_husk_3p','inventory_preview','cosmetic_preview')
+                            ReplayEdges=@('initial_spawn','equip','customization_change','mission_transition','respawn','hot_join','rejoin','preview_open','preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cim.issue882.ranged-properties-preview-position'
             Issue = 882
             Claim = 'structural-only'
