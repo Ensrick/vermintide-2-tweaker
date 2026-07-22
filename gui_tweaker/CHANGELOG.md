@@ -1,6 +1,6 @@
 # Tweaker: GUI — Changelog
 
-## Unreleased -- detached bot loadout snapshots (#954)
+## 0.2.281 (2026-07-22) -- detached bot loadout snapshots (#954) [not-started]
 
 - Assigning a saved loadout to a bot now persists a dedicated copy of that
   row's equipment. Later edits to the player's saved row no longer mutate the
