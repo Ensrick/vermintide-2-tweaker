@@ -1,5 +1,18 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Authoritative teammate ammo (#249)
+
+- [ ] With Numeric UI enabled, obtain **Quiver Cascade** and enough additional
+  boons that the ranged weapon's maximum ammo exceeds its ordinary capacity.
+- [ ] Run `/verify_boon_ammo_hud` on the weapon owner. The local exact and
+  vanilla wire current/maximum pairs must match before any observer test.
+- [ ] A second player observes the owner's Numeric UI teammate ammo count. It
+  must match the owner's actual current/maximum ammo before firing or reloading.
+- [ ] Repeat after one more boon, a shot and reload, and a hot join. The display
+  updates at the native sync boundary without a custom RPC or repeated log spam.
+- [ ] The log contains at most twelve `[gut:249] corrected peer ammo` records
+  and `/gut_regression_test` passes the authoritative-ammo adapter check.
+
 ## Equipment DEFAULT transaction (#1002)
 
 - [ ] In Mod Tweaker, open **Equipment**, press **DEFAULT**, confirm, then press

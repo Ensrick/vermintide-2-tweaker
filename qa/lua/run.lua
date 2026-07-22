@@ -72,6 +72,7 @@ local suites = {
     "test_mod_tweaker_ordering",
     "test_mod_tweaker_disabled_sections",
     "test_gut_video_profiles",
+    "test_gut_numericui_ammo",
     "test_gut_cutscene_probe",
     "test_gut_cutscene_policy274",
     "test_gut_cutscene_skipwindow",
