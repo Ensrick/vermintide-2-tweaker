@@ -1,6 +1,6 @@
 # Crafting in Modded Changelog
 
-## 0.8.106-dev (2026-07-22) - #959/#628/#882/#598 CIM identity and presentation repairs
+## 0.8.106-dev (2026-07-22) - #959/#628/#882/#598/#921 CIM identity and presentation repairs
 
 - #959: Accessory property usage, removal, and clear actions now preserve the
   property category as part of their identity. Selecting a property for one
@@ -12,6 +12,10 @@
 - #598: The safe boolean-only Hold-Tab rarity side channel is mirrored for the
   sender as well as receivers. Explicit ordinary-item state clears a stale
   Modded frame without sending custom material or resource names.
+- #921: Owner and observer now share one bounded tri-state application path,
+  preserving explicit ordinary state across Chaos Wastes transitions and both
+  RPC arrival orders. Edge-only diagnostics report convergence without exposing
+  custom resource identifiers.
 
 ### #628 - restore the canonical salvage adapter
 

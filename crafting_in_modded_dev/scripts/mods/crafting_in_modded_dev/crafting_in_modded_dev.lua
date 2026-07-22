@@ -997,16 +997,10 @@ end)
 -- `player_unit_attachment_extension.lua:154` on attachment change,
 -- `LoadoutUtils.hot_join_sync` on new-peer arrival).
 -- Cim-client side-channel: per-(player, slot) "this slot's item is modded" flag.
--- Populated on the cim host via `cim_modded_slot` VMF RPC fired alongside every
--- `sync_loadout_slot`; consumed on cim clients in the `rpc_sync_loadout_slot`
--- hook to restore `item.rarity = "modded"` AFTER vanilla's decode path runs.
--- Vanilla clients have no registered handler for `cim_modded_slot` and drop
--- the packet silently — they keep the "unique" rarity baked in by the host's
--- wire-rewrite hook and never crash.
+-- Populated by a boolean-only `cim_modded_slot` RPC beside vanilla loadout sync.
+-- Unknown handlers and malformed payloads fail closed; no resource identity crosses the wire.
 --
--- Keyed by unique_id (peer_id .. ":" .. local_player_id) → slot_name →
--- boolean. Both values are retained: false is authoritative evidence that a
--- previously modded slot now carries a vanilla/common item (#598/#921).
+-- Keyed by unique_id → slot_name → boolean; false authoritatively clears stale modded state.
 local _cim_modded_slot_state = {}
 local _cim921_log_count = 0
 local CIM921_LOG_LIMIT = 24
@@ -1020,8 +1014,7 @@ local function _cim_apply_modded_slot_metadata(peer_id, local_player_id, slot_na
         if _cim921_log_count < CIM921_LOG_LIMIT then
             _cim921_log_count = _cim921_log_count + 1
             printf("[cim:921] dropped invalid rarity metadata source=%s peer=%s slot=%s value=%s count=%d/%d",
-                tostring(source), tostring(peer_id), tostring(slot_name), tostring(is_modded),
-                _cim921_log_count, CIM921_LOG_LIMIT)
+                tostring(source), tostring(peer_id), tostring(slot_name), tostring(is_modded), _cim921_log_count, CIM921_LOG_LIMIT)
         end
         return false
     end
@@ -1036,8 +1029,7 @@ local function _cim_apply_modded_slot_metadata(peer_id, local_player_id, slot_na
     local prior = slot_state[slot_name]
     slot_state[slot_name] = is_modded -- retain explicit false; nil means not received yet
 
-    local before
-    local after
+    local before, after
     local pm = Managers and Managers.player
     local loadouts = pm and pm._player_loadouts
     local stored = loadouts and loadouts[uid] and loadouts[uid][slot_name]
@@ -1046,13 +1038,9 @@ local function _cim_apply_modded_slot_metadata(peer_id, local_player_id, slot_na
         local core = mod._cim246_tab_preview_core
         if core and core.resolve_rarity then
             after = core.resolve_rarity(before, true, is_modded)
-        elseif is_modded then
-            after = "modded"
-        elseif before == "modded" then
-            after = "unique"
-        else
-            after = before
-        end
+        elseif is_modded then after = "modded"
+        elseif before == "modded" then after = "unique"
+        else after = before end
         stored.rarity = after
     end
 
