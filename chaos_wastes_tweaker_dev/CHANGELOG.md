@@ -1,5 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.311-dev (2026-08-01) - exact Starting Coins baseline (#912) [verify-fix]
+
+- Starting Coins now replaces vanilla rollover currency for every valid value,
+  including zero. Exact values such as 324 are no longer rounded to 25 at the
+  run-setup or joining-client boundary.
+- Setup replays reapply the same exact baseline instead of allowing a stale
+  rollover argument through. The host still preserves vanilla's separate
+  progress-based hot-join compensation, and malformed settings fail open.
+- Added offline policy/wiring coverage and strengthened `/verify_coins` plus
+  `starting_coins_value_matches_setting` so zero is tested rather than skipped.
+
 ## 0.7.310-dev (2026-07-26) - Starting Boons localized hover descriptions (#1004) [untested]
 
 - The Pilgrimage Chamber Starting Boons preview now gives every displayed icon

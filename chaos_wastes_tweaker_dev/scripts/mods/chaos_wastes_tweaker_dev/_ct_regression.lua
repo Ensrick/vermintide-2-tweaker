@@ -547,8 +547,8 @@ _rt_register("starting_coins_setter_not_adder", function()
     if type(STARTING_COINS_MODE_MARKER) ~= "string" then
         return "STARTING_COINS_MODE_MARKER not defined (adder-vs-setter mode unknown)"
     end
-    if STARTING_COINS_MODE_MARKER ~= "starting_coins:setter-override-via-setup_run-arg" then
-        return "STARTING_COINS_MODE_MARKER mismatch — expected setter-override mode, got: " .. tostring(STARTING_COINS_MODE_MARKER)
+    if STARTING_COINS_MODE_MARKER ~= "starting_coins:exact-total-including-zero-v2" then
+        return "STARTING_COINS_MODE_MARKER mismatch — expected exact zero-inclusive setter mode, got: " .. tostring(STARTING_COINS_MODE_MARKER)
     end
 end)
 

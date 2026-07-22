@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.310-dev"
+local MOD_VERSION = "0.7.311-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -430,6 +430,8 @@ end
 _install_deus_loot_amount_fallback()
 
 local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_adventure_pool")
+mod._ct_starting_coins_policy = mod:dofile(
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_starting_coins_policy")
 
 -- #487 freeze diagnostics. Stored on mod._ (not a new top-level local) to stay
 -- under Lua 5.1's 200-local chunk ceiling. Loaded here (after _adventure_pool,
@@ -686,17 +688,11 @@ local _career_exclusive_denial_counts = {}
 -- Stops the denial log spamming for every spawner that polls the grenades pool.
 local _career_exclusive_logged_this_run = {}
 
--- v0.7.95: per-run idempotence flag for the starting_coins setter override.
--- `setup_run` is the lifecycle event for "campaign begins" and fires exactly
--- once per new CW run, but defensive belt-and-suspenders: track the last
--- run_id we applied to so any re-entry (host-migration replay, debug re-runs
--- of setup_run) doesn't re-apply on top of vanilla's set value.
--- See feedback_redundant_safeguards_ok.md.
+-- Records which run consumed the exact Starting Coins baseline. The setter is
+-- itself idempotent: every setup replay replaces vanilla's argument before the
+-- engine writes it, so suppressing a replay would re-admit rollover currency.
 local _starting_coins_applied_for_run = nil
--- Marker constant — embedded in the compiled bundle so the
--- /ct_regression_test source-pattern check can verify the setter-override
--- mode (not adder mode) shipped to the bundle.
-local STARTING_COINS_MODE_MARKER = "starting_coins:setter-override-via-setup_run-arg"
+local STARTING_COINS_MODE_MARKER = mod._ct_starting_coins_policy.MARKER
 
 -- v0.7.129-dev altar-reuse fix marker: the re-arm logic runs as a POST-hook
 -- on DeusChestExtension.open_chest (so vanilla _post_chest_unlock + _equip_weapon
@@ -2793,10 +2789,9 @@ end
 --
 -- Fix: intercept the `initial_own_soft_currency` argument BEFORE vanilla
 -- runs, by hooking setup_run with a full wrapper (not hook_safe). When the
--- starting_coins setting is > 0, replace arg[5] with the snapped setting
--- value. Vanilla's setter (deus_run_controller.lua:315) then writes exactly
--- the setting value — no addition, no double-grant. Setting=0 leaves vanilla
--- behavior intact (rolled-over coins still flow through).
+-- configured Starting Coins value is valid, replace arg[5] before vanilla.
+-- Zero is a real configured value, not a sentinel for rollover. Vanilla's
+-- setter (deus_run_controller.lua:315) therefore writes exactly 0..3000.
 --
 -- Marker `STARTING_COINS_MODE_MARKER` is embedded near the call site so the
 -- /ct_regression_test source-pattern check (starting_coins_setter_not_adder)
@@ -2905,7 +2900,7 @@ mod:hook("StatisticsUtil", "_register_completed_journey_difficulty",
     end)
 
 mod:hook("DeusRunController", "setup_run", function(func, self, ...)
-    -- STARTING_COINS_MODE_MARKER = setter-override-via-setup_run-arg (embedded for regression check)
+    -- STARTING_COINS_MODE_MARKER = exact-total-including-zero-v2
     -- v0.7.127-dev: reset altar reuse counts at run start. Previous-run go_ids
     -- can collide with this run's new chests if Stingray's unit_storage cycles
     -- the same network ids; wiping at run start avoids ghost-use counts.
@@ -2944,25 +2939,21 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- initial_own_soft_currency, telemetry_id, with_belakor, mutators, boons)
     -- so initial_own_soft_currency is args[5].
     -- effective_setting reads host's broadcast value on clients and own value on host,
-    -- so both peers compute the same target. The host-side RPC handler still re-clamps.
-    local raw_setting = effective_setting("starting_coins")
-    local setting = (type(raw_setting) == "number") and math.floor(raw_setting / 25 + 0.5) * 25 or 0
-
+    -- so both peers compute the same target. The host-side RPC handler enforces it again.
     local run_state = self and self._run_state
     local run_id = run_state and run_state.get_run_id and run_state:get_run_id() or "unknown"
-
     local vanilla_initial = args[5]
-    local final = vanilla_initial
+    local setting, configured = mod._ct_starting_coins_policy.resolve(
+        effective_setting("starting_coins"), vanilla_initial)
 
-    if setting and setting > 0 and _starting_coins_applied_for_run ~= run_id then
+    if configured then
         args[5] = setting
-        final = setting
         _starting_coins_applied_for_run = run_id
         _dbg("[ct/coins] starting_coins setter applied: vanilla_initial=%s, setting=%d, final=%d (run_id=%s)",
-            tostring(vanilla_initial), setting, final, tostring(run_id))
-    elseif setting and setting > 0 then
-        _dbg("[ct/coins] starting_coins setter skipped (already applied for run_id=%s): vanilla_initial=%s, setting=%d",
-            tostring(run_id), tostring(vanilla_initial), setting)
+            tostring(vanilla_initial), setting, setting, tostring(run_id))
+    else
+        _dbg_alert("[ct:912] invalid Starting Coins value; preserving vanilla_initial=%s",
+            tostring(vanilla_initial))
     end
 
     -- #487 freeze diagnostics: bracket the vanilla setup_run call, which runs
@@ -3060,13 +3051,12 @@ end)
 -- `extra_coins + initial_own_soft_currency` for the client's peer. To keep the
 -- "host controls economy" invariant (precedent across coin_multiplier / shrine
 -- multipliers / boon roll), override the incoming value with the host's setting
--- BEFORE vanilla computes `new_coins`. Skip if setting == 0 (vanilla behavior).
+-- BEFORE vanilla computes `new_coins`. Zero is an exact baseline; vanilla's
+-- separate progress compensation remains added for a genuine mid-run join.
 mod:hook("DeusRunController", "rpc_deus_set_initial_soft_currency", function(func, self, sender_channel_id, initial_own_soft_currency)
-    local host_setting = mod:get("starting_coins")
-    if type(host_setting) == "number" then
-        host_setting = math.floor(host_setting / 25 + 0.5) * 25
-    end
-    if host_setting and host_setting > 0 then
+    local host_setting, configured = mod._ct_starting_coins_policy.resolve(
+        mod:get("starting_coins"), initial_own_soft_currency)
+    if configured then
         _dbg("[ct/coins] host RPC override for joining peer: client_sent=%s, host_setting=%d (overriding)",
             tostring(initial_own_soft_currency), host_setting)
         initial_own_soft_currency = host_setting
@@ -11121,25 +11111,25 @@ end)
 mod:command("verify_coins", "Verify starting_coins: live coin balance vs setting, and override-hook registration", function()
     local mechanism = Managers and Managers.mechanism and Managers.mechanism:game_mechanism()
     local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
-    local setting = mod:get("starting_coins")
-    local snapped = (type(setting) == "number") and math.floor(setting / 25 + 0.5) * 25 or 0
+    local raw_setting = mod:get("starting_coins")
+    local setting, configured = mod._ct_starting_coins_policy.resolve(raw_setting, nil)
     local marker_present = (type(STARTING_COINS_MODE_MARKER) == "string"
-        and STARTING_COINS_MODE_MARKER == "starting_coins:setter-override-via-setup_run-arg")
+        and STARTING_COINS_MODE_MARKER == mod._ct_starting_coins_policy.MARKER)
     local hook_registered_str = marker_present and "yes (setter-override mode marker present)" or "NO (marker missing)"
     if not rc then
-        mod:echo(string.format("/verify_coins: setting=%s (snapped=%d), override-hook=%s, live balance=N/A (no active CW run — use during run)",
-            tostring(setting), snapped, hook_registered_str))
-        pcall(printf, "[verify_coins] no active DeusRunController; setting=%s snapped=%d marker=%s",
-            tostring(setting), snapped, tostring(marker_present))
+        mod:echo(string.format("/verify_coins: setting=%s, valid=%s, override-hook=%s, live balance=N/A (no active CW run — use during run)",
+            tostring(setting), tostring(configured), hook_registered_str))
+        pcall(printf, "[verify_coins] no active DeusRunController; setting=%s valid=%s marker=%s",
+            tostring(setting), tostring(configured), tostring(marker_present))
         return
     end
     local own_peer_id = rc.get_own_peer_id and rc:get_own_peer_id()
     local balance = rc.get_player_soft_currency and own_peer_id and rc:get_player_soft_currency(own_peer_id)
     local is_server = rc.is_server and rc:is_server()
-    pcall(printf, "[verify_coins] is_server=%s own_peer_id=%s setting=%s snapped=%d live_balance=%s marker=%s",
-        tostring(is_server), tostring(own_peer_id), tostring(setting), snapped, tostring(balance), tostring(marker_present))
-    mod:echo(string.format("/verify_coins: setting=%d, live=%s, override-hook=%s, host=%s. NOTE: match expected only at run-start; mid-run balance reflects pickups/spends.",
-        snapped, tostring(balance), hook_registered_str, tostring(is_server)))
+    pcall(printf, "[verify_coins] is_server=%s own_peer_id=%s setting=%s valid=%s live_balance=%s marker=%s",
+        tostring(is_server), tostring(own_peer_id), tostring(setting), tostring(configured), tostring(balance), tostring(marker_present))
+    mod:echo(string.format("/verify_coins: setting=%s, live=%s, override-hook=%s, host=%s. NOTE: match expected only at run-start; mid-run balance reflects pickups/spends.",
+        tostring(setting), tostring(balance), hook_registered_str, tostring(is_server)))
 end)
 
 -- v0.7.97: career-exclusive pickup blocklist verifier.
@@ -11885,16 +11875,15 @@ _rt_register("starting_coins_value_matches_setting", function()
     if _starting_coins_applied_for_run ~= run_id then
         return nil
     end
-    local setting = mod:get("starting_coins")
-    if type(setting) ~= "number" then return nil end
-    local snapped = math.floor(setting / 25 + 0.5) * 25
-    if snapped <= 0 then return nil end
+    local setting, configured = mod._ct_starting_coins_policy.resolve(
+        mod:get("starting_coins"), nil)
+    if not configured then return "Starting Coins setting is invalid" end
     local own_peer_id = rc.get_own_peer_id and rc:get_own_peer_id()
     if not own_peer_id then return "could not resolve own_peer_id" end
     local balance = rc.get_player_soft_currency and rc:get_player_soft_currency(own_peer_id)
     if type(balance) ~= "number" then return "could not read balance" end
-    if balance ~= snapped then
-        return string.format("balance=%d != setting=%d (additive-bug regression?)", balance, snapped)
+    if balance ~= setting then
+        return string.format("balance=%d != exact setting=%d (rollover/additive regression?)", balance, setting)
     end
 end)
 
