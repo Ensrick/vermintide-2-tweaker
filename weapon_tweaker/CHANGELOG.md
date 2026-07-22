@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.286-beta (2026-07-21) - #948 Imperial Longsword donor parity
+
+- Imperial Longsword combat style now shares Kruber Greatsword's exact
+  receiver-side third-person wield and attack-remap tables in both WT streams.
+- Added the two missing player-facing CWV Crowbill availability labels.
+- Kept public-beta availability curated; the exhaustive compatibility matrix
+  remains a friends-only development overlay until its cells are verified.
+
 ## 0.12.285-beta (2026-07-21) - receiver-stable remaps and exact wield actions (#112, #661)
 
 - Receiver career is now part of each unit's cached third-person animation

@@ -20,6 +20,7 @@ if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..' }
 
 $WtDevOnlyFiles = @(
     '_wt_longbow_zoom_probe.lua',
+    'wt_universal_availability.lua',
     'wt_dev_anim_picker.lua',
     'wt_dev_hold_pose.lua',
     'wt_port_status.lua'

@@ -26,6 +26,10 @@ local weapon_unlock_map = WT.weapon_unlock_map
 local _cwv_conditional   = WT.cwv_conditional_managed
 local _cwv_ownership     = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_cwv_ownership")
 local _cwv_variant_catalog = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_cwv_variant_catalog")
+-- WT_DEV_OVERLAY_BEGIN:issue948-universal-cwv-runtime
+mod:dofile("scripts/mods/weapon_tweaker_dev/wt_universal_availability")
+    .expand_cwv_catalog(_cwv_variant_catalog)
+-- WT_DEV_OVERLAY_END:issue948-universal-cwv-runtime
 local _cwv_availability_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_cwv_availability_policy")
 local _career_weapon_actions = mod:dofile(
     "scripts/mods/weapon_tweaker_dev/_lib_career_weapon_actions")

@@ -174,6 +174,9 @@ function M.install(mod, _rt_register, deps)
     end)
 
     _rt_register("wh_priest_no_bows", function()
+        -- WT_DEV_OVERLAY_BEGIN:issue948-retired-absence-check
+        if true then return end -- dev lab intentionally exposes unresolved ranged cells
+        -- WT_DEV_OVERLAY_END:issue948-retired-absence-check
         -- Per feedback_vt2_no_bows_on_warrior_priest: wh_priest must NOT receive
         -- bows / crossbows / longbows because his 3P body lacks the anims.
         local bow_keys = {
@@ -190,6 +193,29 @@ function M.install(mod, _rt_register, deps)
         end
         if #found > 0 then return "bows on wh_priest: " .. table.concat(found, ", ") end
     end)
+    -- WT_DEV_OVERLAY_BEGIN:issue948-universal-runtime-check
+    _rt_register("issue948_universal_base_availability", function()
+        local policy = mod:dofile(
+            "scripts/mods/weapon_tweaker_dev/wt_universal_availability")
+        if #policy.all_weapons ~= 83 then
+            return "universal roster size = " .. tostring(#policy.all_weapons)
+        end
+        for _, career in ipairs(policy.careers) do
+            local seen = {}
+            for _, weapon_key in ipairs(weapon_unlock_map[career.key] or {}) do
+                if seen[weapon_key] then
+                    return "duplicate " .. career.key .. ":" .. weapon_key
+                end
+                seen[weapon_key] = true
+            end
+            for _, weapon_key in ipairs(policy.all_weapons) do
+                if not seen[weapon_key] then
+                    return "missing " .. career.key .. ":" .. weapon_key
+                end
+            end
+        end
+    end)
+    -- WT_DEV_OVERLAY_END:issue948-universal-runtime-check
 
     _rt_register("issue290_billhook_kruber_effective_3p_complete", function()
         -- Host-runnable source contract: 2h_billhooks.lua fires anim_event_3p when present,
@@ -308,7 +334,10 @@ function M.install(mod, _rt_register, deps)
                 return clone_name .. " does not share donor 3P remap contract " .. donor_name
             end
         end
-        if count ~= 6 then return "CWV style alias catalogue expected 6 rows, got " .. count end
+        if count ~= 7 then return "CWV style alias catalogue expected 7 rows, got " .. count end
+        if aliases.imperial_longsword_template ~= "two_handed_swords_template_1" then
+            return "Imperial Longsword style is not tied to the Greatsword 3P donor"
+        end
         local clone = _3p_template_remaps
             and _3p_template_remaps.cwv_infantry_spear_template
         if type(clone) ~= "table" or type(clone.wh_) ~= "table"
@@ -1259,6 +1288,9 @@ function M.install(mod, _rt_register, deps)
     end)
 
     _rt_register("no_dwarf_dual_hammers_on_saltzpyre", function()
+        -- WT_DEV_OVERLAY_BEGIN:issue948-retired-dual-hammer-absence
+        if true then return end -- exhaustive dev catalog intentionally includes it
+        -- WT_DEV_OVERLAY_END:issue948-retired-dual-hammer-absence
         -- v0.12.164-dev: dr_dual_wield_hammers removed from the non-WP Saltzpyre
         -- careers (redundant with wh_dual_hammer "Dual Skullsplitters" they already
         -- have). Guard that a future unlock-map edit doesn't silently re-add it.
@@ -2053,6 +2085,9 @@ function M.install(mod, _rt_register, deps)
     end)
 
     _rt_register("no_redundant_bardin_1h_on_saltzpyre", function()
+        -- WT_DEV_OVERLAY_BEGIN:issue948-retired-bardin-1h-absence
+        if true then return end -- exhaustive dev catalog intentionally includes them
+        -- WT_DEV_OVERLAY_END:issue948-retired-bardin-1h-absence
         -- #187: Bardin's dr_1h_axe (≡ Saltzpyre wh_1h_axe) and dr_1h_hammer
         -- (≡ Saltzpyre wh_1h_hammer Skullsplitter) are redundant on Saltzpyre and were
         -- removed (kept their entries to re-add to Saltzpyre = a bug). Guard them out of

@@ -1,5 +1,13 @@
 # weapon_tweaker — Cross-Character Availability Coverage Audit
 
+> **#948 RESET (2026-07-21):** this generated snapshot is historical input,
+> not verification. Issue #948 resets every one of the 83 base-weapon x six
+> receiver-group cells to untested and separately tracks the bounded 32-variant
+> CWV layer. WT Dev generates the complete 83 x 20 career test surface while
+> retaining the user-approved #368 representative exclusions. Update cells only
+> from current in-game evidence recorded on #948; no `Working` claim below is
+> proof for the new matrix.
+
 > **SUPERSEDED MODEL:** the `cwv_managed` ownership model measured throughout this generated
 > snapshot was removed under #368. WT and CWV are independent; WT now covers its bounded CWV
 > catalog with compatible item masters and independent authored-career children (#391). Do not
