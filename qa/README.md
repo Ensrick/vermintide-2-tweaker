@@ -12,10 +12,17 @@ bug-class-to-detection map.
 ```powershell
 # From repo root:
 .\qa\run_all.ps1                    # everything (luacheck + scripts + docs)
-.\qa\run_all.ps1 -Quick             # cfg + versions only (~3 seconds)
+.\qa\run_all.ps1 -Quick             # fast blocking checks + Lua 5.1 units
 .\qa\run_all.ps1 -SkipLua           # if luacheck not installed locally
 .\qa\run_all.ps1 -FixStale          # auto-banner stale audit docs
 ```
+
+Normal Quick and full runs are read-only. `run_all.ps1` fingerprints the exact
+Git-visible worktree before QA and blocks if any check changes tracked/index
+state or the name/content of a non-ignored untracked file. This also works in an
+already-dirty developer worktree: QA must preserve the state it received, not
+merely end clean. `-FixStale` is the explicit mutation mode; it deliberately
+edits stale documentation and therefore visibly skips the purity comparison.
 
 ## What runs
 
@@ -45,7 +52,9 @@ decisions-wired, event-register signature, in-progress sentinels, issue status
 labels + tag sync, loc tags, mechanics citations, name integrity, unpack safety,
 VMF widget types, …) see **[CHECKS.md](CHECKS.md)** and `run_all.ps1`.
 
-Total runtime locally: ~20 seconds.
+Runtime depends on the selected mode and locally available bundle-inspection
+tools. Use `-Quick` for the pre-commit subset and the default invocation for the
+complete gate; `run_all.ps1` is the executable source of truth for both lists.
 
 ## When to run
 
@@ -53,6 +62,8 @@ Total runtime locally: ~20 seconds.
 - **Before every push**: `run_all.ps1` (full).
 - **In CI**: every push and PR (see `.github/workflows/qa.yml`).
 - **Periodically (weekly)**: with `-FixStale` to banner stale audits.
+- **After either normal command**: require the final `[worktree-purity] OK`;
+  mutation is a blocking QA failure even if the individual check passed.
 
 ## Installing luacheck
 
