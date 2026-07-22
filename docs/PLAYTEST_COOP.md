@@ -1,6 +1,6 @@
 # Co-op Playtest Checklist
 
-> Auto-generated on 2026-07-22 12:33 UTC. Plain-language co-op-only checklist for a second tester.
+> Auto-generated on 2026-07-22 13:31 UTC. Plain-language co-op-only checklist for a second tester.
 
 Thanks for helping test. Each item below is either a fix to verify or a diagnostic check that needs real co-op evidence. You do not need any of our tools or notes, just the game and this list.
 
