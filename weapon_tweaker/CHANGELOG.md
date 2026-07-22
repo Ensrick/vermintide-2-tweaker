@@ -1,6 +1,6 @@
 # Weapon Tweaker Changelog
 
-## Unreleased - #445 Weapon Tweaks family controls
+## 0.12.287-beta (2026-07-22) - #445 Weapon Tweaks family controls [not-started]
 
 - Added a nested **Master Toggles** control for all 13 active Weapon Tweaks.
   A master click writes the complete family without firing one full apply per

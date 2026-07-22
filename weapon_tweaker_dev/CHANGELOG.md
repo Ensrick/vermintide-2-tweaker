@@ -1,6 +1,6 @@
 # Weapon Tweaker Changelog
 
-## Unreleased - #445 Weapon Tweaks family controls
+## 0.12.288-dev (2026-07-22) - #445 Weapon Tweaks family controls [not-started]
 
 - Mirrors the public-beta source: a nested **Master Toggles** control owns all
   13 active Weapon Tweaks as one bounded transaction, while individual options
