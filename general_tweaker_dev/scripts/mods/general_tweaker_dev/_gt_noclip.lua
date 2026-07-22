@@ -1,5 +1,6 @@
 local mod = get_mod("gt_dev")
 local BoundaryPolicy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_noclip_boundary_policy")
+local GodmodeLedgePolicy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_godmode_ledge_policy")
 
 -- _gt_noclip.lua — Noclip (player body flies through walls)
 --
@@ -196,8 +197,57 @@ mod:hook("CharacterStateHelper", "is_ledge_hanging", function(func, world, unit,
     if _is_local_noclip_unit(unit) then
         return false
     end
-    return func(world, unit, params)
+
+    local vanilla_is_ledge = func(world, unit, params)
+    if not vanilla_is_ledge then
+        mod._gt939_ledge_restore_logged = false
+        return false
+    end
+
+    -- Issue #939 shares this hook with noclip because VMF permits only one
+    -- wrapper per (Class, method).  The native helper has already identified
+    -- the authored ledge and populated params.  Godmode treats that boundary
+    -- as solid by restoring the owning player to the engine-maintained last
+    -- on-ground navmesh position, then rejecting the state transition.  This
+    -- mirrors the game's bot ledge failsafe, but prefers the whereabouts
+    -- extension's stricter on-ground sample. [src: player_character_state_
+    -- helper.lua:1797-1815,1915-1945; player_whereabouts_extension.lua:108-118]
+    -- If no valid sample exists we
+    -- preserve the native ledge hang instead of stranding the player in a fall.
+    local local_unit = _local_player_unit()
+    local godmode_active = mod._gt_godmode_active
+        and mod._gt_godmode_active(unit) == true
+    local whereabouts = unit and ScriptUnit.has_extension(unit, "whereabouts_system")
+    local last_onground = whereabouts and whereabouts.last_position_onground_on_navmesh
+        and whereabouts:last_position_onground_on_navmesh() or nil
+    local last_navmesh = whereabouts and whereabouts.last_position_on_navmesh
+        and whereabouts:last_position_on_navmesh() or nil
+    local recovery_position = GodmodeLedgePolicy.choose_recovery_position(
+        last_onground, last_navmesh)
+
+    if GodmodeLedgePolicy.should_restore(
+            vanilla_is_ledge, godmode_active, unit == local_unit, recovery_position) then
+        local locomotion = ScriptUnit.has_extension(unit, "locomotion_system")
+        if locomotion and locomotion.teleport_to then
+            locomotion:teleport_to(recovery_position)
+            if locomotion.set_forced_velocity then
+                locomotion:set_forced_velocity(Vector3.zero())
+            end
+            if locomotion.set_wanted_velocity then
+                locomotion:set_wanted_velocity(Vector3.zero())
+            end
+            if not mod._gt939_ledge_restore_logged then
+                mod._gt939_ledge_restore_logged = true
+                printf("[gt:939] Godmode ledge boundary restored the local player to the last safe navmesh position")
+            end
+            return false
+        end
+    end
+
+    return vanilla_is_ledge
 end)
+
+mod._GT_939_GODMODE_LEDGE_MARKER = "gt-939-godmode-ledge-boundary"
 
 mod:hook("CharacterStateHelper", "will_be_ledge_hanging", function(func, world, unit, params)
     if _is_local_noclip_unit(unit) then

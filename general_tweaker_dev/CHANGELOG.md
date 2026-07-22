@@ -1,5 +1,18 @@
 ﻿# General Tweaker Changelog
 
+## Unreleased -- Godmode ledge boundary (#939)
+
+- Godmode now treats authored ledge-hang triggers as a boundary for the owning
+  player. When vanilla positively identifies a ledge, the player is restored
+  to the engine-maintained last on-ground navmesh position and the disabled
+  hanging state is rejected.
+- The fix composes through noclip's existing singleton ledge helper hook. If a
+  safe recovery sample or locomotion extension is unavailable, vanilla ledge
+  hanging is preserved instead of risking an uncontrolled fall.
+- Added offline truth-table/ownership coverage and a `/gt_regression_test`
+  structural check. The live diagnostic is transition-bounded to one line per
+  ledge encounter.
+
 ## v0.2.253-dev (2026-07-21) -- strict debug-renderer residency (#749)
 
 - Bot Teleport Lab and Debug Highlights now require a positive shared V2
