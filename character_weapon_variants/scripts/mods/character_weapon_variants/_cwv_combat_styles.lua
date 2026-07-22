@@ -252,6 +252,25 @@ M.FAMILIES = {
 			we_1h_spears_shield = { default = "elven", order = { "elven", "empire" } },
 		},
 	},
+	sword_shield = {
+		styles = {
+			empire = {
+				label = "Empire Sword and Shield Combat Style",
+				template = "one_handed_sword_shield_template_1",
+				resource = "units/beings/player/first_person_base/state_machines/melee/1h_sword_shield",
+			},
+			bretonnian = {
+				label = "Bretonnian Sword and Shield Combat Style",
+				template = "one_handed_sword_shield_template_2",
+				resource = "units/beings/player/first_person_base/state_machines/melee/1h_sword_shield_breton",
+				required_dlc = "lake",
+			},
+		},
+		members = {
+			es_sword_shield = { default = "empire", order = { "empire", "bretonnian" } },
+			es_sword_shield_breton = { default = "bretonnian", order = { "bretonnian", "empire" } },
+		},
+	},
 }
 
 -- Canonical, lossless retirement map. These rows remain registered only as
@@ -1048,7 +1067,10 @@ function M.install(mod, deps)
 		local data = item and (item.data or item)
 		local cwv_key = type(deps.cwv_key_for_item) == "function"
 			and deps.cwv_key_for_item(item_identity(item, backend_id), data) or nil
-		if M.member(cwv_key) then return cwv_key end
+		-- An explicit CWV identity owns its complete authored template. Never
+		-- fall through to the clone's inherited vanilla `name`, or native style
+		-- families would silently replace custom CWV balance/action graphs.
+		if cwv_key ~= nil then return M.member(cwv_key) and cwv_key or nil end
 		-- Do not collect these into an ipairs table: optional leading fields are
 		-- commonly nil and would stop traversal before the native item name.
 		for _, field in ipairs({ "cwv_key", "key", "name", "item_type" }) do
