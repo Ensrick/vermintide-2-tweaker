@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.285-beta (2026-07-21) - receiver-stable remaps and exact wield actions (#112, #661)
+
+- Receiver career is now part of each unit's cached third-person animation
+  remap identity, so switching characters and back cannot retain the previous
+  skeleton's Billhook, Cog Hammer, or other cross-character vocabulary.
+- The local wield boundary now resolves exact CWV identity before inherited
+  vanilla item keys and reconciles the actual effective template before the
+  engine consumes it. The engine wield function still executes exactly once.
+- Direct WT ports are mutated only when the exact item is declared for the
+  receiver career. Unknown providers, including Pusfume-owned weapons, pass
+  through without WT mutation.
+- Imperial and Dawi Crowbill register both pick and hammer effective templates
+  against their canonical donor, covering Bounty Hunter career actions across
+  either combat style.
+- Added bounded `[wt:661] wield-boundary` evidence plus offline and runtime
+  regression coverage for ownership, action identity, and career cache reset.
+
 ## 0.12.284-beta (2026-07-19) - #664 dead parity tick + #374/#388 EnergyData seeding [untested]
 
 - #664 root cause: `weapon_tweaker_backend.lua`'s `M.install` (run at the

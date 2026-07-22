@@ -966,6 +966,12 @@ local _variant_definitions = {
 			or "Imperial Crowbill",
 		item_type       = "cwv_es_imperial_crowbill",
 		crowbill_mode_family = _om.crowbill_family.HAMMER_MODE_FAMILY,
+		effective_templates = {
+			{ name = _om.crowbill_runtime.PICK_TEMPLATE_KEY,
+			  source_template = _om.crowbill_family.SOURCE_TEMPLATE },
+			{ name = _om.crowbill_hammer_mode.HAMMER_TEMPLATE_KEY,
+			  source_template = _om.crowbill_family.SOURCE_TEMPLATE },
+		},
 	},
 	{
 		item_key        = "cwv_dr_dawi_crowbill",
@@ -985,6 +991,12 @@ local _variant_definitions = {
 			or "Dawi Crowbill",
 		item_type       = "cwv_dr_dawi_crowbill",
 		crowbill_mode_family = _om.crowbill_family.HAMMER_MODE_FAMILY,
+		effective_templates = {
+			{ name = _om.crowbill_runtime.PICK_TEMPLATE_KEY,
+			  source_template = _om.crowbill_family.SOURCE_TEMPLATE },
+			{ name = _om.crowbill_hammer_mode.HAMMER_TEMPLATE_KEY,
+			  source_template = _om.crowbill_family.SOURCE_TEMPLATE },
+		},
 	},
 	{
 		-- Dual Warrior-Priest Hammers — paired clone of cwv_es_warpriest_hammer

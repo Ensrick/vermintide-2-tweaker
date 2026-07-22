@@ -48,6 +48,8 @@ local weapon_unlock_map   = WT.weapon_unlock_map
 local _build_3p_template_remaps = WT.build_3p_template_remaps
 local _cwv_effective_template = mod:dofile(
     "scripts/mods/weapon_tweaker_dev/_wt_cwv_effective_template")
+local _anim_state_policy = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/_wt_anim_state_policy")
 
 local _anim_redirect = {
     to_repeating_crossbow            = "to_repeating_crossbow_elf",
@@ -910,7 +912,12 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
     --
     -- v0.12.35 — was previously gated on `is_local`. The same logic applies
     -- per-unit: husks switching weapons should re-resolve their own remap.
-    local remap_id = state and (state.template or state.key)
+    -- #112: receiver career is part of the state-machine identity. Character
+    -- selection can reuse a player unit and the same weapon/template; without
+    -- the career component the old receiver's remap survives and all subsequent
+    -- attacks can silently target the wrong vocabulary.
+    local remap_id = state and _anim_state_policy.remap_identity(
+        state.template, state.key, career)
     if state and event_name:sub(1, 3) == "to_" and remap_id and remap_id ~= state.last_remap_id then
         state.last_remap_id = remap_id
         state.remap = nil
@@ -1303,6 +1310,7 @@ WT.unit_career_name            = _unit_career_name
 WT.unit_state                  = _unit_state
 WT.suffix_career_map           = _suffix_career_map
 WT.three_p_template_remaps     = _3p_template_remaps
+WT.anim_state_policy           = _anim_state_policy
 WT.billhook_kruber_contract = function()
     local map = _3p_template_remaps.two_handed_billhooks_template
     map = map and map.es_

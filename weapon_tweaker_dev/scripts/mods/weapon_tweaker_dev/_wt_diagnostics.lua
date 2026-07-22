@@ -10,7 +10,8 @@
 -- runtime template (#661); tuning and coverage commands remain dev-only.
 --
 -- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile.
--- Registers the sole (SimpleInventoryExtension, _wield_slot) hook repo-wide.
+-- Wield-time mutation is deliberately owned by _wt_weapon_action_lifecycle.lua;
+-- this module owns only explicit, read-only diagnostic commands.
 
 local mod = get_mod("wt_dev")
 -- WT_DEV_OVERLAY_BEGIN:port-coverage-audits
@@ -524,27 +525,7 @@ local function _wt_dump_weapon_data(item_key, source)
     end
 end
 
--- Hook: SimpleInventoryExtension._wield_slot fires for every local-player
--- wield. slot_data.id carries the item key. hook_safe so we never perturb
--- the wield path. Husk extension intentionally NOT hooked -- we want our
--- own equips, not teammates'.
-mod:hook_safe("SimpleInventoryExtension", "_wield_slot",
-    function(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
-        local item_data = slot_data and slot_data.item_data
-        local item_key = item_data
-            and (item_data.key or (item_data.data and item_data.data.key))
-            or (slot_data and slot_data.id)
-        local iml = rawget(_G, "ItemMasterList")
-        local item = iml and item_key and rawget(iml, item_key)
-            or (item_data and item_data.data) or item_data
-        local ok, effective_template = pcall(
-            BackendUtils.get_item_template, item_data)
-        if ok and mod._wt.reconcile_effective_career_actions then
-            mod._wt.reconcile_effective_career_actions(
-                item, effective_template, self._career_name, item_key)
-        end
-        _wt_dump_weapon_data(item_key, "wield_slot")
-    end)
+WT.dump_weapon_data = _wt_dump_weapon_data
 
 mod:command("wt_dump_wielded",
     "Dump everything wt knows about the currently wielded weapon.",

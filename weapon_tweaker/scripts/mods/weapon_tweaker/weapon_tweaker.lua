@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.284-beta"
+local MOD_VERSION = "0.12.285-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -289,9 +289,13 @@ local _wt_master_toggles = mod:dofile("scripts/mods/weapon_tweaker/_wt_master_to
 _wt_master_toggles.install_refresh_hook(mod)
 _wt_master_toggles.seed(mod)
 
--- Read-only diagnostic dump/probe chat commands + the wield-time weapon-data
--- dump hook (leaf consumers of game globals only; no entry-state dependency).
+-- Read-only diagnostic dump/probe commands (leaf consumers of game globals;
+-- no entry-state dependency and no gameplay mutation).
 mod:dofile("scripts/mods/weapon_tweaker/_wt_diagnostics")
+-- #661 correctness owner: exact provider identity + effective-template action
+-- reconciliation runs before vanilla's local wield transition. Diagnostics is
+-- only a leaf callback and cannot disable the invariant.
+mod:dofile("scripts/mods/weapon_tweaker/_wt_weapon_action_lifecycle")
 
 -- #341: Bolt Staff's two rapid primary actions exclusively use the `spark`
 -- overcharge key. This small module owns the snapshot/apply/revert transaction;
