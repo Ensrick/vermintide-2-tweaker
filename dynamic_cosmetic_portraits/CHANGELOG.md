@@ -1,5 +1,55 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## Unreleased -- #526 vanilla-equivalent cutout atlas candidate [not built]
+
+- Empirical correction: all 12 committed HUD PNG alpha channels are exactly
+  equal to `tools/vanilla_hud_alpha_mask_86x108.png`, yet the attached
+  post-remask score-screen screenshot still shows the custom portrait's
+  rectangle. Vanilla source proves the portrait widget has no clipping pass:
+  `UIRenderer.script_draw_bitmap` sends atlas sprites to `Gui.bitmap_uv` and
+  standalone identifiers to `Gui.bitmap`. DCP used the latter while vanilla
+  portraits use the former.
+- Migrated all 12 HUD and 12 small cutout portraits to one deterministic
+  512x512 private atlas registered through VMF's existing `custom_atlas` API.
+  Medium portraits remain on the proven standalone path. The readiness gate now
+  requires valid HUD/small atlas rows plus resident atlas and medium materials;
+  an incomplete registration fails open to the vanilla portrait.
+- Added `tools/rebuild_portrait_atlas.ps1`; `add_portrait.ps1` invokes it and no
+  longer generates new HUD/small standalone metadata. The atlas uses
+  `A8R8G8B8` with alpha cutting disabled and two-pixel transparent padding.
+- Added runtime check `portrait_cutouts_use_atlas_path_526` and expanded offline
+  coverage for identifier collision, atlas completeness/dimensions/UV bounds,
+  PNG dimensions, alpha-preserving metadata, package/data registration, and
+  readiness gating. Updated the renderer and authoring documentation to remove
+  the stale claim that atlas registration was ineffective.
+- Related-issue cross-check: #435's score-record/player-scope resolver and
+  #609's safe network-teardown lookup are unchanged. Closed score-screen
+  cosmetic-model reports such as #513 and the broader 3D appearance umbrellas
+  operate on hero/weapon units rather than this 2D portrait renderer seam, so
+  they are not duplicates of #526.
+- #749's borrowed-renderer residency rules remain intact: DCP owns a private,
+  packaged atlas and never borrows or unloads another mod's resource. Readiness
+  now proves every one of the 24 atlas rows and all 12 medium materials before
+  assigning a custom portrait. DCP still owns only `es_mercenary`; unknown or
+  custom careers, including Pusfume, remain on their existing portrait path.
+
+This is source-complete at the pre-build boundary only. No VMB build, deploy,
+Workshop upload, lifecycle-label change, or live-test card has occurred.
+
+If the first built atlas still fails visually, use this evidence ladder rather
+than another guessed asset edit:
+
+1. Extract the compiled atlas from the exact root bundle and compare its alpha
+   channel against the checked-in PNG, separating compiler loss from UI draw.
+2. If compiled alpha is intact but ordinary atlas output is rectangular, set
+   the portrait pass to `masked=true` only for DCP atlas rows and exercise the
+   already-declared atlas masked material (the prior failure was a standalone
+   masked material, not this UV path).
+3. If both atlas shaders ignore alpha, instrument `Gui.bitmap_uv` material/UV
+   selection beside one vanilla portrait, then clone the exact resident vanilla
+   HUD-atlas material contract or add a narrowly scoped score-widget mask. Do
+   not alter career lookup, player scope, or the working medium path.
+
 ## 0.1.27-dev (2026-07-18) -- #435 score rows use recorded cosmetics [verify-fix-coop]
 
 - The attached client log had Dynamic Cosmetic Portraits disabled and no

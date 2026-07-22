@@ -32,8 +32,9 @@
     score screen. This script now FAILS if a generated HUD png has any
     opaque pixel outside that canonical silhouette.
 
-    Also writes the matching .texture and .material files. Verifies the
-    output and prints next-steps for wiring up lua / _data.lua / .package.
+    Writes the standalone medium .texture/.material files, then rebuilds the
+    shared HUD/small atlas and VMF descriptor. Verifies the output and prints
+    next steps for wiring the portrait lookup maps and package entries.
 
 .PARAMETER SourcePng
     Path to the 110x130 source PNG (e.g. "Kruber Portrait (Hellequin).png").
@@ -145,15 +146,16 @@ foreach ($v in $variants) {
 }
 $source.Dispose()
 
-# ---------------- .texture and .material files ----------------
-foreach ($prefix in @("", "medium_", "small_")) {
+# ---------------- Standalone medium .texture and .material files ----------------
+# HUD/small variants are compiled through dcp_portrait_atlas (#526). Creating
+# standalone metadata for those variants would make it easier to accidentally
+# register them through VMF's Gui.bitmap fallback again.
+foreach ($prefix in @("medium_")) {
     $texName = "$($prefix)portrait_$HatKey"
     $texPath = "gui/1080p/single_textures/custom_portraits/$texName"
-    # All standalone portrait materials use the proven visible Gui shader.
-    # `gui_gradient:DIFFUSE_MAP:MASKED` made the compiled HUD/small portraits
-    # fully transparent in-game (#526 regression, 2026-07-14). Cutout shape
-    # remains authored in the PNG alpha; score-frame clipping needs a separate
-    # source-backed solution that does not sacrifice portrait visibility.
+    # Medium portraits use the proven visible standalone Gui shader. The
+    # incompatible masked-gradient standalone experiment made cutout portraits
+    # fully transparent; HUD/small now follow vanilla through the private atlas.
     $shader = "gui:DIFFUSE_MAP"
 
     $textureContent = @"
@@ -240,15 +242,16 @@ foreach ($prefix in @("", "medium_", "small_")) {
 }
 
 Write-Output ""
-Write-Output "Asset files created. NEXT STEPS (manual):"
+& (Join-Path $PSScriptRoot "rebuild_portrait_atlas.ps1")
+
+Write-Output ""
+Write-Output "Asset files created and portrait atlas rebuilt. NEXT STEPS (manual):"
 Write-Output "  1. dynamic_cosmetic_portraits.lua"
-Write-Output "       - Add 3 entries to _PORTRAIT_MATERIALS (one per size)"
+Write-Output "       - Add the medium path to _PORTRAIT_STANDALONE_MATERIALS"
 Write-Output "       - Add entry to _hat_portrait_map or _skin_portrait_map"
 Write-Output "  2. dynamic_cosmetic_portraits_data.lua"
-Write-Output "       - Add 3 textures + 3 ui_renderer_injections paths in custom_gui_textures"
+Write-Output "       - Add only the medium name to _texture_names"
 Write-Output "  3. resource_packages/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.package"
-Write-Output "       - Add 3 'material =' lines + 3 'texture =' lines"
+Write-Output "       - Add only the medium material + texture paths"
 Write-Output "  4. Bump MOD_VERSION in dynamic_cosmetic_portraits.lua"
-Write-Output "  5. Build + deploy:"
-Write-Output "       node C:/Users/danjo/source/repos/vmb/vmb.js build dynamic_cosmetic_portraits --no-workshop --cwd"
-Write-Output "       .\deploy_all.ps1 -Mods @('dynamic_cosmetic_portraits')"
+Write-Output "  5. Use the repository's serialized ship lane for build/deploy/upload"

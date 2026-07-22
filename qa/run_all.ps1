@@ -135,6 +135,7 @@ Run-Check "check_pusfume_compatibility"       { & (Join-Path $here "check_pusfum
 Run-Check "check_shared_lib_drift"            { & (Join-Path $here "check_shared_lib_drift.ps1")            -Quiet:$Quiet }
 Run-Check "check_wt_stream_parity"            { & (Join-Path $here "check_wt_stream_parity.ps1")            -Quiet:$Quiet }
 Run-Check "check_dofile_package_coverage"      { & (Join-Path $here "check_dofile_package_coverage.ps1")      -Quiet:$Quiet }
+Run-Check "check_dcp_portrait_atlas"           { & (Join-Path $here "check_dcp_portrait_atlas.ps1")           -Quiet:$Quiet }
 Run-Check "check_woc_skarrik_asset_sources"    { & (Join-Path $here "check_woc_skarrik_asset_sources.ps1")    -Quiet:$Quiet }
 Run-Check "check_woc_skarrik_halberd_sources" { & (Join-Path $here "check_woc_skarrik_halberd_sources.ps1") -Quiet:$Quiet }
 if (-not $SkipCustomUnitBundleReachability) {

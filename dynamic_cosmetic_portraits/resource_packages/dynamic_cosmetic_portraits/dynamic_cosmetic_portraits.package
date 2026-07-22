@@ -8,9 +8,11 @@ package = [
 
 lua = [
 	"scripts/mods/dynamic_cosmetic_portraits/*"
+	"materials/dynamic_cosmetic_portraits/*"
 ]
 
 material = [
+	"materials/dynamic_cosmetic_portraits/dcp_portrait_atlas"
 	"materials/ui/portrait_kruber_mercenary_hat_1002"
 	"materials/ui/medium_portrait_kruber_mercenary_hat_1002"
 	"materials/ui/small_portrait_kruber_mercenary_hat_1002"
@@ -50,6 +52,7 @@ material = [
 ]
 
 texture = [
+	"textures/dynamic_cosmetic_portraits/dcp_portrait_atlas"
 	"gui/1080p/single_textures/custom_portraits/portrait_kruber_mercenary_hat_1002"
 	"gui/1080p/single_textures/custom_portraits/medium_portrait_kruber_mercenary_hat_1002"
 	"gui/1080p/single_textures/custom_portraits/small_portrait_kruber_mercenary_hat_1002"

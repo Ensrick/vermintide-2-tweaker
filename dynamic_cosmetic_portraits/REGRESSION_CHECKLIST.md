@@ -48,14 +48,14 @@ Last updated: 2026-07-18.
 
 | Field | Value |
 |-------|-------|
-| Symptom | The masked-gradient #526 follow-up made Kruber's custom portrait fully transparent. Before that experiment, mission-completion corners could extend outside the octagonal frame. |
-| Root cause | `gui_gradient:DIFFUSE_MAP:MASKED` was assumed compatible from another atlas material, but DCP's standalone portrait draw rendered it invisible even though material readiness succeeded. |
+| Symptom | Mission-completion portraits exposed rectangular corners; the first masked-gradient follow-up then made the custom portrait fully transparent. |
+| Root cause | The PNG alpha was corrected and byte-identical to the canonical mask, but DCP still registered HUD/small portraits as standalone textures. Vanilla `UIRenderer` sends atlas sprites through `Gui.bitmap_uv` and standalone identifiers through `Gui.bitmap`; the score widget has no clipping pass. The incompatible masked-gradient shader did not repair that renderer-contract mismatch. |
 | Mod(s) | dynamic_cosmetic_portraits |
-| Fix version(s) | dynamic_cosmetic_portraits v0.1.22-dev |
+| Fix version(s) | Unreleased candidate |
 | Category | INTEGRATION / ASSET |
 | Repro | Equip a tracked Kruber Mercenary cosmetic, finish a mission, and inspect the Kruber portrait tile. |
-| Expected post-fix | Custom portraits remain visible on HUD, Tab, and score surfaces. The PNG alpha remains conformant; the remaining score-frame clipping investigation must not replace the material with the incompatible masked-gradient shader. |
-| Detection | Offline `test_dcp_portrait_materials.lua` checks all 36 materials plus the generator policy. `/dcp_regression_test` passes `portrait_materials_use_visible_shader_526`. Final evidence is one solo HUD/Tab/score visual check. |
+| Expected post-fix | HUD and small portrait identifiers resolve to the private DCP atlas at exact 86x108 / 60x70 sizes; medium portraits remain standalone. Custom portraits stay visible and clipped on HUD, Tab, and score surfaces. Missing atlas/material residency fails open to vanilla. |
+| Detection | Offline `test_dcp_portrait_materials.lua` checks atlas completeness, UV bounds, format, package/data registration, generator policy, and readiness source contract. `/dcp_regression_test` passes `portrait_materials_use_visible_shader_526`, `portrait_cutouts_use_atlas_path_526`, and the alpha-pipeline check. Final evidence is one solo HUD/Tab/score visual check after a full restart. |
 | Tracking | GitHub issue #526. |
 
 ### vmf-dropdown-options-mutated — Multi-angle-bracket cascades from shared options table
