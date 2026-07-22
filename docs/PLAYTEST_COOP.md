@@ -1,6 +1,6 @@
 # Co-op Playtest Checklist
 
-> Auto-generated on 2026-07-22 10:22 UTC. Plain-language co-op-only checklist for a second tester.
+> Auto-generated on 2026-07-22 11:35 UTC. Plain-language co-op-only checklist for a second tester.
 
 Thanks for helping test. Each item below is either a fix to verify or a diagnostic check that needs real co-op evidence. You do not need any of our tools or notes, just the game and this list.
 
@@ -41,9 +41,9 @@ Thanks for helping test. Each item below is either a fix to verify or a diagnost
    - It works if: everything behaves normally for all players and nobody crashes.
 11. (Item #378) General: The host enables a hash-neutral mod that the joining player does not have.
    - It works if: everything behaves normally for all players and nobody crashes.
-12. (Item #719) cross-mod: Kruber equips Imperial Crowbill before the observer joins.
+12. (Item #322) Chaos Wastes: Start a two-player Chaos Wastes mission and equip Bardin's Throwing Axes.
    - It works if: everything behaves normally for all players and nobody crashes.
-13. (Item #322) Chaos Wastes: Start a two-player Chaos Wastes mission and equip Bardin's Throwing Axes.
+13. (Item #719) cross-mod: Kruber equips Imperial Crowbill before the observer joins.
    - It works if: everything behaves normally for all players and nobody crashes.
 14. (Item #309) General: Both players confirm the exact Tweaker: General Dev banner above.
    - Please report: attach both players' logs and note what appeared on each player's screen.
