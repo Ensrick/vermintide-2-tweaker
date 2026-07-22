@@ -2877,4 +2877,4 @@ a sparse table written for the smaller vanilla-reachable difficulty set.
   (class 66), and do not paper over the later hit-reaction update.
 
 **Related:** class 59 (sparse/nil runtime inputs), class 66 (failed tick replay),
-and issue #505 (test-path reachability only).
+and issue #505 (the now-proven targeted test lever, not a runtime dependency).

@@ -86,6 +86,7 @@ local suites = {
     "test_event_mission_allowlist",
     "test_event_curse_join_policy",
     "test_ct_mission_progress",
+    "test_ct_sorcerer_rank_health",
     "test_ct_profile_snapshot",
     "test_ct_start_shrine_policy",
     "test_ct_boon_preview_context",
