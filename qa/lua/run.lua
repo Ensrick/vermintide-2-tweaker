@@ -234,6 +234,7 @@ local suites = {
     "test_ct_cot_early_reward",
     "test_ct_cot_cost",
     "test_ct_cot_placement",
+    "test_ct_chest_revive_teleport",
     "test_ct_chest_count_audit",
     "test_ct_spawn_pickup_two_return",
     "test_ct_ammo_guard_policy",
