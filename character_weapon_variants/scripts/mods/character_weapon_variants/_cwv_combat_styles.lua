@@ -18,6 +18,8 @@ M.EMPIRE_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_empire_spear_shield"
 M.ELVEN_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_elven_spear_shield"
 M.DIAGNOSTIC_EVENT_CAP = 32
 M.MISSION_UI_DIAGNOSTIC_CAP = 24
+M.REMOTE_REFRESH_INTERVAL = 0.25
+M.MAX_REMOTE_REFRESH_ATTEMPTS = 8
 M.IMPERIAL_SPEED_MULT = 1.15
 M.IMPERIAL_DAMAGE_MULT = 0.85
 M.IMPERIAL_STAGGER_MULT = 0.85
@@ -779,6 +781,24 @@ function M.remote_refresh_readiness(inventory, slot_name)
 	return true, "ready"
 end
 
+-- Only lifecycle-not-ready outcomes receive a short local retry. A style for an
+-- unwielded slot is already cached and will be consumed by the next natural
+-- wield; engine errors and post-wield missing meshes need separate evidence and
+-- must not be hammered repeatedly (#786/#660).
+local RETRYABLE_REMOTE_REFRESH = {
+	["player manager unavailable"] = true,
+	["player unavailable"] = true,
+	["player unit unavailable"] = true,
+	["inventory extension unavailable"] = true,
+	["inventory unavailable"] = true,
+	["equipment unavailable"] = true,
+	["slot not ready"] = true,
+}
+
+function M.remote_refresh_retryable(reason)
+	return RETRYABLE_REMOTE_REFRESH[reason] == true
+end
+
 local function build_modified_template(donor, clone, clone_damage_profile, prefix, speed, modifiers)
 	if type(donor) ~= "table" then return nil, "donor template missing" end
 	if type(clone) ~= "function" or type(clone_damage_profile) ~= "function" then
@@ -931,7 +951,91 @@ function M.install(mod, deps)
 	local store = M.normalize_store(mod:get(M.SETTING_KEY))
 	local remote = {}
 	local presentations = type(deps.presentations) == "table" and deps.presentations or {}
-	local runtime = { store = store, remote = remote, pending = {}, diagnostic_counts = {}, diagnostic_seen = {} }
+	local runtime = { store = store, remote = remote, pending = {}, pending_remote = {},
+		diagnostic_counts = {}, diagnostic_seen = {} }
+
+	local function remote_refresh_key(peer_id, slot_name)
+		return tostring(peer_id) .. "|" .. tostring(slot_name)
+	end
+
+	function runtime:_attempt_remote_refresh(peer_id, slot_name, edge, attempt)
+		if type(deps.rebuild_remote) ~= "function" then
+			return false, "remote rebuild unavailable"
+		end
+		local ok, refreshed, detail = pcall(deps.rebuild_remote, peer_id, slot_name)
+		if not ok then detail = refreshed end
+		local succeeded = ok and refreshed == true
+		pcall(printf, "[cwv:620/786] style husk refresh peer=%s slot=%s refreshed=%s detail=%s edge=%s attempt=%d/%d",
+			tostring(peer_id), tostring(slot_name), tostring(succeeded),
+			tostring(detail), tostring(edge), tonumber(attempt) or 1,
+			M.MAX_REMOTE_REFRESH_ATTEMPTS)
+		return succeeded, detail
+	end
+
+	function runtime:refresh_remote(peer_id, slot_name, edge)
+		local key = remote_refresh_key(peer_id, slot_name)
+		local state = remote[peer_id] and remote[peer_id][slot_name]
+		local refreshed, detail = self:_attempt_remote_refresh(peer_id, slot_name,
+			edge or "state", 1)
+		if refreshed or not M.remote_refresh_retryable(detail) or not state then
+			self.pending_remote[key] = nil
+			return refreshed, detail
+		end
+		self.pending_remote[key] = {
+			peer_id = peer_id,
+			slot_name = slot_name,
+			family_id = state.family_id,
+			style_id = state.style_id,
+			edge = edge or "state",
+			attempts = 1,
+			elapsed = 0,
+		}
+		return false, detail
+	end
+
+	function runtime:step(dt)
+		dt = type(dt) == "number" and math.max(dt, 0) or 0
+		local completed, expired = 0, 0
+		for key, pending in pairs(self.pending_remote) do
+			local current = remote[pending.peer_id]
+				and remote[pending.peer_id][pending.slot_name]
+			pending.elapsed = pending.elapsed + dt
+			if not current or current.family_id ~= pending.family_id
+					or current.style_id ~= pending.style_id then
+				self.pending_remote[key] = nil
+			elseif pending.attempts >= M.MAX_REMOTE_REFRESH_ATTEMPTS then
+				self.pending_remote[key] = nil
+				expired = expired + 1
+			elseif pending.elapsed >= M.REMOTE_REFRESH_INTERVAL then
+				pending.elapsed = 0
+				pending.attempts = pending.attempts + 1
+				local refreshed, detail = self:_attempt_remote_refresh(
+					pending.peer_id, pending.slot_name, "retry:" .. pending.edge,
+					pending.attempts)
+				if refreshed then
+					self.pending_remote[key] = nil
+					completed = completed + 1
+				elseif not M.remote_refresh_retryable(detail) then
+					self.pending_remote[key] = nil
+					expired = expired + 1
+				elseif pending.attempts >= M.MAX_REMOTE_REFRESH_ATTEMPTS then
+					self.pending_remote[key] = nil
+					expired = expired + 1
+				end
+			end
+		end
+		if expired > 0 then
+			pcall(printf, "[cwv:620/786] style husk refresh complete expired=%d pending=%d",
+				expired, self:pending_remote_refresh_count())
+		end
+		return completed, expired
+	end
+
+	function runtime:pending_remote_refresh_count()
+		local count = 0
+		for _ in pairs(self.pending_remote) do count = count + 1 end
+		return count
+	end
 
 	local function item_identity(item, backend_id)
 		local data = item and (item.data or item)
@@ -1316,12 +1420,7 @@ function M.install(mod, deps)
 			remote[sender_peer_id][slot_name] = { family_id = family_id, style_id = style_id }
 			pcall(printf, "[cwv:620] style rx peer=%s slot=%s family=%s style=%s",
 				tostring(sender_peer_id), slot_name, family_id, style_id)
-			if type(deps.rebuild_remote) == "function" then
-				local ok, refreshed, detail = pcall(deps.rebuild_remote, sender_peer_id, slot_name)
-				pcall(printf, "[cwv:620] style husk refresh peer=%s slot=%s refreshed=%s detail=%s",
-					tostring(sender_peer_id), tostring(slot_name),
-					tostring(ok and refreshed == true), tostring(ok and detail or refreshed))
-			end
+			runtime:refresh_remote(sender_peer_id, slot_name, "state")
 		end)
 	end
 

@@ -1,5 +1,21 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.474-dev (2026-07-26) - protected peer resolution and bounded style replay (#786) [not-started]
+
+- Replaced every CWV style, Crowbill-mode, Old Musket-mode, and Crowbill team-
+  preview peer lookup that routed `pcall` through a logical expression. Lua
+  retained only the success flag and discarded the player/profile return,
+  making the remote renderer permanently unreachable.
+- Added one shared human-only peer resolver that rejects bots at owner, local,
+  direct-peer, and peer-roster seams, plus a local, attempt-bounded Combat
+  Style refresh ledger. Genuine player/husk/equipment readiness races retry at
+  0.25-second cadence for at most eight attempts; unwielded slots wait for their
+  natural wield and engine/render failures remain fail-closed evidence.
+- Added offline and in-game regression checks for protected return preservation,
+  human-versus-bot targeting, tuple preservation, retry cadence, terminal
+  outcomes, and hard attempt bounds. No build, deployment, or Workshop upload
+  is represented by this source-only candidate.
+
 ## 0.1.473-dev (2026-07-26) - #935 additive Foot Knight secondary slot [not-started]
 
 - Classified equipment filters and carried the active loadout category's exact

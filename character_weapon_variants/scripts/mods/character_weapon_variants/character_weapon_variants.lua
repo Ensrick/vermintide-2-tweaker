@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.473-dev"
+local MOD_VERSION = "0.1.474-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -63,6 +63,7 @@ _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_ma
 _om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_family")
 _om.crowbill_hammer_mode = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_hammer_mode")
 _om.crowbill_presentation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_presentation")
+_om.peer_resolver = mod:dofile("scripts/mods/character_weapon_variants/_cwv_peer_resolver")
 _om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_runtime")
 _om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
 _om.rapier_contract = mod:dofile("scripts/mods/character_weapon_variants/_cwv_rapier_contract")
@@ -9700,7 +9701,7 @@ for skin_key in pairs(_custom_skin_keys) do
 	end
 end
 
-local function _is_unit(v) return type(v) == "userdata" and pcall(Unit.alive, v) end
+local function _is_unit(v) return _om.peer_resolver.alive_unit(v, Unit) end
 
 -- ============================================================
 -- WeaponAppearance (WA) — copied shared appearance primitive (#420)
@@ -10065,8 +10066,7 @@ do
 		acquire_style_resource = acquire_style_resource,
 		peer_for_owner = function(owner_unit)
 			local pm = Managers and Managers.player
-			local ok, player = pm and pcall(pm.owner, pm, owner_unit)
-			player = ok and player or nil
+			local player = _om.peer_resolver.owner(pm, owner_unit)
 			if not player then return nil end
 			if type(player.peer_id) == "string" then return player.peer_id end
 			local nok, value = pcall(player.network_id, player)
@@ -10074,10 +10074,8 @@ do
 		end,
 		rebuild_remote = function(peer_id, slot_name)
 			local pm = Managers and Managers.player
-			if not pm then return false, "player manager unavailable" end
-			local ok, player = pm and pcall(pm.player_from_peer_id, pm, peer_id, 1)
-			player = ok and player or nil
-			if not player then return false, "player unavailable" end
+			local player, player_source = _om.peer_resolver.peer_player(pm, peer_id, 1)
+			if not player then return false, player_source end
 			local unit = player and player.player_unit
 			if not (unit and Unit.alive(unit)) then return false, "player unit unavailable" end
 			local iok, inventory = pcall(ScriptUnit.extension, unit, "inventory_system")
@@ -10097,8 +10095,8 @@ do
 			local effective = _om.combat_styles
 				and _om.combat_styles:effective_template_name(
 					slot and slot.item_data, nil, unit, slot_name) or nil
-			local detail = string.format("rewielded template=%s right_3p=%s left_3p=%s",
-				tostring(effective), tostring(right_live), tostring(left_live))
+			local detail = string.format("rewielded resolver=%s template=%s right_3p=%s left_3p=%s",
+				tostring(player_source), tostring(effective), tostring(right_live), tostring(left_live))
 			return right_live or left_live, detail
 		end,
 	})
@@ -10860,6 +10858,9 @@ do
 		if _om._cwv_durable_crowbill_owner then
 			_om._cwv_durable_crowbill_owner:step()
 		end
+		if _om.combat_styles and _om.combat_styles.step then
+			_om.combat_styles:step(dt)
+		end
 		local identity_sent, identity_expired = lifecycle:step_deliveries(dt)
 		peer_pull.step(dt)
 		if identity_sent > 0 then
@@ -11322,14 +11323,13 @@ _om._crowbill_team_peer = function(profile_index, career_index, context)
 		local network = Managers.state and Managers.state.network
 		psync = network and network.profile_synchronizer
 	end
-	local ok, players = pm and pm.human_players and pcall(pm.human_players, pm)
-	if not ok or type(players) ~= "table" then return nil, "live_unavailable" end
+	local players = _om.peer_resolver.human_players(pm)
+	if type(players) ~= "table" then return nil, "live_unavailable" end
 	for _, player in pairs(players) do
 		local local_id_ok, local_id = pcall(player.local_player_id, player)
-		local sync_ok, pi, ci = psync and psync.profile_by_peer
-			and pcall(psync.profile_by_peer, psync, player.peer_id,
-				local_id_ok and local_id or 1)
-		if sync_ok and pi == profile_index and ci == career_index then
+		local pi, ci = _om.peer_resolver.profile_by_peer(psync, player.peer_id,
+			local_id_ok and local_id or 1)
+		if pi == profile_index and ci == career_index then
 			return player.peer_id, "live_profile"
 		end
 	end

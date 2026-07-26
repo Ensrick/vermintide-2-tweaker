@@ -93,8 +93,7 @@ local _om = ctx.om
 
 	local function peer_for_owner(owner_unit)
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.owner, pm, owner_unit)
-		player = ok and player or nil
+		local player = _om.peer_resolver.owner(pm, owner_unit)
 		if not player then return nil end
 		if type(player.peer_id) == "string" then return player.peer_id end
 		local nok, peer_id = pcall(player.network_id, player)
@@ -139,8 +138,7 @@ local _om = ctx.om
 	-- cwv_item_identity send adapter so stance rides the delivering channel.
 	_om._old_musket_mode_for_local_slot = function(slot_name)
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.local_player, pm, 1)
-		player = ok and player or nil
+		local player = _om.peer_resolver.local_player(pm, 1)
 		local owner_unit = player and player.player_unit
 		local _, equipment = owner_slot(owner_unit)
 		local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
@@ -155,8 +153,7 @@ local _om = ctx.om
 
 	_om._old_musket_publish_local_loadout = function(recipient, reason)
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.local_player, pm, 1)
-		player = ok and player or nil
+		local player = _om.peer_resolver.local_player(pm, 1)
 		local owner_unit = player and player.player_unit
 		local _, equipment = owner_slot(owner_unit)
 		local slots = equipment and equipment.slots
@@ -217,8 +214,7 @@ local _om = ctx.om
 		modes_by_peer[sender_peer_id], peer_slots[slot_name] = peer_slots, mode
 		if bid and valid_bid(bid) then modes_by_backend[bid] = mode end
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
-		player = ok and player or nil
+		local player = _om.peer_resolver.peer_player(pm, sender_peer_id, 1)
 		local owner_unit = player and player.player_unit
 		if owner_unit then
 			local slots = modes_by_owner[owner_unit] or {}
@@ -235,8 +231,7 @@ local _om = ctx.om
 	local function play_remote_fire(sender_peer_id, event_name, source)
 		if event_name ~= "player_combat_weapon_rifle_fire" then return false end
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
-		player = ok and player or nil
+		local player = _om.peer_resolver.peer_player(pm, sender_peer_id, 1)
 		local owner_unit = player and player.player_unit
 		local world = rawget(_G, "Application") and Application.main_world()
 		if owner_unit and Unit.alive(owner_unit) and world and rawget(_G, "WwiseUtils") then

@@ -713,11 +713,87 @@ return function(H, repo_root)
 				slots = { slot_melee = { item_data = { name = "es_sword_shield" } } },
 			},
 		}, "slot_melee")
-		H.equal(ready, false)
-		H.equal(reason, "slot not wielded")
-	end)
+                H.equal(ready, false)
+                H.equal(reason, "slot not wielded")
+        end)
 
-	H.test("CWV owner style transition performs one bounded slot rebuild", function()
+        H.test("CWV #786 remote style refresh retries only bounded lifecycle gaps", function()
+                local registered, attempts = nil, 0
+                local runtime = policy.install({
+                        get = function() end,
+                        set = function() end,
+                        network_register = function(_, _, callback) registered = callback end,
+                }, {
+                        rebuild_remote = function()
+                                attempts = attempts + 1
+                                if attempts < 3 then return false, "player unavailable" end
+                                return true, "rewielded resolver=player_from_peer_id"
+                        end,
+                })
+                registered("peer-a", policy.SCHEMA, "state", "slot_melee",
+                        "greatsword", "bretonnian")
+                H.equal(attempts, 1)
+                H.equal(runtime:pending_remote_refresh_count(), 1)
+                runtime:step(policy.REMOTE_REFRESH_INTERVAL - 0.01)
+                H.equal(attempts, 1)
+                runtime:step(0.01)
+                H.equal(attempts, 2)
+                local completed = runtime:step(policy.REMOTE_REFRESH_INTERVAL)
+                H.equal(completed, 1)
+                H.equal(attempts, 3)
+                H.equal(runtime:pending_remote_refresh_count(), 0)
+
+                -- An unwielded slot is terminal for active refresh; the next natural wield
+                -- consumes the already-cached style instead of an update-loop retry.
+                local terminal_calls = 0
+                local terminal_callback
+                local terminal = policy.install({
+                        get = function() end,
+                        set = function() end,
+                        network_register = function(_, _, callback) terminal_callback = callback end,
+                }, {
+                        rebuild_remote = function()
+                                terminal_calls = terminal_calls + 1
+                                return false, "slot not wielded"
+                        end,
+                })
+                terminal_callback("peer-b", policy.SCHEMA, "state", "slot_melee",
+                        "greatsword", "kerillian")
+                for _ = 1, 20 do terminal:step(1) end
+                H.equal(terminal_calls, 1)
+                H.equal(terminal:pending_remote_refresh_count(), 0)
+        end)
+
+        H.test("CWV #786 remote style lifecycle retry is attempt bounded", function()
+                local registered, attempts, network_sends = nil, 0, 0
+                local runtime = policy.install({
+                        get = function() end,
+                        set = function() end,
+                        network_register = function(_, _, callback) registered = callback end,
+                        network_send = function() network_sends = network_sends + 1 end,
+                }, {
+                        rebuild_remote = function()
+                                attempts = attempts + 1
+                                return false, "slot not ready"
+                        end,
+                })
+                registered("peer-a", policy.SCHEMA, "state", "slot_melee",
+                        "greatsword", "bretonnian")
+                -- A long frame advances one local attempt, never a catch-up burst.
+                runtime:step(policy.REMOTE_REFRESH_INTERVAL * 20)
+                H.equal(attempts, 2)
+                local expired = 0
+                for _ = 1, policy.MAX_REMOTE_REFRESH_ATTEMPTS + 3 do
+                        local _, count = runtime:step(policy.REMOTE_REFRESH_INTERVAL)
+                        expired = expired + count
+                end
+                H.equal(attempts, policy.MAX_REMOTE_REFRESH_ATTEMPTS)
+                H.equal(expired, 1)
+                H.equal(runtime:pending_remote_refresh_count(), 0)
+                H.equal(network_sends, 0)
+        end)
+
+        H.test("CWV owner style transition performs one bounded slot rebuild", function()
 		local old_managers, old_unit, old_script_unit = _G.Managers, _G.Unit, _G.ScriptUnit
 		local ok, err = pcall(function()
 			local item = { backend_id = "owner_style_uuid", name = "es_2h_sword" }
@@ -821,10 +897,12 @@ return function(H, repo_root)
 		H.truthy(module:find('"cwv_style_hotspot" .. suffix', 1, true))
 		H.truthy(module:find('function runtime:request_item_style', 1, true))
 		H.truthy(module:find('acquire_style_resource', 1, true))
-		H.truthy(module:find('function M.refresh_console_row_layout', 1, true))
-		H.truthy(module:find('"[cwv:774] surface=%s stage=%s', 1, true))
-		H.truthy(module:find('M.MISSION_UI_DIAGNOSTIC_CAP = 24', 1, true))
-		H.truthy(main:find("policy.plan_legacy_migrations(saved", 1, true))
+                H.truthy(module:find('function M.refresh_console_row_layout', 1, true))
+                H.truthy(module:find('"[cwv:774] surface=%s stage=%s', 1, true))
+                H.truthy(module:find('M.MISSION_UI_DIAGNOSTIC_CAP = 24', 1, true))
+                H.truthy(module:find('M.MAX_REMOTE_REFRESH_ATTEMPTS = 8', 1, true))
+                H.truthy(main:find('_om.combat_styles:step(dt)', 1, true))
+                H.truthy(main:find("policy.plan_legacy_migrations(saved", 1, true))
 		H.truthy(main:find('_om._migrate_legacy_style_items = function()', 1, true))
 		H.truthy(module:find('cwv_es_longsword_blackguard = {', 1, true))
 		H.truthy(module:find('target_item = "es_2h_sword", style_id = "longsword"', 1, true))
