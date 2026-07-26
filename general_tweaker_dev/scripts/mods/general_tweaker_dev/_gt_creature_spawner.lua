@@ -245,11 +245,24 @@ end
 -- breed_chaos_tether_sorcerer.lua `special = true` - both missing from the
 -- old hardcoded map); `race = "dummy"` marks the training dummy
 -- (breed_training_dummy.lua:43). Everything else lists as a regular enemy.
+--
+-- Categories are ADDITIVE, mirroring the curated overlay's own convention: every
+-- curated special is { "regular", "special" } (skaven_ratling_gunner, gutter_runner,
+-- pack_master, ...) and the roaming bosses are { "regular", "boss" } (skaven_rat_ogre,
+-- chaos_troll, chaos_spawn, skaven_stormfiend). Returning a single exclusive category
+-- here made every dynamically-detected breed invisible in the default view: the
+-- dropdown defaults to regular_units, so a mod-registered special (which inherits
+-- special = true when cloned from a vanilla special) appeared ONLY under
+-- special_units. Cycling the default list could never reach it.
 local function _gt_cs_dynamic_categories(breed)
-    if breed.boss then return { "boss" } end
-    if breed.special then return { "special" } end
     if breed.race == "dummy" then return { "dummy", "misc" } end
-    return { "regular" }
+
+    local categories = { "regular" }
+
+    if breed.boss then categories[#categories + 1] = "boss" end
+    if breed.special then categories[#categories + 1] = "special" end
+
+    return categories
 end
 
 local function _gt_cs_build_unit_lists()

@@ -1913,6 +1913,38 @@ function M.install(mod, _rt_register, deps)
         if unsorted then
             return "all_units not A-Z sorted: " .. unsorted
         end
+
+        -- Categories are ADDITIVE. A mod-registered special (e.g. a breed cloned from
+        -- skaven_ratling_gunner, which carries special = true) must still be reachable
+        -- from the DEFAULT regular_units list, exactly as every curated special is
+        -- ({ "regular", "special" }). Returning one exclusive category here hid such
+        -- breeds from the default dropdown entirely: cycling could never reach them.
+        local sprobe = "gt_rt_probe_special_454"
+        if Breeds[sprobe] ~= nil then
+            return "special probe breed name collision in Breeds"
+        end
+        Breeds[sprobe] = {
+            base_unit = "units/gameplay/training_dummy/training_dummy_bob",
+            unit_template = "gt_rt_probe_template",
+            behavior = "gt_rt_probe_behavior",
+            special = true,
+        }
+        local slists = rebuild()
+        Breeds[sprobe] = nil
+        local in_regular, in_special = false, false
+        for _, n in ipairs((slists and slists.regular_units) or {}) do
+            if n == sprobe then in_regular = true break end
+        end
+        for _, n in ipairs((slists and slists.special_units) or {}) do
+            if n == sprobe then in_special = true break end
+        end
+        rebuild() -- rebuild clean without the probe
+        if not in_special then
+            return "probe breed with special=true missing from special_units"
+        end
+        if not in_regular then
+            return "probe breed with special=true missing from regular_units (exclusive-category regression: invisible in the default dropdown)"
+        end
     end)
 
     _rt_register("bots_in_keep_setting_registered", function()

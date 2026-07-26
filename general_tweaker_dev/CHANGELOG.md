@@ -1,5 +1,21 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.256-dev (2026-07-25) -- Creature Spawner: dynamically-detected breeds reachable from the default list
+
+- Creature Spawner categories derived from a breed's own fields are now ADDITIVE,
+  matching the curated overlay's convention: every curated special is
+  `{ "regular", "special" }` and the roaming bosses are `{ "regular", "boss" }`.
+- Previously `_gt_cs_dynamic_categories` returned a single EXCLUSIVE category, so a
+  mod-registered breed cloned from a vanilla special (inheriting `special = true`)
+  landed only in `special_units`. The dropdown defaults to `regular_units`, so
+  cycling the default list could never reach it and the breed looked absent
+  entirely. Surfaced by a third-party bombardier breed that would not appear.
+- The live-table enumeration itself was already correct (#454); only the
+  categorisation hid the result.
+- `/gt_regression_test` `gt_cs_breed_list_dynamic` now also injects a
+  `special = true` probe and asserts it lists in BOTH `special_units` and
+  `regular_units`.
+
 ## v0.2.254-dev (2026-07-22) -- Godmode ledge repair and Raise Dead trace (#939, #659) [not-started]
 
 - Godmode now treats authored ledge-hang triggers as a boundary for the owning
