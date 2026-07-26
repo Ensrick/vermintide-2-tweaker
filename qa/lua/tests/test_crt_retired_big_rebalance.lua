@@ -40,7 +40,7 @@ return function(H, repo_root)
         local data = read(data_path)
         H.truthy(data:find('setting_id = "rework_master_ensrick"', 1, true))
         H.truthy(data:find('setting_id = "rework_master_tourney"', 1, true))
-        H.truthy(data:find('setting_id = "trn_es_mercenary"', 1, true))
+        H.truthy(data:find('cb("trn_es_mercenary")', 1, true))
         H.truthy(data:find('setting_id = "rework_general_stagger_thp"', 1, true))
     end)
 

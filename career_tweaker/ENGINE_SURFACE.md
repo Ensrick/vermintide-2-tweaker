@@ -136,6 +136,21 @@ completion and 1P/3P animation playback by that scale [src:
 producing a 0.75-second action so neither presentation nor the `ActionOneTimeConsumable.finish` buff grant can
 lead the other. The balance restore path returns the prior field or exact nil.
 
+The Tourney port uses the same snapshot/restore boundary. Issue #936 splits its
+former 17 career-wide mutations into 46 catalog-owned leaves, so each talent or
+ability change is independently reversible. The stable old career IDs now plan
+changed-only writes to their leaves and trigger one final restore/apply pass;
+they do not mutate `BuffTemplates` themselves. Existing saved ON values migrate
+to the new leaves once on the first `StateIngame` entry. Cross-family conflicts
+are attached only to the exact overlapping leaf, so an Ensrick Huntsman aura
+choice no longer suppresses Tourney's unrelated Prowl reload change. The Warrior
+Priest Prayer of Flight leaf alone retains `network_unsafe=true` and the exact
+peer-parity gate described below.
+When either family changes, CRT restores the lower-priority Tourney owner first,
+rebuilds the Ensrick owner, and then reapplies only non-conflicting Tourney
+leaves. This ordering prevents a stale Tourney snapshot from restoring vanilla
+over a newly selected Ensrick value.
+
 ### Networked buffs + peer parity (owner: `docs/engine/03`; project `project_vt2_cross_peer_wire_safety`)
 
 Nine rework toggles push a mod-registered buff name onto a vanilla NETWORKED buff
