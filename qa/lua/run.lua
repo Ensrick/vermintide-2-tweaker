@@ -108,6 +108,8 @@ local suites = {
     "test_wt_longbow_zoom_probe",
     "test_wt_flamestorm_fx",
     "test_wt_master_toggles",
+    "test_wt_rework_master_runtime",
+    "test_wt_settings_runtime",
     "test_wt_rework_master_policy",
     "test_wt_bardin_coverage",
     "test_wt_port_status",

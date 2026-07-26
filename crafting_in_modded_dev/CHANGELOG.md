@@ -1,5 +1,11 @@
 # Crafting in Modded Changelog
 
+## 0.8.107-dev (2026-07-25) - #1002 bounded Equipment reset
+
+- Opted CIM into Mod Tweaker's owner-level setting transaction. A full
+  Equipment DEFAULT/profile restore reapplies the movespeed template at most
+  once after all values persist, with bounded `[cim:1002]` evidence.
+
 ## 0.8.106-dev (2026-07-22) - #959/#628/#882/#598/#921 CIM identity and presentation repairs
 
 - #959: Accessory property usage, removal, and clear actions now preserve the
@@ -26,7 +32,6 @@
 - Offline Lua coverage locks the keyed-map iteration contract, salvage-state fingerprint stability/change detection, and the production diagnostic marker. Runtime `/cim_regression_test` adds `issue628_salvage_state_diagnostic` and requires every real provider enumerator to be routed.
 
 **Verify:** Open Salvage on Bounty Hunter after equipping and then replacing Dual Maces; the unequipped exact item must appear. Switch to Kruber and reopen Salvage. The console log must contain bounded `[cim:628] salvage_state` rows naming the exact eligibility or rejection reason and saved loadout owners for each crafted item.
-
 ## 0.8.105-dev (2026-07-21) - #592/#928 bounded CWV Blacksmith seed contract [not-started]
 
 - Reconciled the Craft Item selector and runtime diagnostics with CWV's current

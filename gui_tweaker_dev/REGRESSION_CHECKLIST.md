@@ -1,5 +1,20 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Equipment DEFAULT transaction (#1002)
+
+- [ ] In Mod Tweaker, open **Equipment**, press **DEFAULT**, confirm, then press
+  **APPLY**. The game remains responsive and does not exhaust the Lua heap.
+- [ ] The log contains one `[gut:560]` commit for each non-empty Equipment owner
+  and one `[wt:1002]` line with `availability_applies=1 action_applies=1`.
+  Cosmetics/CIM/CWV each emit at most one corresponding `:1002` line.
+- [ ] Reopen Equipment and confirm every current setting matches its declared
+  first-use default. Restart once and confirm those values persisted.
+- [ ] Change one Weapon Availability master without changing its advanced
+  children; Apply must still cascade. DEFAULT must restore mixed per-weapon
+  defaults rather than flattening them to the master's boolean.
+- [ ] `qa/check_lua_unit_tests.ps1` passes the multi-owner transaction and both
+  WT master-reconciliation cases.
+
 ## Detached bot loadouts (#954)
 
 - [ ] Prepare a Warrior Priest saved row with visibly distinct melee and ranged

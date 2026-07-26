@@ -951,6 +951,24 @@ function M.on_setting_changed(setting_id)
     end
 end
 
+function M.on_settings_batch_changed(setting_ids)
+    local relevant = false
+    for i = 1, #(setting_ids or {}) do
+        if type(setting_ids[i]) == "string"
+                and setting_ids[i]:find("^wt_dev_hp_") then
+            relevant = true
+            break
+        end
+    end
+    if not relevant then return false end
+    if mod:get("wt_dev_hp_enabled") ~= true then
+        _restore_cached_poses()
+    else
+        _apply_pose_all()
+    end
+    return true
+end
+
 function M.on_disabled()
     return _restore_cached_poses()
 end

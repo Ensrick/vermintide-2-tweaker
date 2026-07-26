@@ -56,7 +56,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.106-dev"
+local MOD_VERSION = "0.8.107-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -4126,14 +4126,8 @@ end
 -- at engine boot, so this just rewrites the multiplier shape).
 _patch_movespeed_buff()
 
--- Re-apply when the user toggles the setting in the VMF menu. VMF fires
--- `on_setting_changed` with the setting_id; gate on our toggle to avoid
--- spurious work on unrelated setting flips.
-mod.on_setting_changed = function(setting_id)
-    if setting_id == "movespeed_2pct_mode" then
-        _patch_movespeed_buff()
-    end
-end
+local _settings_runtime = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_settings_runtime")
+_settings_runtime.install(mod, _patch_movespeed_buff, printf)
 
 local function _seed_one_item(item, props_out, traits_out, slot_index)
     if not item then return end

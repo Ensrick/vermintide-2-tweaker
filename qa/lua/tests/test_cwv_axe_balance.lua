@@ -360,9 +360,12 @@ return function(H, repo_root)
 		end
 		local source = read(repo_root
 			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")
+		local settings_runtime = read(repo_root
+			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_settings_runtime.lua")
 		H.truthy(source:find("mod._wt_apply_axe_balance(nil, false)", 1, true))
 		H.truthy(source:find("mod._wt_apply_axe_balance(nil, true)", 1, true))
-		H.truthy(source:find("mod._wt_apply_axe_balance(setting_id, false)", 1, true))
+		H.truthy(settings_runtime:find(
+			"mod._wt_apply_axe_balance(setting_id, false)", 1, true))
 		local cwv_data = read(repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants_data.lua")
 		H.equal(cwv_data:find(policy.GREATAXE_LIGHT_CRIT_SETTING, 1, true), nil)
 	end)

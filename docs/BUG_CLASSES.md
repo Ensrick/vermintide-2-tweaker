@@ -2959,3 +2959,60 @@ restores information intentionally stripped from a vanilla-safe RPC.
 
 **Related:** class 24 (transition lifecycle), class 43 (durable versus render
 state), class 48 (presentation adapters), and class 64 (numeric lookup parity).
+---
+
+## 79. Merged settings tab leaves one expensive owner on per-setting notification
+
+**First confirmed:** issue #1002 on 2026-07-23; prior single-owner precedent
+issue #560.
+**Canonical Issue:** [#1002](https://github.com/Ensrick/vermintide-2-tweaker/issues/1002)
+**Lives in:** Mod Tweaker DEFAULT/profile commits spanning multiple VMF mod
+owners, especially a large owner whose `on_setting_changed` rebuilds global
+tables.
+
+### Symptoms
+- Confirming DEFAULT on one merged tab exhausts the Lua heap or freezes before
+  Apply completes, while resetting a smaller single-owner tab works.
+- The transaction module exists and is correct, but the expensive owner never
+  receives its batch callback; it falls back to one synchronous VMF
+  notification per setting.
+- A master checkbox and its children can also restore incorrectly if a batch
+  treats the master's aggregate boolean as authoritative over mixed child
+  defaults.
+
+### Diagnosis pattern
+1. Partition the staged buffer by its real `_owners` mapping. Enumerate every
+   owner selected by the synthetic tab; do not attribute the whole tab to the
+   GUI mod.
+2. For each owner, check for an explicit `on_settings_batch_changed(ids)`.
+   VMF `set(..., true)` synchronously dispatches the ordinary setting event, so
+   one missing opt-in is enough to reintroduce N whole-mod rebuilds.
+3. Instrument only transaction completion. Compare settings persisted,
+   completion notifications, and expensive final applies. The bound is owners,
+   not settings.
+
+### Fix template
+- Keep the generic transaction opt-in. Persist each owner's complete buffer
+  with `notify=false`, then invoke exactly one owner completion callback.
+  Never invent a generic sentinel for unknown owners.
+- Inside each owner, classify changed ids and coalesce each independent side
+  effect. A large availability owner performs one final full reconciliation,
+  not one reconciliation per `unlock_*` row.
+- Treat stable/dev aliases as separate selectable providers of one family; each
+  alias that can own a merged row must implement the same completion contract.
+- A failed silent write or completion callback keeps that owner's pending
+  buffer and suppresses profile capture. Successful sibling owners may remain
+  committed; the retry completes the remaining owner before one full snapshot.
+- A profile switch that auto-commits the old slot must re-check for a retained
+  pending buffer and abort before capturing either profile or changing the
+  active slot.
+- Reconcile master controls before the final apply. If the transaction contains
+  the master and every child, preserve child values and derive the master. If
+  only the master changed, cascade once.
+- Lock the contract with Lua 5.1 tests proving N persisted writes, at most one
+  completion notification per owner, mixed-default preservation, and
+  master-only cascade semantics.
+
+**Related:** issue #560 (Enemy Tweaker's verified one-owner implementation),
+class 11 (Lua 5.1 limits), and class 51 (a completed branch is not a shipped
+fix).

@@ -1759,6 +1759,20 @@ function M.on_setting_changed(setting_id)
     end
 end
 
+function M.on_settings_batch_changed(setting_ids)
+    _ensure_setting_index_built()
+    local changed = 0
+    for i = 1, #(setting_ids or {}) do
+        local setting_id = setting_ids[i]
+        local rec = _setting_index[setting_id]
+        if rec then
+            changed = changed + _apply_anim_event_change(rec, mod:get(setting_id))
+        end
+    end
+    if changed > 0 then _try_force_rewield() end
+    return changed
+end
+
 -- ---------------------------------------------------------------------------
 -- /wt_dump_anim_picks chat command
 -- ---------------------------------------------------------------------------
