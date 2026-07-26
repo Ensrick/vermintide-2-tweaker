@@ -63,6 +63,12 @@ every per-frame feature CHAINS `mod.update` (capture-prev / call-prev-first), so
 method)`; every module below carries a pre-flight grep note, and consolidations
 are flagged in the trap column.
 
+### Native talent Perks presentation (#153; `_gut_hidden_passives.lua`)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why gut hooks it | Trap / invariant |
+|---|---|---|---|
+| `HeroWindowTalents._populate_career_info` / `HeroWindowTalentsConsole._populate_career_info` [hook] | Vanilla reads `CareerUtils.get_passive_ability_by_career(career_settings).perks`, then renders those records into three PC or six console `career_perk_*` widgets [src: `hero_window_talents.lua:439-483`; `hero_window_talents_console.lua:620-694`; console definition `NUM_PERKS=6`] | Supply source-confirmed omitted WHC passives to the existing **Perks** renderer instead of appending them to Witch Hunt's passive description | The gameplay-owned table is replaced only for the synchronous vanilla call and restored on success/error. Console gets two independent rows; the three-slot PC surface gets one combined tooltip row. No buff, attribute, selection, or network mutation. |
+
 ### Surface 1a - Third-person camera + screen-particle suppression (owner: `docs/engine/08`, `/04`; `_gut_camera.lua`)
 
 Migrated from `gt` 2026-06-29 (#191); behavior unchanged, ids `tp_*` -> `gut_tp_*`.

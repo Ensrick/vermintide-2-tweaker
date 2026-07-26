@@ -35,7 +35,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.316-dev"
+local MOD_VERSION = "0.2.317-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2243,7 +2243,8 @@ do
 end
 
 -- Source-confirmed hidden innate career bonuses (#153). Presentation only:
--- hooks run after vanilla population and never mutate career/passive tables.
+-- the wrapper supplies a temporary Perks collection to the synchronous vanilla
+-- population call, then restores the exact original table on success or error.
 do
     local ok, api = pcall(mod.dofile, mod,
         "scripts/mods/gui_tweaker_dev/_gut_hidden_passives")

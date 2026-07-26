@@ -47,6 +47,15 @@ If this candidate fails, use exactly one evidence-selected fallback:
 3. If explicit bot editing is required, add a bot-only edit transaction that
    writes `bot_loadout`; never route it through a player saved row.
 
+## Hidden career passives (#153)
+
+- [ ] Enable **Surface Hidden Career Passives** and open Witch Hunter Captain's Talents screen.
+- [ ] **Power of Sigmar** and **Sigmar's Charm** render under **Perks**, never inside the Witch Hunt passive description.
+- [ ] The six-row/console layout shows two independent rows; the compact three-slot PC layout shows one combined row whose tooltip contains both exact bonuses.
+- [ ] Disable the option and reopen the screen; only the two vanilla WHC perks remain.
+- [ ] Switch careers; no uncatalogued, duplicated, selectable, or gameplay-changing perk appears.
+- [ ] `/gut_regression_test` passes `issue153_hidden_passives_display_only`; offline `test_gut_hidden_passives.lua` passes.
+
 ## Mutually exclusive controls (#446)
 
 - [ ] A presented exclusive group renders as one collapsible with radio bubbles, not separate ON/OFF steppers.
