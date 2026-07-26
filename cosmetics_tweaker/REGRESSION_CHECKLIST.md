@@ -62,6 +62,8 @@ Last updated: 2026-07-21.
 | Root cause | The preview replay painted and cached `mesh_unit` on its hidden spawn frame. On the following update, vanilla `_update_units_visibility` called `_set_character_visibility(true)` and restored `skin_data.material_changes`; the same-mesh cache then suppressed every corrective repaint. |
 | Fix version | cosmetics_tweaker v0.9.130-dev |
 | Expected | Hidden or not-yet-visible meshes are never cached. The first visible frame paints once after vanilla's material restore; hide/show, view reopen, and career respawn invalidate and replay once without per-frame writes. |
+| Remote complete-set replay | When another player appears, the existing owner republishes the durable career-scoped hat/outfit cache plus exact-item offhand selections through the existing semantic channel. The publish remains armed until exact career, bridge registration, loadout-cache rehydration, both equipped weapon records, every saved offhand hand, and every queued/emitted outcome are proven; a hat-only/empty early snapshot or failed send cannot consume the edge. |
+| Peer safety | The host stores the career-stamped semantic records and answers the joiner's acknowledged pull. No custom backend ID enters vanilla wire data; unsupported peers retain the registered vanilla fallback. |
 | Detection | Offline `test_cos_grail_knight_set.lua` simulates hidden spawn, visible transition, same-mesh steady state, hide/show, and new-mesh respawn. `/cos_regression_test` passes `issue629_grail_knight_set_contract`. |
 | Tracking | GitHub issue #629. |
 

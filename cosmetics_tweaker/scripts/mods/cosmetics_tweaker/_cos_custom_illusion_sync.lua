@@ -124,10 +124,14 @@ function M.install(owner, deps)
 
         local operations, next_state = M.plan(
             by_template[template_key], desired, claimed)
-        by_template[template_key] = next(next_state) and next_state or nil
+        local accepted = 0
         for _, operation in ipairs(operations) do
-            deps.send(unit, template_key, operation.hand, operation.unit)
+            if deps.send(unit, template_key, operation.hand, operation.unit) ~= true then
+                return false, "send-failed", accepted
+            end
+            accepted = accepted + 1
         end
+        by_template[template_key] = next(next_state) and next_state or nil
 
         if skin_key and deps.custom_skin_keys[skin_key]
             and type(deps.log) == "function"
@@ -141,7 +145,7 @@ function M.install(owner, deps)
                     tostring(reason), #operations)
             end
         end
-        return true, reason, #operations
+        return true, reason, accepted
     end
 
     owner._cos_send_custom_skin_hands = function(...)

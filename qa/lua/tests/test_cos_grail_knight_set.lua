@@ -148,7 +148,7 @@ return function(H, repo_root)
             "loadout item lookup must use the exact career fallback")
         H.truthy(entry:find("_la_vanilla_fallback(la_id, career)", 1, true),
             "hot-join replay must use the exact wearer career fallback")
-        H.truthy(entry:find("_wire_career_for_player(lp)", 1, true),
+        H.truthy(entry:find("career_for = _wire_career_for_player", 1, true),
             "self-rebroadcast must use the exact local player career fallback")
     end)
 
