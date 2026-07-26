@@ -147,14 +147,18 @@ Single VMF setting `glow_per_item` (string). JSON-encoded via the global
 * Saved only by explicit `GlowPicker.apply()`; close discards preview edits.
 * If `cjson` is nil, persistence is no-op and a one-time log-only warning fires.
 
-## 5. The popup UI
+## 5. The contextual editor UI
 
-Floating panel anchored top-center, 600×620, no background dim. Built
-lazily on first `open_for(...)` call. It includes:
+The editor replaces the contents of vanilla's right-side Information panel and
+does not cover the weapon model. `_cos_glow_panel_layout.lua` reads the live
+`HeroWindowItemCustomization._ui_scenegraph.info_window` size and world
+position; `_glow_picker.lua` binds its own `scale = "fit"` scenegraph to those
+values before input and draw. Missing or malformed host geometry fails closed.
+The native Information frame/background remains the sole panel chrome. The
+editor is built lazily on first `open_for(...)` and includes:
 
-* `panel_bg` — semi-opaque dark rect with border
 * `title` — "Glow Customizer"
-* `subtitle` — shows `backend_id:` and `family:` for the active item
+* `subtitle` — player-facing Rune Glow or Magic Glow family
 * `close_btn` — top-right X button
 * `apply_btn` — explicit bottom-center commit, active after a slider edit
 * `slider_r / slider_g / slider_b / slider_intensity` — 4 sliders for
@@ -164,6 +168,21 @@ lazily on first `open_for(...)` call. It includes:
   when a committed override exists; clears the per-item + per-variant
   override, rebroadcasts the cleared coop payload, repaints the native
   template on the live weapon, and drops the badge.
+
+### 5.1 Ownership boundary (#377)
+
+Vanilla's `_state_draw_overview` draws `_info_widgets` independently from the
+base Information frame. While the editor is open for the exact selected
+backend-item + illusion identity, the host adapter temporarily sets only that
+field to nil for the wrapped draw and restores the exact table afterward,
+including on errors. The frame in `_widgets`, model, illusion grid, and
+controller paths remain vanilla-owned.
+
+This adapter does not alter #574's exact persistence, world-unit application,
+remote replay, inventory hero preview, or #650's composed icon descriptor. The
+committed badge remains Apply-only; dirty slider previews never become durable
+or network-visible. #796's live customization-model preview remains a separate
+functional issue.
 
 ### Native-default resolution (issue 610)
 
@@ -234,7 +253,7 @@ no per-item customizations still see the global preset behavior.
 ### a. Context and command access coexist
 
 Selecting or wielding a glow-capable illusion never opens the picker. A persistent
-button beside the picker's bottom-right corner is the contextual open/close action;
+button inside the Information panel's bottom-right corner is the contextual open/close action;
 it greys out when the previewed illusion has no glow family. `/glow_picker` remains
 available as a diagnostic manual entry point.
 

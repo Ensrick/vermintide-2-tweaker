@@ -1,5 +1,20 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.171-dev (2026-07-26) — #377 glow editor Information-panel host
+
+- The manually opened Glow editor now replaces the right-side Information
+  panel's contents instead of covering the weapon preview. Its geometry and
+  toggle position derive from the live vanilla `info_window` scenegraph node.
+- The editor scenegraph now uses vanilla's `scale = "fit"` screen transform, so
+  the custom controls and native panel share one resolution/UI-scale space.
+- The native Information frame, illusion controls, model preview, and
+  controller navigation remain vanilla-owned. Closing the editor restores the
+  original information contents; the transaction also restores them before a
+  wrapped vanilla draw error is propagated.
+- Exact item+illusion persistence, explicit Apply, Restore Default, committed
+  badges, and the separate #796 live-preview adapter are unchanged. Added
+  executable layout, hitbox, and host-restoration regressions.
+
 ## 0.9.170-dev (2026-07-26) — #629 complete-set peer-ready replay
 
 - A different peer appearing now re-arms the existing owner's durable
