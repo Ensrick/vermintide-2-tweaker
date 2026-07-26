@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.289-dev"
+local MOD_VERSION = "0.12.290-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -1309,6 +1309,21 @@ function mod._force_load_necromancer_fx_package()
 end
 
 mod._force_load_necromancer_fx_package()
+
+-- #201: Deepwood Staff's secondary action spawns the native plague-vortex
+-- through WeaponSystem. The weapon units are ordinary Woods DLC inventory
+-- assets, but the vortex runtime unit is resident only with the complete
+-- Sister of the Thorn career package. Cross-career users do not load that
+-- package naturally, so explicitly request it for DLC owners and keep the
+-- availability/action boundary closed until it is resident.
+local _deepwood_runtime = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/_wt_deepwood_runtime").install(mod, {
+    package_manager = function() return Managers and Managers.package end,
+    unlock_manager = function() return Managers and Managers.unlock end,
+    on_residency_changed = function() mod._wt368_deferred_availability = true end,
+})
+mod._wt.deepwood_runtime = _deepwood_runtime
+mod._wt.deepwood_runtime_ready = _deepwood_runtime.ready
 
 -- ============================================================
 -- Brace → Repeater illusion resolver
@@ -4027,6 +4042,7 @@ mod.on_game_state_changed = function(status, state_name)
     mod._heap_probe_last_kb = _heap_pre
 
     mod:info("Weapon Tweaker: Baseline Active")
+    mod._force_load_deepwood_runtime_package(true)
     apply_weapon_unlocks()
     -- #368: CWV registers clone definitions from its own state-enter callback.
     -- Reconcile once more on the following frame so WT is the deterministic
@@ -4530,6 +4546,7 @@ local _wt_runtime_check_deps = {
     grip_offset_policy = _wt_grip_offset_policy,
     skullsplitter_hand_policy = _wt_skullsplitter_hand_policy,
     weapon_backend = weapon_backend,
+    deepwood_runtime = _deepwood_runtime,
 }
 -- WT_DEV_OVERLAY_BEGIN:runtime-check-dependencies
 _wt_runtime_check_deps.dev_anim_picker = _wt_dev_anim_picker

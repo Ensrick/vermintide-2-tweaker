@@ -96,7 +96,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.168-dev"
+local MOD_VERSION = "0.9.169-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -10162,7 +10162,9 @@ if rawget(_G, "AttachmentUtils") then
             -- attachment exists.
             local spawn_item = item_data
             local path = spawn_item and spawn_item.unit
-            if type(path) == "string" and path ~= "" and not _unit_resident(path) then
+            local is_headpiece = slot_name == "slot_hat"
+            if is_headpiece and type(path) == "string" and path ~= ""
+                    and not _unit_resident(path) then
                 mod:info("[cos-hat] SKIP non-resident headpiece=%s slot=%s owner=%s (viewer package not resident; no hat instead of crash)",
                     tostring(path), tostring(slot_name),
                     tostring(type(owner_unit) == "userdata" and "unit" or owner_unit))

@@ -48,6 +48,16 @@ local function _get_setting(setting_id)
     return mod:get(setting_id)
 end
 
+-- #201: a Deepwood Staff weapon unit is not a complete runtime. Its vortex
+-- action requires the owner-gated we_thornsister career package. Keep the
+-- can_wield and career-action surfaces closed until the entry point's package
+-- owner reports that complete package resident.
+local function _runtime_ready(weapon_key)
+    if weapon_key ~= "we_life_staff" then return true end
+    local check = WT.deepwood_runtime_ready
+    return type(check) == "function" and check() == true
+end
+
 -- #620: native Tuskgor Spear remains a WT-alone default-off Foot Knight port,
 -- but CWV's ready Combat Style family authors that pair default-on. The hidden
 -- seed runs once per profile, only after the positive live IML marker exists,
@@ -186,7 +196,7 @@ local function apply_weapon_unlocks()
             local conditional_yield = _cwv_ownership.should_yield_native(
                 career, weapon_key, has_cwv, _cwv_conditional,
                 _cwv_replacement_ready(weapon_key))
-            if not conditional_yield then
+            if not conditional_yield and _runtime_ready(weapon_key) then
                 if mod:get("unlock_" .. career .. "_" .. weapon_key) then
                     local item = rawget(ItemMasterList, weapon_key)
                     if item then
@@ -259,7 +269,8 @@ local function patch_career_actions_on_weapons()
             local yields_to_cwv = _cwv_ownership.should_yield_native(
                 career, weapon_key, has_cwv, _cwv_conditional,
                 _cwv_replacement_ready(weapon_key))
-            if not yields_to_cwv and mod:get("unlock_" .. career .. "_" .. weapon_key) then
+            if not yields_to_cwv and _runtime_ready(weapon_key)
+                    and mod:get("unlock_" .. career .. "_" .. weapon_key) then
                 local item = rawget(ItemMasterList, weapon_key)
                 local tmpl_key = item and item.template
                 local tmpl = tmpl_key and Weapons[tmpl_key]
@@ -310,6 +321,9 @@ local function reconcile_effective_career_actions(item, template, career_name, i
     if type(item) ~= "table" or type(template) ~= "table"
             or type(template.actions) ~= "table" or type(career_name) ~= "string" then
         return nil, "effective_context_unavailable"
+    end
+    if not _runtime_ready(item_key) then
+        return nil, "runtime_package_not_ready"
     end
     local allowed = false
     for _, career in ipairs(item.can_wield or {}) do
