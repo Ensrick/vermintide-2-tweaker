@@ -1,6 +1,6 @@
 # Career Tweaker Changelog
 
-## 0.4.16-beta (2026-07-26) - #936 split Tourney balance controls [verify-fix-coop]
+## 0.4.16-beta (2026-07-26) - #936 split Tourney balance controls [verify-fix]
 
 - Split the 17 legacy career-wide Tourney Balance Testing toggles into 46 independent `[TB]` mutation leaves inside each career's existing Talent Reworks section. The stable legacy IDs remain as changed-only **Enable All** presets, and existing saved ON presets expand to their leaves once on first mission entry.
 - Added a third **Enable All Reworks** preset that selects both the Ensrick and Tourney families. Cross-family conflicts now suppress only the exact overlapping Tourney leaf, leaving unrelated Tourney changes active.
