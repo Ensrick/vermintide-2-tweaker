@@ -1,5 +1,49 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.310-dev (2026-07-26) - Starting Boons localized hover descriptions (#1004) [untested]
+
+- The Pilgrimage Chamber Starting Boons preview now gives every displayed icon
+  a hover target. Use the Tab panel's native cursor-unlock action, then hover an
+  icon to see the boon's localized name and description.
+- Description lookup uses the same `DeusPowerUpUtils.get_power_up_description`
+  path as vanilla boon cards, including career-specific talent descriptions and
+  native runtime-registered mod boons. If that canonical resolver cannot produce
+  text, the preview says `Description unavailable.`; it does not reconstruct
+  values from a template and risk showing plausible but incorrect numbers.
+- Tooltip widgets are built lazily on first hover. They use the live renderer's
+  wrapped-font measurement, shrink only from 18 to 14 point, and turn any
+  remaining overflow into pages that preserve the full localized string. Mouse
+  wheel changes pages in either direction; controller right shoulder advances
+  one page per press and wraps after the last page. The displayed hint follows
+  the active device. The box is bounded by the production
+  `banner_right`/`reward_divider` geometry. Missing icons retain an empty, safe
+  hover target while the independent boon-name row still renders.
+- Third-party localized text is treated as untrusted input. Canonical
+  descriptions are capped at 16 KiB; layout is capped at 16 pages and 256 live
+  renderer measurements. Oversized/pathological input falls back to
+  `Description unavailable.` rather than allocating without a bound. Unhovered
+  rows never allocate a tooltip.
+- The feature extends the existing consolidated
+  `IngamePlayerListUI._draw` hook shared by #461/#533/#571. It adds no input or
+  activation hook, so keyboard/controller behavior and native cursor release
+  remain owned by the game.
+- Offline coverage locks canonical-only vanilla/talent/modded lookup, safe and
+  hard-bounded failure, measured shrink/pagination with byte-complete UTF-8
+  content, a source-derived production pane oracle, a faithful dependency-
+  injected port of the production font metric, source-proven controller
+  bindings/debounce, native cursor ownership, and singleton Tab-hook
+  composition. Runtime check:
+  `issue1004_boon_hover_tooltip_wired`.
+
+**Verify in game:** in `morris_hub`, configure a vanilla boon, a talent-derived
+boon, and a CT mod boon. Open the Tab panel, unlock the cursor, and hover each
+icon. Confirm the localized title/description, wrapping, every mouse-wheel page,
+screen bounds at the available UI scales/aspect ratios, and normal cursor
+release when the panel closes. Repeat with controller input: hover the long
+description, advance every page with right shoulder, confirm one page per press,
+wrapping after the last page, and the controller-specific hint. This remains
+`[untested]` until that visual pass is recorded.
+
 ## 0.7.309-dev (2026-07-22) - Chest rescue ordering and Pilgrimage Chamber boon preview (#299, #461) [not-started]
 
 - Chest of Trials rescue jobs now move a still-disabled player beside the

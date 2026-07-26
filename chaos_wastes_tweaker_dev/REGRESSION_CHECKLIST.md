@@ -4,7 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-21.
+Last updated: 2026-07-26.
+
+### starting-boon-preview-hover-description - issue #1004
+
+| Field | Value |
+|---|---|
+| Symptom | The Starting Boons Tab preview shows only icon and name, so the player cannot inspect what a configured boon does before the run. |
+| Source boundary | Native `IngamePlayerListUI.update` owns cursor activation/capture/release. Vanilla boon cards resolve text through `DeusPowerUpUtils.get_power_up_description`, which also derives the current career's talent descriptions. |
+| Expected post-fix | With the native cursor unlocked, hovering any displayed boon icon shows its localized name and description. Vanilla, talent-derived, and native-registered mod boons use the canonical resolver; failure displays a neutral unavailable message rather than reconstructing template values. Missing localization/icon fails safe. Text height comes from the live renderer, shrinks only to 14 point, and supported overflow is reachable in measured pages inside the production right-banner geometry: mouse wheel in either direction, or one controller page per right-shoulder press with wrap. The hint follows the active device. Canonical text over 16 KiB or layout exceeding 16 pages / 256 measurements fails neutral. |
+| Composition | Extend the one `_setup_deed_reward_data` build and consolidated `_draw` pass shared by #461/#533/#571. Do not add an `update`, `_set_active`, or second `_draw` hook. |
+| Detection | Offline `test_ct_boon_preview_tooltip` covers canonical-only lookup, neutral oversize failure, hard byte/page/measurement bounds, measured shrink and byte-complete pagination, a source-derived `banner_right`/`reward_divider` oracle, a faithful dependency-injected adapter of production `UIUtils.get_text_height`, source-proven mouse/controller actions, controller debounce, lazy construction, native cursor ownership, and singleton hook composition. `/ct_regression_test` passes `issue1004_boon_hover_tooltip_wired`. |
+| Manual risk | Engine-free tests cannot prove hotspot timing, atlas residency, or rasterized glyph output. Verify vanilla/talent/modded rows in `morris_hub`, every mouse-wheel page of an intentionally long localized description at multiple UI scales/aspect ratios, missing-icon degradation, and mouse cursor release. Repeat on controller, advance every page with right shoulder, confirm one page per press plus last-to-first wrap and the device-specific hint, then close/reopen the panel before promotion. |
 
 ### boon-runtime module ownership - issue #2
 

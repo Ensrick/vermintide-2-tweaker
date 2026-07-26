@@ -89,6 +89,7 @@ local suites = {
     "test_ct_profile_snapshot",
     "test_ct_start_shrine_policy",
     "test_ct_boon_preview_context",
+    "test_ct_boon_preview_tooltip",
     "test_event_shadow_adventure",
     "test_gut_all_languages_diagnostics",
     "test_mod_tweaker_search",
