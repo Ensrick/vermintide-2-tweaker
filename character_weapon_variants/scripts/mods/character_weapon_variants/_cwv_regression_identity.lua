@@ -184,6 +184,44 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 end)
 
+_rt_register("issue786_peer_resolution_multi_return", function()
+	local resolver = _om.peer_resolver
+	if type(resolver) ~= "table" then return "shared peer resolver is not installed" end
+	local marker = { is_player_controlled = function() return true end }
+	local player, source = resolver.peer_player({
+		player_from_peer_id = function(_, peer_id, local_player_id)
+			if peer_id == "issue786_peer" and local_player_id == 1 then return marker end
+		end,
+	}, "issue786_peer", 1)
+	if player ~= marker or source ~= "player_from_peer_id" then
+		return "protected PlayerManager return value collapsed"
+	end
+	local bot = {
+		peer_id = "issue786_peer",
+		_local_player_id = 2,
+		is_player_controlled = function() return false end,
+	}
+	local owner_player = resolver.owner({
+		owner = function() return bot end,
+	}, "issue786_bot_unit")
+	local direct_player = resolver.peer_player({
+		player_from_peer_id = function() return bot end,
+	}, "issue786_peer", 1)
+	if owner_player ~= nil or direct_player ~= nil then
+		return "same-peer host bot consumed human style/mode identity"
+	end
+	local profile, career = resolver.profile_by_peer({
+		profile_by_peer = function() return 5, 3 end,
+	}, "issue786_peer", 1)
+	if profile ~= 5 or career ~= 3 then
+		return "protected ProfileSynchronizer tuple collapsed"
+	end
+	if _om.combat_style_policy.MAX_REMOTE_REFRESH_ATTEMPTS ~= 8
+			or type(_om.combat_styles.step) ~= "function" then
+		return "bounded remote style refresh owner is not installed"
+	end
+end)
+
 _rt_register("issue645_reciprocal_style_descriptors", function()
 	local policy = _om.combat_style_policy
 	local runtime = _om.combat_styles

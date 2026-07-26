@@ -141,8 +141,7 @@ function M.install(mod, om)
 
 	local function peer_for_owner(owner_unit)
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.owner, pm, owner_unit)
-		player = ok and player or nil
+		local player = om.peer_resolver.owner(pm, owner_unit)
 		if not player then return nil end
 		if type(player.peer_id) == "string" then return player.peer_id end
 		local nok, value = pcall(player.network_id, player)
@@ -182,8 +181,7 @@ function M.install(mod, om)
 
 	local function publish_loadout(recipient, reason)
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.local_player, pm, 1)
-		player = ok and player or nil
+		local player = om.peer_resolver.local_player(pm, 1)
 		local owner_unit = player and player.player_unit
 		local _, equipment = owner_equipment(owner_unit)
 		local slot = equipment and equipment.slots and equipment.slots[M.SLOT]
@@ -304,8 +302,7 @@ function M.install(mod, om)
 
 	function M.restore_local(reason)
 		local pm = Managers and Managers.player
-		local ok, player = pm and pcall(pm.local_player, pm, 1)
-		player = ok and player or nil
+		local player = om.peer_resolver.local_player(pm, 1)
 		local unit = player and player.player_unit
 		if not unit then return false end
 		return rewield(unit, policy.MODE_PICK, true, nil, nil, true)
@@ -336,8 +333,7 @@ function M.install(mod, om)
 						return
 					end
 					local pm = Managers and Managers.player
-					local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
-					player = ok and player or nil
+					local player = om.peer_resolver.peer_player(pm, sender_peer_id, 1)
 					local owner_unit = player and player.player_unit
 					if not owner_unit then return end
 					local _, equipment = owner_equipment(owner_unit)

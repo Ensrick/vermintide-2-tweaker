@@ -684,6 +684,15 @@ The migrated contract is:
    accepting the same record cannot re-wield twice, and no identity RPC is sent
    from `update`.
 
+Any adapter that turns a transport peer id into a render owner must use one
+shared protected resolver and identify the human local-player id. Never route a
+multi-return `pcall` through `and`/`or`: Lua preserves only its first value and
+silently discards the player or profile tuple (#786, bug class 26). A fallback
+peer roster must reject host-owned bots, which share their human owner's peer
+id. If the human/husk is genuinely early, retain one coalesced semantic edge and
+retry only the local render operation with a fixed cadence and hard attempt cap;
+do not resend state from `update`.
+
 Post-edge evidence is bounded `[cwv:660]`: it records lifecycle, adapter,
 fingerprint, and exact right/left model identity at owner/bot spawn and husk
 hand selection. This is stronger than setter-success bookkeeping but still
