@@ -112,7 +112,6 @@ local unit_set_material   = Unit.set_material
 local unit_num_meshes     = Unit.num_meshes
 local unit_mesh           = Unit.mesh
 local unit_world          = Unit.world
-local unit_world_pos      = Unit.world_position
 local mesh_has_matrerial  = Mesh.has_material   -- (sic — kept original spelling)
 local mesh_material       = Mesh.material
 local material_set_texture = Material.set_texture
@@ -126,15 +125,6 @@ local _DEFAULT_TEX_DICT = {
     texture_map_4617b8e0 = "textures/default_emis",
     texture_map_71d74d4d = "textures/default_emis",
 }
-
--- ============================================================
--- Defensive helpers
--- ============================================================
-local function _has_unit(path)
-    if not path or type(path) ~= "string" then return false end
-    if not rawget(_G, "Application") or not Application.can_get then return true end
-    return Application.can_get("unit", path) and true or false
-end
 
 local function _has_package(path)
     if not path or type(path) ~= "string" then return false end
@@ -571,39 +561,20 @@ end)
 -- (replace_textures + add_particles). Functionally equivalent; one hook
 -- registration instead of two.
 
--- The patched UnitSpawner.spawn_local_unit: pre-validates via
--- Application.can_get before calling World.spawn_unit, refusing the spawn
--- if the unit isn't in resources. Prevents the C-level fatal that pcall
--- can't catch.
+-- #270 / #201: UnitSpawner is an engine-global boundary, not a Cosmetics-owned
+-- attachment boundary. The old wrapper preflighted every unit in the game and
+-- returned nil for non-resident paths. Native callers do not share Cosmetics'
+-- nil-tolerant attachment contract: WeaponSystem._summon_vortex continued into
+-- EntityManager:add_unit_extensions with a nil unit and crashed.
+--
+-- Preserve native UnitSpawner semantics exactly: delegate once, then decorate
+-- the returned live unit. Cosmetics-owned optional headpieces fail closed at
+-- the narrower AttachmentUtils.create_attachment gate in cosmetics_tweaker.lua.
 mod:hook("UnitSpawner", "spawn_local_unit", function (func, self, unit_name, position, rotation, material)
-    if not _has_unit(unit_name) then
-        -- issue #270 (crash A): DO NOT delegate to native here. Vanilla
-        -- UnitSpawner.spawn_local_unit calls World.spawn_unit(self.world,
-        -- unit_name, ...) UNCONDITIONALLY (unit_spawner.lua:294), which C-asserts
-        -- (`can_get(unit_type, unit_name)`, c_api_world.cpp:67) on a non-resident
-        -- unit and hard-crashes the client -- bypassing pcall. The old
-        -- `return func(...)` here therefore DID crash: the "refusing to spawn" log
-        -- was misleading (it refused our texture work but still called native, so
-        -- a non-resident headpiece on a viewer machine CTD'd them). Returning nil
-        -- skips the spawn entirely. Every mod-side caller that can feed a
-        -- non-resident headpiece here is guarded to tolerate a nil/absent unit:
-        -- AttachmentUtils.create_attachment has a residency gate and
-        -- AttachmentUtils.link has a Unit.has_node guard (both cosmetics_tweaker.lua).
-        -- Log-only via mod:info (reaches the console log with mod logging OFF; no
-        -- chat spam, unlike the old mod:warning).
-        mod:info("[cos-hat] SKIP non-resident spawn unit=%s (would C-assert in World.spawn_unit)",
-            tostring(unit_name))
-        return nil
+    local unit = func(self, unit_name, position, rotation, material)
+    if not unit or not unit_alive(unit) then
+        return unit
     end
-
-    local unit = World.spawn_unit(self.world, unit_name, position, rotation, material)
-    local unit_unique_id = self.unit_unique_id
-    self.unit_unique_id = unit_unique_id + 1
-
-    unit_set_data(unit, "unique_id", unit_unique_id)
-    unit_set_data(unit, "unit_name", unit_name)
-
-    POSITION_LOOKUP[unit] = unit_world_pos(unit, 0)
 
     replace_textures(unit)
     add_particles(unit, self.world)

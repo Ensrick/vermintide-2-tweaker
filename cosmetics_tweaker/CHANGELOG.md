@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.169-dev (2026-07-26) — #270 native UnitSpawner semantics
+
+- Removed Cosmetics' engine-global non-resident-unit short circuit from
+  `UnitSpawner.spawn_local_unit`. The wrapper now delegates exactly once and
+  applies Material-Hijack decoration only to the returned live unit.
+- Optional Cosmetics headpieces remain fail-closed at their narrower
+  `AttachmentUtils.create_attachment` ownership boundary.
+- Added regression coverage proving Cosmetics cannot return a fabricated nil
+  from unrelated native gameplay spawns.
+
 ## 0.9.168-dev (2026-07-25) — #1002 bounded Equipment reset [not-started]
 
 - Opted Cosmetics into Mod Tweaker's owner-level setting transaction. A full
