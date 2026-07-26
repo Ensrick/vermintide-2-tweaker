@@ -1,5 +1,17 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.317-dev (2026-07-26) -- restore source-backed hidden career perks (#153) [not-started]
+
+- Supplies the native passive-perk rows only while the career-information
+  panel is populated, then restores the exact original data immediately.
+- Shows both source-proven Witch Hunter Captain passives without permanently
+  mutating shared career settings or relying on guessed descriptions.
+- Adapts the presentation to the available career-info row count: separate
+  rows on the six-row console layout and one combined tooltip row on the
+  compact three-row desktop layout.
+- Fails closed when native source signatures drift, and adds bounded
+  regression coverage for restoration, idempotence, layout, and localization.
+
 ## 0.2.316-dev (2026-07-26) -- reconcile detached bot equipment at the read boundary (#954) [not-started]
 
 - Reconciles the persisted detached bot snapshot at the engine's shared
