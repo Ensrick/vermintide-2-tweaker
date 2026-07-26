@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-17.
+Last updated: 2026-07-26.
 
 ## Runtime regression module boundaries
 
@@ -214,14 +214,24 @@ Last updated: 2026-07-17.
 
 ---
 
-## Player-stat HUD census diagnostics (#797)
+## Player-stat HUD and census diagnostics (#797)
 
+- [ ] **Player stat HUD** is off by default. Enabling it shows career, wielded item/template/style, current action/sub-action/damage profile, and the fixed health/stamina/movement/cooldown/attack/critical/power/damage/defense families without chat/log spam or networking.
+- [ ] Every consumer-effective supported row reconciles base plus displayed deltas to final. Authoritative health/stamina remainder is an explicit `unattributed-engine-delta`; exact downstream modifiers say `factor`, never `final`. `activated_cooldown` is labeled an activation factor and never appears as `max_cooldown * factor`, because the native call first consumes current cooldown, cost, refund, and optional modified cost. Movement says `UNSUPPORTED(stance/status/current_movement_speed_scale/player_speed_scale-dependent)` and never presents `PlayerUnitMovementSettings.move_speed` alone as effective.
+- [ ] Stamina regen uses the live status getter as its denominator: six fatigue points produce an unbuffed `1.5 / 6 * 100 = 25` gauge-per-second base before `fatigue_regen`. If authoritative max fatigue is absent or non-positive, the row says `UNSUPPORTED(max-fatigue-unavailable)`.
+- [ ] Current action time scale has separate chain/action (`is_animation=false`) and animation (`is_animation=true`) rows. Both compose action base, generic, weapon-family, and drakefire transforms; charge time follows the exact `scale_chain_window_by_charge_time_buff OR (scale_anim_by_charge_time_buff AND is_animation)` truth table. The action-settings critical row composes career/action/melee-or-ranged/heavy/generic stages, while effective critical chance says `UNSUPPORTED(runtime-overrides-unobservable)`. Target/profile/difficulty-dependent power and proc/action-dependent push/dodge finals also say `UNSUPPORTED(reason)`.
+- [ ] Expanded rows retain the exact native stage key plus active parent/child buff identity; collapsed root stages say `root-aggregate` rather than inventing per-source arithmetic. Proc, conditional, function/table multiplier, and missing-base paths are never evaluated through the engine.
+- [ ] Compact shows eight high-value families. Expanded pages expose every family, consumer, and wrapped contribution with `/gt_stat_hud_page`; no generated text clips horizontally or hides behind a fixed page cap.
+- [ ] Bottom-left/right anchors remain outside the top-left bot HUD and top-right Godmode indicator occupancy. The renderer uses standard colors and no hardcoded panel chrome.
+- [ ] `/gt_stat_hud_metrics` shows 4 Hz bounded samples, provenance rebuilds only on unit/equipment/action/buff edges, formatting only when values change, and bounded row/line allocations. Stat/stage/source truncation is visible and absent rows fail closed.
+- [ ] Toggle-off, mod disable, game-state transitions, native health/status death (including while `Unit.alive` is still true), and a missing local extension immediately clear the cached panel without retaining a GUI/world handle.
+- [ ] `/gt_regression_test` passes `issue797_player_stat_hud`.
 - [ ] `/gt_stat_probe` writes one `[gt:797]` census to the engine log and never echoes diagnostic output into chat.
 - [ ] `/gt_stat_trace` writes exactly five bounded samples at 0, 0.25, 1, 3, and 10 seconds, then terminates.
-- [ ] Each sample reports career, wielded item/template, health/status context, and every nonempty authoritative `BuffExtension._stat_buffs` row without calling `apply_buffs_to_value`.
+- [ ] Each sample reports career, item/template/style, action/sub-action/profile, reconciled values, exact factors, exact stage/source identity, and unsupported reasons without calling `apply_buffs_to_value`.
 - [ ] Death, respawn, career/equipment transitions, or a missing extension produce a bounded `skip=` row rather than an error or retained engine handle.
 - [ ] `/gt_regression_test` passes `issue797_player_stat_diagnostics_armed`.
-- Detection: offline `test_gt_player_stat_probe.lua`; runtime commands `/gt_stat_probe` and `/gt_stat_trace`; source owner `docs/engine/10_damage_buffs_and_talents.md`.
+- Detection: offline `test_gt_player_stat_probe.lua`; runtime commands `/gt_stat_probe` and `/gt_stat_trace`; `/gt_regression_test` checks `issue797_player_stat_diagnostics_armed` and `issue797_player_stat_hud`; source owner `docs/engine/10_damage_buffs_and_talents.md`.
 
 ---
 

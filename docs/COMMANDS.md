@@ -61,6 +61,8 @@ gt_disconnect_grace_probe, -- arm one bounded host disconnect lifecycle trace (#
 gt_chest_pickup_probe,      -- arm one bounded closed-chest pickup trace (#347)
 gt_stat_probe,              -- one read-only player stat census (#797)
 gt_stat_trace,              -- five bounded player stat censuses over ten seconds (#797)
+gt_stat_hud_page,           -- select expanded HUD page: next, prev, or number (#797)
+gt_stat_hud_metrics,        -- log bounded HUD sample/rebuild/format counters (#797)
 gt_regression_test,         -- issue diagnostic + regression commands retain gt_ prefix
 -- Host-side lobby controls (absorbed from lobby_tweaker; still lobby_-prefixed):
 lobby_reserve, lobby_unreserve, lobby_reservations,
