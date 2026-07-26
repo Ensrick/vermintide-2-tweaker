@@ -1,5 +1,21 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.170-dev (2026-07-26) — #629 complete-set peer-ready replay
+
+- A different peer appearing now re-arms the existing owner's durable
+  appearance publication. Replay waits for an exact career, both realized
+  equipped weapon records, career-scoped hat/outfit cache, and every persisted
+  exact-item offhand hand to converge with its restored selection.
+- Managed hat/outfit state is replaced atomically from the current career,
+  clearing stale or wrong-career cosmetics while preserving weapon illusions.
+- Hat, outfit, shield, vanilla offhand mesh, and custom-illusion publication
+  now propagates an actual queued/emitted result. The pending edge clears only
+  when every composed operation is accepted; unproven careers and transport
+  failures remain retryable.
+- Extracted the complete-set replay runtime from the frozen entry file and
+  added Lua 5.1 composition coverage for staggered slots, stale clearing, and
+  career/send-failure retries.
+
 ## 0.9.169-dev (2026-07-26) — #270 native UnitSpawner semantics
 
 - Removed Cosmetics' engine-global non-resident-unit short circuit from

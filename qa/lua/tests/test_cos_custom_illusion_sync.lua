@@ -86,6 +86,7 @@ return function(H, repo_root)
             selection_for = function() return nil end,
             send = function(unit, template, hand, path)
                 sent[#sent + 1] = { unit, template, hand, path }
+                return true
             end,
         }))
         local applied, reason, count = owner._cos_send_custom_skin_hands(
@@ -96,6 +97,25 @@ return function(H, repo_root)
         H.equal(sent[1][2], "spear_template")
         H.equal(sent[1][3], "right_hand_unit")
         H.equal(sent[1][4], "custom/spear")
+    end)
+
+    H.test("Cosmetics #918 runtime adapter propagates transport rejection", function()
+        local owner = {}
+        H.truthy(policy.install(owner, {
+            custom_skin_keys = custom,
+            item_master = item_master,
+            weapon_skins = skins,
+            unit_alive = function() return true end,
+            owner_for_unit = function() return { peer_id = "peer-a" } end,
+            wearer_is_human = function() return true end,
+            selection_for = function() return nil end,
+            send = function() return false end,
+        }))
+        local applied, reason, count = owner._cos_send_custom_skin_hands(
+            "unit-a", { key = "es_2h_heavy_spear" }, "ct_spear", "test")
+        H.equal(applied, false)
+        H.equal(reason, "send-failed")
+        H.equal(count, 0)
     end)
 
     H.test("Cosmetics #918 runtime adapter fails open on dependency errors", function()

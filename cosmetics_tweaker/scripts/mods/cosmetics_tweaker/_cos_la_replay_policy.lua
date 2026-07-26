@@ -4,8 +4,8 @@
 --
 -- Two concerns, both pure so the regression suite can pin the exact semantics:
 --   1. inventory_ready  - player-unit existence is not enough; exact-item
---      state cannot be emitted until at least one weapon slot has realized
---      item_data.
+--      state cannot be emitted until every equipped weapon slot has converged
+--      on realized item_data.
 --   2. the REPLAY RECONCILER - the coalescing state machine that decides WHEN
 --      to re-drive the surviving persisted records at bounded lifecycle edges
 --      (peer-ready / session-ready / lobby-return). It never touches the
@@ -35,12 +35,229 @@ function Policy.inventory_ready(inventory)
 
     for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
         local slot = slots[slot_name]
-        if type(slot) == "table" and type(slot.item_data) == "table" then
-            return true
+        if type(slot) ~= "table" or type(slot.item_data) ~= "table"
+            or slot.item_data.backend_id == nil
+        then
+            return false
         end
     end
 
+    return true
+end
+
+-- An existing owner must republish its durable appearance snapshot when a
+-- different peer appears. The joiner's pull can only replay records already
+-- present on the host; it cannot reconstruct an owner's unpublished
+-- outfit/offhand state. Keep the decision pure so local-player aliases and
+-- transition re-adds have an explicit contract.
+function Policy.should_publish_local_on_peer_ready(local_peer, added_peer)
+    return local_peer ~= nil and added_peer ~= nil and local_peer ~= added_peer
+end
+
+-- A local snapshot is complete only after all three durable owners are ready:
+-- the authored/LA bridge (semantic identity), the loadout cache (hat/outfit),
+-- and the exact-item offhand restore. Consuming the one-shot publish flag
+-- before any one of these is ready recreates #629's hat-only cold join.
+function Policy.local_snapshot_ready(inventory, bridge_ready, loadout_ready,
+        offhand_restore_ready, career_name)
+    if bridge_ready ~= true then return false, "bridge" end
+    if loadout_ready ~= true then return false, "loadout" end
+    if offhand_restore_ready ~= true then return false, "offhand" end
+    if type(career_name) ~= "string" or career_name == "" then
+        return false, "career"
+    end
+    if not Policy.inventory_ready(inventory) then return false, "inventory" end
+    return true, "ready"
+end
+
+-- Rehydrate the ephemeral unit-keyed cosmetic cache from the durable,
+-- career-scoped loadout owner. Only identities proven by the current bridge
+-- are returned. This does not read menu preview state and never guesses a
+-- career or fallback.
+function Policy.cached_cosmetic_records(loadout_cache, career_name,
+        backend_to_armoury)
+    local records = {}
+    local slots = type(loadout_cache) == "table"
+        and type(career_name) == "string"
+        and loadout_cache[career_name] or nil
+    if type(slots) ~= "table" or type(backend_to_armoury) ~= "table" then
+        return records
+    end
+    for _, slot in ipairs({ "slot_hat", "slot_skin" }) do
+        local item_name = slots[slot]
+        local armoury_key = item_name and backend_to_armoury[item_name] or nil
+        if type(armoury_key) == "string" and armoury_key ~= "" then
+            records[#records + 1] = {
+                slot = slot,
+                kind = slot == "slot_hat" and "hat" or "armor",
+                item_name = item_name,
+                armoury_key = armoury_key,
+            }
+        end
+    end
+    return records
+end
+
+function Policy.replace_cosmetic_equips(equips_by_unit, unit, loadout_cache,
+        career_name, backend_to_armoury)
+    local records = Policy.cached_cosmetic_records(
+        loadout_cache, career_name, backend_to_armoury)
+    local previous = type(equips_by_unit) == "table" and equips_by_unit[unit] or nil
+    local replacement = {}
+    for slot, value in pairs(type(previous) == "table" and previous or {}) do
+        if slot ~= "slot_hat" and slot ~= "slot_skin" then
+            replacement[slot] = value
+        end
+    end
+    for i = 1, #records do
+        replacement[records[i].slot] = records[i].item_name
+    end
+    equips_by_unit[unit] = replacement
+    return #records
+end
+
+-- Compatibility name retained for runtime checks and older callers. Its
+-- semantics are now replacement, not additive rehydration.
+Policy.rehydrate_cosmetic_equips = Policy.replace_cosmetic_equips
+
+local function _equipment_slots(inventory)
+    local equipment = type(inventory) == "table"
+        and (inventory._equipment or inventory.equipment) or nil
+    return type(equipment) == "table" and equipment.slots or nil
+end
+
+local function _offhand_matches(saved, live)
+    if type(saved) ~= "table" or type(live) ~= "table" then return false end
+    if type(saved.armoury_key) == "string" and saved.armoury_key ~= "" then
+        return live.la_armoury_key == saved.armoury_key
+            or live.armoury_key == saved.armoury_key
+    end
+    if type(saved.unit_path) == "string" and saved.unit_path ~= "" then
+        return live.unit == saved.unit_path
+            or live.unit_path == saved.unit_path
+    end
     return false
+end
+
+-- Compose one complete, immutable replay plan from the three durable owners.
+-- A saved shield hand is expected only when its exact backend item is equipped,
+-- but every such record must already be present in the restored live selection.
+-- This prevents the first realized weapon slot from consuming the edge while
+-- the second slot's saved shield is still restoring.
+function Policy.compose_local_snapshot(args)
+    args = type(args) == "table" and args or {}
+    local ready, reason = Policy.local_snapshot_ready(
+        args.inventory, args.bridge_ready, args.loadout_ready,
+        args.offhand_restore_ready, args.career_name)
+    if not ready then return nil, reason end
+
+    local slots = _equipment_slots(args.inventory)
+    local snapshot = {
+        unit = args.unit,
+        career_name = args.career_name,
+        cosmetics = Policy.cached_cosmetic_records(
+            args.loadout_cache, args.career_name, args.backend_to_armoury),
+        offhands = {},
+        custom_slots = {},
+    }
+
+    for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
+        local slot_data = slots[slot_name]
+        local item_data = slot_data.item_data
+        local backend_id = item_data.backend_id
+        local saved_hands = type(args.saved_offhands) == "table"
+            and args.saved_offhands[backend_id] or nil
+        local live_hands = type(args.offhand_selection) == "table"
+            and args.offhand_selection[backend_id] or nil
+
+        for _, hand_field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+            local saved = type(saved_hands) == "table"
+                and saved_hands[hand_field] or nil
+            if saved then
+                local live = type(live_hands) == "table"
+                    and live_hands[hand_field] or nil
+                if not _offhand_matches(saved, live) then
+                    return nil, "offhand-convergence"
+                end
+                local template_key = item_data.template or item_data.name
+                    or slot_name
+                if live.la_armoury_key or live.armoury_key then
+                    snapshot.offhands[#snapshot.offhands + 1] = {
+                        slot = template_key,
+                        kind = "offhand",
+                        armoury_key = live.la_armoury_key or live.armoury_key,
+                        vanilla_key = live.vanilla_skin or live.vanilla_key,
+                        hand_field = hand_field,
+                    }
+                elseif type(live.unit or live.unit_path) == "string"
+                        and (live.unit or live.unit_path) ~= "" then
+                    snapshot.offhands[#snapshot.offhands + 1] = {
+                        slot = template_key,
+                        kind = "offhand_mesh",
+                        unit_path = live.unit or live.unit_path,
+                        hand_field = hand_field,
+                    }
+                else
+                    return nil, "offhand-convergence"
+                end
+            end
+        end
+
+        snapshot.custom_slots[#snapshot.custom_slots + 1] = {
+            item_data = item_data,
+            skin = slot_data.skin,
+        }
+    end
+
+    return snapshot, "ready"
+end
+
+-- Execute the composed plan and report only positively acknowledged
+-- queued/emitted operations. Callers clear the one-shot pending flag solely
+-- when `complete` is true; a false/nil adapter result keeps the whole snapshot
+-- eligible for retry (the transport's own dedup handles earlier successes).
+function Policy.publish_local_snapshot(snapshot, adapters)
+    local result = { expected = 0, accepted = 0, failed = 0, complete = false }
+    if type(snapshot) ~= "table" or type(adapters) ~= "table" then
+        result.failed = 1
+        return result
+    end
+
+    local function attempt(fn, ...)
+        result.expected = result.expected + 1
+        local ok = type(fn) == "function" and fn(...) == true
+        if ok then
+            result.accepted = result.accepted + 1
+        else
+            result.failed = result.failed + 1
+        end
+    end
+
+    for i = 1, #(snapshot.cosmetics or {}) do
+        local rec = snapshot.cosmetics[i]
+        attempt(adapters.send_la, snapshot.unit, rec.slot, rec.kind,
+            rec.armoury_key, adapters.vanilla_fallback
+                and adapters.vanilla_fallback(rec.item_name,
+                    snapshot.career_name) or nil)
+    end
+    for i = 1, #(snapshot.offhands or {}) do
+        local rec = snapshot.offhands[i]
+        if rec.kind == "offhand_mesh" then
+            attempt(adapters.send_mesh, snapshot.unit, rec.slot,
+                rec.hand_field, rec.unit_path)
+        else
+            attempt(adapters.send_la, snapshot.unit, rec.slot, rec.kind,
+                rec.armoury_key, rec.vanilla_key, rec.hand_field)
+        end
+    end
+    for i = 1, #(snapshot.custom_slots or {}) do
+        local rec = snapshot.custom_slots[i]
+        attempt(adapters.send_custom, snapshot.unit, rec.item_data,
+            rec.skin, "game_state_rebroadcast")
+    end
+
+    result.complete = result.failed == 0
+    return result
 end
 
 -- ---------------------------------------------------------------------------
