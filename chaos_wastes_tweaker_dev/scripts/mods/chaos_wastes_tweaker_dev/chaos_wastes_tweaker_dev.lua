@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.309-dev"
+local MOD_VERSION = "0.7.310-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8704,6 +8704,10 @@ end)
 --     reports level=morris_hub, while the queue predicate remains false. The
 --     preview now shares #505's exact native chamber-level predicate.
 CT_BOON_PREVIEW_461_MARKER = "boon_preview_pilgrimage_context"
+CT_BOON_TOOLTIP_1004_MARKER = "starting_boon_hover_description_v2"
+mod._ct_boon_preview_tooltip = mod:dofile(
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_preview_tooltip")
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_preview_runtime").install(mod)
 
 -- TRUE while this peer's party is queued for a Chaos Wastes expedition (host pressed
 -- host/start on a CW journey; not yet transitioned out of the keep). Direct port of
@@ -8767,8 +8771,26 @@ function mod._ct_start_boon_identity(name, rarity, profile_index, career_index)
     return display, icon
 end
 
+-- Resolve the same localized description used by vanilla boon cards. The
+-- canonical helper covers vanilla, career-derived talents, and power-ups
+-- registered with the native Deus runtime. Do not reconstruct description
+-- values from DeusPowerUpTemplates: that can look correct while disagreeing
+-- with get_trait/talent description. A rejected registration fails neutral.
+function mod._ct_start_boon_description(name, rarity, profile_index, career_index)
+    local utils = rawget(_G, "DeusPowerUpUtils")
+    local unavailable = mod:localize("ct_boon_preview_description_unavailable")
+    return mod._ct_boon_preview_tooltip.resolve_description({
+        instance = { name = name, rarity = rarity },
+        profile_index = profile_index,
+        career_index = career_index,
+        canonical = utils and utils.get_power_up_description,
+        unavailable = unavailable ~= "ct_boon_preview_description_unavailable"
+            and unavailable or "Description unavailable.",
+    })
+end
+
 -- Ordered, de-duplicated list of the starting boons the run will grant, host-effective.
--- Each entry: { name, rarity, display, icon, modded }. On `mod` (not a file-local) per
+-- Each entry: { name, rarity, display, description, icon, modded }. On `mod` (not a file-local) per
 -- the Lua 5.1 200-locals cap; shared by the Tab panel + `/ct_preview_boons`.
 function mod._ct_collect_start_boons()
     local out = {}
@@ -8792,10 +8814,13 @@ function mod._ct_collect_start_boons()
             seen[name] = true
             local display, icon = mod._ct_start_boon_identity(
                 name, entry.rarity, profile_index, career_index)
+            local description = mod._ct_start_boon_description(
+                name, entry.rarity, profile_index, career_index)
             out[#out + 1] = {
                 name = name,
                 rarity = entry.rarity,
                 display = display,
+                description = description,
                 icon = icon,
                 modded = (is_modded and is_modded(name)) or false,
             }
@@ -8847,6 +8872,9 @@ function mod._ct_build_boon_preview_widgets(boons)
     local ICON, ROW_H, COL_W, NUM_ROWS = 24, 28, 330, 9
     local MAX = NUM_ROWS * 2
     local n = math.min(#boons, MAX)
+    local function has_icon(content)
+        return type(content.icon) == "string" and content.icon ~= ""
+    end
     for i = 1, n do
         local b = boons[i]
         local col = (i - 1) % 2
@@ -8857,11 +8885,38 @@ function mod._ct_build_boon_preview_widgets(boons)
         -- down per row; the icon (drawn from its bottom-left corner by the texture
         -- pass) gets +4 so its center matches the text center.
         local row_center_offset = -(34 + row * ROW_H)
-        if b.icon then
-            out[#out + 1] = UIWidget.init(UIWidgets.create_simple_texture(
-                b.icon, "reward_divider", false, false, nil,
-                { x, row_center_offset + 4, 1 }, { ICON, ICON }))
-        end
+        local icon_widget = UIWidget.init({
+            scenegraph_id = "reward_divider",
+            element = {
+                passes = {
+                    { pass_type = "hotspot", style_id = "hotspot", content_id = "hotspot" },
+                    {
+                        pass_type = "texture", style_id = "icon", texture_id = "icon",
+                        content_check_function = has_icon,
+                    },
+                },
+            },
+            content = { hotspot = {}, icon = b.icon },
+            style = {
+                hotspot = {
+                    offset = { x, row_center_offset + 4, 4 },
+                    size = { ICON, ICON },
+                },
+                icon = {
+                    color = { 255, 255, 255, 255 },
+                    offset = { x, row_center_offset + 4, 1 },
+                    texture_size = { ICON, ICON },
+                },
+            },
+            offset = { 0, 0, 0 },
+        })
+        icon_widget._ct_boon_hover_target = true
+        -- Layout and UIWidget construction are intentionally deferred until
+        -- this icon is first hovered. The one-time work is hard-bounded by the
+        -- tooltip policy and never touches unhovered rows.
+        icon_widget._ct_boon_tooltip_data = b
+        icon_widget._ct_boon_tooltip_attempted = false
+        out[#out + 1] = icon_widget
         out[#out + 1] = UIWidget.init(UIWidgets.create_simple_text(
             trunc(b.display or b.name, 30), "reward_divider", 16, nil, {
                 horizontal_alignment = "left",
@@ -8895,8 +8950,8 @@ end
 -- re-evaluate per Tab press. Gates: keep UI, the local display toggle, and the
 -- exact `morris_hub` Pilgrimage Chamber level shared with #505. Queue state is
 -- diagnostic only: the requested preparation window begins before queueing.
--- Builds onto the instance so the per-frame _draw hook only draws (zero
--- per-frame allocation).
+-- Builds row widgets onto the instance. Tooltip layout is deferred until a
+-- row's first hover, then cached; all one-time work is policy-bounded.
 mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data", function(self)
     self._ct_boon_preview_widgets = nil
     self._ct_boon_header_widget = nil
@@ -8969,12 +9024,51 @@ mod:hook_safe("IngamePlayerListUI", "_draw", function(self, dt)
         local input_service = im and im:get_service("player_list_input")
         local rs = self._render_settings
         if not (r and sg and input_service and rs) then return end
+        -- Hotspot state from the preceding frame lets a hovered row build its
+        -- tooltip before this frame's renderer pass. First hover therefore has
+        -- at most a one-frame delay, and no allocation occurs inside the pass.
+        if has_boons and self._cursor_active then
+            for i = 1, #widgets do
+                local widget = widgets[i]
+                local hotspot = widget._ct_boon_hover_target
+                    and widget.content and widget.content.hotspot
+                if hotspot and hotspot.is_hover
+                    and not widget._ct_boon_tooltip_attempted then
+                    widget._ct_boon_tooltip_attempted = true
+                    widget._ct_boon_tooltip_widget = mod._ct_build_boon_tooltip_widget(
+                        widget._ct_boon_tooltip_data, r)
+                end
+            end
+        end
         UIRenderer.begin_pass(r, sg, input_service, dt, nil, rs)
         if has_boons then
             local hdr = self._ct_boon_header_widget
             if hdr then pcall(UIRenderer.draw_widget, r, hdr) end
+            local tooltip
             for i = 1, #widgets do
-                pcall(UIRenderer.draw_widget, r, widgets[i])
+                local widget = widgets[i]
+                pcall(UIRenderer.draw_widget, r, widget)
+                local hotspot = widget._ct_boon_hover_target
+                    and widget.content and widget.content.hotspot
+                if self._cursor_active and hotspot and hotspot.is_hover then
+                    tooltip = widget._ct_boon_tooltip_widget
+                end
+            end
+            if tooltip then
+                local wheel = input_service:get("scroll_axis")
+                local gamepad_active = im:is_device_active("gamepad")
+                local controller_pressed = gamepad_active
+                    and input_service:get("right_press") == true
+                local controller_down = gamepad_active
+                    and input_service:get("right_hold") == true
+                local delta, latched, controller_step =
+                    mod._ct_boon_preview_tooltip.navigation_step(
+                        wheel and wheel.y, controller_pressed, controller_down,
+                        tooltip._ct_controller_page_latched)
+                tooltip._ct_controller_page_latched = latched
+                pcall(mod._ct_scroll_boon_tooltip, tooltip, delta, controller_step)
+                pcall(mod._ct_update_boon_tooltip_hint, tooltip, gamepad_active)
+                pcall(UIRenderer.draw_widget, r, tooltip)
             end
         end
         if cw then
@@ -9052,6 +9146,36 @@ _rt_register("issue461_boon_preview_wired", function()
         if sample[i].scenegraph_id == "reward_item" then
             return "#461 REGRESSION: preview widget anchored on sizeless reward_item node (off-screen bug class)"
         end
+    end
+end)
+
+_rt_register("issue1004_boon_hover_tooltip_wired", function()
+    if CT_BOON_TOOLTIP_1004_MARKER ~= "starting_boon_hover_description_v2" then
+        return "#1004 REGRESSION: hover-tooltip marker missing/mismatch"
+    end
+    local policy = mod._ct_boon_preview_tooltip
+    if type(policy) ~= "table" or type(policy.resolve_description) ~= "function"
+        or type(policy.layout_description) ~= "function"
+        or type(policy.navigation_step) ~= "function"
+        or type(policy.production_geometry) ~= "function" then
+        return "#1004 REGRESSION: tooltip policy incomplete"
+    end
+    if type(mod._ct_start_boon_description) ~= "function"
+        or type(mod._ct_build_boon_tooltip_widget) ~= "function"
+        or type(mod._ct_scroll_boon_tooltip) ~= "function"
+        or type(mod._ct_update_boon_tooltip_hint) ~= "function" then
+        return "#1004 REGRESSION: tooltip runtime helpers missing"
+    end
+    if type(policy.LIMITS) ~= "table"
+        or policy.LIMITS.max_description_bytes ~= 16384
+        or policy.LIMITS.max_pages ~= 16
+        or policy.LIMITS.max_measure_calls ~= 256 then
+        return "#1004 REGRESSION: tooltip allocation limits missing/mismatch"
+    end
+    local layout = policy.layout_description("Runtime description",
+        function() return 20 end)
+    if type(layout) ~= "table" or layout.measured_description_height ~= 20 then
+        return "#1004 REGRESSION: measured tooltip layout failed"
     end
 end)
 
