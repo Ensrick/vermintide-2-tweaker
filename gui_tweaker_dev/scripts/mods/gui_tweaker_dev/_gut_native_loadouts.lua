@@ -315,12 +315,16 @@ local function _mirror_mode(mirror)
 end
 
 -- Interface/UI hooks lack the mirror on `self`; resolve it to check the same discriminator.
-local function _adventure_mode()
+local function _adventure_mode(items_iface)
     local m = _feature_mode()
     if m == MODE_OFF then return MODE_OFF end
-    local ok, mirror = pcall(function()
-        return Managers.backend:get_interface("items")._backend_mirror
-    end)
+    local mirror = items_iface and items_iface._backend_mirror
+    local ok = mirror ~= nil
+    if not mirror then
+        ok, mirror = pcall(function()
+            return Managers.backend:get_interface("items")._backend_mirror
+        end)
+    end
     return (ok and mirror and mirror._characters_data_key == ADVENTURE_DATA_KEY) and m or MODE_OFF
 end
 
@@ -1595,6 +1599,7 @@ M.HOOK_TARGETS = {
     { "PlayFabMirrorAdventure", "add_loadout" },
     { "PlayFabMirrorAdventure", "delete_loadout" },
     { "BackendInterfaceItemPlayfab", "refresh_bot_loadouts" },
+    { "BackendInterfaceItemPlayfab", "get_bot_loadout" },
     { "HeroWindowLoadoutSelectionConsole", "_save_bot_equipment" },
     { "HeroWindowLoadoutSelectionConsole", "_populate_context_menu_loadout" },  -- issue #372 preview crash guard
     { "BackendUtils", "set_loadout_item" },  -- TABLE-form, installed deferred (_install_bu_capture)
@@ -1602,7 +1607,11 @@ M.HOOK_TARGETS = {
 
 M.rt_checks = {
     { name = "issue954_bot_loadout_snapshot", fn = function()
-        return BotLoadoutSnapshot.contract_check(Policy, LOADOUT_SLOT_NAMES)
+        local err = BotLoadoutSnapshot.contract_check(Policy, LOADOUT_SLOT_NAMES)
+        if err or _adventure_mode() ~= MODE_STORE then return err end
+        local ok, iface = pcall(function() return Managers.backend:get_interface("items") end)
+        if not ok or not iface then return "runtime items interface unavailable" end
+        return BotLoadoutSnapshot.live_check(iface, _store(), Policy, LOADOUT_SLOT_NAMES)
     end },
     { name = "issue354_wt_loadout_lifecycle_trace", fn = function()
         if M._issue354_trace_wired ~= true then return "WT loadout lifecycle trace is not wired" end
