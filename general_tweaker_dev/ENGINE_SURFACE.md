@@ -1,5 +1,16 @@
 # general_tweaker_dev - engine contact surface
 
+## Live player stat HUD (#797, 0.2.255-dev)
+
+| Surface | Ownership and invariant |
+|---|---|
+| `BuffExtension._buffs`, `_stat_buffs` | Read only. Active buff parent/child identity and `stat_buff_index` are joined to the exact retained stage key. No add/remove/apply call is made. |
+| `BuffExtension.apply_buffs_to_value` equation | Reproduced only for finite deterministic stages: ordered nonzero stages first, then retained root multiplier/bonus. Proc/function/table stages fail closed as `UNSUPPORTED`, avoiding PRD/proc side effects. |
+| `HeroStatisticsTemplate`, `ActionUtils`, `DamageUtils`, status/career consumers | Health/stamina getters are authoritative and any remainder outside retained stat stages is disclosed as an unattributed reconciling delta. `GenericStatusExtension.update` derives stamina regeneration as `FATIGUE_POINTS_DEGEN_AMOUNT / authoritative max_fatigue_points * MAX_FATIGUE` (`1.5 / max * 100`) before applying `fatigue_regen`; a missing live max fails closed. `CareerExtension.start_activated_ability_cooldown` consumes current cooldown, cost, refund, and optional modified cost before applying `activated_cooldown`, so the HUD exposes that stat only as an activation factor rather than multiplying the maximum cooldown. Movement final fails closed because `PlayerCharacterStateWalking` additionally consumes stance, `StatusExtension.current_move_speed_multiplier`, `current_movement_speed_scale`, and `player_speed_scale`; `PlayerUnitMovementSettings.move_speed` alone is never called effective. Action time scale is split into exact default-value chain/action (`is_animation=false`) and animation (`is_animation=true`) consumers, including the native chain-window OR animation-window charge-time truth table. The action-settings critical path is shown separately; its effective final fails closed because call-site runtime overrides are unobservable. Power/damage/cleave/block/ammo/reload entries are labeled exact factors; target/profile-dependent effective finals fail closed as `UNSUPPORTED`. |
+| `WeaponUnitExtension.current_action_settings.lookup_data` | Read-only action/sub-action/item-template identity plus active action damage profile. It is part of the lifecycle cache identity. |
+| Existing singleton `IngameHud.update` owner | Draw dispatch only; no additional HUD hook. Bottom anchors avoid the existing top-left bot HUD and top-right Godmode indicator. |
+| Cache/page bounds | 4 Hz samples, 256 stat types, 1,024 stages, 1,024 active sources, and 18 wrapped expanded body lines per navigable page. Enumeration is capped before key sorting/allocation; truncation is visible and absent rows fail closed. Missing units and native health/status dead states clear retained panel state even while the engine unit remains alive. Provenance rebuilds only when unit/equipment/action/buff identity changes; metrics expose rebuild/sample/format/allocation counts. |
+
 What vanilla VT2/Stingray does at every seam `gt_dev` touches, and why the mod is
 there. This is the per-mod companion to the subsystem set in `docs/engine/`
 (read `docs/engine/README.md` for house style). It does **not** re-explain a
@@ -14,7 +25,7 @@ line; the remaining `[src:]` citations are carried from the cited `gt_dev`
 module comments, which cite the decompile in turn).
 
 **Dev/stable relationship.** This documents `general_tweaker_dev` (`gt_dev`,
-MOD_VERSION `0.2.248-dev`, friends-only Workshop 3733367409), the ACTIVE working
+MOD_VERSION `0.2.255-dev`, friends-only Workshop 3733367409), the ACTIVE working
 stream. `general_tweaker/` (`gt`, public Workshop 3713619122) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gt_dev`

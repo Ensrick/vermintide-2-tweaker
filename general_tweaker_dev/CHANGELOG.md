@@ -1,5 +1,51 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.255-dev (2026-07-26) -- Source-backed live player stat HUD (#797) [not deployed]
+
+- Added a default-off, local/read-only HUD for health, stamina, movement,
+  cooldown/charge state, attack speed, critical, power, damage, impact/cleave,
+  healing, block/push, regeneration, ammo, and reload families. It displays
+  consumer-effective values only where the complete deterministic engine path
+  is available, labels exact retained modifiers as factors, and marks
+  target/profile/proc-dependent finals `UNSUPPORTED`.
+- Separate chain/action (`is_animation=false`) and animation
+  (`is_animation=true`) time-scale rows compose the authored action base with
+  generic, melee/ranged, drakefire, and charge-time stages in engine order.
+  `scale_chain_window_by_charge_time_buff` applies to both rows, while
+  `scale_anim_by_charge_time_buff` applies only to the animation row. The
+  action-settings critical path composes career base, action bonus,
+  melee/ranged, heavy, and generic stages, while the effective critical final
+  is explicitly unsupported because call-site runtime overrides are not
+  observable. Authoritative health and stamina getters expose any otherwise
+  unattributable remainder as an explicit reconciling delta. Movement final is
+  explicitly unsupported because native walking additionally consumes stance,
+  `current_move_speed_multiplier`, `current_movement_speed_scale`, and
+  `player_speed_scale`; the settings-table base is never presented as final.
+- `activated_cooldown` is shown only as an **activation factor**, never as
+  `max_cooldown * factor`: vanilla first adds the ability's actual cost to its
+  current cooldown, subtracts the call-site refund, and only then applies the
+  stat. Refund and modified-cost arguments are not retained outside that call.
+  Stamina regeneration derives the exact native gauge rate
+  `1.5 / authoritative_max_fatigue_points * 100` before applying
+  `fatigue_regen`; the row fails closed when the live max-fatigue getter is
+  unavailable.
+- Preserved native `BuffExtension` stage keys and its deterministic ordered
+  stage/root equation. Proc, function/table multiplier, and missing-base paths
+  are explicitly `UNSUPPORTED`; the HUD never invokes proc-bearing methods.
+  Retained sources are identified by parent/child/id and classified by their
+  authored active lifetime as timed or persistent.
+- Static provenance rebuilds only on unit/equipment/action/buff edges. A 4 Hz
+  bounded sampler formats only changed results, bounds active-source discovery
+  before allocation, exposes truncation, clears stale panels on missing units
+  and on native health/status death even while `Unit.alive` remains true, wraps
+  every line before pagination, and reports counters through
+  `/gt_stat_hud_metrics`.
+- Reused the singleton HUD dispatcher and bottom-corner anchors to avoid the
+  existing top-left bot HUD and top-right Godmode indicator. No background
+  chrome, network traffic, gameplay mutation, or deployment is included. This
+  reviewed candidate remains source-only; no VMB build or generated root-bundle
+  update is included yet.
+
 ## v0.2.254-dev (2026-07-22) -- Godmode ledge repair and Raise Dead trace (#939, #659) [not-started]
 
 - Godmode now treats authored ledge-hang triggers as a boundary for the owning

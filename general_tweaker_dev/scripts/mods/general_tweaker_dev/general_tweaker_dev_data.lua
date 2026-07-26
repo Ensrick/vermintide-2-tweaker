@@ -1407,6 +1407,48 @@ if mod == get_mod("gt" .. "_dev") then
                 default_value = false,
                 tooltip       = "gt_devtools_bot_hud_tooltip",
             },
+            -- Read-only local player-stat HUD (#797). Static stage/source
+            -- provenance rebuilds only on lifecycle edges; deterministic
+            -- finals sample at 4 Hz through the singleton HUD owner.
+            {
+                setting_id    = "gt_devtools_player_stat_hud",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "gt_devtools_player_stat_hud_tooltip",
+                sub_widgets   = {
+                    {
+                        setting_id    = "gt_player_stat_hud_mode",
+                        type          = "dropdown",
+                        default_value = "compact",
+                        tooltip       = "gt_player_stat_hud_mode_tooltip",
+                        options       = {
+                            { text = "gt_player_stat_hud_mode_compact", value = "compact" },
+                            { text = "gt_player_stat_hud_mode_expanded", value = "expanded" },
+                        },
+                    },
+                    {
+                        setting_id    = "gt_player_stat_hud_position",
+                        type          = "dropdown",
+                        default_value = "bottom_left",
+                        tooltip       = "gt_player_stat_hud_position_tooltip",
+                        options       = {
+                            { text = "gt_player_stat_hud_position_left", value = "bottom_left" },
+                            { text = "gt_player_stat_hud_position_right", value = "bottom_right" },
+                        },
+                    },
+                    {
+                        setting_id    = "gt_player_stat_hud_scale",
+                        type          = "dropdown",
+                        default_value = 100,
+                        tooltip       = "gt_player_stat_hud_scale_tooltip",
+                        options       = {
+                            { text = "gt_player_stat_hud_scale_75", value = 75 },
+                            { text = "gt_player_stat_hud_scale_100", value = 100 },
+                            { text = "gt_player_stat_hud_scale_125", value = 125 },
+                        },
+                    },
+                },
+            },
             -- 3D leash lines (former Bot Teleport Lab D7). Host-only, visual.
             {
                 setting_id    = "gt_devtools_leash_lines",

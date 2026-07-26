@@ -378,6 +378,11 @@ mod:hook_safe("IngameHud", "update", function(self, dt, t)
     local draw_godmode_indicator = mod._gt_godmode_indicator_draw
     if draw_godmode_indicator then draw_godmode_indicator(self, dt) end
 
+    -- Issue #797 uses the same singleton HUD-composite seam. The stat module is
+    -- loaded later, so resolve its read-only draw consumer dynamically.
+    local draw_player_stat_hud = mod._gt_player_stat_hud_draw
+    if draw_player_stat_hud then draw_player_stat_hud(self, dt) end
+
     if not _flash_until then return end
     if not (mod:get("gt_melee_warning") and mod:get("gt_melee_warning_visual")) then
         _flash_until = nil
