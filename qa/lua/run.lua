@@ -228,6 +228,7 @@ local suites = {
     "test_gt_chest_pickup_probe",
     "test_gt_teleport_loop_policy",
     "test_cos_glow_lifecycle",
+    "test_cos_glow_panel_layout",
     "test_cos_glow_slider_geometry",
     "test_cos_glow_badge_policy",
     "test_cos_glow_instance_policy",

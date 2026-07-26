@@ -98,7 +98,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.170-dev"
+local MOD_VERSION = "0.9.171-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -851,8 +851,8 @@ local function _create_glow_editor_button()
                 text_color = { 255, 255, 255, 255 }, offset = { 0, 0, 3 },
             },
         },
-        scenegraph_id = "screen",
-        offset = GlowPicker.toggle_anchor(button_width, 20),
+        scenegraph_id = "info_window",
+        offset = { 0, 0, 20 },
     }
     local widget = UIWidget.init(definition)
     widget.content.equipped = false
@@ -3913,13 +3913,15 @@ mod:hook_safe("HeroWindowItemCustomization", "_handle_input", function(self, inp
 end)
 
 mod:hook("HeroWindowItemCustomization", "_state_draw_overview", function(func, self, ui_renderer, dt)
-    func(self, ui_renderer, dt)
+    GlowPicker.draw_native_information(func, self, ui_renderer, dt,
+        self._ct_glow_editor_widget and self._ct_glow_editor_widget.content)
 
     -- #377: draw and consume the contextual editor toggle before the
     -- offhand-row early return below, so ordinary one-handed weapons get it.
     local glow_widget = self._ct_glow_editor_widget
     local sg = ui_renderer and ui_renderer.ui_scenegraph
-    if glow_widget and sg and sg[glow_widget.scenegraph_id] then
+    if glow_widget and sg and sg[glow_widget.scenegraph_id]
+            and GlowPicker.position_toggle(self, glow_widget, 96, 20) then
         UIRenderer.draw_widget(ui_renderer, glow_widget)
         local family = glow_widget.content and glow_widget.content.glow_family
         -- Consume the release edge even while disabled so it cannot become a

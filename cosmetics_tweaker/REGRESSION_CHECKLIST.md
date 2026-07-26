@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-21.
+Last updated: 2026-07-26.
 
 ---
 ## Athanor exact offhand preview ownership (#481)
@@ -109,6 +109,8 @@ Last updated: 2026-07-21.
 |---|---|
 | Scope | Hero-view inventory and illusion grids; exact backend item plus skin identity. |
 | Open policy | Selection and wield never open the editor. The persistent in-view button is the only contextual open/close action. |
+| Panel ownership | While open for the exact selected item+illusion, suppress only vanilla `_info_widgets` and render editor controls at the live `info_window` size/world position. Keep the native frame, weapon preview, illusion widgets, draw order, and controller navigation. Restore `_info_widgets` after the wrapped draw even if it errors. |
+| Layout safety | Button placement, editor bounds, and input swallowing derive from the live Information-panel node. The editor root uses the same `scale = "fit"` transform as vanilla; no fixed screen-coordinate formula. Missing/malformed geometry fails closed with bounded log-only evidence. |
 | Commit boundary | Badge state reads durable Apply data only. Dirty live previews never alter a badge. |
 | Color | Rune uses committed RGB. Magic uses the deterministic intensity-weighted lower/upper/dots blend. |
 | Refresh | One Apply callback refreshes weakly tracked live grids/windows once; no per-frame decode or RPC traffic. |
@@ -117,8 +119,9 @@ Last updated: 2026-07-21.
 | Slider detection | Offline `test_cos_glow_slider_geometry.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
 | Manual #794 | At multiple UI scales/resolutions, click and drag each visible track at both endpoints, quartiles, and midpoint. Values and thumb centres must match the visible cursor position. |
 | Illusion selector | Enrich the shared `illusions_root` definition only inside the `UIWidget.init` pre-hook. Never append render passes after a widget owns `element.pass_data`; Apply/Restore only update existing content/style. |
-| Badge detection | Offline `test_cos_glow_badge_policy.lua` and `test_cos_glow_lifecycle.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
+| Badge/layout detection | Offline `test_cos_glow_badge_policy.lua`, `test_cos_glow_lifecycle.lua`, and `test_cos_glow_panel_layout.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
 | Manual #795 | Apply a glow on one exact item/skin, then close/reopen and restart. Its selector badge appears immediately and persists; another instance/skin remains unchanged; Restore Default removes the badge. |
+| Manual #377 redesign | At two UI scales, select a glow-capable illusion and use Edit Glow. The right Information contents become the editor without covering the model; Edit Glow remains at the panel's bottom-right; closing restores Information. Confirm pointer and controller illusion navigation, Apply, Restore Default, cancel rollback, and non-glow disabled state. |
 
 ## Live glow on the customization preview model (#796)
 
