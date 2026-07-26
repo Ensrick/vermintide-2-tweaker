@@ -50,13 +50,14 @@ function M.properties_preview_position(slot_type, native_position)
     }
 end
 
--- The overview normally puts every held item at x=-0.8 and relies on the
--- ranged viewport's `ui_weave_forge_preview_inverted` environment to mirror the
--- final image.  The mission-safe environment fallback cannot preserve that
--- keep-only inverted resource, so the ranged item must be mirrored explicitly
--- at the producer boundary.  Keep and non-ranged paths remain untouched.
-function M.overview_preview_x(slot_type, native_x, in_keep)
-    if in_keep or slot_type ~= "ranged" or type(native_x) ~= "number" then
+-- The overview normally puts both equipped weapons at x=-0.8 and marks the
+-- third/secondary viewport `invert_rendering`; its keep-only inverted shading
+-- environment mirrors the final image.  The mission-safe environment fallback
+-- cannot preserve that resource, so mirror the viewport which vanilla marked,
+-- regardless of the weapon's slot_type.  Grail Knight, Slayer, Warrior Priest,
+-- and cross-slot loadouts can legitimately put a melee item in slot_ranged.
+function M.overview_preview_x(mirrored_viewport, native_x, in_keep)
+    if in_keep or mirrored_viewport ~= true or type(native_x) ~= "number" then
         return native_x
     end
     return -native_x

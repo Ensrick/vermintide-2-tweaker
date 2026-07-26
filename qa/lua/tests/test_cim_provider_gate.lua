@@ -178,8 +178,10 @@ return function(H, repo_root)
         -- Fresh instance: every expected surface is unrouted.
         H.deep_equal(contract.unrouted_surfaces(), {
             "athanor_list", "blacksmith_list", "mirror_restore",
-            "mirror_injection", "salvage", "cw_conversion",
+            "mirror_injection", "salvage",
         })
+        H.equal(contract.NON_ENUMERATOR_BOUNDARIES.cw_conversion,
+            "rarity-exclude-scrub-only")
 
         -- gate_item / gate_record self-register their surface.
         contract.gate_item("athanor_list", "es_1h_sword", { slot_type = "melee" })
@@ -191,19 +193,18 @@ return function(H, repo_root)
         -- Install-time registration covers the rest.
         contract.register_enumerator("blacksmith_list")
         contract.register_enumerator("mirror_restore")
-        contract.register_enumerator("salvage")
-        H.deep_equal(contract.unrouted_surfaces(), { "cw_conversion" })
+        H.deep_equal(contract.unrouted_surfaces(), { "salvage" })
 
-        -- Capped self-report names exactly the unrouted walk, then caps.
+        -- Capped self-report names exactly the remaining real walk, then caps.
         local lines = {}
         local printer = function(line) lines[#lines + 1] = line end
         H.equal(contract.report_unrouted(printer, 2), true)
         H.equal(contract.report_unrouted(printer, 2), true)
         H.equal(contract.report_unrouted(printer, 2), false, "cap must stop the third emit")
         H.equal(#lines, 2)
-        H.truthy(lines[1]:find("unrouted walks=cw_conversion", 1, true),
-            "self-report must name cw_conversion: " .. lines[1])
-        H.truthy(lines[1]:find("routed=5/6", 1, true),
+        H.truthy(lines[1]:find("unrouted walks=salvage", 1, true),
+            "self-report must name salvage: " .. lines[1])
+        H.truthy(lines[1]:find("routed=4/5", 1, true),
             "self-report must count routed surfaces: " .. lines[1])
 
         -- Fully routed contract stays silent.

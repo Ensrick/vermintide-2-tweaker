@@ -205,12 +205,13 @@
             )
         }
         @{
-            Id = 'cim.issue882.ranged-properties-preview-position'
+            Id = 'cim.issue882.athanor-preview-position'
             Issue = 882
             Claim = 'structural-only'
             Owners = @(
                 'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview_policy.lua'
                 'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_mission_forge_safety.lua'
                 'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'
             )
             Concerns = @(
@@ -223,7 +224,7 @@
                         remote_husk_3p = @{ Disposition = 'not-applicable'; Reason = 'the correction is local UI state and has no network transport or husk consumer' }
                         inventory_preview = @{ Disposition = 'not-applicable'; Reason = 'the inventory character preview uses MenuWorldPreviewer rather than HeroWindowWeaveProperties' }
                         cosmetic_preview = @{ Disposition = 'not-applicable'; Reason = 'the cosmetic browser uses its own LootItemUnitPreviewer surface outside the CIM forge-active gate' }
-                        athanor_preview = @{ Disposition = 'covered'; Evidence = 'the ranged-only HeroWindowWeaveProperties construction adapter composes native centered x with authored y/z and updates the live link plus boxed zoom-reset position atomically' }
+                        athanor_preview = @{ Disposition = 'covered'; Evidence = 'the HeroWindowWeaveProperties adapter centers ranged editor previews, while the overview adapter preserves the native mirrored-viewport role before mission environment substitution and separates secondary from primary even when both item slot types are melee' }
                         crafting_preview = @{ Disposition = 'not-applicable'; Reason = 'the ordinary crafting preview does not instantiate HeroWindowWeaveProperties' }
                         lobby_preview = @{ Disposition = 'not-applicable'; Reason = 'lobby preview construction does not instantiate HeroWindowWeaveProperties' }
                         score_screen = @{ Disposition = 'not-applicable'; Reason = 'score preview construction does not instantiate HeroWindowWeaveProperties' }
@@ -243,8 +244,8 @@
                         peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the local preview transform has no peer state' }
                         parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the local preview uses only resident vanilla coordinates and no peer registry' }
                         rejoin = @{ Disposition = 'not-applicable'; Reason = 'the local preview transform has no peer state' }
-                        preview_open = @{ Disposition = 'covered'; Evidence = 'each ranged properties preview construction applies one active-only correction after vanilla creates the previewer' }
-                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'each replacement previewer recomputes from its untouched native position; the boxed start position preserves the correction through zoom reset' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'each ranged properties preview construction applies one active-only correction; each mission overview reads the viewport role captured from vanilla invert_rendering rather than guessing from item type' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'each replacement properties previewer recomputes from its untouched native position, and each rebuilt overview recaptures the primary/secondary viewport role before environment substitution' }
                         lobby_score_create = @{ Disposition = 'not-applicable'; Reason = 'lobby and score creation do not instantiate HeroWindowWeaveProperties' }
                         mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'restoring an already-open preview when CIM is disabled has no paired runtime evidence' }
                     }
@@ -257,6 +258,15 @@
                                 'CIM #882 accepts retail callable-table vector constructors'
                                 'CIM #882 constructor failure leaves preview state untouched'
                                 'CIM #882 production correction is construction-only and zoom durable'
+                                'CIM #882 overview separates by viewport role, not item slot type'
+                            )
+                            Surfaces = @('athanor_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cim_mission_forge_widget_safety.lua'
+                            Names = @(
+                                'production proves static panels and separates mission secondary overview'
                             )
                             Surfaces = @('athanor_preview')
                             ReplayEdges = @('preview_open', 'preview_reopen')

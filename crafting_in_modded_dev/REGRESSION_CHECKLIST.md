@@ -4,19 +4,33 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-15.
+Last updated: 2026-07-22.
+
+### accessory-property-layer-isolation - issue #959
+
+| Field | Value |
+|---|---|
+| Symptom | Filling Health on Necklace makes Health unavailable on Charm and Trinket; right-click or Clear can target the wrong accessory after the same property is used in multiple categories. |
+| Root cause | CIM widens each property key into every accessory category, but vanilla counts and removes by the aggregate property-key array without retaining the active category's ten-slot layer. |
+| Fix version(s) | Unreleased source candidate |
+| Category | SOLO |
+| Repro | In the Athanor accessory editor, set Necklace Health to five bubbles. Add Health to Charm and Trinket independently. Right-click Health in each category, then use Clear in one category. |
+| Expected post-fix | Each accessory shows and edits only its own Health bubbles. Right-click removes from the open accessory; Clear leaves the other two accessories unchanged. Weapon property editing remains unchanged. |
+| Detection | Offline `test_cim_accessory_property_policy.lua` passes and `/cim_regression_test` passes `issue959_accessory_property_layers_are_independent`. |
+
+---
 
 ### canonical-synthetic-item-salvage - issue #628
 
 | Field | Value |
 |---|---|
 | Symptom | CIM-crafted provider weapons can craft/equip/persist but disappear from Salvage, or unsafe rows are admitted independently of equip, favorite, and saved-loadout state. |
-| Root cause | Craft, mirror restore, inventory filtering, and salvage constructed or classified partial item records independently; the old salvage adapter explicitly bypassed vanilla safety exclusions. |
+| Root cause | Craft, mirror restore, inventory filtering, and salvage constructed or classified partial item records independently; after those identities were unified, the salvage adapter still iterated vanilla's backend-id keyed input map with `ipairs`, silently visiting zero real items. |
 | Fix version(s) | cim_dev 0.8.80-dev |
 | Category | SOLO |
 | Repro | Craft the three Dawi Maces and one older CWV weapon; inspect inventory/preview/restart/salvage, then repeat while equipped, favorited, or present in any saved loadout. Equip Blightreaper and confirm it never appears on a CIM acquisition or edit surface. |
 | Expected post-fix | Every CIM surface consumes one exact CIM-owned identity; only an unequipped, unfavorited, no-loadout Modded instance appears. WOC trophy relics remain provider-owned singletons and are never crafted, edited, mirrored, or salvaged by CIM. |
-| Detection | Offline `test_cim_synthetic_item_contract.lua` passes and `/cim_regression_test` passes `issue628_provider_contract` plus `issue628_saved_instance_contract`. |
+| Detection | Offline `test_cim_synthetic_item_contract.lua` locks `pairs(items)` at the raw backend-map boundary and `/cim_regression_test` passes `issue628_provider_contract`, `issue628_saved_instance_contract`, and `issue628_salvage_state_diagnostic`. Bounded `[cim:628] salvage_state` rows name the exact instance, rejecting guard, active careers, saved loadouts, favorite, and backend dirty state. |
 
 ---
 
@@ -125,6 +139,17 @@ Last updated: 2026-07-15.
 | Repro | Two players equip distinct non-default melee and ranged illusions, then inspect each other while holding Tab. Swap one illusion and return another to default. |
 | Expected post-fix | Icons and hover tooltips match the live equipped skins in both host-to-client directions, update after swaps, and clear to the base icon for default skin. |
 | Detection | Run the offline Lua suite and `/cim_regression_test`; require `issue246_tab_preview_exact_skin_icon` PASS. Unknown registered identity emits one bounded `[cim:246]` line. |
+
+### issue598/921-hold-tab-rarity-convergence - Modded frames follow the current slot item
+
+| Field | Value |
+|-------|-------|
+| Scope | Hold-Tab rarity backgrounds for the owner and every CIM observer; resource/icon identity remains separately renderer-gated. |
+| Source boundary | The vanilla server queues `rpc_sync_loadout_slot` locally as well as sending it to clients, but CIM's `network_send(..., "others", ...)` excludes the sender [src: `network_transmit.lua:508-524`; `loadout_utils.lua:13-42`]. The side-channel cache must therefore be primed locally and retain explicit `false` as distinct from not-yet-received metadata. |
+| Solo repro first | Equip a Career Weapon Variants weapon, hold Tab, then equip the Blightreaper and hold Tab. Replace either with a vanilla weapon and hold Tab again. |
+| Expected post-fix | A Modded item uses the Modded frame for its owner and observer. A common replacement immediately uses its ordinary frame on both peers; no prior slot occupant leaks through a transition. A peer without CIM still receives only the vanilla-safe `unique` rarity. |
+| Co-op follow-up | Only after solo passes: host and client inspect their own and each other's rows, enter the Chaos Wastes so the slot becomes a common-rarity weapon, and repeat in the opposite direction with the Imperial Crowbill. Then repeat with one peer lacking CIM. |
+| Detection | Run the offline Lua suite and `/cim_regression_test`; require `issue921_tab_rarity_state_is_tristate` PASS. The bounded `[cim:921]` lines must show `current=false` on the common replacement and no custom resource name on the side-channel path. |
 
 ---
 

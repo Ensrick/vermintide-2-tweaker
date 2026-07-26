@@ -96,7 +96,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.167-dev"
+local MOD_VERSION = "0.9.168-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -683,33 +683,8 @@ mod.on_game_state_changed = function(status, state_name)
     -- Glow state restores on equipment spawn; editor opening is manual.
 end
 
-mod.on_setting_changed = function(setting_id)
-    if setting_id == "cos_encarmine_hat_enabled" and CUSTOM_HATS then
-        CUSTOM_HATS.sync_toggle()
-    end
-    if GK_SET and (GK_SET.is_availability_setting(setting_id) or setting_id == "cos_fk_reikland_griffin_enabled") then
-        GK_SET.sync_toggle()
-    end
-    if setting_id and setting_id:sub(1, 11) == "cos_unlock_" then
-        mod._cos.apply_cosmetic_unlocks()
-    end
-    -- v0.9.0-dev: any glow_* setting change triggers a per-peer glow
-    -- rebroadcast. _on_glow_setting_changed schedules (doesn't emit
-    -- immediately) so a multi-setting save in the VMF menu coalesces into
-    -- one RPC via the throttle in _glow_sync_tick.
-    if setting_id and setting_id:sub(1, 5) == "glow_"
-        and mod._on_glow_setting_changed then
-        mod._on_glow_setting_changed()
-    end
-    -- Glow override no longer auto-repaints on setting change — the walk
-    -- destabilized adjacent unit state (hand meshes disappeared after pressing
-    -- X to inspect, 1P breakage). User re-equips the weapon to see the new
-    -- preset; the apply_material_settings hook paints reliably at spawn.
-
-    if TPE and TPE.on_setting_changed then
-        TPE.on_setting_changed(setting_id)
-    end
-end
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_settings_runtime")
+    .install(mod, CUSTOM_HATS, GK_SET, TPE)
 
 -- v0.9.0-dev: TPE per-frame tick moved into the unified mod.update defined
 -- later in the file (around line 3880, the LA bridge init driver). Previously

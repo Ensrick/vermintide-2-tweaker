@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.288-beta (2026-07-25) - #1002 bounded Equipment reset [not-started]
+
+- Opted Weapon Tweaker into Mod Tweaker's owner-level setting transaction so an
+  Equipment DEFAULT/profile restore persists every value silently, reconciles
+  master controls, and rebuilds availability plus career actions exactly once.
+- Complete DEFAULT snapshots preserve mixed child defaults; master-only edits
+  retain select-all behavior. Added bounded `[wt:1002]` evidence and Lua 5.1
+  coverage for both master-control families.
+
 ## 0.12.287-beta (2026-07-22) - #445 Weapon Tweaks family controls [not-started]
 
 - Added a nested **Master Toggles** control for all 13 active Weapon Tweaks.

@@ -1,5 +1,37 @@
 # Crafting in Modded Changelog
 
+## 0.8.107-dev (2026-07-25) - #1002 bounded Equipment reset
+
+- Opted CIM into Mod Tweaker's owner-level setting transaction. A full
+  Equipment DEFAULT/profile restore reapplies the movespeed template at most
+  once after all values persist, with bounded `[cim:1002]` evidence.
+
+## 0.8.106-dev (2026-07-22) - #959/#628/#882/#598/#921 CIM identity and presentation repairs
+
+- #959: Accessory property usage, removal, and clear actions now preserve the
+  property category as part of their identity. Selecting a property for one
+  accessory category no longer makes the same property appear selected or
+  removable in a sibling category.
+- #882: Athanor weapon previews preserve the requested primary/secondary slot
+  identity through policy and mission-forge adapters, so ranged and secondary
+  previews retain the engine-authored placement instead of drifting left.
+- #598: The safe boolean-only Hold-Tab rarity side channel is mirrored for the
+  sender as well as receivers. Explicit ordinary-item state clears a stale
+  Modded frame without sending custom material or resource names.
+- #921: Owner and observer now share one bounded tri-state application path,
+  preserving explicit ordinary state across Chaos Wastes transitions and both
+  RPC arrival orders. Edge-only diagnostics report convergence without exposing
+  custom resource identifiers.
+
+### #628 - restore the canonical salvage adapter
+
+- The attached #930 session ran CIM Dev `0.8.101-dev` and proved crafted Dual Maces remained in the backend mirror, but the old salvage probe reported only aggregate counts. It could not distinguish active equip, saved-loadout ownership, favorite state, stale backend cache, or an identity rejection.
+- Root cause: vanilla `BackendInterfaceCommon.filter_items` receives a backend-id keyed item map and enumerates it with `pairs`. CIM's recovery adapter used `ipairs`, so it silently visited zero real items. It now enumerates the same map shape as vanilla; exact eligible CIM instances can be restored to Salvage again.
+- The canonical salvage adapter now emits one bounded `[cim:628] salvage_state` line per changed state of each exact CIM-owned instance. It records the item key, exact backend id, visible/hidden result, eligibility verdict and reason, active careers, saved loadout rows, favorite state, and backend dirty state. Identical UI refreshes are deduplicated and the session is capped at 96 lines.
+- The provider-gate census no longer reports `cw_conversion` as an unrouted item walk. Current source inspection confirms that boundary only scrubs unsupported custom rarity names from a Chaos Wastes exclusion map; it does not enumerate or convert provider items. The boundary remains explicitly documented as non-enumerator behavior.
+- Offline Lua coverage locks the keyed-map iteration contract, salvage-state fingerprint stability/change detection, and the production diagnostic marker. Runtime `/cim_regression_test` adds `issue628_salvage_state_diagnostic` and requires every real provider enumerator to be routed.
+
+**Verify:** Open Salvage on Bounty Hunter after equipping and then replacing Dual Maces; the unequipped exact item must appear. Switch to Kruber and reopen Salvage. The console log must contain bounded `[cim:628] salvage_state` rows naming the exact eligibility or rejection reason and saved loadout owners for each crafted item.
 ## 0.8.105-dev (2026-07-21) - #592/#928 bounded CWV Blacksmith seed contract [not-started]
 
 - Reconciled the Craft Item selector and runtime diagnostics with CWV's current

@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.315-dev (2026-07-26) -- bounded Equipment DEFAULT transactions (#1002) [not-started]
+
+- Equipment-tab DEFAULT now commits each participating owner through one
+  owner-defined batch transaction instead of firing heavyweight refresh work
+  once per setting.
+- Failed or incomplete owner transactions remain staged, preventing profile
+  capture and profile switching from silently accepting a partial reset.
+- Added regression coverage for bounded notification counts, owner isolation,
+  partial failures, and retry behavior.
+
 ## 0.2.314-dev (2026-07-22) -- detached bot loadout snapshots (#954) [not-started]
 
 - Assigning a saved loadout to a bot now persists a dedicated copy of that

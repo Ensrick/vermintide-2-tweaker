@@ -1,5 +1,12 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.168-dev (2026-07-25) — #1002 bounded Equipment reset [not-started]
+
+- Opted Cosmetics into Mod Tweaker's owner-level setting transaction. A full
+  Equipment DEFAULT/profile restore now coalesces hat, Grail Knight set,
+  cosmetic-unlock, glow-sync, and TPE-flush work to at most one call each.
+- Added bounded `[cos:1002]` evidence and shared Equipment transaction coverage.
+
 ## 0.9.167-dev (2026-07-22) — #149 retained Loremaster shield transition repair [not-started]
 
 - Keep-to-mission replay now resolves the active weapon slot from the common

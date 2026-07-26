@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.288-dev"
+local MOD_VERSION = "0.12.289-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4099,56 +4099,32 @@ local _wt_rework_runtime = _wt_rework_master_runtime_module.new(
     end)
 mod._wt.rework_master_runtime = _wt_rework_runtime
 
-mod.on_setting_changed = function(setting_id)
-    if _wt_rework_runtime:is_batching() then return end
-    if _wt_rework_runtime:on_master_changed(setting_id) then return end
-    if setting_id and setting_id:find("^wtmaster_") then
-        -- issue 611: a master toggle was clicked. Cascade its new value to every
-        -- child availability toggle (notify = false), then re-apply the unlocks
-        -- once. Children set with notify = false do not re-enter this handler.
-        _wt_master_toggles.on_master_changed(mod, setting_id)
-        apply_weapon_unlocks()
-        patch_career_actions_on_weapons()
-        if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
-        weapon_backend.refresh_on_setting_change(mod)
-    elseif setting_id and (setting_id:find("^unlock_") or setting_id == "debug") then
-        apply_weapon_unlocks()
-        patch_career_actions_on_weapons()
-        if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
-        weapon_backend.refresh_on_setting_change(mod)
-        -- issue 611 auto-off: recompute the owning master so deselecting one
-        -- weapon flips its "Enable All ..." toggle OFF while the rest stay as-is.
-        if setting_id:find("^unlock_") then
-            _wt_master_toggles.on_child_changed(mod, setting_id)
-        end
-    elseif setting_id and (setting_id:find("^trait_") or setting_id:find("^cw_trait_")) then
-        apply_trait_filters()
+mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_settings_runtime").install({
+    mod = mod, rework_runtime = _wt_rework_runtime,
+    master_toggles = _wt_master_toggles, backend = weapon_backend,
+    apply_weapon_unlocks = apply_weapon_unlocks,
+    patch_career_actions = patch_career_actions_on_weapons,
+    apply_trait_filters = apply_trait_filters,
+    bolt_policy = _wt_bolt_staff_overcharge,
+    bolt_runtime = _wt_bolt_staff_overcharge_runtime,
+    balance_policy = _wt_axe_balance_policy,
     -- WT_DEV_OVERLAY_BEGIN:dev-tool-setting-lifecycle
-    elseif setting_id and setting_id:find("^wt_dev_anim_") then
-        -- Dev: 3P anim picker — mutate live Weapons.<tpl> tables.
-        _wt_dev_anim_picker.on_setting_changed(setting_id)
-    elseif setting_id and setting_id:find("^wt_dev_hp_") then
-        -- Hold-Pose owns immediate non-destructive bypass/restore for its
-        -- isolated first-/third-person transform channels (#616).
-        _wt_dev_hold_pose.on_setting_changed(setting_id)
+    extra_setting = function(setting_id)
+        if setting_id and setting_id:find("^wt_dev_anim_") then
+            _wt_dev_anim_picker.on_setting_changed(setting_id)
+            return true
+        elseif setting_id and setting_id:find("^wt_dev_hp_") then
+            _wt_dev_hold_pose.on_setting_changed(setting_id)
+            return true
+        end
+        return false
+    end,
+    extra_batch = function(setting_ids)
+        _wt_dev_anim_picker.on_settings_batch_changed(setting_ids)
+        _wt_dev_hold_pose.on_settings_batch_changed(setting_ids)
+    end,
     -- WT_DEV_OVERLAY_END:dev-tool-setting-lifecycle
-    elseif setting_id == "wt_priest_punch_buff" then
-        if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
-    elseif setting_id == "wt_brett_sword_shield_buff" then
-        if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
-    elseif setting_id == _wt_bolt_staff_overcharge.SETTING_ID then
-        _wt_bolt_staff_overcharge_runtime.apply()
-    elseif setting_id == _wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING
-            or setting_id == _wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING
-            or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING
-            or setting_id == _wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING
-            or setting_id == _wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING
-            or setting_id == _wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING
-            or setting_id == _wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
-        mod._wt_apply_axe_balance(setting_id, false)
-    end
-    _wt_rework_runtime:sync_for_leaf(setting_id)
-end
+})
 
 do
     local function register_profile(name)

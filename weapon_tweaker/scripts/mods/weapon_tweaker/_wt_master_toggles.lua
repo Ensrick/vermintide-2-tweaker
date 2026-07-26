@@ -234,6 +234,39 @@ function M.seed(mod)
     return seeded
 end
 
+-- Reconcile one Mod Tweaker bulk commit without turning a full DEFAULT/profile
+-- restore into a series of master cascades. When every child of a changed
+-- master is present in the same transaction, those child values are
+-- authoritative (their individual defaults may be mixed) and `seed` merely
+-- derives the master indicator. A lone/partial master edit retains the normal
+-- select-all behavior and cascades to its complete child set once.
+function M.reconcile_batch(mod, changed_ids)
+    local changed = {}
+    for key, value in pairs(changed_ids or {}) do
+        local id = type(key) == "number" and value or key
+        if type(id) == "string" then changed[id] = true end
+    end
+
+    local cascaded = 0
+    for master_id, children in pairs(mod._wt_master_children or {}) do
+        if changed[master_id] then
+            local complete_child_snapshot = type(children) == "table"
+            for _, child_id in ipairs(children or {}) do
+                if not changed[child_id] then
+                    complete_child_snapshot = false
+                    break
+                end
+            end
+            if not complete_child_snapshot then
+                M.on_master_changed(mod, master_id)
+                cascaded = cascaded + 1
+            end
+        end
+    end
+
+    return cascaded, M.seed(mod)
+end
+
 -- VMF's checkbox factory returns a widget with `style.text.text_color`
 -- (Vermintide-Mod-Framework vmf_options_view.lua:1184-1373,3327-3337).
 -- GUI Tweaker uses `font_button_normal` for its warm-tan dropdown/chrome color

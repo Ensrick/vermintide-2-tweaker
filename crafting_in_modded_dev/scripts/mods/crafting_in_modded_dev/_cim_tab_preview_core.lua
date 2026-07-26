@@ -42,7 +42,14 @@ end
 -- vanilla loadout RPC always carries `unique`; a same-schema CIM side-channel
 -- may locally restore the frame without sending an atlas/material name.
 Core.resolve_rarity = function(wire_rarity, cim_metadata_capable, is_modded)
-    if cim_metadata_capable == true and is_modded == true then return "modded" end
+    if cim_metadata_capable ~= true or is_modded == nil then return wire_rarity end
+    if is_modded == true then return "modded" end
+
+    -- #598/#921: `false` is authoritative metadata, not absence of metadata.
+    -- The preceding item in this peer/slot may already have been promoted to
+    -- `modded`; normalize that cached presentation back to the vanilla-safe
+    -- rarity carried on the wire when the slot changes to a non-modded item.
+    if wire_rarity == "modded" then return "unique" end
     return wire_rarity
 end
 

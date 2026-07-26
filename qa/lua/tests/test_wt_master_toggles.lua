@@ -168,6 +168,47 @@ return function(H, repo_root)
         H.truthy(#writes > 0)
     end)
 
+    H.test("WT #1002 complete DEFAULT snapshot preserves mixed child defaults", function()
+        local mod, data, values, writes, mercenary = fixture()
+        Masters.build_widgets(mod, data)
+        local master = mercenary.sub_widgets[3]
+        master.sub_widgets[2] = checkbox(
+            "unlock_es_mercenary_we_spear", "Kerillian: Spear", false)
+        mod._wt_master_children[master.setting_id][2] =
+            "unlock_es_mercenary_we_spear"
+        mod._wt_child_to_master.unlock_es_mercenary_we_spear = master.setting_id
+
+        values[master.setting_id] = false
+        values.unlock_es_mercenary_we_glaive = true
+        values.unlock_es_mercenary_we_spear = false
+        local cascaded = Masters.reconcile_batch(mod, {
+            master.setting_id,
+            "unlock_es_mercenary_we_glaive",
+            "unlock_es_mercenary_we_spear",
+        })
+
+        H.equal(cascaded, 0, "complete snapshot must not cascade an off master")
+        H.equal(values.unlock_es_mercenary_we_glaive, true)
+        H.equal(values.unlock_es_mercenary_we_spear, false)
+        H.equal(values[master.setting_id], false)
+        H.equal(#writes, 0)
+    end)
+
+    H.test("WT #1002 lone master retains select-all semantics once", function()
+        local mod, data, values, writes, mercenary = fixture()
+        Masters.build_widgets(mod, data)
+        local master = mercenary.sub_widgets[3]
+        values[master.setting_id] = true
+        values.unlock_es_mercenary_we_glaive = false
+
+        local cascaded = Masters.reconcile_batch(mod, { master.setting_id })
+        H.equal(cascaded, 1)
+        H.equal(values.unlock_es_mercenary_we_glaive, true)
+        H.equal(values[master.setting_id], true)
+        H.equal(#writes, 1)
+        H.equal(writes[1].notify, false)
+    end)
+
     H.test("WT #611 master style uses GUI Tweaker font_button_normal", function()
         local previous = _G.Colors
         _G.Colors = {

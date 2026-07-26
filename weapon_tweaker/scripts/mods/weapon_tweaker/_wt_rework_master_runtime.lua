@@ -59,6 +59,35 @@ function M.new(mod, policy, apply_live)
         if policy.is_member(setting_id) then self:sync() end
     end
 
+    -- Preserve master-checkbox semantics across an owner-level bulk commit.
+    -- A complete master+leaf snapshot (DEFAULT/profile restore) keeps the
+    -- committed leaf values and derives the indicator. A master-only edit
+    -- retains select-all semantics but deliberately defers `apply_live` to the
+    -- owner's one final batch apply.
+    function runtime:prepare_batch(changed_ids)
+        local changed = {}
+        for key, value in pairs(changed_ids or {}) do
+            local id = type(key) == "number" and value or key
+            if type(id) == "string" then changed[id] = true end
+        end
+
+        if changed[policy.MASTER_ID] then
+            local complete_leaf_snapshot = true
+            for i = 1, #policy.LEAF_IDS do
+                if not changed[policy.LEAF_IDS[i]] then
+                    complete_leaf_snapshot = false
+                    break
+                end
+            end
+            if not complete_leaf_snapshot then
+                local desired = mod:get(policy.MASTER_ID) and true or false
+                if not write(policy.plan(desired, snapshot())) then return false end
+            end
+        end
+        self:sync()
+        return true
+    end
+
     return runtime
 end
 

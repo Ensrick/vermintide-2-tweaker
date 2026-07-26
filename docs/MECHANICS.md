@@ -77,6 +77,13 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 ## Domain: Inventory / Equipment
 
+### Athanor accessory properties
+
+- The no-item Athanor layout assigns property slots 1-10 to `offence_accessory`, 11-20 to `defence_accessory`, and 21-30 to `utility_accessory`. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:24-65]
+- Vanilla computes a property row's used amount as the full length of the property-key slot-index array; it does not filter that array by the row's category. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:718-740]
+- Vanilla passes the active category to `_find_slot_by_key`, but the function accepts only the key and menu-option arguments and returns the last aggregate slot index for that key. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:2402-2423,2483-2501]
+- Vanilla Clear identifies properties by membership in the active category's property-key list, then removes every stored index under a matching key; it does not test whether each index belongs to the category's slot layer. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:2540-2632]
+
 - Named enemy weapons are resolved by following a boss breed's
   `default_inventory_template` into `InventoryConfigurations`, whose item
   categories hold concrete enemy `unit_name` paths; Rasknitt is a grounded
@@ -108,6 +115,15 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 - The full cim recipe→synth→craft→mirror→persistence flow (including
   `_forged_weapons` + `_modded_loadout` and the cross-mod API) is mapped in its
   memory note; read it before touching the craft path. [memory: reference_cim_weapon_crafting_flow]
+- Adventure salvage uses two distinct ownership queries: `equipped_by` scans
+  the active loadout for every career, while `is_equipped_by_any_loadout` scans
+  every cached saved-loadout row for every career; the salvage recipe requires
+  both to be empty before admitting an item. [src: scripts/managers/backend_playfab/backend_interface_item_playfab.lua:747-801; scripts/settings/crafting/crafting_recipes.lua:13]
+- `BackendInterfaceCommon.filter_items` receives the source inventory as a
+  backend-id keyed map and enumerates it with `pairs`, then returns a dense
+  result array. A post-filter adapter that reconsiders excluded source rows
+  must preserve that map shape instead of iterating it with `ipairs`. [src:
+  scripts/managers/backend/backend_interface_common.lua:648-669]
 - A base `ItemMasterList` weapon-TYPE key's own `display_name` / `localized_name`
   is the DEFAULT COSMETIC SKIN's name, NOT the weapon-type name: e.g.
   `ItemMasterList.dr_2h_pick.display_name = "dw_2h_pick_skin_01_name"` ("…Azdrek")

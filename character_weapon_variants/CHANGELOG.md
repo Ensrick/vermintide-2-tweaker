@@ -1,5 +1,11 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.472-dev (2026-07-25) - #1002 bounded Equipment reset [not-started]
+
+- Opted CWV into Mod Tweaker's owner-level setting transaction. A full
+  Equipment DEFAULT/profile restore now reapplies the mace/hammer template
+  identity at most once, with bounded `[cwv:1002]` evidence.
+
 ## 0.1.471-dev (2026-07-22) - mixed-lobby Tuskgor Javelin containment (#424) [not-started]
 
 - Connected CWV's existing peer-capability protocol to the actual earliest

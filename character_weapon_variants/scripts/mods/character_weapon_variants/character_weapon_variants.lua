@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.471-dev"
+local MOD_VERSION = "0.1.472-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -406,6 +406,19 @@ do
 		if setting_id == policy.SETTING_ID then
 			_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
 		end
+	end
+
+	-- #1002: opt into GUI Tweaker's owner-level bulk transaction. CWV's
+	-- current setting callback owns one whole-template apply; run it at most
+	-- once after all Equipment DEFAULT/profile values are persisted.
+	function mod.on_settings_batch_changed(setting_ids)
+		for i = 1, #(setting_ids or {}) do
+			if setting_ids[i] == policy.SETTING_ID then
+				_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
+				break
+			end
+		end
+		pcall(printf, "[cwv:1002] settings=%d notifications=1", #(setting_ids or {}))
 	end
 end
 

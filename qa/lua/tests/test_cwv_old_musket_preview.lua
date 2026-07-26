@@ -128,10 +128,11 @@ return function(H, repo_root)
         H.equal(Cim.properties_preview_position("ranged", nil), nil)
         H.equal(Cim.properties_preview_position("ranged", {}), nil)
 
-        H.equal(Cim.overview_preview_x("ranged", -0.8, false), 0.8)
-        H.equal(Cim.overview_preview_x("ranged", -0.8, true), -0.8)
-        H.equal(Cim.overview_preview_x("melee", -0.8, false), -0.8)
-        H.equal(Cim.overview_preview_x("ranged", nil, false), nil)
+        H.equal(Cim.overview_preview_x(true, -0.8, false), 0.8)
+        H.equal(Cim.overview_preview_x(true, -0.8, true), -0.8)
+        H.equal(Cim.overview_preview_x(false, -0.8, false), -0.8)
+        H.equal(Cim.overview_preview_x(nil, -0.8, false), -0.8)
+        H.equal(Cim.overview_preview_x(true, nil, false), nil)
     end)
 
     H.test("CIM #882 runtime installs one active-only zoom-durable correction", function()
@@ -261,6 +262,20 @@ return function(H, repo_root)
         H.truthy(runtime:find("previewer._unit_start_position_boxed = adjusted_box", 1, true))
         H.truthy(runtime:find("if not deps.is_active() or not previewer then return previewer end", 1, true))
         H.truthy(runtime:find("pcall(deps.vector3, dx, dy, dz)", 1, true))
+    end)
+
+    H.test("CIM #882 overview separates by viewport role, not item slot type", function()
+        local path = repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
+            .. "_cim_mission_forge_safety.lua"
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(source:find("definition.content._cim882_mirrored_viewport = invert_rendering == true", 1, true))
+        H.truthy(source:find("content._cim882_mirrored_viewport == true", 1, true))
+        H.truthy(source:find("overview_preview_x(\n            mirrored_viewport", 1, true))
+        H.equal(source:find("overview_preview_x(\n            data and data.slot_type", 1, true), nil)
+        H.truthy(source:find("[cim:882] mission overview secondary preview mirrored", 1, true))
     end)
 
     H.test("CWV #474 installs Old Musket in the generic preview lease bridge", function()

@@ -29,9 +29,13 @@ M.PROVIDER_GATE_SURFACES = {
     "mirror_restore",   -- _forge_load saved-record normalize + legacy MIL re-inject (crafting_in_modded_dev.lua)
     "mirror_injection", -- backend-mirror add_item boundaries: Athanor/standard-forge/import crafts + registration
     "salvage",          -- BackendInterfaceCommon.filter_items salvage adapter (_cim_inventory_filter.lua)
-    "cw_conversion",    -- Chaos Wastes weapon-pool conversion: NO cim enumerator routes provider
-                        -- validation here yet (modded_rarities.lua only scrubs rarity keys).
-                        -- Deliberately unrouted; named by the self-report until a consumer exists.
+}
+
+-- `modded_rarities.lua` has no provider-item enumerator. Its Chaos Wastes hook
+-- only removes custom rarity names from a vanilla pool-excludes map before
+-- vanilla reads it; it never walks, creates, or converts a CIM/provider item.
+M.NON_ENUMERATOR_BOUNDARIES = {
+    cw_conversion = "rarity-exclude-scrub-only",
 }
 
 local _routed_surfaces = {}
@@ -445,6 +449,23 @@ function M.is_salvage_eligible(item, record, state)
     if state.is_equipped_by_any_loadout then return false, "loadout" end
     if state.is_favorite then return false, "favorite" end
     return true
+end
+
+-- Stable identity for the bounded issue-628 salvage diagnostic. Keeping this
+-- engine-free lets offline tests prove unchanged UI refreshes deduplicate while
+-- a changed equip/loadout/favorite/result state produces a new trace.
+function M.salvage_trace_fingerprint(backend_id, visible, eligible, reason, state)
+    state = state or {}
+    return table.concat({
+        tostring(backend_id),
+        visible and "visible" or "hidden",
+        eligible and "eligible" or "rejected",
+        tostring(reason or "none"),
+        state.is_equipped and "equipped" or "unequipped",
+        state.is_equipped_by_any_loadout and "saved" or "unsaved",
+        state.is_favorite and "favorite" or "not-favorite",
+        state.backend_dirty and "dirty" or "clean",
+    }, "|")
 end
 
 -- #277 uses the same closed slot set as crafting/salvage. ItemMasterList calls

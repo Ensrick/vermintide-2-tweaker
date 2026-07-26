@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.289-dev (2026-07-25) - #1002 bounded Equipment reset [not-started]
+
+- Mirrors public beta `0.12.288-beta`: Equipment DEFAULT/profile restores now
+  use one owner-level WT notification and one availability/action rebuild.
+- Complete snapshots preserve independent child defaults while a master-only
+  edit still cascades once. `[wt:1002]` and offline tests expose the bound.
+
 ## 0.12.288-dev (2026-07-22) - #445 Weapon Tweaks family controls [not-started]
 
 - Mirrors the public-beta source: a nested **Master Toggles** control owns all

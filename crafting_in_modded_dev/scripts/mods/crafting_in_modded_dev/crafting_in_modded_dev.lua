@@ -22,6 +22,8 @@ mod._cim_forge_preview_policy = _FORGE_PREVIEW_POLICY
 local _FORGE_PREVIEW = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_forge_preview")
 mod._cim_forge_preview = _FORGE_PREVIEW
+mod._cim959_accessory_property_policy = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_accessory_property_policy")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- ============================================================
@@ -54,7 +56,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.105-dev"
+local MOD_VERSION = "0.8.107-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -983,31 +985,77 @@ end)
 -- (cim-installed OR vanilla), because cim only APPENDS to the rarities
 -- table — vanilla ids 1..N are unchanged.
 --
--- Downstream effect on cim clients: they see the modded item as "unique"
--- in their loadout view. This is the stated user requirement ("modded
--- rarity should show up as regular unique/veteran rarity for the client").
--- The host still sees "modded" because we restore item.rarity after the
--- sync call, and the host's own UI reads item.rarity locally — not via
--- the RPC pipeline.
+-- Downstream safety effect on clients without CIM: they retain `unique` and
+-- never resolve a custom rarity id. CIM installations separately restore
+-- presentation from a boolean-only side channel. The owner's Hold-Tab row is
+-- also reconstructed from PlayerManager loadout data, so it needs the same
+-- boolean mirrored locally; restoring the backend item alone is insufficient
+-- (#598, source: ingame_player_list_ui_v2.lua:1500-1512).
 --
 -- This is the minimum-risk patch: a single wrap-hook on one function
 -- catches every call site (`simple_inventory_extension.lua:885` on equip,
 -- `player_unit_attachment_extension.lua:154` on attachment change,
 -- `LoadoutUtils.hot_join_sync` on new-peer arrival).
 -- Cim-client side-channel: per-(player, slot) "this slot's item is modded" flag.
--- Populated on the cim host via `cim_modded_slot` VMF RPC fired alongside every
--- `sync_loadout_slot`; consumed on cim clients in the `rpc_sync_loadout_slot`
--- hook to restore `item.rarity = "modded"` AFTER vanilla's decode path runs.
--- Vanilla clients have no registered handler for `cim_modded_slot` and drop
--- the packet silently — they keep the "unique" rarity baked in by the host's
--- wire-rewrite hook and never crash.
+-- Populated by a boolean-only `cim_modded_slot` RPC beside vanilla loadout sync.
+-- Unknown handlers and malformed payloads fail closed; no resource identity crosses the wire.
 --
--- Keyed by unique_id (peer_id .. ":" .. local_player_id) → slot_name → true.
+-- Keyed by unique_id → slot_name → boolean; false authoritatively clears stale modded state.
 local _cim_modded_slot_state = {}
+local _cim921_log_count = 0
+local CIM921_LOG_LIMIT = 24
 
 local function _cim_unique_id(peer_id, local_player_id)
     return tostring(peer_id) .. ":" .. tostring(local_player_id)
 end
+
+local function _cim_apply_modded_slot_metadata(peer_id, local_player_id, slot_name, is_modded, source)
+    if type(slot_name) ~= "string" or (is_modded ~= true and is_modded ~= false) then
+        if _cim921_log_count < CIM921_LOG_LIMIT then
+            _cim921_log_count = _cim921_log_count + 1
+            printf("[cim:921] dropped invalid rarity metadata source=%s peer=%s slot=%s value=%s count=%d/%d",
+                tostring(source), tostring(peer_id), tostring(slot_name), tostring(is_modded), _cim921_log_count, CIM921_LOG_LIMIT)
+        end
+        return false
+    end
+
+    local uid = _cim_unique_id(peer_id, local_player_id)
+    local slot_state = _cim_modded_slot_state[uid]
+    if not slot_state then
+        slot_state = {}
+        _cim_modded_slot_state[uid] = slot_state
+    end
+
+    local prior = slot_state[slot_name]
+    slot_state[slot_name] = is_modded -- retain explicit false; nil means not received yet
+
+    local before, after
+    local pm = Managers and Managers.player
+    local loadouts = pm and pm._player_loadouts
+    local stored = loadouts and loadouts[uid] and loadouts[uid][slot_name]
+    if stored then
+        before = stored.rarity
+        local core = mod._cim246_tab_preview_core
+        if core and core.resolve_rarity then
+            after = core.resolve_rarity(before, true, is_modded)
+        elseif is_modded then after = "modded"
+        elseif before == "modded" then after = "unique"
+        else after = before end
+        stored.rarity = after
+    end
+
+    if _cim921_log_count < CIM921_LOG_LIMIT
+            and (prior ~= is_modded or (before ~= nil and before ~= after)) then
+        _cim921_log_count = _cim921_log_count + 1
+        printf("[cim:921] rarity metadata source=%s peer=%s slot=%s prior=%s current=%s stored=%s->%s count=%d/%d",
+            tostring(source), tostring(peer_id), tostring(slot_name), tostring(prior),
+            tostring(is_modded), tostring(before), tostring(after),
+            _cim921_log_count, CIM921_LOG_LIMIT)
+    end
+
+    return true
+end
+mod._cim_apply_modded_slot_metadata = _cim_apply_modded_slot_metadata
 
 -- ============================================================
 -- MASTER loadout gate (loadout persistence REMOVED 2026-06-30)
@@ -1066,6 +1114,11 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
         do
             local peer_id = player:network_id()
             local local_player_id = player:local_player_id()
+            -- `network_send(..., "others", ...)` excludes the sender. Prime the
+            -- same tri-state locally before vanilla queues its self RPC so the
+            -- owner and observers consume one identical presentation contract.
+            _cim_apply_modded_slot_metadata(peer_id, local_player_id, slot_name,
+                is_modded, "sender")
             -- Send even is_modded=false so equipping a non-modded item clears any stale
             -- modded flag on that slot. CIM_RPC_SCHEMA is the FIRST positional arg after
             -- the target (VMF_RECIPES § 10); the receiver gate drops shape mismatches.
@@ -1103,23 +1156,10 @@ local function _rpc_cim_modded_slot(sender_peer_id, schema_version, peer_id, loc
             tostring(sender_peer_id), tostring(schema_version), tostring(CIM_RPC_SCHEMA))
         return
     end
-    local uid = _cim_unique_id(peer_id, local_player_id)
-    _cim_modded_slot_state[uid] = _cim_modded_slot_state[uid] or {}
-    _cim_modded_slot_state[uid][slot_name] = is_modded and true or nil
-
-    -- Retroactive patch: if PlayerManager._player_loadouts already has the
-    -- "unique"-coerced item for this slot, upgrade it back to "modded" so the
-    -- cim client's UI shows the right chrome.
-    local pm = Managers.player
-    local loadouts = pm and pm._player_loadouts
-    if loadouts and loadouts[uid] then
-        local stored = loadouts[uid][slot_name]
-        if stored then
-            stored.rarity = mod._cim246_tab_preview_core
-                and mod._cim246_tab_preview_core.resolve_rarity(stored.rarity, true, is_modded)
-                or (is_modded and "modded" or stored.rarity)
-        end
-    end
+    -- Record true AND false. This also reconciles an already-arrived vanilla
+    -- loadout RPC, covering either ordering between the two reliable channels.
+    _cim_apply_modded_slot_metadata(peer_id, local_player_id, slot_name,
+        is_modded, "receiver")
 end
 mod:network_register("cim_modded_slot", _rpc_cim_modded_slot)
 
@@ -1178,12 +1218,13 @@ mod:hook("PlayerManager", "rpc_sync_loadout_slot", function(func, self, channel_
     local slot_state = _cim_modded_slot_state[uid]
     if not slot_state then return end
     local slot_name = NL and NL.equipment_slots and NL.equipment_slots[slot_id]
-    if not slot_name or not slot_state[slot_name] then return end
+    if not slot_name or slot_state[slot_name] == nil then return end
     local stored = self._player_loadouts and self._player_loadouts[uid] and self._player_loadouts[uid][slot_name]
     if stored then
+        local is_modded = slot_state[slot_name]
         stored.rarity = mod._cim246_tab_preview_core
-            and mod._cim246_tab_preview_core.resolve_rarity(stored.rarity, true, true)
-            or "modded"
+            and mod._cim246_tab_preview_core.resolve_rarity(stored.rarity, true, is_modded)
+            or (is_modded and "modded" or (stored.rarity == "modded" and "unique" or stored.rarity))
     end
 end)
 mod._cim_rpc_loadout_guard_installed = true
@@ -2856,26 +2897,15 @@ mod:hook("HeroWindowWeaveProperties", "_sync_backend_loadout", function(func, se
     end
 end)
 
--- #239: the modded Athanor crafts for FREE (cim fakes all essence/mastery costs
--- to 0 via the BackendInterfaceWeavesPlayFab hooks), so the vanilla per-option
--- "Cost: 0" readout on every trait/property/talent row is meaningless clutter.
--- Blank it after vanilla populates each option widget. The cost NUMBER is
--- content.price_text (all three text passes share text_id="price_text"); the
--- mastery ICON is a SEPARATE texture pass gated independently of the text, so we
--- also zero its per-widget alpha. hook_safe (post) because vanilla rewrites these
--- every time _sync_backend_loadout re-populates the list. Modded forge only; each
--- entry owns its widget (UIWidget.init), so the per-widget style edit can't leak
--- to other rows. Row height is fixed, so blanking does not reflow the layout.
-mod:hook_safe("HeroWindowWeaveProperties", "_populate_menu_option_widget", function(self, entry_data, menu_option)
-    if not _custom_forge_active then return end
-    local widget = entry_data and entry_data.widget
-    if not widget then return end
-    if widget.content then
-        widget.content.price_text = ""
-    end
-    local pic = widget.style and widget.style.price_icon
-    if pic and pic.color then pic.color[1] = 0 end
-end)
+-- #239/#959: one extracted adapter owns the consolidated property-row cost,
+-- category-aware usage/removal, and Clear hooks. Keeping the seam together
+-- avoids VMF's same-mod duplicate-hook drop and keeps this oversized entry from
+-- growing further.
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_accessory_property_runtime")({
+    mod = mod,
+    policy = mod._cim959_accessory_property_policy,
+    is_custom_forge_active = function() return _custom_forge_active end,
+})
 
 -- --- Forge UI polish (runs each frame while forge is open) ---
 
@@ -4096,14 +4126,8 @@ end
 -- at engine boot, so this just rewrites the multiplier shape).
 _patch_movespeed_buff()
 
--- Re-apply when the user toggles the setting in the VMF menu. VMF fires
--- `on_setting_changed` with the setting_id; gate on our toggle to avoid
--- spurious work on unrelated setting flips.
-mod.on_setting_changed = function(setting_id)
-    if setting_id == "movespeed_2pct_mode" then
-        _patch_movespeed_buff()
-    end
-end
+local _settings_runtime = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_settings_runtime")
+_settings_runtime.install(mod, _patch_movespeed_buff, printf)
 
 local function _seed_one_item(item, props_out, traits_out, slot_index)
     if not item then return end
@@ -6104,6 +6128,7 @@ _install_regression_checks({
     forge_load = _forge_load,
     is_in_keep = _is_in_keep,
     store_property_slot = _store_property_slot,
+    accessory_property_policy = mod._cim959_accessory_property_policy,
     accessory_panel = _AccessoryPanel,
     overview_btn_render_field = _OVERVIEW_BTN_RENDER_FIELD,
     overview_drawn_fields = _OVERVIEW_DRAWN_FIELDS,
