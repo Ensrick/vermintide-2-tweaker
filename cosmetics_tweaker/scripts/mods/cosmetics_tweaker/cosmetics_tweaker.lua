@@ -71,6 +71,8 @@ local OFFHAND_COMMIT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_c
 local CUSTOM_ILLUSION_SYNC = mod:dofile(
     "scripts/mods/cosmetics_tweaker/_cos_custom_illusion_sync")
 local LA_REPLAY_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_policy")
+mod._cos_complete_set_rebroadcast = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_complete_set_rebroadcast")
 mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_instance_policy")
 mod._la_icon_provider = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_inventory_icon").new(mod._la_instance_policy, printf, 32)
 -- v0.9.49-dev (issue #186): disable Loremaster's Armoury's Okri's-Challenges /
@@ -96,7 +98,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.167-dev"
+local MOD_VERSION = "0.9.171-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -683,33 +685,8 @@ mod.on_game_state_changed = function(status, state_name)
     -- Glow state restores on equipment spawn; editor opening is manual.
 end
 
-mod.on_setting_changed = function(setting_id)
-    if setting_id == "cos_encarmine_hat_enabled" and CUSTOM_HATS then
-        CUSTOM_HATS.sync_toggle()
-    end
-    if GK_SET and (GK_SET.is_availability_setting(setting_id) or setting_id == "cos_fk_reikland_griffin_enabled") then
-        GK_SET.sync_toggle()
-    end
-    if setting_id and setting_id:sub(1, 11) == "cos_unlock_" then
-        mod._cos.apply_cosmetic_unlocks()
-    end
-    -- v0.9.0-dev: any glow_* setting change triggers a per-peer glow
-    -- rebroadcast. _on_glow_setting_changed schedules (doesn't emit
-    -- immediately) so a multi-setting save in the VMF menu coalesces into
-    -- one RPC via the throttle in _glow_sync_tick.
-    if setting_id and setting_id:sub(1, 5) == "glow_"
-        and mod._on_glow_setting_changed then
-        mod._on_glow_setting_changed()
-    end
-    -- Glow override no longer auto-repaints on setting change — the walk
-    -- destabilized adjacent unit state (hand meshes disappeared after pressing
-    -- X to inspect, 1P breakage). User re-equips the weapon to see the new
-    -- preset; the apply_material_settings hook paints reliably at spawn.
-
-    if TPE and TPE.on_setting_changed then
-        TPE.on_setting_changed(setting_id)
-    end
-end
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_settings_runtime")
+    .install(mod, CUSTOM_HATS, GK_SET, TPE)
 
 -- v0.9.0-dev: TPE per-frame tick moved into the unified mod.update defined
 -- later in the file (around line 3880, the LA bridge init driver). Previously
@@ -874,8 +851,8 @@ local function _create_glow_editor_button()
                 text_color = { 255, 255, 255, 255 }, offset = { 0, 0, 3 },
             },
         },
-        scenegraph_id = "screen",
-        offset = GlowPicker.toggle_anchor(button_width, 20),
+        scenegraph_id = "info_window",
+        offset = { 0, 0, 20 },
     }
     local widget = UIWidget.init(definition)
     widget.content.equipped = false
@@ -3936,13 +3913,15 @@ mod:hook_safe("HeroWindowItemCustomization", "_handle_input", function(self, inp
 end)
 
 mod:hook("HeroWindowItemCustomization", "_state_draw_overview", function(func, self, ui_renderer, dt)
-    func(self, ui_renderer, dt)
+    GlowPicker.draw_native_information(func, self, ui_renderer, dt,
+        self._ct_glow_editor_widget and self._ct_glow_editor_widget.content)
 
     -- #377: draw and consume the contextual editor toggle before the
     -- offhand-row early return below, so ordinary one-handed weapons get it.
     local glow_widget = self._ct_glow_editor_widget
     local sg = ui_renderer and ui_renderer.ui_scenegraph
-    if glow_widget and sg and sg[glow_widget.scenegraph_id] then
+    if glow_widget and sg and sg[glow_widget.scenegraph_id]
+            and GlowPicker.position_toggle(self, glow_widget, 96, 20) then
         UIRenderer.draw_widget(ui_renderer, glow_widget)
         local family = glow_widget.content and glow_widget.content.glow_family
         -- Consume the release edge even while disabled so it cannot become a
@@ -6059,7 +6038,8 @@ local function _install_skin_loadout_safety()
         -- HOST's loadout -> bots cloned the host's gear instead of using their own. Forward
         -- is_bot, and never let a bot read mod.loadout_cache (career+slot keyed, holds the
         -- LOCAL player's cross-character cosmetics). Identical to the wt v0.12.115 fix; this
-        -- path is LA-gated (_install_skin_loadout_safety), so it only bit users running LA.
+        -- path is bridge-gated (_install_skin_loadout_safety), so it covers
+        -- Cosmetics-authored sets even when the external LA mod is absent.
         if not is_bot and mod.loadout_cache[career_name] and mod.loadout_cache[career_name][slot_name] then
             return mod.loadout_cache[career_name][slot_name]
         end
@@ -6647,8 +6627,8 @@ local _EMIT_DEDUP_WINDOW = 0.5
 -- the host so the resulting apply is server-broadcast and consistent across
 -- peers. If we ARE the host, short-circuits the round-trip.
 _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_field)
-    if not (unit and Unit.alive(unit)) then return end
-    if not (slot_name and kind and armoury_key) then return end
+    if not (unit and Unit.alive(unit)) then return false end
+    if not (slot_name and kind and armoury_key) then return false end
     -- v0.9.9.4-dev: hand_field is optional, defaults to "left_hand_unit"
     -- (legacy behavior — only relevant to kind="offhand"/"illusion"). hat
     -- and armor paths ignore it.
@@ -6663,12 +6643,12 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
         wearer_peer = owner and owner.peer_id or nil
     end
     wearer_peer = wearer_peer or _local_player_peer_id()
-    if not wearer_peer then return end
+    if not wearer_peer then return false end
     local wearer_career = mod._la_career_for_unit(unit)
     if not wearer_career then
         if printf then printf("[cos:698] EMIT SKIP wearer=%s slot=%s kind=%s reason=career-unproven",
             tostring(wearer_peer), tostring(slot_name), tostring(kind)) end
-        return
+        return false
     end
 
     -- v0.9.9.4-dev: dedup key includes hand_field so the same shield/weapon
@@ -6680,7 +6660,7 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
     local now = os.clock()
     local prev = _last_emit_at[dedup_key]
     if prev and (now - prev) < _EMIT_DEDUP_WINDOW then
-        return  -- recent duplicate, suppress
+        return true, "coalesced"  -- a matching emit was already accepted
     end
     _last_emit_at[dedup_key] = now
 
@@ -6708,7 +6688,7 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
             hand_field     = hand_field,
             wearer_career  = wearer_career,
         })
-        return
+        return true, "emitted"
     end
 
     -- Client: ask the host to fan out.
@@ -6751,7 +6731,7 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
         -- user's log shows exactly when an emit queued instead of sending.
         if printf then printf("[la-state] EMIT client DEFERRED (no host yet) slot=%s kind=%s key=%s queue=%d",
             tostring(slot_name), tostring(kind), tostring(armoury_key), #mod._la_deferred_emits) end
-        return
+        return true, "queued"
     end
     _dbg("[cos_la_apply emit] CLIENT->req wearer=%s slot=%s kind=%s key=%s hand=%s host=%s",
         tostring(wearer_peer), tostring(slot_name), tostring(kind), tostring(armoury_key), tostring(hand_field), tostring(host))
@@ -6770,6 +6750,7 @@ _send_la_apply = function(unit, slot_name, kind, armoury_key, vanilla_key, hand_
         hand_field   = hand_field,
         wearer_career = wearer_career,
     })
+    return true, "emitted"
 end
 
 -- v0.9.2-hotfix: deferred-emit drain. Called from mod.update every frame.
@@ -7001,8 +6982,8 @@ end
 -- peer never receives it, so no modded key can ride a vanilla RPC into its
 -- NetworkLookup (#421 floor intact). Attached to `mod` (200-local ceiling).
 mod._send_offhand_mesh = function(unit, slot_name, hand_field, unit_path)
-    if not (unit and Unit.alive(unit)) then return end
-    if not slot_name or unit_path == nil then return end
+    if not (unit and Unit.alive(unit)) then return false end
+    if not slot_name or unit_path == nil then return false end
     hand_field = hand_field or "left_hand_unit"
     local wearer_peer = nil
     local pm = Managers and Managers.player
@@ -7011,12 +6992,14 @@ mod._send_offhand_mesh = function(unit, slot_name, hand_field, unit_path)
         wearer_peer = owner and owner.peer_id or nil
     end
     wearer_peer = wearer_peer or _local_player_peer_id()
-    if not wearer_peer then return end
+    if not wearer_peer then return false end
     local dedup_key = wearer_peer .. "|" .. tostring(slot_name) .. "|OFFHANDMESH|"
         .. tostring(hand_field) .. "|" .. tostring(unit_path)
     local now = os.clock()
     local prev = _last_emit_at[dedup_key]
-    if prev and (now - prev) < _EMIT_DEDUP_WINDOW then return end
+    if prev and (now - prev) < _EMIT_DEDUP_WINDOW then
+        return true, "coalesced"
+    end
     _last_emit_at[dedup_key] = now
 
     if _is_local_server() then
@@ -7027,7 +7010,7 @@ mod._send_offhand_mesh = function(unit, slot_name, hand_field, unit_path)
             wearer_peer_id = wearer_peer, slot = slot_name, kind = "offhand",
             offhand_unit = unit_path, hand_field = hand_field,
         })
-        return
+        return true, "emitted"
     end
 
     local host = _host_peer_id()
@@ -7039,13 +7022,14 @@ mod._send_offhand_mesh = function(unit, slot_name, hand_field, unit_path)
         }
         if printf then printf("[la-state] OFFHAND-MESH client DEFERRED (no host yet) slot=%s hand=%s unit=%s queue=%d",
             tostring(slot_name), tostring(hand_field), tostring(unit_path), #mod._la_deferred_emits) end
-        return
+        return true, "queued"
     end
     if printf then printf("[la-state] OFFHAND-MESH client->req host=%s slot=%s hand=%s unit=%s",
         tostring(host), tostring(slot_name), tostring(hand_field), tostring(unit_path)) end
     mod:network_send("cos_la_apply_req", host, COS_RPC_SCHEMA, {
         slot = slot_name, kind = "offhand", offhand_unit = unit_path, hand_field = hand_field,
     })
+    return true, "emitted"
 end
 
 -- #918: ct_* skin ids cannot safely use vanilla's numeric weapon-skin wire
@@ -8349,6 +8333,10 @@ if rawget(_G, "PlayerManager") then
             mod._la_peer_purge_at[peer_id] = nil
             if printf then printf("[la-state] PEER-PURGE canceled peer=%s (re-added - transition, not a disconnect)",
                 tostring(peer_id)) end
+        end
+        if LA_REPLAY_POLICY.should_publish_local_on_peer_ready(
+                _local_player_peer_id(), peer_id) then
+            mod._la_self_rebroadcast_pending = true
         end
         -- #660 S3: a peer appeared -> peer-ready replay edge, scoped to that
         -- peer. Its husk unit is usually not spawned yet, so most records defer
@@ -9711,6 +9699,41 @@ mod._la_rebroadcast_inventory_ready = function(inventory)
     return LA_REPLAY_POLICY.inventory_ready(inventory)
 end
 
+mod._cos_complete_set_rebroadcast_tick = mod._cos_complete_set_rebroadcast.new({
+    policy = LA_REPLAY_POLICY,
+    pending = function() return mod._la_self_rebroadcast_pending == true end,
+    clear_pending = function() mod._la_self_rebroadcast_pending = false end,
+    local_player = function()
+        return _local_player_safe(Managers and Managers.player)
+    end,
+    unit_alive = function(unit) return Unit.alive(unit) end,
+    inventory_for = function(unit)
+        return ScriptUnit and ScriptUnit.has_extension
+            and ScriptUnit.has_extension(unit, "inventory_system") or nil
+    end,
+    career_for = _wire_career_for_player,
+    bridge_ready = function() return LA_BRIDGE.registered == true end,
+    loadout_ready = function() return mod._la_skin_safety_installed == true end,
+    offhand_restore_ready = function()
+        return mod._la_offhand_restore_done == true
+    end,
+    loadout_cache = function() return mod.loadout_cache end,
+    backend_to_armoury = function() return LA_BRIDGE.backend_to_armoury end,
+    saved_offhands = function() return LA_PERSIST.get_saved_offhands() end,
+    offhand_selection = function() return _offhand_selection end,
+    migrate_selection = _migrate_legacy_offhand_selection,
+    equips_by_unit = function() return _local_la_equips end,
+    send_la = _send_la_apply,
+    send_mesh = mod._send_offhand_mesh,
+    send_custom = mod._cos_send_custom_skin_hands,
+    vanilla_fallback = _la_vanilla_fallback,
+    now = os.clock,
+    retry_delay = 0.25,
+    log = function(n)
+        _dbg("[ct la-rebroadcast] accepted %d complete-set record(s)", n)
+    end,
+})
+
 -- VMF calls mod.update once per frame.
 -- CLARIFY: la_bridge initialization is deferred to first frame where:
 --   1. ItemMasterList is loaded
@@ -9730,109 +9753,9 @@ mod.update = function(dt)
         LA_PERSIST.tick_pending_restore()
     end
 
-    -- v0.9.4: drain pending self-rebroadcast of local LA equips.
-    -- Triggered by on_game_state_changed. Walks _local_la_equips for the
-    -- local player_unit and re-emits each entry. Idempotent — the per-
-    -- emit dedup window (~0.5s in _send_la_apply) prevents flooding if
-    -- state changes multiple times rapidly.
-    if mod._la_self_rebroadcast_pending and _send_la_apply then
-        local pm = Managers and Managers.player
-        local lp = _local_player_safe(pm)
-        local pu = lp and lp.player_unit
-        if pu and Unit.alive(pu) then
-            local n = 0
-            local replay_ready = true
-            -- (A) Hats / armor via _local_la_equips (populated by
-            -- CosmeticUtils.update_cosmetic_slot hook).
-            if _local_la_equips then
-                local equips = _local_la_equips[pu]
-                if equips then
-                    for slot, item_name in pairs(equips) do
-                        local kind
-                        if slot == "slot_hat"  then kind = "hat"
-                        elseif slot == "slot_skin" then kind = "armor"
-                        else kind = "illusion" end
-                        local armoury_key = LA_BRIDGE and LA_BRIDGE.backend_to_armoury
-                            and LA_BRIDGE.backend_to_armoury[item_name]
-                        local vanilla_key = _la_vanilla_fallback(item_name,
-                            _wire_career_for_player(lp))
-                        if armoury_key then
-                            _send_la_apply(pu, slot, kind, armoury_key, vanilla_key)
-                            n = n + 1
-                        end
-                    end
-                end
-            end
-            -- (B) v0.9.6: shields / weapon offhands via _offhand_selection.
-            -- _local_la_equips ONLY tracks hat + armor (set by the
-            -- CosmeticUtils.update_cosmetic_slot hook). Shields and weapon
-            -- illusions live in _offhand_selection[backend_id]. Audit
-            -- 2026-05-21 showed hats sync on join but shields don't —
-            -- because the drain didn't walk this table.
-            -- Strategy: iterate the player's CURRENT equipped slots, look
-            -- up _offhand_selection[slot.backend_id], emit if matched.
-            -- Avoids replaying stale selections for items no longer
-            -- equipped.
-            if _offhand_selection and next(_offhand_selection) ~= nil then
-                local inv = ScriptUnit and ScriptUnit.has_extension
-                    and ScriptUnit.has_extension(pu, "inventory_system") or nil
-                if not mod._la_rebroadcast_inventory_ready(inv) then
-                    replay_ready = false
-                else
-                    for _, slot_data in pairs(inv._equipment.slots) do
-                        local sd_item = slot_data and slot_data.item_data
-                        local sd_bid = sd_item and sd_item.backend_id
-                        if sd_bid then _migrate_legacy_offhand_selection(sd_bid) end
-                        local per_hand_sel = sd_bid and _offhand_selection[sd_bid]
-                        if type(per_hand_sel) == "table" then
-                            local template_key = sd_item.template or sd_item.name or "slot_unknown"
-                            -- #583: replay each committed hand through its
-                            -- existing transport. One equipped item contributes
-                            -- at most one direct dual-offhand mesh.
-                            for hand_field, opt in pairs(per_hand_sel) do
-                                if type(opt) == "table" and opt.la_armoury_key then
-                                    _send_la_apply(pu, template_key, "offhand",
-                                        opt.la_armoury_key, opt.vanilla_skin, hand_field)
-                                    n = n + 1
-                                elseif type(opt) == "table" and type(opt.unit) == "string"
-                                        and opt.unit ~= "" and mod._send_offhand_mesh then
-                                    mod._send_offhand_mesh(pu, template_key,
-                                        hand_field, opt.unit)
-                                    n = n + 1
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-            -- (C) #918: custom weapon illusions use the same semantic hand
-            -- transport. Re-publish from the authoritative equipped slots on
-            -- every game-state edge; vanilla/non-custom skins also drive the
-            -- explicit CLEAR needed after a respawn or illusion removal.
-            do
-                local inv = ScriptUnit and ScriptUnit.has_extension
-                    and ScriptUnit.has_extension(pu, "inventory_system") or nil
-                if not mod._la_rebroadcast_inventory_ready(inv) then
-                    replay_ready = false
-                else
-                    for _, slot_data in pairs(inv._equipment.slots) do
-                        local item_data = slot_data and slot_data.item_data
-                        local _, _, emitted = mod._cos_send_custom_skin_hands(
-                            pu, item_data, slot_data and slot_data.skin,
-                            "game_state_rebroadcast")
-                        n = n + (emitted or 0)
-                    end
-                end
-            end
-            if replay_ready then
-                mod._la_self_rebroadcast_pending = false
-                if n > 0 then
-                    _dbg("[ct la-rebroadcast] re-emitted %d local LA equip(s) on state change (hats/armor + offhand)", n)
-                end
-            end
-        end
-        -- If player_unit not yet ready, keep flag pending and retry next frame.
-    end
+    -- #629: keep this edge pending until exact career, both equipped slots,
+    -- saved offhand convergence, and every queued/emitted operation are proven.
+    mod._cos_complete_set_rebroadcast_tick()
 
     -- v0.9.66-dev (#233): CLIENT-side self-heal of REMOTE peers' cached LA offhand/
     -- illusion equips after a level transition. Armed by on_game_state_changed
@@ -9999,7 +9922,7 @@ mod.update = function(dt)
     -- this still pre-loads the vanilla _offhand_options + _custom_illusions
     -- meshes, which is enough for non-LA picks. Function is idempotent.
     if _force_load_all_offhand_packages then _force_load_all_offhand_packages() end
-    if _la_bridge_init_done then _install_skin_loadout_safety() end
+    if LA_BRIDGE.registered then _install_skin_loadout_safety() end
     -- #376: wait until all local-backend injectors have had time to restore,
     -- then retire exact-item overrides whose item no longer exists. Vanilla's
     -- item interface is a direct backend-mirror lookup
@@ -10187,7 +10110,9 @@ if rawget(_G, "AttachmentUtils") then
             -- attachment exists.
             local spawn_item = item_data
             local path = spawn_item and spawn_item.unit
-            if type(path) == "string" and path ~= "" and not _unit_resident(path) then
+            local is_headpiece = slot_name == "slot_hat"
+            if is_headpiece and type(path) == "string" and path ~= ""
+                    and not _unit_resident(path) then
                 mod:info("[cos-hat] SKIP non-resident headpiece=%s slot=%s owner=%s (viewer package not resident; no hat instead of crash)",
                     tostring(path), tostring(slot_name),
                     tostring(type(owner_unit) == "userdata" and "unit" or owner_unit))

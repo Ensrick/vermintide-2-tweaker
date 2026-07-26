@@ -784,9 +784,14 @@ _rt_register("glow_manual_editor_button_377", function()
             or type(GlowPicker.is_open_for) ~= "function" then
         return "committed/manual picker API incomplete"
     end
-    local anchor = type(GlowPicker.toggle_anchor) == "function"
-        and GlowPicker.toggle_anchor(96, 20) or nil
-    if not anchor or anchor[1] ~= 1164 or anchor[2] ~= 376 or anchor[3] ~= 20 then
+    local probe_widget = { offset = { 0, 0, 0 } }
+    local probe_host = { _ui_scenegraph = {
+        info_window = { size = { 500, 800 }, world_position = { 1345, 160 } },
+    } }
+    local positioned = type(GlowPicker.position_toggle) == "function"
+        and GlowPicker.position_toggle(probe_host, probe_widget, 96, 20)
+    local anchor = probe_widget.offset
+    if not positioned or anchor[1] ~= 386 or anchor[2] ~= 18 or anchor[3] ~= 20 then
         return "manual editor toggle is not aligned to the panel bottom-right"
     end
     local frame = type(GlowPicker.frame_style) == "function"

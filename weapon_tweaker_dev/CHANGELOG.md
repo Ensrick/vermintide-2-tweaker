@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.290-dev (2026-07-26) - #201 Deepwood runtime package ownership
+
+- Mirrors public beta `0.12.289-beta`: cross-career Deepwood Staff is withheld
+  until the owner-gated Sister of the Thorn runtime package is resident.
+- The exact vortex spawn has a final non-resident fail-closed guard, and
+  `/wt_regression_test` reports the live ownership/request/residency state.
+
+## 0.12.289-dev (2026-07-25) - #1002 bounded Equipment reset [not-started]
+
+- Mirrors public beta `0.12.288-beta`: Equipment DEFAULT/profile restores now
+  use one owner-level WT notification and one availability/action rebuild.
+- Complete snapshots preserve independent child defaults while a master-only
+  edit still cascades once. `[wt:1002]` and offline tests expose the bound.
+
 ## 0.12.288-dev (2026-07-22) - #445 Weapon Tweaks family controls [not-started]
 
 - Mirrors the public-beta source: a nested **Master Toggles** control owns all

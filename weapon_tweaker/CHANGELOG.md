@@ -1,5 +1,25 @@
 # Weapon Tweaker Changelog
 
+## 0.12.289-beta (2026-07-26) - #201 Deepwood runtime package ownership
+
+- Cross-career Deepwood Staff now owner-gates and idempotently loads the full
+  Sister of the Thorn career package before exposing the weapon's availability
+  or career-action integration.
+- The exact native vortex spawn fails closed while its unit is non-resident,
+  preventing a missing runtime asset from reaching the engine spawn boundary.
+- Added in-game package-residency diagnostics plus Lua 5.1 coverage for
+  ownership timing, retry, reference bounds, beta/dev parity, and lifecycle
+  ordering.
+
+## 0.12.288-beta (2026-07-25) - #1002 bounded Equipment reset [not-started]
+
+- Opted Weapon Tweaker into Mod Tweaker's owner-level setting transaction so an
+  Equipment DEFAULT/profile restore persists every value silently, reconciles
+  master controls, and rebuilds availability plus career actions exactly once.
+- Complete DEFAULT snapshots preserve mixed child defaults; master-only edits
+  retain select-all behavior. Added bounded `[wt:1002]` evidence and Lua 5.1
+  coverage for both master-control families.
+
 ## 0.12.287-beta (2026-07-22) - #445 Weapon Tweaks family controls [not-started]
 
 - Added a nested **Master Toggles** control for all 13 active Weapon Tweaks.

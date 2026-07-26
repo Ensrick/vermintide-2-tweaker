@@ -50,6 +50,11 @@ return function(H, repo_root)
             forge_load = noop,
             is_in_keep = noop,
             store_property_slot = noop,
+            accessory_property_policy = {
+                count_slots = noop,
+                last_slot = noop,
+                collect_property_slots = noop,
+            },
             accessory_panel = {},
             overview_btn_render_field = "bottom_hdr_widgets",
             overview_drawn_fields = {},
@@ -72,7 +77,13 @@ return function(H, repo_root)
             "issue 787 authored Dual Axes icon check missing")
         H.truthy(seen.issue682_provider_gate_routing,
             "issue 682 provider-gate routing check missing")
-        H.equal(#names, 79, "regression registration set changed")
+        H.truthy(seen.issue959_accessory_property_layers_are_independent,
+            "issue 959 accessory property layer check missing")
+        H.truthy(seen.issue628_salvage_state_diagnostic,
+            "issue 628 exact salvage-state diagnostic check missing")
+        H.truthy(seen.issue921_tab_rarity_state_is_tristate,
+            "issue 921 Hold-Tab rarity convergence check missing")
+        H.equal(#names, 82, "regression registration set changed")
         local ok, result = pcall(checks[1])
         H.truthy(ok, "registered checks did not close over the supplied mod object")
         H.equal(type(result), "string")

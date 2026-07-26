@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.471-dev"
+local MOD_VERSION = "0.1.473-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -53,6 +53,7 @@ local CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 = "cwv-slot-extension-scoped-to-cros
 local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
 _om.javelin_gate = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_gate")
+_om.cross_slot_filter = mod:dofile("scripts/mods/character_weapon_variants/_cwv_cross_slot_filter")
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
 _om.identity_peer_pull = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_pull")
@@ -406,6 +407,19 @@ do
 		if setting_id == policy.SETTING_ID then
 			_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
 		end
+	end
+
+	-- #1002: opt into GUI Tweaker's owner-level bulk transaction. CWV's
+	-- current setting callback owns one whole-template apply; run it at most
+	-- once after all Equipment DEFAULT/profile values are persisted.
+	function mod.on_settings_batch_changed(setting_ids)
+		for i = 1, #(setting_ids or {}) do
+			if setting_ids[i] == policy.SETTING_ID then
+				_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
+				break
+			end
+		end
+		pcall(printf, "[cwv:1002] settings=%d notifications=1", #(setting_ids or {}))
 	end
 end
 
@@ -3151,13 +3165,38 @@ end
 -- The career mutation above adds "ranged" to slot_melee, which surfaces
 -- ALL ranged weapons in the melee grid. This filter scopes that down so
 -- only items whose key matches `_CWV_CROSS_SLOT_PREFIXES` (currently the
--- musket and jav+shield families) remain in the melee result. Native
--- melee items are kept untouched. The ranged-slot filter is NOT touched —
--- vanilla ranged items appear there naturally regardless.
+-- musket and jav+shield families) remain in a MELEE-ONLY result. Native
+-- melee items are kept untouched. A combined `(melee or ranged)` category
+-- is deliberately not narrowed: Career Tweaker uses that category when
+-- Foot Knight's secondary slot accepts both weapon types (#935).
 --
 -- Replaces the prior dual-hook setup (inject + post-filter) that had
 -- potential chain-ordering issues. One hook, one job: take the result
 -- vanilla produces, drop the unwanted ranged items from melee grid.
+--
+-- #935: the primary and secondary loadout categories can both serialize to
+-- the same `(melee or ranged)` filter. ItemGridUI therefore carries the
+-- category's exact slot_name across the synchronous backend call; filter text
+-- alone is not treated as surface identity.
+mod:hook("ItemGridUI", "_on_category_index_change", function(func, self, index, ...)
+	local settings = self._category_settings and self._category_settings[index]
+	local slot_name = settings and (settings.slot_name or settings.name)
+	self._cwv_filter_slot_name =
+		(slot_name == "slot_melee" or slot_name == "slot_ranged") and slot_name or nil
+	return func(self, index, ...)
+end)
+
+mod:hook("ItemGridUI", "_get_items_by_filter", function(func, self, item_filter)
+	local previous = _om._cwv_filter_slot_name
+	_om._cwv_filter_slot_name = self._cwv_filter_slot_name
+	local ok, result = pcall(func, self, item_filter)
+	_om._cwv_filter_slot_name = previous
+	if not ok then
+		error(result)
+	end
+	return result
+end)
+
 mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, self, filter, params)
 	local items = func(self, filter, params)
 	if not items or type(filter) ~= "string" then return items end
@@ -3180,37 +3219,17 @@ mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, sel
 				hidden, tostring(state))
 		end
 	end
-	-- Only run for the melee-slot filter.
-	if not string.find(filter, "slot_type == melee", 1, true) then return items end
-
-	local filtered, kept, dropped, dropped_examples = {}, 0, 0, {}
-	for _, item in ipairs(items) do
-		local data = item.data or {}
-		local item_slot_type = data.slot_type
-		if item_slot_type ~= "ranged" then
-			-- Native melee / shield / etc — keep.
-			filtered[#filtered + 1] = item
-			kept = kept + 1
-		else
-			-- Ranged item — only keep if it's in our cross-slot allowlist.
-			if _is_cwv_musket_item(item) then
-				filtered[#filtered + 1] = item
-				kept = kept + 1
-			else
-				dropped = dropped + 1
-				-- Log first 3 dropped items so we can see if a musket got dropped.
-				if #dropped_examples < 3 then
-					dropped_examples[#dropped_examples + 1] = string.format(
-						"{key=%s name=%s ItemId=%s bid=%s mod_bid=%s}",
-						tostring(data and data.key),
-						tostring(data and data.name),
-						tostring(item.ItemId),
-						tostring(item.backend_id),
-						tostring(data and data.mod_data and data.mod_data.backend_id))
-				end
-			end
+	local slot_name = _om._cwv_filter_slot_name
+	if not _om.cross_slot_filter.should_narrow(filter, slot_name) then
+		if _om.cross_slot_filter.kind(filter) == "combined" then
+			_dbg("[cwv:935] preserved combined equipment category slot=%s",
+				tostring(slot_name))
 		end
+		return items
 	end
+
+	local filtered, kept, dropped, dropped_examples =
+		_om.cross_slot_filter.apply(items, filter, slot_name, _is_cwv_musket_item)
 	_dbg("[cwv melee-grid filter] kept=%d  dropped_ranged=%d  drop_samples=[%s]",
 		kept, dropped, table.concat(dropped_examples, ", "))
 	return filtered

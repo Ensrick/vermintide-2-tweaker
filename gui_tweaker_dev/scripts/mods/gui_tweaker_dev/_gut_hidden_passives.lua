@@ -24,39 +24,43 @@ local function career_context(self)
     return career, passive
 end
 
-local function surface(self)
-    if mod:get("gut_surface_hidden_passives") == false then
-        return
-    end
-    local career, passive = career_context(self)
-    if not career or not passive then
-        return
-    end
-    local entries = Policy.entries(career.name, career, passive)
-    local widget = self._widgets_by_name and self._widgets_by_name.passive_description_text
-    if widget and widget.content and #entries > 0 then
-        widget.content.text = Policy.append_description(widget.content.text,
-            mod:localize("gut_hidden_passive_heading"), entries,
-            function(key) return mod:localize(key) end)
-    end
-    if not logged[career.name] then
-        logged[career.name] = true
-        mod:info("[gut:153] career=%s buffs=%d vanilla_perks=%d hidden_added=%d display_only=true",
-            tostring(career.name), #(passive.buffs or {}), #(passive.perks or {}), #entries)
-    end
-end
+local COMBINED = {
+    title_key = "gut_hidden_passive_whc_combined_name",
+    description_key = "gut_hidden_passive_whc_combined_desc",
+}
 
-local function install(class_name)
+local function install(class_name, capacity)
     local class = rawget(_G, class_name)
     if class and class._populate_career_info then
-        mod:hook_safe(class, "_populate_career_info", surface)
+        mod:hook(class, "_populate_career_info", function(func, self, ...)
+            if mod:get("gut_surface_hidden_passives") == false then
+                return func(self, ...)
+            end
+            local career, passive = career_context(self)
+            local entries = career and passive
+                and Policy.entries(career.name, career, passive) or {}
+            if #entries == 0 then return func(self, ...) end
+
+            local original = passive.perks
+            passive.perks = Policy.presentation_perks(original, entries, capacity, COMBINED)
+            local ok, result = pcall(func, self, ...)
+            passive.perks = original
+            if not ok then error(result) end
+
+            if not logged[career.name] then
+                logged[career.name] = true
+                mod:info("[gut:153] career=%s buffs=%d vanilla_perks=%d hidden_added=%d surface=perks display_only=true",
+                    tostring(career.name), #(passive.buffs or {}), #(original or {}), #entries)
+            end
+            return result
+        end)
         return true
     end
     return false
 end
 
-local pc_hooked = install("HeroWindowTalents")
-local console_hooked = install("HeroWindowTalentsConsole")
+local pc_hooked = install("HeroWindowTalents", 3)
+local console_hooked = install("HeroWindowTalentsConsole", 6)
 
 mod:command("gut_hidden_passive_probe",
     "Log bounded hidden-career-passive display diagnostics (#153)", function()
@@ -97,6 +101,11 @@ return {
                 })
                 if #entries ~= 2 then
                     return "WHC source-derived hidden-passive catalog incomplete"
+                end
+                local rows = Policy.presentation_perks({ {}, {} }, entries, 6, COMBINED)
+                if #rows ~= 4 or rows[3]._gut_hidden_passive ~= true
+                        or rows[4]._gut_hidden_passive ~= true then
+                    return "WHC hidden passives are not routed through native Perks rows"
                 end
                 return nil
             end,

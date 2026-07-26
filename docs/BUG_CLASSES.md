@@ -1051,6 +1051,19 @@ Multiple mods hooking the same writer chain safely: `force_default=true` is stic
 ### Reference fix
 cosmetics_tweaker v0.9.66-dev (`_create_preview_widget` re-point + `_update_environment` pin, cosmetics_tweaker.lua ~2619-2751); cim_dev v0.8.48-dev (`mod._cim_pick_mission_env` + variation pin, commit 2a4c2c7). Memory: `reference_vt2_shading_env_variation_blend_av`.
 
+### Presentation semantics lost with the substituted environment
+
+The environment name can also encode layout behavior, not only lighting. In
+the Athanor overview, vanilla marks viewport 3 as `invert_rendering` and gives
+it `ui_weave_forge_preview_inverted`; both equipped weapons otherwise receive
+the same x coordinate [src: `hero_window_weave_forge_overview.lua:202-221,332-348,385-397`].
+If a mission-safe fallback replaces both environments with the same resource,
+capture that viewport role before substitution and reproduce only the lost
+transform at the item-preview producer. Do not infer the viewport from
+`item.data.slot_type`: dual-melee careers and cross-slot loadouts can place a
+melee item in `slot_ranged` (#882). Test primary, ordinary ranged secondary,
+and melee secondary independently.
+
 ---
 
 ## 23. Keep-only Gui material drawn mid-mission ("Material 'X' not found in Gui" draw fatal)
@@ -2837,3 +2850,169 @@ fallback path, especially live strings containing UTF-8 smart punctuation.
 **Related:** class 27 (husk base identity), class 43 (durable vs ephemeral
 render state), class 65 (partial-row loadouts), and class 68 (Deus identity and
 mechanism boundaries).
+## 74. Widened category reuses a key whose state omits the category dimension
+
+**First confirmed:** issue #959 in CIM's Athanor accessory property picker.
+**Canonical Issue:** [#959](https://github.com/Ensrick/vermintide-2-tweaker/issues/959)
+**Lives in:** UI adapters that widen one engine key into multiple categories
+while the engine stores or presents that key as one aggregate record.
+
+### Symptoms
+- A value selected in one category appears used, capped, removable, or clearable
+  in another category even though the persisted records retain separate slots.
+- Logs show correct per-slot writes, so persistence looks healthy while the
+  picker prevents the same key from being selected independently.
+
+### Diagnosis pattern
+1. Prove the write records retain a category discriminator or disjoint index
+   range; do not rewrite storage merely because presentation looks shared.
+2. Trace every read/remove consumer of the aggregate key. In the confirmed
+   Athanor case, row population counts `#slot_indices`, key removal selects the
+   final aggregate index, and Clear removes all indices for any key present in
+   the category [src: `hero_window_weave_properties.lua:718-740,2483-2501,2540-2632`].
+3. Compare those consumers with the authored category layout. Accessory property
+   layers are disjoint ten-slot ranges [src: `hero_window_weave_properties.lua:24-65`].
+
+### Fix template
+- Preserve the category dimension at every presentation and mutation seam:
+  usage/count, single-row removal, clear eligibility, and clear execution.
+- Put the mapping and filtering in one pure policy rather than duplicating
+  arithmetic in hooks. Let unaffected categories and vanilla contexts fall
+  through unchanged.
+- Regression-test one fully occupied category, an empty sibling category, the
+  same key in two categories, single-row removal, and category Clear.
+
+**Related:** class 1 (duplicate hooks) and issue #414 (category-family scope).
+
+## 75. Keyed backend collection is silently treated as a dense array
+
+**First confirmed:** issue #628 on 2026-07-22.
+**Canonical Issue:** [#628](https://github.com/Ensrick/vermintide-2-tweaker/issues/628)
+**Lives in:** adapters that reconsider or augment engine filter input after the
+vanilla function has produced a dense result array.
+
+### Symptoms
+- The vanilla grid works, but a post-filter recovery adapter never re-admits
+  eligible modded rows and emits none of its per-item diagnostics.
+- Aggregate diagnostics prove that records exist in the mirror, yet the
+  canonical ownership or eligibility function appears never to run.
+- The bug is silent: `ipairs` over a string/backend-id keyed table performs
+  zero iterations without raising an error.
+
+### Diagnosis pattern
+1. Read the engine producer or callee and record the exact collection shape at
+   every boundary; do not infer it from the result shape.
+2. Distinguish the raw keyed inventory map from the dense filtered result. In
+   `BackendInterfaceCommon.filter_items`, the former is enumerated with
+   `pairs`, while accepted rows are appended to the latter [src:
+   `backend_interface_common.lua:648-669`].
+3. Add a source-contract test for the required iterator and a keyed-table unit
+   fixture. An empty array fixture cannot expose this class.
+
+### Fix template
+- Preserve the engine collection shape and use `pairs` for backend-id keyed
+  maps. Use `ipairs` only where the producer guarantees a dense sequence.
+- Keep output deduplication keyed by the stable backend id; never depend on map
+  iteration order.
+- Lock the production adapter's iterator, exact ownership checks, and bounded
+  diagnostics under engine-free tests, then verify one eligible and each
+  rejected state in game.
+
+**Related:** class 5 (identity layers), class 39 (shape/contract drift), class
+65 (loadout row shapes), and class 73 (backend ownership boundaries).
+
+## 78. Boolean side-channel state collapses false into absence
+
+**First confirmed:** issues #598 and #921 on 2026-07-22.
+**Canonical Issue:** [#598](https://github.com/Ensrick/vermintide-2-tweaker/issues/598)
+**Lives in:** peer/slot presentation caches where a mod-only side-channel
+restores information intentionally stripped from a vanilla-safe RPC.
+
+### Symptoms
+- A slot is rendered correctly while it contains the custom item, but a common
+  replacement inherits the prior item's frame after a mode transition.
+- The owner and observer disagree because a broadcast target such as `others`
+  updates only remote peers while the server also queues the vanilla RPC
+  locally [src: `network_transmit.lua:508-524`; `loadout_utils.lua:36-42`].
+- No custom icon or model key crossed the wire; only cached presentation state
+  is wrong.
+
+### Diagnosis pattern
+1. Treat `true`, `false`, and `nil` as three states: custom, explicitly ordinary,
+   and not-yet-received. Search for `flag and true or nil` and truthy-only
+   consumers that erase the explicit clear.
+2. Drive both packet orders: vanilla RPC before side-channel and side-channel
+   before vanilla RPC. The receiver must converge in either order.
+3. Check whether the sender belongs to the transport target. `send_rpc_all`
+   queues a local RPC, while a mod-channel `others` send excludes its sender.
+
+### Fix template
+- Retain explicit `false` in the per-identity slot cache and consume it with an
+  `== nil` absence test. On false, normalize any cached custom presentation to
+  the known vanilla-safe substitute.
+- Prime the same metadata through the local policy before dispatch when the
+  network recipient excludes the sender. Reuse one apply helper for local and
+  remote paths so their semantics cannot drift.
+- Keep resource identity out of the side-channel. Test true-to-false, nil
+  fail-closed, local-owner priming, both arrival orders, transition, hot join,
+  and a peer without the mod.
+
+**Related:** class 24 (transition lifecycle), class 43 (durable versus render
+state), class 48 (presentation adapters), and class 64 (numeric lookup parity).
+---
+
+## 79. Merged settings tab leaves one expensive owner on per-setting notification
+
+**First confirmed:** issue #1002 on 2026-07-23; prior single-owner precedent
+issue #560.
+**Canonical Issue:** [#1002](https://github.com/Ensrick/vermintide-2-tweaker/issues/1002)
+**Lives in:** Mod Tweaker DEFAULT/profile commits spanning multiple VMF mod
+owners, especially a large owner whose `on_setting_changed` rebuilds global
+tables.
+
+### Symptoms
+- Confirming DEFAULT on one merged tab exhausts the Lua heap or freezes before
+  Apply completes, while resetting a smaller single-owner tab works.
+- The transaction module exists and is correct, but the expensive owner never
+  receives its batch callback; it falls back to one synchronous VMF
+  notification per setting.
+- A master checkbox and its children can also restore incorrectly if a batch
+  treats the master's aggregate boolean as authoritative over mixed child
+  defaults.
+
+### Diagnosis pattern
+1. Partition the staged buffer by its real `_owners` mapping. Enumerate every
+   owner selected by the synthetic tab; do not attribute the whole tab to the
+   GUI mod.
+2. For each owner, check for an explicit `on_settings_batch_changed(ids)`.
+   VMF `set(..., true)` synchronously dispatches the ordinary setting event, so
+   one missing opt-in is enough to reintroduce N whole-mod rebuilds.
+3. Instrument only transaction completion. Compare settings persisted,
+   completion notifications, and expensive final applies. The bound is owners,
+   not settings.
+
+### Fix template
+- Keep the generic transaction opt-in. Persist each owner's complete buffer
+  with `notify=false`, then invoke exactly one owner completion callback.
+  Never invent a generic sentinel for unknown owners.
+- Inside each owner, classify changed ids and coalesce each independent side
+  effect. A large availability owner performs one final full reconciliation,
+  not one reconciliation per `unlock_*` row.
+- Treat stable/dev aliases as separate selectable providers of one family; each
+  alias that can own a merged row must implement the same completion contract.
+- A failed silent write or completion callback keeps that owner's pending
+  buffer and suppresses profile capture. Successful sibling owners may remain
+  committed; the retry completes the remaining owner before one full snapshot.
+- A profile switch that auto-commits the old slot must re-check for a retained
+  pending buffer and abort before capturing either profile or changing the
+  active slot.
+- Reconcile master controls before the final apply. If the transaction contains
+  the master and every child, preserve child values and derive the master. If
+  only the master changed, cascade once.
+- Lock the contract with Lua 5.1 tests proving N persisted writes, at most one
+  completion notification per owner, mixed-default preservation, and
+  master-only cascade semantics.
+
+**Related:** issue #560 (Enemy Tweaker's verified one-owner implementation),
+class 11 (Lua 5.1 limits), and class 51 (a completed branch is not a shipped
+fix).

@@ -25,6 +25,7 @@ function M.install(mod, _rt_register, deps)
     local _wt_grip_offset_policy = deps.grip_offset_policy
     local _wt_skullsplitter_hand_policy = deps.skullsplitter_hand_policy
     local weapon_backend = deps.weapon_backend
+    local _deepwood_runtime = deps.deepwood_runtime
     -- WT_DEV_OVERLAY_BEGIN:runtime-check-dependencies
     local _wt_dev_anim_picker = deps.dev_anim_picker
     local _wt_dev_hold_pose = deps.dev_hold_pose
@@ -48,6 +49,23 @@ function M.install(mod, _rt_register, deps)
         -- class check + an embedded comment marker proving wt hooks it.
         local _MARKER = "SimpleHuskInventoryExtension"
         if #_MARKER == 0 then return "marker missing" end
+    end)
+
+    _rt_register("issue201_deepwood_runtime_package_resident", function()
+        if type(_deepwood_runtime) ~= "table"
+                or type(_deepwood_runtime.status) ~= "function" then
+            return "#201 Deepwood runtime package owner missing"
+        end
+        local status = _deepwood_runtime.status()
+        if not status.owned then
+            return "skip: Woods DLC ownership unavailable"
+        end
+        if not status.ready then
+            return string.format(
+                "#201 we_thornsister package not resident (requested=%s attempts=%s error=%s)",
+                tostring(status.requested), tostring(status.attempts),
+                tostring(status.last_error))
+        end
     end)
 
     _rt_register("issue181_skullsplitter_right_hand_contract", function()

@@ -419,11 +419,12 @@ return {
     gut_surface_hidden_passives_tooltip = {
         en = "Shows source-confirmed innate career bonuses that the normal talent screen omits. Display only; talents and gameplay data are unchanged. On by default.",
     },
-    gut_hidden_passive_heading = { en = "Innate Perks" },
     gut_hidden_passive_whc_headshot_name = { en = "Power of Sigmar" },
     gut_hidden_passive_whc_headshot_desc = { en = "+25%% headshot damage." },
     gut_hidden_passive_whc_crit_name = { en = "Sigmar's Charm" },
     gut_hidden_passive_whc_crit_desc = { en = "+5%% base critical-strike chance." },
+    gut_hidden_passive_whc_combined_name = { en = "Power of Sigmar & Sigmar's Charm" },
+    gut_hidden_passive_whc_combined_desc = { en = "+25%% headshot damage and +5%% base critical-strike chance." },
 
     -- ============================================================
     -- Overlays (parry indicator, respawn timer, damage numbers) - now inside the

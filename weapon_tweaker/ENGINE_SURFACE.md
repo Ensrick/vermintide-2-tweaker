@@ -95,6 +95,19 @@ the wrapper named in the trap column (`_safe_hook.lua`, issue 26).
 | Data seam | Vanilla behavior | Why wt mutates it | Trap / invariant |
 |---|---|---|---|
 | `PlayerUnitStatusSettings.overcharge_values.spark` `_wt_bolt_staff_overcharge.lua` (#341) | Both alternating Bolt Staff primary sub-actions name the unique `spark` key [src: `staff_spark_spear.lua:24,108`]; `ActionChargedProjectileUtility.fire_charged_projectile` resolves that key at fire time and passes it to `add_charge` [src: `action_charged_projectile.lua:41-58`] | Optional 40% primary-overcharge reduction by scaling the captured scalar to 0.6; live setting changes reapply it | Snapshot and restore the exact pre-WT value; never mutate the charged `spear*` keys, damage, cadence, or action tables. No hook, NetworkLookup entry, or RPC surface |
+
+### VMF bulk-setting lifecycle (no engine hook)
+
+`_wt_settings_runtime.lua` installs `mod.on_settings_batch_changed(ids)` as
+WT's explicit opt-in to GUI Tweaker's owner transaction (#560/#1002). VMF has
+already persisted every value with
+`notify=false` before this callback runs. `_wt_master_toggles.reconcile_batch`
+and `_wt_rework_master_runtime.prepare_batch` preserve master-only cascade
+semantics while treating a complete master+children DEFAULT/profile snapshot as
+authoritative child state. WT then runs availability, career-action, energy,
+backend, trait, and balance reconciliation once. The bounded diagnostic is
+`[wt:1002] settings=<N> availability_applies=1 action_applies=1`; no class hook,
+RPC, package, or per-frame work is added. See `docs/BUG_CLASSES.md` class 79.
 | `Weapons[*].actions.action_one` + damage-profile clones `_wt_axe_balance.lua` (#621/#622/#623) | `ActionUtils.get_max_targets` multiplies cleave power by `cleave_distribution.attack/impact` [src: `scripts/helpers/action_utils.lua:22-29`]. Weapon action completion and chain windows divide authored time by `ActionUtils.get_action_time_scale` [src: `scripts/unit_extensions/weapons/weapon_unit_extension.lua:487-489,930-937`] | Three default-off policies: 0.90x 1H Axe cleave by capability, 1/1.10 Cog Hammer heavy release speed, and 1/1.10 native Mace and Sword L1/L2/heavy speed | Private cleave profiles preserve shared donors and register in sorted order even while off; action repointing is #431 parity-gated and wire-floored. Speed allow-lists are exact and restore nil/non-nil authored scales. Dual/shield/2H axes and CWV reversed Sword and Mace are explicit controls. No new hook/RPC/per-frame work |
 | local `PlayerUnitOverchargeExtension` scalars + `OverchargeBarUI.set_charge_bar_fraction` [safe,tbl,deferred] `_wt_overcharge_presentation.lua` (#388) | Player creation copies career-keyed `OverchargeData` into the owner extension [src: `bulldozer_player.lua:206`; `player_unit_overcharge_extension.lua:9-77`]; HUD draw independently selects `OverchargeData[player:career_name()].overcharge_ui` [src: `overcharge_bar_ui.lua:234-271`] | While exact `we_life_staff` is ranged-equipped off-career, reversibly project Sister decay/sound/screen/non-explosion fields and apply its native green palette to local/spectator HUD | Owner-local scalar mutation only; overcharge value replication stays vanilla. HUD class is mission-lazy, so install table-form only after `_G.OverchargeBarUI` exists. Clear live particles before profile transitions; restore exact captured nil/non-nil fields on removal/disable. No RPC, NetworkLookup, or husk mutation |
 

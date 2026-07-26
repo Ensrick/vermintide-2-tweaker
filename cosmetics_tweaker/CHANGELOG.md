@@ -1,5 +1,53 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.171-dev (2026-07-26) — #377 glow editor Information-panel host
+
+- The manually opened Glow editor now replaces the right-side Information
+  panel's contents instead of covering the weapon preview. Its geometry and
+  toggle position derive from the live vanilla `info_window` scenegraph node.
+- The editor scenegraph now uses vanilla's `scale = "fit"` screen transform, so
+  the custom controls and native panel share one resolution/UI-scale space.
+- The native Information frame, illusion controls, model preview, and
+  controller navigation remain vanilla-owned. Closing the editor restores the
+  original information contents; the transaction also restores them before a
+  wrapped vanilla draw error is propagated.
+- Exact item+illusion persistence, explicit Apply, Restore Default, committed
+  badges, and the separate #796 live-preview adapter are unchanged. Added
+  executable layout, hitbox, and host-restoration regressions.
+
+## 0.9.170-dev (2026-07-26) — #629 complete-set peer-ready replay
+
+- A different peer appearing now re-arms the existing owner's durable
+  appearance publication. Replay waits for an exact career, both realized
+  equipped weapon records, career-scoped hat/outfit cache, and every persisted
+  exact-item offhand hand to converge with its restored selection.
+- Managed hat/outfit state is replaced atomically from the current career,
+  clearing stale or wrong-career cosmetics while preserving weapon illusions.
+- Hat, outfit, shield, vanilla offhand mesh, and custom-illusion publication
+  now propagates an actual queued/emitted result. The pending edge clears only
+  when every composed operation is accepted; unproven careers and transport
+  failures remain retryable.
+- Extracted the complete-set replay runtime from the frozen entry file and
+  added Lua 5.1 composition coverage for staggered slots, stale clearing, and
+  career/send-failure retries.
+
+## 0.9.169-dev (2026-07-26) — #270 native UnitSpawner semantics
+
+- Removed Cosmetics' engine-global non-resident-unit short circuit from
+  `UnitSpawner.spawn_local_unit`. The wrapper now delegates exactly once and
+  applies Material-Hijack decoration only to the returned live unit.
+- Optional Cosmetics headpieces remain fail-closed at their narrower
+  `AttachmentUtils.create_attachment` ownership boundary.
+- Added regression coverage proving Cosmetics cannot return a fabricated nil
+  from unrelated native gameplay spawns.
+
+## 0.9.168-dev (2026-07-25) — #1002 bounded Equipment reset [not-started]
+
+- Opted Cosmetics into Mod Tweaker's owner-level setting transaction. A full
+  Equipment DEFAULT/profile restore now coalesces hat, Grail Knight set,
+  cosmetic-unlock, glow-sync, and TPE-flush work to at most one call each.
+- Added bounded `[cos:1002]` evidence and shared Equipment transaction coverage.
+
 ## 0.9.167-dev (2026-07-22) — #149 retained Loremaster shield transition repair [not-started]
 
 - Keep-to-mission replay now resolves the active weapon slot from the common

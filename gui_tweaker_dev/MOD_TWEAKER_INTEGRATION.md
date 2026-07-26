@@ -208,6 +208,28 @@ The implementation lives in `_mod_tweaker_transaction.lua`; issue #560 is the
 Enemy Tweaker crash precedent. Future profiles/imports must reuse this transaction
 instead of inventing another bulk-write loop.
 
+The synthetic **Equipment** tab is a multi-owner transaction, not one giant
+GUI-owned callback. Its four current owner families -- Cosmetics, CIM, Weapon
+Tweaker, and CWV -- must each implement the opt-in callback in every selectable
+stable/dev alias. The source audit for issue #1002 shows that leaving Weapon
+Tweaker on the legacy path makes every `unlock_*` default repeat the complete
+availability and career-action rebuild. The required bound is therefore:
+
+- persist every changed value, grouped by owner;
+- invoke at most one owner completion callback per non-empty owner buffer;
+- retain the exact owner buffer and suppress profile capture if a silent write
+  or completion callback fails, so Apply can retry rather than certify a
+  partial state;
+- reconcile select-all/master controls before the owner's one final apply;
+- when a DEFAULT/profile snapshot contains both a master and all of its
+  children, preserve the committed child values and derive the master instead
+  of cascading the master over mixed defaults.
+
+Do not make batching implicit for arbitrary future owners. Adding another mod
+to `EQUIPMENT_ROLES` requires its explicit `on_settings_batch_changed(ids)`
+adapter and an offline assertion that callback/application count is bounded by
+owner count, not setting count.
+
 ## Per-tab search expansion transaction (#497 / #559)
 
 The fixed search bar filters only the current tab. Matching groups and the ancestors required to
@@ -231,7 +253,9 @@ The active slot is scoped to the visible tab and persisted across restarts. Slot
 1 adopts the live pre-profile settings on first use; unused slots start from the
 tab's declared defaults. Applying an edit captures the resulting live values in
 the active slot. A profile-button click auto-applies pending edits to the old
-slot before restoring the new slot, so staged values cannot leak across profiles.
+slot before restoring the new slot. If any owner transaction remains pending,
+the switch aborts before profile capture or active-slot mutation, so staged or
+partially committed values cannot leak across profiles.
 
 Storage is partitioned as `mt_profile::<tab>::<slot>` maps and one
 `mt_profile_active::<tab>` scalar. Never replace this with a monolithic profile

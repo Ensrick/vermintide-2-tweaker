@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.256-dev"
+local MOD_VERSION = "0.2.257-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -487,6 +487,7 @@ mod.on_game_state_changed = function(status, state_name)
     -- time) so a stale noclip setting from the previous mission doesn't
     -- re-arm before the player has a body to fly.
     if mod._gt_noclip_reset_active then mod._gt_noclip_reset_active() end
+    if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
     -- AI takeover is a per-run intent — the saved state on the host doesn't
     -- survive a level/state change cleanly, and persisting the checkbox would
     -- show "on" across runs where no swap actually happened. Suppress the
@@ -578,7 +579,12 @@ mod.on_setting_changed = function(setting_id)
     -- exactly when a setting flips and to what — pairs with the load snapshot.
     _dbg("[gt:setting-changed] %s = %s", tostring(setting_id), tostring(mod:get(setting_id)))
     -- (3rd-Person Camera tp_* branches MIGRATED to gui_tweaker / gut 2026-06-29, #191.)
-    if setting_id == "godmode_enabled" then
+    if setting_id == "gt_devtools_player_stat_hud"
+        or setting_id == "gt_player_stat_hud_mode"
+        or setting_id == "gt_player_stat_hud_position"
+        or setting_id == "gt_player_stat_hud_scale" then
+        if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
+    elseif setting_id == "godmode_enabled" then
         _apply_godmode(mod:get("godmode_enabled") or false)
     elseif setting_id == "gt_godmode_strike_damage" then
         -- The host needs the client's child-toggle state at the same damage
@@ -684,6 +690,7 @@ mod.on_disabled = function()
     -- bounded per-extension snapshot and can unwind immediately.
     if mod._gt_restore_keep_dummy_collision then mod._gt_restore_keep_dummy_collision() end
     if mod._gt359_clear_commands then mod._gt359_clear_commands() end
+    if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
     -- Issue #15: the mod is is_togglable=true but only the camera offset is
     -- snapshot-and-restored above. Many global mutations persist after
     -- disable: script_data flags (ai_*, intro dialogue,
@@ -1629,11 +1636,12 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_saved_positions")
 -- (zero per-frame work until enabled). Dev-only, client-safe. No new hooks.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_debug_highlights")
 
--- Live player-stat HUD groundwork (#797). This diagnostics tranche is
--- read-only and inert until either command is used; it inventories the exact
--- local BuffExtension rows and player/equipment context at five bounded samples
--- without guessing conditional finals. The evidence determines the supported
--- HUD rows and attribution limits before a renderer is added.
+-- Live player-stat HUD (#797). The default-off overlay preserves retained
+-- BuffExtension stage/source identity, uses the engine's deterministic equation
+-- for complete consumer paths and exact retained factors, reconciles
+-- authoritative getters, and labels downstream/proc/dynamic paths unsupported.
+-- Provenance rebuilds only on lifecycle edges; values sample at 4 Hz through
+-- gt's singleton HUD-composite hook.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_diag_player_stats")
 
 mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - mod._mem_probe_t0) / 1024)

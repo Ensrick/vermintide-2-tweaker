@@ -1,7 +1,34 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Equipment DEFAULT transaction (#1002)
+
+- [ ] In Mod Tweaker, open **Equipment**, press **DEFAULT**, confirm, then press
+  **APPLY**. The game remains responsive and does not exhaust the Lua heap.
+- [ ] The log contains one `[gut:560]` commit for each non-empty Equipment owner
+  and one `[wt:1002]` line with `availability_applies=1 action_applies=1`.
+  Cosmetics/CIM/CWV each emit at most one corresponding `:1002` line.
+- [ ] Reopen Equipment and confirm every current setting matches its declared
+  first-use default. Restart once and confirm those values persisted.
+- [ ] Change one Weapon Availability master without changing its advanced
+  children; Apply must still cascade. DEFAULT must restore mixed per-weapon
+  defaults rather than flattening them to the master's boolean.
+- [ ] `qa/check_lua_unit_tests.ps1` passes the multi-owner transaction and both
+  WT master-reconciliation cases.
+
 ## Detached bot loadouts (#954)
 
+- **Status:** source-only regression candidate; do not apply a tester lifecycle
+  label until this exact candidate is committed, built, deployed, and identified
+  by banner, Workshop manifest, and archive hash in a new live-test card.
+- The candidate reconciles the detached persisted snapshot at the shared
+  `get_bot_loadout` read boundary. This covers a backend cache built before the
+  post-refresh hook became eligible and same-table drift after a successful
+  refresh. The wrapper preserves every native getter argument.
+- Wide, deep, cyclic, or over-cap stores must fail open to the native cache,
+  leave both persisted and runtime owners unchanged, and retry recoverable
+  persistence failures on the next read.
+- A mixed store containing one valid legacy designation plus one corrupt
+  designation must commit neither row until the corrupt value is removed.
 - [ ] Prepare a Warrior Priest saved row with visibly distinct melee and ranged
   weapons, assign that row to the bot, then switch to another player loadout.
 - [ ] Change the player's weapons. Refresh/respawn the Warrior Priest bot and
@@ -10,6 +37,24 @@
   snapshot and player row must retain their independent values.
 - [ ] Run `/gut_regression_test` and require
   `issue954_bot_loadout_snapshot` to pass.
+
+If this candidate fails, use exactly one evidence-selected fallback:
+
+1. If the persisted snapshot is absent after restart, move the migration to the
+   store-load boundary and record the serialized `bot_loadout` readback.
+2. If a later engine writer changes `_bot_loadouts`, identify that writer from
+   the bounded reconcile reason and compose it into the singleton cache owner.
+3. If explicit bot editing is required, add a bot-only edit transaction that
+   writes `bot_loadout`; never route it through a player saved row.
+
+## Hidden career passives (#153)
+
+- [ ] Enable **Surface Hidden Career Passives** and open Witch Hunter Captain's Talents screen.
+- [ ] **Power of Sigmar** and **Sigmar's Charm** render under **Perks**, never inside the Witch Hunt passive description.
+- [ ] The six-row/console layout shows two independent rows; the compact three-slot PC layout shows one combined row whose tooltip contains both exact bonuses.
+- [ ] Disable the option and reopen the screen; only the two vanilla WHC perks remain.
+- [ ] Switch careers; no uncatalogued, duplicated, selectable, or gameplay-changing perk appears.
+- [ ] `/gut_regression_test` passes `issue153_hidden_passives_display_only`; offline `test_gut_hidden_passives.lua` passes.
 
 ## Mutually exclusive controls (#446)
 

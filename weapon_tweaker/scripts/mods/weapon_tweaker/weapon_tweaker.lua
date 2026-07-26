@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.287-beta"
+local MOD_VERSION = "0.12.289-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -1282,6 +1282,21 @@ function mod._force_load_necromancer_fx_package()
 end
 
 mod._force_load_necromancer_fx_package()
+
+-- #201: Deepwood Staff's secondary action spawns the native plague-vortex
+-- through WeaponSystem. The weapon units are ordinary Woods DLC inventory
+-- assets, but the vortex runtime unit is resident only with the complete
+-- Sister of the Thorn career package. Cross-career users do not load that
+-- package naturally, so explicitly request it for DLC owners and keep the
+-- availability/action boundary closed until it is resident.
+local _deepwood_runtime = mod:dofile(
+    "scripts/mods/weapon_tweaker/_wt_deepwood_runtime").install(mod, {
+    package_manager = function() return Managers and Managers.package end,
+    unlock_manager = function() return Managers and Managers.unlock end,
+    on_residency_changed = function() mod._wt368_deferred_availability = true end,
+})
+mod._wt.deepwood_runtime = _deepwood_runtime
+mod._wt.deepwood_runtime_ready = _deepwood_runtime.ready
 
 -- ============================================================
 -- Brace → Repeater illusion resolver
@@ -3943,6 +3958,7 @@ mod.on_game_state_changed = function(status, state_name)
     mod._heap_probe_last_kb = _heap_pre
 
     mod:info("Weapon Tweaker: Baseline Active")
+    mod._force_load_deepwood_runtime_package(true)
     apply_weapon_unlocks()
     -- #368: CWV registers clone definitions from its own state-enter callback.
     -- Reconcile once more on the following frame so WT is the deterministic
@@ -4010,47 +4026,16 @@ local _wt_rework_runtime = _wt_rework_master_runtime_module.new(
     end)
 mod._wt.rework_master_runtime = _wt_rework_runtime
 
-mod.on_setting_changed = function(setting_id)
-    if _wt_rework_runtime:is_batching() then return end
-    if _wt_rework_runtime:on_master_changed(setting_id) then return end
-    if setting_id and setting_id:find("^wtmaster_") then
-        -- issue 611: a master toggle was clicked. Cascade its new value to every
-        -- child availability toggle (notify = false), then re-apply the unlocks
-        -- once. Children set with notify = false do not re-enter this handler.
-        _wt_master_toggles.on_master_changed(mod, setting_id)
-        apply_weapon_unlocks()
-        patch_career_actions_on_weapons()
-        if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
-        weapon_backend.refresh_on_setting_change(mod)
-    elseif setting_id and (setting_id:find("^unlock_") or setting_id == "debug") then
-        apply_weapon_unlocks()
-        patch_career_actions_on_weapons()
-        if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
-        weapon_backend.refresh_on_setting_change(mod)
-        -- issue 611 auto-off: recompute the owning master so deselecting one
-        -- weapon flips its "Enable All ..." toggle OFF while the rest stay as-is.
-        if setting_id:find("^unlock_") then
-            _wt_master_toggles.on_child_changed(mod, setting_id)
-        end
-    elseif setting_id and (setting_id:find("^trait_") or setting_id:find("^cw_trait_")) then
-        apply_trait_filters()
-    elseif setting_id == "wt_priest_punch_buff" then
-        if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
-    elseif setting_id == "wt_brett_sword_shield_buff" then
-        if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
-    elseif setting_id == _wt_bolt_staff_overcharge.SETTING_ID then
-        _wt_bolt_staff_overcharge_runtime.apply()
-    elseif setting_id == _wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING
-            or setting_id == _wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING
-            or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING
-            or setting_id == _wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING
-            or setting_id == _wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING
-            or setting_id == _wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING
-            or setting_id == _wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
-        mod._wt_apply_axe_balance(setting_id, false)
-    end
-    _wt_rework_runtime:sync_for_leaf(setting_id)
-end
+mod:dofile("scripts/mods/weapon_tweaker/_wt_settings_runtime").install({
+    mod = mod, rework_runtime = _wt_rework_runtime,
+    master_toggles = _wt_master_toggles, backend = weapon_backend,
+    apply_weapon_unlocks = apply_weapon_unlocks,
+    patch_career_actions = patch_career_actions_on_weapons,
+    apply_trait_filters = apply_trait_filters,
+    bolt_policy = _wt_bolt_staff_overcharge,
+    bolt_runtime = _wt_bolt_staff_overcharge_runtime,
+    balance_policy = _wt_axe_balance_policy,
+})
 
 do
     local function register_profile(name)
@@ -4456,6 +4441,7 @@ local _wt_runtime_check_deps = {
     grip_offset_policy = _wt_grip_offset_policy,
     skullsplitter_hand_policy = _wt_skullsplitter_hand_policy,
     weapon_backend = weapon_backend,
+    deepwood_runtime = _deepwood_runtime,
 }
 _wt_runtime_checks.install(mod, _rt_register, _wt_runtime_check_deps)
 -- WT_PUBLIC_OVERLAY_BEGIN:public-beta-surface-regression

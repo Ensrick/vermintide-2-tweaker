@@ -159,6 +159,25 @@ return function(H, repo_root)
         H.equal(contract.is_salvage_eligible(item, record, {}), false)
     end)
 
+    H.test("CIM #628 salvage trace fingerprints state changes and deduplicates refreshes", function()
+        local base = {
+            is_equipped = false,
+            is_equipped_by_any_loadout = false,
+            is_favorite = false,
+            backend_dirty = false,
+        }
+        local a = contract.salvage_trace_fingerprint("owned_1", true, true, nil, base)
+        local b = contract.salvage_trace_fingerprint("owned_1", true, true, nil, base)
+        H.equal(a, b)
+        H.truthy(a:find("owned_1|visible|eligible", 1, true))
+
+        local c = contract.salvage_trace_fingerprint("owned_1", false, false, "loadout", {
+            is_equipped_by_any_loadout = true,
+        })
+        H.truthy(c ~= a, "saved-loadout rejection must emit a new diagnostic state")
+        H.truthy(c:find("hidden|rejected|loadout|unequipped|saved", 1, true))
+    end)
+
     H.test("CIM #628 deletion partitions exact owned instances once", function()
         local owned, foreign = contract.partition_exact_ids(
             { "owned_a", "foreign", "owned_a", "owned_b" },
@@ -312,6 +331,12 @@ return function(H, repo_root)
         H.truthy(importer:find("contract.build_mirror_payload(record", 1, true))
         H.truthy(forge:find("mod._cim277_delete_owned_ids(owned)", 1, true))
         H.truthy(filter:find("contract.is_salvage_eligible", 1, true))
+        H.truthy(filter:find("for _, item in pairs(items) do", 1, true),
+            "salvage adapter must enumerate the backend-id keyed inventory map")
+        H.equal(filter:find("for _, item in ipairs(items) do", 1, true), nil,
+            "salvage adapter must not treat the backend inventory map as an array")
+        H.truthy(filter:find("[cim:628] salvage_state", 1, true),
+            "exact salvage rejection diagnostic is not wired")
         H.equal(filter:find("REGARDLESS of equip / loadout / favorite", 1, true), nil)
         -- issues 524/628 identity unification: the acquisition selector must
         -- consume both exact identity and picker-row role from one contract.

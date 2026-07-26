@@ -397,12 +397,15 @@ local loc = {
     respawn_on_chest_complete_tooltip = { en = "When a Chest of Trials is completed, revive knocked-down players and respawn dead players with a wound and 50%% temporary health. Host-only." },
 
     -- ============================================================
-    -- Starting-Boon Preview (#461)
+    -- Starting-Boon Preview (#461, #1004)
     -- ============================================================
     -- Option title and ct_boon_preview_header are both player-facing and untagged.
     preview_starting_boons = { en = "Preview Starting Boons on Tab" },
-    preview_starting_boons_tooltip = { en = "While you are in the Pilgrimage Chamber and hold Tab, show the starting boons this run will grant (icon and name) on the right-hand pop-out panel. This works before or after an expedition is queued, reflects the host's configuration, and applies to your own screen only." },
+    preview_starting_boons_tooltip = { en = "While you are in the Pilgrimage Chamber and hold Tab, show the starting boons this run will grant on the right-hand pop-out panel. Unlock the native cursor, then hover a boon icon to read its description; use the mouse wheel or controller right shoulder to change long-description pages. This works before or after an expedition is queued, reflects the host's configuration, and applies to your own screen only." },
     ct_boon_preview_header = { en = "Starting Boons" },
+    ct_boon_preview_description_unavailable = { en = "Description unavailable." },
+    ct_boon_preview_page_hint_mouse = { en = "Mouse wheel: pages" },
+    ct_boon_preview_page_hint_controller = { en = "Right shoulder: next page" },
 
     -- ============================================================
     -- CW Collectibles on Tab (#533)

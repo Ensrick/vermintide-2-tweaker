@@ -133,21 +133,32 @@ local function _swap_forge_env(viewport_def)
 end
 
 mod:hook("HeroWindowWeaveForgeOverview", "_create_viewport_definition", function(func, self, scenegraph_id, invert_rendering)
-    return _swap_forge_env(func(self, scenegraph_id, invert_rendering))
+    local definition = func(self, scenegraph_id, invert_rendering)
+    -- #882: retain the native viewport role before the mission-safe environment
+    -- substitution erases the only visual distinction between primary and
+    -- secondary. UIWidget.init preserves definition.content on widget.content.
+    if type(definition) == "table" and type(definition.content) == "table" then
+        definition.content._cim882_mirrored_viewport = invert_rendering == true
+    end
+    return _swap_forge_env(definition)
 end)
 
--- #404: the native overview gives every item x=-0.8 and mirrors the ranged
--- viewport through the keep-only `_inverted` shading environment. Mission
--- safety replaces both keep environments with one resident fallback, removing
--- that mirror and placing ranged directly over melee. Compensate only at the
--- overview item producer while in mission; keep behavior is byte-unchanged.
+-- #882: the native overview gives both equipped weapons x=-0.8 and mirrors the
+-- secondary viewport through the keep-only `_inverted` shading environment.
+-- Mission safety replaces both keep environments with one resident fallback,
+-- removing that mirror and placing secondary directly over primary. Preserve
+-- the viewport role captured above instead of inferring it from item.slot_type:
+-- dual-melee careers and cross-slot loadouts make that inference false.
 mod:hook("HeroWindowWeaveForgeOverview", "_create_item_previewer",
     function(func, self, viewport_widget, item, x_offset, invert_start_rotation)
         local data = item and item.data
+        local content = viewport_widget and viewport_widget.content
+        local mirrored_viewport = content
+            and content._cim882_mirrored_viewport == true
         local adjusted_x = mod._cim_forge_preview_policy.overview_preview_x(
-            data and data.slot_type, x_offset, _is_in_keep())
+            mirrored_viewport, x_offset, _is_in_keep())
         if adjusted_x ~= x_offset and printf then
-            printf("[cim:404] mission overview ranged preview mirrored key=%s native_x=%.3f target_x=%.3f",
+            printf("[cim:882] mission overview secondary preview mirrored key=%s native_x=%.3f target_x=%.3f",
                 tostring((data and data.key) or (item and item.key) or "<?>"),
                 tonumber(x_offset) or 0, tonumber(adjusted_x) or 0)
         end

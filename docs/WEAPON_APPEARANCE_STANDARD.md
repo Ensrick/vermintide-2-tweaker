@@ -574,7 +574,7 @@ an empty, unknown, red-placeholder, or custom-resource error is a failure.
 | #419 | Units | 4 | illusion browser previews base mesh (path-3 swap not mirrored) |
 | #420 | Texture | all | WA not shared; Material.set_texture banned-primitive copies |
 | #617 | Texture | 4 | Old Musket custom unit spawned in Athanor/browser without its texture consumer |
-| #882 | Transform | 4 | CIM ranged properties preview uses the native centered picker position; melee remains on its authored path |
+| #882 | Transform | 4 | CIM ranged properties preview uses the native centered picker position; the in-mission overview preserves the native primary/secondary viewport split even when both equipped items are melee |
 
 ---
 

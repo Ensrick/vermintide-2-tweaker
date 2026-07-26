@@ -155,8 +155,11 @@ local function register(Harness, repo_root)
         local source = read(wt_dir .. "/weapon_tweaker.lua")
         local _, seed_calls = source:gsub(
             "if mod%._wt374_seed_energy_data then mod%._wt374_seed_energy_data%(%) end", "")
-        Harness.equal(3, seed_calls,
-            "entry point must re-seed at on_game_state_changed and both unlock setting arms")
+        local settings_runtime = read(wt_dir .. "/_wt_settings_runtime.lua")
+        local _, runtime_seed_calls = settings_runtime:gsub(
+            "if mod%._wt374_seed_energy_data then mod%._wt374_seed_energy_data%(%) end", "")
+        Harness.equal(4, seed_calls + runtime_seed_calls,
+            "WT must re-seed at state change, both setting arms, and the #1002 batch seam")
         Harness.truthy(source:find(
             "if mod._wt374_revert_energy_data then mod._wt374_revert_energy_data() end", 1, true),
             "on_disabled must revert the seeded rows")

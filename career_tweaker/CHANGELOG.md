@@ -1,5 +1,14 @@
 # Career Tweaker Changelog
 
+## 0.4.16-beta (2026-07-26) - #936 split Tourney balance controls [verify-fix]
+
+- Split the 17 legacy career-wide Tourney Balance Testing toggles into 46 independent `[TB]` mutation leaves inside each career's existing Talent Reworks section. The stable legacy IDs remain as changed-only **Enable All** presets, and existing saved ON presets expand to their leaves once on first mission entry.
+- Added a third **Enable All Reworks** preset that selects both the Ensrick and Tourney families. Cross-family conflicts now suppress only the exact overlapping Tourney leaf, leaving unrelated Tourney changes active.
+- Reconciled the two mutation engines restore-first: Tourney restores its older snapshot, Ensrick applies its selected values, and then non-conflicting Tourney leaves apply. This prevents stale Tourney state from overwriting a newly selected Ensrick value during live setting, master-preset, mission-state, or parity transitions.
+- Preserved the peer-parity gate on the network-unsafe Warrior Priest Prayer of Flight leaf, added concise `[TB]` ownership labels and per-leaf descriptions, and extended offline/runtime regression coverage for catalog ownership, migration, changed-only writes, exact-nil restore, conflict precedence, and stale-snapshot transitions.
+
+**Co-op verify candidate:** with matching Career Tweaker versions on host and client, enable individual `[TB]` leaves and confirm unrelated leaves remain independent. Exercise overlapping Ensrick/Tourney choices in both orders, including master presets, and confirm Ensrick wins only at the exact conflict while the prior owner restores cleanly. Verify legacy ON presets expand once, Prayer of Flight remains parity-gated, toggling everything off restores vanilla values, and `/crt_regression_test` passes.
+
 ## 0.4.15-beta (2026-07-22) - #935 Foot Knight secondary-slot concrete UI repair [verify-fix]
 
 - Repaired the #619 secondary-melee regression on the controller inventory used by the attached log. The log proves Career Tweaker changed only `CareerSettings.es_knight` to `{melee,ranged}`, then the player opened `HeroWindowLoadoutInventoryConsole`; the prior fix hooked only the separate desktop `HeroWindowLoadoutInventory` category builder.

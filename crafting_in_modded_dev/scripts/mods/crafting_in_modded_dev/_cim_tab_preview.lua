@@ -32,6 +32,20 @@ local function _apply_player_weapon_icons(self)
         if type(loadout) == "table" and type(content) == "table" then
             for _, slot_name in ipairs(WEAPON_SLOTS) do
                 local item = loadout[slot_name]
+                -- #598: the VMF `others` target excludes the sender, so the
+                -- loadout-sync wrapper mirrors this exact boolean locally.
+                -- Repair both the backing item and the already-rendered frame
+                -- in this post-hook; waiting for the next vanilla refresh made
+                -- the owner's row retain the red/unique chrome for one cycle.
+                local slot_state = mod._cim_modded_slot_state
+                    and mod._cim_modded_slot_state[unique_id]
+                local is_modded = slot_state and slot_state[slot_name]
+                if type(item) == "table" and type(is_modded) == "boolean" then
+                    item.rarity = Core.resolve_rarity(item.rarity, true, is_modded)
+                    content[slot_name .. "_rarity_texture"] = UISettings
+                        and UISettings.item_rarity_textures
+                        and UISettings.item_rarity_textures[item.rarity]
+                end
                 local authoritative, skin, icon, reason = Core.resolve(
                     item, equipment, slot_name, weapon_skins, function(texture)
                         return UIAtlasHelper and UIAtlasHelper.has_texture_by_name

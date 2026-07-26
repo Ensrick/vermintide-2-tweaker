@@ -1,8 +1,8 @@
 -- ============================================================
--- Glow Picker — in-context per-item glow customization popup
+-- Glow Picker — in-context per-item glow customization editor
 -- ============================================================
--- Floating overlay panel anchored top-center of the cosmetic-changing screen
--- (HeroWindowCosmeticsLoadout). Opens contextually for any glow-eligible
+-- Contextual editor hosted by the cosmetic-changing screen's native right-side
+-- Information panel (HeroWindowItemCustomization). Opens manually for any glow-eligible
 -- equipped item, no master toggle. Persists per-item-instance (backend_id-
 -- keyed) in a single VMF JSON-blob setting (`glow_per_item`). Supersedes the
 -- existing VMF glow override; eventually that menu will be deprecated.
@@ -63,6 +63,7 @@ end
 -- stateless, so a per-consumer dofile instance is safe.
 local INSTANCE_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy")
 local SLIDER_GEOMETRY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_slider_geometry")
+local PANEL_LAYOUT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_panel_layout")
 
 -- Backend ids identify the inventory instance; the skin suffix keeps a glow
 -- choice attached to the exact illusion variant when an item's illusion changes.
@@ -72,15 +73,15 @@ end
 GlowPicker.identity_key = _identity_key
 
 -- --------------------------------------------------------
--- Scenegraph: floating panel, anchored top-center, ~600x400px
+-- Scenegraph authored at the vanilla Information-panel dimensions. Every
+-- frame, _sync_panel_layout replaces these defaults with the live host node's
+-- computed size and world position (resolution/UI-scale safe).
 -- --------------------------------------------------------
--- v0.9.8: panel grew from 400 → 620 to fit magic-family layout (3
--- component sections × 4 sliders each = 12 sliders + 3 section labels).
--- Rune family still uses just the top 4 slider positions; the rest of
--- the panel area sits empty for rune-family items.
-local PANEL_W, PANEL_H = 600, 620
-local TOP_INSET        = 80   -- distance from screen top to panel top
-local TOGGLE_Y_NUDGE   = -4   -- #377 follow-up: user-confirmed button was a few pixels high
+-- The 800px authoring height matches vanilla's Information panel and fits the
+-- magic-family layout (12 sliders + 3 section labels). Rune family still uses
+-- only the top four slider positions.
+local PANEL_W, PANEL_H = 500, 800
+local PANEL_INSET = 18
 
 -- Proven CIM/GUT ornate nine-slice frame contract. This texture is resident on
 -- the popup/hero renderers used below; keeping one constructor prevents the
@@ -103,15 +104,16 @@ function GlowPicker.frame_style(width, height, z, color)
     }
 end
 
--- #377: the persistent Edit Glow toggle belongs to the panel geometry even
--- while the panel is closed. Return its lower-right-aligned origin in the
--- same 1920x1080 virtual canvas used by the customization screen. Keeping the
--- calculation here prevents the caller from drifting away from panel changes.
-function GlowPicker.toggle_anchor(button_width, z)
-    button_width = tonumber(button_width) or 0
-    local panel_right = (1920 + PANEL_W) * 0.5
-    local panel_bottom = 1080 - TOP_INSET - PANEL_H
-    return { panel_right - button_width, panel_bottom + TOGGLE_Y_NUDGE, z or 20 }
+function GlowPicker.position_toggle(host, widget, button_width, z)
+    local layout = PANEL_LAYOUT.resolve(host)
+    if not layout or type(widget) ~= "table" then return false end
+    local target = PANEL_LAYOUT.toggle_offset(
+        layout.width, button_width, PANEL_INSET, z or 20)
+    if not target then return false end
+    widget.offset = widget.offset or { 0, 0, 0 }
+    widget.offset[1], widget.offset[2], widget.offset[3] =
+        target[1], target[2], target[3]
+    return true
 end
 
 local function _make_scenegraph_definition()
@@ -124,25 +126,20 @@ local function _make_scenegraph_definition()
     local _popup_layer = (type(_ui_layer) == "table" and _ui_layer.popup) or 900
     return {
         root = {
-            is_root = true,
+            -- Match UISettings.console_menu_scenegraphs.screen, the parent of
+            -- vanilla info_window. A generic is_root node uses a different
+            -- user-UI-scale transform and drifts away at non-default scale.
+            scale = "fit",
             size    = { 1920, 1080 },
             position = { 0, 0, _popup_layer },
         },
-        -- Dim layer behind the popup so the screen reads as visually paused.
-        glow_picker_dim = {
-            parent = "root",
-            horizontal_alignment = "center",
-            vertical_alignment   = "center",
-            size = { 1920, 1080 },
-            position = { 0, 0, 0 },
-        },
-        -- Main panel anchored top-center.
+        -- Main panel follows the live native info_window via _sync_panel_layout.
         glow_picker_panel = {
             parent = "root",
-            horizontal_alignment = "center",
-            vertical_alignment   = "top",
+            horizontal_alignment = "left",
+            vertical_alignment   = "bottom",
             size     = { PANEL_W, PANEL_H },
-            position = { 0, -TOP_INSET, 5 },
+            position = { 0, 0, 5 },
         },
         glow_picker_title = {
             parent = "glow_picker_panel",
@@ -176,7 +173,7 @@ local function _make_scenegraph_definition()
             parent = "glow_picker_panel",
             horizontal_alignment = "center",
             vertical_alignment   = "bottom",
-            size     = { 180, 42 },
+            size     = { 140, 42 },
             position = { 0, 18, 2 },
         },
         -- #610 Restore to Default: clears the per-item override and repaints the
@@ -185,7 +182,7 @@ local function _make_scenegraph_definition()
             parent = "glow_picker_panel",
             horizontal_alignment = "left",
             vertical_alignment   = "bottom",
-            size     = { 176, 42 },
+            size     = { 140, 42 },
             position = { 18, 18, 2 },
         },
         -- v0.9.6 M2: 4 slider rows for R, G, B, intensity. Each row is
@@ -499,48 +496,8 @@ local function _widget_slider(scenegraph_id, label, min_val, max_val, decimals, 
 end
 
 -- --------------------------------------------------------
--- Widget definitions: panel background, title, subtitle, placeholder, X button
+-- Widget definitions: title, subtitle, placeholder, X button
 -- --------------------------------------------------------
-local function _widget_dim_overlay()
-    return {
-        element = {
-            passes = {
-                { pass_type = "rect", style_id = "rect" },
-            },
-        },
-        content = { rect = "rect" },
-        style = {
-            rect = {
-                size  = { 1920, 1080 },
-                color = { 160, 0, 0, 0 },  -- alpha, r, g, b (semi-opaque black)
-            },
-        },
-        offset    = { 0, 0, 0 },
-        scenegraph_id = "glow_picker_dim",
-    }
-end
-
-local function _widget_panel_bg()
-    return {
-        element = {
-            passes = {
-                { pass_type = "rect",   style_id = "rect" },
-                { pass_type = "texture_frame", style_id = "frame", texture_id = "frame" },
-            },
-        },
-        content = { frame = GlowPicker.FRAME_TEXTURE },
-        style = {
-            rect = {
-                size  = { PANEL_W, PANEL_H },
-                color = { 245, 18, 18, 24 },  -- dark panel
-            },
-            frame = GlowPicker.frame_style(PANEL_W, PANEL_H, 3),
-        },
-        offset    = { 0, 0, 0 },
-        scenegraph_id = "glow_picker_panel",
-    }
-end
-
 local function _widget_title()
     return {
         element = {
@@ -670,13 +627,13 @@ local function _widget_apply_button()
         },
         content = { text = "Apply", frame = GlowPicker.FRAME_TEXTURE, hotspot = {} },
         style = {
-            rect = { size = { 180, 42 }, color = { 210, 55, 75, 35 } },
-            frame = GlowPicker.frame_style(180, 42, 3),
+            rect = { size = { 140, 42 }, color = { 210, 55, 75, 35 } },
+            frame = GlowPicker.frame_style(140, 42, 3),
             text = {
                 font_size = 22, font_type = "hell_shark_header",
                 horizontal_alignment = "center", vertical_alignment = "center",
                 text_color = { 255, 245, 235, 205 }, offset = { 0, 0, 2 },
-                size = { 180, 42 },
+                size = { 140, 42 },
             },
         },
         offset = { 0, 0, 2 },
@@ -719,13 +676,13 @@ local function _widget_restore_button()
         },
         content = { text = "Restore Default", frame = GlowPicker.FRAME_TEXTURE, hotspot = {} },
         style = {
-            rect = { size = { 176, 42 }, color = { 210, 70, 55, 30 } },
-            frame = GlowPicker.frame_style(176, 42, 3),
+            rect = { size = { 140, 42 }, color = { 210, 70, 55, 30 } },
+            frame = GlowPicker.frame_style(140, 42, 3),
             text = {
                 font_size = 16, font_type = "hell_shark_header",
                 horizontal_alignment = "center", vertical_alignment = "center",
                 text_color = { 255, 235, 225, 200 }, offset = { 0, 0, 2 },
-                size = { 176, 42 },
+                size = { 140, 42 },
             },
         },
         offset = { 0, 0, 2 },
@@ -776,7 +733,6 @@ local function _build()
     local thumb_b = { 255,  60,  60, 220 }
     local thumb_i = { 255, 220, 220, 220 }
     local widget_factories = {
-        { "panel_bg",    _widget_panel_bg      },
         { "title",       _widget_title         },
         { "subtitle",    _widget_subtitle      },
         { "close_btn",   _widget_close_button  },
@@ -1077,6 +1033,23 @@ function GlowPicker.is_open_for(backend_id, slot_data)
         and GlowPicker._current_identity == _identity_key(backend_id, slot_data)
 end
 
+-- Keep the native frame/model/illusion/controller paths, replacing only the
+-- Information contents for this exact editor identity. The host transaction
+-- restores _info_widgets before returning or propagating a vanilla error.
+function GlowPicker.draw_native_information(func, host, ui_renderer, dt, content)
+    if not content or not GlowPicker.is_open_for(content.glow_backend_id,
+            { skin = content.glow_skin }) then
+        return func(host, ui_renderer, dt)
+    end
+    -- If the editor cannot prove its target geometry, preserve vanilla
+    -- Information rather than replacing it with an undrawable blank panel.
+    if not PANEL_LAYOUT.resolve(host) then
+        return func(host, ui_renderer, dt)
+    end
+    return PANEL_LAYOUT.without_native_information(
+        func, host, ui_renderer, dt)
+end
+
 -- Called by the equipment spawn path so an applied value is restored after a
 -- restart before the picker is opened again.
 --
@@ -1205,7 +1178,9 @@ function GlowPicker.open_for(backend_id, slot_data)
     -- v0.9.8: assemble family-specific draw list. Magic shows 12
     -- sliders + 3 section labels; rune shows 4 sliders.
     local by_name = GlowPicker._widgets_by_name
-    local widgets = { by_name.panel_bg, by_name.title, by_name.subtitle,
+    -- The native info_window frame/background remains in the host pass. Do not
+    -- paint another opaque panel over it: the editor replaces only its contents.
+    local widgets = { by_name.title, by_name.subtitle,
         by_name.close_btn, by_name.apply_btn, by_name.restore_btn }
     if family == "magic" then
         widgets[#widgets+1] = by_name.label_lower
@@ -1244,9 +1219,9 @@ function GlowPicker.open_for(backend_id, slot_data)
             and GlowPicker._current_glow_state or nil
     end
 
-    -- Update subtitle to reflect the current item
-    local subtitle = string.format("backend_id: %s • family: %s",
-        tostring(backend_id):sub(1, 16), tostring(family))
+    -- Keep implementation identifiers out of the player-facing Information
+    -- panel. Exact backend/item identity remains in the bounded log below.
+    local subtitle = family == "magic" and "Magic Glow" or "Rune Glow"
     if by_name.subtitle then
         by_name.subtitle.content.text = subtitle
     end
@@ -1400,6 +1375,7 @@ function GlowPicker.close()
     GlowPicker._has_override       = false
     GlowPicker._dirty              = false
     GlowPicker._preview_host       = nil
+    GlowPicker._panel_bounds       = nil
 end
 
 function GlowPicker.is_open()
@@ -1409,9 +1385,51 @@ end
 -- --------------------------------------------------------
 -- Per-frame: input + render
 -- --------------------------------------------------------
+local function _sync_panel_layout(preview_host)
+    local layout, reason = PANEL_LAYOUT.resolve(preview_host)
+    if not layout then
+        if GlowPicker._panel_layout_error ~= reason then
+            GlowPicker._panel_layout_error = reason
+            _log_only("[glow_picker:layout] unavailable reason=%s", tostring(reason))
+        end
+        GlowPicker._panel_bounds = nil
+        return false
+    end
+
+    GlowPicker._panel_layout_error = nil
+    GlowPicker._panel_bounds = layout
+    local graph = GlowPicker._scenegraph
+    if type(graph) ~= "table" then return false end
+    local panel = graph.glow_picker_panel
+    if not panel or not panel.local_position then return false end
+
+    panel.size[1], panel.size[2] = layout.width, layout.height
+    panel.local_position[1], panel.local_position[2] = layout.x, layout.y
+
+    local content_width = math.max(1, layout.width - 40)
+    local label_width = math.max(1, layout.width - 60)
+    for _, name in ipairs({
+        "glow_picker_title", "glow_picker_subtitle", "glow_picker_placeholder",
+    }) do
+        local node = graph[name]
+        if node and node.size then node.size[1] = content_width end
+    end
+    for _, name in ipairs({
+        "glow_picker_label_lower", "glow_picker_label_upper", "glow_picker_label_dots",
+    }) do
+        local node = graph[name]
+        if node and node.size then node.size[1] = label_width end
+    end
+
+    return true
+end
+
+GlowPicker.sync_panel_layout = _sync_panel_layout
+
 function GlowPicker.handle_input(input_service, preview_host)
     if not GlowPicker._open then return false end
     if preview_host ~= nil then GlowPicker._preview_host = preview_host end
+    if not _sync_panel_layout(GlowPicker._preview_host) then return false end
     local by_name = GlowPicker._widgets_by_name
     if not by_name then return false end
     local close = by_name.close_btn
@@ -1435,19 +1453,9 @@ function GlowPicker.handle_input(input_service, preview_host)
         if GlowPicker._has_override == true then GlowPicker.restore_default() end
         return true  -- swallow even when disabled so it can't leak to the screen
     end
-    -- v0.9.3.7: dim removed → clicks OUTSIDE the panel should pass through
-    -- to the cosmetic screen behind. Previously we swallowed all left-
-    -- press input while open; without the dim that would block the user
-    -- from clicking buttons on the cosmetic screen visible around the
-    -- panel.
-    --
-    -- Scope swallow to clicks INSIDE the panel bounds. The panel is
-    -- anchored top-center at (PANEL_W=600, PANEL_H=400) with TOP_INSET=80
-    -- offset from screen top. At 1920x1080 the panel covers x=[660..1260],
-    -- y=[80..480]. Mouse coords from input_service:get("cursor") are in
-    -- 1080p resolution coordinates after UIInverseScaleVectorToResolution
-    -- (vanilla pattern). Below we compute panel rect in those coords and
-    -- check the cursor.
+    -- Clicks outside the live Information panel continue to the cosmetic
+    -- screen. Inside clicks are swallowed so the hidden native information
+    -- controls cannot react beneath the editor.
     if input_service and input_service.get then
         local pressed = input_service:get("left_press")
         if pressed then
@@ -1460,13 +1468,7 @@ function GlowPicker.handle_input(input_service, preview_host)
                 else
                     cx, cy = cursor[1], cursor[2]
                 end
-                -- 1920x1080 logical. Panel top-center: x_center=960,
-                -- y from TOP_INSET=80 down PANEL_H=400.
-                local x_min, x_max = 960 - PANEL_W/2, 960 + PANEL_W/2
-                local y_min, y_max = TOP_INSET, TOP_INSET + PANEL_H
-                if cx and cy
-                    and cx >= x_min and cx <= x_max
-                    and cy >= y_min and cy <= y_max then
+                if PANEL_LAYOUT.contains(GlowPicker._panel_bounds, cx, cy) then
                     return true  -- click inside panel: swallow
                 end
             end
@@ -1492,6 +1494,7 @@ function GlowPicker.draw(ui_renderer, input_service, dt, preview_host)
         GlowPicker._draw_log_frame = GlowPicker._draw_log_frame + 1
         return
     end
+    if not _sync_panel_layout(GlowPicker._preview_host) then return end
     GlowPicker._draw_log_frame = GlowPicker._draw_log_frame + 1
     -- Log first frame + every 120 frames thereafter to confirm draw loop is alive.
     local should_log = (GlowPicker._draw_log_frame == 1) or (GlowPicker._draw_log_frame % 120 == 0)

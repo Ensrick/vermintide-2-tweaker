@@ -1,4 +1,4 @@
--- Runtime owner for CIM's Athanor preview-placement correction (#404).
+-- Runtime owner for CIM's Athanor preview-placement correction (#882).
 -- The position decision remains engine-free in _cim_forge_preview_policy.lua;
 -- this module owns only the VMF hook and Stingray unit update seam.
 local M = {}

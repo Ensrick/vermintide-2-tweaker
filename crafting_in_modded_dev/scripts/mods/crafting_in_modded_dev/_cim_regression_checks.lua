@@ -20,6 +20,7 @@ return function(context)
     local _forge_load = context.forge_load
     local _is_in_keep = context.is_in_keep
     local _store_property_slot = context.store_property_slot
+    local _accessory_property_policy = context.accessory_property_policy
     local _AccessoryPanel = context.accessory_panel
     local _OVERVIEW_BTN_RENDER_FIELD = context.overview_btn_render_field
     local _OVERVIEW_DRAWN_FIELDS = context.overview_drawn_fields
@@ -121,6 +122,43 @@ _rt_register("issue277_bulk_cleanup_exact_owner_transaction", function()
     end
 end)
 
+_rt_register("issue959_accessory_property_layers_are_independent", function()
+    local policy = _accessory_property_policy
+    if type(policy) ~= "table"
+        or type(policy.count_slots) ~= "function"
+        or type(policy.last_slot) ~= "function"
+        or type(policy.collect_property_slots) ~= "function"
+        or mod.CIM959_ACCESSORY_PROPERTY_LAYER_MARKER ~= true
+    then
+        return "#959 accessory property layer policy/runtime wiring missing"
+    end
+
+    local properties = { weave_health = { 11, 12, 13, 14, 15 } }
+    if policy.count_slots(properties.weave_health, "defence_accessory", 10) ~= 5
+        or policy.count_slots(properties.weave_health, "offence_accessory", 10) ~= 0
+        or policy.count_slots(properties.weave_health, "utility_accessory", 10) ~= 0
+    then
+        return "Necklace Health usage leaked into another accessory layer"
+    end
+
+    properties.weave_health[#properties.weave_health + 1] = 1
+    if policy.count_slots(properties.weave_health, "offence_accessory", 10) ~= 1
+        or policy.count_slots(properties.weave_health, "defence_accessory", 10) ~= 5
+        or policy.last_slot(properties.weave_health, "offence_accessory", 10) ~= 1
+    then
+        return "Charm edit did not remain independent from Necklace usage"
+    end
+
+    local removals = policy.collect_property_slots(
+        properties, "offence_accessory", 10)
+    if #removals ~= 1
+        or removals[1].property_key ~= "weave_health"
+        or removals[1].slot_index ~= 1
+    then
+        return "active-category clear plan crossed an accessory layer"
+    end
+end)
+
 _rt_register("issue246_tab_preview_exact_skin_icon", function()
     local core = mod._cim246_tab_preview_core
     if type(core) ~= "table" or type(core.resolve) ~= "function"
@@ -203,7 +241,7 @@ _rt_register("forge_preview_accepts_resident_3p_unit", function()
     end
 end)
 
-_rt_register("issue404_ranged_properties_preview_centered", function()
+_rt_register("issue882_athanor_preview_placement", function()
     local policy = mod._cim_forge_preview_policy
     local fn = policy and policy.properties_preview_position
     if type(fn) ~= "function" then
@@ -222,11 +260,14 @@ _rt_register("issue404_ranged_properties_preview_centered", function()
     if fn("melee", native) ~= nil then
         return "#404 preview policy must leave melee on the vanilla path"
     end
-    if policy.overview_preview_x("ranged", -0.8, false) ~= 0.8 then
-        return "#404 mission overview no longer separates ranged from melee"
+    if policy.overview_preview_x(true, -0.8, false) ~= 0.8 then
+        return "#882 mission overview no longer separates secondary from primary"
     end
-    if policy.overview_preview_x("ranged", -0.8, true) ~= -0.8 then
-        return "#404 overview policy changed the native keep layout"
+    if policy.overview_preview_x(false, -0.8, false) ~= -0.8 then
+        return "#882 mission overview changed the primary viewport"
+    end
+    if policy.overview_preview_x(true, -0.8, true) ~= -0.8 then
+        return "#882 overview policy changed the native keep layout"
     end
     if mod._cim404_preview_install_ok ~= true then
         return "#404 properties preview runtime hook did not install"
@@ -834,15 +875,32 @@ _rt_register("issue682_provider_gate_routing", function()
     if type(reason) ~= "string" or reason == "" then
         return "record-gate rejection reason is nil/empty (issue 682 regression)"
     end
-    -- Routed-surface census: every expected enumerator surface except the
-    -- deliberately-unrouted cw_conversion must be registered by its install
-    -- site (athanor_list / blacksmith_list / mirror_restore /
-    -- mirror_injection from the entry + standard_forge, salvage from
-    -- _cim_inventory_filter).
+    -- Routed-surface census: every real provider-item enumerator must register
+    -- its install site. `cw_conversion` is a rarity-exclude scrub only, not an
+    -- item enumerator, and is documented separately by the contract.
     local missing = contract.unrouted_surfaces()
-    if #missing ~= 1 or missing[1] ~= "cw_conversion" then
+    if #missing ~= 0 then
         return "unrouted provider-gate surfaces: [" .. table.concat(missing, ",") .. "]"
     end
+    if type(contract.NON_ENUMERATOR_BOUNDARIES) ~= "table"
+            or contract.NON_ENUMERATOR_BOUNDARIES.cw_conversion ~= "rarity-exclude-scrub-only" then
+        return "cw_conversion boundary lost its non-enumerator classification"
+    end
+end)
+
+_rt_register("issue628_salvage_state_diagnostic", function()
+    local contract = mod._cim_synthetic_item_contract
+    if type(contract) ~= "table" or type(contract.salvage_trace_fingerprint) ~= "function" then
+        return "#628 salvage trace fingerprint policy missing"
+    end
+    if mod._cim628_salvage_trace_wired ~= true then
+        return "#628 exact salvage-state diagnostic not wired"
+    end
+    local clean = contract.salvage_trace_fingerprint("rt_bid", true, true, nil, {})
+    local saved = contract.salvage_trace_fingerprint("rt_bid", false, false, "loadout", {
+        is_equipped_by_any_loadout = true,
+    })
+    if clean == saved then return "#628 loadout rejection does not change trace state" end
 end)
 
 _rt_register("issue703_athanor_cwv_rows_unlocked", function()
@@ -2299,6 +2357,37 @@ _rt_register("rpc_schema_gate_drops_on_mismatch", function()
     -- Teardown: restore whatever was there before (don't leak the synthetic entry).
     if had_uid then state[uid] = saved else state[uid] = nil end
 
+    return result_err
+end)
+
+_rt_register("issue921_tab_rarity_state_is_tristate", function()
+    local apply = mod._cim_apply_modded_slot_metadata
+    local state = mod._cim_modded_slot_state
+    local core = mod._cim246_tab_preview_core
+    if type(apply) ~= "function" or type(state) ~= "table"
+            or type(core) ~= "table" or type(core.resolve_rarity) ~= "function" then
+        return "#921 rarity metadata policy/runtime wiring missing"
+    end
+
+    local peer_id, local_player_id, slot_name = "rt_issue921_peer", 7, "slot_melee"
+    local uid = tostring(peer_id) .. ":" .. tostring(local_player_id)
+    local saved = state[uid]
+    state[uid] = nil
+
+    local result_err
+    if apply(peer_id, local_player_id, slot_name, true, "regression") ~= true
+            or not (state[uid] and state[uid][slot_name] == true) then
+        result_err = "modded=true metadata was not retained"
+    elseif apply(peer_id, local_player_id, slot_name, false, "regression") ~= true
+            or not state[uid] or state[uid][slot_name] ~= false then
+        result_err = "modded=false metadata collapsed to absence; stale frame can survive"
+    elseif core.resolve_rarity("modded", true, false) ~= "unique" then
+        result_err = "authoritative false did not clear a cached modded rarity"
+    elseif core.resolve_rarity("modded", true, nil) ~= "modded" then
+        result_err = "missing metadata did not fail closed"
+    end
+
+    state[uid] = saved
     return result_err
 end)
 

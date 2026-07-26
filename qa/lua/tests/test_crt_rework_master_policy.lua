@@ -60,6 +60,196 @@ return function(H, repo_root)
         H.equal(exact[module.MASTER_TOURNEY], true)
     end)
 
+    H.test("CRT all-reworks master plans both families without per-leaf callback fanout", function()
+        local got = change_map(policy:plan("all", true, {
+            rework_a = false, rework_b = true, trn_a = false, trn_b = true,
+        }))
+        H.equal(got.rework_a, true)
+        H.equal(got.rework_b, nil)
+        H.equal(got.trn_a, true)
+        H.equal(got.trn_b, nil)
+        H.equal(got[module.MASTER_ENSRICK], nil)
+        H.equal(got[module.MASTER_TOURNEY], nil)
+        H.equal(got[module.MASTER_ALL], true)
+
+        local exact = policy:derive_masters({ rework_a=true, rework_b=true, trn_a=true, trn_b=true })
+        H.equal(exact[module.MASTER_ENSRICK], false)
+        H.equal(exact[module.MASTER_TOURNEY], false)
+        H.equal(exact[module.MASTER_ALL], true)
+    end)
+
+    H.test("CRT family and all masters reconcile Foot Knight secondary carriers once", function()
+        local globals = {
+            get_mod = _G.get_mod,
+            BuffTemplates = _G.BuffTemplates,
+            BuffFunctionTemplates = _G.BuffFunctionTemplates,
+            CareerSettings = _G.CareerSettings,
+            SPProfiles = _G.SPProfiles,
+            HeroWindowLoadoutInventory = _G.HeroWindowLoadoutInventory,
+            HeroWindowLoadoutInventoryConsole = _G.HeroWindowLoadoutInventoryConsole,
+            printf = _G.printf,
+        }
+        local perk_key = "scripts/unit_extensions/default_player_unit/buffs/settings/buff_perk_names"
+        local old_preload = package.preload[perk_key]
+        local old_loaded = package.loaded[perk_key]
+        local settings = {}
+        local backend_types = { "ranged" }
+        local menu_types = { "ranged" }
+        local mock = {
+            get = function(_, id) return settings[id] end,
+            dofile = function(_, path)
+                return assert(loadfile(repo_root .. "/career_tweaker/" .. path .. ".lua"))()
+            end,
+            hook = function() end,
+        }
+
+        _G.get_mod = function() return mock end
+        _G.BuffTemplates = {}
+        _G.BuffFunctionTemplates = nil
+        _G.CareerSettings = {
+            es_knight = {
+                name = "es_knight",
+                item_slot_types_by_slot_name = { slot_ranged = backend_types },
+            },
+        }
+        _G.SPProfiles = {
+            [4] = {
+                careers = {
+                    [3] = {
+                        name = "es_knight",
+                        item_slot_types_by_slot_name = { slot_ranged = menu_types },
+                    },
+                },
+            },
+        }
+        _G.HeroWindowLoadoutInventory = nil
+        _G.HeroWindowLoadoutInventoryConsole = nil
+        _G.printf = function() end
+        package.loaded[perk_key] = nil
+        package.preload[perk_key] = function()
+            return { uninterruptible_heavy = "uninterruptible_heavy" }
+        end
+
+        local foot_knight
+        local ok, err = pcall(function()
+            foot_knight = assert(loadfile(
+                repo_root .. "/career_tweaker/scripts/mods/career_tweaker/_crt_foot_knight.lua"))()
+            local master_policy = module.new({
+                rework_es_knight_secondary_melee = {},
+                rework_other = {},
+            }, {
+                trn_other = {},
+            })
+
+            local function exercise(family)
+                settings = {}
+                foot_knight.apply_settings()
+                H.deep_equal(backend_types, { "ranged" })
+                H.deep_equal(menu_types, { "ranged" })
+
+                local batch = false
+                local writer_calls, callback_calls = 0, 0
+                local nested_owner_applies, engine_applies, live_applies = 0, 0, 0
+                local function nested_setting_callback()
+                    callback_calls = callback_calls + 1
+                    if batch then return end
+                    nested_owner_applies = nested_owner_applies + 1
+                end
+                local function write_changes(changes)
+                    writer_calls = writer_calls + 1
+                    batch = true
+                    for _, change in ipairs(changes) do
+                        settings[change.id] = change.value
+                        nested_setting_callback()
+                    end
+                    batch = false
+                    return true
+                end
+
+                local applied, changes = module.apply_bounded_master(
+                    master_policy, family, true, settings,
+                    write_changes,
+                    function() engine_applies = engine_applies + 1 end,
+                    function()
+                        live_applies = live_applies + 1
+                        foot_knight.apply_settings()
+                    end)
+                H.equal(applied, true)
+                H.equal(writer_calls, 1)
+                H.equal(callback_calls, #changes)
+                H.equal(nested_owner_applies, 0,
+                    "programmatic leaf callbacks must stay under the batch guard")
+                H.equal(engine_applies, 1)
+                H.equal(live_applies, 1)
+                H.deep_equal(backend_types, { "melee", "ranged" })
+                H.deep_equal(menu_types, { "melee", "ranged" })
+
+                settings.rework_es_knight_secondary_melee = false
+                foot_knight.apply_settings()
+            end
+
+            exercise("ensrick")
+            exercise("all")
+        end)
+
+        if foot_knight then pcall(foot_knight.restore) end
+        package.preload[perk_key] = old_preload
+        package.loaded[perk_key] = old_loaded
+        _G.get_mod = globals.get_mod
+        _G.BuffTemplates = globals.BuffTemplates
+        _G.BuffFunctionTemplates = globals.BuffFunctionTemplates
+        _G.CareerSettings = globals.CareerSettings
+        _G.SPProfiles = globals.SPProfiles
+        _G.HeroWindowLoadoutInventory = globals.HeroWindowLoadoutInventory
+        _G.HeroWindowLoadoutInventoryConsole = globals.HeroWindowLoadoutInventoryConsole
+        _G.printf = globals.printf
+        H.truthy(ok, tostring(err))
+    end)
+
+    H.test("CRT rework engines preserve the selected owner across conflict transitions", function()
+        local value = 5
+        local tourney_saved
+        local balance_saved
+        local tourney_on = true
+        local ensrick_on = false
+
+        local tourney = {
+            restore = function()
+                if tourney_saved ~= nil then value = tourney_saved end
+                tourney_saved = nil
+            end,
+            apply = function()
+                if tourney_saved ~= nil then value = tourney_saved end
+                tourney_saved = nil
+                if tourney_on and not ensrick_on then
+                    tourney_saved = value
+                    value = 20
+                end
+            end,
+        }
+        local balance = {
+            apply = function()
+                if balance_saved ~= nil then value = balance_saved end
+                balance_saved = nil
+                if ensrick_on then
+                    balance_saved = value
+                    value = 999
+                end
+            end,
+        }
+
+        module.reconcile_engines(balance, tourney)
+        H.equal(value, 20, "Tourney should own the field before the conflict is selected")
+
+        ensrick_on = true
+        module.reconcile_engines(balance, tourney)
+        H.equal(value, 999, "Tourney restore must not clobber the newly selected Ensrick value")
+
+        ensrick_on = false
+        module.reconcile_engines(balance, tourney)
+        H.equal(value, 20, "Tourney should resume after the Ensrick conflict is cleared")
+    end)
+
     H.test("CRT active rework labels carry derived family prefixes", function()
         local localization = load_localization()
         local checked = 0
@@ -79,7 +269,7 @@ return function(H, repo_root)
             "navigation/master rows should remain undecorated")
     end)
 
-    H.test("CRT data nests both live masters in their own group", function()
+    H.test("CRT data nests all three live presets in their own group", function()
         local old_get_mod = _G.get_mod
         _G.get_mod = function()
             return { localize = function(_, id) return id end }
@@ -98,7 +288,8 @@ return function(H, repo_root)
                 master_group_parent = parent_id
                 H.equal(widget.type, "group")
             end
-            if widget.setting_id == module.MASTER_ENSRICK or widget.setting_id == module.MASTER_TOURNEY then
+            if widget.setting_id == module.MASTER_ENSRICK or widget.setting_id == module.MASTER_TOURNEY
+                    or widget.setting_id == module.MASTER_ALL then
                 found[widget.setting_id] = { type = widget.type, parent = parent_id }
             end
             for _, child in ipairs(widget.sub_widgets or {}) do visit(child, widget.setting_id) end
@@ -109,6 +300,8 @@ return function(H, repo_root)
         H.equal(found[module.MASTER_ENSRICK].parent, "rework_master_group")
         H.equal(found[module.MASTER_TOURNEY].type, "checkbox")
         H.equal(found[module.MASTER_TOURNEY].parent, "rework_master_group")
+        H.equal(found[module.MASTER_ALL].type, "checkbox")
+        H.equal(found[module.MASTER_ALL].parent, "rework_master_group")
     end)
 
     H.test("CRT every visible rework checkbox has one family prefix", function()

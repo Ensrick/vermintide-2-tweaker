@@ -60,8 +60,10 @@ return function(H, repo_root)
         -- cursed_chest_reconcile_132): module 68 -> 70, conserved total 103.
         -- v0.7.304-dev adds one NEW module check (cot471_placement_topup, the #471
         -- Chest-of-Trials placement top-up marker): module 70 -> 71, total 104.
+        -- Issue #1004 adds one NEW inline UI check while preserving module order:
+        -- entry 33 -> 34, total 105.
         H.equal(count_plain(regression, "_rt_register("), 71)
-        H.equal(count_plain(entry, "_rt_register("), 33)
+        H.equal(count_plain(entry, "_rt_register("), 34)
         -- The shared _RT_CHECKS registrar stays defined and exposed in the entry;
         -- the module registers through the exposed handle, never a second registry.
         H.truthy(entry:find("mod._ct_rt_register = _rt_register", 1, true))

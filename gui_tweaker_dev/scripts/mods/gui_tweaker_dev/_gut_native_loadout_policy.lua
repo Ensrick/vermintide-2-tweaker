@@ -11,6 +11,8 @@ local COSMETIC_SLOTS = {
 }
 
 local WEAPON_SLOTS = { slot_melee = true, slot_ranged = true }
+local MAX_SNAPSHOT_DEPTH = 12
+local MAX_SNAPSHOT_NODES = 256
 
 function P.is_cwv_backend_id(backend_id)
     return type(backend_id) == "string"
@@ -50,12 +52,28 @@ function P.readonly_action(slot_name, backend_id)
     return "block"
 end
 
-local function copy_value(value)
+local function copy_value(value, state, depth)
     if type(value) ~= "table" then return value end
+    if depth >= MAX_SNAPSHOT_DEPTH then return nil, "depth-bound" end
+    if state.seen[value] then return nil, "cycle" end
+    state.nodes = state.nodes + 1
+    if state.nodes > MAX_SNAPSHOT_NODES then return nil, "node-bound" end
+    state.seen[value] = true
     local copy = {}
     for key, child in pairs(value) do
-        copy[key] = copy_value(child)
+        state.nodes = state.nodes + 1
+        if state.nodes > MAX_SNAPSHOT_NODES then
+            state.seen[value] = nil
+            return nil, "node-bound"
+        end
+        local child_copy, detail = copy_value(child, state, depth + 1)
+        if detail then
+            state.seen[value] = nil
+            return nil, detail
+        end
+        copy[key] = child_copy
     end
+    state.seen[value] = nil
     return copy
 end
 
@@ -65,10 +83,13 @@ end
 -- bot cache.
 function P.snapshot_bot_loadout(row, slot_names)
     if type(row) ~= "table" or type(slot_names) ~= "table" then return nil end
+    local state = { nodes = 0, seen = {} }
     local snapshot = {}
     for i = 1, #slot_names do
         local slot_name = slot_names[i]
-        snapshot[slot_name] = copy_value(row[slot_name])
+        local value, detail = copy_value(row[slot_name], state, 0)
+        if detail then return nil, detail end
+        snapshot[slot_name] = value
     end
     return snapshot
 end

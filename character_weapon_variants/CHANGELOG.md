@@ -1,5 +1,23 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.473-dev (2026-07-26) - #935 additive Foot Knight secondary slot [not-started]
+
+- Classified equipment filters and carried the active loadout category's exact
+  slot identity across the synchronous backend query before applying CWV's Old
+  Musket melee-grid narrowing. Career Tweaker's combined `(melee or ranged)`
+  Foot Knight secondary category now preserves every normal ranged weapon,
+  while CWV's textually identical primary category still keeps only melee and
+  allowed cross-slot weapons.
+- Added executable regression coverage for melee-only, ranged-only, combined,
+  unrelated, and invalid filter inputs. The existing Tuskgor Javelin
+  capability gate remains independent and still runs before this classification.
+
+## 0.1.472-dev (2026-07-25) - #1002 bounded Equipment reset [not-started]
+
+- Opted CWV into Mod Tweaker's owner-level setting transaction. A full
+  Equipment DEFAULT/profile restore now reapplies the mace/hammer template
+  identity at most once, with bounded `[cwv:1002]` evidence.
+
 ## 0.1.471-dev (2026-07-22) - mixed-lobby Tuskgor Javelin containment (#424) [not-started]
 
 - Connected CWV's existing peer-capability protocol to the actual earliest

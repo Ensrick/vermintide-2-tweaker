@@ -1,5 +1,46 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.317-dev (2026-07-26) -- restore source-backed hidden career perks (#153) [not-started]
+
+- Supplies the native passive-perk rows only while the career-information
+  panel is populated, then restores the exact original data immediately.
+- Shows both source-proven Witch Hunter Captain passives without permanently
+  mutating shared career settings or relying on guessed descriptions.
+- Adapts the presentation to the available career-info row count: separate
+  rows on the six-row console layout and one combined tooltip row on the
+  compact three-row desktop layout.
+- Fails closed when native source signatures drift, and adds bounded
+  regression coverage for restoration, idempotence, layout, and localization.
+
+## 0.2.316-dev (2026-07-26) -- reconcile detached bot equipment at the read boundary (#954) [not-started]
+
+- Reconciles the persisted detached bot snapshot at the engine's shared
+  `get_bot_loadout` consumer, covering startup refreshes that occurred before
+  the dev hook or Adventure interface was ready.
+- Repairs later same-cache drift on demand with one bounded diagnostic record;
+  the check runs only on bot-loadout reads, not per frame.
+- Both comparison and detached-copy work are bounded by depth, visited-key,
+  and career ceilings. Wide, cyclic, or corrupt saved values defer to the
+  native result without mutating the bot cache or persisted row.
+- Reconciliation validates every career before committing any migration or
+  cache replacement, preventing a later corrupt row from leaving earlier
+  careers half-migrated in memory.
+- Uses the concrete backend interface to prove Adventure ownership and leaves
+  official and read-only loadout paths native.
+- Adds functional coverage for stale startup caches, later in-place mutation,
+  exact argument forwarding, persistence retry, wide/cyclic corruption, and
+  official-realm fail-open behavior.
+
+## 0.2.315-dev (2026-07-26) -- bounded Equipment DEFAULT transactions (#1002) [not-started]
+
+- Equipment-tab DEFAULT now commits each participating owner through one
+  owner-defined batch transaction instead of firing heavyweight refresh work
+  once per setting.
+- Failed or incomplete owner transactions remain staged, preventing profile
+  capture and profile switching from silently accepting a partial reset.
+- Added regression coverage for bounded notification counts, owner isolation,
+  partial failures, and retry behavior.
+
 ## 0.2.314-dev (2026-07-22) -- detached bot loadout snapshots (#954) [not-started]
 
 - Assigning a saved loadout to a bot now persists a dedicated copy of that

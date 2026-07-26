@@ -160,6 +160,43 @@ do
     end
 end
 
+-- Issue 628 diagnostic: the 2026-07-20 log proved a crafted Dual Maces
+-- instance remained in the mirror, but only exposed aggregate salvage counts.
+-- Trace the exact guard state at this canonical boundary. Fingerprints suppress
+-- identical UI refreshes; the hard cap prevents unbounded output.
+local _cim628_salvage_trace_seen = {}
+local _cim628_salvage_trace_emits = 0
+local _CIM628_SALVAGE_TRACE_CAP = 96
+
+local function _cim628_join(values)
+    if type(values) ~= "table" or #values == 0 then return "none" end
+    local copy = {}
+    for i = 1, math.min(#values, 12) do copy[i] = tostring(values[i]) end
+    table.sort(copy)
+    local suffix = #values > 12 and string.format("+%d", #values - 12) or ""
+    return table.concat(copy, ",") .. suffix
+end
+
+local function _cim628_trace(contract, item, record, state, visible, eligible, reason,
+        careers, loadouts)
+    if _cim628_salvage_trace_emits >= _CIM628_SALVAGE_TRACE_CAP then return end
+    local bid = item and item.backend_id
+    local fingerprint = contract.salvage_trace_fingerprint
+        and contract.salvage_trace_fingerprint(bid, visible, eligible, reason, state)
+    if not fingerprint or _cim628_salvage_trace_seen[fingerprint] then return end
+    _cim628_salvage_trace_seen[fingerprint] = true
+    _cim628_salvage_trace_emits = _cim628_salvage_trace_emits + 1
+    printf("[cim:628] salvage_state bid=%s key=%s result=%s verdict=%s reason=%s equipped=%s careers=%s saved=%s loadouts=%s favorite=%s backend_dirty=%s trace=%d/%d",
+        tostring(bid), tostring(record and record.item_key), visible and "visible" or "hidden",
+        eligible and "eligible" or "rejected", tostring(reason or "none"),
+        tostring(state.is_equipped), _cim628_join(careers),
+        tostring(state.is_equipped_by_any_loadout), _cim628_join(loadouts),
+        tostring(state.is_favorite), tostring(state.backend_dirty),
+        _cim628_salvage_trace_emits, _CIM628_SALVAGE_TRACE_CAP)
+end
+
+mod._cim628_salvage_trace_wired = true
+
 mod:hook("BackendInterfaceCommon", "filter_items", function(func, self, items, filter_infix, params)
     local result = func(self, items, filter_infix, params)
     if not _is_salvage_filter(filter_infix) then return result end
@@ -176,33 +213,48 @@ mod:hook("BackendInterfaceCommon", "filter_items", function(func, self, items, f
     local contract = mod._cim_synthetic_item_contract
     if type(contract) ~= "table" then return result end
 
-    for _, item in ipairs(items) do
+    -- BackendInterfaceCommon.filter_items receives the backend inventory as a
+    -- backend-id keyed map, not a dense array. Using ipairs here silently made
+    -- the canonical CIM recovery/diagnostic adapter skip every real item.
+    for _, item in pairs(items) do
         local bid = item and item.backend_id
         local record = bid and mod._cim_get_craft and mod._cim_get_craft(bid)
-        if bid and record and not seen[bid] then
+        if bid and record then
             local equipped, any_loadout, favorite = true, true, true
+            local careers, loadouts = { "query-error" }, { "query-error" }
 
-            local ok_equipped, careers = pcall(backend_items.equipped_by, backend_items, bid)
-            if ok_equipped and type(careers) == "table" then equipped = #careers > 0 end
+            local ok_equipped, queried_careers = pcall(
+                backend_items.equipped_by, backend_items, bid)
+            if ok_equipped and type(queried_careers) == "table" then
+                careers = queried_careers
+                equipped = #careers > 0
+            end
 
-            local ok_loadout, loadouts = pcall(
+            local ok_loadout, queried_loadouts = pcall(
                 backend_items.is_equipped_by_any_loadout, backend_items, bid)
-            if ok_loadout and type(loadouts) == "table" then any_loadout = #loadouts > 0 end
+            if ok_loadout and type(queried_loadouts) == "table" then
+                loadouts = queried_loadouts
+                any_loadout = #loadouts > 0
+            end
 
             if ItemHelper and ItemHelper.is_favorite_backend_id then
                 local ok_favorite, value = pcall(ItemHelper.is_favorite_backend_id, bid, item)
                 if ok_favorite then favorite = value and true or false end
             end
 
-            local eligible = contract.is_salvage_eligible(item, record, {
+            local state = {
                 is_equipped = equipped,
                 is_equipped_by_any_loadout = any_loadout,
                 is_favorite = favorite,
-            })
-            if eligible then
+                backend_dirty = backend_items._dirty == true,
+            }
+            local eligible, reason = contract.is_salvage_eligible(item, record, state)
+            if eligible and not seen[bid] then
                 result[#result + 1] = item
                 seen[bid] = true
             end
+            _cim628_trace(contract, item, record, state, seen[bid] == true,
+                eligible == true, reason, careers, loadouts)
         end
     end
     return result
