@@ -329,6 +329,9 @@ return {
     gut_mission_map_host_only_tooltip = {
         en = "When on, only the party host can open the mission map mid-mission; everyone else gets a short message instead. Off by default, so any player can open it to look around.",
     },
+    gut_mission_vote_title = {
+        en = "Change Mission?",
+    },
 
     -- ============================================================
     -- Inventory (#522): character-preview lighting dropdown.
