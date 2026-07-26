@@ -1,5 +1,24 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.316-dev (2026-07-26) -- reconcile detached bot equipment at the read boundary (#954) [not-started]
+
+- Reconciles the persisted detached bot snapshot at the engine's shared
+  `get_bot_loadout` consumer, covering startup refreshes that occurred before
+  the dev hook or Adventure interface was ready.
+- Repairs later same-cache drift on demand with one bounded diagnostic record;
+  the check runs only on bot-loadout reads, not per frame.
+- Both comparison and detached-copy work are bounded by depth, visited-key,
+  and career ceilings. Wide, cyclic, or corrupt saved values defer to the
+  native result without mutating the bot cache or persisted row.
+- Reconciliation validates every career before committing any migration or
+  cache replacement, preventing a later corrupt row from leaving earlier
+  careers half-migrated in memory.
+- Uses the concrete backend interface to prove Adventure ownership and leaves
+  official and read-only loadout paths native.
+- Adds functional coverage for stale startup caches, later in-place mutation,
+  exact argument forwarding, persistence retry, wide/cyclic corruption, and
+  official-realm fail-open behavior.
+
 ## 0.2.315-dev (2026-07-26) -- bounded Equipment DEFAULT transactions (#1002) [not-started]
 
 - Equipment-tab DEFAULT now commits each participating owner through one

@@ -17,6 +17,18 @@
 
 ## Detached bot loadouts (#954)
 
+- **Status:** source-only regression candidate; do not apply a tester lifecycle
+  label until this exact candidate is committed, built, deployed, and identified
+  by banner, Workshop manifest, and archive hash in a new live-test card.
+- The candidate reconciles the detached persisted snapshot at the shared
+  `get_bot_loadout` read boundary. This covers a backend cache built before the
+  post-refresh hook became eligible and same-table drift after a successful
+  refresh. The wrapper preserves every native getter argument.
+- Wide, deep, cyclic, or over-cap stores must fail open to the native cache,
+  leave both persisted and runtime owners unchanged, and retry recoverable
+  persistence failures on the next read.
+- A mixed store containing one valid legacy designation plus one corrupt
+  designation must commit neither row until the corrupt value is removed.
 - [ ] Prepare a Warrior Priest saved row with visibly distinct melee and ranged
   weapons, assign that row to the bot, then switch to another player loadout.
 - [ ] Change the player's weapons. Refresh/respawn the Warrior Priest bot and
@@ -25,6 +37,15 @@
   snapshot and player row must retain their independent values.
 - [ ] Run `/gut_regression_test` and require
   `issue954_bot_loadout_snapshot` to pass.
+
+If this candidate fails, use exactly one evidence-selected fallback:
+
+1. If the persisted snapshot is absent after restart, move the migration to the
+   store-load boundary and record the serialized `bot_loadout` readback.
+2. If a later engine writer changes `_bot_loadouts`, identify that writer from
+   the bounded reconcile reason and compose it into the singleton cache owner.
+3. If explicit bot editing is required, add a bot-only edit transaction that
+   writes `bot_loadout`; never route it through a player saved row.
 
 ## Mutually exclusive controls (#446)
 
