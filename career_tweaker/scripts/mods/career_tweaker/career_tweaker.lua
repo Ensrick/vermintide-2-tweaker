@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.15-beta"
+local MOD_VERSION = "0.4.16-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -116,8 +116,8 @@ mod._crt.balance = balance
 -- deleted under #433. Old cbr_* saved values remain untouched and reserved;
 -- reactivation requires a new reviewed architecture recovered from git history.
 
--- Tourney Balance Testing port (PHASE 1: clean per-career data mutations,
--- ~17 default-OFF trn_* toggles). Same {apply,restore,active_count} contract
+-- Tourney Balance Testing port (#936: 46 independent default-OFF mutation
+-- leaves plus 17 stable per-career presets). Same {apply,restore,active_count}
 -- as the native balance engine. See career_tweaker_tourney.lua header.
 local ok_trn, tourney = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_tourney")
 if not ok_trn then
@@ -140,6 +140,15 @@ else
     rework_master_module = {
         MASTER_ENSRICK = "rework_master_ensrick",
         MASTER_TOURNEY = "rework_master_tourney",
+        MASTER_ALL = "rework_master_all",
+        apply_bounded_master = function(policy, family, enabled, current,
+                                        write_changes, reconcile, reconcile_live_state)
+            local changes = policy:plan(family, enabled, current)
+            if not write_changes(changes) then return false, changes end
+            reconcile()
+            reconcile_live_state()
+            return true, changes
+        end,
     }
     rework_master_policy = {
         ensrick_ids = {}, tourney_ids = {},
@@ -150,6 +159,19 @@ else
 end
 
 local _rework_master_batch = false
+local foot_knight
+
+local function _reconcile_rework_engines()
+    if rework_master_module and type(rework_master_module.reconcile_engines) == "function" then
+        rework_master_module.reconcile_engines(balance, tourney)
+        return
+    end
+    -- Safe fallback if the pure policy failed to load: preserve the same
+    -- restore-first ownership order instead of reviving the stale-snapshot bug.
+    if tourney and tourney.restore then tourney.restore() end
+    if balance and balance.apply then balance.apply() end
+    if tourney and tourney.apply then tourney.apply() end
+end
 
 -- #221's remaining Career Tweaker subgroup proposal crosses independent
 -- template-patch and live-hook owners. Re-arm the existing observation-only
@@ -187,6 +209,11 @@ local function _rework_master_snapshot()
     for _, id in ipairs(rework_master_policy.tourney_ids or {}) do state[id] = mod:get(id) and true or false end
     state[rework_master_module.MASTER_ENSRICK] = mod:get(rework_master_module.MASTER_ENSRICK) and true or false
     state[rework_master_module.MASTER_TOURNEY] = mod:get(rework_master_module.MASTER_TOURNEY) and true or false
+    state[rework_master_module.MASTER_ALL] = mod:get(rework_master_module.MASTER_ALL) and true or false
+    local catalog = tourney and tourney.CATALOG
+    for _, id in ipairs(catalog and catalog.MASTER_IDS or {}) do
+        state[id] = mod:get(id) and true or false
+    end
     return state
 end
 
@@ -204,12 +231,15 @@ local function _write_rework_master_changes(changes)
 end
 
 local function _apply_rework_master(family, enabled)
-    local changes = rework_master_policy:plan(family, enabled, _rework_master_snapshot())
-    if not _write_rework_master_changes(changes) then return end
     -- Every nested on_setting_changed callback returned under the batch guard;
-    -- run each owner exactly once after the complete desired state is visible.
-    if balance and balance.apply then balance.apply() end
-    if tourney and tourney.apply then tourney.apply() end
+    -- run each owner and Foot Knight's live carriers exactly once after the
+    -- complete desired state is visible.
+    local applied, changes = rework_master_module.apply_bounded_master(
+        rework_master_policy, family, enabled, _rework_master_snapshot(),
+        _write_rework_master_changes,
+        _reconcile_rework_engines,
+        function() foot_knight.apply_settings() end)
+    if not applied then return end
     pcall(printf, "[crt:445] family=%s enabled=%s writes=%d ensrick=%d tourney=%d",
         tostring(family), tostring(enabled), #changes,
         #(rework_master_policy.ensrick_ids or {}), #(rework_master_policy.tourney_ids or {}))
@@ -218,7 +248,8 @@ end
 local function _sync_rework_master_indicators()
     local desired = rework_master_policy:derive_masters(_rework_master_snapshot())
     local changes = {}
-    for _, id in ipairs({ rework_master_module.MASTER_ENSRICK, rework_master_module.MASTER_TOURNEY }) do
+    for _, id in ipairs({ rework_master_module.MASTER_ENSRICK, rework_master_module.MASTER_TOURNEY,
+            rework_master_module.MASTER_ALL }) do
         local value = desired[id] and true or false
         if (mod:get(id) and true or false) ~= value then
             changes[#changes + 1] = { id = id, value = value }
@@ -227,14 +258,56 @@ local function _sync_rework_master_indicators()
     _write_rework_master_changes(changes)
 end
 
+local function _sync_tourney_career_master_indicators()
+    local catalog = tourney and tourney.CATALOG
+    if not catalog then return end
+    local current = _rework_master_snapshot()
+    local changes = {}
+    for _, master_id in ipairs(catalog.MASTER_IDS or {}) do
+        local value = catalog.derive_master(master_id, current)
+        if (mod:get(master_id) and true or false) ~= value then
+            changes[#changes + 1] = { id = master_id, value = value }
+        end
+    end
+    _write_rework_master_changes(changes)
+end
+
+local function _apply_tourney_career_master(master_id, enabled)
+    local catalog = tourney and tourney.CATALOG
+    if not catalog then return end
+    local changes = catalog.plan_master(master_id, enabled, _rework_master_snapshot())
+    if not _write_rework_master_changes(changes) then return end
+    if tourney and tourney.apply then tourney.apply() end
+    _sync_rework_master_indicators()
+    pcall(printf, "[crt:936] career_preset=%s enabled=%s writes=%d",
+        tostring(master_id), tostring(enabled), #changes)
+end
+
+local _tourney_legacy_migrated = false
+local function _migrate_tourney_career_masters()
+    if _tourney_legacy_migrated then return end
+    _tourney_legacy_migrated = true
+    local catalog = tourney and tourney.CATALOG
+    if not catalog then return end
+    local current = _rework_master_snapshot()
+    local changes = catalog.plan_legacy_migration(current)
+    if #changes > 0 and _write_rework_master_changes(changes) then
+        pcall(printf, "[crt:936] migrated legacy career presets writes=%d", #changes)
+    end
+    _sync_tourney_career_master_indicators()
+    _sync_rework_master_indicators()
+end
+
 mod._crt.rework_master_policy = rework_master_policy
 mod._crt.rework_master_module = rework_master_module
+mod._crt.tourney = tourney
 
 -- Issue #619: Foot Knight's capability-aware career mechanics load before the
 -- armor module because that module owns crt's singleton
 -- DamageUtils.apply_buffs_to_damage hook and delegates its outgoing multiplier
 -- to this concern.  Custom buffs remain local-only and never enter NetworkLookup.
-local ok_fk, foot_knight = pcall(mod.dofile, mod,
+local ok_fk
+ok_fk, foot_knight = pcall(mod.dofile, mod,
     "scripts/mods/career_tweaker/_crt_foot_knight")
 if not ok_fk or type(foot_knight) ~= "table" then
     mod:error("Failed to load Foot Knight module: %s", tostring(foot_knight))
@@ -318,6 +391,7 @@ mod._crt.PUBLIC_BETA_BARDIN_PROBE_DISABLED = true
 mutex.declare("rework_family_master_choice", {
     rework_master_module.MASTER_ENSRICK,
     rework_master_module.MASTER_TOURNEY,
+    rework_master_module.MASTER_ALL,
 }, {
     control = "radio",
     label = "rework_family_master_choice_radio_group",
@@ -531,12 +605,12 @@ mod.on_game_state_changed = function(status, state_name)
         mod._crt_start_dump_retry()
     end
     if status == "enter" and state_name == "StateIngame" then
+        _migrate_tourney_career_masters()
         foot_knight.reset_mission_state()
     end
     -- Defensive nil-check: VMF's `mod:dofile` can return nil after logging an
     -- error instead of raising, so skip cleanly rather than crashing lifecycle.
-    if balance and balance.apply then balance.apply() end
-    if tourney and tourney.apply then tourney.apply() end
+    _reconcile_rework_engines()
     foot_knight.apply_settings()
 end
 
@@ -554,9 +628,18 @@ mod.on_setting_changed = function(setting_id)
 
     if setting_id == rework_master_module.MASTER_ENSRICK then
         _apply_rework_master("ensrick", mod:get(setting_id) and true or false)
+        _sync_tourney_career_master_indicators()
         return
     elseif setting_id == rework_master_module.MASTER_TOURNEY then
         _apply_rework_master("tourney", mod:get(setting_id) and true or false)
+        _sync_tourney_career_master_indicators()
+        return
+    elseif setting_id == rework_master_module.MASTER_ALL then
+        _apply_rework_master("all", mod:get(setting_id) and true or false)
+        _sync_tourney_career_master_indicators()
+        return
+    elseif tourney and tourney.CATALOG and tourney.CATALOG.is_master(setting_id) then
+        _apply_tourney_career_master(setting_id, mod:get(setting_id) and true or false)
         return
     end
 
@@ -570,10 +653,10 @@ mod.on_setting_changed = function(setting_id)
     mutex.enforce(setting_id)
 
     if setting_id:find("^rework_") then
-        if balance and balance.apply then balance.apply() end
-        -- A rework_ flip can change a trn_ entry's conflict state (a trn_ entry
-        -- yields to its overlapping rework_), so re-apply tourney too.
-        if tourney and tourney.apply then tourney.apply() end
+        -- Restore Tourney before rebuilding the higher-priority Ensrick owner.
+        -- Otherwise an old overlapping Tourney snapshot can restore vanilla
+        -- over the Ensrick value selected by this change.
+        _reconcile_rework_engines()
         foot_knight.apply_settings()
     end
 
@@ -583,6 +666,9 @@ mod.on_setting_changed = function(setting_id)
 
     if rework_master_policy:is_member(setting_id) then
         _sync_rework_master_indicators()
+    end
+    if tourney and tourney.CATALOG and tourney.CATALOG.is_leaf(setting_id) then
+        _sync_tourney_career_master_indicators()
     end
 
     -- Career-select lock state is baked at populate. Refresh both independent
@@ -732,13 +818,11 @@ do
                 label = "networked talent reworks",
                 on_enable = function()
                     pcall(printf, "[crt:425] parity established: re-applying networked talent reworks per settings")
-                    if balance and balance.apply then pcall(balance.apply) end
-                    if tourney and tourney.apply then pcall(tourney.apply) end
+                    pcall(_reconcile_rework_engines)
                 end,
                 on_disable = function()
                     pcall(printf, "[crt:425] parity degraded (peer set changed or peer lacks crt): networked talent reworks fall back to vanilla")
-                    if balance and balance.apply then pcall(balance.apply) end
-                    if tourney and tourney.apply then pcall(tourney.apply) end
+                    pcall(_reconcile_rework_engines)
                 end,
             })
         else

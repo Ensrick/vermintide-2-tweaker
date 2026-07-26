@@ -51,6 +51,7 @@ local suites = {
     "test_crt_bardin_disabler_probe",
     "test_crt_damage_classification",
     "test_crt_rework_master_policy",
+    "test_crt_tourney_catalog",
     "test_crt_umbrella_audit",
     "test_crt_dance_of_blades",
     "test_crt_flagellation",

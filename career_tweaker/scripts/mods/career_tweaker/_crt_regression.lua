@@ -705,10 +705,11 @@ _rt_register("issue445_rework_family_masters", function()
     end
     local mutex = mod._crt and mod._crt.mutex
     local members = mutex and mutex.CLUSTERS and mutex.CLUSTERS.rework_family_master_choice
-    if type(members) ~= "table" or #members ~= 2
+    if type(members) ~= "table" or #members ~= 3
         or members[1] ~= "rework_master_ensrick"
-        or members[2] ~= "rework_master_tourney" then
-        return "live rework-family mutex pair missing or reordered"
+        or members[2] ~= "rework_master_tourney"
+        or members[3] ~= "rework_master_all" then
+        return "live rework-family three-choice group missing or reordered"
     end
 end)
 
@@ -1175,5 +1176,33 @@ _rt_register("crt_impetuous_timed_sync_contract_776", function()
                 or proc_sub.buff_to_add ~= timed_name then
             return proc_name .. " bypasses the parity-gated timed-sync wrapper"
         end
+    end
+end)
+
+_rt_register("crt_tourney_leaf_catalog_936", function()
+    local tourney = mod._crt and mod._crt.tourney
+    local catalog = tourney and tourney.CATALOG
+    local definitions = tourney and tourney.TOURNEY_MODS
+    if type(catalog) ~= "table" or type(definitions) ~= "table" then
+        return "Tourney leaf catalog/runtime unavailable"
+    end
+    if #(catalog.CAREERS or {}) ~= 17 or #(catalog.LEAF_IDS or {}) ~= 46 then
+        return string.format("Tourney catalog count drift: careers=%d leaves=%d",
+            #(catalog.CAREERS or {}), #(catalog.LEAF_IDS or {}))
+    end
+    for _, leaf_id in ipairs(catalog.LEAF_IDS) do
+        local definition = definitions[leaf_id]
+        if type(definition) ~= "table"
+                or (type(definition.patches) ~= "table" and type(definition.custom_apply) ~= "function") then
+            return "Tourney mutation leaf missing runtime owner: " .. tostring(leaf_id)
+        end
+        local label = mod:localize(leaf_id)
+        if type(label) ~= "string" or label:sub(1, 4) ~= "[TB]" then
+            return "Tourney mutation leaf missing [TB] label: " .. tostring(leaf_id)
+        end
+    end
+    local priest = definitions.trn_wh_priest_prayer_movement_speed
+    if not priest or priest.network_unsafe ~= true then
+        return "Warrior Priest movement-speed leaf lost peer-parity gate"
     end
 end)

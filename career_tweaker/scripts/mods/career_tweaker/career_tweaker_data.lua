@@ -1,5 +1,11 @@
 local mod = get_mod("crt")
 
+local function cb(id)
+    local tooltip_suffix = id:match("^trn_[^_]+_[^_]+$") and "_tooltip" or "_description"
+    return { setting_id = id, type = "checkbox", default_value = false,
+        tooltip = id .. tooltip_suffix }
+end
+
 return {
     name              = mod:localize("mod_name"),
     description       = mod:localize("mod_description"),
@@ -474,14 +480,15 @@ return {
                     -- Issue #445: live rework-family controls. The masters stay
                     -- in one dedicated nested group instead of being mixed into
                     -- the individual rework rows. These are ordinary checkboxes
-                    -- so stock VMF can use them; crt enforces the same single-
-                    -- select contract that Mod Tweaker registers via #446.
+                    -- so stock VMF can use them. The first two are exclusive
+                    -- family presets; the third explicitly selects both.
                     {
                         setting_id = "rework_master_group",
                         type = "group",
                         sub_widgets = {
                             { setting_id = "rework_master_ensrick", type = "checkbox", default_value = false },
                             { setting_id = "rework_master_tourney", type = "checkbox", default_value = false },
+                            { setting_id = "rework_master_all", type = "checkbox", default_value = false },
                         },
                     },
                     -- General (cross-career)
@@ -507,6 +514,9 @@ return {
                                     { setting_id = "rework_es_huntsman_crit_aura_unlimited_range", type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_huntsman_base_hp_plus_25",            type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_huntsman_prowl_monster_power",        type = "checkbox", default_value = false },
+                                    cb("trn_es_huntsman"),
+                                    cb("trn_es_huntsman_crit_aura_range"),
+                                    cb("trn_es_huntsman_prowl_reload_speed"),
                                 },
                             },
                             {
@@ -516,6 +526,8 @@ return {
                                     { setting_id = "rework_es_mercenary_hellborgs_tutelage",            type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_mercenary_blade_barrier_60x_minus_10_on_hit", type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_mercenary_enhanced_training_tiered",      type = "checkbox", default_value = false },
+                                    cb("trn_es_mercenary"),
+                                    cb("trn_es_mercenary_paced_strikes"),
                                 },
                             },
                             {
@@ -530,6 +542,14 @@ return {
                                     { setting_id = "rework_es_knight_secondary_melee",                                 type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_knight_valiant_charge_great_foes_45s_battering_ram_30s",   type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_knight_counter_punch_stagger_stack",                       type = "checkbox", default_value = false },
+                                    cb("trn_es_knight"),
+                                    cb("trn_es_knight_protective_presence"),
+                                    cb("trn_es_knight_have_at_them_range"),
+                                    cb("trn_es_knight_cooldown_on_damage"),
+                                    cb("trn_es_knight_elite_stagger_power_duration"),
+                                    cb("trn_es_knight_push_attack_speed_duration"),
+                                    cb("trn_es_knight_impact_power"),
+                                    cb("trn_es_knight_stagger_cooldown_duration"),
                                 },
                             },
                             {
@@ -539,6 +559,10 @@ return {
                                     { setting_id = "rework_es_questingknight_virtue_of_ideal_3pct_per_kill",        type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_questingknight_virtue_of_discipline_double_parry",    type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_questingknight_virtue_of_impetuous_buffed",           type = "checkbox", default_value = false },
+                                    cb("trn_es_questingknight"),
+                                    cb("trn_es_questingknight_instant_kill_threshold"),
+                                    cb("trn_es_questingknight_kill_move_speed_duration"),
+                                    cb("trn_es_questingknight_health_refund"),
                                 },
                             },
                         },
@@ -557,6 +581,20 @@ return {
                                     { setting_id = "rework_dr_ranger_attack_speed_5_to_10",  type = "checkbox", default_value = false },
                                     { setting_id = "rework_dr_ranger_base_hp_plus_25",       type = "checkbox", default_value = false },
                                     { setting_id = "rework_dr_ranger_exuberance_stacking_dr", type = "checkbox", default_value = false },
+                                    cb("trn_dr_ranger"),
+                                    cb("trn_dr_ranger_attack_speed"),
+                                    cb("trn_dr_ranger_exuberance_dr"),
+                                    cb("trn_dr_ranger_free_grenade_duration"),
+                                },
+                            },
+                            {
+                                setting_id = "rework_dr_ironbreaker_group",
+                                type = "group",
+                                sub_widgets = {
+                                    cb("trn_dr_ironbreaker"),
+                                    cb("trn_dr_ironbreaker_cooldown_on_damage"),
+                                    cb("trn_dr_ironbreaker_gromril_regeneration"),
+                                    cb("trn_dr_ironbreaker_gromril_attack_speed"),
                                 },
                             },
                             {
@@ -567,6 +605,8 @@ return {
                                     { setting_id = "rework_dr_slayer_dawi_drop_buffed",                 type = "checkbox", default_value = false },
                                     { setting_id = "rework_dr_slayer_no_escape_15s",                    type = "checkbox", default_value = false },
                                     { setting_id = "rework_dr_slayer_adrenaline_surge_150pct_nerf",     type = "checkbox", default_value = false },
+                                    cb("trn_dr_slayer"),
+                                    cb("trn_dr_slayer_dodge_damage_reduction"),
                                 },
                             },
                             {
@@ -593,6 +633,13 @@ return {
                                     { setting_id = "rework_we_maidenguard_crit_chance_5_to_10", type = "checkbox", default_value = false },
                                     { setting_id = "rework_we_maidenguard_focused_spirit_stacks", type = "checkbox", default_value = false },
                                     { setting_id = "rework_we_maidenguard_dance_of_blades", type = "checkbox", default_value = false },
+                                    cb("trn_we_maidenguard"),
+                                    cb("trn_we_maidenguard_stamina_aura_range"),
+                                    cb("trn_we_maidenguard_focused_spirit_cooldown"),
+                                    cb("trn_we_maidenguard_push_block_stacks"),
+                                    cb("trn_we_maidenguard_power_on_dodge"),
+                                    cb("trn_we_maidenguard_max_health"),
+                                    cb("trn_we_maidenguard_max_ammo"),
                                 },
                             },
                             {
@@ -600,6 +647,10 @@ return {
                                 type        = "group",
                                 sub_widgets = {
                                     { setting_id = "rework_we_shade_hungry_wind_buffed", type = "checkbox", default_value = false },
+                                    cb("trn_we_shade"),
+                                    cb("trn_we_shade_infiltrate_duration"),
+                                    cb("trn_we_shade_stealth_parry"),
+                                    cb("trn_we_shade_critical_damage"),
                                 },
                             },
                             {
@@ -611,6 +662,17 @@ return {
                                     { setting_id = "rework_we_waywatcher_kurnous_reward_5pct",          type = "checkbox", default_value = false },
                                     { setting_id = "rework_we_waywatcher_ricochet_no_ff_5_bounces",     type = "checkbox", default_value = false },
                                     { setting_id = "rework_we_waywatcher_serrated_shots_all_arrows",    type = "checkbox", default_value = false },
+                                    cb("trn_we_waywatcher"),
+                                    cb("trn_we_waywatcher_headshot_attack_speed"),
+                                },
+                            },
+                            {
+                                setting_id = "rework_we_thornsister_group",
+                                type = "group",
+                                sub_widgets = {
+                                    cb("trn_we_thornsister"),
+                                    cb("trn_we_thornsister_team_aura_duration"),
+                                    cb("trn_we_thornsister_thp_funnel"),
                                 },
                             },
                         },
@@ -631,6 +693,8 @@ return {
                                     { setting_id = "rework_wh_zealot_castigate_4pct_as_per_fiery_faith",      type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_zealot_holy_fortitude_30_max_hp",               type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_zealot_flagellation",                            type = "checkbox", default_value = false },
+                                    cb("trn_wh_zealot"),
+                                    cb("trn_wh_zealot_melee_power"),
                                 },
                             },
                             {
@@ -645,6 +709,11 @@ return {
                                     { setting_id = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",    type = "checkbox", default_value = false, tooltip = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip" },
                                     { setting_id = "rework_wh_bountyhunter_just_reward_5s_cooldown",                      type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_bountyhunter_indiscriminate_blast_refund_per_kill",         type = "checkbox", default_value = false },
+                                    cb("trn_wh_bountyhunter"),
+                                    cb("trn_wh_bountyhunter_double_shotted_refund"),
+                                    cb("trn_wh_bountyhunter_job_well_done_stacks"),
+                                    cb("trn_wh_bountyhunter_just_reward_cooldown"),
+                                    cb("trn_wh_bountyhunter_blessed_kill"),
                                 },
                             },
                             {
@@ -660,6 +729,8 @@ return {
                                 sub_widgets = {
                                     { setting_id = "rework_wh_priest_shield_of_faith_10s_110s_cd_plus_unyielding_20s", type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_priest_prayer_of_vengeance_self_40_others_20",            type = "checkbox", default_value = false },
+                                    cb("trn_wh_priest"),
+                                    cb("trn_wh_priest_prayer_movement_speed"),
                                 },
                             },
                         },
@@ -676,6 +747,11 @@ return {
                                     { setting_id = "rework_bw_adept_famished_flames_buffed",            type = "checkbox", default_value = false },
                                     { setting_id = "rework_bw_adept_volcanic_force_doubled",            type = "checkbox", default_value = false },
                                     { setting_id = "rework_bw_adept_fires_from_ash_1pct_plus_thp",      type = "checkbox", default_value = false },
+                                    cb("trn_bw_adept"),
+                                    cb("trn_bw_adept_famished_flames"),
+                                    cb("trn_bw_adept_ignite_damage_reduction"),
+                                    cb("trn_bw_adept_fires_from_ash"),
+                                    cb("trn_bw_adept_burning_vigour"),
                                 },
                             },
                             {
@@ -688,6 +764,18 @@ return {
                                     { setting_id = "rework_bw_necromancer_vanhels_per_skeleton_as",    type = "checkbox", default_value = false },
                                     { setting_id = "rework_bw_necromancer_death_ascendant_10s",        type = "checkbox", default_value = false },
                                     { setting_id = "rework_bw_necromancer_army_of_dead_buffed",        type = "checkbox", default_value = false },
+                                    cb("trn_bw_necromancer"),
+                                    cb("trn_bw_necromancer_spell_cast_ranged_power"),
+                                    cb("trn_bw_necromancer_critical_cleave"),
+                                    cb("trn_bw_necromancer_cursed_blood"),
+                                },
+                            },
+                            {
+                                setting_id = "rework_bw_scholar_group",
+                                type = "group",
+                                sub_widgets = {
+                                    cb("trn_bw_scholar"),
+                                    cb("trn_bw_scholar_martial_study"),
                                 },
                             },
                             {
@@ -707,45 +795,6 @@ return {
                             },
                         },
                     },
-                },
-            },
-            -- ============================================================
-            -- Tourney Balance Testing port (PHASE 1 - default OFF). Applies
-            -- via career_tweaker_tourney.lua. Per-career clean data mutations.
-            -- Roster-order exemption: character subgroups follow the vanilla
-            -- hero roster (Kruber, Bardin, Kerillian, Saltzpyre, Sienna), not A-Z.
-            -- ============================================================
-            {
-                setting_id = "trn_career_group",
-                type        = "group",
-                sub_widgets = {
-                    { setting_id = "trn_kruber_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_es_mercenary", type = "checkbox", default_value = false, tooltip = "trn_es_mercenary_tooltip" },
-                        { setting_id = "trn_es_huntsman", type = "checkbox", default_value = false, tooltip = "trn_es_huntsman_tooltip" },
-                        { setting_id = "trn_es_knight", type = "checkbox", default_value = false, tooltip = "trn_es_knight_tooltip" },
-                        { setting_id = "trn_es_questingknight", type = "checkbox", default_value = false, tooltip = "trn_es_questingknight_tooltip" },
-                    } },
-                    { setting_id = "trn_bardin_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_dr_ranger", type = "checkbox", default_value = false, tooltip = "trn_dr_ranger_tooltip" },
-                        { setting_id = "trn_dr_ironbreaker", type = "checkbox", default_value = false, tooltip = "trn_dr_ironbreaker_tooltip" },
-                        { setting_id = "trn_dr_slayer", type = "checkbox", default_value = false, tooltip = "trn_dr_slayer_tooltip" },
-                    } },
-                    { setting_id = "trn_kerillian_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_we_waywatcher", type = "checkbox", default_value = false, tooltip = "trn_we_waywatcher_tooltip" },
-                        { setting_id = "trn_we_maidenguard", type = "checkbox", default_value = false, tooltip = "trn_we_maidenguard_tooltip" },
-                        { setting_id = "trn_we_shade", type = "checkbox", default_value = false, tooltip = "trn_we_shade_tooltip" },
-                        { setting_id = "trn_we_thornsister", type = "checkbox", default_value = false, tooltip = "trn_we_thornsister_tooltip" },
-                    } },
-                    { setting_id = "trn_saltzpyre_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_wh_bountyhunter", type = "checkbox", default_value = false, tooltip = "trn_wh_bountyhunter_tooltip" },
-                        { setting_id = "trn_wh_zealot", type = "checkbox", default_value = false, tooltip = "trn_wh_zealot_tooltip" },
-                        { setting_id = "trn_wh_priest", type = "checkbox", default_value = false, tooltip = "trn_wh_priest_tooltip" },
-                    } },
-                    { setting_id = "trn_sienna_group", type = "group", sub_widgets = {
-                        { setting_id = "trn_bw_adept", type = "checkbox", default_value = false, tooltip = "trn_bw_adept_tooltip" },
-                        { setting_id = "trn_bw_scholar", type = "checkbox", default_value = false, tooltip = "trn_bw_scholar_tooltip" },
-                        { setting_id = "trn_bw_necromancer", type = "checkbox", default_value = false, tooltip = "trn_bw_necromancer_tooltip" },
-                    } },
                 },
             },
         },
