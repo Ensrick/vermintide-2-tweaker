@@ -174,6 +174,22 @@ Last updated: 2026-07-26.
 
 ---
 
+### la-target-qualified-option-icons -- one live provider icon per exact target
+
+| Field | Value |
+|-------|-------|
+| Symptom | Selecting Myrmidia/Kotbs01 on Mace+Shield or Spear+Shield shows a sibling Sword+Shield icon even though LA declares distinct mace and spear icons. |
+| Root cause | `_la_bridge` built one option from the lexicographically first icon key and inserted the same table into every compatible target pool. Restart restoration then indexed only by Armoury key, again discarding target item type. |
+| Mod(s) | cosmetics_tweaker + Loremaster's Armoury |
+| Fix version(s) | pending release (#923) |
+| Category | INTEGRATION / SOLO |
+| Repro | On exact backend instances of Kruber Mace+Shield and Spear+Shield, select the same Kotbs01 LA shield, inspect the live card, Apply, restart, and inspect both again. |
+| Expected post-fix | Each target option is a distinct record. The exact current skin resolves only its own `SKIN_LIST[armoury_key].icons[skin]` row (including distinct runed variants). An expanded target with no authored row retains its native icon and cannot fall through to generic sibling-unit icon recovery. Pending row-one preview identity outranks stale committed/equipped widget state. Restart restore is keyed by backend instance, item type, hand, and Armoury key. Provider icon asset names are neither persisted nor sent to peers. |
+| Detection | Offline `test_cos_la_option_icon_policy.lua` locks mace/spear separation, exact runed mapping, executable `_cos_option_for_record` native fallback, Cosmetics-authored recovery isolation, preview/selected/backend/default row-one order, target-qualified restore, and the no-provider-asset persistence/wire boundary. Full Lua gate compiles the entry under Lua 5.1 limits. |
+| Tracking | GitHub issue #923; preserves the verified exact-instance persistence fix from #883 and the per-instance contracts from #376/#650/#246. |
+
+---
+
 ### la-kruber-shield-catalogue-compatibility -- native and CWV pools preserve mesh provenance
 
 | Field | Value |

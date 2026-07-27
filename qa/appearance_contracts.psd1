@@ -688,6 +688,72 @@
             )
         }
         @{
+            Id = 'cosmetics.issue923.la-target-option-icon'
+            Issue = 923
+            Claim = 'structural-only'
+            Owners = @(
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_option_icon_policy.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'icon'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'first-person held units do not render item-card icons' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'third-person held units do not render item-card icons' }
+                        bot_3p = @{ Disposition = 'not-applicable'; Reason = 'bot held units do not render item-card icons' }
+                        remote_husk_3p = @{ Disposition = 'not-applicable'; Reason = 'remote husks never receive provider-owned icon assets' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'the exact item target and exact current skin resolve only their authored LA SKIN_LIST icon; missing mappings retain the native card without generic sibling-unit recovery' }
+                        cosmetic_preview = @{ Disposition = 'deferred'; Reason = 'row-two cells currently render rarity presentation rather than a provider icon texture' }
+                        athanor_preview = @{ Disposition = 'deferred'; Reason = 'Athanor presentation is owned by its separate exact-identity adapter' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'ordinary crafting rows are outside the row-two exact-item adapter' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'lobby renderer provider-atlas capability has not been proven' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'score renderer provider-atlas capability has not been proven' }
+                        hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab uses peer-safe native synchronized identity and cannot consume an unsynchronized provider asset' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'covered'; Evidence = 'restore resolves the saved Armoury key through an item-type and hand-qualified option index for the exact backend item' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'world-unit spawning does not own item-card icon presentation' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'equip state does not cache target option icons' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'wield state does not cache target option icons' }
+                        customization_change = @{ Disposition = 'covered'; Evidence = 'a click creates a per-item runtime copy bound through preview then exact selected row-one identity, never stale equipped state, without mutating the canonical pool' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style does not own LA option icon identity' }
+                        career_change = @{ Disposition = 'covered'; Evidence = 'target qualification is item-type based and card resolution re-evaluates the exact item after career changes' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'provider icon names are not retained in peer state; exact local identity is resolved again on card request' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not own item-card icon state' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'provider-owned icons are local and are never sent to joining peers' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'provider-owned icons are local and require no peer replay' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'no provider icon identity crosses the network boundary' }
+                        rejoin = @{ Disposition = 'covered'; Evidence = 'restart/rejoin reads the semantic exact-item record and re-resolves the local provider mapping' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'opening the exact item card resolves its current skin and target-qualified option' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'canonical target options are immutable and each reopen re-resolves the provider mapping' }
+                        lobby_score_create = @{ Disposition = 'deferred'; Reason = 'lobby and score renderers remain outside this local inventory-card adapter' }
+                        mod_disable_restore = @{ Disposition = 'covered'; Evidence = 'no shared WeaponSkins or ItemMasterList icon is mutated, so disabling Cosmetics restores native presentation' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cos_la_option_icon_policy.lua'
+                            Names = @(
+                                'LA target options are immutable per weapon family (#923)'
+                                'Kotbs mace and spear resolve their distinct exact LA icons (#923)'
+                                'exact runed skin mapping is not collapsed to a representative icon'
+                                'unauthored and sibling targets retain their native icon'
+                                '_cos_option_for_record keeps native icon after exact LA miss'
+                                'Cosmetics-authored unit options retain generic icon recovery'
+                                'pending preview skin outranks stale equipped widget (#923)'
+                                'primary skin fallback order is backend interface then default'
+                                'restore lookup requires exact item type hand and Armoury key'
+                                'source does not persist or transmit external provider icon assets'
+                            )
+                            Surfaces = @('inventory_preview')
+                            ReplayEdges = @('instance_load', 'customization_change', 'career_change', 'mission_transition', 'rejoin', 'preview_open', 'preview_reopen', 'mod_disable_restore')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cwv-cim.issue787.dual-axes-athanor-icon'
             Issue = 787
             Claim = 'structural-only'
