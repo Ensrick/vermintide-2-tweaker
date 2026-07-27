@@ -45,7 +45,7 @@ M.HAMMER_MODE = {
     impact_cleave_multiplier = 1.60,
     direct_damage_multiplier = 0.85,
     light_attacks_armor_piercing = false,
-    vanilla_sienna_optional = true,
+    vanilla_sienna_optional = false,
 }
 
 M.VARIANTS = {

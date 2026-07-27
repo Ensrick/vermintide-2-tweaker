@@ -67,6 +67,14 @@ only the owner's equipped melee unit, and lets the existing
 `BackendUtils.get_item_template` owner choose the pick or hammer template. The
 remote wire item remains Sienna's vanilla Crowbill identity.
 
+Item identity is normalized at that boundary. Native-career equipment may pass
+the master item directly, while WT cross-character equipment may pass an exact
+instance wrapper with the semantic master item under `.data`. Classification
+reads both shapes, but mode state remains keyed to the outer backend instance;
+therefore Kruber using Sienna's Crowbill and foreign careers using an authored
+Imperial/Dawi Crowbill receive the same private templates and Weapon Special
+without merging their per-instance modes.
+
 Presentation state uses an authenticated `family:peer:slot` identity. A receiver
 accepts a state only from the peer who owns that player unit, for `slot_melee`,
 with a known Crowbill family key and the fixed pick/hammer enum. Wield, husk

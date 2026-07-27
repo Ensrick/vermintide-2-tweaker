@@ -14,16 +14,103 @@ return function(H, repo_root)
 	end
 
 	H.test("CWV #798 runtime classifies every Crowbill family member implicitly", function()
-		local cwv = { cwv_key = "cwv_es_imperial_crowbill", template = family.SOURCE_TEMPLATE }
-		local key, identity = runtime.classify(family, cwv, "crafted-guid-1",
-			function() return cwv.cwv_key end)
-		H.equal(key, cwv.cwv_key)
-		H.equal(identity, "crafted-guid-1")
-		local vanilla = { name = family.SOURCE_ITEM, template = family.SOURCE_TEMPLATE }
-		local vanilla_key, vanilla_identity = runtime.classify(family, vanilla,
-			"vanilla-1", nil)
-		H.equal(vanilla_key, family.SOURCE_ITEM)
-		H.equal(vanilla_identity, "vanilla-1")
+		local cases = {
+			{
+				label = "Sienna Crowbill direct on Kruber",
+				expected_key = family.SOURCE_ITEM,
+				expected_identity = "kruber-sienna-direct",
+				item = {
+					backend_id = "kruber-sienna-direct",
+					name = family.SOURCE_ITEM,
+					template = family.SOURCE_TEMPLATE,
+				},
+			},
+			{
+				label = "Sienna Crowbill wrapped on Kruber",
+				expected_key = family.SOURCE_ITEM,
+				expected_identity = "kruber-sienna-wrapped",
+				item = {
+					backend_id = "kruber-sienna-wrapped",
+					data = {
+						backend_id = "sienna-donor-row",
+						name = family.SOURCE_ITEM,
+						template = family.SOURCE_TEMPLATE,
+					},
+				},
+			},
+			{
+				label = "Imperial Crowbill direct on Sienna",
+				expected_key = "cwv_es_imperial_crowbill",
+				expected_identity = "sienna-imperial-direct",
+				item = {
+					backend_id = "sienna-imperial-direct",
+					cwv_key = "cwv_es_imperial_crowbill",
+					template = family.SOURCE_TEMPLATE,
+				},
+			},
+			{
+				label = "Imperial Crowbill wrapped on Bardin",
+				expected_key = "cwv_es_imperial_crowbill",
+				expected_identity = "bardin-imperial-wrapped",
+				item = {
+					backend_id = "bardin-imperial-wrapped",
+					data = {
+						backend_id = "imperial-donor-row",
+						cwv_key = "cwv_es_imperial_crowbill",
+						template = family.SOURCE_TEMPLATE,
+					},
+				},
+			},
+			{
+				label = "Dawi Crowbill direct on Kruber",
+				expected_key = "cwv_dr_dawi_crowbill",
+				expected_identity = "kruber-dawi-direct",
+				item = {
+					backend_id = "kruber-dawi-direct",
+					cwv_key = "cwv_dr_dawi_crowbill",
+					template = family.SOURCE_TEMPLATE,
+				},
+			},
+			{
+				label = "Dawi Crowbill wrapped on Sienna",
+				expected_key = "cwv_dr_dawi_crowbill",
+				expected_identity = "sienna-dawi-wrapped",
+				item = {
+					backend_id = "sienna-dawi-wrapped",
+					data = {
+						backend_id = "dawi-donor-row",
+						cwv_key = "cwv_dr_dawi_crowbill",
+						template = family.SOURCE_TEMPLATE,
+					},
+				},
+			},
+		}
+		for _, case in ipairs(cases) do
+			local key, identity = runtime.classify(family, case.item, nil, nil)
+			H.equal(key, case.expected_key, case.label .. " family")
+			H.equal(identity, case.expected_identity, case.label .. " exact instance")
+		end
+	end)
+
+	H.test("CWV #798 runtime preserves vanilla backend identity precedence", function()
+		local wrapped = {
+			backend_id = "outer-exact",
+			data = {
+				backend_id = "nested-donor",
+				name = family.SOURCE_ITEM,
+				template = family.SOURCE_TEMPLATE,
+			},
+		}
+		local key, identity = runtime.classify(family, wrapped, "explicit-fallback", nil)
+		H.equal(key, family.SOURCE_ITEM)
+		H.equal(identity, "outer-exact",
+			"item_data.backend_id must win over explicit fallback and nested donor")
+
+		wrapped.backend_id = nil
+		key, identity = runtime.classify(family, wrapped, "explicit-fallback", nil)
+		H.equal(key, family.SOURCE_ITEM)
+		H.equal(identity, "explicit-fallback",
+			"explicit backend_id must win over a wrapped donor backend_id")
 	end)
 
 	H.test("CWV #604 wire envelope is fixed bounded and closed vocabulary", function()
@@ -153,7 +240,9 @@ return function(H, repo_root)
 			crowbill_hammer_mode = policy,
 			crowbill_family = family,
 			_record_cwv_dp_source = function() end,
-			_cwv_key_for_item = function(_, item) return item.cwv_key end,
+			_cwv_key_for_item = function(_, item)
+				return item.cwv_key or (item.data and item.data.cwv_key)
+			end,
 		}
 		local installed, err = runtime.install(fake_mod, om)
 		H.truthy(installed, err)
@@ -164,12 +253,66 @@ return function(H, repo_root)
 		H.equal(_G.Weapons.cwv_crowbill_hammer_template.actions.action_three.default.lookup_data.item_template_name,
 			"cwv_crowbill_hammer_template")
 		H.equal(registered.channel, policy.CHANNEL)
-		local item = { cwv_key = "cwv_es_imperial_crowbill", backend_id = "cwv_test_001",
-			mod_data = { cwv_crowbill_mode = "hammer" } }
-		H.equal(runtime.resolve_template(item), _G.Weapons.cwv_crowbill_hammer_template)
-		local native = { name = family.SOURCE_ITEM, template = family.SOURCE_TEMPLATE,
-			backend_id = "native-test-001", mod_data = { cwv_crowbill_mode = "hammer" } }
-		H.equal(runtime.resolve_template(native), _G.Weapons.cwv_crowbill_hammer_template)
+		local hammer_cases = {
+			{
+				label = "Sienna Crowbill direct",
+				item = {
+					name = family.SOURCE_ITEM,
+					template = family.SOURCE_TEMPLATE,
+					backend_id = "native-direct-test-001",
+					mod_data = { cwv_crowbill_mode = "hammer" },
+				},
+			},
+			{
+				label = "Sienna Crowbill wrapped",
+				item = {
+					backend_id = "native-wrapped-test-001",
+					data = {
+						name = family.SOURCE_ITEM,
+						template = family.SOURCE_TEMPLATE,
+						mod_data = { cwv_crowbill_mode = "hammer" },
+					},
+				},
+			},
+			{
+				label = "Imperial Crowbill direct",
+				item = {
+					cwv_key = "cwv_es_imperial_crowbill",
+					backend_id = "imperial-direct-test-001",
+					mod_data = { cwv_crowbill_mode = "hammer" },
+				},
+			},
+			{
+				label = "Imperial Crowbill wrapped",
+				item = {
+					backend_id = "imperial-wrapped-test-001",
+					mod_data = { cwv_crowbill_mode = "hammer" },
+					data = { cwv_key = "cwv_es_imperial_crowbill" },
+				},
+			},
+			{
+				label = "Dawi Crowbill direct",
+				item = {
+					cwv_key = "cwv_dr_dawi_crowbill",
+					backend_id = "dawi-direct-test-001",
+					mod_data = { cwv_crowbill_mode = "hammer" },
+				},
+			},
+			{
+				label = "Dawi Crowbill wrapped",
+				item = {
+					backend_id = "dawi-wrapped-test-001",
+					data = {
+						cwv_key = "cwv_dr_dawi_crowbill",
+						mod_data = { cwv_crowbill_mode = "hammer" },
+					},
+				},
+			},
+		}
+		for _, case in ipairs(hammer_cases) do
+			H.equal(runtime.resolve_template(case.item),
+				_G.Weapons.cwv_crowbill_hammer_template, case.label)
+		end
 
 		_G.Weapons = saved.Weapons
 		_G.DamageProfileTemplates = saved.DamageProfileTemplates

@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.475-dev (2026-07-26) - universal Crowbill hammer mode (#798) [not-started]
+
+- Made the native Sienna Crowbill, Imperial Crowbill, and Dawi Crowbill use the
+  same per-instance Weapon Special hammer-mode contract on every supported
+  career. Native Sienna mode is implicit while CWV is enabled; the retired
+  preference no longer gates it.
+- Preserved the exact outer backend item identity for direct and `.data`-
+  wrapped records, matching vanilla backend-ID precedence before any nested
+  donor fallback. Each owned Crowbill therefore keeps its own mode.
+- Added executable coverage for native, Imperial, and Dawi variants,
+  cross-career use, wrapped records, conflicting outer/explicit/nested IDs,
+  retired settings, and independent per-instance state.
+
 ## 0.1.474-dev (2026-07-26) - protected peer resolution and bounded style replay (#786) [not-started]
 
 - Replaced every CWV style, Crowbill-mode, Old Musket-mode, and Crowbill team-

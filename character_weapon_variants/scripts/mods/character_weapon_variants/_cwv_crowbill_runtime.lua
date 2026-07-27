@@ -10,25 +10,54 @@ local function _valid_family_key(family, key)
 	return type(key) == "string" and family and family.is_family_key(key)
 end
 
+-- Backend inventory rows are not shape-stable across owners. Native-career
+-- equipment commonly passes the master item directly, while WT cross-career
+-- equipment can pass an instance wrapper whose semantic item lives in `.data`.
+-- Keep the wrapper for exact-instance state, but read identity from both layers.
+local function _data(item_data)
+	return type(item_data) == "table" and type(item_data.data) == "table"
+		and item_data.data or item_data
+end
+
+local function _field(item_data, name)
+	if type(item_data) ~= "table" then return nil end
+	local value = item_data[name]
+	if value ~= nil then return value end
+	local data = _data(item_data)
+	return data ~= item_data and data[name] or nil
+end
+
 local function _bid(item_data, backend_id)
-	local value = backend_id or (item_data and (item_data.backend_id
-		or (item_data.mod_data and item_data.mod_data.backend_id)))
+	local mod_data = type(item_data) == "table" and item_data.mod_data or nil
+	local data = _data(item_data)
+	local nested_mod_data = data ~= item_data and type(data.mod_data) == "table"
+		and data.mod_data or nil
+	-- Match BackendUtils.get_item_template/get_item_units exactly: the item
+	-- row's own backend_id is authoritative and the separate argument is only
+	-- its fallback (scripts/managers/backend/backend_utils.lua:136-156). A
+	-- wrapped row's nested id can name the donor data, so it must not displace
+	-- the outer exact instance.
+	local value = type(item_data) == "table" and item_data.backend_id or nil
+	value = value or backend_id
+		or (mod_data and mod_data.backend_id)
+		or (data ~= item_data and data.backend_id)
+		or (nested_mod_data and nested_mod_data.backend_id)
 	return type(value) == "string" and value or nil
 end
 
 local function _is_source_crowbill(family, item_data)
 	if type(item_data) ~= "table" then return false end
-	return item_data.template == family.SOURCE_TEMPLATE
-		or item_data.name == family.SOURCE_ITEM
-		or item_data.key == family.SOURCE_ITEM
-		or item_data.item_type == family.SOURCE_ITEM
+	return _field(item_data, "template") == family.SOURCE_TEMPLATE
+		or _field(item_data, "name") == family.SOURCE_ITEM
+		or _field(item_data, "key") == family.SOURCE_ITEM
+		or _field(item_data, "item_type") == family.SOURCE_ITEM
 end
 
 function M.classify(family, item_data, backend_id, cwv_key_for_item)
 	if type(item_data) ~= "table" then return nil end
 	local bid = _bid(item_data, backend_id)
 	local cwv_key = type(cwv_key_for_item) == "function"
-		and cwv_key_for_item(bid, item_data) or item_data.cwv_key
+		and cwv_key_for_item(bid, item_data) or _field(item_data, "cwv_key")
 	if _valid_family_key(family, cwv_key) and cwv_key ~= family.SOURCE_ITEM then
 		return cwv_key, bid or cwv_key
 	end
@@ -100,7 +129,10 @@ function M.install(mod, om)
 	end
 
 	local function item_mode(item_data, identity)
+		local data = _data(item_data)
 		local mode = item_data and item_data.mod_data and item_data.mod_data.cwv_crowbill_mode
+			or (data ~= item_data and data and data.mod_data
+				and data.mod_data.cwv_crowbill_mode)
 		if mode == policy.MODE_HAMMER or mode == policy.MODE_PICK then return mode end
 		return state:mode(identity)
 	end
@@ -214,7 +246,7 @@ function M.install(mod, om)
 	end
 
 	local function toggle(attacker_unit)
-		local inv, equipment = owner_equipment(attacker_unit)
+		local _, equipment = owner_equipment(attacker_unit)
 		local slot = equipment and equipment.wielded_slot
 		local item_data = slot and equipment.slots and equipment.slots[slot]
 		item_data = item_data and item_data.item_data

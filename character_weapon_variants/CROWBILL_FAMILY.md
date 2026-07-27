@@ -33,9 +33,11 @@ Weapon Special toggles between normal Crowbill mode (the default) and Hammer
 mode. Hammer mode rotates the model 180 degrees around its authored haft axis,
 keeps the same moveset and timing, multiplies attack and impact cleave by 1.60,
 multiplies direct damage by 0.85, and removes armour piercing from light attacks.
-The mode applies to both CWV variants; applying it to vanilla Sienna Crowbill is
-an optional CWV setting. Runtime mechanics live in the isolated hammer-mode
-module and consume `_cwv_crowbill_family.lua` rather than duplicating constants.
+The mode is an implicit family capability while CWV is enabled: it applies to
+both CWV variants and the native Sienna Crowbill on every career, with no saved
+preference gate. Retired setting values are ignored. Runtime mechanics live in
+the isolated hammer-mode module and consume `_cwv_crowbill_family.lua` rather
+than duplicating constants.
 
 Presentation is owned by `_cwv_crowbill_presentation.lua`. It captures the
 authored/native base rotation once and computes `base * local-Z(180°)` for
