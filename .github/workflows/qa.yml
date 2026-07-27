@@ -55,9 +55,14 @@ jobs:
         if: env.VT2_PROMOTION == '1'
         shell: pwsh
         run: |
+          $changed = @(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          if ($LASTEXITCODE -ne 0 -or $changed.Count -eq 0) {
+            Write-Error "Unable to resolve the exact PR change set for stable validation."
+            exit 2
+          }
           foreach ($dir in ($env:VT2_PROMOTION_DIRS -split ';')) {
             if (-not $dir) { continue }
-            ./qa/check_promotion.ps1 -Mod $dir
+            ./qa/check_promotion.ps1 -Mod $dir -ChangedPath $changed
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 

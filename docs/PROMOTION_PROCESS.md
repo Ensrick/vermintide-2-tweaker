@@ -122,9 +122,14 @@ content and is no longer trusted by CI.
 5. Remove `stable-promotion-approved` to revoke authorization. The GitHub label
    event and comment ID remain in the workflow log as the audit trail.
 
-After authorization, CI runs `qa/check_promotion.ps1` for each exact approved
-directory and exports promotion mode only to the remaining read-only QA steps.
-It never builds, deploys, uploads, or publishes merely because QA passed.
+After authorization, CI resolves the exact PR diff and runs
+`qa/check_promotion.ps1` for each exact approved directory. Documentation-only
+maintenance (Markdown other than `CHANGELOG.md`) remains authorization-bound
+but does not pretend to be a release, so version/suffix/monotonicity checks are
+not applicable. Any runtime, cfg, localization, changelog, bundle, or other
+stable-file change still runs the full promotion gate. CI exports promotion mode
+only to the remaining read-only QA steps. It never builds, deploys, uploads, or
+publishes merely because QA passed.
 
 Approval is therefore separate from every later boundary: build the exact root
 bundle before opening the PR; merge only after the protected `qa-gate` passes;
@@ -157,6 +162,9 @@ rewriting the published version or relying on an older bundle.
   suffix on the stable MOD_VERSION (override with `VT2_SUFFIX_OK=1` when the USER
   named a suffixed stable version, issue #328 ruling), (c) MOD_VERSION not equal
   to the top stable CHANGELOG entry, or that entry not increasing over the previous
-  one. Self-test: `qa/check_promotion.ps1 -SelfTest` (9 cases, pwsh 7 + PS 5.1).
+  one. Authorization-bound documentation-only maintenance (Markdown other than
+  `CHANGELOG.md`) skips these release invariants because no releasable surface
+  changed. Self-test: `qa/check_promotion.ps1 -SelfTest` (12 cases, pwsh 7 +
+  PS 5.1).
 - **Verify the ship**: `workshop_log.txt` must show `Uploaded new content`; `ship.ps1`
   hash-verifies the deploy. `ugc_tool` prints success even on failure.
