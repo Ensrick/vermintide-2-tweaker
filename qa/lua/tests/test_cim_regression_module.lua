@@ -2,6 +2,7 @@ return function(H, repo_root)
     local mod_root = repo_root .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
     local entry_path = mod_root .. "crafting_in_modded_dev.lua"
     local module_path = mod_root .. "_cim_regression_checks.lua"
+    local cleanup_module_path = mod_root .. "_cim_regression_cleanup.lua"
 
     local function read_all(path)
         local file = assert(io.open(path, "rb"))
@@ -15,6 +16,9 @@ return function(H, repo_root)
         local _, dofile_count = entry:gsub(
             "scripts/mods/crafting_in_modded_dev/_cim_regression_checks", "")
         H.equal(dofile_count, 1)
+        local _, cleanup_dofile_count = entry:gsub(
+            "scripts/mods/crafting_in_modded_dev/_cim_regression_cleanup", "")
+        H.equal(cleanup_dofile_count, 1)
         H.equal(entry:find('_rt_register("issue277_', 1, true), nil)
 
         local line_count = 0
@@ -23,6 +27,7 @@ return function(H, repo_root)
     end)
 
     H.test("CIM regression module preserves registration order", function()
+        local cleanup_install = assert(loadfile(cleanup_module_path))()
         local install = assert(loadfile(module_path))()
         local names = {}
         local checks = {}
@@ -37,7 +42,7 @@ return function(H, repo_root)
         end
 
         local noop = function() end
-        install({
+        local context = {
             mod = {},
             rt_register = register,
             rt_src_read = noop,
@@ -65,7 +70,9 @@ return function(H, repo_root)
             set_modded_loadout = noop,
             modded_loadout_load = noop,
             rpc_schema = 1,
-        })
+        }
+        cleanup_install(context)
+        install(context)
 
         H.equal(names[1], "issue277_bulk_cleanup_exact_owner_transaction")
         H.equal(names[#names], "issue562_auto_equip_contract")

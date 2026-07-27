@@ -576,7 +576,7 @@ return function(H, repo_root)
         local entry = read("crafting_in_modded_dev.lua")
         local source = read("_cim_bulk_cleanup_command.lua")
         local deletion_source = read("_cim_owned_deletion.lua")
-        local regression_source = read("_cim_regression_checks.lua")
+        local regression_source = read("_cim_regression_cleanup.lua")
         H.truthy(entry:find(
             "scripts/mods/crafting_in_modded_dev/_cim_bulk_cleanup_command", 1, true))
         H.truthy(source:find(

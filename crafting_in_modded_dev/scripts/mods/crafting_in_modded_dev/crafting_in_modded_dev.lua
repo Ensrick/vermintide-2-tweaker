@@ -6108,6 +6108,15 @@ _install_bulk_cleanup_command({
 -- helper/hook above is installed before its invariant closes over the shared state.
 -- The installer receives narrow accessors for entry-local mutable stores; public
 -- flat mod._cim_* APIs and runtime hook/load order remain unchanged.
+local _install_cleanup_regression_checks = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_regression_cleanup")
+_install_cleanup_regression_checks({
+    mod = mod,
+    rt_register = _rt_register,
+    rt_src_read = _rt_src_read,
+    accessory_property_policy = mod._cim959_accessory_property_policy,
+})
+
 local _install_regression_checks = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_regression_checks"
 )
