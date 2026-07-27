@@ -40,6 +40,9 @@ param(
     [string]$Mod,
     # Repo root override (self-test fixtures). Default: parent of qa/.
     [string]$RepoRoot,
+    # PR-relative paths used only to distinguish documentation maintenance from
+    # an actual stable release mutation. The check fails closed when omitted.
+    [string[]]$ChangedPath,
     [switch]$SelfTest
 )
 
@@ -59,6 +62,27 @@ $StableSplitDirs = @(
 # Section 13.1 sanctioned vocabulary (exact case) + the wt-only 13.8 extensions.
 # [Issue N]-form tags are matched by pattern below.
 $SanctionedTags = @('untested', 'working', 'diag', 'crash', 'verify-fix', 'needs animations', 'needs offsets')
+
+function Test-DocumentationOnlyStableChange([string]$modName, [string[]]$paths) {
+    if (-not $paths -or $paths.Count -eq 0) { return $false }
+
+    $prefix = "$modName/"
+    $owned = @(
+        $paths |
+            ForEach-Object { "$_".Replace('\', '/') } |
+            Where-Object { $_.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) }
+    )
+    if ($owned.Count -eq 0) { return $false }
+
+    foreach ($path in $owned) {
+        $leaf = [System.IO.Path]::GetFileName($path)
+        if (-not $leaf.EndsWith('.md', [System.StringComparison]::OrdinalIgnoreCase) -or
+            $leaf.Equals('CHANGELOG.md', [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+    }
+    return $true
+}
 
 function Get-LeadingTagLeaks([string]$luaText, [string]$fileLabel) {
     # Same conservative single-literal heuristic as check_loc_tags.ps1: only
@@ -212,6 +236,17 @@ function Invoke-GateSelfTest {
         Assert (@((Invoke-PromotionGate $fx $mod) -match 'CHANGELOG MISMATCH').Count -eq 1)     'MOD_VERSION != top entry fails (c)'
 
         Assert ((Invoke-PromotionGate $fx 'weapon_tweaker').Count -eq 0)                        'non-stable mod is not applicable'
+        Assert (Test-DocumentationOnlyStableChange $mod @(
+            'crafting_in_modded/REGRESSION_CHECKLIST.md',
+            'docs/PORTABLE_SETUP.md'
+        ))                                                                                     'stable markdown maintenance is not a release'
+        Assert (-not (Test-DocumentationOnlyStableChange $mod @(
+            'crafting_in_modded/REGRESSION_CHECKLIST.md',
+            'crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua'
+        )))                                                                                    'stable runtime change still requires release gate'
+        Assert (-not (Test-DocumentationOnlyStableChange $mod @(
+            'crafting_in_modded/CHANGELOG.md'
+        )))                                                                                    'stable changelog change still requires release gate'
     } finally {
         $env:VT2_SUFFIX_OK = $saved
         # Individual-path cleanup only (repo rule: no recursive deletes).
@@ -234,6 +269,11 @@ if ($SelfTest) { exit (Invoke-GateSelfTest) }
 if (-not $Mod) {
     Write-Host "Usage: check_promotion.ps1 -Mod <stable split dir>  (or -SelfTest)" -ForegroundColor Yellow
     exit 1
+}
+
+if (Test-DocumentationOnlyStableChange $Mod $ChangedPath) {
+    Write-Host "[check_promotion] PASS - '$Mod' changes documentation only; no stable release invariants changed." -ForegroundColor Green
+    exit 0
 }
 
 $failures = Invoke-PromotionGate $RepoRoot $Mod

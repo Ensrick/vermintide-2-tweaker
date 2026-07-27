@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 3 | Edit ONLY the `*_dev/` dir for the 5 promotion-pair mods (ct, cim, gt, gut, vdl). Weapon Tweaker is a special mirror pair: feature work lands in public-beta `weapon_tweaker/`, then `weapon_tweaker_dev/` is refreshed by exact runtime parity while preserving its `wt_dev` namespace, friends-only ID, and preview. |
 | 4 | Ship doctrine keys off the MOD_VERSION suffix. `-dev`/`-alpha`/`-beta` = FULL pipeline every build, NO ask. Clean version (no suffix) = stable: needs a fresh per-build ship signal naming the version. |
 | 5 | Bump MOD_VERSION (3-segment semver + suffix) every build; write the CHANGELOG entry and doc updates in the SAME response. |
-| 6 | VMBLauncher is the ONLY build/deploy/upload path. Never raw `node vmb.js`, `ugc_tool`, `scp`, or hand-wrapped SDK. |
+| 6 | VMBLauncher is the ONLY build/deploy boundary; `tools/ship/ship.ps1` is the ONLY publication entry point. Never raw `node vmb.js`, `ugc_tool`, direct launcher `all`/`upload`, GUI publication, `scp`, or hand-wrapped SDK. |
 | 7 | Never write into `steamapps/workshop/content/552500/<real_id>/` by hand - Steam reconciles foreign writes and may wipe the folder. |
 | 8 | Before ANY `mod:hook`/`mod:hook_safe`: grep for existing hooks on that `(Class, method)`. VMF silently drops the 2nd - merge into the existing body. |
 | 9 | Diagnostics use engine `printf`, NOT `mod:info`/`mod:echo` (user runs with mod-logging OFF, so those are invisible). |
@@ -203,8 +203,8 @@ name, directory suffix, or version suffix.
 
 **Where work happens.**
 
-- **`<mod>-dev/`** - all new feature work, in-flight fixes, experiments. Build/deploy/upload from here during the dev loop. MOD_VERSION carries the `-dev` (or `-alpha`/`-beta`) suffix.
-- **`<mod>/`** - stable releases only. When dev work matures and the user signs off on a release, cherry-pick or merge the changes into the stable dir, set MOD_VERSION to whatever the user names for the release (it MAY keep a pre-release suffix - e.g. ct promoted as `0.7.130-beta`, a public beta; strip the suffix only when the user names a clean version), then `build` + `deploy` + `upload` to the stable Workshop item under the suffix approval rule below. The stable directory should never contain in-flight `-dev` work between releases.
+- **`<mod>-dev/`** - all new feature work, in-flight fixes, experiments. Nonpublishing build/deploy iteration uses this directory; subscriber-facing updates use the merge-first `ship.ps1` transaction in section 6.6 of `PROJECT_STANDARDS.md`. MOD_VERSION carries the `-dev` (or `-alpha`/`-beta`) suffix.
+- **`<mod>/`** - stable releases only. When dev work matures and the user signs off on a release, cherry-pick or merge the changes into the stable dir, set MOD_VERSION to whatever the user names for the release (it MAY keep a pre-release suffix - e.g. ct promoted as `0.7.130-beta`, a public beta; strip the suffix only when the user names a clean version), then follow the merge-first `ship.ps1` transaction under the suffix approval rule below. The stable directory should never contain in-flight `-dev` work between releases.
 
 **Promotion tracking & safe port.** `docs/PROMOTION_PROCESS.md` is the full procedure. Run `tools/promote/promotion-status.ps1` before any public ship (and in CI) to catch a crash fix stranded in dev — the #278 failure mode where the fix sat in `cim_dev` while public kept crashing. Port a full rollup with `tools/promote/promote.ps1` (DryRun by default; identity-preserving; skips dev-only files). **When you promote a crash fix, cite its issue number in the public CHANGELOG entry** so the tracker stays exact (as cim v0.8.34 does for #278).
 
@@ -224,7 +224,17 @@ name, directory suffix, or version suffix.
 
 ### Required: VMBLauncher headless CLI
 
-VMBLauncher is **the only** sanctioned path to build / deploy / upload any VT2 mod in this repo. Not "preferred" - required. Do NOT invent ad-hoc PowerShell pipelines, raw `node vmb.js`, raw `ugc_tool` calls, raw `scp` to PC-B, or wrap the SDK compiler by hand. Every one of those one-off paths has burned multiple iterations in the past (hash-unverified deploys, stale PC-B, missed UTF-8 BOM, 0x2 empty-content-directory, wrong scp protocol, etc.). If the approved launcher binary is missing, canonical shipping stops; install the reviewed, versioned binary through the launcher release process. Do not fall back to a raw uploader or create an ad hoc publication binary inside a ship.
+VMBLauncher is **the only** sanctioned implementation boundary for building and
+deploying VT2 mods in this repo. Operators publish only through
+`tools/ship/ship.ps1`; direct launcher `upload`/`all` and GUI publication are not
+alternate workflows. Do NOT invent ad-hoc PowerShell pipelines, raw
+`node vmb.js`, raw `ugc_tool` calls, raw `scp` to PC-B, or wrap the SDK compiler
+by hand. Every one of those one-off paths has burned multiple iterations in the
+past (hash-unverified deploys, stale PC-B, missed UTF-8 BOM, 0x2
+empty-content-directory, wrong scp protocol, etc.). If the approved launcher
+binary is missing, canonical shipping stops; install the reviewed, versioned
+binary through the launcher release process. Do not fall back to a raw uploader
+or create an ad hoc publication binary inside a ship.
 
 ```powershell
 $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
@@ -240,8 +250,11 @@ publish without the exact short-lived receipt hosted on the canonical GitHub
 release by `ship.ps1`; a claim or hand-authored JSON is insufficient. The
 launcher independently downloads the receipt and validates the SDK staging
 bytes immediately before `ugc_tool`. Headless build/deploy streams output live
-and preserves exit codes 0/1/2/3. **Read `tools/vmb-launcher/CLAUDE.md` for the
-full doctrine.**
+and preserves exit codes 0/1/2/3. Agent/default verification and publication
+must open no WPF, Explorer, or other interactive window and must not run a real
+build/deploy as an incidental smoke test. A visible launcher window is a tooling
+defect; stop before publication. **Read `PROJECT_STANDARDS.md` section 6.6 and
+the separate VMBLauncher repository's `CLAUDE.md` for the full doctrine.**
 
 ### Ship doctrine (2026-07-01 canonical)
 

@@ -67,13 +67,14 @@ Horseshoe" → look up → `mercenary_hat_0003`).
 $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
 & $exe build  dynamic_cosmetic_portraits
 & $exe deploy dynamic_cosmetic_portraits
-# Or in one shot:
-& $exe all    dynamic_cosmetic_portraits
 ```
 
 `VMBLauncher.exe deploy` copies the bundle to the local Steam Workshop folder
 (`steamapps/workshop/content/552500/3721036701/`), verifies bundle hashes,
 and pushes to every remote target currently enabled in VMBLauncher settings.
+These are nonpublishing iteration commands. For a Workshop release, follow the
+merge-first canonical transaction in `PROJECT_STANDARDS.md` section 6.6.
+Direct launcher `all`/`upload` and GUI publication are prohibited.
 A disabled target is not updated and must not be reported as updated. Workshop
 ID **3721036701**; current cfg visibility is `friends_only`, with
 `itemV2.cfg` remaining the sole authority.

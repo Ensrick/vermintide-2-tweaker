@@ -1,8 +1,11 @@
 # tools/ship/ship.ps1
 #
-# CANONICAL one-shot RELEASE path for a single VT2 mod in this monorepo:
-#   build + deploy + Workshop upload + GitHub release + hash/upload verification
-#   + GitHub-issue status labeling (verify-fix[-coop] / diagnostics-armed, issue #326).
+# CANONICAL two-phase RELEASE transaction for one VT2 mod:
+#   (1) -BuildOnly generates the artifact committed with source and reviewed;
+#   (2) after merge, the clean live default HEAD deploys, records authorization,
+#       uploads, and verifies the exact reviewed bytes
+#   + GitHub-issue status labeling (verify-fix / diagnostics-armed, with
+#     coop-required only after solo verification is exhausted; issue #326).
 #
 # Prefer this over hand-chaining VMBLauncher verbs and
 # `tools\publish-release\publish-release.ps1` separately. It runs both, then

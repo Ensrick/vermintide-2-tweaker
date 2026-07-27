@@ -44,20 +44,23 @@ vermintide-2-tweaker/
 ├── character_weapon_variants/      <- same VMB layout
 ├── tweaker/                        <- LEGACY -- original monolithic mod, kept as reference (still SDK)
 ├── old-backup/                     <- pre-VMB SDK build/upload scripts and artifacts
-└── tools/vmb-launcher/             <- VMBLauncher.exe — canonical build/deploy/upload entry point. Drive it via `tools\ship\ship.ps1` (build+deploy+upload+release+verify). The per-mod `upload_*.ps1` wrappers (removed 2026-07-07, archived to `../_vt2-tweaker-archive/`) and the `deploy_*.ps1` shims (removed 2026-05-21) are gone — use `ship.ps1` / `VMBLauncher.exe deploy <mod>` directly.
+└── tools/vmb-launcher/             <- machine-local VMBLauncher dependency; build/deploy boundary only. Publication is owned exclusively by the merge-first `tools\ship\ship.ps1` transaction in `PROJECT_STANDARDS.md` section 6.6.
 ```
 
-## Dev Workflow: Build -> Deploy -> Upload
+## Dev Workflow: Build -> Deploy; Reviewed Ship for Publication
 
-> Owner docs for build/deploy/upload doctrine (consolidated 2026-07-08, issue #432):
-> the repo-root `CLAUDE.md` section "Build Commands" (ship doctrine, verbs, post-ship
-> verification) and `tools/vmb-launcher/CLAUDE.md` (launcher mechanics, itemV2.cfg
-> format + visibility policy, first-upload sequence). Do not restate them here.
+> The sole owner of publication doctrine is `PROJECT_STANDARDS.md` section 6.6.
+> The repo-root `CLAUDE.md` summarizes it, while the separately maintained
+> launcher's `CLAUDE.md` owns launcher mechanics. If this secondary document
+> conflicts with either owner, stop and correct it. Do not invent a local
+> publication sequence here.
 
-- Loop: `VMBLauncher.exe build <mod>` -> `deploy <mod>` (or `all <mod>`), then a FULL
+- Nonpublishing loop: `VMBLauncher.exe build <mod>` -> `deploy <mod>`, then a FULL
   game restart (hot-reload is NOT safe for weapon_tweaker / cosmetics_tweaker - see
   CLAUDE.md "Important Constraints").
-- Release path: `tools\ship\ship.ps1 -Mod <name>` per the CLAUDE.md ship doctrine.
+- Subscriber-facing release: the claim, `ship.ps1 -BuildOnly`, reviewed
+  source+bundle merge, and final clean-default-HEAD ship phases in
+  `PROJECT_STANDARDS.md` section 6.6.
 - Upload verification: `workshop_log.txt` must show `Uploaded new content`
   (`ugc_tool` prints success even on failure) - see CLAUDE.md "Post-ship verification".
 - itemV2.cfg field format, the visibility removal-risk warning, and the new-item

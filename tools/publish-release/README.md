@@ -13,6 +13,9 @@ builds without waiting on Workshop propagation.
 This is an authorization-bound internal publication component. Routine releases
 must enter through `tools\ship\ship.ps1 -Mod <name>`; do not invoke this publisher
 directly or hand-author its authorization/dependency parameters.
+The operator sequence is owned by `PROJECT_STANDARDS.md` section 6.6. This
+component opens no GUI and is never a substitute for the owner's merge-first
+claim, `-BuildOnly`, protected-merge, and clean-default-HEAD phases.
 
 Caller JSON is correlation evidence, never authority. Immediately before any
 release mutation, this component re-queries the live default branch, exact
@@ -132,9 +135,9 @@ FULL mode (no `-Mods`) is reserved for authorization-bearing internal automation
 performing a deliberate whole-set refresh of a release-clean tree, such as after
 retiring or adding a mod. It is not a separate operator entry point.
 
-Source pull requests created after publishing must link tracker work with
-`Refs #N`. Do not use GitHub auto-closing keywords: a successful release or
-merge is not the user-verification receipt required to close an in-game issue.
+Source pull requests must link tracker work with `Refs #N` before publication.
+Do not use GitHub auto-closing keywords: a successful release or merge is not
+the user-verification receipt required to close an in-game issue.
 Repository-only issues are closed after their named deterministic check passes.
 
 ## Manifest schema

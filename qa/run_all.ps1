@@ -188,6 +188,7 @@ Run-Check "check_vmf_widget_types"            { & (Join-Path $here "check_vmf_wi
 Run-Check "check_event_register_signature"    { & (Join-Path $here "check_event_register_signature.ps1")    -Quiet:$Quiet }
 Run-Check "check_loc_description_titles"      { & (Join-Path $here "check_loc_description_titles.ps1")      -Quiet:$Quiet }
 Run-Check "check_ci_hardening"                { & (Join-Path $here "check_ci_hardening.ps1")                -Quiet:$Quiet }
+Run-Check "check_publication_doctrine"         { & (Join-Path $here "check_publication_doctrine.ps1")         -Quiet:$Quiet }
 Run-Check "check_ps51_compatibility"          { & (Join-Path $here "check_ps51_compatibility.ps1")          -Quiet:$Quiet }
 Run-Check "check_pr_autoclose"                { & (Join-Path $here "check_pr_autoclose.ps1")                -Quiet:$Quiet }
 Run-Check "check_cross_mod_deps"              { & (Join-Path $here "check_cross_mod_deps.ps1")              -Quiet:$Quiet }

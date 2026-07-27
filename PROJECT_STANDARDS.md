@@ -972,6 +972,17 @@ There is no pre-merge or hosted-QA publication override. `-SkipGitHub` and
 bypass exact clean default HEAD, its merged PR, successful hosted `qa-gate`,
 release provenance, the machine-global claim, or tracked-bundle parity.
 
+**Agent/headless publication is noninteractive.** The operator entry point is
+only `tools\ship\ship.ps1`; direct launcher publication and GUI publication are
+not alternatives. Agent, CI, and default launcher verification must not start
+WPF, Explorer, or any other interactive window, and must not run real
+build/deploy/publication integration actions as an incidental smoke test.
+Launcher GUI and mutating integration suites require explicit human opt-in and
+are never part of a ship. A visible launcher window during agent work is a
+tooling defect: stop the transaction before publication and fix the launcher
+guard rather than hiding or dismissing the window. The launcher repository's
+`CLAUDE.md` owns its implementation and test split.
+
 **First-upload bootstrap is identity allocation, not a test release.** A
 reviewed `published_id = 0L` commit may use the constrained hosted bootstrap
 receipt so Steam can allocate one ID. After the launcher compare-and-swaps only

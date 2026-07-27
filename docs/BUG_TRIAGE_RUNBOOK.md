@@ -209,6 +209,9 @@ is missing after you solve it, you add it in STEP 9.
 Shipping is how the user tests. Steam re-syncs a subscribed Workshop item over
 any local deploy, so a `-dev` build only reaches the user's game after an
 UPLOAD - a local deploy alone is silently clobbered.
+This checklist applies the owner doctrine in `PROJECT_STANDARDS.md` section
+6.6; if this secondary checklist ever differs, stop and correct it before
+shipping. Agent publication is headless and opens no interactive window.
 
 - [ ] **Bump `MOD_VERSION` (patch segment)** in
   `<mod>/scripts/mods/<mod>/<mod>.lua`. Three-segment semver plus track suffix
