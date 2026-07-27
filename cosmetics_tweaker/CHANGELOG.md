@@ -1,5 +1,19 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.172-dev (2026-07-26) — #923 exact Loremaster icon identity
+
+- Loremaster's Armoury offhand icons now resolve from the exact target weapon
+  family and exact selected primary skin instead of borrowing one
+  representative icon across compatible mace, spear, sword, and shield
+  families.
+- An absent or rejected LA mapping now retains the native item icon. Saved
+  selections restore through item type, hand, and Armoury identity, while
+  provider-owned icon asset names remain local and are not persisted or sent
+  over Cosmetics RPCs.
+- Added executable coverage for the distinct Kotbs01 mace and spear icons,
+  pending-preview selection over stale equipped state, native fallback, and
+  exact restore ownership.
+
 ## 0.9.171-dev (2026-07-26) — #377 glow editor Information-panel host
 
 - The manually opened Glow editor now replaces the right-side Information

@@ -2922,6 +2922,35 @@ vanilla function has produced a dense result array.
 **Related:** class 5 (identity layers), class 39 (shape/contract drift), class
 65 (loadout row shapes), and class 73 (backend ownership boundaries).
 
+## 76. Shared provider option collapses target-specific icon identity
+
+**First seen:** 2026-07-26 (cosmetics_tweaker #923)
+**Canonical issue:** [#923](https://github.com/Ensrick/vermintide-2-tweaker/issues/923)
+**Lives in:** cross-mod pickers that fan one provider record into several target item families
+
+**Symptom.** The selected provider cosmetic is correct, but its live card shows a
+sibling weapon family's icon. Restart may change which sibling wins.
+
+**Diagnosis pattern.** Audit all three dimensions separately: exact backend
+instance, target item type/hand, and provider variant. A shared option table or a
+restore index keyed only by provider ID has already lost target identity. Sorting
+provider keys and choosing the first is not deterministic correctness: one target
+may contain multiple exact runed/glow icon rows.
+
+**Fix template.** Create a new immutable option per target item type. At the
+presentation boundary, accept only the provider's exact `(variant, current skin)`
+mapping after proving the skin belongs to the target family. Missing mappings
+fall through to the native icon; never borrow a sibling-family representative.
+Restore by `(backend id, item type, hand, provider variant)`. Keep external asset
+names local—persist and synchronize semantic identities only.
+
+**Reference fix.** Cosmetics `_cos_la_option_icon_policy.lua` and
+`test_cos_la_option_icon_policy.lua` (#923). Related: #883 exact-instance icon
+provider, #376 restart persistence, #650 composed local appearance, #246
+peer-safe native identity.
+
+---
+
 ## 78. Boolean side-channel state collapses false into absence
 
 **First confirmed:** issues #598 and #921 on 2026-07-22.

@@ -75,6 +75,8 @@ mod._cos_complete_set_rebroadcast = mod:dofile(
     "scripts/mods/cosmetics_tweaker/_cos_complete_set_rebroadcast")
 mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_instance_policy")
 mod._la_icon_provider = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_inventory_icon").new(mod._la_instance_policy, printf, 32)
+mod._la_option_icon_policy = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_la_option_icon_policy")
 -- v0.9.49-dev (issue #186): disable Loremaster's Armoury's Okri's-Challenges /
 -- achievement-book entries (main_quest + 12 sub-quests) — display, tracking and
 -- completion pop-ups — behind the `la_disable_okri_challenges` toggle (default
@@ -98,7 +100,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.171-dev"
+local MOD_VERSION = "0.9.172-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2871,6 +2873,7 @@ local function _merge_la_offhand_options()
                         name            = la_opt.name .. " (LA)",
                         la_armoury_key  = la_opt.armoury_key,
                         vanilla_skin    = la_opt.vanilla_skin,
+                        target_item_type = la_opt.target_item_type or weapon_key,
                         -- mesh the LA texture was authored for; swapped in via
                         -- BackendUtils.get_item_units so LA paints onto the right
                         -- shield shape. nil for pure-paint variants, in which case
@@ -2912,16 +2915,14 @@ mod._la_restore_offhand_selections = function()
     if not next(saved) then mod._la_offhand_restore_done = true return end
     local la_pools = LA_BRIDGE and LA_BRIDGE.registered
         and LA_BRIDGE.la_offhand_options_by_weapon_type or nil
-    local needs_la, needs_mesh = false, false
+    local needs_la, needs_item = false, false
     for _, hands in pairs(saved) do
         for _, rec in pairs(hands) do
             if rec and rec.armoury_key
                     and not (GK_SET and GK_SET.resolve_variant(rec.armoury_key)) then
                 needs_la = true
             end
-            if rec and type(rec.unit_path) == "string" and rec.unit_path ~= "" then
-                needs_mesh = true
-            end
+            if rec then needs_item = true end
         end
     end
     if needs_la and type(la_pools) ~= "table" then return end
@@ -2929,31 +2930,26 @@ mod._la_restore_offhand_selections = function()
     local backend_mgr = Managers and Managers.backend
     local backend_items = backend_mgr and backend_mgr._interfaces
         and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
-    if needs_mesh and not (backend_items and backend_items.get_item_from_id) then return end
+    if needs_item and not (backend_items and backend_items.get_item_from_id) then return end
     if get_mod("character_weapon_variants") and mod._discover_cwv_dual_offhand_pools then
         mod._discover_cwv_dual_offhand_pools()
     end
-    -- armoury_key -> bridge option record (first hit wins; records for the
-    -- same key are identical across weapon types/hands).
-    local by_key = {}
-    for _, hand_pools in pairs(la_pools or {}) do
-        for _, pool in pairs(hand_pools) do
-            for _, la_opt in ipairs(pool) do
-                if la_opt.armoury_key and not by_key[la_opt.armoury_key] then
-                    by_key[la_opt.armoury_key] = la_opt
-                end
-            end
-        end
-    end
+    -- #923: restoration is qualified by exact item type + hand + Armoury
+    -- key. A first-hit global key index can restore a sibling target option.
+    local by_target = mod._la_option_icon_policy.index_by_target(la_pools)
     -- Cosmetics-authored offhands live in the same persisted schema but do not
     -- require Loremaster's Armoury.  Rebuild them from the canonical component
     -- pools so a saved GK shield survives restart even when LA is absent.
-    for _, hand_pools in pairs(_offhand_options) do
-        for _, pool in pairs(hand_pools) do
+    for item_type, hand_pools in pairs(_offhand_options) do
+        for hand_field, pool in pairs(hand_pools) do
             for _, opt in ipairs(pool) do
                 if opt.la_armoury_key and opt.cos_authored
-                        and not by_key[opt.la_armoury_key] then
-                    by_key[opt.la_armoury_key] = {
+                        and not mod._la_option_icon_policy.lookup(by_target, item_type,
+                            hand_field, opt.la_armoury_key) then
+                    by_target[item_type] = by_target[item_type] or {}
+                    by_target[item_type][hand_field] =
+                        by_target[item_type][hand_field] or {}
+                    by_target[item_type][hand_field][opt.la_armoury_key] = {
                         name = opt.name,
                         armoury_key = opt.la_armoury_key,
                         vanilla_skin = opt.vanilla_skin,
@@ -2961,6 +2957,7 @@ mod._la_restore_offhand_selections = function()
                         authored_family = opt.authored_family,
                         variant_kind = opt.variant_kind,
                         inventory_icon = opt.inventory_icon,
+                        cos_authored = true,
                     }
                 end
             end
@@ -2968,20 +2965,31 @@ mod._la_restore_offhand_selections = function()
     end
     local n, miss, deferred = 0, 0, 0
     for backend_id, hands in pairs(saved) do
+        local ok_item, item = pcall(backend_items.get_item_from_id,
+            backend_items, backend_id)
+        local item_data = ok_item and item and (item.data
+            or (item.key and ItemMasterList and rawget(ItemMasterList, item.key)))
+        local item_type = item_data and item_data.item_type
+        local exact_skin = ok_item and item and item.skin or nil
+        if not exact_skin and ok_item and item and backend_items.get_skin then
+            local ok_skin, backend_skin = pcall(backend_items.get_skin,
+                backend_items, backend_id)
+            if ok_skin then exact_skin = backend_skin end
+        end
+        local item_pending = not (ok_item and item)
+            and restore_now < mod._la_offhand_restore_deadline
         for hand_field, rec in pairs(hands) do
-            local la_opt = rec and rec.armoury_key and by_key[rec.armoury_key]
+            local la_opt = rec and rec.armoury_key
+                and mod._la_option_icon_policy.lookup(by_target, item_type,
+                    hand_field, rec.armoury_key)
             local mesh_opt = nil
-            local this_deferred = false
+            local this_deferred = item_pending
+            if item_pending then deferred = deferred + 1 end
             if rec and type(rec.unit_path) == "string" and rec.unit_path ~= "" then
                 -- Backend records can outlive salvaged items or removed CWV
                 -- variants. Resolve defensively and accept only a unit still in
                 -- this exact item's compatible hand pool.
-                local ok_item, item = pcall(backend_items.get_item_from_id,
-                    backend_items, backend_id)
                 if ok_item and item then
-                    local data = item.data or (item.key and ItemMasterList
-                        and rawget(ItemMasterList, item.key))
-                    local item_type = data and data.item_type
                     local pools = item_type and mod._ensure_independent_dual_pool
                         and mod._ensure_independent_dual_pool(item_type)
                     local pool = pools and pools[hand_field]
@@ -3017,25 +3025,34 @@ mod._la_restore_offhand_selections = function()
                     local cim = get_mod("cim_dev") or get_mod("cim")
                     local pending_cim = cim and cim._cim_get_craft
                         and cim._cim_get_craft(backend_id) ~= nil
-                    if pending_cim and restore_now < mod._la_offhand_restore_deadline then
+                    if not this_deferred and pending_cim
+                            and restore_now < mod._la_offhand_restore_deadline then
                         deferred = deferred + 1
                         this_deferred = true
                     end
                 end
             end
             if la_opt then
-                _offhand_selection[backend_id] = _offhand_selection[backend_id] or {}
-                _offhand_selection[backend_id][hand_field] = {
-                    name            = la_opt.name .. " (LA)",
-                    la_armoury_key  = la_opt.armoury_key,
-                    vanilla_skin    = la_opt.vanilla_skin,
-                    intended_unit   = la_opt.intended_unit,
-                    authored_family = la_opt.authored_family,
-                    variant_kind    = la_opt.variant_kind,
-                    inventory_icon  = la_opt.inventory_icon,
-                    cos_authored    = la_opt.inventory_icon ~= nil,
-                    rarity          = "promo",
+                local restored = {
+                    name             = la_opt.name .. " (LA)",
+                    la_armoury_key   = la_opt.armoury_key,
+                    target_item_type = la_opt.target_item_type or item_type,
+                    intended_unit    = la_opt.intended_unit,
+                    authored_family  = la_opt.authored_family,
+                    variant_kind     = la_opt.variant_kind,
+                    inventory_icon   = la_opt.inventory_icon,
+                    cos_authored     = la_opt.cos_authored == true,
+                    rarity           = "promo",
                 }
+                if not restored.cos_authored then
+                    local la_mod = get_mod("Loremasters-Armoury")
+                    restored = mod._la_option_icon_policy.resolve_for_item(restored,
+                        item_type, exact_skin,
+                        la_mod and la_mod.SKIN_LIST,
+                        LA_BRIDGE.normalize_weapon_type)
+                end
+                _offhand_selection[backend_id] = _offhand_selection[backend_id] or {}
+                _offhand_selection[backend_id][hand_field] = restored
                 if la_opt.intended_unit then _preload_offhand_package(la_opt.intended_unit) end
                 n = n + 1
             elseif mesh_opt then
@@ -3178,8 +3195,11 @@ local function _cos_presentation_ownership(item_type)
     return nil
 end
 
-local function _cos_option_for_record(item_type, record)
+local function _cos_option_for_record(item, record, exact_skin)
     if type(record) ~= "table" then return nil end
+    local item_data = item and (item.data or (item.key and ItemMasterList
+        and rawget(ItemMasterList, item.key)))
+    local item_type = item_data and item_data.item_type
     local pools = mod._ensure_independent_dual_pool
         and mod._ensure_independent_dual_pool(item_type) or _offhand_options[item_type]
     local option = OFFHAND_NAMES.match_option(record,
@@ -3189,7 +3209,20 @@ local function _cos_option_for_record(item_type, record)
         option = record
     end
     if not option then return nil end
-    if not option.inventory_icon and (option.unit or option.intended_unit) then
+    local external_la = option.la_armoury_key
+        and option.cos_authored ~= true
+    if external_la then
+        local la_mod = get_mod("Loremasters-Armoury")
+        option = mod._la_option_icon_policy.resolve_for_item(option, item_type,
+            exact_skin or (item and item.skin), la_mod and la_mod.SKIN_LIST,
+            LA_BRIDGE.normalize_weapon_type)
+    end
+    -- An external LA option may use a mesh shared by several weapon families.
+    -- Once its exact (Armoury key, target type, skin) mapping rejects or misses,
+    -- the native card is authoritative. Generic unit lookup would select a
+    -- sibling family's authored icon and recreate #923.
+    if not external_la and not option.inventory_icon
+            and (option.unit or option.intended_unit) then
         local recovered = _inventory_icon_for_offhand_unit(
             option.unit or option.intended_unit, nil)
         if recovered then
@@ -3235,7 +3268,10 @@ end
 
 local function _cos_resolve_presentation(item, base_icon, display_name,
         base_description, ownership, record, saved_illusion)
-    local option = _cos_option_for_record(item and item.data and item.data.item_type, record)
+    local exact_skin = item and item.skin
+        or (type(record) == "table"
+            and (record.vanilla_skin or record.vanilla_key))
+    local option = _cos_option_for_record(item, record, exact_skin)
     if not option then return base_icon, display_name, base_description, false end
     local primary = _cos_primary_component_name(item, display_name, ownership, saved_illusion)
     local descriptor = ITEM_PRESENTATION.resolve({
@@ -4070,6 +4106,21 @@ mod:hook("HeroWindowItemCustomization", "_state_draw_overview", function(func, s
     end
 end)
 
+mod._cos_selected_primary_skin = function(self, backend_item)
+    return mod._la_option_icon_policy.selected_primary_skin(
+        self, backend_item, function(item)
+            local backend_mgr = Managers and Managers.backend
+            local items_iface = backend_mgr and backend_mgr._interfaces
+                and backend_mgr._interfaces.items
+                and backend_mgr:get_interface("items")
+            local backend_id = item and item.backend_id
+                or (self and self._item_backend_id)
+            if backend_id and items_iface and items_iface.get_skin then
+                return items_iface:get_skin(backend_id)
+            end
+        end, WeaponSkins and WeaponSkins.default_skins)
+end
+
 HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, index)
     -- v0.9.9.4-dev: hand-aware dispatch. Pre-v0.9.9.4 signature was
     -- (self, index) with implicit left_hand_unit; tolerate older callers
@@ -4091,6 +4142,24 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
     local pool = hand_pools and hand_pools[hand_field]
     local opt = pool and pool[index]
     if not opt then return end
+
+    -- #923: bind the option's local presentation to this exact target item and
+    -- current row-one skin. The canonical pool remains immutable, so another
+    -- weapon family/instance cannot inherit this icon. Provider-owned icon
+    -- names stay in memory only; persistence and RPCs keep semantic identities.
+    if opt.la_armoury_key and opt.cos_authored ~= true then
+        local backend_mgr = Managers and Managers.backend
+        local items_iface = backend_mgr and backend_mgr._interfaces
+            and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
+        local backend_item = nil
+        if self._item_backend_id and items_iface and items_iface.get_item_from_id then
+            backend_item = items_iface:get_item_from_id(self._item_backend_id)
+        end
+        local la_mod = get_mod("Loremasters-Armoury")
+        opt = mod._la_option_icon_policy.resolve_for_item(opt, weapon_key,
+            mod._cos_selected_primary_skin(self, backend_item),
+            la_mod and la_mod.SKIN_LIST, LA_BRIDGE.normalize_weapon_type)
+    end
 
     -- v0.8.32: key selection by backend_id (per-weapon-instance).
     -- v0.9.9.4: nested under hand_field.
@@ -4197,7 +4266,9 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
                 hand_field   = hand_field,
                 armoury_key  = opt.la_armoury_key,
                 vanilla_key  = opt.vanilla_skin,
-                inventory_icon = opt.inventory_icon,
+                -- External LA assets are local provider data, not Cosmetics
+                -- persistence/sync payload. #883 re-resolves the exact icon.
+                inventory_icon = opt.cos_authored and opt.inventory_icon or nil,
                 cos_authored = opt.cos_authored == true,
                 backend_id   = self._item_backend_id,  -- v0.9.71: persistence key
             }
@@ -4308,32 +4379,19 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
     -- Resolution order:
     --   1. self._previewer._item (pending row-1 OR equipped illusion the
     --      screen auto-selected on open — both correct)
-    --   2. backend item's `.skin` (vanilla-crafted edge case)
-    --   3. backend get_skin(backend_id) (vanilla-crafted Bret etc.)
-    --   4. WeaponSkins.default_skins[item.key]
-    local pending_item, pending_data, pending_skin
+    --   2. exact row-one `is_selected` cell (never stale `equipped`)
+    --   3. backend item's `.skin` (vanilla-crafted edge case)
+    --   4. backend get_skin(backend_id) (vanilla-crafted Bret etc.)
+    --   5. WeaponSkins.default_skins[item.key]
+    local pending_data
     if self._previewer and self._previewer._item then
         local pi = self._previewer._item
         if pi.data then pending_data = pi.data end
-        if pi.skin and pi.skin ~= "" then pending_skin = pi.skin end
     end
 
     local item = self:_get_item(self._item_backend_id)
+    local pending_skin = mod._cos_selected_primary_skin(self, item)
     if item then
-        if not pending_skin then
-            local skin_key = item.skin
-            if not skin_key and item.backend_id and Managers and Managers.backend then
-                local items_iface = Managers.backend:get_interface("items")
-                if items_iface and items_iface.get_skin then
-                    skin_key = items_iface:get_skin(item.backend_id)
-                end
-            end
-            if not skin_key and item.data and item.key then
-                skin_key = WeaponSkins.default_skins[item.key]
-            end
-            pending_skin = skin_key
-        end
-
         local skin_data = pending_skin and WeaponSkins.skins[pending_skin]
         if skin_data then
             local preview_item = {

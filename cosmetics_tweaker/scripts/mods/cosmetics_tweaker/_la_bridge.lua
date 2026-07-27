@@ -416,6 +416,10 @@ local function _normalize_weapon_type(wt)
     return _LA_WEAPON_TYPE_ALIAS[wt] or wt
 end
 
+local LA_OPTION_ICON = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_la_option_icon_policy")
+M.normalize_weapon_type = _normalize_weapon_type
+
 local function build_offhand_options()
     M.la_offhand_options_by_weapon_type = {}
     M._la_offhand_resolution = {}
@@ -515,7 +519,6 @@ local function build_offhand_options()
                         end
                     end
                     table.sort(sorted_icons)
-                    local vanilla_skin_key = sorted_icons[1]
                     local intended_unit, source = _resolve_intended_unit(la_key, variant, sorted_icons)
                     -- For every canonical-mesh variant, register both
                     -- new_units entries (1p and 3p) in
@@ -544,10 +547,9 @@ local function build_offhand_options()
                     -- actual icon storage format needs a proper
                     -- diagnostic probe before re-attempting. Reverting
                     -- to pre-v0.9.9.0 opt shape (no icon field).
-                    local opt = {
+                    local option_fields = {
                         name          = humanize_armoury_key(la_key),
                         armoury_key   = la_key,
-                        vanilla_skin  = vanilla_skin_key,
                         intended_unit = intended_unit,
                         authored_family = authored_family,
                         variant_kind  = variant.kind,
@@ -564,7 +566,12 @@ local function build_offhand_options()
                         if not per_hand then per_hand = {}; M.la_offhand_options_by_weapon_type[wt] = per_hand end
                         local list = per_hand[hand_field]
                         if not list then list = {}; per_hand[hand_field] = list end
-                        list[#list + 1] = opt
+                        -- #923: never share one mutable option across target
+                        -- families. Exact icon/skin state is resolved later for
+                        -- the selected backend item; unauthored expanded targets
+                        -- deliberately retain the native icon.
+                        list[#list + 1] = LA_OPTION_ICON.new_target_option(
+                            option_fields, wt)
                     end
                 end
             end

@@ -306,12 +306,27 @@ Shield slot hashes (3p):
 
 **Auto-select on customization screen open.** `_setup_illusions` resolves the equipped illusion via `Managers.backend:get_interface("items"):get_skin(item.backend_id)` (vanilla-crafted weapons sometimes have `item.skin = nil` on the BackendItem) → looks up `WeaponSkins.skins[skin].left_hand_unit` → finds the option in our pool whose `unit` or `intended_unit` matches → auto-selects. Stale `_offhand_selection` entries whose mesh no longer matches the rendered shield are discarded so the picker always reflects what's visible.
 
+**Exact target icon identity (#923).** One LA Armoury variant can declare different
+icons for Mace+Shield, Spear+Shield, Sword+Shield, and individual runed skins.
+`_la_bridge` therefore emits a distinct immutable option for each target
+`item_type`; it does not retain a lexicographic representative skin. On selection,
+card presentation, and restart restore, `_cos_la_option_icon_policy` accepts only
+`SKIN_LIST[armoury_key].icons[exact_skin]` when that skin belongs to the exact
+target family. Missing mappings (including compatibility-expanded CWV targets)
+retain the native icon and do not enter generic unit-based icon recovery, which
+can only recover Cosmetics-authored assets. A pending row-one preview skin is
+resolved before the exact selected cell, backend item/interface skin, and
+default; stale `equipped` widget state is never allowed to override the preview.
+External icon names are runtime-local: persisted records and `cos_la_apply`
+carry semantic Armoury/skin identity only, so a peer without the provider mod
+never receives a provider-owned asset reference.
+
 **`item_data.backend_id` resolution chain (v0.7.101).** `BackendUtils.get_item_units` is called from `GearUtils.create_equipment` with `(item_data, nil, nil, career_name)` — the explicit backend_id and skin args are nil. Vanilla resolves via `item_data.backend_id` internally (`backend_utils.lua:156`: `local backend_id = item_data.backend_id or backend_id`). Our hook MUST mirror this — check `item_data.backend_id` as a third fallback after the explicit args. Without it, the hook bails at `has_skin=false` for every in-game equip and (a) the user's row-2 selection never reaches the player body, (b) we never get to re-route the spawn away from a runed-shield path the engine hasn't preloaded → `world.spawn_unit` "Unit not found" crash. Crash GUID 1a7b27db documented this.
 
 **Known limitations:**
 - LA `kind="unit"` variants (Empire basic 1/2/3 with custom heraldic shapes) handled via the cosmetics_tweaker-owned pipeline (6.4); LA-helper path stays filtered.
 - Variants without `new_units` paint onto whatever the current illusion's shield mesh is, so heraldic UVs may not always match perfectly. Bret variants tested OK because all GK shields are visually similar.
-- **Glow/runed/magic shield illusions show no LA paint** (confirmed v0.7.99 user testing 2026-05-06). Skins like `es_sword_shield_breton_skin_03_runed_01` use `wpn_emp_gk_shield_*_runed_01` meshes whose emissive material doesn't expose the standard `texture_map_c0ba2942` diffuse slot. `Material.set_texture` returns `ok=true` but no pixel changes — every LA option visually identical to equipped shield. LA's `icons` table per variant enumerates compatible skins (e.g. `Reynard01.icons.es_sword_shield_breton_skin_03_runed_01 = "kruber_bret_shield_basic1_reynard01_blueglow_icon"`, with separate `_blueglow` / `_purpleglow` icons for runed variants). We don't honor that table.
+- **Glow/runed/magic shield paint remains limited.** Skins like `es_sword_shield_breton_skin_03_runed_01` use emissive meshes that may not expose the standard diffuse slot. Icon presentation now honors LA's exact blue/purple `icons` rows (#923), but that does not prove the corresponding held-unit paint supports every emissive material.
 - **LA paint sticks across shield changes** (confirmed v0.7.99 user testing 2026-05-06). Material is shared — `Material.set_texture` mutates the asset in place, so any other shield mesh sharing that material file inherits the override globally until the engine reloads it. Can't reset (`Material.reset_texture` doesn't exist), can't snapshot original (`Material.get_texture` doesn't exist). LA's normal mode "fixes" this by re-painting every shield in the world every frame — we paint once at spawn.
 
 **Diagnostic commands:**
