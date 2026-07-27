@@ -1,48 +1,15 @@
-# `.ship_claims/` -- ship/version claim locks
+# `.ship_claims/` -- legacy documentation pointer
 
-Atomic mutual-exclusion locks that stop parallel sessions on this machine from
-allocating the **same** next `MOD_VERSION` and uploading competing bundles.
-Managed entirely by `tools/ship/claim.ps1`; you should not create or edit these
-files by hand.
+Live claim files no longer belong in a source checkout. The authoritative
+machine-global directory is:
 
-Full rationale, usage, and stale policy: **`tools/ship/CLAIMS.md`**.
-
-## What's tracked vs ignored
-
-- `README.md` (this file) is **tracked** so the convention is discoverable.
-- Every `*.claim` file is **gitignored** (see `.gitignore`) -- claims are
-  ephemeral per-session coordination state, not commit history. This mirrors
-  the `.in_progress/*.md` sentinel convention.
-
-## Claim file format
-
-One file per claimed mod, named exactly `<mod_name>.claim` (the mod's repo-root
-directory name), containing:
-
-```
-# VT2 ship/version claim -- see tools/ship/CLAIMS.md
-mod = weapon_tweaker
-version = 0.12.274-beta
-session = <explicit/Claude/Codex owner id, or deterministic worktree id>
-created = 2026-07-18T04:12:33Z
+```text
+%APPDATA%\VMBLauncher\ship_claims\
 ```
 
-- `mod`     -- the claimed mod's directory name.
-- `version` -- the allocated next patch version (current `MOD_VERSION`,
-  `PATCH + 1`, suffix preserved).
-- `session` -- the enforced claiming owner. Verify and release require an exact
-  match; foreign tasks cannot spend or delete a live claim.
-- `created` -- ISO-8601 UTC timestamp; claims older than 2 hours are stale and
-  may be broken by a new claimant.
+That is the same authority consulted by separate worktrees and nested
+VMBLauncher processes. This directory remains tracked only so older checkout
+instructions lead to the current policy. Do not create claim files here.
 
-## Lifecycle
-
-```powershell
-.\tools\ship\claim.ps1 -Mod <name>            # acquire + allocate next version
-.\tools\ship\claim.ps1 -Mod <name> -Release   # free the claim
-```
-
-`tools/ship/ship.ps1` requires a live, version-matching claim before it will
-build/deploy/upload. The owner must also match, and only that owner can release
-the claim automatically on a successful ship.
-`-NoClaim` bypasses the gate for solo sessions (see `tools/ship/CLAIMS.md`).
+Full rationale, usage, ownership rules, and stale policy:
+**`tools/ship/CLAIMS.md`**.

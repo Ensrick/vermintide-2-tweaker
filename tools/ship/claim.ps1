@@ -16,14 +16,13 @@
 #   claim.ps1 -Mod <name> -Verify -ExpectedVersion <v>   ship.ps1 gate hook.
 #   claim.ps1 -SelfTest          offline contention/stale/allocate/release tests.
 #
-# THE LOCK: an atomic exclusive file create at .ship_claims/<mod>.claim. The OS
-# CREATE_NEW disposition guarantees exactly one racer's create succeeds; every
-# other gets IOException. That is the same principle as `New-Item -ItemType File`
-# failing on an existing path, but CREATE_NEW is OS-atomic (no check-then-create
-# TOCTOU) and lets us write the claim body through the exclusive handle, so a
-# reader never observes an empty claim mid-write.
+# THE LOCK: an atomic exclusive file create at
+# %APPDATA%\VMBLauncher\ship_claims\<mod>.claim. This is the same machine-global
+# authority VMBLauncher consults, so separate worktrees and nested launchers see
+# one lock. The OS CREATE_NEW disposition guarantees exactly one racer's create
+# succeeds; every other gets IOException.
 #
-# STALE POLICY: a claim older than -StaleHours (default 2h) is stale and may be
+# STALE POLICY: a claim older than -StaleHours (default 24h) is stale and may be
 # broken by a new claimant (reported when it happens). Guards against a crashed
 # session wedging a mod forever.
 #
@@ -47,8 +46,12 @@ param(
     [string]$RepoRoot,
     [string]$ClaimsDir,
     [string]$Session,
-    [double]$StaleHours = 2,
-    [switch]$Quiet
+    [double]$StaleHours = 24,
+    [switch]$Quiet,
+    [switch]$ConditionalDeleteRaceWorker,
+    [string]$RaceClaimPath,
+    [string]$RaceReadyPath,
+    [string]$RaceContinuePath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,6 +89,20 @@ function Get-ClaimModVersion {
     $txt = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
     if ($txt -match 'MOD_VERSION\s*=\s*"([^"]+)"') { return $matches[1] }
     throw "No MOD_VERSION found in $luaPath."
+}
+
+function Get-MachineClaimsDir {
+    param([string]$AppDataRoot)
+    if ([string]::IsNullOrWhiteSpace($AppDataRoot)) {
+        $AppDataRoot = $env:APPDATA
+    }
+    if ([string]::IsNullOrWhiteSpace($AppDataRoot)) {
+        $AppDataRoot = [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)
+    }
+    if ([string]::IsNullOrWhiteSpace($AppDataRoot)) {
+        throw 'Cannot locate the roaming AppData directory for the machine-global ship claim authority.'
+    }
+    return [System.IO.Path]::Combine($AppDataRoot, 'VMBLauncher', 'ship_claims')
 }
 
 function Get-ClaimSessionId {
@@ -133,7 +150,7 @@ function ConvertFrom-ClaimTimestamp {
 }
 
 function Test-ClaimStale {
-    param([datetime]$CreatedUtc, [datetime]$NowUtc, [double]$StaleHours = 2)
+    param([datetime]$CreatedUtc, [datetime]$NowUtc, [double]$StaleHours = 24)
     return [bool]((($NowUtc - $CreatedUtc).TotalHours) -ge $StaleHours)
 }
 
@@ -179,6 +196,83 @@ function Read-ClaimFile {
     }
 }
 
+function Get-ClaimMutationMutexName {
+    param([string]$Path)
+    $normalized = [System.IO.Path]::GetFullPath($Path).ToLowerInvariant()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $digest = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($normalized)) }
+    finally { $sha.Dispose() }
+    $hex = [System.BitConverter]::ToString($digest).Replace('-', '')
+    return "Local\VT2ShipClaimMutation_$hex"
+}
+
+function Invoke-WithClaimMutationLock {
+    param([string]$Path, [scriptblock]$Action, [int]$TimeoutMilliseconds = 10000)
+    $mutex = New-Object System.Threading.Mutex($false, (Get-ClaimMutationMutexName $Path))
+    $held = $false
+    try {
+        try { $held = $mutex.WaitOne($TimeoutMilliseconds) }
+        catch [System.Threading.AbandonedMutexException] { $held = $true }
+        if (-not $held) { throw "Timed out waiting for claim mutation lock: $Path" }
+        return & $Action
+    }
+    finally {
+        if ($held) { $mutex.ReleaseMutex() }
+        $mutex.Dispose()
+    }
+}
+
+# Delete only the exact bytes previously observed. Every broker create/replacement
+# uses the same per-claim OS mutex, so a newer owner's claim cannot appear between
+# this comparison and deletion.
+function Remove-ClaimIfUnchanged {
+    param([string]$Path, [string]$ExpectedRaw)
+    return Invoke-WithClaimMutationLock -Path $Path -Action {
+        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            return [pscustomobject]@{ Deleted = $false; Changed = $true }
+        }
+        try { $currentRaw = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8) }
+        catch { return [pscustomobject]@{ Deleted = $false; Changed = $true } }
+        if (-not [string]::Equals($currentRaw, $ExpectedRaw, [System.StringComparison]::Ordinal)) {
+            return [pscustomobject]@{ Deleted = $false; Changed = $true }
+        }
+        Remove-Item -LiteralPath $Path -Force
+        return [pscustomobject]@{ Deleted = $true; Changed = $false }
+    }
+}
+
+function Invoke-ClaimCreate {
+    param([string]$Path, [string]$Mod, [string]$RepoRoot, [string]$Session, [datetime]$NowUtc)
+    return Invoke-WithClaimMutationLock -Path $Path -Action {
+        $stream = $null
+        try {
+            $stream = [System.IO.File]::Open(
+                $Path,
+                [System.IO.FileMode]::CreateNew,
+                [System.IO.FileAccess]::Write,
+                [System.IO.FileShare]::None)
+        }
+        catch [System.IO.IOException] {
+            return [pscustomobject]@{ Created = $false; Version = $null }
+        }
+
+        $wrote = $false
+        try {
+            $version = Get-NextPatchVersion (Get-ClaimModVersion -RepoRoot $RepoRoot -Mod $Mod)
+            $content = Format-ClaimContent -Mod $Mod -Version $version -Session $Session -CreatedUtc $NowUtc
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($content)
+            $stream.Write($bytes, 0, $bytes.Length)
+            $stream.Flush()
+            $wrote = $true
+            return [pscustomobject]@{ Created = $true; Version = $version }
+        }
+        finally {
+            $stream.Dispose()
+            if (-not $wrote) { Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue }
+        }
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Operation functions (filesystem side effects live here).
 # ---------------------------------------------------------------------------
@@ -193,7 +287,7 @@ function Invoke-ClaimAcquire {
         [string]$RepoRoot,
         [string]$Session,
         [datetime]$NowUtc,
-        [double]$StaleHours = 2,
+        [double]$StaleHours = 24,
         [int]$MaxAttempts = 6
     )
     if (-not (Test-Path -LiteralPath $ClaimsDir)) {
@@ -203,50 +297,29 @@ function Invoke-ClaimAcquire {
     $brokeStale = $false
 
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $stream = $null
-        try {
-            $stream = [System.IO.File]::Open(
-                $claimPath,
-                [System.IO.FileMode]::CreateNew,
-                [System.IO.FileAccess]::Write,
-                [System.IO.FileShare]::None)
-        }
-        catch [System.IO.IOException] {
-            $stream = $null   # someone else won the create; inspect their claim below
-        }
-
-        if ($null -ne $stream) {
-            $wrote = $false
-            $version = $null
-            try {
-                $version = Get-NextPatchVersion (Get-ClaimModVersion -RepoRoot $RepoRoot -Mod $Mod)
-                $content = Format-ClaimContent -Mod $Mod -Version $version -Session $Session -CreatedUtc $NowUtc
-                $bytes = [System.Text.Encoding]::UTF8.GetBytes($content)
-                $stream.Write($bytes, 0, $bytes.Length)
-                $wrote = $true
-            }
-            finally {
-                $stream.Dispose()
-                if (-not $wrote) {
-                    # Version allocation threw AFTER we grabbed the lock -- never
-                    # leave an empty claim wedging the mod.
-                    Remove-Item -LiteralPath $claimPath -Force -ErrorAction SilentlyContinue
-                }
-            }
+        $create = Invoke-ClaimCreate -Path $claimPath -Mod $Mod -RepoRoot $RepoRoot -Session $Session -NowUtc $NowUtc
+        if ($create.Created) {
             return [pscustomobject]@{
-                Ok = $true; Acquired = $true; Version = $version
+                Ok = $true; Acquired = $true; Version = $create.Version
                 ClaimPath = $claimPath; BrokeStale = $brokeStale; Held = $null
                 Message = 'claimed'
             }
         }
 
+        $rawReadable = $false
+        $observedRaw = $null
+        try {
+            $observedRaw = [System.IO.File]::ReadAllText($claimPath, [System.Text.Encoding]::UTF8)
+            $rawReadable = $true
+        }
+        catch { }
         $existing = Read-ClaimFile $claimPath
         if ($null -eq $existing) {
             # Empty/partial (a racer created but has not written yet) or corrupt.
             Start-Sleep -Milliseconds (40 * $attempt)
-            if ($attempt -ge 3) {
-                Remove-Item -LiteralPath $claimPath -Force -ErrorAction SilentlyContinue
-                $brokeStale = $true
+            if ($attempt -ge 3 -and $rawReadable) {
+                $deleted = Remove-ClaimIfUnchanged -Path $claimPath -ExpectedRaw $observedRaw
+                if ($deleted.Deleted) { $brokeStale = $true }
             }
             continue
         }
@@ -258,8 +331,8 @@ function Invoke-ClaimAcquire {
             }
         }
         if (Test-ClaimStale $existing.CreatedUtc $NowUtc $StaleHours) {
-            Remove-Item -LiteralPath $claimPath -Force -ErrorAction SilentlyContinue
-            $brokeStale = $true
+            $deleted = Remove-ClaimIfUnchanged -Path $claimPath -ExpectedRaw $existing.Raw
+            if ($deleted.Deleted) { $brokeStale = $true }
             continue
         }
         return [pscustomobject]@{
@@ -296,11 +369,11 @@ function Invoke-ClaimRelease {
             Held = $existing
         }
     }
-    Remove-Item -LiteralPath $claimPath -Force -ErrorAction SilentlyContinue
-    $removed = -not (Test-Path -LiteralPath $claimPath)
+    $delete = Remove-ClaimIfUnchanged -Path $claimPath -ExpectedRaw $existing.Raw
+    $removed = [bool]$delete.Deleted
     return [pscustomobject]@{
         Ok = $removed; Removed = $removed; CrossSession = $cross
-        Message = $(if ($removed) { 'released' } else { "FAILED to remove $claimPath" })
+        Message = $(if ($removed) { 'released' } else { "claim changed after ownership check; not removed" })
         Held = $existing
     }
 }
@@ -309,7 +382,7 @@ function Invoke-ClaimRelease {
 # recorded version equals the source MOD_VERSION about to ship and whose owner
 # equals the current orchestrator/worktree session?
 function Test-ShipClaimState {
-    param([string]$ClaimsDir, [string]$Mod, [string]$ExpectedVersion, [string]$ExpectedSession, [datetime]$NowUtc, [double]$StaleHours = 2)
+    param([string]$ClaimsDir, [string]$Mod, [string]$ExpectedVersion, [string]$ExpectedSession, [datetime]$NowUtc, [double]$StaleHours = 24)
     $claimPath = Join-Path $ClaimsDir "$Mod.claim"
     $existing = Read-ClaimFile $claimPath
     if ($null -eq $existing) { return @{ State = 'absent'; Claim = $null } }
@@ -317,6 +390,20 @@ function Test-ShipClaimState {
     if ($existing.Version -ne $ExpectedVersion) { return @{ State = 'mismatch'; Claim = $existing } }
     if ([string]::IsNullOrWhiteSpace($ExpectedSession) -or $existing.Session -ne $ExpectedSession) { return @{ State = 'owner_mismatch'; Claim = $existing } }
     return @{ State = 'ok'; Claim = $existing }
+}
+
+function Invoke-ConditionalDeleteRaceWorker {
+    if (-not $RaceClaimPath -or -not $RaceReadyPath -or -not $RaceContinuePath) { return 2 }
+    try { $observedRaw = [System.IO.File]::ReadAllText($RaceClaimPath, [System.Text.Encoding]::UTF8) }
+    catch { return 3 }
+    [System.IO.File]::WriteAllText($RaceReadyPath, 'ready', (New-Object System.Text.UTF8Encoding($false)))
+    $deadline = (Get-Date).AddSeconds(15)
+    while (-not (Test-Path -LiteralPath $RaceContinuePath) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 20
+    }
+    if (-not (Test-Path -LiteralPath $RaceContinuePath)) { return 4 }
+    $delete = Remove-ClaimIfUnchanged -Path $RaceClaimPath -ExpectedRaw $observedRaw
+    return $(if ($delete.Deleted) { 5 } else { 0 })
 }
 
 # ---------------------------------------------------------------------------
@@ -350,17 +437,33 @@ function Invoke-ClaimSelfTest {
     # --- timestamp round-trip + staleness ---
     $rt = ConvertFrom-ClaimTimestamp (ConvertTo-ClaimTimestamp $nowRef)
     Assert ($null -ne $rt -and [math]::Abs(($rt - $nowRef).TotalSeconds) -lt 1.5) "ISO timestamp round-trips through UTC"
-    Assert (Test-ClaimStale $nowRef.AddHours(-3) $nowRef 2) "3h-old claim is stale at 2h threshold"
-    Assert (-not (Test-ClaimStale $nowRef.AddMinutes(-30) $nowRef 2)) "30-min-old claim is not stale"
+    Assert (Test-ClaimStale $nowRef.AddHours(-25) $nowRef 24) "25h-old claim is stale at 24h threshold"
+    Assert (-not (Test-ClaimStale $nowRef.AddHours(-3) $nowRef 24)) "3h-old claim survives a normal PR/hosted-QA cycle"
 
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-claim-" + [guid]::NewGuid().ToString('N'))
     $fixRepo = Join-Path $tmp 'repo'
+    $fixRepoB = Join-Path $tmp 'repo-b'
     $fixMod = 'fixturemod'
     $luaDir = Join-Path $fixRepo (Join-Path $fixMod "scripts\mods\$fixMod")
+    $luaDirB = Join-Path $fixRepoB (Join-Path $fixMod "scripts\mods\$fixMod")
     [System.IO.Directory]::CreateDirectory($luaDir) | Out-Null
+    [System.IO.Directory]::CreateDirectory($luaDirB) | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $luaDir "$fixMod.lua"), "local MOD_VERSION = `"0.1.5-dev`"`n", $utf8NoBom)
+    [System.IO.File]::WriteAllText((Join-Path $luaDirB "$fixMod.lua"), "local MOD_VERSION = `"0.1.5-dev`"`n", $utf8NoBom)
 
     try {
+        # --- one machine-global namespace, including nested launchers ---
+        $fixtureAppData = Join-Path $tmp 'appdata'
+        $machineDir = Get-MachineClaimsDir -AppDataRoot $fixtureAppData
+        $expectedMachineDir = Join-Path $fixtureAppData 'VMBLauncher\ship_claims'
+        Assert ($machineDir -eq $expectedMachineDir) "default authority is the VMBLauncher machine-global claims directory"
+        Assert ($machineDir -ne (Join-Path $fixRepo '.ship_claims')) "default authority is not scoped to a source worktree"
+        $outer = Invoke-ClaimAcquire -ClaimsDir $machineDir -Mod $fixMod -RepoRoot $fixRepo -Session 'nested-owner' -NowUtc $nowRef
+        $nestedState = Test-ShipClaimState -ClaimsDir (Get-MachineClaimsDir -AppDataRoot $fixtureAppData) -Mod $fixMod -ExpectedVersion $outer.Version -ExpectedSession 'nested-owner' -NowUtc $nowRef
+        Assert ($outer.Ok -and $nestedState.State -eq 'ok') "nested launcher resolves and verifies the outer machine-global claim"
+        $outerRelease = Invoke-ClaimRelease -ClaimsDir $machineDir -Mod $fixMod -Session 'nested-owner'
+        Assert ($outerRelease.Ok -and $outerRelease.Removed) "nested-authority fixture releases cleanly"
+
         # --- stable owner identity across child processes/worktrees ---
         $savedExplicit = $env:VT2_SHIP_SESSION_ID
         $savedClaude = $env:CLAUDE_SESSION_ID
@@ -371,7 +474,7 @@ function Invoke-ClaimSelfTest {
             $env:CODEX_THREAD_ID = $null
             $ownerA1 = Get-ClaimSessionId -RepoRoot $fixRepo
             $ownerA2 = Get-ClaimSessionId -RepoRoot $fixRepo
-            $ownerB = Get-ClaimSessionId -RepoRoot (Join-Path $tmp 'other-repo')
+            $ownerB = Get-ClaimSessionId -RepoRoot $fixRepoB
             Assert ($ownerA1 -eq $ownerA2 -and $ownerA1 -match '^worktree:[0-9a-f]{16}$') "manual owner is stable for one worktree"
             Assert ($ownerA1 -ne $ownerB) "different worktrees derive different owners"
             $env:CODEX_THREAD_ID = 'thread-fixture'
@@ -410,7 +513,7 @@ function Invoke-ClaimSelfTest {
         [System.IO.Directory]::CreateDirectory($staleDir) | Out-Null
         [System.IO.File]::WriteAllText(
             (Join-Path $staleDir "$fixMod.claim"),
-            (Format-ClaimContent -Mod $fixMod -Version '0.9.9-dev' -Session 'old-session' -CreatedUtc $nowRef.AddHours(-3)),
+            (Format-ClaimContent -Mod $fixMod -Version '0.9.9-dev' -Session 'old-session' -CreatedUtc $nowRef.AddHours(-25)),
             $utf8NoBom)
         $broke = Invoke-ClaimAcquire -ClaimsDir $staleDir -Mod $fixMod -RepoRoot $fixRepo -Session 'new-session' -NowUtc $nowRef
         Assert ($broke.Ok -and $broke.Acquired) "stale claim is broken and re-acquired"
@@ -440,20 +543,45 @@ function Invoke-ClaimSelfTest {
         Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion '9.9.9-dev' -ExpectedSession 'sess-v' -NowUtc $nowRef).State -eq 'mismatch') "verify reports mismatch on version divergence"
         Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion $ver -ExpectedSession 'sess-foreign' -NowUtc $nowRef).State -eq 'owner_mismatch') "same-version foreign owner cannot consume a claim"
         Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod 'nonesuch' -ExpectedVersion $ver -ExpectedSession 'sess-v' -NowUtc $nowRef).State -eq 'absent') "verify reports absent when no claim"
-        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion $ver -ExpectedSession 'sess-v' -NowUtc $nowRef.AddHours(3)).State -eq 'stale') "verify treats a 3h-old claim as stale"
+        Assert ((Test-ShipClaimState -ClaimsDir $vDir -Mod $fixMod -ExpectedVersion $ver -ExpectedSession 'sess-v' -NowUtc $nowRef.AddHours(25)).State -eq 'stale') "verify treats a 25h-old claim as stale"
 
-        # --- atomic contention: two racing PROCESSES, exactly one wins ---
+        # --- adversarial delete-after-read races: replacement must survive ---
+        foreach ($raceKind in @('unreadable', 'stale')) {
+            $deleteRaceDir = Join-Path $tmp "delete-race-$raceKind"
+            [System.IO.Directory]::CreateDirectory($deleteRaceDir) | Out-Null
+            $deleteRaceClaim = Join-Path $deleteRaceDir "$fixMod.claim"
+            $oldRaw = if ($raceKind -eq 'unreadable') {
+                'persistently corrupt claim fixture'
+            } else {
+                Format-ClaimContent -Mod $fixMod -Version '0.0.1-dev' -Session 'expired-owner' -CreatedUtc $nowRef.AddHours(-25)
+            }
+            [System.IO.File]::WriteAllText($deleteRaceClaim, $oldRaw, $utf8NoBom)
+            $ready = Join-Path $deleteRaceDir 'ready'
+            $continue = Join-Path $deleteRaceDir 'continue'
+            $workerArgs = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -ConditionalDeleteRaceWorker -RaceClaimPath "{1}" -RaceReadyPath "{2}" -RaceContinuePath "{3}"' -f $PSCommandPath, $deleteRaceClaim, $ready, $continue
+            $worker = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList $workerArgs
+            $deadline = (Get-Date).AddSeconds(10)
+            while (-not (Test-Path -LiteralPath $ready) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 20 }
+            $replacement = Format-ClaimContent -Mod $fixMod -Version '0.1.6-dev' -Session "replacement-$raceKind" -CreatedUtc $nowRef
+            [System.IO.File]::WriteAllText($deleteRaceClaim, $replacement, $utf8NoBom)
+            [System.IO.File]::WriteAllText($continue, 'continue', $utf8NoBom)
+            $worker.WaitForExit()
+            $survivor = Read-ClaimFile $deleteRaceClaim
+            Assert ($worker.ExitCode -eq 0 -and $survivor -and $survivor.Session -eq "replacement-$raceKind") "$raceKind delete-after-read race preserves the replacement owner's claim (multi-process)"
+        }
+
+        # --- atomic contention: two worktrees/processes, exactly one wins ---
         $raceDir = Join-Path $tmp 'race'
         $selfPath = $PSCommandPath
         $fmt = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Mod {1} -RepoRoot "{2}" -ClaimsDir "{3}" -Session {4} -Quiet'
         $p1 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepo, $raceDir, 'race-a')
-        $p2 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepo, $raceDir, 'race-b')
+        $p2 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepoB, $raceDir, 'race-b')
         $p1.WaitForExit(); $p2.WaitForExit()
         $codes = @($p1.ExitCode, $p2.ExitCode)
         $acquired = @($codes | Where-Object { $_ -eq 0 }).Count
         $contended = @($codes | Where-Object { $_ -eq 1 }).Count
-        Assert ($acquired -eq 1) ("exactly one racing process acquires (exit codes: {0})" -f ($codes -join ','))
-        Assert ($contended -eq 1) ("the other racing process reports contention exit 1 (exit codes: {0})" -f ($codes -join ','))
+        Assert ($acquired -eq 1) ("exactly one cross-worktree racing process acquires (exit codes: {0})" -f ($codes -join ','))
+        Assert ($contended -eq 1) ("the other cross-worktree process reports contention exit 1 (exit codes: {0})" -f ($codes -join ','))
     }
     finally {
         if (Test-Path -LiteralPath $tmp) {
@@ -477,10 +605,11 @@ function Invoke-ClaimSelfTest {
 # ---------------------------------------------------------------------------
 # Main dispatch
 # ---------------------------------------------------------------------------
+if ($ConditionalDeleteRaceWorker) { exit (Invoke-ConditionalDeleteRaceWorker) }
 if ($SelfTest) { exit (Invoke-ClaimSelfTest) }
 
 if (-not $RepoRoot)  { $RepoRoot  = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }
-if (-not $ClaimsDir) { $ClaimsDir = Join-Path $RepoRoot '.ship_claims' }
+if (-not $ClaimsDir) { $ClaimsDir = Get-MachineClaimsDir }
 $sessionId = if ($Session) { $Session } else { Get-ClaimSessionId -RepoRoot $RepoRoot }
 $nowUtc = (Get-Date).ToUniversalTime()
 

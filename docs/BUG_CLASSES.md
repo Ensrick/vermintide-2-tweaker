@@ -579,7 +579,9 @@ Full mechanic + when-to-bump rules + graceful-degradation behavior: `VMF_RECIPES
 No code change — this is process. Three doctrines:
 
 1. **Always increment `MOD_VERSION` before every build** so the in-game banner confirms the new build deployed. (`CLAUDE.md § Version bumping`.)
-2. **Use `VMBLauncher.exe all <mod>`** instead of ad-hoc pipelines — it handles hash verification, BOM, and the PC-B remote push in one go. (`tools/vmb-launcher/CLAUDE.md`.)
+2. **Use the canonical reviewed ship sequence:** claim, `ship.ps1 -BuildOnly`,
+   commit/push/PR/hosted-QA/merge, then `ship.ps1 -Mod <mod>` from clean live
+   default HEAD. Direct launcher publication is not authorized.
 3. **Drop a `.in_progress/<mod>.md` sentinel** when starting substantive multi-step work; check the directory before editing a mod another session might own. (`CLAUDE.md § Multi-agent coordination`.)
 
 ### Related Issues / commits

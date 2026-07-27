@@ -115,9 +115,44 @@ function Test-ReleaseManifest {
         }
 
         if ("$($entry.source_commit)" -notmatch '^[0-9a-f]{40}$') { $errors.Add("$prefix.source_commit must be a lowercase 40-character Git commit") }
-        if ("$($entry.source_state)" -notmatch '^(clean|dirty)$') { $errors.Add("$prefix.source_state must be clean or dirty") }
+        if ("$($entry.source_state)" -ne 'clean') { $errors.Add("$prefix.source_state must be clean") }
         if ("$($entry.builder.name)" -ne 'VMBLauncher') { $errors.Add("$prefix.builder.name must be VMBLauncher") }
         if (-not "$($entry.builder.version)".Trim()) { $errors.Add("$prefix.builder.version is required") }
+
+        if ($null -eq $entry.publication_authorization) {
+            $errors.Add("$prefix.publication_authorization is required")
+        }
+        else {
+            $authorization = $entry.publication_authorization
+            $mode = "$($authorization.mode)"
+            if ($mode -ne 'hosted_qa') {
+                $errors.Add("$prefix.publication_authorization.mode must be hosted_qa")
+            }
+            if ("$($authorization.source_commit)" -ne "$($entry.source_commit)") {
+                $errors.Add("$prefix.publication_authorization.source_commit must equal entry source_commit")
+            }
+            if (-not "$($authorization.checked_at_utc)".Trim()) {
+                $errors.Add("$prefix.publication_authorization.checked_at_utc is required")
+            }
+            if (-not "$($authorization.default_branch)".Trim()) {
+                $errors.Add("$prefix.publication_authorization.default_branch is required for hosted_qa")
+            }
+            if ("$($authorization.default_branch_commit)" -ne "$($entry.source_commit)") {
+                $errors.Add("$prefix.publication_authorization.default_branch_commit must equal entry source_commit")
+            }
+            if ("$($authorization.merged_pr_number)" -notmatch '^\d+$') {
+                $errors.Add("$prefix.publication_authorization.merged_pr_number must contain digits for hosted_qa")
+            }
+            if ("$($authorization.qa_check)" -ne 'qa-gate') {
+                $errors.Add("$prefix.publication_authorization.qa_check must be qa-gate")
+            }
+            if (-not "$($authorization.qa_check_url)".Trim()) {
+                $errors.Add("$prefix.publication_authorization.qa_check_url is required for hosted_qa")
+            }
+            if (-not "$($authorization.qa_completed_at_utc)".Trim()) {
+                $errors.Add("$prefix.publication_authorization.qa_completed_at_utc is required for hosted_qa")
+            }
+        }
 
         $bundleFiles = @($entry.bundle_files)
         if ($bundleFiles.Count -eq 0) { $errors.Add("$prefix.bundle_files must not be empty"); continue }
@@ -174,5 +209,115 @@ function Test-ReleaseManifest {
         Valid    = ($errors.Count -eq 0)
         Errors   = @($errors)
         Warnings = @($warnings)
+    }
+}
+
+function Test-ReleaseZipSnapshot {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$ZipBytes,
+        [Parameter(Mandatory = $true)]$ManifestEntry
+    )
+
+    $errors = [System.Collections.Generic.List[string]]::new()
+    $expected = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::Ordinal)
+    foreach ($bundle in @($ManifestEntry.bundle_files)) {
+        $name = "$($bundle.filename)"
+        $hash = "$($bundle.sha256)"
+        if (-not $name -or [System.IO.Path]::GetFileName($name) -cne $name) {
+            $errors.Add("manifest bundle filename is not one exact leaf: $name")
+            continue
+        }
+        if ($expected.ContainsKey($name)) {
+            $errors.Add("manifest contains duplicate bundle filename: $name")
+        }
+        else { $expected.Add($name, $hash) }
+    }
+    $expectedVersion = "$($ManifestEntry.version)"
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    $memory = $null
+    $archive = $null
+    try {
+        Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
+        $memory = New-Object System.IO.MemoryStream (,$ZipBytes)
+        $archive = New-Object System.IO.Compression.ZipArchive(
+            $memory,
+            [System.IO.Compression.ZipArchiveMode]::Read,
+            $false
+        )
+        foreach ($entry in @($archive.Entries)) {
+            $name = "$($entry.FullName)"
+            if (-not $name -or "$($entry.Name)" -cne $name) {
+                $errors.Add("zip entry is not one exact leaf filename: $name")
+                continue
+            }
+            if (-not $seen.Add($name)) {
+                $errors.Add("zip contains duplicate entry: $name")
+                continue
+            }
+            if ($entry.Length -gt 1073741824) {
+                $errors.Add("zip entry exceeds the 1 GiB verification bound: $name")
+                continue
+            }
+            if ($name -ceq 'vt2updater_version.txt') {
+                if ($entry.Length -gt 128) {
+                    $errors.Add('vt2updater_version.txt exceeds 128 bytes')
+                    continue
+                }
+                $stream = $entry.Open()
+                try {
+                    $reader = New-Object System.IO.StreamReader(
+                        $stream,
+                        [System.Text.Encoding]::ASCII,
+                        $false,
+                        128,
+                        $true
+                    )
+                    try { $actualVersion = $reader.ReadToEnd() }
+                    finally { $reader.Dispose() }
+                }
+                finally { $stream.Dispose() }
+                if ($actualVersion -cne $expectedVersion) {
+                    $errors.Add("zip updater version '$actualVersion' does not equal manifest version '$expectedVersion'")
+                }
+                continue
+            }
+            if (-not $expected.ContainsKey($name)) {
+                $errors.Add("zip contains unrepresented entry: $name")
+                continue
+            }
+            $stream = $entry.Open()
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $actualHash = [System.BitConverter]::ToString(
+                    $sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+            }
+            finally {
+                $sha.Dispose()
+                $stream.Dispose()
+            }
+            if ($actualHash -cne "$($expected[$name])") {
+                $errors.Add("zip entry hash does not match exact manifest bundle: $name")
+            }
+        }
+    }
+    catch {
+        $errors.Add("zip snapshot is unreadable: $($_.Exception.Message)")
+    }
+    finally {
+        if ($archive) { $archive.Dispose() }
+        elseif ($memory) { $memory.Dispose() }
+    }
+
+    foreach ($name in $expected.Keys) {
+        if (-not $seen.Contains($name)) {
+            $errors.Add("zip is missing exact manifest bundle: $name")
+        }
+    }
+    if (-not $seen.Contains('vt2updater_version.txt')) {
+        $errors.Add('zip is missing vt2updater_version.txt')
+    }
+    return [pscustomobject]@{
+        Valid = ($errors.Count -eq 0)
+        Errors = @($errors)
     }
 }

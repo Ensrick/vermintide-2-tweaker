@@ -9,15 +9,23 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
+    [string]$RepoRoot,
     [switch]$Quiet,
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $RepoRoot = Join-Path $PSScriptRoot ".."
+}
 $repoRoot = (Resolve-Path $RepoRoot).Path
 $errors = @()
 $warnings = @()
+$releaseIdentityHelpers = Join-Path $repoRoot 'tools\ship\release-identity.ps1'
+if (-not (Test-Path -LiteralPath $releaseIdentityHelpers -PathType Leaf)) {
+    throw "Release identity helpers not found: $releaseIdentityHelpers"
+}
+. $releaseIdentityHelpers
 
 # Frozen exact triplets found by the 2026-07-17 repository-wide census. These
 # preserve unrelated, user-authored Workshop metadata while making the baseline
@@ -95,7 +103,19 @@ if ($SelfTest) {
     if (-not (Test-DescriptionVersionMatch "1.2.3-dev" $unversioned)) {
         throw "optional unversioned description did not pass"
     }
-    Write-Host "[check_versions] SELF-TEST PASS — planted banner drift rejected; matching and unversioned descriptions accepted." -ForegroundColor Green
+    $staleFirst = "## 1.2.2-dev (2026-07-17)`nold`n`n## 1.2.3-dev (2026-07-18)`nnew"
+    if ((Test-ReleaseIdentity -SourceVersion '1.2.3-dev' -ChangelogText $staleFirst).Ok) {
+        throw "stale-first CHANGELOG fixture was not rejected"
+    }
+    $missingFirst = "## Release candidate (2026-07-18)`n`n## 1.2.3-dev (2026-07-17)"
+    if ((Test-ReleaseIdentity -SourceVersion '1.2.3-dev' -ChangelogText $missingFirst).Ok) {
+        throw "missing-first-version CHANGELOG fixture was not rejected"
+    }
+    $validFirst = "## v1.2.3-dev (2026-07-18) - newest`nbody`n`n## 1.2.2-dev - old"
+    if (-not (Test-ReleaseIdentity -SourceVersion '1.2.3-dev' -ChangelogText $validFirst).Ok) {
+        throw "valid newest-first CHANGELOG fixture did not pass"
+    }
+    Write-Host "[check_versions] SELF-TEST PASS - banner drift plus stale/missing/valid newest release identities covered." -ForegroundColor Green
     exit 0
 }
 
@@ -155,19 +175,20 @@ foreach ($modLua in Find-ModLuas) {
         }
     }
 
-    # Row #51: CHANGELOG entry must exist for current MOD_VERSION.
+    # Row #51 (issue #724): the NEWEST CHANGELOG entry is the release identity
+    # consumed by ship.ps1. It must lead with exactly MOD_VERSION after removing
+    # only the optional display 'v'; a matching historical entry is insufficient.
     # CHANGELOG.md is at the MOD ROOT, not inside scripts/. Walk up 3 levels from
     # <mod>/scripts/mods/<mod>/<mod>.lua to find the mod root.
     $changelogPath = Join-Path (Split-Path $modLua.FullName -Parent | Split-Path -Parent | Split-Path -Parent | Split-Path -Parent) "CHANGELOG.md"
     if (Test-Path $changelogPath) {
         $changelogText = Read-FileUtf8 $changelogPath
-        # Just check the raw version literal appears somewhere reasonable
-        # (different mods use slightly different header formats; lenient scan).
-        if ($changelogText -notmatch [regex]::Escape($rawVersion)) {
-            $warnings += "${modName}: CHANGELOG.md has no entry mentioning v$rawVersion"
+        $identity = Test-ReleaseIdentity -SourceVersion $rawVersion -ChangelogText $changelogText
+        if (-not $identity.Ok) {
+            $errors += "${modName}: $($identity.Message)"
         }
     } else {
-        $warnings += "${modName}: no CHANGELOG.md at $changelogPath"
+        $errors += "${modName}: no CHANGELOG.md at $changelogPath"
     }
 }
 

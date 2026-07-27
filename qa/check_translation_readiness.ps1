@@ -187,7 +187,11 @@ foreach ($file in (Find-LocFiles $repoRoot | Sort-Object FullName)) {
         $parts += "${language}=$translated/$($measure.English)"
     }
     if (-not $Quiet) {
-        $relative = [IO.Path]::GetRelativePath($repoRoot, $file.FullName)
+        $rootPrefix = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        $fullName = [IO.Path]::GetFullPath($file.FullName)
+        $relative = if ($fullName.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            $fullName.Substring($rootPrefix.Length)
+        } else { $fullName }
         $unknown = if ($measure.UnknownLocales.Count -eq 0) { '-' } else {
             (($measure.UnknownLocales.Keys | Sort-Object | ForEach-Object {
                 "$_=$($measure.UnknownLocales[$_])"

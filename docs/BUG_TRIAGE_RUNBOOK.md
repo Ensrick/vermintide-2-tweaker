@@ -216,17 +216,30 @@ UPLOAD - a local deploy alone is silently clobbered.
   in the next log.
 - [ ] **Add a CHANGELOG entry** for the new version (symptom, root cause, fix,
   and the in-game verify check from STEP 8).
-- [ ] **Ship with the canonical one-shot:**
+- [ ] **Generate the reviewed artifact without publishing:**
 
   ```powershell
-  .\tools\ship\ship.ps1 -Mod <mod>            # build + deploy + upload + GitHub + verify
+  .\tools\ship\claim.ps1 -Mod <mod>
+  .\tools\ship\ship.ps1 -Mod <mod> -BuildOnly
   ```
 
-  - Add `-AllowPublic` whenever the mod's `itemV2.cfg` visibility is public —
-    a mechanical launcher gate, applies regardless of version suffix (#328).
-  - Add `-NoRemote` only to skip an otherwise-enabled remote target for that
-    invocation, and identify the skipped target. No flag is needed when no
-    remote target is enabled.
+- [ ] **Commit source and generated bundle together, then review before
+  publication.** Stage the exact mod source, `itemV2.cfg`, CHANGELOG, and root
+  bundle; commit; push; open the PR; pass hosted `qa-gate`; and merge.
+- [ ] **Publish only from a clean checkout at exact live default-branch HEAD:**
+
+  ```powershell
+  .\tools\ship\ship.ps1 -Mod <mod>
+  ```
+
+  The publisher independently re-queries default HEAD, the exact merged PR,
+  and successful hosted `qa-gate`. VMBLauncher receives a capability valid for
+  at most five minutes and independently rechecks the clean root, claim owner,
+  mod/version, cfg hash, and every bundle hash immediately before `ugc_tool`.
+  Direct launcher `upload`/`all`, GUI publication, caller-authored publisher
+  JSON, `-SkipGitHub`, and claim-only publication are not supported.
+  Add `-AllowPublic` whenever `itemV2.cfg` visibility is public. Add
+  `-NoRemote` only to skip an otherwise-enabled remote target and identify it.
 - [ ] **APPROVAL RULE:**
   - **`-dev` / `-alpha` / `-beta`-versioned mods: ship with NO asking, every
     update.** This is how the user tests. Includes single-stream public mods
@@ -241,8 +254,6 @@ UPLOAD - a local deploy alone is silently clobbered.
   "Upload finished" even when nothing transferred.
 - [ ] **Deploy-verify hash mismatch after a confirmed upload:** re-run
   `VMBLauncher deploy <mod> --no-remote` once, then continue. Do not loop on it.
-- [ ] **Commit and push:** `git add` the changed mod files + CHANGELOG, commit
-  with a message naming the version and the bug, `git push`.
 - [ ] **Add the status label to the Issue NOW (same pass, do NOT wait for STEP
   9).** Shipping a fix or diagnostic is what flips an issue into "ready to test",
   and that signal is a GitHub label, not just a comment. `PROJECT_STANDARDS.md`

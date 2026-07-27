@@ -5,15 +5,9 @@
 # vt2-mod-updater tool consumes the release manifest to deploy bundles into friends' Steam
 # Workshop folders.
 #
-# Usage:
-#   .\publish-release.ps1                       # builds all, releases with auto-generated date tag
-#   .\publish-release.ps1 -Tag mods-2026-05-21  # explicit tag name
-#   .\publish-release.ps1 -SkipBuild            # use existing bundleV2/ outputs (faster iter)
-#   .\publish-release.ps1 -DryRun               # build + stage but don't create the GH release
-#   .\publish-release.ps1 -Mods weapon_tweaker  # PER-MOD publish (issues #436/#493): stage/upload
-#                                               # ONLY the named mods (folder name or ModId);
-#                                               # sibling assets + manifest entries stay exactly
-#                                               # as last published. This is what ship.ps1 passes.
+# Internal publication component. Routine releases enter through
+# tools\ship\ship.ps1, which supplies exact publication authorization and
+# launcher provenance. Direct invocation without that evidence fails closed.
 #   .\publish-release.ps1 -LauncherPath <exe> -LauncherSource <source> -LauncherApprovalAnchor <path>
 #                                               # exact approved dependency handoff from ship.ps1
 #
@@ -39,6 +33,8 @@ param(
     [switch]$SkipBuild,
     [switch]$DryRun,
     [string[]]$Mods,
+    [string]$PublicationAuthorizationJson,
+    [string]$PublicationReceiptOutputPath,
     [string]$LauncherPath,
     [string]$LauncherSource,
     [string]$LauncherApprovalAnchor
@@ -56,6 +52,16 @@ if (-not (Test-Path -LiteralPath $manifestHelpers)) {
     throw "Release-manifest helpers not found at $manifestHelpers."
 }
 . $manifestHelpers
+$publicationAuthorizationHelpers = Join-Path $repoRoot 'tools\ship\publication-authorization.ps1'
+if (-not (Test-Path -LiteralPath $publicationAuthorizationHelpers -PathType Leaf)) {
+    throw "Publication authorization helpers not found at $publicationAuthorizationHelpers."
+}
+. $publicationAuthorizationHelpers
+$publicationReceiptHelpers = Join-Path $repoRoot 'tools\ship\publication-receipt.ps1'
+if (-not (Test-Path -LiteralPath $publicationReceiptHelpers -PathType Leaf)) {
+    throw "Publication receipt helpers not found at $publicationReceiptHelpers."
+}
+. $publicationReceiptHelpers
 $githubReleaseHelpers = Join-Path $PSScriptRoot 'github-release-api.ps1'
 if (-not (Test-Path -LiteralPath $githubReleaseHelpers)) {
     throw "GitHub release helpers not found at $githubReleaseHelpers."
@@ -74,10 +80,60 @@ $launcherResolution = Resolve-ApprovedVmbLauncherPath `
     -EnvironmentPath $env:VT2_SHIP_VMB_LAUNCHER
 $launcher = $launcherResolution.Path
 $sourceCommit = Get-ReleaseSourceCommit -RepoRoot $repoRoot
-$builderVersion = Get-VmbLauncherVersion -LauncherPath $launcher
-Write-Host "VMBLauncher dependency: $launcher ($($launcherResolution.Source), version $builderVersion)" -ForegroundColor DarkGray
-
 $ghRepo = 'Ensrick/vermintide-2-tweaker'
+
+$callerAuthorization = $null
+if ([string]::IsNullOrWhiteSpace($PublicationAuthorizationJson)) {
+    throw 'PublicationAuthorizationJson correlation evidence is required. It is never trusted without an independent live GitHub authorization query.'
+}
+else {
+    try {
+        $callerAuthorization = $PublicationAuthorizationJson | ConvertFrom-Json
+    }
+    catch {
+        throw "Publication authorization evidence is invalid JSON: $($_.Exception.Message)"
+    }
+    if (-not $callerAuthorization.mode -or -not $callerAuthorization.source_commit -or -not $callerAuthorization.checked_at_utc) {
+        throw 'Publication authorization evidence requires mode, source_commit, and checked_at_utc.'
+    }
+    if ([string]$callerAuthorization.source_commit -ne $sourceCommit) {
+        throw "Publication authorization source_commit '$($callerAuthorization.source_commit)' does not equal release source commit '$sourceCommit'."
+    }
+    if ([string]$callerAuthorization.mode -ne 'hosted_qa') {
+        throw "Publication authorization mode must be hosted_qa; '$($callerAuthorization.mode)' cannot authorize publication."
+    }
+
+}
+$publicationAuthorization = $callerAuthorization
+$builderVersion = Get-VmbLauncherVersion -LauncherPath $launcher
+$launcherCapability = Assert-VmbLauncherPublicationCapability -LauncherPath $launcher
+Write-Host "VMBLauncher dependency: $launcher ($($launcherResolution.Source), version $builderVersion)" -ForegroundColor DarkGray
+Write-Host "VMBLauncher publication boundary: schema 3, exact commit blobs, locked upload snapshot - PASS" -ForegroundColor DarkGray
+
+# Every filtered ship updates the same daily release and its shared manifest.
+# Per-mod claims do not serialize two DIFFERENT mods, so without this machine-
+# global transaction lock both publishers can read the same base manifest and
+# the later writer silently erases the earlier mod's new entry. Hold the lock
+# across lookup, carry-forward, immutable snapshot capture, and release-ID
+# mutation. An abandoned mutex is safe to take over because the next run reads
+# GitHub again rather than trusting predecessor state.
+$releaseMutationMutex = $null
+$releaseMutationLockHeld = $false
+try {
+    $releaseMutationMutex = New-Object System.Threading.Mutex(
+        $false,
+        'Global\VT2_GitHubReleaseMutation')
+    try {
+        $releaseMutationLockHeld = $releaseMutationMutex.WaitOne(
+            [TimeSpan]::FromMinutes(15))
+    }
+    catch [System.Threading.AbandonedMutexException] {
+        $releaseMutationLockHeld = $true
+    }
+    if (-not $releaseMutationLockHeld) {
+        throw 'Timed out waiting for the machine-global GitHub release mutation lock. Another ship is still preparing or updating the shared release manifest.'
+    }
+    Write-Host 'GitHub release mutation lock: acquired' -ForegroundColor DarkGray
 
 # Mod inventory: single source of truth at tools/mod-inventory.psd1 (shared with
 # tools/mod-lint/lint-mod.ps1 + qa/check_cfg.ps1). Each entry maps to this
@@ -114,6 +170,9 @@ if ($filterActive) {
     }
     $releaseSet = @($releaseSet | Where-Object { ($Mods -contains $_.Folder) -or ($Mods -contains $_.Id) })
     Write-Host "Per-mod filter: staging ONLY $(@($releaseSet | ForEach-Object { $_.Id }) -join ', ') (issues #436/#493)" -ForegroundColor Yellow
+}
+if ($PublicationReceiptOutputPath -and @($releaseSet).Count -ne 1) {
+    throw '-PublicationReceiptOutputPath requires an exact one-mod filtered publication.'
 }
 
 # ---- Static-analysis lint gate ----
@@ -208,6 +267,15 @@ function Read-Visibility {
     return ''
 }
 
+function Get-ByteSha256 {
+    param([byte[]]$Bytes)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return [System.BitConverter]::ToString($sha.ComputeHash($Bytes)).Replace('-', '').ToLowerInvariant()
+    }
+    finally { $sha.Dispose() }
+}
+
 function Read-GitHubReleaseManifest {
     param(
         [Parameter(Mandatory = $true)]$Release,
@@ -215,10 +283,8 @@ function Read-GitHubReleaseManifest {
     )
     $manifestAsset = Get-GitHubReleaseAsset -Release $Release -Name 'manifest.json'
     if (-not $manifestAsset) { return $null }
-    $manifestFile = Join-Path $DownloadDirectory 'manifest.json'
-    if (Test-Path -LiteralPath $manifestFile) { Remove-Item -LiteralPath $manifestFile }
-    Save-GitHubReleaseAsset -Repo $ghRepo -Asset $manifestAsset -Destination $manifestFile
-    try { $parsed = Get-Content $manifestFile -Raw | ConvertFrom-Json } catch { return $null }
+    $manifestBytes = Get-GitHubReleaseAssetBytes -Repo $ghRepo -Asset $manifestAsset
+    try { $parsed = [System.Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json } catch { return $null }
     if (-not $parsed -or -not $parsed.mods) { return $null }
     return [pscustomobject]@{ Manifest = $parsed; Release = $Release }
 }
@@ -279,6 +345,7 @@ if ($filterActive) {
 $manifestMods = @()
 $assetPaths   = @()
 $stagedIds    = @()
+$receiptInputs = @()
 
 foreach ($m in $releaseSet) {
     $modPath  = Join-Path $repoRoot $m.Folder
@@ -287,13 +354,21 @@ foreach ($m in $releaseSet) {
         continue
     }
 
-    $version    = Read-ModVersion -ModFolderPath $modPath -FolderName $m.Folder -ModId $m.Id
-    $workshopId = Read-WorkshopId -ModFolder $modPath
-    $visibility = Read-Visibility -ModFolder $modPath
+    $commitSnapshot = Get-PublicationCommitSnapshot `
+        -RepoRoot $repoRoot -SourceCommit $sourceCommit -Mod $m.Folder
+    $version = "$($commitSnapshot.Version)"
+    $workshopId = "$($commitSnapshot.PublishedId)"
+    $visibility = "$($commitSnapshot.Visibility)"
 
     if (-not $workshopId) {
+        if ($PublicationReceiptOutputPath -or $filterActive) {
+            throw "Source-commit itemV2.cfg for '$($m.Folder)' has no published_id."
+        }
         Write-Warning "Skipping $($m.Folder): no published_id (unpublished mod)"
         continue
+    }
+    if ($workshopId -eq '0' -and -not $PublicationReceiptOutputPath) {
+        throw "published_id=0 is accepted only for a one-mod canonical first-upload receipt handoff."
     }
     if (-not $version) {
         Write-Warning "$($m.Folder) has no MOD_VERSION; falling back to '$Tag'"
@@ -307,15 +382,21 @@ foreach ($m in $releaseSet) {
         if ($LASTEXITCODE -ne 0) { throw "Build failed for $($m.Folder) (exit $LASTEXITCODE)" }
     }
 
-    $bundleDir = Join-Path $modPath 'bundleV2'
-    if (-not (Test-Path $bundleDir)) {
-        throw "Bundle output missing for $($m.Folder) at $bundleDir"
-    }
-
-    # Stage: copy bundleV2/* into <stage>/<mod_id>/, write version sidecar, zip.
+    # Stage immutable source-commit blobs, never mutable working-tree paths.
+    # Build remains a reproducibility gate, but its path output is not a release
+    # input and cannot be swapped into the hosted bytes.
     $modStage = Join-Path $stage $m.Id
     New-Item -ItemType Directory -Force -Path $modStage | Out-Null
-    Copy-Item (Join-Path $bundleDir '*') $modStage -Recurse -Force
+    foreach ($bundle in @($commitSnapshot.BundleFiles)) {
+        $relative = "$($bundle.Path)".Replace('/', '\')
+        $destination = [System.IO.Path]::GetFullPath((Join-Path $modStage $relative))
+        $stagePrefix = [System.IO.Path]::GetFullPath($modStage).TrimEnd('\') + '\'
+        if (-not $destination.StartsWith($stagePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Commit bundle path escapes release staging: $($bundle.Path)"
+        }
+        [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($destination)) | Out-Null
+        [System.IO.File]::WriteAllBytes($destination, [byte[]]$bundle.Bytes)
+    }
     Set-Content -Path (Join-Path $modStage 'vt2updater_version.txt') -Value $version -Encoding ascii -NoNewline
 
     # Provenance hashes describe VMBLauncher's raw output, before the updater
@@ -336,7 +417,8 @@ foreach ($m in $releaseSet) {
     # corruption). Purely additive — older consumers without verification still function.
     $sha256 = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash.ToLowerInvariant()
 
-    $manifestMods += [ordered]@{
+    $sourceState = 'clean'
+    $manifestEntry = [ordered]@{
         mod_id          = $m.Id
         friendly_name   = $m.Name
         workshop_id     = $workshopId
@@ -345,14 +427,21 @@ foreach ($m in $releaseSet) {
         sha256          = $sha256
         visibility      = $visibility
         source_commit   = $sourceCommit
-        source_state    = (Get-ModSourceState -RepoRoot $repoRoot -ModFolder $m.Folder)
+        source_state    = $sourceState
         builder         = [ordered]@{
             name    = 'VMBLauncher'
             version = $builderVersion
         }
         bundle_files    = $bundleFiles
     }
+    $manifestEntry['publication_authorization'] = $publicationAuthorization
+    $manifestMods += $manifestEntry
     $stagedIds += $m.Id
+    $receiptInputs += [pscustomobject]@{
+        Folder = $m.Folder
+        ModId = $m.Id
+        Version = $version
+    }
     Write-Host "  staged $($m.Id) v$version -> $zipPath (sha256 $($sha256.Substring(0,12))...)"
 }
 
@@ -408,12 +497,17 @@ if ($filterActive) {
             $zipDest = Join-Path $stage $fname
             if (Test-Path $zipDest) { Remove-Item $zipDest -Force }
             $baseAsset = Get-GitHubReleaseAsset -Release $baseRelease -Name $fname
-            Save-GitHubReleaseAsset -Repo $ghRepo -Asset $baseAsset -Destination $zipDest
-            $gotHash  = (Get-FileHash -Algorithm SHA256 -Path $zipDest).Hash.ToLowerInvariant()
+            $zipBytes = Get-GitHubReleaseAssetBytes -Repo $ghRepo -Asset $baseAsset
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $gotHash = [System.BitConverter]::ToString($sha.ComputeHash($zipBytes)).Replace('-', '').ToLowerInvariant()
+            }
+            finally { $sha.Dispose() }
             $wantHash = "$($entry.sha256)"
             if ($wantHash -and $gotHash -ne $wantHash) {
                 throw "carry-forward: '$fname' hash mismatch (manifest $wantHash vs downloaded $gotHash) -- refusing to republish a corrupt asset"
             }
+            [System.IO.File]::WriteAllBytes($zipDest, $zipBytes)
             $assetPaths += $zipDest
             Write-Host "  carried $id v$($entry.version) ($fname, sha256 $($gotHash.Substring(0,12))...)"
             $keptMods += $entry
@@ -429,7 +523,8 @@ $manifest = [ordered]@{
     mods         = $manifestMods
 }
 $manifestPath = Join-Path $stage 'manifest.json'
-$manifest | ConvertTo-Json -Depth 5 | Set-Content -Path $manifestPath -Encoding utf8
+$manifestJson = $manifest | ConvertTo-Json -Depth 5
+[System.IO.File]::WriteAllText($manifestPath, $manifestJson, (New-Object System.Text.UTF8Encoding($false)))
 $assetPaths += $manifestPath
 
 # Block before any GitHub mutation if a newly staged entry cannot be mapped to
@@ -442,6 +537,95 @@ if (-not $manifestVerdict.Valid) {
     throw "Release manifest validation failed:`n - $($manifestVerdict.Errors -join "`n - ")"
 }
 Write-Host "Release manifest validation: PASS ($($stagedIds.Count) newly staged provenance entr$(if ($stagedIds.Count -eq 1) { 'y' } else { 'ies' }))." -ForegroundColor Green
+
+# All lint, commit-blob staging, base-manifest lookup, and carry-forward
+# downloads are complete. Re-query authority only now, immediately before
+# constructing the hosted receipt and mutating the release. Local HEAD/index/
+# worktree are deliberately not re-read: exact sourceCommit blobs already own
+# every new release and receipt byte.
+$liveAuthorization = Get-LivePublicationAuthorization -Repo $ghRepo -SourceCommit $sourceCommit
+if (-not $liveAuthorization.Ok) {
+    throw "Last-moment independent publication authorization FAILED: $($liveAuthorization.Message)"
+}
+$correlation = Test-PublicationEvidenceMatchesLive `
+    -CallerEvidence $callerAuthorization `
+    -LiveEvidence $liveAuthorization.Evidence
+if (-not $correlation.Ok) {
+    throw "Caller publication authorization was rejected at the mutation boundary: $($correlation.Message)"
+}
+$publicationAuthorization = $liveAuthorization.Evidence
+
+foreach ($receiptInput in $receiptInputs) {
+    $entry = @($manifestMods | Where-Object { "$($_.mod_id)" -eq "$($receiptInput.ModId)" })
+    if ($entry.Count -ne 1) {
+        throw "Could not bind final authorization to exact manifest entry '$($receiptInput.ModId)'."
+    }
+    $entry[0]['publication_authorization'] = $publicationAuthorization
+}
+$manifest.published_at = (Get-Date).ToUniversalTime().ToString('o')
+$manifestJson = $manifest | ConvertTo-Json -Depth 8
+$manifestBytes = [System.Text.Encoding]::UTF8.GetBytes($manifestJson)
+[System.IO.File]::WriteAllBytes($manifestPath, $manifestBytes)
+
+$finalManifestVerdict = Test-ReleaseManifest -Manifest $manifest -RequiredModIds $stagedIds -StageRoot $stage
+if (-not $finalManifestVerdict.Valid) {
+    throw "Final release manifest validation failed:`n - $($finalManifestVerdict.Errors -join "`n - ")"
+}
+
+$receiptOutputAssetName = $null
+$expectedAssetHashes = @{ 'manifest.json' = (Get-ByteSha256 -Bytes $manifestBytes) }
+foreach ($receiptInput in $receiptInputs) {
+    $assetName = "publication-receipt-$($receiptInput.ModId).json"
+    $receiptPath = Join-Path $stage $assetName
+    $receipt = New-WorkshopPublicationReceipt `
+        -RepoRoot $repoRoot `
+        -Repository $ghRepo `
+        -ReleaseTag $Tag `
+        -ReceiptAssetName $assetName `
+        -Mod $receiptInput.Folder `
+        -Version $receiptInput.Version `
+        -Owner (Get-CanonicalShipOwnerId -RepoRoot $repoRoot) `
+        -SourceCommit $sourceCommit `
+        -AuthorizationEvidence $publicationAuthorization
+    $receiptJson = $receipt | ConvertTo-Json -Depth 12
+    $receiptBytes = [System.Text.Encoding]::UTF8.GetBytes($receiptJson)
+    [System.IO.File]::WriteAllBytes($receiptPath, $receiptBytes)
+    $expectedAssetHashes[$assetName] = Get-ByteSha256 -Bytes $receiptBytes
+    $assetPaths += $receiptPath
+    if ($PublicationReceiptOutputPath) { $receiptOutputAssetName = $assetName }
+}
+
+# Freeze all local release inputs into immutable byte arrays. From this point
+# onward GitHub mutation and the launcher handoff never reopen zip, manifest, or
+# receipt paths. Revalidate every snapshot against the in-memory manifest/receipt
+# objects so a same-user path replacement before this read fails closed.
+$assetSnapshots = @(New-GitHubReleaseAssetSnapshots -AssetPaths $assetPaths)
+foreach ($snapshot in $assetSnapshots) {
+    $snapshotName = "$($snapshot.Name)"
+    $expectedHash = if ($expectedAssetHashes.ContainsKey($snapshotName)) {
+        "$($expectedAssetHashes[$snapshotName])"
+    } else { '' }
+    if ($expectedHash -and "$($snapshot.Sha256)" -ne $expectedHash) {
+        throw "Release asset '$snapshotName' changed before immutable snapshot capture."
+    }
+    if ($snapshotName -like '*.zip') {
+        $entries = @($manifest.mods | Where-Object { "$($_.asset_filename)" -ceq $snapshotName })
+        if ($entries.Count -ne 1 -or "$($entries[0].sha256)" -ne "$($snapshot.Sha256)") {
+            throw "Zip snapshot '$snapshotName' does not match the final manifest SHA-256."
+        }
+        if (@($entries[0].bundle_files).Count -gt 0) {
+            $zipBinding = Test-ReleaseZipSnapshot `
+                -ZipBytes ([byte[]]$snapshot.Bytes) `
+                -ManifestEntry $entries[0]
+            if (-not $zipBinding.Valid) {
+                throw "Zip snapshot '$snapshotName' is not bound to exact commit-derived bundle bytes:`n - $($zipBinding.Errors -join "`n - ")"
+            }
+        }
+        elseif ($stagedIds -contains "$($entries[0].mod_id)") {
+            throw "Newly staged zip '$snapshotName' lacks commit-derived bundle records."
+        }
+    }
+}
 
 Write-Host ""
 Write-Host "Manifest:" -ForegroundColor Green
@@ -460,22 +644,42 @@ if ($DryRun) {
     return
 }
 
+function Copy-PublicationReceiptOutput {
+    if (-not $PublicationReceiptOutputPath) { return }
+    $receiptSnapshot = @($assetSnapshots | Where-Object { "$($_.Name)" -ceq "$receiptOutputAssetName" })
+    if (-not $receiptOutputAssetName -or $receiptSnapshot.Count -ne 1) {
+        throw 'The hosted publication receipt was not available for the canonical ship handoff.'
+    }
+    [System.IO.File]::WriteAllBytes($PublicationReceiptOutputPath, [byte[]]$receiptSnapshot[0].Bytes)
+}
+
 if ($filterActive -and $releaseExists) {
     # Filtered update of an existing release: replace ONLY the staged zip(s) +
     # the merged manifest. Sibling assets on the release are never touched.
     Write-Host ""
     Write-Host "==> GitHub release-id upload/clobber $($targetRelease.id) ($($assetPaths.Count) asset(s))" -ForegroundColor Cyan
-    Publish-GitHubReleaseAssetsById -Repo $ghRepo -Release $targetRelease -AssetPaths $assetPaths
+    $null = Publish-GitHubReleaseAssetsById -Repo $ghRepo -Release $targetRelease -AssetSnapshots $assetSnapshots
+    Copy-PublicationReceiptOutput
     Write-Host ""
     Write-Host "Release updated: https://github.com/$ghRepo/releases/tag/$Tag" -ForegroundColor Green
     return
 }
 
 Write-Host ""
-Write-Host "==> gh release create $Tag" -ForegroundColor Cyan
+Write-Host "==> GitHub draft release create $Tag" -ForegroundColor Cyan
 $notes = "Pre-built mod bundles for vt2-mod-updater.`n`nUpdater app: https://github.com/Ensrick/vt2-mod-updater/releases/latest"
-gh release create $Tag --repo $ghRepo --title "Mod bundles $Tag" --notes $notes @assetPaths
-if ($LASTEXITCODE -ne 0) { throw "gh release create failed (exit $LASTEXITCODE)" }
+$newRelease = New-GitHubDraftRelease -Repo $ghRepo -Tag $Tag -Title "Mod bundles $Tag" -Notes $notes
+$null = Publish-GitHubReleaseAssetsById -Repo $ghRepo -Release $newRelease -AssetSnapshots $assetSnapshots
+$null = Publish-GitHubDraftRelease -Repo $ghRepo -Release $newRelease
+Copy-PublicationReceiptOutput
 
 Write-Host ""
 Write-Host "Release published: https://github.com/$ghRepo/releases/tag/$Tag" -ForegroundColor Green
+}
+finally {
+    if ($releaseMutationLockHeld -and $releaseMutationMutex) {
+        try { $releaseMutationMutex.ReleaseMutex() }
+        catch { Write-Warning "Could not release the GitHub release mutation mutex: $($_.Exception.Message)" }
+    }
+    if ($releaseMutationMutex) { $releaseMutationMutex.Dispose() }
+}

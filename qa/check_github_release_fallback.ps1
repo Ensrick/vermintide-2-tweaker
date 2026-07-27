@@ -26,7 +26,12 @@ function Assert-ReleaseFixture {
 function global:New-Issue651FixtureResponse {
     param([int]$StatusCode, $Value)
     $content = if ($null -eq $Value) { '' } else { ConvertTo-Json -InputObject $Value -Depth 8 -Compress }
-    return [pscustomobject]@{ StatusCode = $StatusCode; Content = $content; Error = $null }
+    return [pscustomobject]@{
+        StatusCode = $StatusCode
+        Content = $content
+        Bytes = [System.Text.Encoding]::UTF8.GetBytes($content)
+        Error = $null
+    }
 }
 
 $repo = 'Owner/Repo'
@@ -139,22 +144,50 @@ try {
     $downloadPath = Join-Path $tempRoot 'manifest.json'
     $downloadUris = [System.Collections.Generic.List[string]]::new()
     $downloadRequest = {
-        param($Method, $Uri, $Accept, $OutputPath)
+        param($Method, $Uri, $Accept)
         $downloadUris.Add($Uri)
-        [System.IO.File]::WriteAllBytes($OutputPath, [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}'))
-        return (New-Issue651FixtureResponse 200 $null)
+        return [pscustomobject]@{
+            StatusCode = 200
+            Content = '{"ok":true}'
+            Bytes = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
+            Error = $null
+        }
     }.GetNewClosure()
     Save-GitHubReleaseAsset -Repo $repo -Asset $selected -Destination $downloadPath -Request $downloadRequest
     Assert-ReleaseFixture ((Test-Path -LiteralPath $downloadPath) -and $downloadUris[0] -match '/releases/assets/501$' -and $downloadUris[0] -notmatch '/tags/') 'asset download uses resolved asset id, never tag route'
 
     $zipPath = Join-Path $tempRoot 'WOC.zip'
     $manifestPath = Join-Path $tempRoot 'manifest.json'
+    $receiptPath = Join-Path $tempRoot 'publication-receipt-modx.json'
     [System.IO.File]::WriteAllBytes($zipPath, [byte[]](1, 2, 3))
     [System.IO.File]::WriteAllBytes($manifestPath, [System.Text.Encoding]::UTF8.GetBytes('{}'))
+    $receiptOriginal = [System.Text.Encoding]::UTF8.GetBytes('{"schema":2}')
+    [System.IO.File]::WriteAllBytes($receiptPath, $receiptOriginal)
+    $receiptSha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $receiptOriginalHash = [System.BitConverter]::ToString($receiptSha.ComputeHash($receiptOriginal)).Replace('-', '').ToLowerInvariant()
+    }
+    finally { $receiptSha.Dispose() }
     $mutationCalls = [System.Collections.Generic.List[string]]::new()
+    $uploadedHashes = @{}
+    $pathsMutated = $false
     $mutationRequest = {
-        param($Method, $Uri, $InputPath, $ContentType)
-        $mutationCalls.Add("$Method $Uri $(if ($InputPath) { [IO.Path]::GetFileName($InputPath) } else { '-' })")
+        param($Method, $Uri, [byte[]]$InputBytes, $ContentType)
+        $mutationCalls.Add("$Method $Uri")
+        if (-not $pathsMutated -and $Method -eq 'DELETE') {
+            $pathsMutated = $true
+            [System.IO.File]::WriteAllBytes($zipPath, [byte[]](9, 9, 9))
+            [System.IO.File]::WriteAllBytes($manifestPath, [System.Text.Encoding]::UTF8.GetBytes('{"mutated":true}'))
+            [System.IO.File]::WriteAllBytes($receiptPath, [System.Text.Encoding]::UTF8.GetBytes('{"schema":999}'))
+        }
+        if ($Method -eq 'POST') {
+            $name = [System.Uri]::UnescapeDataString(($Uri -split 'name=')[-1])
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $uploadedHashes[$name] = [System.BitConverter]::ToString($sha.ComputeHash($InputBytes)).Replace('-', '').ToLowerInvariant()
+            }
+            finally { $sha.Dispose() }
+        }
         $status = if ($Method -eq 'DELETE') { 204 } else { 201 }
         return (New-Issue651FixtureResponse $status $null)
     }.GetNewClosure()
@@ -162,13 +195,40 @@ try {
         id = 777
         assets = @(
             [pscustomobject]@{ id = 601; name = 'WOC.zip' },
-            [pscustomobject]@{ id = 602; name = 'manifest.json' }
+            [pscustomobject]@{ id = 602; name = 'manifest.json' },
+            [pscustomobject]@{ id = 603; name = 'publication-receipt-modx.json' }
         )
     }
-    Publish-GitHubReleaseAssetsById -Repo $repo -Release $mutationRelease -AssetPaths @($manifestPath, $zipPath) -Request $mutationRequest
-    Assert-ReleaseFixture ($mutationCalls.Count -eq 4 -and $mutationCalls[0] -match 'DELETE .*/assets/601' -and $mutationCalls[1] -match 'POST .*/releases/777/assets\?name=WOC.zip') 'clobber replaces only exact requested asset by release id'
-    Assert-ReleaseFixture ($mutationCalls[2] -match 'DELETE .*/assets/602' -and $mutationCalls[3] -match 'POST .*/releases/777/assets\?name=manifest.json') 'manifest upload is forced after replacement zip'
+    $null = Publish-GitHubReleaseAssetsById -Repo $repo -Release $mutationRelease `
+        -AssetPaths @($manifestPath, $zipPath, $receiptPath) -Request $mutationRequest
+    $joinedMutations = $mutationCalls -join "`n"
+    Assert-ReleaseFixture ($mutationCalls.Count -eq 6 -and $joinedMutations -match 'DELETE .*/assets/601' -and $joinedMutations -match 'POST .*/releases/777/assets\?name=WOC.zip') 'clobber replaces only exact requested asset by release id'
+    Assert-ReleaseFixture ($joinedMutations -match 'DELETE .*/assets/603' -and $joinedMutations -match 'POST .*/releases/777/assets\?name=publication-receipt-modx.json') 'receipt replacement uses the exact release asset id'
+    Assert-ReleaseFixture ($mutationCalls[4] -match 'DELETE .*/assets/602' -and $mutationCalls[5] -match 'POST .*/releases/777/assets\?name=manifest.json') 'manifest upload is forced after replacement zip and receipt'
     Assert-ReleaseFixture (-not (($mutationCalls -join "`n") -match '/releases/tags/')) 'release-id mutation never reuses broken tag route'
+    Assert-ReleaseFixture ($uploadedHashes['WOC.zip'] -eq '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81') 'zip upload uses immutable pre-mutation bytes'
+    Assert-ReleaseFixture ($uploadedHashes['publication-receipt-modx.json'] -eq $receiptOriginalHash) 'receipt upload uses immutable pre-mutation bytes'
+    Assert-ReleaseFixture ($uploadedHashes['manifest.json'] -eq '44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a') 'manifest upload uses immutable pre-mutation bytes'
+
+    $draftCalls = [System.Collections.Generic.List[string]]::new()
+    $draftRequest = {
+        param($Method, $Uri, [byte[]]$InputBytes, $ContentType)
+        $body = if ($null -ne $InputBytes) { [System.Text.Encoding]::UTF8.GetString($InputBytes) } else { '' }
+        $draftCalls.Add("$Method $Uri $body")
+        if ($Method -eq 'POST') {
+            return (New-Issue651FixtureResponse 201 ([pscustomobject]@{
+                id = 888; tag_name = $tag; draft = $true; assets = @()
+            }))
+        }
+        return (New-Issue651FixtureResponse 200 ([pscustomobject]@{
+            id = 888; tag_name = $tag; draft = $false; assets = @()
+        }))
+    }.GetNewClosure()
+    $draft = New-GitHubDraftRelease -Repo $repo -Tag $tag -Title 'fixture' -Notes 'fixture notes' -Request $draftRequest
+    $published = Publish-GitHubDraftRelease -Repo $repo -Release $draft -Request $draftRequest
+    Assert-ReleaseFixture ($draft.id -eq 888 -and $draft.draft) 'new release is created as an exact draft before asset upload'
+    Assert-ReleaseFixture ($published.id -eq 888 -and -not $published.draft -and
+        $draftCalls[1] -match '^PATCH .*releases/888 .*"draft":false') 'draft is published by exact release id only after uploads'
 }
 finally {
     Get-ChildItem -LiteralPath $tempRoot -File -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath $_.FullName }
