@@ -236,13 +236,13 @@ isn't justified for a three-mission lighting mod.
 
 ```powershell
 $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
-& $exe build  verminious_dreams_lighting
-& $exe all    verminious_dreams_lighting --allow-public
+& $exe build  verminious_dreams_lighting_dev
+& $exe deploy verminious_dreams_lighting_dev
 ```
 
-Public visibility requires `--allow-public` per launcher doctrine; `all`
-also runs deploy so the author's local install picks up the new bundle
-without waiting on Steam. After a tuning pass:
+Those commands are nonpublishing iteration only. Workshop publication follows
+the merge-first canonical transaction in `PROJECT_STANDARDS.md` section 6.6.
+This friends-only dev stream never takes `-AllowPublic`. After a tuning pass:
 
 1. In-game, run `vdl_dump` to print the resolved values block.
 2. Paste into `_PROFILES` in
@@ -257,6 +257,6 @@ event_tweaker pre-public; verify before transitioning visibility.
 
 ## Status
 
-- Build: `VMBLauncher.exe build verminious_dreams_lighting` →
-  `verminious_dreams_lighting/bundleV2/` (4 bundles + .mod)
-- Upload: `VMBLauncher.exe all verminious_dreams_lighting --allow-public`
+- Build: `VMBLauncher.exe build verminious_dreams_lighting_dev` →
+  `verminious_dreams_lighting_dev/bundleV2/` (4 bundles + .mod)
+- Release: canonical transaction in `PROJECT_STANDARDS.md` section 6.6

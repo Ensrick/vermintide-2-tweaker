@@ -57,7 +57,7 @@ Both were documented in CHANGELOG v0.1.45 as "consumed by cosmetics_tweaker's LA
 | **Author & spec** | `_variant_definitions` (lines ~86–600) | Def table: item_key, base_weapon, careers, right/left_hand_unit, rarity, template |
 | **Validate** | `DEFINITION_OF_DONE.md` | Universal checklist + 9 trait-gated sub-checklists (G-DUAL, G-RANGED, G-3P-ANIM, etc.) |
 | **Proceduralize** | `RECIPES.md` | Decision tree (A1–C1) + copy-paste recipes + add-ons (stat-mod, damage-swap, inverse-hand) |
-| **Build & deploy** | `VMBLauncher.exe all <mod>` | VMB build → bundleV2/, copy to Workshop + PC-B, full game restart |
+| **Build & release** | `PROJECT_STANDARDS.md` section 6.6 | BuildOnly, reviewed source+bundle merge, then canonical ship from clean live default HEAD; PC-A tests the hash-verified deploy without restarting Steam |
 | **Reference** | `DEVELOPMENT.md` + `ANIMATION_FIX_PLAYBOOK.md` | Technical why: rarity, skin system, 3P-only rule, closed-vocab procedure |
 
 ### Major Subsystems

@@ -530,13 +530,12 @@ CurrentPacing.delay_mini_patrol_threat_value = 200
 $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
 & $exe build  event_tweaker
 & $exe deploy event_tweaker
-# To push to Workshop (creates a new revision visible only to subscribers):
-& $exe upload event_tweaker
-# Or do all three in one shot (preferred: the full pipeline + verify):
-& .\tools\ship\ship.ps1 -Mod event_tweaker
 ```
 
-The legacy `deploy_all.ps1` shim and the per-mod `upload_*.ps1` wrappers were removed (deploy shims 2026-05-21; upload wrappers 2026-07-07, archived to `../_vt2-tweaker-archive/`) — use `tools\ship\ship.ps1` (or `VMBLauncher.exe deploy`/`upload <mod>`) directly. The `visibility = "public"` abort guard that prevented the prior automated-public-flip incident (two mods removed-from-community, irreversible) lives in `VMBLauncher.exe upload`, which `ship.ps1` calls.
+Those commands are nonpublishing iteration only. Workshop publication follows
+the merge-first canonical transaction in `PROJECT_STANDARDS.md` section 6.6.
+Direct launcher `all`/`upload`, GUI publication, and the removed legacy wrappers
+are prohibited.
 
 ## Known limitations
 

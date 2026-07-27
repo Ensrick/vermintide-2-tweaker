@@ -104,16 +104,14 @@ and are unaffected by this repository change.
 
 ## Maintainer release topology
 
-The canonical release command remains:
-
-```powershell
-pwsh -NoProfile -File tools/ship/ship.ps1 -Mod <mod-name>
-```
-
-`ship.ps1` invokes the ignored `.vmbrc` indirectly through VMBLauncher, and
-VMBLauncher performs the configured local and remote deployments. Use
-`-NoRemote` only for the documented one-off exception; do not copy bundles into
-Workshop folders or invoke VMB, the SDK uploader, SSH, or SCP directly.
+The canonical merge-first release transaction is owned by
+`PROJECT_STANDARDS.md` section 6.6. This setup document does not redefine its
+claim, `-BuildOnly`, protected merge, or final clean-default-HEAD phases.
+`ship.ps1` invokes the ignored `.vmbrc` indirectly through VMBLauncher and
+performs configured local and remote deployments without opening interactive
+windows. Use `-NoRemote` only for the exception defined by the owner doctrine;
+do not copy bundles into Workshop folders or invoke VMB, direct launcher
+publication, GUI publication, the SDK uploader, SSH, or SCP directly.
 
 When migrating an existing checkout, preserve the old `.vmbrc` before updating,
 then restore it as the ignored local file. Existing `%APPDATA%` launcher settings

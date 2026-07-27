@@ -376,7 +376,7 @@ Last updated: 2026-05-22.
 | Mod(s) | every newly-created mod's first upload |
 | Fix version(s) | vmb-launcher v0.2.8 |
 | Category | STATIC |
-| Repro | 1. Hand-write `itemV2.cfg` with `tags = [ ];`. 2. Run `vmblauncher upload <mod>` for first time. 3. Watch failure. |
+| Repro | 1. Hand-write `itemV2.cfg` with `tags = [ ];`. 2. Run the canonical reviewed ship sequence from `PROJECT_STANDARDS.md` section 6.6. 3. Confirm the cfg gate rejects it before publication. |
 | Expected post-fix | Don't include `tags = [];` in the staged cfg for first upload. (Also: disable Zapret if present.) |
 | Detection | Audit cfg before first upload; ensure no `tags` line. |
 
@@ -422,11 +422,11 @@ Last updated: 2026-05-22.
 | Symptom | After uploading a new version, you restart VT2 and console still echoes the OLD version. |
 | Root cause | Steam doesn't reliably re-download Workshop items the same Steam account authored. |
 | Mod(s) | all |
-| Fix version(s) | n/a — use `vmblauncher all` |
+| Fix version(s) | n/a - canonical reviewed ship; see `PROJECT_STANDARDS.md` section 6.6 |
 | Category | MANUAL |
-| Repro | 1. Run `vmblauncher upload <mod>`. 2. Restart VT2. 3. Watch console show old version. |
-| Expected post-fix | Use `vmblauncher all <mod>` (build + deploy + upload) during iterative dev. |
-| Detection | After every upload, restart VT2; console version matches bumped MOD_VERSION. |
+| Repro | Historical direct-publication path: upload without the reviewed tracked bundle/deploy transaction, then observe the author still loading the old version. The current receipt gate blocks this path. |
+| Expected post-fix | Use the canonical merge-first reviewed ship sequence in `PROJECT_STANDARDS.md` section 6.6; direct launcher publication is prohibited. |
+| Detection | PC-A uses the hash-verified local deploy without restarting Steam; volunteer testers unsubscribe/resubscribe through the dev collection. Confirm the newest console log's `[<id>:LOAD]` version. |
 
 
 ---
@@ -438,10 +438,10 @@ Last updated: 2026-05-22.
 | Symptom | Friend / subscriber still reports old behavior; only the author's local install is updated. |
 | Root cause | `deploy_all.ps1` only copies to LOCAL workshop folder. Subscribers get the version on Steam, which needs `upload`. |
 | Mod(s) | all |
-| Fix version(s) | n/a — use `vmblauncher all` |
+| Fix version(s) | n/a - canonical reviewed ship; see `PROJECT_STANDARDS.md` section 6.6 |
 | Category | MANUAL |
 | Repro | 1. Run `vmblauncher deploy <mod>` only. 2. Friend reports no change. |
-| Expected post-fix | Use `vmblauncher all <mod>` for changes intended to reach subscribers. |
+| Expected post-fix | Use the canonical merge-first reviewed ship sequence in `PROJECT_STANDARDS.md` section 6.6 for subscriber-facing changes. |
 | Detection | After every iterative fix, verify both the local file AND the Workshop page changed. |
 
 
@@ -472,7 +472,7 @@ Last updated: 2026-05-22.
 | Mod(s) | every newly-scaffolded mod |
 | Fix version(s) | doc rule |
 | Category | MANUAL |
-| Repro | 1. Hand-scaffold a new mod (skip `vmb create`). 2. Run `vmblauncher upload <mod>` without copying `item_preview.png`. 3. Watch failure. |
+| Repro | 1. Hand-scaffold a new mod (skip `vmb create`) without `item_preview.png`. 2. Run the canonical reviewed ship sequence from `PROJECT_STANDARDS.md` section 6.6. 3. Confirm preflight rejects the missing preview before publication. |
 | Expected post-fix | Copy `vmb/.template-vmf/item_preview.png` into mod root BEFORE first upload. If failure occurs, capture orphan publisher_id from stdout, convert signed→unsigned, write `published_id = <N>L;` to cfg manually, then retry. |
 | Detection | Verify `item_preview.png` exists in mod root before any first upload. |
 
@@ -488,7 +488,7 @@ Last updated: 2026-05-22.
 | Mod(s) | all |
 | Fix version(s) | n/a — process rule |
 | Category | STATIC |
-| Repro | 1. Set `MOD_VERSION = "0.9.9.1-revert"`. 2. Run `vmblauncher all <mod>`. 3. See Workshop title carry the descriptor. |
+| Repro | 1. Set `MOD_VERSION = "0.9.9.1-revert"`. 2. Run the canonical nonpublishing `ship.ps1 -BuildOnly` phase. 3. Confirm version QA rejects the descriptor before publication. |
 | Expected post-fix | `MOD_VERSION = "X.Y.Z[.W][-alpha|beta|dev|rc]"`. No change descriptors. |
 | Detection | Lint: grep each mod's `MOD_VERSION` for suffix tokens outside the allowed set. |
 

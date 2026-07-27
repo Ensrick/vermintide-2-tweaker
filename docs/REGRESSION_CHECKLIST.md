@@ -1021,7 +1021,7 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Mod(s) | every newly-created mod's first upload |
 | Fix version(s) | vmb-launcher v0.2.8 |
 | Category | STATIC |
-| Repro | 1. Hand-write `itemV2.cfg` with `tags = [ ];`. 2. Run `vmblauncher upload <mod>` for first time. 3. Watch failure. |
+| Repro | 1. Hand-write `itemV2.cfg` with `tags = [ ];`. 2. Run the canonical reviewed ship sequence from `PROJECT_STANDARDS.md` section 6.6. 3. Confirm the cfg gate rejects it before publication. |
 | Expected post-fix | Don't include `tags = [];` in the staged cfg for first upload. (Also: disable Zapret if present.) |
 | Detection | Audit cfg before first upload; ensure no `tags` line. |
 
@@ -1060,9 +1060,9 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Mod(s) | all |
 | Fix version(s) | canonical reviewed ship workflow |
 | Category | MANUAL |
-| Repro | 1. Run `vmblauncher upload <mod>`. 2. Restart VT2. 3. Watch console show old version. |
+| Repro | Historical direct-publication path: upload without the reviewed tracked bundle/deploy transaction, then observe the author still loading the old version. The current receipt gate blocks this path. |
 | Expected post-fix | Claim; run `ship.ps1 -BuildOnly`; commit/push/PR/qa-gate/merge; then run canonical ship from clean live default HEAD. |
-| Detection | After every upload, restart VT2; console version matches bumped MOD_VERSION. |
+| Detection | PC-A uses the hash-verified local deploy without restarting Steam; volunteer testers unsubscribe/resubscribe through the dev collection. Confirm the newest console log's `[<id>:LOAD]` version. |
 
 ### feedback-deploy-vs-upload-distinction — Local deploy doesn't reach subscribers
 
@@ -1112,7 +1112,7 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Mod(s) | every newly-scaffolded mod |
 | Fix version(s) | doc rule |
 | Category | MANUAL |
-| Repro | 1. Hand-scaffold a new mod (skip `vmb create`). 2. Run `vmblauncher upload <mod>` without copying `item_preview.png`. 3. Watch failure. |
+| Repro | 1. Hand-scaffold a new mod (skip `vmb create`) without `item_preview.png`. 2. Run the canonical reviewed ship sequence from `PROJECT_STANDARDS.md` section 6.6. 3. Confirm preflight rejects the missing preview before publication. |
 | Expected post-fix | Copy `vmb/.template-vmf/item_preview.png` into mod root BEFORE first upload. If failure occurs, capture orphan publisher_id from stdout, convert signed→unsigned, write `published_id = <N>L;` to cfg manually, then retry. |
 | Detection | Verify `item_preview.png` exists in mod root before any first upload. |
 
@@ -1125,7 +1125,7 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Mod(s) | all |
 | Fix version(s) | n/a — process rule |
 | Category | STATIC |
-| Repro | 1. Set `MOD_VERSION = "0.9.9.1-revert"`. 2. Run `vmblauncher all <mod>`. 3. See Workshop title carry the descriptor. |
+| Repro | 1. Set `MOD_VERSION = "0.9.9.1-revert"`. 2. Run the canonical nonpublishing `ship.ps1 -BuildOnly` phase. 3. Confirm version QA rejects the descriptor before publication. |
 | Expected post-fix | `MOD_VERSION = "X.Y.Z[.W][-alpha|beta|dev|rc]"`. No change descriptors. |
 | Detection | Lint: grep each mod's `MOD_VERSION` for suffix tokens outside the allowed set. |
 
