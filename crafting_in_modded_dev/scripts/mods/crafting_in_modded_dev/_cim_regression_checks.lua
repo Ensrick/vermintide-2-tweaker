@@ -34,10 +34,14 @@ return function(context)
 
 _rt_register("issue277_bulk_cleanup_exact_owner_transaction", function()
     local core = mod._cim277_bulk_core
+    local deletion = mod._cim277_owned_deletion
     if type(core) ~= "table" or type(core.classify) ~= "function"
             or type(core.snapshot_signature) ~= "function"
             or type(core.partition_equipped) ~= "function"
             or type(core.clear_loadout_refs) ~= "function"
+            or type(deletion) ~= "table"
+            or type(deletion.execute) ~= "function"
+            or deletion.MARKER ~= "cim_owned_deletion_transaction_v2"
             or type(mod._cim277_delete_owned_ids) ~= "function"
             or mod.CIM277_BULK_CLEANUP_MARKER_v0_8_68 ~= true then
         return "#277 cleanup policy/runtime wiring missing"
@@ -76,6 +80,42 @@ _rt_register("issue277_bulk_cleanup_exact_owner_transaction", function()
         return "classify must delete nothing without the identity contract"
     end
 
+    -- Execute the owning pure transaction, not a source needle copied from its
+    -- former inline implementation.
+    local rt_records = { rt_delete = owned("weapon", true) }
+    local rt_loadouts = { rt_career = { slot_melee = "rt_delete" } }
+    local rt_overrides = { rt_delete = "rt_skin" }
+    local rt_inventory = { rt_delete = { backend_id = "rt_delete" } }
+    local rt_new = { rt_delete = "exact-marker" }
+    local rt_new_by_career = {
+        rt_career = { melee = { rt_delete = "exact-career-marker" } },
+    }
+    local removed, delete_err = deletion.execute({
+        records = rt_records,
+        item_master = masters,
+        contract = contract,
+        inventory_items = rt_inventory,
+        new_item_ids = rt_new,
+        new_item_ids_by_career = rt_new_by_career,
+        loadouts = rt_loadouts,
+        clear_loadout_refs = core.clear_loadout_refs,
+        persist_loadouts = function() end,
+        get_overrides = function() return rt_overrides end,
+        clear_override_refs = core.clear_map_keys,
+        persist_overrides = function() end,
+        save = function() end,
+        invalidate = function() end,
+    }, { "rt_delete" })
+    if removed ~= 1 or delete_err ~= nil
+            or rt_records.rt_delete ~= nil
+            or rt_inventory.rt_delete ~= nil
+            or rt_new.rt_delete ~= nil
+            or rt_new_by_career.rt_career.melee.rt_delete ~= nil
+            or rt_loadouts.rt_career.slot_melee ~= nil
+            or rt_overrides.rt_delete ~= nil then
+        return "owned deletion module transaction failed"
+    end
+
     local snapshot = core.snapshot_signature(crafts, records, masters, contract)
     records.owned_weapon.item_key = "accessory"
     local changed = core.snapshot_signature(crafts, records, masters, contract)
@@ -95,7 +135,7 @@ _rt_register("issue277_bulk_cleanup_exact_owner_transaction", function()
         for _, marker in ipairs({
             "core.classify(_forged_weapons, ItemMasterList, contract)",
             "core.snapshot_signature(deletable, _forged_weapons,",
-            "pcall(contract.classify_owned_record,",
+            "deletion.execute({",
             "type(current) ~= \"table\" or type(saved) ~= \"table\"",
         }) do
             if not entry:find(marker, 1, true) then
@@ -890,7 +930,9 @@ end)
 
 _rt_register("issue628_salvage_state_diagnostic", function()
     local contract = mod._cim_synthetic_item_contract
-    if type(contract) ~= "table" or type(contract.salvage_trace_fingerprint) ~= "function" then
+    if type(contract) ~= "table"
+            or type(contract.salvage_trace_fingerprint) ~= "function"
+            or type(contract.recover_salvage_items) ~= "function" then
         return "#628 salvage trace fingerprint policy missing"
     end
     if mod._cim628_salvage_trace_wired ~= true then

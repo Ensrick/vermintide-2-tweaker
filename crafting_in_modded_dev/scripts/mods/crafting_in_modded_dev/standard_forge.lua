@@ -23,6 +23,10 @@ and reverts everything. This matches how the Athanor handles property/trait edit
 
 local mod = get_mod("cim_dev")
 mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_salvage_modded_button")
+local _craft_dispatch = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_craft_dispatch")
+local _salvage_local = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_salvage_local_boundary")
 local template_selector = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_template_selector")
 local template_catalog = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_template_catalog")
 mod._cim_template_selector = template_selector
@@ -544,27 +548,21 @@ end
 -- layer so they don't get re-injected next launch, and clear any modded-loadout
 -- entry that points to the salvaged backend_id.
 synth.salvage = function(self, item_backend_ids)
-    local mirror = self._backend_mirror
-    local contract = mod._cim_synthetic_item_contract
-    local records = {}
-    for i = 1, #item_backend_ids do
-        local bid = item_backend_ids[i]
-        records[bid] = mod._cim_get_craft and mod._cim_get_craft(bid) or nil
+    local summary, err = _salvage_local.execute({
+        contract = mod._cim_synthetic_item_contract,
+        get_record = function(backend_id)
+            return mod._cim_get_craft and mod._cim_get_craft(backend_id)
+        end,
+        delete_owned_ids = mod._cim277_delete_owned_ids,
+    }, item_backend_ids)
+    if not summary then
+        mod:warning("[cim:628] salvage local transaction refused: %s",
+            tostring(err))
+        return {}, false
     end
-    local owned, foreign = contract.partition_exact_ids(item_backend_ids, records)
-
-    -- CIM-owned rows use the same exact-instance transaction as /forge_delete:
-    -- mirror removal + forged_weapons persistence + every CIM loadout/skin
-    -- reference are cleared once. Ordinary rows remain session-local only; no
-    -- PlayFab/official-backend request is made anywhere in this synth.
-    local deleted = 0
-    if #owned > 0 and mod._cim277_delete_owned_ids then
-        deleted = mod._cim277_delete_owned_ids(owned) or 0
-    end
-    for i = 1, #foreign do mirror:remove_item(foreign[i]) end
     mod:info("[cim:628] salvage local-only selected=%d owned=%d deleted=%d foreign=%d",
-        #item_backend_ids, #owned, deleted, #foreign)
-    return {}
+        summary.selected, summary.owned, summary.deleted, summary.foreign)
+    return {}, true
 end
 
 -- ---- apply_weapon_skin: weapon = item[1], skin = item[2]; set weapon.skin ----
@@ -1716,15 +1714,16 @@ mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career
             tostring(item_backend_ids[1])))
     end
 
-    self._last_id = (self._last_id or 0) + 1
-    local id = self._last_id
-    local result = synth_fn(self, item_backend_ids, recipe, recipe_override)
-    self._craft_requests[id] = result or {}
-
-    if Managers.backend and Managers.backend.dirtify_interfaces then
-        pcall(Managers.backend.dirtify_interfaces, Managers.backend)
-    end
-    return id, recipe
+    local id, completed_recipe = _craft_dispatch.execute({
+        invalidate = function()
+            if Managers.backend and Managers.backend.dirtify_interfaces then
+                Managers.backend:dirtify_interfaces()
+            end
+        end,
+    }, self, synth_fn, item_backend_ids, recipe, recipe_override)
+    -- Preserve BackendInterfaceCraftingPlayfab.craft's public two-value shape;
+    -- committed/refused is internal to the dispatch contract.
+    return id, completed_recipe
 end)
 
 -- ============================================================

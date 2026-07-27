@@ -7,8 +7,9 @@
 --     leaked OWNED vs_* twins from the Adventure grid (ALWAYS), drop vanilla
 --     weapons when show_only_modded / the standard forge is active, and inject
 --     blacksmith templates for the can_craft_with recipe.
---   * BackendInterfaceCommon.filter_items -- surface modded crafts in the salvage
---     grid regardless of equip / loadout state.
+--   * BackendInterfaceCommon.filter_items -- restore exact persisted CIM crafts
+--     to the salvage grid only when active-equip, saved-loadout, favorite,
+--     rarity, slot, and immutable-relic guards all pass.
 --   * _cim_is_versus_key / _cim_is_leaked_versus_twin (also published on the flat
 --     mod._cim_* namespace; the get_filtered_items re-hide and the inline
 --     versus_twin_rehidden regression check in the entry both consume them).
@@ -180,7 +181,7 @@ end
 local function _cim628_trace(contract, item, record, state, visible, eligible, reason,
         careers, loadouts)
     if _cim628_salvage_trace_emits >= _CIM628_SALVAGE_TRACE_CAP then return end
-    local bid = item and item.backend_id
+    local bid = item and (item.backend_id or item.ItemInstanceId)
     local fingerprint = contract.salvage_trace_fingerprint
         and contract.salvage_trace_fingerprint(bid, visible, eligible, reason, state)
     if not fingerprint or _cim628_salvage_trace_seen[fingerprint] then return end
@@ -202,60 +203,34 @@ mod:hook("BackendInterfaceCommon", "filter_items", function(func, self, items, f
     if not _is_salvage_filter(filter_infix) then return result end
     if type(result) ~= "table" or type(items) ~= "table" then return result end
 
-    local seen = {}
-    for _, r in ipairs(result) do
-        if r and r.backend_id then seen[r.backend_id] = true end
-    end
-
     local backend_items = Managers.backend and Managers.backend:get_interface("items")
     if not backend_items then return result end
 
     local contract = mod._cim_synthetic_item_contract
-    if type(contract) ~= "table" then return result end
-
-    -- BackendInterfaceCommon.filter_items receives the backend inventory as a
-    -- backend-id keyed map, not a dense array. Using ipairs here silently made
-    -- the canonical CIM recovery/diagnostic adapter skip every real item.
-    for _, item in pairs(items) do
-        local bid = item and item.backend_id
-        local record = bid and mod._cim_get_craft and mod._cim_get_craft(bid)
-        if bid and record then
-            local equipped, any_loadout, favorite = true, true, true
-            local careers, loadouts = { "query-error" }, { "query-error" }
-
-            local ok_equipped, queried_careers = pcall(
-                backend_items.equipped_by, backend_items, bid)
-            if ok_equipped and type(queried_careers) == "table" then
-                careers = queried_careers
-                equipped = #careers > 0
-            end
-
-            local ok_loadout, queried_loadouts = pcall(
-                backend_items.is_equipped_by_any_loadout, backend_items, bid)
-            if ok_loadout and type(queried_loadouts) == "table" then
-                loadouts = queried_loadouts
-                any_loadout = #loadouts > 0
-            end
-
-            if ItemHelper and ItemHelper.is_favorite_backend_id then
-                local ok_favorite, value = pcall(ItemHelper.is_favorite_backend_id, bid, item)
-                if ok_favorite then favorite = value and true or false end
-            end
-
-            local state = {
-                is_equipped = equipped,
-                is_equipped_by_any_loadout = any_loadout,
-                is_favorite = favorite,
-                backend_dirty = backend_items._dirty == true,
-            }
-            local eligible, reason = contract.is_salvage_eligible(item, record, state)
-            if eligible and not seen[bid] then
-                result[#result + 1] = item
-                seen[bid] = true
-            end
-            _cim628_trace(contract, item, record, state, seen[bid] == true,
-                eligible == true, reason, careers, loadouts)
-        end
+    if type(contract) ~= "table"
+            or type(contract.recover_salvage_items) ~= "function" then
+        return result
     end
-    return result
+
+    return contract.recover_salvage_items(items, result, {
+        get_record = function(backend_id)
+            return mod._cim_get_craft and mod._cim_get_craft(backend_id)
+        end,
+        get_equipped_careers = function(backend_id)
+            return backend_items:equipped_by(backend_id)
+        end,
+        get_saved_loadouts = function(backend_id)
+            return backend_items:is_equipped_by_any_loadout(backend_id)
+        end,
+        is_favorite = function(backend_id, item)
+            if not ItemHelper or not ItemHelper.is_favorite_backend_id then
+                return nil
+            end
+            return ItemHelper.is_favorite_backend_id(backend_id, item)
+        end,
+        backend_dirty = backend_items._dirty == true,
+        trace = function(...)
+            return _cim628_trace(contract, ...)
+        end,
+    })
 end)

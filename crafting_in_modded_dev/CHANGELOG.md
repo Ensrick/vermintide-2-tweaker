@@ -1,5 +1,19 @@
 # Crafting in Modded Changelog
 
+## 0.8.108-dev (2026-07-26) - transactional synthetic salvage (#628) [not-started]
+
+- Unified keyed backend-item recovery with the canonical synthetic-item
+  eligibility contract, including active and saved loadouts, favorites,
+  malformed rows, and immutable Weapons of Chaos relics.
+- Made mixed CIM-owned and foreign salvage one compensating local transaction.
+  A failed deletion restores exact mirror rows, loadouts, illusion overrides,
+  persistence, and vanilla new-item metadata without calling PlayFab, eager
+  refresh, item normalizers, or autosave.
+- Added a commit-aware crafting dispatcher so backend interfaces are dirtied
+  only after a successful local salvage commit. Executable regressions cover
+  partial multi-item failures, rollback errors, idempotence, and the full outer
+  crafting boundary.
+
 ## 0.8.107-dev (2026-07-25) - #1002 bounded Equipment reset
 
 - Opted CIM into Mod Tweaker's owner-level setting transaction. A full
