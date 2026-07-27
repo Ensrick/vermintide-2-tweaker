@@ -1004,7 +1004,7 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Field | Value |
 |-------|-------|
 | Symptom | A schema-2 manifest records `source_state: dirty`, or a clean entry's raw bundle hashes cannot be reproduced from `source_commit`. |
-| Root cause | The canonical ship workflow builds/uploads before committing source, so `HEAD` may be only a baseline rather than the exact build input. |
+| Root cause | Historical publication allowed build/upload before immutable source review, so `HEAD` could be only a baseline rather than the exact build input. |
 | Mod(s) | release tooling; all published VMB mods |
 | Fix version(s) | transition gate for issue #558 |
 | Category | STATIC / PROCESS |
@@ -1058,10 +1058,10 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Symptom | After uploading a new version, you restart VT2 and console still echoes the OLD version. |
 | Root cause | Steam doesn't reliably re-download Workshop items the same Steam account authored. |
 | Mod(s) | all |
-| Fix version(s) | n/a — use `vmblauncher all` |
+| Fix version(s) | canonical reviewed ship workflow |
 | Category | MANUAL |
 | Repro | 1. Run `vmblauncher upload <mod>`. 2. Restart VT2. 3. Watch console show old version. |
-| Expected post-fix | Use `vmblauncher all <mod>` (build + deploy + upload) during iterative dev. |
+| Expected post-fix | Claim; run `ship.ps1 -BuildOnly`; commit/push/PR/qa-gate/merge; then run canonical ship from clean live default HEAD. |
 | Detection | After every upload, restart VT2; console version matches bumped MOD_VERSION. |
 
 ### feedback-deploy-vs-upload-distinction — Local deploy doesn't reach subscribers
@@ -1071,10 +1071,10 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Symptom | Friend / subscriber still reports old behavior; only the author's local install is updated. |
 | Root cause | `deploy_all.ps1` only copies to LOCAL workshop folder. Subscribers get the version on Steam, which needs `upload`. |
 | Mod(s) | all |
-| Fix version(s) | n/a — use `vmblauncher all` |
+| Fix version(s) | canonical reviewed ship workflow |
 | Category | MANUAL |
 | Repro | 1. Run `vmblauncher deploy <mod>` only. 2. Friend reports no change. |
-| Expected post-fix | Use `vmblauncher all <mod>` for changes intended to reach subscribers. |
+| Expected post-fix | Use the canonical reviewed ship sequence for subscriber-facing changes; local deploy remains non-publishing. |
 | Detection | After every iterative fix, verify both the local file AND the Workshop page changed. |
 
 ### ugc-tool-pushes-all-cfg-fields — Every upload overwrites title/desc/preview/visibility

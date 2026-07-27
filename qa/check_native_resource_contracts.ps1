@@ -81,7 +81,11 @@ function Get-DetectedRows {
         $_.Name -ne '_lib_resource_residency.lua' -and
         $_.FullName -notmatch '[\\/]_archive[\\/]|[\\/]bundleV2[\\/]|[\\/]_test_fixtures[\\/]'
     } | ForEach-Object {
-        $relative = [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/')
+        $rootPrefix = [IO.Path]::GetFullPath($root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        $fullName = [IO.Path]::GetFullPath($_.FullName)
+        $relative = $(if ($fullName.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            $fullName.Substring($rootPrefix.Length)
+        } else { $fullName }).Replace('\', '/')
         $source = [IO.File]::ReadAllText($_.FullName, [Text.Encoding]::UTF8)
         $candidateKinds = @($patterns.Keys | Where-Object {
             $patterns[$_].IsMatch($source)

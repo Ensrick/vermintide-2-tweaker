@@ -28,6 +28,7 @@ function Invoke-GitHubReleaseApiRequest {
         [Parameter(Mandatory = $true)][string]$Uri,
         [string]$Accept = 'application/vnd.github+json',
         [string]$InputPath,
+        [byte[]]$InputBytes,
         [string]$ContentType = 'application/octet-stream',
         [string]$OutputPath
     )
@@ -47,12 +48,17 @@ function Invoke-GitHubReleaseApiRequest {
             'Bearer',
             (Get-GitHubReleaseToken)
         )
+        if ($InputPath -and $null -ne $InputBytes) {
+            throw 'Specify either InputPath or InputBytes, not both.'
+        }
         if ($InputPath) {
             if (-not (Test-Path -LiteralPath $InputPath -PathType Leaf)) {
                 throw "Upload input not found: $InputPath"
             }
-            $bytes = [System.IO.File]::ReadAllBytes($InputPath)
-            $request.Content = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$bytes)
+            $InputBytes = [System.IO.File]::ReadAllBytes($InputPath)
+        }
+        if ($null -ne $InputBytes) {
+            $request.Content = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$InputBytes)
             $request.Content.Headers.ContentType = New-Object System.Net.Http.Headers.MediaTypeHeaderValue($ContentType)
         }
 
@@ -65,6 +71,7 @@ function Invoke-GitHubReleaseApiRequest {
             return [pscustomobject]@{
                 StatusCode = [int]$response.StatusCode
                 Content    = [System.Text.Encoding]::UTF8.GetString($responseBytes)
+                Bytes      = $responseBytes
                 Error      = $null
             }
         }
@@ -72,6 +79,7 @@ function Invoke-GitHubReleaseApiRequest {
             return [pscustomobject]@{
                 StatusCode = 0
                 Content    = ''
+                Bytes      = [byte[]]@()
                 Error      = $_.Exception.Message
             }
         }
@@ -220,34 +228,148 @@ function Save-GitHubReleaseAsset {
     } else {
         "https://api.github.com/repos/$Repo/releases/assets/$($Asset.id)"
     }
-    $response = & $Request -Method GET -Uri $uri -Accept 'application/octet-stream' -OutputPath $Destination
-    if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300 -or -not (Test-Path -LiteralPath $Destination -PathType Leaf)) {
+    $bytes = Get-GitHubReleaseAssetBytes -Repo $Repo -Asset $Asset -Request $Request
+    [System.IO.File]::WriteAllBytes($Destination, $bytes)
+    if (-not (Test-Path -LiteralPath $Destination -PathType Leaf)) {
+        throw "Could not persist downloaded release asset '$($Asset.name)' (id $($Asset.id))."
+    }
+}
+
+function Get-GitHubReleaseAssetBytes {
+    param(
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)]$Asset,
+        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
+    )
+    if ("$($Asset.id)" -notmatch '^\d+$') { throw "Asset '$($Asset.name)' has no numeric release asset id." }
+    $uri = if ("$($Asset.url)" -match '/releases/assets/\d+$') {
+        "$($Asset.url)"
+    } else {
+        "https://api.github.com/repos/$Repo/releases/assets/$($Asset.id)"
+    }
+    $response = & $Request -Method GET -Uri $uri -Accept 'application/octet-stream'
+    if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300) {
         throw "Download of release asset '$($Asset.name)' (id $($Asset.id)) failed with HTTP $($response.StatusCode)."
     }
+    if ($null -ne $response.Bytes) { return [byte[]]$response.Bytes }
+    return [System.Text.Encoding]::UTF8.GetBytes([string]$response.Content)
+}
+
+function New-GitHubReleaseAssetSnapshots {
+    param([Parameter(Mandatory = $true)][string[]]$AssetPaths)
+
+    $seenNames = @{}
+    $snapshots = @()
+    foreach ($path in $AssetPaths) {
+        $name = [System.IO.Path]::GetFileName($path)
+        if ($seenNames.ContainsKey($name)) { throw "Duplicate requested release asset name: $name" }
+        $seenNames[$name] = $true
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "Release asset input not found: $path"
+        }
+        # Read once. Every later validation, upload, and receipt handoff uses
+        # this immutable byte array rather than reopening a mutable path.
+        $bytes = [System.IO.File]::ReadAllBytes($path)
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $hash = [System.BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+        }
+        finally { $sha.Dispose() }
+        $snapshots += [pscustomobject]@{
+            Name = $name
+            SourcePath = [System.IO.Path]::GetFullPath($path)
+            Bytes = $bytes
+            Length = [long]$bytes.Length
+            Sha256 = $hash
+            ContentType = if ($name -eq 'manifest.json' -or $name -like 'publication-receipt-*.json') {
+                'application/json'
+            } else {
+                'application/zip'
+            }
+        }
+    }
+    return @($snapshots | Sort-Object @{ Expression = { if ($_.Name -eq 'manifest.json') { 1 } else { 0 } } }, Name)
+}
+
+function New-GitHubDraftRelease {
+    param(
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$Tag,
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Notes,
+        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
+    )
+    $payload = [ordered]@{
+        tag_name = $Tag
+        name = $Title
+        body = $Notes
+        draft = $true
+        prerelease = $false
+    } | ConvertTo-Json -Compress
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+    $response = & $Request -Method POST -Uri "https://api.github.com/repos/$Repo/releases" `
+        -InputBytes $bytes -ContentType 'application/json'
+    if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300) {
+        throw "Could not create draft release '$Tag' (HTTP $($response.StatusCode))."
+    }
+    $release = ConvertFrom-GitHubReleaseJson -Response $response -Context "draft release '$Tag'"
+    if ("$($release.id)" -notmatch '^\d+$' -or "$($release.tag_name)" -cne $Tag -or -not $release.draft) {
+        throw "GitHub returned an invalid draft release identity for '$Tag'."
+    }
+    return $release
+}
+
+function Publish-GitHubDraftRelease {
+    param(
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)]$Release,
+        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
+    )
+    if ("$($Release.id)" -notmatch '^\d+$' -or -not $Release.draft) {
+        throw 'Only an exact draft release id can be published.'
+    }
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes('{"draft":false}')
+    $response = & $Request -Method PATCH `
+        -Uri "https://api.github.com/repos/$Repo/releases/$($Release.id)" `
+        -InputBytes $bytes -ContentType 'application/json'
+    if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300) {
+        throw "Could not publish draft release id $($Release.id) (HTTP $($response.StatusCode))."
+    }
+    $published = ConvertFrom-GitHubReleaseJson -Response $response -Context "published release $($Release.id)"
+    if ("$($published.id)" -ne "$($Release.id)" -or $published.draft) {
+        throw "GitHub did not confirm publication of release id $($Release.id)."
+    }
+    return $published
 }
 
 function Publish-GitHubReleaseAssetsById {
     param(
         [Parameter(Mandatory = $true)][string]$Repo,
         [Parameter(Mandatory = $true)]$Release,
-        [Parameter(Mandatory = $true)][string[]]$AssetPaths,
+        [string[]]$AssetPaths,
+        [object[]]$AssetSnapshots,
         [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
     )
     if ("$($Release.id)" -notmatch '^\d+$') { throw 'Resolved release has no numeric id; refusing asset mutation.' }
+    if (($AssetPaths -and $AssetSnapshots) -or (-not $AssetPaths -and -not $AssetSnapshots)) {
+        throw 'Specify exactly one of AssetPaths or AssetSnapshots.'
+    }
+    $snapshots = if ($AssetSnapshots) { @($AssetSnapshots) } else {
+        @(New-GitHubReleaseAssetSnapshots -AssetPaths $AssetPaths)
+    }
 
     # Keep manifest last: consumers must never observe a manifest that points at
     # a replacement zip which has not reached the release yet.
     $seenNames = @{}
-    foreach ($path in $AssetPaths) {
-        $name = [System.IO.Path]::GetFileName($path)
+    foreach ($snapshot in $snapshots) {
+        $name = "$($snapshot.Name)"
         if ($seenNames.ContainsKey($name)) { throw "Duplicate requested release asset name: $name" }
         $seenNames[$name] = $true
     }
-    $orderedPaths = @($AssetPaths | Where-Object { [System.IO.Path]::GetFileName($_) -ne 'manifest.json' })
-    $orderedPaths += @($AssetPaths | Where-Object { [System.IO.Path]::GetFileName($_) -eq 'manifest.json' })
-    foreach ($path in $orderedPaths) {
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Release asset input not found: $path" }
-        $name = [System.IO.Path]::GetFileName($path)
+    $orderedSnapshots = @($snapshots | Where-Object { $_.Name -ne 'manifest.json' })
+    $orderedSnapshots += @($snapshots | Where-Object { $_.Name -eq 'manifest.json' })
+    foreach ($snapshot in $orderedSnapshots) {
+        $name = "$($snapshot.Name)"
         $existing = Get-GitHubReleaseAsset -Release $Release -Name $name
         if ($existing) {
             $deleteUri = "https://api.github.com/repos/$Repo/releases/assets/$($existing.id)"
@@ -259,10 +381,11 @@ function Publish-GitHubReleaseAssetsById {
 
         $encodedName = [System.Uri]::EscapeDataString($name)
         $uploadUri = "https://uploads.github.com/repos/$Repo/releases/$($Release.id)/assets?name=$encodedName"
-        $contentType = if ($name -eq 'manifest.json') { 'application/json' } else { 'application/zip' }
-        $uploaded = & $Request -Method POST -Uri $uploadUri -InputPath $path -ContentType $contentType
+        $uploaded = & $Request -Method POST -Uri $uploadUri `
+            -InputBytes ([byte[]]$snapshot.Bytes) -ContentType "$($snapshot.ContentType)"
         if ($uploaded.StatusCode -lt 200 -or $uploaded.StatusCode -ge 300) {
             throw "Upload of '$name' to release id $($Release.id) failed with HTTP $($uploaded.StatusCode)."
         }
     }
+    return $orderedSnapshots
 }

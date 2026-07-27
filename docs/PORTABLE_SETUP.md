@@ -69,7 +69,9 @@ launcher action and removed in `finally` after both success and failure.
 These fallbacks supply tooling and configuration only. The pre-existing ship
 identity gate still requires VMBLauncher `info` to resolve the invoking mod
 directory and match its git commit, `MOD_VERSION`, and `published_id` before
-`all` can build, deploy, or upload.
+the wrapper can build or deploy. Publication is a separate internal launcher
+verb and remains available only to the canonical `ship.ps1` transaction; direct
+`all`, `upload`, and GUI publication cannot construct its authority.
 
 ## VMBLauncher settings
 
@@ -83,12 +85,15 @@ Multiple git worktrees share the same launcher settings, so the wrapper
 temporarily binds ProjectRoot to the repository containing the invoked script,
 asks VMBLauncher to report the resolved mod folder, and compares the root,
 `MOD_VERSION`, git commit, and `published_id` with that invoking checkout. Any
-mismatch aborts before `VMBLauncher all` can build, deploy, or upload. The
+mismatch aborts before the canonical launcher build/deploy/publication actions.
+The
 original settings file is restored byte-for-byte in a `finally` block on both
 success and failure. A named OS mutex covers binding, validation, the complete
 launcher action, and restoration so parallel worktree ships cannot race the
-shared file (issue #647). This is a wrapper guard; VMBLauncher's normal `all`
-build/deploy/upload semantics are unchanged.
+shared file (issue #647). VMBLauncher's final publication boundary additionally
+requires a short-lived receipt whose exact bytes it independently downloads
+from the canonical GitHub release. It then verifies live authorization and the
+byte-exact SDK staging set immediately before invoking `ugc_tool`.
 
 Remote hosts are also local settings. Configure `RemoteDeployTargets` in the
 launcher settings and SSH aliases in `~/.ssh/config`; never place hostnames,

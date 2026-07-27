@@ -84,7 +84,11 @@ function Get-ActiveLuaFiles {
 function Find-PlayerFacingLifecycleTags([System.IO.FileInfo[]]$Files) {
     $findings = [System.Collections.Generic.List[object]]::new()
     foreach ($file in $Files) {
-        $relative = [IO.Path]::GetRelativePath($repoRoot, $file.FullName)
+        $rootPrefix = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        $fullName = [IO.Path]::GetFullPath($file.FullName)
+        $relative = if ($fullName.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            $fullName.Substring($rootPrefix.Length)
+        } else { $fullName }
         $isLocalization = $file.Name -like '*_localization.lua'
         $inLongComment = $false
         $lineNumber = 0

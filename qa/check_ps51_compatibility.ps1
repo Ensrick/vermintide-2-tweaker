@@ -124,6 +124,7 @@ function Get-Ps51ParseClosure {
         foreach ($match in [regex]::Matches($text, '["''](?<path>[^"'']+\.ps1)["'']')) {
             $literal = $match.Groups['path'].Value -replace '\\', [System.IO.Path]::DirectorySeparatorChar
             if ($literal -match '[*?]') { continue }
+            if ($literal.IndexOfAny([char[]]"`r`n") -ge 0) { continue }
             if ($literal -match '^(qa|tools|\.github)[\\/]') {
                 $candidate = Join-Path $rootFull $literal
             }

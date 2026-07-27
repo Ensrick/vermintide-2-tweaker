@@ -224,7 +224,7 @@ name, directory suffix, or version suffix.
 
 ### Required: VMBLauncher headless CLI
 
-VMBLauncher is **the only** sanctioned path to build / deploy / upload any VT2 mod in this repo. Not "preferred" - required. Do NOT invent ad-hoc PowerShell pipelines, raw `node vmb.js`, raw `ugc_tool` calls, raw `scp` to PC-B, or wrap the SDK compiler by hand. Every one of those one-off paths has burned multiple iterations in the past (hash-unverified deploys, stale PC-B, missed UTF-8 BOM, 0x2 empty-content-directory, wrong scp protocol, etc.). If the launcher binary is missing on the current machine, rebuild it via `tools/vmb-launcher/publish.ps1 -SkipOpen` before doing anything else.
+VMBLauncher is **the only** sanctioned path to build / deploy / upload any VT2 mod in this repo. Not "preferred" - required. Do NOT invent ad-hoc PowerShell pipelines, raw `node vmb.js`, raw `ugc_tool` calls, raw `scp` to PC-B, or wrap the SDK compiler by hand. Every one of those one-off paths has burned multiple iterations in the past (hash-unverified deploys, stale PC-B, missed UTF-8 BOM, 0x2 empty-content-directory, wrong scp protocol, etc.). If the approved launcher binary is missing, canonical shipping stops; install the reviewed, versioned binary through the launcher release process. Do not fall back to a raw uploader or create an ad hoc publication binary inside a ship.
 
 ```powershell
 $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
@@ -233,51 +233,64 @@ $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\
 & $exe doctor                                        # diagnostics
 & $exe build  general_tweaker                        # VMB build -> bundleV2/
 & $exe deploy general_tweaker                        # hash-verified local copy + every enabled remote target
-& $exe upload general_tweaker                        # stage + push via ugc_tool
-& $exe upload chaos_wastes_tweaker --allow-public    # only required for public-visibility mods
-& $exe all    general_tweaker                        # build + deploy + upload (enabled remotes included)
 ```
 
-Same code as the GUI buttons; streams VMB output live to stdout; exit codes 0/1/2/3. **Read `tools/vmb-launcher/CLAUDE.md` for the full doctrine** - verbs, flags, preflight gates, visibility-public safety, remote-deploy config, the PowerShell pipeline-truncation quirk, GUI/headless detection rule.
+The internal launcher `upload`/`all` verbs and GUI publication controls cannot
+publish without the exact short-lived receipt hosted on the canonical GitHub
+release by `ship.ps1`; a claim or hand-authored JSON is insufficient. The
+launcher independently downloads the receipt and validates the SDK staging
+bytes immediately before `ugc_tool`. Headless build/deploy streams output live
+and preserves exit codes 0/1/2/3. **Read `tools/vmb-launcher/CLAUDE.md` for the
+full doctrine.**
 
 ### Ship doctrine (2026-07-01 canonical)
 
 **The ship decision keys off the MOD_VERSION suffix, nothing else** - not the directory, not Workshop visibility.
 
-**`-dev` / `-alpha` / `-beta` suffix (= every currently active mod):** EVERY update ships the FULL pipeline with NO per-build approval. Run:
+**`-dev` / `-alpha` / `-beta` suffix (= every currently active mod):** EVERY update ships the FULL pipeline with NO per-build approval. The release is merge-first:
 
 ```powershell
-.\tools\ship\ship.ps1 -Mod <name>     # build + local/enabled-remote deploy + upload + GitHub release + verify
+.\tools\ship\claim.ps1 -Mod <name>
+# bump MOD_VERSION and newest CHANGELOG entry, make source changes
+.\tools\ship\ship.ps1 -Mod <name> -BuildOnly
+# commit source + bundle, push feature branch, pass hosted qa-gate, merge
+.\tools\ship\ship.ps1 -Mod <name>     # from clean exact default-branch HEAD
 ```
 
-Then `git add` + commit the source and generated bundle, push a feature branch, open a PR to protected `master`, wait for required `qa-gate`, and merge. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled remote target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only. Local-deploy-only is NOT a valid **ship** path: Steam re-syncs the subscribed Workshop bundle over any local deploy, so the user only ever runs the last UPLOADED build. Uploading is the only thing that reaches them.
+The publishing invocation fails closed unless HEAD is the live default-branch commit, an associated PR merged that exact commit, hosted `qa-gate` completed successfully on it, the machine-global mod/version claim matches, and a clean build exactly reproduces every tracked `bundleV2` blob. It then runs separate deploy and upload actions and records authorization evidence in the GitHub release manifest. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled remote target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only.
 
 **Clean version, no suffix (including stable promotions):** requires a fresh, explicit, per-build ship signal from the user naming the version (e.g. "ship cim v0.8.34 now"). A "ship it" from earlier does NOT carry forward. Default for these is `build` + `deploy` only; treat upload like `git push --force`. This guards subscribers - reflex uploads of unstable mid-fix builds cost ~80 cim subscribers in May 2026.
 
 | Intent | Verbs |
 |---|---|
-| Update a `-dev`/`-alpha`/`-beta` build (any active mod) | `ship.ps1 -Mod <name>`, then commit source+bundle, push a branch, pass `qa-gate`, and merge the PR. No ask. |
+| Update a `-dev`/`-alpha`/`-beta` build (any active mod) | claim; `ship.ps1 -BuildOnly`; commit source+bundle; push; pass hosted `qa-gate`; merge; then `ship.ps1 -Mod <name>` from exact clean default-branch HEAD. No ask. |
 | ...when the target mod's current `itemV2.cfg` says `visibility = "public"` | add `-AllowPublic` |
 | ...while intentionally skipping an enabled remote | add `-NoRemote` and SAY WHICH target was skipped |
 | Confirm a build only compiles | `VMBLauncher.exe build <mod>` |
 | Promote a clean stable version | ONLY on a fresh per-build ship signal naming the version; then `ship.ps1 -Mod <mod>` plus `-AllowPublic` iff the cfg is public |
 
-`ship.ps1` flags: `-AllowPublic` (public itemV2.cfg visibility), `-NoRemote` (skip all enabled remote targets for that invocation), `-SkipGitHub`. Dev clones are `friends_only` and never take `-AllowPublic`. `ship.ps1` also runs `publish-release.ps1` (the GitHub release feeding [vt2-mod-updater](https://github.com/Ensrick/vt2-mod-updater), the source of truth that keeps the friends cohort synced where Workshop propagation is unreliable). For a session that touched several mods, run `.\tools\publish-release\publish-release.ps1` once at the end - it packages every mod's current bundle, auto-skips unpublished mods, and writes a `vt2updater_version.txt` sidecar per zip.
+`ship.ps1` flags: `-AllowPublic` (public itemV2.cfg visibility) and
+`-NoRemote` (skip enabled remote targets for that invocation). `-SkipGitHub`
+and emergency publication are prohibited because Workshop upload cannot bypass
+exact clean default-head, merged-PR, hosted-QA, and release-provenance checks;
+use `-BuildOnly` for nonpublishing work. Dev clones are `friends_only` and
+never take `-AllowPublic`.
 
 **Post-ship verification (both load-bearing - `ugc_tool` prints success even on failure):**
 1. `C:\Program Files (x86)\Steam\logs\workshop_log.txt` must show `Uploaded new content` for the item. For `friends_only`/`private` items the public Steam API returns blank fields, so if in doubt eyeball the Workshop page in Steam.
 2. `ship.ps1` hash-verifies the deploy against the Workshop content folder. If that verify fails with a hash mismatch AFTER a confirmed upload, it is a Steam reconcile race: re-run `VMBLauncher.exe deploy <mod> --no-remote` once and treat the ship as successful. Do NOT lecture the user about restarting Steam unless the log shows they are actually running a stale build.
 
-**Protected source landing (issue #540).** `master` requires the strict
+**Protected source landing (issues #540/#724).** `master` requires the strict
 `qa-gate` context, applies the rule to administrators, forbids force-push and
 deletion, and requires conversation resolution. Do not attempt a direct push or
 disable protection to preserve the old workflow. A ship is source-consistent
-only after its source and generated bundle merge through the protected PR; the
-merge-triggered `master` QA run is the final remote confirmation.
+only after its source and generated bundle merge through the protected PR. The
+merge-triggered `master` `qa-gate` must succeed before Workshop upload; the
+publisher rechecks that exact commit immediately before upload.
 
 **Every deploy hits every enabled remote target automatically.** As of launcher v0.4.0, `deploy` (and `all`/`ship.ps1`) push the bundle to each enabled `RemoteDeployTargets` entry in `%APPDATA%\VMBLauncher\settings.json` right after the local Workshop-folder copy. A disabled target is intentionally out of scope and must not be reported as updated. For co-op debugging, enable the tester target before deploying so host and client stay in lockstep. Skip otherwise-enabled remotes for one invocation with `-NoRemote`/`--no-remote`; disable a target persistently with `Enabled = false` in settings.
 
-`ship.ps1` is the canonical build/deploy/upload path; the visibility-regression guard (verify `itemV2.cfg` visibility before a `--allow-public` push) lives in `VMBLauncher.exe upload`, which `ship.ps1` calls. The legacy per-mod `upload_*.ps1` wrappers were removed 2026-07-07 (archived externally to `../_vt2-tweaker-archive/`); the earlier `deploy_*.ps1` wrappers were removed 2026-05-21. Do not author new `.ps1` wrappers; extend the launcher / `ship.ps1` instead. Use `VMBLauncher.exe deploy <mod>` for a bare deploy.
+`ship.ps1` is the canonical publishing path; it invokes VMBLauncher's sanctioned `build`, `deploy`, and `upload` verbs separately so reviewed bundle parity can be checked before upload. Do not use `VMBLauncher.exe all` for publication. The visibility-regression guard lives in `VMBLauncher.exe upload`, which `ship.ps1` calls. The legacy per-mod wrappers were removed; extend the launcher / `ship.ps1` instead. Use `VMBLauncher.exe deploy <mod>` for a bare non-publishing deploy.
 
 **Historical user quotes** (SUPERSEDED for `-dev` builds by the 2026-06-19 / 2026-07-01 rules above; still binding for clean stable promotions):
 - 2026-05-25 morning: "stop reflexively uploading to the workshop. Only do so when directed."
@@ -285,7 +298,7 @@ merge-triggered `master` QA run is the final remote confirmation.
 
 ### Legacy raw pipelines (archived - DO NOT USE)
 
-The `node vmb.js build <mod> --no-workshop --cwd` invocations and the raw Stingray SDK compile pipeline that previously lived in this section are no longer the supported path. Use `VMBLauncher.exe build <mod>` for VMB mods and `VMBLauncher.exe all <mod>` for full pipeline. The launcher already wraps `node vmb.js` internally, so if you're tempted to invoke `node` directly you're skipping hash verification, enabled-remote deployment, BOM handling on staged cfgs, and the rest of the protective layers documented in the launcher repository.
+The `node vmb.js build <mod> --no-workshop --cwd` invocations and the raw Stingray SDK compile pipeline that previously lived in this section are no longer the supported path. Use `VMBLauncher.exe build <mod>` for a bare build and `tools\ship\ship.ps1` for the publication pipeline. The launcher already wraps `node vmb.js` internally, so if you're tempted to invoke `node` directly you're skipping hash verification, enabled-remote deployment, BOM handling on staged cfgs, and the rest of the protective layers documented in the launcher repository.
 
 The one exception is the deprecated `tweaker` mod (Workshop ID 3704660429) - it pre-dates the VMB migration and only builds via raw SDK. Treat it as frozen: don't iterate on it, don't try to graft it onto the launcher.
 

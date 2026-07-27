@@ -21,16 +21,15 @@ that `ship.ps1` refuses to ship without.
 ## The lock
 
 Acquiring a claim is an **atomic exclusive file create** of
-`.ship_claims/<mod>.claim` at the repo root. The create uses the OS `CREATE_NEW`
-disposition: exactly one racer's create can succeed; every other racer gets
-`IOException` and reports contention. This is the same principle as
-`New-Item -ItemType File` failing when the path already exists, but `CREATE_NEW`
-is OS-atomic (no check-then-create race) and the claim body is written through
-the exclusive handle, so a reader never sees an empty claim mid-write.
+`%APPDATA%\VMBLauncher\ship_claims\<mod>.claim`. This is the machine-global
+directory used by VMBLauncher, so separate git worktrees, the outer ship
+wrapper, and nested launcher processes all consult the same authority. The
+create uses the OS `CREATE_NEW` disposition: exactly one racer's create can
+succeed; every other racer gets `IOException` and reports contention.
 
-`.ship_claims/*.claim` files are gitignored (ephemeral per-session state, exactly
-like `.in_progress/*.md`); the tracked `.ship_claims/README.md` documents the
-on-disk format.
+The repo-local `.ship_claims/` directory is a tracked legacy documentation
+pointer only. It is not the default claim authority. `-ClaimsDir` exists for
+isolated tests and diagnostics, not normal shipping.
 
 ### Claim file format
 
@@ -64,13 +63,31 @@ erase a same-version live claim.
 # 2. Set  local MOD_VERSION = "0.12.274-beta"  in the mod's lua, make your
 #    changes, write the CHANGELOG entry.
 
-# 3. Ship. ship.ps1 verifies a live claim whose version EQUALS the source
-#    MOD_VERSION, then (on success) auto-releases the claim.
+# 3. Build the tracked release artifact without deploying or publishing.
+.\tools\ship\ship.ps1 -Mod weapon_tweaker -BuildOnly
+
+# 4. Commit source + bundle together, push, open the PR, pass hosted qa-gate,
+#    and merge.
+
+# 5. From a clean worktree at the exact live default-branch commit, ship.
+#    ship.ps1 verifies the same live claim, merged PR, hosted qa-gate, and
+#    freshly rebuilt bundle bytes. It records release provenance, then gives
+#    VMBLauncher the exact five-minute receipt hosted on that GitHub release.
+#    The launcher independently downloads those bytes, rechecks root, commit,
+#    owner, mod/version, cfg/source hashes, and the exact SDK-staged content
+#    immediately before ugc_tool.
 .\tools\ship\ship.ps1 -Mod weapon_tweaker
 
 # Free your own claim manually (abandoned work, or ship never ran):
 .\tools\ship\claim.ps1 -Mod weapon_tweaker -Release
 ```
+
+First-upload bootstrap is the exception to automatic release. When the reviewed
+cfg carries `published_id = 0L`, the successful bootstrap writes only Steam's
+assigned ID, stops before lifecycle labeling/test-readiness output, and keeps
+the claim held. Commit that ID-only change, pass protected PR QA, merge, and run
+the ordinary canonical ship from the new live default HEAD. Releasing the claim
+earlier permits another clean worktree to create a second Workshop item.
 
 Claim **before** bumping the source: the broker allocates from the current (not
 yet bumped) version. Re-running `claim.ps1 -Mod <name>` in the same session is
@@ -93,36 +110,39 @@ when the claim is:
 On a fully successful ship, `ship.ps1` releases its own claim automatically.
 Foreign releases fail closed and leave the original claim intact.
 
-### `-NoClaim` escape hatch
+### `-NoClaim`
 
-`ship.ps1 -Mod <name> -NoClaim` skips the gate with a loud warning. Use it only
-in a **solo** session (no other sessions shipping on this machine), or for an
-urgent fix when the broker is in the way. It exists so the rollout of this gate
-can never brick a ship.
+`-NoClaim` is accepted only with `-BuildOnly`, which cannot deploy or upload.
+Workshop publication cannot bypass the machine-global claim.
+The inverse is equally important: a matching claim is version coordination,
+not publication authorization. Direct launcher `upload`/`all`, GUI
+publication, and caller-authored JSON cannot publish on a claim alone.
 
 ## Stale policy
 
-A claim older than **2 hours** (`-StaleHours`) is stale. A new claimant will
+A claim older than **24 hours** (`-StaleHours`) is stale. This covers a normal
+feature-branch review and hosted-QA cycle without releasing the reserved
+version. A new claimant will
 break a stale claim (deleting it and taking its own), and says so in the output.
 This keeps a crashed or abandoned session from wedging a mod's version stream
 forever. A stale claim never authorizes a ship -- `ship.ps1` treats it as absent.
 
-## Caveats
+## Cross-worktree ownership
 
-- **Same-checkout coordination.** The lock lives at the repo root, and owner
-  verification prevents a foreign orchestrator task in that checkout from
-  spending it. Separate git worktrees also derive different manual owner IDs;
-  ship.ps1's source/worktree identity guards (issue #647) cover publication.
-- **Advisory sibling: `.in_progress/`.** Claims are about version allocation;
-  `.in_progress/` sentinels are about who is editing which files. They are
-  complementary -- keep dropping a sentinel for multi-step work.
+Codex/Claude task identities survive child processes and worktree changes. A
+manual multi-worktree release must set one explicit identity before both claim
+and ship, for example `$env:VT2_SHIP_SESSION_ID = 'wt-0.12.274-beta'`. A
+different owner cannot spend or erase the claim even when the version matches.
+
+Claims are about version allocation; `.in_progress/` sentinels are advisory
+editing awareness. They remain complementary.
 
 ## Self-test
 
 `claim.ps1 -SelfTest` runs offline fixtures: allocate-increment (with 4-segment
 rejection), timestamp round-trip + staleness, idempotent re-claim vs contention,
 stale-break, release (own + idempotent), the ship.ps1 verify contract, and a
-foreign-owner verify/release refusal, plus a real two-process race asserting
-exactly one process acquires. It is wired into
+foreign-owner verify/release refusal, nested-authority visibility, plus a real
+two-worktree/two-process race asserting exactly one process acquires. It is wired into
 `qa/run_selftests.ps1` (and therefore `qa/run_all.ps1` full pass + CI). Exit
 codes: 0 pass, 2 regression.

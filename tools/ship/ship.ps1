@@ -4,7 +4,7 @@
 #   build + deploy + Workshop upload + GitHub release + hash/upload verification
 #   + GitHub-issue status labeling (verify-fix[-coop] / diagnostics-armed, issue #326).
 #
-# Prefer this over hand-chaining `VMBLauncher.exe all <mod>` and
+# Prefer this over hand-chaining VMBLauncher verbs and
 # `tools\publish-release\publish-release.ps1` separately. It runs both, then
 # PROVES the deploy and upload actually transferred (the two steps that silently
 # lie) so a release can't be quietly skipped.
@@ -13,12 +13,13 @@
 #   .\tools\ship\ship.ps1 -Mod general_tweaker_dev
 #   .\tools\ship\ship.ps1 -Mod chaos_wastes_tweaker -AllowPublic        # public Workshop item
 #   .\tools\ship\ship.ps1 -Mod gui_tweaker_dev -NoRemote                # skip the PC-B push
-#   .\tools\ship\ship.ps1 -Mod gui_tweaker_dev -SkipGitHub              # local ship only, no GH release
 #   .\tools\ship\ship.ps1 -Mod gui_tweaker_dev -BuildOnly               # hidden, serialized bundle build
 #
 # WHY THIS SCRIPT EXISTS -- hard-won facts encoded below (do not "simplify" them away):
 #
-#  * `VMBLauncher.exe all <mod>` = build + deploy + upload. `deploy` is a
+#  * VMBLauncher remains the only sanctioned build/deploy/upload boundary, but
+#    this wrapper invokes its verbs separately so tracked bundle parity and
+#    hosted authorization can be checked before upload. `deploy` is a
 #    hash-verified LOCAL copy of `<mod>\bundleV2\*.mod_bundle` + the `.mod` into
 #    `...\steamapps\workshop\content\552500\<published_id>\`. `upload` is the
 #    ugc_tool push to the Steam Workshop SERVER. Public mods require
@@ -59,6 +60,7 @@ param(
     [switch]$SkipGitHub,
     [switch]$BuildOnly,
     [switch]$NoClaim,
+    [string]$EmergencyPublicationReason,
     [switch]$SelfTest
 )
 
@@ -74,6 +76,24 @@ if (-not (Test-Path -LiteralPath $launcherPathHelpers -PathType Leaf)) {
     throw "Shared VMBLauncher path helpers not found: $launcherPathHelpers"
 }
 . $launcherPathHelpers
+
+$releaseIdentityHelpers = Join-Path $PSScriptRoot 'release-identity.ps1'
+if (-not (Test-Path -LiteralPath $releaseIdentityHelpers -PathType Leaf)) {
+    throw "Shared release identity policy not found: $releaseIdentityHelpers"
+}
+. $releaseIdentityHelpers
+
+$publicationAuthorizationHelpers = Join-Path $PSScriptRoot 'publication-authorization.ps1'
+if (-not (Test-Path -LiteralPath $publicationAuthorizationHelpers -PathType Leaf)) {
+    throw "Publication authorization policy not found: $publicationAuthorizationHelpers"
+}
+. $publicationAuthorizationHelpers
+
+$publicationReceiptHelpers = Join-Path $PSScriptRoot 'publication-receipt.ps1'
+if (-not (Test-Path -LiteralPath $publicationReceiptHelpers -PathType Leaf)) {
+    throw "Publication receipt policy not found: $publicationReceiptHelpers"
+}
+. $publicationReceiptHelpers
 
 function Fail {
     param([string]$Message)
@@ -119,6 +139,72 @@ function Invoke-NativeCapture {
         $ErrorActionPreference = $prev
     }
     return [pscustomobject]@{ ExitCode = $code; Lines = $lines }
+}
+
+function ConvertFrom-NativeJson {
+    param([object]$Capture, [string]$Description)
+    if ($Capture.ExitCode -ne 0) {
+        throw "$Description query failed (exit $($Capture.ExitCode)): $($Capture.Lines -join ' | ')"
+    }
+    try {
+        return (($Capture.Lines -join "`n") | ConvertFrom-Json)
+    }
+    catch {
+        throw "$Description returned invalid JSON: $($_.Exception.Message)"
+    }
+}
+
+function Compare-BundleBlobMaps {
+    param([hashtable]$Tracked, [hashtable]$Built)
+    $problems = @()
+    foreach ($name in $Tracked.Keys) {
+        if (-not $Built.ContainsKey($name)) {
+            $problems += "tracked artifact missing after build: $name"
+        }
+        elseif ([string]$Tracked[$name] -ne [string]$Built[$name]) {
+            $problems += "built bytes differ from HEAD: $name"
+        }
+    }
+    foreach ($name in $Built.Keys) {
+        if (-not $Tracked.ContainsKey($name)) {
+            $problems += "untracked artifact produced by build: $name"
+        }
+    }
+    return @{ Ok = ($problems.Count -eq 0); Problems = $problems }
+}
+
+function Test-TrackedBundleParity {
+    param([string]$RepoRoot, [string]$Mod)
+    $bundleDir = Join-Path (Join-Path $RepoRoot $Mod) 'bundleV2'
+    if (-not (Test-Path -LiteralPath $bundleDir -PathType Container)) {
+        return @{ Ok = $false; Problems = @("bundleV2 missing after build: $bundleDir") }
+    }
+
+    $prefix = "$Mod/bundleV2/"
+    $tree = Invoke-NativeCapture { & git -C $RepoRoot ls-tree -r --name-only HEAD -- "$Mod/bundleV2" }
+    if ($tree.ExitCode -ne 0) {
+        return @{ Ok = $false; Problems = @("cannot read tracked bundle tree: $($tree.Lines -join ' | ')") }
+    }
+    $tracked = @{}
+    foreach ($repoPath in @($tree.Lines | Where-Object { $_ -and $_.StartsWith($prefix) })) {
+        $rel = $repoPath.Substring($prefix.Length)
+        $blob = Invoke-NativeCapture { & git -C $RepoRoot rev-parse "HEAD:$repoPath" }
+        if ($blob.ExitCode -ne 0 -or $blob.Lines.Count -eq 0) {
+            return @{ Ok = $false; Problems = @("cannot resolve tracked blob for $repoPath") }
+        }
+        $tracked[$rel] = ([string]$blob.Lines[-1]).Trim().ToLowerInvariant()
+    }
+
+    $built = @{}
+    foreach ($file in @(Get-ChildItem -LiteralPath $bundleDir -Recurse -File)) {
+        $rel = $file.FullName.Substring($bundleDir.Length).TrimStart('\', '/').Replace('\', '/')
+        $blob = Invoke-NativeCapture { & git -C $RepoRoot hash-object -- $file.FullName }
+        if ($blob.ExitCode -ne 0 -or $blob.Lines.Count -eq 0) {
+            return @{ Ok = $false; Problems = @("cannot hash built artifact $rel") }
+        }
+        $built[$rel] = ([string]$blob.Lines[-1]).Trim().ToLowerInvariant()
+    }
+    return Compare-BundleBlobMaps -Tracked $tracked -Built $built
 }
 
 # Issue #829: a console-subsystem executable launched from a desktop agent process can ask
@@ -694,6 +780,37 @@ function Invoke-ShipSelfTest {
     Assert (-not (Test-DevStreamVersion '1.0.0')) "clean stable version does NOT auto-label (1.0.0)"
     Assert (-not (Test-DevStreamVersion '(unknown)')) "unknown version does NOT auto-label"
 
+    $authSha = '0123456789abcdef0123456789abcdef01234567'
+    $authPulls = @([pscustomobject]@{
+        number = 724
+        merged_at = '2026-07-26T00:00:00Z'
+        merge_commit_sha = $authSha
+        base = [pscustomobject]@{ ref = 'master' }
+    })
+    $authChecks = @([pscustomobject]@{
+        name = 'qa-gate'
+        head_sha = $authSha
+        status = 'completed'
+        conclusion = 'success'
+        completed_at = '2026-07-26T00:05:00Z'
+        html_url = 'https://example.invalid/check/724'
+    })
+    $authOk = Test-PublicationAuthorizationSnapshot -SourceCommit $authSha -DefaultBranch master -DefaultBranchCommit $authSha -PullRequests $authPulls -CheckRuns $authChecks
+    Assert ($authOk.Ok -and $authOk.Evidence.mode -eq 'hosted_qa') "exact default-head merge with hosted qa-gate is publication-authorized"
+    Assert (-not (Test-PublicationAuthorizationSnapshot -SourceCommit $authSha -DefaultBranch master -DefaultBranchCommit ('f' * 40) -PullRequests $authPulls -CheckRuns $authChecks).Ok) "pre-merge/non-default-head source is rejected"
+    $badQa = @([pscustomobject]@{ name = 'qa-gate'; head_sha = $authSha; status = 'completed'; conclusion = 'failure' })
+    Assert (-not (Test-PublicationAuthorizationSnapshot -SourceCommit $authSha -DefaultBranch master -DefaultBranchCommit $authSha -PullRequests $authPulls -CheckRuns $badQa).Ok) "failed hosted qa-gate is rejected"
+    $matchingEvidence = Test-PublicationEvidenceMatchesLive -CallerEvidence $authOk.Evidence -LiveEvidence $authOk.Evidence
+    Assert $matchingEvidence.Ok "caller authorization correlation matches independently queried live evidence"
+    $forgedEvidence = $authOk.Evidence | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+    $forgedEvidence.default_branch_commit = ('f' * 40)
+    Assert (-not (Test-PublicationEvidenceMatchesLive -CallerEvidence $forgedEvidence -LiveEvidence $authOk.Evidence).Ok) "forged caller authorization JSON cannot replace independently queried live evidence"
+
+    $sameBundle = Compare-BundleBlobMaps -Tracked @{ 'fixture.mod_bundle' = 'abc'; 'fixture.mod' = 'def' } -Built @{ 'fixture.mod_bundle' = 'abc'; 'fixture.mod' = 'def' }
+    Assert $sameBundle.Ok "tracked and freshly built bundle maps match"
+    Assert (-not (Compare-BundleBlobMaps -Tracked @{ 'fixture.mod_bundle' = 'abc' } -Built @{ 'fixture.mod_bundle' = 'changed' }).Ok) "changed built bytes are rejected"
+    Assert (-not (Compare-BundleBlobMaps -Tracked @{ 'fixture.mod_bundle' = 'abc' } -Built @{ 'fixture.mod_bundle' = 'abc'; 'extra.bin' = 'x' }).Ok) "untracked built artifact is rejected"
+
     $cl = @(
         '# Changelog',
         '',
@@ -871,6 +988,20 @@ function Invoke-ShipSelfTest {
     Assert ($pubTxt -match 'Resolve-ApprovedVmbLauncherPath') "publish-release.ps1 revalidates the shared approved-launcher contract (issue #683)"
     Assert (-not ($pubTxt -cmatch '(?m)^\s*\$mods\s*=')) "publish-release.ps1 never assigns lowercase `$mods (param-stomp guard, 2026-07-13)"
     Assert ($pubTxt -match 'Resolve-GitHubReleaseByTag' -and $pubTxt -match 'Publish-GitHubReleaseAssetsById') "publish-release owns exact-tag fallback and release-id mutation (issue #651)"
+    Assert ($pubTxt -match 'Global\\VT2_GitHubReleaseMutation' -and
+        $pubTxt -match 'ReleaseMutex\(\)') "shared daily GitHub release lookup/manifest/mutation is serialized across different-mod ships"
+    $publisherCapabilityPos = $pubTxt.IndexOf('Assert-VmbLauncherPublicationCapability -LauncherPath $launcher')
+    $publisherLookupPos = $pubTxt.IndexOf('Resolve-GitHubReleaseByTag -Repo $ghRepo')
+    $publisherAssetMutationPos = $pubTxt.IndexOf('Publish-GitHubReleaseAssetsById -Repo $ghRepo')
+    Assert ($publisherCapabilityPos -ge 0 -and
+        $publisherCapabilityPos -lt $publisherLookupPos -and
+        $publisherCapabilityPos -lt $publisherAssetMutationPos) "launcher 0.5.7 capability probe precedes every GitHub release lookup/mutation"
+    Assert ($pubTxt -match 'New-GitHubReleaseAssetSnapshots' -and
+        $pubTxt -match '-AssetSnapshots \$assetSnapshots') "zip, manifest, and receipt uploads consume immutable byte snapshots"
+    Assert ($pubTxt -match 'Get-PublicationCommitSnapshot' -and
+        $pubTxt -match '\[System\.IO\.File\]::WriteAllBytes\(\$destination, \[byte\[\]\]\$bundle\.Bytes\)') "new release zips are staged from exact source-commit blob bytes"
+    Assert (-not ($pubTxt -match 'status --porcelain')) "publisher authorization never relies on a mutable worktree cleanliness check"
+    Assert (-not ($pubTxt -match '(?m)^\s*gh\s+release\s+create\b')) "new releases use draft API plus immutable byte upload, not path-consuming gh release create"
     $shipSource = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
     $legacyTagProbe = 'gh release ' + 'view $tag'
     $legacyTagUpload = 'gh release ' + 'upload $tag'
@@ -1055,8 +1186,10 @@ finally {
     # Issue #591: this is an ordering invariant, not merely a documentation
     # promise. Both offline gates must execute before the launcher can perform
     # its first build/deploy/upload action.
+    $selfRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
     $selfTxt = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
-    $quickPos = $selfTxt.IndexOf('& $quickGate -Quick -SkipLua -Quiet')
+    $quickInvocation = '& $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -SkipCustomUnitBundleReachability:$BuildOnly -Quiet'
+    $quickPos = $selfTxt.IndexOf($quickInvocation)
     $lintPos = $selfTxt.IndexOf('& $modLint $Mod -Quiet')
     $launcherCallMarker = 'Invoke-ShipLauncherNoWindow -FilePath $' + 'launcher'
     $launcherPos = $selfTxt.LastIndexOf($launcherCallMarker)
@@ -1079,13 +1212,51 @@ finally {
     Assert ($selfTxt.IndexOf('6 { Fail "Ship claim for') -ge 0) "claim gate rejects a same-version foreign owner"
     Assert ($selfTxt.IndexOf('Claim broker missing') -ge 0) "missing claim broker fails closed"
     Assert ($selfTxt.IndexOf('-Mod $Mod -Release -Quiet') -ge 0) "ship auto-releases the claim on success"
-    Assert ($selfTxt -match '(?m)^\s*\[switch\]\$NoClaim\b') "ship exposes the -NoClaim solo-session escape hatch"
+    Assert ($selfTxt -match '(?m)^\s*\[switch\]\$NoClaim\b') "ship retains -NoClaim for non-publishing build-only use"
+    Assert ($selfTxt.IndexOf('-NoClaim is not permitted for Workshop publication') -ge 0) "Workshop publication cannot bypass the machine-global claim"
+    Assert ($selfTxt.IndexOf('-SkipGitHub is not permitted for Workshop publication') -ge 0) "Workshop publication cannot bypass provenance recording"
     Assert ($selfTxt -match '(?m)^\s*\[switch\]\$BuildOnly\b') "ship exposes the canonical hidden build-only path"
     Assert ($selfTxt.IndexOf('-SkipBundleAtomicity:$BuildOnly') -ge 0) "build-only preflight defers bundle atomicity until after generation"
     Assert ($selfTxt.IndexOf('-SkipCustomUnitBundleReachability:$BuildOnly') -ge 0) "build-only preflight defers compiled custom-unit reachability until after generation"
     Assert ($selfTxt.IndexOf('qa\check_custom_unit_bundle_reachability.ps1') -ge 0) "build-only runs custom-unit reachability after generation"
     Assert ($selfTxt.IndexOf("@('build', `$Mod, '--clean')") -ge 0) "build-only invokes VMBLauncher's clean build action"
     Assert ($selfTxt.IndexOf('BUILD-ONLY COMPLETE') -ge 0) "build-only exits before deploy/upload/release handling"
+    $mainDispatchPos = $selfTxt.LastIndexOf('if ($SelfTest) { exit (Invoke-ShipSelfTest) }')
+    $initialAuthorizationPos = $selfTxt.IndexOf('publicationAuthorization = Get-LivePublicationAuthorization', $mainDispatchPos)
+    $cleanBuildPos = $selfTxt.IndexOf("launcherArgs = @('build', `$Mod, '--clean')", $mainDispatchPos)
+    $bundleParityPos = $selfTxt.IndexOf('bundleParity = Test-TrackedBundleParity', $mainDispatchPos)
+    $deployActionPos = $selfTxt.IndexOf("deployArgs = @('deploy', `$Mod)", $mainDispatchPos)
+    $finalAuthorizationPos = $selfTxt.LastIndexOf('publicationAuthorization = Get-LivePublicationAuthorization')
+    $authorizationRecordPos = $selfTxt.IndexOf('-PublicationAuthorizationJson $publicationAuthorizationJson', $mainDispatchPos)
+    $receiptHandoffPos = $selfTxt.IndexOf('-PublicationReceiptOutputPath $receiptPath', $mainDispatchPos)
+    $uploadActionPos = $selfTxt.IndexOf("uploadArgs = @('upload', `$Mod)", $mainDispatchPos)
+    Assert ($initialAuthorizationPos -ge 0 -and $initialAuthorizationPos -lt $cleanBuildPos) "publication authorization runs before the first build mutation"
+    Assert ($cleanBuildPos -lt $bundleParityPos -and $bundleParityPos -lt $deployActionPos) "clean build parity is proven before deploy"
+    Assert ($deployActionPos -lt $finalAuthorizationPos -and $finalAuthorizationPos -lt $uploadActionPos) "authorization is revalidated immediately before Workshop upload"
+    Assert ($authorizationRecordPos -lt $finalAuthorizationPos -and $finalAuthorizationPos -lt $uploadActionPos) "authorization evidence is recorded before the last-moment upload gate"
+    Assert ($authorizationRecordPos -lt $receiptHandoffPos -and $receiptHandoffPos -lt $finalAuthorizationPos) "publisher hosts the short-lived receipt before the last-moment upload gate"
+    Assert ($selfTxt.IndexOf("'--publication-receipt', `$receiptPath", $mainDispatchPos) -ge 0) "launcher upload receives the GitHub-hosted publication receipt"
+    Assert ($selfTxt.IndexOf("@('all', `$Mod)") -lt 0) "ship never uses the atomic all action that can upload before bundle parity"
+    Assert ($authorizationRecordPos -ge 0) "release manifest receives publication authorization evidence"
+    $publisherSource = [System.IO.File]::ReadAllText((Join-Path $selfRepoRoot 'tools\publish-release\publish-release.ps1'), [System.Text.Encoding]::UTF8)
+    $callerJsonPos = $publisherSource.IndexOf('$callerAuthorization = $PublicationAuthorizationJson | ConvertFrom-Json')
+    $publisherLivePos = $publisherSource.IndexOf('$liveAuthorization = Get-LivePublicationAuthorization')
+    $publisherMatchPos = $publisherSource.IndexOf('Test-PublicationEvidenceMatchesLive')
+    $publisherPreparationPos = $publisherSource.IndexOf('$manifestVerdict = Test-ReleaseManifest')
+    $publisherReceiptPos = $publisherSource.IndexOf('New-WorkshopPublicationReceipt')
+    $publisherZipBindingPos = $publisherSource.IndexOf('Test-ReleaseZipSnapshot')
+    $publisherMutationPos = $publisherSource.IndexOf('Publish-GitHubReleaseAssetsById')
+    $launcherCapabilityPos = $selfTxt.IndexOf('Assert-VmbLauncherPublicationCapability -LauncherPath $launcher', $mainDispatchPos)
+    Assert ($callerJsonPos -ge 0 -and $callerJsonPos -lt $publisherLivePos -and $publisherLivePos -lt $publisherMatchPos) "publisher independently re-queries live authorization before accepting caller correlation JSON"
+    Assert ($publisherPreparationPos -lt $publisherLivePos -and $publisherLivePos -lt $publisherReceiptPos -and $publisherReceiptPos -lt $publisherMutationPos) "publisher re-queries live authorization after preparation and immediately before receipt/release mutation"
+    Assert ($publisherZipBindingPos -ge 0 -and $publisherZipBindingPos -lt $publisherMutationPos) "publisher binds immutable zip entries to commit-derived bundle hashes before release mutation"
+    Assert ($launcherCapabilityPos -ge 0 -and $launcherCapabilityPos -lt $authorizationRecordPos) "ship probes launcher minimum/capabilities before any GitHub release mutation"
+    Assert ($selfTxt.IndexOf('$isFirstUploadBootstrap = ($publishedId -eq ''0'')', $mainDispatchPos) -ge 0) "ship recognizes the explicit published_id=0 bootstrap lane"
+    Assert ($selfTxt.IndexOf('if (-not $isFirstUploadBootstrap) {', $deployActionPos - 100) -ge 0) "first-upload bootstrap skips impossible pre-ID deploy"
+    Assert ($selfTxt.IndexOf('constrained bootstrap did not write one nonzero published_id', $uploadActionPos) -ge 0) "first-upload bootstrap requires a nonzero ID-only write-back after ugc_tool"
+    Assert ($publisherSource.IndexOf('published_id=0 is accepted only for a one-mod canonical first-upload receipt handoff') -ge 0) "publisher constrains zero-ID release mutation to the exact receipt handoff"
+    Assert ($selfTxt.IndexOf('BOOTSTRAP COMPLETE - NOT TEST READY', $uploadActionPos) -ge 0) "first-upload bootstrap stops before live-test labeling and readiness output"
+    Assert ($selfTxt.IndexOf('The machine-global claim remains held', $uploadActionPos) -ge 0) "first-upload bootstrap retains its claim until the ID-only reconciliation merges"
 
     Write-Host ""
     if ($script:__stpass) {
@@ -1098,9 +1269,18 @@ finally {
 }
 
 if ($SelfTest) { exit (Invoke-ShipSelfTest) }
-if (-not $Mod) { Fail "Usage: ship.ps1 -Mod <name> [-AllowPublic] [-NoRemote] [-SkipGitHub] [-BuildOnly]  (or ship.ps1 -SelfTest)" }
+if (-not $Mod) { Fail "Usage: ship.ps1 -Mod <name> [-AllowPublic] [-NoRemote] [-BuildOnly]  (or ship.ps1 -SelfTest)" }
+if ($SkipGitHub) {
+    Fail "-SkipGitHub is not permitted for Workshop publication because it would upload without release provenance. Use -BuildOnly for a nonpublishing local build."
+}
 if ($BuildOnly -and ($AllowPublic -or $NoRemote -or $SkipGitHub)) {
     Fail "-BuildOnly cannot be combined with -AllowPublic, -NoRemote, or -SkipGitHub because it never deploys, uploads, or publishes."
+}
+if (-not $BuildOnly -and $NoClaim) {
+    Fail "-NoClaim is not permitted for Workshop publication. Acquire the machine-global mod/version claim first; -NoClaim remains available only for non-publishing -BuildOnly runs."
+}
+if ($EmergencyPublicationReason) {
+    Fail "-EmergencyPublicationReason is no longer accepted. Workshop publication requires exact clean default-branch HEAD, its merged PR, and successful hosted qa-gate."
 }
 
 # ---------------------------------------------------------------------------
@@ -1118,6 +1298,7 @@ if ($cfgTxt -notmatch 'published_id\s*=\s*(\d+)L') {
     Fail "No published_id found in $cfgPath (mod not yet uploaded to Workshop?)"
 }
 $publishedId = $matches[1]
+$isFirstUploadBootstrap = ($publishedId -eq '0')
 
 # ---------------------------------------------------------------------------
 # Preflight (issue #344): refuse to ship while ANY itemV2.cfg carries a wrong or
@@ -1146,6 +1327,18 @@ if (Test-Path $luaPath) {
     if ($luaTxt -match 'MOD_VERSION\s*=\s*"([^"]+)"') { $modVersion = $matches[1] }
     if ($luaTxt -match '\[(\w+):LOAD\]')              { $loadTag = $matches[1] }
 }
+if ($modVersion -eq '(unknown)') {
+    Fail "No MOD_VERSION found in $luaPath."
+}
+$changelogPath = Join-Path $modDir 'CHANGELOG.md'
+if (-not (Test-Path -LiteralPath $changelogPath -PathType Leaf)) {
+    Fail "CHANGELOG not found: $changelogPath"
+}
+$changelogText = [System.IO.File]::ReadAllText($changelogPath, [System.Text.Encoding]::UTF8)
+$releaseIdentity = Test-ReleaseIdentity -SourceVersion $modVersion -ChangelogText $changelogText
+if (-not $releaseIdentity.Ok) {
+    Fail "$($releaseIdentity.Message). The first CHANGELOG release must exactly equal MOD_VERSION (an optional leading display 'v' is allowed)."
+}
 
 # ---------------------------------------------------------------------------
 # SHIP/VERSION CLAIM GATE (parallel-session collision guard). Full rationale +
@@ -1160,8 +1353,8 @@ if (Test-Path $luaPath) {
 # match the source MOD_VERSION and current task. Its own claim is auto-released
 # on ship success.
 #
-# -NoClaim skips the gate (loud warning) for a solo session or an urgent fix.
-# Without that explicit override, missing tooling and every coordination-state
+# -NoClaim is limited to non-publishing -BuildOnly. Every Workshop publication
+# must hold the machine-global claim; missing tooling and every coordination
 # failure are fail-closed before VMB can build, deploy, or upload.
 # ---------------------------------------------------------------------------
 if ($NoClaim) {
@@ -1173,18 +1366,18 @@ if ($NoClaim) {
 else {
     $claimScript = Join-Path $PSScriptRoot 'claim.ps1'
     if (-not (Test-Path -LiteralPath $claimScript)) {
-        Fail "Claim broker missing at $claimScript. Refusing an unguarded ship; restore tools/ship/claim.ps1 or use the explicit -NoClaim emergency override."
+        Fail "Claim broker missing at $claimScript. Refusing an unguarded publication; restore tools/ship/claim.ps1."
     }
     else {
         & $claimScript -Mod $Mod -Verify -ExpectedVersion $modVersion -Quiet
         $claimExit = $LASTEXITCODE
         switch ($claimExit) {
             0 { Write-Host "  OK -- live ship claim for $Mod matches v$modVersion." -ForegroundColor Green }
-            3 { Fail "No live ship claim for '$Mod'. Run:  .\tools\ship\claim.ps1 -Mod $Mod  (it allocates the next version -- set MOD_VERSION to the value it prints, then re-ship). Solo session: re-run ship.ps1 with -NoClaim. See tools/ship/CLAIMS.md." }
+            3 { Fail "No live ship claim for '$Mod'. Run:  .\tools\ship\claim.ps1 -Mod $Mod  (it allocates the next version -- set MOD_VERSION to the value it prints, then re-ship). See tools/ship/CLAIMS.md." }
             4 { Fail "Ship claim for '$Mod' does not match the source MOD_VERSION ($modVersion). Another session likely allocated a different version. Reconcile: .\tools\ship\claim.ps1 -Mod $Mod -Release  then re-claim and re-bump. See tools/ship/CLAIMS.md." }
-            5 { Fail "Ship claim for '$Mod' is STALE (older than 2h). Re-claim with .\tools\ship\claim.ps1 -Mod $Mod (a fresh claimant breaks a stale claim), set MOD_VERSION to the printed value, then re-ship. See tools/ship/CLAIMS.md." }
+            5 { Fail "Ship claim for '$Mod' is STALE (older than 24h). Coordinate before breaking the reservation; then re-claim/reconcile the version and re-ship. See tools/ship/CLAIMS.md." }
             6 { Fail "Ship claim for '$Mod' has the right version but belongs to another task/worktree. This process cannot consume it. Coordinate with the owner or wait for stale recovery; do not use -NoClaim while parallel work is active." }
-            default { Fail "Ship claim verification failed (claim.ps1 exit $claimExit). See tools/ship/CLAIMS.md; -NoClaim overrides in a solo session." }
+            default { Fail "Ship claim verification failed (claim.ps1 exit $claimExit). See tools/ship/CLAIMS.md." }
         }
     }
 }
@@ -1194,6 +1387,47 @@ if ($commitProbe.ExitCode -ne 0 -or $commitProbe.Lines.Count -eq 0) {
     Fail "Cannot resolve the invoking checkout's source commit at $repoRoot. Shipping requires a git worktree identity (issue #647)."
 }
 $sourceCommit = ([string]$commitProbe.Lines[-1]).Trim()
+
+$publicationAuthorization = $null
+if (-not $BuildOnly) {
+    try {
+        $commitPublicationSnapshot = Get-PublicationCommitSnapshot `
+            -RepoRoot $repoRoot -SourceCommit $sourceCommit -Mod $Mod
+    }
+    catch {
+        Fail "Cannot read exact publication blobs from source commit $sourceCommit`: $($_.Exception.Message)"
+    }
+    if ([string]::IsNullOrWhiteSpace("$($commitPublicationSnapshot.PublishedId)")) {
+        Fail "Exact source commit has no published_id in $Mod/itemV2.cfg."
+    }
+    if ("$($commitPublicationSnapshot.PublishedId)" -ne "$publishedId") {
+        Fail "Mutable itemV2.cfg published_id '$publishedId' differs from exact source-commit value '$($commitPublicationSnapshot.PublishedId)'."
+    }
+
+    # A publishing checkout must already be the immutable reviewed tree.
+    # BuildOnly intentionally accepts development changes so it can generate
+    # the artifact that will be committed in the PR.
+    $cleanProbe = Invoke-NativeCapture { & git -C $repoRoot status --porcelain --untracked-files=all }
+    if ($cleanProbe.ExitCode -ne 0) {
+        Fail "Cannot verify release-worktree cleanliness: $($cleanProbe.Lines -join ' | ')"
+    }
+    if ($cleanProbe.Lines.Count -gt 0) {
+        Fail "Release worktree is not clean at exact source commit $sourceCommit. Commit, review, and merge every source and bundle artifact before shipping."
+    }
+
+    try {
+        $publicationAuthorization = Get-LivePublicationAuthorization `
+            -Repo 'Ensrick/vermintide-2-tweaker' `
+            -SourceCommit $sourceCommit
+    }
+    catch {
+        Fail "Publication authorization could not be established: $($_.Exception.Message)"
+    }
+    if (-not $publicationAuthorization.Ok) {
+        Fail "Publication authorization FAILED: $($publicationAuthorization.Message). Workshop upload requires exact clean live default-branch HEAD, its merged PR, and successful hosted qa-gate."
+    }
+    Write-Host ("  OK -- publication authorization: {0}" -f $publicationAuthorization.Message) -ForegroundColor Green
+}
 
 # ---------------------------------------------------------------------------
 # Promotion red gate (issue #327): shipping one of the five STABLE split dirs
@@ -1235,6 +1469,13 @@ catch {
     Fail $_.Exception.Message
 }
 $launcher = $launcherResolution.Path
+try {
+    $launcherCapability = Assert-VmbLauncherPublicationCapability -LauncherPath $launcher
+}
+catch {
+    Fail $_.Exception.Message
+}
+Write-Host ("VMBLauncher publication capability: PASS (v{0}, receipt schema 3, exact commit blobs, locked snapshot)" -f $launcherCapability.Version) -ForegroundColor DarkGray
 
 # ---------------------------------------------------------------------------
 # Headless red gate (issues #590/#591): exercise the same fast, host-runnable
@@ -1275,39 +1516,41 @@ if ($modLintExit -eq 1) {
 }
 
 $workshopRoot = 'C:\Program Files (x86)\Steam\steamapps\workshop\content\552500'
-$deployDir    = Join-Path $workshopRoot $publishedId
+$deployDir    = if ($isFirstUploadBootstrap) { $null } else { Join-Path $workshopRoot $publishedId }
 $workshopLog  = 'C:\Program Files (x86)\Steam\logs\workshop_log.txt'
 
 Write-Host ""
 $operationLabel = if ($BuildOnly) { 'Building bundle for' } else { 'Shipping' }
 Write-Host "==> $operationLabel $Mod  (v$modVersion, published_id $publishedId)" -ForegroundColor Cyan
+if ($isFirstUploadBootstrap -and -not $BuildOnly) {
+    Write-Host "    mode: constrained first-upload bootstrap (exact hosted receipt; ID-only write-back)" -ForegroundColor Yellow
+}
 Write-Host "    repo root : $repoRoot"
 Write-Host "    launcher  : $launcher ($($launcherResolution.Source))"
 Write-Host "    .vmbrc    : $($vmbRcResolution.Path) ($($vmbRcResolution.Source))"
-Write-Host "    deploy dir: $deployDir"
+Write-Host "    deploy dir: $(if ($deployDir) { $deployDir } else { '(not assigned until Steam creates the item)' })"
 if ($AllowPublic) { Write-Host "    --allow-public : ON (public Workshop item)" -ForegroundColor Yellow }
 if ($NoRemote)    { Write-Host "    --no-remote    : ON (skipping PC-B push)" }
 
 # ---------------------------------------------------------------------------
-# Step 2: build + deploy + upload via VMBLauncher
+# Step 2: clean build via VMBLauncher. Deploy and upload are deliberately
+# separate actions so the freshly generated bundle can be proven byte-identical
+# to the reviewed commit before either publication surface is mutated.
 # ---------------------------------------------------------------------------
-$launcherArgs = if ($BuildOnly) { @('build', $Mod, '--clean') } else { @('all', $Mod) }
-if (-not $BuildOnly -and $AllowPublic) { $launcherArgs += '--allow-public' }
-if (-not $BuildOnly -and $NoRemote)    { $launcherArgs += '--no-remote' }
+$launcherArgs = @('build', $Mod, '--clean')
 $launcherArgs += @('--config', $launcherSettings)
 
 Write-Host ""
 Write-Host "==> VMBLauncher $($launcherArgs -join ' ')" -ForegroundColor Cyan
 # Do NOT pipe the launcher's pipeline output through Select-Object/head -- that
 # trips the PowerShell broken-pipe quirk that reports $LASTEXITCODE = -1 on a
-# clean exit. VMBLauncher keeps its established `all` semantics; the wrapper
-# only stages validated machine-local tooling, binds the shared ProjectRoot,
-# and validates source identity before allowing it to run.
+# clean exit. The wrapper stages validated machine-local tooling, binds the
+# shared ProjectRoot, and validates source identity before allowing it to run.
 try {
     Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
         Invoke-WithBoundLauncherProjectRoot -SettingsPath $launcherSettings -ProjectRoot $repoRoot -Action {
             # Ask the launcher which mod it resolved while the temporary binding is
-            # active. Abort before `all` (therefore before deploy/upload) if root,
+            # active. Abort before build (therefore before deploy/upload) if root,
             # version, source commit, or Workshop identity differs from Step 1.
             $info = Invoke-ShipLauncherNoWindow -FilePath $launcher `
                 -ArgumentList @('info', $Mod, '--no-banner', '--config', $launcherSettings)
@@ -1351,8 +1594,7 @@ try {
                 -ArgumentList $launcherArgs -ReplayOutput
             $launcherExit = $launcherRun.ExitCode
             if ($launcherExit -ne 0) {
-                $launcherOperation = if ($BuildOnly) { 'build' } else { 'all' }
-                throw "VMBLauncher '$launcherOperation $Mod' exited $launcherExit (see output above)."
+                throw "VMBLauncher 'build $Mod' exited $launcherExit (see output above)."
             }
         }
     }
@@ -1383,6 +1625,44 @@ if ($BuildOnly) {
     exit 0
 }
 
+$bundleParity = Test-TrackedBundleParity -RepoRoot $repoRoot -Mod $Mod
+if (-not $bundleParity.Ok) {
+    Write-Host "  TRACKED BUNDLE PARITY FAILED:" -ForegroundColor Red
+    $bundleParity.Problems | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+    Fail "The clean build does not exactly reproduce $Mod/bundleV2 at reviewed commit $sourceCommit. Commit the generated bundle, pass PR QA, merge it, and ship that exact default-branch commit."
+}
+$postBuildClean = Invoke-NativeCapture { & git -C $repoRoot status --porcelain --untracked-files=all }
+if ($postBuildClean.ExitCode -ne 0 -or $postBuildClean.Lines.Count -gt 0) {
+    Fail "The release worktree changed during the clean build. No deploy or upload was attempted; reviewed source and tracked bundle must remain byte-exact."
+}
+Write-Host "  OK -- clean build exactly reproduces the tracked HEAD bundle." -ForegroundColor Green
+
+$deployOk = $false
+if (-not $isFirstUploadBootstrap) {
+    $deployArgs = @('deploy', $Mod)
+    if ($NoRemote) { $deployArgs += '--no-remote' }
+    $deployArgs += @('--config', $launcherSettings)
+    Write-Host ""
+    Write-Host "==> VMBLauncher $($deployArgs -join ' ')" -ForegroundColor Cyan
+    try {
+        Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
+            Invoke-WithBoundLauncherProjectRoot -SettingsPath $launcherSettings -ProjectRoot $repoRoot -Action {
+                $deployRun = Invoke-ShipLauncherNoWindow -FilePath $launcher -ArgumentList $deployArgs -ReplayOutput
+                if ($deployRun.ExitCode -ne 0) {
+                    throw "VMBLauncher 'deploy $Mod' exited $($deployRun.ExitCode) (see output above)."
+                }
+            }
+        }
+    }
+    catch {
+        Fail $_.Exception.Message
+    }
+}
+else {
+    Write-Host ""
+    Write-Host "==> Skipping deploy verification until Steam assigns the first Workshop ID." -ForegroundColor DarkGray
+}
+
 # ---------------------------------------------------------------------------
 # Mid-ship id-stomp detector (issue #344): in the 2026-07-05 incident the cfg
 # was CORRECT when this script read it (the banner printed the canonical id)
@@ -1398,87 +1678,157 @@ if ($cfgTxtAfter -match 'published_id\s*=\s*(\d+)L' -and $matches[1] -ne $publis
 }
 
 # ---------------------------------------------------------------------------
-# Step 3: GitHub release (vt2-mod-updater consumers) unless -SkipGitHub
+# Step 3: VERIFY DEPLOY -- byte-exact bundles; newline-normalized .mod descriptor
 # ---------------------------------------------------------------------------
-$githubStatus = 'SKIPPED'
-if (-not $SkipGitHub) {
-    $tag       = "mods-$(Get-Date -Format yyyy-MM-dd)"
-    $pubScript = Join-Path $repoRoot 'tools\publish-release\publish-release.ps1'
-    if (-not (Test-Path $pubScript)) { Fail "publish-release.ps1 not found at $pubScript" }
-
-    Write-Host ""
-    Write-Host "==> GitHub release (tag $tag) -- THIS mod only (issues #436/#493)" -ForegroundColor Cyan
-
-    # Per-mod release (issues #436/#493): pass -Mods $Mod so publish-release
-    # stages ONLY this mod's zip and carries every sibling's manifest entry over
-    # from the release's existing manifest. Rebuilding/restaging all 18+ mods
-    # here let any sibling's mid-edit WIP fail THIS ship (#493) and published
-    # sibling zips whose version label was never actually shipped (#436).
-    # -SkipBuild because step 2's `VMBLauncher all` built this bundle seconds
-    # ago -- re-building here would race mid-ship source edits; the GitHub asset
-    # must be byte-identical to the bundle that just went to the Workshop.
-    #
-    # publish-release owns exact-tag resolution and mutation.  Its issue #651
-    # path distinguishes absent/unavailable/degraded states, falls back through
-    # a bounded releases-list lookup on transient tag-route failure, and updates
-    # an existing release through its numeric id.  Do not duplicate a tag probe
-    # here: a 503 must never be misclassified as "release absent" by ship.ps1.
-    try {
-        & $pubScript -Tag $tag -Mods $Mod -SkipBuild `
-            -LauncherPath $launcherResolution.Path `
-            -LauncherSource $launcherResolution.Source `
-            -LauncherApprovalAnchor $launcherResolution.ApprovalAnchor
-    }
-    catch {
-        Fail "publish-release.ps1 failed: $($_.Exception.Message)"
-    }
-    $githubStatus = "OK ($tag)"
-}
-
-# ---------------------------------------------------------------------------
-# Step 4: VERIFY DEPLOY -- byte-exact bundles; newline-normalized .mod descriptor
-# ---------------------------------------------------------------------------
-Write-Host ""
-Write-Host "==> Verifying deploy (SHA256 bundleV2 vs Workshop content folder)" -ForegroundColor Cyan
 $bundleDir = Join-Path $modDir 'bundleV2'
 if (-not (Test-Path $bundleDir)) { Fail "bundleV2 missing at $bundleDir (build did not produce output)" }
-if (-not (Test-Path $deployDir)) {
-    Fail "Deploy folder missing: $deployDir -- are you SUBSCRIBED to this mod on Workshop? (deploy can't create it)"
+if (-not $isFirstUploadBootstrap) {
+    Write-Host ""
+    Write-Host "==> Verifying deploy (SHA256 bundleV2 vs Workshop content folder)" -ForegroundColor Cyan
+    if (-not (Test-Path $deployDir)) {
+        Fail "Deploy folder missing: $deployDir -- are you SUBSCRIBED to this mod on Workshop? (deploy can't create it)"
+    }
+
+    $mismatches = @()
+    $checked    = 0
+    $normalizedDescriptors = 0
+    foreach ($f in Get-ChildItem $bundleDir -File) {
+        $target = Join-Path $deployDir $f.Name
+        if (-not (Test-Path $target)) {
+            $mismatches += "  $($f.Name): MISSING in deploy folder"
+            continue
+        }
+        $srcHash = (Get-FileHash -Algorithm SHA256 -Path $f.FullName).Hash
+        $dstHash = (Get-FileHash -Algorithm SHA256 -Path $target).Hash
+        $checked++
+        if ($srcHash -ne $dstHash) {
+            if (Test-DeployFileEquivalent -SourcePath $f.FullName -DeployedPath $target) {
+                $normalizedDescriptors++
+                Write-Host "  OK -- $($f.Name): descriptor differs only by LF/CRLF line endings." -ForegroundColor DarkGreen
+            }
+            else {
+                $mismatches += "  $($f.Name): src $($srcHash.Substring(0,12)).. != deploy $($dstHash.Substring(0,12)).."
+            }
+        }
+    }
+
+    $deployOk = ($mismatches.Count -eq 0)
+    if (-not $deployOk) {
+        Write-Host "  DEPLOY HASH MISMATCH (Steam likely reconciled the folder back to a cached manifest):" -ForegroundColor Red
+        $mismatches | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+        Fail "Deploy verification failed: $($mismatches.Count) file(s) differ between $bundleDir and $deployDir."
+    }
+    $normalizationNote = if ($normalizedDescriptors -gt 0) {
+        "; $normalizedDescriptors textual .mod descriptor(s) line-ending-equivalent"
+    } else { '' }
+    Write-Host ("  OK -- {0} file(s) verified (bundles byte-exact{1})." -f $checked, $normalizationNote) -ForegroundColor Green
 }
 
-$mismatches = @()
-$checked    = 0
-$normalizedDescriptors = 0
-foreach ($f in Get-ChildItem $bundleDir -File) {
-    $target = Join-Path $deployDir $f.Name
-    if (-not (Test-Path $target)) {
-        $mismatches += "  $($f.Name): MISSING in deploy folder"
-        continue
-    }
-    $srcHash = (Get-FileHash -Algorithm SHA256 -Path $f.FullName).Hash
-    $dstHash = (Get-FileHash -Algorithm SHA256 -Path $target).Hash
-    $checked++
-    if ($srcHash -ne $dstHash) {
-        if (Test-DeployFileEquivalent -SourcePath $f.FullName -DeployedPath $target) {
-            $normalizedDescriptors++
-            Write-Host "  OK -- $($f.Name): descriptor differs only by LF/CRLF line endings." -ForegroundColor DarkGreen
-        }
-        else {
-            $mismatches += "  $($f.Name): src $($srcHash.Substring(0,12)).. != deploy $($dstHash.Substring(0,12)).."
-        }
-    }
+# ---------------------------------------------------------------------------
+# Step 4: re-authorize, record release provenance, then upload only.
+# Branch head and hosted QA can change while the clean build/deploy runs. The
+# second read closes that window and bundle parity is rechecked immediately
+# before ugc_tool can mutate Workshop.
+# ---------------------------------------------------------------------------
+try {
+    $publicationAuthorization = Get-LivePublicationAuthorization `
+        -Repo 'Ensrick/vermintide-2-tweaker' `
+        -SourceCommit $sourceCommit
 }
+catch {
+    Fail "Final publication authorization could not be established: $($_.Exception.Message)"
+}
+if (-not $publicationAuthorization.Ok) {
+    Fail "Final publication authorization FAILED: $($publicationAuthorization.Message). No Workshop upload was attempted."
+}
+Write-Host ("  OK -- final publication authorization: {0}" -f $publicationAuthorization.Message) -ForegroundColor Green
 
-$deployOk = ($mismatches.Count -eq 0)
-if (-not $deployOk) {
-    Write-Host "  DEPLOY HASH MISMATCH (Steam likely reconciled the folder back to a cached manifest):" -ForegroundColor Red
-    $mismatches | ForEach-Object { Write-Host $_ -ForegroundColor Red }
-    Fail "Deploy verification failed: $($mismatches.Count) file(s) differ between $bundleDir and $deployDir."
+# Persist independently queried authorization evidence before Workshop mutation.
+$tag       = "mods-$(Get-Date -Format yyyy-MM-dd)"
+$pubScript = Join-Path $repoRoot 'tools\publish-release\publish-release.ps1'
+if (-not (Test-Path $pubScript)) { Fail "publish-release.ps1 not found at $pubScript" }
+$publicationAuthorizationJson = $publicationAuthorization.Evidence | ConvertTo-Json -Depth 10 -Compress
+$receiptPath = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-workshop-receipt-" + [guid]::NewGuid().ToString('N') + '.json')
+
+Write-Host ""
+Write-Host "==> Recording authorized GitHub release (tag $tag) -- THIS mod only (issues #436/#493/#724)" -ForegroundColor Cyan
+try {
+    & $pubScript -Tag $tag -Mods $Mod -SkipBuild `
+        -PublicationAuthorizationJson $publicationAuthorizationJson `
+        -PublicationReceiptOutputPath $receiptPath `
+        -LauncherPath $launcherResolution.Path `
+        -LauncherSource $launcherResolution.Source `
+        -LauncherApprovalAnchor $launcherResolution.ApprovalAnchor
 }
-$normalizationNote = if ($normalizedDescriptors -gt 0) {
-    "; $normalizedDescriptors textual .mod descriptor(s) line-ending-equivalent"
-} else { '' }
-Write-Host ("  OK -- {0} file(s) verified (bundles byte-exact{1})." -f $checked, $normalizationNote) -ForegroundColor Green
+catch {
+    if (Test-Path -LiteralPath $receiptPath) {
+        Remove-Item -LiteralPath $receiptPath -Force -ErrorAction SilentlyContinue
+    }
+    Fail "publish-release.ps1 failed before Workshop upload: $($_.Exception.Message)"
+}
+if (-not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) {
+    Fail "publish-release.ps1 did not return the exact GitHub-hosted publication receipt. No Workshop upload was attempted."
+}
+$githubStatus = "OK ($tag)"
+
+# The release-recording call can take long enough for default HEAD to move.
+# Close that final window after the record exists and immediately before upload.
+try {
+    $publicationAuthorization = Get-LivePublicationAuthorization `
+        -Repo 'Ensrick/vermintide-2-tweaker' `
+        -SourceCommit $sourceCommit
+}
+catch {
+    if (Test-Path -LiteralPath $receiptPath) {
+        Remove-Item -LiteralPath $receiptPath -Force -ErrorAction SilentlyContinue
+    }
+    Fail "Last-moment publication authorization could not be established: $($_.Exception.Message)"
+}
+if (-not $publicationAuthorization.Ok) {
+    Remove-Item -LiteralPath $receiptPath -Force -ErrorAction SilentlyContinue
+    Fail "Last-moment publication authorization FAILED: $($publicationAuthorization.Message). No Workshop upload was attempted."
+}
+# The launcher now reconstructs source proofs from sourceCommit blobs and pins
+# the staged cfg/content/preview/tool before comparing them. Do not insert a
+# mutable worktree hash/cleanliness precheck here: it would recreate the
+# check/use window this boundary exists to remove.
+
+$uploadArgs = @('upload', $Mod)
+if ($AllowPublic) { $uploadArgs += '--allow-public' }
+$uploadArgs += @('--publication-receipt', $receiptPath, '--config', $launcherSettings)
+Write-Host ""
+Write-Host "==> VMBLauncher $($uploadArgs -join ' ')" -ForegroundColor Cyan
+$uploadFailure = $null
+try {
+    Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
+        Invoke-WithBoundLauncherProjectRoot -SettingsPath $launcherSettings -ProjectRoot $repoRoot -Action {
+            $uploadRun = Invoke-ShipLauncherNoWindow -FilePath $launcher -ArgumentList $uploadArgs -ReplayOutput
+            if ($uploadRun.ExitCode -ne 0) {
+                throw "VMBLauncher 'upload $Mod' exited $($uploadRun.ExitCode) (see output above)."
+            }
+        }
+    }
+}
+catch {
+    $uploadFailure = $_.Exception.Message
+}
+finally {
+    if (Test-Path -LiteralPath $receiptPath) {
+        Remove-Item -LiteralPath $receiptPath -Force -ErrorAction SilentlyContinue
+    }
+}
+if ($uploadFailure) {
+    Fail $uploadFailure
+}
+if ($isFirstUploadBootstrap) {
+    $cfgAfterBootstrap = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+    if ($cfgAfterBootstrap -notmatch 'published_id\s*=\s*([1-9]\d*)L') {
+        Fail "ugc_tool returned success but the constrained bootstrap did not write one nonzero published_id to itemV2.cfg."
+    }
+    $publishedId = $matches[1]
+    $deployDir = Join-Path $workshopRoot $publishedId
+    Write-Host "  Bootstrap assigned Workshop ID $publishedId. Commit the ID-only itemV2.cfg change before the next ship." -ForegroundColor Yellow
+}
 
 # ---------------------------------------------------------------------------
 # Step 5: VERIFY UPLOAD -- scan recent workshop_log.txt for this published_id
@@ -1523,6 +1873,31 @@ switch ($uploadStatus) {
     default {
         Fail "No fresh (<5 min) workshop_log line for item $publishedId. Upload may not have transferred -- inspect $workshopLog."
     }
+}
+
+# A successful published_id=0 transaction creates the Workshop identity but is
+# deliberately not a completed release. The reviewed commit and provisional
+# GitHub manifest still carry ID 0, there was no subscribed deploy target to
+# verify, and the ID-only source change has not passed PR review yet. Stop
+# before issue lifecycle mutation and before any "test ready" banner. Keep the
+# machine-global claim so a parallel worktree cannot create a second Workshop
+# item for the same mod while the ID-only reconciliation is in flight.
+if ($isFirstUploadBootstrap) {
+    Write-Host ""
+    Write-Host "================ BOOTSTRAP COMPLETE - NOT TEST READY ================" -ForegroundColor Yellow
+    Write-Host ("  Mod                  : {0}" -f $Mod)
+    Write-Host ("  Version              : v{0}" -f $modVersion)
+    Write-Host ("  Assigned Workshop ID : {0}" -f $publishedId)
+    Write-Host ("  Source cfg           : {0}" -f $cfgPath)
+    Write-Host "  GitHub release       : provisional; manifest still records published_id 0" -ForegroundColor Yellow
+    Write-Host "  Lifecycle labels     : unchanged; this build is not ready for in-game testing" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Commit only the assigned-ID itemV2.cfg change, pass protected PR QA," -ForegroundColor Yellow
+    Write-Host "  merge it, then run the ordinary canonical ship from the new live" -ForegroundColor Yellow
+    Write-Host "  default-branch HEAD. The machine-global claim remains held until that" -ForegroundColor Yellow
+    Write-Host "  reconciliation completes; do not release or override it early." -ForegroundColor Yellow
+    Write-Host "=====================================================================" -ForegroundColor Yellow
+    exit 0
 }
 
 # ---------------------------------------------------------------------------

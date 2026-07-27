@@ -10,14 +10,16 @@ builds without waiting on Workshop propagation.
 
 ## Usage
 
-```powershell
-.\publish-release.ps1                       # FULL mode: build all mods + create release with date-stamped tag
-.\publish-release.ps1 -Tag mods-2026-05-21  # explicit tag
-.\publish-release.ps1 -SkipBuild            # reuse existing bundleV2/ output (faster repeat runs)
-.\publish-release.ps1 -DryRun               # build + stage but don't push to GitHub
-.\publish-release.ps1 -Mods weapon_tweaker  # FILTERED mode (issues #436/#493): touch ONLY the named
-                                            # mods (folder name or ModId, comma-separate for several)
-```
+This is an authorization-bound internal publication component. Routine releases
+must enter through `tools\ship\ship.ps1 -Mod <name>`; do not invoke this publisher
+directly or hand-author its authorization/dependency parameters.
+
+Caller JSON is correlation evidence, never authority. Immediately before any
+release mutation, this component re-queries the live default branch, exact
+merged PR SHA, and successful hosted `qa-gate` for the exact source commit.
+New zip and receipt inputs are reconstructed from that commit's Git blobs, not
+hashed from mutable working-tree paths. Missing, forged, stale, emergency, or
+contradictory evidence fails closed.
 
 `ship.ps1` also supplies `-LauncherPath`, `-LauncherSource`, and
 `-LauncherApprovalAnchor` internally. That snapshot is the exact approved
@@ -25,6 +27,31 @@ VMBLauncher dependency used for the Workshop phase; the release phase
 revalidates its path/provenance without rereading mutable global settings
 before recording the builder version. Do not hand-author those parameters for
 routine publishing.
+
+Publication requires VMBLauncher 0.5.7 or newer with
+`hosted-publication-receipt-v3`, `git-commit-blob-snapshot-v1`, and
+`locked-upload-snapshot-v1`, plus
+`constrained-first-upload-bootstrap-v1`. The launcher release must land and be
+installed before this monorepo guard lands. Both `ship.ps1` and this publisher
+probe those capabilities before any GitHub release mutation. Release zip,
+receipt, and manifest inputs are captured once as immutable bytes; new releases
+remain drafts until those bytes are uploaded, with the manifest last. Before
+mutation, every entry inside each immutable ZIP snapshot is independently
+hashed against the commit-derived manifest bundle records; a staged-file swap
+during compression cannot be hidden by restoring the path afterward.
+The complete lookup/carry-forward/manifest/release-ID mutation is also guarded
+by one machine-global mutex. Per-mod claims do not serialize two different mods,
+so this prevents concurrent ships from reading the same daily manifest and
+silently erasing one another's new entry.
+
+First Workshop item creation stays inside canonical ship with a distinct
+`workshop_bootstrap` receipt over the exact reviewed commit carrying
+`published_id = 0L`. VMBLauncher keeps content files/directories, preview, and
+tool bytes pinned, opens only the staged cfg/parent replacement boundary
+immediately before ugc_tool, validates the complete output, and compare-and-swaps only Steam's
+nonzero ID into a source cfg that still matches the authorized Git blob. The
+outer ship then stops before test-ready labeling and retains the claim until the
+ID-only commit passes protected review, merges, and receives an ordinary ship.
 
 Requires:
 
@@ -46,11 +73,10 @@ both Windows PowerShell 5.1 and PowerShell 7:
 
 ## Two modes (issues #436 / #493)
 
-**FULL (no `-Mods`)** — the legacy behavior, unchanged: lint the whole repo, build + stage every
-inventory mod, write a fresh manifest from live source, `gh release create`. Run it only when the
-whole working tree is release-clean: it publishes whatever every mod's source builds to *right
-now*, so a sibling mid-edit gets published with a version label that was never shipped to
-Workshop (the issue #436 mislabel), and any mod's broken WIP fails the entire run (issue #493).
+**FULL (no `-Mods`)** — lint the whole repo, build every inventory mod as a
+reproducibility gate, stage exact source-commit bundle blobs, and write a fresh
+manifest. It publishes the selected commit bytes, not whatever a mutable path
+contains at check time; any mod's broken build still fails the entire run.
 
 **FILTERED (`-Mods <names>`)** — what `ship.ps1` passes. Only the named mods are linted, built,
 staged, and uploaded; sibling mods are never rebuilt, restaged, or re-uploaded:
@@ -94,22 +120,17 @@ and staged provenance/hash validation still runs before mutation. Offline covera
 
 ## When to run
 
-**After every Workshop upload.** Per the user's standing rule: "from here on out, claude will
-also build the latest as well and make sure the pre-built mod files are on github, in addition
-to deploying and building, and uploading to the workshop whenever a mod is updated."
+**Before every Workshop upload, inside the canonical ship transaction.** The
+authorized release record must exist before the launcher is allowed to mutate
+Workshop.
 
-The canonical path is `tools\ship\ship.ps1 -Mod <name>`, which invokes this script as
-`publish-release.ps1 -Tag mods-<today> -Mods <name> -SkipBuild` (the ship's step 2 built the
-bundle seconds earlier, so the release asset is byte-identical to the bundle that just went to
-the Workshop). Manual equivalent for one mod:
+The canonical path is `tools\ship\ship.ps1 -Mod <name>`. It invokes this script
+with exact authorization evidence after clean tracked-bundle parity succeeds and
+before the final launcher upload. There is no supported manual equivalent.
 
-```powershell
-& $vmblauncher all <mod>                                    # build + deploy + Workshop upload
-.\tools\publish-release\publish-release.ps1 -Mods <mod>     # then update ONLY this mod's release asset
-```
-
-Use FULL mode (no `-Mods`) only for a deliberate whole-set refresh of a release-clean tree —
-e.g. after retiring/adding a mod, or to restore a dropped carry-forward entry.
+FULL mode (no `-Mods`) is reserved for authorization-bearing internal automation
+performing a deliberate whole-set refresh of a release-clean tree, such as after
+retiring or adding a mod. It is not a separate operator entry point.
 
 Source pull requests created after publishing must link tracker work with
 `Refs #N`. Do not use GitHub auto-closing keywords: a successful release or
@@ -138,6 +159,17 @@ Repository-only issues are closed after their named deterministic check passes.
         "name": "VMBLauncher",
         "version": "1.2.3"
       },
+      "publication_authorization": {
+        "mode": "hosted_qa",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "checked_at_utc": "2026-05-21T17:59:00Z",
+        "default_branch": "master",
+        "default_branch_commit": "0123456789abcdef0123456789abcdef01234567",
+        "merged_pr_number": 724,
+        "qa_check": "qa-gate",
+        "qa_check_url": "https://github.com/Ensrick/vermintide-2-tweaker/actions/runs/1",
+        "qa_completed_at_utc": "2026-05-21T17:58:00Z"
+      },
       "bundle_files": [
         {
           "filename": "209fb8c3c0a8c3a4.mod_bundle",
@@ -160,12 +192,8 @@ them in `vt2-mod-updater`'s `Models/ReleaseManifest.cs` and retain compatibility
 with older releases.
 
 `source_commit` is the repository `HEAD` used as the build baseline.
-`source_state` is `clean` only when the mod's source paths match that commit;
-generated `bundleV2/` changes are excluded. A `dirty` entry is intentionally
-truthful transitional metadata, not proof that the commit alone reproduces the
-bundle. Commit-before-build (or another immutable source snapshot identifier)
-is still required before the project can promise exact commit-to-bundle
-reproduction.
+`source_state` must be `clean`; dirty provenance is rejected. The publisher
+also checks whole-worktree cleanliness independently before mutation.
 
 `builder.name` is fixed to `VMBLauncher`, preserving it as the only sanctioned
 builder. `builder.version` comes from the launcher's Windows ProductVersion or
@@ -174,12 +202,16 @@ FileVersion metadata. `bundle_files` records every raw top-level VMB output
 describe the raw files inside the zip, while the existing entry-level `sha256`
 continues to describe the downloadable zip itself.
 
+`publication_authorization` must be canonical `hosted_qa` evidence. Its source
+and default-branch commits must equal the entry commit; the merged PR and exact
+successful check are independently queried rather than trusted from this JSON.
+
 Before any GitHub mutation, `publish-release.ps1` validates every newly staged
 entry against the copied bytes in `.release-stage`. A filtered publish carries
-older sibling entries verbatim; pre-schema provenance is allowed with a warning
-until that sibling is rebuilt, but a newly staged entry without complete
-provenance is a hard failure. This makes the migration incremental without
-rewriting releases or rebuilding unrelated mods.
+older sibling entries verbatim; pre-schema entries without provenance remain
+transitional warnings, but every provenance-bearing entry must record clean
+source and publication authorization. Newly staged entries without complete
+provenance are hard failures.
 
 Offline validator self-test and manual validation:
 
@@ -229,14 +261,10 @@ outputs only after all of these are complete:
 
 ### Transition audit and fresh-checkout proof
 
-The clean-source requirement cannot safely become a late
-`publish-release.ps1` failure. The canonical `ship.ps1` sequence currently
-builds, deploys, and uploads before the source commit is created. A dirty-source
-failure in the GitHub-release step would therefore discover the problem only
-after Workshop had already changed.
-
-Until a maintainer explicitly approves a commit-before-build ship transaction,
-run the read-only preflight report before building:
+The canonical transaction requires a clean, reviewed default-branch source
+commit before build, proves the build reproduces tracked artifacts, records
+authorized release provenance, and only then uploads to Workshop. The publisher
+independently rejects dirty source as defense in depth. For a read-only audit:
 
 ```powershell
 .\qa\check_release_reproducibility.ps1 -Mod <folder-or-mod-id> -AuditOnly
@@ -244,10 +272,8 @@ run the read-only preflight report before building:
 
 Exit 0 means the selected mod's source paths match `HEAD`; `bundleV2/` changes
 are excluded because they are generated outputs. Exit 2 lists the source
-changes that prevent `HEAD` from being an immutable build input. This audit is
-deliberately not wired into `ship.ps1` yet: doing so would make the documented
-edit-then-ship workflow unshippable without also deciding commit/push failure,
-upload failure, retry, and rollback policy.
+changes that prevent `HEAD` from being an immutable build input. This audit does
+not publish or mutate external state.
 
 After a clean schema-2 entry has been published, prove it from a separate fresh
 checkout. Use the exact recorded commit and launcher version; configure only
@@ -273,12 +299,13 @@ temporary settings file whose `ProjectRoot` is the fresh checkout. Every raw
 extra, or changed output fails the proof. It never deploys, uploads, edits
 Workshop state, or treats a zip hash alone as reproducibility evidence.
 
-**Maintainer decision still required:** reorder the canonical transaction so
-the exact release source is committed (and decide whether it must also be
-pushed) before VMBLauncher builds. Define what happens if build, Workshop
-upload, GitHub publication, or the eventual source push fails after that point.
-Only then should the audit become a blocking `ship.ps1` preflight and newly
-staged manifests reject `source_state: dirty`.
+The canonical transaction is already ordered around immutable reviewed source:
+run `ship.ps1 -BuildOnly`, commit source and the exact generated bundle together,
+push, pass review and hosted `qa-gate`, merge, then run the final ship from a
+clean checkout at the exact live default-branch HEAD. The publisher re-queries
+that live state after lint, staging, and carry-forward downloads and immediately
+before GitHub mutation. A failure leaves Workshop untouched; there is no
+post-upload source commit or push.
 
 ## Mod inventory
 

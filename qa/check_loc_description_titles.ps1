@@ -70,7 +70,13 @@ function Get-EnglishLocalizationMap([string]$Source) {
 function Find-RepeatedTitleBodies([System.IO.FileInfo[]]$Files) {
     $findings = [System.Collections.Generic.List[object]]::new()
     foreach ($file in $Files) {
-        $relative = [IO.Path]::GetRelativePath($repoRoot, $file.FullName)
+        $rootPrefix = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        $fullName = [IO.Path]::GetFullPath($file.FullName)
+        $relative = if ($fullName.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            $fullName.Substring($rootPrefix.Length)
+        } else {
+            $fullName
+        }
         $source = [IO.File]::ReadAllText($file.FullName)
         $map = Get-EnglishLocalizationMap $source
         foreach ($key in $map.Keys) {
@@ -120,8 +126,8 @@ local localization = {
             $file = [IO.FileInfo]::new($temp)
             $findings = @(Find-RepeatedTitleBodies @($file))
             Assert ($findings.Count -eq 2) 'expected bad tooltip and paren description only'
-            Assert (($findings | Where-Object Key -eq 'bad_tooltip').Count -eq 1) 'bad_tooltip missing'
-            Assert (($findings | Where-Object Key -eq 'paren_description').Count -eq 1) 'paren_description missing'
+            Assert (@($findings | Where-Object { $_.Key -eq 'bad_tooltip' }).Count -eq 1) 'bad_tooltip missing'
+            Assert (@($findings | Where-Object { $_.Key -eq 'paren_description' }).Count -eq 1) 'paren_description missing'
         } finally {
             if (Test-Path $temp) { Remove-Item -LiteralPath $temp }
         }

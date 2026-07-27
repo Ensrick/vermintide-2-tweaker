@@ -899,36 +899,33 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
 3. **Update the stable mod's CHANGELOG.md** with a single rolled-up entry
    covering the merged work. Reference the dev versions that contributed
    if it helps the reader (`merge of dev 0.7.62-dev..0.7.66-dev`).
-4. **`VMBLauncher.exe build <stable-mod>`** — confirm clean compile against
-   the stable tree.
-5. **`VMBLauncher.exe deploy <stable-mod>`** — deploy locally and to every
-   enabled remote target, then smoke-test in-game from the stable bundle. A
-   disabled remote is intentionally out of scope and must not be reported as
-   updated. The dev bundle may be live in the same install (different mod_id) —
-   that's fine, but the test is "does the stable build behave correctly alone".
+4. **Claim, then build the tracked artifact** with
+   `tools\ship\claim.ps1 -Mod <stable-mod>` and
+   `tools\ship\ship.ps1 -Mod <stable-mod> -BuildOnly`.
+5. **Commit source + generated bundle together**, push a feature branch, open a
+   PR to protected `master`, require `qa-gate`, and merge.
 6. **Apply the suffix approval rule in § 6.6.** A clean MOD_VERSION needs a
    fresh per-build ship signal naming the version. A user-chosen pre-release
    suffix ships the full pipeline without another prompt, including on a public
    item. Workshop visibility does not change this approval rule.
-7. **Upload via `ship.ps1 -Mod <stable> -AllowPublic`** (or `VMBLauncher.exe
-   upload <stable-mod> --allow-public`) — the visibility-regression guard lives
-   in `VMBLauncher.exe upload`, which both call. (The old per-mod `upload_*.ps1`
-   wrappers were removed 2026-07-07, archived to `../_vt2-tweaker-archive/`.)
-8. **`.\tools\publish-release\publish-release.ps1`** — publishes the bundle
-   to the GitHub release so `vt2-mod-updater` consumers stay in sync.
-9. **`git add` / `git commit`**, push a feature branch, open a PR to protected
-   `master`, require `qa-gate`, and merge the stable source + generated bundle +
-   version + CHANGELOG changes. The merged source is PART of the ship, not a follow-up:
-   uncommitted shipped work piles up silently (three sessions' worth was found
-   uncommitted on 2026-07-01).
+7. **From a clean worktree at the exact live default-branch commit, run
+   `ship.ps1 -Mod <stable> -AllowPublic`.** The wrapper requires the merged PR,
+   successful hosted `qa-gate`, exact newest CHANGELOG/MOD_VERSION identity,
+   and machine-global version claim before any mutation. It clean-builds and
+   proves every `bundleV2` blob equals the tracked merge commit before separate
+   deploy and upload actions. It then records the authorization in the GitHub
+   release manifest.
+8. **Smoke-test the hash-verified deployed stable bundle.** A disabled remote is
+   intentionally out of scope and must not be reported as updated. The dev
+   bundle may be live in the same install (different mod_id); test that the
+   stable build behaves correctly alone.
 
 **Dev uploads are pre-authorized: NO per-build approval.** Per the ship
 doctrine in § 6.6, a `-dev`/`-alpha`/`-beta`-versioned build ships the full
 pipeline on every update. Dev uploads target the friends-only item, skip
-`--allow-public`, and ride the `ship.ps1`
-pipeline (which wraps `VMBLauncher.exe upload <mod>-dev`; the launcher's
-visibility check auto-passes for `friends_only`). GitHub release AND the source
-commit/push are part of every dev ship, not optional follow-ups.
+`--allow-public`, and ride the reviewed `ship.ps1` pipeline. GitHub release and
+the source commit/PR/hosted-QA/merge are mandatory predecessors to Workshop
+mutation, not post-upload follow-ups.
 
 **Cross-mod refs** always resolve against the stable mod_id (`get_mod("cim")`,
 `get_mod("gt")`, `(get_mod('bt') or {}):is_br_active()`). Dev clones are
@@ -955,16 +952,41 @@ EVERY active mod in the repo, including single-stream items whose current cfg is
 public:** every update ships the FULL pipeline with NO per-build approval. The
 full pipeline is:
 
-1. `tools\ship\ship.ps1 -Mod <name>` builds, deploys locally and to every
-   enabled remote target, uploads to the Workshop item, publishes the GitHub
-   release, and verifies deploy hashes plus `workshop_log.txt`. Add
-   `-AllowPublic` when `itemV2.cfg` is public. Use `-NoRemote` only to skip an
-   otherwise-enabled remote for that invocation, and identify the skipped
-   target in the report. No flag is needed when no remote is enabled.
-2. `git add` / `git commit` the source and generated bundle, push a feature
-   branch, then merge it through protected `master` only after `qa-gate` passes.
-   The merged source is PART of the ship, not an optional follow-up. Branch
-   protection applies to administrators and must not be bypassed for routine work.
+1. Acquire the machine-global mod/version claim. Update source, exact first
+   CHANGELOG release, and `MOD_VERSION`; run
+   `tools\ship\ship.ps1 -Mod <name> -BuildOnly` to generate and validate the
+   tracked bundle without deploying or uploading.
+2. `git add` / `git commit` source and generated bundle together, push a feature
+   branch, and merge it through protected `master` only after `qa-gate` passes.
+3. From a clean worktree at the exact live default-branch commit, run
+   `tools\ship\ship.ps1 -Mod <name>`. It re-runs hosted authorization, clean
+   build, tracked-bundle parity, deploy, authorization-backed GitHub release,
+   Workshop upload, and transfer verification in that order. Recording
+   authorization before Workshop mutation is mandatory. Add `-AllowPublic`
+   when `itemV2.cfg` is public.
+   Use `-NoRemote` only to skip an otherwise-enabled remote for that invocation,
+   and identify the skipped target in the report.
+
+There is no pre-merge or hosted-QA publication override. `-SkipGitHub` and
+`-EmergencyPublicationReason` are prohibited because Workshop mutation cannot
+bypass exact clean default HEAD, its merged PR, successful hosted `qa-gate`,
+release provenance, the machine-global claim, or tracked-bundle parity.
+
+**First-upload bootstrap is identity allocation, not a test release.** A
+reviewed `published_id = 0L` commit may use the constrained hosted bootstrap
+receipt so Steam can allocate one ID. After the launcher compare-and-swaps only
+that ID into the still-authorized cfg, `ship.ps1` must stop before lifecycle
+labeling and test-readiness output and must retain the machine-global claim.
+Commit the ID-only change, pass protected PR QA, merge, and run an ordinary
+canonical ship before releasing the claim. The provisional GitHub manifest's
+zero Workshop ID is not updater/test-ready evidence.
+
+**Daily GitHub release mutation is globally serialized.** Per-mod claims permit
+two different mods to ship concurrently, but their filtered publishers share
+one release manifest. The publisher therefore holds one machine-global mutex
+from release lookup through carry-forward, immutable snapshot capture, and
+release-ID mutation; removing or narrowing that transaction revives lost
+manifest updates.
 
 **Atomic source/root-bundle gate (issue #724).** A PR that changes an active
 mod's runtime source, `itemV2.cfg`, or newest CHANGELOG release identity must
@@ -2097,6 +2119,9 @@ BEFORE shipping:
   - claim.ps1 (claim the mod first - every ship, before build)
   - MOD_VERSION bumped
   - CHANGELOG entry written
+  - BuildOnly generated the exact tracked bundle
+  - Source and bundle committed together, pushed, reviewed, hosted QA passed, and merged
+  - Final ship runs from a clean checkout at the exact live default-branch HEAD
   - No forward-ref bugs (visually verify; future: luacheck)
   - No new "guard ≠ bail" violations
   - Subagent pre-ship review for hot mods
@@ -2104,7 +2129,7 @@ BEFORE shipping:
 
 AFTER shipping:
   - workshop_log.txt shows "Uploaded new content" for the item
-  - git add / commit / push the source (the commit is part of the ship, sec. 6.6)
+  - Do not add a post-upload source commit or push; the uploaded bytes must remain bound to the already reviewed and merged source commit
 
 BEFORE a verify session:
   - generate_playtest.ps1 (generate the in-game playtest checklist)
