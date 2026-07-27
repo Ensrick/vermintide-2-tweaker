@@ -1,5 +1,24 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.318-dev (2026-07-26) -- guarantee in-mission vote titles (#700) [not-started]
+
+- Replaces the blank keep-only `game_settings_vote` localization at the
+  promoted in-mission HUD edge with the dedicated player-facing title
+  **Change Mission?**, while retaining a usable native title when one exists.
+- Keeps the shared vanilla vote template, RPC identities, `NetworkLookup`,
+  Accept/Decline option keys, keep voting, and unrelated vote types unchanged.
+- Preserves the complete return tuple from both wrapped `VoteManager` start
+  methods, including trailing nils, and fails closed when the template is
+  malformed or neither localization provider yields a usable title.
+- Retains usable output from an existing authored title modifier, contains a
+  throwing or unusable modifier, and falls back to the dedicated title.
+- Records one bounded `[gut:700] title-boundary` result per promoted active
+  vote at `IngameVotingUI.start_vote`; there is no per-frame diagnostic.
+- `/verify_gut_mission_vote` and `issue700_mission_vote_client_popup` in
+  `/gut_regression_test` cover the live hook/policy/title contract; the offline
+  policy suite covers localization rejection, tuple-safe wiring, option
+  preservation, malformed input, and diagnostic classification.
+
 ## 0.2.317-dev (2026-07-26) -- restore source-backed hidden career perks (#153) [not-started]
 
 - Supplies the native passive-perk rows only while the career-information

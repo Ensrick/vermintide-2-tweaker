@@ -147,12 +147,12 @@ Last updated: 2026-07-17.
 
 ## In-mission mission-vote client popup (#700)
 
-- [ ] Host and client both load GUT dev v0.2.291-dev, enter an Adventure mission, and the host selects another mission from the in-mission map.
+- [ ] Host and client both load the same candidate GUT dev version, enter an Adventure mission, and the host selects another mission from the in-mission map.
 - [ ] The client sees the vanilla accept/decline HUD vote, accepts, and the selected mission starts without waiting for the 30-second timeout.
 - [ ] The HUD title is localized player-facing text; it must not display the internal `game_settings_vote` key or any underscore-delimited identifier.
 - [ ] Keep mission selection remains vanilla; unrelated kick/continue votes retain their original classification.
-- [ ] Both peers log one `[gut:700] mission vote promoted to localized IngameVotingUI` line for the active vote.
-- [ ] `/verify_gut_mission_vote` reports `hooks=true policy=true ... result=PASS`; `/gut_regression_test` passes `issue700_mission_vote_client_popup`; offline `test_gut_mission_vote_policy.lua` passes.
+- [ ] Both peers log one `[gut:700] mission vote promoted to localized IngameVotingUI` and one `[gut:700] title-boundary ... result=PASS` line for the active vote; `final` is non-empty and `accept=popup_choice_accept decline=dlc1_3_1_decline`.
+- [ ] `/verify_gut_mission_vote` reports `hooks=true policy=true title_ready=true ... result=PASS`; `/gut_regression_test` passes `issue700_mission_vote_client_popup`; offline `test_gut_mission_vote_policy.lua` passes.
 
 ## Cosmetics-only in-mission customization mount (#89)
 
