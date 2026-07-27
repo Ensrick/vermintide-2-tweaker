@@ -178,6 +178,175 @@ return function(H, repo_root)
         H.truthy(c:find("hidden|rejected|loadout|unequipped|saved", 1, true))
     end)
 
+    H.test("CIM #628 keyed salvage recovery enforces all ownership exclusions", function()
+        local row = master("cwv_variant")
+        local function record(backend_id, item_key)
+            return assert(contract.normalize_record(backend_id, {
+                item_key = item_key or "cwv_dr_dawi_mace",
+                rarity = "modded",
+            }, row))
+        end
+        local function item(backend_id)
+            return {
+                backend_id = backend_id,
+                ItemId = "cwv_dr_dawi_mace",
+                rarity = "modded",
+                data = row,
+            }
+        end
+
+        local keyed = {
+            ["uuid-eligible"] = item("uuid-eligible"),
+            ["uuid-active-other-career"] = item("uuid-active-other-career"),
+            ["uuid-saved-other-career"] = item("uuid-saved-other-career"),
+            ["uuid-favorite"] = item("uuid-favorite"),
+            ["uuid-query-error"] = item("uuid-query-error"),
+            ["woc_blightreaper_001"] = {
+                backend_id = "woc_blightreaper_001",
+                ItemId = "woc_blightreaper",
+                rarity = "modded",
+                data = {
+                    slot_type = "melee",
+                    woc_variant = true,
+                    woc_unique_relic = true,
+                },
+            },
+        }
+        local records = {
+            ["uuid-eligible"] = record("uuid-eligible"),
+            ["uuid-active-other-career"] = record("uuid-active-other-career"),
+            ["uuid-saved-other-career"] = record("uuid-saved-other-career"),
+            ["uuid-favorite"] = record("uuid-favorite"),
+            ["uuid-query-error"] = record("uuid-query-error"),
+            ["woc_blightreaper_001"] = {
+                backend_id = "woc_blightreaper_001",
+                item_key = "woc_blightreaper",
+                owner = contract.OWNER,
+                schema_version = contract.SCHEMA_VERSION,
+                rarity = "modded",
+                slot_type = "melee",
+            },
+        }
+        local traces = {}
+        local result = contract.recover_salvage_items(keyed, {}, {
+            get_record = function(backend_id)
+                return records[backend_id]
+            end,
+            get_equipped_careers = function(backend_id)
+                if backend_id == "uuid-query-error" then error("unavailable") end
+                if backend_id == "uuid-active-other-career" then
+                    return { "es_mercenary" }
+                end
+                return {}
+            end,
+            get_saved_loadouts = function(backend_id)
+                if backend_id == "uuid-saved-other-career" then
+                    return { "dr_ranger:loadout_3" }
+                end
+                return {}
+            end,
+            is_favorite = function(backend_id)
+                return backend_id == "uuid-favorite"
+            end,
+            trace = function(traced_item, _, _, visible, eligible, reason,
+                    careers, loadouts)
+                traces[traced_item.backend_id] = {
+                    visible = visible,
+                    eligible = eligible,
+                    reason = reason,
+                    careers = careers,
+                    loadouts = loadouts,
+                }
+            end,
+        })
+
+        H.equal(#result, 1)
+        H.equal(result[1].backend_id, "uuid-eligible")
+        H.equal(traces["uuid-active-other-career"].reason, "equipped")
+        H.deep_equal(traces["uuid-active-other-career"].careers, { "es_mercenary" })
+        H.equal(traces["uuid-saved-other-career"].reason, "loadout")
+        H.deep_equal(traces["uuid-saved-other-career"].loadouts,
+            { "dr_ranger:loadout_3" })
+        H.equal(traces["uuid-favorite"].reason, "favorite")
+        H.equal(traces["uuid-query-error"].reason, "equipped")
+        H.equal(traces["woc_blightreaper_001"].reason, "immutable_relic")
+    end)
+
+    H.test("CIM #628 keyed salvage recovery fails closed and is idempotent", function()
+        local row = master("cwv_variant")
+        local function record(backend_id)
+            return assert(contract.normalize_record(backend_id, {
+                item_key = "cwv_dr_dawi_mace",
+                rarity = "modded",
+            }, row))
+        end
+        local function instance(backend_id)
+            return {
+                ItemInstanceId = backend_id,
+                ItemId = "cwv_dr_dawi_mace",
+                rarity = "modded",
+                data = row,
+            }
+        end
+        local function recover(backend_id, access, result)
+            access.get_record = function(id)
+                return id == backend_id and record(backend_id) or nil
+            end
+            access.get_equipped_careers = access.get_equipped_careers
+                or function() return {} end
+            access.get_saved_loadouts = access.get_saved_loadouts
+                or function() return {} end
+            return contract.recover_salvage_items(
+                { arbitrary_string_key = instance(backend_id) },
+                result or {}, access)
+        end
+
+        local result = recover("saved-throw", {
+            get_saved_loadouts = function() error("saved query unavailable") end,
+            is_favorite = function() return false end,
+        })
+        H.equal(#result, 0)
+
+        result = recover("saved-non-table", {
+            get_saved_loadouts = function() return "not-a-list" end,
+            is_favorite = function() return false end,
+        })
+        H.equal(#result, 0)
+
+        result = recover("favorite-throw", {
+            is_favorite = function() error("favorite query unavailable") end,
+        })
+        H.equal(#result, 0)
+
+        result = recover("favorite-non-boolean", {
+            is_favorite = function() return "false" end,
+        })
+        H.equal(#result, 0)
+
+        result = recover("favorite-helper-missing", {})
+        H.equal(#result, 0)
+
+        result = recover("item-instance-id-appended", {
+            is_favorite = function() return false end,
+        })
+        H.equal(#result, 1,
+            "ItemInstanceId-only keyed-map values must be recovered")
+        H.equal(result[1].ItemInstanceId, "item-instance-id-appended")
+        result = recover("item-instance-id-appended", {
+            is_favorite = function() return false end,
+        }, result)
+        H.equal(#result, 1,
+            "recovery must be idempotent across repeated UI refreshes")
+
+        local existing = instance("item-instance-id-preexisting")
+        result = recover("item-instance-id-preexisting", {
+            is_favorite = function() return false end,
+        }, { existing })
+        H.equal(#result, 1,
+            "ItemInstanceId-only rows must dedupe against vanilla's result")
+        H.equal(result[1], existing)
+    end)
+
     H.test("CIM #628 deletion partitions exact owned instances once", function()
         local owned, foreign = contract.partition_exact_ids(
             { "owned_a", "foreign", "owned_a", "owned_b" },
@@ -326,15 +495,17 @@ return function(H, repo_root)
         local filter = read("_cim_inventory_filter.lua")
         local importer = read("saveweapon_import.lua")
         local selector = read("_cim_template_selector.lua")
+        local contract_source = read("_cim_synthetic_item_contract.lua")
         H.truthy(entry:find("contract.build_mirror_payload(normalized", 1, true))
         H.truthy(forge:find("contract.build_mirror_payload(record", 1, true))
         H.truthy(importer:find("contract.build_mirror_payload(record", 1, true))
-        H.truthy(forge:find("mod._cim277_delete_owned_ids(owned)", 1, true))
-        H.truthy(filter:find("contract.is_salvage_eligible", 1, true))
-        H.truthy(filter:find("for _, item in pairs(items) do", 1, true),
-            "salvage adapter must enumerate the backend-id keyed inventory map")
-        H.equal(filter:find("for _, item in ipairs(items) do", 1, true), nil,
-            "salvage adapter must not treat the backend inventory map as an array")
+        H.truthy(forge:find(
+            "delete_owned_ids = mod._cim277_delete_owned_ids", 1, true))
+        H.truthy(filter:find("contract.recover_salvage_items", 1, true))
+        H.truthy(contract_source:find("for _, item in pairs(items) do", 1, true),
+            "canonical salvage adapter must enumerate the backend-id keyed map")
+        H.equal(contract_source:find("for _, item in ipairs(items) do", 1, true), nil,
+            "canonical salvage adapter must not treat the backend map as an array")
         H.truthy(filter:find("[cim:628] salvage_state", 1, true),
             "exact salvage rejection diagnostic is not wired")
         H.equal(filter:find("REGARDLESS of equip / loadout / favorite", 1, true), nil)

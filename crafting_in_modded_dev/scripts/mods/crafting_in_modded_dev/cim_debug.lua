@@ -414,7 +414,7 @@ mod._cim_autodump_salvage_open = function()
             if mod._cim_is_modded_item and mod._cim_is_modded_item(it) then n_mod = n_mod + 1 end
         end
     end
-    _info(label, "salvage filter result: total=%d modded=%d (cim's filter override adds modded items unconditionally)", n_total, n_mod)
+    _info(label, "salvage filter result: total=%d modded=%d (cim re-admits exact persisted crafts only after vanilla safety guards)", n_total, n_mod)
 end
 
 -- Restore pass completion (called from _restore_modded_loadout).

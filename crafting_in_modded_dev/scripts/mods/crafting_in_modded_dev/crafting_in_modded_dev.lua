@@ -56,7 +56,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.107-dev"
+local MOD_VERSION = "0.8.108-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -395,6 +395,8 @@ local _is_in_keep = mod._cim_is_in_keep
 -- Pure destructive-cleanup policy (#277), shared with the offline Lua suite.
 -- Loaded once and kept on the mod table to preserve entry-chunk local headroom.
 mod._cim277_bulk_core = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_cleanup_core")
+mod._cim277_owned_deletion = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_owned_deletion")
 mod.CIM277_BULK_CLEANUP_MARKER_v0_8_68 = true
 -- Backward-compat: pre-v0.7.0 cim used `rarity = "promo"` for crafts. Keep
 -- "promo" registered in NetworkLookup.rarities too so legacy saved items can
@@ -5962,74 +5964,68 @@ mod:command("forge_list", "List all forged weapons and accessories", function()
     end
 end)
 
--- Issue #277: one exact-owner deletion transaction shared by single and bulk
--- cleanup. PlayFabMirrorBase.remove_item only unmarks `new` and nils the exact
--- `_inventory_items[backend_id]` row (playfab_mirror_base.lua:2547-2555).
--- Persistence is then cleaned in one write per store so a restart cannot
--- re-inject the craft or revive an obsolete loadout/illusion reference.
-mod._cim277_delete_owned_ids = function(backend_ids)
+-- Issues #277/#628: one local transaction shared by single delete, bulk
+-- cleanup, and Salvage. It snapshots exact `_inventory_items` rows plus
+-- PlayerData's global and career/slot new-item markers, then mutates those
+-- tables directly. Rollback never calls PlayFabMirrorBase.add_item, whose
+-- normalization, callbacks, power evaluation, skin routing, new marking, and
+-- autosave would not reproduce the pre-delete state (decompile :2494-2555).
+-- Owned persistence/reference stores and foreign session-only Salvage rows
+-- therefore commit or compensate as one selected set. Presentation convergence
+-- is a success-only `dirtify_interfaces` flag; rollback never calls the eager
+-- item `_refresh` normalizer.
+mod._cim277_delete_owned_ids = function(backend_ids, foreign_ids)
     local mirror = Managers.backend and Managers.backend:get_backend_mirror()
     local items = Managers.backend and Managers.backend:get_interface("items")
     if not mirror or type(mirror._inventory_items) ~= "table" or not items then
         return 0, "backend mirror is not ready"
     end
 
-    local core = mod._cim277_bulk_core
-    local contract = mod._cim_synthetic_item_contract
-    if not core or not contract
-            or type(contract.canonical_item_key) ~= "function"
-            or type(contract.classify_owned_record) ~= "function" then
+    local deletion = mod._cim277_owned_deletion
+    if not deletion or type(deletion.execute) ~= "function" then
         return 0, "CIM ownership contract is unavailable"
     end
 
-    local exact, legacy_mil, seen = {}, {}, {}
-    for i = 1, #(backend_ids or {}) do
-        local backend_id = backend_ids[i]
-        if type(backend_id) ~= "string" or backend_id == "" then
-            return 0, "requested craft identity is unreadable"
-        end
-        local record = _forged_weapons[backend_id]
-        if not seen[backend_id] then
-            seen[backend_id] = true
-            local key_ok, item_key = pcall(contract.canonical_item_key,
-                record, backend_id)
-            if not key_ok then item_key = nil end
-            local master = type(item_key) == "string" and ItemMasterList
-                and ItemMasterList[item_key] or nil
-            local verdict_ok, verdict = pcall(contract.classify_owned_record,
-                backend_id, record, master)
-            if not verdict_ok or verdict ~= "owned" then
-                return 0, "CIM ownership or craft scope changed before deletion"
+    return deletion.execute({
+        records = _forged_weapons,
+        item_master = ItemMasterList,
+        contract = mod._cim_synthetic_item_contract,
+        inventory_items = mirror._inventory_items,
+        new_item_ids = PlayerData and PlayerData.new_item_ids,
+        new_item_ids_by_career = PlayerData
+            and PlayerData.new_item_ids_by_career,
+        loadouts = _modded_loadout,
+        clear_loadout_refs = mod._cim277_bulk_core
+            and mod._cim277_bulk_core.clear_loadout_refs,
+        persist_loadouts = _modded_loadout_save,
+        get_overrides = function()
+            return mod:get("vanilla_skin_overrides_by_backend_id")
+        end,
+        clear_override_refs = mod._cim277_bulk_core
+            and mod._cim277_bulk_core.clear_map_keys,
+        persist_overrides = function(overrides)
+            mod:set("vanilla_skin_overrides_by_backend_id", overrides)
+        end,
+        build_legacy_entry = _forge_create_item,
+        remove_legacy_item = function(backend_id)
+            if not _forge_detect_mil() then
+                error("MoreItemsLibrary is unavailable")
             end
-            exact[#exact + 1] = backend_id
-            if record.via_mirror == false then
-                legacy_mil[#legacy_mil + 1] = backend_id
+            _more_items_lib:remove_mod_items_from_local_backend(
+                { backend_id }, "crafting_in_modded_dev")
+        end,
+        restore_legacy_item = function(_, entry)
+            if not _forge_detect_mil() then
+                error("MoreItemsLibrary is unavailable")
             end
-        end
-    end
-    if #exact == 0 then return 0, nil end
-
-    if mod._cim_clear_modded_loadout_for_bids then
-        mod._cim_clear_modded_loadout_for_bids(exact)
-    end
-
-    local overrides = mod:get("vanilla_skin_overrides_by_backend_id")
-    if core and core.clear_map_keys and core.clear_map_keys(overrides, exact) then
-        mod:set("vanilla_skin_overrides_by_backend_id", overrides)
-    end
-
-    -- Remove local runtime rows first. The exact ownership snapshot remains in
-    -- `_forged_weapons` until every mirror/MIL removal has been attempted.
-    for i = 1, #exact do mirror:remove_item(exact[i]) end
-    if #legacy_mil > 0 and _forge_detect_mil() then
-        pcall(_more_items_lib.remove_mod_items_from_local_backend,
-            _more_items_lib, legacy_mil, "crafting_in_modded_dev")
-    end
-
-    for i = 1, #exact do _forged_weapons[exact[i]] = nil end
-    _forge_save()
-    items:_refresh()
-    return #exact, nil
+            _more_items_lib:add_mod_items_to_local_backend(
+                { entry }, "crafting_in_modded_dev")
+        end,
+        save = _forge_save,
+        invalidate = function()
+            Managers.backend:dirtify_interfaces()
+        end,
+    }, backend_ids, foreign_ids)
 end
 
 mod:command("forge_delete", "Delete a forged weapon or accessory (usage: /forge_delete <backend_id or index>)", function(id_or_idx)
@@ -6112,6 +6108,15 @@ _install_bulk_cleanup_command({
 -- helper/hook above is installed before its invariant closes over the shared state.
 -- The installer receives narrow accessors for entry-local mutable stores; public
 -- flat mod._cim_* APIs and runtime hook/load order remain unchanged.
+local _install_cleanup_regression_checks = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_regression_cleanup")
+_install_cleanup_regression_checks({
+    mod = mod,
+    rt_register = _rt_register,
+    rt_src_read = _rt_src_read,
+    accessory_property_policy = mod._cim959_accessory_property_policy,
+})
+
 local _install_regression_checks = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_regression_checks"
 )

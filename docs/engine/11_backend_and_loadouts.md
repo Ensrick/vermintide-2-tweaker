@@ -22,9 +22,9 @@ ours relative to the monorepo root. Every claim cites file:line or is marked [un
 | `backend_interface_talents_playfab.lua` | Talents facade; talent strings are just the `"talents"` key of a loadout row: `mirror:get_character_data(career, "talents")` (:37, :73) / `mirror:set_character_data(career, "talents", str, false, idx)` (:331). |
 | `scripts/managers/backend/backend_utils.lua` - `BackendUtils` | PLAIN-TABLE helper layer everything gameplay-side calls: `get_loadout_item_id` (:14), `set_loadout_item` (:22), `get_loadout_item` (:30), `get_item_from_masterlist` (:63), power-level math (:84-134). Routes through `Managers.backend:get_loadout_interface_by_slot` (:15, :23) - the interface-override seam. |
 | `scripts/managers/backend/statistics_database.lua` - `StatisticsDatabase` | In-session stat store (`Managers.player:statistics_db()`). Registers per-player stat trees seeded from backend stats (:109-162), increments/sets (:381-491), RPC receivers for cross-peer stat sync (:582-663), and `apply_persistant_stats` / `generate_backend_stats` for the save round-trip (:714, :372). |
-| `scripts/managers/backend_playfab/backend_interface_crafting_playfab.lua` | Vanilla crafting recipes (salvage/craft/reroll) as CloudScript calls; cim replaces its recipe execution locally (`crafting_in_modded_dev/.../standard_forge.lua:433-449`). |
+| `scripts/managers/backend_playfab/backend_interface_crafting_playfab.lua` | Vanilla crafting recipes (salvage/craft/reroll) as CloudScript calls; cim replaces recipe execution at `standard_forge.lua:1586` and routes Salvage through its local transaction at `standard_forge.lua:550-565`. |
 | OURS: `gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua` | Modded-realm-only replacement STORE for the native saved-loadout system. Hooks the mirror's 3 read + 5 write methods; official `_career_data` is never mutated in modded (design block :16-47). |
-| OURS: `crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua` | Craft persistence (`_forged_weapons` save layer :340-406) + boot re-injection into the mirror via `add_item` (`_athanor_inject_item` :5270-5348). Its OWN loadout persistence is force-disabled - gut owns loadouts (:729-751). |
+| OURS: `crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua` | Craft persistence (`_forge_save` :454) + boot re-injection via `add_item` (`_athanor_inject_item` :4903-4978). Exact Salvage/delete dispatch lives at :5975 and maintains CIM's indexed `modded_loadout` references through the helper at :1449. |
 | OURS: `character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua` | Registers variant items with synthetic bids `<key>_NNN` via MoreItemsLibrary (:9491-9530); wire-safety substitutions (:10351-10447); husk base+career re-key (:10044-10113). |
 
 Realm signal: `script_data["eac-untrusted"]` - the backend itself stamps `realm = "modded"` /
@@ -197,8 +197,9 @@ work around (repo CLAUDE.md, Mod Directory).
 | `BackendInterfaceItemPlayfab` getters (`get_item_from_id` :384, `get_filtered_items` :627, `set_loadout_item` :635) | String-form class hook; fine for read shaping (cosmetics_tweaker pattern). After mutating mirror state call `Managers.backend:dirtify_interfaces()` (backend_manager_playfab.lua:211-219) - it is a LOCAL cache invalidation, not a network push. | NEVER call `get_item_from_id`/`get_all_backend_items` from INSIDE a mirror read hook: `_dirty` -> `_refresh` -> mirror read -> your hook -> unbounded recursion -> 1 GiB heap crash (gut v0.2.173 burn, `_gut_native_loadouts.lua:359-367`). Inside mirror hooks use raw field reads only (`iface._items`, `mirror._inventory_items` :2189). |
 | Loadout interface override registry: `Managers.backend:add_loadout_interface_override(name, iface_by_slot)` + `set_loadout_interface_override(name)` (backend_manager_playfab.lua:312-341) | ENGINE-NATIVE seam to reroute whole slots to another interface (weaves use it; `BackendUtils` consults it on every loadout read/write :14-27). A mod-owned interface object per slot is an alternative to hooking for whole-mode loadout swaps. Same idea for talents (:343-371) and total power level (:373-390). | The override applies by SLOT NAME for ALL careers; it is mode-global, not per-career. |
 | Interface replacement: `Managers.backend._interfaces[name] = <object>` | Engine-sanctioned precedent: tutorial and benchmark swap `items`/`hero_attributes` wholesale and restore on stop (backend_manager_playfab.lua:250-310). `mp` intercepts interfaces this way [unverified - mp scaffolding]. | Every interface must answer `ready()` truthfully or `profiles_loaded` never flips (:943-979). |
-| Adding items: `mirror:add_item(backend_id, {ItemId=key, ItemInstanceId=bid, CustomData=...})` (playfab_mirror_base.lua:2494-2545) | The correct injection point for synthetic inventory (cim `_athanor_inject_item` :5306-5313). CustomData strings are cjson-decoded by `_update_data`. Follow with `dirtify_interfaces`. | `add_item` indexes `ItemMasterList[item.ItemId]` raw (:2504) - IML has a Crashify `__index`; pre-check `rawget(ItemMasterList, key)` (cim :5274-5283). Weapon-skin/cosmetic/pose ItemIds get REROUTED to the fake-item path and a different bid comes back (:2499-2524). `skip_mark_as_new` otherwise spams new-item markers. |
-| Item mutation: `mirror:update_item(bid, item)` / `update_item_field` (:2557-2574) | Used by cim's apply/extract-skin synth (standard_forge.lua:527-556). | Both `fassert` if the bid is unknown (:2561, :2569). |
+| Adding items: `mirror:add_item(backend_id, {ItemId=key, ItemInstanceId=bid, CustomData=...})` (playfab_mirror_base.lua:2494-2545) | The correct injection point for a new synthetic inventory row (cim `_athanor_inject_item` :4903-4978). CustomData strings are cjson-decoded by `_update_data`. Follow with `dirtify_interfaces`. | `add_item` indexes `ItemMasterList[item.ItemId]` raw (:2504) - IML has a Crashify `__index`; pre-check `rawget(ItemMasterList, key)` (cim :4908-4919). Weapon-skin/cosmetic/pose ItemIds get REROUTED to the fake-item path and a different bid comes back (:2499-2524). `skip_mark_as_new` otherwise spams new-item markers. |
+| Local Salvage removal: `_cim_salvage_local_boundary.lua` -> `mod._cim277_delete_owned_ids` (`crafting_in_modded_dev.lua:5977`) -> `_cim_owned_deletion.execute` -> `_cim_craft_dispatch.execute` | Vanilla `remove_item` clears new markers and `_inventory_items[id]` (:2547-2555; `item_helper.lua:160-192`). CIM snapshots the exact rows plus both PlayerData marker layers and removes the complete owned+foreign selection directly. The synth returns an internal `committed` bit while the hook preserves the public `(id, recipe)` shape. | Do not use `add_item` or item-interface `_refresh` as rollback: they normalize/mutate skin/new/favorite metadata and can autosave (`playfab_mirror_base.lua:2494-2545`; `backend_interface_item_playfab.lua:37-105`). CIM compensates with `rawset`; transaction and enclosing craft dirtification both require success. |
+| Item mutation: `mirror:update_item(bid, item)` / `update_item_field` (:2557-2574) | Used by cim's apply/extract-skin synth (`standard_forge.lua:567-606`). | Both `fassert` if the bid is unknown (:2561, :2569). |
 | `LoadoutUtils.sync_loadout_slot` (loadout_utils.lua:13) | TABLE-form hook (`LoadoutUtils = LoadoutUtils or {}` plain table). THE wire-safety choke point for loadout-panel sync: swap non-vanilla `item.key`/`rarity` for wire-stable vanilla values on a SHADOW copy, then call `func` (cwv :10381-10408; cim rarity coercion :764-806). | Wire-safety substitutions must be UNCONDITIONAL, never behind a feature toggle - v0.8.15 gated the rarity rewrite and crashed every vanilla client (BUG_CLASSES.md 31; memory `reference_vt2_wire_safety_never_toggle_gated`). |
 | `StatisticsDatabase` methods + RPC receivers (statistics_database.lua:381-663) | String-form class hooks; receivers ARE hookable because NetworkEventDelegate dispatch is dynamic (memory `reference_vt2_rpc_dispatch_dynamic_hookable`). | In modded realm the backend save is EAC-gated off (2.3); local stat writes are session-only there. |
 
@@ -303,18 +304,23 @@ with the prior native weapon. This is BUG_CLASSES class 73, not a renderer/husk 
 ### 5.2 cim (`crafting_in_modded_dev`)
 
 5. **Craft injection is on the right seam** (`mirror:add_item` + dirtify,
-   :5306-5347). Two cleanups: (a) `_forge_create_item` hand-rolls JSON strings with
-   `tostring(v)` (:484-502) while the Athanor path uses `cjson.encode` (:5300-5303) - unify
+   `crafting_in_modded_dev.lua:4903-4978`). Two cleanups: (a) `_forge_create_item`
+   hand-rolls JSON strings with `tostring(v)` while the Athanor path uses `cjson.encode` - unify
    on cjson (a string-valued property would emit invalid JSON). (b) The dormant loadout
    capture/restore machinery (:729-751 force-off) is dead weight now that gut owns loadouts -
    excise per the comment's own plan; its `BackendUtils` capture still installs a hook that
    does nothing.
-6. **Salvage leaves dangling bids in gut's store.** `synth.salvage` unregisters cim's own
-   layers (`standard_forge.lua:508-520` -> `mod._cim_clear_modded_loadout_for_bid`,
-   crafting_in_modded_dev.lua:1121-1165) but gut's `native_loadouts` rows keep the salvaged
-   bid forever, silently falling back per-read (by design non-destructive). Add a cross-mod
-   notification (cim calls a gut-exposed `clear_bid(bid)` that removes exact-id matches from
-   store rows) so stores converge instead of masking.
+6. **Salvage owns one local selected-set transaction.** Current call path:
+   `standard_forge.lua:550-565` -> `_cim_salvage_local_boundary.execute` ->
+   `mod._cim277_delete_owned_ids` (`crafting_in_modded_dev.lua:5975`) ->
+   `_cim_owned_deletion.execute`, then `_cim_craft_dispatch.execute` records the public
+   completion result. Persisted CIM rows and foreign session-only rows commit together;
+   failure restores exact mirror rows, both vanilla new-item marker layers, CIM persistence,
+   indexed `modded_loadout`, and illusion overrides. The internal committed bit suppresses
+   the enclosing presentation dirtify on failure while preserving the public `(id, recipe)`
+   return. GUT's separate `native_loadouts` store remains outside this ownership boundary;
+   any future convergence requires an explicit cross-mod API rather than mutating that
+   store by assumption.
 
 ### 5.3 cwv / cim crafted-item identity (issue #474 mechanism 3)
 

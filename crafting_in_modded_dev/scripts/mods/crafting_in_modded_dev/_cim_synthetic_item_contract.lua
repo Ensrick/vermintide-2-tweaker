@@ -426,11 +426,16 @@ function M.validate_instance(item, record)
         return false, "not_owned"
     end
     local backend_id = item.backend_id or item.ItemInstanceId
+    local item_key = instance_key(item)
+    if M.is_immutable_relic_identity(
+            item_key or record.item_key, item, backend_id) then
+        return false, "immutable_relic"
+    end
     if backend_id ~= record.backend_id then return false, "backend_id" end
     if record.owner ~= M.OWNER or record.schema_version ~= M.SCHEMA_VERSION then
         return false, "schema"
     end
-    if instance_key(item) ~= record.item_key then return false, "item_key" end
+    if item_key ~= record.item_key then return false, "item_key" end
     local slot_type = item.data and item.data.slot_type or record.slot_type
     if not SALVAGE_SLOTS[slot_type] then return false, "slot_type" end
     return true
@@ -449,6 +454,79 @@ function M.is_salvage_eligible(item, record, state)
     if state.is_equipped_by_any_loadout then return false, "loadout" end
     if state.is_favorite then return false, "favorite" end
     return true
+end
+
+-- Reconsider exact CIM instances that vanilla excluded from its dense result.
+-- The source inventory remains a backend-id keyed map, so this function owns
+-- the `pairs` boundary and is executable under the engine-free Lua suite.
+-- Runtime accessors are read-only and injected; unavailable/raising equip,
+-- saved-loadout, or favorite queries fail closed.
+function M.recover_salvage_items(items, result, access)
+    if type(items) ~= "table" or type(result) ~= "table" then return result end
+    access = type(access) == "table" and access or {}
+
+    local seen = {}
+    for _, row in ipairs(result) do
+        local backend_id = type(row) == "table"
+            and (row.backend_id or row.ItemInstanceId) or nil
+        if backend_id then
+            seen[backend_id] = true
+        end
+    end
+
+    local function query(fn, ...)
+        if type(fn) ~= "function" then return false, nil end
+        local ok, value = pcall(fn, ...)
+        return ok, value
+    end
+
+    for _, item in pairs(items) do
+        local backend_id = type(item) == "table"
+            and (item.backend_id or item.ItemInstanceId) or nil
+        local record_ok, record = query(access.get_record, backend_id)
+        if backend_id and record_ok and type(record) == "table" then
+            local state = {
+                is_equipped = true,
+                is_equipped_by_any_loadout = true,
+                is_favorite = true,
+                backend_dirty = access.backend_dirty == true,
+            }
+
+            local careers_ok, careers = query(
+                access.get_equipped_careers, backend_id)
+            if careers_ok and type(careers) == "table" then
+                state.is_equipped = #careers > 0
+            else
+                careers = { "query-error" }
+            end
+
+            local loadouts_ok, loadouts = query(
+                access.get_saved_loadouts, backend_id)
+            if loadouts_ok and type(loadouts) == "table" then
+                state.is_equipped_by_any_loadout = #loadouts > 0
+            else
+                loadouts = { "query-error" }
+            end
+
+            local favorite_ok, favorite = query(
+                access.is_favorite, backend_id, item)
+            if favorite_ok and type(favorite) == "boolean" then
+                state.is_favorite = favorite
+            end
+
+            local eligible, reason = M.is_salvage_eligible(item, record, state)
+            if eligible and not seen[backend_id] then
+                result[#result + 1] = item
+                seen[backend_id] = true
+            end
+            if type(access.trace) == "function" then
+                pcall(access.trace, item, record, state,
+                    seen[backend_id] == true, eligible == true, reason,
+                    careers, loadouts)
+            end
+        end
+    end
+    return result
 end
 
 -- Stable identity for the bounded issue-628 salvage diagnostic. Keeping this
