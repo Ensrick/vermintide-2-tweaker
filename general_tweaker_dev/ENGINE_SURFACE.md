@@ -1,5 +1,16 @@
 # general_tweaker_dev - engine contact surface
 
+## Host-side melee latency compensation (#1034, 0.2.256-dev)
+
+| Surface | Ownership and invariant |
+|---|---|
+| `GameNetworkManager:ping_by_peer` | Host-only RTT source. The mod samples it through `Managers.state.network`, applies a per-peer EMA, and caps the grace window at 350 ms. Clients send no custom latency value. [src: `scripts/managers/network/game_network_manager.lua:82-85,176-192`] |
+| `BTMeleeOverlapAttackAction.hit_player` | Common ordinary-melee impact owner. GT defers the whole player impact so damage, block result, push, and hit callbacks resolve together; the original method remains the authority at the deadline. [src: `scripts/entity_system/systems/behaviour/nodes/bt_melee_overlap_attack_action.lua:638-676`] |
+| `AiUtils.damage_target` | Shared final AI-damage helper and fallback for legacy/direct blockable AI melee paths not owned by the overlap action. Host players, bots, already-blocked damage, disabled targets, and unblockable/non-melee paths delegate immediately. The shared queue is globally bounded to 256 and overflow fails open. [src: `scripts/unit_extensions/human/ai_player_unit/ai_utils.lua:258-390`] |
+| `DamageUtils.check_block` | Re-run once at the compensated deadline so the host's current blocking state, facing, fatigue cost, `ai_unblockable` perk, block RPC, and attacker blocked state remain vanilla-owned. [src: `scripts/helpers/damage_utils.lua:2697-2765`] |
+| `StatusSystem.rpc_set_blocking` / `.rpc_status_change_bool` | Post-observe the vanilla host receivers after authoritative block/dodge state updates. A valid rising edge resolves matching queued hits immediately, so a short input is not lost before the deadline. No custom defense RPC or client claim is accepted. [src: `scripts/entity_system/systems/status/status_system.lua:278-302,430-445`; `scripts/unit_extensions/default_player_unit/states/player_character_state_dodging.lua:285-297`] |
+| `AiUtils.stagger` | Wrapped per `(enemy, attacker)` epoch. The epoch advances only when vanilla actually changes the enemy's stagger state; rejected stagger requests do not count. A stagger caused by the targeted remote player during that hit's grace window cancels only that queued hit, while unrelated ally/environment staggers do not satisfy the condition. [src: `scripts/unit_extensions/human/ai_player_unit/ai_utils.lua:1108-1161`] |
+
 ## Live player stat HUD (#797, 0.2.255-dev)
 
 | Surface | Ownership and invariant |
@@ -25,7 +36,7 @@ line; the remaining `[src:]` citations are carried from the cited `gt_dev`
 module comments, which cite the decompile in turn).
 
 **Dev/stable relationship.** This documents `general_tweaker_dev` (`gt_dev`,
-MOD_VERSION `0.2.255-dev`, friends-only Workshop 3733367409), the ACTIVE working
+MOD_VERSION `0.2.256-dev`, friends-only Workshop 3733367409), the ACTIVE working
 stream. `general_tweaker/` (`gt`, public Workshop 3713619122) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gt_dev`
@@ -44,7 +55,7 @@ damage/movement/camera path - each with its own subsystem note below.
 
 ## Hook table
 
-~112 registration sites across ~31 modules, grouped below into rows-of-concern.
+~117 registration sites across ~32 modules, grouped below into rows-of-concern.
 `[hook]` = full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` =
 `mod:hook_safe` (post-callback, no override, chains across mods); `[tbl]` =
 table-form hook against a plain-table / data-table target (nil-guarded); `[rpc]`

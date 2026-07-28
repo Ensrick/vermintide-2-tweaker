@@ -1,5 +1,26 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.256-dev (2026-07-28) -- Host-side melee latency compensation (#1034)
+
+- Added a default-on, host-authoritative grace window for ordinary blockable AI
+  melee hits against remote human players. The window uses a capped exponential
+  moving average of the host's own `GameNetworkManager:ping_by_peer` sample;
+  clients provide no custom ping or combat claims.
+- Eligible damage is queued for at most 350 ms. At the deadline, a host-observed
+  dodge, valid directional block, attacker death, or stagger caused by that
+  player cancels the hit. Host players, bots, grabs, projectiles, hazards,
+  unblockable attacks, and already-blocked damage remain vanilla.
+- The common overlap-attack path defers the complete player-impact method, so
+  damage, blocking, pushes, and hit callbacks resolve together. Vanilla
+  block/dodge RPC rising edges and player-authored stagger resolve matching
+  pending hits immediately, preserving even short defensive inputs.
+- Bounded the global pending queue to 256 hits and fail open on missing network
+  context, invalid ping samples, or overflow. Added per-session bounded
+  `[gt_dev:LC]` cancellation evidence and `/gt_lag_comp_status` counters.
+- Common overlap hits have one owner: when the whole-impact hook fails open, it
+  suppresses the lower damage-only fallback for that call so damage, pushes,
+  and callbacks can never split across two timing decisions.
+
 ## v0.2.255-dev (2026-07-26) -- Source-backed live player stat HUD (#797) [not deployed]
 
 - Added a default-off, local/read-only HUD for health, stamina, movement,

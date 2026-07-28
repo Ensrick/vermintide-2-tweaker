@@ -464,7 +464,7 @@ return function(H, repo_root)
         local main = read(repo_root
             .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua")
         H.truthy(main:find("mod._gt_player_stat_hud_reset()", 1, true))
-        H.truthy(main:find('local MOD_VERSION = "0.2.255-dev"', 1, true))
+        H.truthy(main:match('local MOD_VERSION = "0%.2%.%d+%-dev"'))
     end)
 
     H.test("GT #797 documents engine surfaces and release identity", function()

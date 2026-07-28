@@ -1006,6 +1006,24 @@ local _data = {
                         decimals_number = 0,
                         tooltip         = "gt_adventure_save_trait_chance_tooltip",
                     },
+                    -- Host-side Melee Latency Compensation (#1034). The host
+                    -- measures RTT; clients send no custom combat/network data.
+                    {
+                        setting_id    = "gt_host_lag_comp",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = "gt_host_lag_comp_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id      = "gt_host_lag_comp_max_ms",
+                                type            = "numeric",
+                                default_value   = 250,
+                                range           = { 0, 350 },
+                                decimals_number = 0,
+                                tooltip         = "gt_host_lag_comp_max_ms_tooltip",
+                            },
+                        },
+                    },
                     -- "No Player Collision with Keep Dummies" (#304). Local
                     -- player movement only; hit actors and damage stay intact.
                     {
