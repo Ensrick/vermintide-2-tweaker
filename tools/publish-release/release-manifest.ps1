@@ -115,12 +115,16 @@ function Test-ReleaseManifest {
         }
 
         if ("$($entry.source_commit)" -notmatch '^[0-9a-f]{40}$') { $errors.Add("$prefix.source_commit must be a lowercase 40-character Git commit") }
-        if ("$($entry.source_state)" -ne 'clean') { $errors.Add("$prefix.source_state must be clean") }
+        if ("$($entry.source_state)" -ne 'clean') {
+            if ($mustHaveProvenance) { $errors.Add("$prefix.source_state must be clean") }
+            else { $warnings.Add("$prefix carries historical non-clean source_state '$($entry.source_state)'") }
+        }
         if ("$($entry.builder.name)" -ne 'VMBLauncher') { $errors.Add("$prefix.builder.name must be VMBLauncher") }
         if (-not "$($entry.builder.version)".Trim()) { $errors.Add("$prefix.builder.version is required") }
 
         if ($null -eq $entry.publication_authorization) {
-            $errors.Add("$prefix.publication_authorization is required")
+            if ($mustHaveProvenance) { $errors.Add("$prefix.publication_authorization is required") }
+            else { $warnings.Add("$prefix is a carried pre-authorization entry without publication_authorization") }
         }
         else {
             $authorization = $entry.publication_authorization
