@@ -16,6 +16,162 @@ return function(H, repo_root)
         H.truthy(math.abs(actual - expected) < 0.0001,
             "expected " .. tostring(expected) .. ", got " .. tostring(actual))
     end
+    local function runtime_harness()
+        local hooks = {}
+        local updates = {}
+        local hit_count = 0
+        local player = { name = "remote_player" }
+        local other_player = { name = "other_remote_player" }
+        local proxy = { name = "player_proxy" }
+        local enemy = { name = "enemy" }
+        local other_enemy = { name = "other_enemy" }
+        local blackboards = {
+            [enemy] = {
+                breed = { name = "skaven_slave" },
+                attack_anim = "attack",
+            },
+            [other_enemy] = {
+                breed = { name = "skaven_clan_rat" },
+                attack_anim = "attack",
+            },
+        }
+        local status = {
+            is_disabled = function() return false end,
+            get_is_dodging = function() return false end,
+        }
+        local owner = {
+            bot_player = false,
+            peer_id = "remote_peer",
+            remote = true,
+        }
+        local network = {
+            is_server = true,
+            ping_by_peer = function() return 0.2 end,
+        }
+        local mod = {
+            get = function(_, key)
+                if key == "gt_host_lag_comp" then return true end
+                if key == "gt_host_lag_comp_max_ms" then return 250 end
+                return nil
+            end,
+            dofile = function()
+                return policy
+            end,
+            hook = function(_, class_name, method_name, wrapper)
+                hooks[class_name .. "." .. method_name] = wrapper
+            end,
+            hook_safe = function(_, class_name, method_name, wrapper)
+                hooks[class_name .. "." .. method_name] = wrapper
+            end,
+            command = function() end,
+            echo = function() end,
+            _gt_register_update = function(name, update)
+                updates[name] = update
+            end,
+            _gt_rt_register = function() end,
+        }
+        local env = setmetatable({
+            get_mod = function() return mod end,
+            Unit = {
+                alive = function(unit)
+                    return unit ~= nil and unit.alive ~= false
+                end,
+            },
+            ScriptUnit = {
+                has_extension = function(unit, extension_name)
+                    if unit == player and extension_name == "status_system" then
+                        return status
+                    end
+                    return nil
+                end,
+            },
+            Network = {
+                peer_id = function() return "host_peer" end,
+            },
+            DamageUtils = {
+                check_block = function() return false end,
+            },
+            AiUtils = {},
+            BLACKBOARDS = blackboards,
+            Managers = {
+                player = {
+                    owner = function(_, unit)
+                        if unit == player then return owner end
+                        return nil
+                    end,
+                },
+                state = {
+                    network = network,
+                },
+            },
+            printf = function() end,
+        }, { __index = _G })
+
+        local chunk = assert(loadfile(root .. "_gt_host_lag_comp.lua"))
+        setfenv(chunk, env)
+        chunk()
+
+        local hit_hook = assert(
+            hooks["BTMeleeOverlapAttackAction.hit_player"]
+        )
+        local stagger_hook = assert(hooks["AiUtils.stagger"])
+        local update = assert(updates.host_lag_comp)
+        local action = {
+            damage = 10,
+            fatigue_type = "blocked",
+            attack_directions = {
+                attack = "left",
+            },
+        }
+
+        return {
+            player = player,
+            other_player = other_player,
+            proxy = proxy,
+            enemy = enemy,
+            other_enemy = other_enemy,
+            blackboards = blackboards,
+            queue = function(attacking_enemy)
+                local unit = attacking_enemy or enemy
+                hit_hook(
+                    function()
+                        hit_count = hit_count + 1
+                    end,
+                    {},
+                    unit,
+                    blackboards[unit],
+                    player,
+                    action,
+                    {}
+                )
+            end,
+            accept_stagger = function(staggered_enemy, source)
+                local bb = blackboards[staggered_enemy]
+                stagger_hook(
+                    function()
+                        bb.stagger = (bb.stagger or 0) + 1
+                    end,
+                    staggered_enemy,
+                    bb,
+                    source
+                )
+            end,
+            reject_stagger = function(staggered_enemy, source)
+                stagger_hook(
+                    function() end,
+                    staggered_enemy,
+                    blackboards[staggered_enemy],
+                    source
+                )
+            end,
+            advance = function(dt)
+                update(dt or 1)
+            end,
+            hits = function()
+                return hit_count
+            end,
+        }
+    end
 
     H.test("GT host lag compensation is default on and wired once", function()
         H.truthy(data:find('setting_id    = "gt_host_lag_comp"', 1, true))
@@ -116,6 +272,67 @@ return function(H, repo_root)
         for k, value in pairs(base) do dead_attacker[k] = value end
         dead_attacker.attacker_alive = false
         H.equal("attacker_dead", policy.cancel_reason(dead_attacker))
+    end)
+
+    H.test("GT lag compensation cancels only an accepted exact-pair stagger", function()
+        local harness = runtime_harness()
+        harness.queue(harness.enemy)
+        harness.accept_stagger(harness.enemy, harness.player)
+        harness.advance()
+        H.equal(0, harness.hits())
+    end)
+
+    H.test("GT lag compensation ignores unrelated enemy and player staggers", function()
+        local different_enemy = runtime_harness()
+        different_enemy.queue(different_enemy.enemy)
+        different_enemy.accept_stagger(
+            different_enemy.other_enemy,
+            different_enemy.player
+        )
+        different_enemy.advance()
+        H.equal(1, different_enemy.hits())
+
+        local different_player = runtime_harness()
+        different_player.queue(different_player.enemy)
+        different_player.accept_stagger(
+            different_player.enemy,
+            different_player.other_player
+        )
+        different_player.advance()
+        H.equal(1, different_player.hits())
+    end)
+
+    H.test("GT lag compensation ignores rejected and preexisting staggers", function()
+        local rejected = runtime_harness()
+        rejected.queue(rejected.enemy)
+        rejected.reject_stagger(rejected.enemy, rejected.player)
+        rejected.advance()
+        H.equal(1, rejected.hits())
+
+        local preexisting = runtime_harness()
+        preexisting.accept_stagger(preexisting.enemy, preexisting.player)
+        preexisting.queue(preexisting.enemy)
+        preexisting.advance()
+        H.equal(1, preexisting.hits())
+    end)
+
+    H.test("GT lag compensation cannot cancel an already applied hit", function()
+        local harness = runtime_harness()
+        harness.queue(harness.enemy)
+        harness.advance()
+        H.equal(1, harness.hits())
+
+        harness.accept_stagger(harness.enemy, harness.player)
+        harness.advance()
+        H.equal(1, harness.hits())
+    end)
+
+    H.test("GT lag compensation does not infer proxy ownership", function()
+        local harness = runtime_harness()
+        harness.queue(harness.enemy)
+        harness.accept_stagger(harness.enemy, harness.proxy)
+        harness.advance()
+        H.equal(1, harness.hits())
     end)
 
     H.test("GT host lag compensation keeps bounded fail-open runtime markers", function()
