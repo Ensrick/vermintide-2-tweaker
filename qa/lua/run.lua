@@ -303,6 +303,7 @@ local suites = {
     "test_gt_lobby_failnotify_hardening",
     "test_gt_appearance_parity",
     "test_gt_improved_bot_combat_controls",
+    "test_gt_host_lag_comp",
     "test_gt_bot_hazard_resistance",
     "test_gt_ai_takeover",
     "test_gt_bot_aid_pin_policy",

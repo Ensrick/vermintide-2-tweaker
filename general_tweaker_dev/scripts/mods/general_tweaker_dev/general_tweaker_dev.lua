@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.255-dev"
+local MOD_VERSION = "0.2.256-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -488,6 +488,7 @@ mod.on_game_state_changed = function(status, state_name)
     -- re-arm before the player has a body to fly.
     if mod._gt_noclip_reset_active then mod._gt_noclip_reset_active() end
     if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
+    if mod._gt_host_lag_comp_reset then mod._gt_host_lag_comp_reset() end
     -- AI takeover is a per-run intent — the saved state on the host doesn't
     -- survive a level/state change cleanly, and persisting the checkbox would
     -- show "on" across runs where no swap actually happened. Suppress the
@@ -615,6 +616,10 @@ mod.on_setting_changed = function(setting_id)
         -- table-field ref resolves at call time, so it's fine that the body is
         -- assigned further down the file.
         if mod._gt_apply_adv_save_traits then mod._gt_apply_adv_save_traits() end
+    elseif setting_id == "gt_host_lag_comp" then
+        if mod._gt_host_lag_comp_setting_changed then
+            mod._gt_host_lag_comp_setting_changed()
+        end
     elseif setting_id == "time_scale_value" then
         mod.gt_time_apply()
     elseif setting_id == "base_crit_chance" then
@@ -691,6 +696,9 @@ mod.on_disabled = function()
     if mod._gt_restore_keep_dummy_collision then mod._gt_restore_keep_dummy_collision() end
     if mod._gt359_clear_commands then mod._gt359_clear_commands() end
     if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
+    if mod._gt_host_lag_comp_disable then
+        mod._gt_host_lag_comp_disable()
+    end
     -- Issue #15: the mod is is_togglable=true but only the camera offset is
     -- snapshot-and-restored above. Many global mutations persist after
     -- disable: script_data flags (ai_*, intro dialogue,
@@ -1602,6 +1610,11 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_teleport_lab")
 -- shadows/mutator-explosions/intro-audio, boss path draw). Exposes
 -- mod._gt_solo_on_spawn_queued (called from the ConflictDirector hook above).
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_solo_qol")
+
+-- Host-authoritative remote-client melee grace window (#1034). Uses only the
+-- host's Network.ping sample, queues a bounded subset of blockable AI melee
+-- damage, and re-checks block/dodge/player-authored stagger at the deadline.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_host_lag_comp")
 
 -- Client-side latency cosmetics (Issue #308). Both self-contained, all toggles
 -- default OFF, no networking, no gameplay-outcome change:

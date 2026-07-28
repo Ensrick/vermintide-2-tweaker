@@ -63,6 +63,7 @@ gt_stat_probe,              -- one read-only player stat census (#797)
 gt_stat_trace,              -- five bounded player stat censuses over ten seconds (#797)
 gt_stat_hud_page,           -- select expanded HUD page: next, prev, or number (#797)
 gt_stat_hud_metrics,        -- log bounded HUD sample/rebuild/format counters (#797)
+gt_lag_comp_status,         -- show queued/applied/block/dodge/stagger counters (#1034)
 gt_regression_test,         -- issue diagnostic + regression commands retain gt_ prefix
 -- Host-side lobby controls (absorbed from lobby_tweaker; still lobby_-prefixed):
 lobby_reserve, lobby_unreserve, lobby_reservations,
