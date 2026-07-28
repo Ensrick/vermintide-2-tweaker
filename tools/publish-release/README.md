@@ -208,6 +208,9 @@ continues to describe the downloadable zip itself.
 `publication_authorization` must be canonical `hosted_qa` evidence. Its source
 and default-branch commits must equal the entry commit; the merged PR and exact
 successful check are independently queried rather than trusted from this JSON.
+The mutation-boundary correlation canonicalizes the QA completion timestamp to
+UTC because PowerShell 7 deserializes ISO JSON dates as `DateTime` while Windows
+PowerShell 5.1 retains strings; a genuinely different instant still fails.
 
 Before any GitHub mutation, `publish-release.ps1` validates every newly staged
 entry against the copied bytes in `.release-stage`. A filtered publish carries

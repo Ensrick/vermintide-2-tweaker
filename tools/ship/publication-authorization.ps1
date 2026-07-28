@@ -134,6 +134,22 @@ function Get-LivePublicationAuthorization {
         -CheckRuns @($checksResponse.check_runs)
 }
 
+function ConvertTo-PublicationEvidenceUtcString {
+    param([object]$Value)
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
+        return ''
+    }
+    try {
+        return ([datetime]$Value).ToUniversalTime().ToString(
+            'yyyy-MM-ddTHH:mm:ssZ',
+            [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+    catch {
+        return ''
+    }
+}
+
 function Test-PublicationEvidenceMatchesLive {
     param(
         [object]$CallerEvidence,
@@ -156,6 +172,13 @@ function Test-PublicationEvidenceMatchesLive {
     foreach ($field in $fields) {
         $callerValue = [string]$CallerEvidence.$field
         $liveValue = [string]$LiveEvidence.$field
+        if ($field -eq 'qa_completed_at_utc') {
+            # PowerShell 7 ConvertFrom-Json materializes ISO timestamps as
+            # DateTime while Windows PowerShell 5.1 keeps strings. Compare the
+            # same UTC instant, not the caller process's culture rendering.
+            $callerValue = ConvertTo-PublicationEvidenceUtcString $CallerEvidence.$field
+            $liveValue = ConvertTo-PublicationEvidenceUtcString $LiveEvidence.$field
+        }
         if ([string]::IsNullOrWhiteSpace($callerValue) -or $callerValue -ne $liveValue) {
             return @{ Ok = $false; Message = "Caller authorization field '$field' does not match the independently queried live value." }
         }

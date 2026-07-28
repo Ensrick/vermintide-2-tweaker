@@ -67,6 +67,12 @@ function Invoke-SelfTest {
         $forgedAuth.merged_pr_number = 999
         Assert (-not (Test-PublicationEvidenceMatchesLive -CallerEvidence $forgedAuth -LiveEvidence $liveAuth.Evidence).Ok) 'rejects forged caller authorization JSON against independently queried live evidence'
 
+        $roundTrippedAuth = $liveAuth.Evidence | ConvertTo-Json -Depth 6 | ConvertFrom-Json
+        Assert (Test-PublicationEvidenceMatchesLive -CallerEvidence $roundTrippedAuth -LiveEvidence $liveAuth.Evidence).Ok 'accepts an equivalent JSON round-tripped UTC completion timestamp'
+        $differentCompletedAt = $liveAuth.Evidence | ConvertTo-Json -Depth 6 | ConvertFrom-Json
+        $differentCompletedAt.qa_completed_at_utc = '2026-07-26T00:05:01Z'
+        Assert (-not (Test-PublicationEvidenceMatchesLive -CallerEvidence $differentCompletedAt -LiveEvidence $liveAuth.Evidence).Ok) 'rejects a genuinely different QA completion timestamp'
+
         $staleCallerAuth = $liveAuth.Evidence | ConvertTo-Json -Depth 6 | ConvertFrom-Json
         $movedHeadAuth = $liveAuth.Evidence | ConvertTo-Json -Depth 6 | ConvertFrom-Json
         $movedHeadAuth.source_commit = ('c' * 40)
