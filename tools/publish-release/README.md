@@ -211,10 +211,13 @@ successful check are independently queried rather than trusted from this JSON.
 
 Before any GitHub mutation, `publish-release.ps1` validates every newly staged
 entry against the copied bytes in `.release-stage`. A filtered publish carries
-older sibling entries verbatim; pre-schema entries without provenance remain
-transitional warnings, but every provenance-bearing entry must record clean
-source and publication authorization. Newly staged entries without complete
-provenance are hard failures.
+older sibling entries and their SHA-256-verified assets verbatim. Historical
+carried entries may predate provenance entirely, predate
+`publication_authorization`, or record the historical dirty `source_state`;
+those immutable transition fields warn instead of blocking a later unrelated
+mod. Any provenance or authorization metadata that is present must still be
+well-formed. Newly staged entries always require clean source and complete
+hosted-QA authorization and fail hard otherwise.
 
 Offline validator self-test and manual validation:
 

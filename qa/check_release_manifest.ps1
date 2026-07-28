@@ -185,6 +185,22 @@ function Invoke-SelfTest {
         $filtered = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example') -StageRoot $temp
         Assert $filtered.Valid 'filtered publish does not require carried sibling bundle files in StageRoot'
 
+        $savedCarriedAuthorization = $carried.publication_authorization
+        $carried.Remove('publication_authorization')
+        $carried.source_state = 'dirty'
+        $legacyProvenanceCarry = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example') -StageRoot $temp
+        Assert $legacyProvenanceCarry.Valid 'filtered publish allows unchanged carried pre-authorization provenance'
+        Assert ($legacyProvenanceCarry.Warnings.Count -eq 2) 'warns for carried missing authorization and historical dirty source'
+        $requiredLegacyProvenance = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example', 'carried') -StageRoot $temp
+        Assert (-not $requiredLegacyProvenance.Valid) 'newly staged entries cannot use carried transition allowances'
+        $carried.source_state = 'clean'
+        $carried['publication_authorization'] = $savedCarriedAuthorization
+
+        $carried.publication_authorization.qa_check = 'wrong-check'
+        $badCarriedAuthorization = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example') -StageRoot $temp
+        Assert (-not $badCarriedAuthorization.Valid) 'filtered publish rejects malformed present carried authorization'
+        $carried.publication_authorization.qa_check = 'qa-gate'
+
         $carried.source_commit = 'bad'
         $badCarriedMetadata = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example') -StageRoot $temp
         Assert (-not $badCarriedMetadata.Valid) 'filtered publish still validates carried sibling provenance metadata'
