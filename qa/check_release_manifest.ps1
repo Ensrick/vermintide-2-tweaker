@@ -93,6 +93,10 @@ function Invoke-SelfTest {
             -ZipBytes ([System.IO.File]::ReadAllBytes($exactZip)) `
             -ManifestEntry $entry
         Assert $exactZipVerdict.Valid 'immutable zip snapshot contains only exact manifest bundle bytes and updater version'
+        Assert (
+            (Get-ReleaseZipSnapshotBindingMode -ManifestEntry $entry -IsStaged $true -IsCarried $false) -eq
+                'exact_bundle_files'
+        ) 'newly staged snapshot with bundle records uses exact inner-file binding'
 
         [System.IO.File]::WriteAllText((Join-Path $modStage 'example.mod'), 'swapped-during-compression')
         $swappedZip = Join-Path $temp 'swapped.zip'
@@ -164,6 +168,33 @@ function Invoke-SelfTest {
         $legacyCarry = Test-ReleaseManifest -Manifest $legacy
         Assert $legacyCarry.Valid 'allows a carried pre-transition entry'
         Assert ($legacyCarry.Warnings.Count -eq 1) 'warns for carried entry without provenance'
+        $roundTrippedLegacyEntry = (
+            $legacy | ConvertTo-Json -Depth 6 | ConvertFrom-Json
+        ).mods[0]
+        Assert (
+            @(Get-ReleaseManifestBundleFileRecords -ManifestEntry $roundTrippedLegacyEntry).Count -eq 0
+        ) 'normalizes a JSON-round-tripped absent bundle_files property to zero records'
+        Assert (
+            (Get-ReleaseZipSnapshotBindingMode -ManifestEntry $roundTrippedLegacyEntry -IsStaged $false -IsCarried $true) -eq
+                'legacy_carried_whole_zip'
+        ) 'routes only an unchanged historical carry without records to whole-zip binding'
+        Assert (
+            (Get-ReleaseZipSnapshotBindingMode -ManifestEntry $legacy.mods[0] -IsStaged $true -IsCarried $true) -eq
+                'invalid_missing_bundle_files'
+        ) 'never grants the historical carry exception to a newly staged zip'
+        Assert (
+            (Get-ReleaseZipSnapshotBindingMode -ManifestEntry $legacy.mods[0] -IsStaged $false -IsCarried $false) -eq
+                'invalid_missing_bundle_files'
+        ) 'rejects an unclassified zip without commit-derived bundle records'
+        $legacyStrictVerdict = Test-ReleaseZipSnapshot `
+            -ZipBytes ([System.IO.File]::ReadAllBytes($exactZip)) `
+            -ManifestEntry $roundTrippedLegacyEntry
+        Assert (-not $legacyStrictVerdict.Valid) 'strict inner-file verifier remains fail-closed without bundle records'
+        $legacy.mods[0]['bundle_files'] = $null
+        Assert (
+            @(Get-ReleaseManifestBundleFileRecords -ManifestEntry $legacy.mods[0]).Count -eq 0
+        ) 'normalizes an explicit null carried bundle_files property to zero records'
+        $legacy.mods[0].Remove('bundle_files')
         $legacyRequired = Test-ReleaseManifest -Manifest $legacy -RequiredModIds @('legacy')
         Assert (-not $legacyRequired.Valid) 'rejects newly staged entry without provenance'
 
@@ -190,6 +221,10 @@ function Invoke-SelfTest {
         }
         $filtered = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example') -StageRoot $temp
         Assert $filtered.Valid 'filtered publish does not require carried sibling bundle files in StageRoot'
+        Assert (
+            (Get-ReleaseZipSnapshotBindingMode -ManifestEntry $carried -IsStaged $false -IsCarried $true) -eq
+                'exact_bundle_files'
+        ) 'provenance-bearing carried zip retains strict inner-file binding'
 
         $savedCarriedAuthorization = $carried.publication_authorization
         $carried.Remove('publication_authorization')
