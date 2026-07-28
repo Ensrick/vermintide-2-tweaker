@@ -42,6 +42,12 @@ remain drafts until those bytes are uploaded, with the manifest last. Before
 mutation, every entry inside each immutable ZIP snapshot is independently
 hashed against the commit-derived manifest bundle records; a staged-file swap
 during compression cannot be hidden by restoring the path afterward.
+The sole transition exception is an unchanged carried entry whose historical
+manifest predates `bundle_files`: its downloaded ZIP must still match the
+carried whole-asset SHA-256 and is captured in the same immutable byte
+snapshot, but it cannot be retroactively bound to commit-derived inner-file
+records that do not exist. Absent and explicit-null `bundle_files` normalize to
+zero records. Newly staged entries may never use this exception.
 The complete lookup/carry-forward/manifest/release-ID mutation is also guarded
 by one machine-global mutex. Per-mod claims do not serialize two different mods,
 so this prevents concurrent ships from reading the same daily manifest and

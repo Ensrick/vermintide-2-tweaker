@@ -77,6 +77,29 @@ function New-BundleFileRecords {
     })
 }
 
+function Get-ReleaseManifestBundleFileRecords {
+    param([Parameter(Mandatory = $true)]$ManifestEntry)
+
+    # PowerShell can preserve an absent JSON property as one null pipeline
+    # value when it is wrapped directly with @(...). Normalize here so an
+    # historical pre-transition entry with no bundle_files is unambiguously
+    # empty, while every present record remains available for strict binding.
+    return @($ManifestEntry.bundle_files | Where-Object { $null -ne $_ })
+}
+
+function Get-ReleaseZipSnapshotBindingMode {
+    param(
+        [Parameter(Mandatory = $true)]$ManifestEntry,
+        [bool]$IsStaged,
+        [bool]$IsCarried
+    )
+
+    $records = @(Get-ReleaseManifestBundleFileRecords -ManifestEntry $ManifestEntry)
+    if ($records.Count -gt 0) { return 'exact_bundle_files' }
+    if ($IsCarried -and -not $IsStaged) { return 'legacy_carried_whole_zip' }
+    return 'invalid_missing_bundle_files'
+}
+
 function Test-ReleaseManifest {
     param(
         [Parameter(Mandatory = $true)]$Manifest,
@@ -158,7 +181,7 @@ function Test-ReleaseManifest {
             }
         }
 
-        $bundleFiles = @($entry.bundle_files)
+        $bundleFiles = @(Get-ReleaseManifestBundleFileRecords -ManifestEntry $entry)
         if ($bundleFiles.Count -eq 0) { $errors.Add("$prefix.bundle_files must not be empty"); continue }
         $seenNames = @{}
         $hasModBundle = $false
@@ -224,7 +247,7 @@ function Test-ReleaseZipSnapshot {
 
     $errors = [System.Collections.Generic.List[string]]::new()
     $expected = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::Ordinal)
-    foreach ($bundle in @($ManifestEntry.bundle_files)) {
+    foreach ($bundle in @(Get-ReleaseManifestBundleFileRecords -ManifestEntry $ManifestEntry)) {
         $name = "$($bundle.filename)"
         $hash = "$($bundle.sha256)"
         if (-not $name -or [System.IO.Path]::GetFileName($name) -cne $name) {

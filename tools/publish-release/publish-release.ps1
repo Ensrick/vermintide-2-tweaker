@@ -613,7 +613,12 @@ foreach ($snapshot in $assetSnapshots) {
         if ($entries.Count -ne 1 -or "$($entries[0].sha256)" -ne "$($snapshot.Sha256)") {
             throw "Zip snapshot '$snapshotName' does not match the final manifest SHA-256."
         }
-        if (@($entries[0].bundle_files).Count -gt 0) {
+        $entryId = "$($entries[0].mod_id)"
+        $bindingMode = Get-ReleaseZipSnapshotBindingMode `
+            -ManifestEntry $entries[0] `
+            -IsStaged ($stagedIds -contains $entryId) `
+            -IsCarried ($carriedIdSet.ContainsKey($entryId))
+        if ($bindingMode -eq 'exact_bundle_files') {
             $zipBinding = Test-ReleaseZipSnapshot `
                 -ZipBytes ([byte[]]$snapshot.Bytes) `
                 -ManifestEntry $entries[0]
@@ -621,8 +626,8 @@ foreach ($snapshot in $assetSnapshots) {
                 throw "Zip snapshot '$snapshotName' is not bound to exact commit-derived bundle bytes:`n - $($zipBinding.Errors -join "`n - ")"
             }
         }
-        elseif ($stagedIds -contains "$($entries[0].mod_id)") {
-            throw "Newly staged zip '$snapshotName' lacks commit-derived bundle records."
+        elseif ($bindingMode -ne 'legacy_carried_whole_zip') {
+            throw "Zip snapshot '$snapshotName' lacks commit-derived bundle records and is not an unchanged historical carry."
         }
     }
 }
