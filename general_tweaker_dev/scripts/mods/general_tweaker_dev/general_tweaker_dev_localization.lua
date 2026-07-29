@@ -22,10 +22,10 @@ return {
 
     -- Loose bot options (A->Z by display label).
     gt_ai_afk_takeover = { en = "AFK Bot Takeover" },
-    gt_ai_afk_takeover_tooltip = { en = "After 20 seconds of inactivity, one of the host's bots replace your position within the active party. Until you take action, you'll be placed in a dead spectator view. If the host cannot supply enough slots to hold inactive players, this feature won't take effect." },
+    gt_ai_afk_takeover_tooltip = { en = "After 20 seconds of inactivity, one of the host's bots replaces your position within the active party. Until you take action, you'll be placed in a dead spectator view. If the host cannot supply enough slots to hold inactive players, this feature won't take effect." },
 
     gt_bots_in_keep = { en = "Allow Bots in Keep" },
-    gt_bots_in_keep_tooltip = { en = "While enabled, the host's bots are present in any of the game's hub areas (e.g. the Taal's Horn Keep, the Pilgrimage Chamber, or the Versus Basement.) This way, bot builds can be previewed for both the host and other active players." },
+    gt_bots_in_keep_tooltip = { en = "While enabled, the host's bots are present in any of the game's hub areas (e.g., Taal's Horn Keep, the Pilgrimage Chamber, or the Versus Basement). This way, bot builds can be previewed for both the host and other active players." },
 
     gt_bot_guard_break_msg = { en = "Announce when a bot's guard breaks (Replicant)" },
     gt_bot_guard_break_msg_tooltip = { en = "Posts a chat message whenever a bot teammate's block is broken. Choose who sees it below; works only when you are the host." },
