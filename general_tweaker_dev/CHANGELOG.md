@@ -1,6 +1,6 @@
 # General Tweaker Changelog
 
-## v0.2.257-dev (2026-07-26) -- Re-ship: spawner fix rejoined with master
+## v0.2.259-dev (2026-07-29) -- Re-ship: spawner fix rejoined with master
 
 - Merge of v0.2.256 (Creature Spawner additive dynamic categories) with
   master's v0.2.255 (live player stat HUD). The v0.2.255 ship from master
