@@ -22,10 +22,10 @@ return {
 
     -- Loose bot options (A->Z by display label).
     gt_ai_afk_takeover = { en = "AFK Bot Takeover" },
-    gt_ai_afk_takeover_tooltip = { en = "After 20 seconds without input, a temporary bot drives your hero while you observe; any input requests your native respawn. A normal bot yields its slot if needed. Supports Adventure, Chaos Wastes, and Weaves, but not a four-human party, Versus, or the keep." },
+    gt_ai_afk_takeover_tooltip = { en = "After 20 seconds of inactivity, one of the host's bots replace your position within the active party. Until you take action, you'll be placed in a dead spectator view. If the host cannot supply enough slots to hold inactive players, this feature won't take effect." },
 
     gt_bots_in_keep = { en = "Allow Bots in Keep" },
-    gt_bots_in_keep_tooltip = { en = "While in the keep, allows bots so you can preview loadouts and have a full lobby. Works only when you are the host, and the bots are removed when you turn it off." },
+    gt_bots_in_keep_tooltip = { en = "While enabled, the host's bots are present in any of the game's hub areas (e.g. the Taal's Horn Keep, the Pilgrimage Chamber, or the Versus Basement.) This way, bot builds can be previewed for both the host and other active players." },
 
     gt_bot_guard_break_msg = { en = "Announce when a bot's guard breaks (Replicant)" },
     gt_bot_guard_break_msg_tooltip = { en = "Posts a chat message whenever a bot teammate's block is broken. Choose who sees it below; works only when you are the host." },
@@ -35,7 +35,7 @@ return {
     -- The chat line itself when a bot's guard breaks (code-referenced).
     gt_bot_guard_break_chat = { en = "A bot's guard was broken!" },
 
-    gt_bot_command_wheel = { en = "Bot command wheel" },
+    gt_bot_command_wheel = { en = "Bot Command Wheel" },
     gt_bot_command_wheel_tooltip = { en = "Adds Attack Now, Group Up, Cover Me, and Wait as a second page of the mission social wheel for the host. Attack Now prioritizes the last enemy you pinged for 10 seconds; Group Up and Cover Me temporarily gather bots around you; Wait parks the nearest bot around the aimed point for 30 seconds. Normal safety, combat, and rescue behavior still takes priority where required." },
 
     -- Bot Behavior Improvements master toggle + nested sub-toggles (#297,
@@ -47,13 +47,13 @@ return {
     -- in-game confirmation of the wrapped fix, otherwise; the
     -- greedy-pickup item is brand-new (#297 item 8).
     gt_bot_behavior_improvements = { en = "Bot Behavior Improvements" },
-    gt_bot_behavior_improvements_tooltip = { en = "Master switch for the bot fixes listed underneath; while it is on, each fix can be toggled individually below. Covers Necromancer potion handoff, keeping the mission alive while a bot still stands, ledge recovery, ladder unstick, instant and greedy item pickup, smarter self-healing, revive and rescue priority, reviving during the Ironbreaker ult, curated AOE immunity, and short-lived gas/warpfire resistance. Works only when you are the host." },
+    gt_bot_behavior_improvements_tooltip = { en = "Provides multiple settings to edit functionality related to bot mechanics. Some settings include but aren't limited to: an improved revive system that allows bots to not only untie allies awaiting respawn but also prevent the game from ending if all connected players are dead, general improvements with survivability from certain mutators or environmental hazards, smarter methods to acquire and use items, among other settings. Host only." },
 
-    gt_bot_necro_potion_handoff = { en = "Necromancer bots hand off potions" },
-    gt_bot_necro_potion_handoff_tooltip = { en = "A Necromancer bot brings a real potion forward over its skull item, so it can drink it or pass it to a teammate, which the skull otherwise blocks." },
+    gt_bot_necro_potion_handoff = { en = "Necromancer Bots Can Pass Potions" },
+    gt_bot_necro_potion_handoff_tooltip = { en = "Fixes an issue where a Necromancer bot is unable to pass a potion due to its invisible Icon of Death skull item breaking handoff logic." },
 
-    gt_bot_mission_fail_prevention = { en = "Keep the mission going while a bot lives" },
-    gt_bot_mission_fail_prevention_tooltip = { en = "Normally the run ends when every human is down even if a bot still stands; with this on, the mission only fails when no teammate, human or bot, remains." },
+    gt_bot_mission_fail_prevention = { en = "Alive Bots Prevent Automatic Mission Fail" },
+    gt_bot_mission_fail_prevention_tooltip = { en = "Typically, the mission fails when the host and every connected player is down, even if bots yet remain. Toggling this setting on prevents the mission from ending this way. Can be used alongside 'Bots Rescue Allies Awaiting Respawn' to get players back in the game in an authentic way." },
 
     gt_bot_ledge_pullup = { en = "Bots pull themselves up from ledges" },
     gt_bot_ledge_pullup_tooltip = { en = "A bot left hanging from a ledge climbs back up on its own after the delay below instead of waiting for a rescue." },
