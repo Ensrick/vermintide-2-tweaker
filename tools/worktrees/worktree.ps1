@@ -7,17 +7,17 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [ValidateSet('Audit', 'Create', 'Close')]
     [string]$Action,
-    [string]$RepoRoot = (Join-Path $PSScriptRoot '..\..'),
+    [string]$RepoRoot,
     [string]$Name,
     [string]$TargetPath,
     [string]$Branch,
     [string]$BaseRef = 'origin/master',
     [ValidateRange(0, 128)][int]$MaxAdditionalWorktrees = 8,
     [ValidateRange(1, 1024)][double]$MaxAdditionalGiB = 12,
-    [switch]$DeleteMergedBranch
+    [switch]$DeleteMergedBranch,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -61,6 +61,36 @@ function Test-DisposableIgnoredPath([string]$RelativePath) {
     }
     return $false
 }
+
+function Test-IsPathInsideDirectory([string]$CandidatePath, [string]$DirectoryPath) {
+    $candidate = [System.IO.Path]::GetFullPath($CandidatePath)
+    $directory = [System.IO.Path]::GetFullPath($DirectoryPath).TrimEnd([char[]]@('\', '/'))
+    $prefix = $directory + [System.IO.Path]::DirectorySeparatorChar
+    return $candidate.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+if ($SelfTest) {
+    $failures = @()
+    if (-not (Test-IsPathInsideDirectory 'C:\repo\wt\tools\worktrees\worktree.ps1' 'C:\repo\wt')) {
+        $failures += 'script inside target was not detected'
+    }
+    if (Test-IsPathInsideDirectory 'C:\repo\wt-other\worktree.ps1' 'C:\repo\wt') {
+        $failures += 'sibling path was misclassified as inside target'
+    }
+    if (Test-IsPathInsideDirectory 'C:\repo\wt' 'C:\repo\wt') {
+        $failures += 'directory itself was misclassified as a child file'
+    }
+    if ($failures.Count -gt 0) {
+        Write-Host '[worktree -SelfTest] FAILED' -ForegroundColor Red
+        $failures | ForEach-Object { Write-Host "  X $_" -ForegroundColor Red }
+        exit 2
+    }
+    Write-Host '[worktree -SelfTest] OK - self-close and sibling path boundaries pass.' -ForegroundColor Green
+    exit 0
+}
+
+if ([string]::IsNullOrWhiteSpace($Action)) { throw 'Specify -Action Audit, Create, or Close.' }
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) { $RepoRoot = Join-Path $PSScriptRoot '..\..' }
 
 $resolvedRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 $budgetCheck = Join-Path $resolvedRoot 'qa\check_worktree_budget.ps1'
@@ -119,6 +149,9 @@ if ($fullTarget -eq $primary) { throw "Refusing to close the primary worktree: $
 if ($registered -notcontains $fullTarget) { throw "Target is not a registered worktree: $fullTarget" }
 if (-not (Test-Path -LiteralPath $fullTarget -PathType Container)) {
     throw "Registered worktree directory is missing; run git worktree prune after investigating: $fullTarget"
+}
+if (Test-IsPathInsideDirectory $PSCommandPath $fullTarget) {
+    throw "Refusing self-close on Windows. Run this command from the primary checkout and pass -TargetPath `"$fullTarget`"."
 }
 
 $status = (Invoke-Git $fullTarget @('status', '--porcelain=v1', '--untracked-files=all')).Output
