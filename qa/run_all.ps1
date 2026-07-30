@@ -218,6 +218,9 @@ Run-Check "check_retired_big_rebalance"        { & (Join-Path $here "check_retir
 # attempting to regenerate or infer from an incomplete CI ref inventory.
 Run-Check "check_branch_reconciliation_census" { & (Join-Path $here "check_branch_reconciliation_census.ps1") -Quiet:$Quiet }
 Run-Check "check_in_progress"                 { & (Join-Path $here "check_in_progress.ps1")                 -Quiet:$Quiet } -Policy 'Advisory'
+# Blocking local-capacity guard. CI has no secondary worktrees, while maintainer
+# sessions fail closed before agent checkouts can grow without bound.
+Run-Check "check_worktree_budget"             { & (Join-Path $here "check_worktree_budget.ps1")             -Quiet:$Quiet }
 # check_pipeline_state is advisory-only: the pipeline-state ladder (source ->
 # CHANGELOG -> bundle -> upload) surfaces stranded fixes ([not deployed] entries,
 # uploaded-but-user-on-older-version). It ALWAYS exits 0 and reads workshop_log.txt

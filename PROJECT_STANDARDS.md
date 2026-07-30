@@ -1479,6 +1479,15 @@ session's start.
    remote branch in the same pass. 57 merged-but-undeleted branches accumulated;
    the dead branches bury the handful a session actually needs to reason about
    and make the branch inventory untrustworthy.
+4. **Linked worktree closed.** Read-only tasks do not create worktrees. Isolated
+   write worktrees are created and closed only with
+   `tools/worktrees/worktree.ps1`, and a finished agent's tree is closed in the
+   same session after its source is committed. The wrapper refuses dirty source
+   and ambiguous ignored files. On 2026-07-30, 707 registered worktrees consumed
+   hundreds of GiB; the recovery pass reclaimed at least 323.81 GiB. The binding
+   budget is 8 secondary trees / 12 GiB, enforced by
+   `qa/check_worktree_budget.ps1` in Quick QA, pre-commit, full QA, and ship
+   preflight.
 
 Cross-ref: §6.5 / §6.6 (ship pipeline + protected-`master` landing), `CLAUDE.md`
 NON-NEGOTIABLES (worktree / VMBLauncher discipline).
@@ -2112,6 +2121,7 @@ rules; old pain that's been solved may justify deleting rules. Both are fine.
 ```
 AT SESSION START:
   - check_pipeline_state.ps1 (pipeline + worktree state clean before touching anything)
+  - check_worktree_budget.ps1 (max 8 secondary worktrees / 12 GiB)
 
 BEFORE coding a fix:
   - Read crash log / repro evidence
@@ -2231,7 +2241,7 @@ Per the chest-of-trials root-cause analysis (`DORMANT_BOON_RARITY` indexed by cl
 
 ---
 
-*Last updated: 2026-07-21 - made the newest exact CURRENT LIVE TEST comment the one and only truly pinned exact card, enforced GraphQL pin state, and added tracker-event/daily enforcement. Prior update: restored `not-started` as the non-ready OPEN lifecycle, retired open `Fixed` / `verify-fix-coop`, made live-test labels require the newest strict CURRENT LIVE TEST card, and enforced solo-first co-op routing. Prior update 2026-07-19 - introduced the universal lifecycle guard. Prior update 2026-07-18 - added §11b zero-warning policy (fix/baseline/checker-defect within one week + pre-crash-probe-needs-a-consumer corollary), §11 umbrella doctrine + lifecycle-label-cleanup integrity, §8.7 session hygiene (git/worktree/branch closeout), §5.1c retained-state verification (read-back not setter-success), and three §14 card rows (claim.ps1 / check_pipeline_state.ps1 / generate_playtest.ps1). Prior update 2026-07-16 - reconciled cfg-owned visibility, suffix-owned ship approval, enabled-remote deployment, GitHub-only current status, and empirical issue fallback comments. Prior update 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
+*Last updated: 2026-07-30 - added the binding 8-worktree / 12-GiB lifecycle budget, blocking QA guard, and fail-closed create/close wrapper after the 707-worktree cleanup reclaimed at least 323.81 GiB. Prior update 2026-07-21 - made the newest exact CURRENT LIVE TEST comment the one and only truly pinned exact card, enforced GraphQL pin state, and added tracker-event/daily enforcement. Prior update: restored `not-started` as the non-ready OPEN lifecycle, retired open `Fixed` / `verify-fix-coop`, made live-test labels require the newest strict CURRENT LIVE TEST card, and enforced solo-first co-op routing. Prior update 2026-07-19 - introduced the universal lifecycle guard. Prior update 2026-07-18 - added §11b zero-warning policy (fix/baseline/checker-defect within one week + pre-crash-probe-needs-a-consumer corollary), §11 umbrella doctrine + lifecycle-label-cleanup integrity, §8.7 session hygiene (git/worktree/branch closeout), §5.1c retained-state verification (read-back not setter-success), and three §14 card rows (claim.ps1 / check_pipeline_state.ps1 / generate_playtest.ps1). Prior update 2026-07-16 - reconciled cfg-owned visibility, suffix-owned ship approval, enabled-remote deployment, GitHub-only current status, and empirical issue fallback comments. Prior update 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
 pre-authorized for the full pipeline + git commit/push; stable promotions need a
 fresh per-build signal), sec. 8.5a gate semantics (errors block, warnings
 report), sec. 14 card gained the approval axis + AFTER-shipping steps.
