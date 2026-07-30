@@ -46,6 +46,8 @@ $openIssueAuditPs1 = Join-Path $repoRoot 'tools\github\audit-open-issues.ps1'
 if (Test-Path $openIssueAuditPs1) { $targets += $openIssueAuditPs1 }
 $branchCensusPs1 = Join-Path $repoRoot 'tools\github\branch-reconciliation-census.ps1'
 if (Test-Path $branchCensusPs1) { $targets += $branchCensusPs1 }
+$worktreeLifecyclePs1 = Join-Path $repoRoot 'tools\worktrees\worktree.ps1'
+if (Test-Path $worktreeLifecyclePs1) { $targets += $worktreeLifecyclePs1 }
 
 $failed = @()
 foreach ($t in $targets) {

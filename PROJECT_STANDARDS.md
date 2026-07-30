@@ -1482,8 +1482,9 @@ session's start.
 4. **Linked worktree closed.** Read-only tasks do not create worktrees. Isolated
    write worktrees are created and closed only with
    `tools/worktrees/worktree.ps1`, and a finished agent's tree is closed in the
-   same session after its source is committed. The wrapper refuses dirty source
-   and ambiguous ignored files. On 2026-07-30, 707 registered worktrees consumed
+   same session after its source is committed. Invoke Close from the primary
+   checkout, never from inside its target on Windows. The wrapper refuses dirty
+   source and ambiguous ignored files. On 2026-07-30, 707 registered worktrees consumed
    hundreds of GiB; the recovery pass reclaimed at least 323.81 GiB. The binding
    budget is 8 secondary trees / 12 GiB, enforced by
    `qa/check_worktree_budget.ps1` in Quick QA, pre-commit, full QA, and ship

@@ -14,11 +14,13 @@ writes are required:
 The default location is the system temporary directory, never `source\repos`.
 The command refuses creation at the count limit.
 
-Close it in the same session after its work is committed:
+Close it in the same session after its work is committed. Run the close command
+from the primary checkout, not from inside the target worktree; Windows may keep
+the executing script file open and prevent removal of its own directory.
 
 ```powershell
-.\tools\worktrees\worktree.ps1 -Action Close `
-  -TargetPath "$env:TEMP\vt2-issue-123"
+Set-Location C:\Users\danjo\source\repos\vermintide-2-tweaker
+.\tools\worktrees\worktree.ps1 -Action Close -TargetPath "$env:TEMP\vt2-issue-123"
 ```
 
 Close refuses dirty source and ambiguous ignored files. It can force-remove only
