@@ -30,7 +30,7 @@
 
 ## Official loadout reseed after WT/Cosmetics DEFAULT (#1033)
 
-- [ ] Confirm `[gut:LOAD] v0.2.322-dev` in the newest log.
+- [ ] Confirm `[gut:LOAD] v0.2.324-dev` in the newest log.
 - [ ] In the modded realm, equip a weapon or cosmetic that is available only
   because of Tweaker: Weapons or Tweaker: Cosmetics.
 - [ ] Open **Mod Tweaker → Equipment**, press **DEFAULT**, confirm, then press
@@ -181,6 +181,14 @@ If this candidate fails, use exactly one evidence-selected fallback:
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md) for Tweaker: GUI dev.
 
 Last updated: 2026-07-17.
+
+## Floating damage numbers above the network maximum (#938)
+
+- [ ] Enable Floating Damage Numbers and deal ordinary damage below 255.75; number size and color remain unchanged.
+- [ ] Deal exactly 255.75 and then a larger value (the 9999 Damage Per Strike Godmode option is a direct test); both values remain visible and readable.
+- [ ] The high value's text is not truncated to 255.75; only its visual font scale is held at the network maximum.
+- [ ] Critical and damage-over-time colors/durations retain vanilla behavior.
+- [ ] `/gut_regression_test` passes `issue938_damage_number_visual_bound`; offline `test_gut_damage_numbers.lua` passes.
 
 ## In-mission mission-vote client popup (#700)
 

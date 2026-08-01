@@ -1,5 +1,14 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.324-dev (2026-08-01) -- bound high-damage popup scale (#938) [verify-fix]
+
+- Floating damage-number text still carries the full damage amount, while its
+  damage-derived font scale now stops growing at the engine's live
+  `NetworkConstants.damage.max` boundary. Ordinary values through that boundary
+  retain the vanilla formula, colors, critical emphasis, and durations.
+- Added `/gut_regression_test` check `issue938_damage_number_visual_bound` plus
+  offline boundary, fail-open, and runtime-wiring coverage.
+
 ## 0.2.322-dev (2026-08-01) -- reseed official loadouts after Equipment DEFAULT (#1033) [verify-fix]
 
 - Tracks a confirmed WT/Cosmetics DEFAULT as transaction state independent of
@@ -124,7 +133,6 @@
   cannot alias the persistent snapshot. Official-realm behavior remains native.
 - Added stable/dev Lua truth-table, deep-copy, runtime-wiring, and live
   `/gut_regression_test` coverage.
-
 ## 0.2.313-dev (2026-07-22) -- Chaos Wastes exit identity isolation (#273) [not-started]
 
 - Exit-time loadout snapshots now read a slot only when the durable `items`

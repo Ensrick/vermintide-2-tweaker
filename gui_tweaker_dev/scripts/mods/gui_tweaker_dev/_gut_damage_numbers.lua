@@ -1,11 +1,12 @@
 local mod = get_mod("gut_dev")
+local DamageNumberPolicy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_damage_numbers_policy")
 
 -- _gut_damage_numbers.lua — Floating Damage Numbers
 --
 -- MIGRATED from general_tweaker (gt) 2026-06-29: this feature moved out of gt and
--- into gut. Behavior is UNCHANGED from gt's _gt_damage_numbers.lua (same engine
--- machinery, same crash-proof / networking-free design); only the gt->gut
--- namespacing changed (setting ids gt_damage_numbers_* -> gut_damage_numbers_*).
+-- into gut with the same engine machinery and networking-free design. Issue #938
+-- later bounded only the helper's damage-derived font scale; the original damage
+-- value, colors, duration, and event path remain unchanged.
 --
 -- WHAT
 --   Floating numbers pop over enemies YOU damage. Reuses the engine's own
@@ -76,8 +77,12 @@ local function _is_local_player_unit(unit)
 end
 
 -- Trigger one floating number on `hit_unit`. Reuses the vanilla helper so color,
--- crit emphasis, dot-vs-direct coloring, size scaling and the projected-text event
--- all match base-game behavior exactly. Pure UI: no state mutation, no network.
+-- crit emphasis, dot-vs-direct coloring and the projected-text event stay on the
+-- base-game path. Vanilla derives font size directly from uncapped damage, while
+-- its damage RPC transports at most NetworkConstants.damage.max per call. Preserve
+-- vanilla size scaling through that source-backed boundary, then cap only the
+-- damage-derived visual scale; the number text remains the full damage value.
+-- Pure UI: no state mutation, no network.
 -- Wrapped in pcall so a single malformed hit can never interrupt the damage
 -- pipeline.
 mod._gut_dn_show = function(hit_unit, damage_type, damage_amount, is_critical_strike)
@@ -89,7 +94,12 @@ mod._gut_dn_show = function(hit_unit, damage_type, damage_amount, is_critical_st
     local du = rawget(_G, "DamageUtils")
     if not (du and du.add_unit_floating_damage_numbers) then return end
 
-    pcall(du.add_unit_floating_damage_numbers, hit_unit, damage_type, damage_amount, is_critical_strike)
+    local constants = rawget(_G, "NetworkConstants")
+    local max_network_damage = constants and constants.damage and constants.damage.max
+    local font_override = DamageNumberPolicy.font_override(damage_amount, max_network_damage)
+
+    pcall(du.add_unit_floating_damage_numbers, hit_unit, damage_type, damage_amount,
+        is_critical_strike, nil, nil, font_override)
 end
 
 -- add_damage_network carries DoTs, explosions (bombs) and other already-final
@@ -145,3 +155,19 @@ end
 
 -- Initial sync at load (covers the first mission before any state change fires).
 mod._gut_dn_refresh()
+
+if type(mod._gut_rt_register) == "function" then
+    mod._gut_rt_register("issue938_damage_number_visual_bound", function()
+        local max_damage = 255.75
+        local ordinary = DamageNumberPolicy.font_override(100, max_damage)
+        if ordinary ~= 1 then
+            return "ordinary damage scaling changed"
+        end
+        local large = DamageNumberPolicy.font_override(9999, max_damage)
+        local actual = DamageNumberPolicy.vanilla_text_size(9999, large)
+        local expected = DamageNumberPolicy.vanilla_text_size(max_damage, 1)
+        if math.abs(actual - expected) > 0.0001 then
+            return "large damage visual size is not bounded at network maximum"
+        end
+    end)
+end
