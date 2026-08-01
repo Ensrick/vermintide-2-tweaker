@@ -4,7 +4,8 @@ Detailed technical reference for the `cosmetics_tweaker` mod. Read alongside `CH
 
 ## Module map (Phase 4b OOP split)
 
-`cosmetics_tweaker.lua` is still the primary file (~10,004 lines) — this is an
+`cosmetics_tweaker.lua` is still the primary file (ratcheted by
+`qa/decomposition_contracts.psd1`) — this is an
 IN-PROGRESS decomposition (OOP_REFACTOR_PLAN WS5), not a finished one. Phase 1
 carved out the three cleanest self-contained concerns; Phase 2 carved out the
 render-path scale/grip apply layer; Phase 3 carved out the glow apply subsystem.
@@ -59,6 +60,7 @@ exactly once from the manifest.
 | `_cos_grail_knight_set.lua` | Authored Purpure/Azure set registry (#629): vanilla-geometry item registration, exact per-instance material paint for hat/outfit/shield, independent offhand descriptor, and inventory-hero visibility replay. #658 adds its deterministic per-career `can_wield` policy: the set stays native to Grail Knight while default-off Mercenary/Huntsman/Foot Knight toggles only extend inventory availability. They do not relax #698's career-scoped peer appearance identity. |
 | `_cos_wire.lua` | Phase 4a #421 weapon-skin wire boundary. Captures `mod._cos.custom_skin_keys` after `_cos_illusions`, exports the shared pure `mod._cos_wire_safe_custom_skin` policy, the exception-safe `mod._cos_wire_null_custom_skins` helper, and the `mod._cos_skin_wire_surfaces` registry. It owns the three vanilla `rpc_add_equipment` sender hooks (`SimpleInventoryExtension.game_object_initialized`, `SimpleInventoryExtension._spawn_resynced_loadout`, `GearUtils.hot_join_sync`); the entry module's existing `CosmeticUtils.update_cosmetic_slot` hook consumes the same policy for the fourth, GameSession, wire surface. Local slot state is restored even if the wrapped sender raises a Lua error. |
 | `_cos_offhand_preload_lifecycle.lua` | Pure generation-scoped ownership/readiness ledger for #565 async offhand packages. It has no engine or mod dependencies so shared-handle callbacks retained after unload can be reproduced offline. The entry owns all PackageManager calls and bounded diagnostics. |
+| `_cos_offhand_session_state.lua` | Pure #504 exact-backend-item/per-hand customization-session owner. It owns pending selections, Apply baselines/markers, one-way legacy-shape migration, and clone-on-snapshot/restore. It deliberately owns no durable persistence, renderer, hook, or RPC; those existing consumers retain the same table identities through the entry aliases. |
 | `_mh_package_lifecycle.lua` | Pure #282 process-session ownership ledger for embedded Material-Hijack skin packages. It loads exactly once per path, adopts an existing exact reference if the ledger is reinitialized, and exposes read-only held/reference summaries. This does not make Cosmetics hot reload safe. There is deliberately no mod-owned release API: native renderer retirement has no proven Lua boundary, so `PackageManager.destroy` is the sole release owner. |
 | `_cos_offhand_names.lua` | Pure #641 component display-name policy: independent offhand-weapon/shield keys, deterministic source fallback, primary-first label composition, presentation-only decoration, and deduplicated inventory rows. |
 | `_cos_la_instance_policy.lua` | Pure exact-item presentation policy for LA/Cosmetics components. Owns direct Armoury-key/bridge-clone icon identity, exact-skin-first authored icon lookup with representative cross-family fallback, backend fallback qualification, hand-pool ownership, and `spawn_data` target validation for Athanor/illusion previews; missing identity or mesh evidence fails closed. |
@@ -138,6 +140,9 @@ their internals alone.
   `cosmetics_tweaker_localization.lua` using the key emitted by
   `/cos_offhand_name_inventory`. Existing shield registries remain the fallback
   source until a final independent name is authored.
+- **New pending offhand customization-session state or Apply/revert bookkeeping** →
+  `_cos_offhand_session_state.lua`. Key by exact backend item and then hand; do
+  not put durable save data, renderer state, or peer transport into this owner.
 - **New cross-module value** → export onto `mod._cos` in the owning module (which must
   be earlier in the manifest than its consumers) and localize it at the consumer's top.
 

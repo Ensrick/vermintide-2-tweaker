@@ -100,7 +100,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.172-dev"
+local MOD_VERSION = "0.9.173-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2354,7 +2354,15 @@ end
 -- shield picks store under `left_hand_unit` (matching pre-v0.9.9.4
 -- behavior); multi-mount picks (rapier+pistol, dual-wields) store one
 -- entry per hand the user customized. In-memory only.
-local _offhand_selection = {}
+local _offhand_session_state = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_offhand_session_state").new({
+    selections = {},
+    baselines = mod._offhand_baseline,
+    committed = mod._offhand_committed,
+})
+local _offhand_selection = _offhand_session_state.selections
+mod._offhand_baseline = _offhand_session_state.baselines
+mod._offhand_committed = _offhand_session_state.committed
 
 -- v0.9.9.4-dev: tolerate the pre-v0.9.9.4 schema where
 -- `_offhand_selection[bid]` was the option record itself (not a per-hand
@@ -2362,13 +2370,6 @@ local _offhand_selection = {}
 -- / `intended_unit` / `la_armoury_key`); if found, wraps the record as
 -- `{ left_hand_unit = old_record }` in place so subsequent reads see the
 -- new shape. Idempotent.
-local function _migrate_legacy_offhand_selection(backend_id)
-    local v = backend_id and _offhand_selection[backend_id]
-    if type(v) ~= "table" then return end
-    if v.unit or v.intended_unit or v.la_armoury_key then
-        _offhand_selection[backend_id] = { left_hand_unit = v }
-    end
-end
 
 -- v0.9.53-dev (#200): OFFHAND APPLY-GATE state.
 -- The offhand (shield) row writes _offhand_selection[bid] on a genuine cell
@@ -2386,31 +2387,9 @@ end
 --   * _offhand_baseline[bid] == false -> snapshot taken, was ABSENT -> revert to
 --                                         nil (no override = base shield).
 --   * _offhand_baseline[bid] == table -> revert to that per-hand selection.
-mod._offhand_baseline = mod._offhand_baseline or {}
-mod._offhand_committed = mod._offhand_committed or {}
-
 -- Shallow per-hand copy: the opt records themselves come from the stable
 -- _get_offhand_options pool, so copying the {hand_field -> opt} mapping is
 -- enough to restore which option is selected per hand.
-local function _snapshot_offhand_selection(backend_id)
-    if not backend_id then return nil end
-    local cur = _offhand_selection[backend_id]
-    if type(cur) ~= "table" then return false end  -- false = "was absent"
-    local copy = {}
-    for hand, opt in pairs(cur) do copy[hand] = opt end
-    return copy
-end
-
-local function _restore_offhand_selection(backend_id, snap)
-    if not backend_id then return end
-    if snap == false or snap == nil then
-        _offhand_selection[backend_id] = nil
-        return
-    end
-    local copy = {}
-    for hand, opt in pairs(snap) do copy[hand] = opt end
-    _offhand_selection[backend_id] = copy
-end
 
 -- v0.8.64-dev: forward decl. Real impl lives in the cos_la_apply block below
 -- (~line 3300). _on_offhand_index_pressed (~line 2004) and the local-equip
@@ -2680,7 +2659,7 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
     if _exit_bid and not (mod._offhand_committed and mod._offhand_committed[_exit_bid]) then
         local baseline = mod._offhand_baseline and mod._offhand_baseline[_exit_bid]
         if baseline ~= nil then
-            _restore_offhand_selection(_exit_bid, baseline)
+            _offhand_session_state.restore(_exit_bid, baseline)
             mod._pending_la_emit_on_exit = nil  -- skip the drain/pulse-wield below
             mod:info("[cos:weapon-leak] offhand pick NOT applied (no Apply) on exit bid=%s -> reverted to baseline, broadcast dropped",
                 tostring(_exit_bid))
@@ -3340,7 +3319,7 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
                 la and la.SKIN_LIST,
                 ownership)
             if icon then inventory_icon = icon end
-            _migrate_legacy_offhand_selection(backend_id)
+            _offhand_session_state.migrate_legacy(backend_id)
             local live_hands = _offhand_selection[backend_id]
             local record = live_hands and live_hands.left_hand_unit
                 or (saved_offhands and saved_offhands.left_hand_unit)
@@ -3723,7 +3702,7 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
     local base_y = 95
 
     -- Migrate any pre-v0.9.9.4 in-memory selection shape on this backend_id.
-    if item.backend_id then _migrate_legacy_offhand_selection(item.backend_id) end
+    if item.backend_id then _offhand_session_state.migrate_legacy(item.backend_id) end
 
     local widgets = {}  -- flat list of every widget (multiple rows interleaved)
     local widgets_by_hand = {}  -- hand_field -> array of widgets (parallel to pool)
@@ -3797,7 +3776,7 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
     end
 
     local current_backend_id = item.backend_id
-    if current_backend_id then _migrate_legacy_offhand_selection(current_backend_id) end
+    if current_backend_id then _offhand_session_state.migrate_legacy(current_backend_id) end
     local per_hand_sel = current_backend_id and _offhand_selection[current_backend_id] or nil
 
     for _, row in ipairs(hand_rows) do
@@ -3868,7 +3847,7 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
     -- so preserve the original baseline and the committed flag. on_exit reverts
     -- _offhand_selection to this baseline unless a genuine Apply committed.
     if current_backend_id and mod._offhand_baseline[current_backend_id] == nil then
-        mod._offhand_baseline[current_backend_id] = _snapshot_offhand_selection(current_backend_id)
+        mod._offhand_baseline[current_backend_id] = _offhand_session_state.snapshot(current_backend_id)
         mod._offhand_committed[current_backend_id] = nil
         _trace("SCREEN setup_illusions offhand baseline snapshotted bid=%s present=%s",
             tostring(current_backend_id),
@@ -4164,7 +4143,7 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
     -- v0.8.32: key selection by backend_id (per-weapon-instance).
     -- v0.9.9.4: nested under hand_field.
     if self._item_backend_id then
-        _migrate_legacy_offhand_selection(self._item_backend_id)
+        _offhand_session_state.migrate_legacy(self._item_backend_id)
         _offhand_selection[self._item_backend_id] = _offhand_selection[self._item_backend_id] or {}
         _offhand_selection[self._item_backend_id][hand_field] = opt
         -- v0.9.43-dev WRITE trace: the user-press primary write. This is the
@@ -4839,7 +4818,7 @@ if BackendUtils then
 
         -- Selections are per backend item and per hand, never item-type globals.
         if effective_backend_id then
-            _migrate_legacy_offhand_selection(effective_backend_id)
+            _offhand_session_state.migrate_legacy(effective_backend_id)
         end
         -- #150: browsing changes only the preview; the live body commits on exit.
         local _suppress_browse_override = _in_create_equipment
@@ -5117,7 +5096,7 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin,
         _dbg("[LA paint] skip: deus run - CW upgrade cosmetics win (#518) bid=%s", tostring(bid))
         return false
     end
-    _migrate_legacy_offhand_selection(bid)
+    _offhand_session_state.migrate_legacy(bid)
     local per_hand_sel = _offhand_selection[bid]
     if type(per_hand_sel) ~= "table" then
         _dbg("[LA paint] skip: no _offhand_selection for backend_id=%s", tostring(bid)); return false
@@ -7106,7 +7085,7 @@ assert(CUSTOM_ILLUSION_SYNC.install(mod, {
     end,
     wearer_is_human = mod._cos_husk_identity.wearer_is_human,
     selection_for = function(backend_id)
-        _migrate_legacy_offhand_selection(backend_id)
+        _offhand_session_state.migrate_legacy(backend_id)
         return _offhand_selection[backend_id]
     end,
     send = mod._send_offhand_mesh,
@@ -9705,7 +9684,7 @@ if AttachmentUtils then
                 local slot_data = wielded_slot and equipment.slots and equipment.slots[wielded_slot]
                 local item_data = slot_data and slot_data.item_data
                 local bid = item_data and item_data.backend_id
-                if bid then _migrate_legacy_offhand_selection(bid) end
+                if bid then _offhand_session_state.migrate_legacy(bid) end
                 local per_hand_sel = bid and _offhand_selection[bid]
                 if type(per_hand_sel) == "table" then
                     -- v0.9.72-dev: key the replay by the weapon TEMPLATE, not
@@ -9779,7 +9758,9 @@ mod._cos_complete_set_rebroadcast_tick = mod._cos_complete_set_rebroadcast.new({
     backend_to_armoury = function() return LA_BRIDGE.backend_to_armoury end,
     saved_offhands = function() return LA_PERSIST.get_saved_offhands() end,
     offhand_selection = function() return _offhand_selection end,
-    migrate_selection = _migrate_legacy_offhand_selection,
+    migrate_selection = function(backend_id)
+        return _offhand_session_state.migrate_legacy(backend_id)
+    end,
     equips_by_unit = function() return _local_la_equips end,
     send_la = _send_la_apply,
     send_mesh = mod._send_offhand_mesh,
