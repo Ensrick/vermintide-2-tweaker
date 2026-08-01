@@ -116,13 +116,14 @@ Last updated: 2026-08-01.
 
 ---
 
-## Godmode outgoing damage and ammo (#549, supersedes #382)
+## Godmode outgoing damage and ammo (#549, #1008; supersedes #382)
 
 - [ ] **[MULTIPLAYER]** Host and joining client each enable Godmode + 9999 Damage Per Strike; each positive enemy hit resolves as 9999 on the authoritative host.
-- [ ] Friendly fire, self damage, immune zero-damage results, bots, and peers without the child toggle never receive the override.
+- [ ] **[SOLO FIRST]** An attack that normally bounces from ordinary armor and super armor resolves as 9999 while both toggles are enabled; disabling Godmode restores the native bounce.
+- [ ] Friendly fire, self damage, hard invulnerability, authored no-damage/zero-power results, bots, and peers without the child toggle never receive the override.
 - [ ] Godmode + Unlimited Ammo suppresses only the owner's ammo/overcharge consumption; disabling Godmode restores consumption even when the hidden child remains checked.
 - [ ] `/infinite_ammo` retains its host-wide scope and composes by ownership: turning either source off does not remove the buff while the other remains active.
-- [ ] `/gt_regression_test` passes `issue549_godmode_power_and_ammo`.
+- [ ] `/gt_regression_test` passes `issue549_godmode_power_and_ammo` and `issue1008_godmode_armor_boundary`.
 
 ---
 

@@ -2194,6 +2194,47 @@ function M.install(mod, _rt_register, deps)
         if not policy(10, true, false, true) then return "source-attacker state did not override" end
     end)
 
+    _rt_register("issue1008_godmode_armor_boundary", function()
+        if mod._GT_1008_GODMODE_ARMOR_MARKER ~= "gt-1008-godmode-armor-boundary" then
+            return "#1008 structural marker absent"
+        end
+        if mod._GT_1008_GODMODE_ARMOR_LOG_CAP ~= 8 then
+            return "#1008 diagnostic cap drifted"
+        end
+        local policy = mod._gt1008_should_override_armor_zero
+        if type(policy) ~= "function" then return "#1008 armor-zero policy absent" end
+        if not policy(0, false, false, true, true, 2, nil, 0, 0.2, false) then
+            return "ordinary armor zero was not overridden"
+        end
+        if not policy(0, false, false, true, true, 1, 6, 0, 0.2, false) then
+            return "primary super-armor zero was not overridden"
+        end
+        if policy(0, true, false, true, true, 2, nil, 0, 0.2, false) then
+            return "hard invulnerability was overridden"
+        end
+        if policy(0, false, true, true, true, 2, nil, 0, 0.2, false) then
+            return "authored no-damage profile was overridden"
+        end
+        if policy(0, false, false, false, true, 2, nil, 0, 0.2, false) then
+            return "friendly/non-enemy armor zero was overridden"
+        end
+        if policy(0, false, false, true, false, 2, nil, 0, 0.2, false) then
+            return "disabled strike damage overrode armor"
+        end
+        if policy(0, false, false, true, true, 1, nil, 0, 0.2, false) then
+            return "unarmored zero was overridden"
+        end
+        if policy(0, false, false, true, true, 2, nil, 0.5, 0.2, false) then
+            return "non-immune armor result was overridden"
+        end
+        if policy(0, false, false, true, true, 2, nil, 0, 0, false) then
+            return "authored zero-power profile was overridden"
+        end
+        if policy(0, false, false, true, true, 2, nil, 0, 0.2, true) then
+            return "enemy player armor result was overridden"
+        end
+    end)
+
     _rt_register("issue241_noclip_boundary_routes", function()
         if mod._gt241_boundary_suppression_wired ~= true then
             return "noclip boundary suppression is not fully wired"

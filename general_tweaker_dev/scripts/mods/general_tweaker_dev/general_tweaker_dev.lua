@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.257-dev"
+local MOD_VERSION = "0.2.258-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -919,14 +919,122 @@ local function _gt_godmode_strike_damage_active(unit)
 end
 mod._gt_godmode_strike_damage_active = _gt_godmode_strike_damage_active
 
--- Pure truth table shared by the live hook and /gt_regression_test. Requiring a
--- positive vanilla result preserves immune/invalid hits at zero; enemy scope
--- prevents the cheat from turning friendly fire or self damage into 9999.
-mod._gt549_should_override_outgoing = function(damage, is_enemy, attacker_active, source_active)
-    return type(damage) == "number" and damage > 0 and is_enemy == true
-        and (attacker_active == true or source_active == true)
+-- Pure truth tables shared by the live hooks, offline tests, and
+-- /gt_regression_test. The final-damage gate remains positive-only so hard
+-- invulnerability, authored no-damage profiles, friendly fire, and self hits
+-- cannot be promoted to 9999.
+do
+    local policy = mod:dofile(
+        "scripts/mods/general_tweaker_dev/_gt_godmode_outgoing_policy")
+    mod._gt549_should_override_outgoing = policy.should_override_final
+    mod._gt1008_should_override_armor_zero = policy.should_override_armor_zero
 end
 mod._GT_549_GODMODE_POWER_MARKER = "gt-549-godmode-power-and-ammo"
+mod._GT_1008_GODMODE_ARMOR_MARKER = "gt-1008-godmode-armor-boundary"
+mod._GT_1008_GODMODE_ARMOR_LOG_CAP = 8
+mod._gt1008_armor_override_logs = 0
+
+-- Issue #1008: vanilla armor rejection has already reduced the hit to zero by
+-- the time #549's apply_buffs_to_damage hook sees it. calculate_damage is the
+-- narrow earlier seam: it exposes the resolved hit-zone armor categories and
+-- returns a second value only for hard invulnerability
+-- [src: scripts/helpers/damage_utils.lua:449-571]. Lift ONLY a zero against
+-- armor category 2/6 when the authored attack power is positive and its exact
+-- resolved attack-armor modifier is zero. Authored no-damage/zero-power
+-- profiles, invulnerability, allies, self hits, enemy players, unarmored zero
+-- results, cleave exhaustion, and Godmode-off behavior remain vanilla.
+--
+-- Returning the configured 9999 value here also keeps vanilla's predicted
+-- damage and no-crit comparison on the same value as #549's final owner. No
+-- profile or armor table is mutated.
+--
+-- PRE-FLIGHT: this is GT's only DamageUtils.calculate_damage hook.
+do
+    local function classify_armor_zero(damage, is_invincible, target_unit,
+            attacker_unit, hit_zone_name, is_critical_strike, damage_profile,
+            target_index, attacker_active)
+        local breed = AiUtils.unit_breed(target_unit)
+        if not breed or breed.is_hero then
+            return false
+        end
+
+        local is_enemy = DamageUtils.is_enemy(attacker_unit, target_unit)
+        local armor_override = Unit.get_data(target_unit, "armor")
+        local target_armor, _, primary_armor = ActionUtils.get_target_armor(
+            hit_zone_name, breed, armor_override)
+        local target_settings = damage_profile.targets
+            and damage_profile.targets[target_index]
+            or damage_profile.default_target
+        if not target_settings then
+            return false
+        end
+
+        local critical_settings = is_critical_strike
+            and damage_profile.critical_strike or nil
+        local range_scalar = ActionUtils.get_range_scalar_multiplier(
+            damage_profile, target_settings, attacker_unit, target_unit)
+        local attack_armor_modifier = ActionUtils.get_armor_power_modifier(
+            "attack", damage_profile, target_settings, target_armor,
+            primary_armor, critical_settings, range_scalar)
+        local attack_power_multiplier = ActionUtils.get_power_multiplier(
+            "attack", damage_profile, target_settings, range_scalar)
+        local should_override = mod._gt1008_should_override_armor_zero(
+            damage, is_invincible, damage_profile.no_damage, is_enemy,
+            attacker_active, target_armor, primary_armor, attack_armor_modifier,
+            attack_power_multiplier, breed.is_hero)
+
+        return should_override, target_armor, primary_armor,
+            attack_armor_modifier, attack_power_multiplier
+    end
+
+    local function log_armor_boundary(message, ...)
+        local n = mod._gt1008_armor_override_logs or 0
+        if n < mod._GT_1008_GODMODE_ARMOR_LOG_CAP then
+            mod._gt1008_armor_override_logs = n + 1
+            pcall(printf, "[gt:1008] n=%d/%d " .. message,
+                n + 1, mod._GT_1008_GODMODE_ARMOR_LOG_CAP, ...)
+        end
+    end
+
+    mod:hook("DamageUtils", "calculate_damage", function(func, damage_output,
+            target_unit, attacker_unit, hit_zone_name, original_power_level,
+            boost_curve, boost_damage_multiplier, is_critical_strike,
+            damage_profile, target_index, backstab_multiplier, damage_source)
+        local damage, is_invincible = func(damage_output, target_unit,
+            attacker_unit, hit_zone_name, original_power_level, boost_curve,
+            boost_damage_multiplier, is_critical_strike, damage_profile,
+            target_index, backstab_multiplier, damage_source)
+
+        local attacker_active = _gt_godmode_strike_damage_active(attacker_unit)
+        if damage ~= 0 or is_invincible or not attacker_active
+                or not target_unit or not damage_profile
+                or damage_profile.no_damage then
+            return damage, is_invincible
+        end
+
+        local ok, should_override, target_armor, primary_armor,
+            attack_armor_modifier, attack_power_multiplier = pcall(
+                classify_armor_zero, damage, is_invincible, target_unit,
+                attacker_unit, hit_zone_name, is_critical_strike,
+                damage_profile, target_index, attacker_active)
+        if not ok then
+            log_armor_boundary("classification failed error=%s",
+                tostring(should_override))
+            return damage, is_invincible
+        end
+
+        if should_override then
+            log_armor_boundary(
+                "godmode armor zero promoted source=%s armor=%s primary=%s modifier=%s power=%s",
+                tostring(damage_source), tostring(target_armor),
+                tostring(primary_armor), tostring(attack_armor_modifier),
+                tostring(attack_power_multiplier))
+            return 9999, is_invincible
+        end
+
+        return damage, is_invincible
+    end)
+end
 
 -- PRE-FLIGHT: this is gt's only DamageUtils.apply_buffs_to_damage hook. Vanilla
 -- has already populated victim_units and applied target mitigation by the time
