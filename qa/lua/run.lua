@@ -306,6 +306,7 @@ local suites = {
     "test_gt_bot_command_policy",
     "test_gt_godmode_indicator",
     "test_gt_godmode_ledge_policy",
+    "test_gt_godmode_vortex_policy",
     "test_gt_network_readiness",
     "test_gt_necro_keep_policy",
     "test_gt_offline_twitch",

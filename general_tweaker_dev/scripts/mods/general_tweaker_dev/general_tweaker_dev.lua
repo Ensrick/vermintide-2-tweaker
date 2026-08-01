@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.256-dev"
+local MOD_VERSION = "0.2.257-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -851,6 +851,51 @@ end
 -- closure reads the live _godmode / _gt_godmode_peers upvalues, so the export
 -- stays current without re-assignment. Consumers must nil-check (dofile order).
 mod._gt_godmode_active = _gt_godmode_active
+
+-- Issue #1009: Blightstorm capture is server-authored at
+-- StatusUtils.set_in_vortex_network. Vanilla changes the status and broadcasts
+-- it to clients there [src: scripts/helpers/status_utils.lua:278-297], and
+-- VortexExtension adds the player to its captured-player table only when this
+-- function returns true [src:
+-- scripts/unit_extensions/ai_supplementary/vortex_extension.lua:615-631].
+-- Reject only the entering edge for a Godmode human when the source unit
+-- positively owns the enemy VortexExtension through ai_supplementary_system.
+-- Sister of the Thorn's SummonedVortexExtension is registered under
+-- area_damage_system [src:
+-- scripts/settings/dlcs/woods/woods_common_settings.lua:174-184] and remains
+-- vanilla. Exit/cleanup calls and all non-Godmode behavior remain vanilla.
+mod._gt_godmode_vortex_policy = mod:dofile(
+    "scripts/mods/general_tweaker_dev/_gt_godmode_vortex_policy")
+mod._gt1009_should_block_vortex_entry =
+    mod._gt_godmode_vortex_policy.should_block_entry
+mod._GT_1009_GODMODE_VORTEX_MARKER = "gt-1009-godmode-vortex-entry"
+mod._gt1009_logged_units = setmetatable({}, { __mode = "k" })
+
+mod:hook("StatusUtils", "set_in_vortex_network",
+    function(func, affected_unit, in_vortex, vortex_unit)
+        local vortex_extension = in_vortex == true
+            and vortex_unit
+            and ALIVE[vortex_unit]
+            and ScriptUnit.has_extension(
+                vortex_unit, "ai_supplementary_system")
+        local is_blightstorm = vortex_extension
+            and vortex_extension.vortex_template_name ~= nil
+
+        if mod._gt1009_should_block_vortex_entry(
+                _gt_godmode_active(affected_unit),
+                in_vortex,
+                is_blightstorm == true) then
+            if not mod._gt1009_logged_units[affected_unit] then
+                mod._gt1009_logged_units[affected_unit] = true
+                printf(
+                    "[gt:1009] blocked Blightstorm capture template=%s",
+                    tostring(vortex_extension.vortex_template_name))
+            end
+            return false
+        end
+
+        return func(affected_unit, in_vortex, vortex_unit)
+    end)
 
 -- Issue #549: outgoing damage is host-authoritative for a joining client's
 -- weapon hit, so the child toggle rides the existing heartbeat and is resolved
