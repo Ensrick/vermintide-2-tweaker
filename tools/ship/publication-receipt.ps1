@@ -388,6 +388,17 @@ function Get-PublicationPreviewProof {
     }
 }
 
+function Get-WorkshopPublicationReceiptAssetName {
+    param([string]$Mod)
+
+    $slug = "$Mod".Trim()
+    if ([string]::IsNullOrWhiteSpace($slug) -or
+        $slug -cnotmatch '^[a-z0-9][a-z0-9_-]*$') {
+        throw "Workshop publication receipt mod slug must be canonical lowercase, got '$Mod'."
+    }
+    return "publication-receipt-$slug.json"
+}
+
 function New-WorkshopPublicationReceipt {
     param(
         [string]$RepoRoot,
@@ -410,7 +421,7 @@ function New-WorkshopPublicationReceipt {
         throw "Workshop publication receipt repository must be Ensrick/vermintide-2-tweaker."
     }
     if ([string]::IsNullOrWhiteSpace($ReleaseTag) -or
-        $ReceiptAssetName -notmatch '^publication-receipt-[a-z0-9_-]+\.json$') {
+        $ReceiptAssetName -cnotmatch '^publication-receipt-[a-z0-9_-]+\.json$') {
         throw 'Workshop publication receipt requires an exact release tag and canonical asset name.'
     }
     if (-not $AuthorizationEvidence -or [string]$AuthorizationEvidence.mode -ne 'hosted_qa') {
