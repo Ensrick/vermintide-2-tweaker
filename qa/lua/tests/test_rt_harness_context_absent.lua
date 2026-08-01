@@ -245,12 +245,12 @@ return function(H, repo_root)
         H.equal(et_pacing:find("not CP.disabled and (type(CP.mini_patrol)", 1, true), nil,
             "the old inline CP.disabled gate must stay retired (single ownership)")
 
-        local cos_entry = read_all(cos_root .. "cosmetics_tweaker.lua")
-        H.truthy(cos_entry:find("opts and opts.precondition", 1, true) ~= nil,
+        local cos_commands = read_all(cos_root .. "_cos_command_owner.lua")
+        H.truthy(cos_commands:find("opts and opts.precondition", 1, true) ~= nil,
             "cosmetics registrar lost opts.precondition")
-        H.truthy(cos_entry:find("SKIP: %s -- context absent: %s", 1, true) ~= nil,
+        H.truthy(cos_commands:find("SKIP: %s -- context absent: %s", 1, true) ~= nil,
             "cosmetics runner lost the context-absent SKIP line")
-        H.truthy(cos_entry:find("skipped (context absent)", 1, true) ~= nil,
+        H.truthy(cos_commands:find("skipped (context absent)", 1, true) ~= nil,
             "cosmetics runner lost the skip summary")
 
         local cos_checks = read_all(cos_root .. "_cos_runtime_checks.lua")

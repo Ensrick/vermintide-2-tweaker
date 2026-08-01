@@ -8,6 +8,8 @@ return function(H, repo_root)
 
     local picker = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua")
     local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+    local command_owner = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua")
     local instance_policy = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy.lua")
     local preview_policy_path = repo_root
@@ -27,9 +29,9 @@ return function(H, repo_root)
         local executable = lifecycle_sources:gsub("%-%-[^\n]*", "")
         H.truthy(entry:find('local function _local_player_safe(player_manager)', 1, true))
         H.truthy(entry:find('pm.local_player_safe', 1, true))
-        H.truthy(entry:find('_rt_register("local_player_safe_network_lifecycle_609"', 1, true))
-        H.truthy(entry:find('title state must yield nil', 1, true))
-        H.truthy(entry:find('ingame state lost player', 1, true))
+        H.truthy(command_owner:find('register("local_player_safe_network_lifecycle_609"', 1, true))
+        H.truthy(command_owner:find('title state must yield nil', 1, true))
+        H.truthy(command_owner:find('ingame state lost player', 1, true))
         H.equal(executable:find(':local_player%(%s*%)'), nil)
     end)
 

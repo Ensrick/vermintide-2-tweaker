@@ -20,6 +20,7 @@ return function(H, repo_root)
 
     local entry = read("cosmetics_tweaker.lua")
     local runtime_source = read("_cos_runtime_checks.lua")
+    local command_source = read("_cos_command_owner.lua")
     local glow_source = read("_cos_glow_probe.lua")
     local la_source = read("_cos_la_commands.lua")
 
@@ -38,7 +39,7 @@ return function(H, repo_root)
 
     H.test("Cosmetics entry installs each extracted runtime owner once", function()
         for _, name in ipairs({
-            "_cos_glow_probe", "_cos_la_commands", "_cos_runtime_checks",
+            "_cos_glow_probe", "_cos_la_commands", "_cos_runtime_checks", "_cos_command_owner",
             "_cos_modded_illusion_swap",
         }) do
             local call = 'mod:dofile("scripts/mods/cosmetics_tweaker/' .. name .. '")'
@@ -47,8 +48,58 @@ return function(H, repo_root)
         H.equal(count_plain(entry, "_cos_glow_probe.install(mod"), 1)
         H.equal(count_plain(entry, "_cos_la_commands.install(mod"), 1)
         H.equal(count_plain(entry, "_cos_runtime_checks.install(mod, _rt_register"), 1)
+        H.equal(count_plain(entry, "_cos_command_owner\").install(mod"), 1)
         H.equal(count_plain(entry, "MODDED_ILLUSION_SWAP.install(mod"), 1)
         H.equal(count_plain(entry, "local _wielded_units_for_probe = _cos_glow_probe.wielded_units_for_probe"), 1)
+    end)
+
+    H.test("Cosmetics command owner preserves registry and maintenance surfaces", function()
+        local commands, output, values = {}, {}, {}
+        local mod = {
+            command = function(_, name, _, fn)
+                commands[#commands + 1] = { name = name, fn = fn }
+            end,
+            echo = function(_, fmt, ...)
+                output[#output + 1] = string.format(fmt, ...)
+            end,
+            info = function() end,
+            warning = function(_, fmt, ...)
+                output[#output + 1] = string.format(fmt, ...)
+            end,
+            get = function(_, key) return values[key] end,
+            set = function(_, key, value) values[key] = value end,
+        }
+        local owner_module = assert(loadfile(base .. "_cos_command_owner.lua"))()
+        local register, owner = owner_module.install(mod, {
+            version = "0.9.test-dev",
+            local_player_safe = function(pm) return pm and pm:local_player_safe() end,
+            la_persist = {},
+            printf = function() end,
+        })
+        H.equal(owner.command_count, 4)
+        H.equal(owner.check_count(), 1)
+        H.equal(commands[1].name, "cos_regression_test")
+        H.equal(commands[2].name, "cos_persist_dump")
+        H.equal(commands[3].name, "cos_persist_replay")
+        H.equal(commands[4].name, "cos_persist_clear")
+
+        register("passes", function() end)
+        register("fails", function() return "expected failure" end)
+        register("skips", function() error("must not run") end, {
+            precondition = function() return false, "fixture absent" end,
+        })
+        commands[1].fn()
+        H.equal(owner.check_count(), 4)
+        H.truthy(table.concat(output, "\n"):find("2 passed, 1 failed", 1, true))
+        H.truthy(table.concat(output, "\n"):find("1 skipped", 1, true))
+
+        commands[4].fn()
+        H.equal(values.la_persisted_equips.schema, 1)
+        H.equal(next(values.la_persisted_equips.careers), nil)
+        local again_register, again_owner = owner_module.install(mod, {})
+        H.equal(again_register, register)
+        H.equal(again_owner, owner)
+        H.equal(#commands, 4)
     end)
 
     H.test("Cosmetics runtime checks preserve order and command ownership", function()
@@ -129,5 +180,6 @@ return function(H, repo_root)
         H.equal(count_plain(glow_source, "mod:hook"), 0)
         H.equal(count_plain(la_source, "mod:hook"), 0)
         H.equal(count_plain(runtime_source, "mod:hook"), 0)
+        H.equal(count_plain(command_source, "mod:hook"), 0)
     end)
 end
