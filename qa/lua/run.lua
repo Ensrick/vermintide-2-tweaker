@@ -88,6 +88,7 @@ local suites = {
     "test_event_curse_join_policy",
     "test_ct_mission_progress",
     "test_ct_profile_snapshot",
+    "test_ct_starting_coins",
     "test_ct_start_shrine_policy",
     "test_ct_boon_preview_context",
     "test_ct_boon_preview_tooltip",

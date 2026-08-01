@@ -4,7 +4,17 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-26.
+Last updated: 2026-08-01.
+
+### exact Starting Coins baseline - issue #912
+
+| Field | Value |
+|---|---|
+| Symptom | A fresh expedition inherits Adventure/vanilla rollover currency when Starting Coins is 0, and exact non-25 values can be rounded. |
+| Engine boundary | `DeusMechanism` passes backend rollover into `DeusRunController.setup_run` arg 5; vanilla writes it directly for the host and sends it to the host for a client. |
+| Expected post-fix | Every valid configured integer 0-3000 replaces that rollover baseline. Zero starts at zero; 324 starts at 324. Hot-join progress compensation remains vanilla and is added after the configured baseline. |
+| Detection | Offline `test_ct_starting_coins.lua`; `/ct_regression_test`: `starting_coins_setter_not_adder`, `starting_coins_value_matches_setting`; `/verify_coins`. |
+| Test sequence | Set Starting Coins to 0 after ending an Adventure session with currency visible, start a fresh expedition, and verify 0 before pickups. Repeat with 324. No co-op label is needed until solo passes; afterward a client may repeat both values to verify host authority. |
 
 ### starting-boon-preview-hover-description - issue #1004
 
