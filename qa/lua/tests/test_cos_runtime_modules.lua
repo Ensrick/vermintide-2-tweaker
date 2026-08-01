@@ -40,7 +40,7 @@ return function(H, repo_root)
     H.test("Cosmetics entry installs each extracted runtime owner once", function()
         for _, name in ipairs({
             "_cos_glow_probe", "_cos_la_commands", "_cos_runtime_checks", "_cos_command_owner",
-            "_cos_modded_illusion_swap",
+            "_cos_modded_illusion_swap", "_cos_glow_editor_button",
         }) do
             local call = 'mod:dofile("scripts/mods/cosmetics_tweaker/' .. name .. '")'
             H.equal(count_plain(entry, call), 1, name .. " load count")

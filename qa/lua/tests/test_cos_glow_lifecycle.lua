@@ -10,6 +10,8 @@ return function(H, repo_root)
     local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
     local command_owner = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua")
+    local button_owner = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_editor_button.lua")
     local instance_policy = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy.lua")
     local preview_policy_path = repo_root
@@ -184,7 +186,7 @@ return function(H, repo_root)
         H.equal(entry:find("[glow_picker:auto] opened on illusion select", 1, true), nil)
         H.equal(entry:find("glow_picker_auto_popup_enabled", 1, true), nil)
         H.truthy(entry:find("_create_glow_editor_button", 1, true))
-        H.truthy(entry:find('scenegraph_id = "info_window"', 1, true))
+        H.truthy(button_owner:find('scenegraph_id = "info_window"', 1, true))
         H.truthy(entry:find("GlowPicker.position_toggle(self, glow_widget, 96, 20)", 1, true))
         H.truthy(picker:find('mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_panel_layout")', 1, true))
         H.truthy(picker:find('scale = "fit"', 1, true))
@@ -193,10 +195,10 @@ return function(H, repo_root)
         H.equal(picker:find("TOP_INSET", 1, true), nil)
         H.equal(entry:find("offset = { 1272, 380, 20 }", 1, true), nil)
         H.equal(entry:find('has_texture_by_name("cos_glow_badge")', 1, true), nil)
-        H.truthy(entry:find('{ pass_type = "rect", style_id = "button" }', 1, true))
-        H.truthy(entry:find('{ pass_type = "texture_frame", style_id = "button_frame", texture_id = "button_frame" }', 1, true))
-        H.truthy(entry:find("button_frame = GlowPicker.FRAME_TEXTURE", 1, true))
-        H.truthy(entry:find("button_frame = GlowPicker.frame_style(button_width, button_height, 3)", 1, true))
+        H.truthy(button_owner:find('{ pass_type = "rect", style_id = "button" }', 1, true))
+        H.truthy(button_owner:find('{ pass_type = "texture_frame", style_id = "button_frame", texture_id = "button_frame" }', 1, true))
+        H.truthy(button_owner:find("button_frame = glow_picker.FRAME_TEXTURE", 1, true))
+        H.truthy(button_owner:find("button_frame = glow_picker.frame_style(", 1, true))
         H.truthy(picker:find('GlowPicker.FRAME_TEXTURE = "menu_frame_12"', 1, true))
         H.truthy(picker:find("GlowPicker.FRAME_TEX_SIZE = { 64, 64 }", 1, true))
         H.truthy(picker:find("corner = { 11, 11 }", 1, true))
@@ -242,5 +244,75 @@ return function(H, repo_root)
         -- coupling this lifecycle test to whitespace/list layout.
         H.truthy(data:find('"cos_glow_badge"', 1, true))
         H.truthy(data:find('{ "hero_view", "materials/ui/cos_glow_badge" }', 1, true))
+    end)
+
+    H.test("Cosmetics glow editor button owner is idempotent and contextual", function()
+        local module_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+            .. "_cos_glow_editor_button.lua"
+        local module = assert(loadfile(module_path))()
+        local policy_calls = 0
+        local glow_badge = {
+            button = function(family, open)
+                policy_calls = policy_calls + 1
+                return { available = family == "weaves", selected = open == true }
+            end,
+            color = function() return { 255, 11, 22, 33 } end,
+        }
+        local glow_picker = {
+            FRAME_TEXTURE = "frame",
+            classify = function() return "weaves" end,
+            is_open_for = function() return true end,
+            committed_state_for = function() return { active = true } end,
+            frame_style = function(width, height, depth)
+                return { size = { width, height }, offset = { 0, 0, depth } }
+            end,
+        }
+        local init_count = 0
+        local ui_widget = {
+            init = function(definition)
+                init_count = init_count + 1
+                return definition
+            end,
+        }
+        local mod = {
+            localize = function(_, key) return "localized:" .. key end,
+        }
+        local owner = module.install(mod, {
+            glow_picker = glow_picker,
+            glow_badge = glow_badge,
+            ui_widget = ui_widget,
+        })
+        H.equal(mod._glow_editor_button_policy_377, glow_badge.button)
+        H.equal(module.install(mod, {}), owner)
+
+        local widget = owner.create()
+        H.equal(init_count, 1)
+        H.equal(widget.scenegraph_id, "info_window")
+        H.equal(widget.content.button_frame, "frame")
+        H.equal(widget.content.glow_editor_label,
+            "localized:glow_picker_editor_button")
+        H.equal(widget.content.equipped, false)
+
+        local host = {
+            _item_backend_id = "item-377",
+            _ct_glow_editor_widget = {
+                content = { button_hotspot = {} },
+                style = {
+                    icon_texture = {}, glow_editor_label = {}, button = {},
+                },
+            },
+        }
+        H.equal(owner.refresh(host, "weave-skin"), "weaves")
+        H.equal(host._ct_glow_editor_widget.content.glow_backend_id, "item-377")
+        H.equal(host._ct_glow_editor_widget.content.button_hotspot.disable_button, false)
+        H.equal(host._ct_glow_editor_widget.content.button_hotspot.is_selected, true)
+        H.equal(host._ct_glow_editor_widget.style.icon_texture.color[2], 11)
+        H.equal(policy_calls, 1)
+
+        host._item_backend_id = nil
+        owner.refresh(host, "weave-skin")
+        H.equal(host._ct_glow_editor_widget.content.button_hotspot.disable_button, true)
+        H.equal(host._ct_glow_editor_widget.content.button_hotspot.is_selected, false)
     end)
 end
