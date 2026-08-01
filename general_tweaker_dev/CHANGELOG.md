@@ -1,5 +1,17 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.257-dev (2026-08-01) -- Godmode Blightstorm capture boundary (#1009) [verify-fix]
+
+- Godmode now rejects only the server-authored Blightstorm entering edge at
+  `StatusUtils.set_in_vortex_network`, positively identified by its enemy
+  `VortexExtension`. The status mutation and client RPC never begin, and the
+  vortex receives the native `false` result instead of recording a capture.
+- The exit/cleanup edge, non-Godmode players, attraction outside the capture
+  radius, Sister of the Thorn's summoned vortex, damage handling, and every
+  unrelated status remain vanilla. This adds no movement or per-frame hook.
+- Added a pure Lua 5.1 truth table, singleton hook-ownership coverage, bounded
+  runtime evidence, and `/gt_regression_test` wiring coverage.
+
 ## v0.2.256-dev (2026-07-28) -- Host-side melee latency compensation (#1034)
 
 - Added a default-on, host-authoritative grace window for ordinary blockable AI

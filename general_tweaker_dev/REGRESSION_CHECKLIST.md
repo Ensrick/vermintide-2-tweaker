@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-26.
+Last updated: 2026-08-01.
 
 ## Runtime regression module boundaries
 
@@ -160,6 +160,23 @@ Last updated: 2026-07-26.
 - [ ] Troll Bile and any remaining debuff reproduction emits unique `[gt:548]` template names automatically, capped at 24 records for the session.
 - [ ] With godmode disabled, ordinary hit stagger and buff application remain vanilla.
 - [ ] `/gt_regression_test` passes `issue548_godmode_stagger_and_debuff_probe`.
+
+---
+
+## Godmode Blightstorm capture boundary (#1009)
+
+- [ ] With Godmode enabled before entering its inner radius, a normal
+  Blightstorm does not capture, lift, hide weapons, or catapult the player.
+- [ ] Attraction outside the inner capture radius remains vanilla.
+- [ ] Sister of the Thorn's summoned vortex remains vanilla; the guard accepts
+  only the enemy `VortexExtension` source.
+- [ ] With Godmode disabled, the same Blightstorm captures and ejects the
+  player normally.
+- [ ] Toggling Godmode off after a blocked attempt leaves no stale `in_vortex`
+  status, and a later vanilla capture succeeds.
+- [ ] `/gt_regression_test` passes `issue1009_godmode_blightstorm_entry`.
+- [ ] **After solo passes:** verify a joining client's Godmode heartbeat is
+  honored at the same host-owned capture seam; add `coop-required` only then.
 
 ---
 

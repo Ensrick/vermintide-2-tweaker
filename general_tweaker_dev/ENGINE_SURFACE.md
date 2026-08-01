@@ -1,5 +1,11 @@
 # general_tweaker_dev - engine contact surface
 
+## Godmode Blightstorm capture boundary (#1009, 0.2.257-dev)
+
+| Surface | Ownership and invariant |
+|---|---|
+| `StatusUtils.set_in_vortex_network` | Server-authored Blightstorm status/RPC seam. Godmode rejects only the entering edge for a human player when the source positively owns the enemy `VortexExtension`, returning the native false result before status, RPC, and captured-player table writes. Exit cleanup, non-Godmode behavior, and Sister of the Thorn's separately registered `SummonedVortexExtension` remain vanilla. [src: `scripts/helpers/status_utils.lua:278-297`; `scripts/unit_extensions/ai_supplementary/vortex_extension.lua:615-631`; `scripts/settings/dlcs/woods/woods_common_settings.lua:174-184`] |
+
 ## Host-side melee latency compensation (#1034, 0.2.256-dev)
 
 | Surface | Ownership and invariant |
@@ -36,7 +42,7 @@ line; the remaining `[src:]` citations are carried from the cited `gt_dev`
 module comments, which cite the decompile in turn).
 
 **Dev/stable relationship.** This documents `general_tweaker_dev` (`gt_dev`,
-MOD_VERSION `0.2.256-dev`, friends-only Workshop 3733367409), the ACTIVE working
+MOD_VERSION `0.2.257-dev`, friends-only Workshop 3733367409), the ACTIVE working
 stream. `general_tweaker/` (`gt`, public Workshop 3713619122) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gt_dev`
@@ -221,6 +227,7 @@ subsystem note 4.
 |---|---|---|---|
 | `DamageUtils.add_damage_network` [hook] `general_tweaker_dev.lua:1014` / `add_damage_network_player` [hook] `:1032` | Apply already-final damage on the authoritative machine (liquids/DoTs/bombs via `damage_source`; explosion/profile path) [src: `scripts/helpers/damage_utils.lua:1745`, `:1864`] | Godmode HP block: return `0` when `_gt_godmode_active(attacked_unit)`. PLUS #469 bot-AOE immunity MERGED into both bodies (single-hook discipline): return `0` for a host-owned BOT hit by a curated hazard (`mod._gt_bot_aoe_immune_sources` on the network funnel, `mod._gt_bot_aoe_immune_profiles` on the player funnel), gated live on `gt_bot_behavior_improvements` + `gt_bot_aoe_immunity` and `Managers.player.is_server` | Static fns, no `self`; `_gt_godmode_active` answers HUMANS ONLY - bots are owned by the host peer, so a bare peer check made every host bot invincible (regression fixed v0.2.91). #469 identity split: the liquid/DoT funnel keys on `damage_source` (`lamp_oil_fire`), the explosion funnel keys on `damage_profile.name` because timed explosions pass the shared `"undefined"` damage_source [src: `timed_explosion_extension.lua:125`]; nothing rides the wire (host applies bot damage). Pins: `gt_bot469_aoe_immunity_wired` in-game + `test_gt_bot_hazard_resistance.lua` offline |
 | `DamageUtils.apply_buffs_to_damage` [hook] `general_tweaker_dev.lua` (#549/#488) | Populates victim units and applies target/attacker mitigation before both damage funnels perform their authoritative health writes [src: `scripts/helpers/damage_utils.lua:2134-2450`; consumers `:1783-1831`, `:1916-1987`] | After vanilla side effects, #488 applies host-bot gas/warpfire resistance from active prior stacks; #549 then returns 9999 for a positive enemy hit whose human attacker has Godmode + the child toggle | GT's ONLY hook on this pair. #488 uses weak-key per-unit/per-type expiry arrays (2 s, 20%, cap 5), no custom buff/RPC, and leaves first/other/human hits unchanged. #549 remains the final outgoing override. |
+| `StatusUtils.set_in_vortex_network` [hook] `general_tweaker_dev.lua` (#1009) | On the server, set `in_vortex`, broadcast `rpc_status_change_bool`, and return success [src: `scripts/helpers/status_utils.lua:278-297`]; Blightstorm adds the player to its captured-player table only on a true return [src: `scripts/unit_extensions/ai_supplementary/vortex_extension.lua:615-631`] | Reject only the `in_vortex == true` entering edge for a human resolved by `_gt_godmode_active` and a source unit positively owning the enemy `VortexExtension`; return false before status/RPC/capture mutation | GT's only hook on this pair. Exit cleanup, non-Godmode behavior, outside-radius attraction, Sister of the Thorn's `area_damage_system`-owned `SummonedVortexExtension`, and unrelated status transitions remain vanilla. No broad movement or invulnerability hook. |
 | `GenericStatusExtension.update_falling` [hook] `general_tweaker_dev.lua:779` | Client-side fall-damage trigger; checks `ignore_next_fall_damage` before sending the RPC | Godmode fall block for the client-self case (the `add_damage_network` hook only covers host-self); set `ignore_next_fall_damage=true` for the local player under godmode | Blocks at the source before the RPC is sent |
 | `GenericStateMachine.change_state` [hook] `general_tweaker_dev.lua:832` | The chokepoint every `csm:change_state` funnels through | Godmode disabler block: drop the transition into any `_DISABLER_STATES` (pounced/grabbed/hanging-cage) for the local player - disablers bypass the damage pipeline so the DamageUtils hooks alone do not stop them | NOT blocked: stunned/staggered/ledge_hanging/overpowered/knocked_down/dead |
 | `gt_godmode_state` [rpc] `general_tweaker_dev.lua:703` | - | Each peer broadcasts its godmode state keyed by peer_id so the authoritative host can suppress a client's damage; #549 adds an optional strike-damage child flag on the same heartbeat | Schema-validated; `_GT_GODMODE_TIMEOUT = 9.0` (~3 missed 3 s heartbeats); self-healing rebroadcast via `mod.update` because a cold client->host VMF send can drop during mission-load bot churn (re-handshakes `ping_vmf_users` first); optional trailing flag keeps the schema-1 base payload backward-tolerant |
@@ -411,10 +418,13 @@ and drop schema mismatches (`docs/VMF_RECIPES.md` §10).
 gt's player godmode does NOT write `is_invincible` or a `godmode` health-ext
 field (the only `is_invincible` write in the mod is the ported Nurgloth
 boss-intro invincibility inside the creature spawner). Invincibility is the sum
-of three suppressions, all keyed on `_gt_godmode_active(unit)`: `DamageUtils.
+of four suppressions, all keyed on `_gt_godmode_active(unit)`: `DamageUtils.
 add_damage_network` / `add_damage_network_player` return `0`; `update_falling`
 sets `ignore_next_fall_damage`; and `GenericStateMachine.change_state` drops
-disabler-state transitions (disablers bypass the damage pipeline). Because damage
+disabler-state transitions (disablers bypass the damage pipeline).
+`StatusUtils.set_in_vortex_network` separately rejects only the enemy
+Blightstorm entering edge before the status, RPC, and captured-player-table
+mutation. Because damage
 to a player is resolved on the AUTHORITATIVE machine (the host for a client's
 unit), a client's local godmode flag is invisible to the host, so each peer
 broadcasts its state over the `gt_godmode_state` RPC keyed by peer_id with a

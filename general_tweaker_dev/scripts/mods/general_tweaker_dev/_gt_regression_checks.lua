@@ -2155,6 +2155,26 @@ function M.install(mod, _rt_register, deps)
         end
     end)
 
+    _rt_register("issue1009_godmode_blightstorm_entry", function()
+        if mod._GT_1009_GODMODE_VORTEX_MARKER
+                ~= "gt-1009-godmode-vortex-entry" then
+            return "#1009 Blightstorm entry gate is absent"
+        end
+        local policy = mod._gt1009_should_block_vortex_entry
+        if type(policy) ~= "function" then
+            return "#1009 Blightstorm entry policy is unavailable"
+        end
+        if not policy(true, true, true) then
+            return "#1009 Godmode entry should be blocked"
+        end
+        if policy(true, true, false)
+                or policy(true, false, true)
+                or policy(false, true, true)
+                or policy(false, false, true) then
+            return "#1009 non-Blightstorm, exit, or non-Godmode behavior was broadened"
+        end
+    end)
+
     _rt_register("issue549_godmode_power_and_ammo", function()
         if mod._GT_549_GODMODE_POWER_MARKER ~= "gt-549-godmode-power-and-ammo" then
             return "#549 structural marker absent"
