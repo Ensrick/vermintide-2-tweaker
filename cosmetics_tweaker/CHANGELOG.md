@@ -1,5 +1,17 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.179-dev (2026-08-01) — #504 contextual glow-button owner [not-started]
+
+- Moved the Edit Glow button's family/open-state policy binding, contextual
+  refresh, styling, and widget construction into one idempotent owner.
+- Preserved the host customization view's position, input, and draw ownership;
+  no hook, RPC, polling, persistence, item identity, or renderer path changed.
+- Added behavioral create/refresh/idempotence coverage and ratcheted the
+  Cosmetics entry decomposition ceiling from 9,808 to 9,740 lines.
+
+This is structural progress only. The #504 umbrella remains incomplete and does
+not enter the in-game test queue.
+
 ## 0.9.178-dev (2026-08-01) — #504 command-lifecycle owner [not-started]
 
 - Moved the lazy regression registry/runner and the three LA persistence

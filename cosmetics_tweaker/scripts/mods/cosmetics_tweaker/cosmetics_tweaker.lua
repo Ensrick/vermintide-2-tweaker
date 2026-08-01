@@ -102,7 +102,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.178-dev"
+local MOD_VERSION = "0.9.179-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -668,91 +668,18 @@ end
 -- (checked via Managers.unlock:is_dlc_unlocked). This prevents the mod
 -- from bypassing paid cosmetic DLC paywalls.
 
--- Issue #377: selecting or wielding a glow-capable skin must never open an
--- editor. One persistent control beside the editor's bottom-right corner is
--- the sole contextual open/close action.
-mod._glow_editor_button_policy_377 = GLOW_BADGE.button
-
-local function _refresh_glow_editor_button(self, skin_key)
-    local widget = self and self._ct_glow_editor_widget
-    if not widget then return nil end
-
-    local family = skin_key and GlowPicker.classify({ skin = skin_key }) or nil
-    local backend_id = self._item_backend_id
-    local policy = GLOW_BADGE.button(family,
-        GlowPicker.is_open_for(backend_id, { skin = skin_key }))
-    if backend_id == nil then
-        policy.available = false
-        policy.selected = false
-    end
-    local content = widget.content
-    local hotspot = content and content.button_hotspot
-    if not content or not hotspot then return family end
-
-    content.glow_family = family
-    content.glow_skin = skin_key
-    content.glow_backend_id = backend_id
-    content.equipped = policy.selected
-    hotspot.disable_button = not policy.available
-    hotspot.is_selected = policy.selected
-
-    local icon_style = widget.style and widget.style.icon_texture
-    if icon_style then
-        local state = GlowPicker.committed_state_for(backend_id, { skin = skin_key })
-        icon_style.color = policy.available
-            and (GLOW_BADGE.color(state) or { 255, 255, 255, 255 })
-            or { 110, 128, 128, 128 }
-    end
-    local label_style = widget.style and widget.style.glow_editor_label
-    if label_style then
-        label_style.text_color = policy.available
-            and { 255, 255, 255, 255 }
-            or { 110, 128, 128, 128 }
-    end
-    local button_style = widget.style and widget.style.button
-    if button_style then
-        button_style.color = policy.available
-            and (policy.selected and { 245, 90, 65, 20 } or { 230, 30, 30, 38 })
-            or { 110, 30, 30, 38 }
-    end
-    return family
-end
-
-local function _create_glow_editor_button()
-    -- #377: editor access cannot depend on optional badge art. Some shipped
-    -- renderer configurations do not expose the custom single texture through
-    -- UIAtlasHelper, which used to return nil here and remove glow options for
-    -- every item even though skin classification was correct.
-    local button_width, button_height = 96, 38
-    local definition = {
-        element = { passes = {
-            { content_id = "button_hotspot", pass_type = "hotspot", style_id = "button" },
-            { pass_type = "rect", style_id = "button" },
-            { pass_type = "text", text_id = "glow_editor_label", style_id = "glow_editor_label" },
-            { pass_type = "texture_frame", style_id = "button_frame", texture_id = "button_frame" },
-        } },
-        content = {
-            button_hotspot = {},
-            button_frame = GlowPicker.FRAME_TEXTURE,
-            glow_editor_label = mod:localize("glow_picker_editor_button"),
-        },
-        style = {
-            button = {
-                size = { button_width, button_height }, color = { 230, 30, 30, 38 }, offset = { 0, 0, 1 },
-            },
-            button_frame = GlowPicker.frame_style(button_width, button_height, 3),
-            glow_editor_label = {
-                size = { button_width, button_height }, font_size = 13, font_type = "hell_shark",
-                horizontal_alignment = "center", vertical_alignment = "center",
-                text_color = { 255, 255, 255, 255 }, offset = { 0, 0, 3 },
-            },
-        },
-        scenegraph_id = "info_window",
-        offset = { 0, 0, 20 },
-    }
-    local widget = UIWidget.init(definition)
-    widget.content.equipped = false
-    return widget
+-- Issue #377/#504: one contextual, manual Edit Glow control. Its policy,
+-- refresh, and widget construction are one idempotent presentation owner;
+-- positioning, input, and drawing remain with the host customization view.
+local _refresh_glow_editor_button, _create_glow_editor_button
+do
+    local owner = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_editor_button").install(mod, {
+            glow_picker = GlowPicker,
+            glow_badge = GLOW_BADGE,
+            ui_widget = UIWidget,
+        })
+    _refresh_glow_editor_button = owner.refresh
+    _create_glow_editor_button = owner.create
 end
 
 -- #377 committed glow badges. The authored 80x80 texture is a transparent
