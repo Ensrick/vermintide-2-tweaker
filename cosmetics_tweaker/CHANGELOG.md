@@ -1,5 +1,22 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.174-dev (2026-08-01) — #48 CIM exact-instance glow persistence [not-started]
+
+- Apply now mirrors one bounded, versioned item-and-illusion glow blob into
+  CIM's existing opaque `custom_glow` field when the edited item is CIM-crafted.
+  Cosmetics remains the sole renderer and authoritative local provider.
+- Equipment and preview rehydration import CIM only when Cosmetics has no exact
+  local value and the blob proves the same backend item and illusion. Dev CIM
+  remains preferred when both streams are installed; missing or incomplete
+  sibling APIs fail closed to Cosmetics' standalone persistence.
+- Restore to Default clears CIM only when the stored illusion identity matches,
+  and the bounded CIM restore callback rebinds already-realized local units.
+- Added schema, identity-drift, malformed-sibling, stream-precedence, exact-clear,
+  runtime-wiring, and appearance-census regression coverage.
+
+This slice does not complete #48: the magic-skin gateway and the once-per-session
+CIM notice when Cosmetics is absent remain separate work.
+
 ## 0.9.173-dev (2026-08-01) — #504 exact-item offhand session owner
 
 - Extracted pending offhand selections, Apply baselines/markers, legacy-shape

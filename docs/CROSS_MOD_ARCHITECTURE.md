@@ -211,6 +211,23 @@ returns. WOC's unconditional loadout shadow removes the active custom key before
 vanilla `NetworkLookup.traits` encoding, so this optional integration creates no
 hard dependency and no custom lookup id reaches an unmodded or non-WOC peer.
 
+### CIM ↔ Cosmetics optional exact-glow persistence
+
+Cosmetics owns glow identity, validation, preview, rendering, and peer replay.
+CIM owns only the durable synthetic-item record and exposes three public seams:
+`_cim_get_craft`, `_cim_set_custom_glow`, and
+`_cim_register_restore_callback`. Apply may mirror one opaque, bounded,
+versioned `{provider, schema, identity, state}` blob into the exact craft.
+
+Cosmetics-local `glow_per_item` state has precedence. CIM is consulted only on
+a local miss and a blob is accepted only when its backend-item plus illusion
+identity exactly matches the requested Cosmetics identity. Restore clears only
+that matching blob. `cim_dev` takes precedence when both streams are present;
+an absent, older, incomplete, or throwing sibling fails closed to Cosmetics'
+standalone store. CIM never interprets the payload or invokes a material API,
+and Cosmetics never assumes that every backend item belongs to CIM. With
+Cosmetics absent the blob remains inert and the resident vanilla material wins.
+
 ---
 
 ## Loremaster's Armoury Bridge (cosmetics_tweaker ↔ LA)

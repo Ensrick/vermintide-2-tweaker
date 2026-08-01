@@ -100,7 +100,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.173-dev"
+local MOD_VERSION = "0.9.174-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -9995,7 +9995,7 @@ mod.update = function(dt)
             end
         end
     end
-    if mod._glow_scan_tick then mod._glow_scan_tick(dt) end
+    if mod._glow_scan_tick then mod._glow_scan_tick(dt) end; GlowPicker.ensure_cim_bridge()
     if mod._la_shield_probe_tick then mod._la_shield_probe_tick(dt) end
     -- v0.9.49-dev (#186): deferred one-time scrub of LA's Okri's-Challenge
     -- templates once LA has registered them. No-op after it fires (or while
