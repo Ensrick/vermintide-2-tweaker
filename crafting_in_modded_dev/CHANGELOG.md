@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.111-dev (2026-08-01) - bulk accessory crafting (#1031, #1032) [verify-fix]
+
+- Renamed the Athanor bulk button to **Craft Modded Accessories**, matching
+  the game's Necklace, Charm, and Trinket terminology.
+- The bulk button now clones all three equipped accessories even when no
+  bubble or trait was edited in the current session. It uses the same
+  single-slot craft helper as the three individual accessory buttons.
+- A pure policy test proves every accessory slot is attempted in native
+  offence/defence/utility order and that one failed slot cannot suppress the
+  remaining crafts.
+
 ## 0.8.110-dev (2026-08-01) - #48 custom-glow fallback notice [verify-fix]
 
 - When saved CIM weapons contain opaque custom-glow data but Tweaker:

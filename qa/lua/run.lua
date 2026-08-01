@@ -278,6 +278,7 @@ local suites = {
     "test_cos_runtime_modules",
     "test_cos_modded_illusion_swap",
     "test_issue48_finish",
+    "test_cim_bulk_accessory_craft",
     "test_cos_offhand_names",
     "test_cos_item_presentation",
     "test_cos_composite_icons",

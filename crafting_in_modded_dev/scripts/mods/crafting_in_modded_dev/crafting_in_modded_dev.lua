@@ -24,6 +24,7 @@ local _FORGE_PREVIEW = mod:dofile(
 mod._cim_forge_preview = _FORGE_PREVIEW
 mod._cim959_accessory_property_policy = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_accessory_property_policy")
+local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- ============================================================
@@ -56,7 +57,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.110-dev"
+local MOD_VERSION = "0.8.111-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -5267,7 +5268,7 @@ mod:hook_safe("HeroWindowWeaveProperties", "_set_essence_upgrade_cost", function
     local item = self:_selected_item()
 
     if btn.content then btn.content.visible = true end
-    local label = item and "CRAFT" or "CRAFT MODDED JEWELLERY"
+    local label = item and "CRAFT" or "CRAFT MODDED ACCESSORIES"
     btn.content.title_text = label
     btn.content.button_hotspot.disable_button = false
     if btn.style and btn.style.price_icon then btn.style.price_icon.color[1] = 0 end
@@ -5354,22 +5355,18 @@ mod:hook("HeroWindowWeaveProperties", "_upgrade_magic_level", function(func, sel
     -- edits — matching the "set properties then craft" mental model. (The
     -- button was previously hidden for weapons and this branch early-returned.)
 
-    -- Amulet case: no selected_item. Iterate dirty accessory slots and craft
-    -- each via the shared single-slot helper. This branch still runs if the
+    -- Amulet case: no selected_item. Clone all three equipped accessories via
+    -- the same shared single-slot helper used by the individual buttons. This
+    -- branch still runs if the
     -- legacy `upgrade_button` somehow fires (e.g. gamepad activation while in
     -- amulet view) — the 3 cim per-slot buttons supersede it visually but the
     -- legacy path stays wired for compat.
     if not item then
-        local crafted = 0
-        for slot_index, slot_name in ipairs(_AMULET_SLOT_BY_INDEX) do
-            if _amulet_dirty[slot_index] then
-                if _cim_amulet_craft_one_slot(self, slot_index, slot_name) then
-                    crafted = crafted + 1
-                end
-            end
-        end
+        local crafted = _BULK_ACCESSORY_CRAFT.craft_all(function(slot_index, slot_name)
+            return _cim_amulet_craft_one_slot(self, slot_index, slot_name)
+        end)
         if crafted == 0 then
-            mod:echo("[cim] No accessory edits to craft (Apply auto-runs on bubble click)")
+            mod:echo("[cim] No equipped accessories could be crafted")
         end
         return
     end
