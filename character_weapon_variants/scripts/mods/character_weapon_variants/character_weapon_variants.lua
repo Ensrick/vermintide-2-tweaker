@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.477-dev"
+local MOD_VERSION = "0.1.478-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -90,6 +90,7 @@ _om.resource_residency = mod:dofile("scripts/mods/character_weapon_variants/_lib
 _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
 _om.old_musket_preview.set_resource_residency(_om.resource_residency)
 _om.old_musket_preview_pose = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview_pose")
+_om.musket_ammo_pool_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_ammo_pool")
 mod._cwv_preview_descriptor = _om.old_musket_preview
 _om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.profile_package_wire })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
@@ -2808,91 +2809,27 @@ end  -- end of do-block opened above _OLD_MUSKET_BAYONET_DAMAGE_MULT
 -- reserve per item. Two equipped = 1+1 chambered (separate) + 20 reserve
 -- (pooled).
 --
--- Mechanism: weak-keyed set of registered ammo extensions. Whenever any
--- pool member's `_available_ammo` changes (reload completion, ammo
--- pickup), the sync helper copies the new value to every other live
--- member. Cap dynamically scales with the count of alive pool members.
-do
-	_om._CWV_MUSKET_AMMO_EXTS    = setmetatable({}, { __mode = "k" })
-	_om._CWV_RESERVE_PER_MUSKET  = 10  -- max_ammo (11) - ammo_per_clip (1)
-
-	local function _count_alive_pool_members()
-		local n = 0
-		for ext in pairs(_om._CWV_MUSKET_AMMO_EXTS) do
-			if ext.unit and Unit.alive(ext.unit) then n = n + 1 end
-		end
-		return n
-	end
-
-	_om._cwv_musket_pool_cap = function()
-		return _count_alive_pool_members() * _om._CWV_RESERVE_PER_MUSKET
-	end
-
-	-- Sync one member's _available_ammo across all alive pool members,
-	-- capped by the dynamic pool max. Called whenever any single
-	-- member's available_ammo changes.
-	_om._cwv_musket_sync_pool = function(source_ext)
-		if not source_ext or not source_ext._cwv_musket_pool_member then return end
-		local cap = _om._cwv_musket_pool_cap()
-		local pool = math.min(source_ext._available_ammo or 0, cap)
-		source_ext._available_ammo = pool
-		for ext in pairs(_om._CWV_MUSKET_AMMO_EXTS) do
-			if ext ~= source_ext and ext.unit and Unit.alive(ext.unit) then
-				ext._available_ammo = pool
-			end
-		end
-	end
-
-	-- Called from our existing GearUtils.spawn_inventory_unit hook for
-	-- cwv_es_musket_old items, to mark + register the spawned ammo
-	-- extension. Aligns its initial `_available_ammo` with any existing
-	-- pool member's value (so a second-spawned musket inherits the
-	-- pool's current reserve, doesn't reset it to default 10).
-	_om._cwv_musket_register_ammo_ext = function(ext)
-		if not ext or not ext.unit or not Unit.alive(ext.unit) then return end
-		if ext._cwv_musket_pool_member then return end
-		ext._cwv_musket_pool_member = true
-		_om._CWV_MUSKET_AMMO_EXTS[ext] = true
-		-- Inherit existing pool value if any live members exist
-		for other in pairs(_om._CWV_MUSKET_AMMO_EXTS) do
-			if other ~= ext and other.unit and Unit.alive(other.unit) then
-				ext._available_ammo = other._available_ammo
-				break
-			end
-		end
-		-- Re-sync with new cap (which grew when we added this member)
-		_om._cwv_musket_sync_pool(ext)
-		_dbg("[cwv musket pool] registered ext on unit=%s, members=%d, pool_cap=%d, available=%s",
-			tostring(ext.unit), _count_alive_pool_members(), _om._cwv_musket_pool_cap(), tostring(ext._available_ammo))
-	end
-
-	-- Hook ammo extension update — vanilla's reload completion mutates
-	-- `_available_ammo` in-place (line 174 of generic_ammo_user_extension.lua).
-	-- After the vanilla update tick, if our pool member's available_ammo
-	-- changed, sync to the other members.
-	mod:hook("GenericAmmoUserExtension", "update", function(orig, self, ...)
-		local was_member = self._cwv_musket_pool_member
-		local before = was_member and self._available_ammo or nil
-		local r = orig(self, ...)
-		if was_member and self._available_ammo ~= before then
-			_om._cwv_musket_sync_pool(self)
-		end
-		return r
-	end)
-
-	-- Hook add_ammo — ammo pickups (or any direct call) should propagate
-	-- to all pool members so they all see the refill.
-	mod:hook("GenericAmmoUserExtension", "add_ammo", function(orig, self, amount)
-		if self._cwv_musket_pool_member then
-			local before = self._available_ammo
-			local r = orig(self, amount)
-			if self._available_ammo ~= before then
-				_om._cwv_musket_sync_pool(self)
-			end
-			return r
-		end
-		return orig(self, amount)
-	end)
+-- #932: the old global extension set could mix owners and merely copied one
+-- 10-round reserve, so two muskets never produced the promised 20-round pool.
+-- Keep native ammo extensions/chambers, but own reserve state per player+slot.
+_om.musket_ammo_pool = _om.musket_ammo_pool_policy.install(mod, {
+	reserve_per_musket = 10,
+	alive = function(unit) return unit and Unit.alive(unit) end,
+	log = function(edge, owner, slot_name, reserve, capacity)
+		_dbg("[cwv:932] ammo_pool edge=%s owner=%s slot=%s reserve=%d capacity=%d",
+			tostring(edge), tostring(owner), tostring(slot_name), reserve, capacity)
+	end,
+})
+_om._CWV_MUSKET_AMMO_EXTS = _om.musket_ammo_pool.extensions
+_om._CWV_RESERVE_PER_MUSKET = _om.musket_ammo_pool.reserve_per_musket
+_om._cwv_musket_pool_cap = function(ext_or_owner)
+	return _om.musket_ammo_pool:capacity_for(ext_or_owner)
+end
+_om._cwv_musket_register_ammo_ext = function(ext, owner, slot_name)
+	return _om.musket_ammo_pool:register(ext, owner, slot_name)
+end
+_om._cwv_musket_unregister_slot = function(owner, slot_name)
+	return _om.musket_ammo_pool:unregister_slot(owner, slot_name)
 end
 
 -- ============================================================
@@ -3994,13 +3931,25 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	if not item_template or not Weapons then
 		return v_w3p, v_a3p, v_w1p, v_a1p
 	end
+	local _bid_for_tex = item_data and (item_data.backend_id or item_data.ItemInstanceId)
+	local _spawn_cwv_key = item_data and _om._cwv_key_for_item
+		and _om._cwv_key_for_item(_bid_for_tex, item_data)
+	local _spawn_is_old_musket = _spawn_cwv_key == "cwv_es_musket_old"
+		or item_template == Weapons.old_musket_template
+		or item_template == Weapons.old_musket_template_melee
 	-- v0.1.300-301: gate accepts both musket families (cwv_es_musket and
 	-- cwv_es_musket_old), ranged and melee templates. The bayonet attach
 	-- is suppressed below for old musket (its mesh has bayonet baked in);
 	-- texture/transform/FX-proxy fire for either family.
 	if item_template ~= Weapons.musket_template and item_template ~= Weapons.musket_template_melee
 	   and item_template ~= Weapons.old_musket_template and item_template ~= Weapons.old_musket_template_melee then
+		if owner_unit_1p and _om._cwv_musket_unregister_slot then
+			_om._cwv_musket_unregister_slot(owner_unit_3p, slot_name)
+		end
 		return v_w3p, v_a3p, v_w1p, v_a1p
+	end
+	if owner_unit_1p and not _spawn_is_old_musket and _om._cwv_musket_unregister_slot then
+		_om._cwv_musket_unregister_slot(owner_unit_3p, slot_name)
 	end
 
 	-- v0.1.292: bind textures + v0.1.293: track unit for live transform tuning +
@@ -4008,12 +3957,6 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- cwv_es_musket_old backend_id. Helpers defined globally below (search
 	-- "_apply_old_musket_textures", "_track_old_musket_unit",
 	-- "_spawn_old_musket_fx_proxy").
-	local _bid_for_tex = item_data and (item_data.backend_id or item_data.ItemInstanceId)
-	local _spawn_cwv_key = item_data and _om._cwv_key_for_item
-		and _om._cwv_key_for_item(_bid_for_tex, item_data)
-	local _spawn_is_old_musket = _spawn_cwv_key == "cwv_es_musket_old"
-		or item_template == Weapons.old_musket_template
-		or item_template == Weapons.old_musket_template_melee
 	if _spawn_is_old_musket then
 		-- v0.1.295: distinguish ranged vs melee mode for 1P transform tuning.
 		-- The user wants different pos/rot/scale per stance.
@@ -4034,7 +3977,8 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 		-- have ammo_system in vanilla rifle template.
 		if _om._cwv_musket_register_ammo_ext and v_w1p and Unit.alive(v_w1p)
 				and ScriptUnit.has_extension(v_w1p, "ammo_system") then
-			_om._cwv_musket_register_ammo_ext(ScriptUnit.extension(v_w1p, "ammo_system"))
+			_om._cwv_musket_register_ammo_ext(
+				ScriptUnit.extension(v_w1p, "ammo_system"), owner_unit_3p, slot_name)
 		end
 	end
 

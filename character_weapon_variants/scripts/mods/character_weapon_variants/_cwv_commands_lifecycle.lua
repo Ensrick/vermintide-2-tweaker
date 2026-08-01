@@ -185,19 +185,20 @@ mod:command("cwv_musket_ammo_diag", "Dump shared-pool ammo state for all cwv mus
 		local alive = ext.unit and Unit.alive(ext.unit)
 		if alive then
 			count = count + 1
-			mod:echo("[#%d] unit=%s slot=%s curr=%s avail=%s shots_fired=%s max=%s clip=%s reloading=%s",
-				count, tostring(ext.unit), tostring(ext.slot_name),
+			local pool_reserve = _om.musket_ammo_pool and _om.musket_ammo_pool:reserve_for(ext)
+			local pool_cap = _om._cwv_musket_pool_cap and _om._cwv_musket_pool_cap(ext) or 0
+			mod:echo("[#%d] owner=%s unit=%s slot=%s curr=%s avail=%s pool=%s/%s shots_fired=%s native_max=%s effective_max=%s clip=%s reloading=%s",
+				count, tostring(ext.owner_unit), tostring(ext.unit), tostring(ext.slot_name),
 				tostring(ext._current_ammo), tostring(ext._available_ammo),
-				tostring(ext._shots_fired), tostring(ext._max_ammo), tostring(ext._ammo_per_clip),
+				tostring(pool_reserve), tostring(pool_cap), tostring(ext._shots_fired),
+				tostring(ext._max_ammo), tostring(pool_cap + (ext._ammo_per_clip or 0)), tostring(ext._ammo_per_clip),
 				tostring(ext._next_reload_time ~= nil))
 		else
 			mod:echo("[#?] dead member (cleanup pending)")
 		end
 	end
-	if _om._cwv_musket_pool_cap then
-		mod:echo("pool: members=%d  cap=%d  reserve_per_musket=%d",
-			count, _om._cwv_musket_pool_cap(), _om._CWV_RESERVE_PER_MUSKET)
-	end
+	mod:echo("pool: live_members=%d reserve_per_musket=%d (capacity is owner-scoped; see each row)",
+		count, _om._CWV_RESERVE_PER_MUSKET)
 end)
 
 mod:command("cwv_musket_dump", "Dump all musket items + their slot_type / template", function()

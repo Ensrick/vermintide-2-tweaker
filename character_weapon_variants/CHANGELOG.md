@@ -1,5 +1,20 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.478-dev (2026-08-01) - owner-scoped primary-slot Musket ammo (#932)
+
+- Replaced the legacy process-global Old Musket extension set with one reserve
+  controller per player and exact equipment slot. A single equipped Old Musket
+  contributes 10 reserve rounds; melee+ranged Old Muskets contribute and share
+  20 reserve rounds while retaining separate one-round chambers.
+- Preserved reserve across stance-driven unit replacement, removed a slot's
+  contribution when a non-Musket replaces it, and made one native ammo pickup
+  transaction update the shared pool exactly once.
+- Covered reload, pickup, direct add/remove, instant reload, buff refresh, and
+  reset mutations. The native `_max_ammo` field is never widened; only the
+  public maximum query reflects the active shared pool for HUD/status callers.
+- Added bounded `[cwv:932]` registration diagnostics, an owner-aware
+  `/cwv_musket_ammo_diag`, runtime contract check, and engine-free regressions.
+
 ## 0.1.477-dev (2026-08-01) - atomic remote Musket hand selection (#474/#786)
 
 - Fixed a remote-husk ordering regression where handedness preselection wrote
@@ -81,7 +96,6 @@
 - Extracted the live javelin sender and hot-join hook graph into its dedicated
   gate owner so the CWV entry file remains below its enforced decomposition
   ceiling without changing the fail-closed behavior.
-
 ## 0.1.470-dev (2026-07-22) - shared custom-model camera fade (#922) [not-started]
 
 - Enroll complete owner, bot, and remote-husk 3P inventory/attachment snapshots

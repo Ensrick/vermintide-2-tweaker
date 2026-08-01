@@ -719,6 +719,14 @@ _rt_register("issue412_old_musket_universal_special_interrupt", function()
 	end
 end)
 
+_rt_register("issue932_primary_slot_musket_ammo_pool_contract", function()
+	local controller = _om.musket_ammo_pool
+	if type(controller) ~= "table" or type(controller.contract_error) ~= "function" then
+		return "owner-scoped Old Musket ammo controller is not installed"
+	end
+	return controller:contract_error()
+end)
+
 _rt_register("issue273_cwv_deus_identity_is_exact", function()
 	local report = _om.install_deus_identities("runtime_regression")
 	if #report.skipped > 0 then
