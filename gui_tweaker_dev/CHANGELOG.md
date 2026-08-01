@@ -1,5 +1,19 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.320-dev (2026-08-01) -- use authoritative teammate ammo (#249) [verify-fix]
+
+- Corrects Numeric UI's teammate ammo text after its static-template
+  calculation by reading the exact current/maximum pair already replicated by
+  the owner's or remote husk's inventory extension.
+- Preserves Numeric UI's three display modes and existing cooldown integration,
+  while leaving gameplay state, weapon templates, buff arithmetic, and native
+  network fields unchanged.
+- Fails open when the exact pair or retained widget is unavailable, emits at
+  most twelve correction records and three contained adapter errors, and adds
+  no custom RPC or per-frame polling.
+- Adds `/verify_boon_ammo_hud` to compare the local exact ammo pair with the
+  vanilla wire fields before the co-op observer test.
+
 ## 0.2.319-dev (2026-08-01) -- import pre-owner native bot assignments (#954) [verify-fix]
 
 - Imports a bot assignment made by the native loadout UI before GUT owned

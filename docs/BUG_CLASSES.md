@@ -3154,3 +3154,42 @@ extensions but intend them to consume one logical pool.
 
 **Related:** class 7 (reload/wield lifecycle), class 50 (owner authority),
 class 65 (logical row identity), and issue #932.
+
+---
+
+## 82. Observer HUD reconstructs a dynamic total from a static template
+
+**First confirmed:** issue #249 on 2026-07-22.
+**Canonical Issue:** [#249](https://github.com/Ensrick/vermintide-2-tweaker/issues/249)
+**Lives in:** third-party HUDs that turn a replicated fraction into an absolute
+resource count by multiplying it by `item_template.*.max_*`.
+
+### Symptoms
+- The owner can spend the full dynamically buffed resource, while an observer's
+  numeric HUD stops at the unbuffed capacity (for example, 40 instead of 77).
+- The bar/fraction remains plausible. Only the reconstructed absolute count is
+  wrong, so gameplay replication can be healthy while the UI looks desynced.
+- Repeating the gameplay buff's arithmetic in the HUD fixes known talents but
+  drifts again when another mod or temporary effect changes the capacity.
+
+### Diagnosis pattern
+1. Separate authoritative gameplay state from observer presentation before
+   changing RPC or buff code.
+2. Inspect the owner writer and the husk extension. For ammo, vanilla writes
+   current, maximum, and percentage together [src:
+   `simple_inventory_extension.lua:519-534`], and the husk exposes the exact pair
+   through `ammo_status()` [src: `simple_husk_inventory_extension.lua:66-72`].
+3. Compare the third-party HUD calculation. If it reads the fraction but
+   multiplies by static template capacity, the first divergence is display-only.
+
+### Fix template
+- Prefer the engine's existing owner/husk extension accessor for the exact pair.
+  Patch the retained display after the third-party calculation at its existing
+  singleton hook; do not add a parallel RPC or recompute every possible buff.
+- Fail closed when the extension or values are unavailable. Never mutate global
+  item templates or authoritative game-object fields for a presentation repair.
+- Cover dynamic max, full/partial counts, malformed values, display modes, one
+  hook per method, bounded diagnostics, and absence of custom networking.
+
+**Related:** class 5 (owner/husk extension split), class 9 (RPC divergence),
+class 24 (transition lifetimes), and class 64 (wire identity).

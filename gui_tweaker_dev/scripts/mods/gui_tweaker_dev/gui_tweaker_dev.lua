@@ -35,7 +35,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.319-dev"
+local MOD_VERSION = "0.2.320-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1842,11 +1842,9 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_gui_material_guard")
 -- Assigns the forward-declared `_gut_la_keepalive` upvalue (declared above the Mod
 -- Tweaker transition closure so that closure + the view module can call its pin()).
 _gut_la_keepalive = mod:dofile("scripts/mods/gui_tweaker_dev/_la_atlas_keepalive")
--- NumericUI ability-cooldown realtime fix: VT2 cooldown reduction speeds up the
--- countdown (decreases the value faster), so NumericUI's raw cooldown number visibly
--- speeds up. We divide the cooldown read (only while NumericUI is computing its
--- display) by the cooldown_regen multiplier so it shows accurate, real-time-paced
--- reduced seconds. No-op if NumericUI isn't installed. See _numericui_cooldown_realtime.lua.
+-- NumericUI compatibility: real-time ability cooldown plus #249 authoritative
+-- teammate ammo from the owner/husk InventoryExtension exact current/max pair.
+-- No-op if NumericUI isn't installed. See _numericui_cooldown_realtime.lua.
 local _gut_numericui_cd = mod:dofile("scripts/mods/gui_tweaker_dev/_numericui_cooldown_realtime")
 local _gut_prev_on_all_mods_loaded = mod.on_all_mods_loaded
 mod.on_all_mods_loaded = function(...)
