@@ -56,7 +56,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.108-dev"
+local MOD_VERSION = "0.8.109-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -4006,22 +4006,34 @@ end
 -- `props`        : the live `data.properties` table (weave_key -> {slot_index,...})
 -- `property_key` : the game's key form (`weave_movespeed` / `weave_stamina` / ...)
 -- `slot_index`   : the grid slot the game's _find_next_available_slot picked
-_store_property_slot = function(props, property_key, slot_index)
+local _cim959_store_diag_seen, _cim959_store_diag_count = {}, 0
+
+_store_property_slot = function(props, property_key, slot_index, layer_size)
     local cap = _bubble_cap and _bubble_cap(property_key) or 5
-    local arr = props[property_key]
-    if not arr then arr = {}; props[property_key] = arr end
-    -- (a) cross-property collision / dedupe (vanilla 1059-1063): never store a
-    --     slot_index already held by ANY property (including this one).
-    for _, slots in pairs(props) do
-        for _, used_idx in ipairs(slots) do
-            if used_idx == slot_index then return arr end
+    local policy = mod._cim959_accessory_property_policy
+    if not policy or type(policy.store_property_slot) ~= "function" then
+        error("#959 accessory property store policy missing")
+    end
+
+    local arr, stored, reason, used_in_scope = policy.store_property_slot(
+        props, property_key, slot_index, cap, layer_size)
+
+    -- Bounded log-only apply evidence: once per property/layer/outcome.
+    if layer_size and _cim959_store_diag_count < 24 then
+        local layer = math.ceil(slot_index / layer_size)
+        local token = table.concat({
+            tostring(property_key), tostring(layer), tostring(reason),
+        }, "|")
+        if not _cim959_store_diag_seen[token] then
+            _cim959_store_diag_seen[token] = true
+            _cim959_store_diag_count = _cim959_store_diag_count + 1
+            printf("[cim:959] property store key=%s layer=%d slot=%d result=%s layer_uses=%d",
+                tostring(property_key), layer, slot_index, tostring(reason),
+                tonumber(used_in_scope) or 0)
         end
     end
-    -- (b) per-property use cap (vanilla 1067): stop at `_bubble_cap` entries.
-    if #arr < cap then
-        arr[#arr + 1] = slot_index
-    end
-    return arr
+
+    return arr, stored, reason, used_in_scope
 end
 
 -- v0.8.30-dev (#86, READ-CHOKEPOINT guard — the fix the prior four #86 attempts
@@ -4372,12 +4384,10 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func,
     if _custom_forge_active then
         local data = _forge_seed_item(career_name, item_backend_id)
         local props = data.properties
-        -- Distinct-property cap per item / accessory layer. The grid has 10
-        -- property slots per layer (weapon = one layer of 10; amulet = 10 per
-        -- accessory), so 10 is the natural ceiling — one distinct property per
-        -- slot. User request 2026-06-29: "we definitely want there to be a max
-        -- of 10 distinct properties." Single-item editor (weapon): one layer →
-        -- 10 total distinct keys. Amulet editor: 10 distinct per accessory.
+        local accessory_policy = mod._cim959_accessory_property_policy
+        local layer_size = item_backend_id == nil and _AMULET_LAYER_SIZE or nil
+        -- Ten slots cap distinct keys globally for a weapon and per accessory
+        -- layer for the amulet editor (user request 2026-06-29).
         --
         -- Why 2 was the old value: vanilla's HeroWindowItemCustomization
         -- Apply-Skin preview indexes `content["button_hotspot_" .. N]` per
@@ -4391,19 +4401,11 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func,
         -- tab, but they still apply to the buff system and render in the weave
         -- grid. So we can safely open the gate to the full 10-slot grid.
         local MAX_DISTINCT_PROPERTIES = 10
-        if not props[property_key] then
-            local target_layer = item_backend_id and 1 or math.ceil(slot_index / _AMULET_LAYER_SIZE)
-            local distinct_in_layer = 0
-            for existing_key, existing_indices in pairs(props) do
-                if existing_key ~= property_key then
-                    local hit = false
-                    for _, existing_idx in ipairs(existing_indices) do
-                        local layer = item_backend_id and 1 or math.ceil(existing_idx / _AMULET_LAYER_SIZE)
-                        if layer == target_layer then hit = true; break end
-                    end
-                    if hit then distinct_in_layer = distinct_in_layer + 1 end
-                end
-            end
+        local property_present_in_scope = accessory_policy.property_present_in_scope(
+            props[property_key], slot_index, layer_size)
+        if not property_present_in_scope then
+            local distinct_in_layer = accessory_policy.count_distinct_properties(
+                props, slot_index, layer_size)
             if distinct_in_layer >= MAX_DISTINCT_PROPERTIES then
                 -- Use mod:warning (not mod:echo) so the user always sees WHY
                 -- their click was rejected. `mod:echo` is silenced unless
@@ -4418,7 +4420,7 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func,
                     _strip_weave(property_key)))
                 return
             end
-            props[property_key] = {}
+            if not props[property_key] then props[property_key] = {} end
         end
         -- v0.7.44-alpha: per-property bubble cap rejection REMOVED (issue #49).
         -- Previously: clicks beyond `_bubble_cap(property_key)` for stamina (2)
@@ -4480,7 +4482,7 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func,
         -- (each +2%). That CONFIG, not this code, is the only path where
         -- movespeed consumes more than one slot.
         local cap = _bubble_cap and _bubble_cap(property_key) or 5
-        local arr = _store_property_slot(props, property_key, slot_index)
+        local arr = _store_property_slot(props, property_key, slot_index, layer_size)
         if mod._cim_autodump_property_array then
             pcall(mod._cim_autodump_property_array, "set_property", property_key, arr, cap)
         end

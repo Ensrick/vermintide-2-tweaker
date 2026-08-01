@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-01 - Accessory property writes retain their layer (#959)
+
+Crafting in Modded 0.8.109-dev fixes the mutation seam omitted by the first
+accessory-isolation repair. Health (and every other property) can now be applied
+independently to Necklace, Charm, and Trinket even when a sibling accessory has
+already filled that property's cap. The same pure policy now owns write
+admission, both capacity checks, display, removal, and Clear; executable
+coverage performs the actual sibling-layer write instead of manually creating
+the expected fixture.
+
 ## 2026-08-01 - Atomic remote Musket hand selection (#474/#786)
 
 Character Weapon Variants 0.1.477-dev now proves every authored remote-husk

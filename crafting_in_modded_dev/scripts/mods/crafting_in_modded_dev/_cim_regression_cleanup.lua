@@ -142,6 +142,8 @@ return function(context)
             or type(policy.count_slots) ~= "function"
             or type(policy.last_slot) ~= "function"
             or type(policy.collect_property_slots) ~= "function"
+            or type(policy.store_property_slot) ~= "function"
+            or type(policy.count_distinct_properties) ~= "function"
             or mod.CIM959_ACCESSORY_PROPERTY_LAYER_MARKER ~= true
         then
             return "#959 accessory property layer policy/runtime wiring missing"
@@ -155,7 +157,11 @@ return function(context)
             return "Necklace Health usage leaked into another accessory layer"
         end
 
-        properties.weave_health[#properties.weave_health + 1] = 1
+        local _, stored, reason = policy.store_property_slot(
+            properties, "weave_health", 1, 5, 10)
+        if not stored or reason ~= "stored" then
+            return "Charm Health write was rejected by Necklace's property cap"
+        end
         if policy.count_slots(properties.weave_health, "offence_accessory", 10) ~= 1
             or policy.count_slots(properties.weave_health, "defence_accessory", 10) ~= 5
             or policy.last_slot(properties.weave_health, "offence_accessory", 10) ~= 1
@@ -170,6 +176,12 @@ return function(context)
             or removals[1].slot_index ~= 1
         then
             return "active-category clear plan crossed an accessory layer"
+        end
+
+        if policy.count_distinct_properties(properties, 2, 10) ~= 1
+            or policy.count_distinct_properties(properties, 12, 10) ~= 1
+        then
+            return "same property did not count independently in each accessory layer"
         end
     end)
 

@@ -37,6 +37,63 @@ return function(H, repo_root)
         H.equal(#unknown, 0)
     end)
 
+    H.test("CIM accessory property storage applies use caps per layer", function()
+        local properties = {
+            weave_health = { 11, 12, 13, 14, 15 },
+        }
+
+        local slots, stored, reason, layer_uses = policy.store_property_slot(
+            properties, "weave_health", 1, 5, 10)
+        H.equal(stored, true)
+        H.equal(reason, "stored")
+        H.equal(layer_uses, 1)
+        H.equal(#slots, 6)
+        H.equal(slots[6], 1)
+
+        for slot_index = 2, 5 do
+            policy.store_property_slot(
+                properties, "weave_health", slot_index, 5, 10)
+        end
+        slots, stored, reason, layer_uses = policy.store_property_slot(
+            properties, "weave_health", 6, 5, 10)
+        H.equal(stored, false)
+        H.equal(reason, "cap")
+        H.equal(layer_uses, 5)
+        H.equal(#slots, 10)
+
+        slots, stored, reason = policy.store_property_slot(
+            properties, "weave_attack_speed", 11, 5, 10)
+        H.equal(stored, false)
+        H.equal(reason, "occupied")
+        H.equal(#slots, 0)
+    end)
+
+    H.test("CIM weapon property storage retains the global use cap", function()
+        local properties = {
+            weave_health = { 11, 12, 13, 14, 15 },
+        }
+        local slots, stored, reason = policy.store_property_slot(
+            properties, "weave_health", 1, 5, nil)
+        H.equal(stored, false)
+        H.equal(reason, "cap")
+        H.equal(#slots, 5)
+    end)
+
+    H.test("CIM distinct-property capacity is isolated per accessory layer", function()
+        local properties = {
+            weave_health = { 11 },
+            weave_attack_speed = { 1 },
+            weave_crit_chance = { 2 },
+        }
+        H.equal(policy.property_present_in_scope(
+            properties.weave_health, 1, 10), false)
+        H.equal(policy.property_present_in_scope(
+            properties.weave_health, 12, 10), true)
+        H.equal(policy.count_distinct_properties(properties, 3, 10), 2)
+        H.equal(policy.count_distinct_properties(properties, 12, 10), 1)
+        H.equal(policy.count_distinct_properties(properties, 3, nil), 3)
+    end)
+
     H.test("CIM production wires all category-aware issue 959 seams", function()
         local entry_path = repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua"
@@ -53,6 +110,10 @@ return function(H, repo_root)
         H.truthy(runtime_source:find('"_find_slot_by_key"', 1, true))
         H.truthy(runtime_source:find('"_can_clear_slots"', 1, true))
         H.truthy(runtime_source:find('"_clear_slots"', 1, true))
+        H.truthy(entry_source:find(
+            "item_backend_id == nil and _AMULET_LAYER_SIZE or nil", 1, true))
+        H.truthy(entry_source:find("count_distinct_properties", 1, true))
+        H.truthy(entry_source:find("[cim:959] property store", 1, true))
     end)
 
     H.test("CIM runtime adapter keeps picker removal and Clear category-aware", function()
