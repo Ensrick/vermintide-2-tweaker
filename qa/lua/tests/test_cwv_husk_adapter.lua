@@ -47,6 +47,14 @@ return function(H, repo_root)
             right_hand_unit = CUSTOM_MESH,
             item_type = "cwv_fix_musket",
         },
+        {
+            item_key = "cwv_fix_pair",
+            base_weapon = "fix_pair_base",
+            careers = { "es_fix" },
+            right_hand_unit = AXE_OVERRIDE,
+            left_hand_unit = "units/weapons/player/wpn_fix_shield/wpn_fix_shield",
+            item_type = "cwv_fix_pair",
+        },
     }
 
     local function find_def(key)
@@ -74,6 +82,7 @@ return function(H, repo_root)
             ItemMasterList = {
                 fix_base = { can_wield = { "dr_other" } },
                 fix_gun = { can_wield = { "dr_other" } },
+                fix_pair_base = { can_wield = { "dr_other" } },
             },
             WeaponSkins = { skins = {} },
             Weapons = {
@@ -209,6 +218,125 @@ return function(H, repo_root)
         end)
         H.equal(item_units2.right_hand_unit, CUSTOM_MESH,
             "resident donor must admit the authored custom mesh")
+    end)
+
+    H.test("#474/#660 handedness preselection preserves base until the custom mesh is spawnable", function()
+        local om, lines, leases, env = fixture()
+        env.Application = { can_get = function(kind)
+            if kind == "material" then return false end
+            return true
+        end }
+        om._appearance_husk_wield_context = { owner_unit_3p = {}, slot_name = "slot_ranged" }
+        om._husk_identity_descriptor = exact_descriptor("cwv_fix_musket", CUSTOM_MESH)
+        om._husk_custom_bundle_unit = function(u)
+            return u == CUSTOM_MESH or u == CUSTOM_MESH .. "_3p"
+        end
+        local base_right = "units/weapons/player/wpn_fix_gun/wpn_fix_gun"
+        local base_left = "units/weapons/player/wpn_fix_gun_mount/wpn_fix_gun_mount"
+        local item_units = { right_hand_unit = base_right, left_hand_unit = base_left }
+        with_env(env, function()
+            H.equal(om._husk_preselect_units(item_units, { name = "fix_gun" }, nil, nil, "es_fix"), false,
+                "unspawnable custom mesh must defer the whole hand-selection transaction")
+        end)
+        H.equal(item_units.right_hand_unit, base_right,
+            "preselection must preserve the visible vanilla right hand on a residency miss")
+        H.equal(item_units.left_hand_unit, base_left,
+            "preselection must not clear vanilla's left hand unless the replacement transaction is admissible")
+        H.equal(leases[1] and leases[1].path, DONOR_3P,
+            "preselection must queue the same bounded donor lease as the re-key gate")
+        H.truthy(joined(lines):find("base_preserved=true", 1, true),
+            "deferred preselection needs bounded evidence that the base model survived")
+        with_env(env, function()
+            local suppress, template = om._husk_adapter_pre("right", {}, item_units,
+                "slot_ranged", { name = "fix_gun" }, om._appearance_husk_wield_context.owner_unit_3p)
+            H.equal(suppress, false, "deferred Musket base must still spawn")
+            H.equal(template, nil, "deferred Musket must retain the base template")
+        end)
+        H.equal(item_units.right_hand_unit, base_right,
+            "per-hand adapter must not re-key the deferred Musket after preselection")
+        H.equal(item_units.left_hand_unit, base_left,
+            "per-hand adapter must preserve the complete deferred base transaction")
+
+        local om2, _, _, env2 = fixture()
+        env2.Application = { can_get = function() return true end }
+        om2._appearance_husk_wield_context = { owner_unit_3p = {}, slot_name = "slot_ranged" }
+        om2._husk_identity_descriptor = exact_descriptor("cwv_fix_musket", CUSTOM_MESH)
+        om2._husk_custom_bundle_unit = om._husk_custom_bundle_unit
+        local resident = { right_hand_unit = base_right, left_hand_unit = base_left }
+        with_env(env2, function()
+            H.equal(om2._husk_preselect_units(resident, { name = "fix_gun" }, nil, nil, "es_fix"), true)
+        end)
+        H.equal(resident.right_hand_unit, CUSTOM_MESH,
+            "resident custom mesh must be selected")
+        H.equal(resident.left_hand_unit, nil,
+            "resident exact descriptor may atomically remove the inherited left hand")
+    end)
+
+    H.test("#474/#660 asymmetric dual residency defers both later hand adapters", function()
+        local om, lines, _, env = fixture()
+        local pair = find_def("cwv_fix_pair")
+        env.Application = { can_get = function(_, name)
+            return name ~= pair.left_hand_unit .. "_3p"
+        end }
+        local owner = {}
+        om._appearance_husk_wield_context = { owner_unit_3p = owner, slot_name = "slot_melee" }
+        om._husk_identity_descriptor = function()
+            return {
+                variant_key = pair.item_key,
+                right_hand_unit = pair.right_hand_unit,
+                left_hand_unit = pair.left_hand_unit,
+                fingerprint = "fp:" .. pair.item_key,
+            }, "exact"
+        end
+        local base_right = "units/weapons/player/wpn_pair_base/wpn_pair_base"
+        local base_left = "units/weapons/player/wpn_pair_shield/wpn_pair_shield"
+        local item_units = { right_hand_unit = base_right, left_hand_unit = base_left }
+        with_env(env, function()
+            H.equal(om._husk_preselect_units(item_units, { name = "fix_pair_base" }, nil, nil, "es_fix"), false)
+            local suppress_right = om._husk_adapter_pre("right", {}, item_units,
+                "slot_melee", { name = "fix_pair_base" }, owner)
+            local suppress_left = om._husk_adapter_pre("left", {}, item_units,
+                "slot_melee", { name = "fix_pair_base" }, owner)
+            H.equal(suppress_right, false, "ready right hand must remain base when its sibling deferred")
+            H.equal(suppress_left, false, "unready left hand must remain the spawnable base")
+        end)
+        H.equal(item_units.right_hand_unit, base_right,
+            "right-hand re-key cannot escape an atomic dual-hand deferral")
+        H.equal(item_units.left_hand_unit, base_left,
+            "left-hand re-key cannot escape an atomic dual-hand deferral")
+        H.truthy(joined(lines):find("adapter=spawn deferred", 1, true),
+            "complete adapter deferral must emit bounded evidence")
+    end)
+
+    H.test("#474/#478 atomic deferral retains the base-unit crash floor", function()
+        local om, lines, _, env = fixture()
+        local owner = {}
+        local base_right = "units/weapons/player/wpn_fix_gun/wpn_fix_gun"
+        env.Application = { can_get = function(kind, name)
+            if kind == "material" then return false end
+            if kind == "unit" and name == base_right .. "_3p" then return false end
+            return true
+        end }
+        om._appearance_husk_wield_context = { owner_unit_3p = owner, slot_name = "slot_ranged" }
+        om._husk_identity_descriptor = exact_descriptor("cwv_fix_musket", CUSTOM_MESH)
+        om._husk_custom_bundle_unit = function(u)
+            return u == CUSTOM_MESH or u == CUSTOM_MESH .. "_3p"
+        end
+        local base_left = "units/weapons/player/wpn_fix_gun_mount/wpn_fix_gun_mount"
+        local item_units = { right_hand_unit = base_right, left_hand_unit = base_left }
+        with_env(env, function()
+            H.equal(om._husk_preselect_units(item_units, { name = "fix_gun" }, nil, nil, "es_fix"), false)
+            local suppress = om._husk_adapter_pre("right", {}, item_units,
+                "slot_ranged", { name = "fix_gun" }, owner)
+            H.equal(suppress, true,
+                "a nonresident retained base must still be suppressed before vanilla's unsafe spawn")
+        end)
+        H.equal(item_units.right_hand_unit, base_right,
+            "base crash-floor suppression must not mutate the deferred transaction")
+        H.equal(item_units.left_hand_unit, base_left,
+            "base crash-floor suppression must preserve the sibling hand")
+        H.truthy(joined(lines):find("retained base unit", 1, true),
+            "base crash-floor suppression needs bounded evidence")
     end)
 
     H.test("#476/#482 fail-closed: unproven vanilla override keeps base and leases it", function()

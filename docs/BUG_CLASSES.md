@@ -1237,6 +1237,13 @@ Then sweep the repo for the idiom: `\(.*and func\(.*\)\) or ` across every activ
    one attempt-bounded pull generation; peers reply directly through the same
    fingerprint ACK/retry ledger. Deduplicate request retries by sender and
    generation, clear them on peer teardown, and never poll indefinitely.
+5. If handedness must change, `BackendUtils.get_item_units` is an earlier seam
+   than `GearUtils.spawn_inventory_unit`. Do not write a custom hand path there
+   before proving the unit and its donor material are spawnable. A later
+   residency guard cannot restore the old table: it sees the custom path,
+   suppresses that hand, and the remote weapon becomes invisible. A cosmetic
+   change or re-wield may appear to fix it only because the donor became
+   resident between attempts.
 
 ### Fix template
 Put husk fixes in the `GearUtils.spawn_inventory_unit` hook, gated on `not owner_unit_1p`, resolving the CWV def only via positive signals:
@@ -1252,6 +1259,12 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 end)
 ```
 Residency is the other half: the mesh the husk will spawn (curated-skin override units == `def.right_hand_unit`/`.left_hand_unit`) must be RESIDENT on every client. Force-load override units that DIFFER from the base, data-driven over all defs, ref-held at boot — NOT a mission-load blanket load (class: 1 GiB Lua-heap), and ONLY vanilla `units/weapons/player/` paths (class 28: a mod-bundled mesh queued into `Managers.package:load` is an uncatchable boot fatal). Keep the vanilla base-unit force-load as the issue-280 crash floor and a general `start_weapon_fx` nil-slot guard as the durable crash net. Fixes that require the husk to resolve the CWV INSTANCE (transform on a skinless/cim-crafted equip; template-level sound swaps) are blocked until #392 gives the husk a way to see the CWV item (net-safe skin/marker on the wire).
+
+When changing handedness, admit all authored hand paths atomically before
+mutating the vanilla unit table. On any missing unit or donor material, queue
+the bounded lease and preserve the complete base table for that wield. Test
+both phases: the cold path keeps the visible base; the resident path selects
+the exact custom hands.
 
 ### Fix sites (v0.1.366-dev / v0.1.367-dev, `character_weapon_variants.lua`)
 - `SimpleHuskInventoryExtension.start_weapon_fx` guard — durable nil-slot crash net (issue 280).

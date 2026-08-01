@@ -225,6 +225,39 @@ do
 		return name
 	end
 
+	-- #474/#660 atomic hand-selection admission. Preselection runs before
+	-- vanilla decides which hand spawns exist, so writing an unspawnable custom
+	-- unit here cannot be repaired by the later re-key guard: the crash-floor
+	-- sees the already-written custom path and suppresses that hand, leaving the
+	-- whole weapon invisible. Admit every authored hand as one transaction or
+	-- preserve the untouched vanilla table for this wield. The spawnability
+	-- predicate also queues the Old Musket's donor-material lease; ordinary
+	-- vanilla overrides additionally use the bounded override lease.
+	local function _husk_preselection_ready(candidate, source)
+		for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+			local unit_name = candidate and candidate[field]
+			if type(unit_name) == "string" and unit_name ~= ""
+					and (not _om._husk_unit_spawnable
+						or not _om._husk_unit_spawnable(unit_name)) then
+				if _om._husk_lease_override then
+					_om._husk_lease_override(unit_name)
+				end
+				local wield_ctx = _om._appearance_husk_wield_context
+				if wield_ctx then
+					wield_ctx.hand_selection_deferred = true
+					wield_ctx.hand_selection_source = source
+				end
+				_husk_log_once("474_preselect_defer:" .. tostring(source) .. ":" .. field
+						.. ":" .. unit_name,
+					"[cwv:474/660] lifecycle=husk_wield adapter=hand_selection deferred source=%s hand=%s unit=%s base_preserved=true -- residency not proven",
+					tostring(source), tostring(field), tostring(unit_name))
+				return false
+			end
+		end
+		return true
+	end
+	_om._husk_preselection_ready = _husk_preselection_ready
+
 	-- #478 handedness preselection. SimpleHuskInventoryExtension._wield_slot
 	-- asks BackendUtils for the unit table and THEN decides which per-hand
 	-- GearUtils.spawn_inventory_unit calls exist (simple_husk_inventory_extension
@@ -251,6 +284,9 @@ do
 				ctx.owner_unit_3p, ctx.slot_name, base_name)
 		end
 		if exact_state == "exact" and exact then
+			if not _husk_preselection_ready(exact, exact.fingerprint or exact.variant_key) then
+				return false
+			end
 			if type(exact.right_hand_unit) == "string" then
 				result.right_hand_unit = exact.right_hand_unit
 			end
@@ -271,6 +307,7 @@ do
 		end
 		local def, reason = _om._husk_resolve_display_def(base_name, career_name, nil)
 		if not def or reason ~= "base_career" then return false end
+		if not _husk_preselection_ready(def, def.item_key or base_name) then return false end
 
 		if type(def.right_hand_unit) == "string" and def.right_hand_unit ~= "" then
 			result.right_hand_unit = def.right_hand_unit
@@ -1055,6 +1092,33 @@ do
 	-- letting vanilla error over a non-resident unit); template_override is
 	-- consumed ONLY by the vanilla spawn call.
 	_om._husk_adapter_pre = function(hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
+		local wield_ctx = _om._appearance_husk_wield_context
+		local transaction_deferred = wield_ctx
+			and wield_ctx.hand_selection_deferred == true
+			and wield_ctx.owner_unit_3p == owner_unit_3p
+			and wield_ctx.slot_name == slot_name
+		if transaction_deferred then
+			_husk_log_once("474_adapter_base:" .. tostring(slot_name) .. ":"
+					.. tostring(wield_ctx.hand_selection_source),
+				"[cwv:474/660] lifecycle=husk_wield adapter=spawn deferred source=%s slot=%s base_preserved=true -- hand-selection transaction declined",
+				tostring(wield_ctx.hand_selection_source), tostring(slot_name))
+			-- Preserve the COMPLETE vanilla transaction: no per-hand re-key,
+			-- ammo strip, or clone-template override after an atomic preselection
+			-- residency miss. Keep the #478 crash floor, however: an inherited
+			-- cross-character base can itself be unavailable on this peer.
+			local field = (hand == "right") and "right_hand_unit" or "left_hand_unit"
+			local base_unit = item_units and item_units[field]
+			if type(base_unit) == "string" and base_unit ~= ""
+					and (not _om._husk_unit_spawnable
+						or not _om._husk_unit_spawnable(base_unit)) then
+				_husk_log_once("478_deferred_base:" .. tostring(slot_name) .. ":"
+						.. tostring(hand) .. ":" .. tostring(base_unit),
+					"[cwv:478] husk DEFER: hand=%s slot=%s retained base unit %s is non-resident -- spawn suppressed (atomic hand-selection fallback)",
+					tostring(hand), tostring(slot_name), tostring(base_unit))
+				return true, nil
+			end
+			return false, nil
+		end
 		local suppress
 		if _om._husk_rekey_units then
 			suppress = _om._husk_rekey_units(hand, item_data, item_units, owner_unit_3p, slot_name) == true

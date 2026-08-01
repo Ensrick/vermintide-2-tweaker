@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.477-dev (2026-08-01) - atomic remote Musket hand selection (#474/#786)
+
+- Fixed a remote-husk ordering regression where handedness preselection wrote
+  the Old Musket custom unit before its donor material was resident. The later
+  crash-floor then suppressed that already-selected hand, making the weapon
+  invisible instead of retaining the visible vanilla Handgun fallback.
+- Made preselection an atomic transaction across both hands. Any unproven unit
+  or donor now queues the existing bounded lease and preserves the untouched
+  base unit table for that wield; a later resident wield selects the exact
+  authored hands.
+- Added engine-free cold/resident-path coverage and attached the husk adapter to
+  the #660 appearance contract. Runtime co-op verification remains required.
+
 ## 0.1.475-dev (2026-07-26) - universal Crowbill hammer mode (#798) [not-started]
 
 - Made the native Sienna Crowbill, Imperial Crowbill, and Dawi Crowbill use the

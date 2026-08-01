@@ -359,6 +359,7 @@
             Owners = @(
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_appearance.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
             )
             Concerns = @(
@@ -416,6 +417,16 @@
                             )
                             Surfaces = @('inventory_preview', 'cosmetic_preview', 'athanor_preview')
                             ReplayEdges = @()
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_husk_adapter.lua'
+                            Names = @(
+                                '#474/#660 handedness preselection preserves base until the custom mesh is spawnable'
+                                '#474/#660 asymmetric dual residency defers both later hand adapters'
+                                '#474/#478 atomic deferral retains the base-unit crash floor'
+                            )
+                            Surfaces = @('remote_husk_3p')
+                            ReplayEdges = @('wield')
                         }
                     )
                 }
