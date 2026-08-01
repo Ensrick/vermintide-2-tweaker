@@ -1,5 +1,22 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.48-dev (2026-08-01) - #934 shared Blightreaper lease correction [not-started]
+
+- Make the host the sole authority for the lobby's one active Blightreaper,
+  including the exact equipped slot used by same-mod remote presentation.
+- Reject a second claimant before persistence or live equipment creation and
+  reconcile simultaneous losers without guessing an inventory replacement.
+- Empty the Keep trophy only while the relic is held and restore its requested
+  vanilla presentation when the lease ends.
+- Harden the rejected first candidate against retail callable player identity,
+  remote/bot replay, delayed or retired authority packets, host migration, and
+  callbacks arriving after a game-state or mod lifecycle reset.
+- Re-open a fresh guarded authority session when WOC is disabled and then
+  re-enabled without a Keep/mission transition; the lease can no longer remain
+  silently inactive for the rest of that game state.
+- Add bounded lease diagnostics and offline coverage for equip, release,
+  rollback, hot join, migration, disconnect, and session reset behavior.
+
 ## 0.1.46-dev (2026-07-22) - shared custom-model camera fade (#922) [not-started]
 
 - Enroll the Blightreaper's completed 3P unit in the same bounded, complete

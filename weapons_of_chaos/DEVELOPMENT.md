@@ -537,6 +537,72 @@ the positively tracked local 1P Blightreaper. The private template declares
 `wwise/two_handed_swords`; Greataxe impact events remain independently owned by
 the sweep definitions.
 
+### Shared lobby relic lease (2026-07-22, issue #934)
+
+The inventory singleton from issue #637 is per local profile; it cannot enforce
+one active Blightreaper across a lobby. `_woc_shared_relic.lua` now owns a pure
+first-claimant lease state machine; `_woc_shared_relic_runtime.lua` owns its
+hooks, same-mod channels, transition recovery, and trophy presentation. At the
+existing loadout edge, only the exact local human emits a dedicated lease
+intent. The host grants one peer and publishes a schema, session-local authority
+epoch, monotonic generation, holder peer id, and the holder's two bounded slot
+bits over VMF's same-mod state channel. That one authenticated snapshot owns
+both the lease and remote render identity; clients have no independent identity
+write channel, so bot/remote replay and delayed rival packets cannot repaint a
+husk. Inactive callbacks and packets from a closed epoch are ignored, so a
+delayed old-session packet cannot mutate a new lobby. Discovery queries carry a
+client-session epoch which the host echoes;
+the receiver rejects a reply retained from a closed client session. The
+ordinary loadout RPC remains the vanilla `es_1h_sword`
+shadow required by issues #422/#654, so a peer without WOC never decodes a WOC
+item, rarity, trait, trophy, or channel payload.
+
+`HeroViewStateOverview._set_loadout_item` is the first fail-closed UI boundary:
+vanilla ignores `BackendUtils.set_loadout_item`'s return and otherwise queues
+the clicked backend id for live spawning. `BackendUtils.set_loadout_item`
+remains the persistence boundary across active interface overrides, and
+`SimpleInventoryExtension.create_equipment_in_slot` is the direct live-spawn
+backstop. A known rival lease is rejected before either persistence or live
+spawn. A simultaneous claimant may cross those boundaries before the host
+verdict, so the backend hook records the prior backend id. A losing host
+snapshot restores only that exact item, reads it back, recreates that exact live
+equipment, and publishes release only after both the durable readback and the
+current live slot carry that exact backend id. A loadout-sync or hotjoin
+payload is transport, never rollback proof. A pre-equipped loser has no observed
+prior id; it never guesses an inventory item. It clears the persisted slot,
+requires a nil readback, and then destroys only the exact live Blightreaper so
+the empty state survives the next keep/mission transition. Denial removes the
+exact live relic before any backend write; durable reconciliation then retries
+with exponential backoff from 0.5 seconds to an eight-second cap until exact
+readback converges. Four failed writes enter the explicit terminal fail-closed
+state but do not retire the retry, strand the live relic, or release its denial.
+A holder is
+released on its last equipped slot, or after the host cannot resolve that peer
+for three continuous in-state seconds. A four-second migration reservation
+outranks that disconnect grace. Never hook `remove_player` for the release:
+transition/bot churn makes that edge temporarily false.
+
+Lease authority is session-local. A game-state exit, mod disable, or unload
+clears authority, pending rollbacks, client snapshots, every remote
+Blightreaper identity, and the weak trophy-extension registry, then restores
+the remembered trophy presentation. A later session seeds ownership from the
+active career's persisted and exact live slots before using the ordinary
+loadout-sync edges. A false-to-true delayed seed immediately applies the host
+verdict, and every host rebuild/state application reruns local denial. The
+monotonic per-host epoch floor survives reset, so an old host peer id never
+carries stale appearance, gameplay, or lease state into a new lobby.
+
+The keep response is presentation-only. The sole
+`KeepDecorationTrophyExtension._load_trophy` wrapper remembers the requested
+vanilla trophy and substitutes `hub_trophy_empty` only while the lease is held;
+it replays the remembered request on release. It never writes backend trophy
+selection or custom resource identity. On host migration, the promoted host
+rebuilds a fresh authority epoch from the authenticated prior holder and its
+cached exact slots; a missing slot stays reserved for at most four seconds while
+the old holder immediately reasserts. Hot join and host migration use at most
+four one-second state requests targeted at the literal resolved host peer id;
+the unsupported VMF recipient string `"server"` is forbidden.
+
 ### Attack chain control (2026-07-19, attack-order picker)
 
 Author request 2026-07-19: pick which attacks play in which order on custom
