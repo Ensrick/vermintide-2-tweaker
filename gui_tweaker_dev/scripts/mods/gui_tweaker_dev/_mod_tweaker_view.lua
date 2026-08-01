@@ -12,6 +12,7 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 
 local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
 local transactions = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
+local default_reset = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_default_reset")
 local Search = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_search")
 local profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles")
 local profile_runtime = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profile_runtime")
@@ -947,6 +948,7 @@ end
 function ModTweakerView:_active_category_dirty()
     local cat = self._categories and self._categories[self._selected]
     if not cat then return false end
+    if default_reset.is_armed(self, cat) then return true end
     local ids = cat._owner_mod_ids
     if ids then
         for i = 1, #ids do
@@ -1165,7 +1167,13 @@ function ModTweakerView:apply_pending(category)
                 any = true
             end
         end
-        if not any then return end
+        if not any and not default_reset.is_armed(self, category) then return end
+        local reset_attempted, reset_complete, reset_err = default_reset.finish(
+            self, category, not failed, mod._gut_reset_modded_loadouts)
+        if reset_attempted then
+            _printf("[gut:1033] surface=standalone reset_complete=%s error=%s",
+                tostring(reset_complete), tostring(reset_err or "none"))
+        end
         -- (#123) Keybinds need VMF re-registration, not just a value set.
         for _, row in ipairs(self._rows or {}) do
             if row._is_keybind and row._setting_id and committed[row._setting_id] ~= nil then
@@ -1182,7 +1190,19 @@ function ModTweakerView:apply_pending(category)
     end
     local key = _cat_key(category)
     local p = self._pending[key]
-    if not p or next(p) == nil then return end
+    if (not p or next(p) == nil) and not default_reset.is_armed(self, category) then return end
+    if not p or next(p) == nil then
+        local attempted, reset_complete, reset_err = default_reset.finish(
+            self, category, true, mod._gut_reset_modded_loadouts)
+        if attempted then
+            _printf("[gut:1033] surface=standalone reset_complete=%s error=%s",
+                tostring(reset_complete), tostring(reset_err or "none"))
+        end
+        self:_update_apply_button()
+        self:_build_rows(category)
+        _play_click()
+        return
+    end
     local count, batched, batch_err, complete = transactions.commit(category, p, _owner, _cat_set)
     if batched then
         printf("[gut:560] owner=%s settings=%d notifications=%d complete=%s error=%s", tostring(key), count, batch_err and 0 or 1, tostring(complete), tostring(batch_err or "none"))
@@ -1195,6 +1215,12 @@ function ModTweakerView:apply_pending(category)
         end
     end
     if complete then self._pending[key] = {} end
+    local reset_attempted, reset_complete, reset_err = default_reset.finish(
+        self, category, complete, mod._gut_reset_modded_loadouts)
+    if reset_attempted then
+        _printf("[gut:1033] surface=standalone reset_complete=%s error=%s",
+            tostring(reset_complete), tostring(reset_err or "none"))
+    end
     self._dirty = self._dirty or count > 0
     self:_update_apply_button()
     self:_build_rows(category)
@@ -1224,6 +1250,7 @@ function ModTweakerView:reset_to_defaults()
             n = n + 1
         end
     end
+    default_reset.arm(self, category)
     self:_update_apply_button()
     self:_build_rows(category)
     _play_click()
@@ -2440,6 +2467,7 @@ function ModTweakerView:on_exit()
     -- model), so discard = drop the buffer — no native apply_changes(original_*) re-apply
     -- is needed (that exists only for native's live video-preview). Unapplied edits vanish.
     self._pending = {}
+    default_reset.clear(self)
     -- #605: preview playback belongs to the Dialogue view session. Stop it on
     -- every close path without touching natural in-game dialogue.
     pcall(function()

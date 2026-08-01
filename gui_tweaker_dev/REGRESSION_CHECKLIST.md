@@ -28,6 +28,23 @@
 - [ ] `qa/check_lua_unit_tests.ps1` passes the multi-owner transaction and both
   WT master-reconciliation cases.
 
+## Official loadout reseed after WT/Cosmetics DEFAULT (#1033)
+
+- [ ] Confirm `[gut:LOAD] v0.2.322-dev` in the newest log.
+- [ ] In the modded realm, equip a weapon or cosmetic that is available only
+  because of Tweaker: Weapons or Tweaker: Cosmetics.
+- [ ] Open **Mod Tweaker → Equipment**, press **DEFAULT**, confirm, then press
+  **APPLY**. Repeat once while all Equipment settings are already at defaults;
+  APPLY must still become available for the loadout cleanup transaction.
+- [ ] Close and reopen the hero/equipment menu, then check the same career and
+  one second career.
+- [ ] Both careers use copies of their non-modded (official) saved loadouts;
+  the stale mod-only item is gone. Official loadouts remain unchanged.
+- [ ] The log contains one `[gut:1033] source=mod_tweaker_default` record with
+  `writes=2 dirtify=1`, followed by one surface record with
+  `reset_complete=true`. `/gut_regression_test` passes
+  `issue1033_default_official_reseed_wired`.
+
 ## Detached bot loadouts (#954)
 
 - **Candidate:** v0.2.319-dev. Apply a tester lifecycle label only after this

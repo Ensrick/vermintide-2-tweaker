@@ -2,6 +2,61 @@ return function(H, repo_root)
     local module_path = repo_root
         .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction.lua"
     local Transaction = assert(loadfile(module_path))()
+    local DefaultReset = assert(loadfile(repo_root
+        .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_default_reset.lua"))()
+
+    H.test("Mod Tweaker official reseed intent is scoped to WT and Cosmetics", function()
+        H.equal(DefaultReset.affects_loadouts({ mod_id = "wt_dev" }), true)
+        H.equal(DefaultReset.affects_loadouts({ mod_id = "wt" }), true)
+        H.equal(DefaultReset.affects_loadouts({ mod_id = "cosmetics_tweaker" }), true)
+        H.equal(DefaultReset.affects_loadouts({ mod_id = "cim_dev" }), false)
+        H.equal(DefaultReset.affects_loadouts({
+            mod_id = "gut_equipment",
+            _owner_mod_ids = { "cim_dev", "character_weapon_variants", "wt_dev" },
+        }), true)
+        H.equal(DefaultReset.affects_loadouts({
+            mod_id = "gut_equipment",
+            _owner_mod_ids = { "cim_dev", "character_weapon_variants" },
+        }), false)
+    end)
+
+    H.test("Mod Tweaker official reseed survives failure and completes once", function()
+        local view = {}
+        local category = { mod_id = "gut_equipment", _owner_mod_ids = { "wt_dev" } }
+        H.equal(DefaultReset.arm(view, category), true)
+        H.equal(DefaultReset.is_armed(view, category), true)
+
+        local attempted, complete, err = DefaultReset.finish(view, category, false, function()
+            error("must not run before settings complete")
+        end)
+        H.equal(attempted, true)
+        H.equal(complete, false)
+        H.equal(err, "settings transaction incomplete")
+        H.equal(DefaultReset.is_armed(view, category), true)
+
+        attempted, complete, err = DefaultReset.finish(view, category, true, function()
+            return false, "planted reset rejection"
+        end)
+        H.equal(attempted, true)
+        H.equal(complete, false)
+        H.equal(err, "planted reset rejection")
+        H.equal(DefaultReset.is_armed(view, category), true)
+
+        local calls, source = 0
+        attempted, complete, err = DefaultReset.finish(view, category, true, function(reason)
+            calls = calls + 1
+            source = reason
+            return true
+        end)
+        H.equal(attempted, true)
+        H.equal(complete, true)
+        H.equal(err, nil)
+        H.equal(calls, 1)
+        H.equal(source, "mod_tweaker_default")
+        H.equal(DefaultReset.is_armed(view, category), false)
+        H.equal(DefaultReset.finish(view, category, true, function() calls = calls + 1 end), false)
+        H.equal(calls, 1)
+    end)
 
     H.test("Mod Tweaker batches opt-in owner notifications", function()
         local writes, batches = {}, {}
@@ -202,6 +257,14 @@ return function(H, repo_root)
             H.truthy(source:find(
                 "pending transaction incomplete",
                 1, true), paths[i] .. " diagnoses a deferred profile switch once")
+            H.truthy(source:find("default_reset.arm(self, category)", 1, true),
+                paths[i] .. " does not retain DEFAULT's loadout reseed intent")
+            H.truthy(source:find("default_reset.is_armed(self, cat)", 1, true),
+                paths[i] .. " cannot enable Apply for a reseed-only transaction")
+            H.truthy(source:find("default_reset.finish(", 1, true),
+                paths[i] .. " never completes the official reseed transaction")
+            H.truthy(source:find("default_reset.clear(self)", 1, true),
+                paths[i] .. " can leak a discarded reseed intent across view sessions")
         end
     end)
 end

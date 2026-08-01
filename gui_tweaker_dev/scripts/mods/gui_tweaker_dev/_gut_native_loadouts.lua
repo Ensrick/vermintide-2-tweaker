@@ -402,12 +402,12 @@ local function _repair_missing_loadout_slots(entry, official_rows)
     return repaired
 end
 
-local function _ensure_seeded(mirror, career_name)
+local function _ensure_seeded(mirror, career_name, defer_persist)
     local store = _store()
     local entry = store[career_name]
     local cd = mirror._career_data and mirror._career_data[career_name]
-    if entry and entry._seeded and entry._slot_integrity_v2 then return end  -- already fully imported + migrated
-    if type(cd) ~= "table" or cd[1] == nil then return end  -- official data not ready yet
+    if entry and entry._seeded and entry._slot_integrity_v2 then return false end
+    if type(cd) ~= "table" or cd[1] == nil then return false end
     local selected = (mirror._career_loadouts and mirror._career_loadouts[career_name]) or 1
     if not entry then
         store[career_name] = {
@@ -417,10 +417,12 @@ local function _ensure_seeded(mirror, career_name)
             _seeded = true,
             _slot_integrity_v2 = true,
         }
-        _persist()
-        printf("[gut_dev:NATIVE_LOADOUTS] seeded career=%s loadouts=%d selected=%d from official (fresh)",
-            tostring(career_name), #cd, selected)
-        return
+        if not defer_persist then _persist() end
+        if not defer_persist then
+            printf("[gut_dev:NATIVE_LOADOUTS] seeded career=%s loadouts=%d selected=%d from official (fresh)",
+                tostring(career_name), #cd, selected)
+        end
+        return true
     end
     -- Repair a partial/bare entry left by the pre-seed bug (issue #375).
     local rows_added, rows_repaired = 0, 0
@@ -443,9 +445,12 @@ local function _ensure_seeded(mirror, career_name)
     end
     entry._seeded = true
     entry._slot_integrity_v2 = true
-    _persist()
-    printf("[gut_dev:NATIVE_LOADOUTS] repaired career=%s partial store (issues #375/#402): rows_added=%d rows_repaired=%d slots_repaired=%d loadouts=%d selected=%d",
-        tostring(career_name), rows_added, rows_repaired, slots_repaired, #entry.loadouts, entry.selected_index)
+    if not defer_persist then _persist() end
+    if not defer_persist then
+        printf("[gut_dev:NATIVE_LOADOUTS] repaired career=%s partial store (issues #375/#402): rows_added=%d rows_repaired=%d slots_repaired=%d loadouts=%d selected=%d",
+            tostring(career_name), rows_added, rows_repaired, slots_repaired, #entry.loadouts, entry.selected_index)
+    end
+    return true
 end
 
 -- Tri-state gear-id resolution: "yes" (item PRESENTABLE right now), "no" (checkable and
@@ -1160,47 +1165,61 @@ mod:hook("HeroWindowLoadoutSelectionConsole", "_populate_context_menu_loadout", 
 end)
 
 -- ==================================================================
--- Re-seed command. The seed is one-time by design, so a snapshot taken while the mirror
+-- Re-seed owner + command. The seed is one-time by design, so a snapshot taken while the mirror
 -- held bad data (e.g. blacksmith items committed to the cloud by the pre-isolation #174
 -- bleed, seen 2026-07-02 on merc Kruber slot_melee) is frozen until explicitly reset.
 -- /reset_modded_loadouts        -> wipe the whole modded store + cosmetic overlay
 -- /reset_modded_loadouts <career> -> wipe one career (e.g. es_mercenary)
--- Next loadout touch in modded re-seeds from the CURRENT official data. Official data is
--- never written; this only discards the modded-side copies (the STORE-mode loadouts AND the
--- READONLY cosmetic overlay from issue #287), including any modded-only edits.
+-- Issue #1033 additionally calls this owner after a confirmed Mod Tweaker DEFAULT
+-- transaction for WT/Cosmetics. It clears the modded copies and, when the Adventure
+-- mirror is live, clones every official career immediately with ONE final persistence
+-- write. Official data is read only; no backend method or cloud write is called.
 -- ==================================================================
-mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from official (optional: career name)", function(career_arg)
+function M.reset_modded_loadouts(career_arg, source, echo_result)
     local store = _store()
     local overlay = _overlay()
-    if career_arg and career_arg ~= "" then
-        if not store[career_arg] and not overlay[career_arg] then
+    local cleared, explicit_found = Policy.clear_modded_loadouts(store, overlay, career_arg)
+    if career_arg and career_arg ~= "" and not explicit_found then
+        if echo_result then
             mod:echo("No modded loadout store for '" .. tostring(career_arg) .. "' (nothing to reset)")
-            printf("[gut_dev:NATIVE_LOADOUTS] reset requested for unknown career=%s", tostring(career_arg))
-            return
         end
-        store[career_arg] = nil
-        overlay[career_arg] = nil
-        _persist()
-        _persist_overlay()
-        _dirtify()
-        mod:echo("Modded loadouts reset for " .. career_arg .. "; they re-seed from official on next use")
-        printf("[gut_dev:NATIVE_LOADOUTS] store reset career=%s (will re-seed from official)", career_arg)
-    else
-        local seen = {}
-        for career_name in pairs(store) do seen[career_name] = true end
-        for career_name in pairs(overlay) do seen[career_name] = true end
-        local n = 0
-        for career_name in pairs(seen) do
-            store[career_name] = nil
-            overlay[career_name] = nil
-            n = n + 1
-        end
-        _persist()
-        _persist_overlay()
-        _dirtify()
-        mod:echo("Modded loadouts reset for " .. n .. " career(s); they re-seed from official on next use")
-        printf("[gut_dev:NATIVE_LOADOUTS] store reset ALL (%d careers, will re-seed from official)", n)
+        printf("[gut_dev:NATIVE_LOADOUTS] reset requested for unknown career=%s", tostring(career_arg))
+        return true, { cleared = 0, seeded = 0, mirror = false }
     end
+
+    local ok_mirror, mirror = pcall(function()
+        return Managers.backend:get_interface("items")._backend_mirror
+    end)
+    local adventure = ok_mirror and mirror
+        and mirror._characters_data_key == ADVENTURE_DATA_KEY
+    local seeded = 0
+    if adventure then
+        local careers = Policy.official_seed_careers(mirror, career_arg)
+        for i = 1, #careers do
+            if _ensure_seeded(mirror, careers[i], true) then seeded = seeded + 1 end
+        end
+    end
+    -- One bounded persistence transaction regardless of career count. The mirror
+    -- methods remain untouched, so the official cloud diff stays empty.
+    _persist()
+    _persist_overlay()
+    _dirtify()
+    if echo_result then
+        mod:echo(string.format(
+            "Modded loadouts reset for %d career(s); %d copied from official",
+            cleared, seeded))
+    end
+    printf("[gut:1033] source=%s cleared=%d seeded=%d adventure_mirror=%s writes=2 dirtify=1",
+        tostring(source or "command"), cleared, seeded, tostring(adventure and true or false))
+    return true, { cleared = cleared, seeded = seeded, mirror = adventure and true or false }
+end
+
+mod._gut_reset_modded_loadouts = function(source)
+    return M.reset_modded_loadouts(nil, source or "api", false)
+end
+
+mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from official (optional: career name)", function(career_arg)
+    M.reset_modded_loadouts(career_arg, "command", true)
 end)
 
 -- ==================================================================
@@ -1701,6 +1720,22 @@ M.rt_checks = {
         end
         local value = Policy.canonical_equip_value("slot_hat", "transient_bid", nil)
         if value ~= nil then return "unresolved cosmetic retained transient backend id" end
+    end },
+    { name = "issue1033_default_official_reseed_wired", fn = function()
+        if type(M.reset_modded_loadouts) ~= "function" then return "reset owner missing" end
+        if type(mod._gut_reset_modded_loadouts) ~= "function" then return "view adapter missing" end
+        local store = { mercenary = {} }
+        local overlay = { mercenary = {}, zealot = {} }
+        local cleared = Policy.clear_modded_loadouts(store, overlay)
+        if cleared ~= 2 or next(store) ~= nil or next(overlay) ~= nil then
+            return "mod-owned clear policy failed"
+        end
+        local names = Policy.official_seed_careers({
+            _career_data = { zealot = { {} }, mercenary = { {} } },
+        })
+        if names[1] ~= "mercenary" or names[2] ~= "zealot" or names[3] ~= nil then
+            return "official career plan is not deterministic"
+        end
     end },
     { name = "native_loadouts_no_hardcoded_6", fn = function()
         local expected = InventorySettings and InventorySettings.MAX_NUM_CUSTOM_LOADOUTS
