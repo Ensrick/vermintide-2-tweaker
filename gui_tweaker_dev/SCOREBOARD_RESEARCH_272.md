@@ -72,7 +72,10 @@ views cannot disagree.
    four detached player records, offers six deterministic sort choices, and is
    refreshed at most four times per second. It adds no input owner, statistic
    accumulator, RPC, or lookup entry and declines to draw alongside the
-   installed external scoreboard.
+   installed external scoreboard. After the live TSV-layout failure, the
+   renderer uses an explicit root scenegraph plus one fixed text pass per
+   title, header, label, and value cell; row placement no longer depends on
+   newline handling inside a large text pass.
 3. **Native end-screen page (implemented in v0.2.264-dev).** The same detached
    model renders from `context.players_session_score` after vanilla's
    `EndViewStateScore.draw`; it adds no replacement state or score transport.

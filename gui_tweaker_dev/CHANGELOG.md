@@ -1,5 +1,16 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.321-dev (2026-08-01) -- render the expanded scoreboard as a bounded grid (#272) [diagnostics-armed]
+
+- Replaces the five oversized newline-delimited text passes with one bounded
+  pass per title, header, statistic label, player header, and value cell.
+- Gives the scoreboard an explicit root scenegraph, opaque framed panel,
+  alternating row backgrounds, fixed column rules, and missing title/header
+  localization so Hold-Tab and the mission-end screen share one readable grid.
+- Keeps the existing four-player/eleven-stat cap, detached native snapshot,
+  four-Hz refresh ceiling, external-scoreboard exclusion, and zero custom RPCs.
+- Extends offline source-contract coverage to reject the prior TSV-like layout.
+
 ## 0.2.320-dev (2026-08-01) -- use authoritative teammate ammo (#249) [verify-fix]
 
 - Corrects Numeric UI's teammate ammo text after its static-template
