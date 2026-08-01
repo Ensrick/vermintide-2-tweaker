@@ -51,6 +51,25 @@ $partialCapability = Test-VmbLauncherPublicationCapabilityOutput -Lines @(
 )
 Assert-PublicationFixture (-not $partialCapability.Ok) 'rejects launcher with incomplete publication capabilities'
 
+$wocReceiptAsset = Get-WorkshopPublicationReceiptAssetName -Mod 'weapons_of_chaos'
+Assert-PublicationFixture ($wocReceiptAsset -ceq 'publication-receipt-weapons_of_chaos.json') 'WOC receipt coordinate uses canonical lowercase source folder'
+$uppercaseRejected = $false
+try {
+    $null = Get-WorkshopPublicationReceiptAssetName -Mod 'WOC'
+}
+catch {
+    $uppercaseRejected = $true
+}
+Assert-PublicationFixture $uppercaseRejected 'receipt asset helper rejects uppercase manifest identifiers'
+
+$publishReleaseSource = [System.IO.File]::ReadAllText(
+    (Join-Path $repoRoot 'tools\publish-release\publish-release.ps1'))
+$folderBoundProducer = $publishReleaseSource -match
+    '\$assetName\s*=\s*Get-WorkshopPublicationReceiptAssetName\s+-Mod\s+\$receiptInput\.Folder'
+$modIdBoundProducer = $publishReleaseSource -match
+    'publication-receipt-\$\(\$receiptInput\.ModId\)\.json'
+Assert-PublicationFixture ($folderBoundProducer -and -not $modIdBoundProducer) 'release producer binds receipt name to folder rather than WOC-style ModId'
+
 $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-publication-receipt-" + [guid]::NewGuid().ToString('N'))
 [System.IO.Directory]::CreateDirectory($temp) | Out-Null
 try {

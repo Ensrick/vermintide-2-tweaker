@@ -575,7 +575,10 @@ if (-not $finalManifestVerdict.Valid) {
 $receiptOutputAssetName = $null
 $expectedAssetHashes = @{ 'manifest.json' = (Get-ByteSha256 -Bytes $manifestBytes) }
 foreach ($receiptInput in $receiptInputs) {
-    $assetName = "publication-receipt-$($receiptInput.ModId).json"
+    # Receipt coordinates are a cross-language security boundary. Use the
+    # canonical lowercase source folder, never a manifest/display ModId such as
+    # WOC, so PowerShell and VMBLauncher's case-sensitive gate agree exactly.
+    $assetName = Get-WorkshopPublicationReceiptAssetName -Mod $receiptInput.Folder
     $receiptPath = Join-Path $stage $assetName
     $receipt = New-WorkshopPublicationReceipt `
         -RepoRoot $repoRoot `
