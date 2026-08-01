@@ -260,6 +260,14 @@ cache one across frames (GLOW_SYSTEM §Stingray gotcha); `Material.num_parameter
 `parameter_name` trigger a pcall-bypassing `resource_manager.cpp` fault and must never
 be called (`:435-438` memo).
 
+The optional #48 CIM persistence bridge adds no engine hook, renderer, RPC, or
+network identity. The existing `mod.update` lifecycle retries one cheap
+load-order-safe registration until `cim_dev` or `cim` exposes its complete
+public exact-craft API. CIM's bounded restore callback rehydrates already-bound
+local unit contexts; all later units use the existing spawn-time glow restore
+paths above. Cosmetics-local state wins, and a mismatched opaque CIM blob is
+ignored rather than guessed.
+
 ### Offhand package residency + issue-565 async startup queue (owner: `docs/engine/05`)
 
 The offhand/illusion catalog can touch dozens of unit packages. A synchronous

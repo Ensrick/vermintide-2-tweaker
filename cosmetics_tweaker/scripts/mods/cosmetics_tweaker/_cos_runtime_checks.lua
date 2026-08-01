@@ -927,6 +927,25 @@ _rt_register("glow_picker_apply_transaction_574", function()
     if not GlowPicker.CHAT_DIAGNOSTICS_LOG_ONLY then return "Apply diagnostic may reach chat" end
 end)
 
+_rt_register("glow_picker_cim_persistence_bridge_48", function()
+    if type(GlowPicker.ensure_cim_bridge) ~= "function" then
+        return "CIM restore-callback registration seam missing"
+    end
+    if type(GlowPicker.cim_bridge_status) ~= "function" then
+        return "CIM bridge status seam missing"
+    end
+    local status = GlowPicker.cim_bridge_status()
+    if status ~= "absent" and status ~= "pending" and status ~= "registered" then
+        return "unknown CIM bridge state: " .. tostring(status)
+    end
+    local cim = get_mod("cim_dev") or get_mod("cim")
+    if cim and (type(cim._cim_get_craft) ~= "function"
+        or type(cim._cim_set_custom_glow) ~= "function"
+        or type(cim._cim_register_restore_callback) ~= "function") then
+        return "installed CIM exposes an incomplete custom-glow persistence API"
+    end
+end)
+
 _rt_register("glow_picker_native_defaults_610", function()
     -- #610: opening the editor must display the illusion's NATIVE glow, never a
     -- fixed magenta placeholder, and unknown templates must fail closed.

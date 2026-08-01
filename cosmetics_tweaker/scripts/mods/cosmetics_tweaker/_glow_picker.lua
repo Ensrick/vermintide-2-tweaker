@@ -64,6 +64,12 @@ end
 local INSTANCE_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy")
 local SLIDER_GEOMETRY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_slider_geometry")
 local PANEL_LAYOUT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_panel_layout")
+local CIM_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_cim_bridge")
+
+local function _cim_mod()
+    return CIM_BRIDGE.resolve_cim(get_mod)
+end
+local _cim_registration = {}
 
 -- Backend ids identify the inventory instance; the skin suffix keeps a glow
 -- choice attached to the exact illusion variant when an item's illusion changes.
@@ -1014,6 +1020,20 @@ local function _persisted_state_for(backend_id, slot_data)
     local state = identity and all_data[identity] or nil
     -- One-time compatibility with the original backend-id-only storage.
     if not state and backend_id ~= nil then state = all_data[backend_id] end
+    -- #48: CIM is a bounded backup for CIM-crafted items, not a second glow
+    -- authority. Import only when Cosmetics has no exact/local value and only
+    -- when CIM's opaque blob proves the same backend-item + illusion identity.
+    if not state and backend_id ~= nil and identity ~= nil then
+        local imported, reason = CIM_BRIDGE.read(_cim_mod(), backend_id, identity)
+        if imported then
+            state = imported
+            all_data[identity] = _clone(imported)
+            _save_per_item_glow(all_data)
+            _apply_log_only("[glow_picker:cim] imported identity=%s", identity)
+        elseif reason == "read-error" then
+            _apply_log_only("[glow_picker:cim] read failed identity=%s", identity)
+        end
+    end
     return type(state) == "table" and _clone(state) or nil, identity
 end
 
@@ -1071,6 +1091,36 @@ function GlowPicker.restore_runtime_for(backend_id, slot_data)
     mod._per_item_glow_runtime[backend_id] = state
     mod._per_item_glow_identity_runtime[backend_id] = identity
     return state, identity
+end
+
+-- Register after all mod scripts have had a chance to load. CIM fires this
+-- callback after each of its bounded loadout-restore passes. Existing unit
+-- contexts are rehydrated immediately; units that do not exist yet import the
+-- same exact blob from restore_runtime_for at their normal spawn edge.
+function GlowPicker.ensure_cim_bridge()
+    local now = os.clock()
+    local cim = _cim_mod()
+    if not GlowPicker._cim_restore_callback then
+        GlowPicker._cim_restore_callback = function()
+            local imported = CIM_BRIDGE.rebind_units(
+                mod._unit_to_backend_id, mod._unit_glow_context,
+                GlowPicker.restore_runtime_for, mod._reapply_glow_on_wielded)
+            _apply_log_only("[glow_picker:cim] restore edge rebound=%d", imported)
+        end
+    end
+    local registered, reason = CIM_BRIDGE.ensure_registration(
+        _cim_registration, cim, now, GlowPicker._cim_restore_callback)
+    if registered and not GlowPicker._cim_registration_logged then
+        GlowPicker._cim_registration_logged = true
+        _apply_log_only("[glow_picker:cim] restore callback registered")
+    elseif reason == "register-failed" or reason == "api-incomplete" then
+        _apply_log_only("[glow_picker:cim] bridge unavailable reason=%s", reason)
+    end
+    return registered, reason
+end
+
+function GlowPicker.cim_bridge_status()
+    return CIM_BRIDGE.registration_status(_cim_registration)
 end
 
 -- Update slider widget values from the in-memory state. Called on
@@ -1240,6 +1290,8 @@ function GlowPicker.apply()
     local all_data = _load_per_item_glow()
     all_data[identity] = committed
     _save_per_item_glow(all_data)
+    local cim_written, cim_reason = CIM_BRIDGE.write(
+        _cim_mod(), backend_id, identity, committed)
     GlowPicker._committed_glow_state = _clone(committed)
     GlowPicker._dirty = false
     GlowPicker._has_override = true
@@ -1270,7 +1322,9 @@ function GlowPicker.apply()
     end
     _update_apply_widget()
     _update_restore_widget()
-    _apply_log_only("[glow_picker:apply] committed identity=%s family=%s emit=1", identity, tostring(GlowPicker._current_family))
+    _apply_log_only("[glow_picker:apply] committed identity=%s family=%s emit=1 cim=%s",
+        identity, tostring(GlowPicker._current_family),
+        cim_written and "written" or tostring(cim_reason))
     return true
 end
 
@@ -1292,6 +1346,8 @@ function GlowPicker.restore_default()
     if all_data[identity] ~= nil then all_data[identity] = nil end
     if all_data[backend_id] ~= nil then all_data[backend_id] = nil end
     _save_per_item_glow(all_data)
+    local cim_cleared, cim_reason = CIM_BRIDGE.clear(
+        _cim_mod(), backend_id, identity)
 
     -- Clear the runtime override so no per-item paint is selected anywhere.
     if mod._per_item_glow_runtime then mod._per_item_glow_runtime[backend_id] = nil end
@@ -1334,7 +1390,9 @@ function GlowPicker.restore_default()
     end
     _update_apply_widget()
     _update_restore_widget()
-    _apply_log_only("[glow_picker:restore] cleared identity=%s family=%s", identity, tostring(family))
+    _apply_log_only("[glow_picker:restore] cleared identity=%s family=%s cim=%s",
+        identity, tostring(family),
+        cim_cleared and "cleared" or tostring(cim_reason))
     return true
 end
 

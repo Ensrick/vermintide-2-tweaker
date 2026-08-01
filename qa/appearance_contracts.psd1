@@ -981,6 +981,82 @@
             )
         }
         @{
+            Id = 'cosmetics.issue48.cim-exact-glow-persistence'
+            Issue = 48
+            Claim = 'structural-only'
+            Owners = @(
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_cim_bridge.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'glow'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'covered'; Evidence = 'spawn-time exact-instance restore feeds the existing owner first-person glow renderer' }
+                        owner_3p = @{ Disposition = 'covered'; Evidence = 'the same imported exact state feeds owner third-person units without a CIM renderer' }
+                        bot_3p = @{ Disposition = 'deferred'; Reason = 'CIM-crafted bot loadout ownership has no proven exact backend-instance bridge in this slice' }
+                        remote_husk_3p = @{ Disposition = 'covered'; Evidence = 'an imported owner state enters the existing semantic per-wearer glow transport; CIM identifiers never cross the wire' }
+                        inventory_preview = @{ Disposition = 'covered'; Evidence = 'inventory preview reuses restore_runtime_for with exact backend item and skin evidence' }
+                        cosmetic_preview = @{ Disposition = 'covered'; Evidence = 'the customization preview reads the same exact state and existing bounded paint adapter' }
+                        athanor_preview = @{ Disposition = 'deferred'; Reason = 'CIM Athanor preview does not yet expose a dedicated Cosmetics glow adapter' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'ordinary crafting preview exact-instance glow rendering is not part of this persistence slice' }
+                        lobby_preview = @{ Disposition = 'deferred'; Reason = 'generic lobby weapon glow presentation has no newly migrated exact-instance adapter' }
+                        score_screen = @{ Disposition = 'deferred'; Reason = 'score weapon glow presentation has no newly migrated exact-instance adapter' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab has no backend instance identity and this slice emits no custom icon/material there' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'covered'; Evidence = 'a schema-validated CIM blob imports only on a Cosmetics-local exact-identity miss' }
+                        initial_spawn = @{ Disposition = 'covered'; Evidence = 'existing owner equipment creation calls restore_runtime_for before glow paint' }
+                        equip = @{ Disposition = 'covered'; Evidence = 'equipment and inventory preview equip paths resolve one exact backend item plus illusion' }
+                        wield = @{ Disposition = 'covered'; Evidence = 'local wield rehydrates the exact state before publishing and painting it' }
+                        customization_change = @{ Disposition = 'covered'; Evidence = 'explicit Apply writes both authoritative Cosmetics state and the bounded CIM backup' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style is not part of the item-plus-illusion glow identity' }
+                        career_change = @{ Disposition = 'deferred'; Reason = 'cross-career CIM exact-instance retention has not been observed in game' }
+                        mission_transition = @{ Disposition = 'covered'; Evidence = 'replacement equipment units repeat spawn-time exact restore; no engine object is retained' }
+                        respawn = @{ Disposition = 'covered'; Evidence = 'replacement units repeat the same backend-item plus illusion import and paint path' }
+                        hot_join = @{ Disposition = 'covered'; Evidence = 'the existing host-authoritative glow state pull transports semantic wearer state, never CIM data' }
+                        peer_ready = @{ Disposition = 'covered'; Evidence = 'the existing acknowledged peer-ready pull replays imported active glow state' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'CIM persistence is owner-local and absent Cosmetics peers receive only resident vanilla appearance' }
+                        rejoin = @{ Disposition = 'covered'; Evidence = 'new local and husk units reconstruct from owner-local persistence and semantic peer state' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'preview open restores exact state without requiring a prior editor open' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'preview rebuild repeats exact restore and cannot reuse a different illusion blob' }
+                        lobby_score_create = @{ Disposition = 'deferred'; Reason = 'lobby and score glow consumers are outside this persistence slice' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live Cosmetics disable material restoration is not proven; CIM absence remains inert on a new session' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cos_glow_cim_bridge.lua'
+                            Names = @(
+                                'Cosmetics #48 CIM blob is bounded and exact-instance scoped'
+                                'Cosmetics #48 CIM restore rejects schema and illusion drift'
+                                'Cosmetics #48 CIM bridge prefers the dev stream'
+                                'Cosmetics #48 CIM write and read use public exact-craft APIs'
+                                'Cosmetics #48 CIM clear cannot erase another illusion'
+                                'Cosmetics #48 CIM bridge fails closed on malformed siblings'
+                                'Cosmetics #48 CIM registration is bounded and idempotent'
+                                'Cosmetics #48 CIM restore callback rebinds realized units once'
+                            )
+                            Surfaces = @('owner_1p', 'owner_3p', 'remote_husk_3p', 'inventory_preview', 'cosmetic_preview')
+                            ReplayEdges = @('instance_load', 'customization_change')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cos_glow_lifecycle.lua'
+                            Names = @(
+                                'Cosmetics glow persistence is exact-item plus illusion and explicit-Apply'
+                                'Cosmetics glow replay is host-authoritative and locally bounded'
+                                'Cosmetics glow repaints equipment preview and remote wield surfaces'
+                            )
+                            Surfaces = @('owner_1p', 'owner_3p', 'remote_husk_3p', 'inventory_preview', 'cosmetic_preview')
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'mission_transition', 'respawn', 'hot_join', 'peer_ready', 'rejoin', 'preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cosmetics.issue698.career-scoped-husk-material'
             Issue = 698
             Claim = 'structural-only'

@@ -1,8 +1,8 @@
 # Glow System — cosmetics_tweaker
 
-State as of v0.9.138-dev (2026-07-17); glow sync is verified in co-op, while
-the exact-instance Mace + Bretonnian runed-shield inheritance candidate awaits
-solo verification.
+State as of the v0.9.168-dev source candidate (2026-07-22); glow sync is
+verified in co-op, while CIM-backed restart recovery and the exact-instance
+Mace + Bretonnian runed-shield inheritance candidate await in-game verification.
 
 This is the canonical reference for how the glow customization system is
 wired today: which shader variables drive what visually, how the popup UI
@@ -19,6 +19,7 @@ and where to extend.
 | RUNE family live preview on cosmetic-screen previewer | ✅ (v0.9.7 fix) |
 | Explicit dirty-state Apply button | ✅ |
 | Per-backend-item + illusion persistence to VMF setting `glow_per_item` | ✅ |
+| CIM-crafted item mirrors one bounded opaque exact-instance backup | 🧪 source candidate (#48) |
 | Restores saved RGB+intensity on popup re-open and equipment spawn | ✅ |
 | Rehydrates and repaints after lobby/role transitions | ✅ |
 | Repaints inventory/hero preview rebuilds | ✅ |
@@ -78,6 +79,7 @@ All paths relative to `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/`.
 | `_glow_picker.lua` | The popup UI. Scenegraph, slider widget factory, in-memory state, persistence helpers (`_load_per_item_glow` / `_save_per_item_glow`), live-preview wiring. |
 | `_cos_glow.lua` | Glow apply pipeline, peer-state reads, runtime-map consumption, and local/remote repaint helpers. |
 | `_cos_glow_instance_policy.lua` | **Issue 48.** Single owner of exact-instance identity (`identity_key`), runtime rebinding (`resolve_runtime`), remote matching (`remote_match`), and the durable disable round trip (`carry_disabled` / `is_disabled`). Pure policy: no game globals, no VMF, no rendering. Both the picker and the renderer `mod:dofile` it so they cannot drift apart. Covered by `qa/lua/tests/test_cos_glow_instance_policy.lua`. |
+| `_cos_glow_cim_bridge.lua` | **Issue 48.** Pure optional-persistence bridge. Owns the bounded blob schema, state sanitization, `cim_dev`/`cim` precedence, exact-identity import, and identity-safe clear through CIM's public APIs. Covered by `qa/lua/tests/test_cos_glow_cim_bridge.lua`. |
 | `cosmetics_tweaker.lua` | Equipment/preview hooks plus the host-authoritative `cos_glow_apply_req` / `cos_glow_apply` transport. |
 | `cosmetics_tweaker_data.lua` | Existing global glow VMF settings (master toggle, presets, per-channel dropdowns). These are the "old" UI; the popup is the per-item UI that supersedes them. |
 
@@ -146,6 +148,16 @@ Single VMF setting `glow_per_item` (string). JSON-encoded via the global
 * Loaded for preview on popup open and restored during equipment spawn.
 * Saved only by explicit `GlowPicker.apply()`; close discards preview edits.
 * If `cjson` is nil, persistence is no-op and a one-time log-only warning fires.
+
+For a CIM-crafted item, Apply also mirrors a versioned opaque blob into that
+exact craft's `custom_glow` field through `_cim_set_custom_glow`. Cosmetics is
+still authoritative: `_persisted_state_for` reads CIM only when no matching
+Cosmetics-local value exists, and accepts only the same exact backend-item plus
+illusion identity. `Restore Default` clears CIM only if the stored identity
+matches. After all mods load, Cosmetics registers one idempotent CIM restore
+callback; it rebinds already-realized unit contexts, while later units import at
+their normal spawn-time `restore_runtime_for` edge. CIM never reads or renders
+the state, so Cosmetics-absent behavior remains vanilla and crash-free.
 
 ## 5. The contextual editor UI
 
@@ -343,10 +355,12 @@ at 0.25-second cadence, stopping on the first ready wield (or after 40 attempts 
 
 ## 8. Remaining extensions
 
-The rune/magic picker, persistence, contextual open, and active coop sync are
-wired. Remaining optional work is explicit glow-disable UI, compatible
-cross-slot inheritance, and carefully verified filtering of vanilla cousin
-illusions. These are independent of the Apply transaction.
+The rune/magic picker, Cosmetics-local persistence, contextual open, and active
+coop sync are wired. The #48 CIM backup is structurally wired but still needs a
+restart playtest. Remaining optional work is the magic-skin gateway, the
+Cosmetics-absent CIM log notice, explicit glow-disable UI, compatible cross-slot
+inheritance, and carefully verified filtering of vanilla cousin illusions.
+These are independent of the Apply transaction.
 
 ## 9. Adding new glow shader variables (future-proofing)
 
