@@ -66,6 +66,7 @@ mod._cos_composite_icons = COMPOSITE_ICONS
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
+local MAGIC_SKIN_GATEWAY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_magic_skin_gateway")
 local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
 local OFFHAND_COMMIT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy")
 local CUSTOM_ILLUSION_SYNC = mod:dofile(
@@ -100,7 +101,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.175-dev"
+local MOD_VERSION = "0.9.176-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3244,17 +3245,9 @@ end
 -- (`mat=weaves` for Weavebound, `mat=shyish` for Shyish-Infused). These are
 -- visually jarring on most weapons (the Bret Longsword "Evengleam"
 -- weavebound/shyish pair is the canonical complaint).
--- v0.9.38-dev: the per-family VMF toggles (hide_weavebound_skins /
--- hide_shyish_skins) were REMOVED — hiding is now IMPLICIT and always on,
--- because these glow-family skins are surfaced exclusively through the
--- in-cosmetic-picker glow menu. `_FILTERED_MAT_FAMILIES` is now a plain set
--- of always-hidden families. Currently-equipped skin is NEVER filtered out
--- so vanilla's `_select_illusion_by_key` (called from _setup_illusions
--- before our hook runs) stays valid.
-local _FILTERED_MAT_FAMILIES = {
-    weaves = true,
-    shyish = true,
-}
+-- v0.9.176-dev: the hidden families need a real selection gateway. The
+-- default-off `show_magic_family_skins` option reveals them long enough for
+-- selection; the contextual Edit Glow button then owns customization.
 
 local function _skin_mat_family(skin_key)
     if not skin_key or not WeaponSkins or not WeaponSkins.skins then return nil end
@@ -3267,41 +3260,15 @@ end
 -- Pure helper so the regression test can drive it with synthetic widget
 -- arrays. `current_skin_key` is the always-keep guard (vanilla selection
 -- state would dangle otherwise).
--- v0.9.38-dev: hiding is now implicit/always-on — the per-family VMF
--- toggles were removed, so membership in `_FILTERED_MAT_FAMILIES` alone
--- hides the skin (no setting lookup). The third arg is retained for
--- signature stability but is ignored.
-mod._filter_illusion_widgets = function(widgets, current_skin_key, _ignored_get_setting)
-    if type(widgets) ~= "table" then return widgets, 0 end
-    local kept, removed = {}, 0
-    for _, w in ipairs(widgets) do
-        local skin_key = w and w.content and w.content.skin_key
-        local keep = true
-        if skin_key and skin_key ~= current_skin_key then
-            local mat = _skin_mat_family(skin_key)
-            if mat and _FILTERED_MAT_FAMILIES[mat] then keep = false end
-        end
-        if keep then
-            kept[#kept + 1] = w
-        else
-            removed = removed + 1
-        end
+mod._filter_illusion_widgets = function(widgets, current_skin_key, get_setting)
+    local show_magic
+    if type(get_setting) == "function" then
+        show_magic = get_setting("show_magic_family_skins") == true
+    else
+        show_magic = mod:get("show_magic_family_skins") == true
     end
-    if removed > 0 then
-        -- Re-run vanilla's offset math (hero_window_item_customization.lua:1611-1618).
-        local width, spacing = 51, -5
-        local n = #kept
-        local total_width = (n > 0) and (-spacing + n * (width + spacing)) or 0
-        local x_offset = width / 2
-        for _, w in ipairs(kept) do
-            local offset = w.offset
-            if offset then
-                offset[1] = -total_width / 2 + x_offset
-                x_offset = x_offset + width + spacing
-            end
-        end
-    end
-    return kept, removed
+    return MAGIC_SKIN_GATEWAY.filter(
+        widgets, current_skin_key, _skin_mat_family, show_magic)
 end
 
 mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self, item)

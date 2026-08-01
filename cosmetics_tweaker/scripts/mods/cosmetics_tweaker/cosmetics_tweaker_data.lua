@@ -179,10 +179,16 @@ local widgets = {
                 default_value = false,
                 tooltip       = "cos_unlock_weapon_poses_tooltip",
             },
+            {
+                setting_id    = "show_magic_family_skins",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "show_magic_family_skins_tooltip",
+            },
             -- v0.9.37-dev: the VMF "Weapon Glow Override" menu was REMOVED here;
-            -- glow is now driven by the in-context Glow Picker popup
-            -- (_glow_picker.lua). The old global-override apply paths go inert
-            -- with the setting gone (guarded, not ripped out).
+            -- glow is driven by the in-context Glow Picker popup. The single
+            -- gateway above reveals normally-hidden magic-family illusions;
+            -- global glow override controls remain retired.
         },
     },
 

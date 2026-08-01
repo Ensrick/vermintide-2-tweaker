@@ -56,7 +56,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.109-dev"
+local MOD_VERSION = "0.8.110-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -414,7 +414,7 @@ end
 -- ============================================================
 local _more_items_lib = nil
 local _forge_pending = nil
-local _forged_weapons = {}
+local _forged_weapons = {}; mod._cim_custom_glow_notice = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_custom_glow_notice").new()
 local _external_trait_providers = {}
 
 local function _external_provider_availability()
@@ -530,6 +530,8 @@ local function _forge_load()
                 tostring(bid), tostring(err))
         end
     end
+    local glow_count, should_log = mod._cim_custom_glow_notice:observe(_forged_weapons, get_mod)
+    if should_log then mod:info("[cim] %d weapon(s) have saved custom_glow blobs that won't apply (Tweaker: Cosmetics not installed); weavebound skin will render with vanilla defaults", glow_count) end
     _forge_save() -- persist any rarity migrations
 end
 

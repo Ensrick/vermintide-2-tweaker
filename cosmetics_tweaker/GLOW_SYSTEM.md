@@ -355,12 +355,12 @@ at 0.25-second cadence, stopping on the first ready wield (or after 40 attempts 
 
 ## 8. Remaining extensions
 
-The rune/magic picker, Cosmetics-local persistence, contextual open, and active
-coop sync are wired. The #48 CIM backup is structurally wired but still needs a
-restart playtest. Remaining optional work is the magic-skin gateway, the
-Cosmetics-absent CIM log notice, explicit glow-disable UI, compatible cross-slot
-inheritance, and carefully verified filtering of vanilla cousin illusions.
-These are independent of the Apply transaction.
+The rune/magic picker, Cosmetics-local and CIM backup persistence, contextual
+open, active coop sync, default-off magic-family selection gateway, and
+Cosmetics-absent CIM notice are wired. Restart persistence and the gateway still
+need a live playtest. Remaining optional extensions are explicit glow-disable
+UI, compatible cross-slot inheritance, and carefully verified filtering of
+vanilla cousin illusions. These are independent of the Apply transaction.
 
 ## 9. Adding new glow shader variables (future-proofing)
 
