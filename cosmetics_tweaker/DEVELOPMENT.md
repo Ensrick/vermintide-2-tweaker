@@ -42,7 +42,8 @@ exactly once from the manifest.
 
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
-| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest, the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks, the `/cos_regression_test` registry/command lifecycle, and everything not yet extracted: render-path hooks, per-peer glow broadcast RPCs, LA-bridge/husk integration, remaining offhand/customization UI, the #377 editor/badge presentation, and #282 MH session-residency diagnostics. |
+| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest, the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks, and everything not yet extracted: render-path hooks, per-peer glow broadcast RPCs, LA-bridge/husk integration, remaining offhand/customization UI, the #377 editor/badge presentation, and #282 MH session-residency diagnostics. |
+| `_cos_command_owner.lua` | Single #504 command-lifecycle owner. Owns the lazy regression registry and `/cos_regression_test` runner plus `/cos_persist_dump`, `/cos_persist_replay`, and `/cos_persist_clear`. Returns the register function consumed by `_cos_runtime_checks.lua`; repeated install is idempotent. It owns no hook, RPC, renderer, or lifecycle callback. |
 | `_cos_runtime_checks.lua` | Registers the 60 late runtime checks in historical order plus the single `/verify_gk_set` command. Receives every entry-private table/helper through one explicit dependency table; closures remain lazy so live state is inspected only when the registry runs. It owns no hooks, RPCs, or lifecycle callback. |
 | `_cos_glow_probe.lua` | Owns `/glow_dump`, `/glow_probe`, `/glow_scan`, `/glow_scan_stop`, `/glow_restore`, `/la_shield_glow_probe`, both bounded scan tick functions, and the exported `wielded_units_for_probe` helper consumed by the later manual picker command. It receives only player-safety, unit-liveness, and log-flush helpers. |
 | `_cos_la_commands.lua` | Owns the read-only LA diagnostic commands `/la_dump`, `/la_trace`, `/la_force`, `/la_attach`, `/la_loadout`, and `/la_hats`. Captures the already-loaded bridge plus career/log helpers; no hook or lifecycle ownership. |
@@ -92,6 +93,9 @@ their internals alone.
 - **New `/cos_regression_test` registration** → `_cos_runtime_checks.lua`. Add its
   dependency to the install table if it needs entry-private state; never make the
   module dofile another owner or eagerly snapshot runtime state.
+- **Regression runner behavior or LA persistence maintenance commands** →
+  `_cos_command_owner.lua`. Keep the four public command names and registration
+  order stable; runtime assertions still belong in `_cos_runtime_checks.lua`.
 - **New preview consumer of an independently selected shield/offhand** → resolve
   exact backend identity and current hand-pool ownership through
   `_cos_la_instance_policy.lua`, then pass the preview engine's queued unit path

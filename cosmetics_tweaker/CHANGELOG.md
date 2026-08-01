@@ -1,5 +1,18 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.178-dev (2026-08-01) — #504 command-lifecycle owner [not-started]
+
+- Moved the lazy regression registry/runner and the three LA persistence
+  maintenance commands into one idempotent command owner at their historical
+  registration position.
+- Preserved every command name, late runtime-check order, context-absent skip,
+  and persistence schema while adding no hook, RPC, renderer, or lifecycle path.
+- Added behavioral command/check-count coverage and ratcheted the Cosmetics
+  entry decomposition ceiling from 9,915 to 9,808 lines.
+
+This is structural progress only. The #504 umbrella remains incomplete and does
+not enter the in-game test queue.
+
 ## 0.9.177-dev (2026-08-01) — #796 exact glow preview ownership [verify-fix]
 
 - Bound each newly spawned cosmetic-browser weapon unit to the exact active

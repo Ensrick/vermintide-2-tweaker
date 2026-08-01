@@ -102,7 +102,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.177-dev"
+local MOD_VERSION = "0.9.178-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -260,118 +260,12 @@ if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find(
     mod:echo(string.format("[cosmetics] v%s loaded", MOD_VERSION))
 end
 
--- /regression_test scaffold. Registrations at end of file.
-local _RT_CHECKS = {}
--- #566/#512 class fix: a check that asserts state which legitimately varies
--- by context (engine boot phase, keep vs mission, "registered by us" state)
--- may declare opts.precondition -- a function returning true when the
--- asserted context exists, or (false, "reason") when it is absent. The
--- runner then reports an explicit "context absent" SKIP result (distinct
--- from PASS and FAIL), so FAIL stays reserved for "context present,
--- invariant broken". A THROWING precondition reports as FAIL, never a skip.
-local function _rt_register(name, fn, opts)
-    _RT_CHECKS[#_RT_CHECKS + 1] = {
-        name = name,
-        fn = fn,
-        precondition = opts and opts.precondition or nil,
-    }
-end
-
-_rt_register("local_player_safe_network_lifecycle_609", function()
-    local current_player = nil
-    local safe_calls = 0
-    local fake_pm = {
-        local_player = function() error("unsafe local_player called") end,
-        local_player_safe = function()
-            safe_calls = safe_calls + 1
-            return current_player
-        end,
-    }
-    if _local_player_safe(fake_pm) ~= nil then return "title state must yield nil" end
-    local live_player = {}
-    current_player = live_player
-    if _local_player_safe(fake_pm) ~= live_player then return "ingame state lost player" end
-    if safe_calls ~= 2 then return "safe accessor was not used for both transitions" end
-end)
-mod:command("cos_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail, skip = 0, 0, 0
-    mod:echo("=== cosmetics_tweaker regression_test (v%s) ===", MOD_VERSION)
-    for _, c in ipairs(_RT_CHECKS) do
-        local ok, err
-        local skip_reason
-        if c.precondition then
-            local pc_ok, present, reason = pcall(c.precondition)
-            if not pc_ok then
-                ok, err = false, "precondition error: " .. tostring(present)
-            elseif not present then
-                skip_reason = tostring(reason or "precondition not met")
-            end
-        end
-        if skip_reason then
-            -- Context absent (#566/#512 class): the asserted state
-            -- legitimately does not exist here. printf so the line lands in
-            -- the log with mod logging OFF.
-            skip = skip + 1
-            mod:echo("  SKIP: %s -- context absent: %s", c.name, skip_reason)
-            mod:info("[regression] SKIP (context absent) %s: %s", c.name, skip_reason)
-            if type(printf) == "function" then
-                printf("[cos-regression] SKIP (context absent) %s: %s", c.name, skip_reason)
-            end
-        else
-            if ok == nil then
-                ok, err = pcall(c.fn)
-            end
-            if ok and err == nil then
-                mod:echo("  PASS: %s", c.name); pass = pass + 1
-                mod:info("[regression] PASS %s", c.name)
-            else
-                local msg = (not ok and tostring(err)) or tostring(err)
-                mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
-                mod:warning("[regression] FAIL %s: %s", c.name, msg)
-            end
-        end
-    end
-    mod:echo("=== %d passed, %d failed ===", pass, fail)
-    if skip > 0 then
-        mod:echo("=== %d skipped (context absent) ===", skip)
-    end
-end)
-mod:info("[regression-test-command] registered as /cos_regression_test")
-
--- v0.9.12-dev: persistence inspection + manual replay commands.
-mod:command("cos_persist_dump", "Dump saved LA cosmetic + illusion entries", function()
-    local pm = Managers and Managers.player
-    local lp = _local_player_safe(pm)
-    local career = lp and LA_PERSIST and LA_PERSIST._career_name_for_player(lp)
-    mod:echo("=== la_persistence (current career: %s) ===", tostring(career))
-    local careers_state = mod:get("la_persisted_equips") or {}
-    local careers_t = careers_state.careers or {}
-    local illusions_t = careers_state.illusions or {}
-    local cn = 0
-    for k, v in pairs(careers_t) do
-        cn = cn + 1
-        mod:echo("  career[%s] = { hat=%s, skin=%s }", tostring(k),
-            tostring(v.slot_hat or "-"), tostring(v.slot_skin or "-"))
-    end
-    local _in = 0; for _ in pairs(illusions_t) do _in = _in + 1 end
-    mod:echo("  %d career entries, %d illusion entries", cn, _in)
-    if _in > 0 and _in <= 20 then
-        for bid, skin in pairs(illusions_t) do
-            mod:echo("    illusion[%s] = %s", tostring(bid), tostring(skin))
-        end
-    end
-end)
-mod:command("cos_persist_replay", "Re-apply saved LA hat + armor for local player's current career", function()
-    local pm = Managers and Managers.player
-    local lp = _local_player_safe(pm)
-    if not lp then mod:echo("no local player"); return end
-    local n = LA_PERSIST and LA_PERSIST.restore_for_player(lp) or 0
-    mod:echo("replayed %d saved LA cosmetic(s) for current career", n)
-end)
-mod:command("cos_persist_clear", "Wipe all saved LA persistence entries", function()
-    mod:set("la_persisted_equips", { schema = 1, careers = {}, illusions = {} })
-    mod:echo("[la-persist] cleared all saved entries (in-memory cache will refresh on next save)")
-end)
+-- Command registration remains at its historical load position. Late runtime
+-- checks register into the returned owner after all gameplay seams are wired.
+local _rt_register = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_command_owner").install(mod, {
+        version = MOD_VERSION, local_player_safe = _local_player_safe,
+        la_persist = LA_PERSIST, printf = printf,
+    })
 
 -- ============================================================
 -- Material tinting research (TODO: cloned + recolored cosmetics)
