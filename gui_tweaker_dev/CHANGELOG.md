@@ -1,5 +1,19 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.322-dev (2026-08-01) -- reseed official loadouts after Equipment DEFAULT (#1033) [verify-fix]
+
+- Tracks a confirmed WT/Cosmetics DEFAULT as transaction state independent of
+  changed settings, so Apply remains available even when every setting already
+  equals its default but stale illegal modded equipment still exists.
+- After every owner batch succeeds, clears only GUT's modded loadout/cosmetic
+  overlay and immediately clones the cached official Adventure rows back into
+  it. Official mirror methods and cloud data remain read-only.
+- Persists the loadout and overlay once each, dirtifies backend interfaces once,
+  and emits one bounded `[gut:1033]` summary. A failed settings/reset transaction
+  stays armed for retry and discarded menu sessions cannot replay it later.
+- Adds pure scope, retry, table-identity, deterministic career-order, and both-
+  view wiring coverage.
+
 ## 0.2.321-dev (2026-08-01) -- render the expanded scoreboard as a bounded grid (#272) [diagnostics-armed]
 
 - Replaces the five oversized newline-delimited text passes with one bounded

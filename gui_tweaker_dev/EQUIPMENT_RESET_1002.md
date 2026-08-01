@@ -77,3 +77,17 @@ versions of every changed owner are built, deployed, and uploaded. Then add
 `verify-fix` (solo; no peer is needed) with the steps in
 `REGRESSION_CHECKLIST.md`. Do not add `diagnostics-armed`, `coop-required`, or
 `Fixed` before that artifact boundary.
+
+## Follow-up: stale loadouts after a successful DEFAULT (#1033)
+
+The #1002 batching fix bounded setting callbacks but intentionally did not own
+saved loadout data. Issue #1033 exposed the remaining independent state: WT or
+Cosmetics settings may already be at defaults while GUT's modded-only snapshot
+still points at an item those defaults no longer allow.
+
+Tweaker: GUI dev 0.2.322 adds a separate, retryable DEFAULT intent. APPLY first
+finishes every setting-owner transaction, then clears only `native_loadouts`
+and `native_cosmetic_overlay`, copies the cached official Adventure rows into
+the same working tables, persists each table once, and dirtifies interfaces
+once. It never invokes a mirror write method. The intent also keeps APPLY
+enabled when zero setting values changed, which is the stale-loadout-only case.

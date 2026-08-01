@@ -52,6 +52,47 @@ function P.readonly_action(slot_name, backend_id)
     return "block"
 end
 
+-- Issue #1033: clear only mod-owned snapshots. Both tables retain identity so
+-- the hot mirror hooks keep observing the same working copies. Returns the
+-- number of distinct careers cleared plus whether an explicit career existed.
+function P.clear_modded_loadouts(store, overlay, career_name)
+    if type(store) ~= "table" or type(overlay) ~= "table" then return 0, false end
+    if type(career_name) == "string" and career_name ~= "" then
+        local existed = store[career_name] ~= nil or overlay[career_name] ~= nil
+        store[career_name] = nil
+        overlay[career_name] = nil
+        return existed and 1 or 0, existed
+    end
+    local seen = {}
+    for name in pairs(store) do seen[name] = true end
+    for name in pairs(overlay) do seen[name] = true end
+    local count = 0
+    for name in pairs(seen) do
+        store[name] = nil
+        overlay[name] = nil
+        count = count + 1
+    end
+    return count, true
+end
+
+-- Deterministic list of official Adventure careers eligible for immediate
+-- re-seeding. Reading this shape cannot invoke a backend/interface method.
+function P.official_seed_careers(mirror, career_name)
+    local rows = type(mirror) == "table" and mirror._career_data or nil
+    if type(rows) ~= "table" then return {} end
+    if type(career_name) == "string" and career_name ~= "" then
+        return type(rows[career_name]) == "table" and { career_name } or {}
+    end
+    local names = {}
+    for name, career_rows in pairs(rows) do
+        if type(name) == "string" and type(career_rows) == "table" then
+            names[#names + 1] = name
+        end
+    end
+    table.sort(names)
+    return names
+end
+
 local function copy_value(value, state, depth)
     if type(value) ~= "table" then return value end
     if depth >= MAX_SNAPSHOT_DEPTH then return nil, "depth-bound" end

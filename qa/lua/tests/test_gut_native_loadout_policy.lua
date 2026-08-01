@@ -22,6 +22,40 @@ return function(H, repo_root)
         H.equal(Policy.readonly_action("talents", "1,2,3,4,5,6"), "block")
     end)
 
+    H.test("issue 1033 clears modded stores without replacing table identity", function()
+        local store = { mercenary = { selected_index = 2 }, ranger = { selected_index = 1 } }
+        local overlay = { mercenary = { [2] = { slot_hat = "mod_hat" } }, zealot = {} }
+        local store_identity, overlay_identity = store, overlay
+
+        local count, found = Policy.clear_modded_loadouts(store, overlay, "mercenary")
+        H.equal(count, 1)
+        H.equal(found, true)
+        H.equal(store, store_identity)
+        H.equal(overlay, overlay_identity)
+        H.equal(store.mercenary, nil)
+        H.equal(overlay.mercenary, nil)
+        H.truthy(store.ranger ~= nil)
+        H.truthy(overlay.zealot ~= nil)
+
+        count, found = Policy.clear_modded_loadouts(store, overlay)
+        H.equal(count, 2)
+        H.equal(found, true)
+        H.equal(next(store), nil)
+        H.equal(next(overlay), nil)
+    end)
+
+    H.test("issue 1033 plans deterministic official career copies", function()
+        local mirror = { _career_data = {
+            zealot = { { slot_melee = "hammer" } },
+            mercenary = { { slot_melee = "sword" } },
+            malformed = false,
+        } }
+        H.deep_equal(Policy.official_seed_careers(mirror), { "mercenary", "zealot" })
+        H.deep_equal(Policy.official_seed_careers(mirror, "zealot"), { "zealot" })
+        H.deep_equal(Policy.official_seed_careers(mirror, "missing"), {})
+        H.deep_equal(Policy.official_seed_careers(nil), {})
+    end)
+
     H.test("issue 954 bot designation snapshots do not alias owner rows", function()
         local slots = { "slot_melee", "slot_ranged", "slot_hat" }
         local owner_row = {
@@ -738,6 +772,25 @@ return function(H, repo_root)
             "nil native loadout slots are not treated as corrupt")
         H.truthy(source:find("slots_repaired = _repair_missing_loadout_slots(entry, cd)", 1, true),
             "seed repair does not run the full-slot migration")
+    end)
+
+    H.test("issue 1033 native reseed is one bounded mod-owned transaction", function()
+        local runtime_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua"
+        local file = assert(io.open(runtime_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        local reset_start = assert(source:find("function M.reset_modded_loadouts", 1, true))
+        local reset_end = assert(source:find("mod._gut_reset_modded_loadouts", reset_start, true))
+        local reset_source = source:sub(reset_start, reset_end - 1)
+        H.truthy(reset_source:find("Policy.clear_modded_loadouts(store, overlay, career_arg)", 1, true))
+        H.truthy(reset_source:find("Policy.official_seed_careers(mirror, career_arg)", 1, true))
+        H.truthy(reset_source:find("_ensure_seeded(mirror, careers[i], true)", 1, true))
+        H.truthy(reset_source:find("_persist()\n    _persist_overlay()\n    _dirtify()", 1, true),
+            "bulk reset must persist each mod-owned table once and dirtify once")
+        H.truthy(source:find("mod._gut_reset_modded_loadouts = function(source)", 1, true))
+        H.equal(reset_source:find("mirror:set_character_data", 1, true), nil,
+            "official reseed must not write the mirror")
     end)
 
     H.test("issue 402 official scrub uses complete slot contract", function()
