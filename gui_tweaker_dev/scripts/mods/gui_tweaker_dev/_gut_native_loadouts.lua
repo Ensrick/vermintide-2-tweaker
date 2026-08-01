@@ -175,6 +175,7 @@ M._issue354_trace_wired = true
 --       selected_index = <int>,
 --       bot_index      = <int or nil>,
 --       bot_loadout    = <detached slot snapshot or nil>,
+--       _bot_designation_snapshot_v2 = <one-time native-import marker>,
 --       loadouts       = { [i] = { [slot_name] = backend_id, ..., talents = "1,2,.." } },
 --   }
 -- Each loadout entry mirrors `_career_data[career][i]` 1:1 (slots + "talents" key), so
@@ -1041,11 +1042,18 @@ end)
 -- designation snapshot so later edits to the player's source row cannot change
 -- the bot, while leaving official/readonly behavior on the vanilla boundary.
 local BotLoadoutSnapshot = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_bot_loadout_snapshot")
+local function _native_bot_assignments()
+    local selection = PlayerData and PlayerData.loadout_selection
+    if type(selection) ~= "table" then return nil end
+    if selection.bot_equipment == nil then return {} end
+    if type(selection.bot_equipment) ~= "table" then return nil end
+    return selection.bot_equipment
+end
 BotLoadoutSnapshot.install(mod, {
     mode = _adventure_mode, store = _store, persist = _persist,
     policy = Policy, slot_names = LOADOUT_SLOT_NAMES,
     mode_off = MODE_OFF, mode_store = MODE_STORE, mode_readonly = MODE_READONLY,
-    log_prefix = "gut_dev",
+    log_prefix = "gut_dev", native_bot_assignments = _native_bot_assignments,
 })
 
 -- ==================================================================
@@ -1611,7 +1619,10 @@ M.rt_checks = {
         if err or _adventure_mode() ~= MODE_STORE then return err end
         local ok, iface = pcall(function() return Managers.backend:get_interface("items") end)
         if not ok or not iface then return "runtime items interface unavailable" end
-        return BotLoadoutSnapshot.live_check(iface, _store(), Policy, LOADOUT_SLOT_NAMES)
+        local native = _native_bot_assignments()
+        if type(native) ~= "table" then return "native bot designation store unavailable" end
+        return BotLoadoutSnapshot.live_check(
+            iface, _store(), Policy, LOADOUT_SLOT_NAMES, native)
     end },
     { name = "issue354_wt_loadout_lifecycle_trace", fn = function()
         if M._issue354_trace_wired ~= true then return "WT loadout lifecycle trace is not wired" end

@@ -1,5 +1,32 @@
 # Tweaker: GUI postmortems
 
+## #954 - read-boundary reconciliation protected zero bot snapshots
+
+**Symptom.** Editing the host player's saved loadout still changed a bot's
+designated equipment after the detached-snapshot candidate shipped. The runtime
+regression nevertheless reported PASS.
+
+**Root cause.** The reconcile hook was live: Rain's v0.2.318-dev log repeatedly
+recorded `identity_changed=true`. Every record also said `applied=0`. Native bot
+assignments created before GUT's owner existed remained only in
+`PlayerData.loadout_selection.bot_equipment`; the GUT store had neither
+`bot_index` nor `bot_loadout`, so there was nothing to reconcile. The synthetic
+regression constructed a snapshot and never proved that a live native
+designation had entered the detached owner.
+
+**Fix.** At the first eligible bounded bot read, import each native designation
+whose GUT entry is still unowned. Resolve the native index against the already
+seeded GUT rows, copy only canonical loadout slots, persist a durable migration
+marker once, and never follow that source row again. Preserve any explicit GUT
+snapshot, defer a valid index until its row exists, and leave official/read-only
+realms native.
+
+**Future prevention.** A runtime ownership check must prove non-vacuity. When
+native assignments exist, zero imported snapshots is a failure, not a PASS.
+Offline coverage starts from the actual legacy `PlayerData` shape, mutates the
+source row after import, and proves both one-time persistence and explicit-owner
+precedence. See BUG_CLASSES class 80.
+
 ## #273 - Chaos Wastes exit snapshot persisted generated Deus weapon ids
 
 **Symptom.** A CWV weapon remained correct inside a Chaos Wastes run but reverted

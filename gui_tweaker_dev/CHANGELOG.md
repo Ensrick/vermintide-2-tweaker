@@ -1,5 +1,20 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.319-dev (2026-08-01) -- import pre-owner native bot assignments (#954) [verify-fix]
+
+- Imports a bot assignment made by the native loadout UI before GUT owned
+  detached snapshots. The vanilla `PlayerData` index is resolved against the
+  modded saved rows once, copied into a bounded snapshot, and never followed
+  again as the player's source row changes.
+- Preserves an existing GUT-owned bot index/snapshot over stale native data,
+  defers a valid index until its saved row exists, and seals absent or malformed
+  assignments without repeated persistence work.
+- Strengthens the live regression so a native bot assignment with zero owned
+  snapshots fails instead of producing the false PASS seen in Rain's
+  v0.2.318-dev log.
+- Emits one deduplicated `[gut:954] native bot designation import` summary at
+  the migration boundary; it adds no frame callback or chat output.
+
 ## 0.2.318-dev (2026-07-26) -- guarantee in-mission vote titles (#700) [not-started]
 
 - Replaces the blank keep-only `game_settings_vote` localization at the

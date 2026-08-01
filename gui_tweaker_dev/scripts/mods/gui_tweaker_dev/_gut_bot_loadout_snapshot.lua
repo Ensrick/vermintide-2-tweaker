@@ -3,7 +3,9 @@
 -- once and never touches official persistence.
 local Runtime = {}
 
-Runtime.MARKER = "gut-954-bot-read-reconcile"
+Runtime.MARKER = "gut-954-native-designation-import"
+
+local MIGRATION_MARKER = "_bot_designation_snapshot_v2"
 
 local MAX_COMPARE_DEPTH = 12
 local MAX_COMPARE_NODES = 256
@@ -49,7 +51,7 @@ function Runtime.snapshots_equal(actual, expected, slot_names)
     return true
 end
 
-function Runtime.live_check(items, saved_store, policy, slot_names)
+function Runtime.live_check(items, saved_store, policy, slot_names, native_assignments)
     local bot = items and items._bot_loadouts
     if type(bot) ~= "table" then return "runtime bot cache unavailable" end
     if type(saved_store) ~= "table" then return "saved bot store unavailable" end
@@ -69,6 +71,26 @@ function Runtime.live_check(items, saved_store, policy, slot_names)
             end
         end
     end
+    if native_assignments ~= nil then
+        if type(native_assignments) ~= "table" then
+            return "native bot designation store unavailable"
+        end
+        local native_count = 0
+        for career_name, native_index in pairs(native_assignments) do
+            native_count = native_count + 1
+            if native_count > MAX_STORE_CAREERS then
+                return "native bot designation store exceeds career bound"
+            end
+            if native_index ~= nil then
+                local entry = saved_store[career_name]
+                if type(entry) ~= "table"
+                    or entry[MIGRATION_MARKER] ~= true
+                    or type(entry.bot_loadout) ~= "table" then
+                    return "native bot designation not imported career=" .. tostring(career_name)
+                end
+            end
+        end
+    end
 end
 
 function Runtime.install(mod, deps)
@@ -79,6 +101,7 @@ function Runtime.install(mod, deps)
     local slot_names = deps.slot_names
     local mode_store = deps.mode_store
     local log_prefix = deps.log_prefix
+    local native_bot_assignments = deps.native_bot_assignments
     -- The backend replaces `_bot_loadouts` whenever it refreshes. Remember the
     -- exact table that we audited, but still compare its designated rows on
     -- every bot-loadout read so an unexpected in-place writer is repaired and
@@ -86,6 +109,7 @@ function Runtime.install(mod, deps)
     local audited_bot_tables = setmetatable({}, { __mode = "k" })
     local pending_persist = setmetatable({}, { __mode = "k" })
     local last_reconcile_error = nil
+    local last_import_summary = nil
 
     local function overlay(self, reason)
         -- Pass the concrete interface to the realm gate. During interface init,
@@ -104,30 +128,114 @@ function Runtime.install(mod, deps)
             end
         end
 
+        local native = nil
+        if type(native_bot_assignments) == "function" then
+            local ok, value = pcall(native_bot_assignments)
+            if ok and type(value) == "table" then native = value end
+        end
+
         local identity_changed = audited_bot_tables[self] ~= bot
         local migrations, replacements = {}, {}
+        local imported, absent, invalid, existing, deferred = 0, 0, 0, 0, 0
         for career_name, entry in pairs(all) do
             if type(entry) == "table" then
                 local bot_index = entry.bot_index
                 local rows = type(entry.loadouts) == "table" and entry.loadouts or nil
                 local snapshot = entry.bot_loadout
-                -- One-time migration for stores written before #954. Snapshot the
-                -- current designated row once; later owner edits cannot alias it.
-                if type(snapshot) ~= "table" and bot_index and rows and rows[bot_index] then
+                local migration = nil
+
+                -- Stores written before #954 may have only the GUT-owned index.
+                -- Snapshot it once; later owner edits cannot alias it.
+                if entry[MIGRATION_MARKER] ~= true
+                    and type(snapshot) ~= "table" and bot_index and rows and rows[bot_index] then
                     local snapshot_detail
                     snapshot, snapshot_detail = policy.snapshot_bot_loadout(rows[bot_index], slot_names)
                     if snapshot_detail then
                         return false, "migration-snapshot-" .. tostring(snapshot_detail)
                     end
                     if snapshot then
-                        migrations[#migrations + 1] = {
+                        migration = {
                             career_name = career_name,
                             entry = entry,
                             snapshot = snapshot,
                             source_index = bot_index,
+                            source = "gut-index",
                         }
+                        existing = existing + 1
                     end
                 end
+
+                -- Backward compatibility for assignments made by the vanilla UI
+                -- before this owner existed. Vanilla persists only an index in
+                -- PlayerData; import its row exactly once into the detached GUT
+                -- owner. A newer GUT-owned index/snapshot always wins.
+                if entry[MIGRATION_MARKER] ~= true and not migration then
+                    if type(snapshot) == "table" then
+                        migration = {
+                            career_name = career_name,
+                            entry = entry,
+                            snapshot = snapshot,
+                            source_index = bot_index,
+                            source = "existing",
+                        }
+                        existing = existing + 1
+                    elseif bot_index ~= nil then
+                        if type(bot_index) ~= "number"
+                            or bot_index % 1 ~= 0 or bot_index < 1 then
+                            migration = {
+                                career_name = career_name,
+                                entry = entry,
+                                source = "invalid-existing",
+                            }
+                            invalid = invalid + 1
+                        else
+                            -- The selected row may not have been seeded yet.
+                            -- Retry at the next bounded read instead of sealing a
+                            -- missing snapshot into the durable owner.
+                            deferred = deferred + 1
+                        end
+                    elseif native then
+                        local native_index = native[career_name]
+                        if native_index == nil then
+                            migration = {
+                                career_name = career_name,
+                                entry = entry,
+                                source = "absent",
+                            }
+                            absent = absent + 1
+                        elseif type(native_index) ~= "number"
+                            or native_index % 1 ~= 0 or native_index < 1 then
+                            migration = {
+                                career_name = career_name,
+                                entry = entry,
+                                source = "invalid",
+                            }
+                            invalid = invalid + 1
+                        elseif not rows or not rows[native_index] then
+                            deferred = deferred + 1
+                        else
+                            local snapshot_detail
+                            snapshot, snapshot_detail =
+                                policy.snapshot_bot_loadout(rows[native_index], slot_names)
+                            if snapshot_detail then
+                                return false, "native-import-snapshot-" .. tostring(snapshot_detail)
+                            end
+                            if snapshot then
+                                bot_index = native_index
+                                migration = {
+                                    career_name = career_name,
+                                    entry = entry,
+                                    snapshot = snapshot,
+                                    source_index = native_index,
+                                    set_index = true,
+                                    source = "native-playerdata",
+                                }
+                                imported = imported + 1
+                            end
+                        end
+                    end
+                end
+                if migration then migrations[#migrations + 1] = migration end
                 if type(snapshot) == "table" then
                     local matches = Runtime.snapshots_equal(bot[career_name], snapshot, slot_names)
                     if identity_changed or matches == false then
@@ -153,9 +261,9 @@ function Runtime.install(mod, deps)
         -- half-migrated or half-reconciled in memory.
         for i = 1, #migrations do
             local migration = migrations[i]
-            migration.entry.bot_loadout = migration.snapshot
-            printf("[gut:954] migrated detached bot loadout career=%s source_index=%s",
-                tostring(migration.career_name), tostring(migration.source_index))
+            if migration.set_index then migration.entry.bot_index = migration.source_index end
+            if migration.snapshot ~= nil then migration.entry.bot_loadout = migration.snapshot end
+            migration.entry[MIGRATION_MARKER] = true
         end
         local drifted = 0
         for i = 1, #replacements do
@@ -171,6 +279,15 @@ function Runtime.install(mod, deps)
             pending_persist[self] = not persisted
             if not persisted then
                 return false, "persist-failed"
+            end
+        end
+        if migrated or deferred > 0 then
+            local summary = string.format(
+                "imported=%d absent=%d invalid=%d existing=%d deferred=%d",
+                imported, absent, invalid, existing, deferred)
+            if summary ~= last_import_summary then
+                last_import_summary = summary
+                printf("[gut:954] native bot designation import %s", summary)
             end
         end
         if identity_changed or applied > 0 or drifted > 0 then
@@ -238,6 +355,7 @@ function Runtime.install(mod, deps)
         entry.bot_index = self._context_menu_loadout_index
         local designated_row = entry.bot_index and entry.loadouts[entry.bot_index]
         entry.bot_loadout = policy.snapshot_bot_loadout(designated_row, slot_names)
+        entry[MIGRATION_MARKER] = true
         persist()
         printf("[%s:NATIVE_LOADOUTS] bot_equipment career=%s bot_index=%s detached_snapshot=%s -> store (skipped PlayerData write)",
             log_prefix, tostring(career_name), tostring(entry.bot_index),
@@ -251,7 +369,7 @@ function Runtime.install(mod, deps)
 end
 
 function Runtime.contract_check(policy, slot_names)
-    if Runtime.MARKER ~= "gut-954-bot-read-reconcile" then return "marker mismatch" end
+    if Runtime.MARKER ~= "gut-954-native-designation-import" then return "marker mismatch" end
     if type(policy.snapshot_bot_loadout) ~= "function" then return "snapshot helper unavailable" end
     local source = { slot_melee = "owner", slot_ranged = "ranged", ignored = "metadata" }
     local snapshot = policy.snapshot_bot_loadout(source, slot_names)

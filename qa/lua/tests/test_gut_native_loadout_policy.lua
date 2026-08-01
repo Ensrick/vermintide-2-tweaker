@@ -203,7 +203,189 @@ return function(H, repo_root)
         iface._bot_loadouts.witch_hunter.slot_melee = "official_owner"
         result = getter(function(self) return self._bot_loadouts end, iface)
         H.equal(result.witch_hunter.slot_melee, "official_owner")
-        H.equal(persisted, 0)
+        H.equal(persisted, 1,
+            "legacy detached snapshot should receive its one-time migration marker")
+        _G.printf = old_printf
+    end)
+
+    H.test("issue 954 imports pre-owner vanilla bot designation exactly once", function()
+        local runtime_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_bot_loadout_snapshot.lua"
+        local Runtime = assert(loadfile(runtime_path))()
+        local hooks = {}
+        local fake_mod = {}
+        function fake_mod:hook_safe() end
+        function fake_mod:hook(class_name, method_name, callback)
+            hooks[class_name .. "." .. method_name] = callback
+        end
+        local store = {
+            witch_hunter = {
+                selected_index = 1,
+                loadouts = {
+                    [1] = { slot_melee = "owner_sword", slot_ranged = "owner_crossbow" },
+                    [2] = { slot_melee = "bot_hammer", slot_ranged = "bot_pistols" },
+                },
+            },
+            empire_soldier = {
+                selected_index = 1,
+                bot_index = 2,
+                bot_loadout = { slot_melee = "explicit_sword", slot_ranged = "explicit_gun" },
+                loadouts = {
+                    [1] = { slot_melee = "native_wrong", slot_ranged = "native_wrong" },
+                    [2] = { slot_melee = "explicit_sword", slot_ranged = "explicit_gun" },
+                },
+            },
+        }
+        local native = { witch_hunter = 2, empire_soldier = 1 }
+        local persist_calls = 0
+        local old_printf = _G.printf
+        _G.printf = function() end
+        Runtime.install(fake_mod, {
+            mode = function() return "store" end,
+            store = function() return store end,
+            persist = function() persist_calls = persist_calls + 1 end,
+            policy = Policy,
+            slot_names = { "slot_melee", "slot_ranged" },
+            mode_off = "off",
+            mode_store = "store",
+            mode_readonly = "readonly",
+            log_prefix = "gut_dev",
+            native_bot_assignments = function() return native end,
+        })
+        local getter = assert(hooks["BackendInterfaceItemPlayfab.get_bot_loadout"])
+        local iface = {
+            _bot_loadouts = {
+                witch_hunter = { slot_melee = "owner_sword", slot_ranged = "owner_crossbow" },
+                empire_soldier = { slot_melee = "native_wrong", slot_ranged = "native_wrong" },
+            },
+        }
+
+        local result = getter(function(self) return self._bot_loadouts end, iface)
+        H.equal(store.witch_hunter.bot_index, 2)
+        H.equal(store.witch_hunter.bot_loadout.slot_melee, "bot_hammer")
+        H.equal(result.witch_hunter.slot_melee, "bot_hammer")
+        H.equal(store.empire_soldier.bot_index, 2,
+            "existing GUT designation must outrank stale PlayerData")
+        H.equal(result.empire_soldier.slot_melee, "explicit_sword")
+        H.equal(persist_calls, 1)
+        H.equal(Runtime.live_check(
+            iface, store, Policy, { "slot_melee", "slot_ranged" }, native), nil)
+
+        -- Editing the source row after import must not mutate the bot snapshot,
+        -- and the migration marker must prevent repeat persistence.
+        store.witch_hunter.loadouts[2].slot_melee = "player_edited_after_import"
+        iface._bot_loadouts.witch_hunter.slot_melee = "player_edited_after_import"
+        result = getter(function(self) return self._bot_loadouts end, iface)
+        H.equal(result.witch_hunter.slot_melee, "bot_hammer")
+        H.equal(store.witch_hunter.bot_loadout.slot_melee, "bot_hammer")
+        H.equal(persist_calls, 1)
+        _G.printf = old_printf
+    end)
+
+    H.test("issue 954 runtime check rejects native assignment with zero owned snapshot", function()
+        local runtime_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_bot_loadout_snapshot.lua"
+        local Runtime = assert(loadfile(runtime_path))()
+        local store = {
+            witch_hunter = {
+                selected_index = 1,
+                loadouts = { [1] = { slot_melee = "owner" } },
+            },
+        }
+        local iface = { _bot_loadouts = { witch_hunter = { slot_melee = "owner" } } }
+        H.equal(Runtime.live_check(
+            iface, store, Policy, { "slot_melee" }, { witch_hunter = 1 }),
+            "native bot designation not imported career=witch_hunter")
+    end)
+
+    H.test("issue 954 native designation waits for its saved row", function()
+        local runtime_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_bot_loadout_snapshot.lua"
+        local Runtime = assert(loadfile(runtime_path))()
+        local hooks = {}
+        local fake_mod = {}
+        function fake_mod:hook_safe() end
+        function fake_mod:hook(class_name, method_name, callback)
+            hooks[class_name .. "." .. method_name] = callback
+        end
+        local store = {
+            witch_hunter = {
+                loadouts = { [1] = { slot_melee = "owner" } },
+            },
+        }
+        local persist_calls = 0
+        local old_printf = _G.printf
+        _G.printf = function() end
+        Runtime.install(fake_mod, {
+            mode = function() return "store" end,
+            store = function() return store end,
+            persist = function() persist_calls = persist_calls + 1 end,
+            policy = Policy,
+            slot_names = { "slot_melee" },
+            mode_off = "off",
+            mode_store = "store",
+            mode_readonly = "readonly",
+            log_prefix = "gut_dev",
+            native_bot_assignments = function() return { witch_hunter = 2 } end,
+        })
+        local getter = assert(hooks["BackendInterfaceItemPlayfab.get_bot_loadout"])
+        local iface = { _bot_loadouts = { witch_hunter = { slot_melee = "owner" } } }
+
+        local result = getter(function(self) return self._bot_loadouts end, iface)
+        H.equal(result.witch_hunter.slot_melee, "owner")
+        H.equal(store.witch_hunter.bot_loadout, nil)
+        H.equal(persist_calls, 0)
+
+        store.witch_hunter.loadouts[2] = { slot_melee = "late_bot_row" }
+        result = getter(function(self) return self._bot_loadouts end, iface)
+        H.equal(result.witch_hunter.slot_melee, "late_bot_row")
+        H.equal(store.witch_hunter.bot_loadout.slot_melee, "late_bot_row")
+        H.equal(persist_calls, 1)
+        _G.printf = old_printf
+    end)
+
+    H.test("issue 954 absent and malformed native designations do not churn", function()
+        local runtime_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_bot_loadout_snapshot.lua"
+        local Runtime = assert(loadfile(runtime_path))()
+        local hooks = {}
+        local fake_mod = {}
+        function fake_mod:hook_safe() end
+        function fake_mod:hook(class_name, method_name, callback)
+            hooks[class_name .. "." .. method_name] = callback
+        end
+        local store = {
+            witch_hunter = { loadouts = { [1] = { slot_melee = "owner" } } },
+            empire_soldier = { loadouts = { [1] = { slot_melee = "owner" } } },
+        }
+        local persist_calls = 0
+        local old_printf = _G.printf
+        _G.printf = function() end
+        Runtime.install(fake_mod, {
+            mode = function() return "store" end,
+            store = function() return store end,
+            persist = function() persist_calls = persist_calls + 1 end,
+            policy = Policy,
+            slot_names = { "slot_melee" },
+            mode_off = "off",
+            mode_store = "store",
+            mode_readonly = "readonly",
+            log_prefix = "gut_dev",
+            native_bot_assignments = function()
+                return { empire_soldier = "not-an-index" }
+            end,
+        })
+        local getter = assert(hooks["BackendInterfaceItemPlayfab.get_bot_loadout"])
+        local iface = {
+            _bot_loadouts = {
+                witch_hunter = { slot_melee = "owner" },
+                empire_soldier = { slot_melee = "owner" },
+            },
+        }
+        getter(function(self) return self._bot_loadouts end, iface)
+        H.equal(persist_calls, 1)
+        getter(function(self) return self._bot_loadouts end, iface)
+        H.equal(persist_calls, 1)
         _G.printf = old_printf
     end)
 
