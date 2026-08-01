@@ -74,6 +74,27 @@ return function(H, repo_root)
         end
     end)
 
+    H.test("GUT dev view diagnostics have one install-only owner", function()
+        local stream = streams[2]
+        local view = read(stream.root .. "_mod_tweaker_view.lua")
+        local diagnostics = read(stream.root .. "_mod_tweaker_view_diagnostics.lua")
+
+        H.equal(occurrences(view, stream.module_path .. "_mod_tweaker_view_diagnostics"), 1,
+            "dev view diagnostics must have one owner")
+        H.truthy(diagnostics:find("function M.install", 1, true),
+            "dev view diagnostics have no explicit install API")
+        H.truthy(diagnostics:find("return M", 1, true),
+            "dev view diagnostics do not export their API")
+        H.equal(view:find("function ModTweakerView:_dump_state", 1, true), nil,
+            "dev view duplicated the extracted state probe")
+        H.equal(view:find("function ModTweakerView:_dump_scrollbar", 1, true), nil,
+            "dev view duplicated the extracted scrollbar probe")
+        H.truthy(diagnostics:find("function ModTweakerView:_dump_state", 1, true),
+            "extracted state probe is absent")
+        H.truthy(diagnostics:find("function ModTweakerView:_dump_scrollbar", 1, true),
+            "extracted scrollbar probe is absent")
+    end)
+
     H.test("GUT extracted modules remain hook and lifecycle neutral", function()
         for _, stream in ipairs(streams) do
             for _, name in ipairs({
@@ -90,6 +111,18 @@ return function(H, repo_root)
                 H.equal(source:find("function mod.on_", 1, true), nil, name .. " owns lifecycle")
             end
         end
+
+        local diagnostics = read(streams[2].root .. "_mod_tweaker_view_diagnostics.lua")
+        H.equal(diagnostics:find("mod:hook(", 1, true), nil,
+            "_mod_tweaker_view_diagnostics.lua owns an engine hook")
+        H.equal(diagnostics:find("mod:hook_safe(", 1, true), nil,
+            "_mod_tweaker_view_diagnostics.lua owns a safe hook")
+        H.equal(diagnostics:find("mod:command(", 1, true), nil,
+            "_mod_tweaker_view_diagnostics.lua owns a command")
+        H.equal(diagnostics:find("function mod.update", 1, true), nil,
+            "_mod_tweaker_view_diagnostics.lua owns update")
+        H.equal(diagnostics:find("function mod.on_", 1, true), nil,
+            "_mod_tweaker_view_diagnostics.lua owns lifecycle")
     end)
 
     H.test("GUT stable and dev interaction APIs preserve intentional parity", function()
