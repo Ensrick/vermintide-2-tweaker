@@ -65,6 +65,7 @@ local COMPOSITE_ICONS = COMPOSITE_ICON_FACTORY.new(COMPOSITE_ICON_CATALOG)
 mod._cos_composite_icons = COMPOSITE_ICONS
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
+local GLOW_PREVIEW_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_preview_policy")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
 local MAGIC_SKIN_GATEWAY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_magic_skin_gateway")
 local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
@@ -101,7 +102,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.176-dev"
+local MOD_VERSION = "0.9.177-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -5608,6 +5609,10 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
     local item_data = item.data
     local left_path  = spawn_data and spawn_data[1] and spawn_data[1].unit_name or nil
     local right_path = spawn_data and spawn_data[2] and spawn_data[2].unit_name or nil
+    local preview = GLOW_PREVIEW_POLICY.resolve_spawn(item,
+        _active_customization_backend_id, mod._active_customization_item_type,
+        _resolve_item_type, mod._la_instance_policy.resolve_preview_backend_id)
+    local skin_key, has_skin, preview_backend_id = preview.skin, preview.has_skin, preview.preview_backend_id
 
     -- LA offhand paint: spawn order is left (shield) = index 1, right (weapon) = index 2.
     -- Use the freshly-returned `units` array, not self._spawned_units (not yet assigned).
@@ -5615,22 +5620,13 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
     -- weapon_skin entry, OR the previewer was given a skin via item.skin).
     do
         local world = self._background_world or self._world or self.world
-        local has_skin = (item.skin and item.skin ~= "")
-                or (item_data and item_data.item_type == "weapon_skin")
         if has_skin and world and item_data and units and units[1] then
             -- v0.8.55-dev: when previewing a pending-cycle skin, item.backend_id
             -- is nil. Fall back to the customization screen's active backend_id
             -- so the LA paint follows the row-2 offhand selection while user
             -- cycles row-1 main-hand illusions.
-            local preview_item_type = _resolve_item_type(item_data)
-            local effective_bid = mod._la_instance_policy.resolve_preview_backend_id(
-                item.backend_id or (item_data and item_data.backend_id),
-                preview_item_type,
-                _active_customization_backend_id,
-                mod._active_customization_item_type)
             local component_claimed = _apply_la_offhand_to_units(world, item_data,
-                { units[1] }, true, effective_bid, "loot_previewer", { left_path })
-            local skin_key = item.skin or (item_data.item_type == "weapon_skin" and item_data.name)
+                { units[1] }, true, preview_backend_id, "loot_previewer", { left_path })
             if not component_claimed and skin_key == GK_SET.SHIELD_SKIN_KEY
                 and _offhand_paint_mesh_ok(units[1],
                     GK_SET.SHIELD_VARIANT_KEY, left_path) then
@@ -5652,6 +5648,7 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
     -- the variant's own model, never the base weapon's path.
     mod._cos.apply_unit_path_scale_hand(units[2], nil, right_path, "right")
     mod._cos.apply_unit_path_scale_hand(units[1], nil, left_path,  "left")
+    GLOW_PREVIEW_POLICY.bind_spawned(units, preview, GlowPicker, mod._cos, _dbg)
     mod._cos.apply_glow_override({ units[1], units[2] })
 
     return units

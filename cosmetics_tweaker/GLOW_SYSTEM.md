@@ -1,6 +1,6 @@
 # Glow System — cosmetics_tweaker
 
-State as of the v0.9.168-dev source candidate (2026-07-22); glow sync is
+State as of the v0.9.177-dev source candidate (2026-08-01); glow sync is
 verified in co-op, while CIM-backed restart recovery and the exact-instance
 Mace + Bretonnian runed-shield inheritance candidate await in-game verification.
 
@@ -22,7 +22,7 @@ and where to extend.
 | CIM-crafted item mirrors one bounded opaque exact-instance backup | 🧪 source candidate (#48) |
 | Restores saved RGB+intensity on popup re-open and equipment spawn | ✅ |
 | Rehydrates and repaints after lobby/role transitions | ✅ |
-| Repaints inventory/hero preview rebuilds | ✅ |
+| Repaints inventory/hero preview rebuilds | 🧪 v0.9.177 candidate (#796) |
 | Per-item RGB takes precedence over global override toggle | ✅ |
 | Magic-family multi-component sliders (lower / upper / dots) | ✅ |
 | Selection and wield never auto-open the editor | ✅ (v0.9.103-dev) |
@@ -78,6 +78,7 @@ All paths relative to `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/`.
 | --- | --- |
 | `_glow_picker.lua` | The popup UI. Scenegraph, slider widget factory, in-memory state, persistence helpers (`_load_per_item_glow` / `_save_per_item_glow`), live-preview wiring. |
 | `_cos_glow.lua` | Glow apply pipeline, peer-state reads, runtime-map consumption, and local/remote repaint helpers. |
+| `_cos_glow_preview_policy.lua` | Exact-item validation and the bounded native `loadout_sync_id` refresh edge used by Apply/Restore for the separate inventory character preview. |
 | `_cos_glow_instance_policy.lua` | **Issue 48.** Single owner of exact-instance identity (`identity_key`), runtime rebinding (`resolve_runtime`), remote matching (`remote_match`), and the durable disable round trip (`carry_disabled` / `is_disabled`). Pure policy: no game globals, no VMF, no rendering. Both the picker and the renderer `mod:dofile` it so they cannot drift apart. Covered by `qa/lua/tests/test_cos_glow_instance_policy.lua`. |
 | `_cos_glow_cim_bridge.lua` | **Issue 48.** Pure optional-persistence bridge. Owns the bounded blob schema, state sanitization, `cim_dev`/`cim` precedence, exact-identity import, and identity-safe clear through CIM's public APIs. Covered by `qa/lua/tests/test_cos_glow_cim_bridge.lua`. |
 | `cosmetics_tweaker.lua` | Equipment/preview hooks plus the host-authoritative `cos_glow_apply_req` / `cos_glow_apply` transport. |

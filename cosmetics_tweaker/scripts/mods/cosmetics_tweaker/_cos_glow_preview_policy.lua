@@ -48,4 +48,70 @@ function Policy.resolve(host, backend_id, slot_data, is_unit)
     }, "ready"
 end
 
+-- The standalone customization weapon and the persistent inventory character
+-- are separate preview owners. A committed edit must advance the parent
+-- HeroViewStateOverview revision so HeroWindowCharacterPreview repopulates its
+-- loadout (VT2 source: hero_window_character_preview.lua:240-248).
+function Policy.request_inventory_refresh(host, backend_id)
+    if host == nil or backend_id == nil then return false, "missing_identity" end
+    if host._item_backend_id ~= backend_id then return false, "backend_mismatch" end
+    local parent = host._parent
+    local revision = parent and parent.loadout_sync_id
+    if type(revision) ~= "number" then return false, "revision_unavailable" end
+    parent.loadout_sync_id = revision + 1
+    return true, parent.loadout_sync_id
+end
+
+-- Resolve both preview owners from one immutable item snapshot. The pending
+-- illusion row intentionally has no backend id; only the active customization
+-- item may supply its identity, and only through the shared family validator.
+function Policy.resolve_spawn(item, active_backend_id, active_item_type,
+        resolve_item_type, resolve_preview_backend_id)
+    local data = type(item) == "table" and item.data or nil
+    local skin = _skin_of(item)
+    local has_skin = type(skin) == "string" and skin ~= ""
+    local context = { data = data, skin = skin, has_skin = has_skin }
+    if not has_skin or type(data) ~= "table"
+            or type(resolve_item_type) ~= "function"
+            or type(resolve_preview_backend_id) ~= "function" then
+        return context
+    end
+    local item_type = resolve_item_type(data)
+    context.preview_backend_id = resolve_preview_backend_id(
+        item.backend_id or data.backend_id, item_type,
+        active_backend_id, active_item_type)
+    context.glow_backend_id = resolve_preview_backend_id(
+        nil, item_type, active_backend_id, active_item_type)
+    return context
+end
+
+-- Bind the freshly returned spawn array before the caller stores it on the
+-- previewer. Dirty editor state survives only for the exact item+skin; every
+-- other rebuild restores committed runtime state before the shared painter.
+function Policy.bind_spawned(units, context, picker, glow, log)
+    local backend_id = context and context.glow_backend_id
+    local skin = context and context.skin
+    local data = context and context.data
+    if type(units) ~= "table" or backend_id == nil or skin == nil
+            or type(data) ~= "table" or type(picker) ~= "table"
+            or type(glow) ~= "table" then
+        return false
+    end
+    local slot_data = { skin = skin }
+    local dirty = picker.is_open_for(backend_id, slot_data)
+    if not dirty then picker.restore_runtime_for(backend_id, slot_data) end
+    for i = 1, 2 do
+        local unit = units[i]
+        if unit then
+            glow.bind_glow_unit(unit, backend_id, skin, nil,
+                data.matching_item_key or data.name, data.template)
+        end
+    end
+    if type(log) == "function" then
+        log("[glow:796] preview spawn rebound backend=%s skin=%s dirty=%s units=%d",
+            tostring(backend_id), tostring(skin), tostring(dirty), #units)
+    end
+    return true, dirty
+end
+
 return Policy
