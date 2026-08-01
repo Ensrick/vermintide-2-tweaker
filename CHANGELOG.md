@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-01 - Atomic remote Musket hand selection (#474/#786)
+
+Character Weapon Variants 0.1.477-dev now proves every authored remote-husk
+hand unit and its donor material before changing vanilla's hand-selection
+table. A cold Old Musket render preserves the visible base Handgun and queues
+one bounded lease; a resident replay selects the custom Musket atomically.
+Engine-free coverage reproduces both phases and the #660 appearance contract
+now names the husk adapter as an owner. Co-op runtime verification is pending.
+
 ## 2026-07-22 - Configurable Chaos Wastes starting shrine (#458)
 
 Chaos Wastes Tweaker Dev 0.7.308-dev adds an opt-in shrine at the exact start
