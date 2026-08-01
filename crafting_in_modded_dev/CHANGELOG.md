@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.109-dev (2026-08-01) - accessory properties apply per layer (#959)
+
+- Fixed accessory property clicks that played their success sound but silently
+  rejected the write when the same property was already full on another
+  accessory. Per-property and distinct-property capacity now retain the active
+  Necklace, Charm, or Trinket layer through the backend mutation.
+- Kept ordinary weapon-property capacity global and unchanged.
+- Replaced the display-only runtime regression with a production-equivalent
+  sibling-layer write and added bounded `[cim:959]` store outcomes for live
+  verification.
+
 ## 0.8.108-dev (2026-07-26) - transactional synthetic salvage (#628) [not-started]
 
 - Unified keyed backend-item recovery with the canonical synthetic-item

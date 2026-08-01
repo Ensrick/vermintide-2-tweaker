@@ -2876,27 +2876,35 @@ while the engine stores or presents that key as one aggregate record.
 ### Symptoms
 - A value selected in one category appears used, capped, removable, or clearable
   in another category even though the persisted records retain separate slots.
+- A click can play the native success sound yet make no visual or functional
+  change because the mutation helper rejects the target category against a cap
+  already filled by a sibling category.
 - Logs show correct per-slot writes, so persistence looks healthy while the
   picker prevents the same key from being selected independently.
 
 ### Diagnosis pattern
 1. Prove the write records retain a category discriminator or disjoint index
    range; do not rewrite storage merely because presentation looks shared.
-2. Trace every read/remove consumer of the aggregate key. In the confirmed
-   Athanor case, row population counts `#slot_indices`, key removal selects the
+2. Trace every read, write, cap, and remove consumer of the aggregate key. In
+   the confirmed Athanor case, row population counts `#slot_indices`, the CIM
+   mutation helper capped `#slot_indices` globally, key removal selects the
    final aggregate index, and Clear removes all indices for any key present in
-   the category [src: `hero_window_weave_properties.lua:718-740,2483-2501,2540-2632`].
+   the category [src: `hero_window_weave_properties.lua:718-740,2402-2460,2483-2501,2540-2664`].
 3. Compare those consumers with the authored category layout. Accessory property
    layers are disjoint ten-slot ranges [src: `hero_window_weave_properties.lua:24-65`].
 
 ### Fix template
 - Preserve the category dimension at every presentation and mutation seam:
-  usage/count, single-row removal, clear eligibility, and clear execution.
+  usage/count, write admission, per-key use cap, distinct-key capacity,
+  single-row removal, clear eligibility, and clear execution.
 - Put the mapping and filtering in one pure policy rather than duplicating
   arithmetic in hooks. Let unaffected categories and vanilla contexts fall
   through unchanged.
-- Regression-test one fully occupied category, an empty sibling category, the
-  same key in two categories, single-row removal, and category Clear.
+- Regression-test one fully occupied category, an empty sibling category, an
+  actual write of the same key into that sibling, independent per-key and
+  distinct-key caps, single-row removal, and category Clear. A test that merely
+  appends a slot to a fixture can falsely pass while the production write path
+  remains broken.
 
 **Related:** class 1 (duplicate hooks) and issue #414 (category-family scope).
 

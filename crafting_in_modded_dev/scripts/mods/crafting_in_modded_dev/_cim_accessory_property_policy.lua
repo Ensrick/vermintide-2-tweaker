@@ -16,6 +16,22 @@ local CATEGORY_LAYER = {
     utility_accessory = 3,
 }
 
+local function layer_index(slot_index, layer_size)
+    if type(slot_index) ~= "number"
+        or type(layer_size) ~= "number"
+        or layer_size <= 0
+    then
+        return nil
+    end
+    return math.ceil(slot_index / layer_size)
+end
+
+local function same_scope(a, b, layer_size)
+    if layer_size == nil then return true end
+    local a_layer = layer_index(a, layer_size)
+    return a_layer ~= nil and a_layer == layer_index(b, layer_size)
+end
+
 function M.layer_for_category(category)
     return CATEGORY_LAYER[category]
 end
@@ -30,7 +46,84 @@ function M.slot_in_category(slot_index, category, layer_size)
         return false
     end
 
-    return math.ceil(slot_index / layer_size) == layer
+    return layer_index(slot_index, layer_size) == layer
+end
+
+-- Store one property bubble while retaining the accessory layer dimension.
+-- A nil layer_size preserves the native single-item/global-cap behavior.
+-- An accessory layer_size applies the use cap independently inside the target
+-- ten-slot range while still rejecting a slot occupied by any property.
+function M.store_property_slot(properties, property_key, slot_index, cap, layer_size)
+    if type(properties) ~= "table"
+        or property_key == nil
+        or type(slot_index) ~= "number"
+        or type(cap) ~= "number"
+        or cap <= 0
+    then
+        return nil, false, "invalid", 0
+    end
+
+    local target_layer
+    if layer_size ~= nil then
+        target_layer = layer_index(slot_index, layer_size)
+        if not target_layer then return nil, false, "invalid", 0 end
+    end
+
+    local slots = properties[property_key]
+    if type(slots) ~= "table" then
+        slots = {}
+        properties[property_key] = slots
+    end
+
+    local used_in_scope = 0
+    for _, used_slot in ipairs(slots) do
+        if not target_layer or same_scope(used_slot, slot_index, layer_size) then
+            used_in_scope = used_in_scope + 1
+        end
+    end
+
+    -- Slot occupancy remains global: two properties may never own the same
+    -- authored grid slot, even when their property-use caps are layer-local.
+    for _, property_slots in pairs(properties) do
+        if type(property_slots) == "table" then
+            for _, used_slot in ipairs(property_slots) do
+                if used_slot == slot_index then
+                    return slots, false, "occupied", used_in_scope
+                end
+            end
+        end
+    end
+
+    if used_in_scope >= cap then
+        return slots, false, "cap", used_in_scope
+    end
+
+    slots[#slots + 1] = slot_index
+    return slots, true, "stored", used_in_scope + 1
+end
+
+
+function M.property_present_in_scope(slot_indices, target_slot, layer_size)
+    if type(slot_indices) ~= "table" or type(target_slot) ~= "number" then
+        return false
+    end
+    for _, slot_index in ipairs(slot_indices) do
+        if same_scope(slot_index, target_slot, layer_size) then return true end
+    end
+    return false
+end
+
+function M.count_distinct_properties(properties, target_slot, layer_size)
+    if type(properties) ~= "table" or type(target_slot) ~= "number" then
+        return 0
+    end
+    local count = 0
+    for _, slot_indices in pairs(properties) do
+        if M.property_present_in_scope(slot_indices, target_slot, layer_size) then
+            count = count + 1
+        end
+    end
+    return count
 end
 
 function M.count_slots(slot_indices, category, layer_size)
