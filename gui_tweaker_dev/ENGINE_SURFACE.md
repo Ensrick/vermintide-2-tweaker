@@ -257,14 +257,16 @@ advance [src: `scripts/ui/ui_passes.lua:1964-1990,2177-2181`; `scripts/ui/ui_ren
 Clicks choose the nearest measured insertion boundary rather than estimating by character count, so signs,
 decimal points, proportional digits, and UI scale share one contract. Two ESC-menu surfaces sit here: the button LABEL is supplied as backend-localization DATA (not a `Localize` hook - the global is rawset-replaced on init and the button localizes through the sibling `simple_lookup`), and the modern keep menu's button column (`HeroWindowIngameView._update_presentation` [src: `hero_window_ingame_view.lua:490-515`]) is compacted because gut's own Mod Tweaker button pushes it to overflow. The keep also hosts the injected Bestiary/Armory compendium via HeroView sub-states and the in-mission keep-inventory console windows (`docs/engine/06` owns the inventory/preview seams).
 
-#272's scoreboard inventory is currently observation-only. `_gut_diagnostics.lua`
-chains the existing VMF lifecycle callbacks (no engine hook), inventories
-`ScoreboardHelper.scoreboard_topic_stats`, and takes at most one delayed live
-snapshot after `StateIngame` becomes ready. It calls the same
-`get_grouped_topic_statistics` source used by the end screen [src:
-`scripts/helpers/scoreboard_helper.lua:344-436`] and caps the process at four
-records. It neither intercepts Tab input nor adds a network channel; the phased
-UI and custom-stat ownership decisions live in `SCOREBOARD_RESEARCH_272.md`.
+#272's scoreboard inventory chains the existing VMF lifecycle callbacks (no
+engine hook), inventories `ScoreboardHelper.scoreboard_topic_stats`, and takes
+at most one delayed live snapshot after `StateIngame` becomes ready. The live
+presenter hooks `IngamePlayerListUI._draw`; the end presenter hooks
+`EndViewStateScore.draw`. Both consume the same detached model built from
+`get_grouped_topic_statistics` [src:
+`scripts/helpers/scoreboard_helper.lua:344-436`]. The renderer owns one explicit
+`is_root` scenegraph and a bounded 11-by-4 grid of individual text passes; it
+does not encode rows as multiline/TSV text, own Tab input, or add a network
+channel. Custom-stat ownership decisions remain in `SCOREBOARD_RESEARCH_272.md`.
 
 #437 adds the missing Adventure disconnect lifecycle without changing scoreboard
 rendering or transport. On the server only, `_gut_scoreboard_retention.lua` wraps

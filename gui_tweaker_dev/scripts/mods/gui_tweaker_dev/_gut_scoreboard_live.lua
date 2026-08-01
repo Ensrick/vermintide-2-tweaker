@@ -10,11 +10,21 @@ local UISceneGraph = rawget(_G, "UISceneGraph")
 local UIWidget = rawget(_G, "UIWidget")
 local CAPTURE_INTERVAL = 0.25
 local MAX_PLAYERS = 4
+local MAX_TOPICS = 11
 local MAX_NAME = 18
 local UTF8 = rawget(_G, "UTF8Utils")
+local PANEL_W = 1160
+local PANEL_H = 590
+local PAD_X = 20
+local TITLE_H = 52
+local HEADER_H = 44
+local ROW_H = 42
+local LABEL_W = 300
+local PLAYER_W = 200
 
 local SCENEGRAPH = {
     root = {
+        is_root = true,
         scale = "hud_scale_fit",
         position = { 0, 0, ((rawget(_G, "UILayer") or {}).hud or 100) + 20 },
         size = { 1920, 1080 },
@@ -23,39 +33,86 @@ local SCENEGRAPH = {
         parent = "root",
         vertical_alignment = "center",
         horizontal_alignment = "center",
-        position = { 0, -210, 1 },
-        size = { 1120, 420 },
+        position = { 0, 0, 1 },
+        size = { PANEL_W, PANEL_H },
     },
 }
 
-local PASSES = { { pass_type = "rect", style_id = "background" } }
+local PASSES = {
+    { pass_type = "rect", style_id = "background" },
+    { pass_type = "border", style_id = "border" },
+}
 local CONTENT = {}
 local STYLE = {
     background = {
-        scenegraph_id = "panel",
-        color = { 220, 8, 10, 14 },
+        color = { 245, 8, 10, 14 },
         offset = { 0, 0, 0 },
+        size = { PANEL_W, PANEL_H },
+    },
+    border = {
+        color = { 255, 120, 108, 78 },
+        thickness = 2,
     },
 }
 
-local function _add_text(id, offset_x, width, alignment)
+local function _add_rect(id, x, y, width, height, color, z)
+    PASSES[#PASSES + 1] = { pass_type = "rect", style_id = id }
+    STYLE[id] = {
+        offset = { x, y, z or 1 },
+        size = { width, height },
+        color = color,
+    }
+end
+
+local function _add_text(id, x, y, width, height, alignment, font_size, color)
     PASSES[#PASSES + 1] = { pass_type = "text", text_id = id, style_id = id }
     CONTENT[id] = ""
     STYLE[id] = {
-        scenegraph_id = "panel",
-        font_type = "arial",
-        font_size = 20,
+        font_type = "hell_shark",
+        font_size = font_size or 19,
+        localize = false,
+        upper_case = false,
         horizontal_alignment = alignment or "left",
-        vertical_alignment = "top",
-        text_color = { 255, 235, 235, 235 },
-        offset = { offset_x, 14, 2 },
-        size = { width, 390 },
+        vertical_alignment = "center",
+        text_color = color or { 255, 235, 235, 235 },
+        offset = { x, y, 3 },
+        size = { width, height },
         shadow_offset = { 1, 1, 0 },
     }
 end
 
-_add_text("labels", 22, 360, "left")
-for i = 1, MAX_PLAYERS do _add_text("player" .. i, 372 + (i - 1) * 180, 170, "center") end
+local title_y = PANEL_H - TITLE_H
+local header_y = title_y - HEADER_H
+_add_rect("title_background", 2, title_y, PANEL_W - 4, TITLE_H,
+    { 255, 20, 24, 30 }, 1)
+_add_rect("header_background", 2, header_y, PANEL_W - 4, HEADER_H,
+    { 255, 35, 37, 42 }, 1)
+_add_text("title", PAD_X, title_y, PANEL_W - PAD_X * 2, TITLE_H,
+    "center", 25, { 255, 225, 195, 120 })
+_add_text("stat_header", PAD_X, header_y, LABEL_W, HEADER_H,
+    "left", 19, { 255, 215, 205, 175 })
+
+for column = 1, MAX_PLAYERS do
+    local x = PAD_X + LABEL_W + (column - 1) * PLAYER_W
+    _add_rect("column_rule_" .. column, x - 1, 24,
+        2, PANEL_H - TITLE_H - 24, { 150, 105, 105, 105 }, 2)
+    _add_text("player_header_" .. column, x, header_y, PLAYER_W, HEADER_H,
+        "center", 19, { 255, 235, 225, 195 })
+end
+
+for row = 1, MAX_TOPICS do
+    local y = header_y - row * ROW_H
+    _add_rect("row_background_" .. row, 2, y, PANEL_W - 4, ROW_H,
+        row % 2 == 0 and { 225, 20, 22, 27 } or { 225, 13, 15, 19 }, 1)
+    _add_text("label_" .. row, PAD_X, y, LABEL_W, ROW_H,
+        "left", 18, { 255, 215, 215, 215 })
+    for column = 1, MAX_PLAYERS do
+        local x = PAD_X + LABEL_W + (column - 1) * PLAYER_W
+        _add_text("player_" .. column .. "_row_" .. row,
+            x, y, PLAYER_W, ROW_H, "center", 18,
+            { 255, 240, 240, 240 })
+    end
+end
 
 local WIDGET_DEF = {
     scenegraph_id = "panel",
@@ -113,25 +170,28 @@ end
 
 local function _populate(page)
     local localize = rawget(_G, "Localize")
-    local labels = { mod:localize("gut_scoreboard_live_title") }
-    for i = 1, #page.topics do
-        local key = page.topics[i].display_text
-        labels[#labels + 1] = localize and localize(key) or key
+    widget.content.title = mod:localize("gut_scoreboard_live_title")
+    widget.content.stat_header = mod:localize("gut_scoreboard_live_statistic")
+    for row = 1, MAX_TOPICS do
+        local topic = page.topics[row]
+        widget.content["label_" .. row] = topic
+            and (localize and localize(topic.display_text) or topic.display_text) or ""
     end
-    widget.content.labels = table.concat(labels, "\n")
 
     for column = 1, MAX_PLAYERS do
         local player = page.players[column]
-        local lines = {}
-        if player then
-            lines[1] = _truncate(player.name)
-            for row = 1, #page.topics do
-                local score = player.scores[page.topics[row].name]
-                lines[#lines + 1] = type(score) == "number"
+        widget.content["player_header_" .. column] = player
+            and _truncate(player.name) or ""
+        for row = 1, MAX_TOPICS do
+            local topic = page.topics[row]
+            local value = ""
+            if player and topic then
+                local score = player.scores[topic.name]
+                value = type(score) == "number"
                     and tostring(math.floor(score + 0.5)) or "—"
             end
+            widget.content["player_" .. column .. "_row_" .. row] = value
         end
-        widget.content["player" .. column] = table.concat(lines, "\n")
     end
 end
 

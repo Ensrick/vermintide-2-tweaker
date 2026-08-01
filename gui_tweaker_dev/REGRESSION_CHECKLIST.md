@@ -144,6 +144,9 @@ If this candidate fails, use exactly one evidence-selected fallback:
 
 ## Scoreboard capability inventory (#272)
 
+- [ ] Solo first: enable **Expanded Scoreboard (Live + End Screen)** in an Adventure mission and hold Tab.
+- [ ] A centered opaque framed **Mission Statistics** panel appears with one header row, one statistic column, up to four player columns, and eleven separately aligned rows; no transparent TSV-like line or overlapping text appears.
+- [ ] The same grid appears at mission end, each sort choice reorders whole player columns, and disabling the option restores vanilla presentation.
 - [ ] On load, `[gut:272]` reports 11 topics, 11 grouped references, and zero malformed, duplicate, or unresolved entries.
 - [ ] Hot-join classification reports ten covered topics and only `damage_dealt_bosses` as a gap.
 - [ ] In an Adventure mission, the automatic probe or `/gut_scoreboard_probe` reports a ready snapshot with numeric scores and no malformed player rows.
