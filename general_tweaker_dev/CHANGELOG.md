@@ -1,5 +1,18 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.258-dev (2026-08-01) -- Godmode outgoing armor boundary (#1008) [verify-fix]
+
+- Preserved #549's positive final-damage override and added one earlier,
+  source-backed boundary at `DamageUtils.calculate_damage`, where vanilla still
+  exposes hard invulnerability and the resolved hit-zone armor categories.
+- With Godmode and **9999 Damage Per Strike** enabled, an armor-rejected zero
+  against ordinary armor or super armor is promoted to 9999. Vanilla
+  invulnerability, authored no-damage/zero-power profiles, unarmored zeros,
+  allies, self hits, enemy players, and Godmode-off calls remain unchanged.
+- No damage profile, armor table, lookup, or RPC is changed. Classification is
+  fail-open, successful/failing classifications have a shared eight-line log
+  cap, and pure offline plus runtime regression checks cover the boundary.
+
 ## v0.2.257-dev (2026-08-01) -- Godmode Blightstorm capture boundary (#1009) [verify-fix]
 
 - Godmode now rejects only the server-authored Blightstorm entering edge at

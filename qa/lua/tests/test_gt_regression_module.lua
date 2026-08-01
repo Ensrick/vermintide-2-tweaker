@@ -21,7 +21,7 @@ return function(H, repo_root)
             dbg_alert = function() end,
         })
 
-        H.equal(#names, 82)
+        H.equal(#names, 83)
         H.equal(names[1], "gt_pickup_lookup_uses_rawget")
         H.equal(names[#names], "issue241_noclip_boundary_routes")
     end)
@@ -31,7 +31,7 @@ return function(H, repo_root)
         local module = read("_gt_regression_checks.lua")
         H.truthy(main:find('mod:dofile("scripts/mods/general_tweaker_dev/_gt_regression_checks")', 1, true))
         H.equal(select(2, main:gsub('_rt_register%(', '')), 2)
-        H.equal(select(2, module:gsub('_rt_register%(', '')), 82)
+        H.equal(select(2, module:gsub('_rt_register%(', '')), 83)
     end)
 
     H.test("GT bot update extraction preserves the singleton dispatcher", function()
