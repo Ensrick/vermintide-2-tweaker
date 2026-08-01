@@ -32,6 +32,7 @@ function M.install(mod, rt_register, deps)
     local CWV_PEER_IDENTITY = deps.cwv_peer_identity
     local LA_INSTANCE_POLICY = deps.la_instance_policy
     local ISSUE704_PICKER_FAMILY = deps.issue704_picker_family
+    local MODDED_ILLUSION_SWAP_OWNER = deps.modded_illusion_swap_owner
 
 -- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
@@ -107,6 +108,14 @@ _rt_register("cos_replay_reconciler_wired", function()
     local r3 = P.reconcile_edge(st, "rt", recs, apply)
     if not (r3.applied == 1 and calls == 2) then
         return "replay reconciler did not re-apply after invalidation"
+    end
+end)
+
+_rt_register("cos_modded_illusion_swap_owner_504", function()
+    if type(MODDED_ILLUSION_SWAP_OWNER) ~= "table"
+        or MODDED_ILLUSION_SWAP_OWNER.hook_count ~= 8
+        or type(MODDED_ILLUSION_SWAP_OWNER.owns_illusion_swap) ~= "function" then
+        return "modded-realm illusion-swap owner is missing or incomplete"
     end
 end)
 

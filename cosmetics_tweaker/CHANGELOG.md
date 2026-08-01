@@ -1,5 +1,18 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.175-dev (2026-08-01) — #504 modded-illusion swap owner [not-started]
+
+- Extracted all eight modded-realm illusion selection, crafting, and completion
+  hooks into one idempotent owner with its fake backend-id and pending-request
+  state. Hook order and CIM-at-fire-time yielding are unchanged.
+- Kept the malformed local-craft completion guard with the request producer so
+  a future split cannot separate the empty-result defense from its cause.
+- Added behavioral hook-cardinality, idempotence, safe custom-key lookup, and
+  runtime-owner coverage. Ratcheted the Cosmetics entry ceiling from 10,194 to
+  9,948 lines and made the new owner mandatory in decomposition QA.
+
+This structural slice does not complete #504 and does not require live testing.
+
 ## 0.9.174-dev (2026-08-01) — #48 CIM exact-instance glow persistence [not-started]
 
 - Apply now mirrors one bounded, versioned item-and-illusion glow blob into

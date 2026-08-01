@@ -39,6 +39,7 @@ return function(H, repo_root)
     H.test("Cosmetics entry installs each extracted runtime owner once", function()
         for _, name in ipairs({
             "_cos_glow_probe", "_cos_la_commands", "_cos_runtime_checks",
+            "_cos_modded_illusion_swap",
         }) do
             local call = 'mod:dofile("scripts/mods/cosmetics_tweaker/' .. name .. '")'
             H.equal(count_plain(entry, call), 1, name .. " load count")
@@ -46,6 +47,7 @@ return function(H, repo_root)
         H.equal(count_plain(entry, "_cos_glow_probe.install(mod"), 1)
         H.equal(count_plain(entry, "_cos_la_commands.install(mod"), 1)
         H.equal(count_plain(entry, "_cos_runtime_checks.install(mod, _rt_register"), 1)
+        H.equal(count_plain(entry, "MODDED_ILLUSION_SWAP.install(mod"), 1)
         H.equal(count_plain(entry, "local _wielded_units_for_probe = _cos_glow_probe.wielded_units_for_probe"), 1)
     end)
 
@@ -61,6 +63,9 @@ return function(H, repo_root)
             dbg_alert = function() end, ui_dump = {}, custom_skin_keys = {},
             offhand_preload_lifecycle = {}, mh_embed = {},
             la_instance_policy = {}, husk_identity = {},
+            modded_illusion_swap_owner = {
+                hook_count = 8, owns_illusion_swap = function() return false end,
+            },
             issue704_picker_family = function(surface, family)
                 local expected = {
                     vanilla = "cwv_es_sword_and_mace",
@@ -74,7 +79,7 @@ return function(H, repo_root)
         module.install(mod, function(name, fn)
             checks[#checks + 1] = { name = name, fn = fn }
         end, deps)
-        H.equal(#checks, 59)
+        H.equal(#checks, 60)
         H.equal(checks[1].name, "cos_la_reconcile_and_pull_wired")
         H.equal(checks[2].name, "cos_replay_reconciler_wired")
         local score_identity_index, score_replay_index

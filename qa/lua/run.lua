@@ -276,6 +276,7 @@ local suites = {
     "test_cos_offhand_session_state",
     "test_cos_mh_package_lifecycle",
     "test_cos_runtime_modules",
+    "test_cos_modded_illusion_swap",
     "test_cos_offhand_names",
     "test_cos_item_presentation",
     "test_cos_composite_icons",
