@@ -191,6 +191,7 @@ local suites = {
 	"test_woc_boss_weapon_catalog",
 	"test_cim_external_trait_policy",
     "test_woc_relic_policy",
+	"test_woc_shared_relic",
 	"test_woc_blightreaper_moveset",
 	"test_woc_blightreaper_power",
 	"test_woc_cursed_rarity",

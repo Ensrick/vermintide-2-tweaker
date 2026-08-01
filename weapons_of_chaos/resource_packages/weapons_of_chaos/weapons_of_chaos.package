@@ -14,6 +14,8 @@ lua = [
 	"scripts/mods/weapons_of_chaos/_lib_weapon_appearance"
 	"scripts/mods/weapons_of_chaos/_woc_mod_unit_preview"
 	"scripts/mods/weapons_of_chaos/_woc_relic_policy"
+	"scripts/mods/weapons_of_chaos/_woc_shared_relic"
+	"scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime"
 	"scripts/mods/weapons_of_chaos/_woc_wire_policy"
 	"scripts/mods/weapons_of_chaos/weapons_of_chaos"
 	"scripts/mods/weapons_of_chaos/weapons_of_chaos_data"

@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.46-dev"
+local MOD_VERSION = "0.1.48-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -215,6 +215,8 @@ mod._woc_resource_residency = mod:dofile(
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
+local _shared_relic_policy = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_woc_shared_relic")
 
 -- Issue 822: trophy relics are inventory rewards, never customization inputs.
 -- One presentation owner drives the native flags consumed by both mouse and
@@ -1388,35 +1390,14 @@ local function _wire_safe_item(item)
 end
 
 local _blightreaper_sync_seen = false
-local _IDENTITY_SCHEMA = 1
 local _remote_blightreaper = {}
 
--- The vanilla loadout RPC intentionally carries `es_1h_sword` for mixed-lobby
--- crash safety. This VMF same-mod sideband restores the one missing bit only on
--- WOC-capable peers. It is bounded to loadout sync edges, never sent per-frame.
-mod:network_register("woc_blightreaper_identity", function(sender_peer_id, schema, slot_name, equipped)
-	if schema ~= _IDENTITY_SCHEMA or type(sender_peer_id) ~= "string" then return end
-	if slot_name ~= "slot_melee" and slot_name ~= "slot_ranged" then return end
-	local by_slot = _remote_blightreaper[sender_peer_id]
-	if not by_slot then by_slot = {}; _remote_blightreaper[sender_peer_id] = by_slot end
-	local active = equipped == 1
-	if by_slot[slot_name] == active then return end
-	by_slot[slot_name] = active
-
-	-- The ordinary equipment RPC and this sideband may arrive in either order.
-	-- Re-wield once when the husk already exists; otherwise its upcoming vanilla
-	-- wield consumes the cached identity.
-	local pm = Managers and Managers.player
-	local player = pm and pm.player_from_peer_id and pm:player_from_peer_id(sender_peer_id)
-	local unit = player and player.player_unit
-	if unit and Unit.alive(unit) then
-		local inventory
-		pcall(function() inventory = ScriptUnit.extension(unit, "inventory_system") end)
-		if inventory and inventory.wielded_slot == slot_name and type(inventory.wield) == "function" then
-			pcall(inventory.wield, inventory, slot_name)
-		end
-	end
-end)
+local _shared_relic_runtime = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime").new({
+		mod = mod, policy = _shared_relic_policy, backend_id = BACKEND_ID,
+		item_key = ITEM_KEY, remote_identity = _remote_blightreaper,
+		rt_register = _rt_register,
+	})
 
 -- ============================================================
 -- Native Shyish death spirits (#632)
@@ -2057,25 +2038,33 @@ mod:command("woc_audio_probe",
 mod.update = function(dt)
 	_transform_owner:step()
 	_audio.update(dt)
+	_shared_relic_runtime:update(dt)
 	local network = Managers and Managers.state and Managers.state.network
 	if network and network.is_server then _update_spirits(dt) end
 end
 
 mod.on_game_state_changed = function(status, state_name)
+	_shared_relic_runtime:on_game_state_changed(status, state_name)
 	if status == "exit" then
 		_transform_owner:clear()
 		_audio.stop_all("game-state-exit:" .. tostring(state_name))
 	end
 end
 
+mod.on_enabled = function()
+	_shared_relic_runtime:on_enabled("mod-enabled")
+end
+
 mod.on_disabled = function()
 	_transform_owner:clear()
 	_audio.stop_all("mod-disabled")
+	_shared_relic_runtime:reset("mod-disabled")
 end
 
 mod.on_unload = function()
 	_transform_owner:clear()
 	_audio.stop_all("mod-unload")
+	_shared_relic_runtime:reset("mod-unload")
 end
 
 -- Issue 278/613: the fail-safe skip below fires with `key nil` many times per
@@ -2111,12 +2100,10 @@ end
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
 		local is_blightreaper = _power.is_relic(item)
+		_shared_relic_runtime:observe_loadout_sync(
+			player, slot_name, is_blightreaper)
 		if is_blightreaper then
 			_blightreaper_sync_seen = true
-		end
-		if slot_name == "slot_melee" or slot_name == "slot_ranged" then
-			pcall(mod.network_send, mod, "woc_blightreaper_identity", "others",
-				_IDENTITY_SCHEMA, slot_name, is_blightreaper and 1 or 0)
 		end
 		local send_item = _wire_safe_item(item)
 		if send_item == nil then
@@ -2133,7 +2120,13 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 			printf("[WOC:278] sync_loadout_slot net-safe: %s -> %s (slot=%s)",
 				tostring(item.key), tostring(send_item.key), tostring(slot_name))
 		end
-		return func(player, slot_name, send_item, sync_to_specific_peer_id)
+		local result_n, results
+		local function capture(...)
+			result_n = select("#", ...)
+			results = { ... }
+		end
+		capture(func(player, slot_name, send_item, sync_to_specific_peer_id))
+		return unpack(results, 1, result_n)
 	end)
 end
 
