@@ -165,7 +165,9 @@ return function(H, repo_root)
         H.equal(count_plain(cos,
             'mod:hook(BackendUtils, "set_loadout_item"'), 1,
             "Cosmetics must compose its singleton loadout hook")
-        H.equal(count_plain(cos,
+        local illusion_owner = read(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap.lua")
+        H.equal(count_plain(illusion_owner,
             'mod:hook_safe("HeroWindowItemCustomization", "_apply_weapon_skin_craft_complete"'), 1,
             "Cosmetics must compose its singleton craft-complete hook")
         local cos_owner = read(repo_root .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_ui_presentation_refresh.lua")
