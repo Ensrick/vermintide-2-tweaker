@@ -12,6 +12,8 @@ return function(H, repo_root)
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy.lua")
     local preview_policy_path = repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_preview_policy.lua"
+    local preview_policy_source = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_preview_policy.lua")
     local preview_policy = assert(loadfile(preview_policy_path))()
 
     H.test("Cosmetics local-player lookups are safe across network teardown", function()
@@ -64,6 +66,7 @@ return function(H, repo_root)
         local right, left, dead = {}, {}, {}
         local host = {
             _item_backend_id = "backend-796",
+            _parent = { loadout_sync_id = 0 },
             _previewer = {
                 _item = {
                     skin = "skin-796",
@@ -89,6 +92,47 @@ return function(H, repo_root)
             { skin = "other-skin" })
         H.equal(rejected, nil)
         H.equal(reason, "skin_mismatch")
+
+        local refreshed, revision = preview_policy.request_inventory_refresh(
+            host, "backend-796")
+        H.truthy(refreshed)
+        H.equal(revision, 1)
+        H.equal(host._parent.loadout_sync_id, 1)
+        refreshed, reason = preview_policy.request_inventory_refresh(
+            host, "other-backend")
+        H.equal(refreshed, false)
+        H.equal(reason, "backend_mismatch")
+
+        local spawn = preview_policy.resolve_spawn({
+            skin = "skin-796",
+            data = { name = "weapon-796", template = "template-796" },
+        }, "backend-796", "weapon", function() return "weapon" end,
+            function(exact_backend_id, _, active_backend_id)
+                return exact_backend_id or active_backend_id
+            end)
+        H.equal(spawn.skin, "skin-796")
+        H.equal(spawn.preview_backend_id, "backend-796")
+        H.equal(spawn.glow_backend_id, "backend-796")
+
+        local restored, bound, logged = 0, {}, 0
+        local picker_stub = {
+            is_open_for = function() return false end,
+            restore_runtime_for = function() restored = restored + 1 end,
+        }
+        local glow_stub = {
+            bind_glow_unit = function(unit, backend_id, skin)
+                bound[#bound + 1] = { unit, backend_id, skin }
+            end,
+        }
+        local rebound, dirty = preview_policy.bind_spawned({ right, left },
+            spawn, picker_stub, glow_stub, function() logged = logged + 1 end)
+        H.truthy(rebound)
+        H.equal(dirty, false)
+        H.equal(restored, 1)
+        H.equal(#bound, 2)
+        H.equal(bound[2][1], left)
+        H.equal(bound[2][2], "backend-796")
+        H.equal(logged, 1)
     end)
 
     H.test("Cosmetics glow slider, Apply, Restore, and Cancel repaint the preview pane", function()
@@ -102,6 +146,17 @@ return function(H, repo_root)
         H.truthy(glow:find("GLOW_PREVIEW_POLICY.resolve(host, backend_id, slot_data, _is_unit)", 1, true))
         H.truthy(picker:find("pcall(mod._reapply_glow_on_customization_preview", 1, true))
         H.truthy(picker:find("pcall(mod._repaint_native_glow_on_customization_preview", 1, true))
+        H.truthy(picker:find("GlowPicker.request_inventory_preview_refresh(GlowPicker._preview_host, backend_id)", 1, true))
+        local _, refresh_calls = picker:gsub(
+            "GlowPicker%.request_inventory_preview_refresh%(GlowPicker%._preview_host, backend_id%)", "")
+        H.equal(refresh_calls, 2)
+        H.truthy(entry:find("GLOW_PREVIEW_POLICY.resolve_spawn(item", 1, true))
+        H.truthy(preview_policy_source:find("if not dirty then picker.restore_runtime_for", 1, true))
+        H.truthy(preview_policy_source:find("glow.bind_glow_unit(unit, backend_id", 1, true))
+        local bind_at = assert(entry:find("GLOW_PREVIEW_POLICY.bind_spawned", 1, true))
+        local paint_at = assert(entry:find("mod._cos.apply_glow_override({ units[1], units[2] })", bind_at, true))
+        H.truthy(bind_at < paint_at)
+        H.truthy(preview_policy_source:find("[glow:796] preview spawn rebound", 1, true))
         H.equal(glow:find("network_send", 1, true), nil)
     end)
 

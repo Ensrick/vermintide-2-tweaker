@@ -62,6 +62,7 @@ end
 -- one pure module so the picker and the renderer cannot drift apart. Pure and
 -- stateless, so a per-consumer dofile instance is safe.
 local INSTANCE_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy")
+local PREVIEW_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_preview_policy")
 local SLIDER_GEOMETRY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_slider_geometry")
 local PANEL_LAYOUT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_panel_layout")
 local CIM_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_cim_bridge")
@@ -1070,6 +1071,10 @@ function GlowPicker.draw_native_information(func, host, ui_renderer, dt, content
         func, host, ui_renderer, dt)
 end
 
+function GlowPicker.request_inventory_preview_refresh(host, backend_id)
+    return PREVIEW_POLICY.request_inventory_refresh(host, backend_id)
+end
+
 -- Called by the equipment spawn path so an applied value is restored after a
 -- restart before the picker is opened again.
 --
@@ -1314,6 +1319,8 @@ function GlowPicker.apply()
         pcall(mod._reapply_glow_on_customization_preview, GlowPicker._preview_host,
             backend_id, slot_data)
     end
+    local preview_refreshed, preview_revision =
+        GlowPicker.request_inventory_preview_refresh(GlowPicker._preview_host, backend_id)
     if mod._emit_per_item_glow then pcall(mod._emit_per_item_glow) end
     GlowPicker._commit_revision = GlowPicker._commit_revision + 1
     if mod._cos_glow_badges_refresh then
@@ -1322,9 +1329,10 @@ function GlowPicker.apply()
     end
     _update_apply_widget()
     _update_restore_widget()
-    _apply_log_only("[glow_picker:apply] committed identity=%s family=%s emit=1 cim=%s",
+    _apply_log_only("[glow_picker:apply] committed identity=%s family=%s emit=1 cim=%s inventory_refresh=%s revision=%s",
         identity, tostring(GlowPicker._current_family),
-        cim_written and "written" or tostring(cim_reason))
+        cim_written and "written" or tostring(cim_reason),
+        tostring(preview_refreshed), tostring(preview_revision))
     return true
 end
 
@@ -1382,6 +1390,8 @@ function GlowPicker.restore_default()
         pcall(mod._repaint_native_glow_on_customization_preview,
             GlowPicker._preview_host, backend_id, slot_data, GlowPicker._native_mat)
     end
+    local preview_refreshed, preview_revision =
+        GlowPicker.request_inventory_preview_refresh(GlowPicker._preview_host, backend_id)
 
     -- The committed override is gone, so refresh the grids to drop the badge.
     GlowPicker._commit_revision = GlowPicker._commit_revision + 1
@@ -1390,9 +1400,10 @@ function GlowPicker.restore_default()
     end
     _update_apply_widget()
     _update_restore_widget()
-    _apply_log_only("[glow_picker:restore] cleared identity=%s family=%s cim=%s",
+    _apply_log_only("[glow_picker:restore] cleared identity=%s family=%s cim=%s inventory_refresh=%s revision=%s",
         identity, tostring(family),
-        cim_cleared and "cleared" or tostring(cim_reason))
+        cim_cleared and "cleared" or tostring(cim_reason),
+        tostring(preview_refreshed), tostring(preview_revision))
     return true
 end
 

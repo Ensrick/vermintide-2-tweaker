@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.177-dev (2026-08-01) — #796 exact glow preview ownership [verify-fix]
+
+- Bound each newly spawned cosmetic-browser weapon unit to the exact active
+  item and illusion before the existing glow painter runs, while preserving a
+  dirty editor transaction only for that same identity.
+- Apply and Restore Default now advance VT2's native `loadout_sync_id` once so
+  the separate inventory character preview rebuilds immediately without
+  leaving the inventory screen.
+- Kept exact/family identity checks fail-closed and added no hook, RPC, or
+  polling path. Added policy and source-contract coverage for the refresh edge.
+
 ## 0.9.176-dev (2026-08-01) — #48 magic-family selection gateway [verify-fix]
 
 - Added one default-off **Show Weavebound and Shyish Illusions** option. The
