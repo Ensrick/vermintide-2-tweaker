@@ -1,5 +1,17 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.173-dev (2026-08-01) — #504 exact-item offhand session owner
+
+- Extracted pending offhand selections, Apply baselines/markers, legacy-shape
+  migration, and snapshot/restore into one exact-backend-item/per-hand session
+  owner. Durable persistence, rendering, hooks, and peer transport retain their
+  existing boundaries and consume the same table identities.
+- Routed the complete-set rebroadcast adapter through the extracted migration
+  owner so current transition/hot-join behavior is preserved after the split.
+- Ratcheted the Cosmetics entry ceiling from 10,229 to 10,194 lines and added
+  pure Lua coverage for item/hand isolation, empty baselines, one-way migration,
+  retained Apply maps, and clone-on-restore semantics.
+
 ## 0.9.172-dev (2026-07-26) — #923 exact Loremaster icon identity
 
 - Loremaster's Armoury offhand icons now resolve from the exact target weapon

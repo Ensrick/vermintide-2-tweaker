@@ -272,6 +272,7 @@ local suites = {
     "test_ct_progressive_elite_policy",
     "test_ct_resume_policy",
     "test_cos_offhand_preload_lifecycle",
+    "test_cos_offhand_session_state",
     "test_cos_mh_package_lifecycle",
     "test_cos_runtime_modules",
     "test_cos_offhand_names",
