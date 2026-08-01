@@ -17,9 +17,9 @@
 
 ## Detached bot loadouts (#954)
 
-- **Status:** source-only regression candidate; do not apply a tester lifecycle
-  label until this exact candidate is committed, built, deployed, and identified
-  by banner, Workshop manifest, and archive hash in a new live-test card.
+- **Candidate:** v0.2.319-dev. Apply a tester lifecycle label only after this
+  exact candidate is committed, built, deployed, and identified by banner,
+  Workshop manifest, and archive hash in a new live-test card.
 - The candidate reconciles the detached persisted snapshot at the shared
   `get_bot_loadout` read boundary. This covers a backend cache built before the
   post-refresh hook became eligible and same-table drift after a successful
@@ -29,6 +29,10 @@
   persistence failures on the next read.
 - A mixed store containing one valid legacy designation plus one corrupt
   designation must commit neither row until the corrupt value is removed.
+- A pre-existing native assignment with no GUT bot fields must import once.
+  Existing GUT ownership outranks stale `PlayerData`; a valid index whose row is
+  not seeded remains retryable. The runtime check must fail when native
+  assignments exist but the detached owner has zero snapshots.
 - [ ] Prepare a Warrior Priest saved row with visibly distinct melee and ranged
   weapons, assign that row to the bot, then switch to another player loadout.
 - [ ] Change the player's weapons. Refresh/respawn the Warrior Priest bot and

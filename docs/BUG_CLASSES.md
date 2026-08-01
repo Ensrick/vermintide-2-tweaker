@@ -3069,3 +3069,46 @@ tables.
 **Related:** issue #560 (Enemy Tweaker's verified one-owner implementation),
 class 11 (Lua 5.1 limits), and class 51 (a completed branch is not a shipped
 fix).
+
+---
+
+## 80. Reconciliation passes vacuously because the legacy owner was never imported
+
+**First confirmed:** issue #954 on 2026-08-01.
+**Canonical Issue:** [#954](https://github.com/Ensrick/vermintide-2-tweaker/issues/954)
+**Lives in:** migrations that introduce a new detached owner while legacy data
+continues to identify the same object in an older persistence surface.
+
+### Symptoms
+- A repair/reconcile callback is proven live, but every record reports zero
+  applied objects while the bug remains observable.
+- A synthetic runtime regression passes because it compares only records already
+  present in the new owner; it never asserts that legacy identities entered it.
+- New assignments work, while assignments created before the feature shipped
+  continue aliasing a mutable source row.
+
+### Diagnosis pattern
+1. Count owned records at the reconciliation boundary. Zero is evidence, not a
+   successful no-op, when the legacy store still contains active identities.
+2. Trace the legacy identity from its actual persistence source to the new
+   owner. Do not substitute a hand-built fixture already shaped like the new
+   schema.
+3. Separate a missing source, an absent assignment, a malformed identity, and a
+   valid identity whose referenced row has not loaded yet; only the last state
+   should retry indefinitely.
+
+### Fix template
+- Import only entries that have no newer owner state. Resolve the legacy
+  identity against the new owner's rows, take a bounded point-in-time copy, and
+  persist a schema marker once.
+- Never overwrite explicit new-owner state from a stale legacy value. Do not
+  write the migration back into the legacy store.
+- Make the live regression non-vacuous: if the legacy surface contains an
+  assignment, require a migrated owned record and compare the runtime consumer
+  against it.
+- Test restart-era legacy shape, source mutation after import, owner precedence,
+  delayed row availability, malformed data, and bounded persistence retry.
+
+**Related:** class 43 (durable identity versus render state), class 51 (build is
+not deployment), class 73 (ephemeral identity in a durable snapshot), and #375
+(selected player-row resolution is a different identity dimension).
