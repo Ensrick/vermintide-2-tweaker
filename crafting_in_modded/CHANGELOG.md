@@ -1,5 +1,14 @@
 # Crafting in Modded Changelog
 
+## 0.8.92 (2026-08-01) - #48 custom-glow fallback notice [verify-fix]
+
+- When saved CIM weapons contain opaque custom-glow data but Tweaker:
+  Cosmetics is absent, log one bounded informational notice per session and
+  retain the vanilla material appearance. CIM still never interprets or
+  renders the blob.
+- The provider lookup fails closed and remains retryable; repeated forge-load
+  passes cannot spam the log.
+
 ## 0.8.91 (2026-07-17) - PUBLIC RELEASE: full dev rollup (0.8.34 to 0.8.91)
 
 Promotes the entire dev line since the 0.8.34 wire-safety hotfix. New crafting-flow

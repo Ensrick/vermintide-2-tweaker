@@ -1,5 +1,14 @@
 # Crafting in Modded Changelog
 
+## 0.8.110-dev (2026-08-01) - #48 custom-glow fallback notice [verify-fix]
+
+- When saved CIM weapons contain opaque custom-glow data but Tweaker:
+  Cosmetics is absent, log one bounded informational notice per session and
+  retain the vanilla material appearance. CIM still never interprets or
+  renders the blob.
+- The provider lookup fails closed and remains retryable; repeated forge-load
+  passes cannot spam the log. The policy is byte-identical with stable CIM.
+
 ## 0.8.109-dev (2026-08-01) - accessory properties apply per layer (#959)
 
 - Fixed accessory property clicks that played their success sound but silently

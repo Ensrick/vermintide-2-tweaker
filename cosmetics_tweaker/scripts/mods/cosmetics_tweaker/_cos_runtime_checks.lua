@@ -1203,8 +1203,6 @@ _rt_register("filter_illusion_widgets_hides_named_mat", function()
         make_widget("_ct_test_skin_equipped_weaves"),
     }
     local get_setting = function(key)
-        if key == "hide_weavebound_skins" then return true end
-        if key == "hide_shyish_skins"     then return true end
         return false
     end
     local kept, removed = mod._filter_illusion_widgets(
@@ -1226,9 +1224,8 @@ _rt_register("filter_illusion_widgets_hides_named_mat", function()
     end
     if kept_keys._ct_test_skin_weaves then return "unequipped weaves should be hidden" end
     if kept_keys._ct_test_skin_shyish then return "unequipped shyish should be hidden" end
-    -- v0.9.38-dev: hiding is now IMPLICIT (always on). The third get_setting
-    -- arg is ignored, so even a getter that returns false for every key must
-    -- still hide the filtered families (weaves + shyish) and keep the rest.
+    -- Issue #48 gateway: the explicit default-off setting must reveal both
+    -- hidden families so one can be selected before Edit Glow is opened.
     local widgets2 = {
         make_widget("_ct_test_skin_weaves"),
         make_widget("_ct_test_skin_shyish"),
@@ -1238,11 +1235,11 @@ _rt_register("filter_illusion_widgets_hides_named_mat", function()
     WeaponSkins.skins._ct_test_skin_weaves = { material_settings_name = "weaves" }
     WeaponSkins.skins._ct_test_skin_shyish = { material_settings_name = "shyish" }
     WeaponSkins.skins._ct_test_skin_blue   = { material_settings_name = "blue_glow" }
-    local _, removed2 = mod._filter_illusion_widgets(
-        widgets2, nil, function(_) return false end)
+    local kept2, removed2 = mod._filter_illusion_widgets(
+        widgets2, nil, function(key) return key == "show_magic_family_skins" end)
     for _, k in ipairs(TEST_KEYS) do WeaponSkins.skins[k] = saved[k] end
-    if removed2 ~= 2 then
-        return "implicit hiding should remove weaves+shyish regardless of get_setting, got " .. tostring(removed2)
+    if removed2 ~= 0 or #kept2 ~= 3 then
+        return "magic-family gateway did not reveal all illusion widgets"
     end
 end)
 

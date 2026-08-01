@@ -114,11 +114,15 @@ local loc = {
     -- v0.9.3.9: la_bridge_enable / la_bridge_enable_tooltip loc keys removed
     -- along with the toggle widget. The bridge is now a built-in feature.
 
-    -- v0.9.38-dev: hide_weavebound_skins / hide_shyish_skins / their tooltips
-    -- and glow_picker_auto_popup_enabled / its tooltip loc keys REMOVED along
-    -- with their VMF toggle widgets. Hiding the weavebound + shyish glow
-    -- families remains implicit. Issue #377 uses a purpose-built manual editor
-    -- button in the customization view; no automatic-open preference remains.
+    -- Issue #377 keeps opening manual-only. Issue #48 exposes the normally
+    -- hidden magic families through one explicit selection gateway.
+
+    show_magic_family_skins = {
+        en = "Show Weavebound and Shyish Illusions",
+    },
+    show_magic_family_skins_tooltip = {
+        en = "Shows Weavebound and Shyish-Infused weapon illusions in customization. Select one, then use Edit Glow to customize that exact weapon and illusion. They stay hidden by default.",
+    },
 
     glow_picker_editor_button = {
         en = "EDIT\nGLOW",

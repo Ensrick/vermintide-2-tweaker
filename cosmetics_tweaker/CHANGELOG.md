@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.176-dev (2026-08-01) — #48 magic-family selection gateway [verify-fix]
+
+- Added one default-off **Show Weavebound and Shyish Illusions** option. The
+  families remain hidden by default, but can now be revealed, selected, and
+  handed to the existing manual Edit Glow transaction.
+- Preserved the equipped-skin guard and vanilla illusion-row geometry. The
+  gateway does not auto-open the editor or change Apply/rollback behavior.
+- Extracted the visibility policy, added pure default/reveal coverage, and
+  ratcheted the Cosmetics entry ceiling from 9,948 to 9,915 lines.
+
 ## 0.9.175-dev (2026-08-01) — #504 modded-illusion swap owner [not-started]
 
 - Extracted all eight modded-realm illusion selection, crafting, and completion
