@@ -2,6 +2,7 @@ return function(Harness, repo_root)
     local policy = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/_cd_policy.lua")
     local browser = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/_cd_browser.lua")
     local preview = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/_cd_preview_policy.lua")
+    local residency = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/_cd_preview_residency.lua")
     local dialogue_ui = dofile(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue.lua")
     local transcript = dofile(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue_transcript.lua")
 
@@ -164,6 +165,56 @@ return function(Harness, repo_root)
         Harness.equal(0.5, preview.progress(2, 4))
         Harness.equal(1, preview.progress(20, 4))
         Harness.equal(0, preview.progress(2, 0))
+    end)
+
+    Harness.test("cd issue 881 maps only audited Morris dialogue to one bounded package", function()
+        Harness.equal("resource_packages/dlcs/morris_ingame", residency.MORRIS_PACKAGE)
+        Harness.equal("character_dialogue_preview", residency.REFERENCE)
+        Harness.equal(residency.MORRIS_PACKAGE,
+            residency.package_for_source("hero_conversations_dlc_morris_ingame"))
+        Harness.equal(residency.MORRIS_PACKAGE,
+            residency.package_for_source("hero_conversations_dlc_morris_extras"))
+        Harness.equal(residency.MORRIS_PACKAGE,
+            residency.package_for_source("hero_conversations_dlc_morris_pat_tower"))
+        Harness.equal(nil, residency.package_for_source("hero_conversations_dlc_holly"))
+        Harness.equal(nil, residency.package_for_source("hub_conversations_morris"))
+        Harness.equal(nil, residency.package_for_source(nil))
+    end)
+
+    Harness.test("cd issue 881 replaces one pending click and bounds package wait", function()
+        local state = residency.new_state()
+        local action, event, package_name = residency.request(state, "first",
+            "hero_conversations_dlc_morris_ingame", false, false)
+        Harness.equal("load", action); Harness.equal(nil, event)
+        Harness.equal(residency.MORRIS_PACKAGE, package_name)
+        state.acquired = true
+
+        action = residency.request(state, "second",
+            "hero_conversations_dlc_morris_pat_tower", false, true)
+        Harness.equal("pending", action)
+        Harness.equal("second", state.pending_event, "latest click must replace the pending event")
+        action = residency.poll(state, 0.25, false, true)
+        Harness.equal("pending", action)
+        action, event = residency.poll(state, 0.25, true, false)
+        Harness.equal("ready", action); Harness.equal("second", event)
+        Harness.equal(nil, state.pending_event)
+
+        action, event = residency.request(state, "resident",
+            "hero_conversations_dlc_morris_extras", true, false)
+        Harness.equal("direct", action); Harness.equal("resident", event)
+
+        action = residency.request(state, "timeout",
+            "hero_conversations_dlc_morris_ingame", false, true)
+        Harness.equal("pending", action)
+        action, event = residency.poll(state, residency.TIMEOUT_SECONDS, false, true)
+        Harness.equal("failed", action); Harness.equal("timeout", event)
+        Harness.equal(nil, state.pending_event)
+
+        action, event = residency.request(state, "vanilla",
+            "hero_conversations_dlc_holly", false, false)
+        Harness.equal("direct", action); Harness.equal("vanilla", event)
+        residency.cancel(state)
+        Harness.equal(nil, state.package); Harness.equal(false, state.acquired)
     end)
 
     Harness.test("cd Mod Tweaker integration is grouped virtual media UI", function()

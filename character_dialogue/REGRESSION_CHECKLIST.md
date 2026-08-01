@@ -9,6 +9,12 @@
 - The active row's progress bar advances from the Wwise playback position,
   freezes while paused, and resets after replacement, stop, or cleanup.
 - Leaving Mod Tweaker or changing worlds stops the local preview.
+- From the keep, play `pes_morris_bardin_song_kruber_13`: one `[cd:881]
+  package_queued`/`package_ready` pair is followed by a non-zero Wwise playing
+  ID and audible dialogue. Repeated clicks keep one package reference; Stop,
+  collapse, view exit, world transition, disable, and unload release it.
+- While the Morris package is still loading, click two Morris rows. Only the
+  latest row plays after residency and the wait cannot exceed 30 seconds.
 - Disable one line in a multi-line group: it is not selected naturally.
 - Cycle one line Default -> Enabled -> Disabled -> Default; all three labels
   and persisted values must be reachable.

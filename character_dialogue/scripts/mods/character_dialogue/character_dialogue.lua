@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.6-dev"
+local MOD_VERSION = "0.1.7-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
@@ -8,6 +8,7 @@ local DialogueQueries = require("scripts/entity_system/systems/dialogues/dialogu
 local Policy = mod:dofile("scripts/mods/character_dialogue/_cd_policy")
 local Browser = mod:dofile("scripts/mods/character_dialogue/_cd_browser")
 local PreviewPolicy = mod:dofile("scripts/mods/character_dialogue/_cd_preview_policy")
+local PreviewResidency = mod:dofile("scripts/mods/character_dialogue/_cd_preview_residency")
 
 local function log(fmt, ...)
     mod:debug("[cd:dbg] " .. fmt, ...)
@@ -30,6 +31,7 @@ local preview = {
     world = nil, playing_id = nil, event = nil, paused = false,
     elapsed = 0, duration = 0,
 }
+local preview_residency = PreviewResidency.new_state()
 local catalogue_cache
 local catalogue_index_cache
 local catalogue_index
@@ -61,7 +63,37 @@ local function level_wwise_world()
     return world, wwise_world
 end
 
-local function stop_preview()
+local function release_preview_package(keep_package)
+    local package_name = preview_residency.package
+    if not package_name or package_name == keep_package or not preview_residency.acquired then return true end
+    local package_manager = Managers and Managers.package
+    if not package_manager then return false end
+    local ok_loaded, loaded = pcall(package_manager.has_loaded, package_manager,
+        package_name, PreviewResidency.REFERENCE)
+    local ok_loading, loading = pcall(package_manager.is_loading, package_manager,
+        package_name, PreviewResidency.REFERENCE)
+    if not ((ok_loaded and loaded) or (ok_loading and loading)) then return true end
+    local ok, err = pcall(package_manager.unload, package_manager,
+        package_name, PreviewResidency.REFERENCE)
+    printf("[cd:881] package_release package=%s ok=%s error=%s",
+        package_name, tostring(ok), tostring(err))
+    if not ok then
+        printf("[cd:881] package_release_retry package=%s reason=unload_failed", package_name)
+    end
+    return ok
+end
+
+local function finish_package_release(released, keep_package)
+    if released then
+        PreviewResidency.cancel(preview_residency, keep_package)
+    else
+        -- Clear stale click ownership but retain the exact package/reference so
+        -- a later stop/disable/unload boundary can retry the symmetric release.
+        PreviewResidency.cancel(preview_residency, preview_residency.package)
+    end
+end
+
+local function stop_preview(keep_package)
     if preview.playing_id and preview.world and WwiseWorld then
         pcall(WwiseWorld.stop_event, preview.world, preview.playing_id)
     end
@@ -69,16 +101,13 @@ local function stop_preview()
     preview.world, preview.playing_id = nil, nil
     preview.event, preview.paused = next_state.event, next_state.paused
     preview.elapsed, preview.duration = 0, 0
+    finish_package_release(release_preview_package(keep_package), keep_package)
     return true
 end
 
-local function play_preview(event)
+local function trigger_preview(event)
     local next_state, _, validation_error = PreviewPolicy.transition(preview, "play", event)
-    if validation_error then
-        printf("[character_dialogue:preview] rejected event=%s reason=%s", tostring(event), validation_error)
-        return false, validation_error
-    end
-    stop_preview()
+    if validation_error then return false, validation_error end
     local _, wwise_world = level_wwise_world()
     if not wwise_world then
         printf("[character_dialogue:preview] no_audio_world event=%s", tostring(event))
@@ -96,6 +125,97 @@ local function play_preview(event)
     preview.duration = Browser.duration_for(catalogue_index(), event, fallback)
     printf("[character_dialogue:preview] play event=%s id=%s", event, tostring(playing_id))
     return true
+end
+
+local function package_status(package_name)
+    local package_manager = Managers and Managers.package
+    if not package_manager or not package_name then return package_manager, false, false end
+    local ok_loaded, loaded = pcall(package_manager.has_loaded, package_manager,
+        package_name, PreviewResidency.REFERENCE)
+    local ok_loading, loading = pcall(package_manager.is_loading, package_manager,
+        package_name, PreviewResidency.REFERENCE)
+    return package_manager, ok_loaded and loaded == true, ok_loading and loading == true
+end
+
+local function trigger_owned_preview(event)
+    local ok, err = trigger_preview(event)
+    if not ok then
+        finish_package_release(release_preview_package(nil), nil)
+    end
+    return ok, err
+end
+
+local function play_preview(event)
+    local _, _, validation_error = PreviewPolicy.transition(preview, "play", event)
+    if validation_error then
+        printf("[character_dialogue:preview] rejected event=%s reason=%s", tostring(event), validation_error)
+        return false, validation_error
+    end
+
+    local tuple = catalogue_index().by_event[event]
+    local source = tuple and tuple[4]
+    local package_name = PreviewResidency.package_for_source(source)
+    stop_preview(package_name)
+
+    if not package_name then return trigger_preview(event) end
+
+    local package_manager, owned_loaded, owned_loading = package_status(package_name)
+    local action, direct_event = PreviewResidency.request(preview_residency, event, source,
+        owned_loaded, owned_loading)
+    if owned_loaded or owned_loading then preview_residency.acquired = true end
+
+    if action == "load" then
+        if not package_manager then
+            PreviewResidency.cancel(preview_residency)
+            return false, "package manager is unavailable"
+        end
+        local ok, err = pcall(package_manager.load, package_manager, package_name,
+            PreviewResidency.REFERENCE, nil, true, false)
+        if not ok then
+            printf("[cd:881] package_queue_failed event=%s source=%s package=%s error=%s",
+                event, tostring(source), package_name, tostring(err))
+            PreviewResidency.cancel(preview_residency)
+            return false, "dialogue soundbank could not be queued"
+        end
+        preview_residency.acquired = true
+        local _, loaded_after = package_status(package_name)
+        if loaded_after then
+            PreviewResidency.cancel(preview_residency, package_name)
+            printf("[cd:881] package_ready event=%s source=%s package=%s path=synchronous",
+                event, tostring(source), package_name)
+            return trigger_owned_preview(event)
+        end
+        printf("[cd:881] package_queued event=%s source=%s package=%s",
+            event, tostring(source), package_name)
+        return true, "loading dialogue soundbank"
+    end
+    if action == "pending" then
+        printf("[cd:881] package_wait event=%s source=%s package=%s",
+            event, tostring(source), package_name)
+        return true, "loading dialogue soundbank"
+    end
+    return trigger_owned_preview(direct_event)
+end
+
+local function poll_preview_residency(dt)
+    if not preview_residency.pending_event then return end
+    local package_name = preview_residency.package
+    local _, owned_loaded, owned_loading = package_status(package_name)
+    local action, event, err = PreviewResidency.poll(preview_residency, dt,
+        owned_loaded, owned_loading)
+    if action == "ready" then
+        printf("[cd:881] package_ready event=%s package=%s path=asynchronous",
+            tostring(event), tostring(package_name))
+        local ok, trigger_err = trigger_owned_preview(event)
+        if not ok then
+            printf("[cd:881] retry_unavailable event=%s package=%s error=%s",
+                tostring(event), tostring(package_name), tostring(trigger_err))
+        end
+    elseif action == "failed" then
+        printf("[cd:881] package_load_failed event=%s package=%s error=%s",
+            tostring(event), tostring(package_name), tostring(err))
+        finish_package_release(release_preview_package(nil), nil)
+    end
 end
 
 local function pause_preview()
@@ -277,13 +397,22 @@ mod:command("cd_regression_test", "Character Dialogue self-check", function()
     if grouped ~= browsable then failures = failures + 1 end
     local page = Browser.page(entries, "kruber", "", 0, Browser.PAGE_LIMIT)
     if #page > Browser.PAGE_LIMIT then failures = failures + 1 end
+    if PreviewResidency.package_for_source("hero_conversations_dlc_morris_ingame")
+       ~= PreviewResidency.MORRIS_PACKAGE
+       or PreviewResidency.package_for_source("hero_conversations_dlc_morris_pat_tower")
+       ~= PreviewResidency.MORRIS_PACKAGE
+       or PreviewResidency.package_for_source("hero_conversations_dlc_holly") ~= nil then
+        failures = failures + 1
+    end
     mod:echo("Character Dialogue v%s: catalogue=%d timed=%d browsable=%d grouped=%d visible_cap=%d overrides=%d failures=%d",
         MOD_VERSION, #entries, timed, browsable, grouped, #page, table.size(overrides), failures)
 end)
 
+mod.update = function(dt) poll_preview_residency(dt) end
 mod.on_all_mods_loaded = function() register_mod_tweaker() end
 mod.on_game_state_changed = function(status)
     stop_preview()
     if status == "enter" then register_mod_tweaker() end
 end
 mod.on_disabled = stop_preview
+mod.on_unload = stop_preview
