@@ -102,6 +102,71 @@ return function(Harness, repo_root)
         Harness.equal(1, filtered[2].count, "search must retain Bardin grouping")
     end)
 
+    Harness.test("cd 931 groups conversations by stem in play order", function()
+        Harness.equal("pbw_taunt_warlord", browser.conversation_for({ "pbw_taunt_warlord_02" }))
+        Harness.equal("pes_no_ordinal", browser.conversation_for({ "pes_no_ordinal" }),
+            "an event without a trailing ordinal is its own conversation")
+        Harness.equal(2, browser.line_order({ "pbw_taunt_warlord_02" }))
+        Harness.equal(0, browser.line_order({ "pes_no_ordinal" }))
+
+        -- Deliberately out of order, and ordinal 10 present so a STRING sort
+        -- would wrongly place it before 2.
+        local entries = {
+            { "pes_talk_10", "s10", "g", "empire_soldier", 1 },
+            { "pes_talk_02", "s02", "g", "empire_soldier", 1 },
+            { "pes_talk_01", "s01", "g", "empire_soldier", 1 },
+        }
+        local index = browser.build_conversation_index(entries, {})
+        local page = browser.conversation_page(index, "pes_talk", "", 0, 99)
+        Harness.equal(3, #page)
+        Harness.equal("pes_talk_01", page[1].event, "play order is numeric, not lexical")
+        Harness.equal("pes_talk_02", page[2].event)
+        Harness.equal("pes_talk_10", page[3].event)
+        Harness.equal("Markus Kruber", page[1].speaker_label,
+            "rows carry the character name now that headers are stems")
+    end)
+
+    Harness.test("cd 931 hero variants of one topic sort adjacent", function()
+        -- Lexically pbw < pes < pwh, so a naive sort would interleave these with
+        -- any unrelated stem sharing a prefix. Topic-first keeps the exchange together.
+        local entries = {
+            { "pwh_hub_conversation_01", "a", "g", "witch_hunter", 1 },
+            { "pbw_alpha_unrelated_01", "b", "g", "bright_wizard", 1 },
+            { "pbw_hub_conversation_01", "c", "g", "bright_wizard", 1 },
+        }
+        local index = browser.build_conversation_index(entries, {})
+        local groups = browser.conversation_groups(index, "")
+        Harness.equal(3, #groups)
+        Harness.equal("pbw_alpha_unrelated", groups[1].id, "topic ordering, not raw stem ordering")
+        Harness.equal("pbw_hub_conversation", groups[2].id)
+        Harness.equal("pwh_hub_conversation", groups[3].id,
+            "both speakers' halves of hub_conversation land next to each other")
+    end)
+
+    Harness.test("cd 931 search matches spoken words, not just the codename", function()
+        local entries = {
+            { "pwh_hub_conversation_01", "sub_tingle", "g", "witch_hunter", 1 },
+            { "pes_unrelated_01", "sub_other", "g", "empire_soldier", 1 },
+        }
+        -- tuple[2] is a localization KEY. Without resolved prose a player
+        -- searching what they HEARD can never match; that was the #605 report.
+        local bare = browser.build_conversation_index(entries, {})
+        Harness.equal(0, #browser.conversation_groups(bare, "does it tingle"),
+            "key-only index cannot match spoken words")
+
+        local index = browser.build_conversation_index(entries,
+            { pwh_hub_conversation_01 = "Does it tingle, Saltzpyre?" })
+        local groups = browser.conversation_groups(index, "does it tingle")
+        Harness.equal(1, #groups, "transcript search finds the line")
+        Harness.equal("pwh_hub_conversation", groups[1].id)
+        -- The codename must keep working too: notfuegonasus asked for BOTH.
+        Harness.equal(1, #browser.conversation_groups(index, "hub_conversation"),
+            "codename search must still work alongside transcript search")
+        local page = browser.conversation_page(index, "pwh_hub_conversation", "tingle", 0, 99)
+        Harness.equal("Does it tingle, Saltzpyre?", page[1].transcript,
+            "resolved prose rides the page item for inline display")
+    end)
+
     Harness.test("cd production catalogue groups every event with exact hero ownership", function()
         local entries = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/character_dialogue_catalogue.lua")
         local groups = browser.groups(entries, "")
@@ -306,13 +371,30 @@ return function(Harness, repo_root)
         end
     end
 
-    local function make_api(entries)
-        local index = browser.build_index(entries)
+    -- #605 Mirrors the PRODUCTION v4 contract: groups are conversation stems and
+    -- page items carry speaker_label + resolved transcript. `localize` is
+    -- optional and, when given, builds the transcript map exactly as the mod
+    -- does, so search-by-spoken-words is exercised against real policy code.
+    local function make_api(entries, localize)
+        local transcripts = {}
+        if localize then
+            for i = 1, #entries do
+                local key = entries[i][2]
+                if type(key) == "string" and key ~= "" then
+                    local ok, text = pcall(localize, key)
+                    if ok and type(text) == "string" and text ~= "" and text ~= key
+                       and text:sub(1, 1) ~= "<" then
+                        transcripts[entries[i][1]] = text
+                    end
+                end
+            end
+        end
+        local index = browser.build_conversation_index(entries, transcripts)
         return {
-            version = 3,
-            browser_groups = function(query) return browser.index_groups(index, query or "") end,
-            browser_page = function(speaker, query, offset, limit)
-                return browser.index_page(index, speaker, query or "", offset, limit)
+            version = 4,
+            browser_groups = function(query) return browser.conversation_groups(index, query or "") end,
+            browser_page = function(stem, query, offset, limit)
+                return browser.conversation_page(index, stem, query or "", offset, limit)
             end,
             browser_window = browser.window,
             browser_reconcile_focus = browser.reconcile_focus,
@@ -395,7 +477,7 @@ return function(Harness, repo_root)
         local api = make_api(entries)
         with_build_env(api, function()
             local view = make_view(make_localizer(book, counter))
-            view._dialogue_expanded = "kruber"
+            view._dialogue_expanded = "pes_line"
             for _, scroll in ipairs({ 0, 5 * ROW_H, 20 * ROW_H }) do
                 view._scroll_y = scroll
                 run_build(view, api)
@@ -455,22 +537,25 @@ return function(Harness, repo_root)
         Harness.equal("T\n\nMarkus Kruber", transcript.compose("T", "Markus Kruber", ""))
         Harness.equal("T\n\ngrp", transcript.compose("T", "", "grp"))
 
+        -- #605 One conversation stem (pes_line), three ordinals: resolved,
+        -- marker-only, and key-echo. Grouping is by stem now, so three distinct
+        -- stems would put these in three separate one-line groups.
         local entries = {
-            { "pes_speaks_01", "sub_pes_speaks_01", "pes_talk", "empire_soldier", 2 },
-            { "pes_silent_02", "sub_pes_silent_02", "pes_talk", "empire_soldier", 2 },
-            { "pes_echo_03", "sub_pes_echo_03", "pes_talk", "empire_soldier", 2 },
+            { "pes_line_01", "sub_pes_line_01", "pes_talk", "empire_soldier", 2 },
+            { "pes_line_02", "sub_pes_line_02", "pes_talk", "empire_soldier", 2 },
+            { "pes_line_03", "sub_pes_line_03", "pes_talk", "empire_soldier", 2 },
         }
         local counter = { calls = 0 }
         local localize = function(key)
             counter.calls = counter.calls + 1
-            if key == "sub_pes_speaks_01" then return "We march to war." end
-            if key == "sub_pes_echo_03" then return key end
+            if key == "sub_pes_line_01" then return "We march to war." end
+            if key == "sub_pes_line_03" then return key end
             return "<" .. key .. ">"
         end
-        local api = make_api(entries)
+        local api = make_api(entries, localize)
         with_build_env(api, function()
             local view = make_view(localize)
-            view._dialogue_expanded = "kruber"
+            view._dialogue_expanded = "pes_line"
             run_build(view, api)
             local by_event, group_rows = {}, 0
             for i = 1, #view._rows do
@@ -481,18 +566,18 @@ return function(Harness, repo_root)
                     Harness.equal(nil, row._tip_desc, "group headers never carry the popup")
                 end
             end
-            local bound = by_event.pes_speaks_01
+            local bound = by_event.pes_line_01
             Harness.truthy(bound and bound._tip_desc, "resolved subtitle must bind")
-            Harness.equal("pes_speaks_01", bound._tip_title)
+            Harness.equal("pes_line_01", bound._tip_title)
             Harness.equal("We march to war.\n\nMarkus Kruber - pes_talk", bound._tip_desc,
                 "body = transcript, then speaker label - dialogue group")
-            Harness.equal(nil, bound._tip_desc:find("pes_speaks_01", 1, true),
+            Harness.equal(nil, bound._tip_desc:find("pes_line_01", 1, true),
                 "body must not restate the event id (the popup title owns it)")
             Harness.equal(true, bound._tip_prefer_below)
-            Harness.truthy(by_event.pes_silent_02, "unresolved line must still be in the window")
-            Harness.equal(nil, by_event.pes_silent_02._tip_desc, "marker key must not bind")
-            Harness.equal(nil, by_event.pes_silent_02._tip_prefer_below)
-            Harness.equal(nil, by_event.pes_echo_03._tip_desc, "echoed key must not bind")
+            Harness.truthy(by_event.pes_line_02, "unresolved line must still be in the window")
+            Harness.equal(nil, by_event.pes_line_02._tip_desc, "marker key must not bind")
+            Harness.equal(nil, by_event.pes_line_02._tip_prefer_below)
+            Harness.equal(nil, by_event.pes_line_03._tip_desc, "echoed key must not bind")
             Harness.truthy(group_rows > 0)
         end)
     end)
@@ -505,7 +590,7 @@ return function(Harness, repo_root)
         local api = make_api(entries)
         with_build_env(api, function()
             local view = make_view(make_localizer(book, counter))
-            view._dialogue_expanded = "kruber"
+            view._dialogue_expanded = "pes_line"
             run_build(view, api)
             local line_rows = {}
             for i = 1, #view._rows do
@@ -560,7 +645,7 @@ return function(Harness, repo_root)
         local api = make_api(entries)
         with_build_env(api, function()
             local view = make_view(localize)
-            view._dialogue_expanded = "kruber"
+            view._dialogue_expanded = "pes_line"
             run_build(view, api)
             -- Production capture predicate (twin _draw loops): a row is the popup
             -- target only while hovered AND carrying a non-empty body.

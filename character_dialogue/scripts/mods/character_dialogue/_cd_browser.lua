@@ -4,7 +4,11 @@
 -- regression-testable without launching Vermintide.
 local Browser = {}
 
-Browser.ROW_HEIGHT = 32
+-- #605 48, not 32: every row now carries the codename AND a transcript line
+-- beneath it. The virtual-window planner divides scroll offsets by ONE uniform
+-- row height, so variable-height rows would desynchronise scrolling from the
+-- logical index; a taller uniform row keeps that math exact.
+Browser.ROW_HEIGHT = 48
 Browser.PAGE_LIMIT = 32
 Browser.GROUPS = {
     { id = "kruber", label = "Markus Kruber" },
@@ -49,6 +53,13 @@ function Browser.speaker_for(tuple)
     return "other"
 end
 
+function Browser.speaker_label(id)
+    for i = 1, #Browser.GROUPS do
+        if Browser.GROUPS[i].id == id then return Browser.GROUPS[i].label end
+    end
+    return nil
+end
+
 function Browser.is_browsable(tuple)
     local event = normalized(tuple and tuple[1])
     -- The generated tables contain one literal Wwise sentinel named "dummy".
@@ -57,13 +68,43 @@ function Browser.is_browsable(tuple)
     return event ~= "" and event ~= "dummy"
 end
 
-function Browser.matches(tuple, query)
+function Browser.matches(tuple, query, transcript)
     query = normalized(query):gsub("^%s+", ""):gsub("%s+$", "")
     if query == "" then return true end
     for i = 1, 4 do
         if normalized(tuple and tuple[i]):find(query, 1, true) then return true end
     end
+    -- #605 search the SPOKEN words too, not just the codename and the subtitle
+    -- KEY. tuple[2] is a localization key (pwh_hub_conversation_01_a), so a
+    -- player searching "does it tingle" never matched before this. The caller
+    -- supplies already-resolved prose; this stays engine-free.
+    if type(transcript) == "string" and transcript ~= "" then
+        if transcript:lower():find(query, 1, true) then return true end
+    end
     return false
+end
+
+-- #605 CONVERSATION grouping. A conversation is one event stem: the Wwise event
+-- minus its trailing ordinal, so pbw_level_skaven_stronghold_taunt_warlord_02
+-- belongs to pbw_level_skaven_stronghold_taunt_warlord. Grouping by stem (not
+-- by character) is what puts a conversation's lines together in the order the
+-- game plays them; searching the shared topic then surfaces every character's
+-- stem as adjacent groups, which is how you find the other half of an exchange.
+function Browser.conversation_for(tuple)
+    local event = normalized(tuple and tuple[1])
+    if event == "" then return "" end
+    local stem = event:match("^(.-)_%d+$")
+    if stem and stem ~= "" then return stem end
+    return event
+end
+
+-- Play order within a conversation = the numeric ordinal. Events with no
+-- ordinal sort first and keep catalogue order (stable, never reordered).
+function Browser.line_order(tuple)
+    local event = normalized(tuple and tuple[1])
+    local ordinal = event:match("_(%d+)$")
+    if ordinal then return tonumber(ordinal) end
+    return 0
 end
 
 -- A scan returns only eight count records. It never manufactures one widget or
@@ -149,6 +190,103 @@ function Browser.index_page(index, speaker, query, offset, limit)
                 out[#out + 1] = {
                     id = tuple[1], event = tuple[1], subtitle = tuple[2],
                     dialogue_group = tuple[3], source = tuple[4], duration = tuple[5], speaker = speaker,
+                }
+            end
+            total = total + 1
+        end
+    end
+    return out, total
+end
+
+-- #605 Conversation index. Built once beside the speaker index. `transcripts`
+-- is an optional event -> resolved prose map; when present it makes the search
+-- match spoken words. Stems are ordered by TOPIC (the stem minus its hero
+-- prefix) so pes_/pdr_/pwe_/pwh_/pbw_ variants of one exchange land adjacent
+-- instead of scattering alphabetically by character.
+local function topic_of(stem)
+    local rest = stem:match("^p[bdehw][srwe]_(.+)$")
+    if rest then return rest end
+    return stem
+end
+
+function Browser.build_conversation_index(entries, transcripts)
+    local index = { by_stem = {}, order = {}, transcripts = transcripts or {}, total = 0 }
+    for i = 1, #(entries or {}) do
+        local tuple = entries[i]
+        if Browser.is_browsable(tuple) then
+            local stem = Browser.conversation_for(tuple)
+            local bucket = index.by_stem[stem]
+            if not bucket then
+                bucket = {}
+                index.by_stem[stem] = bucket
+                index.order[#index.order + 1] = stem
+            end
+            bucket[#bucket + 1] = tuple
+            index.total = index.total + 1
+        end
+    end
+    for i = 1, #index.order do
+        local bucket = index.by_stem[index.order[i]]
+        -- Stable sort by ordinal; equal ordinals keep catalogue order.
+        for a = 2, #bucket do
+            local moving = bucket[a]
+            local key = Browser.line_order(moving)
+            local b = a - 1
+            while b >= 1 and Browser.line_order(bucket[b]) > key do
+                bucket[b + 1] = bucket[b]
+                b = b - 1
+            end
+            bucket[b + 1] = moving
+        end
+    end
+    table.sort(index.order, function(l, r)
+        local lt, rt = topic_of(l), topic_of(r)
+        if lt ~= rt then return lt < rt end
+        return l < r
+    end)
+    return index
+end
+
+function Browser.conversation_matches(index, tuple, query)
+    local transcript = index and index.transcripts and index.transcripts[tuple[1]]
+    return Browser.matches(tuple, query, transcript)
+end
+
+function Browser.conversation_groups(index, query)
+    local out = {}
+    local order = (index and index.order) or {}
+    for i = 1, #order do
+        local stem = order[i]
+        local bucket = index.by_stem[stem]
+        local count = 0
+        for j = 1, #bucket do
+            if Browser.conversation_matches(index, bucket[j], query) then count = count + 1 end
+        end
+        if count > 0 then
+            out[#out + 1] = { id = stem, label = stem, count = count }
+        end
+    end
+    return out
+end
+
+function Browser.conversation_page(index, stem, query, offset, limit)
+    offset = math.max(0, tonumber(offset) or 0)
+    limit = math.max(1, math.min(Browser.PAGE_LIMIT, tonumber(limit) or Browser.PAGE_LIMIT))
+    local bucket = (index and index.by_stem and index.by_stem[stem]) or {}
+    local total, out = 0, {}
+    for i = 1, #bucket do
+        local tuple = bucket[i]
+        if Browser.conversation_matches(index, tuple, query) then
+            if total >= offset and #out < limit then
+                out[#out + 1] = {
+                    id = tuple[1], event = tuple[1], subtitle = tuple[2],
+                    dialogue_group = tuple[3], source = tuple[4], duration = tuple[5],
+                    speaker = Browser.speaker_for(tuple),
+                    -- Groups are stems now, so the row no longer inherits a
+                    -- character name from its header; carry it per line for the
+                    -- hover popup's metadata footer.
+                    speaker_label = Browser.speaker_label(Browser.speaker_for(tuple)),
+                    transcript = index.transcripts and index.transcripts[tuple[1]],
                 }
             end
             total = total + 1
