@@ -330,4 +330,45 @@ return function(H, repo_root)
         H.equal(source:find("function WA.apply_scale", 1, true), nil)
         H.equal(source:find("local _offset_applied", 1, true), nil)
     end)
+
+    H.test("#420 ordinary WT adapters consume shared WeaponAppearance", function()
+        local function read(path)
+            local file = assert(io.open(repo_root .. path, "rb"))
+            local source = file:read("*a")
+            file:close()
+            return source
+        end
+        local consumers = {
+            {
+                path = "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua",
+                loader = '"scripts/mods/weapon_tweaker/_lib_weapon_appearance"',
+                export = "mod._wt_weapon_appearance = _WEAPON_APPEARANCE",
+            },
+            {
+                path = "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua",
+                loader = '"scripts/mods/weapon_tweaker_dev/_lib_weapon_appearance"',
+                export = "mod._wt_weapon_appearance = _WEAPON_APPEARANCE",
+            },
+        }
+        for _, consumer in ipairs(consumers) do
+            local source = read(consumer.path)
+            H.truthy(source:find(consumer.loader, 1, true), consumer.path)
+            H.truthy(source:find(consumer.export, 1, true), consumer.path)
+            H.truthy(source:find("_WEAPON_APPEARANCE.apply(unit", 1, true), consumer.path)
+        end
+
+        for _, consumer in ipairs(consumers) do
+            local source = read(consumer.path)
+            H.equal(source:find(
+                "pcall(Unit.set_local_scale, unit, 0, scale)", 1, true), nil)
+            H.equal(source:find(
+                "pcall(Unit.set_local_position, unit, 0, current + pos)", 1, true), nil)
+            -- Durable animation-tick retention and #569 rotation composition
+            -- deliberately remain specialized absolute owners.
+            H.truthy(source:find(
+                "function mod._reapply_durable_grip_offsets()", 1, true))
+            H.truthy(source:find(
+                "function mod._wt569_reapply_3p_orientation()", 1, true))
+        end
+    end)
 end

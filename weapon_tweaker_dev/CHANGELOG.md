@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.291-dev (2026-08-02) - #420 shared appearance runtime
+
+- Mirrors beta `0.12.290-beta`: ordinary spawn and inventory-preview scale/grip
+  transforms now use the mod-local shared atomic WeaponAppearance primitive.
+- The shared weak-key ledger prevents repeat additive offsets, while dev pose
+  tuning, durable animation retention, and #569 rotation keep their specialized
+  canonical-baseline owners.
+
 ## 0.12.290-dev (2026-07-26) - #201 Deepwood runtime package ownership
 
 - Mirrors public beta `0.12.289-beta`: cross-career Deepwood Staff is withheld
