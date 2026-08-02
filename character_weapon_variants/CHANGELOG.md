@@ -1,5 +1,13 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.480-dev (2026-08-01) - publish reciprocal Sword-and-Shield styles (#657) [verify-fix]
+
+- Re-staged the v0.1.479-dev reciprocal Empire/Bretonnian Sword-and-Shield
+  family under a fresh broker-owned version after applying the repository's
+  visibility-orthogonality ruling from closed #328.
+- Runtime behavior is unchanged from v0.1.479-dev; the exact build retains its
+  DLC gate, native-item identity boundary, and solo-first verification scope.
+
 ## 0.1.479-dev (2026-08-01) - reciprocal Sword and Shield Combat Styles (#657) [verify-fix]
 
 - Added **Empire Sword and Shield** and **Bretonnian Sword and Shield** to the

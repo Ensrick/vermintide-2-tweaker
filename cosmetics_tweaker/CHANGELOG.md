@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.180-dev (2026-08-01) — publish reviewed #504 extraction [not-started]
+
+- Re-staged the already-reviewed contextual glow-button owner extraction after
+  applying the repository's visibility-orthogonality ruling from closed #328.
+- Runtime behavior is unchanged from v0.9.179-dev. This entry gives the public
+  Workshop transaction a fresh broker-owned version while the incomplete #504
+  architecture umbrella remains outside the test queue.
+
 ## 0.9.179-dev (2026-08-01) — #504 contextual glow-button owner [not-started]
 
 - Moved the Edit Glow button's family/open-state policy binding, contextual
