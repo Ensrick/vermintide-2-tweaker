@@ -112,6 +112,12 @@ return function(H, repo_root)
 			'if _spirit_state.count >= _spirits.MAX_ACTIVE then',
 			'if network and network.is_server then _update_spirits(dt) end',
 			'_audio.update(dt)',
+			'_owner_trait_evidence(',
+			'"kill observed peer=%s damage=%s source=%s trait=%s identity=%s',
+			'_stop_spirit_runtime("mod-disabled")',
+			'_release_spirit_package("mod-disabled")',
+			'_stop_spirit_runtime("mod-unload")',
+			'_release_spirit_package("mod-unload")',
 		}) do
 			H.truthy(source:find(needle, 1, true), "missing spirit boundary: " .. needle)
 		end
@@ -126,6 +132,8 @@ return function(H, repo_root)
 			1, true), "chase target must pass the validated live-position seam")
 		H.truthy(source:find('local position, position_reason = _spirit_position(unit)',
 			1, true), "spawned spirit must pass the validated live-position seam")
+		H.truthy(source:find('if not entry.chase_logged then', 1, true),
+			"chase-start telemetry must be once per spirit, not per frame")
 		H.equal(source:find('local target_pos = POSITION_LOOKUP[target]', 1, true), nil,
 			"stale lookup userdata must never reach Vector3 arithmetic directly")
 
