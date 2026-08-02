@@ -40,6 +40,23 @@
             ExpectedErrors = 1
         }
         @{
+            Name = 'declared active root retirement still fails'
+            Changes = @(@{ Path = 'example_mod/bundleV2/aaaaaaaaaaaaaaaa.mod_bundle'; Status = 'D' })
+            DeclaredBundleRetirements = @('example_mod/aaaaaaaaaaaaaaaa.mod_bundle')
+            ExpectedErrors = 1
+        }
+        @{
+            Name = 'undeclared sibling bundle deletion fails'
+            Changes = @(@{ Path = 'example_mod/bundleV2/cccccccccccccccc.mod_bundle'; Status = 'D' })
+            ExpectedErrors = 1
+        }
+        @{
+            Name = 'newest-release sibling retirement passes'
+            Changes = @(@{ Path = 'example_mod/bundleV2/cccccccccccccccc.mod_bundle'; Status = 'D' })
+            DeclaredBundleRetirements = @('example_mod/cccccccccccccccc.mod_bundle')
+            ExpectedErrors = 0
+        }
+        @{
             Name = 'item config without root bundle'
             Changes = @(@{ Path = 'example_mod/itemV2.cfg' })
             ExpectedErrors = 1

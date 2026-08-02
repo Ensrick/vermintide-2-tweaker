@@ -7,7 +7,9 @@
 # must land in one reviewed change set.
 #
 # This check is diff-scoped. It intentionally allows docs/tests-only changes and
-# bundle-only reconciliation changes. A split-mod stable promotion may omit a
+# bundle-only additions/modifications. Deletions require a new exact retirement
+# trailer in the newest release, and an active canonical root cannot be deleted.
+# A split-mod stable promotion may omit a
 # root bundle only when it is metadata-only AND is explicitly sanctioned by the
 # existing VT2-Promotion trailer (or VT2_PROMOTION=1 locally). Runtime source is
 # never exempted by that trailer.
@@ -152,6 +154,26 @@ function Get-TopReleaseVersion([string]$Text) {
     return $match.Groups['version'].Value
 }
 
+function Get-TopReleaseSection([string]$Text) {
+    if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
+    $match = [regex]::Match($Text,
+        '(?ms)^##\s+v?\d+\.\d+\.\d+(?:\.\d+)?(?:-[A-Za-z0-9+.-]+)?\b.*?(?=^##\s+|\z)')
+    if (-not $match.Success) { return '' }
+    return $match.Value
+}
+
+function Get-DeclaredBundleRetirements([string]$Text) {
+    $declared = @{}
+    $section = Get-TopReleaseSection $Text
+    if (-not $section) { return $declared }
+    $matches = [regex]::Matches($section,
+        '(?im)^\s*(?:[-*]\s*)?VT2-Bundle-Retirement:\s*`?(?<name>[A-Fa-f0-9]{16}\.mod_bundle)`?\s*$')
+    foreach ($match in $matches) {
+        $declared[$match.Groups['name'].Value.ToLowerInvariant()] = $true
+    }
+    return $declared
+}
+
 function Test-RuntimePath([string]$RelativePath) {
     $rel = Normalize-RepoPath $RelativePath
     if ($rel -match '^bundleV2/') { return $false }
@@ -167,9 +189,36 @@ function Test-ReleaseBundleAtomicity {
         [object[]]$Mods,
         [object[]]$Changes,
         [hashtable]$TopReleaseChanged,
-        [hashtable]$TrustedPromotions
+        [hashtable]$TrustedPromotions,
+        [hashtable]$DeclaredBundleRetirements
     )
     $errors = @()
+    if ($null -eq $DeclaredBundleRetirements) { $DeclaredBundleRetirements = @{} }
+    $deletionErrors = @{}
+
+    # Bundle-only reconciliation remains valid, but deletion is never ordinary
+    # generated-output churn.  A sibling bundle may retire only through a new,
+    # exact trailer in the newest CHANGELOG release.  The active canonical root
+    # remains mandatory while its mod is present in mod-inventory.psd1.
+    foreach ($change in @($Changes)) {
+        if ($change.Status -ne 'D' -or
+                $change.Path -notmatch '^(?<dir>[^/]+)/bundleV2/(?<name>[A-Fa-f0-9]{16}\.mod_bundle)$') {
+            continue
+        }
+        $dir = $matches['dir']
+        $name = $matches['name'].ToLowerInvariant()
+        $key = "$dir/$name".ToLowerInvariant()
+        $active = @($Mods | Where-Object { [string]$_.Dir -ieq $dir }) | Select-Object -First 1
+        $isActiveRoot = $active -and ([string]$active.RootBundle -ieq $name)
+        if ($isActiveRoot) {
+            $errors += "${dir}: active canonical root bundle cannot be deleted: $($change.Path)"
+            $deletionErrors[$key] = $true
+        } elseif (-not $DeclaredBundleRetirements.ContainsKey($key)) {
+            $errors += "${dir}: tracked bundle deletion lacks a new newest-release 'VT2-Bundle-Retirement: $name' trailer: $($change.Path)"
+            $deletionErrors[$key] = $true
+        }
+    }
+
     foreach ($mod in @($Mods)) {
         $dir = [string]$mod.Dir
         $rootBundle = [string]$mod.RootBundle
@@ -203,6 +252,9 @@ function Test-ReleaseBundleAtomicity {
         if ($runtimeHits.Count -eq 0 -and $metadataHits.Count -eq 0) { continue }
         if ($rootUpdated) { continue }
 
+        $rootDeletionKey = "$dir/$rootBundle".ToLowerInvariant()
+        if ($deletionErrors.ContainsKey($rootDeletionKey)) { continue }
+
         $trustedMetadataOnlyPromotion = $runtimeHits.Count -eq 0 -and
             ([string]$mod.Stream -eq 'stable') -and
             $TrustedPromotions.ContainsKey($dir) -and [bool]$TrustedPromotions[$dir]
@@ -229,7 +281,10 @@ function Invoke-SelfTest {
         })
         $top = @{}; foreach ($name in @($case.TopReleaseChanged)) { $top[[string]$name] = $true }
         $trusted = @{}; foreach ($name in @($case.TrustedPromotions)) { $trusted[[string]$name] = $true }
-        $actual = @(Test-ReleaseBundleAtomicity -Mods $mods -Changes $changes -TopReleaseChanged $top -TrustedPromotions $trusted)
+        $retired = @{}; foreach ($path in @($case.DeclaredBundleRetirements | Where-Object { $_ })) {
+            $retired[([string]$path).ToLowerInvariant()] = $true
+        }
+        $actual = @(Test-ReleaseBundleAtomicity -Mods $mods -Changes $changes -TopReleaseChanged $top -TrustedPromotions $trusted -DeclaredBundleRetirements $retired)
         $expected = [int]$case.ExpectedErrors
         if ($actual.Count -ne $expected) {
             throw "fixture '$($case.Name)' expected $expected error(s), got $($actual.Count): $($actual -join '; ')"
@@ -237,6 +292,10 @@ function Invoke-SelfTest {
         $passed++
     }
     if ((Get-TopReleaseVersion "# x`n## v1.2.3-dev (date)`n") -ne '1.2.3-dev') { throw 'top release parser lost optional v prefix' }
+    $retirements = Get-DeclaredBundleRetirements "# x`n## 1.2.3-dev`n- VT2-Bundle-Retirement: ``cccccccccccccccc.mod_bundle```n`n## 1.2.2-dev`n- VT2-Bundle-Retirement: ``dddddddddddddddd.mod_bundle```n"
+    if (-not $retirements.ContainsKey('cccccccccccccccc.mod_bundle') -or $retirements.ContainsKey('dddddddddddddddd.mod_bundle')) {
+        throw 'bundle retirement parser did not stay within the newest release section'
+    }
     if (Test-RuntimePath 'DEVELOPMENT.md') { throw 'markdown doc classified as runtime' }
     if (-not (Test-RuntimePath 'scripts/mods/example_mod/example_mod.lua')) { throw 'Lua source not classified as runtime' }
     $emptyGit = Invoke-GitLines @('diff', 'HEAD', '--name-only', '--', '__release_atomicity_fixture_path_that_does_not_exist__')
@@ -266,12 +325,27 @@ try {
     $mods = @($inventory.Mods)
 
     $topReleaseChanged = @{}
+    $declaredBundleRetirements = @{}
     foreach ($mod in $mods) {
         $path = "$($mod.Dir)/CHANGELOG.md"
         if (@($changes | Where-Object { $_.Path -ieq $path }).Count -eq 0) { continue }
         $before = Get-TopReleaseVersion (Read-ContextText $context $path 'Base' $root)
         $after = Get-TopReleaseVersion (Read-ContextText $context $path 'Head' $root)
         $topReleaseChanged[[string]$mod.Dir] = ($before -ne $after)
+    }
+
+    $deletedBundleDirs = @($changes | Where-Object {
+        $_.Status -eq 'D' -and $_.Path -match '^(?<dir>[^/]+)/bundleV2/[A-Fa-f0-9]{16}\.mod_bundle$'
+    } | ForEach-Object { if ($_.Path -match '^(?<dir>[^/]+)/') { $matches['dir'] } } | Sort-Object -Unique)
+    foreach ($dir in $deletedBundleDirs) {
+        $changelogPath = "$dir/CHANGELOG.md"
+        $before = Get-DeclaredBundleRetirements (Read-ContextText $context $changelogPath 'Base' $root)
+        $after = Get-DeclaredBundleRetirements (Read-ContextText $context $changelogPath 'Head' $root)
+        foreach ($name in $after.Keys) {
+            if (-not $before.ContainsKey($name)) {
+                $declaredBundleRetirements["$dir/$name".ToLowerInvariant()] = $true
+            }
+        }
     }
 
     $trustedPromotions = @{}
@@ -292,12 +366,13 @@ try {
         }
     }
 
-    $errors = @(Test-ReleaseBundleAtomicity -Mods $mods -Changes $changes -TopReleaseChanged $topReleaseChanged -TrustedPromotions $trustedPromotions)
+    $errors = @(Test-ReleaseBundleAtomicity -Mods $mods -Changes $changes -TopReleaseChanged $topReleaseChanged -TrustedPromotions $trustedPromotions -DeclaredBundleRetirements $declaredBundleRetirements)
     if ($errors.Count -gt 0) {
         Write-Host '[check_release_bundle_atomicity] ERRORS - releasable mod changes and root bundles must land atomically (#724):' -ForegroundColor Red
         foreach ($message in $errors) { Write-Host "  X $message" -ForegroundColor Red }
         Write-Host '  Build with the serialized VMB path, commit the exact root bundle in the same PR, then rerun QA.' -ForegroundColor Yellow
-        Write-Host '  Bundle-only reconciliation PRs and docs/tests-only changes remain valid. VT2-Promotion only exempts stable metadata-only promotions.' -ForegroundColor Yellow
+        Write-Host '  Bundle-only additions/modifications and docs/tests-only changes remain valid. Deletions require a new exact VT2-Bundle-Retirement trailer; active roots cannot be deleted.' -ForegroundColor Yellow
+        Write-Host '  VT2-Promotion only exempts stable metadata-only promotions.' -ForegroundColor Yellow
         exit 2
     }
     if (-not $Quiet) { Write-Host '[check_release_bundle_atomicity] OK - every releasable mod delta has its exact root bundle delta.' -ForegroundColor Green }
