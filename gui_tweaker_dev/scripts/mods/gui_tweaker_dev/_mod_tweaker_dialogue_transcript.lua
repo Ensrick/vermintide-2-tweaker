@@ -60,7 +60,13 @@ function Transcript.bind_row(row, item, speaker_label, localize)
     end
     row._transcript_bound_event = item.event
     row._tip_title = item.event
-    local transcript = Transcript.resolve(item.subtitle, localize)
+    -- #931 Prefer the prose the catalogue already resolved for this line. It is
+    -- the SAME text the row shows inline (truncated), so the popup cannot drift
+    -- from the preview, and we avoid re-localizing a key per rebuilt row.
+    local transcript = item.transcript
+    if type(transcript) ~= "string" or transcript == "" then
+        transcript = Transcript.resolve(item.subtitle, localize)
+    end
     if not transcript then
         row._tip_desc = nil
         row._tip_prefer_below = nil

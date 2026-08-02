@@ -186,16 +186,17 @@ return function(H, repo_root)
 		H.equal(a.light_attack_left.additional_critical_strike_chance,
 			moveset.INTRINSIC_CRIT_CHANCE)
 
-		-- Crowbill native impact identity is kept; only the burn stab's fire
-		-- sounds are normalized (its burn profile is replaced by poison).
-		H.equal(a.heavy_attack.impact_sound_event, "crowbill_stab_hit")
-		H.equal(a.heavy_attack.no_damage_impact_sound_event, "blunt_hit_armour")
-		H.equal(a.heavy_attack.hit_effect, "melee_hit_hammers_1h")
-		H.equal(a.light_attack_left.impact_sound_event, moveset.CROWBILL_IMPACT_SOUND)
+		-- Every damaging sweep uses the requested native Greataxe impact family;
+		-- the Crowbill graph/baked geometry remains intact.
+		H.equal(a.heavy_attack.impact_sound_event, moveset.GREATAXE_IMPACT_SOUND)
+		H.equal(a.heavy_attack.no_damage_impact_sound_event,
+			moveset.GREATAXE_ARMOUR_IMPACT_SOUND)
+		H.equal(a.heavy_attack.hit_effect, moveset.GREATAXE_HIT_EFFECT)
+		H.equal(a.light_attack_left.impact_sound_event, moveset.GREATAXE_IMPACT_SOUND)
 		H.equal(a.light_attack_left.no_damage_impact_sound_event,
-			moveset.CROWBILL_ARMOUR_IMPACT_SOUND)
+			moveset.GREATAXE_ARMOUR_IMPACT_SOUND)
 		H.equal(a.light_attack_left.armor_impact_sound_event, nil)
-		H.equal(a.light_attack_left.hit_effect, "melee_hit_hammers_1h")
+		H.equal(a.light_attack_left.hit_effect, moveset.GREATAXE_HIT_EFFECT)
 		H.equal(a.push.impact_sound_event, "slashing_hit",
 			"push is not a sweep and keeps its authored sounds")
 		H.deep_equal(a.push.damage_profile_inner,
@@ -233,15 +234,52 @@ return function(H, repo_root)
 		end
 	end)
 
-	H.test("WOC Blightreaper impact constants match the crowbill family baseline", function()
+	H.test("WOC Blightreaper impact constants match the Greataxe family", function()
 		H.equal(moveset.SOURCE_ITEM, "bw_1h_crowbill")
 		H.equal(moveset.SOURCE_TEMPLATE, "one_handed_crowbill")
-		H.equal(moveset.CROWBILL_IMPACT_SOUND, "crowbill_stab_hit")
-		H.equal(moveset.CROWBILL_ARMOUR_IMPACT_SOUND, "blunt_hit_armour")
-		H.deep_equal(moveset.FIRE_IMPACT_SOUNDS,
-			{ fire_hit = true, fire_hit_armour = true })
+		H.equal(moveset.GREATAXE_IMPACT_SOUND, "axe_2h_hit")
+		H.equal(moveset.GREATAXE_HIT_EFFECT, "melee_hit_axes_2h")
+		H.equal(moveset.GREATAXE_ARMOUR_IMPACT_SOUND, "blunt_hit_armour")
+		-- Native Greataxe split per 2h_axes.lua: lights = Smiter rows
+		-- (:469/:614/:760), heavies = Linesman rows (:189/:328). A 2026-07-22
+		-- candidate tried to swap these; the decompiled source disproves it.
+		H.equal(moveset.LIGHT_DAMAGE_PROFILE, "medium_slashing_smiter_2h")
+		H.equal(moveset.HEAVY_DAMAGE_PROFILE, "heavy_slashing_axe_linesman")
 		H.equal(moveset.EXECUTIONER_WWISE_DEP, "wwise/two_handed_swords")
 		H.equal(moveset.SPEED_MULTIPLIER, 0.83)
+	end)
+
+	H.test("WOC Blightreaper doubles only its own derived sweep cleave", function()
+		local action = {
+			_max_targets_attack = 2,
+			_max_targets_impact = 3,
+			_max_targets = 3,
+		}
+		local applied, reason = moveset.apply_runtime_cleave(action, {
+			lookup_data = { item_template_name = moveset.TEMPLATE },
+		})
+		H.equal(applied, true)
+		H.equal(reason, "applied")
+		H.equal(action._max_targets_attack, 4)
+		H.equal(action._max_targets_impact, 6)
+		H.equal(action._max_targets, 6)
+		H.equal(moveset.CLEAVE_MULTIPLIER, 2)
+
+		local foreign = {
+			_max_targets_attack = 2, _max_targets_impact = 3, _max_targets = 3,
+		}
+		applied, reason = moveset.apply_runtime_cleave(foreign, {
+			lookup_data = { item_template_name = "one_handed_crowbill" },
+		})
+		H.equal(applied, false)
+		H.equal(reason, "foreign_action")
+		H.equal(foreign._max_targets_attack, 2)
+
+		applied, reason = moveset.apply_runtime_cleave({}, {
+			lookup_data = { item_template_name = moveset.TEMPLATE },
+		})
+		H.equal(applied, false)
+		H.equal(reason, "missing__max_targets_attack")
 	end)
 
 	H.test("WOC Blightreaper install is idempotent and fails closed", function()

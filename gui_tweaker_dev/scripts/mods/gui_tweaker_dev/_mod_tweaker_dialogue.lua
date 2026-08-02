@@ -105,9 +105,6 @@ function DialogueUI.build(view, category, defs)
     local binder = transcript_binder()
     local localize = view._dialogue_localize
     if localize == nil and binder then localize = binder.default_localizer() end
-    local speaker_labels = {}
-    for i = 1, #groups do speaker_labels[groups[i].id] = groups[i].label end
-
     local visible_groups, expanded_pos = {}, nil
     for i = 1, #groups do
         if groups[i].count > 0 then
@@ -139,8 +136,12 @@ function DialogueUI.build(view, category, defs)
         if line_offset ~= nil then
             local item = by_offset[line_offset]
             if item then
+                -- #605 transcript rides INTO the row (inline preview) instead of
+                -- existing only as a hover popup. The popup is kept for the full
+                -- prose, because the inline line is truncated to keep rows compact.
                 local row = defs.create_dialogue_row(item.event,
-                    state_text(value.get_line_state(item.event)), base, 1)
+                    state_text(value.get_line_state(item.event)), base, 1, item.transcript,
+                    value.browser_row_height)
                 row._is_dialogue_line = true
                 row._dialogue_event = item.event
                 row._dialogue_speaker = item.speaker
@@ -150,7 +151,9 @@ function DialogueUI.build(view, category, defs)
                 row._category = category
                 -- #880: bind (or suppress) the hover transcript popup fields.
                 if binder then
-                    binder.bind_row(row, item, speaker_labels[item.speaker], localize)
+                    -- Group labels are conversation stems now, so the character
+                    -- name comes from the line itself, not from its header.
+                    binder.bind_row(row, item, item.speaker_label, localize)
                 end
                 view._rows[#view._rows + 1] = row
                 visible_ids[#visible_ids + 1] = item.id
