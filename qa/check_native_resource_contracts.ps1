@@ -79,7 +79,7 @@ function Get-DetectedRows {
 
     $files | Where-Object {
         $_.Name -ne '_lib_resource_residency.lua' -and
-        $_.FullName -notmatch '[\\/]_archive[\\/]|[\\/]bundleV2[\\/]|[\\/]_test_fixtures[\\/]'
+        $_.FullName -notmatch '[\\/]_archive[\\/]|[\\/]bundleV2[\\/]|[\\/]_test_fixtures[\\/]|[\\/]\.claude[\\/]'
     } | ForEach-Object {
         $rootPrefix = [IO.Path]::GetFullPath($root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
         $fullName = [IO.Path]::GetFullPath($_.FullName)

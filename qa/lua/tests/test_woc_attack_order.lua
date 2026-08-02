@@ -314,7 +314,7 @@ return function(H, repo_root)
 		H.truthy(report, tostring(reason))
 		local actions = template.actions.action_one
 		-- Position 1 (slot light_attack_last) now plays the stab unit: anim,
-		-- speed, windows, sweep, and normalized fire sounds all moved together.
+		-- speed, windows, sweep, and Greataxe impact identity all move together.
 		local p1 = actions.light_attack_last
 		H.equal(p1.anim_event, "attack_swing_stab", "position 1 anim must be the stab")
 		H.equal(p1.anim_time_scale, 0.95 * 0.95 * moveset.SPEED_MULTIPLIER,
@@ -323,8 +323,8 @@ return function(H, repo_root)
 		H.equal(p1.damage_window_end, 0.32, "stab window end must ride")
 		H.deep_equal(p1.baked_sweep, { { 0.44, 19, 20, 21 } },
 			"stab sweep volume must ride")
-		H.equal(p1.impact_sound_event, moveset.CROWBILL_IMPACT_SOUND,
-			"normalized stab impact must ride")
+		H.equal(p1.impact_sound_event, moveset.GREATAXE_IMPACT_SOUND,
+			"Greataxe stab impact must ride")
 		H.equal(p1.armor_impact_sound_event, nil,
 			"cleared armor impact must not resurrect")
 		H.equal(p1.sweep_z_offset, nil,

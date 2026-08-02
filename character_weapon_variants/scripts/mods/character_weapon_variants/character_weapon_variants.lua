@@ -1,13 +1,15 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.481-dev"
+local MOD_VERSION = "0.1.482-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
 mod._cwv_smoke_bomb_probe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_smoke_bomb_probe")
 mod._cwv_smoke_bomb_probe.install(mod)
+-- #915: vanilla-ownership provenance for every illusion-source registry scan.
+mod._cwv_illusion_provenance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_illusion_provenance")
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- The peer-parity beacon and feature-owned channels (including #604 Crowbill
@@ -7238,8 +7240,7 @@ local function _register_kruber_1h_sword_dual_illusions()
 
 	local source_keys = {}
 	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
+		if mod._cwv_illusion_provenance.vanilla_owned(entry)
 				and entry.matching_item_key == "es_1h_sword" then
 			source_keys[#source_keys + 1] = skin_key
 		end
@@ -7544,8 +7545,9 @@ local function _register_es_1h_mace_dual_illusions()
 
 	local source_keys = {}
 	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
+		-- #915 class fix: excludes cwv_es_cudgel_skin and cwv_dr_dawi_mace_skin,
+		-- which borrow this matching key without vanilla family membership.
+		if mod._cwv_illusion_provenance.vanilla_owned(entry)
 				and entry.matching_item_key == "es_1h_mace" then
 			source_keys[#source_keys + 1] = skin_key
 		end
@@ -7680,13 +7682,19 @@ local function _register_macesword_mace_maul_illusions()
 
 	local source_keys = {}
 	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
+		-- #915: cwv_es_sword_and_mace_skin borrows this matching key with a
+		-- SWORD right hand (inverse layout); a bare family scan put a 1H
+		-- sword in the Maul picker. See _cwv_illusion_provenance.
+		if mod._cwv_illusion_provenance.vanilla_owned(entry)
 				and entry.matching_item_key == "es_dual_wield_hammer_sword" then
 			source_keys[#source_keys + 1] = skin_key
 		end
 	end
 	table.sort(source_keys)
+
+	-- #915 stale-generation scrub: drop picker-tier entries whose source row
+	-- is CWV-owned (left behind by a pre-filter mod generation on VMF reload).
+	mod._cwv_illusion_provenance.scrub_stale_picker_entries("cwv_es_maul_skins", "cwv_es_maul_")
 
 	local single_hand_display = "units/weapons/weapon_display/display_1h_hammer"
 
@@ -7934,8 +7942,9 @@ local function _register_rapier_illusions()
 
 	local source_keys = {}
 	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
+		-- #915 class fix: excludes cwv_es_rapier_skin, which would otherwise
+		-- re-enter its own pool and duplicate the default mesh.
+		if mod._cwv_illusion_provenance.vanilla_owned(entry)
 				and entry.matching_item_key == "wh_fencing_sword" then
 			source_keys[#source_keys + 1] = skin_key
 		end

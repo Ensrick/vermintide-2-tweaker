@@ -323,6 +323,15 @@ vanilla skin family use this additive field to exclude sibling CWV skins unless
 the target explicitly admits that owner. Never change `matching_item_key` merely
 to repair picker membership; doing so can reintroduce the apply crash above.
 
+The same rule binds CWV's OWN illusion registrars: every `ItemMasterList` scan
+that harvests illusion sources by `matching_item_key` MUST also require
+`not entry.cwv_owner_item_type`, or it re-admits CWV's own generated skins as
+false vanilla provenance (issue #915: the Maul picker gained a 1H sword because
+`cwv_es_sword_and_mace_skin` borrows `es_dual_wield_hammer_sword` with an
+inverse sword-right hand layout). Pinned by
+`qa/lua/tests/test_cwv_illusion_family_provenance.lua` and the
+`issue915_maul_illusion_vanilla_provenance` runtime census.
+
 ### Forge interactions verified
 
 - Re-roll properties: works (default-rarity items show the property roll UI).

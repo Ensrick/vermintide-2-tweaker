@@ -22,10 +22,10 @@ Cross-reference: `CLAUDE.md` (technical) describes HOW things work. This doc
 - **VMBLauncher** is engineered properly — hash verification, exit codes,
   remote PC-B deploy. Don't bypass it.
 - **Per-mod data + localization separation** is canonical VMF and well followed.
-- **QA tooling in place** — `luacheck` + GHA workflow + 6 PowerShell checks
-  catch the recurring bug classes that previously slipped through (forward
-  refs, unescaped `%`, `tags=[]`, MOD_VERSION drift, oversized files, stale
-  audit docs). See §11a for the full table.
+- **QA tooling in place** — policy-driven PowerShell gates, offline Lua 5.1
+  tests, and GitHub Actions catch recurring bug classes that previously slipped
+  through. See §11a and `qa/CHECKS.md` for the live inventory; do not freeze a
+  check count in prose.
 
 ### What's still weak
 - **File sizes exceed Claude's effective working memory.** 9 Lua files remain
@@ -134,6 +134,13 @@ STATIC bug-class detection lands here: scaffold `qa/check_<name>.ps1`, wire it
 into `run_all.ps1`, add a row to `qa/CHECKS.md`. Deterministic transformations
 on ordinary Lua values may instead use `qa/lua/`; do not mock a general VMF or
 Stingray runtime to force engine behavior into this tier.
+
+Default tier-(a) orchestration is read-only. Quick and full `run_all.ps1`
+invocations must leave the exact initial Git-visible state unchanged, including
+tracked/index state and non-ignored untracked file contents when the developer
+started dirty. A checker that intentionally writes must expose a named opt-in
+mode; the current canonical example is `run_all.ps1 -FixStale`, which visibly
+skips the purity guard because that flag authorizes documentation edits.
 
 **Tier (b) - In-game regression harnesses.** A per-mod runtime self-check suite,
 invoked from chat as `/<mod>_regression_test`. Each check is a closure
@@ -1989,7 +1996,7 @@ see what was open on a given date.
 | `check_lua_unit_tests.ps1` | `qa/` + `qa/lua/` | deterministic pure-Lua transformations under a pinned offline Lua 5.1.5 runtime; harness self-test includes a planted failure | `.\qa\check_lua_unit_tests.ps1 [-SelfTest]` |
 | `check_release_bundle_atomicity.ps1` | `qa/` + `qa/fixtures/release_bundle_atomicity/` | runtime/version/config/newest-release diff without the owning exact root bundle (#724) | `.\qa\check_release_bundle_atomicity.ps1 [-Staged] [-Range <range>] [-SelfTest]` |
 | `check_ps51_compatibility.ps1` | `qa/` | non-ASCII bytes in the explicit Windows PowerShell 5.1 target set; PS5/pwsh divergence in sentinel parsing; advisory policy hiding a parser/host/tool failure (#85) | `.\qa\check_ps51_compatibility.ps1 [-SelfTest]` |
-| `run_all.ps1` | `qa/` | all of the above; reserved execution-failure exits 90-99 always block before per-check policy is applied | `.\qa\run_all.ps1 [-Quick] [-SkipLua] [-SelfTest]` |
+| `run_all.ps1` | `qa/` | all of the above; reserved execution-failure exits 90-99 always block before per-check policy is applied; normal Quick/full runs compare exact pre/post Git-visible worktree fingerprints and block on mutation (`-FixStale` is the explicit write-mode exemption) | `.\qa\run_all.ps1 [-Quick] [-SkipLua] [-SelfTest]` |
 | GitHub Actions | `.github/workflows/qa.yml`, `.github/workflows/issue-lifecycle.yml` | full code QA on push/PR plus a lightweight blocking tracker guard on issue/label/comment events, manual dispatch, and daily schedule; the tracker guard enforces true GraphQL pin state | automatic |
 
 Full check-to-bug-class map: [`qa/CHECKS.md`](qa/CHECKS.md).

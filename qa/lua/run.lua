@@ -174,6 +174,7 @@ local suites = {
     "test_cwv_combat_styles",
     "test_cwv_peer_resolver",
     "test_cwv_rapier_contract",
+    "test_cwv_illusion_family_provenance",
     "test_wt_cwv_tuskgor_default",
     "test_wt_cwv_effective_template",
     "test_cim_skin_persistence",
