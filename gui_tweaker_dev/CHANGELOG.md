@@ -1,5 +1,16 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.326-dev (2026-07-20) -- Dialogue rows show the transcript inline (#605) [untested]
+
+- Each dialogue row is now two lines: the codename on top, the spoken transcript beneath it, so a line can be READ before it is previewed. This replaces mouseover-only transcripts (#880) as the primary surface; the hover popup is kept for the full prose because the inline line is truncated.
+- Long transcripts (mission intros run for paragraphs) are collapsed to one line and end in an ellipsis, so the list stays compact.
+- Rows that have no resolvable subtitle (most enemy barks) draw no second line instead of reserving empty space.
+- Row height comes from Character Dialogue's `browser_row_height` rather than a second hardcoded copy, so the widget cannot drift out of alignment with the virtual-window planner. The shared `ROW_H` used by every other Mod Tweaker row is unchanged at 32.
+- Group headers are conversation stems now, so the popup's metadata footer takes the character name from the line itself.
+
+**Test:** open the Dialogue tab, expand any conversation, and confirm each row shows its transcript under the codename, that a very long transcript ends in an ellipsis, and that hovering still shows the full text. Confirm other Mod Tweaker tabs are unchanged in row spacing.
+
+
 ## 0.2.324-dev (2026-08-01) -- bound high-damage popup scale (#938) [verify-fix]
 
 - Floating damage-number text still carries the full damage amount, while its
