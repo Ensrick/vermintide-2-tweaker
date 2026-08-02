@@ -109,6 +109,7 @@ local suites = {
     "test_wt_deepwood_runtime",
     "test_wt_energy_seed",
     "test_wt_664_solo_parity",
+    "test_wt_fire_sword_heat",
     "test_wt_hold_pose",
     "test_wt_overcharge_presentation",
     "test_wt_bolt_staff_overcharge",

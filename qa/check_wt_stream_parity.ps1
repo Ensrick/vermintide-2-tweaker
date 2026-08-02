@@ -19,6 +19,8 @@ $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..' }
 
 $WtDevOnlyFiles = @(
+    '_wt_fire_sword_heat.lua',
+    '_wt_fire_sword_heat_runtime.lua',
     '_wt_longbow_zoom_probe.lua',
     'wt_universal_availability.lua',
     'wt_dev_anim_picker.lua',

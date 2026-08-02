@@ -112,21 +112,18 @@ mod:dofile("scripts/mods/weapon_tweaker_dev/_safe_hook")
 -- ============================================================
 -- Dev-only tooling modules (v0.12.96-dev)
 -- ============================================================
--- Two nested VMF menus for live in-game tuning of cross-character ports.
--- Loaded HERE (after _safe_hook, before template patchers) so the module
--- locals are available; their `install()` calls fire at the bottom of this
--- file after the template patchers have populated `Weapons.<template>` with
--- their initial values (which is what the anim picker dropdowns mirror).
---
--- These modules will be stripped (or moved to a sibling `_dev` directory)
--- when wt forks a stable release-side mod; until then they ship inline.
--- See feedback_no_premature_dev_gates.md.
+-- Loaded before template patchers; installed at the bottom after weapon
+-- definitions exist. Public WT strips this complete marked overlay.
 local _wt_dev_anim_picker = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_dev_anim_picker")
 local _wt_dev_hold_pose   = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_dev_hold_pose")
 -- WT_DEV_OVERLAY_END:dev-tool-imports
 
 local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_axe_balance")
 local _wt_axe_balance = _wt_axe_balance_policy.new()
+-- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-import
+local _wt_fire_sword_heat_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_fire_sword_heat")
+local _wt_fire_sword_heat_runtime = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_fire_sword_heat_runtime").install(mod, _wt_fire_sword_heat_policy, _wt_fire_sword_heat_policy.new())
+-- WT_DEV_OVERLAY_END:fire-sword-heat-import
 local _wt_grip_offset_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_grip_offset_policy")
 local _wt_skullsplitter_hand_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_skullsplitter_hand")
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
@@ -4051,6 +4048,9 @@ mod.on_game_state_changed = function(status, state_name)
     patch_career_actions_on_weapons()
     apply_trait_filters()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+    -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-state-apply
+    if mod._wt_apply_fire_sword_heat then mod._wt_apply_fire_sword_heat(false) end
+    -- WT_DEV_OVERLAY_END:fire-sword-heat-state-apply
     if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
     _wt_bolt_staff_overcharge_runtime.apply()
     -- Re-attempt the Necromancer FX force-load (idempotent). DLC ownership can be
@@ -4099,6 +4099,9 @@ mod.on_disabled = function()
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, true) end
+    -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-disable
+    if mod._wt_apply_fire_sword_heat then mod._wt_apply_fire_sword_heat(true) end
+    -- WT_DEV_OVERLAY_END:fire-sword-heat-disable
     if mod._wt374_revert_energy_data then mod._wt374_revert_energy_data() end
     clear_weapon_unlocks()
     clear_career_action_injections()
@@ -4112,6 +4115,9 @@ local _wt_rework_runtime = _wt_rework_master_runtime_module.new(
         if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
         _wt_bolt_staff_overcharge_runtime.apply()
         if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+        -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-master-apply
+        if mod._wt_apply_fire_sword_heat then mod._wt_apply_fire_sword_heat(false) end
+        -- WT_DEV_OVERLAY_END:fire-sword-heat-master-apply
     end)
 mod._wt.rework_master_runtime = _wt_rework_runtime
 
@@ -4124,6 +4130,9 @@ mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_settings_runtime").install({
     bolt_policy = _wt_bolt_staff_overcharge,
     bolt_runtime = _wt_bolt_staff_overcharge_runtime,
     balance_policy = _wt_axe_balance_policy,
+    -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-settings-owner
+    fire_runtime = _wt_fire_sword_heat_runtime,
+    -- WT_DEV_OVERLAY_END:fire-sword-heat-settings-owner
     -- WT_DEV_OVERLAY_BEGIN:dev-tool-setting-lifecycle
     extra_setting = function(setting_id)
         if setting_id and setting_id:find("^wt_dev_anim_") then
@@ -4234,11 +4243,18 @@ if rawget(_G, "DamageUtils") then
             local multiplier_type = DamageUtils.get_breed_damage_multiplier_type(breed, hit_zone_name)
             damage = _wt_axe_balance_policy.scale_executioner_headshot_damage(
                 damage, multiplier_type, damage_profile)
+            -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-damage
+            damage = _wt_fire_sword_heat_runtime:scale_direct_damage(
+                damage, damage_profile, attacker_unit)
+            -- WT_DEV_OVERLAY_END:fire-sword-heat-damage
         end
         if second ~= nil then return damage, second end
         return damage
     end)
 end
+-- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-regression
+_wt_fire_sword_heat_policy.register_regression(_rt_register, function(value) return table.clone(value, true) end)
+-- WT_DEV_OVERLAY_END:fire-sword-heat-regression
 
 _rt_register("issue621_one_hand_axe_cleave_boundary", function()
     local function action(profile)

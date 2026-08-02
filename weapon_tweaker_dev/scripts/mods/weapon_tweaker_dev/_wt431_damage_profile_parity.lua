@@ -116,6 +116,11 @@ local function _wt431_reapply_profile_repoints()
     if type(mod._wt_apply_axe_balance) == "function" then
         pcall(mod._wt_apply_axe_balance, nil, false)
     end
+    -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-parity-reapply
+    if type(mod._wt_apply_fire_sword_heat) == "function" then
+        pcall(mod._wt_apply_fire_sword_heat, false)
+    end
+    -- WT_DEV_OVERLAY_END:fire-sword-heat-parity-reapply
 end
 
 if mod._wt_peer_parity then

@@ -17,9 +17,14 @@ return function(H, repo_root)
 
     H.test("WT rework master owns the exact active tweak family", function()
         H.equal(#policy.LEAF_IDS, 13)
-        H.equal(#dev_policy.LEAF_IDS, #policy.LEAF_IDS)
+        H.equal(#dev_policy.LEAF_IDS, 14)
+        H.truthy(dev_policy.is_member("wt_fire_sword_heat_scaling"))
+        H.equal(policy.is_member("wt_fire_sword_heat_scaling"), false,
+            "unverified dev tweak must not enter the stable/public family")
+        local dev_members = {}
+        for i = 1, #dev_policy.LEAF_IDS do dev_members[dev_policy.LEAF_IDS[i]] = true end
         for i = 1, #policy.LEAF_IDS do
-            H.equal(dev_policy.LEAF_IDS[i], policy.LEAF_IDS[i])
+            H.truthy(dev_members[policy.LEAF_IDS[i]], "dev stream lost a stable family member")
             H.truthy(policy.is_member(policy.LEAF_IDS[i]))
             H.equal(policy.LEAF_IDS[i]:find("^br_"), nil, "retired Big Rebalance leaked into family")
         end
