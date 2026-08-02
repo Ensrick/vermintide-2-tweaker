@@ -1047,6 +1047,19 @@ exempts a runtime source delta.
 This closes the PR #759/#765/#766/#767/#769 class where
 source/version/config merged first and its compiled artifact followed later.
 
+Tracked bundle deletion is a separate fail-closed boundary (issue #1100).
+Deleting any `bundleV2/<16-hex>.mod_bundle` requires a newly added exact trailer
+in that mod's newest CHANGELOG release:
+
+```text
+VT2-Bundle-Retirement: 0123456789abcdef.mod_bundle
+```
+
+Historical or previously committed trailers do not authorize a later deletion.
+The `RootBundle` of an active `tools/mod-inventory.psd1` entry cannot be retired;
+change the owning inventory/lifecycle explicitly instead. This prevents a clean
+rebuild or merge resolution from silently staging deletion of a sibling bundle.
+
 Do NOT downgrade a `-dev` update to deploy-only "to be safe". For a mod the
 user is subscribed to, Steam re-syncs the Workshop bundle over any local
 deploy, so the upload is the ONLY path that reaches the user's game; and
