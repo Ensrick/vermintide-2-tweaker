@@ -209,7 +209,7 @@ edges and deduplicate unchanged owner fingerprints; never poll or stream it.
 The sole exception is a known post-vanilla replacement boundary such as husk
 `_reapply_fade`: re-submit once there even when the fingerprint is unchanged,
 because native code has just replaced the engine-owned list.
-`[src: fade_system.lua:35-36; simple_husk_inventory_extension.lua:290-311]`
+`[src: scripts/entity_system/systems/fade/fade_system.lua:35-36; scripts/unit_extensions/default_player_unit/inventory/simple_husk_inventory_extension.lua:290-311]`
 
 **The gaps this standard is closing** (as of 2026-07-07):
 - Units, path 3 (inventory preview): fixed v0.1.370-dev — `_cwv_preview_meshswap_apply`
