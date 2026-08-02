@@ -126,7 +126,7 @@ function M.install(mod, apply_transform, print_fn, debug_fn)
 	-- visibility pass. Consume the exact pending record once on vanilla's final
 	-- `_loading_done` edge, then make both the pose and item transform the final
 	-- bounded writers for this preview generation.
-	mod:hook("HeroPreviewer", "_update_units_visibility", function(func, self, dt)
+	local function on_update_units_visibility(func, self, dt)
 		local was_loading_done = self._loading_done
 		local result = func(self, dt)
 		if not was_loading_done and self._loading_done then
@@ -158,7 +158,24 @@ function M.install(mod, apply_transform, print_fn, debug_fn)
 			end
 		end
 		return result
-	end)
+	end
+
+	-- #474 base-class hook trap: the keep inventory previewer is
+	-- MenuWorldPreviewer, whose methods are COPIES of HeroPreviewer taken at
+	-- class-definition time (foundation/scripts/util/class.lua:51-57), and its
+	-- own `_update_units_visibility` override (menu_world_previewer.lua:315)
+	-- can early-return without reaching the base entry. Register the SAME
+	-- consume-once callback on BOTH classes (repo doctrine: hook the derived
+	-- class, never only the base). Double delivery on one update is safe:
+	-- `take_when_stable` consumes the pending record on the first stable edge
+	-- and reports `not_armed` to the second wrapper.
+	-- Pre-flight (CLAUDE.md NON-NEGOTIABLE #8): CWV's only other hooks on
+	-- these classes are `equip_item` (hook_safe), `_spawn_item`, and
+	-- `_load_packages` -- these are the sole CWV hooks on
+	-- (HeroPreviewer, _update_units_visibility) and
+	-- (MenuWorldPreviewer, _update_units_visibility).
+	mod:hook("HeroPreviewer", "_update_units_visibility", on_update_units_visibility)
+	mod:hook("MenuWorldPreviewer", "_update_units_visibility", on_update_units_visibility)
 end
 
 return M

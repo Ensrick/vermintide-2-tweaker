@@ -181,15 +181,21 @@ function M.apply_spawn_descriptor(descriptor, spawn_data, resolve_3p, adapter)
     if adapter ~= "hand_flags" and adapter ~= "base_identity" then return 0 end
 
     local changed = 0
-    -- Iterate backwards because a no-ammo descriptor removes inherited recipe
-    -- rows.  This makes the operation safe for one or several base ammo rows
-    -- and idempotent when two presentation adapters see the same recipe.
-    for index = #spawn_data, 1, -1 do
+    for index = 1, #spawn_data do
         local entry = spawn_data[index]
+        -- #279: vanilla stamps `is_ammo_unit = item_units.ammo_unit ~= nil`
+        -- onto the LEFT/RIGHT WEAPON rows themselves
+        -- (world_hero_previewer.lua:707/731) -- the flag records ammo-unit
+        -- INHERITANCE from the base item (backend_utils.lua:147-148), NOT a
+        -- dedicated ammo row. A no-ammo descriptor therefore CLEARS the
+        -- inherited ammo identity and lets the row fall through to the exact
+        -- hand-unit rewrite below; deleting flagged rows would delete the
+        -- weapon row itself and vanish the weapon from the preview.
         if type(entry) == "table" and entry.is_ammo_unit and descriptor.no_ammo_unit then
-            table.remove(spawn_data, index)
+            entry.is_ammo_unit = nil
             changed = changed + 1
-        elseif type(entry) == "table" and not entry.is_ammo_unit then
+        end
+        if type(entry) == "table" and not entry.is_ammo_unit then
             local hand
             if adapter == "hand_flags" then
                 hand = entry.right_hand and "right" or (entry.left_hand and "left")

@@ -268,11 +268,26 @@ function M.install(ctx)
         if rejected_peers[peer_id] then return false end
         return func(self, peer_id)
     end)
+    -- CONSOLIDATED hook_safe on (GameNetworkManager, remove_peer) -- the real
+    -- peer-teardown seam (game_network_manager.lua:814, invoked from
+    -- peer_states.lua:574 on disconnect). Any CWV per-peer teardown belongs in
+    -- THIS body; a second registration on the same pair is silently dropped
+    -- (CLAUDE.md NON-NEGOTIABLE #8).
     mod:hook_safe("GameNetworkManager", "remove_peer", function(self, peer_id)
         rejected_peers[peer_id] = nil
         local parity = mod._cwv_peer_parity
         if parity and type(parity.forget_peer) == "function" then
             parity:forget_peer(peer_id)
+        end
+        -- #914: clear the appearance lifecycle's per-peer ledgers (exact
+        -- identity states, accepted request generations, pending deliveries)
+        -- so a later rejoin under the same peer id cannot reuse stale exact
+        -- appearance or a coalesced request generation. The lifecycle is
+        -- installed later in the entry file (_om._appearance_lifecycle), so
+        -- resolve it lazily at event time.
+        local lifecycle = om._appearance_lifecycle
+        if lifecycle and type(lifecycle.clear_peer) == "function" then
+            pcall(lifecycle.clear_peer, lifecycle, peer_id)
         end
     end)
     om._cwv424_hot_join_fence_installed = true

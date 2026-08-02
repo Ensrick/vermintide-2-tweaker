@@ -84,4 +84,124 @@ return function(H, repo_root)
         H.truthy(checks:find('{ "deus", "deus", true', 1, true),
             "active-mission row missing from the in-game truth table")
     end)
+
+    -- #518 diagnostics-armed probe contract. The pinned falsifier is "the log
+    -- records the wielded weapon with a non-empty skin= value"; these tests
+    -- lock the bounded emitter semantics (printf-only, [cos:518] prefix,
+    -- dedupe, 16-record per-channel cap) and the three emit sites (owner
+    -- wield probe, local paint-skip, husk-side variant miss). The emitter and
+    -- probe helpers live in the _cos_518_probe.lua owner module (the entry
+    -- file sits at its decomposition ceiling); the entry keeps the wiring.
+    local probe_module = read("_cos_518_probe.lua")
+
+    local function extract_emitter()
+        local body = probe_module:match(
+            "mod%._cos518_emit%s*=%s*(function%s*%b().-\nend)")
+        H.truthy(body, "mod._cos518_emit extraction failed (renamed/moved?)")
+        return body
+    end
+
+    local function build_emitter(env_printf)
+        local body = extract_emitter()
+        local chunk = assert(loadstring("return " .. body))
+        local stub_mod = {}
+        local env = {
+            mod = stub_mod,
+            rawget = rawget,
+            _G = env_printf and { printf = env_printf } or {},
+        }
+        setfenv(chunk, env)
+        return chunk(), stub_mod
+    end
+
+    H.test("Cos #518 probe emitter is printf-guarded, prefixed, chat-free", function()
+        local body = extract_emitter()
+        H.truthy(body:find('rawget(_G, "printf")', 1, true),
+            "emitter must guard on rawget(_G, \"printf\")")
+        H.truthy(body:find('"[cos:518] " .. fmt', 1, true),
+            "emitter must prepend the [cos:518] prefix")
+        H.equal(body:find("echo", 1, true), nil,
+            "emitter must never route through chat/echo")
+        local lines = {}
+        local emit = build_emitter(function(f, ...)
+            lines[#lines + 1] = string.format(f, ...)
+        end)
+        H.equal(emit("wield", "k1", "OWNER-WIELD item=%s skin=%s", "sword", "skin_red"), true)
+        H.equal(#lines, 1)
+        H.truthy(lines[1]:find("[cos:518] ", 1, true) == 1,
+            "emitted line must start with the [cos:518] prefix")
+        H.truthy(lines[1]:find("skin=skin_red", 1, true),
+            "emitted line must carry the formatted skin= value")
+    end)
+
+    H.test("Cos #518 probe emitter dedupes per key and caps at 16 per channel", function()
+        local lines = {}
+        local emit, stub_mod = build_emitter(function(f, ...)
+            lines[#lines + 1] = string.format(f, ...)
+        end)
+        H.equal(emit("wield", "item_a|skin_1", "r=%s", "a"), true)
+        H.equal(emit("wield", "item_a|skin_1", "r=%s", "a"), false,
+            "duplicate (item,skin) key must not re-emit")
+        H.equal(#lines, 1)
+        for i = 2, 20 do
+            emit("wield", "item_a|skin_" .. i, "r=%d", i)
+        end
+        H.equal(#lines, 16, "wield channel must cap at 16 records")
+        H.equal(stub_mod._cos518_probe_state.wield.count, 16)
+        H.equal(emit("wield", "item_fresh|skin_fresh", "r=%s", "x"), false,
+            "capped channel must refuse fresh keys")
+        -- Channels are independently bounded: a capped wield channel must not
+        -- starve the paint-skip / husk-miss channels.
+        H.equal(emit("paint-skip", "bid-1", "r=%s", "b"), true)
+        H.equal(#lines, 17)
+    end)
+
+    H.test("Cos #518 probe emitter is inert without engine printf", function()
+        local emit, stub_mod = build_emitter(nil)
+        H.equal(emit("wield", "k", "r=%s", "a"), false)
+        H.equal(stub_mod._cos518_probe_state, nil,
+            "no printf must mean no state mutation")
+    end)
+
+    H.test("Cos #518 owner-wield probe rides the single local _wield_slot hook", function()
+        -- Merge-into-existing-hook doctrine: exactly ONE registration on
+        -- (SimpleInventoryExtension, _wield_slot) - VMF drops a second.
+        local _, hook_count = main:gsub(
+            'mod:hook_safe%("SimpleInventoryExtension", "_wield_slot"', "")
+        H.equal(hook_count, 1,
+            "expected exactly one SimpleInventoryExtension._wield_slot hook")
+        H.truthy(main:find('mod:dofile("scripts/mods/cosmetics_tweaker/_cos_518_probe")', 1, true),
+            "probe module not wired by the entry")
+        H.truthy(main:find('mod._cos518_owner_wield(slot_data, wielded_slot)', 1, true),
+            "owner-wield probe call missing from the local _wield_slot hook body")
+        H.truthy(probe_module:find('mod._cos518_emit("wield"', 1, true),
+            "owner-wield probe emit site missing")
+        H.truthy(probe_module:find(
+            '"OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s"', 1, true),
+            "owner-wield probe must log item key + resolved skin + yield verdict")
+        H.truthy(probe_module:find(
+            'tostring(item_key) .. "|" .. tostring(skin)', 1, true),
+            "owner-wield probe must dedupe per (item,skin)")
+        H.truthy(probe_module:find('mechanism_name ~= "deus" then return', 1, true),
+            "owner-wield probe must gate on the Chaos Wastes mechanism")
+    end)
+
+    H.test("Cos #518 failure-path decisions are promoted to printf, _dbg retained", function()
+        -- Local paint skip (was _dbg-only at the ingame deus gate).
+        H.truthy(main:find('mod._cos518_paint_skip(bid)', 1, true),
+            "paint-skip promotion call missing")
+        H.truthy(probe_module:find('mod._cos518_emit("paint-skip"', 1, true),
+            "paint-skip emit site missing")
+        H.truthy(main:find(
+            '_dbg("[LA paint] skip: deus run - CW upgrade cosmetics win (#518) bid=%s"',
+            1, true), "paint-skip _dbg line must be retained")
+        -- Husk-side authored-variant miss (was _dbg-only).
+        H.truthy(main:find('mod._cos518_husk_miss(entry.armoury_key', 1, true),
+            "husk-miss promotion call missing")
+        H.truthy(probe_module:find('mod._cos518_emit("husk-miss"', 1, true),
+            "husk-miss emit site missing")
+        H.truthy(main:find(
+            '_dbg("[husk-mesh-swap] miss: authored variant %s unavailable"',
+            1, true), "husk-miss _dbg line must be retained")
+    end)
 end

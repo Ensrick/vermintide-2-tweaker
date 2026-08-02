@@ -89,7 +89,7 @@ return function(H, repo_root)
             "surface adapters mutated the canonical descriptor")
     end)
 
-    H.test("CWV #279 no-ammo variants remove inherited preview ammo rows", function()
+    H.test("CWV #279 no-ammo variants clear inherited ammo flags on WEAPON rows", function()
         local descriptor = assert(Policy.resolve_spawn_descriptor({
             variant = {
                 item_key = "cwv_es_outrider_grenade_launcher",
@@ -102,22 +102,28 @@ return function(H, repo_root)
         }))
         H.equal(descriptor.no_ammo_unit, true)
 
+        -- Real engine shape: vanilla stamps `is_ammo_unit = ammo_unit ~= nil`
+        -- onto the WEAPON rows themselves (world_hero_previewer.lua:707/731);
+        -- there is never a dedicated ammo-only row. Deleting flagged rows would
+        -- vanish the weapon from the preview.
         local inventory = {
-            { right_hand = true, unit_name = "trollhammer_right_3p" },
             { right_hand = true, is_ammo_unit = true,
-                unit_name = "trollhammer_torpedo_3p" },
+                unit_name = "trollhammer_right_3p" },
         }
+        -- LootItemUnitPreviewer rows carry only unit_name
+        -- (loot_item_unit_previewer.lua:290/308) -- no ammo or hand flags.
         local browser = {
             { unit_name = "trollhammer_right_3p" },
-            { is_ammo_unit = true, unit_name = "trollhammer_torpedo_3p" },
         }
         local resident = function(unit) return unit .. "_3p" end
         H.equal(Policy.apply_spawn_descriptor(
             descriptor, inventory, resident, "hand_flags"), 2)
         H.equal(Policy.apply_spawn_descriptor(
-            descriptor, browser, resident, "base_identity"), 2)
-        H.equal(#inventory, 1)
-        H.equal(#browser, 1)
+            descriptor, browser, resident, "base_identity"), 1)
+        H.equal(#inventory, 1, "the weapon row must survive")
+        H.equal(#browser, 1, "the weapon row must survive")
+        H.equal(inventory[1].is_ammo_unit, nil,
+            "inherited ammo identity must be cleared, not the row deleted")
         H.equal(inventory[1].unit_name, "launcher_right_3p")
         H.equal(browser[1].unit_name, "launcher_right_3p")
         H.equal(Policy.apply_spawn_descriptor(

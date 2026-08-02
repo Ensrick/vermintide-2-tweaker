@@ -155,6 +155,8 @@ local suites = {
     "test_cwv_exact_pair_state",
     "test_cwv_exact_appearance",
     "test_cwv_appearance_lifecycle",
+    "test_cwv_identity_peer_pull",
+    "test_cwv_residency_ledger",
     "test_cwv_dual_icons",
     "test_cwv_greataxe",
 	"test_cwv_mod_unit_preview",

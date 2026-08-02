@@ -149,6 +149,45 @@ return function(H, repo_root)
         H.equal(native_calls, 0)
     end)
 
+    H.test("appearance fade forced reapply survives vanilla husk linked-set reset (#922)", function()
+        -- Vanilla wield calls `_reapply_fade` AFTER `_wield_slot`
+        -- (simple_husk_inventory_extension.lua:319 then :353) and REPLACES the
+        -- fade system's linked set with only the four inventory fields
+        -- (:292-311), evicting the wield-edge enrollment. The fingerprint
+        -- dedup must not swallow the post-replacement re-enroll.
+        local owner, sword, hat = unit("owner"), unit("sword"), unit("hat")
+        local linked
+        local fade = { new_linked_units = function(_, _, units) linked = units end }
+        local inventory = { _equipment = { right_hand_wielded_unit_3p = sword } }
+        local attachments = { _attachments = { slots = { slot_hat = { unit = hat } } } }
+        local adapter = Library.new({
+            alive = alive,
+            get_extension = function(_, name)
+                if name == "inventory_system" then return inventory end
+                if name == "attachment_system" then return attachments end
+                if name == "fade_system" then return {} end
+            end,
+            get_fade_system = function() return fade end,
+        })
+        -- wield-edge enrollment (the _wield_slot / spawn-path hook)
+        local ok1, first = adapter:enroll(owner, "remote_husk_wield", {})
+        H.equal(ok1, true)
+        H.equal(first.reason, "applied")
+        H.equal(#linked, 2)
+        -- vanilla _reapply_fade replaces the linked set behind the adapter
+        linked = { sword }
+        -- an unforced replay is fingerprint-deduped: the eviction would stick
+        local ok2, second = adapter:enroll(owner, "remote_husk_wield", {})
+        H.equal(ok2, true)
+        H.equal(second.reason, "unchanged")
+        H.equal(#linked, 1, "the dedup skip must leave vanilla's reset visible")
+        -- the post-_reapply_fade hook re-enrolls with force=true
+        local ok3, third = adapter:enroll(owner, "remote_husk_reapply", { force = true })
+        H.equal(ok3, true)
+        H.equal(third.reason, "applied")
+        H.equal(#linked, 2, "forced reapply must restore the complete snapshot")
+    end)
+
     H.test("appearance fade adapter owns no RPC hook or per-frame loop", function()
         local source = read(canonical_path):lower()
         H.equal(source:find("network_register", 1, true), nil)
@@ -199,5 +238,20 @@ return function(H, repo_root)
 		H.truthy(woc:find('"SimpleInventoryExtension", "_wield_slot"', 1, true)
 			and woc:find('"owner_wield"', 1, true),
 			"WOC owner does not enroll the final post-wield snapshot")
+        -- #922 husk-fade eviction: vanilla `_reapply_fade` runs AFTER
+        -- `_wield_slot` (simple_husk_inventory_extension.lua:319 then :353)
+        -- and resets the linked set, so BOTH custom-render husk owners must
+        -- post-hook it and re-enroll with force=true (the Cosmetics pattern).
+        local cwv_fade = read(repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_appearance_fade.lua")
+        H.truthy(cwv_fade:find('"SimpleHuskInventoryExtension", "_reapply_fade"', 1, true)
+            and cwv_fade:find("M.husk_reapply(self, equipment)", 1, true)
+            and cwv_fade:find('"remote_husk_reapply"', 1, true)
+            and cwv_fade:find("force = true", 1, true),
+            "CWV does not force re-enrollment after vanilla husk fade replacement (#922)")
+        H.truthy(woc:find('"SimpleHuskInventoryExtension", "_reapply_fade"', 1, true)
+            and woc:find('"remote_husk_reapply"', 1, true)
+            and woc:find("force = true", 1, true),
+            "WOC does not force re-enrollment after vanilla husk fade replacement (#922)")
     end)
 end

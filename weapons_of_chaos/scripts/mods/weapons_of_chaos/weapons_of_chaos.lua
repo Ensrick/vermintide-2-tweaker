@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.50-dev"
+local MOD_VERSION = "0.1.51-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -2045,6 +2045,31 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 			})
 	end
 	return unit_3p, ammo_3p, unit_1p, ammo_1p
+end)
+
+-- #922: the husk spawn-path enrollment above runs INSIDE vanilla wield, but
+-- vanilla then calls `_reapply_fade` (simple_husk_inventory_extension.lua:319
+-- then :353), replacing the fade system's linked set with only the four
+-- inventory fields (simple_husk_inventory_extension.lua:292-311) and evicting
+-- WOC's snapshot; the adapter's fingerprint dedup would then report
+-- "unchanged" and skip every later re-apply. Re-enroll AFTER the native
+-- replacement with force=true (the proven Cosmetics pattern,
+-- _cos_appearance_fade_runtime.lua), gated on the same positive sideband
+-- identity as the spawn re-key. Pre-flight (CLAUDE.md NON-NEGOTIABLE #8):
+-- this is the sole hook on (SimpleHuskInventoryExtension, _reapply_fade) --
+-- and the sole SimpleHuskInventoryExtension hook of any kind -- in WOC.
+mod:hook("SimpleHuskInventoryExtension", "_reapply_fade", function(func, self, equipment)
+	local result = func(self, equipment)
+	local peer_id = _husk_peer_id(self and self._unit)
+	local active = peer_id and _remote_blightreaper[peer_id]
+	if active and next(active) then
+		_appearance_fade:enroll(self and self._unit, "remote_husk_reapply", {
+			inventory_extension = self,
+			equipment = equipment,
+			force = true,
+		})
+	end
+	return result
 end)
 
 -- Owner/bot inventory has no husk-style fade replay. Enroll the final wielded
