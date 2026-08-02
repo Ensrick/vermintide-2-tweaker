@@ -3193,3 +3193,38 @@ resource count by multiplying it by `item_template.*.max_*`.
 
 **Related:** class 5 (owner/husk extension split), class 9 (RPC divergence),
 class 24 (transition lifetimes), and class 64 (wire identity).
+## 83. Valid UI asset key carries the wrong semantic ownership
+
+**First confirmed:** Career Tweaker #699 on 2026-07-20.
+**Lives in:** custom buff/status presentation that borrows resident vanilla
+atlas art based only on technical availability or a loosely related mechanic.
+
+### Symptoms
+- The HUD renders a valid, resident, non-blank icon, but the player identifies
+  it as a different talent or mechanic (for example, Numb to Pain).
+- Key-presence and atlas-residency tests pass, so the implementation appears
+  technically sound while communicating false gameplay state.
+- Permanent bookkeeping buffs consume status-bar slots even though only an
+  active conditional bonus or timed effect is worth surfacing.
+
+### Diagnosis pattern
+1. Trace the live active sub-template through `BuffUI._sync_buffs` and its
+   `_buff_name_to_widget` entry; an authored outer-template field is not proof
+   of what the renderer displays.
+2. Record the intended key, live template key, widget key, and atlas
+   material/UV identity. Compare the identity with the player-reported vanilla
+   effect, not merely with a list of valid string names.
+3. Classify the state semantically before selecting art: player-facing timed or
+   conditional bonus versus permanent mechanic, penalty, or bookkeeping.
+
+### Fix template
+- Give HUD slots only to player-facing states whose appearance/disappearance
+  conveys actionable information. Keep internal and always-on bookkeeping
+  iconless unless the design explicitly requires a permanent status indicator.
+- Prefer the exact source-owned talent artwork for conditional talent effects.
+  Do not infer semantic suitability from atlas residency or mechanical
+  similarity.
+- Lock the exact visible set, exact icon ownership, iconless bookkeeping set,
+  atlas-identity non-aliasing, and live widget identity in offline/runtime
+  coverage. Diagnostics must be transition-only, bounded, chat-silent, and
+  distinguish semantic mismatch from missing atlas/widget capacity.

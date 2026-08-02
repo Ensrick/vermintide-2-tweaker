@@ -26,4 +26,26 @@ return function(H, repo_root)
         H.equal(Policy.is_self_dot({}, unit, "wounded_dot"), false)
         H.equal(Policy.is_chip_or_aoe("skaven_slave", "light_attack"), false)
     end)
+
+    H.test("CRT #472 observes retained transitions and owns the full talent description", function()
+        local base = repo_root .. "/career_tweaker/scripts/mods/career_tweaker/"
+        local function read(name)
+            local f = assert(io.open(base .. name, "rb"))
+            local source = f:read("*a"); f:close()
+            return source
+        end
+        local armor = read("career_tweaker_armor_overcharge.lua")
+        local balance = read("career_tweaker_balance.lua")
+        local loc = read("career_tweaker_localization.lua")
+
+        H.truthy(armor:find("FOCUSED_DIAG_CAP = 48", 1, true))
+        H.truthy(armor:find('"[crt:472] event=%s', 1, true))
+        H.truthy(armor:find('ctx.action = "ignored_preserve"', 1, true))
+        H.truthy(armor:find('ctx.action = "remove_one_restart"', 1, true))
+        H.truthy(armor:find('action = "zero_stack_restart_requested"', 1, true))
+        H.truthy(armor:find("stacks_after = _focused_stack_count(be)", 1, true))
+        H.truthy(balance:find('talent.description = "crt_kerillian_maidenguard_focused_spirit_stacks_desc"', 1, true))
+        H.truthy(balance:find("saved.focused_talent_description_values_original", 1, true))
+        H.truthy(loc:find("crt_kerillian_maidenguard_focused_spirit_stacks_desc", 1, true))
+    end)
 end

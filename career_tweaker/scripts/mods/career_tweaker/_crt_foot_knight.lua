@@ -28,11 +28,12 @@ local BUFF_TEAMWORK_POWER = "crt_fk_teamwork_great_power"
 local BUFF_FINAL_MARCH = "crt_fk_final_march"
 
 -- Resident vanilla Foot Knight atlas keys, sourced from
--- talent_settings_markus.lua. Icons live on the stable effect buffs (not the
--- 0.2s reconciler), so HUD widgets persist until the effect actually ends.
+-- talent_settings_markus.lua. Only conditional, player-facing bonuses consume
+-- HUD slots. The permanent heavy-immunity mechanic and Rock dodge penalty are
+-- bookkeeping state, not timed/aura bonuses, and deliberately have no icon.
+-- Icons live on stable effect buffs (not the 0.2s reconciler), so their widgets
+-- persist until the effect actually ends.
 local BUFF_ICONS = {
-    [BUFF_UNINTERRUPTIBLE] = "markus_knight_ability_invulnerability",
-    [BUFF_ROCK_DODGE] = "markus_knight_passive_block_cost_aura",
     [BUFF_ROCK_POWER] = "markus_knight_passive_block_cost_aura",
     [BUFF_TEAMWORK_POWER] = "markus_knight_damage_taken_ally_proximity",
     [BUFF_FINAL_MARCH] = "markus_knight_movement_speed_on_incapacitated_allies",
@@ -75,7 +76,6 @@ local function _register_templates()
         buffs = {
             {
                 name = BUFF_UNINTERRUPTIBLE,
-                icon = BUFF_ICONS[BUFF_UNINTERRUPTIBLE],
                 perks = { buff_perks.uninterruptible_heavy },
             },
         },
@@ -97,7 +97,6 @@ local function _register_templates()
         buffs = {
             {
                 name = BUFF_ROCK_DODGE,
-                icon = BUFF_ICONS[BUFF_ROCK_DODGE],
                 apply_buff_func = "apply_movement_buff",
                 remove_buff_func = "remove_movement_buff",
                 multiplier = 0.90,

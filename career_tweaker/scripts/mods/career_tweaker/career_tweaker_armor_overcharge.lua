@@ -116,6 +116,37 @@ local CRT_COUNTER_REMOVER_FUNC = "crt_cursed_armor_counter_remover"
 local CRT_FOCUSED_PROC_FUNC    = "crt_focused_spirit_damage_taken"
 local CRT_FOCUSED_GROW_FUNC    = "crt_focused_spirit_arm_growth"
 
+-- #472: the earlier regression check proved only that the policy and wrappers
+-- existed. It could not prove that a real damage event reached the wrapper or
+-- that the retained stack/cooldown state matched the requested transition.
+-- Keep one bounded, transition-deduplicated receipt stream at the live owner
+-- boundary. It is always log-only, never chat, and cannot grow per Ratling tick.
+local _focused_diag_seen, _focused_diag_count = {}, 0
+local FOCUSED_DIAG_CAP = 48
+local function _focused_diag(event, data)
+    data = data or {}
+    local signature = table.concat({
+        tostring(event), tostring(data.source), tostring(data.damage_type),
+        tostring(data.attacker_self), tostring(data.has_talent),
+        tostring(data.ignored), tostring(data.action),
+        tostring(data.stacks_before), tostring(data.stacks_after),
+        tostring(data.cooldown_before), tostring(data.cooldown_after),
+        tostring(data.ok),
+    }, "|")
+    if _focused_diag_seen[signature] or _focused_diag_count >= FOCUSED_DIAG_CAP then return end
+    _focused_diag_seen[signature] = true
+    _focused_diag_count = _focused_diag_count + 1
+    pcall(printf,
+        "[crt:472] event=%s source=%s damage_type=%s attacker_self=%s has_talent=%s ignored=%s action=%s stacks=%s->%s cooldown=%s->%s wrapped_ok=%s receipt=%d/%d",
+        tostring(event), tostring(data.source), tostring(data.damage_type),
+        tostring(data.attacker_self), tostring(data.has_talent),
+        tostring(data.ignored), tostring(data.action),
+        tostring(data.stacks_before), tostring(data.stacks_after),
+        tostring(data.cooldown_before), tostring(data.cooldown_after),
+        tostring(data.ok), _focused_diag_count, FOCUSED_DIAG_CAP)
+end
+mod._crt.issue472_diagnostics_armed = FOCUSED_DIAG_CAP
+
 -- ── Predicate helpers (all damage-context reads nil-guarded) ─────────────────
 
 -- Shared #334 policy is manifest-loaded and engine-free. Keeping these aliases
@@ -346,6 +377,11 @@ local function _focused_spirit_has_talent(unit)
         and te:has_talent("kerillian_maidenguard_power_level_on_unharmed")
 end
 
+local function _focused_is_handmaiden(unit)
+    local ce = unit and ScriptUnit.has_extension(unit, "career_system")
+    return ce and ce._career_name == "we_maidenguard"
+end
+
 local _focused_rearm = setmetatable({}, { __mode = "k" })
 
 local function _focused_stack_count(be)
@@ -381,8 +417,13 @@ local function _crt_install_focused_spirit_wrapper()
     fns[CRT_FOCUSED_GROW_FUNC] = function(owner_unit)
         if not mod:get("rework_we_maidenguard_focused_spirit_stacks") then return end
         local be = ScriptUnit.has_extension(owner_unit, "buff_system")
-        if be and _focused_stack_count(be) < 5 then
+        local stacks = _focused_stack_count(be)
+        if be and stacks < 5 then
             _focused_rearm[owner_unit] = true
+            _focused_diag("growth", {
+                has_talent = true, action = "rearm_next_frame",
+                stacks_before = math.max(0, stacks - 1), stacks_after = stacks,
+            })
         end
     end
 
@@ -390,9 +431,11 @@ local function _crt_install_focused_spirit_wrapper()
         local vanilla = PF.maidenguard_reset_unharmed_buff
         local ctx = mod._crt_focused_spirit_damage_context
         if ctx and ctx.unit == owner_unit and ctx.ignored then
+            ctx.action = "ignored_preserve"
             return false
         end
         if not mod:get("rework_we_maidenguard_focused_spirit_stacks") then
+            if ctx and ctx.unit == owner_unit then ctx.action = "delegate_vanilla" end
             return vanilla and vanilla(owner_unit, buff, params, world, proc_event_params)
         end
 
@@ -401,13 +444,16 @@ local function _crt_install_focused_spirit_wrapper()
         local attacker_unit = params and params[1]
         local damage_amount = params and params[2]
         if attacker_unit == owner_unit or damage_amount == 0 then
+            if ctx and ctx.unit == owner_unit then ctx.action = "self_or_zero_preserve" end
             return false
         end
 
         if not ctx or ctx.unit ~= owner_unit or ctx.handled then
+            if ctx and ctx.unit == owner_unit then ctx.action = "duplicate_proc_preserve" end
             return false
         end
         ctx.handled = true
+        ctx.action = "remove_one_restart"
 
         local be = ScriptUnit.has_extension(owner_unit, "buff_system")
         if be and buff and buff.id then
@@ -442,6 +488,12 @@ mod._crt_focused_spirit_tick = function()
             local be = ScriptUnit.has_extension(unit, "buff_system")
             if be and _focused_stack_count(be) < 5 then
                 _focused_add_local_cooldown(unit, be)
+                _focused_diag("rearm", {
+                    has_talent = true, action = "cooldown_added",
+                    stacks_after = _focused_stack_count(be),
+                    cooldown_after = be.has_buff_type
+                        and be:has_buff_type(FOCUSED_COOLDOWN) or false,
+                })
             end
         end
     end
@@ -483,17 +535,28 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
     -- health degeneration never fires on_damage_taken and is excluded here too.
     local focused_ignore_on = mod:get("maidenguard_focused_spirit_ignore_chip_damage")
     local focused_rework_on = mod:get("rework_we_maidenguard_focused_spirit_stacks")
+    local focused_has_talent = (focused_ignore_on or focused_rework_on)
+        and _focused_spirit_has_talent(unit) or false
     if (focused_ignore_on or focused_rework_on)
        and damage_amount and damage_amount > 0
        and damage_source_name ~= "temporary_health_degen"
-       and _focused_spirit_has_talent(unit) then
+       and focused_has_talent then
         local ignored = focused_ignore_on
             and _focused_spirit_ignores(attacker_unit, unit, damage_source_name, damage_type)
+        local stacks_before = _focused_stack_count(be)
+        local cooldown_before = be and be.has_buff_type
+            and be:has_buff_type(FOCUSED_COOLDOWN) or false
         prev_focused_context = mod._crt_focused_spirit_damage_context
         mod._crt_focused_spirit_damage_context = {
             unit = unit,
             ignored = ignored,
             handled = false,
+            action = ignored and "await_ignored_proc" or "await_real_hit_proc",
+            source = damage_source_name,
+            damage_type = damage_type,
+            attacker_self = attacker_unit == unit,
+            stacks_before = stacks_before,
+            cooldown_before = cooldown_before,
         }
         set_focused_context = true
 
@@ -504,7 +567,19 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
         if focused_rework_on and not ignored and attacker_unit ~= unit
            and be and _focused_stack_count(be) == 0 then
             _focused_request_cooldown(unit, attacker_unit, damage_amount)
+            mod._crt_focused_spirit_damage_context.action = "zero_stack_restart_requested"
         end
+    elseif (focused_ignore_on or focused_rework_on)
+       and damage_amount and damage_amount > 0
+       and damage_source_name ~= "temporary_health_degen"
+       and _focused_is_handmaiden(unit) then
+        _focused_diag("damage_untracked", {
+            source = damage_source_name, damage_type = damage_type,
+            attacker_self = attacker_unit == unit,
+            has_talent = focused_has_talent,
+            action = "talent_not_detected",
+            stacks_before = _focused_stack_count(be),
+        })
     end
 
     -- add_damage returns nothing meaningful, but wrap in pcall so the exempt flag
@@ -515,6 +590,18 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
 
     if set_exempt then mod._crt_cursed_armor_exempt_unit = prev_exempt end
     if set_focused_context then
+        local ctx = mod._crt_focused_spirit_damage_context
+        _focused_diag("damage", {
+            source = ctx.source, damage_type = ctx.damage_type,
+            attacker_self = ctx.attacker_self, has_talent = true,
+            ignored = ctx.ignored, action = ctx.action,
+            stacks_before = ctx.stacks_before,
+            stacks_after = _focused_stack_count(be),
+            cooldown_before = ctx.cooldown_before,
+            cooldown_after = be and be.has_buff_type
+                and be:has_buff_type(FOCUSED_COOLDOWN) or false,
+            ok = ok,
+        })
         mod._crt_focused_spirit_damage_context = prev_focused_context
     end
 

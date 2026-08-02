@@ -27,7 +27,7 @@ function M.templates()
             buffs = { {
                 buff_func = "crt_wire_safe_add_buff",
                 buff_to_add = M.stack_buff,
-                event = "on_kill",
+                event = "on_hit",
                 name = M.proc_buff,
             } },
         },
@@ -65,7 +65,7 @@ function M.validate(templates)
     local damage = stack and stack.buffs and stack.buffs[1]
     local taken = stack and stack.buffs and stack.buffs[2]
     return db and db.event == "on_dodge"
-        and pb and pb.event == "on_kill" and pb.buff_to_add == M.stack_buff
+        and pb and pb.event == "on_hit" and pb.buff_to_add == M.stack_buff
         and damage and damage.stat_buff == "damage_dealt"
         and damage.multiplier == 0.02 and damage.max_stacks == 15
         and damage.duration == 2 and damage.refresh_durations == false
