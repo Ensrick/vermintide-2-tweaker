@@ -228,6 +228,7 @@ elseif (-not $Quiet) {
     Write-Host "[check_release_bundle_atomicity] SKIP - build-only pipeline generates the required bundle, then runs this gate." -ForegroundColor DarkYellow
     Write-Host ""
 }
+Run-Check "check_mod_descriptor_line_endings" { & (Join-Path $here "check_mod_descriptor_line_endings.ps1") -Quiet:$Quiet }
 Run-Check "check_unpack_safety"               { & (Join-Path $here "check_unpack_safety.ps1")               -Quiet:$Quiet }
 Run-Check "check_vmf_widget_types"            { & (Join-Path $here "check_vmf_widget_types.ps1")            -Quiet:$Quiet }
 Run-Check "check_event_register_signature"    { & (Join-Path $here "check_event_register_signature.ps1")    -Quiet:$Quiet }

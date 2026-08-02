@@ -1,6 +1,6 @@
 # Character Weapon Variants — Changelog
 
-## 0.1.483-dev (2026-08-02) - #914 #474 #279 #401 #922 critical-audit render fixes [untested]
+## 0.1.484-dev (2026-08-02) - #914 #474 #279 #401 #922 critical-audit render fixes [untested]
 
 - Fixed the dead #914 peer-pull trigger: the exact-identity request from `game_object_initialized` guarded on `Managers.player:local_player(1).player_unit == unit`, but vanilla assigns `player_unit` only AFTER that broadcast (spawn at `bulldozer_player.lua:365` -> `unit_spawner.lua:349` `sync_unit_extensions` fires GO-init -> ownership at `bulldozer_player.lua:393`), so the request never fired. Locality now derives from the unit's own inventory extension at hook time (`SimpleInventoryExtension.init` sets `player`/`is_bot` before GO-init, `simple_inventory_extension.lua:31-32`; local human = `BulldozerPlayer.local_player`, `bulldozer_player.lua:9`; bots refused via `bot_player`, `player_bot.lua:23`). Retry cap and request-generation coalescing unchanged. (#914)
 - Wired the previously caller-less `appearance_lifecycle:clear_peer` into the real peer-teardown seam: merged into the existing consolidated `(GameNetworkManager, remove_peer)` hook in `_cwv_javelin_gate.lua` (fires from `peer_states.lua:574` on disconnect), so a rejoin under the same peer id cannot reuse stale exact-identity state, accepted request generations, or pending deliveries. (#914)
@@ -8,6 +8,19 @@
 - Fixed the #279 preview adapter deleting WEAPON rows: vanilla stamps `is_ammo_unit = item_units.ammo_unit ~= nil` onto the LEFT/RIGHT weapon rows themselves (`world_hero_previewer.lua:707/731`; the flag records ammo-unit inheritance from the base item, `backend_utils.lua:147-148`), so removing flagged rows vanished the weapon from the preview. `apply_spawn_descriptor` now CLEARS the inherited ammo identity and rewrites the row to the descriptor's exact hand unit instead of deleting it. Rewrote the `/cwv_regression_test` and offline fixtures to the real engine shape (weapon row carrying `is_ammo_unit`; no dedicated ammo-only row). (#279)
 - Fixed the log-only #401 husk override-unit residency ledger: `_loaded[path] = true` was written BEFORE the `pcall` load, so a failed load still counted as resident and was never retried, and the `has_loaded` probe only fed a printf. The ledger now records success only when the load call succeeded, each path carries a bounded attempt counter (max 3), and the re-entrant pass re-runs once at `on_all_mods_loaded` to re-attempt failed loads (preserving the earlier handler). The runtime residency regression test now asserts real success, not attempts. (#401)
 - Fixed #922 husk fade enrollment eviction: vanilla wield calls `_reapply_fade` AFTER `_wield_slot` (`simple_husk_inventory_extension.lua:319` then `:353`), replacing the fade system's linked set with only the four inventory fields (`:292-311`) and evicting the snapshot enrolled from the `_wield_slot` hook; the adapter's `_last_by_owner` fingerprint dedup then reported "unchanged" and skipped every later re-apply. Added the sole CWV hook on `(SimpleHuskInventoryExtension, _reapply_fade)` - owned by `_cwv_appearance_fade.lua` to respect the entry-file decomposition ceiling - which re-enrolls with `force = true` after the native replacement (the proven Cosmetics `remote_husk_reapply` pattern), gated on the same exact-identity descriptor as the wield-edge enrollment. (#922)
+
+## 0.1.483-dev (2026-08-02) - interrupt attacks when changing Combat Style (#944) [verify-fix]
+
+- Combat Style switching now finishes active weapon actions through VT2's
+  canonical `WeaponUnitExtension:stop_action("interrupted")` lifecycle before
+  rebuilding the exact equipped instance.
+- Both hands are preflighted and deduplicated. Career actions, unknown action
+  identities, failed interrupts, and actions that remain active fail closed
+  without saving or applying a new style.
+- Resource-loaded transitions revalidate the exact instance before interrupting,
+  preventing delayed switches from affecting a replacement weapon.
+- Added bounded `[cwv:944]` receipts plus offline coverage for right-hand,
+  left-hand-only, dual-hand, shared-extension, failure, and career-action cases.
 
 ## 0.1.482-dev (2026-08-02) - #915 Maul illusion pool admits vanilla-owned sources only [untested]
 

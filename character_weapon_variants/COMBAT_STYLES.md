@@ -69,10 +69,14 @@ shield-free Spear+Shield models now belong to Tuskgor Spear's illusion pool.
 `_cwv_combat_styles.lua` owns the catalogue, exact-instance store, template
 selection, contextual inventory button, hotkey transition, peer state, and
 diagnostics. `BackendUtils.get_item_template` remains CWV's one consolidated
-template seam. A transition is rejected while a weapon action is active, then
-otherwise rebuilds the currently wielded slot once through vanilla
+template seam. A transition preflights both hands, ends active weapon actions
+through vanilla `WeaponUnitExtension:stop_action("interrupted")`, and then
+rebuilds the currently wielded slot once through vanilla
 `destroy_slot -> add_equipment -> wield`. A failed rebuild rolls persistence
-back before a best-effort repair.
+back before a best-effort repair. Career actions fail closed and are never
+cancelled by the style control. An asynchronously loaded style performs this
+interrupt only after its resource is resident and the exact instance is still
+wielded, so a failed or stale load does not cancel the player's attack.
 
 CWV also publishes the narrow dot-call contract
 `get_effective_combat_style_template_name(item, backend_id, owner_unit, slot_name)`.

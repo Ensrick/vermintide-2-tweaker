@@ -1058,7 +1058,7 @@ cosmetics_tweaker v0.9.66-dev (`_create_preview_widget` re-point + `_update_envi
 The environment name can also encode layout behavior, not only lighting. In
 the Athanor overview, vanilla marks viewport 3 as `invert_rendering` and gives
 it `ui_weave_forge_preview_inverted`; both equipped weapons otherwise receive
-the same x coordinate [src: `hero_window_weave_forge_overview.lua:202-221,332-348,385-397`].
+the same x coordinate [src: `scripts/ui/views/hero_view/windows/hero_window_weave_forge_overview.lua:202-221,332-348,385-397`].
 If a mission-safe fallback replaces both environments with the same resource,
 capture that viewport role before substitution and reproduce only the lost
 transform at the item-preview producer. Do not infer the viewport from
@@ -2083,9 +2083,9 @@ once during boot, then consumed later without an exact-path capability check.
    is extended.
 2. Trace how the dependent registry is generated. Vanilla populates
    `completed_career_levels` by iterating the then-current `CareerSettings`
-   [src: `statistics_definitions.lua:556-576`], while Mission Select later
+   [src: `scripts/managers/backend/statistics_definitions.lua:556-576`], while Mission Select later
    iterates all live `profile.careers` [src:
-   `start_game_window_mission_selection_console.lua:503-524`].
+   `scripts/ui/views/start_game_view/windows/start_game_window_mission_selection_console.lua:503-524`].
 3. Confirm the missing exact leaf in the crash locals; do not infer failure from
    the custom entry's presence alone.
 
@@ -2610,7 +2610,7 @@ across preview worlds, owner units, or remote husks.
 
 **First seen:** 2026-07-11 (enemy_tweaker #479; no-re-run guard v0.7.33-dev, exact-error quarantine v0.7.39-dev, both on master 0.7.51-dev)
 **Canonical Issue:** [#479](https://github.com/Ensrick/vermintide-2-tweaker/issues/479) (crash evidence from [#470](https://github.com/Ensrick/vermintide-2-tweaker/issues/470))
-**Lives in:** any pcall-wrapped hook whose error path "bails to vanilla" by calling `func(...)` a SECOND time (the PROJECT_STANDARDS 4.1 protective pattern) on a target that mutates state mid-call or whose CALLER does post-return bookkeeping. Known non-idempotent targets: `ConflictDirector.update` (spawn-queue bookkeeping runs AFTER `_spawn_unit` [src: `conflict_director.lua:1835-1891`]) and anything reached from it - `EnemyRecycler.update_main_path_events` advances `current_main_path_event_id` only after `TerrorEventMixer.start_event` returns [src: `enemy_recycler.lua:456-463`].
+**Lives in:** any pcall-wrapped hook whose error path "bails to vanilla" by calling `func(...)` a SECOND time (the PROJECT_STANDARDS 4.1 protective pattern) on a target that mutates state mid-call or whose CALLER does post-return bookkeeping. Known non-idempotent targets: `ConflictDirector.update` (spawn-queue bookkeeping runs AFTER `_spawn_unit` [src: `scripts/managers/conflict_director/conflict_director.lua:1835-1891`]) and anything reached from it - `EnemyRecycler.update_main_path_events` advances `current_main_path_event_id` only after `TerrorEventMixer.start_event` returns [src: `scripts/managers/conflict_director/enemy_recycler.lua:456-463`].
 
 ### Symptoms
 - Paired log lines: `inner errored: ... bailing to vanilla` followed by `vanilla fallback ALSO errored` - the same tick ran twice, re-popped the same queue entry, re-threw, and doubled partial state (two half-initialized extension sets crashed the host: #470 `i470.log:158014-158017`).
@@ -2642,7 +2642,7 @@ across preview worlds, owner units, or remote husks.
 - The same code works in the modding-tools executable (full stdlib) - which is where the disproven "read-only io works" belief came from.
 
 ### Diagnosis pattern
-- The retail Stingray binary registers no `io` library into the shared `_G` that mods are loadstring'd into [src: `scripts/managers/mod/mod_manager.lua:375`]; `os` IS present (the engine itself calls `os.date` unguarded [src: `mod_manager.lua:312`]) - so "os works" proves nothing about `io`.
+- The retail Stingray binary registers no `io` library into the shared `_G` that mods are loadstring'd into [src: `scripts/managers/mod/mod_manager.lua:375`]; `os` IS present (the engine itself calls `os.date` unguarded [src: `scripts/managers/mod/mod_manager.lua:312`]) - so "os works" proves nothing about `io`.
 - Distinguish CHECKS (convert) from genuine file-backed FEATURES (need a different transport entirely - `io` has no read OR write half in retail; see memory `reference_vt2_mod_file_io.md`).
 
 ### Fix template
@@ -2657,7 +2657,7 @@ across preview worlds, owner units, or remote husks.
 
 **First seen:** 2026-07-12 (cosmetics_tweaker 0.9.84-dev deus-yield gate; staging-hub over-scope regression fixed 0.9.89-dev)
 **Canonical Issue:** [#518](https://github.com/Ensrick/vermintide-2-tweaker/issues/518) (root-cause per-`backend_id` descriptor work continues under the [#660](https://github.com/Ensrick/vermintide-2-tweaker/issues/660) umbrella; inverse context-gate example: [#461](https://github.com/Ensrick/vermintide-2-tweaker/issues/461))
-**Lives in:** any per-weapon customization store keyed by TEMPLATE (or item key) confronted with GENERATED item instances. Chaos Wastes deus weapons clone the base item - `create_item` sets `key = deus_item_data.base_item`, same weapon template [src: `deus_weapon_generation.lua:185-202`] - and re-roll `item.skin` on generation [src: `:246-249`] and every shrine upgrade [src: `:318-321`]; the skin change IS the upgrade's visual feedback.
+**Lives in:** any per-weapon customization store keyed by TEMPLATE (or item key) confronted with GENERATED item instances. Chaos Wastes deus weapons clone the base item - `create_item` sets `key = deus_item_data.base_item`, same weapon template [src: `scripts/managers/game_mode/mechanisms/deus_weapon_generation.lua:185-202`] - and re-roll `item.skin` on generation [src: `scripts/managers/game_mode/mechanisms/deus_weapon_generation.lua:246-249`] and every shrine upgrade [src: `scripts/managers/game_mode/mechanisms/deus_weapon_generation.lua:318-321`]; the skin change IS the upgrade's visual feedback.
 
 ### Symptoms
 - A keep-committed cosmetic re-appears on every CW starting/upgraded weapon sharing the template; the rolled upgrade skin is stomped on every wield (log tell: the re-apply firing with `mechanism=deus`).
@@ -2666,12 +2666,12 @@ across preview worlds, owner units, or remote husks.
 
 ### Diagnosis pattern
 1. Store key is a template / item key; the CW item is a FRESH instance with the SAME key. Any per-instance intent stored per-template will match every generated sibling.
-2. Boundary check: vanilla splits the deus mechanism by level into `inn_deus` (`morris_hub`), `map_deus` (`dlc_morris_map`), and `deus` (every mission node) [src: `deus_mechanism.lua:28-35,49-59`]. "In the deus mechanism" is NOT "in an expedition".
+2. Boundary check: vanilla splits the deus mechanism by level into `inn_deus` (`morris_hub`), `map_deus` (`dlc_morris_map`), and `deus` (every mission node) [src: `scripts/managers/game_mode/mechanisms/deus_mechanism.lua:28-35,49-59`]. "In the deus mechanism" is NOT "in an expedition".
 
 ### Fix template
 - Gate on mechanism AND game mode: yield only when both are `"deus"` (`mod._la_weapon_yield_for_context`). Read live per call so returning to a hub re-asserts with no state loss.
 - For chamber-only UI/actions, prefer the exact `morris_hub` level key. Share one pure context predicate across features (#461 preview and #505 Single Mission Loader) instead of re-deriving matchmaking state.
-- Resolve the game mode with fallbacks - `GameModeManager.game_mode_key` [src: `game_mode_manager.lua:915-917`] -> `LevelTransitionHandler.get_current_game_mode` [src: `level_transition_handler.lua:387-389`] -> level-key classification - with the fail direction "staging never yields; a starting mission never briefly repaints".
+- Resolve the game mode with fallbacks - `GameModeManager.game_mode_key` [src: `scripts/managers/game_mode/game_mode_manager.lua:915-917`] -> `LevelTransitionHandler.get_current_game_mode` [src: `scripts/game_state/components/level_transition_handler.lua:387-389`] -> level-key classification - with the fail direction "staging never yields; a starting mission never briefly repaints".
 - Put the terminal gate at the single apply funnel every trigger routes through, and make the retry queue treat the yield as a TERMINAL reason so pending applies don't spin to their deadline.
 - Owner doc: `cosmetics_tweaker/LA_SYNC_MODEL.md` section 6.10. Pins: in-game `cos_la_deus_yield_active_mission_only` truth table; offline `qa/lua/tests/test_cos_deus_yield_policy.lua`.
 
@@ -2849,7 +2849,7 @@ fallback path, especially live strings containing UTF-8 smart punctuation.
 2. Follow the id across the bounded exit snapshot and the mechanism override
    teardown. A changing generated id that becomes unresolved is ephemeral.
 3. Separate mixed ownership: Deus maps melee/ranged to `deus` but cosmetics to
-   `items` [src: `backend_interface_deus_base.lua:7-14`]. A whole-mode gate is
+   `items` [src: `scripts/managers/backend_playfab/backend_interface_deus_base.lua:7-14`]. A whole-mode gate is
    less precise than a per-slot gate.
 
 ### Fix template
@@ -2889,9 +2889,9 @@ while the engine stores or presents that key as one aggregate record.
    the confirmed Athanor case, row population counts `#slot_indices`, the CIM
    mutation helper capped `#slot_indices` globally, key removal selects the
    final aggregate index, and Clear removes all indices for any key present in
-   the category [src: `hero_window_weave_properties.lua:718-740,2402-2460,2483-2501,2540-2664`].
+   the category [src: `scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:718-740,2402-2460,2483-2501,2540-2664`].
 3. Compare those consumers with the authored category layout. Accessory property
-   layers are disjoint ten-slot ranges [src: `hero_window_weave_properties.lua:24-65`].
+   layers are disjoint ten-slot ranges [src: `scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:24-65`].
 
 ### Fix template
 - Preserve the category dimension at every presentation and mutation seam:
@@ -2929,7 +2929,7 @@ vanilla function has produced a dense result array.
 2. Distinguish the raw keyed inventory map from the dense filtered result. In
    `BackendInterfaceCommon.filter_items`, the former is enumerated with
    `pairs`, while accepted rows are appended to the latter [src:
-   `backend_interface_common.lua:648-669`].
+   `scripts/managers/backend/backend_interface_common.lua:648-669`].
 3. Add a source-contract test for the required iterator and a keyed-table unit
    fixture. An empty array fixture cannot expose this class.
 
@@ -2986,7 +2986,7 @@ restores information intentionally stripped from a vanilla-safe RPC.
   replacement inherits the prior item's frame after a mode transition.
 - The owner and observer disagree because a broadcast target such as `others`
   updates only remote peers while the server also queues the vanilla RPC
-  locally [src: `network_transmit.lua:508-524`; `loadout_utils.lua:36-42`].
+  locally [src: `scripts/network/network_transmit.lua:508-524`; `scripts/helpers/loadout_utils.lua:36-42`].
 - No custom icon or model key crossed the wire; only cached presentation state
   is wrong.
 
@@ -3177,8 +3177,8 @@ resource count by multiplying it by `item_template.*.max_*`.
    changing RPC or buff code.
 2. Inspect the owner writer and the husk extension. For ammo, vanilla writes
    current, maximum, and percentage together [src:
-   `simple_inventory_extension.lua:519-534`], and the husk exposes the exact pair
-   through `ammo_status()` [src: `simple_husk_inventory_extension.lua:66-72`].
+   `scripts/unit_extensions/default_player_unit/inventory/simple_inventory_extension.lua:519-534`], and the husk exposes the exact pair
+   through `ammo_status()` [src: `scripts/unit_extensions/default_player_unit/inventory/simple_husk_inventory_extension.lua:66-72`].
 3. Compare the third-party HUD calculation. If it reads the fraction but
    multiplies by static template capacity, the first divergence is display-only.
 
