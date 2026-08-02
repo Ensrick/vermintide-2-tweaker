@@ -36,10 +36,11 @@
 #
 # SRC RESOLUTION (second, independent check — runs by default)
 #   Tag SHAPE alone proves nothing: `[src: totally/made/up.lua:99999]` satisfies
-#   the regex above. The resolver opens every `[src: path:line]` in the substrate
-#   and requires the file to exist under the decompiled tree with every cited
-#   line in range. CI checks out ONLY this repo, so a missing source tree is a
-#   clean, visible SKIP (same convention as check_name_integrity /
+#   the regex above. The resolver opens every `[src: path:line]` in MECHANICS,
+#   BUG_CLASSES, WEAPON_APPEARANCE_STANDARD, and CROSS_MOD_ARCHITECTURE and
+#   requires the file to exist under the decompiled tree with every cited line
+#   in range. CI checks out ONLY this repo, so a missing source tree is a clean,
+#   visible SKIP (same convention as check_name_integrity /
 #   check_source_provenance); it is BLOCKING wherever the tree is present.
 #
 # USAGE
@@ -351,10 +352,18 @@ if ($SelfTest) { exit (Invoke-SelfTest) }
 
 $repoRoot = (Resolve-Path $RepoRoot).Path
 $mechPath = Join-Path $repoRoot "docs\MECHANICS.md"
+$sourceDocuments = [ordered]@{
+    'docs/MECHANICS.md'                  = $mechPath
+    'docs/BUG_CLASSES.md'                = (Join-Path $repoRoot 'docs\BUG_CLASSES.md')
+    'docs/WEAPON_APPEARANCE_STANDARD.md' = (Join-Path $repoRoot 'docs\WEAPON_APPEARANCE_STANDARD.md')
+    'docs/CROSS_MOD_ARCHITECTURE.md'      = (Join-Path $repoRoot 'docs\CROSS_MOD_ARCHITECTURE.md')
+}
 
-if (-not (Test-Path $mechPath)) {
-    Write-Host "[check_mechanics_citations] FATAL: substrate not found at $mechPath" -ForegroundColor Red
-    exit 2
+foreach ($doc in $sourceDocuments.GetEnumerator()) {
+    if (-not (Test-Path -LiteralPath $doc.Value)) {
+        Write-Host "[check_mechanics_citations] FATAL: source-citation document not found at $($doc.Value)" -ForegroundColor Red
+        exit 2
+    }
 }
 
 $text = Read-FileUtf8 $mechPath
@@ -362,7 +371,7 @@ $text = Read-FileUtf8 $mechPath
 # ---- [src:] resolution (blocking where the decompiled tree is present) ----
 # Returns: 0 clean, 1 skipped (no source tree), 2 unresolved citations.
 function Invoke-SrcResolveReport {
-    param([string]$Text, [string]$SourceRoot)
+    param([string]$Text, [string]$SourceRoot, [string]$DocumentLabel)
 
     if (-not (Test-Path -LiteralPath $SourceRoot)) {
         $msg = "[check_mechanics_citations] decompiled source not at $SourceRoot"
@@ -376,18 +385,30 @@ function Invoke-SrcResolveReport {
 
     $r = Invoke-SrcResolve -Text $Text -SourceRoot $SourceRoot
     if ($r.problems.Count -gt 0) {
-        Write-Host ("[check_mechanics_citations] ERRORS ({0}) — unresolvable [src:] citations:" -f $r.problems.Count) -ForegroundColor Red
+        Write-Host ("[check_mechanics_citations] ERRORS ({0}) in {1} — unresolvable [src:] citations:" -f $r.problems.Count, $DocumentLabel) -ForegroundColor Red
         foreach ($p in $r.problems) { Write-Host "  X $p" -ForegroundColor Red }
         Write-Host ""
         Write-Host "  A [src:] tag must open. Fix the path/line, or downgrade the claim to [unverified]." -ForegroundColor Red
         return 2
     }
-    Write-Host ("[src:] resolution:       {0}/{0} refs resolve against the decompiled tree" -f $r.refs) -ForegroundColor Green
+    Write-Host ("[src:] resolution ({0}): {1}/{1} refs resolve against the decompiled tree" -f $DocumentLabel, $r.refs) -ForegroundColor Green
     return 0
 }
 
+function Invoke-AllSrcResolveReports {
+    param([System.Collections.IDictionary]$Documents, [string]$SourceRoot)
+
+    $failed = $false
+    foreach ($doc in $Documents.GetEnumerator()) {
+        $docText = Read-FileUtf8 $doc.Value
+        $rc = Invoke-SrcResolveReport -Text $docText -SourceRoot $SourceRoot -DocumentLabel $doc.Key
+        if ($rc -eq 2) { $failed = $true }
+    }
+    return $(if ($failed) { 2 } else { 0 })
+}
+
 if ($ResolveSrc) {
-    $srcRc = Invoke-SrcResolveReport -Text $text -SourceRoot $VtSrc
+    $srcRc = Invoke-AllSrcResolveReports -Documents $sourceDocuments -SourceRoot $VtSrc
     exit ($(if ($srcRc -eq 2) { 2 } else { 0 }))
 }
 
@@ -412,7 +433,7 @@ if (-not $Quiet -and $res.domains.Count -gt 0) {
 }
 
 # Tag SHAPE and tag RESOLUTION are independent failures; report both before exiting.
-$srcRc = Invoke-SrcResolveReport -Text $text -SourceRoot $VtSrc
+$srcRc = Invoke-AllSrcResolveReports -Documents $sourceDocuments -SourceRoot $VtSrc
 Write-Host ""
 
 if ($res.errors.Count -gt 0) {
@@ -425,7 +446,7 @@ if ($res.errors.Count -gt 0) {
 }
 
 if ($srcRc -eq 2) {
-    Write-Host "[check_mechanics_citations] FAILED — every bullet is tagged, but a [src:] citation does not resolve." -ForegroundColor Red
+    Write-Host "[check_mechanics_citations] FAILED — every MECHANICS bullet is tagged, but a [src:] citation does not resolve in the checked documentation set." -ForegroundColor Red
     exit 2
 }
 
