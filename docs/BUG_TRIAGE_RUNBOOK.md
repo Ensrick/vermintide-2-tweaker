@@ -213,22 +213,42 @@ This checklist applies the owner doctrine in `PROJECT_STANDARDS.md` section
 6.6; if this secondary checklist ever differs, stop and correct it before
 shipping. Agent publication is headless and opens no interactive window.
 
-- [ ] **Bump `MOD_VERSION` (patch segment)** in
-  `<mod>/scripts/mods/<mod>/<mod>.lua`. Three-segment semver plus track suffix
-  (`0.12.68-dev`); never a 4th segment. The echoed version confirms the build
-  in the next log.
-- [ ] **Add a CHANGELOG entry** for the new version (symptom, root cause, fix,
-  and the in-game verify check from STEP 8).
-- [ ] **Generate the reviewed artifact without publishing:**
+- [ ] **Claim the mod FIRST, before choosing the version.**
 
   ```powershell
   .\tools\ship\claim.ps1 -Mod <mod>
+  ```
+
+  The claim broker is machine-global
+  (`%APPDATA%\VMBLauncher\ship_claims\<mod>.claim`), shared across every worktree
+  and every concurrent session on the machine. The number it allocates can be
+  HIGHER than master's newest + 1, because prior claims burned numbers that never
+  shipped. Always renumber to the broker's answer; never assume master+1 and
+  never re-use a number the broker did not hand you.
+- [ ] **Bump `MOD_VERSION` to the claimed number** in
+  `<mod>/scripts/mods/<mod>/<mod>.lua`. Three-segment semver plus track suffix
+  (`0.12.68-dev`); never a 4th segment. The echoed version confirms the build
+  in the next log.
+- [ ] **Add a CHANGELOG entry** for that exact version (symptom, root cause, fix,
+  and the in-game verify check from STEP 8).
+- [ ] **Confirm the mod's `.mod` descriptors are LF** (the root one AND the
+  `bundleV2/` copy). `.gitattributes` declares `*.mod text eol=lf`; a CRLF
+  working copy makes the raw staged bytes disagree with the commit blob and
+  fails the publication receipt. Remaining drifted mods: issue #1085.
+- [ ] **Generate the reviewed artifact without publishing:**
+
+  ```powershell
   .\tools\ship\ship.ps1 -Mod <mod> -BuildOnly
   ```
 
+  If this change touches TWO mods, run `-BuildOnly` for BOTH before committing.
 - [ ] **Commit source and generated bundle together, then review before
   publication.** Stage the exact mod source, `itemV2.cfg`, CHANGELOG, and root
   bundle; commit; push; open the PR; pass hosted `qa-gate`; and merge.
+  `qa/check_release_bundle_atomicity.ps1` (issue #724) requires each changed
+  mod's source delta and its own root `.mod_bundle` in the SAME commit — a split
+  commit or a half-built two-mod pair fails the PR, and a common VMF bundle or
+  asset sidecar cannot stand in for the root.
 - [ ] **Publish only from a clean checkout at exact live default-branch HEAD:**
 
   ```powershell
@@ -256,16 +276,36 @@ shipping. Agent publication is headless and opens no interactive window.
   in `C:\Program Files (x86)\Steam\logs\workshop_log.txt`. `ugc_tool` prints
   "Upload finished" even when nothing transferred.
 - [ ] **Deploy-verify hash mismatch after a confirmed upload:** re-run
-  `VMBLauncher deploy <mod> --no-remote` once, then continue. Do not loop on it.
+  `& $env:VT2_SHIP_VMB_LAUNCHER deploy <mod> --no-remote` once, then continue.
+  Do not loop on it. (The launcher is out-of-repo; see `docs/PORTABLE_SETUP.md`
+  for resolution order.)
 - [ ] **Add the status label to the Issue NOW (same pass, do NOT wait for STEP
   9).** Shipping a fix or diagnostic is what flips an issue into "ready to test",
   and that signal is a GitHub label, not just a comment. `PROJECT_STANDARDS.md`
   §11 requires it "in the same pass as the CHANGELOG entry":
-  - **PREREQ:** post the newest exact `## CURRENT LIVE TEST` card FIRST. It
-    names the semantic version and either `[mod:LOAD]` or a clearly labeled
-    exact versioned banner such as `[WOC] v0.1.42-dev loaded`, `Topology: Solo` or
-    `Co-op`, numbered localized/player-facing steps, and `Expected:` result.
-    Issue-body text and older method headings do not qualify.
+  - **PREREQ: post the card, then PIN it, then unpin every older card.** The
+    newest exact `## CURRENT LIVE TEST` comment must be the one and only pinned
+    exact card on the issue. Pinning is a GraphQL `pinIssueComment` mutation -
+    the REST API cannot do it, and an unpinned card is a policy failure even if
+    its content is perfect. Required format (authoritative definition:
+    `tools/verify/lifecycle_method_policy.ps1`):
+    - `Build/banner:` a semantic version plus either a backticked `[<id>:LOAD]`
+      or a clearly labeled exact versioned banner (`[WOC] v0.1.42-dev loaded`).
+    - `**Topology:**` `Solo` or `Co-op` (solo first; `Co-op` needs a
+      `Solo status:` line recording passed/completed/exhausted).
+    - Numbered player-facing steps using the localized names players see
+      in-game. NO snake_case internal identifiers - the only exception is an
+      exact player-entered slash command wrapped in backticks.
+    - `**Expected:**` the observable in-game result.
+    Issue-body text and older method headings never qualify as fallbacks.
+  - **This is CI-enforced, and it fails wide.**
+    `tools/github/check-lifecycle-cardinality.ps1` is a blocking step in
+    `.github/workflows/qa.yml` (PRs AND master pushes) and
+    `.github/workflows/issue-lifecycle.yml` (tracker events, manual, daily). It
+    pages EVERY open issue, so a single issue carrying `verify-fix` or
+    `diagnostics-armed` without exactly one correctly formatted pinned card
+    fails qa-gate for the whole repository - including PRs that never touched
+    that mod. Fix the card, do not retry the build.
   - `gh issue edit <N> --remove-label not-started --add-label verify-fix` only
     when a **complete deployed fix** is runnable in-game now.
   - `gh issue edit <N> --remove-label not-started --add-label diagnostics-armed`
@@ -297,8 +337,9 @@ shipping. Agent publication is headless and opens no interactive window.
 
 ## STEP 8 - VERIFY
 
-- [ ] **Provide ONE current live-test card.** Name the build/banner, topology,
-  player-visible steps, and expected in-game result.
+- [ ] **Provide ONE current live-test card, pinned, with every older exact card
+  unpinned** (format and CI consequences: STEP 7 PREREQ). Name the build/banner,
+  topology, player-visible steps, and expected in-game result.
 - [ ] **NEVER claim a runtime issue "fixed" until the user confirms in-game.**
   Compile success and structural review are not runtime verification. Say
   "shipped v0.12.152-dev, please check X" - not "fixed". Repository-only work

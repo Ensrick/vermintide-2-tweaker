@@ -20,24 +20,33 @@ Cross-reference: `CLAUDE.md` (technical) describes HOW things work. This doc
 - **Memory file system** (`~/.claude/projects/...`) actively prevents re-burning
   recurring bug classes (forward refs, peer-sync drift, etc).
 - **VMBLauncher** is engineered properly — hash verification, exit codes,
-  remote PC-B deploy. Don't bypass it.
+  remote PC-B deploy. Don't bypass it. It now lives in its own repository
+  (relocated ~2026-07-30); this repo resolves the binary through
+  `tools/vmb-launcher-path.ps1` / `VT2_SHIP_VMB_LAUNCHER`.
 - **Per-mod data + localization separation** is canonical VMF and well followed.
 - **QA tooling in place** — policy-driven PowerShell gates, offline Lua 5.1
   tests, and GitHub Actions catch recurring bug classes that previously slipped
-  through. See §11a and `qa/CHECKS.md` for the live inventory; do not freeze a
-  check count in prose.
+  through. See `qa/CHECKS.md` for the live inventory (§11a lists only a
+  representative subset); do not freeze a check count in prose.
 
 ### What's still weak
 - **File sizes exceed Claude's effective working memory.** 9 Lua files remain
-  over the 2500-line hard limit (`chaos_wastes_tweaker_dev.lua` at ~13500,
-  `chaos_wastes_tweaker.lua` at ~12800, `character_weapon_variants.lua` at
-  ~12200, `cosmetics_tweaker.lua` at ~10000, plus five others). Reading the
+  over the 2500-line hard limit (`chaos_wastes_tweaker.lua` at ~12800,
+  `chaos_wastes_tweaker_dev.lua` at ~11300, `character_weapon_variants.lua` at
+  ~10900, `cosmetics_tweaker.lua` at ~10200, plus five others; exact frozen
+  counts live in `qa/baselines/file_sizes.json` — do not restate them here,
+  they drift). Reading the
   worst offenders consumes well over ~80K tokens. The set is now frozen in
   `qa/baselines/file_sizes.json` (issue #429) so the gate blocks only on growth
   past a baselined count or a new file crossing the limit. Tracked under GitHub
   Issue #2.
-- **Logging conventions inconsistent.** The prefix convention in §3.1 is only
-  partially adopted across mods. No central enforcement yet.
+- **Logging conventions partially adopted.** The §3.1 prefix convention is not
+  universal across mods, but enforcement now exists: `qa/check_logging.ps1`
+  (advisory, wired into `qa/run_all.ps1`) scans for chat-echo in NEVER contexts,
+  per-frame `mod:info`/`mod:warning`, and level misuse, with an inline
+  `-- allow-echo: <reason>` suppression path. Under §11b every warning it emits
+  carries a one-week clock. Remaining work is the per-mod prefix sweep, not the
+  missing checker.
 - **Error handling has tended toward reactive layering.** The v0.9.8.x chain
   (4 patches in 24h, each fixing the prior patch's side effect) is the
   canonical example. §4.4 codifies the corrective rule; the pattern still
@@ -317,14 +326,19 @@ that dumps current state in a copy-pasteable form. Examples:
 >   `_dbg`/`_dbg_alert` route through `mod:debug`/`mod:warning`; zero live reads
 >   of any `enable_debug_logging` key; no menu widget.
 >
-> **Migration status (2026-07-07).** `ct_dev` and `weapons_of_chaos` are fully
-> VMF-native (WOC migrated in v0.1.2-dev: no `enable_debug_logging` widget; routes
-> through `mod:debug`/`mod:warning`). Still on the legacy per-mod gate:
-> `chaos_wastes_tweaker` (stable), `character_weapon_variants`,
-> `general_tweaker_dev` (gate the helper on the legacy key in code, no menu
-> widget); `weapon_tweaker`, `weapon_tweaker_dev` (still expose the menu
-> checkbox). Rolling the VMF-native pattern out to these is a per-mod task — do
-> it when touching each mod, or as a deliberate sweep.
+> **Migration status (2026-08-02).** Fully VMF-native (no `enable_debug_logging`
+> key anywhere): `ct_dev`, `chaos_wastes_tweaker` (stable),
+> `character_weapon_variants`, `weapons_of_chaos`, `career_tweaker`,
+> `enemy_tweaker`, `event_tweaker`, `modded_progression`. Still on the legacy
+> per-mod gate, keyed in code only (no menu widget): `cosmetics_tweaker`,
+> `crafting_in_modded`, `crafting_in_modded_dev`, `dynamic_cosmetic_portraits`,
+> `general_tweaker`, `general_tweaker_dev`. Still exposing the menu checkbox in
+> `*_data.lua`: `gui_tweaker`, `gui_tweaker_dev`, `weapon_tweaker`,
+> `weapon_tweaker_dev`. Rolling the VMF-native pattern out is a per-mod task — do
+> it when touching each mod, or as a deliberate sweep. **Re-derive this list
+> before trusting it** (`grep -rl enable_debug_logging --include=*.lua`, then the
+> same over `--include=*_data.lua` for the widget split); the 2026-07-07 snapshot
+> this replaces had drifted wrong in both directions.
 
 ---
 
@@ -701,7 +715,7 @@ Before declaring any mod "shipped" (uploaded to Workshop), Claude must verify:
 2. **CHANGELOG entry** for the new version exists.
 3. **Forward-reference audit**: every `local function foo` is defined before
    any caller. (Future: automate via luacheck.)
-4. **No `tags = [ ]`** in cfg (per `tools/vmb-launcher/CLAUDE.md` § "Drop `tags = [ ];` from cfg on first upload").
+4. **No `tags = [ ]`** in cfg (enforced by `qa/check_cfg.ps1`; rationale in the launcher repository's `CLAUDE.md` § "Drop `tags = [ ];` from cfg on first upload").
 5. **Preview file exists** at the path the cfg references.
 6. **Visibility matches expectation** — never auto-flip to public.
 7. **Verify-before-shipping coverage (§5.1a)** — every fix lands with an apply-site log line AND a `/verify_<feature>` chat command.
@@ -962,7 +976,19 @@ full pipeline is:
 1. Acquire the machine-global mod/version claim. Update source, exact first
    CHANGELOG release, and `MOD_VERSION`; run
    `tools\ship\ship.ps1 -Mod <name> -BuildOnly` to generate and validate the
-   tracked bundle without deploying or uploading.
+   tracked bundle without deploying or uploading. **If the change touches TWO
+   mods, `-BuildOnly` BOTH before committing** — the atomicity gate below
+   requires each mod's source change and its own root `.mod_bundle` in the same
+   commit, so a half-built pair fails the PR.
+
+**The claim broker owns the version number.** `tools\ship\claim.ps1` writes a
+machine-global claim at `%APPDATA%\VMBLauncher\ship_claims\<mod>.claim`, shared
+across every worktree and every concurrent session on the machine. The number it
+returns can be HIGHER than the newest version on `master` + 1: prior claims that
+never shipped burn their numbers permanently. Always renumber `MOD_VERSION`, the
+newest CHANGELOG heading, and any version reference to the broker's answer —
+never to master+1 by inspection, and never re-use a burned number. Claim BEFORE
+bumping, not after; a bump chosen first usually has to be redone.
 2. `git add` / `git commit` source and generated bundle together, push a feature
    branch, and merge it through protected `master` only after `qa-gate` passes.
 3. From a clean worktree at the exact live default-branch commit, run
@@ -1051,6 +1077,14 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   non-descriptor artifacts. For textual `.mod` descriptors only, LF and CRLF
   line endings compare as equivalent because Steam may normalize them after a
   deploy; every other descriptor byte remains significant (issue #646).
+- **`.mod` working-copy CRLF drift is NOT covered by that carve-out.**
+  `.gitattributes` declares `*.mod text eol=lf`. The deploy-verify tolerance
+  above applies only to the post-deploy Steam comparison. The publication
+  receipt binds exact git commit blobs (`git-commit-blob-snapshot-v1`), so a
+  CRLF working copy makes the raw staged bytes disagree with the commit blob and
+  the receipt fails closed. Before a ship, confirm the mod's `.mod` descriptors
+  (both the root and the `bundleV2/` copy) are LF. Remaining drifted mods are
+  tracked in issue #1085.
 - A real deploy-verify mismatch after a CONFIRMED upload is a Steam reconcile
   race, not a ship failure: do one local re-deploy, then continue.
 - Test refresh (user ruling 2026-07-13): the author on PC-A uses the
@@ -1082,6 +1116,11 @@ The complete list of canonical docs and where each lives.
 | `CHANGELOG.md` (repo root) | Yes | Repo-aggregate release notes | Per-mod CHANGELOG entries that affect multiple mods or the toolchain |
 | `docs/REGRESSION_CHECKLIST.md` (repo-wide) | Yes | Master list of repo-wide regression signatures | New crash class survives more than one fix attempt |
 | `STATUS.md` | Yes | Dated session history; never a current deployment, version, or verification instruction | Preserve historical evidence only; GitHub Issues §11 is the sole current status authority |
+| `docs/BUG_TRIAGE_RUNBOOK.md` | Yes | THE entry point on any bug report (STEP 0-9 loop) | A step proves counterproductive on a real bug, or the ship/label contract changes |
+| `docs/BUG_CLASSES.md` | Yes | Known bug patterns (symptom -> diagnosis -> fix template) | A novel bug is solved and has no matching class |
+| `docs/MECHANICS.md` | Yes | Provenance-tagged index of VT2/Stingray mechanics | Any new mechanic claim; `qa/check_mechanics_citations.ps1` blocks untagged ones |
+| `docs/engine/README.md` (+ `01..11_*.md`) | Yes | Per-subsystem engine reference with decompile `file:line` citations | New engine subsystem contact; per-mod `ENGINE_SURFACE.md` additions |
+| `docs/PORTABLE_SETUP.md` | Yes | Launcher + `.vmbrc` resolution for ships from any checkout or linked worktree | Launcher relocation; new resolution override or worktree gate |
 | `docs/WEAPON_CATALOG.md` / `ITEM_LIST.md` / `ANIMATION_RESEARCH.md` | Yes | Reference catalogs | When the underlying data changes (new weapon, new skeleton probe) |
 | `docs/VMF_RECIPES.md` / `docs/COMMANDS.md` | Yes | Cross-mod reference (VMF gotchas, command inventory) | New VMF burn class; new chat command in any mod |
 | `DEVELOPMENT.md` (repo root) | Yes | Historical architecture reference | Pre-dates CLAUDE.md; still authoritative for topics it covers |
@@ -1226,6 +1265,13 @@ Rules:
 - If you want to preserve an audit report for archaeological reasons, move it
   to `_archive/audits/YYYY-MM-DD/` and add a `> ⚠ ARCHIVED — superseded by
   <where>` banner per §7.5.
+
+**POSTMORTEMS.md is NOT snapshot-class (ruling 2026-08-02).** Per-mod
+`POSTMORTEMS.md` files are append-only incident logs — CHANGELOG-class, every
+entry carries its own date. A quiet month means no new incidents, not
+staleness, so they are exempt from the `qa/check_stale_docs.ps1` staleness
+ratchet and must never receive a SUPERSEDED banner or be moved to `_archive/`
+while their mod is active. The checker excludes `POSTMORTEM*.md` by pattern.
 
 ### 7.5 Supersession banner (preserved from previous version)
 
@@ -1825,6 +1871,11 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   Exact player-entered slash commands are allowed when wrapped in backticks.
   An incomplete newer card invalidates an older valid card; issue-body text and
   legacy method headings are not fallbacks.
+  The authoritative, machine-checked definition of this format is
+  `tools/verify/lifecycle_method_policy.ps1`; `tools/ship/ship.ps1`,
+  `tools/verify/generate_playtest.ps1`, and
+  `tools/github/check-lifecycle-cardinality.ps1` all consume it. When prose here
+  and that script disagree, the script wins — fix the prose.
 - **Solo first:** `coop-required` is valid only beside `diagnostics-armed` or
   `verify-fix`, with a `Topology: Co-op` current card whose `Solo status:` says
   the useful solo stage passed/completed or was exhausted. Do not add it while
@@ -1847,8 +1898,12 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   replacement current card for the next genuinely ready diagnostic/test.
 - **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
   merged into `diagnostics-armed`. Do not recreate them.
-- **Retired for OPEN issues 2026-07-21:** `Fixed` and `verify-fix-coop`. Closed
-  history may retain them as evidence.
+- **Retired for OPEN issues 2026-07-21:** `Fixed` and `verify-fix-coop`. `Fixed`
+  still exists in the repo's label set and closed history may retain it as
+  evidence; `verify-fix-coop` has since been DELETED outright (verified absent
+  from `gh label list` 2026-08-02), so any doc or comment naming it is a legacy
+  parse target only — a `--add-label verify-fix-coop` call now hard-errors. Use
+  `verify-fix` plus `coop-required`.
 - `qa/check_issue_status_labels.ps1` pass 3 sweeps all open issues and warns on
   zero/multiple canonical lifecycles or any retired lifecycle mixed with a
   canonical one (advisory, issue #498). The blocking CI cardinality guard rejects
@@ -1861,18 +1916,56 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
 - `crash` is a **severity flag layered on `bug`** (a crash issue carries BOTH `bug`
   and `crash`), not a separate type.
 
-**Mod (1+):** `ct`, `gt`, `gut`, `cim`, `wt`, `cwv`, `cosmetics`, `enemy`, `event`,
-`mp`, `crt`, `cross-mod`, `tooling`. Each mod tag mirrors that mod's internal
-`new_mod` id root (e.g. `cosmetics` = `cosmetics_tweaker`, `enemy` =
-`enemy_tweaker`, `event` = `event_tweaker`). (`et` retired 2026-07-04 → split
-into `enemy` + `event`: the single `et` label was ambiguous between the two
-`*_tweaker` mods — its GitHub description said event_tweaker while a 2026-07-03
-merge had repurposed it onto enemy_tweaker issues. Do NOT recreate `et`.)
+**Mod (1+) — DISPLAY-named, not internal ids.** The live labels are:
 
-**Optional modifiers (informational, never a substitute for a type or lifecycle):**
-`regression` (a fix that broke a working feature), `audit`, `refactor`, `blocked`,
-`deferred`, `coop-required`. `coop-required` is a live-test routing qualifier,
-never a lifecycle or a substitute for the solo-first proof in the current card.
+| Label | Mod |
+|---|---|
+| `Tweaker: Chaos Wastes` | `chaos_wastes_tweaker` (`ct`) |
+| `Tweaker: General` | `general_tweaker` (`gt`) |
+| `Tweaker: GUI` | `gui_tweaker` (`gut`) |
+| `Tweaker: Weapons` | `weapon_tweaker` (`wt`) |
+| `Tweaker: Cosmetics` | `cosmetics_tweaker` |
+| `Tweaker: Enemies` | `enemy_tweaker` |
+| `Tweaker: Events` | `event_tweaker` |
+| `Tweaker: Career` | `career_tweaker` (`crt`) |
+| `CWV` | `character_weapon_variants` |
+| `WOC` | `weapons_of_chaos` |
+| `dcp` | `dynamic_cosmetic_portraits` |
+| `Character Dialogue` | `character_dialogue` |
+| `Progression` | `modded_progression` (`mp`) |
+| `cim` | `crafting_in_modded` |
+| `cross-mod` | spans multiple mods |
+| `tooling` | qa / build / repo tooling |
+
+The eight `Tweaker: *` labels carry their internal id in the GitHub label
+description (e.g. `Tweaker: GUI` → "[gut] ..."), so a `--label gut` call fails.
+Pass the display name verbatim, quoted. Confirm with `gh label list --limit 60`
+before a batch edit rather than trusting this table; it is a snapshot.
+(`et` retired 2026-07-04 → split into `Tweaker: Enemies` + `Tweaker: Events`: the
+single `et` label was ambiguous between the two `*_tweaker` mods — its GitHub
+description said event_tweaker while a 2026-07-03 merge had repurposed it onto
+enemy_tweaker issues. Do NOT recreate `et`. The short lowercase ids `ct` / `gt` /
+`gut` / `wt` / `cosmetics` / `enemy` / `event` / `crt` / `mp` are likewise gone —
+do not recreate them either.)
+
+**Priority (exactly 1 on every open issue):** `0-critical` (crashes /
+game-breaking; do next), `1-major` (really needed or wanted badly), `2-moderate`
+(standard fix; the default — most issues land here), `3-low` (later / minor /
+small, often vanilla, bugs). A `crash`-flagged bug is `0-critical`.
+
+**Optional modifiers (informational, never a substitute for a type, priority, or
+lifecycle):** `regression` (a fix that broke a working feature), `audit`,
+`refactor`, `blocked`, `deferred`, `coop-required`, `architecture`,
+`vanilla-bug`, `stable-promotion-approved`. `coop-required` is a live-test
+routing qualifier, never a lifecycle or a substitute for the solo-first proof in
+the current card. `vanilla-bug` marks a defect that exists in the official game —
+we work around it rather than owning it, so it caps expectations on a fix and
+usually pairs with `3-low`. `stable-promotion-approved` is NOT informational
+housekeeping: it is the maintainer-granted, version- and head-SHA-bound
+authorization consumed by `qa/check_promotion_authorization.ps1` (§6.6 atomic
+source/root-bundle gate). Never add or re-add it by hand to keep a promotion PR
+green — removing and re-granting it is the documented revocation path, and a
+grant edited after the fact fails closed.
 
 When you ship a fix or diagnostic, add the matching status label and remove every
 competing/retired lifecycle in the **same pass** as the CHANGELOG entry. Filing a
@@ -1982,7 +2075,18 @@ the GitHub issue list and silently drifted — exactly the failure mode §11
 above is meant to prevent. The git history has the snapshots if you want to
 see what was open on a given date.
 
-## 11a. QA tooling — what's in place
+## 11a. QA tooling — representative gates (full inventory: `qa/CHECKS.md`)
+
+This table is a READING AID, not the inventory. `qa/` currently holds ~60
+`check_*.ps1` gates; the rows below are the ones a session hits most often.
+Notably absent but load-bearing: `check_logging.ps1` (§3.6 logging hygiene),
+`check_wt_stream_parity.ps1` (wt beta/dev mirror + the one-patch-ahead version
+bind), `check_publication_receipt.ps1` (#724 receipt schema),
+`check_vmb_launcher_path.ps1` (launcher resolution), `check_dev_only_edits.ps1`
+(NON-NEGOTIABLE #3 dev/stable split), `check_worktree_budget.ps1` and
+`check_pipeline_state.ps1` (both named in the §14 card). Always resolve
+"is there a gate for X?" against `qa/CHECKS.md` or a directory listing, never
+against this table.
 
 | Tool | Location | Catches | Run via |
 |---|---|---|---|
@@ -2145,10 +2249,12 @@ WHEN coding:
   - Comment: why, not what; cite when fixing a bug
 
 BEFORE shipping:
-  - claim.ps1 (claim the mod first - every ship, before build)
-  - MOD_VERSION bumped
-  - CHANGELOG entry written
-  - BuildOnly generated the exact tracked bundle
+  - VT2_SHIP_VMB_LAUNCHER set (launcher is out-of-repo; see docs/PORTABLE_SETUP.md)
+  - claim.ps1 FIRST (before the version bump - the broker allocates the number)
+  - MOD_VERSION renumbered to the BROKER's answer (may exceed master+1)
+  - CHANGELOG entry written against that exact version
+  - .mod descriptors are LF, root + bundleV2 (CRLF breaks the publication receipt)
+  - Every changed mod BuildOnly'd before the commit (#724 atomicity)
   - Source and bundle committed together, pushed, reviewed, hosted QA passed, and merged
   - Final ship runs from a clean checkout at the exact live default-branch HEAD
   - No forward-ref bugs (visually verify; future: luacheck)
@@ -2158,6 +2264,8 @@ BEFORE shipping:
 
 AFTER shipping:
   - workshop_log.txt shows "Uploaded new content" for the item
+  - CURRENT LIVE TEST card posted AND pinned; every older exact card unpinned
+    (CI cardinality guard fails the whole repo's qa-gate otherwise)
   - Do not add a post-upload source commit or push; the uploaded bytes must remain bound to the already reviewed and merged source commit
 
 BEFORE a verify session:

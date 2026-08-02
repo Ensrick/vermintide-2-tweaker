@@ -31,7 +31,8 @@ license, attribution, conversion, package-residency, preview, and multiplayer
 wire-safety review; they must not change the canonical item or skin-table keys.
 The candidate hashes, geometry inspection, exact blockers, and resumable
 integration contract are recorded in
-[`tools/DAWI_MACE_ASSET_AUDIT.md`](tools/DAWI_MACE_ASSET_AUDIT.md).
+[`_archive/docs/character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md`](../_archive/docs/character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md)
+(archived snapshot, 2026-07-15).
 
 Canonical skin tables are `<item_key>_skins`. Cosmetics owns exact-hand
 persistence, independent dual/offhand selection, icon ownership, and peer

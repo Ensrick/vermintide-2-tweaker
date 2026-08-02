@@ -1,3 +1,9 @@
+> [!WARNING]
+> ⚠ **SUPERSEDED** — this snapshot is from 2026-07-03 (30 days old).
+> Recent state may differ. Kept for historical context — verify against current
+> code before acting on findings. This doc is NOT archivable: it owns the LA
+> sync-state invariants (`docs/CROSS_MOD_ARCHITECTURE.md` delegates to it).
+> Refresh tracked as issue #1088; remove this banner when that lands.
 # Loremaster's Armoury cosmetic sync - core-logic audit
 
 Research and design only. No code was changed to produce this document.
