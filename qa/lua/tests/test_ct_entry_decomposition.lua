@@ -62,8 +62,10 @@ return function(H, repo_root)
         -- Chest-of-Trials placement top-up marker): module 70 -> 71, total 104.
         -- Issue #1004 adds one NEW inline UI check while preserving module order:
         -- entry 33 -> 34, total 105.
+        -- Issue #467 adds one NEW inline exact-price runtime check:
+        -- entry 34 -> 35, total 106.
         H.equal(count_plain(regression, "_rt_register("), 71)
-        H.equal(count_plain(entry, "_rt_register("), 34)
+        H.equal(count_plain(entry, "_rt_register("), 35)
         -- The shared _RT_CHECKS registrar stays defined and exposed in the entry;
         -- the module registers through the exposed handle, never a second registry.
         H.truthy(entry:find("mod._ct_rt_register = _rt_register", 1, true))

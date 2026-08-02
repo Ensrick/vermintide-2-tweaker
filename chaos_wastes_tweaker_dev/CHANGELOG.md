@@ -1,5 +1,18 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.314-dev (2026-08-02) - individual boon price hierarchy (#467) [verify-fix]
+
+- Add the opt-in `Individual Boon Prices` rework. Clearly conditional boons
+  move into lower price bands while broad and run-defining boons move higher;
+  engine rarity remains the registry identity so set and wire lookups stay
+  intact.
+- Drive shrine-card text, affordability, authoritative coin deductions,
+  purchase telemetry, mirrored/random bot purchases, discounts, and the
+  starting-shrine percentage from one exact-name price policy.
+- Add full-catalog coverage validation, deterministic Lua 5.1 tests, a runtime
+  regression check, and `/ct_boon_price_status` plus enriched bounded audit
+  rows for retained-state verification.
+
 ## 0.7.313-dev (2026-08-02) - replacement lifecycle capture hardening (#465)
 
 - Capture the retiring bot's Chaos Wastes run row before vanilla removes it,

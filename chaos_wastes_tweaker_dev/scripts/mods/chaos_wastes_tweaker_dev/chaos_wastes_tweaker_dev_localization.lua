@@ -47,6 +47,8 @@ local loc = {
     ct_start_shrine_cost_percent_tooltip = { en = "Sets boon prices at the starting shrine from 0%% to 200%% of their normal price, in 10%% steps. This does not change any later shrine. Default 100%%." },
     ct_start_shrine_purchase_limit = { en = "Start Shrine: Boon Purchase Limit" },
     ct_start_shrine_purchase_limit_tooltip = { en = "Maximum boons each hero can buy at the starting shrine. Choose Unlimited to preserve the normal shop behavior. Miracles do not count toward this limit, and later shrines are unchanged." },
+    ct_individual_boon_prices = { en = "Individual Boon Prices" },
+    ct_individual_boon_prices_tooltip = { en = "Prices shrine boons by their individual strength and conditions instead of rarity alone. This affects the displayed price, affordability, coins charged, purchase telemetry, bots, and the starting shrine. The starting shrine price percentage is applied after the individual price." },
     ct_start_shrine_limit_unlimited = { en = "Unlimited" },
     ct_start_shrine_miracle_count = { en = "Start Shrine: Miracles Offered" },
     ct_start_shrine_miracle_count_tooltip = { en = "How many miracles (blessings) the starting shrine offers, from 0 to 3. If more miracles are enabled in the pool below than this number, the shrine picks that many at random, and the whole lobby gets the same picks. Set to 0 for no miracles." },

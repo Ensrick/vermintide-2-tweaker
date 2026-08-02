@@ -149,9 +149,16 @@ function M.prepare(drc)
     return cfg
 end
 
-function M.price(rarity, discount)
+function M.price(rarity, discount, name)
     local cfg = config()
     if not M.config_valid(cfg) then return nil end
+    local exact = mod._ct_boon_pricing_policy
+    local reader = mod._ct_effective_setting
+    local exact_enabled = (reader and reader("ct_individual_boon_prices")
+        or mod:get("ct_individual_boon_prices")) == true
+    if exact_enabled and exact and type(exact.price) == "function" then
+        return exact.price(name, rarity, discount, cfg.ct_cost_percent)
+    end
     return policy.shop_cost(rawget(_G, "DeusCostSettings"), rarity, discount, cfg.ct_cost_percent)
 end
 
@@ -181,7 +188,7 @@ function M.try_buy(drc, buyer, power_up, discount)
     local active, run_id = M.is_context(drc)
     if not active then return false end
     local cfg = config()
-    local price = power_up and M.price(power_up.rarity, discount)
+    local price = power_up and M.price(power_up.rarity, discount, power_up.name)
     if not M.config_valid(cfg) or not price or buyer == nil or type(power_up) ~= "table"
             or type(power_up.name) ~= "string" or power_up.name == ""
             or power_up.client_id == nil or type(drc.has_power_up) ~= "function" then
@@ -263,7 +270,8 @@ function M.decorate_shop(view)
     for i = 1, #offers do
         local entry = offers[i]
         local content = entry and entry.widget and entry.widget.content
-        local price = entry and entry.power_up and M.price(entry.power_up.rarity, entry.discount)
+        local price = entry and entry.power_up and M.price(entry.power_up.rarity,
+            entry.discount, entry.power_up.name)
         if content then
             content.price_text = price and tostring(price) or "-"
             if not price and content.button_hotspot then content.button_hotspot.disable_button = true end
@@ -300,6 +308,7 @@ mod:hook("DeusShopView", "_get_power_up_costs", function(func, self, rarity, dis
 end)
 
 mod:hook_safe("DeusShopView", "_update_shop_widgets", function(self)
+    if mod._ct_boon_pricing_runtime then mod._ct_boon_pricing_runtime.enforce_shop(self) end
     M.enforce_limit(self)
 end)
 
