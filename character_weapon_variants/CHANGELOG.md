@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.483-dev (2026-08-02) - interrupt attacks when changing Combat Style (#944) [verify-fix]
+
+- Combat Style switching now finishes active weapon actions through VT2's
+  canonical `WeaponUnitExtension:stop_action("interrupted")` lifecycle before
+  rebuilding the exact equipped instance.
+- Both hands are preflighted and deduplicated. Career actions, unknown action
+  identities, failed interrupts, and actions that remain active fail closed
+  without saving or applying a new style.
+- Resource-loaded transitions revalidate the exact instance before interrupting,
+  preventing delayed switches from affecting a replacement weapon.
+- Added bounded `[cwv:944]` receipts plus offline coverage for right-hand,
+  left-hand-only, dual-hand, shared-extension, failure, and career-action cases.
+
 ## 0.1.482-dev (2026-08-02) - #915 Maul illusion pool admits vanilla-owned sources only [untested]
 
 - Fixed the Maul illusion picker offering a 1H sword (#915): illusion-source
