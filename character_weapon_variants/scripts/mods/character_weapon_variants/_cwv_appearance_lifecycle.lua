@@ -75,12 +75,27 @@ function M.new(opts)
         }
     end
 
-    function self:publish(slots, edge, recipient, force)
+    -- COMPLETE publish (partial falsy, the default): every SLOT_ORDER slot
+    -- emits a record; a slot absent from `slots` emits the explicit native
+    -- record, which is what clears a removed variant back to base on remotes.
+    -- PARTIAL publish (partial == true): only slots PRESENT in `slots` emit
+    -- records. #476 Defect B: vanilla resyncs ONE slot at a time
+    -- (_spawn_resynced_loadout), and treating that single-slot table as a
+    -- complete snapshot published item_key="" for the OTHER slot - the
+    -- receiver mapped empty to native, husk paths refused to re-key, and the
+    -- _sent dedupe cached the false signature. Present-only is the shape the
+    -- existing contract supports cleanly: _sent routes are keyed per
+    -- recipient|slot, so a skipped slot keeps its last truthful signature and
+    -- the receiver's per-peer slot state is simply left alone, whereas a
+    -- merge-with-last-known would need a new payload cache and could replay a
+    -- stale snapshot over a racing genuine change.
+    function self:publish(slots, edge, recipient, force, partial)
         if type(slots) ~= "table" then return 0 end
         recipient = recipient or "others"
         local sent = 0
         for _, slot_name in ipairs(SLOT_ORDER) do
-            local payload = self:payload_for(slot_name, slots[slot_name])
+            local payload = (not partial or slots[slot_name] ~= nil)
+                and self:payload_for(slot_name, slots[slot_name]) or nil
             if payload then
                 local signature = table.concat({
                     payload.provider, payload.item_key, payload.base_item_key,

@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.314-dev"
+local MOD_VERSION = "0.7.315-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -453,6 +453,7 @@ mod._ct_chest132 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cu
 -- `gargoyle_head` pickup path. See _ct_diag_skull52.lua.
 mod._ct_diag_skull52 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_skull52")
 pcall(mod._ct_diag_skull52.install)
+_rt_register("issue52_skull_diag_installed", mod._ct_diag_skull52.regression)
 
 -- #505 Single Mission Loader. Registers /ct_load_mission + friends and the
 -- ct_dev_load_selected_mission menu keybind target. No hooks - it forces a run via
@@ -8356,8 +8357,29 @@ do
 
         local pos = Vector3(x, y, z)
         local rot = Unit.local_rotation(teammate, 0)
+        -- #299: this write is KEPT, but as a guarded in-place REFRESH, never a seed.
+        -- Flow analysis: nothing in this transaction reads the lookup back - the
+        -- retention readback below and _retained_near_team both re-derive live
+        -- positions via _world_xyz (Unit.world_position). The one consumer is the
+        -- vanilla callee: teleport_to's last line calls set_falling_height
+        -- (player_unit_locomotion_extension.lua:1022), which reads
+        -- POSITION_LOOKUP[unit].z (generic_status_extension.lua:2590). This
+        -- transaction runs in the mod.update phase, BEFORE StateIngame.pre_update's
+        -- UPDATE_POSITION_LOOKUP (state_ingame.lua:808), so the stored entry is a
+        -- dead frame-pool handle (BUG_CLASSES section 21); without the refresh the
+        -- pcall'd teleport_to raises AFTER the player already moved and the whole
+        -- move-then-free transaction aborts. The value must stay a raw Vector3
+        -- (vanilla readers do .z and Vector3.distance on it, so Vector3Box cannot
+        -- go here); per the BUG_CLASSES 21 fix template the residual lives one
+        -- frame - the engine bulk refresh rewrites the maintained entry next
+        -- frame, matching vanilla's own raw seeding (unit_spawner.lua:302).
+        -- The lookup[unit] presence guard is the fix for the dangling-residual
+        -- risk: set_falling_height no-ops when the entry is absent (its ALIVE
+        -- guard; ALIVE = POSITION_LOOKUP, global_utils.lua:15), and CREATING an
+        -- entry the engine is not maintaining would both flip ALIVE[unit] truthy
+        -- for every consumer and leave expired frame-pool userdata behind.
         local lookup = rawget(_G, "POSITION_LOOKUP")
-        if lookup then lookup[unit] = Vector3(x, y, z) end
+        if lookup and lookup[unit] then lookup[unit] = Vector3(x, y, z) end
         local moved, move_err = pcall(locomotion.teleport_to, locomotion, pos, rot)
         if not moved then return false, "teleport-failed: " .. tostring(move_err) end
 

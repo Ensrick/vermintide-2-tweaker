@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.259-dev"
+local MOD_VERSION = "0.2.260-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1289,19 +1289,55 @@ end)
 -- ============================================================
 -- Disable Enemy Spawns
 -- ============================================================
--- Every enemy unit in VT2 — hordes, specials, bosses, patrols, and the
--- pre-placed level-load spawns — funnels through ConflictDirector's two
--- public entry points: spawn_queued_unit (the deferred queue used by the
--- pacing system) and spawn_unit_immediate (synchronous, used by terror
--- events and some scripted triggers). Hook both and refuse when the
--- setting is on.
+-- Every enemy unit in VT2 - hordes, specials, bosses, patrols, and the
+-- pre-placed level-load spawns - funnels through ConflictDirector: the
+-- deferred spawn queue (spawn_queued_unit enqueues; update_spawn_queue is
+-- the single drain, called once per frame from ConflictDirector.update,
+-- conflict_director.lua:1654/1835) and the synchronous spawn_unit_immediate.
+-- spawn_one and every pacing/terror-event path enqueue via
+-- spawn_queued_unit (conflict_director.lua:3410+), so gating the queue
+-- drain plus spawn_unit_immediate covers every AI spawn entry point.
 --
--- Existing enemies are NOT despawned — refusing the spawn affects future
+-- THE REFUSAL LIVES AT THE QUEUE DRAIN, NOT IN spawn_queued_unit (#242).
+-- Returning nil from a spawn_queued_unit hook is a latent crash: vanilla
+-- consumers treat the returned spawn-queue id as a real handle.
+--   * bt_chaos_sorcerer_summoning_action.lua:406-408 does
+--     `vortex_data.queued_vortex[vortex_queue_id] = {...}` - a nil id is a
+--     nil TABLE-KEY write, an instant Lua error from any live Chaos
+--     Sorcerer at its next cast (we deliberately do NOT despawn enemies
+--     that already exist when the toggle flips - see below).
+--   * A fabricated non-nil sentinel id is no better: sorcerer death cleanup
+--     (ai_breed_snippets.lua:900-901), the roaming-AI recycler
+--     (enemy_recycler.lua:634-635/678-679/737-738), necromancer pets
+--     (passive_ability_necromancer_charges.lua:442-446), and the CW curses
+--     (mutator_curse_blood_storm_v2.lua:207-211,
+--     mutator_curse_belakor_totems.lua:152-158) all hand the stored id back
+--     to ConflictDirector.remove_queued_unit, which ferror()s on any id not
+--     present in the queue (conflict_director.lua:1832).
+-- The only id every consumer tolerates is a REAL queue entry. So
+-- spawn_queued_unit enqueues normally (ids stay valid, remove_queued_unit
+-- finds them, get_spawned_unit returns nil exactly as for any
+-- not-yet-spawned entry, ai_interest_point_system.lua:392-394 /
+-- flow_callbacks_ai.lua:223-225 / hub ai_spawner.lua:189 store a live
+-- handle) and the block instead skips the dequeue-and-spawn step in
+-- update_spawn_queue. Vanilla already supports an indefinitely parked
+-- queue entry - update_spawn_queue skips entries whose breed is not yet
+-- loaded on all peers (conflict_director.lua:1847-1857) - so every
+-- consumer handles "queued but never spawned" by construction. Trade-off:
+-- entries queued while blocked spawn later (at the vanilla one-per-frame
+-- drain rate) if the toggle turns off mid-mission, instead of never;
+-- vanilla's own cleanup paths (remove_queued_unit on owner death/reset)
+-- prune stale entries meanwhile.
+--
+-- Existing enemies are NOT despawned - blocking affects future
 -- enemies only. Pair with `gt god` if you want existing enemies to ignore
 -- you while you reach a cleaner area.
 
 mod:hook("ConflictDirector", "spawn_queued_unit", function(func, self, breed, ...)
-    if mod:get("disable_enemy_spawns") then return end
+    -- NO refusal here (#242): a nil return is a nil-keyed table write in
+    -- bt_chaos_sorcerer_summoning_action.lua:406-408 (full analysis in the
+    -- design block above). The disable_enemy_spawns / Freeze AI block gates
+    -- update_spawn_queue below instead.
     -- Solo/QoL: assassin/packmaster spawn text warning. Merged here because VMF
     -- drops a 2nd hook on the same Class.method; the detector lives in
     -- _gt_solo_qol.lua and no-ops unless one of its warning toggles is on.
@@ -1317,13 +1353,46 @@ mod:hook("ConflictDirector", "spawn_queued_unit", function(func, self, breed, ..
     return func(self, breed, ...)
 end)
 
-mod:hook("ConflictDirector", "spawn_unit_immediate", function(func, self, ...)
+-- Dequeue gate (#242): park the spawn queue while the block is on. Gate is
+-- the /no_enemies toggle OR the dev-only Freeze AI state (#303 -
+-- mod._gt_freeze_ai_active is only ever set on the dev stream host, nil
+-- elsewhere, so the OR is a no-op in stable). See the design block above for
+-- why the refusal lives here and not in spawn_queued_unit.
+mod:hook("ConflictDirector", "update_spawn_queue", function(func, self, ...)
+    if mod:get("disable_enemy_spawns") or mod._gt_freeze_ai_active then
+        return
+    end
+    return func(self, ...)
+end)
+mod._gt_242_dequeue_gate_armed = true
+
+mod:hook("ConflictDirector", "spawn_unit_immediate", function(func, self, breed, spawn_pos, spawn_rot, spawn_category, ...)
     -- Freeze AI (#303, dev-only) blocks new spawns too, via the same gate as the
     -- /no_enemies toggle. mod._gt_freeze_ai_active is only ever set on the dev
     -- stream host (nil elsewhere), so this OR is a no-op in stable.
-    if mod:get("disable_enemy_spawns") or mod._gt_freeze_ai_active then return nil, nil end
-    return func(self, ...)
+    --
+    -- Category discrimination (#242): refuse AI ENEMY spawns only. Vanilla
+    -- routes PICKUPS through this entry point - the training-dummy level
+    -- events spawn Breeds.training_dummy with spawn_category "pickup"
+    -- (pickups.lua:133-150/165-182 -> pickup_system.lua:1271-1283) - and
+    -- those two are the ONLY vanilla spawn_unit_immediate call sites
+    -- (decompile-wide grep, 2026-08-02), so the "pickup" category cleanly
+    -- separates unit-pickup spawns from AI enemy spawns; the dummy breed is
+    -- also passed by race as belt-and-suspenders (`race = "dummy"`,
+    -- breed_training_dummy.lua:43). The nil,nil refusal for everything else
+    -- cannot hit a vanilla nil-sink - no vanilla caller spawns AI enemies
+    -- through this path - and remains only to stop mod-injected immediate
+    -- enemy spawns.
+    if mod:get("disable_enemy_spawns") or mod._gt_freeze_ai_active then
+        local is_pickup_spawn = spawn_category == "pickup"
+            or (type(breed) == "table" and breed.race == "dummy")
+        if not is_pickup_spawn then
+            return nil, nil
+        end
+    end
+    return func(self, breed, spawn_pos, spawn_rot, spawn_category, ...)
 end)
+mod._gt_242_pickup_passthrough_armed = true
 
 -- Belt-and-suspenders: the two ConflictDirector hooks above catch every spawn
 -- *call*, but Janoti's "Hacks" also flips a fuller set of `script_data.ai_*`
@@ -1382,6 +1451,19 @@ _rt_register("issue242_all_spawn_classes_blocked", function()
     end
     if type(mod._gt_apply_spawn_block) ~= "function" then
         return "spawn-block reapply boundary missing"
+    end
+    -- #242 nil-safety design invariants: the refusal must live at the
+    -- update_spawn_queue drain (a spawn_queued_unit nil return is a nil-keyed
+    -- table write in bt_chaos_sorcerer_summoning_action.lua:406-408), and
+    -- spawn_unit_immediate must pass pickup-category spawns (training
+    -- dummies, pickups.lua:147/179) through. The markers are set immediately
+    -- after each hook registration, so their absence means the hook block
+    -- was removed or reordered.
+    if not mod._gt_242_dequeue_gate_armed then
+        return "update_spawn_queue dequeue gate not armed"
+    end
+    if not mod._gt_242_pickup_passthrough_armed then
+        return "spawn_unit_immediate pickup passthrough not armed"
     end
 end)
 

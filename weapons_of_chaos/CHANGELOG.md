@@ -1,5 +1,32 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.52-dev (2026-08-02) - [WOC:LOAD] banner + honest #642 residency + #615 material reconcile [diag]
+
+- Added the canonical log-provable load banner: `[WOC:LOAD] v<version> enabled
+  fp=<settings_fp> OK` via `pcall(printf, ...)` at the same lifecycle point as
+  the existing `mod:info` applied marker (ct model, chaos_wastes_tweaker.lua:135).
+  Engine printf survives VMF mod logging OFF, so pinned live-test cards can now
+  key on a banner that actually appears; the mod:info and dev-chat mod:echo
+  lines are unchanged. New offline lock: qa/lua/tests/test_woc_load_banner.lua.
+- Made the boss-catalogue runtime residency column honest (#642 diagnostics).
+  The former probe passed enemy UNIT paths to `package_manager:has_loaded`,
+  which keys on PACKAGE names only (decompile
+  foundation/scripts/managers/package/package_manager.lua:286-294), so
+  `resident_now` read false unconditionally - a measurement it never made. The
+  runtime snapshot no longer wires a probe and the emitted line now prints
+  `residency=unknown(package-level probe unavailable)`; an injected offline
+  probe still reports true/false. DEVELOPMENT.md and ENGINE_SURFACE.md updated
+  to match; offline tests lock the label, the nil-probe path, and the dead
+  `:has_loaded(` call form.
+- Resolved the #614/#615 Skarrik material contradiction: #615's descriptor now
+  names the real mod-owned closure `units/woc_skarrik_dual_swords/skarrik_swords`
+  (proven by skarrik_sword_right.unit:2, skarrik_halberd.unit:2, the shipped
+  skarrik_swords.material, and tools/SKARRIK_DUAL_SWORDS_ASSET_PIPELINE.md),
+  matching the path #614's `material_owner_issue = 615` already pointed at. The
+  vanilla enemy family string `units/weapons/enemy/wpn_skaven_set/wpn_skaven_set`
+  (introduced alongside the halberd row in commit be76c562) is preserved as
+  `native_material` provenance only. Offline test locks the two rows agreeing.
+
 ## v0.1.51-dev (2026-08-02) - #922 husk fade enrollment eviction fix [untested]
 
 - Fixed #922 husk fade enrollment eviction: the spawn-path enrollment (`GearUtils.spawn_inventory_unit` hook) runs INSIDE vanilla husk wield, but vanilla then calls `_reapply_fade` (`simple_husk_inventory_extension.lua:319` then `:353`), replacing the fade system's linked set with only the four inventory fields (`:292-311`) and evicting WOC's snapshot; the shared fade adapter's fingerprint dedup then reported "unchanged" and skipped every later re-apply. Added the sole WOC hook on `(SimpleHuskInventoryExtension, _reapply_fade)` that re-enrolls with `force = true` after the native replacement (the proven Cosmetics `remote_husk_reapply` pattern), gated on the same positive `_remote_blightreaper` sideband identity as the spawn re-key; vanilla-only husks keep the native linked set untouched. (#922)

@@ -52,6 +52,49 @@ function P.readonly_action(slot_name, backend_id)
     return "block"
 end
 
+-- Issue #273 (capture side). The outer BackendUtils.set_loadout_item hook feeds the
+-- DURABLE Adventure store, but vanilla routes Deus weapon chest/shrine swaps through the
+-- same 3-arg seam with a RUN-LOCAL backend id (deus_chest_extension.lua:597). Gear slots
+-- are therefore capture-eligible only while the durable items interface owns the slot
+-- RIGHT NOW -- `owned_by_items` is the caller-resolved true-table-identity ownership
+-- verdict (_gut_exit_snapshot_core.lua slot_owned_by_items semantics) and anything but
+-- `true` fails closed. Cosmetic slots stay unconditionally eligible: the Deus override
+-- maps skin/hat/frame/pose to "items" (backend_interface_deus_base.lua:7-14), so
+-- cosmetics legitimately persist through a CW run.
+function P.capture_slot_durable(slot_name, owned_by_items)
+    if COSMETIC_SLOTS[slot_name] then return true end
+    return owned_by_items == true
+end
+
+-- Issue #1033 x #954 reset boundary. A confirmed Equipment DEFAULT must wipe MODDED
+-- LOADOUT DATA: the saved loadout rows, the loadout selection, the seed/integrity
+-- markers (forcing a fresh official reseed), and the cosmetic overlay. The user's BOT
+-- DESIGNATION is NOT modded loadout data: `bot_index`, the detached `bot_loadout`
+-- snapshot, and the one-time native-import marker `_bot_designation_snapshot_v2`
+-- record an explicit user choice, and dropping the marker would let the next bot read
+-- re-import the native PlayerData index -- silently replacing the designated bot
+-- equipment the #954 marker exists to make durable. Preserve exactly that designation
+-- set across the clear; a career without any designation field is removed outright.
+local DESIGNATION_FIELDS = {
+    "bot_index", "bot_loadout", "_bot_designation_snapshot_v2",
+}
+
+-- Returns nil (drop the row) or a bare re-seedable shell carrying only the preserved
+-- designation fields. The shell uses the standard fallback-entry shape
+-- (selected_index = 1, empty loadouts) so the reseed/repair path can fill it.
+local function preserve_designation(row)
+    if type(row) ~= "table" then return nil end
+    local kept = nil
+    for i = 1, #DESIGNATION_FIELDS do
+        local field = DESIGNATION_FIELDS[i]
+        if row[field] ~= nil then
+            kept = kept or { selected_index = 1, loadouts = {} }
+            kept[field] = row[field]
+        end
+    end
+    return kept
+end
+
 -- Issue #1033: clear only mod-owned snapshots. Both tables retain identity so
 -- the hot mirror hooks keep observing the same working copies. Returns the
 -- number of distinct careers cleared plus whether an explicit career existed.
@@ -59,7 +102,7 @@ function P.clear_modded_loadouts(store, overlay, career_name)
     if type(store) ~= "table" or type(overlay) ~= "table" then return 0, false end
     if type(career_name) == "string" and career_name ~= "" then
         local existed = store[career_name] ~= nil or overlay[career_name] ~= nil
-        store[career_name] = nil
+        store[career_name] = preserve_designation(store[career_name])
         overlay[career_name] = nil
         return existed and 1 or 0, existed
     end
@@ -68,7 +111,7 @@ function P.clear_modded_loadouts(store, overlay, career_name)
     for name in pairs(overlay) do seen[name] = true end
     local count = 0
     for name in pairs(seen) do
-        store[name] = nil
+        store[name] = preserve_designation(store[name])
         overlay[name] = nil
         count = count + 1
     end

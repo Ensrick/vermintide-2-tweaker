@@ -64,8 +64,10 @@ return function(H, repo_root)
         -- entry 33 -> 34, total 105.
         -- Issue #467 adds one NEW inline exact-price runtime check:
         -- entry 34 -> 35, total 106.
+        -- Issue #52 registers the skull diagnostic's M.regression at its wiring
+        -- site (issue52_skull_diag_installed): entry 35 -> 36, total 107.
         H.equal(count_plain(regression, "_rt_register("), 71)
-        H.equal(count_plain(entry, "_rt_register("), 35)
+        H.equal(count_plain(entry, "_rt_register("), 36)
         -- The shared _RT_CHECKS registrar stays defined and exposed in the entry;
         -- the module registers through the exposed handle, never a second registry.
         H.truthy(entry:find("mod._ct_rt_register = _rt_register", 1, true))

@@ -1,5 +1,43 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.260-dev (2026-08-02) -- #242 spawn-disable nil-id crash fix + pickup passthrough [untested]
+
+- **Fixed a latent crash in Disable Enemy Spawns (#242).** [untested] The hard refusal in the
+  `ConflictDirector.spawn_queued_unit` hook returned bare nil, but vanilla consumers use the
+  returned spawn-queue id as a real handle: a live Chaos Sorcerer writes it as a TABLE KEY
+  (`bt_chaos_sorcerer_summoning_action.lua:406-408`, a nil key is an instant Lua error), and the
+  sorcerer death cleanup, roaming-AI recycler, necromancer pets, and CW curse mutators all hand
+  the stored id back to `remove_queued_unit`, which ferrors on any id not in the queue
+  (`conflict_director.lua:1832`). Since the toggle deliberately leaves existing enemies alive, a
+  live sorcerer at toggle-flip reached the nil path. The refusal now lives at the queue's single
+  drain point instead: `spawn_queued_unit` always enqueues (every consumer holds a real, removable
+  id), and a new `ConflictDirector.update_spawn_queue` hook parks the queue while the block is on -
+  the same "queued but not yet spawned" state vanilla already produces for breeds not loaded on all
+  peers (`conflict_director.lua:1847-1857`). Trade-off: enemies queued while blocked spawn at the
+  vanilla one-per-frame drain rate if the toggle is turned off mid-mission, instead of never.
+- **Disable Enemy Spawns no longer swallows pickups (#242).** [untested]
+  `ConflictDirector.spawn_unit_immediate` was refused unconditionally, but its only vanilla callers
+  are the training-dummy level-event PICKUPS (`pickups.lua:147/179`, spawn category `"pickup"`,
+  `Breeds.training_dummy` with `race = "dummy"`). The refusal is now scoped to AI enemy spawns:
+  pickup-category and dummy-race spawns always pass through; the nil,nil refusal remains only for
+  mod-injected immediate enemy spawns (no vanilla caller consumes that nil).
+- Extended the `issue242_all_spawn_classes_blocked` regression check to assert the dequeue-gate and
+  pickup-passthrough markers in addition to the `script_data.ai_*_disabled` flag set, and rewrote
+  `qa/lua/tests/test_gt_disable_enemy_spawns.lua` to execute the shipped hook closures offline:
+  blocked `spawn_queued_unit` must still return a real table-key-safe queue id, the
+  `update_spawn_queue` gate must park/drain on toggle and Freeze AI state, and
+  `spawn_unit_immediate` must pass pickups while refusing enemies.
+- Freeze AI (#303) rides the same gates: comment references in `_gt_freeze_ai.lua` and the
+  `ENGINE_SURFACE.md` ConflictDirector row updated to the new design.
+
+1. Start a mission, let a Chaos Sorcerer (Vortex) spawn, then enable "Disable Enemy Spawns"
+   (or `/no_enemies`). Stay near the sorcerer: it must keep casting without a crash and no new
+   vortex may appear. Kill it: no crash on death cleanup.
+2. With the toggle ON from the keep, load Trail of Treachery (or any dummy level event) and confirm
+   training dummies still spawn.
+3. Toggle OFF mid-mission and confirm spawning resumes (a short backlog of deferred spawns
+   appearing over the following seconds is expected).
+
 ## v0.2.259-dev (2026-08-02) -- godmode debuff immunity (#548) + downed-mood regression lock (#380) [untested]
 
 - Godmode now suppresses a curated, cite-verified set of DEBUFFS that ride the

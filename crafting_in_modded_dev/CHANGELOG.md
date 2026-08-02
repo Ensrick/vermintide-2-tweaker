@@ -1,5 +1,22 @@
 # Crafting in Modded Changelog
 
+## 0.8.112-dev (2026-08-02) - #628 favorite-verdict coercion unblocks salvage recovery [untested]
+
+- Fixed the #628 salvage recovery rejecting EVERY recovered row as
+  "favorite": vanilla `ItemHelper.is_favorite_backend_id` ends
+  `return favorite_item_ids and favorite_item_ids[item_id]`
+  (`scripts/helpers/item_helper.lua:453`), returning NIL for a non-favorited
+  item, never false. The filter accessor passed that verdict through
+  uncoerced, and the salvage contract only yields its fail-closed
+  `is_favorite = true` default to a real boolean, so no exact CIM craft ever
+  re-entered the salvage grid. The accessor now coerces through the new
+  engine-free `contract.coerce_favorite_verdict` (`raw and true or false`);
+  unavailable or raising favorite queries still fail closed. (#628)
+- Offline suite now feeds the REAL vanilla helper shape: a nil
+  (non-favorited) verdict routed through the shared coercion must recover
+  the row, a truthy non-boolean marker must stay ineligible, and uncoerced
+  non-boolean verdicts remain fail-closed at the contract boundary.
+
 ## 0.8.111-dev (2026-08-01) - bulk accessory crafting (#1031, #1032) [verify-fix]
 
 - Renamed the Athanor bulk button to **Craft Modded Accessories**, matching

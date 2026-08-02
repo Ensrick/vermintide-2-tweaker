@@ -1,5 +1,33 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.327-dev (2026-08-02) -- preserve bot designation through resets + gate Deus gear capture (#954, #273) [untested]
+
+     the claimed version and the issue-lifecycle tag). Suggested title:
+
+- Preserves the user's bot designation (bot index, detached bot snapshot, and the
+  one-time native-import marker) across every modded-loadout reset, including the
+  automatic reseed after a confirmed Mod Tweaker Equipment DEFAULT (#1033). The
+  reset previously deleted the whole career row, marker included, so the next bot
+  read re-imported the native PlayerData assignment and silently replaced the
+  designated bot equipment, falsifying the #954 "never followed again" guarantee.
+  The designation is a user choice, not modded loadout data; saved rows, selection,
+  seed markers, and the cosmetic overlay still reset exactly as before (#954).
+- Gates the BackendUtils.set_loadout_item equip capture behind the same fail-closed
+  durable-owner check the exit-time snapshot uses: a gear equip is captured only
+  while the durable items interface owns the slot by true table identity. Vanilla
+  routes every Deus weapon chest/shrine swap through that same seam with a run-local
+  backend id (deus_chest_extension.lua:597), which previously entered the durable
+  Adventure store as an unresolvable id (#273). Cosmetic slots keep current
+  behavior: Deus maps skin/hat/frame/pose to the durable items interface
+  (backend_interface_deus_base.lua:7-14), so they legitimately persist through a
+  Chaos Wastes run.
+- Emits one bounded `BU gear capture SKIP ... reason=foreign-loadout-interface`
+  console line per career+slot when a foreign-owned gear equip is dropped.
+- Extends the offline native-loadout policy suite and the live regression checks:
+  the reset preserves exactly the designation set while forcing an official reseed,
+  and the capture gate rejects unowned gear ids while accepting cosmetics under the
+  exit-path owner semantics.
+
 ## 0.2.326-dev (2026-07-20) -- Dialogue rows show the transcript inline (#605) [untested]
 
 - Each dialogue row is now two lines: the codename on top, the spoken transcript beneath it, so a line can be READ before it is previewed. This replaces mouseover-only transcripts (#880) as the primary surface; the hover popup is kept for the full prose because the inline line is truncated.

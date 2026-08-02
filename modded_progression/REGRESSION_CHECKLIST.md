@@ -6,7 +6,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 - [ ] #607: one ordinary official-realm chest/vault opening emits exactly one bounded `[mp:607] CAPTURE applied ... backend=observed-only` summary without changing the native opening.
 - [ ] #607: modded-realm navigation/open attempts add no capture; `/mp_loot_diag` contains at most 12 sanitized records and `/mp_loot_diag reset` clears only diagnostic evidence.
-- [ ] #607: `/mp_regression_test` passes `mp607_official_loot_capture_is_bounded_and_realm_gated`; engine-free `test_mp_loot_diag.lua` passes.
+- [ ] #607: `/mp_regression_test` passes `mp607_modded_loot_capture_is_bounded_and_realm_gated`; engine-free `test_mp_loot_diag.lua` passes.
 
 - [ ] #577: one modded SM purchase debits local shillings once, grants/owns the exact item immediately and after restart, and never enqueues `PurchaseItem` or `storePurchaseMade`.
 - [ ] #577: repeat/double activation, stale price, owned item, insufficient funds, unavailable/DLC/platform/bundle offer, and failed persistence cannot double-spend or partially grant; official purchase remains vanilla.

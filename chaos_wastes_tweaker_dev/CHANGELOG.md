@@ -1,5 +1,34 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.315-dev (2026-08-02) - #52 diag registration + #299 lookup-refresh hardening [untested]
+
+- **#52 skull diagnostic wired into /ct_regression_test.** The skull52 module's
+  `M.regression` (record/lifecycle cap + target-level drift checks) was defined but
+  never passed to `_rt_register`, so the pinned live-test step "run
+  /ct_regression_test; the #52 checks must pass" proved nothing. Now registered as
+  `issue52_skull_diag_installed` at the wiring site, direct-reference pattern like
+  `issue458_start_shrine_config`. Contract verified: string = FAIL, fall-through
+  nil = PASS. Offline locks: registration follows the install at the wiring site
+  (`test_ct_tower_skull_diag.lua`), entry `_rt_register` count 35 -> 36
+  (`test_ct_entry_decomposition.lua`).
+- **#299 POSITION_LOOKUP write hardened to a guarded in-place refresh.** Flow
+  analysis kept the write: nothing in the move-then-free transaction reads the
+  lookup back (readback and retention both re-derive live via `_world_xyz` /
+  `Unit.world_position`), but the vanilla callee does - `teleport_to`'s last line
+  calls `set_falling_height` (player_unit_locomotion_extension.lua:1022), which
+  reads `POSITION_LOOKUP[unit].z` (generic_status_extension.lua:2590); in the
+  mod.update phase that entry is a dead frame-pool handle (BUG_CLASSES 21) and the
+  teleport would raise after the player already moved. Change: refresh only an
+  EXISTING entry (`if lookup and lookup[unit] then ...`) instead of seeding
+  unconditionally - creating an entry the engine is not maintaining would flip
+  `ALIVE[unit]` truthy (`ALIVE = POSITION_LOOKUP`, global_utils.lua:15) and leave
+  dangling expired userdata; when the entry is absent, `set_falling_height`
+  no-ops safely behind its own ALIVE guard. Raw Vector3 stays: the table's
+  vanilla contract is raw Vector3 (readers do `.z` / `Vector3.distance`), so
+  Vector3Box cannot go there; the residual lives one frame per the BUG_CLASSES 21
+  fix template. Offline lock: `test_ct_chest_revive_teleport.lua` pins the guarded
+  form and rejects the unguarded seed.
+
 ## 0.7.314-dev (2026-08-02) - individual boon price hierarchy (#467) [verify-fix]
 
 - Add the opt-in `Individual Boon Prices` rework. Clearly conditional boons

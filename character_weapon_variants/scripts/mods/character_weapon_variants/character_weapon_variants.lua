@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.484-dev"
+local MOD_VERSION = "0.1.485-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -2154,9 +2154,8 @@ local function _toggle_musket_stance_and_rewield(player_unit)
 		if cap_reloading and new_ext.is_reloading and new_ext:is_reloading() then
 			pcall(function() new_ext:abort_reload() end)
 		end
-		-- v0.1.307: re-sync shared pool to the restored reserve so the
-		-- other pool member (if any) sees the same reserve.
-		if _om._cwv_musket_sync_pool then _om._cwv_musket_sync_pool(new_ext) end
+		-- #932: shared-reserve sync is owned by the pool controller in
+		-- _cwv_musket_ammo_pool.lua (a dead nil-guarded call sat here).
 	end
 end
 
@@ -10612,8 +10611,8 @@ do
 		return descriptor and _find_def(descriptor.variant_key) or nil, state
 	end
 
-	local function _send_identity_slots(slots, context, force, recipient)
-		local sent = lifecycle:publish(slots, context, recipient or "others", force)
+	local function _send_identity_slots(slots, context, force, recipient, partial)
+		local sent = lifecycle:publish(slots, context, recipient or "others", force, partial)
 		if sent > 0 then
 			pcall(printf, "[cwv:396/660] exact identity replay: context=%s recipient=%s slots=%d",
 				tostring(context), tostring(recipient or "others"), sent)
@@ -10756,8 +10755,9 @@ do
 
 	mod:hook("SimpleInventoryExtension", "_spawn_resynced_loadout", function(func, self, equipment_to_spawn, skip_wield)
 		if equipment_to_spawn and equipment_to_spawn.slot_id then
+			-- #476 Defect B: single-slot resync = PARTIAL publish; no native record for the absent slot (see lifecycle module).
 			_send_identity_slots({ [equipment_to_spawn.slot_id] = equipment_to_spawn },
-				"spawn_resynced_loadout", false)
+				"spawn_resynced_loadout", false, nil, true)
 		end
 		if not (equipment_to_spawn and equipment_to_spawn.skin) then
 			return func(self, equipment_to_spawn, skip_wield)

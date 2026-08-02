@@ -647,8 +647,24 @@ M.official_gear_fallback = _official_gear_fallback   -- exported for the /gut_re
 -- loadout interface and translate it exactly as vanilla does (`override_id or ItemId`,
 -- backend_interface_item_playfab.lua:656-663) before writing the modded store/overlay.
 -- ------------------------------------------------------------------
+-- True only when the durable items interface currently owns `slot_name`. BackendManager's
+-- per-slot dispatch is the authoritative boundary (backend_manager_playfab.lua:329-341);
+-- unknown/throwing resolution fails closed. Shared by the equip CAPTURE gate below (#273
+-- capture side) and the exit-time snapshot reads further down (#273 exit side).
+local function _slot_owned_by_items(slot_name)
+    local backend = Managers and Managers.backend
+    if not (backend and backend.get_loadout_interface_by_slot and backend.get_interface) then
+        return false
+    end
+    local ok, slot_interface, items_interface = pcall(function()
+        return backend:get_loadout_interface_by_slot(slot_name), backend:get_interface("items")
+    end)
+    return ok and ExitSnapshotCore.slot_owned_by_items(slot_interface, items_interface)
+end
+
 local _bu_capture_installed = false
 local _bu_unresolved_seen = {}
+local _bu_foreign_seen = {}
 
 local function _bu_canonical_value(backend_id, slot_name)
     if not Policy.is_cosmetic_slot(slot_name) then
@@ -705,18 +721,37 @@ local function _install_bu_capture()
         local mode = _adventure_mode()
         local is_loadout_slot = _is_loadout_slot(slot_name)
         if mode ~= MODE_OFF and career_name and backend_id and is_loadout_slot then
-            local ok_m, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
-            local value, source = _bu_canonical_value(backend_id, slot_name)
-            if ok_m and mirror and value ~= nil then
-                _capture_bu_equip(mode, mirror, career_name, slot_name, value, source)
-            elseif COSMETIC_SLOT_SET[slot_name] then
-                -- Bounded evidence for an unexpected LA/item-registry timing miss. Never
-                -- persist the transient backend id into a cosmetic slot as a guess.
-                local token = tostring(slot_name) .. "\0" .. tostring(backend_id) .. "\0" .. tostring(source)
-                if not _bu_unresolved_seen[token] then
-                    _bu_unresolved_seen[token] = true
-                    printf("[gut_dev:NATIVE_LOADOUTS] BU cosmetic capture SKIP career=%s slot=%s bid=%s reason=%s mirror=%s",
-                        tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(source), tostring(ok_m and mirror ~= nil))
+            -- Issue #273 capture side: vanilla's DeusChestExtension._equip_weapon routes every
+            -- CW weapon chest/shrine swap through this SAME 3-arg seam with a Deus RUN-LOCAL
+            -- backend id (deus_chest_extension.lua:597). Gear capture targets the durable
+            -- Adventure store, so it additionally requires the durable items interface to own
+            -- the slot RIGHT NOW -- the same fail-closed table-identity owner gate the
+            -- exit-path read uses. Cosmetic slots keep current behavior (unconditionally
+            -- eligible): Deus maps skin/hat/frame/pose to "items"
+            -- (backend_interface_deus_base.lua:7-14), so they legitimately persist.
+            if Policy.capture_slot_durable(slot_name, _slot_owned_by_items(slot_name)) then
+                local ok_m, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
+                local value, source = _bu_canonical_value(backend_id, slot_name)
+                if ok_m and mirror and value ~= nil then
+                    _capture_bu_equip(mode, mirror, career_name, slot_name, value, source)
+                elseif COSMETIC_SLOT_SET[slot_name] then
+                    -- Bounded evidence for an unexpected LA/item-registry timing miss. Never
+                    -- persist the transient backend id into a cosmetic slot as a guess.
+                    local token = tostring(slot_name) .. "\0" .. tostring(backend_id) .. "\0" .. tostring(source)
+                    if not _bu_unresolved_seen[token] then
+                        _bu_unresolved_seen[token] = true
+                        printf("[gut_dev:NATIVE_LOADOUTS] BU cosmetic capture SKIP career=%s slot=%s bid=%s reason=%s mirror=%s",
+                            tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(source), tostring(ok_m and mirror ~= nil))
+                    end
+                end
+            else
+                -- Bounded evidence: a gear equip arrived while a mechanism interface (Deus)
+                -- owned the slot. The run-local id is dropped, never stored (class-73).
+                local token = tostring(career_name) .. "\0" .. tostring(slot_name)
+                if not _bu_foreign_seen[token] then
+                    _bu_foreign_seen[token] = true
+                    printf("[gut_dev:NATIVE_LOADOUTS] BU gear capture SKIP career=%s slot=%s bid=%s reason=foreign-loadout-interface",
+                        tostring(career_name), tostring(slot_name), tostring(backend_id))
                 end
             end
         end
@@ -1476,18 +1511,8 @@ end)
 -- store/overlay are modded-only; #175 isolation guarantee is untouched).
 -- ==================================================================
 
--- True only when the durable items interface currently owns `slot_name`. BackendManager's
--- per-slot dispatch is the authoritative boundary; unknown/throwing resolution fails closed.
-local function _slot_owned_by_items(slot_name)
-    local backend = Managers and Managers.backend
-    if not (backend and backend.get_loadout_interface_by_slot and backend.get_interface) then
-        return false
-    end
-    local ok, slot_interface, items_interface = pcall(function()
-        return backend:get_loadout_interface_by_slot(slot_name), backend:get_interface("items")
-    end)
-    return ok and ExitSnapshotCore.slot_owned_by_items(slot_interface, items_interface)
-end
+-- The per-slot owner gate `_slot_owned_by_items` is defined above the BackendUtils equip
+-- capture (its other #273 consumer); both the capture and these exit reads share it.
 
 -- Read one career+slot's LIVE equipped value, canonicalized to the store's format (gear = raw
 -- backend id; cosmetics = override_id or ItemId, the same identity the equip capture stores).
@@ -1730,12 +1755,37 @@ M.rt_checks = {
         if cleared ~= 2 or next(store) ~= nil or next(overlay) ~= nil then
             return "mod-owned clear policy failed"
         end
+        -- #954 boundary: the reset wipes modded loadout data but must never drop the
+        -- user's bot designation (index + detached snapshot + one-time import marker).
+        local store2 = { mercenary = {
+            selected_index = 2, _seeded = true, _slot_integrity_v2 = true,
+            bot_index = 2, bot_loadout = { slot_melee = "bot" },
+            _bot_designation_snapshot_v2 = true,
+            loadouts = { { slot_melee = "a" }, { slot_melee = "bot" } },
+        } }
+        Policy.clear_modded_loadouts(store2, { mercenary = {} })
+        local kept = store2.mercenary
+        if not (kept and kept.bot_index == 2 and kept._bot_designation_snapshot_v2 == true
+            and type(kept.bot_loadout) == "table" and next(kept.loadouts) == nil
+            and kept._seeded == nil) then
+            return "reset dropped or over-preserved the #954 bot designation"
+        end
         local names = Policy.official_seed_careers({
             _career_data = { zealot = { {} }, mercenary = { {} } },
         })
         if names[1] ~= "mercenary" or names[2] ~= "zealot" or names[3] ~= nil then
             return "official career plan is not deterministic"
         end
+    end },
+    { name = "issue273_capture_owner_gate", fn = function()
+        -- Capture side of the #273 owner invariant: gear capture fails closed unless the
+        -- durable items interface owns the slot; cosmetics stay unconditionally eligible.
+        if type(Policy.capture_slot_durable) ~= "function" then return "capture owner gate missing" end
+        if Policy.capture_slot_durable("slot_melee", false) then return "gear capture not fail-closed" end
+        if Policy.capture_slot_durable("slot_ranged", nil) then return "gear capture not fail-closed (nil owner)" end
+        if not Policy.capture_slot_durable("slot_melee", true) then return "owned gear capture rejected" end
+        if not Policy.capture_slot_durable("slot_hat", false) then return "cosmetic capture regressed" end
+        if type(_slot_owned_by_items) ~= "function" then return "slot owner resolver missing" end
     end },
     { name = "native_loadouts_no_hardcoded_6", fn = function()
         local expected = InventorySettings and InventorySettings.MAX_NUM_CUSTOM_LOADOUTS

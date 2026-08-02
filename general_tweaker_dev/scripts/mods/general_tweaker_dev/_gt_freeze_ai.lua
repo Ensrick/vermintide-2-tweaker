@@ -11,7 +11,8 @@ local mod = get_mod("gt_dev")
 -- (one echo). mod._gt_freeze_ai_active is the single piece of state; it is never
 -- set on a client or in the stable stream, so every reader of it (the merged
 -- AISystem.update_brains gate in _gt_creature_spawner.lua, the ConflictDirector
--- spawn hook + _apply_script_data_no_enemies in the main file) is inert there.
+-- update_spawn_queue dequeue gate + spawn_unit_immediate gate +
+-- _apply_script_data_no_enemies in the main file) is inert there.
 --
 -- Mechanism (two vanilla-respected switches, both cited):
 --   1. Halt existing + future AI: the brain gate merged into gt's existing
