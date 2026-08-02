@@ -36,10 +36,12 @@ weak-key offset ledger. The instance owns only:
 It deliberately does not resolve item/skin identity, units, hand, perspective,
 career, packages, ammo, network state, or render-path hooks. The API can be tested
 offline through dependency injection, while production defaults bind VT2 globals.
-CWV v0.1.405-dev is the first runtime consumer. It replaces only the private WA
-implementation and preserves CWV's existing resolver/caller surface and exported
-compatibility handles. Cosmetics and WT carry synchronized copies but do not load
-them yet.
+CWV v0.1.405-dev was the first runtime consumer. It replaced only the private WA
+implementation and preserved CWV's existing resolver/caller surface and exported
+compatibility handles. Both WT streams now construct their own mod-local
+instances too. Cosmetics carries a synchronized copy but its runtime cutover is
+still pending. Identity, hand, perspective, render-path, and durable-retention
+policies remain with the owning mods.
 
 ## Loader proof
 
@@ -63,9 +65,10 @@ loads only its bundled copy after its own namespace exists. Therefore:
 4. **Cosmetics texture fallback:** delete the mesh-material fallback only after
    the unit-local route is proven on every LA unit class. Never silently restore
    `Material.set_texture` as a compatibility fallback.
-5. **WT transforms:** migrate ordinary spawn-time transforms last. Keep durable
-   per-frame and #569 canonical rotation composition outside the primitive until
-   their base-capture contract has a dedicated API.
+5. **WT transforms (landed in stable/dev together):** ordinary spawn-time and
+   menu-preview scale/offset helpers delegate to the bundled WA instance. Durable
+   per-frame and #569 canonical rotation composition stay outside the primitive:
+   they own captured baselines and animation-tick retention, not one-shot math.
 
 Each cutover requires existing four-render-path regression coverage and an
 in-game verification label appropriate to that consumer. The architecture phase
