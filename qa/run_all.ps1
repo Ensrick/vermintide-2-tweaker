@@ -21,6 +21,7 @@ param(
 $ErrorActionPreference = "Stop"
 $here = $PSScriptRoot
 $repoRoot = Split-Path $here -Parent
+. (Join-Path $here 'worktree_state.ps1')
 # Gate semantics (2026-07-01): a check's exit 1 = advisory WARNINGS, which are
 # REPORTED but never fail the gate; exit >=2 = ERRORS, which fail the gate. This
 # is what stops pre-existing advisory warnings (e.g. bare-unpack in stable
@@ -112,6 +113,35 @@ function Write-Summary {
     }
 }
 
+function Confirm-QAWorktreePurity {
+    if ($FixStale) {
+        Write-Host "[worktree-purity] SKIP - -FixStale explicitly authorizes documentation edits." -ForegroundColor DarkYellow
+        return
+    }
+    try {
+        $after = Get-QAWorktreeState -RepoRoot $repoRoot
+    } catch {
+        Write-Host "[worktree-purity] INFRASTRUCTURE FAILURE: $_" -ForegroundColor Red
+        $script:infrastructureFailures += 'worktree-purity (snapshot failed)'
+        if ($script:blockingExit -lt 99) { $script:blockingExit = 99 }
+        return
+    }
+    if (Test-QAWorktreeStateEqual $script:worktreeBefore $after) {
+        Write-Host "[worktree-purity] OK - QA preserved the exact Git-visible worktree state." -ForegroundColor Green
+        return
+    }
+
+    Write-Host "[worktree-purity] ERROR - QA mutated the Git-visible worktree." -ForegroundColor Red
+    Write-Host "  before=$($script:worktreeBefore.Fingerprint) after=$($after.Fingerprint)" -ForegroundColor Red
+    $beforeStatus = if ($script:worktreeBefore.Status.Count) {
+        $script:worktreeBefore.Status -join '; '
+    } else { '<clean>' }
+    $afterStatus = if ($after.Status.Count) { $after.Status -join '; ' } else { '<clean>' }
+    Write-Host "  status before: $beforeStatus" -ForegroundColor Red
+    Write-Host "  status after:  $afterStatus" -ForegroundColor Red
+    if ($script:blockingExit -lt 2) { $script:blockingExit = 2 }
+}
+
 function Invoke-PolicySelfTest {
     $failures = @()
 
@@ -140,17 +170,32 @@ function Invoke-PolicySelfTest {
         $failures += "reserved tool-failure exit was flattened by advisory policy"
     }
 
+    try {
+        Invoke-QAWorktreeStateSelfTest
+    } catch {
+        $failures += "worktree-purity fixture failed: $_"
+    }
+
     if ($failures.Count -gt 0) {
         Write-Host "[run_all:selftest] FAILED" -ForegroundColor Red
         foreach ($failure in $failures) { Write-Host "  X $failure" -ForegroundColor Red }
         exit 2
     }
 
-    Write-Host "[run_all:selftest] PASS - findings remain advisory and execution failures block." -ForegroundColor Green
+    Write-Host "[run_all:selftest] PASS - policy and worktree-purity fixtures passed." -ForegroundColor Green
     exit 0
 }
 
 if ($SelfTest) { Invoke-PolicySelfTest }
+
+if (-not $FixStale) {
+    try {
+        $script:worktreeBefore = Get-QAWorktreeState -RepoRoot $repoRoot
+    } catch {
+        Write-Host "[worktree-purity] INFRASTRUCTURE FAILURE before QA: $_" -ForegroundColor Red
+        exit 99
+    }
+}
 
 # Always run cfg + version + unpack-safety + widget-type checks (cheap, catch
 # most ship-blockers).
@@ -234,6 +279,7 @@ Run-Check "lua_unit_tests"                    { & (Join-Path $here "check_lua_un
 
 if ($Quick) {
     Write-Host "Quick mode - Lua units passed; skipping localization, stale-docs, file-sizes, luacheck." -ForegroundColor DarkGray
+    Confirm-QAWorktreePurity
     Write-Summary
     exit $script:blockingExit
 }
@@ -357,5 +403,6 @@ if (-not $SkipLua) {
 }
 
 # Summary
+Confirm-QAWorktreePurity
 Write-Summary
 exit $script:blockingExit
