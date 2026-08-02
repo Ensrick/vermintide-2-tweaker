@@ -1,5 +1,46 @@
 # Career Tweaker Changelog
 
+## 0.4.17-beta (2026-08-02) - #472/#473/#699 live-test readiness
+
+### Focused Spirit retained-state diagnostics and talent text (#472)
+
+- Replaced the misleading numeric-only Focused Spirit tooltip patch with a full,
+  reversible talent description for the stacking behavior: empty start, one 5%
+  power stack per ten seconds, five-stack/25% cap, one stack lost per ordinary
+  hit, and the separate chip-damage exemption's interaction.
+- Added a log-only, transition-deduplicated `[crt:472]` receipt at the actual
+  `PlayerUnitHealthExtension.add_damage` -> Focused Spirit proc boundary. It
+  records source/type classification, talent detection, ignored/real-hit action,
+  stack and cooldown before/after state, and wrapped-call success. The stream is
+  hard-capped at 48 distinct transitions and adds no update loop or network data.
+- Hardened `/crt_regression_test` so #472 now requires the bounded live receipt
+  owner and the reversible full-description lifecycle instead of passing on the
+  mere presence of dormant wrapper functions.
+### Foot Knight HUD icon semantic ownership (#699)
+
+- Removed HUD icons from the always-on heavy-immunity mechanic and Rock dodge
+  penalty. Those are persistent implementation/tradeoff states, not conditional
+  aura bonuses; showing borrowed invulnerability art made the former appear to
+  be Sienna's **Numb to Pain** effect.
+- Kept resident Foot Knight artwork only on the conditional Rock shield-power
+  bonus, conditional Teamwork great-weapon power bonus, and timed Final March.
+  Their gameplay, lifetime, local-only ownership, and #663 aura reconciliation
+  are unchanged.
+- Hardened `[crt:699]` to report each state's semantic role, intended icon,
+  actual BuffUI widget icon, atlas material/UV identity, semantic match, and an
+  explicit Numb-to-Pain collision verdict. Offline tests prove the three visible
+  icons occupy atlas coordinates distinct from Numb to Pain and that bookkeeping
+  buffs cannot regain a HUD icon unnoticed.
+
+### Dance of Blades triggers on enemy strikes (#473)
+
+- Changed the rework's stack trigger from killing an enemy to striking an enemy,
+  matching the verified player-requested behavior while retaining independent
+  two-second stack lifetimes, the 15-stack cap, and the blocking-dodge branch.
+- Updated the setting and live talent descriptions so they no longer claim that
+  a killing blow is required. The existing peer-parity wire-safe grant remains
+  the sole stack writer.
+
 ## 0.4.16-beta (2026-07-26) - #936 split Tourney balance controls [verify-fix]
 
 - Split the 17 legacy career-wide Tourney Balance Testing toggles into 46 independent `[TB]` mutation leaves inside each career's existing Talent Reworks section. The stable legacy IDs remain as changed-only **Enable All** presets, and existing saved ON presets expand to their leaves once on first mission entry.

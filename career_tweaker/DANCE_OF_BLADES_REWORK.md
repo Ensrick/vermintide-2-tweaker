@@ -9,13 +9,13 @@ the native improved dodge-distance and dodge-speed buffs; otherwise it grants a
 two-second power buff.
 
 The opt-in rework retains the blocking branch and replaces the non-blocking
-dodge reward with a kill-driven risk/reward stack:
+dodge reward with a hit-driven risk/reward stack:
 
-- each kill grants 2% damage dealt;
-- each kill also increases damage taken by 2% (equivalent to losing 2% damage
+- each enemy hit grants 2% damage dealt;
+- each enemy hit also increases damage taken by 2% (equivalent to losing 2% damage
   reduction);
 - up to 15 stacks, for 30% damage dealt and 30% increased damage taken;
-- every stack has its own two-second lifetime; later kills do not refresh older
+- every stack has its own two-second lifetime; later hits do not refresh older
   stacks;
 - blocking dodges retain the authored 20% dodge-distance benefit and matching
   vanilla dodge-speed handling.
@@ -28,7 +28,7 @@ inside that bucket before applying them, producing the requested linear 30% at
 ## Network and lifecycle
 
 The three `crt_maidenguard_dance_of_blades_*` names are registered
-unconditionally and alphabetically for stable `NetworkLookup` indices. The kill
+unconditionally and alphabetically for stable `NetworkLookup` indices. The hit
 proc routes through Career Tweaker's existing live peer-parity wrapper. The
 rework is marked network-unsafe, so it degrades to the complete vanilla talent
 whenever any human peer has not confirmed Career Tweaker. No new RPC is added.
@@ -40,12 +40,12 @@ the canonical way to test a toggle change.
 
 ## Verification
 
-1. Enable **Handmaiden: Dance of Blades kill-stack rework**, equip Dance of
+1. Enable **Handmaiden: Dance of Blades hit-stack rework**, equip Dance of
    Blades, then start a fresh mission.
-2. Dodge without blocking and without a kill: no damage stack should appear.
-3. Kill enemies more slowly than two seconds apart: each stack should disappear
-   two seconds after its own kill rather than all stacks refreshing together.
-4. Kill rapidly and confirm the visible stack count caps at 15.
+2. Dodge without blocking and without hitting an enemy: no damage stack should appear.
+3. Hit enemies more slowly than two seconds apart: each stack should disappear
+   two seconds after its own hit rather than all stacks refreshing together.
+4. Hit rapidly and confirm the visible stack count caps at 15.
 5. Compare outgoing damage at zero and 15 stacks; it should rise by 30%.
 6. Take a controlled hit at zero and 15 stacks; damage taken should rise by 30%.
 7. Dodge while blocking and confirm the native 20% distance benefit remains.

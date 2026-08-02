@@ -166,29 +166,38 @@ end
 -- sub-template `name` [src: scripts/ui/hud_ui/buff_ui.lua:105-134,216-267].
 -- The mechanics regression already proved the authored fields exist, but that
 -- cannot distinguish a missing active buff, an unavailable atlas entry, a full
--- HUD widget pool, or a third-party HideBuffs disposition. This automatic,
--- transition-only census captures those four runtime boundaries without a
--- command and without changing the HUD.
+-- HUD widget pool, a misleading bookkeeping icon, an atlas identity alias, or
+-- a third-party HideBuffs disposition. This automatic, transition-only census
+-- captures those runtime boundaries without a command or HUD mutation.
+local _CRT_NUMB_TO_PAIN_ICON = "sienna_unchained_reduced_damage_taken_after_venting"
 local _CRT_FK_ICON_SPECS = {
     {
         outer = "crt_fk_uninterruptible_heavies",
         active = "crt_fk_uninterruptible_heavies",
+        role = "bookkeeping-heavy-immunity",
     },
     {
         outer = "crt_fk_rock_dodge_distance",
         active = "crt_fk_rock_dodge_distance",
+        role = "bookkeeping-rock-dodge-penalty",
     },
     {
         outer = "crt_fk_rock_shield_power",
         active = "crt_fk_rock_shield_power",
+        role = "conditional-rock-shield-power",
+        expected_icon = "markus_knight_passive_block_cost_aura",
     },
     {
         outer = "crt_fk_teamwork_great_power",
         active = "crt_fk_teamwork_great_power",
+        role = "conditional-teamwork-great-power",
+        expected_icon = "markus_knight_damage_taken_ally_proximity",
     },
     {
         outer = "crt_fk_final_march",
         active = "crt_fk_final_march_power",
+        role = "timed-final-march",
+        expected_icon = "markus_knight_movement_speed_on_incapacitated_allies",
     },
 }
 
@@ -221,13 +230,22 @@ local function _crt_fk_icon_observed_unit(hud)
     return _crt_fk_icon_local_unit(), "local"
 end
 
-local function _crt_fk_icon_atlas_has(icon)
+local function _crt_fk_icon_atlas_identity(icon)
     if type(icon) ~= "string" or not UIAtlasHelper
-       or not UIAtlasHelper.has_atlas_settings_by_texture_name then
-        return false
+       or not UIAtlasHelper.get_atlas_settings_by_texture_name then
+        return false, "none"
     end
-    local ok, present = pcall(UIAtlasHelper.has_atlas_settings_by_texture_name, icon)
-    return ok and present == true
+    if UIAtlasHelper.has_atlas_settings_by_texture_name then
+        local ok, present = pcall(UIAtlasHelper.has_atlas_settings_by_texture_name, icon)
+        if not ok or present ~= true then return false, "missing" end
+    end
+    local ok, settings = pcall(UIAtlasHelper.get_atlas_settings_by_texture_name, icon)
+    if not ok or type(settings) ~= "table" then return false, "missing" end
+    local uv00, uv11 = settings.uv00 or {}, settings.uv11 or {}
+    return true, string.format("%s:%.6f,%.6f:%.6f,%.6f",
+        tostring(settings.material_name), tonumber(uv00[1]) or -1,
+        tonumber(uv00[2]) or -1, tonumber(uv11[1]) or -1,
+        tonumber(uv11[2]) or -1)
 end
 
 local function _crt_fk_icon_hidebuffs_disposition(buff_type)
@@ -284,23 +302,37 @@ mod._crt_foot_knight_icon_probe_tick = function(dt)
         if active_buff then
             local active_template = active_buff.template or {}
             local icon = active_template.icon
-            local atlas = _crt_fk_icon_atlas_has(icon)
+            local atlas, atlas_identity = _crt_fk_icon_atlas_identity(icon)
+            local _, numb_identity = _crt_fk_icon_atlas_identity(_CRT_NUMB_TO_PAIN_ICON)
             local widget = hud and hud._buff_name_to_widget
                 and hud._buff_name_to_widget[active_template.name]
             local widget_icon = widget and widget.content and widget.content.texture_icon
+            local expected_visible = spec.expected_icon ~= nil
+            local semantic_match = icon == spec.expected_icon
+                and widget_icon == spec.expected_icon
+            if not expected_visible then
+                semantic_match = icon == nil and widget == nil
+            end
+            local numb_collision = icon == _CRT_NUMB_TO_PAIN_ICON
+                or widget_icon == _CRT_NUMB_TO_PAIN_ICON
+                or (atlas and atlas_identity == numb_identity)
             local hide_buffs, hidden, priority =
                 _crt_fk_icon_hidebuffs_disposition(active_buff.buff_type or spec.active)
             local signature = table.concat({
-                subject, tostring(icon), tostring(atlas), tostring(widget ~= nil),
-                tostring(widget_icon), tostring(widget_count), tostring(widget_capacity),
-                tostring(hide_buffs), tostring(hidden), tostring(priority),
+                subject, tostring(spec.role), tostring(spec.expected_icon), tostring(icon),
+                tostring(atlas), tostring(atlas_identity), tostring(widget ~= nil),
+                tostring(widget_icon), tostring(semantic_match), tostring(numb_collision),
+                tostring(widget_count), tostring(widget_capacity), tostring(hide_buffs),
+                tostring(hidden), tostring(priority),
             }, "|")
             if _crt_fk_icon_last[state_key] ~= signature then
                 _crt_fk_icon_last[state_key] = signature
                 _crt_fk_icon_log(
-                    "[crt:699] icon active=true subject=%s buff=%s template=%s icon=%s atlas=%s widget=%s widget_icon=%s hud_widgets=%d hud_capacity=%d hidebuffs=%s hidden=%s priority=%s",
-                    subject, tostring(spec.outer), tostring(active_template.name), tostring(icon),
-                    tostring(atlas), tostring(widget ~= nil), tostring(widget_icon),
+                    "[crt:699] icon active=true subject=%s buff=%s role=%s template=%s expected=%s icon=%s atlas=%s atlas_id=%s widget=%s widget_icon=%s semantic_match=%s numb_collision=%s hud_widgets=%d hud_capacity=%d hidebuffs=%s hidden=%s priority=%s",
+                    subject, tostring(spec.outer), tostring(spec.role),
+                    tostring(active_template.name), tostring(spec.expected_icon), tostring(icon),
+                    tostring(atlas), tostring(atlas_identity), tostring(widget ~= nil),
+                    tostring(widget_icon), tostring(semantic_match), tostring(numb_collision),
                     widget_count, widget_capacity, tostring(hide_buffs), tostring(hidden),
                     tostring(priority))
             end

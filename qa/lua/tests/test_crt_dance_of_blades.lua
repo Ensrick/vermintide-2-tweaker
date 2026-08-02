@@ -12,14 +12,14 @@ return function(H, repo_root)
         H.equal(stack[2].refresh_durations, false)
     end)
 
-    H.test("CRT #473 Dance separates blocking dodge from kill trigger", function()
+    H.test("CRT #473 Dance separates blocking dodge from enemy-hit trigger", function()
         local templates = Policy.templates()
         local dodge = templates[Policy.dodge_buff].buffs[1]
         local proc = templates[Policy.proc_buff].buffs[1]
         H.equal(dodge.event, "on_dodge")
         H.equal(dodge.buff_func, "crt_maidenguard_dance_blocking_dodge")
         H.equal(#dodge.dodge_buffs_to_add, 2)
-        H.equal(proc.event, "on_kill")
+        H.equal(proc.event, "on_hit")
         H.equal(proc.buff_func, "crt_wire_safe_add_buff")
         H.equal(proc.buff_to_add, Policy.stack_buff)
     end)

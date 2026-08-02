@@ -546,14 +546,13 @@ local BALANCE_MODS = {
             local talent = _focused_spirit_talent()
             if not talent then return end
             saved.focused_talent_buff_original = talent.buffs and talent.buffs[1]
+            saved.focused_talent_description_original = talent.description
+            saved.focused_talent_description_values_original = talent.description_values
             if talent.buffs then
                 talent.buffs[1] = "kerillian_maidenguard_power_level_on_unharmed_cooldown"
             end
-            local dv = talent.description_values and talent.description_values[2]
-            if dv then
-                saved.focused_tooltip_power_original = dv.value
-                dv.value = 0.05
-            end
+            talent.description = "crt_kerillian_maidenguard_focused_spirit_stacks_desc"
+            talent.description_values = {}
         end,
         custom_restore = function(saved)
             local talent = _focused_spirit_talent()
@@ -561,12 +560,13 @@ local BALANCE_MODS = {
             if talent.buffs and saved.focused_talent_buff_original ~= nil then
                 talent.buffs[1] = saved.focused_talent_buff_original
             end
-            local dv = talent.description_values and talent.description_values[2]
-            if dv and saved.focused_tooltip_power_original ~= nil then
-                dv.value = saved.focused_tooltip_power_original
+            if saved.focused_talent_description_original ~= nil then
+                talent.description = saved.focused_talent_description_original
+                talent.description_values = saved.focused_talent_description_values_original
             end
             saved.focused_talent_buff_original = nil
-            saved.focused_tooltip_power_original = nil
+            saved.focused_talent_description_original = nil
+            saved.focused_talent_description_values_original = nil
         end,
     },
     -- Dance of Blades (#473): vanilla `kerillian_maidenguard_versatile_dodge`

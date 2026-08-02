@@ -93,7 +93,7 @@ Last updated: 2026-07-22.
 | Symptom | Damage-over-time, gas, Warpfire Throwers, and Ratling Gunners reset Focused Spirit; the requested stacking variant does not exist. |
 | Source boundary | Vanilla's proc receives only attacker, amount, and damage type (`player_unit_health_extension.lua:702-703`), so Ratling identity must be captured from the full `add_damage` call's `damage_source_name`. |
 | Expected | Default exemption preserves Focused Spirit through the named chip classes. Opt-in rework starts at zero, gains one 5% stack per ten seconds up to five, and loses one stack per ordinary hit. |
-| Detection | Run the three `test_crt_damage_classification.lua` cases and `/crt_regression_test` check `issue472_focused_spirit_contract`, then perform the solo in-game walk in CHANGELOG 0.3.65-dev. |
+| Detection | Run the four `test_crt_damage_classification.lua` cases and `/crt_regression_test` check `issue472_focused_spirit_contract`, then inspect bounded `[crt:472]` receipts for the exact damage source/type, classification, proc action, and retained stack/cooldown before/after state. Perform the solo in-game walk in CHANGELOG 0.3.65-dev only against the exact deployed build. |
 
 ---
 ## Multiplayer / Network Sync
