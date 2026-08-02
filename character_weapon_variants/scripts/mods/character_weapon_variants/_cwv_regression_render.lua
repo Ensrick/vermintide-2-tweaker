@@ -1554,6 +1554,46 @@ _rt_register("issue704_canonical_skin_owner_and_sword_mace_sources", function()
 	end
 end)
 
+_rt_register("issue915_maul_illusion_vanilla_provenance", function()
+	-- #915: the Maul picker pool must contain only illusions copied from
+	-- VANILLA es_dual_wield_hammer_sword skins (mace in right_hand_unit).
+	-- CWV's Sword and Mace base skin borrows that matching key with a SWORD
+	-- in the right hand; if it ever re-enters the pool, the Maul renders a
+	-- 1H sword. Provenance field per #704: cwv_owner_item_type.
+	local vanilla_right_units = {}
+	for _, row in pairs(ItemMasterList or {}) do
+		if type(row) == "table" and row.item_type == "weapon_skin"
+				and row.matching_item_key == "es_dual_wield_hammer_sword"
+				and not row.cwv_owner_item_type and row.right_hand_unit then
+			vanilla_right_units[row.right_hand_unit] = true
+		end
+	end
+	local combo = WeaponSkins and WeaponSkins.skin_combinations
+		and WeaponSkins.skin_combinations.cwv_es_maul_skins
+	for _, bucket in pairs(combo or {}) do
+		for _, skin_key in ipairs(type(bucket) == "table" and bucket or {}) do
+			local source_key = type(skin_key) == "string"
+				and skin_key:match("^cwv_es_maul_(.+)$")
+			-- Only judge registrar-generated keys: their suffix resolves to a
+			-- real IML source row. The variant's own base skin
+			-- (cwv_es_maul_skin) also matches the prefix but has no source.
+			local source_row = source_key and ItemMasterList
+				and rawget(ItemMasterList, source_key)
+			if type(source_row) == "table" then
+				if source_row.cwv_owner_item_type then
+					return "Maul pool admitted CWV-owned source: " .. skin_key
+				end
+				local row = ItemMasterList and rawget(ItemMasterList, skin_key)
+				if type(row) == "table" and row.right_hand_unit
+						and not vanilla_right_units[row.right_hand_unit] then
+					return "Maul illusion carries non-vanilla right hand: "
+						.. skin_key .. " -> " .. tostring(row.right_hand_unit)
+				end
+			end
+		end
+	end
+end)
+
 mod._cwv_dev_anim_picker.install()
 
 mod:info("Character Weapon Variants v%s loaded", MOD_VERSION)
