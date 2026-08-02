@@ -53,10 +53,12 @@ local loc = {
 
     -- Issue 626: dormant event missions are grouped separately from mutators.
     cat_event_missions = en("Dormant Event Missions"),
+    event_mission_area_name = en("Events"),
+    event_mission_area_description = en("Special missions from Vermintide 2's past events. Enable the missions you want in Tweaker: Events."),
     mission_dlc_dwarf_fest = en("The Feast of Grimnir"),
-    mission_dlc_dwarf_fest_tooltip = en("Show The Feast of Grimnir in Own Game under the built-in event area. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
+    mission_dlc_dwarf_fest_tooltip = en("Show The Feast of Grimnir in Own Game under Events. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
     mission_dlc_celebrate_crawl = en("A Quiet Drink"),
-    mission_dlc_celebrate_crawl_tooltip = en("Show A Quiet Drink in Own Game under the built-in event area. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
+    mission_dlc_celebrate_crawl_tooltip = en("Show A Quiet Drink in Own Game under Events. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
 
     -- Difficulty modifiers
     mut_no_ammo                    = en("No Ammo"),

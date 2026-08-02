@@ -118,10 +118,16 @@ return function(H, repo_root)
             'mod:hook%("StartGameWindowMissionSelection", "_setup_level_acts"', "")
         local _, mission_console = event_source:gsub(
             'mod:hook%("StartGameWindowMissionSelectionConsole", "_setup_level_acts"', "")
+        local _, presentation_desktop = event_source:gsub(
+            'mod:hook%("StartGameWindowAreaSelection", "_set_area_presentation_info"', "")
+        local _, presentation_console = event_source:gsub(
+            'mod:hook%("StartGameWindowAreaSelectionConsoleV2", "_set_area_presentation_info"', "")
         H.equal(area_desktop, 1)
         H.equal(area_console, 1)
         H.equal(mission_desktop, 1)
         H.equal(mission_console, 1)
+        H.equal(presentation_desktop, 1)
+        H.equal(presentation_console, 1)
         H.truthy(event_source:find("Missions.selected_area_name(self)", 1, true))
         local _, area_adapter_calls = event_source:gsub("Missions%.run_area_setup%(", "")
         local _, mission_adapter_calls = event_source:gsub("Missions%.apply_levels_for_area%(", "")
@@ -131,28 +137,66 @@ return function(H, repo_root)
 
     end)
 
-    H.test("Event area setup observes published widgets and restores the global flag", function()
-        local area = { exclude_from_area_selection = true }
+    H.test("Event area setup keeps Campaign first and restores the stock descriptor", function()
+        local campaign = {
+            name = "helmgart", sort_order = 1, acts = { "act_1" },
+            level_image = "area_icon_helmgart",
+        }
+        local stock_event = {
+            name = Missions.AREA_KEY, sort_order = 0,
+            exclude_from_area_selection = true,
+            acts = { Missions.ACT_KEY }, level_image = "area_icon_bogenhafen",
+        }
+        local areas = {
+            helmgart = campaign,
+            celebrate = stock_event,
+            dwarf_fest = {
+                name = "dwarf_fest", sort_order = 0,
+                exclude_from_area_selection = true,
+                level_image = "area_icon_dwarf_fest",
+            },
+            dlc = { name = "dlc", sort_order = 7, acts = { "act_dlc" } },
+        }
         local view = {}
         local signatures = {}
         local ok, err, emit, proof = Missions.run_area_setup(function(self)
-            H.equal(area.exclude_from_area_selection, false)
+            local transient = areas.celebrate
+            H.equal(transient == stock_event, false)
+            H.equal(transient.exclude_from_area_selection, false)
+            H.equal(transient.sort_order, 8)
+            H.equal(transient.level_image, "level_image_dlc_dwarf_fest")
+            H.equal(areas.helmgart, campaign)
             self._active_area_widgets = {
                 { content = { area_name = "helmgart" } },
+                { content = { area_name = "dlc" } },
                 { content = { area_name = Missions.AREA_KEY } },
             }
-        end, view, "desktop", area, signatures)
+        end, view, "desktop", areas, signatures)
 
         H.equal(ok, true)
         H.equal(err, nil)
         H.equal(emit, true)
-        H.equal(area.exclude_from_area_selection, true)
+        H.equal(areas.celebrate, stock_event)
+        H.equal(areas.helmgart, campaign)
+        H.equal(stock_event.exclude_from_area_selection, true)
+        H.equal(stock_event.sort_order, 0)
+        H.equal(stock_event.level_image, "area_icon_bogenhafen")
         H.truthy(proof:find("call_ok=true", 1, true))
-        H.truthy(proof:find("widgets=2 target=1", 1, true))
+        H.truthy(proof:find("widgets=3 target=1 campaign_index=1 event_index=3", 1, true))
+        H.truthy(proof:find("presentation_sort=8", 1, true))
+        H.truthy(proof:find("presentation_icon=level_image_dlc_dwarf_fest", 1, true))
+        H.truthy(proof:find("stock_identity=true", 1, true))
     end)
 
     H.test("Event area setup skips stale widgets after a failed native build", function()
-        local area = { exclude_from_area_selection = true }
+        local stock_event = {
+            name = Missions.AREA_KEY, sort_order = 0,
+            exclude_from_area_selection = true, acts = { Missions.ACT_KEY },
+        }
+        local areas = {
+            celebrate = stock_event,
+            helmgart = { name = "helmgart", sort_order = 1, acts = { "act_1" } },
+        }
         local view = {
             _active_area_widgets = {
                 { content = { area_name = Missions.AREA_KEY } },
@@ -160,15 +204,67 @@ return function(H, repo_root)
         }
         local ok, err, emit, proof = Missions.run_area_setup(function()
             error("native build failed")
-        end, view, "controller", area, {})
+        end, view, "controller", areas, {})
 
         H.equal(ok, false)
         H.truthy(tostring(err):find("native build failed", 1, true))
         H.equal(emit, true)
-        H.equal(area.exclude_from_area_selection, true)
+        H.equal(areas.celebrate, stock_event)
+        H.equal(stock_event.exclude_from_area_selection, true)
         H.truthy(proof:find("call_ok=false", 1, true))
         H.truthy(proof:find("widgets=skipped", 1, true))
         H.equal(proof:find("target=1", 1, true), nil)
+    end)
+
+    H.test("Events presentation uses the resident Feast icon without mutating stock", function()
+        local stock_event = {
+            name = Missions.AREA_KEY, sort_order = 0,
+            exclude_from_area_selection = true,
+            level_image = "area_icon_bogenhafen",
+            acts = { Missions.ACT_KEY },
+        }
+        local campaign = {
+            name = "helmgart", sort_order = 1,
+            level_image = "area_icon_helmgart", acts = { "act_1" },
+        }
+        local areas = { celebrate = stock_event, helmgart = campaign }
+        local presentation = Missions.event_area_presentation(areas)
+        H.equal(presentation.exclude_from_area_selection, false)
+        H.equal(presentation.sort_order, 2)
+        H.equal(presentation.level_image, "level_image_dlc_dwarf_fest")
+        H.equal(presentation.acts, stock_event.acts)
+        H.equal(areas.celebrate, stock_event)
+        H.equal(areas.helmgart, campaign)
+    end)
+
+    H.test("Events copy changes only the selected view widgets", function()
+        local desktop = {
+            _widgets_by_name = {
+                area_title = { content = { text = "old title" } },
+                description_text = { content = { text = "old description" } },
+            },
+        }
+        H.equal(Missions.apply_event_area_copy(
+            desktop, "desktop", "Events", "Special missions"), true)
+        H.equal(desktop._widgets_by_name.area_title.content.text, "Events")
+        H.equal(desktop._widgets_by_name.description_text.content.text, "Special missions")
+
+        local controller = {
+            _widgets_by_name = {
+                area_title = { content = { text = "old title" } },
+                area_desc = {
+                    content = { text = "old description" },
+                    style = { text = { localize = true } },
+                },
+            },
+        }
+        Missions.prepare_area_copy(controller, "controller", true)
+        H.equal(controller._widgets_by_name.area_desc.style.text.localize, false)
+        H.equal(Missions.apply_event_area_copy(
+            controller, "controller", "Events", "Special missions"), true)
+        Missions.prepare_area_copy(controller, "controller", false)
+        H.equal(controller._widgets_by_name.area_desc.style.text.localize, true)
+        H.equal(Missions.apply_event_area_copy({}, "desktop", "Events", "Special missions"), false)
     end)
 
     H.test("Event diagnostic deduplication is independent per UI surface", function()

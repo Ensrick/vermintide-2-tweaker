@@ -58,6 +58,7 @@ local _area_hook_calls = 0
 local _mission_hook_calls = 0
 local _area_signatures = {}
 local _mission_signatures = {}
+local _copy_signatures = {}
 local _last_area_proof = "not-called"
 local _last_mission_proof = "not-called"
 
@@ -79,12 +80,11 @@ local function _with_celebrate_area_exposed(func, self, surface)
     end
 
     -- Both vanilla methods have the source-verified `(self)` signature and no
-    -- return value. The pure helper restores the temporary global bit even on
-    -- a Lua error, records call_ok=false without inspecting stale widgets, and
-    -- returns the original error for propagation below.
-    local area = AreaSettings[Missions.AREA_KEY]
+    -- return value. The pure helper restores the exact stock area descriptor
+    -- identity even on a Lua error, records call_ok=false without inspecting
+    -- stale widgets, and returns the original error for propagation below.
     local call_ok, call_error, should_emit, proof = Missions.run_area_setup(
-        func, self, surface, area, _area_signatures)
+        func, self, surface, AreaSettings, _area_signatures)
     _area_hook_calls = _area_hook_calls + 1
     _last_area_proof = proof
     if should_emit then
@@ -94,6 +94,28 @@ local function _with_celebrate_area_exposed(func, self, surface)
     end
 
     if not call_ok then error(call_error) end
+end
+
+local function _present_event_area_copy(func, self, surface, area_name, ...)
+    local is_event = Missions.any_enabled(_get) and area_name == Missions.AREA_KEY
+    -- Let vanilla resolve its own localization keys first. The controller's
+    -- description pass is switched to direct-string mode only after that call,
+    -- then restored before every later non-event call.
+    Missions.prepare_area_copy(self, surface, false)
+    func(self, area_name, ...)
+
+    if not is_event then return end
+    Missions.prepare_area_copy(self, surface, true)
+    local title = mod:localize("event_mission_area_name")
+    local description = mod:localize("event_mission_area_description")
+    local applied = Missions.apply_event_area_copy(
+        self, surface, title, description)
+    local signature = table.concat({ tostring(area_name), tostring(applied) }, "|")
+    if Missions.should_emit_for_surface(_copy_signatures, surface, signature) then
+        pcall(printf,
+            "[event-missions:802] Events presentation: surface=%s area=%s applied=%s campaign=untouched",
+            tostring(surface), tostring(area_name), tostring(applied))
+    end
 end
 
 local function _replace_celebrate_levels(func, self, surface, ...)
@@ -148,6 +170,18 @@ mod:hook("StartGameWindowAreaSelectionConsoleV2", "_setup_area_widgets", functio
     return _with_celebrate_area_exposed(func, self, "controller")
 end)
 
+-- Source pre-flight: no other Event Tweaker module hooks either presentation
+-- method. These wrappers alter only the view-local copy after vanilla has
+-- populated it; AreaSettings.helmgart and its Campaign widget are never read or
+-- written by the adapter.
+mod:hook("StartGameWindowAreaSelection", "_set_area_presentation_info", function(func, self, area_name, ...)
+    return _present_event_area_copy(func, self, "desktop", area_name, ...)
+end)
+
+mod:hook("StartGameWindowAreaSelectionConsoleV2", "_set_area_presentation_info", function(func, self, area_name, ...)
+    return _present_event_area_copy(func, self, "controller", area_name, ...)
+end)
+
 mod:hook("StartGameWindowMissionSelection", "_setup_level_acts", function(func, self, ...)
     return _replace_celebrate_levels(func, self, "desktop", ...)
 end)
@@ -193,6 +227,34 @@ ET.rt_register("issue626_event_mission_allowlist_contract", function()
 end)
 
 ET.rt_register("issue802_event_mission_area_scope", function()
+    local campaign = {
+        name = "helmgart",
+        sort_order = 1,
+        acts = { "act_1" },
+    }
+    local stock_event = {
+        name = Missions.AREA_KEY,
+        sort_order = 0,
+        exclude_from_area_selection = true,
+        level_image = "area_icon_bogenhafen",
+        acts = { Missions.ACT_KEY },
+    }
+    local areas = {
+        helmgart = campaign,
+        celebrate = stock_event,
+        dwarf_fest = {
+            exclude_from_area_selection = true,
+            level_image = "area_icon_dwarf_fest",
+            sort_order = 0,
+        },
+    }
+    local event_copy = Missions.event_area_presentation(areas)
+    if type(event_copy) ~= "table" then return "Events presentation was not built" end
+    if event_copy.sort_order <= campaign.sort_order then return "Events can steal Campaign's first slot" end
+    if event_copy.level_image == stock_event.level_image then return "Events still uses Bogenhafen presentation" end
+    if areas.helmgart ~= campaign then return "Campaign descriptor identity changed" end
+    if areas.celebrate ~= stock_event then return "stock celebrate descriptor changed outside transaction" end
+
     local control = { { level_id = "control" } }
     local original = { act_1 = control }
     local untouched, applied = Missions.filter_levels_for_area(

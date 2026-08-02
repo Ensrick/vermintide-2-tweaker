@@ -1,5 +1,12 @@
 # Tweaker: Events — Changelog
 
+## 0.4.41-dev (2026-08-01) - issue #802 Campaign ownership correction [verify-fix]
+
+- Corrects the deployed unhide-only candidate. Vanilla's hidden `celebrate` descriptor has `sort_order=0` and Bogenhafen presentation, while Helmgart has `sort_order=1`; controller area selection gives its first sorted entry the special Campaign widget. Exposing `celebrate` directly therefore replaced Campaign with the two event missions.
+- Builds a transient shallow Events presentation only during desktop/controller area enumeration, sorts it after every visible vanilla area, uses the resident Feast level image, and restores the exact stock `AreaSettings.celebrate` table after success or error. `AreaSettings.helmgart` is never read or written by the adapter.
+- Applies the localized **Events** title and description only to the selected view's widgets. It adds no global localization hook, persistent area mutation, custom resource, or network/campaign write.
+- Extends offline/runtime proof with Campaign index, Event index, stock identity restoration, icon provenance, view-local copy application, and the existing exact selected-area/allowlist gates. `/event_mission_probe` is the verification command after an atomic build/deploy.
+
 ## 0.4.40-dev (2026-07-22) - issue #430 read-only curse preview separation [not-started]
 
 - Split the read-only Cursed Adventure candidate collector from the injection-only selector. The Tab-hold preview now mirrors the peer-parity decision without arming or releasing `GameModeBase.is_joinable`; only an actual injection selection owns the issue-430 session lock.

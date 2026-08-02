@@ -9,6 +9,7 @@ local M = {}
 
 M.AREA_KEY = "celebrate"
 M.ACT_KEY = "act_celebrate"
+M.EVENT_ICON = "level_image_dlc_dwarf_fest"
 local PARENT_FIELDS = { "parent", "_parent" }
 
 -- Deliberately closed. A future event level must be source-audited and added
@@ -48,6 +49,47 @@ function M.enabled_ids(get)
         end
     end
     return ids
+end
+
+local function _shallow_copy(source)
+    local copy = {}
+    for key, value in pairs(source or {}) do
+        copy[key] = value
+    end
+    return copy
+end
+
+-- Vanilla's hidden celebrate descriptor is not an Events tile. It has
+-- sort_order=0 and reuses Bogenhafen's presentation, so merely unhiding it
+-- makes the controller's special first widget look like Campaign while routing
+-- that widget to act_celebrate. Build a transient view-only descriptor instead:
+-- the routing key/acts stay stock, the event icon is the resident 168x168 Feast
+-- level image, and the tile sorts after every already-visible area.
+-- AreaSettings itself is swapped only for the duration of vanilla's build.
+function M.event_area_presentation(area_settings)
+    local stock = type(area_settings) == "table" and rawget(area_settings, M.AREA_KEY)
+    if type(stock) ~= "table" then return nil, "celebrate area missing" end
+
+    local highest_visible_order = 0
+    for key, settings in pairs(area_settings) do
+        if key ~= M.AREA_KEY and type(settings) == "table"
+                and settings.exclude_from_area_selection ~= true
+                and type(settings.sort_order) == "number"
+                and settings.sort_order > highest_visible_order then
+            highest_visible_order = settings.sort_order
+        end
+    end
+
+    local presentation = _shallow_copy(stock)
+    presentation.exclude_from_area_selection = false
+    presentation.sort_order = highest_visible_order + 1
+    presentation.level_image = M.EVENT_ICON
+
+    return presentation, {
+        stock = stock,
+        sort_order = presentation.sort_order,
+        level_image = presentation.level_image,
+    }
 end
 
 -- Resolve only the two source-backed mission-view parent shapes. Keep every
@@ -225,6 +267,8 @@ function M.area_widget_proof(view)
 
     local names = {}
     local target_count = 0
+    local campaign_index
+    local event_index
     for i = 1, #widgets do
         local widget = widgets[i]
         local content = type(widget) == "table" and widget.content
@@ -232,11 +276,15 @@ function M.area_widget_proof(view)
         names[#names + 1] = tostring(area_name or "<nil>")
         if area_name == M.AREA_KEY then
             target_count = target_count + 1
+            event_index = event_index or i
+        elseif area_name == "helmgart" then
+            campaign_index = campaign_index or i
         end
     end
 
-    return string.format("widgets=%d target=%d areas=[%s]",
-        #widgets, target_count, table.concat(names, ","))
+    return string.format("widgets=%d target=%d campaign_index=%s event_index=%s areas=[%s]",
+        #widgets, target_count, tostring(campaign_index or "missing"),
+        tostring(event_index or "missing"), table.concat(names, ","))
 end
 
 function M.celebrate_level_proof(levels_by_act)
@@ -278,18 +326,65 @@ function M.area_observation(signatures, surface, call_ok, restored, view)
     return M.should_emit_for_surface(signatures, surface, signature), proof
 end
 
--- Execute the exact temporary-setting transaction used by both area hooks.
+-- Execute the exact temporary-descriptor transaction used by both area hooks.
 -- The caller owns error propagation so diagnostics can be recorded first.
-function M.run_area_setup(func, view, surface, area, signatures)
-    local previous = area.exclude_from_area_selection
-    area.exclude_from_area_selection = false
-    local call_ok, call_error = pcall(func, view)
-    area.exclude_from_area_selection = previous
+function M.run_area_setup(func, view, surface, area_settings, signatures)
+    local presentation, metadata = M.event_area_presentation(area_settings)
+    if not presentation then
+        local problem = metadata or "event presentation unavailable"
+        local should_emit, proof = M.area_observation(
+            signatures, surface, false, true, view)
+        return false, problem, should_emit, proof
+    end
 
-    local restored = area.exclude_from_area_selection == previous
+    local previous = metadata.stock
+    area_settings[M.AREA_KEY] = presentation
+    local call_ok, call_error = pcall(func, view)
+    area_settings[M.AREA_KEY] = previous
+
+    local restored = rawget(area_settings, M.AREA_KEY) == previous
     local should_emit, proof = M.area_observation(
         signatures, surface, call_ok, restored, view)
+    proof = string.format("%s presentation_sort=%s presentation_icon=%s stock_identity=%s",
+        proof, tostring(metadata.sort_order), tostring(metadata.level_image), tostring(restored))
     return call_ok, call_error, should_emit, proof
+end
+
+-- The stock celebrate descriptor also carries Bogenhafen's title and
+-- description. Area-selection windows keep those strings in view-local widgets,
+-- so replace only that visible copy after vanilla has completed. The controller
+-- description pass normally localizes its content; our already-localized mod
+-- string must explicitly opt out, and the next non-event selection restores the
+-- vanilla mode before its original method runs.
+function M.prepare_area_copy(view, surface, is_event)
+    if surface ~= "controller" then return end
+    local widgets = type(view) == "table" and view._widgets_by_name
+    local area_desc = type(widgets) == "table" and widgets.area_desc
+    local text_style = type(area_desc) == "table"
+        and type(area_desc.style) == "table"
+        and area_desc.style.text
+    if type(text_style) == "table" then
+        text_style.localize = not is_event
+    end
+end
+
+function M.apply_event_area_copy(view, surface, title, description)
+    local widgets = type(view) == "table" and view._widgets_by_name
+    if type(widgets) ~= "table" then return false end
+
+    local title_widget = widgets.area_title
+    local description_widget = surface == "controller"
+        and widgets.area_desc or widgets.description_text
+    if type(title_widget) ~= "table" or type(title_widget.content) ~= "table"
+            or type(description_widget) ~= "table"
+            or type(description_widget.content) ~= "table" then
+        return false
+    end
+
+    title_widget.content.text = title
+    description_widget.content.text = description
+    return title_widget.content.text == title
+        and description_widget.content.text == description
 end
 
 -- Filter, assign, then return the value read back from the view. This order is
