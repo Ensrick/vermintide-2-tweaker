@@ -64,6 +64,12 @@ return function(H, repo_root)
 		H.equal(policy.next_style("es_deus_01", "empire", function() return true end), "elven")
 		H.equal(policy.style("we_1h_spears_shield"), "elven")
 		H.equal(policy.next_style("we_1h_spears_shield", "elven", function() return true end), "empire")
+		H.equal(policy.style("es_sword_shield"), "empire")
+		H.equal(policy.next_style("es_sword_shield", "empire", function() return true end),
+			"bretonnian")
+		H.equal(policy.style("es_sword_shield_breton"), "bretonnian")
+		H.equal(policy.next_style("es_sword_shield_breton", "bretonnian",
+			function() return true end), "empire")
 	end)
 
 	H.test("CWV inventory indicator follows each exact member cycle", function()
@@ -121,11 +127,39 @@ return function(H, repo_root)
 			"attack_swing_charge_left_diagonal")
 		H.equal(policy.remap_event("wh_2h_sword", "bretonnian", "wh_zealot", "attack_swing_up_left"),
 			"attack_swing_left_diagonal")
+		local empire_sword = policy.package("es_sword_shield_breton", "empire")
+		local bretonnian_sword = policy.package("es_sword_shield", "bretonnian")
+		H.equal(empire_sword.template, "one_handed_sword_shield_template_1")
+		H.equal(empire_sword.resource,
+			"units/beings/player/first_person_base/state_machines/melee/1h_sword_shield")
+		H.equal(bretonnian_sword.template, "one_handed_sword_shield_template_2")
+		H.equal(bretonnian_sword.resource,
+			"units/beings/player/first_person_base/state_machines/melee/1h_sword_shield_breton")
+		H.equal(bretonnian_sword.required_dlc, "lake")
+		H.equal(empire_sword.remap_key, nil)
+		H.equal(bretonnian_sword.remap_key, nil)
 		for _, item_key in ipairs({ "dr_1h_axe", "wh_1h_axe", "we_1h_axe",
 				"we_2h_axe", "dr_2h_axe", "es_1h_sword", "we_1h_sword", "we_spear" }) do
 			H.equal(policy.member(item_key), nil)
 			H.truthy(policy.diagnostic_candidate(item_key))
 		end
+	end)
+
+	H.test("CWV native Sword and Shield styles never capture custom CWV clones", function()
+		local runtime = policy.install({ get = function() end, set = function() end }, {
+			cwv_key_for_item = function(backend_id)
+				if backend_id == "elf_clone" then return "cwv_we_sword_shield" end
+				if backend_id == "longsword_clone" then return "cwv_es_longsword_shield" end
+				return nil
+			end,
+		})
+		H.equal(runtime:describe({ backend_id = "elf_clone", name = "es_sword_shield" }), nil)
+		H.equal(runtime:describe({ backend_id = "longsword_clone",
+			name = "es_sword_shield_breton" }), nil)
+		H.equal(runtime:describe({ backend_id = "native_empire",
+			name = "es_sword_shield" }).style_id, "empire")
+		H.equal(runtime:describe({ backend_id = "native_bretonnian",
+			name = "es_sword_shield_breton" }).style_id, "bretonnian")
 	end)
 
 	H.test("CWV reciprocal style DLC gates skip unavailable donors", function()
@@ -136,6 +170,11 @@ return function(H, repo_root)
 		H.equal(next_id, "empire")
 		local own_all = function() return true end
 		H.equal(policy.next_style("es_deus_01", "empire", own_all), "elven")
+		H.equal(policy.next_style("es_sword_shield", "empire", own_grass_only), "empire")
+		H.equal(policy.next_style("es_sword_shield", "empire",
+			function(name) return name == "lake" end), "bretonnian")
+		H.equal(policy.next_style("es_sword_shield_breton", "bretonnian",
+			function() return false end), "empire")
 	end)
 
 	H.test("CWV Combat Style input descriptions never exceed the vanilla widget pool", function()

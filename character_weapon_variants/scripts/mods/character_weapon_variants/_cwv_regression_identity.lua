@@ -78,6 +78,8 @@ _rt_register("issue620_per_instance_combat_styles", function()
 		cwv_es_longsword = { "longsword", "bretonnian", "kerillian", "greatsword" },
 		es_2h_hammer = { "kruber", "warrior_priest" },
 		es_2h_heavy_spear = { "hunter", "infantry" },
+		es_sword_shield = { "empire", "bretonnian" },
+		es_sword_shield_breton = { "bretonnian", "empire" },
 	}
 	for item_key, order in pairs(expected) do
 		local _, _, _, member = policy.style(item_key)
@@ -247,6 +249,20 @@ _rt_register("issue645_reciprocal_style_descriptors", function()
 			or policy.remap_event("es_deus_01", "elven", "es_knight",
 				"attack_swing_stab_lh") ~= "attack_swing_stab" then
 		return "reciprocal Spear and Shield event translations drifted"
+	end
+	local empire_sword = policy.package("es_sword_shield_breton", "empire")
+	local bretonnian_sword = policy.package("es_sword_shield", "bretonnian")
+	if not empire_sword or empire_sword.template ~= "one_handed_sword_shield_template_1"
+			or empire_sword.resource ~= "units/beings/player/first_person_base/state_machines/melee/1h_sword_shield"
+			or not bretonnian_sword
+			or bretonnian_sword.template ~= "one_handed_sword_shield_template_2"
+			or bretonnian_sword.resource ~= "units/beings/player/first_person_base/state_machines/melee/1h_sword_shield_breton"
+			or bretonnian_sword.required_dlc ~= "lake" then
+		return "reciprocal Empire/Bretonnian Sword and Shield descriptors drifted"
+	end
+	if type(rawget(Weapons, empire_sword.template)) ~= "table"
+			or type(rawget(Weapons, bretonnian_sword.template)) ~= "table" then
+		return "reciprocal Empire/Bretonnian Sword and Shield donor template missing"
 	end
 	for _, item_key in ipairs({ "dr_1h_axe", "wh_1h_axe", "we_1h_axe",
 			"we_2h_axe", "dr_2h_axe", "es_1h_sword", "we_1h_sword", "we_spear" }) do

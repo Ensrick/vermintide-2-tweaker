@@ -13,6 +13,7 @@ properties, traits, and CWV identity do not change.
 | Greathammer | Kruber Greathammer, Warrior Priest Greathammer, CWV Sigmarite Greathammer | Kruber, Warrior Priest |
 | Tuskgor Spear | Native Kruber Tuskgor Spear; migrated legacy Infantry Spear UUIDs | Hunter, Infantry |
 | Spear and Shield | Native Kruber Chaos Wastes Spear and Shield and Kerillian Spear and Shield | Kruber, Elven |
+| Sword and Shield | Native Empire Sword and Shield and Bretonnian Sword and Shield | Empire, Bretonnian |
 
 Kerillian Greatsword style deep-clones the donor template and every referenced
 damage profile before applying its package: 15% slower attack actions, 25%
@@ -156,6 +157,22 @@ Kerillian's uses `one_handed_spears_shield_template`, `scorpion`,
 The bidirectional event translations are the existing source-audited WT
 contract [repo: `docs/WEAPON_CATALOG.md:310-322`].
 
+Empire and Bretonnian Sword and Shield form a second reciprocal family. Each
+style resolves the complete native donor template rather than copying only its
+actions: Empire uses `one_handed_sword_shield_template_1` with
+`.../melee/1h_sword_shield`; Bretonnian uses
+`one_handed_sword_shield_template_2` with
+`.../melee/1h_sword_shield_breton`. The equipped item remains authoritative
+for the sword, shield, illusion, glow, and icon. Both donors are native Kruber
+graphs with registered wield/action events, so they require no invented 3P
+translation or model transform. The Bretonnian style is gated by `lake`.
+
+Provenance: Empire item/template identity is source-backed at
+`scripts/settings/equipment/item_master_list_exported.lua:6639-6658` and
+`scripts/settings/equipment/weapon_templates/1h_swords_shield.lua:1364-1365`;
+Bretonnian is at `scripts/settings/dlcs/lake/item_master_list_lake.lua:411-429`
+and `scripts/settings/equipment/weapon_templates/1h_swords_shield_breton.lua:1250-1251`.
+
 The CWV-to-WT effective-template contract below is a third-person animation
 handoff only; it does not repair first-person donor-state-machine events. A
 reciprocal Spear and Shield style is not verification-ready until its receiver
@@ -213,3 +230,10 @@ lossless migration. Never mutate a donor template, persist a table/function,
 send a template over the wire, poll per frame, or special-case another preview
 surface outside the shared appearance consumers. A candidate without complete
 remap/transform evidence belongs in `DIAGNOSTIC_CANDIDATES`, not `FAMILIES`.
+
+When resolving an exact item, an explicit CWV identity is authoritative. If a
+custom CWV key is not itself a registered family member, resolution fails
+closed and never falls through to the clone's inherited vanilla `name`. This
+prevents custom Sword-and-Shield variants, and future variants, from losing
+their authored template or balance merely because a native donor joins a
+Combat Style family.

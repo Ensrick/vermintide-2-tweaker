@@ -1,5 +1,17 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.479-dev (2026-08-01) - reciprocal Sword and Shield Combat Styles (#657) [verify-fix]
+
+- Added **Empire Sword and Shield** and **Bretonnian Sword and Shield** to the
+  existing per-instance Combat Style registry, with each native item cycling
+  to the other complete native attack template.
+- Kept the equipped item authoritative for its model, shield, illusion, glow,
+  icon, properties, and backend instance. Bretonnian style remains DLC-gated,
+  and explicit CWV identities fail closed instead of inheriting a native name.
+- Added offline and runtime coverage for both donor descriptors and both cycle
+  orders. Solo action/block/presentation verification comes before the shared
+  remote-husk follow-up tracked with #786.
+
 ## 0.1.478-dev (2026-08-01) - owner-scoped primary-slot Musket ammo (#932)
 
 - Replaced the legacy process-global Old Musket extension set with one reserve
