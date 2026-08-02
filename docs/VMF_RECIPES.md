@@ -510,16 +510,23 @@ re-Add for the next 47 seconds before the user's toggle attempt at
 
 ## 4. RPC string parameter cap = 500 chars (and VMF JSON-packs all args)
 
-**Rule:** Stingray hardcaps every RPC string parameter at **500 characters**
-(`scripts/helpers/network_utils.lua:93`, `STRING_MAX = 500`). VMF's
+**Rule:** every RPC string parameter is capped at **500 characters**. The value is
+a Lua-side constant, `NetworkConstants.max_string_length = 500`
+(`scripts/network_lookup/network_constants.lua:4`) — vanilla consumers read it
+rather than repeating the literal (`scripts/helpers/network_utils.lua:93`,
+`scripts/network/shared_state.lua:297`, `chat_manager.lua:551`). VMF's
 `mod:network_send` JSON-encodes every user arg into a single string parameter,
 so any payload that exceeds the cap silently no-ops.
+
+[src: `scripts/network_lookup/network_constants.lua:4`; `scripts/helpers/network_utils.lua:93`; `scripts/network/shared_state.lua:297`]
 
 ### Why
 
 `ModManager.network_send(destination_peer_id, port, payload)`
-(`mod_manager.lua:595`) calls
-`RPC.rpc_mod_user_data(channel_id, src, dst, port, payload)`. VMF wraps
+(`scripts/managers/mod/mod_manager.lua:595`) calls
+`RPC.rpc_mod_user_data(channel_id, self._my_peer_id, destination_peer_id, port, payload)`
+at `:603` (local sends detour through `network_transmit:queue_local_rpc` at `:597`).
+[src: `scripts/managers/mod/mod_manager.lua:595,597,603`] VMF wraps
 `mod:network_send(rpc_name, target, ...args)` by JSON-encoding
 `(rpc_name_id, args...)` into the single `payload` string. A 105-key settings
 table → ~4-5KB JSON → fatal:
@@ -532,10 +539,14 @@ too many characters in string with max length 500
 The error fires inside VMF's safe-hook wrapper so it **never surfaces as a
 crash** — the broadcast silently no-ops and clients receive nothing.
 
-The cap is **hardcoded in the engine** and not affected by any in-game
-setting. `max_upload_speed = 512` is bandwidth throttling, unrelated — the
-500/512 proximity is a red herring. `small_network_packets` controls MTU
-(576), also unrelated.
+The cap is a **fixed Lua constant** (`network_constants.lua:4`), not something any
+in-game setting moves — treat it as immutable, but do not describe it as an opaque
+engine value: it is right there in the decompile, and the engine-side wire limit it
+mirrors lives in `global.network_config`. `max_upload_speed = 512` is bandwidth
+throttling, unrelated — the 500/512 proximity is a red herring.
+`small_network_packets` controls MTU (576), also unrelated. [The `512`/`576`
+config semantics are asserted from configuration naming, not read out of source —
+unverified.]
 
 ### Fix: mirror vanilla `shared_state.lua` chunking
 
@@ -934,13 +945,19 @@ ui_renderer_injections = {
   path when `UIRenderer.create` runs, it silently poisons the **entire** Gui
   material loading pass — ALL materials (including VMF's `vmf_atlas` and
   other mods' atlases) fail to load. See `cosmetics_tweaker` section in
-  `DEVELOPMENT.md`.
+  `DEVELOPMENT.md`. The vanilla table and the creation seam are real:
+  [src: `scripts/ui/ui_renderer.lua:234,237`] (`UIRenderer._injected_material_sets = {}`
+  and the loop that walks it) and [src: `scripts/ui/ui_renderer.lua:246`]
+  (`UIRenderer.create`). The whole-pass poisoning consequence is a runtime
+  observation, not a source-read control-flow path — *unverified*.
 - VMF's hook on `UIRenderer.create` fires at game boot (VMF inits before
-  game scripts).
+  game scripts). [unverified — VMF's own source is not in the decompile tree]
 - Each `.material` file creates ONE Gui material named after the filename
-  (not per-definition).
+  (not per-definition). [unverified]
 - `Gui.create_material` and `Gui.create` do NOT exist in VT2 — materials
-  only at creation time.
+  only at creation time. [unverified: no `Gui.create*` call appears anywhere in the
+  Lua decompile, but `Gui.*` is an engine C API, so absence from Lua is consistent
+  with the claim without proving it. Vanilla creates GUIs via `World.create_screen_gui`.]
 
 ### Detecting injected materials at runtime
 
@@ -1286,17 +1303,26 @@ Preventive. No recorded burn yet — landed alongside the universal applied-mark
 
 ## 12. Stingray `event:register` signature — 3rd arg MUST be a string method name
 
-**Rule:** Stingray's per-state `EventManager:register(target_object, event_name, callback_name)` resolves the callback BY NAME against `target_object` at fire time — it does `target_object[callback_name](target_object, ...)` from C++. The 3rd arg MUST be a string method name (or a string identifying a function field on the object). Passing a function VALUE (`em:register(mod, "ev", _local_fn)`) makes the engine try to index `mod[<function>]` and emits:
+**Rule:** `EventManager:register(target_object, ...)` is VARIADIC over `(event_name, callback_name)` PAIRS — you can register several events in one call — and every `callback_name` MUST be a string naming a function field on `target_object`. Passing a function VALUE (`em:register(mod, "ev", _local_fn)`) is rejected at REGISTER time by an eager assert:
 
 ```
-[Script Error] (script) ... No function found with name '[function]'
+[Script Error] (script) ... No function found with name '[function]' on supplied object
 ```
 
-The handler never fires and the feature silently dies.
+That message is `fassert` at `foundation/scripts/managers/event/event_manager.lua:16`, and `fassert` is `assert(false, message)` — a real raise, not a warning. So the registration itself fails; the handler is never stored. You will only observe the "silently dies, no diagnostic" symptom when that raise is swallowed by an enclosing `pcall` — which is exactly what happens if you register from inside a VMF-wrapped callback (`mod:safe_hook`, a VMF callback body). If you register from a bare call site, you get the error loudly.
+
+[src: `foundation/scripts/managers/event/event_manager.lua:11-23,42`; `foundation/scripts/util/error.lua:25-31`]
 
 ### Why
 
-This is `Managers.state.event` (the per-state EventManager) — NOT `mod:hook` (VMF wrapper) and NOT `mod:command` (VMF chat). The EventManager is a vanilla Stingray API; its `register` method accepts `(object, event_name, callback_name)` where the third arg is fed straight into a C++ `object:method_by_name(callback_name, ...)` call at fire time. There is no function-value fallback path. VMF doesn't wrap or sanity-check this; you reach through `Managers.state.event` directly.
+This is `Managers.state.event` (the per-state EventManager) — NOT `mod:hook` (VMF wrapper) and NOT `mod:command` (VMF chat). It is a vanilla **Lua** manager, not a C++ seam: `register` walks its varargs two at a time, asserts `type(object[callback_name]) == "function"` on each pair, and stores `self._events[event_name][object] = callback_name` in a weak-valued table. `trigger` later does a plain Lua `object[callback_name](object, ...)`. There is no function-value fallback path at either end.
+
+Two practical consequences the older wording got wrong:
+
+- **The rejection is eager, not deferred.** Nothing waits until the event fires. If `register` returned without raising, your callback name resolved.
+- **The weak-valued `__mode = "v"` events table means a registered `object` that goes unreachable is collected**, silently dropping the registration. Keep a strong reference to whatever you register (the mod table qualifies).
+
+[src: `foundation/scripts/managers/event/event_manager.lua:11-23,18-20,37-44`]
 
 ### How to apply
 

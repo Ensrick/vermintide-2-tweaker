@@ -15,7 +15,7 @@
 #   bundle state           - fresh / STALE / none (see HEURISTIC below)
 #   last Workshop upload    - newest 'Uploaded new content' OR 'No content change'
 #                            timestamp for the cfg published_id in workshop_log.txt
-#   ND                     - a [not deployed] marker in any of the top-3 CHANGELOG entries
+#   ND                     - a [not deployed] marker on any of the top-3 CHANGELOG entry HEADER lines (body prose is historical and never counts)
 #   verdict                - IN-SYNC / CHANGELOG-DRIFT / BUNDLE-STALE / UPLOAD-BEHIND
 #                            (verdicts combine with '+' when more than one rung is off)
 #
@@ -111,8 +111,14 @@ function Get-ChangelogTopVersion([string]$text) {
 }
 
 function Test-ChangelogNotDeployed([string]$text, [int]$TopN = 3) {
-    # True if any of the top-N CHANGELOG entries (header line through the body
-    # before the next `## ` header) mentions "not deployed" / "not-deployed".
+    # True if any of the top-N CHANGELOG entry HEADER lines (`## ...`) carries a
+    # "not deployed" / "not-deployed" lifecycle marker. Header lines ONLY, by
+    # ruling 2026-08-02: entry BODIES legitimately contain historical prose like
+    # "verification only. NOT deployed, NOT uploaded" (vdl 1.0.5/1.0.6 Build
+    # notes) describing what that session did at write time - a later ship
+    # covers those changes, so body prose must not flag forever. The lifecycle
+    # marker doctrine (PROJECT_STANDARDS section 6.4) puts status tags on the
+    # header line, which is the only place this heuristic reads.
     $lines = $text -split '\r?\n'
     $headerIdx = @()
     for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -121,10 +127,7 @@ function Test-ChangelogNotDeployed([string]$text, [int]$TopN = 3) {
     if ($headerIdx.Count -eq 0) { return $false }
     $limit = [Math]::Min($TopN, $headerIdx.Count)
     for ($e = 0; $e -lt $limit; $e++) {
-        $start = $headerIdx[$e]
-        $end = if (($e + 1) -lt $headerIdx.Count) { $headerIdx[$e + 1] - 1 } else { $lines.Count - 1 }
-        $chunk = ($lines[$start..$end] -join "`n")
-        if ($chunk -match '(?i)not[ -]?deployed') { return $true }
+        if ($lines[$headerIdx[$e]] -match '(?i)not[ -]?deployed') { return $true }
     }
     return $false
 }
@@ -247,6 +250,9 @@ if ($SelfTest) {
     if (Test-ChangelogNotDeployed "## 0.3.74-dev - shipped`n- body`n## 0.3.73-dev`n") { $fail += 'nd-parse: false positive' }
     # Marker only in the 4th entry must NOT flag (top-3 window).
     if (Test-ChangelogNotDeployed "## a`n## b`n## c`n## d [not deployed]`n" 3) { $fail += 'nd-parse: 4th-entry leaked into top-3' }
+    # Historical body prose ("verification only. NOT deployed, NOT uploaded" in a
+    # Build subsection) must NOT flag - only header-line lifecycle markers count.
+    if (Test-ChangelogNotDeployed "## 1.0.6 (2026-05-25) - tidy`n### Build`nVMBLauncher.exe build x -- verification only. NOT deployed, NOT uploaded.`n## 1.0.5`n") { $fail += 'nd-parse: body prose false positive' }
 
     if ($fail.Count -eq 0) {
         Write-Host "[check_pipeline_state -SelfTest] OK - verdict + parser fixtures pass." -ForegroundColor Green

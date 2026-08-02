@@ -79,7 +79,8 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 ### Athanor accessory properties
 
-- The no-item Athanor layout assigns property slots 1-10 to `offence_accessory`, 11-20 to `defence_accessory`, and 21-30 to `utility_accessory`. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:24-65]
+- The no-item Athanor property ring holds 30 slots as three layers of 10: the `property` entry of `amulet_slot_layout` declares `max_amount = 30`, `amount_per_layer = 10`, and three `layer_settings` rows of 10 each. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:39-64]
+- Which category owns which slot-index band (whether that is 1-10 `offence_accessory`, 11-20 `defence_accessory`, 21-30 `utility_accessory`) is NOT stated in the layout table — `amulet_slot_layout` is pure geometry (radius/degrees/counts) and names no category. The three `*_accessory` keys appear in this file only as a `Localize` sub-title map at lines 112-119, which does not bind them to slot indices. The band mapping needs a source-verified binding site before it can be asserted. [unverified]
 - Vanilla computes a property row's used amount as the full length of the property-key slot-index array; it does not filter that array by the row's category. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:718-740]
 - Vanilla passes the active category to `_find_slot_by_key`, but the function accepts only the key and menu-option arguments and returns the last aggregate slot index for that key. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:2402-2423,2483-2501]
 - Vanilla Clear identifies properties by membership in the active category's property-key list, then removes every stored index under a matching key; it does not test whether each index belongs to the category's slot layer. [src: scripts/ui/views/hero_view/windows/hero_window_weave_properties.lua:2540-2632]
@@ -108,7 +109,8 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   (`slot_index`); bridge via `info.spawn_data[1].slot_index`. [memory: (CLAUDE.md § Three Weapon Rendering Paths)]
 - The runtime keep inventory previewer instance is `MenuWorldPreviewer`, not
   `HeroPreviewer`; `HeroPreviewer` itself is only instantiated by
-  `team_previewer.lua`. [memory: feedback_inventory_preview_hook_menuworldpreviewer]
+  `team_previewer.lua` (the sole `HeroPreviewer:new` call site in the tree).
+  [src: scripts/ui/views/team_previewer.lua:20; scripts/ui/views/hero_view/states/hero_view_state_loot.lua:1866]
 - cim's loadout-restore must hook `BackendUtils.set_loadout_item` (table-form,
   deferred), not just `BackendInterfaceItemPlayfab` — LA routes menu equips through
   a clone that bypasses the class hook. [memory: reference_cim_equip_capture_la_dispatch]
@@ -133,20 +135,31 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   `localized_name` on a base key is cosmetic-grade — UNSAFE as a weapon-TYPE
   label. Key any "what weapon TYPE is this" UI on a curated key→type map (wt's
   `_WEAPON_NAME`), not on `localized_name`. Same trap as the vs_* cosmetic-grade
-  display strings below. [src: scripts/settings/equipment/item_master_list_exported.lua:7500 (dr_2h_pick), :6797 (es_handgun); scripts/settings/equipment/item_master_list.lua:115 (localized_name = Localize(display_name))]
+  display strings below. [src: scripts/settings/equipment/item_master_list_exported.lua:7501 (dr_2h_pick), :6797 (es_handgun); scripts/settings/equipment/item_master_list.lua:115 (localized_name = Localize(display_name))]
 
 ## Domain: Networking / RPC
 
+- `NetworkConstants` is defined in one place, and only two of its fields are Lua
+  literals (`max_string_length = 500`, `max_attachments = 4`). Every bounded
+  resource field — `damage`, `health`, `velocity`, `position`, `rotation`,
+  `max_overcharge`, `max_energy`, `ping`, `number`, `game_object_id`, `weave_score` —
+  is `Network.type_info("<name>")`, i.e. resolved at RUNTIME from the engine's
+  `global.network_config`. Field names are greppable; the numeric caps are not. [src: scripts/network_lookup/network_constants.lua:3-4,19-38]
 - Direct widening of network-bounded resource maxes (`_max_overcharge`,
   `_max_energy`, `_max_ammo`, etc.) crashes peers via fassert — these caps are
   hardcoded in the engine `.network_config`; buff resources via consumption-side
   stat_buffs (`reduced_overcharge`, `ammo_used_multiplier`) instead. [memory: feedback_vt2_max_resource_consumption_side]
 - Downward CLAMPS of `_max_*` (a `math.min(...)` RHS, or guarded
   `if X > CONST then X = CONST end`) are SAFE; only bare upward assignments crash. [bugclass: (CHECKS.md row 7f)]
-- Stingray `EventManager:register(object, event_name, callback_name)` requires the
-  3rd arg to be a STRING method name on `object`; a function value makes the
-  engine emit `No function found with name '[function]'` and the handler silently
-  dies. [bugclass: §3b]
+- `EventManager:register(object, ...)` is variadic over `(event_name, callback_name)`
+  PAIRS — not a fixed 3-arg call — and each `callback_name` must be a STRING naming
+  a function field on `object`. It is pure Lua, not a C++ seam: registration
+  validates EAGERLY with `fassert(type(object) == "table" and type(object[callback_name]) == "function", "No function found with name %q on supplied object", callback_name)`,
+  and `fassert` is `assert(false, message)` — a real raise, not a no-op. Fire-time
+  dispatch is likewise plain Lua (`object[callback_name](object, ...)`). So passing
+  a function VALUE is rejected at REGISTER time, not silently at fire time; the
+  "handler silently dies" symptom appears only when that raise is swallowed by an
+  enclosing pcall (e.g. a VMF-wrapped callback). [src: foundation/scripts/managers/event/event_manager.lua:11-23,42; foundation/scripts/util/error.lua:25-31]
 - `Managers.state.event` is REBUILT on every state transition (StateInGame /
   StateLoading / StateTitleScreen); event registrations must be re-applied on each
   fresh handle. [bugclass: §3b]
@@ -163,8 +176,9 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   `twitch_no_overcharge_no_ammo_reloads` prevents reserve-ammo subtraction, and
   `PlayerUnitOverchargeExtension` independently returns before adding heat when
   that same buff is present. [src: scripts/unit_extensions/generic/generic_ammo_user_extension.lua:160-176; scripts/unit_extensions/default_player_unit/charge/player_unit_overcharge_extension.lua:343-368]
-- VMF RPC string payloads are capped at 500 chars by a Stingray hardcap; chunk
-  longer payloads. [memory: reference_vmf_rpc_string_cap]
+- VMF RPC string payloads are capped at 500 chars: `NetworkConstants.max_string_length = 500`
+  is a Lua-side constant (not an opaque engine value), and vanilla chunks against it
+  in `shared_state.lua`; chunk longer payloads the same way. [src: scripts/network_lookup/network_constants.lua:4; scripts/network/shared_state.lua:297]
 
 ## Domain: Bot commands / social wheel
 
@@ -184,6 +198,11 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 - `ConflictDirector.spawn_queued_unit` places a breed in the director's spawn
   queue, and `update_spawn_queue` waits for required breed packages to be loaded
   on every peer before completing the queued spawn. [src: scripts/managers/conflict_director/conflict_director.lua:1732-1791,1847-1891]
+- The director's per-frame entry point is `ConflictDirector.update`; the pacing and
+  spawn stages it drives are separate named methods on the same class —
+  `update_main_path_player_info`, `update_player_areas`, `update_horde_pacing`,
+  `update_mini_patrol`, and `update_spawn_queue` (clients run `update_client`
+  instead). [src: scripts/managers/conflict_director/conflict_director.lua:520,669,890,1377,1430,1835,4052]
 - Vanilla classifies ranged victim modifiers with
   `RangedAttackTypes[buff_attack_type]` inside
   `DamageUtils.apply_buffs_to_damage`, after base damage enters the singleton
@@ -202,16 +221,24 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   all but the first (e.g. `HordeSpawner.compose_blob_horde_spawn_list`'s
   `num_to_spawn`). [bugclass: §2]
 - Adventure-injected levels crash on the `no_roamers` mutator; ct strips
-  incompatible mutators as the mitigation. [memory: reference_vt2_adventure_pack_spawning_compat]
-- Vanilla `NetworkedFlowStateManager` leaks and fatals at 512 states; ct patches
-  it via `mod:hook`. [memory: reference_vt2_networked_flow_state_leak]
+  incompatible mutators as the mitigation. The mutator itself exists
+  (`scripts/settings/mutators/mutator_no_roamers.lua`), but the crash interaction
+  with Adventure-injected levels is a runtime observation with no source site
+  opened and no surviving memory note. [unverified]
+- Vanilla `NetworkedFlowStateManager` caps at `self._max_states = 512` and fatals
+  via `fassert(self._num_states < self._max_states, "…Too many object states(%i)…")`
+  when a leak pushes past it; ct patches it via `mod:hook`. [src: scripts/managers/networked_flow_state/networked_flow_state_manager.lua:55,381]
 
 ## Domain: Animation / 3P
 
-- 1P animations are universal across all six characters (the `first_person_base`
-  unit is shared); only the 3P body is character-specific and needs cross-character
-  remap work. Never override `anim_event` / `wield_anim` / `state_machine` per
-  character. [memory: feedback_1p_animations_universal]
+- 1P animations are universal across all six characters: `first_person_base_units`
+  declares ONE shared driver unit path (`units/beings/player/first_person_base/chr_first_person_base`)
+  applied to every profile, and the default 1P state machine is the single shared
+  `.../first_person_base/state_machines/common`. Only the 3P body is
+  character-specific and needs cross-character remap work. Never override
+  `anim_event` / `wield_anim` / `state_machine` per character. (The per-character
+  paths under `first_person_base/` are the skinned `chr_first_person_mesh`, not the
+  animation driver.) [src: scripts/settings/profiles/base_units.lua:3-5,42; scripts/settings/profiles/sp_profiles.lua:120]
 - Universal does not mean automatically resident: `ProfileSynchronizer` derives
   first-person state-machine packages from the backend loadout visible during its
   inventory-list pass, so a later modded resync can wield a different template
@@ -226,16 +253,18 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   bodies are recorded data, not inference. [dump: ANIMATION_RESEARCH.md]
 - `wield_anim_career_3p` is NOT read by the engine — it was an invented field with
   no consuming code path (confirmed dead during the monolithic-tweaker era). [dump: ANIMATION_RESEARCH.md]
-- The mutator template `server_*_function` fields are dead as written; the engine
-  wraps them into `template.server.start_function` (etc.) at boot, so hook the
-  wrapped form. [memory: reference_vt2_mutator_template_server_wrap]
+- The mutator template `server_*_function` fields are dead as written; boot-time
+  registration wraps each into `template.server.start_function` / `.stop_function`
+  (a closure that calls the vanilla default first, then the template's own), and
+  assigns `template.server.update = template.server_update_function` outright — so
+  hook the wrapped form. [src: scripts/managers/game_mode/mutator_templates.lua:260-269,271-278,532-533]
 
 ## Domain: Cosmetics / Illusions
 
-- The `weaves` material-settings shape (vanilla
-  `weapon_material_settings_templates.lua:52`) requires all five vector3 channels
-  (`color_glow_high`/`color_glow_low`/`color_smoke_high`/`color_smoke_low` + one
-  more) to be present; the per-instance glow popup depends on this exact shape. [src: scripts/settings/equipment/weapon_material_settings_templates.lua:52]
+- The `weaves` material-settings shape requires all FIVE vector3 channels to be
+  present — `color_glow_high`, `color_glow_low`, `color_smoke_high`,
+  `color_smoke_low`, and `color_dots` — and the per-instance glow popup depends on
+  this exact shape. [src: scripts/settings/equipment/weapon_material_settings_templates.lua:52-83]
 - Adding a runtime weapon skin requires injecting into three tables
   (`ItemMasterList[skin_key]`, `WeaponSkins.skins[skin_key]`,
   `WeaponSkins.skin_combinations[...]`) then hooking
@@ -274,7 +303,8 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 - The DLC id for gated content lives on the master entry's `required_dlc` field;
   the vanilla gate is `Managers.unlock:is_dlc_unlocked(required_dlc)`, pre-checked
-  with `dlc_exists` to avoid the fassert at `unlock_manager.lua:527`. [src: scripts/settings/dlc_settings.lua:274]
+  with `dlc_exists` to avoid the fassert at `unlock_manager.lua:527`.
+  [src: scripts/settings/equipment/item_master_list_exported.lua:61; scripts/managers/backend_playfab/backend_interface_item_playfab.lua:854; scripts/managers/backend_playfab/playfab_mirror_base.lua:207; scripts/managers/unlock/unlock_manager.lua:516,527,548]
 - event_tweaker's DLC-by-mutator/preset ids were taken from `dlc_settings.lua`:
   `:274` (geheimnisnacht_2021), `:576` (geheimnisnacht_2025), `:287`
   (skulls_2023). [src: scripts/settings/dlc_settings.lua:274]
@@ -282,7 +312,9 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   they craft into the mirror but the Adventure grid filters them out at the
   `get_filtered_items` layer — debug the filtered layer, not
   `get_all_backend_items`. [memory: reference_vt2_versus_items_hidden_in_adventure]
-- `DeusPowerUp` rarities are limited to event/rare/exotic/unique only. [memory: reference_vt2_deus_power_up_rarities]
+- `DeusPowerUp` rarities are limited to event/rare/exotic/unique only —
+  `DeusPowerUpRarities` is exactly that four-entry list, and a boot-time check
+  fatals if `DeusPowerUpRarityPool` does not carry the same set. [src: scripts/settings/dlcs/morris/deus_power_up_settings.lua:7032-7037,7065-7067]
 
 ## Domain: Network / session lifecycle
 
@@ -338,16 +370,14 @@ or opened during seeding. They are placeholders ON PURPOSE. Do NOT fill them fro
 model knowledge — grep the decompiled source, capture a dump, or get a maintainer
 statement, then promote.
 
-- Exact `ConflictDirector` spawn/pacing pipeline entry-point function names and
-  their call order (intensity → pacing → horde compose → spawn). Not yet opened in
-  `scripts/managers/conflict_director/conflict_director.lua`. [unverified]
-- The precise `NetworkConstants` field names and numeric caps for each bounded
-  resource (overcharge/energy/ammo/health/stamina/push_power). The memory note
-  establishes that caps exist and crash on widening, but the exact constant table
-  and values have not been read out of source. [unverified]
+- The precise NUMERIC caps behind each bounded network resource
+  (damage/health/overcharge/energy/velocity/position). The constant TABLE is now
+  grounded — see the Networking / RPC domain — but the numbers are NOT readable
+  from this tree: every bounded field is `Network.type_info("<name>")`, resolved at
+  runtime from the engine's `global.network_config`, which is not part of the Lua
+  decompile. Only `max_string_length = 500` and `max_attachments = 4` are literals.
+  Closing this needs an IN-GAME DUMP of the resolved `NetworkConstants` table, not
+  further grepping. [unverified]
 - Whether `Unit.actor` / other `Unit.*` engine APIs share the exact same
   pcall-bypassing fatal behavior as `Unit.node` (the `has_*` companion rule is
   asserted generally but only `Unit.node` is confirmed). [unverified]
-- The fifth required `weaves` vector3 channel name (four are enumerated from the
-  cosmetics code comment; the full five-field list at
-  `weapon_material_settings_templates.lua:52` was not read out). [unverified]

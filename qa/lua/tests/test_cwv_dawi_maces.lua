@@ -44,8 +44,10 @@ return function(H, repo_root)
 	end)
 
 	H.test("CWV #602 blocked model candidates stay audited and unpackaged", function()
+		-- The audit snapshot was archived 2026-08-02 per PROJECT_STANDARDS 7.4 /
+		-- issue #502; the blocked-hash record it froze remains the contract.
 		local audit = read(repo_root
-			.. "/character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md")
+			.. "/_archive/docs/character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md")
 		H.truthy(audit:find("7cc646d8e8084a5fb2961855bca284e8", 1, true))
 		H.truthy(audit:find(
 			"7929EADFF79A10BF6C5FC8C568EEE8F3E6F367C8DA2713274D3392FC4F4ADF2D",

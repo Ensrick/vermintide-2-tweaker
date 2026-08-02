@@ -69,7 +69,7 @@ Interpret `/ct_426_diag` without changing the run:
 | Inventory | 7 run-config getters, 4 progress getters, SharedState full sync, and power-up/currency/loadout read-write families. |
 | Runtime evidence | At most two `[ct:141]` lines per session; `/ct_resume_audit` captures the current lifecycle point. |
 | Detection | Offline `test_ct_resume_policy.lua`; `/ct_regression_test`: `issue141_resume_surface_inventory`. |
-| Lifecycle | `diagnostics-armed` solo. Any actual restore becomes `verify-fix-coop`. |
+| Lifecycle | `diagnostics-armed` solo. Any actual restore becomes `verify-fix` + `coop-required` (the `verify-fix-coop` label was retired 2026-07-21 and has since been deleted). |
 
 ### Chest of Trials activation cost - issue #63
 
@@ -90,7 +90,7 @@ Interpret `/ct_426_diag` without changing the run:
 | Expected catalog | 8 settings, templates and wire entries; 8 context-bound, 2 objective-bound, 6 resource-bound, 0 declared package lists. |
 | Runtime evidence | At most two `[ct:253]` snapshots (two lines each): startup and first `StateIngame`; the latter reports six sampled resource-residency results. |
 | Detection | Offline `test_ct_weave_curse_policy.lua`; `/ct_regression_test`: `issue253_weave_curse_feasibility`. |
-| Future verification | Each implemented wind is `verify-fix-coop`; test host/client, hot join, transition, respawn, stacking and cleanup independently. |
+| Future verification | Each implemented wind is `verify-fix` + `coop-required` (the `verify-fix-coop` label was retired 2026-07-21 and has since been deleted); test host/client, hot join, transition, respawn, stacking and cleanup independently. |
 
 ### dev-localization-status-sync - issue #345
 
