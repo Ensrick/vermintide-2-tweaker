@@ -102,7 +102,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.180-dev"
+local MOD_VERSION = "0.9.181-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2389,7 +2389,7 @@ local function _merge_la_offhand_options()
     if _la_offhand_merged then return end
     if not LA_BRIDGE.registered then return end
     if type(LA_BRIDGE.la_offhand_options_by_weapon_type) ~= "table" then return end
-    local has_focus = next(_LA_FOCUS_KEYS) ~= nil
+    local has_focus, appended, duplicates = next(_LA_FOCUS_KEYS) ~= nil, 0, 0
     -- v0.9.9.4: per-hand structure — LA_BRIDGE.la_offhand_options_by_weapon_type
     -- is `[weapon_type][hand_field] = array_of_la_opts`.
     for weapon_key, la_hand_pools in pairs(LA_BRIDGE.la_offhand_options_by_weapon_type) do
@@ -2400,7 +2400,7 @@ local function _merge_la_offhand_options()
             if not target then target = {}; hand_target[hand_field] = target end
             for _, la_opt in ipairs(la_pool) do
                 if (not has_focus) or _LA_FOCUS_KEYS[la_opt.armoury_key] then
-                    target[#target + 1] = {
+                    local candidate = {
                         name            = la_opt.name .. " (LA)",
                         la_armoury_key  = la_opt.armoury_key,
                         vanilla_skin    = la_opt.vanilla_skin,
@@ -2415,14 +2415,14 @@ local function _merge_la_offhand_options()
                         rarity          = "promo",
                         -- v0.9.9.1 REVERT: dropped la_opt.icon passthrough.
                     }
-                    _decorate_shield_option(target[#target])
+                    _decorate_shield_option(candidate); if OFFHAND_NAMES.merge_unique(target, candidate, hand_field) then appended = appended + 1 else duplicates = duplicates + 1 end
                 end
             end
         end
     end
     _la_offhand_merged = true
-    mod:info("[offhand] merged LA shield options (focus gate: %d keys)",
-        (function() local n = 0; for _ in pairs(_LA_FOCUS_KEYS) do n = n + 1 end; return n end)())
+    mod:info("[offhand] merged LA shield options (focus gate: %d keys, appended=%d duplicate_identity=%d)",
+        (function() local n = 0; for _ in pairs(_LA_FOCUS_KEYS) do n = n + 1 end; return n end)(), appended, duplicates)
 end
 
 -- v0.9.71-dev: restore persisted offhand (shield) picks into

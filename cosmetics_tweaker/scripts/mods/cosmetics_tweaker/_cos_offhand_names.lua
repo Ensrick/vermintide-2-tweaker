@@ -208,6 +208,41 @@ function M.match_option(record, options)
     return nil
 end
 
+local function _option_identity(option, hand_field)
+    if type(option) ~= "table" then return nil end
+    local component_kind = option.component_kind or "weapon_offhand"
+    local source_identity = option.component_identity or option.la_armoury_key
+        or option.source_skin_key or option.skin_key or option.intended_unit
+        or option.unit or option.vanilla_skin
+    return M.identity(component_kind, source_identity, hand_field)
+end
+
+-- Merge one selectable component by semantic identity, not array position.
+-- Cosmetics-authored metadata must survive a later generic provider merge:
+-- otherwise the duplicate row can win matching and silently replace the
+-- component's independent name, description, and icon (#641).
+function M.merge_unique(options, candidate, hand_field)
+    if type(options) ~= "table" or type(candidate) ~= "table" then
+        return false, "invalid"
+    end
+    local candidate_identity = _option_identity(candidate, hand_field)
+    if candidate_identity then
+        for index, existing in ipairs(options) do
+            if _option_identity(existing, hand_field) == candidate_identity then
+                if candidate.cos_authored == true
+                        and existing.cos_authored ~= true then
+                    options[index] = candidate
+                    return true, "replaced_with_authored"
+                end
+                return false, existing.cos_authored == true
+                    and "preserved_authored" or "duplicate"
+            end
+        end
+    end
+    options[#options + 1] = candidate
+    return true, candidate_identity and "appended" or "appended_unkeyed"
+end
+
 -- Deterministically reuse an existing illusion name for an identical primary
 -- model.  `records` entries are { key, primary_unit, name }; the key is used
 -- only to make selection stable when several illusions share the same mesh.
