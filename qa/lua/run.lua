@@ -43,6 +43,7 @@ local suites = {
 	"test_shared_appearance_fade",
 	"test_shared_career_weapon_actions",
 	"test_shared_debug",
+	"test_shared_network_lookup",
 	"test_ui_presentation_refresh",
 	"test_wt_weapon_action_lifecycle",
     "test_attack_labeler",

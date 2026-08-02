@@ -11,6 +11,7 @@ lua = [
 	"scripts/mods/weapons_of_chaos/_woc_durable_transform"
 	"scripts/mods/weapons_of_chaos/_woc_inventory_icons"
 	"scripts/mods/weapons_of_chaos/_lib_career_weapon_actions"
+	"scripts/mods/weapons_of_chaos/_lib_network_lookup"
 	"scripts/mods/weapons_of_chaos/_lib_weapon_appearance"
 	"scripts/mods/weapons_of_chaos/_woc_mod_unit_preview"
 	"scripts/mods/weapons_of_chaos/_woc_relic_policy"

@@ -66,6 +66,12 @@
             )
         }
         @{
+            Source = "_lib_network_lookup.lua"
+            Consumers = @(
+                "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_network_lookup.lua"
+            )
+        }
+        @{
             Source = "_lib_ui_presentation_refresh.lua"
             Consumers = @(
                 "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_ui_presentation_refresh.lua"

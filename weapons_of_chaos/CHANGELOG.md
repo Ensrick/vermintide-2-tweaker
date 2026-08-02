@@ -1,5 +1,15 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.49-dev (2026-08-01) - canonical NetworkLookup registration (#428)
+
+- Route the Blightreaper item-name registration through the copied, canonical
+  bidirectional NetworkLookup helper instead of maintaining another inline
+  append implementation.
+- Fail closed on malformed half-pairs or unavailable lookup tables so a local
+  registration cannot silently corrupt peer index meaning.
+- Add standalone behavioral coverage, exact-copy drift enforcement, and a
+  consumer test proving Weapons of Chaos loads the owned helper.
+
 ## 0.1.48-dev (2026-08-01) - #934 shared Blightreaper lease correction [not-started]
 
 - Make the host the sole authority for the lobby's one active Blightreaper,
