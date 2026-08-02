@@ -800,6 +800,13 @@ function Invoke-ShipSelfTest {
     })
     $authOk = Test-PublicationAuthorizationSnapshot -SourceCommit $authSha -DefaultBranch master -DefaultBranchCommit $authSha -PullRequests $authPulls -CheckRuns $authChecks
     Assert ($authOk.Ok -and $authOk.Evidence.mode -eq 'hosted_qa') "exact default-head merge with hosted qa-gate is publication-authorized"
+    $trackerPage = [pscustomobject]@{ check_runs = @(1..30 | ForEach-Object {
+        [pscustomobject]@{ name = 'tracker-guard'; head_sha = $authSha; status = 'completed'; conclusion = 'success'; completed_at = '2026-07-26T00:06:00Z' }
+    }) }
+    $qaPage = [pscustomobject]@{ check_runs = $authChecks }
+    $pagedChecks = Merge-PublicationCheckRunPages -Pages @($trackerPage, $qaPage)
+    Assert ($pagedChecks.Count -eq 31 -and $pagedChecks[-1].name -eq 'qa-gate') "publication authorization flattens qa-gate beyond the first 30 check runs (#1109)"
+    Assert ((Test-PublicationAuthorizationSnapshot -SourceCommit $authSha -DefaultBranch master -DefaultBranchCommit $authSha -PullRequests $authPulls -CheckRuns $pagedChecks).Ok) "paginated qa-gate remains publication-authorized (#1109)"
     Assert (-not (Test-PublicationAuthorizationSnapshot -SourceCommit $authSha -DefaultBranch master -DefaultBranchCommit ('f' * 40) -PullRequests $authPulls -CheckRuns $authChecks).Ok) "pre-merge/non-default-head source is rejected"
     $badQa = @([pscustomobject]@{ name = 'qa-gate'; head_sha = $authSha; status = 'completed'; conclusion = 'failure' })
     Assert (-not (Test-PublicationAuthorizationSnapshot -SourceCommit $authSha -DefaultBranch master -DefaultBranchCommit $authSha -PullRequests $authPulls -CheckRuns $badQa).Ok) "failed hosted qa-gate is rejected"
