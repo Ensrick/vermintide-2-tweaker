@@ -1312,6 +1312,19 @@ local data = {
                     { setting_id = "wt_dual_axes_cleave", type = "checkbox", default_value = true },
                     { setting_id = "wt_dual_axes_light_crit", type = "checkbox", default_value = true },
                     { setting_id = "wt_executioner_light_headshot_bonus", type = "checkbox", default_value = false },
+                    -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-menu
+                    {
+                        setting_id = "wt_fire_sword_heat_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "wt_fire_sword_heat_scaling", type = "checkbox", default_value = false },
+                            { setting_id = "wt_fire_sword_heat_cleave_per_point", type = "numeric", default_value = 2, range = { 0, 5 }, decimals_number = 1 },
+                            { setting_id = "wt_fire_sword_heat_damage_per_point", type = "numeric", default_value = 1, range = { 0, 5 }, decimals_number = 1 },
+                            { setting_id = "wt_fire_sword_heat_light_armor", type = "checkbox", default_value = true },
+                            { setting_id = "wt_fire_sword_heat_armor_threshold", type = "numeric", default_value = 25, range = { 0, 100 }, decimals_number = 1 },
+                        },
+                    },
+                    -- WT_DEV_OVERLAY_END:fire-sword-heat-menu
                     { setting_id = "wt_greataxe_light_crit", type = "checkbox", default_value = true },
                     { setting_id = "wt_mace_sword_speed_nerf", type = "checkbox", default_value = false },
                     { setting_id = "wt_bolt_staff_primary_overcharge_reduction", type = "checkbox", default_value = false },

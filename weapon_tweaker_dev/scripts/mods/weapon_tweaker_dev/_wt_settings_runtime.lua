@@ -31,6 +31,10 @@ function M.install(c)
             if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
         elseif setting_id == c.bolt_policy.SETTING_ID then
             c.bolt_runtime.apply()
+        -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-setting
+        elseif c.fire_runtime and c.fire_runtime:is_setting(setting_id) then
+            mod._wt_apply_fire_sword_heat(false)
+        -- WT_DEV_OVERLAY_END:fire-sword-heat-setting
         elseif setting_id == c.balance_policy.GREATAXE_LIGHT_CRIT_SETTING
                 or setting_id == c.balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING
                 or setting_id == c.balance_policy.DUAL_AXES_CLEAVE_SETTING
@@ -58,6 +62,9 @@ function M.install(c)
         if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
         c.bolt_runtime.apply()
         if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+        -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-batch
+        if mod._wt_apply_fire_sword_heat then mod._wt_apply_fire_sword_heat(false) end
+        -- WT_DEV_OVERLAY_END:fire-sword-heat-batch
         if c.extra_batch then c.extra_batch(setting_ids) end
         pcall(printf, "[wt:1002] settings=%d availability_applies=1 action_applies=1",
             type(setting_ids) == "table" and #setting_ids or 0)

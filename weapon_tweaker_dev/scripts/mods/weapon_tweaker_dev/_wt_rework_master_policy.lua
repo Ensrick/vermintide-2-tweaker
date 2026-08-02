@@ -17,6 +17,9 @@ M.LEAF_IDS = {
     "wt_dual_axes_cleave",
     "wt_dual_axes_light_crit",
     "wt_executioner_light_headshot_bonus",
+    -- WT_DEV_OVERLAY_BEGIN:fire-sword-heat-master-leaf
+    "wt_fire_sword_heat_scaling",
+    -- WT_DEV_OVERLAY_END:fire-sword-heat-master-leaf
     "wt_greataxe_light_crit",
     "wt_mace_sword_speed_nerf",
     "wt_one_hand_axe_cleave_nerf",
