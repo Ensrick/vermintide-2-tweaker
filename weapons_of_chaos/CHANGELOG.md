@@ -1,6 +1,30 @@
 # Weapons of Chaos — Changelog
 
-## 0.1.49-dev (2026-08-01) - canonical NetworkLookup registration (#428)
+## v0.1.50-dev (2026-08-02) - #632 Blightreaper Greataxe impacts, doubled cleave, Shyish evidence [untested]
+
+- Reconciled landing of the orphaned 2026-07-22 `agent/632` candidate
+  (`f40a325c`), adapted to the current boss-catalogue / #934 shared-lease /
+  #428 canonical-NetworkLookup source.
+- Restored native Greataxe impact sound/effect identifiers (`axe_2h_hit`,
+  `melee_hit_axes_2h`, `blunt_hit_armour`) on every damaging sweep while
+  retaining the Crowbill animations and baked geometry; this retires the
+  burn-stab fire-sound normalization.
+- Doubled the three cleave budgets derived by `ActionSweep` only for the
+  private Blightreaper template. This is an exact per-attack multiplier and
+  avoids registering an unsafe private damage-profile network id.
+- DROPPED the candidate's light/heavy damage-profile swap: the decompiled
+  source disproves its "reversed rows" claim (vanilla Greataxe lights are
+  `medium_slashing_smiter_2h`, 2h_axes.lua:469/614/760; heavies are
+  `heavy_slashing_axe_linesman`, :189/328). The existing assignment already
+  matches the native split and is now documented against regression.
+- Added bounded automatic `[WOC:632]` evidence for live-backend/relic identity,
+  kill attribution, poison markers, spawn, chase start, and contact (24-line
+  relevant budget plus a separate 8-line rejected-kill budget). The July 21
+  ItemMasterList trait false-FAIL remains corrected to query the live backend
+  instance (landed earlier via #712).
+- Mod disable/unload now unregisters the kill listener, deletes live spirits,
+  and releases the exact Shyish package reference; re-enable reacquires it
+  alongside the #934 shared-lease session restart.
 
 - Route the Blightreaper item-name registration through the copied, canonical
   bidirectional NetworkLookup helper instead of maintaining another inline

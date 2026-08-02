@@ -85,7 +85,7 @@ foreach ($path in $requiredDocs.Keys) {
 $sources = @()
 Get-ChildItem -LiteralPath $repoRoot -Recurse -Filter '*.lua' -File | ForEach-Object {
     $relative = $_.FullName.Substring($repoRoot.Length + 1)
-    if ($relative -match '^(?:_archive|bundleV2|\.temp|tools|qa)[\\/]') { return }
+    if ($relative -match '^(?:_archive|bundleV2|\.temp|tools|qa|\.claude)[\\/]') { return }
     if ($relative -match '[\\/]bundleV2[\\/]') { return }
     $sources += [pscustomobject]@{
         Path = $relative
