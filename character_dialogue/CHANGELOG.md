@@ -1,5 +1,15 @@
 # Character Dialogue Changelog
 
+## 0.1.9-dev (2026-07-20) - conversation grouping, transcript search, audio isolation (#605 #998) [untested]
+
+- Browser groups by CONVERSATION (the event stem) instead of by character, and orders each group's lines by their numeric ordinal so an exchange reads in the order the game plays it. Stems sort by topic first, so every hero's version of one conversation lands adjacent: searching `downed_three_times` returns the whole set rather than five scattered entries.
+- Search now matches the SPOKEN words as well as the codename. `tuple[2]` is a localization key, so searching "down again, elf?" previously could not match anything; subtitle keys are now resolved to prose once at first Dialogue open and every later query is a plain string find. Codename search is unchanged and still works.
+- Page items carry the resolved transcript and the speaker's display name, so a row no longer depends on its header for the character's identity.
+- New `Isolate Dialogue Audio` keybind and `/cd_isolate` command: mutes `music_bus_volume` and `sfx_bus_volume` while leaving `voice_bus_volume` untouched, so a line can be auditioned without flying out of the play area to escape ambient sound. Toggling off restores the player's own saved volumes. Bus writes use the same `WwiseWorld.set_global_parameter` path vanilla uses (`scripts/ui/views/options_view.lua:1907-1909`, applied at `:2043`/`:2049`; `scripts/managers/music/music_manager.lua:1019-1025`).
+- API is v4: `browser_groups`/`browser_page` are keyed by conversation stem, not speaker.
+
+**Test:** open Mod Tweaker's Dialogue tab. Search `downed_three_times` and confirm each hero's conversation appears as its own group with lines in ordinal order, transcripts visible inline under each codename. Then search a phrase you have heard in game (for example `down again`) and confirm the matching line is found. Press the Isolate Dialogue Audio key in a mission and confirm music and effects mute while a previewed line stays audible, and that pressing again restores your volumes.
+
 ## 0.1.7-dev (2026-07-22) - #881 bounded Morris soundbank residency [verify-fix]
 
 - The #927/#940 logs prove silent `pes_morris_*` clicks reach Wwise but return

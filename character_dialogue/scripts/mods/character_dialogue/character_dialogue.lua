@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.7-dev"
+local MOD_VERSION = "0.1.9-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
@@ -35,6 +35,8 @@ local preview_residency = PreviewResidency.new_state()
 local catalogue_cache
 local catalogue_index_cache
 local catalogue_index
+local conversation_index_cache
+local conversation_index
 local browser_group_cache = { query = nil, groups = nil }
 
 local function clone_table(source)
@@ -250,6 +252,41 @@ catalogue_index = function()
     return catalogue_index_cache
 end
 
+-- #605 Resolve every subtitle key to prose ONCE, so the search can match the
+-- words a player actually heard. tuple[2] is a localization KEY, so before this
+-- a search for "does it tingle" could never hit. Doing it per keystroke would
+-- mean 34k Localize calls per character typed; doing it once at first Dialogue
+-- open costs a single pass and every later query is a plain string find.
+-- Unresolved keys (enemy barks often have none) are simply absent from the map.
+local function build_transcripts(entries)
+    local out = {}
+    local localize = rawget(_G, "Localize")
+    if type(localize) ~= "function" then return out end
+    for i = 1, #(entries or {}) do
+        local tuple = entries[i]
+        local key = tuple[2]
+        if type(key) == "string" and key ~= "" then
+            local ok, text = pcall(localize, key)
+            if ok and type(text) == "string" and text ~= "" and text ~= key
+               and text:sub(1, 1) ~= "<" then
+                out[tuple[1]] = text
+            end
+        end
+    end
+    return out
+end
+
+conversation_index = function()
+    if not conversation_index_cache then
+        local entries = catalogue()
+        conversation_index_cache =
+            Browser.build_conversation_index(entries, build_transcripts(entries))
+        log("conversation index built stems=%d entries=%d",
+            #conversation_index_cache.order, conversation_index_cache.total or -1)
+    end
+    return conversation_index_cache
+end
+
 local function toggle_pause(event)
     if preview.event ~= event then return play_preview(event) end
     return preview.paused and resume_preview() or pause_preview()
@@ -333,18 +370,25 @@ mod:hook(TagQueryDatabase, "iterate_query", function(func, self, t)
 end)
 
 mod.character_dialogue_api = {
-    version = 3,
+    -- v4 (#605): browser_groups/browser_page are keyed by CONVERSATION stem
+    -- instead of speaker, and page items carry a resolved `transcript` field.
+    version = 4,
     catalogue = catalogue,
+    -- #605 Groups are CONVERSATIONS (event stems), not the eight speakers. A
+    -- group id is therefore a stem like pbw_level_skaven_stronghold_taunt_warlord
+    -- and its rows are that stem's ordinals in the order the game plays them.
+    -- Scanning every stem per query stays cheap because the result is cached
+    -- per query string, exactly as the speaker grouping was.
     browser_groups = function(query)
         query = type(query) == "string" and query or ""
         if browser_group_cache.query ~= query then
             browser_group_cache.query = query
-            browser_group_cache.groups = Browser.index_groups(catalogue_index(), query)
+            browser_group_cache.groups = Browser.conversation_groups(conversation_index(), query)
         end
         return browser_group_cache.groups
     end,
-    browser_page = function(speaker, query, offset, limit)
-        return Browser.index_page(catalogue_index(), speaker, query, offset, limit)
+    browser_page = function(stem, query, offset, limit)
+        return Browser.conversation_page(conversation_index(), stem, query, offset, limit)
     end,
     browser_window = Browser.window,
     browser_reconcile_focus = Browser.reconcile_focus,
@@ -359,6 +403,59 @@ mod.character_dialogue_api = {
     stop = stop_preview,
     preview_state = poll_preview,
 }
+
+-- #998 Audio isolation. Replaces the "fly to the map's ozone layer until all
+-- sound is gone" workaround for auditioning a voice line cleanly.
+--
+-- Bus volumes are global Wwise RTPCs. Vanilla sets them exactly this way:
+-- OptionsView.set_wwise_parameter is WwiseWorld.set_global_parameter
+-- (scripts/ui/views/options_view.lua:1907-1909), applied per bus at
+-- options_view.lua:2031 (master), :2043 (sfx), :2049 (voice), and MusicManager
+-- wraps the same call (scripts/managers/music/music_manager.lua:1019-1025).
+--
+-- voice_bus_volume is a SEPARATE bus from sfx/music, so muting music+SFX leaves
+-- dialogue fully audible. That is why this isolates rather than kills all sound:
+-- silencing everything would silence the line you are trying to hear.
+local ISOLATED_BUSES = { "music_bus_volume", "sfx_bus_volume" }
+local isolation = { active = false, saved = nil }
+
+local function set_bus(name, value)
+    -- Reuse the mod's existing PUBLIC accessor rather than reaching into
+    -- Managers.music._wwise_world; the preview path already proved this one.
+    local _, wwise_world = level_wwise_world()
+    local setter = rawget(_G, "WwiseWorld")
+    if not wwise_world or not setter then return false end
+    local ok = pcall(setter.set_global_parameter, wwise_world, name, value)
+    return ok
+end
+
+function mod.toggle_audio_isolation()
+    if isolation.active then
+        for name, value in pairs(isolation.saved or {}) do set_bus(name, value) end
+        isolation.active, isolation.saved = false, nil
+        printf("[character_dialogue] audio isolation OFF")
+        mod:echo("[Character Dialogue] Audio isolation OFF - music and SFX restored.")
+        return
+    end
+    local saved, applied = {}, 0
+    for i = 1, #ISOLATED_BUSES do
+        local name = ISOLATED_BUSES[i]
+        -- Restore target is the player's own saved setting, so toggling off
+        -- never invents a volume they did not choose.
+        saved[name] = Application.user_setting(name) or 0
+        if set_bus(name, 0) then applied = applied + 1 end
+    end
+    if applied == 0 then
+        mod:echo("[Character Dialogue] Audio isolation unavailable (no Wwise world yet).")
+        return
+    end
+    isolation.active, isolation.saved = true, saved
+    printf("[character_dialogue] audio isolation ON buses=%d", applied)
+    mod:echo("[Character Dialogue] Audio isolation ON - music and SFX muted, dialogue still audible.")
+end
+
+mod:command("cd_isolate", "Mute music and SFX so dialogue can be heard cleanly (toggle)",
+    mod.toggle_audio_isolation)
 
 mod:command("cd_play", "Preview a dialogue event locally. Usage: /cd_play <event>", function(event)
     local ok, err = play_preview(event); if not ok then mod:echo("Character Dialogue: " .. tostring(err)) end
