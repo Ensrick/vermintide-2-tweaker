@@ -1,5 +1,15 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.313-dev (2026-08-02) - replacement lifecycle capture hardening (#465)
+
+- Capture the retiring bot's Chaos Wastes run row before vanilla removes it,
+  then apply the bounded handoff only when vanilla returns that exact bot.
+- Instrument both the public `GameModeManager` delegation edges and the active
+  `GameModeDeus` implementation edges, with `/ct_report_465` providing one
+  bounded summary for live host/client replacement testing.
+- Preserve the existing parity filter, weapon-tier projection, readback and
+  rollback behavior; the new path fails closed on bot-selection disagreement.
+
 ## 0.7.311-dev (2026-08-01) - exact Starting Coins baseline (#912) [verify-fix]
 
 - Starting Coins now replaces vanilla rollover currency for every valid value,

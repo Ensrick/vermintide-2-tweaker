@@ -459,7 +459,7 @@ _rt_register("progressive_difficulty_installed", function()
 end)
 
 _rt_register("replacement_player_compensation_installed", function()
-    if CT_REPLACEMENT_COMPENSATION_MARKER ~= "replacement_compensation:ordered_projection_readback_v2" then
+    if CT_REPLACEMENT_COMPENSATION_MARKER ~= "replacement_compensation:pre_remove_capture_edges_v3" then
         return "replacement compensation marker missing or stale"
     end
     local policy = mod._ct_replacement_policy
@@ -484,6 +484,9 @@ _rt_register("replacement_player_compensation_installed", function()
         or type(mod._ct_replacement_refresh_bot) ~= "function"
         or type(mod._ct_bot_equip_weapon) ~= "function" then
         return "replacement compensation live/backend refresh missing"
+    end
+    if type(mod._ct465_report) ~= "function" or type(mod._ct465_edges) ~= "table" then
+        return "replacement compensation lifecycle receipts missing"
     end
 end)
 
