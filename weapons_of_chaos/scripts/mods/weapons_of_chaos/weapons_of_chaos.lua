@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.49-dev"
+local MOD_VERSION = "0.1.50-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -574,6 +574,26 @@ local function _ensure_spirit_package()
 	end
 	_spirit_package_requested = true
 	mod:info("[WOC:643] requested source-backed Shyish package %s", package_name)
+	return true
+end
+
+local function _release_spirit_package(reason)
+	if not _spirit_package_requested then return true end
+	local packages = Managers and Managers.package
+	if not packages or type(packages.unload) ~= "function" then
+		printf("[WOC:632] Shyish package release deferred reason=%s manager=missing",
+			tostring(reason))
+		return false
+	end
+	local ok, err = pcall(packages.unload, packages, _spirits.PACKAGE,
+		_spirits.PACKAGE_REFERENCE)
+	if not ok then
+		printf("[WOC:632] Shyish package release failed reason=%s error=%s",
+			tostring(reason), tostring(err))
+		return false
+	end
+	_spirit_package_requested = false
+	printf("[WOC:632] Shyish package released reason=%s", tostring(reason))
 	return true
 end
 _ensure_spirit_package()
@@ -1291,9 +1311,12 @@ _rt_register("issue632_blightreaper_cursed_combat_contract", function()
 			return "native Crowbill action is missing: " .. tostring(required)
 		end
 	end
-	if actions.light_attack_left.impact_sound_event ~= _moveset.CROWBILL_IMPACT_SOUND
+	if actions.light_attack_left.impact_sound_event ~= _moveset.GREATAXE_IMPACT_SOUND
+			or actions.light_attack_left.no_damage_impact_sound_event
+				~= _moveset.GREATAXE_ARMOUR_IMPACT_SOUND
+			or actions.light_attack_left.hit_effect ~= _moveset.GREATAXE_HIT_EFFECT
 			or actions.light_attack_left.armor_impact_sound_event ~= nil then
-		return "burn-stab fire impact identity was not normalized"
+		return "Blightreaper Greataxe impact identity is incomplete"
 	end
 	for name, action in pairs(actions) do
 		if type(action) == "table" and action.kind == "sweep" then
@@ -1418,7 +1441,8 @@ local _spirit_state = {
 	dropped = 0,
 	damage_index = 1,
 }
-local _spirit_diag_budget = 16
+local _spirit_diag_budget = 24
+local _spirit_reject_diag_budget = 8
 
 local function _spirit_now()
 	local time = Managers and Managers.time
@@ -1430,6 +1454,14 @@ end
 local function _spirit_diag(fmt, ...)
 	if _spirit_diag_budget <= 0 then return end
 	_spirit_diag_budget = _spirit_diag_budget - 1
+	pcall(printf, "[WOC:632] " .. fmt, ...)
+end
+
+-- Rejected-identity kills get a separate small budget so ordinary teammate
+-- kills cannot consume the relevant [WOC:632] trace.
+local function _spirit_reject_diag(fmt, ...)
+	if _spirit_reject_diag_budget <= 0 then return end
+	_spirit_reject_diag_budget = _spirit_reject_diag_budget - 1
 	pcall(printf, "[WOC:632] " .. fmt, ...)
 end
 
@@ -1461,10 +1493,12 @@ local function _wielded_relic(unit)
 	return remote and remote[slot] == true or false, slot
 end
 
-_owner_has_wielded_trait = function(unit, trait_key)
-	if not unit or not Unit.alive(unit) or type(trait_key) ~= "string" then return false end
+local function _owner_trait_evidence(unit, trait_key)
+	if not unit or not Unit.alive(unit) or type(trait_key) ~= "string" then
+		return false, "invalid_owner", nil, nil
+	end
 	local inventory = ScriptUnit.has_extension(unit, "inventory_system")
-	if not inventory then return false end
+	if not inventory then return false, "inventory_missing", nil, nil end
 	local slot_data
 	if type(inventory.get_wielded_slot_data) == "function" then
 		pcall(function() slot_data = inventory:get_wielded_slot_data() end)
@@ -1474,11 +1508,27 @@ _owner_has_wielded_trait = function(unit, trait_key)
 	local items = backend_id and _backend_items()
 	local item
 	if items then pcall(function() item = items:get_item_from_id(backend_id) end) end
-	if _moveset.item_has_trait(item, trait_key) then return true end
+	if _moveset.item_has_trait(item, trait_key) then
+		return true, "live_backend_trait", backend_id,
+			item and (item.key or item.ItemId)
+	end
 	-- Blightreaper's same-mod remote identity cannot carry its custom trait on
 	-- vanilla loadout transport. Its exact relic identity is the bounded
 	-- semantic fallback for the intrinsic Shyish row only.
-	return trait_key == _moveset.SHYISH_CURSE_TRAIT and _wielded_relic(unit) or false
+	local relic, slot = _wielded_relic(unit)
+	if trait_key == _moveset.SHYISH_CURSE_TRAIT and relic then
+		return true, "exact_relic_identity:" .. tostring(slot), backend_id,
+			item_data and (item_data.key or item_data.ItemId)
+	end
+	return false, item and "live_backend_trait_absent"
+		or backend_id and "backend_item_missing"
+		or "backend_id_missing", backend_id,
+		item_data and (item_data.key or item_data.ItemId)
+end
+
+_owner_has_wielded_trait = function(unit, trait_key)
+	local has_trait = _owner_trait_evidence(unit, trait_key)
+	return has_trait
 end
 
 _mark_blight_poison = function(hit_unit, owner_unit)
@@ -1489,6 +1539,8 @@ _mark_blight_poison = function(hit_unit, owner_unit)
 		owner = owner_unit,
 		t = _spirit_now(),
 	}
+	_spirit_diag("poison marker armed peer=%s ttl=%.1f",
+		tostring(_player_peer_id(owner_unit)), _spirits.POISON_ATTRIBUTION_TTL)
 end
 
 -- Client-owned Hagbane applications already traverse this native RPC with the
@@ -1588,6 +1640,7 @@ local function _spawn_spirit(killed_unit, target_unit, attribution)
 		target = target_unit,
 		delay = _spirits.DELAY_TIME,
 		chase = _spirits.CHASE_TIME,
+		chase_logged = false,
 	}
 	_spirit_state.active[entry] = true
 	_spirit_state.count = _spirit_state.count + 1
@@ -1611,13 +1664,24 @@ local function _on_blightreaper_kill(killing_blow, _, killed_unit)
 	local owner_unit = killing_blow[indexes.SOURCE_ATTACKER_UNIT]
 		or killing_blow[indexes.ATTACKER]
 	if not owner_unit or not Unit.alive(owner_unit) then return end
-	local wielding = _owner_has_wielded_trait(owner_unit, _moveset.SHYISH_CURSE_TRAIT)
+	local wielding, identity_reason, backend_id, item_key = _owner_trait_evidence(
+		owner_unit, _moveset.SHYISH_CURSE_TRAIT)
 	local poison = _spirit_state.poison_sources[killed_unit]
 	local poison_match = poison and poison.owner == owner_unit
 	local poison_age = poison and (_spirit_now() - poison.t) or nil
 	local damage_type = killing_blow[indexes.DAMAGE_TYPE]
 	local attributable, reason = _spirits.kill_is_attributable(
 		wielding, damage_type, poison_match, poison_age)
+	local damage_source = killing_blow[indexes.DAMAGE_SOURCE]
+	local report = (wielding or poison ~= nil)
+		and _spirit_diag or _spirit_reject_diag
+	report(
+		"kill observed peer=%s damage=%s source=%s trait=%s identity=%s backend=%s item=%s poison_match=%s age=%s attributable=%s reason=%s",
+		tostring(_player_peer_id(owner_unit)), tostring(damage_type),
+		tostring(damage_source), tostring(wielding), tostring(identity_reason),
+		tostring(backend_id), tostring(item_key), tostring(poison_match == true),
+		poison_age and string.format("%.2f", poison_age) or "nil",
+		tostring(attributable), tostring(reason))
 	_spirit_state.poison_sources[killed_unit] = nil
 	if attributable then _spawn_spirit(killed_unit, owner_unit, reason) end
 end
@@ -1639,7 +1703,8 @@ _start_spirit_runtime = function()
 	events:register(mod, "on_player_killed_enemy", "_woc_on_blightreaper_kill")
 	_spirit_state.event_manager = events
 	_spirit_state.damage_index = 1
-	_spirit_diag_budget = 16
+	_spirit_diag_budget = 24
+	_spirit_reject_diag_budget = 8
 	_spirit_diag("native Shyish listener armed cap=%d convert=%d delay=%.1f chase=%.1f/%.1f",
 		_spirits.MAX_ACTIVE, _spirits.CONVERT_AMOUNT, _spirits.DELAY_TIME,
 		_spirits.CHASE_SPEED, _spirits.CHASE_TIME)
@@ -1677,6 +1742,10 @@ local function _update_spirits(dt)
 							entry, "spirit_position_invalid:" .. tostring(position_reason), false,
 						}
 					else
+						if not entry.chase_logged then
+							entry.chase_logged = true
+							_spirit_diag("spirit chase started remaining=%.1f", entry.chase)
+						end
 						local destination = target_pos + Vector3.up()
 						local delta = destination - position
 					local distance_sq = Vector3.length_squared(delta)
@@ -2017,9 +2086,23 @@ mod:hook("ActionMeleeStart", "client_owner_start_action",
 		return result
 	end)
 
+local _cleave_diag_budget = 4
 mod:hook("ActionSweep", "client_owner_start_action",
 	function(func, self, new_action, ...)
 		local result = func(self, new_action, ...)
+		local cleave_applied, cleave_reason = _moveset.apply_runtime_cleave(
+			self, new_action)
+		if cleave_applied and _cleave_diag_budget > 0 then
+			_cleave_diag_budget = _cleave_diag_budget - 1
+			pcall(printf, "[WOC:632] combat sweep cleave=%.2fx attack=%.2f impact=%.2f",
+				_moveset.CLEAVE_MULTIPLIER, self._max_targets_attack,
+				self._max_targets_impact)
+		elseif not cleave_applied and cleave_reason ~= "foreign_action"
+				and _cleave_diag_budget > 0 then
+			_cleave_diag_budget = _cleave_diag_budget - 1
+			pcall(printf, "[WOC:632] combat sweep cleave skipped reason=%s",
+				tostring(cleave_reason))
+		end
 		_audio.play_swing(self, "release")
 		return result
 	end)
@@ -2058,15 +2141,21 @@ end
 
 mod.on_enabled = function()
 	_shared_relic_runtime:on_enabled("mod-enabled")
+	_ensure_spirit_package()
+	if _registered then _start_spirit_runtime() end
 end
 
 mod.on_disabled = function()
+	_stop_spirit_runtime("mod-disabled")
+	_release_spirit_package("mod-disabled")
 	_transform_owner:clear()
 	_audio.stop_all("mod-disabled")
 	_shared_relic_runtime:reset("mod-disabled")
 end
 
 mod.on_unload = function()
+	_stop_spirit_runtime("mod-unload")
+	_release_spirit_package("mod-unload")
 	_transform_owner:clear()
 	_audio.stop_all("mod-unload")
 	_shared_relic_runtime:reset("mod-unload")

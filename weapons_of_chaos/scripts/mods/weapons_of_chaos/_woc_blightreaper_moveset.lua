@@ -16,8 +16,15 @@ M.EXECUTIONER_SOURCE_TEMPLATE = "two_handed_swords_executioner_template_1"
 M.TEMPLATE = "woc_blightreaper_template"
 M.SPEED_MULTIPLIER = 0.83
 M.INTRINSIC_CRIT_CHANCE = 0.15
+-- Native Bardin Greataxe profile split, verified against `2h_axes.lua`:
+-- every vanilla Greataxe light sweep uses `medium_slashing_smiter_2h`
+-- (2h_axes.lua:469/614/760) and every heavy sweep uses
+-- `heavy_slashing_axe_linesman` (2h_axes.lua:189/328). Do NOT swap these:
+-- a 2026-07-22 candidate claimed the rows were reversed, but the decompiled
+-- source disproves that claim - this assignment IS the native split.
 M.LIGHT_DAMAGE_PROFILE = "medium_slashing_smiter_2h"
 M.HEAVY_DAMAGE_PROFILE = "heavy_slashing_axe_linesman"
+M.CLEAVE_MULTIPLIER = 2
 M.EXECUTIONER_WWISE_DEP = "wwise/two_handed_swords"
 M.DOT_TEMPLATE = "arrow_poison_dot"
 M.POISON_BUFF_TEMPLATE = "woc_blightreaper_poison_on_hit"
@@ -34,22 +41,16 @@ M.ORDER_PROPERTY = "woc_power_vs_order"
 M.CRIT_PROPERTY_BUFF = "properties_woc_intrinsic_crit_display_only"
 M.ORDER_PROPERTY_BUFF = "properties_woc_power_vs_order_display_only"
 
--- Impact presentation: the Crowbill graph carries its own authored pick
--- identity (`1h_crowbills.lua`: `crowbill_stab_hit` impacts,
--- `melee_hit_hammers_1h` effects, `blunt_hit_armour` no-damage impacts), so
--- the Sword era's Greataxe impact translation layer is retired together with
--- the Sword graph it was authored against. One normalization remains: the
--- native burn stab (`light_attack_left`, `1h_crowbills.lua:680-708`) presents
--- fire impacts (`fire_hit` / `fire_hit_armour`) for a burn damage profile
--- (`light_blunt_smiter_stab_burn`) that this template replaces with its
--- poison identity, so those sounds are normalized to the crowbill family
--- baseline instead of keeping a fire cue with no burn behind it.
-M.CROWBILL_IMPACT_SOUND = "crowbill_stab_hit"
-M.CROWBILL_ARMOUR_IMPACT_SOUND = "blunt_hit_armour"
-M.FIRE_IMPACT_SOUNDS = {
-	fire_hit = true,
-	fire_hit_armour = true,
-}
+-- The relic keeps the Crowbill graph and baked sweeps, but impact presentation
+-- comes from Bardin's Greataxe exactly as requested (#632: the Crowbill
+-- transition had retired the requested Greataxe impact family). These are
+-- boot-stable vanilla identifiers and therefore add no mixed-peer lookup
+-- surface. This also retires the burn-stab fire-sound normalization: every
+-- damaging sweep now carries the same Greataxe identity, so the fire cues
+-- (`fire_hit` / `fire_hit_armour`) are overwritten with the rest.
+M.GREATAXE_IMPACT_SOUND = "axe_2h_hit"
+M.GREATAXE_HIT_EFFECT = "melee_hit_axes_2h"
+M.GREATAXE_ARMOUR_IMPACT_SOUND = "blunt_hit_armour"
 
 -- Crowbill 3P attack events are authored for Sienna's (bw_) skeleton only.
 -- Every other receiver redirects into its own native vocabulary using Weapon
@@ -187,6 +188,31 @@ function M.item_has_trait(item, trait_key)
 	return false
 end
 
+-- ActionSweep derives its three cleave budgets from the selected vanilla
+-- damage profile when an attack starts. Doubling those already-derived values
+-- gives the requested +100% cleave without registering a private damage
+-- profile (damage-profile ids cross the native attack RPC). The engine
+-- recomputes the fields before every start, so this is one bounded write per
+-- Blightreaper sweep rather than cumulative state.
+function M.apply_runtime_cleave(action, action_settings)
+	local lookup = type(action_settings) == "table" and action_settings.lookup_data
+	if type(action) ~= "table" or type(lookup) ~= "table"
+			or lookup.item_template_name ~= M.TEMPLATE then
+		return false, "foreign_action"
+	end
+	for _, field in ipairs({
+		"_max_targets_attack", "_max_targets_impact", "_max_targets",
+	}) do
+		if type(action[field]) ~= "number" then
+			return false, "missing_" .. field
+		end
+	end
+	action._max_targets_attack = action._max_targets_attack * M.CLEAVE_MULTIPLIER
+	action._max_targets_impact = action._max_targets_impact * M.CLEAVE_MULTIPLIER
+	action._max_targets = action._max_targets * M.CLEAVE_MULTIPLIER
+	return true, "applied"
+end
+
 function M.install(weapons, clone)
 	local report = { installed = false, attacks = 0, skipped = nil }
 	if type(weapons) ~= "table" or type(clone) ~= "function" then
@@ -254,16 +280,11 @@ function M.install(weapons, clone)
 									and sub_action_name:find("^heavy_attack") then
 								sub_action.damage_profile = M.HEAVY_DAMAGE_PROFILE
 							end
+							sub_action.impact_sound_event = M.GREATAXE_IMPACT_SOUND
+							sub_action.no_damage_impact_sound_event = M.GREATAXE_ARMOUR_IMPACT_SOUND
+							sub_action.armor_impact_sound_event = nil
+							sub_action.hit_effect = M.GREATAXE_HIT_EFFECT
 							sub_action.additional_critical_strike_chance = M.INTRINSIC_CRIT_CHANCE
-							if M.FIRE_IMPACT_SOUNDS[sub_action.impact_sound_event] then
-								sub_action.impact_sound_event = M.CROWBILL_IMPACT_SOUND
-							end
-							if M.FIRE_IMPACT_SOUNDS[sub_action.no_damage_impact_sound_event] then
-								sub_action.no_damage_impact_sound_event = M.CROWBILL_ARMOUR_IMPACT_SOUND
-							end
-							if M.FIRE_IMPACT_SOUNDS[sub_action.armor_impact_sound_event] then
-								sub_action.armor_impact_sound_event = nil
-							end
 						end
 						sub_action.anim_time_scale = (sub_action.anim_time_scale or 1)
 							* M.SPEED_MULTIPLIER

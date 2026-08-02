@@ -1,5 +1,23 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.482-dev (2026-08-02) - #915 Maul illusion pool admits vanilla-owned sources only [untested]
+
+- Fixed the Maul illusion picker offering a 1H sword (#915): illusion-source
+  scans now admit vanilla-owned skins only, so CWV's own Sword and Mace base
+  skin (which borrows es_dual_wield_hammer_sword for template resolution with
+  an inverse sword-right layout) can no longer masquerade as a Maul source.
+- Same provenance filter applied to the dual-swords, dual-maces (Cudgel and
+  Dawi Mace pollution), and Rapier (default-mesh duplicate) source scans;
+  stale polluted picker entries from a prior mod generation are scrubbed on
+  load. NetworkLookup untouched for wire stability.
+- New runtime census issue915_maul_illusion_vanilla_provenance and host test
+  test_cwv_illusion_family_provenance pin the class.
+
+**Solo verify:** open the Maul illusion picker on Kruber - every offered
+illusion is a mace-family model (no 1H sword rows). Run /cwv and confirm the
+issue915 census reports PASS. Spot-check dual maces and Rapier pickers for
+the scrubbed pollution.
+
 ## 0.1.481-dev (2026-08-01) - canonical generated-skin ownership (#704) [verify-fix]
 
 - Added `cwv_owner_item_type` to every CWV-generated `ItemMasterList` weapon

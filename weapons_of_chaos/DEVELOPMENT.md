@@ -467,13 +467,21 @@ mission-entry replay is structurally incomplete.
 
 ### Blightreaper combat and Shyish residency (2026-07-16, issues #632/#643)
 
-The private template retains Kerillian Sword's authored graph at 75% speed, but
-its light chain is now two donor lights, Empire Sword's complete authored
-vertical sweep as light three, then Kerillian's complete stab sweep as light
-four. Every heavy's light-chain exit is retargeted to that overhead/stab pair.
-Greataxe light/heavy profiles provide the requested armor behavior; the existing
-Greataxe impact events remain unchanged. A flat `0.15` critical chance is baked
-into every sweep rather than expressed through a rerollable vanilla property.
+The private template retains Sienna Crowbill's authored graph and baked sweep
+geometry at 83% speed. Its four-light, three-heavy, and push-follow-up ordering
+is descriptor-driven without replacing the donor's authored attack units.
+Native Greataxe profiles provide the requested armor behavior in the NATIVE
+split verified against `2h_axes.lua`: lights use `medium_slashing_smiter_2h`
+(2h_axes.lua:469/614/760) and heavies use `heavy_slashing_axe_linesman`
+(2h_axes.lua:189/328) - do not "fix" this the other way around; a 2026-07-22
+candidate claimed the rows were reversed and the decompiled source disproves
+it. The three cleave budgets derived at
+`ActionSweep.client_owner_start_action` are doubled only for the private
+Blightreaper template. This avoids a private damage-profile id on the attack
+RPC. Native `axe_2h_hit`, `melee_hit_axes_2h`, and `blunt_hit_armour` provide
+impact presentation while the Crowbill graph and Executioner swing whoosh
+remain separate owners. A flat `0.15` critical chance is baked into every
+sweep rather than expressed through a rerollable property.
 The two inventory property rows are display-only no-op buffs; in particular,
 `+50% Power vs. Order` must never acquire a `stat_buff` or proc.
 
@@ -488,6 +496,14 @@ dependencies. WOC acquires that package under one lifetime reference and gates
 spawn on `PackageManager.has_loaded(package, reference)`. Never pass the unit
 path itself to `Managers.package:load` and never restore the disproven
 `Application.can_get` gate.
+
+The exact package reference is held across keep/mission transitions, then
+released on mod disable/unload. Spirit listener and live-unit state remain
+mission-scoped. Bounded `[WOC:632]` telemetry records the live backend or exact
+relic identity used for each observed kill, attribution decision, poison marker,
+spawn, first chase update, contact, and exceptional cleanup. Do not infer
+gameplay failure from the ItemMasterList acquisition definition: MoreItemsLibrary
+copies the intrinsic rows onto the live backend item, which is the runtime owner.
 
 At contact, reproduce `mutator_death.lua`: choose rank-one damage five when it
 is below total health, otherwise permanent health minus one; call host-side

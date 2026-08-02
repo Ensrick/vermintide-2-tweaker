@@ -437,10 +437,15 @@ local _ult_moods = {
 --   bleeding_out   generic_status_extension.lua:1457
 --   wounded        generic_status_extension.lua:1458
 local _downed_moods = {
-    knocked_down = true,
-    bleeding_out = true,
-    wounded      = true,
+    knocked_down = true,   -- red knocked-down vignette [src: mood_settings.lua:33-44]
+    bleeding_out = true,   -- persistent grayscale after revive [src: mood_settings.lua:65-71]
+    wounded      = true,   -- last-wound screenspace fx [src: mood_settings.lua:72-82]
 }
+-- Issue #380: exported so /gt_regression_test can lock all three downed moods in
+-- the swallow set. Both the red vignette (knocked_down) and the lingering
+-- grayscale (bleeding_out/wounded) render only through the mood system, so this
+-- single set is the whole surface the disable-downed-fx toggle must cover.
+mod._gt_downed_moods = _downed_moods
 
 mod:hook("MoodHandler", "set_mood", function (func, self, mood_name, reason, value)
     if value then  -- only intercept ENABLE calls; disables pass through
