@@ -1,6 +1,29 @@
 return function(H, repo_root)
     local Audit = dofile(repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_pricing_audit.lua")
+    local Policy = dofile(repo_root
+        .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_pricing_policy.lua")
+
+    H.test("CT #467 exact policy composes price discount and start-shrine multiplier", function()
+        H.equal(Policy.price("barkskin", "rare", 0, 100), 225)
+        H.equal(Policy.price("barkskin", "rare", 0.5, 100), 112)
+        H.equal(Policy.price("barkskin", "rare", 0, 50), 113)
+        H.equal(Policy.price("ordinary", "exotic", 0, 100), 250)
+        H.equal(Policy.tier("boonset_crit_set_bonus", "unique"), "run-defining")
+    end)
+
+    H.test("CT #467 exact policy covers current and future known-rarity catalog entries", function()
+        local report = Policy.audit_catalog({
+            rare = { { name = "barkskin" }, { name = "future_rare" } },
+            exotic = { { name = "boulder_bro" } },
+            invalid = { { name = "bad" } },
+        })
+        H.equal(report.total, 4)
+        H.equal(report.priced, 3)
+        H.equal(report.overrides, 2)
+        H.equal(#report.missing, 1)
+        H.equal(report.missing[1], "invalid:bad")
+    end)
 
     H.test("CT #467 catalog is deterministic and preserves tier prices", function()
         local pools = {

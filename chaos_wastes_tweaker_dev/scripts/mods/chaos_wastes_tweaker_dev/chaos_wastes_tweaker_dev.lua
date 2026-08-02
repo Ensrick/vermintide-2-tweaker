@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.313-dev"
+local MOD_VERSION = "0.7.314-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -833,6 +833,8 @@ mod._ct_bot_economy_initialized = {}
 CT_BOON_PRICE_AUDIT_MARKER = "boon_price_audit:auto_once_bounded_v0.7.279"
 mod._ct_boon_pricing_audit = mod:dofile(
     "scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_pricing_audit")
+mod._ct_boon_pricing_policy = mod:dofile(
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_pricing_policy")
 mod._ct467_audit_done = false
 mod._ct467_last_audit = nil
 
@@ -905,8 +907,12 @@ function mod._ct_boon_price_audit_once(force, run_controller)
             local ok, resolved = pcall(Localize, template.advanced_description)
             if ok and resolved then description = resolved end
         end
-        pcall(printf, "[ct:467] row name=%s rarity=%s shop=%s display=%s description=%s",
+        local exact_price = mod._ct_boon_pricing_policy.price(
+            record.name, record.rarity, 0, 100)
+        local price_tier = mod._ct_boon_pricing_policy.tier(record.name, record.rarity)
+        pcall(printf, "[ct:467] row name=%s rarity=%s shop=%s rework=%s price_tier=%s display=%s description=%s",
             record.name, tostring(record.rarity), tostring(record.shop_price),
+            tostring(exact_price), tostring(price_tier),
             mod._ct467_flat_text(display, 120), mod._ct467_flat_text(description, 240))
     end
     for _, anomaly in ipairs(report.anomalies) do
@@ -3343,6 +3349,9 @@ mod:hook_safe("DeusShopView", "_create_ui_elements", function(self, shop_setting
     -- module uses the same price helper for this display and the charged value.
     if mod._ct_start_shrine_runtime then
         mod._ct_start_shrine_runtime.decorate_shop(self)
+    end
+    if mod._ct_boon_pricing_runtime then
+        mod._ct_boon_pricing_runtime.enforce_shop(self)
     end
     -- v0.7.67 diagnostic: log the blessings the shop is offering this visit. The
     -- 2026-05-20 session had blessing_of_power available at shop_strife but the
@@ -9499,6 +9508,8 @@ _rt_register("issue571_cw_tab_collectibles_safe_reflow", _ct_tab_layout_571.regr
 mod._ct_start_shrine_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_start_shrine_policy")
 mod._ct_start_shrine_runtime = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_start_shrine_runtime")
 _rt_register("issue458_start_shrine_config", mod._ct_start_shrine_runtime.regression)
+mod._ct_boon_pricing_runtime = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_pricing_runtime")
+_rt_register("issue467_individual_boon_prices", mod._ct_boon_pricing_runtime.regression)
 
 -- ============================================================
 -- Bot Boon Mirror (v0.7.76)
@@ -9842,13 +9853,22 @@ end)
 mod:hook("DeusRunController", "_try_buy_power_up", function(func, self, buyer, power_up, discount)
     -- _ct_consolidated_try_buy_power_up_hook: #458 must share this existing
     -- purchase choke point with #466. A second VMF hook on the pair is dropped.
-    local start_handled, bought, start_cost = false, nil, nil
+    local start_handled, bought = false, nil
     if mod._ct_start_shrine_runtime then
-        start_handled, bought, start_cost = mod._ct_start_shrine_runtime.try_buy(
+        start_handled, bought = mod._ct_start_shrine_runtime.try_buy(
             self, buyer, power_up, discount)
     end
     if not start_handled then
-        bought = func(self, buyer, power_up, discount)
+        local pricing_handled, pricing_bought
+        if mod._ct_boon_pricing_runtime then
+            pricing_handled, pricing_bought = mod._ct_boon_pricing_runtime.try_buy(
+                self, buyer, power_up, discount)
+        end
+        if pricing_handled then
+            bought = pricing_bought
+        else
+            bought = func(self, buyer, power_up, discount)
+        end
     end
     if not bought or _ct_bot_mirror_active then return bought end
     local run_state = self and self._run_state
@@ -9858,9 +9878,6 @@ mod:hook("DeusRunController", "_try_buy_power_up", function(func, self, buyer, p
     local mode_random = effective_setting("bots_get_random_boons")
     if not (mode_mirror or mode_random) or not power_up then return bought end
 
-    local cost = start_handled and start_cost
-        or mod._ct_bot_economy.shop_boon_cost(rawget(_G, "DeusCostSettings"),
-            power_up.rarity, discount)
     _ct_bot_mirror_active = true
     local ok, err = pcall(function()
         for _, bot in ipairs(mod._ct_bot_economy_players()) do
@@ -9869,6 +9886,13 @@ mod:hook("DeusRunController", "_try_buy_power_up", function(func, self, buyer, p
                 if mode_random then
                     boon_name = mod._ct_bot_pick_random_for_rarity(power_up.rarity) or boon_name
                 end
+                local bot_power_up = { name = boon_name, rarity = power_up.rarity }
+                local cost = start_handled and mod._ct_start_shrine_runtime.price(
+                    power_up.rarity, discount, boon_name)
+                    or (mod._ct_boon_pricing_runtime
+                        and mod._ct_boon_pricing_runtime.price(bot_power_up, discount, 100))
+                    or mod._ct_bot_economy.shop_boon_cost(rawget(_G, "DeusCostSettings"),
+                        power_up.rarity, discount)
                 local start_allowed = not start_handled
                     or mod._ct_start_shrine_runtime.can_purchase(self,
                         bot:network_id(), bot:local_player_id())
@@ -9910,6 +9934,24 @@ mod:hook("DeusRunController", "_try_buy_power_up", function(func, self, buyer, p
     _ct_bot_mirror_active = false
     if not ok then mod._ct_bot_economy_log("shrine bot purchase error=%s", tostring(err)) end
     return bought
+end)
+
+mod:hook("DeusShopView", "_init_power_up_widget", function(func, self, widget,
+        power_up_instance, discount, current_value, max_value, profile_index, career_index)
+    func(self, widget, power_up_instance, discount, current_value, max_value,
+        profile_index, career_index)
+    if mod._ct_boon_pricing_runtime then
+        local price = mod._ct_boon_pricing_runtime.view_price(self, power_up_instance, discount)
+        if price and widget and widget.content then widget.content.price_text = tostring(price) end
+    end
+end)
+
+mod:hook("DeusShopView", "_on_power_up_bought", function(func, self, power_up, discount)
+    func(self, power_up, discount)
+    if not (mod._ct_boon_pricing_runtime and self and self._telemetry_data) then return end
+    local price = mod._ct_boon_pricing_runtime.view_price(self, power_up, discount)
+    local rows = self._telemetry_data.purchased_boons
+    if price and type(rows) == "table" and rows[#rows] then rows[#rows].cost = price end
 end)
 
 -- #144 install-time finding (kept for the record): there is NO fixed max-boon cap in vanilla. A
@@ -11489,6 +11531,17 @@ mod:command("ct_boon_price_audit", "Re-run the bounded #467 live boon tier/price
     else
         mod:echo("Boon price census unavailable; enter Chaos Wastes and try again.")
     end
+end)
+
+mod:command("ct_boon_price_status", "Report individual boon-price coverage for issue #467", function()
+    if not mod._ct_boon_pricing_runtime then
+        mod:echo("[ct:467] individual boon pricing runtime unavailable")
+        return
+    end
+    local report = mod._ct_boon_pricing_runtime.summary()
+    mod:echo("[ct:467] Individual Boon Prices=%s catalog=%d/%d overrides=%d missing=%d",
+        tostring(effective_setting("ct_individual_boon_prices")), report.priced,
+        report.total, report.overrides, #report.missing)
 end)
 
 mod:command("dump_boons", "Deep dump of all DeusPowerUpTemplates + buff data to log", function(filter)

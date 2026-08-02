@@ -771,6 +771,7 @@ local data = {
                                 -- in letter order (enforced in on_setting_changed via
                                 -- chaos_wastes_tweaker_mutex); the leading indent sorts it first.
                                 sub_widgets = {
+                                    { setting_id = "ct_individual_boon_prices", type = "checkbox", default_value = false, tooltip = "ct_individual_boon_prices_tooltip" },
                                     { setting_id = "tweak_miracle_of_isha_aegis",  type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_aegis_tooltip" },
                                     { setting_id = "tweak_miracle_of_isha_wounds", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_wounds_tooltip" },
                                     { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
