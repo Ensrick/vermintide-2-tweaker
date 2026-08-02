@@ -37,8 +37,34 @@ $descriptionVersionDebt = @{
     "dynamic_cosmetic_portraits" = "0.1.25-dev|0.1.13"
 }
 
-function Read-FileUtf8([string]$path) {
-    return [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
+function Try-ReadFileUtf8([string]$path) {
+    try {
+        return [pscustomobject]@{
+            Ok = $true
+            Text = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
+        }
+    }
+    catch [System.IO.FileNotFoundException], [System.IO.DirectoryNotFoundException] {
+        # Agent worktrees may be removed between enumeration and this read.
+        # That race is not a version defect in the invoking checkout.
+        return [pscustomobject]@{ Ok = $false; Text = $null }
+    }
+}
+
+function Test-ModLuaCandidate([string]$path, [string]$name, [string]$parent) {
+    $isMainFile = ($name -eq $parent)
+    $isInModsScripts = $path -match "\\scripts\\mods\\$([regex]::Escape($name))\\"
+    $notExcluded = $path -notlike "*\_archive\*" `
+               -and $path -notlike "*\bundleV2\*" `
+               -and $path -notlike "*\.build\*" `
+               -and $path -notlike "*\.temp\*" `
+               -and $path -notlike "*\.claude\*" `
+               -and $path -notlike "*\.git\*" `
+               -and $path -notlike "*\.spawn_tweaks_ref\*" `
+               -and $path -notlike "*\tweaker\*" `
+               -and $path -notlike "*\sample_*\*" `
+               -and $path -notlike "*\Helpers*"
+    return $isMainFile -and $isInModsScripts -and $notExcluded
 }
 
 function Find-ModLuas {
@@ -49,17 +75,7 @@ function Find-ModLuas {
             $p = $_.FullName
             $name = $_.BaseName
             $parent = (Split-Path $p -Parent | Split-Path -Leaf)
-            $isMainFile = ($name -eq $parent)
-            $isInModsScripts = $p -match "\\scripts\\mods\\$name\\"
-            $notExcluded = $p -notlike "*\_archive\*" `
-                       -and $p -notlike "*\bundleV2\*" `
-                       -and $p -notlike "*\.build\*" `
-                       -and $p -notlike "*\.temp\*" `
-                       -and $p -notlike "*\.spawn_tweaks_ref\*" `
-                       -and $p -notlike "*\tweaker\*" `
-                       -and $p -notlike "*\sample_*\*" `
-                       -and $p -notlike "*\Helpers*"
-            return $isMainFile -and $isInModsScripts -and $notExcluded
+            return Test-ModLuaCandidate $p $name $parent
         }
 }
 
@@ -115,13 +131,30 @@ if ($SelfTest) {
     if (-not (Test-ReleaseIdentity -SourceVersion '1.2.3-dev' -ChangelogText $validFirst).Ok) {
         throw "valid newest-first CHANGELOG fixture did not pass"
     }
-    Write-Host "[check_versions] SELF-TEST PASS - banner drift plus stale/missing/valid newest release identities covered." -ForegroundColor Green
+    $canonicalCandidate = 'C:\repo\weapon_tweaker\scripts\mods\weapon_tweaker\weapon_tweaker.lua'
+    if (-not (Test-ModLuaCandidate $canonicalCandidate 'weapon_tweaker' 'weapon_tweaker')) {
+        throw 'canonical main-mod Lua candidate was excluded'
+    }
+    $agentCandidate = 'C:\repo\.claude\worktrees\agent-race\weapon_tweaker\scripts\mods\weapon_tweaker\weapon_tweaker.lua'
+    if (Test-ModLuaCandidate $agentCandidate 'weapon_tweaker' 'weapon_tweaker') {
+        throw 'agent-worktree Lua candidate was not excluded'
+    }
+    $vanishedRead = Try-ReadFileUtf8 (Join-Path ([System.IO.Path]::GetTempPath()) 'vt2-check-versions-vanished-file')
+    if ($vanishedRead.Ok) {
+        throw 'vanished-file read did not fail closed'
+    }
+    Write-Host "[check_versions] SELF-TEST PASS - banner drift, release identity, agent-worktree exclusion, and vanished reads covered." -ForegroundColor Green
     exit 0
 }
 
 foreach ($modLua in Find-ModLuas) {
     $modName = $modLua.BaseName
-    $luaText = Read-FileUtf8 $modLua.FullName
+    $luaRead = Try-ReadFileUtf8 $modLua.FullName
+    if (-not $luaRead.Ok) {
+        $warnings += "${modName}: SKIP - main Lua vanished during version scan: $($modLua.FullName)"
+        continue
+    }
+    $luaText = $luaRead.Text
     if (-not $Quiet) { Write-Host "Checking $modName" -ForegroundColor DarkGray }
 
     # Row #10: MOD_VERSION constant must exist
@@ -146,7 +179,12 @@ foreach ($modLua in Find-ModLuas) {
     # Row #11: cfg title should include current version
     $cfgPath = Join-Path (Split-Path $modLua.FullName -Parent | Split-Path -Parent | Split-Path -Parent | Split-Path -Parent) "itemV2.cfg"
     if (Test-Path $cfgPath) {
-        $cfgText = Read-FileUtf8 $cfgPath
+        $cfgRead = Try-ReadFileUtf8 $cfgPath
+        if (-not $cfgRead.Ok) {
+            $warnings += "${modName}: SKIP - itemV2.cfg vanished during version scan: $cfgPath"
+            continue
+        }
+        $cfgText = $cfgRead.Text
         if ($cfgText -match 'title\s*=\s*"([^"]+)"') {
             $cfgTitle = $matches[1]
             # Should end with " v<stripped_version>"
@@ -182,7 +220,12 @@ foreach ($modLua in Find-ModLuas) {
     # <mod>/scripts/mods/<mod>/<mod>.lua to find the mod root.
     $changelogPath = Join-Path (Split-Path $modLua.FullName -Parent | Split-Path -Parent | Split-Path -Parent | Split-Path -Parent) "CHANGELOG.md"
     if (Test-Path $changelogPath) {
-        $changelogText = Read-FileUtf8 $changelogPath
+        $changelogRead = Try-ReadFileUtf8 $changelogPath
+        if (-not $changelogRead.Ok) {
+            $warnings += "${modName}: SKIP - CHANGELOG.md vanished during version scan: $changelogPath"
+            continue
+        }
+        $changelogText = $changelogRead.Text
         $identity = Test-ReleaseIdentity -SourceVersion $rawVersion -ChangelogText $changelogText
         if (-not $identity.Ok) {
             $errors += "${modName}: $($identity.Message)"
