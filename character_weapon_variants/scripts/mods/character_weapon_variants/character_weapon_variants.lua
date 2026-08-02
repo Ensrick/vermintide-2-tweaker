@@ -1,13 +1,15 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.481-dev"
+local MOD_VERSION = "0.1.482-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
 mod._cwv_smoke_bomb_probe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_smoke_bomb_probe")
 mod._cwv_smoke_bomb_probe.install(mod)
+-- #915: vanilla-ownership provenance for every illusion-source registry scan.
+mod._cwv_illusion_provenance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_illusion_provenance")
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- The peer-parity beacon and feature-owned channels (including #604 Crowbill
@@ -7238,13 +7240,8 @@ local function _register_kruber_1h_sword_dual_illusions()
 
 	local source_keys = {}
 	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
-				and entry.matching_item_key == "es_1h_sword"
-				-- #915 class guard: vanilla-owned sources only. A CWV base
-				-- skin borrowing this matching key for template resolution
-				-- must never enter the dual-swords source pool (#704 field).
-				and not entry.cwv_owner_item_type then
+		if mod._cwv_illusion_provenance.vanilla_owned(entry)
+				and entry.matching_item_key == "es_1h_sword" then
 			source_keys[#source_keys + 1] = skin_key
 		end
 	end
@@ -7548,15 +7545,10 @@ local function _register_es_1h_mace_dual_illusions()
 
 	local source_keys = {}
 	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
-				and entry.matching_item_key == "es_1h_mace"
-				-- #915 class fix: cwv_es_cudgel_skin (a mace+sword-family
-				-- mesh) and cwv_dr_dawi_mace_skin (a DWARF placeholder mesh)
-				-- both borrow matching_item_key = "es_1h_mace" for template
-				-- resolution; neither belongs to the vanilla es_1h_mace skin
-				-- family. Admit vanilla-owned rows only (#704 field).
-				and not entry.cwv_owner_item_type then
+		-- #915 class fix: excludes cwv_es_cudgel_skin and cwv_dr_dawi_mace_skin,
+		-- which borrow this matching key without vanilla family membership.
+		if mod._cwv_illusion_provenance.vanilla_owned(entry)
+				and entry.matching_item_key == "es_1h_mace" then
 			source_keys[#source_keys + 1] = skin_key
 		end
 	end
@@ -7690,45 +7682,19 @@ local function _register_macesword_mace_maul_illusions()
 
 	local source_keys = {}
 	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
-				and entry.matching_item_key == "es_dual_wield_hammer_sword"
-				-- #915: matching_item_key is template-resolution metadata,
-				-- NOT source provenance. CWV's own Sword and Mace base skin
-				-- (cwv_es_sword_and_mace_skin) carries this vanilla matching
-				-- key with a SWORD in right_hand_unit (inverse hand layout),
-				-- so a bare family scan put a 1H sword in the Maul picker.
-				-- Admit vanilla-owned rows only (#704 ownership field).
-				and not entry.cwv_owner_item_type then
+		-- #915: cwv_es_sword_and_mace_skin borrows this matching key with a
+		-- SWORD right hand (inverse layout); a bare family scan put a 1H
+		-- sword in the Maul picker. See _cwv_illusion_provenance.
+		if mod._cwv_illusion_provenance.vanilla_owned(entry)
+				and entry.matching_item_key == "es_dual_wield_hammer_sword" then
 			source_keys[#source_keys + 1] = skin_key
 		end
 	end
 	table.sort(source_keys)
 
-	-- #915 stale-generation scrub: a previous mod generation (VMF reload)
-	-- may have admitted a CWV-sourced key (cwv_es_maul_cwv_es_sword_and_mace_skin)
-	-- into the picker tiers before the provenance filter above existed.
-	-- Registration below is guarded per-key, so stale tier entries would
-	-- otherwise survive. Drop combo entries whose source row is CWV-owned;
-	-- NetworkLookup rows are left untouched (numeric wire stability).
-	local stale_combos = WeaponSkins.skin_combinations.cwv_es_maul_skins
-	if stale_combos then
-		for _, tier in pairs(stale_combos) do
-			if type(tier) == "table" then
-				for i = #tier, 1, -1 do
-					local tier_key = tier[i]
-					local tier_source = type(tier_key) == "string"
-						and tier_key:match("^cwv_es_maul_(.+)$")
-					local tier_source_row = tier_source
-						and rawget(ItemMasterList, tier_source)
-					if type(tier_source_row) == "table"
-							and tier_source_row.cwv_owner_item_type then
-						table.remove(tier, i)
-					end
-				end
-			end
-		end
-	end
+	-- #915 stale-generation scrub: drop picker-tier entries whose source row
+	-- is CWV-owned (left behind by a pre-filter mod generation on VMF reload).
+	mod._cwv_illusion_provenance.scrub_stale_picker_entries("cwv_es_maul_skins", "cwv_es_maul_")
 
 	local single_hand_display = "units/weapons/weapon_display/display_1h_hammer"
 
@@ -7976,14 +7942,10 @@ local function _register_rapier_illusions()
 
 	local source_keys = {}
 	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
-				and entry.matching_item_key == "wh_fencing_sword"
-				-- #915 class fix: cwv_es_rapier_skin borrows this matching
-				-- key for template resolution; a bare scan re-admits it and
-				-- duplicates the default mesh in the Rapier picker. Admit
-				-- vanilla-owned rows only (#704 field).
-				and not entry.cwv_owner_item_type then
+		-- #915 class fix: excludes cwv_es_rapier_skin, which would otherwise
+		-- re-enter its own pool and duplicate the default mesh.
+		if mod._cwv_illusion_provenance.vanilla_owned(entry)
+				and entry.matching_item_key == "wh_fencing_sword" then
 			source_keys[#source_keys + 1] = skin_key
 		end
 	end
