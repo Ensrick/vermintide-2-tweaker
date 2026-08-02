@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.481-dev (2026-08-01) - canonical generated-skin ownership (#704) [verify-fix]
+
+- Added `cwv_owner_item_type` to every CWV-generated `ItemMasterList` weapon
+  skin, independently of the vanilla `matching_item_key` retained for safe
+  template application.
+- Sword+Mace pair generation now admits only vanilla-owned Empire sword and
+  mace sources, so Dawi Mace and Cudgel skins cannot enter its paired models.
+- Added a runtime census for complete generated-skin ownership and exact
+  vanilla Sword+Mace component provenance.
+
 ## 0.1.480-dev (2026-08-01) - publish reciprocal Sword-and-Shield styles (#657) [verify-fix]
 
 - Re-staged the v0.1.479-dev reciprocal Empire/Bretonnian Sword-and-Shield

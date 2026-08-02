@@ -20,9 +20,11 @@ local _is_unit_alive = function(u) return type(u) == "userdata" and pcall(Unit.a
 -- #704: the authored Sword+Mace catalog is intentionally asymmetric. Vanilla
 -- row 1 owns the generated paired skin, while the independent component pools
 -- must contain Empire swords on the right and Empire maces on the left. The
--- reported Bardin hammer is not present in those declarations, so capture the
--- exact picker products at their common _setup_illusions seam rather than
--- guessing at a second filter. This classifier is also injected into the late
+-- issue #940 proved that Dawi Mace/Cudgel rows inherit the vanilla Empire mace
+-- matching key for apply compatibility and were therefore admitted as if they
+-- were vanilla presentation sources. Capture the exact picker products at the
+-- common _setup_illusions seam and classify canonical CWV owner metadata before
+-- the compatibility family. This classifier is also injected into the late
 -- runtime checks as a pure family boundary.
 local _ISSUE704_ITEM_TYPE = "cwv_es_sword_and_mace"
 local _ISSUE704_ENTRY_CAP = 56
@@ -48,9 +50,20 @@ local function _issue704_expected_family(surface, provider_contract)
     return type(spec) == "table" and spec.matching_item_key or nil
 end
 
-COS.classify_issue704_picker_family = function(surface, matching_item_key, provider_contract)
+COS.classify_issue704_picker_family = function(
+        surface, matching_item_key, provider_contract, owner_item_type)
     local expected = _issue704_expected_family(surface, provider_contract)
     if not expected then return false, nil, "unknown-surface" end
+    -- Canonical CWV ownership outranks the vanilla compatibility key.  The
+    -- generated Sword+Mace row deliberately retains its donor key so the
+    -- engine can apply it, while Dawi Mace/Cudgel rows must never enter either
+    -- independently borrowed Empire component pool.
+    if owner_item_type ~= nil and owner_item_type ~= "" then
+        if surface == "vanilla" and owner_item_type == _ISSUE704_ITEM_TYPE then
+            return true, expected, "canonical-owner"
+        end
+        return false, expected, "foreign-cwv-owner"
+    end
     if matching_item_key == expected then return true, expected, "exact-family" end
     if matching_item_key == nil or matching_item_key == "" then
         return false, expected, "missing-family"
@@ -134,12 +147,14 @@ COS.capture_issue704_picker = function(context)
         local data = skin_key and _issue704_skin_data(
             skin_key, item_master_list, weapon_skins) or nil
         local family = data and data.matching_item_key
+        local owner = data and data.cwv_owner_item_type
         local accepted, expected, reason = COS.classify_issue704_picker_family(
-            "vanilla", family, provider_contract)
+            "vanilla", family, provider_contract, owner)
         inspected = inspected + 1
         if not accepted then suspects = suspects + 1 end
-        if not emit("[cos:704] row=vanilla index=%d skin=%s family=%s expected=%s decision=%s reason=%s right=%s left=%s",
+        if not emit("[cos:704] row=vanilla index=%d skin=%s family=%s owner=%s expected=%s decision=%s reason=%s right=%s left=%s",
                 index, _issue704_value(skin_key), _issue704_value(family),
+                _issue704_value(owner),
                 _issue704_value(expected),
                 accepted and "ALLOW" or "SUSPECT", tostring(reason),
                 _issue704_value(data and data.right_hand_unit),
@@ -160,13 +175,15 @@ COS.capture_issue704_picker = function(context)
                 local data = skin_key and _issue704_skin_data(
                     skin_key, item_master_list, weapon_skins) or nil
                 local family = data and data.matching_item_key
+                local owner = data and data.cwv_owner_item_type
                 local accepted, expected, reason = COS.classify_issue704_picker_family(
-                    hand_field, family, provider_contract)
+                    hand_field, family, provider_contract, owner)
                 inspected = inspected + 1
                 if not accepted then suspects = suspects + 1 end
-                if not emit("[cos:704] row=component hand=%s index=%d skin=%s family=%s expected=%s decision=%s reason=%s unit=%s name=%s",
+                if not emit("[cos:704] row=component hand=%s index=%d skin=%s family=%s owner=%s expected=%s decision=%s reason=%s unit=%s name=%s",
                         hand_field, index, _issue704_value(skin_key),
-                        _issue704_value(family), _issue704_value(expected),
+                        _issue704_value(family), _issue704_value(owner),
+                        _issue704_value(expected),
                         accepted and "ALLOW" or "SUSPECT", tostring(reason),
                         _issue704_value(option.unit), _issue704_value(option.name)) then break end
             end

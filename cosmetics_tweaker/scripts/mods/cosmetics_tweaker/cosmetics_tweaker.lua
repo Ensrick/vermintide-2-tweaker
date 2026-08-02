@@ -102,7 +102,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.181-dev"
+local MOD_VERSION = "0.9.182-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -1707,7 +1707,7 @@ do
     -- ownership relation. This covers modded asymmetric pairs whose generated
     -- pair table intentionally couples the hands and therefore cannot supply
     -- independent picker rows. Stable rarity/key sorting keeps UI order fixed.
-    local function _build_offhand_options_from_matching_item(matching_item_key, unit_field, hand_field)
+    local function _build_offhand_options_from_matching_item(matching_item_key, unit_field, hand_field, admitted_owners)
         if type(ItemMasterList) ~= "table" then return nil end
         unit_field = unit_field or "right_hand_unit"
 
@@ -1721,6 +1721,7 @@ do
                     and entry.item_type == "weapon_skin"
                     and entry.matching_item_key == matching_item_key
                     and entry[unit_field]
+                    and CWV_FAMILY_CONTRACT.skin_source_allowed(entry, admitted_owners)
                     and not _skin_requires_unowned_dlc(skin_key) then
                 candidates[#candidates + 1] = {
                     skin_key = skin_key,
@@ -1809,8 +1810,7 @@ do
                 local source_kind = spec.skin_table and "skin_table" or "matching_item"
                 local pool
                 if spec.matching_item_key then
-                    pool = _build_offhand_options_from_matching_item(
-                        spec.matching_item_key, spec.unit_field, hand_field)
+                    pool = _build_offhand_options_from_matching_item(spec.matching_item_key, spec.unit_field, hand_field, spec.admitted_owner_item_types)
                 else
                     pool = _build_offhand_options_from_skin_table(
                         spec.skin_table, spec.unit_field, hand_field)
@@ -10108,9 +10108,8 @@ _cos_runtime_checks.install(mod, _rt_register, {
     cwv_peer_identity = mod._cos_cwv_peer_identity,
     la_instance_policy = mod._la_instance_policy,
     modded_illusion_swap_owner = mod._cos_modded_illusion_swap_owner,
-    issue704_picker_family = function(surface, family)
-        return mod._cos.classify_issue704_picker_family(
-            surface, family, mod._cwv_dual_offhand_contract)
+    issue704_picker_family = function(surface, family, _, owner_item_type)
+        return mod._cos.classify_issue704_picker_family(surface, family, mod._cwv_dual_offhand_contract, owner_item_type)
     end,
 })
 -- ============================================================

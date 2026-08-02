@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.182-dev (2026-08-01) — #704 borrowed-family owner boundary [verify-fix]
+
+- Borrowed matching-key hand pools now distinguish vanilla apply compatibility
+  from CWV presentation ownership. Mod-owned skins are excluded unless an exact
+  hand declaration explicitly admits their canonical owner.
+- Updated the existing bounded #704 census to prefer canonical owner metadata,
+  eliminating the false positive on Sword+Mace's own donor-keyed row while
+  identifying Dawi Mace/Cudgel contamination even when its matching key is a
+  valid Empire mace family.
+- Hardened the live component-pool regression to reject mod-owned sources.
+
 ## 0.9.181-dev (2026-08-01) — #641 semantic offhand identity merge [not-started]
 
 - Loremaster shield rows now merge into each hand pool by the same semantic

@@ -156,6 +156,18 @@ their internals alone.
 
 ## Independent offhand (shield) illusion picker
 
+### Borrowed vanilla families and CWV ownership
+
+Some CWV skins deliberately retain a vanilla `matching_item_key` because the
+engine's illusion-apply path needs a real vanilla template. This is a
+compatibility relation, not presentation ownership. CWV stamps the canonical
+target in `ItemMasterList[skin].cwv_owner_item_type`; matching-key pool builders
+must route through `_cos_cwv_family_contract.skin_source_allowed`. The default is
+vanilla-only. A mod-owned source enters a borrowed pool only through an explicit
+`admitted_owner_item_types` set on that exact hand declaration. This prevents a
+Dawi Mace or Cudgel from leaking into Kruber's Sword+Mace merely because all
+three safely apply through `es_1h_mace`.
+
 The two-row picker on the weapon customization screen lets the user pick a shield independent of the weapon illusion. Vanilla shield options have `unit` set; LA (Loremaster's Armoury) options have `la_armoury_key`, `vanilla_skin`, and `intended_unit`.
 
 ### Dual-weapon ownership contract (#583)

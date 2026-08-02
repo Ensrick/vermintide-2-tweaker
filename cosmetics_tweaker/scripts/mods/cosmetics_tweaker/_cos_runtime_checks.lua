@@ -1330,7 +1330,8 @@ _rt_register("issue483_cwv_sword_mace_individualized_cosmetics", function()
     local expected = { es_1h_sword = {}, es_1h_mace = {} }
     for _, entry in pairs(ItemMasterList or {}) do
         local family = type(entry) == "table" and entry.matching_item_key
-        if expected[family] and entry.item_type == "weapon_skin" and entry.right_hand_unit then
+        if expected[family] and entry.item_type == "weapon_skin"
+                and not entry.cwv_owner_item_type and entry.right_hand_unit then
             expected[family][entry.right_hand_unit] = true
         end
     end
@@ -1354,17 +1355,19 @@ _rt_register("issue704_sword_mace_picker_family_diagnostics", function()
         return "#704 picker-family classifier missing"
     end
     local cases = {
-        { "vanilla", "cwv_es_sword_and_mace", true },
-        { "right_hand_unit", "es_1h_sword", true },
-        { "left_hand_unit", "es_1h_mace", true },
-        { "left_hand_unit", "dr_1h_hammer", false },
-        { "right_hand_unit", "dr_1h_hammer", false },
+        { "vanilla", "es_dual_wield_hammer_sword", "cwv_es_sword_and_mace", true },
+        { "right_hand_unit", "es_1h_sword", nil, true },
+        { "left_hand_unit", "es_1h_mace", nil, true },
+        { "left_hand_unit", "es_1h_mace", "cwv_dr_dawi_mace", false },
+        { "left_hand_unit", "dr_1h_hammer", nil, false },
+        { "right_hand_unit", "dr_1h_hammer", nil, false },
     }
     for _, case in ipairs(cases) do
-        local accepted = ISSUE704_PICKER_FAMILY(case[1], case[2])
-        if accepted ~= case[3] then
-            return string.format("surface=%s family=%s accepted=%s expected=%s",
-                case[1], case[2], tostring(accepted), tostring(case[3]))
+        local accepted = ISSUE704_PICKER_FAMILY(case[1], case[2], nil, case[3])
+        if accepted ~= case[4] then
+            return string.format("surface=%s family=%s owner=%s accepted=%s expected=%s",
+                case[1], case[2], tostring(case[3]),
+                tostring(accepted), tostring(case[4]))
         end
     end
 end)

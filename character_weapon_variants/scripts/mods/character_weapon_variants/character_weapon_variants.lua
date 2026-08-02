@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.480-dev"
+local MOD_VERSION = "0.1.481-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -6688,6 +6688,7 @@ local function _register_variant_skins()
 				item_type         = "weapon_skin",
 				slot_type         = "weapon_skin",
 				matching_item_key = def.style_target_item or def.base_weapon,
+				cwv_owner_item_type = def.item_key,
 				rarity            = rarity,
 				display_name      = def.item_key .. "_skin_name",
 				description       = def.item_key .. "_description",
@@ -6705,6 +6706,14 @@ local function _register_variant_skins()
 				can_wield         = def.careers,
 				template          = nil,
 			}
+		end
+		-- A VMF hot reload can retain the previous ItemMasterList row and skip
+		-- the constructor above.  Reconcile the additive ownership field on the
+		-- retained row as well so Cosmetics never falls back to the compatibility
+		-- matching key for a generated CWV skin.
+		local registered_skin = ItemMasterList and rawget(ItemMasterList, skin_key)
+		if type(registered_skin) == "table" then
+			registered_skin.cwv_owner_item_type = def.item_key
 		end
 
 		if NetworkLookup and NetworkLookup.weapon_skins and not rawget(NetworkLookup.weapon_skins, skin_key) then
@@ -6986,6 +6995,12 @@ local _custom_illusions = {
 }
 
 local _custom_skin_keys = {}
+local _custom_skin_owner_by_combo = {
+	cwv_es_warpriest_hammer_skins = "cwv_es_warpriest_hammer",
+	cwv_es_dual_warpriest_hammers_skins = "cwv_es_dual_warpriest_hammers",
+	cwv_es_warpriest_hammer_shield_skins = "cwv_es_warpriest_hammer_shield",
+	cwv_es_priest_greathammer_skins = "cwv_es_priest_greathammer",
+}
 
 local function _register_custom_illusions()
 	if not ItemMasterList or not WeaponSkins then return end
@@ -6999,6 +7014,8 @@ local function _register_custom_illusions()
 		-- retain their exact visuals without leaving a duplicate craft family.
 		local retired_longsword_pool = illusion.target_combo == "cwv_imperial_longsword_skins"
 		local matching_weapon = retired_longsword_pool and "es_2h_sword" or illusion.matching_weapon
+		local skin_owner = retired_longsword_pool and matching_weapon
+			or _custom_skin_owner_by_combo[illusion.target_combo] or matching_weapon
 
 		local source = WeaponSkins.skins[illusion.source_skin]
 		if not source then
@@ -7036,6 +7053,7 @@ local function _register_custom_illusions()
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
 			matching_item_key = matching_weapon,
+			cwv_owner_item_type = skin_owner,
 			rarity            = source.rarity,
 			display_name      = source.display_name,
 			description       = source.description,
@@ -7148,6 +7166,7 @@ do
 						key = skin_key, name = skin_key,
 						item_type = "weapon_skin", slot_type = "weapon_skin",
 						matching_item_key = target_item,
+						cwv_owner_item_type = target_item,
 						rarity = source.rarity or "exotic",
 						display_name = "cwv_es_infantry_spear_skin_name",
 						description = "cwv_es_infantry_spear_description",
@@ -7248,6 +7267,7 @@ local function _register_kruber_1h_sword_dual_illusions()
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
 			matching_item_key = "cwv_es_dual_swords",
+			cwv_owner_item_type = "cwv_es_dual_swords",
 			rarity            = source.rarity,
 			display_name      = source.display_name,
 			description       = source.description,
@@ -7417,6 +7437,7 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
 			matching_item_key = target.item_key,
+			cwv_owner_item_type = target.item_key,
 			rarity            = source.rarity,
 			display_name      = source.display_name,
 			description       = source.description,
@@ -7561,6 +7582,7 @@ local function _register_es_1h_mace_dual_illusions()
 				item_type         = "weapon_skin",
 				slot_type         = "weapon_skin",
 				matching_item_key = target.matching,
+				cwv_owner_item_type = target.matching,
 				rarity            = source.rarity,
 				display_name      = source.display_name,
 				description       = source.description,
@@ -7682,6 +7704,7 @@ local function _register_macesword_mace_maul_illusions()
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
 			matching_item_key = "cwv_es_maul",
+			cwv_owner_item_type = "cwv_es_maul",
 			rarity            = source.rarity,
 			display_name      = source.display_name,
 			description       = source.description,
@@ -7778,6 +7801,7 @@ local function _register_greataxe_model_illusions()
 			item_type = "weapon_skin",
 			slot_type = "weapon_skin",
 			matching_item_key = _om.greataxe.BASE_WEAPON,
+			cwv_owner_item_type = _om.greataxe.ITEM_KEY,
 			rarity = rarity,
 			display_name = key .. "_name",
 			description = key .. "_description",
@@ -7833,6 +7857,7 @@ local function _register_greataxe_model_illusions()
 			item_type = "weapon_skin",
 			slot_type = "weapon_skin",
 			matching_item_key = _om.crowbill_family.SOURCE_ITEM,
+			cwv_owner_item_type = model.variant_key,
 			rarity = rarity,
 			display_name = model.key .. "_name",
 			description = model.key .. "_description",
@@ -7931,6 +7956,7 @@ local function _register_rapier_illusions()
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
 			matching_item_key = "cwv_es_rapier",
+			cwv_owner_item_type = "cwv_es_rapier",
 			rarity            = source.rarity,
 			display_name      = source.display_name,
 			description       = source.description,
@@ -8095,6 +8121,7 @@ local function _register_imperial_longsword_shield_illusions()
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
 			matching_item_key = "cwv_es_longsword_shield",
+			cwv_owner_item_type = "cwv_es_longsword_shield",
 			rarity            = pair.rarity,
 			display_name      = "cwv_es_longsword_shield_skin_name",
 			description       = "cwv_es_longsword_shield_description",
@@ -8226,6 +8253,7 @@ local function _register_axe_shield_illusions()
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
 			matching_item_key = "cwv_es_axe_shield",
+			cwv_owner_item_type = "cwv_es_axe_shield",
 			rarity            = pair.rarity,
 			display_name      = "cwv_es_axe_shield_skin_name",
 			description       = "cwv_es_axe_shield_description",
@@ -8339,6 +8367,7 @@ local function _register_sword_and_mace_illusions()
 			if type(entry) == "table"
 					and entry.item_type == "weapon_skin"
 					and entry.matching_item_key == matching_key
+					and not entry.cwv_owner_item_type
 					and entry.right_hand_unit then
 				pool[#pool + 1] = {
 					skin_key = skin_key,
@@ -8389,6 +8418,7 @@ local function _register_sword_and_mace_illusions()
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
 			matching_item_key = "cwv_es_sword_and_mace",
+			cwv_owner_item_type = "cwv_es_sword_and_mace",
 			rarity            = rarity,
 			-- Display name / description fall through to a generic
 			-- "Sword and Mace" — auto-populated from the variant def's
@@ -11554,6 +11584,7 @@ local _cwv_regression_context = {
 	transform_map = _transform_map,
 	skin_transform_map = _skin_transform_map,
 	crowbill_transform_by_unit = _crowbill_transform_by_unit,
+	custom_skin_keys = _custom_skin_keys,
 }
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_identity")(mod, _cwv_regression_context)
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_render")(mod, _cwv_regression_context)
