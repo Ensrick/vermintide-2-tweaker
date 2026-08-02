@@ -240,8 +240,9 @@ return function(H, repo_root)
         H.truthy(foot_source:find('_install_inventory_category_hook("HeroWindowLoadoutInventory",', 1, true))
         H.truthy(foot_source:find('_install_inventory_category_hook("HeroWindowLoadoutInventoryConsole",', 1, true))
         H.truthy(foot_source:find('[crt:935] menu-slot', 1, true))
-        H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_UNINTERRUPTIBLE]', 1, true))
-        H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_ROCK_DODGE]', 1, true))
+        H.equal(foot_source:find('icon = BUFF_ICONS[BUFF_UNINTERRUPTIBLE]', 1, true), nil)
+        H.equal(foot_source:find('icon = BUFF_ICONS[BUFF_ROCK_DODGE]', 1, true), nil)
+        H.equal(foot_source:find('sienna_unchained_reduced_damage_taken_after_venting', 1, true), nil)
         H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_ROCK_POWER]', 1, true))
         H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_TEAMWORK_POWER]', 1, true))
         H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_FINAL_MARCH]', 1, true))
@@ -270,6 +271,10 @@ return function(H, repo_root)
         diagnostics_file:close()
         H.truthy(diagnostics_source:find("[crt:699] icon active=true", 1, true))
         H.truthy(diagnostics_source:find("UIAtlasHelper.has_atlas_settings_by_texture_name", 1, true))
+        H.truthy(diagnostics_source:find("UIAtlasHelper.get_atlas_settings_by_texture_name", 1, true))
+        H.truthy(diagnostics_source:find("sienna_unchained_reduced_damage_taken_after_venting", 1, true))
+        H.truthy(diagnostics_source:find("semantic_match=%s", 1, true))
+        H.truthy(diagnostics_source:find("numb_collision=%s", 1, true))
         H.truthy(diagnostics_source:find('_buff_name_to_widget[active_template.name]', 1, true))
         H.truthy(diagnostics_source:find('#hud._unused_buff_widgets', 1, true))
         H.truthy(diagnostics_source:find('hud_capacity=%d', 1, true))
@@ -316,14 +321,31 @@ return function(H, repo_root)
     end
     H.test_if(vanilla_source ~= nil and atlas_source ~= nil,
         "CRT #619 buff icons are resident vanilla Foot Knight atlas keys", function()
-            for _, icon in ipairs({
-                "markus_knight_ability_invulnerability",
+            local visible_icons = {
                 "markus_knight_passive_block_cost_aura",
                 "markus_knight_damage_taken_ally_proximity",
                 "markus_knight_movement_speed_on_incapacitated_allies",
-            }) do
+            }
+            for _, icon in ipairs(visible_icons) do
                 H.truthy(vanilla_source:find('icon = "' .. icon .. '"', 1, true), icon)
                 H.truthy(atlas_source:find(icon .. ' = {', 1, true), icon)
+            end
+            local numb = "sienna_unchained_reduced_damage_taken_after_venting"
+            H.truthy(atlas_source:find(numb .. ' = {', 1, true), numb)
+
+            local function atlas_identity(icon)
+                local start_at = assert(atlas_source:find(icon .. ' = {', 1, true), icon)
+                local next_entry = atlas_source:find('\n\t[%w_]+ = {', start_at + #icon)
+                    or (#atlas_source + 1)
+                local entry = atlas_source:sub(start_at, next_entry - 1)
+                local uv00_a, uv00_b = entry:match('uv00 = {%s*([%d%.]+),%s*([%d%.]+)')
+                local uv11_a, uv11_b = entry:match('uv11 = {%s*([%d%.]+),%s*([%d%.]+)')
+                return table.concat({ uv00_a, uv00_b, uv11_a, uv11_b }, ":")
+            end
+            local numb_identity = atlas_identity(numb)
+            for _, icon in ipairs(visible_icons) do
+                H.equal(atlas_identity(icon) == numb_identity, false,
+                    icon .. " aliases Numb to Pain atlas coordinates")
             end
         end)
 end

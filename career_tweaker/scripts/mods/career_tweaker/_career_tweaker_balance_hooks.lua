@@ -227,7 +227,7 @@ local CRT_DESC_OVERRIDES = {
     },
     ["kerillian_maidenguard_versatile_dodge_desc"] = {
         setting = "rework_we_maidenguard_dance_of_blades",
-        text = "Killing an enemy grants 2%% damage and increases damage taken by 2%% for 2 seconds, stacking up to 15 times. Each stack expires independently; dodging while blocking increases dodge distance by 20%%.",
+        text = "Striking an enemy grants 2%% damage and increases damage taken by 2%% for 2 seconds, stacking up to 15 times. Each stack expires independently; dodging while blocking increases dodge distance by 20%%.",
     },
     -- ------ Kerillian: Shade ------
     ["kerillian_shade_activated_ability_phasing_desc"] = {

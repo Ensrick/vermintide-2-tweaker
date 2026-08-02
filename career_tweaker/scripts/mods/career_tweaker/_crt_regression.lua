@@ -778,6 +778,12 @@ _rt_register("issue472_focused_spirit_contract", function()
     if not sub or sub.buff_func ~= "crt_focused_spirit_damage_taken" then
         return "Focused Spirit vanilla proc was not routed through crt wrapper"
     end
+    if mod._crt.issue472_diagnostics_armed ~= 48 then
+        return "Focused Spirit live transition diagnostics missing or unbounded"
+    end
+    if rework.custom_apply == nil or rework.custom_restore == nil then
+        return "Focused Spirit dynamic talent description lifecycle missing"
+    end
 end)
 
 _rt_register("issue283_talent_menu_noop_guard", function()
@@ -974,8 +980,6 @@ _rt_register("issue619_foot_knight_contract", function()
         end
     end
     local expected_icons = {
-        crt_fk_uninterruptible_heavies = "markus_knight_ability_invulnerability",
-        crt_fk_rock_dodge_distance = "markus_knight_passive_block_cost_aura",
         crt_fk_rock_shield_power = "markus_knight_passive_block_cost_aura",
         crt_fk_teamwork_great_power = "markus_knight_damage_taken_ally_proximity",
         crt_fk_final_march = "markus_knight_movement_speed_on_incapacitated_allies",
@@ -988,6 +992,21 @@ _rt_register("issue619_foot_knight_contract", function()
         local first = template and template.buffs and template.buffs[1]
         if not first or first.icon ~= icon then
             return "Foot Knight active-effect buff has no stable icon: " .. buff_name
+        end
+    end
+    for _, buff_name in ipairs({
+        "crt_fk_uninterruptible_heavies",
+        "crt_fk_rock_dodge_distance",
+        "crt_fk_teamwork_innate_dr_cancel",
+    }) do
+        if feature.buff_icons and feature.buff_icons[buff_name] ~= nil then
+            return "Foot Knight bookkeeping buff leaked into icon catalog: " .. buff_name
+        end
+        local template = BuffTemplates and rawget(BuffTemplates, buff_name)
+        for _, buff in ipairs(template and template.buffs or {}) do
+            if buff.icon ~= nil then
+                return "Foot Knight bookkeeping buff consumes a HUD slot: " .. buff_name
+            end
         end
     end
     local player_manager = Managers.player
@@ -1097,6 +1116,10 @@ _rt_register("issue699_foot_knight_icon_census", function()
     for _, marker in ipairs({
         "[crt:699] icon active=true",
         "UIAtlasHelper.has_atlas_settings_by_texture_name",
+        "UIAtlasHelper.get_atlas_settings_by_texture_name",
+        "sienna_unchained_reduced_damage_taken_after_venting",
+        "semantic_match=%s",
+        "numb_collision=%s",
         'get_hud_component, Managers.ui, "BuffUI"',
         "_buff_name_to_widget[active_template.name]",
         "#hud._unused_buff_widgets",
