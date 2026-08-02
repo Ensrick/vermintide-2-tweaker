@@ -743,6 +743,14 @@ _rt_register("issue932_primary_slot_musket_ammo_pool_contract", function()
 	return controller:contract_error()
 end)
 
+_rt_register("issue1108_primary_slot_musket_ammo_hud_contract", function()
+	local adapter = _om.musket_ammo_hud
+	if type(adapter) ~= "table" or type(adapter.contract_error) ~= "function" then
+		return "Old Musket ammo HUD adapter is not installed"
+	end
+	return adapter:contract_error()
+end)
+
 _rt_register("issue273_cwv_deus_identity_is_exact", function()
 	local report = _om.install_deus_identities("runtime_regression")
 	if #report.skipped > 0 then

@@ -130,6 +130,17 @@ function M.new(options)
 		return pool and pool.reserve or nil
 	end
 
+	function controller:extension_for(owner, slot_name)
+		if not owner or not VALID_SLOTS[slot_name] then return nil end
+		local pool = self:_pool_for_owner(owner, false)
+		local record = pool and pool.slots[slot_name]
+		local ext = record and record.ext
+		if not ext or self.extensions[ext] ~= pool or not self._alive(ext.unit) then
+			return nil
+		end
+		return ext
+	end
+
 	function controller:begin_mutation(ext)
 		local pool = self:_active_record(ext)
 		if not pool then return nil end

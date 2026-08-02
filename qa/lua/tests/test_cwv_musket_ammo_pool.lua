@@ -82,6 +82,19 @@ return function(H, repo_root)
 		H.equal(controller:reserve_for(ranged), nil)
 	end)
 
+	H.test("CWV #1108 exposes only an active owner-slot extension to HUD consumers", function()
+		local alive = setmetatable({}, { __mode = "k" })
+		local controller = policy.new({ alive = function(unit) return alive[unit] == true end })
+		local owner = {}
+		local melee = extension(owner, "slot_melee")
+		alive[melee.unit] = true
+		H.truthy(controller:register(melee))
+		H.equal(controller:extension_for(owner, "slot_melee"), melee)
+		H.equal(controller:extension_for(owner, "slot_ranged"), nil)
+		alive[melee.unit] = false
+		H.equal(controller:extension_for(owner, "slot_melee"), nil)
+	end)
+
 	H.test("CWV #932 applies one ammo pickup transaction to the shared pool", function()
 		local controller = policy.new({ alive = function() return true end })
 		local owner = {}

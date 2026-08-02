@@ -6,6 +6,17 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-19.
 
+## #1108 Primary-slot Old Musket ammo HUD
+
+| Field | Contract |
+|---|---|
+| Symptom | With Old Musket in the primary slot and an ordinary ranged weapon in the secondary slot, the HUD keeps showing the secondary weapon's ammunition while the Musket is wielded. |
+| Root cause | Both native equipment HUD classes refresh ammunition only while iterating `slot_ranged`; the gameplay pool has an authoritative `slot_melee` extension but no presentation consumer selects it. |
+| Fix | `_cwv_musket_ammo_hud.lua` runs once after each native equipment sync and replaces the displayed count only when the wielded primary slot, pool owner/slot, effective template ammo hand, and exact live ammo unit all agree. |
+| Repro | Equip Old Musket in the primary slot and a Handgun in the secondary slot. Spend a different number of rounds from each, wield Old Musket, switch between them, toggle the Musket stance, and repeat with controller HUD enabled. |
+| Expected post-fix | The native counter follows the wielded ammo-bearing Old Musket in either desktop or gamepad HUD and returns to the secondary weapon when that weapon is wielded. A non-ammo melee stance or non-Musket primary cannot borrow the pool or leave a stale count. |
+| Detection | Offline tests cover exact owner/slot selection, ranged/non-ammo/unit-mismatch rejection, one native refresh/focus call, and exactly one post-sync hook per HUD class. `/cwv_musket_ammo_diag` remains the gameplay-state authority. |
+
 ## #932 Primary-slot Old Musket shared ammo
 
 | Field | Contract |

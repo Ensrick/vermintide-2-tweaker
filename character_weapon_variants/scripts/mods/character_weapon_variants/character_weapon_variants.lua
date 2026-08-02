@@ -93,12 +93,12 @@ _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv
 _om.old_musket_preview.set_resource_residency(_om.resource_residency)
 _om.old_musket_preview_pose = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview_pose")
 _om.musket_ammo_pool_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_ammo_pool")
+_om.musket_ammo_hud_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_ammo_hud")
 mod._cwv_preview_descriptor = _om.old_musket_preview
 _om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.profile_package_wire })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
 _om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
-
 -- Single source of truth for the husk override-unit package ref (issue #418).
 -- Used by BOTH the residency force-load producer (_force_load_husk_override_units)
 -- AND the preview/browser mesh-swap consumer's has_loaded gate. A duplicated bare
@@ -2824,16 +2824,14 @@ _om.musket_ammo_pool = _om.musket_ammo_pool_policy.install(mod, {
 })
 _om._CWV_MUSKET_AMMO_EXTS = _om.musket_ammo_pool.extensions
 _om._CWV_RESERVE_PER_MUSKET = _om.musket_ammo_pool.reserve_per_musket
-_om._cwv_musket_pool_cap = function(ext_or_owner)
-	return _om.musket_ammo_pool:capacity_for(ext_or_owner)
-end
+_om._cwv_musket_pool_cap = function(ext_or_owner) return _om.musket_ammo_pool:capacity_for(ext_or_owner) end
 _om._cwv_musket_register_ammo_ext = function(ext, owner, slot_name)
 	return _om.musket_ammo_pool:register(ext, owner, slot_name)
 end
 _om._cwv_musket_unregister_slot = function(owner, slot_name)
 	return _om.musket_ammo_pool:unregister_slot(owner, slot_name)
 end
-
+_om.musket_ammo_hud = _om.musket_ammo_hud_policy.install(mod, _om.musket_ammo_pool)
 -- ============================================================
 -- Musket template-swap hook (BackendUtils.get_item_template)
 -- ============================================================
