@@ -1,5 +1,28 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.259-dev (2026-08-02) -- godmode debuff immunity (#548) + downed-mood regression lock (#380) [untested]
+
+- Godmode now suppresses a curated, cite-verified set of DEBUFFS that ride the
+  buff funnel rather than the HP-damage funnel: Troll Bile's ground pool
+  (DoT + slow), the vomit-in-face blind, and generic slow volumes. Damage
+  immunity alone never blocked these because they apply through
+  BuffExtension:add_buff, which the existing #548 probe only observed. The set
+  is curated so godmode can never strip an unrelated status (heal/buff); gas and
+  warpfire stay out until the observer captures their authored template names.
+- Extended the existing add_buff hook (no second hook on the pair) and added a
+  pure predicate (mod._gt548_should_deny_buff) covered by /gt_regression_test.
+- #380: locked the downed-mood swallow set (knocked_down + bleeding_out +
+  wounded) behind a regression check so a future edit cannot silently drop the
+  bleedout grayscale back out. No behaviour change - the disable-downed-fx
+  toggle already covers all three moods; this only prevents regressing it.
+- (Salvaged from a 2026-07-20 draft authored as 0.2.253-dev; renumbered onto
+  current master, which meanwhile shipped 0.2.254 through 0.2.258.)
+
+**Solo verify:** with godmode ON, walk into a Troll Bile pool (no slow, no green
+debuff, HP flat), take a troll vomit to the face (no blind/slow), and stand in a
+generic slow volume (unaffected). Toggle godmode OFF and confirm every debuff
+behaves vanilla. Run /gt_regression_test; issue548_... and issue380_... pass.
+
 ## v0.2.258-dev (2026-08-01) -- Godmode outgoing armor boundary (#1008) [verify-fix]
 
 - Preserved #549's positive final-damage override and added one earlier,
