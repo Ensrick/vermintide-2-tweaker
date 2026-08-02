@@ -1,6 +1,6 @@
 # Weapons of Chaos — Changelog
 
-## vPENDING-dev - #632 Blightreaper Greataxe impacts, doubled cleave, Shyish evidence [not-started]
+## v0.1.50-dev (2026-08-02) - #632 Blightreaper Greataxe impacts, doubled cleave, Shyish evidence [untested]
 
 - Reconciled landing of the orphaned 2026-07-22 `agent/632` candidate
   (`f40a325c`), adapted to the current boss-catalogue / #934 shared-lease /
