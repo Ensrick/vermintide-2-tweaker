@@ -66,7 +66,12 @@ function Get-DocDateHint([string]$text) {
 
 function Find-AuditDocs {
     $candidates = @()
-    $patterns = @("*AUDIT*.md", "*REVIEW*.md", "POSTMORTEM*.md", "*audit*.md")
+    # POSTMORTEM*.md is deliberately NOT scanned: postmortem files are append-only
+    # incident logs (CHANGELOG-class) whose entries each carry their own date. A
+    # quiet month is absence of incidents, not staleness, and the SUPERSEDED ->
+    # _archive ratchet (#502) must never move a live incident log. Ruling 2026-08-02
+    # (PROJECT_STANDARDS section 7.4).
+    $patterns = @("*AUDIT*.md", "*REVIEW*.md", "*audit*.md")
     foreach ($pat in $patterns) {
         Get-ChildItem -Path $repoRoot -Filter $pat -Recurse -File -ErrorAction SilentlyContinue `
             | Where-Object {
