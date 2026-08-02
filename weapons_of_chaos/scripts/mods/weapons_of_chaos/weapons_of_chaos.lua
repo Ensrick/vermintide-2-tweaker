@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.48-dev"
+local MOD_VERSION = "0.1.49-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -162,6 +162,7 @@ end
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
 local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
+local _network_lookup = mod:dofile("scripts/mods/weapons_of_chaos/_lib_network_lookup")
 local _durable_transform_lib = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_woc_durable_transform")
 local _appearance_fade = mod:dofile(
@@ -1049,12 +1050,16 @@ local function _register_blightreaper()
 		_dbg("Blightreaper Deus identity deferred: %s", tostring(deus_reason))
 	end
 
-	-- Inject into NetworkLookup.item_names so item-name RPCs serialize. rawset:
-	-- the table has an error-throwing __index.
-	if NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, ITEM_KEY) then
-		local idx = #NetworkLookup.item_names + 1
-		rawset(NetworkLookup.item_names, idx, ITEM_KEY)
-		rawset(NetworkLookup.item_names, ITEM_KEY, idx)
+	-- Inject into NetworkLookup.item_names so item-name RPCs serialize. The
+	-- canonical helper preserves both directions and fails closed on half-pairs.
+	local lookup_index, _, lookup_reason = _network_lookup.register_named(
+		NetworkLookup, "item_names", ITEM_KEY)
+	if not lookup_index then
+		_registration_last_gate = "network_lookup"
+		_registration_last_reason = lookup_reason
+		_dbg("Blightreaper registration deferred: NetworkLookup.item_names %s",
+			tostring(lookup_reason))
+		return
 	end
 
 	local items = _backend_items()
