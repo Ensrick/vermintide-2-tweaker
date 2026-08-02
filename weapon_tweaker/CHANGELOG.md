@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.290-beta (2026-08-02) - #420 shared appearance runtime
+
+- Routed ordinary spawn-time and inventory-preview scale/grip transforms through
+  the mod-local copy of the shared atomic WeaponAppearance primitive.
+- Repeated visits to one spawned unit can no longer compound an additive grip
+  offset. Durable animation-tick retention and #569 rotation composition remain
+  separate canonical-baseline owners.
+
 ## 0.12.289-beta (2026-07-26) - #201 Deepwood runtime package ownership
 
 - Cross-career Deepwood Staff now owner-gates and idempotently loads the full

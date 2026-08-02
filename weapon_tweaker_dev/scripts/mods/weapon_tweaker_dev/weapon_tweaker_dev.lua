@@ -29,6 +29,10 @@ Key conventions (also in CLAUDE.md):
 ]]
 
 local mod = get_mod("wt_dev")
+local _WA_LIBRARY = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/_lib_weapon_appearance")
+local _WEAPON_APPEARANCE = _WA_LIBRARY.new()
+mod._wt_weapon_appearance = _WEAPON_APPEARANCE
 
 --[==[
 Direction note — read before adding new cross-character unlocks
@@ -86,7 +90,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.290-dev"
+local MOD_VERSION = "0.12.291-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -484,9 +488,9 @@ local function _scale_weapon_units(slot_data, weapon_key, career_name)
 
     local scale
     if type(scale_factor) == "table" then
-        scale = Vector3(scale_factor[1], scale_factor[2], scale_factor[3])
+        scale = { scale_factor[1], scale_factor[2], scale_factor[3] }
     else
-        scale = Vector3(scale_factor, scale_factor, scale_factor)
+        scale = { scale_factor, scale_factor, scale_factor }
     end
     -- CLARIFY: scale all four hand units identically. Unlike grip offset (which
     -- has a `hand` field for shield-only/weapon-only scaling), scale always
@@ -497,7 +501,7 @@ local function _scale_weapon_units(slot_data, weapon_key, career_name)
     for _, field in ipairs(unit_fields) do
         local unit = slot_data[field]
         if unit then
-            pcall(Unit.set_local_scale, unit, 0, scale)
+            _WEAPON_APPEARANCE.apply(unit, { scale = scale })
         end
     end
     if type(scale_factor) == "table" then
@@ -678,7 +682,7 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
     local offset = _resolve_grip_offset(weapon_key, career_name)
     if not offset then return end
 
-    local pos = Vector3(offset[1], offset[2], offset[3])
+    local descriptor = { offset = { offset[1], offset[2], offset[3] } }
     -- v0.12.136-dev: 3P-ONLY. Grip offsets must NEVER move the 1P units
     -- (right_unit_1p / left_unit_1p). First person is universal across all six
     -- characters and renders correctly by default — offsetting it visibly breaks
@@ -690,16 +694,11 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
     for _, field in ipairs(unit_fields) do
         local unit = slot_data[field]
         if unit then
-            -- POTENTIAL BUG (LOW): if create_equipment fires multiple times for
-            -- the same unit instance (e.g. weapon swap that re-wields the same
-            -- key), the offset compounds (current = previous_offset_position).
-            -- Vanilla units start at zero local_position so the first apply
-            -- is correct; subsequent applies double up. Not currently a known
-            -- issue because spawning re-creates the unit instance.
-            local ok_current, current = pcall(Unit.local_position, unit, 0)
-            if ok_current and current then
-                pcall(Unit.set_local_position, unit, 0, current + pos)
-            end
+            -- The shared primitive owns the weak-key, per-node idempotency
+            -- ledger. Revisiting the same spawned unit cannot compound this
+            -- additive grip delta; durable animation-tick reapplication below
+            -- remains an absolute base+delta owner and is intentionally separate.
+            _WEAPON_APPEARANCE.apply(unit, descriptor)
         end
     end
     _dbg("Offset %s on %s by {%.3f, %.3f, %.3f} (hand=%s)", weapon_key, career_name, offset[1], offset[2], offset[3], tostring(offset.hand or "both"))
