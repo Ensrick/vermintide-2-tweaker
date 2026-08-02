@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.483-dev"
+local MOD_VERSION = "0.1.484-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -59,7 +59,7 @@ _om.cross_slot_filter = mod:dofile("scripts/mods/character_weapon_variants/_cwv_
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
 _om.identity_peer_pull = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_pull")
-_om.husk_transform_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_transform_policy"); _om.appearance_fade = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_fade")(mod)
+_om.husk_transform_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_transform_policy"); _om.appearance_fade = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_fade")(mod, _om)
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
 _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
 _om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_family")
@@ -3599,7 +3599,10 @@ do
 		return u
 	end
 
-	local _loaded = {}   -- path -> true (attempted); exposed for the regression test
+	-- #401: the ledger records SUCCESS, not attempts (a pre-write made failed
+	-- loads count as loaded and never re-attempted -- log-only residency).
+	local _loaded = {}     -- path -> true (load call SUCCEEDED); exposed for the regression test
+	local _attempts, _MAX_LOAD_ATTEMPTS = {}, 3   -- path -> attempt count; bounded retry cap
 
 	local function _force_load_husk_override_units()
 		if not (Managers and Managers.package) then return end
@@ -3609,19 +3612,20 @@ do
 				local u = _om._husk_override_unit_needs_residency(d, field)
 				if u then
 					for _, path in ipairs({ u, u .. "_3p" }) do
-						if not _loaded[path] then
-							_loaded[path] = true
+						if not _loaded[path] and (_attempts[path] or 0) < _MAX_LOAD_ATTEMPTS then
+							_attempts[path] = (_attempts[path] or 0) + 1
 							local ok, err = pcall(function()
 								Managers.package:load(path, ref, nil, true, true)
 							end)
 							if ok then
+								_loaded[path] = true
 								local resident = false
 								pcall(function() resident = Managers.package:has_loaded(path, ref) and true or false end)
 								printf("[cwv husk-override-residency] force-loaded %s (ref=%s, resident=%s, for=%s.%s)",
 									path, ref, tostring(resident), tostring(d.item_key), field)
 							else
-								printf("[cwv husk-override-residency] FAILED to force-load %s (for=%s.%s): %s",
-									path, tostring(d.item_key), field, tostring(err))
+								printf("[cwv husk-override-residency] FAILED to force-load %s (attempt %d/%d, for=%s.%s): %s",
+									path, _attempts[path], _MAX_LOAD_ATTEMPTS, tostring(d.item_key), field, tostring(err))
 							end
 						end
 					end
@@ -3633,6 +3637,15 @@ do
 	end
 
 	_force_load_husk_override_units()
+
+	-- #401 bounded retry: re-run the attempt-capped pass once at all-mods-loaded
+	-- (re-attempts only FAILED loads); preserve the earlier handler at ~:3099.
+	do local previous_on_all_mods_loaded = mod.on_all_mods_loaded
+		function mod.on_all_mods_loaded()
+			if previous_on_all_mods_loaded then previous_on_all_mods_loaded() end
+			_force_load_husk_override_units()
+		end
+	end
 end
 
 -- ============================================================
@@ -3767,6 +3780,7 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
 		_om.combat_styles:on_husk_wield(self, slot_name)
 	end; if descriptor then _om.appearance_fade.husk_wield(self, equipment) end -- #922 complete post-adapter snapshot
 end)
+-- #922 post-_reapply_fade forced re-enroll lives in _cwv_appearance_fade.lua.
 _cwv_husk_wield_diag_installed = true
 
 local function _spawn_and_link_musket_bayonet(world, rifle_unit, bayonet_unit_path, package_ref)

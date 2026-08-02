@@ -3228,3 +3228,40 @@ atlas art based only on technical availability or a loosely related mechanic.
   atlas-identity non-aliasing, and live widget identity in offline/runtime
   coverage. Diagnostics must be transition-only, bounded, chat-silent, and
   distinguish semantic mismatch from missing atlas/widget capacity.
+
+## 84. Hold-to-destroy package references are a DESIGN, not a leak
+
+**First codified:** #282 audit on 2026-08-02 (design shipped earlier in
+cosmetics `_mh_package_lifecycle.lua`).
+**Lives in:** any mod that force-loads a package for session-resident content
+(Material-Hijack graphs, husk override units, cross-character force-loads).
+
+### Symptoms
+- Shutdown log shows `Package '#ID[...]' was not removed before shutdown` for
+  mod-held packages; a leak audit finds load sites with no matching unload.
+- A well-meaning session adds an unload path "for symmetry" and reintroduces
+  the mid-session unload crash the hold was built to prevent.
+
+### Diagnosis pattern
+1. Check whether the reference is deliberately held: one reference per path per
+   process, deduped at acquisition (`_mh_package_lifecycle.lua:37,46-51`), an
+   `on_unload` that REFUSES release with the reason inline, and printf
+   inventory diagnostics (`held/exact/over/missing`).
+2. Engine mechanism (decompile `foundation/scripts/managers/package/
+   package_manager.lua`): a last-reference release with `can_unload` false
+   parks the handle in `_delayed_packages_to_remove` (`:200-237`);
+   `PackageManager.destroy` drains every reference and force-unloads the
+   delayed table (`:254-280`). Hold-to-destroy deliberately routes teardown
+   through that engine recovery path instead of risking a mid-session unload.
+3. Distinguish from a REAL leak: a real leak ACCUMULATES references across
+   repeated triggers (re-request without dedup while a load is in flight - the
+   wt `_wt_deepwood_runtime.lua` `retry()` class found 2026-08-02). Held-once
+   is design; grows-per-transition is a bug.
+
+### Fix template
+- Never add an unload "for symmetry" to a documented hold-to-destroy ledger.
+- For new force-loads: dedupe at acquisition (latch per (package, reference)),
+  make retry paths re-arm WITHOUT issuing a second load while one is in
+  flight, and register the path in the owning mod's inventory diagnostic.
+- Lock the asymmetry in an offline test that asserts the ledger has no unload
+  method AND that repeated triggers do not grow the reference count.

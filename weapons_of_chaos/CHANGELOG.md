@@ -1,5 +1,9 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.51-dev (2026-08-02) - #922 husk fade enrollment eviction fix [untested]
+
+- Fixed #922 husk fade enrollment eviction: the spawn-path enrollment (`GearUtils.spawn_inventory_unit` hook) runs INSIDE vanilla husk wield, but vanilla then calls `_reapply_fade` (`simple_husk_inventory_extension.lua:319` then `:353`), replacing the fade system's linked set with only the four inventory fields (`:292-311`) and evicting WOC's snapshot; the shared fade adapter's fingerprint dedup then reported "unchanged" and skipped every later re-apply. Added the sole WOC hook on `(SimpleHuskInventoryExtension, _reapply_fade)` that re-enrolls with `force = true` after the native replacement (the proven Cosmetics `remote_husk_reapply` pattern), gated on the same positive `_remote_blightreaper` sideband identity as the spawn re-key; vanilla-only husks keep the native linked set untouched. (#922)
+
 ## v0.1.50-dev (2026-08-02) - #632 Blightreaper Greataxe impacts, doubled cleave, Shyish evidence [untested]
 
 - Reconciled landing of the orphaned 2026-07-22 `agent/632` candidate

@@ -23,13 +23,41 @@ local function local_slots()
 	return equipment and equipment.slots, unit
 end
 
+-- #914: locality must be derived from the UNIT ITSELF at hook time. The pull
+-- request fires from the `game_object_initialized` hook, but vanilla assigns
+-- `player.player_unit` only AFTER that broadcast: spawn at
+-- bulldozer_player.lua:365 -> unit_spawner.lua:349 `sync_unit_extensions`
+-- (fires game_object_initialized) -> ownership at bulldozer_player.lua:393
+-- `assign_unit_ownership`. A guard comparing against
+-- `Managers.player:local_player(1).player_unit` therefore NEVER passes at
+-- request time and the whole peer pull goes dead. The inventory extension's
+-- ownership fields are already set in `SimpleInventoryExtension.init`
+-- (simple_inventory_extension.lua:31-32, before game_object_initialized):
+-- the local human player is a BulldozerPlayer (`local_player = true`,
+-- bulldozer_player.lua:9); bots carry `bot_player = true` (player_bot.lua:23).
+local function unit_is_local_human(unit)
+	if not unit then return false end
+	local ok_alive, alive = pcall(function() return Unit.alive(unit) end)
+	if not ok_alive or not alive then return false end
+	local inventory
+	pcall(function()
+		inventory = ScriptUnit.has_extension
+			and ScriptUnit.has_extension(unit, "inventory_system") or nil
+	end)
+	local player = inventory and inventory.player
+	return player ~= nil and player.local_player == true
+		and not inventory.is_bot and not player.bot_player
+end
+
 function M.bind(lifecycle, send_slots, policy, print_fn)
 	local generation = 0
 	local owner = {}
 
 	function owner.request(unit, context)
-		local _, local_unit = local_slots()
-		if not local_unit or local_unit ~= unit then return false end
+		-- #914: derive locality from the unit's own inventory extension, not
+		-- from `local_player(1).player_unit` (nil/stale until vanilla's later
+		-- assign_unit_ownership -- see unit_is_local_human above).
+		if not unit_is_local_human(unit) then return false end
 		generation = generation % policy.MAX_REQUEST_GENERATION + 1
 		local started = lifecycle:begin_request(generation,
 			context or "peer_ready_request")

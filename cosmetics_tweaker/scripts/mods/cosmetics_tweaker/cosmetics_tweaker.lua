@@ -102,7 +102,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.182-dev"
+local MOD_VERSION = "0.9.183-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -4054,6 +4054,8 @@ mod._la_deus_weapon_yield = function()
     return should_yield
 end
 
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_518_probe") -- #518 bounded solo-visible probes: printf-only emitter + owner-wield / paint-skip / husk-miss helpers wired into the three sites below
+
 if BackendUtils then
     mod:hook(BackendUtils, "get_item_units", function(func, item_data, backend_id, skin, career_name)
         local result = func(item_data, backend_id, skin, career_name)
@@ -4146,7 +4148,7 @@ if BackendUtils then
                 local variant, variant_source =
                     _resolve_authored_offhand_variant(entry.armoury_key)
                 if not variant then
-                    _dbg("[husk-mesh-swap] miss: authored variant %s unavailable", tostring(entry.armoury_key))
+                    _dbg("[husk-mesh-swap] miss: authored variant %s unavailable", tostring(entry.armoury_key)); mod._cos518_husk_miss(entry.armoury_key, _current_husk_wield.wearer_peer, template) -- #518 printf
                     -- v0.9.0.14-hotfix: dedup'd chat warning. Surface the
                     -- missing-variant problem to the local user so they know
                     -- their LA install is missing what a peer is broadcasting
@@ -4611,7 +4613,7 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin,
     -- weapon visuals; skip the in-game LA offhand paint. Preview contexts
     -- (loot_previewer / hero_previewer render the KEEP instance) stay live.
     if context == "ingame" and mod._la_deus_weapon_yield() then
-        _dbg("[LA paint] skip: deus run - CW upgrade cosmetics win (#518) bid=%s", tostring(bid))
+        _dbg("[LA paint] skip: deus run - CW upgrade cosmetics win (#518) bid=%s", tostring(bid)); mod._cos518_paint_skip(bid) -- #518 printf
         return false
     end
     _offhand_session_state.migrate_legacy(bid)
@@ -9966,7 +9968,7 @@ mod:hook_safe("SimpleInventoryExtension", "_wield_slot", function(self, equipmen
     -- slot_ranged, then back to slot_melee). Logs from→to via self._ct_last_wielded.
     _trace("TRANSITION WIELD local from=%s to=%s",
         tostring(self._ct_last_wielded), tostring(wielded_slot))
-    self._ct_last_wielded = wielded_slot
+    self._ct_last_wielded = wielded_slot; mod._cos518_owner_wield(slot_data, wielded_slot) -- #518 owner-wield probe (see _cos_518_probe.lua)
 
     -- v0.9.54-dev (#203): RE-APPLY the local player's committed LA offhand on
     -- EVERY local wield. Vanilla _wield_slot only toggles set_unit_visibility on

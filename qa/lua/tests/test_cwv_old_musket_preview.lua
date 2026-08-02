@@ -278,6 +278,72 @@ return function(H, repo_root)
         H.truthy(source:find("[cim:882] mission overview secondary preview mirrored", 1, true))
     end)
 
+    H.test("CWV #474 pose installer covers BOTH previewer classes and consumes once", function()
+        -- The keep inventory previewer is MenuWorldPreviewer, whose methods are
+        -- COPIES of HeroPreviewer taken at class-definition time
+        -- (foundation/scripts/util/class.lua:51-57) and whose own
+        -- `_update_units_visibility` override (menu_world_previewer.lua:315)
+        -- can bypass the base entry. A HeroPreviewer-only hook is the base-class
+        -- trap; the installer must register the derived class alongside.
+        local Pose = dofile(repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview_pose.lua")
+        local hooks = {}
+        local fake_mod = {
+            hook = function(_, class_name, method_name, callback)
+                H.equal(method_name, "_update_units_visibility")
+                H.equal(hooks[class_name], nil,
+                    "duplicate hook registration on " .. tostring(class_name))
+                hooks[class_name] = callback
+            end,
+        }
+        local events = {}
+        local previous_unit = rawget(_G, "Unit")
+        rawset(_G, "Unit", {
+            alive = function(value) return value ~= nil end,
+            animation_event = function(_, event) events[#events + 1] = event end,
+        })
+        local ok, err = pcall(function()
+            Pose.install(fake_mod, nil, function() end, nil)
+            H.truthy(hooks.HeroPreviewer, "HeroPreviewer registration missing")
+            H.truthy(hooks.MenuWorldPreviewer,
+                "MenuWorldPreviewer registration missing (base-class hook trap, #474)")
+
+            local previewer = {
+                character_unit = { "character" },
+                _wielded_slot_type = "ranged",
+                _item_info_by_slot = {
+                    ranged = { name = "cwv_es_musket_old", backend_id = "bid-1" },
+                },
+                _equipment_units = {},
+                _loading_done = false,
+            }
+            H.truthy(Pose.arm(previewer, {
+                character_unit = previewer.character_unit,
+                item_name = "cwv_es_musket_old",
+                backend_id = "bid-1",
+                slot_type = "ranged",
+                slot_index = 2,
+                stance = "ranged",
+                wield_event = "wield_test_event",
+            }))
+            -- Simulate the keep previewer's real call shape: the derived
+            -- wrapper delegates through super (menu_world_previewer.lua:320),
+            -- so BOTH wrappers can observe the same _loading_done edge. The
+            -- pending record must be consumed exactly once.
+            hooks.MenuWorldPreviewer(function(self, dt)
+                return hooks.HeroPreviewer(function(inner)
+                    inner._loading_done = true
+                end, self, dt)
+            end, previewer, 0.016)
+            H.equal(#events, 1, "pose must fire exactly once across the double delivery")
+            H.equal(events[1], "wield_test_event")
+            H.equal(previewer._cwv_old_musket_pose_pending, nil,
+                "the pending record must be consumed")
+        end)
+        rawset(_G, "Unit", previous_unit)
+        if not ok then error(err, 0) end
+    end)
+
     H.test("CWV #474 installs Old Musket in the generic preview lease bridge", function()
         local path = repo_root
             .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"

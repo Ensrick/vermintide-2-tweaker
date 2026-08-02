@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.183-dev (2026-08-02) — #518 solo-visible deus-yield probes [diag]
+
+- **#518 diagnostics: solo-visible probe coverage for the CW deus-yield path [diag].** The pinned live-test falsifier ("the log records the wielded weapon with a non-empty skin= value") had no solo-visible emitter - the only skin= printf repo-wide is CWV's husk-wield line, remote-only, and both #518 failure-path decisions logged via _dbg only (invisible with user mod-logging OFF). New owner module `_cos_518_probe.lua` (the entry file sits at its decomposition ceiling) carries a bounded emitter `mod._cos518_emit` (engine printf only, rawget-guarded, `[cos:518]` prefix, deduped per key, capped at 16 records per channel, no chat) plus three probes the entry wires in:
+  - **OWNER-WIELD probe**, called from the existing consolidated `SimpleInventoryExtension._wield_slot` hook_safe body (no new hook registration): on every LOCAL wield anywhere in a Chaos Wastes run (mechanism "deus": Pilgrimage Chamber, map, mission) logs the wielded item key + the resolved skin the render path consumes (`slot_data.skin` - simple_inventory_extension.lua:259,2106; `item_data.key` - spawning_helper.lua:80) plus the deus-yield verdict. Deduped per (item,skin). One Solo run now discriminates upgrade-selection vs local-rendering vs saved-identity.
+  - **PAINT-SKIP promotion**: the ingame LA-paint deus-yield skip in `_apply_la_offhand_to_units` now also emits a deduped-per-backend_id printf (previous _dbg retained).
+  - **HUSK-MISS promotion**: the husk mesh-swap authored-variant-unavailable miss in the `BackendUtils.get_item_units` hook now also emits a deduped-per-armoury_key printf (previous _dbg and the existing dedup'd chat warning retained).
+  - Offline contract lock: `qa/lua/tests/test_cos_deus_yield_policy.lua` extended with 5 suites - executes the extracted emitter (prefix, printf guard, per-key dedupe, 16-per-channel cap, channel independence, inert-without-printf) and pins the module wiring, the three emit sites, the (item,skin) dedupe key, the mechanism gate, the retained _dbg lines, and the single-`_wield_slot`-hook invariant. (#518)
+
 ## 0.9.182-dev (2026-08-01) — #704 borrowed-family owner boundary [verify-fix]
 
 - Borrowed matching-key hand pools now distinguish vanilla apply compatibility

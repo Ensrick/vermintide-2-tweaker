@@ -1061,14 +1061,18 @@ _rt_register("issue279_no_ammo_preview_descriptor", function()
         base = { right_hand_unit = "rt_trollhammer" },
     })
     if not descriptor then return "#279 descriptor failed: " .. tostring(reason) end
+    -- Real engine recipe shape: vanilla stamps `is_ammo_unit = ammo_unit ~= nil`
+    -- onto the WEAPON row itself (world_hero_previewer.lua:707/731); there is no
+    -- dedicated ammo-only row. The adapter must CLEAR the inherited ammo flag
+    -- and rewrite the row -- deleting flagged rows would vanish the weapon.
     local recipe = {
-        { right_hand = true, unit_name = "rt_trollhammer_3p" },
-        { right_hand = true, is_ammo_unit = true, unit_name = "rt_torpedo_3p" },
+        { right_hand = true, is_ammo_unit = true, unit_name = "rt_trollhammer_3p" },
     }
     local changed = policy.apply_spawn_descriptor(descriptor, recipe,
         function(unit) return unit .. "_3p" end, "hand_flags")
-    if changed ~= 2 or #recipe ~= 1 or recipe[1].unit_name ~= "rt_launcher_3p" then
-        return "#279 inherited preview ammo row survived the canonical descriptor"
+    if changed ~= 2 or #recipe ~= 1 or recipe[1].unit_name ~= "rt_launcher_3p"
+            or recipe[1].is_ammo_unit ~= nil then
+        return "#279 inherited ammo flag was not cleared off the weapon row"
     end
     if policy.apply_spawn_descriptor(descriptor, recipe,
             function(unit) return unit .. "_3p" end, "hand_flags") ~= 0 then
