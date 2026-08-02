@@ -18,6 +18,15 @@ $patterns = [ordered]@{
 
 function Get-Key([string]$File, [string]$Kind) { return "$File|$Kind" }
 
+function Convert-ToRepoRelativePath([string]$FullPath, [string]$RootPath = $root) {
+    $rootPrefix = [IO.Path]::GetFullPath($RootPath).TrimEnd('\', '/') +
+        [IO.Path]::DirectorySeparatorChar
+    $fullName = [IO.Path]::GetFullPath($FullPath)
+    return $(if ($fullName.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        $fullName.Substring($rootPrefix.Length)
+    } else { $fullName }).Replace('\', '/')
+}
+
 # Fast Lua token scrub for the census. The combined expression chooses the
 # earliest token, so '--' inside a quoted/long string remains string content,
 # while quotes inside an earlier comment remain comment content.
@@ -61,7 +70,8 @@ function Get-DetectedRows {
             '--glob', '*/scripts/mods/**/*.lua',
             '--glob', '!**/_archive/**',
             '--glob', '!**/bundleV2/**',
-            '--glob', '!**/_test_fixtures/**')
+            '--glob', '!**/_test_fixtures/**',
+            '--glob', '!**/.claude/**')
         foreach ($needle in $needles) { $rgArgs += @('-e', $needle) }
         $rgArgs += '.'
         Push-Location $root
@@ -78,14 +88,11 @@ function Get-DetectedRows {
     }
 
     $files | Where-Object {
+        $relative = Convert-ToRepoRelativePath $_.FullName
         $_.Name -ne '_lib_resource_residency.lua' -and
-        $_.FullName -notmatch '[\\/]_archive[\\/]|[\\/]bundleV2[\\/]|[\\/]_test_fixtures[\\/]|[\\/]\.claude[\\/]'
+        $relative -notmatch '(^|/)(?:_archive|bundleV2|_test_fixtures|\.claude)(/|$)'
     } | ForEach-Object {
-        $rootPrefix = [IO.Path]::GetFullPath($root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-        $fullName = [IO.Path]::GetFullPath($_.FullName)
-        $relative = $(if ($fullName.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-            $fullName.Substring($rootPrefix.Length)
-        } else { $fullName }).Replace('\', '/')
+        $relative = Convert-ToRepoRelativePath $_.FullName
         $source = [IO.File]::ReadAllText($_.FullName, [Text.Encoding]::UTF8)
         $candidateKinds = @($patterns.Keys | Where-Object {
             $patterns[$_].IsMatch($source)
@@ -190,12 +197,17 @@ function Invoke-SelfTest {
     $missingProofDetected = @{
         'mod/scripts/mods/mod/a.lua|texture' = [pscustomobject]@{Count=1}
     }
+    $fakeRoot = Join-Path ([IO.Path]::GetTempPath()) '.claude\worktrees\agent'
+    $insideRelative = Convert-ToRepoRelativePath (Join-Path $fakeRoot 'mod\scripts\mods\mod\a.lua') $fakeRoot
+    $nestedRelative = Convert-ToRepoRelativePath (Join-Path $fakeRoot '.claude\worktrees\nested\mod\a.lua') $fakeRoot
     $checks = @(
         @{ Name='exact census passes'; Pass=(Get-CensusFindings $good $base).Count -eq 0 }
         @{ Name='count drift fails'; Pass=(Get-CensusFindings $drift $base).Count -gt 0 }
         @{ Name='new boundary fails'; Pass=(Get-CensusFindings $new $base).Count -gt 0 }
         @{ Name='stale row fails'; Pass=(Get-CensusFindings @{} $base).Count -gt 0 }
         @{ Name='shared policy without live proof fails'; Pass=(Get-CensusFindings $missingProofDetected $missingProofManifest).Count -gt 0 }
+        @{ Name='parent .claude worktree path does not hide repository files'; Pass=$insideRelative -eq 'mod/scripts/mods/mod/a.lua' }
+        @{ Name='nested .claude content remains repo-relative and excludable'; Pass=$nestedRelative -match '(^|/)\.claude(/|$)' }
         @{ Name='Lua scrub rejects prose and keeps native calls'; Pass=(
             $patterns.material_bind.Matches((Remove-LuaCommentsAndStrings @'
 -- Unit.set_all_materials(unit, "comment")
