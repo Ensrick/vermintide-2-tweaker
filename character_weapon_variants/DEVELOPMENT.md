@@ -316,6 +316,13 @@ When the user later applies a different illusion via the cosmetic menu, `result.
 
 **`matching_item_key` on the ItemMasterList skin entry MUST be `def.base_weapon`, not `def.item_key`.** Vanilla `_apply_skin_to_item` does `ItemHelper.get_template_by_item_name(matching_item_key)`. For `skin_only` variants (e.g. `cwv_es_longsword_nordland`) the def's `item_key` is NOT mirrored into ItemMasterList by `_auto_register_all` (skin-only entries are deliberately not handed to the player as inventory items), so a lookup against `def.item_key` returns nil and crashes. The `def.base_weapon` (e.g. `es_bastard_sword`) is always present in `ItemMasterList` with a real template — see CHANGELOG v0.1.95.
 
+That vanilla compatibility key is not cosmetic ownership. Every CWV-generated
+`ItemMasterList` weapon-skin row must also carry
+`cwv_owner_item_type = <canonical target item type>`. Consumers that borrow a
+vanilla skin family use this additive field to exclude sibling CWV skins unless
+the target explicitly admits that owner. Never change `matching_item_key` merely
+to repair picker membership; doing so can reintroduce the apply crash above.
+
 ### Forge interactions verified
 
 - Re-roll properties: works (default-rarity items show the property roll UI).

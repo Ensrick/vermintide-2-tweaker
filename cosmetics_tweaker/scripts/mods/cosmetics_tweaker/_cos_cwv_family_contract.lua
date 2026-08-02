@@ -6,6 +6,23 @@
 
 local M = {}
 
+-- CWV skins sometimes keep a vanilla matching_item_key because the engine's
+-- apply path requires a real vanilla template.  That compatibility key is not
+-- presentation ownership.  The producer stamps this field on every generated
+-- ItemMasterList skin so borrowed-family pickers can reject sibling CWV items
+-- without breaking vanilla application.
+M.SKIN_OWNER_FIELD = "cwv_owner_item_type"
+
+function M.skin_source_allowed(entry, admitted_owners)
+    if type(entry) ~= "table" then return false, "invalid-entry" end
+    local owner = entry[M.SKIN_OWNER_FIELD]
+    if owner == nil or owner == "" then return true, "vanilla-owner" end
+    if type(admitted_owners) == "table" and admitted_owners[owner] == true then
+        return true, "admitted-cwv-owner"
+    end
+    return false, "foreign-cwv-owner"
+end
+
 M.families = {
     cwv_es_imperial_crowbill = {
         item_type = "cwv_es_imperial_crowbill",

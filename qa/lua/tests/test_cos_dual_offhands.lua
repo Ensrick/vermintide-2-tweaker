@@ -7,6 +7,8 @@ return function(H, repo_root)
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy.lua"
     local diagnostics_path = repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diagnostics.lua"
+    local cwv_family_path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract.lua"
     local cwv_path = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
     local cim_path = repo_root
@@ -23,6 +25,7 @@ return function(H, repo_root)
     local persist = read(persist_path)
     local commit = read(commit_path)
     local diagnostics = read(diagnostics_path)
+    local cwv_family = assert(dofile(cwv_family_path))
     local cim = read(cim_path)
     local cwv = require("cwv_source").combined(repo_root)
 
@@ -136,9 +139,12 @@ return function(H, repo_root)
 
         local classify = fake_mod._cos.classify_issue704_picker_family
         local provider = fake_mod._cwv_dual_offhand_contract
-        H.equal(classify("vanilla", "cwv_es_sword_and_mace", provider), true)
+        H.equal(classify("vanilla", "es_dual_wield_hammer_sword", provider,
+            "cwv_es_sword_and_mace"), true)
         H.equal(classify("right_hand_unit", "es_1h_sword", provider), true)
         H.equal(classify("left_hand_unit", "es_1h_mace", provider), true)
+        H.equal(classify("left_hand_unit", "es_1h_mace", provider,
+            "cwv_dr_dawi_mace"), false)
         H.equal(classify("left_hand_unit", "dr_1h_hammer", provider), false)
         H.equal(classify("left_hand_unit", "es_1h_mace", {}), false)
 
@@ -164,10 +170,16 @@ return function(H, repo_root)
             },
             provider_contract = provider,
             item_master_list = {
-                pair_skin = { matching_item_key = "cwv_es_sword_and_mace" },
+                pair_skin = {
+                    matching_item_key = "es_dual_wield_hammer_sword",
+                    cwv_owner_item_type = "cwv_es_sword_and_mace",
+                },
                 sword_skin = { matching_item_key = "es_1h_sword" },
                 mace_skin = { matching_item_key = "es_1h_mace" },
-                hammer_skin = { matching_item_key = "dr_1h_hammer" },
+                hammer_skin = {
+                    matching_item_key = "es_1h_mace",
+                    cwv_owner_item_type = "cwv_dr_dawi_mace",
+                },
             },
             weapon_skins = {},
         })
@@ -208,5 +220,28 @@ return function(H, repo_root)
         local bounded_log = table.concat(lines, "\n")
         H.truthy(bounded_log:find("truncated=true", 1, true))
         H.truthy(bounded_log:find("signature_truncated=true", 1, true))
+    end)
+
+    H.test("issue 704 borrowed family distinguishes owner from compatibility key", function()
+        local vanilla = {
+            matching_item_key = "es_1h_mace",
+            right_hand_unit = "empire_mace",
+        }
+        local dawi = {
+            matching_item_key = "es_1h_mace",
+            cwv_owner_item_type = "cwv_dr_dawi_mace",
+            right_hand_unit = "dawi_mace",
+        }
+        H.equal(cwv_family.SKIN_OWNER_FIELD, "cwv_owner_item_type")
+        H.equal(cwv_family.skin_source_allowed(vanilla), true)
+        H.equal(cwv_family.skin_source_allowed(dawi), false)
+        H.equal(cwv_family.skin_source_allowed(dawi, {
+            cwv_dr_dawi_mace = true,
+        }), true)
+        H.truthy(cos:find("CWV_FAMILY_CONTRACT.skin_source_allowed(", 1, true))
+        H.truthy(cos:find("issue704_picker_family = function(surface, family, _, owner_item_type)", 1, true))
+        H.truthy(cos:find("mod._cwv_dual_offhand_contract, owner_item_type)", 1, true))
+        H.truthy(cwv:find("cwv_owner_item_type = def.item_key", 1, true))
+        H.truthy(cwv:find("and not entry.cwv_owner_item_type", 1, true))
     end)
 end

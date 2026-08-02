@@ -15,6 +15,7 @@ local _cwv_wield_hook_registration_count = ctx.wield_hook_registration_count
 local _transform_map = ctx.transform_map
 local _skin_transform_map = ctx.skin_transform_map
 local _crowbill_transform_by_unit = ctx.crowbill_transform_by_unit
+local _custom_skin_keys = ctx.custom_skin_keys
 
 _rt_register("cwv_unit_bearing_variants_registered", function()
     -- Issue #417: a variant that overrides a hand unit must resolve a def on every
@@ -1507,6 +1508,50 @@ _rt_register("issue567_skin_reverse_index_valid", function()
         or not tostring(skin.left_hand_unit):find("wpn_emp_mace_03_t1", 1, true) then
         return "#567 exact skin lost sword-right/mace-left authored hand order"
     end
+end)
+
+_rt_register("issue704_canonical_skin_owner_and_sword_mace_sources", function()
+	local function require_owner(keys, label)
+		for skin_key in pairs(keys or {}) do
+			local row = ItemMasterList and rawget(ItemMasterList, skin_key)
+			if type(row) ~= "table" then
+				return string.format("%s skin missing from ItemMasterList: %s",
+					label, tostring(skin_key))
+			end
+			if type(row.cwv_owner_item_type) ~= "string"
+					or row.cwv_owner_item_type == "" then
+				return string.format("%s skin lacks canonical owner: %s matching=%s",
+					label, tostring(skin_key), tostring(row.matching_item_key))
+			end
+		end
+	end
+	local problem = require_owner(_om._skin_keys, "generated")
+		or require_owner(_custom_skin_keys, "custom")
+	if problem then return problem end
+
+	local vanilla = { es_1h_sword = {}, es_1h_mace = {} }
+	for _, row in pairs(ItemMasterList or {}) do
+		local family = type(row) == "table" and row.matching_item_key
+		if vanilla[family] and row.item_type == "weapon_skin"
+				and not row.cwv_owner_item_type and row.right_hand_unit then
+			vanilla[family][row.right_hand_unit] = true
+		end
+	end
+	local combo = WeaponSkins and WeaponSkins.skin_combinations
+		and WeaponSkins.skin_combinations.cwv_es_sword_and_mace_skins
+	for _, bucket in pairs(combo or {}) do
+		for _, skin_key in ipairs(type(bucket) == "table" and bucket or {}) do
+			local row = ItemMasterList and rawget(ItemMasterList, skin_key)
+			if type(row) == "table" and row.cwv_owner_item_type == "cwv_es_sword_and_mace" then
+				if not vanilla.es_1h_sword[row.right_hand_unit] then
+					return "Sword+Mace pair admitted non-vanilla sword owner: " .. tostring(skin_key)
+				end
+				if not vanilla.es_1h_mace[row.left_hand_unit] then
+					return "Sword+Mace pair admitted non-vanilla mace owner: " .. tostring(skin_key)
+				end
+			end
+		end
+	end
 end)
 
 mod._cwv_dev_anim_picker.install()
