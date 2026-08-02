@@ -1005,6 +1005,12 @@ There is no pre-merge or hosted-QA publication override. `-SkipGitHub` and
 bypass exact clean default HEAD, its merged PR, successful hosted `qa-gate`,
 release provenance, the machine-global claim, or tracked-bundle parity.
 
+The hosted-check lookup is fully paginated (issue #1109). Issue and tracker
+workflows can attach more than GitHub's default 30 check runs to one commit, so
+publication authorization must request the maximum page size and flatten every
+page before locating the exact successful `qa-gate`. Never treat the first REST
+page as a complete authorization census.
+
 **Agent/headless publication is noninteractive.** The operator entry point is
 only `tools\ship\ship.ps1`; direct launcher publication and GUI publication are
 not alternatives. Agent, CI, and default launcher verification must not start

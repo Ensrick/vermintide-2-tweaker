@@ -103,6 +103,18 @@ function ConvertFrom-PublicationNativeJson {
     }
 }
 
+function Merge-PublicationCheckRunPages {
+    param([object[]]$Pages)
+
+    $runs = @()
+    foreach ($page in @($Pages)) {
+        if ($page -and $page.check_runs) {
+            $runs += @($page.check_runs)
+        }
+    }
+    return @($runs)
+}
+
 function Get-LivePublicationAuthorization {
     param(
         [string]$Repo,
@@ -122,16 +134,21 @@ function Get-LivePublicationAuthorization {
     $pulls = @(ConvertFrom-PublicationNativeJson `
         (Invoke-PublicationNativeCapture { & gh api -H 'Accept: application/vnd.github+json' "repos/$Repo/commits/$SourceCommit/pulls" }) `
         'GitHub associated pull requests')
-    $checksResponse = ConvertFrom-PublicationNativeJson `
-        (Invoke-PublicationNativeCapture { & gh api -H 'Accept: application/vnd.github+json' "repos/$Repo/commits/$SourceCommit/check-runs" }) `
+    # Issue #1109: issue lifecycle edits can create enough tracker-guard runs to
+    # push qa-gate beyond GitHub's default first 30 results. Use the maximum
+    # page size and consume every page; authorization must never depend on the
+    # ordering or volume of unrelated check suites for the same commit.
+    $checkPages = ConvertFrom-PublicationNativeJson `
+        (Invoke-PublicationNativeCapture { & gh api --paginate --slurp -H 'Accept: application/vnd.github+json' "repos/$Repo/commits/$SourceCommit/check-runs?per_page=100" }) `
         'GitHub check runs'
+    $checkRuns = Merge-PublicationCheckRunPages -Pages @($checkPages)
 
     return Test-PublicationAuthorizationSnapshot `
         -SourceCommit $SourceCommit `
         -DefaultBranch $defaultBranch `
         -DefaultBranchCommit ([string]$branchRef.object.sha) `
         -PullRequests $pulls `
-        -CheckRuns @($checksResponse.check_runs)
+        -CheckRuns @($checkRuns)
 }
 
 function ConvertTo-PublicationEvidenceUtcString {
