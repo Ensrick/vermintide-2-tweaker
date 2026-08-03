@@ -4,7 +4,7 @@
 
 - The shared mutator_shadow_damage_reduction template is patched only for the
   lifetime of an Adventure Shadow session and restored on stop, so the Chaos
-  Wastes Be''lakor curse sees the vanilla zero-effect marker again. Previously
+  Wastes Be'lakor curse sees the vanilla zero-effect marker again. Previously
   a boot-time write gave CW shadow enemies 90 percent damage reduction whenever
   event_tweaker was installed.
 - Shadow damage reduction corrected from -90 percent to the vanilla Ulgu wind
@@ -12,6 +12,10 @@
   shadow policy module.
 - Dormant-template leak and constant-drift sentinels added to the regression
   command; offline suite locks both defects.
+- Retires a stale tracked bundle that dated to the mod's first import and that
+  no current build reproduces; caught by the ship reproducibility gate.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
+
 ## 0.4.41-dev (2026-08-01) - issue #802 Campaign ownership correction [verify-fix]
 
 - Corrects the deployed unhide-only candidate. Vanilla's hidden `celebrate` descriptor has `sort_order=0` and Bogenhafen presentation, while Helmgart has `sort_order=1`; controller area selection gives its first sorted entry the special Campaign widget. Exposing `celebrate` directly therefore replaced Campaign with the two event missions.

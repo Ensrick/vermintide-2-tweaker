@@ -5,14 +5,14 @@
 - Vanilla only charges ammo reserve for the ranged slot
   (generic_ammo_user_extension.lua reload path), so the melee-slot Old Musket
   reloaded for free. The pool controller now charges any chamber refill vanilla
-  left uncharged, mirroring vanilla''s no-ammo-consumed buff exemptions; the
+  left uncharged, mirroring vanilla's no-ammo-consumed buff exemptions; the
   shared 20-round pool depletes identically from either slot. Ammo state is
   owner-local, so host and client each drain correctly with no wire traffic.
 - Regression: issue1107_melee_slot_reload_drains_reserve synthetic controller
   check plus a contract tripwire.
 ## 0.1.486-dev (2026-08-03) -- preview spawn-safety contract repaired; picker dump audible (#237, #317) [verify-fix][untested]
 
-- Preview/browser mesh swap (#237, issue 419): the resolved-3p helper''s and/or
+- Preview/browser mesh swap (#237, issue 419): the resolved-3p helper's and/or
   collapse silently bypassed the documented residency guard, so every preview
   target fell through to blind base.."_3p" concatenation. New preview gate:
   husk resolver answers are final, the invisible-weapon sentinel and non-player
@@ -20,7 +20,7 @@
   spawnable crash floor (including the #474 donor-material gate) before
   World.spawn_unit. Packaged _3p families still swap exactly as before.
 - 3P Animation Picker (#317): /cwv_dump_anim_picks output moved to printf so
-  the card''s evidence step produces evidence; regression check now captures
+  the card's evidence step produces evidence; regression check now captures
   the dump at runtime.
 ## 0.1.485-dev (2026-08-02) - #476 partial-publish remote revert fix + #932 dead call removal [untested]
 
