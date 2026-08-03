@@ -1,5 +1,20 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.53-dev (2026-08-03) - #633 executable audio diagnostic contract
+
+- Extended `issue633_blightreaper_audio_contract` from provenance-only constants
+  to an engine-free semantic run of the shipped audio owner: inspect start,
+  replacement, release, unrelated-item rejection, ambient start/expiry, and the
+  three-run cap must all succeed.
+- The same named in-mod regression now requires every live #633 registration
+  surface: Blightreaper spawn observation, inspect start/finish, charge/swing,
+  equipment cleanup, both diagnostic commands, bounded update, and state/disable/
+  unload cleanup. Removing a live diagnostic or ownership edge can no longer
+  leave `/woc_regression_test` green.
+- The keep-trophy ambience remains diagnostic-only. This build still never
+  force-loads `wwise/level_hub` and never sends an audio RPC; mission residency
+  must be observed before peer-spatial ambience is implemented.
+
 ## v0.1.52-dev (2026-08-02) - [WOC:LOAD] banner + honest #642 residency + #615 material reconcile [diag]
 
 - Added the canonical log-provable load banner: `[WOC:LOAD] v<version> enabled

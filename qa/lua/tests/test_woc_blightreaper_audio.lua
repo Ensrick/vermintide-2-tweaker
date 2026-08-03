@@ -179,6 +179,10 @@ return function(H, repo_root)
 		H.truthy(source:find("PROBE_MAX_SECONDS = 8", 1, true))
 	end)
 
+	H.test("WOC #633 named semantic regression drives ownership and probe lifecycle", function()
+		H.equal(Audio.regression_check(), nil)
+	end)
+
 	H.test("WOC #633 runtime hooks are singleton and fully cleaned", function()
 		local main_path = repo_root
 			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
@@ -205,5 +209,14 @@ return function(H, repo_root)
 		H.truthy(source:find('_audio.stop_all("game-state-exit:', 1, true))
 		H.truthy(source:find('_audio.stop_all("mod-disabled")', 1, true))
 		H.truthy(source:find('_audio.stop_all("mod-unload")', 1, true))
+		H.truthy(source:find('local semantic_error = _audio_lib.regression_check()', 1, true))
+		for _, surface in ipairs({
+			"spawn_observer", "inspect_start", "inspect_finish", "charge_audio",
+			"swing_audio", "equipment_cleanup", "contract_command", "probe_command",
+			"bounded_update", "game_state_cleanup", "disable_cleanup", "unload_cleanup",
+		}) do
+			H.truthy(source:find('_woc633_surface("' .. surface .. '")', 1, true),
+				"missing #633 live surface registration: " .. surface)
+		end
 	end)
 end
