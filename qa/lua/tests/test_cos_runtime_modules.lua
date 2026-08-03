@@ -130,9 +130,23 @@ return function(H, repo_root)
         module.install(mod, function(name, fn)
             checks[#checks + 1] = { name = name, fn = fn }
         end, deps)
-        H.equal(#checks, 60)
+        H.equal(#checks, 61)
         H.equal(checks[1].name, "cos_la_reconcile_and_pull_wired")
         H.equal(checks[2].name, "cos_replay_reconciler_wired")
+        -- #25: the cold-load contract must stay registered directly after the
+        -- process-mirror roundtrip it exists to harden.
+        local cosmetic_roundtrip_index, cold_load_index
+        for index, check in ipairs(checks) do
+            if check.name == "cos_la_cosmetic_persistence_roundtrip" then
+                cosmetic_roundtrip_index = index
+            end
+            if check.name == "cos_la_cold_load_contract_25" then
+                cold_load_index = index
+            end
+        end
+        H.truthy(cosmetic_roundtrip_index)
+        H.equal(cold_load_index, cosmetic_roundtrip_index + 1,
+            "cold-load contract must follow the mirror roundtrip it hardens")
         local score_identity_index, score_replay_index
         for index, check in ipairs(checks) do
             if check.name == "cos_la_score_screen_apply_wired" then score_identity_index = index end
