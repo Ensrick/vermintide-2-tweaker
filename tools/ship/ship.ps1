@@ -5,7 +5,9 @@
 #   (2) after merge, the clean live default HEAD deploys, records authorization,
 #       uploads, and verifies the exact reviewed bytes
 #   + GitHub-issue status labeling (verify-fix / diagnostics-armed, with
-#     coop-required only after solo verification is exhausted; issue #326).
+#     coop-required only after solo verification is exhausted; issue #326)
+#   + pinned CURRENT LIVE TEST card version-surface refresh via
+#     tools/ship/refresh-cards.ps1 (issue #1102).
 #
 # Prefer this over hand-chaining VMBLauncher verbs and
 # `tools\publish-release\publish-release.ps1` separately. It runs both, then
@@ -2077,6 +2079,64 @@ catch {
 }
 
 # ---------------------------------------------------------------------------
+# Step 6b: refresh pinned CURRENT LIVE TEST card version surfaces (issue #1102)
+# ---------------------------------------------------------------------------
+# The 2026-08-02 audit found every sampled pinned card naming a superseded
+# build, so testers failed the [id:LOAD] confirmation on correct builds.
+# After the workshop_log has confirmed this upload, refresh-cards.ps1 rewrites
+# ONLY the just-shipped mod's stale version/manifest tokens inside each pinned
+# exact card (selection by this mod's Workshop item id or its exact runtime
+# anchor); step text, expected needles, topology, and other mods' tokens are
+# never touched, and unparseable cards are skipped and reported. Runs for BOTH
+# streams: unlike step 6's lifecycle labels (applied when the dev build
+# shipped), version surfaces go stale on every upload, dev or stable. Like
+# step 6, this step NEVER fails the ship -- the upload already succeeded.
+Write-Host ""
+Write-Host "==> Refreshing pinned live-test card versions (issue #1102)" -ForegroundColor Cyan
+$cardSummary = 'not run'
+try {
+    $cardGhReady = $false
+    if (Get-Command gh -ErrorAction SilentlyContinue) {
+        $cardGhReady = ((Invoke-NativeProbe { gh auth status }) -eq 0)
+    }
+    if (-not $cardGhReady) {
+        Write-Host "  WARNING: gh not installed/authenticated -- refresh the pinned cards by hand (tools\ship\refresh-cards.ps1)." -ForegroundColor Yellow
+        $cardSummary = 'SKIPPED (gh unavailable) -- refresh by hand'
+    }
+    else {
+        $refreshScript = Join-Path $PSScriptRoot 'refresh-cards.ps1'
+        if (-not (Test-Path -LiteralPath $refreshScript -PathType Leaf)) {
+            Write-Host "  WARNING: refresh-cards.ps1 not found at $refreshScript -- refresh the pinned cards by hand." -ForegroundColor Yellow
+            $cardSummary = 'SKIPPED (script missing)'
+        }
+        else {
+            # Manifest: only a confirmed 'Uploaded new content' line carries a
+            # fresh ManifestID. On NOCHANGE the server manifest did not move,
+            # so existing card manifests are still current -- leave them.
+            $shipManifestId = $null
+            if ($uploadStatus -eq 'UPLOADED' -and $matchedLine -match 'ManifestID\s+(\d+)') {
+                $shipManifestId = $matches[1]
+            }
+            $refreshArgs = @('-PublishedId', $publishedId, '-NewVersion', $modVersion,
+                             '-LoadTag', $loadTag, '-Repository', 'Ensrick/vermintide-2-tweaker')
+            if ($shipManifestId) { $refreshArgs += @('-NewManifest', $shipManifestId) }
+            & $refreshScript @refreshArgs
+            if ($LASTEXITCODE -eq 0) {
+                $cardSummary = 'OK'
+            }
+            else {
+                Write-Host "  WARNING: refresh-cards.ps1 exited $LASTEXITCODE -- inspect the per-card lines above and refresh the skipped cards by hand." -ForegroundColor Yellow
+                $cardSummary = "PARTIAL (exit $LASTEXITCODE) -- see per-card lines"
+            }
+        }
+    }
+}
+catch {
+    Write-Host "  WARNING: card-refresh step errored ($($_.Exception.Message)) -- refresh the pinned cards by hand." -ForegroundColor Yellow
+    $cardSummary = 'ERRORED -- refresh by hand'
+}
+
+# ---------------------------------------------------------------------------
 # Step 7: success summary
 # ---------------------------------------------------------------------------
 $uploadHuman = if ($uploadStatus -eq 'UPLOADED') { 'Uploaded new content' } else { 'No content change (server up to date)' }
@@ -2090,6 +2150,7 @@ Write-Host ("  Upload       : {0}" -f $uploadHuman)
 Write-Host ("  GitHub       : {0}" -f $githubStatus)
 $labelsHuman = if ($labelSummary.Count -gt 0) { $labelSummary -join '; ' } else { 'none' }
 Write-Host ("  Labels       : {0}" -f $labelsHuman)
+Write-Host ("  Cards        : {0}" -f $cardSummary)
 Write-Host "======================================================" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
