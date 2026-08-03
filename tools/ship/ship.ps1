@@ -2117,9 +2117,18 @@ try {
             if ($uploadStatus -eq 'UPLOADED' -and $matchedLine -match 'ManifestID\s+(\d+)') {
                 $shipManifestId = $matches[1]
             }
-            $refreshArgs = @('-PublishedId', $publishedId, '-NewVersion', $modVersion,
-                             '-LoadTag', $loadTag, '-Repository', 'Ensrick/vermintide-2-tweaker')
-            if ($shipManifestId) { $refreshArgs += @('-NewManifest', $shipManifestId) }
+            # Hashtable splat, NOT an array of '-Name'/value strings: array
+            # splatting a script path binds every element POSITIONALLY (the
+            # dash tokens are not parsed as parameter names), which shoved
+            # $loadTag into -MaxIssues on the first live run (#1102).
+            $refreshArgs = @{
+                PublishedId = "$publishedId"
+                NewVersion  = "$modVersion"
+                LoadTag     = "$loadTag"
+                Repository  = 'Ensrick/vermintide-2-tweaker'
+                MaxIssues   = 300
+            }
+            if ($shipManifestId) { $refreshArgs.NewManifest = "$shipManifestId" }
             & $refreshScript @refreshArgs
             if ($LASTEXITCODE -eq 0) {
                 $cardSummary = 'OK'

@@ -320,6 +320,27 @@ M.prune_missing_items = function(exists)
     return removed
 end
 
+-- #25: full reset that keeps the process mirror and the VMF setting in
+-- lockstep. The old /cos_persist_clear wrote the setting directly and left
+-- the mirror stale, so the very next save_* call persisted the stale mirror
+-- and resurrected every "cleared" record after the next restart.
+M.reset_all = function()
+    _state = _empty_state()
+    _persist()
+end
+
+-- #25 check-only seam: discard the process mirror and re-read the VMF
+-- setting, exactly what a game restart does to this module. VMF deep-clones
+-- table settings on both set and get (vmf settings.lua:54/74 via
+-- foundation/scripts/util/table.lua:31 table.clone), so after this call the
+-- mirror can only contain what _persist actually wrote - a removed or broken
+-- write/load makes the cold-load contract check fail. Production code must
+-- never call this.
+M._rt_cold_reload = function()
+    _state = nil
+    _load()
+end
+
 -- ============================================================
 -- Restore
 -- ============================================================

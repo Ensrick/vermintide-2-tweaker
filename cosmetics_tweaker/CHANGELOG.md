@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.185-dev (2026-08-03) -- cold-load persistence contract locked; clear command repaired (#25) [verify-fix][untested]
+
+- New named regression check cos_la_cold_load_contract_25: seeds LA hat,
+  illusion, and offhand records, discards the in-process mirror, reloads from
+  the persisted setting, and drives the real restore consumers, so the
+  persistence pipeline can no longer silently unwire while checks stay green.
+- Real bug fixed: /cos_persist_clear wrote the setting directly and left the
+  module mirror stale, so the next save resurrected every cleared record after
+  restart. Clears now go through LA_PERSIST.reset_all(), which also wipes
+  offhand records per the command's wipe-all contract.
 ## 0.9.184-dev (2026-08-03) -- husk-hat paint failures name the hat (#697) [verify-fix][untested]
 
 - A residual LA paint failure now emits the armoury key and vanilla key on the

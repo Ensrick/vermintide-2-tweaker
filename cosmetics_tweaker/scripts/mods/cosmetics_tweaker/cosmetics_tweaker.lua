@@ -102,7 +102,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.184-dev"
+local MOD_VERSION = "0.9.185-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -10109,7 +10109,7 @@ _cos_runtime_checks.install(mod, _rt_register, {
     offhand_preload_lifecycle = OFFHAND_PRELOAD_LIFECYCLE, mh_embed = MH_EMBED,
     cwv_peer_identity = mod._cos_cwv_peer_identity,
     la_instance_policy = mod._la_instance_policy,
-    modded_illusion_swap_owner = mod._cos_modded_illusion_swap_owner,
+    modded_illusion_swap_owner = mod._cos_modded_illusion_swap_owner, active_skin = _cos_active_skin, offhand_selection = _offhand_selection, -- #25
     issue704_picker_family = function(surface, family, _, owner_item_type)
         return mod._cos.classify_issue704_picker_family(surface, family, mod._cwv_dual_offhand_contract, owner_item_type)
     end,
