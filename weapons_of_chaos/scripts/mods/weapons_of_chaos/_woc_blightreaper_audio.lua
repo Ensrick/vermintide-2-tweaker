@@ -310,4 +310,63 @@ function M.new(injected)
 	return runtime
 end
 
+-- Engine-free semantic regression used by /woc_regression_test. This drives
+-- the shipped runtime instead of merely checking event-string constants.
+function M.regression_check()
+	local calls = { trigger = 0, stop = 0 }
+	local player, unit_1p, unit_3p = {}, {}, {}
+	local runtime = M.new({
+		unit = { alive = function(unit) return unit ~= nil and not unit.dead end },
+		wwise_utils = {
+			trigger_unit_event = function(world)
+				calls.trigger = calls.trigger + 1
+				return calls.trigger, {}, world
+			end,
+		},
+		wwise_world = {
+			is_playing = function() return true end,
+			stop_event = function() calls.stop = calls.stop + 1 end,
+		},
+		managers = {
+			package = { has_loaded = function() return true end },
+			world = { world = function() return {} end },
+		},
+		local_player_unit = function() return player end,
+		printf = function() end,
+	})
+	runtime.observe_spawn(unit_3p, unit_1p, {}, player)
+	local action_a = { world = {}, weapon_unit = unit_1p }
+	local action_b = { world = {}, weapon_unit = unit_1p }
+	local ok, reason = runtime.start_inspect(action_a)
+	if not ok or reason ~= "started" or runtime.snapshot().inspect ~= 1 then
+		return "inspect runtime did not start one owned local track"
+	end
+	if not runtime.start_inspect(action_b) or calls.stop ~= 1
+			or runtime.snapshot().inspect ~= 1 then
+		return "inspect restart did not replace the previous owned track"
+	end
+	if not runtime.finish_inspect(action_b, "regression-release")
+			or runtime.snapshot().active ~= 0 then
+		return "inspect finish did not clear owned playback"
+	end
+	for _ = 1, M.PROBE_MAX_RUNS do
+		local started, probe_reason = runtime.probe_ambient()
+		if not started or probe_reason ~= "started" then
+			return "bounded ambient probe did not start on a resident fake event"
+		end
+		runtime.update(M.PROBE_MAX_SECONDS)
+	end
+	local capped, cap_reason = runtime.probe_ambient()
+	if capped or cap_reason ~= "probe-cap"
+			or runtime.snapshot().active ~= 0
+			or calls.trigger ~= 2 + M.PROBE_MAX_RUNS
+			or calls.stop ~= 2 + M.PROBE_MAX_RUNS then
+		return "ambient probe cap/expiry ownership contract drifted"
+	end
+	local foreign, foreign_reason = runtime.start_inspect({ world = {}, weapon_unit = {} })
+	if foreign or foreign_reason ~= "not-blightreaper" then
+		return "inspect runtime accepted an unrelated weapon unit"
+	end
+end
+
 return M

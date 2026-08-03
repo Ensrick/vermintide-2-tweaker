@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.52-dev"
+local MOD_VERSION = "0.1.53-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -502,6 +502,10 @@ local _audio = type(_audio_lib) == "table" and type(_audio_lib.new) == "function
 		probe_ambient = function() end,
 		describe = function() end,
 	}
+mod._woc633_audio_surfaces = {}
+local function _woc633_surface(name)
+	mod._woc633_audio_surfaces[name] = true
+end
 mod._woc_inventory_icons = _inventory_icons
 _cursed.install({
 	Colors = rawget(_G, "Colors"),
@@ -2046,6 +2050,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	end
 	return unit_3p, ammo_3p, unit_1p, ammo_1p
 end)
+_woc633_surface("spawn_observer")
 
 -- #922: the husk spawn-path enrollment above runs INSIDE vanilla wield, but
 -- vanilla then calls `_reapply_fade` (simple_husk_inventory_extension.lua:319
@@ -2095,11 +2100,13 @@ mod:hook("ActionInspect", "client_owner_start_action", function(func, self, ...)
 	_audio.start_inspect(self)
 	return result
 end)
+_woc633_surface("inspect_start")
 
 mod:hook("ActionInspect", "finish", function(func, self, reason, ...)
 	_audio.finish_inspect(self, reason or "inspect-finish")
 	return func(self, reason, ...)
 end)
+_woc633_surface("inspect_finish")
 
 -- The custom Blightreaper unit has no inherited weapon flow graph. Recreate
 -- the exact two Executioner Sword flow outcomes at the same native action
@@ -2110,6 +2117,7 @@ mod:hook("ActionMeleeStart", "client_owner_start_action",
 		_audio.play_swing(self, "charge")
 		return result
 	end)
+_woc633_surface("charge_audio")
 
 local _cleave_diag_budget = 4
 mod:hook("ActionSweep", "client_owner_start_action",
@@ -2131,6 +2139,7 @@ mod:hook("ActionSweep", "client_owner_start_action",
 		_audio.play_swing(self, "release")
 		return result
 	end)
+_woc633_surface("swing_audio")
 
 -- Equipment destruction is an independent edge from ActionInspect.finish on
 -- level transitions and forced inventory teardown. Merge here as the sole WOC
@@ -2139,14 +2148,17 @@ mod:hook("GearUtils", "destroy_equipment", function(func, world, equipment, ...)
 	_audio.stop_equipment(equipment, "equipment-destroy")
 	return func(world, equipment, ...)
 end)
+_woc633_surface("equipment_cleanup")
 
 mod:command("woc_audio_contract",
 	"Log Blightreaper inspect and ambient audio provenance",
 	function() _audio.describe() end)
+_woc633_surface("contract_command")
 
 mod:command("woc_audio_probe",
 	"Probe the native keep-trophy event for 8 seconds (maximum 3 runs)",
 	function() _audio.probe_ambient() end)
+_woc633_surface("probe_command")
 
 mod.update = function(dt)
 	_transform_owner:step()
@@ -2155,6 +2167,7 @@ mod.update = function(dt)
 	local network = Managers and Managers.state and Managers.state.network
 	if network and network.is_server then _update_spirits(dt) end
 end
+_woc633_surface("bounded_update")
 
 mod.on_game_state_changed = function(status, state_name)
 	_shared_relic_runtime:on_game_state_changed(status, state_name)
@@ -2163,6 +2176,7 @@ mod.on_game_state_changed = function(status, state_name)
 		_audio.stop_all("game-state-exit:" .. tostring(state_name))
 	end
 end
+_woc633_surface("game_state_cleanup")
 
 mod.on_enabled = function()
 	_shared_relic_runtime:on_enabled("mod-enabled")
@@ -2177,6 +2191,7 @@ mod.on_disabled = function()
 	_audio.stop_all("mod-disabled")
 	_shared_relic_runtime:reset("mod-disabled")
 end
+_woc633_surface("disable_cleanup")
 
 mod.on_unload = function()
 	_stop_spirit_runtime("mod-unload")
@@ -2185,6 +2200,7 @@ mod.on_unload = function()
 	_audio.stop_all("mod-unload")
 	_shared_relic_runtime:reset("mod-unload")
 end
+_woc633_surface("unload_cleanup")
 
 -- Issue 278/613: the fail-safe skip below fires with `key nil` many times per
 -- session (79 hits across the 24 logs of 2026-07-18) and the caller is still
@@ -2507,6 +2523,21 @@ _rt_register("issue633_blightreaper_audio_contract", function()
 			or _audio_lib.CHARGE_EVENT ~= "rare_sword_2h_charge_swing_execution"
 			or _audio_lib.SWING_BANK ~= _moveset.EXECUTIONER_WWISE_DEP then
 		return "Executioner Sword swing/charge audio evidence drifted"
+	end
+	if type(_audio_lib.regression_check) ~= "function" then
+		return "Blightreaper semantic audio regression is unavailable"
+	end
+	local semantic_error = _audio_lib.regression_check()
+	if semantic_error then return semantic_error end
+	local surfaces = mod._woc633_audio_surfaces
+	for _, name in ipairs({
+		"spawn_observer", "inspect_start", "inspect_finish", "charge_audio",
+		"swing_audio", "equipment_cleanup", "contract_command", "probe_command",
+		"bounded_update", "game_state_cleanup", "disable_cleanup", "unload_cleanup",
+	}) do
+		if not (surfaces and surfaces[name] == true) then
+			return "Blightreaper live audio surface is not registered: " .. name
+		end
 	end
 	local package_manager = Managers and Managers.package
 	if package_manager and type(package_manager.has_loaded) == "function" then
