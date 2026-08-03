@@ -1,10 +1,18 @@
--- Owner-scoped shared reserve for the Old Musket (#932).
+-- Owner-scoped shared reserve for the Old Musket (#932, #1107).
 --
 -- Native VT2 gives each weapon unit an independent GenericAmmoUserExtension.
 -- This controller keeps the native extensions and their chambers, but owns one
 -- reserve value for the Old Muskets in a single player's melee/ranged slots.
 -- It never mutates `_max_ammo`; public max-ammo queries are adapted by the
 -- installed hook while the controller synchronizes `_available_ammo` only.
+--
+-- #1107: vanilla's reload completion refills the chamber unconditionally but
+-- charges `_available_ammo` only inside `if buff_extension then`
+-- (generic_ammo_user_extension.lua:164-175), and `apply_buffs` assigns
+-- `owner_buff_extension` for slot_ranged/slot_career_skill_weapon only
+-- (:83-89). A melee-slot musket therefore reloads for free. The update hook
+-- below tracks the chamber across the vanilla call and charges the pool for
+-- any refill vanilla did not charge itself (consumption-side only).
 
 local M = {}
 
@@ -145,6 +153,31 @@ function M.new(options)
 		self:_sync(pool)
 	end
 
+	-- #1107: charge the pool for a reload that vanilla completed WITHOUT
+	-- draining reserve (melee-slot muskets have a nil `owner_buff_extension`
+	-- for their whole life, so vanilla's decrement at
+	-- generic_ammo_user_extension.lua:174 never runs for them). Returns the
+	-- number of rounds drained. `exempt_fn(ext)` mirrors vanilla's
+	-- no-consumption buffs (:169-173) and is only consulted when an
+	-- uncharged refill actually happened. Never touches `_max_ammo`.
+	function controller:end_reload_drain(ext, chamber_before, exempt_fn)
+		local pool = self:_active_record(ext)
+		if not pool or chamber_before == nil then return 0 end
+		if ext.owner_buff_extension then return 0 end -- vanilla already charged reserve
+		local chamber_after = (tonumber(ext._current_ammo) or 0) - (tonumber(ext._shots_fired) or 0)
+		local refill = chamber_after - chamber_before
+		if refill <= 0 then return 0 end
+		if exempt_fn and exempt_fn(ext) then
+			self._log("reload_drain_exempt", ext.owner_unit, ext._cwv_musket_pool_slot,
+				pool.reserve, self:_capacity(pool))
+			return 0
+		end
+		local reserve = type(ext._available_ammo) == "number" and ext._available_ammo or pool.reserve
+		local drained = math.min(refill, math.max(reserve, 0))
+		ext._available_ammo = reserve - drained
+		return drained
+	end
+
 	function controller:end_add(ext, before, amount)
 		local pool = self:_active_record(ext)
 		if not pool or before == nil then return end
@@ -215,6 +248,9 @@ function M.new(options)
 
 	function controller:contract_error()
 		if not self.hooks_installed then return "musket ammo controller hooks are not installed" end
+		if type(self.end_reload_drain) ~= "function" then
+			return "melee-slot reload reserve drain (#1107) is missing"
+		end
 		if self.reserve_per_musket ~= 10 then return "Old Musket reserve contribution is not 10" end
 		if not VALID_SLOTS.slot_melee or not VALID_SLOTS.slot_ranged then
 			return "musket ammo controller does not own both equipment slots"
@@ -227,9 +263,41 @@ end
 function M.install(mod, options)
 	local controller = M.new(options)
 
+	-- #1107 parity with the vanilla reload block's buff exemptions
+	-- (generic_ammo_user_extension.lua:169-173): a reload that vanilla would
+	-- not charge to reserve on the ranged slot must not drain the pool from
+	-- the melee slot either.
+	local function _reload_drain_exempt(ext)
+		local owner_unit = ext.owner_unit
+		local script_unit = rawget(_G, "ScriptUnit")
+		local buff_extension = owner_unit and script_unit and script_unit.has_extension
+			and script_unit.has_extension(owner_unit, "buff_system")
+		if not buff_extension then return false end
+		return (buff_extension:has_buff_type("no_ammo_consumed")
+			or buff_extension:has_buff_type("markus_huntsman_activated_ability")
+			or buff_extension:has_buff_type("markus_huntsman_activated_ability_duration")
+			or buff_extension:has_buff_type("twitch_no_overcharge_no_ammo_reloads")) and true or false
+	end
+
 	mod:hook("GenericAmmoUserExtension", "update", function(orig, self, ...)
 		local before = controller:begin_mutation(self)
+		-- #1107: chamber count (`ammo_count()`) only grows inside vanilla
+		-- update via the reload refill at generic_ammo_user_extension.lua:166;
+		-- `_check_ammo` reconciles `_shots_fired` into `_current_ammo` without
+		-- changing the difference. A positive delta across the call is exactly
+		-- the completed reload amount.
+		local chamber_before
+		if before ~= nil then
+			chamber_before = (tonumber(self._current_ammo) or 0) - (tonumber(self._shots_fired) or 0)
+		end
 		local result = orig(self, ...)
+		if chamber_before ~= nil then
+			local drained = controller:end_reload_drain(self, chamber_before, _reload_drain_exempt)
+			if drained > 0 then
+				pcall(printf, "[cwv:1107] melee-slot musket reload drained %d round(s): reserve %d -> %d",
+					drained, before, tonumber(self._available_ammo) or 0)
+			end
+		end
 		controller:end_delta(self, before)
 		return result
 	end)

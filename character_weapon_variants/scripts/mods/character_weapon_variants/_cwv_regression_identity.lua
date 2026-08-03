@@ -743,6 +743,59 @@ _rt_register("issue932_primary_slot_musket_ammo_pool_contract", function()
 	return controller:contract_error()
 end)
 
+_rt_register("issue1107_melee_slot_reload_drains_reserve", function()
+	-- Synthetic controller run: a melee-slot member (nil owner_buff_extension,
+	-- matching generic_ammo_user_extension.lua:83-89) whose chamber grew across
+	-- vanilla update must charge the pool by the refill; buff-exempt reloads
+	-- and vanilla-charged ranged reloads must not double-drain.
+	local policy = _om.musket_ammo_pool_policy
+	if type(policy) ~= "table" or type(policy.new) ~= "function" then
+		return "musket ammo pool policy module missing"
+	end
+	local c = policy.new({ reserve_per_musket = 10, alive = function() return true end })
+	if type(c.end_reload_drain) ~= "function" then
+		return "end_reload_drain surface missing from controller"
+	end
+	local owner = {}
+	local ext = { unit = {}, owner_unit = owner,
+		_current_ammo = 0, _shots_fired = 0, _ammo_per_clip = 1, _available_ammo = 10 }
+	if not c:register(ext, owner, "slot_melee") then
+		return "synthetic melee ext failed to register"
+	end
+	local before = c:begin_mutation(ext)
+	ext._current_ammo = 1 -- vanilla chamber refill (:166) with no reserve charge (:168 nil gate)
+	local drained = c:end_reload_drain(ext, 0, function() return false end)
+	c:end_delta(ext, before)
+	if drained ~= 1 or c:reserve_for(ext) ~= 9 then
+		return string.format("melee reload drained %s, reserve %s (want 1 / 9)",
+			tostring(drained), tostring(c:reserve_for(ext)))
+	end
+	before = c:begin_mutation(ext)
+	ext._current_ammo = 2
+	drained = c:end_reload_drain(ext, 1, function() return true end)
+	c:end_delta(ext, before)
+	if drained ~= 0 or c:reserve_for(ext) ~= 9 then
+		return "buff-exempt reload drained the pool"
+	end
+	local rext = { unit = {}, owner_unit = owner,
+		_current_ammo = 0, _shots_fired = 0, _available_ammo = 0, owner_buff_extension = {} }
+	if not c:register(rext, owner, "slot_ranged") then
+		return "synthetic ranged ext failed to register"
+	end
+	before = c:begin_mutation(rext)
+	rext._current_ammo = 1
+	rext._available_ammo = rext._available_ammo - 1 -- vanilla ranged charge (:174)
+	drained = c:end_reload_drain(rext, 0, function() return false end)
+	c:end_delta(rext, before)
+	if drained ~= 0 then
+		return "vanilla-charged ranged reload was double-drained"
+	end
+	if c:reserve_for(rext) ~= 8 then
+		return string.format("pooled reserve %s after ranged reload (want 8)",
+			tostring(c:reserve_for(rext)))
+	end
+end)
+
 _rt_register("issue273_cwv_deus_identity_is_exact", function()
 	local report = _om.install_deus_identities("runtime_regression")
 	if #report.skipped > 0 then
