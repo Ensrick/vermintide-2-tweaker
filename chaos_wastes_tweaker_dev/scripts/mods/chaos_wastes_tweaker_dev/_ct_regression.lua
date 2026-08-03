@@ -533,6 +533,9 @@ _rt_register("reliquary_reroll_message_hook", function()
     if type(CT_RELIQUARY_REROLL_MARKER) ~= "string" or #CT_RELIQUARY_REROLL_MARKER == 0 then
         return "CT_RELIQUARY_REROLL_MARKER not defined (#252 reroll-message hook missing)"
     end
+    if CT_RELIQUARY_REROLL_PROMPT ~= "Reroll this weapon?" then
+        return "#252 same-tier reroll prompt drifted from the approved short copy"
+    end
     local cls = rawget(_G, "DeusUpgradeWeaponInteractionUI")
     if not cls then return nil end
     if type(cls._populate_widget) ~= "function" then

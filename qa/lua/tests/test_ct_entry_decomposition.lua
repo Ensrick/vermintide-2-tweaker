@@ -74,6 +74,17 @@ return function(H, repo_root)
         H.truthy(regression:find("local _rt_register = mod._ct_rt_register", 1, true))
     end)
 
+    H.test("CT #252 owns the approved short reroll prompt once", function()
+        H.equal(count_plain(entry,
+            'CT_RELIQUARY_REROLL_PROMPT = "Reroll this weapon?"'), 1)
+        H.equal(count_plain(entry,
+            "Re-rolls this weapon's traits and properties"), 0)
+        H.equal(count_plain(entry,
+            "reward_info_text = CT_RELIQUARY_REROLL_PROMPT"), 1)
+        H.truthy(regression:find(
+            'CT_RELIQUARY_REROLL_PROMPT ~= "Reroll this weapon?"', 1, true))
+    end)
+
     H.test("ct_dev extracted checks live only in the module; inline check only in entry", function()
         -- Representative moved checks: absent from the entry, present once in the module.
         H.equal(count_plain(entry, '_rt_register("no_roamers_strip_arity_356"'), 0)

@@ -1,4 +1,4 @@
-<!-- checker-consumed: verified-current 2026-07-18 -->
+<!-- checker-consumed: verified-current 2026-08-02 -->
 <!-- ^ Read by qa/check_decisions_wired.ps1. This doc is trusted as ground truth
      for which cross-character ports are live work. Re-verify the rows against
      wt_unlock_data.lua + the _data.lua checkboxes + the _localization.lua keys,
@@ -234,8 +234,22 @@ Already on Kruber from earlier:
 
 ### Kruber receiver — STATUS
 
-Mostly done. **Still pending:**
-- `we_life_staff` (Kerillian: Deepwood Staff) — Sister of the Thorn career-locked magic staff. Add to Kruber? If yes, target? (Likely `es_2h_hammer` like the Sienna staves pattern.)
+Inventory availability is fully wired for the rows recorded below. Animation
+target and presentation verification remain separate concerns tracked by the
+animation coverage and issue records.
+
+**Shipped — inventory-wiring reconciliation (2026-08-02):**
+
+The checker verifies each row below is present for all four Kruber careers in
+`weapon_unlock_map`, has its availability checkbox, and has its localization
+key. These rows reconcile later shipped state that the earlier walkthrough did
+not record; they do not make new animation-target decisions.
+
+| Source weapon (key) | Display name | Reconciliation evidence |
+|---|---|---|
+| `we_life_staff` | Kerillian: Deepwood Staff | Fully wired on all Kruber careers; supersedes the stale pending note above. |
+| `wh_1h_falchion` | Saltzpyre: Falchion | Fully wired on all Kruber careers. |
+| `wh_crossbow` | Saltzpyre: Crossbow | Fully wired on all Kruber careers. |
 
 ### Kruber → Kerillian (Batch 1 decisions, 2026-05-28)
 
@@ -414,7 +428,11 @@ and the WP receiver section below.)
 |---|---|---|
 | KS2 | `es_2h_sword` (Empire: 2H Sword) | Analogous to Saltzpyre native `wh_2h_sword`. |
 
-**Flagged — target unclear, NOT APPLIED (user to revisit):**
+> **SUPERSEDED 2026-06-04**: the four historical target-unclear rows below
+> were replaced by the shipped Shield-Combos Override later in this receiver
+> section. They remain only as decision history.
+
+**SUPERSEDED — prior target-unclear rows, DO NOT ADD from this historical table:**
 
 | # | Source weapon | Display name | Default suggestion | Why flagged |
 |---|---|---|---|---|
@@ -588,7 +606,7 @@ target's 3P vocab is the closest non-WP Saltzpyre body has to a shield-
 stance presentation; the off-hand slot of the axe-and-falchion combo carries
 the shield while the right hand carries the swap-in weapon.
 
-**Batch E remaining (5 weapons × 3 careers = 15 entries):**
+**Shipped — Batch E wired rows (4 weapons × 3 careers = 12 entries):**
 
 | # | Source weapon (key) | Display name | Target (3P) | Class |
 |---|---|---|---|---|
@@ -596,9 +614,14 @@ the shield while the right hand carries the swap-in weapon.
 | E2 | `bw_necromancy_staff` | Sienna: Soulstealer Staff | Saltzpyre Falchion (`wh_1h_falchion`) | ranged |
 | E3 | `bw_deus_01` | Sienna: Coruscation Staff | Saltzpyre Falchion (`wh_1h_falchion`) | ranged |
 | E4 | `we_javelin` | Kerillian: Javelin | Saltzpyre 1H Axe (`wh_1h_axe`) | ranged |
+
+**To ADD — pending Batch E row:**
+
+| # | Source weapon (key) | Display name | Target (3P) | Class |
+|---|---|---|---|---|
 | E5 | `we_life_staff` | Kerillian: Deepwood Staff | Saltzpyre Falchion (`wh_1h_falchion`) | ranged |
 
-**Shield-Combos Override (7 weapons × 3 careers = 21 entries):**
+**Shipped — Shield-Combos Override (6 weapons × 3 careers = 18 entries):**
 
 | # | Source weapon (key) | Display name | Target (3P) | Class | Supersedes |
 |---|---|---|---|---|---|
@@ -607,12 +630,37 @@ the shield while the right hand carries the swap-in weapon.
 | SHO3 | `es_sword_shield_breton` | Kruber: Bretonnian Sword and Shield | `wh_dual_wield_axe_falchion` | melee | KS8 / BS-A-skip-3 |
 | SHO4 | `es_deus_01` | Kruber: Spear and Shield (CW deus) | `wh_dual_wield_axe_falchion` | melee | KS9 / BS-A-skip-4 |
 | SHO5 | `dr_shield_axe` | Bardin: Axe and Shield | `wh_dual_wield_axe_falchion` | melee | (new — never queued) |
-| SHO6 | `dr_shield_hammer` | Bardin: Hammer and Shield | `wh_dual_wield_axe_falchion` | melee | (new — never queued) |
 | SHO7 | `we_1h_spears_shield` | Kerillian: Spear and Shield | `wh_dual_wield_axe_falchion` | melee | (new — never queued) |
 
-**Total Batch E + Shield-Combos Override: 12 weapons × 3 careers = 36 new
-entries** across `wt_unlock_data.lua`, `weapon_tweaker_data.lua`, and
-`weapon_tweaker_localization.lua`.
+SHO6 (`dr_shield_hammer`, Bardin: Hammer and Shield) is retired by #594.
+Saltzpyre keeps Kruber's `es_mace_shield`; the returned unlock map explicitly
+removes Bardin's analogous weapon for all three non-Warrior-Priest careers.
+
+**Shipped — inventory-wiring reconciliation (2026-08-02):**
+
+The checker verifies each row below is present for all three non-Warrior-Priest
+Saltzpyre careers in `weapon_unlock_map`, has its availability checkbox, and
+has its localization key. These are live ports omitted from the earlier batch
+tables; this reconciliation records existing wiring without inventing new
+animation-target decisions.
+
+| Source weapon (key) | Display name |
+|---|---|
+| `bw_1h_crowbill` | Sienna: Crowbill |
+| `es_1h_flail` | Kruber: Flail |
+| `es_1h_mace` | Kruber: Mace |
+| `es_1h_sword` | Kruber: Sword |
+| `es_2h_heavy_spear` | Kruber: Tuskgor Spear |
+| `es_halberd` | Kruber: Halberd |
+| `es_longbow` | Kruber: Longbow |
+| `we_1h_sword` | Kerillian: Sword |
+| `we_crossbow_repeater` | Kerillian: Volley Crossbow |
+| `we_longbow` | Kerillian: Longbow |
+| `we_spear` | Kerillian: Spear |
+
+**Current reconciled Batch E + Shield-Combos state:** 10 weapons are fully
+wired across the three non-Warrior-Priest careers, `we_life_staff` remains a
+documented pending row, and `dr_shield_hammer` is retired by #594.
 
 Implementation note: Wave 2 anim redirects NOT YET WIRED — separate fix
 pass. The 5 Batch E ranged ports (E1-E5) need bespoke redirects: staves
@@ -633,15 +681,41 @@ Bow/crossbow/longbow/firearm ports are FORBIDDEN per
 `feedback_vt2_no_bows_on_warrior_priest.md` (WP's body authors no
 `to_longbow` / `to_crossbow` / `to_*pistol*` / `to_handgun` events).
 
-(Filled in during walkthrough.)
+**Shipped — inventory-wiring reconciliation (2026-08-02):**
+
+| Source weapon (key) | Display name | Reconciliation evidence |
+|---|---|---|
+| `es_1h_flail` | Kruber: Flail | Present in `wh_priest` unlocks with checkbox and localization. |
 
 ## Receiver: Bardin
 
-(Filled in during walkthrough.)
+**Shipped — inventory-wiring reconciliation (2026-08-02):**
+
+The checker verifies every row on Ranger Veteran, Ironbreaker, Slayer, and
+Outcast Engineer across the unlock map, checkbox definitions, and localization.
+
+| Source weapon (key) | Display name |
+|---|---|
+| `bw_1h_crowbill` | Sienna: Crowbill |
+| `es_1h_sword` | Kruber: Sword |
+| `es_handgun` | Kruber: Handgun |
+| `we_1h_sword` | Kerillian: Sword |
+| `wh_1h_falchion` | Saltzpyre: Falchion |
 
 ## Receiver: Kerillian
 
-(Filled in during walkthrough.)
+**Shipped — inventory-wiring reconciliation (2026-08-02):**
+
+The checker verifies every row on Waystalker, Handmaiden, Shade, and Sister of
+the Thorn across the unlock map, checkbox definitions, and localization.
+
+| Source weapon (key) | Display name |
+|---|---|
+| `es_1h_mace` | Kruber: Mace |
+| `es_2h_sword` | Kruber: Greatsword |
+| `es_deus_01` | Kruber: Spear and Shield |
+| `es_longbow` | Kruber: Longbow |
+| `wh_crossbow_repeater` | Saltzpyre: Volley Crossbow |
 
 ## Receiver: Sienna
 
@@ -661,4 +735,3 @@ Currently no cross-character ports. User to decide whether to add any.
 | 2026-06-03 | v0.12.109-dev | **Saltzpyre (non-WP) receiver** Sienna batch D1-D8: 8 BW source weapons across 3 non-WP careers (bw_1h_mace, bw_dagger, bw_flame_sword, bw_ghost_scythe melee; bw_skullstaff_beam, bw_skullstaff_fireball, bw_skullstaff_flamethrower, bw_skullstaff_geiser ranged); SKIPPED bw_1h_flail_flaming (~ Saltzpyre native es_1h_flail) and bw_sword (~ wh_1h_falchion native 1H sword-class). 4 melee + 4 ranged. = 24 new entries. Wave 2 anim redirects (Saltzpyre `wh_1h_falchion` staff-cast/charge for the 4 staves; `wh_2h_hammer` for bw_1h_mace + bw_ghost_scythe; `wh_fencing_sword` for bw_dagger) NOT YET WIRED — separate fix pass. |
 | 2026-05-31 | v0.12.103-dev | **Kerillian receiver** Sienna batch SiK1-SiK14: 12 BW source weapons across 4 careers (bw_1h_crowbill, bw_1h_flail_flaming, bw_dagger, bw_flame_sword, bw_ghost_scythe melee; bw_skullstaff_beam/fireball/flamethrower/geiser/spear + bw_necromancy_staff + bw_deus_01 ranged); SKIPPED bw_1h_mace (~ es_1h_mace already on Kerillian) and bw_sword (~ we_1h_sword). = 48 new entries. **Saltzpyre (non-WP) receiver** Kruber batch KS1/KS3/KS4/KS5/KS10/KS11/KS12: 7 ES source weapons across 3 non-WP careers (es_bastard_sword, es_2h_sword_executioner, es_2h_hammer, es_dual_wield_hammer_sword melee; es_blunderbuss, es_handgun, es_repeating_handgun ranged); SKIPPED KS2 es_2h_sword (~ wh_2h_sword native); FLAGGED KS6 es_mace_shield / KS7 es_sword_shield / KS8 es_sword_shield_breton / KS9 es_deus_01 (shield combos — non-WP careers lack native shield-stance support; user to revisit). = 21 new entries. **Saltzpyre (non-WP) receiver** Kerillian batch C1-C9: 9 WE source weapons across 3 non-WP careers (we_1h_axe, we_2h_axe, we_2h_sword, we_dual_wield_daggers, we_dual_wield_swords, we_dual_wield_sword_dagger melee; we_shortbow, we_shortbow_hagbane, we_deus_01 ranged); SKIPPED we_crossbow_repeater (already native on non-WP rows). = 27 new entries. Wave 2 anim redirects (Saltzpyre `to_crossbow` for KS10/KS11 + repeater-pistol for KS12; Saltzpyre `to_crossbow` for C7/C8/C9 bow→crossbow remap) NOT YET WIRED — separate fix pass. |
 | 2026-05-30 | v0.12.103-dev | **Kruber receiver**: Bardin batch (B-cog, B-pick, B-dualaxes, B-shieldaxe, B-throw, B-drakepistol, B-drakegun, B-steampistol, B-deus, BONUS wh_1h_axe; B-dualhammers removed per correction). Kerillian batch (we_1h_axe, we_2h_axe, we_dual_wield_daggers, we_dual_wield_swords, we_dual_wield_sword_dagger, we_deus_01, we_shortbow, we_shortbow_hagbane, we_crossbow_repeater). Saltzpyre batch (wh_dual_hammer, wh_2h_hammer, wh_fencing_sword, wh_crossbow_repeater, wh_deus_01). WP batch (wh_flail_shield, wh_hammer_book). Sienna batch (bw_1h_mace, bw_dagger, bw_flame_sword, bw_ghost_scythe, bw_skullstaff_beam, bw_skullstaff_fireball, bw_skullstaff_flamethrower, bw_skullstaff_geiser, bw_skullstaff_spear, bw_necromancy_staff, bw_deus_01). **Kerillian receiver**: Kruber batch (es_1h_flail, es_2h_hammer, es_2h_heavy_spear, es_2h_sword_executioner, es_bastard_sword, es_dual_wield_hammer_sword, es_halberd, es_mace_shield, es_sword_shield, es_sword_shield_breton, es_blunderbuss, es_handgun, es_repeating_handgun). Bardin batch (wh_1h_axe BONUS, dr_1h_hammer, dr_1h_throwing_axes, dr_2h_axe, dr_2h_cog_hammer, dr_2h_pick, dr_crossbow, dr_deus_01, dr_drake_pistol, dr_drakegun, dr_dual_wield_axes, dr_dual_wield_hammers, dr_rakegun, dr_shield_axe, dr_steam_pistol). **SKIPPED**: `we_javelin` on Kruber (EXPERIMENTAL), `we_life_staff` on Kruber (PENDING user decision). Wave 2 (anim redirects / `_career_anim_redirect` / `_WIELD_ANIM_CAREER_3P_PATCHES`) and Wave 3 (3P model/offhand swap dispatchers for drakefire, griffon-foot, brace mirror) NOT YET WIRED — separate fix pass owned by the lead. |
-

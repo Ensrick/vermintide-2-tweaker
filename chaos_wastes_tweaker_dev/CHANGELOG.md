@@ -1,5 +1,15 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.316-dev (2026-08-02) - shorten the same-tier temper prompt (#252) [verify-fix]
+
+- Replaced the overflow-prone same-tier temper-altar text with the approved
+  **Reroll this weapon?** copy. The existing exact same-tier/re-armed gate is
+  unchanged, so genuine upgrades, downgrades, no-use, and unaffordable states
+  retain their native presentation and behavior.
+- Centralized the prompt in one runtime constant and extended both the runtime
+  regression and offline source coverage to reject copy drift or a bypassing
+  hard-coded assignment.
+
 ## 0.7.315-dev (2026-08-02) - #52 diag registration + #299 lookup-refresh hardening [untested]
 
 - **#52 skull diagnostic wired into /ct_regression_test.** The skull52 module's
