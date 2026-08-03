@@ -20,6 +20,21 @@ return function(H, repo_root)
         H.equal(Policy.plan(true, false, true, false), "drop_adapter_unavailable")
         H.equal(Policy.plan(false, false, false, false), "passthrough")
         H.equal(Policy.ADVENTURE_RADIUS, 6)
+        H.equal(Policy.ADVENTURE_DAMAGE_TAKEN, -0.8)
+    end)
+
+    H.test("Event Tweaker Shadow multiplier is session-scoped, never a boot write", function()
+        -- Issue 1123: an unconditional load-time template write leaked damage
+        -- reduction into Chaos Wastes (mutator_curse_belakors_shadows shares
+        -- the buff), and -0.9 contradicted WindSettings.shadow (-0.8).
+        local runtime = read(repo_root
+            .. "/event_tweaker/scripts/mods/event_tweaker/_evt_shadow_adventure.lua")
+        H.equal(runtime:find("-0.9", 1, true), nil)
+        H.equal(runtime:find("sub_buff.multiplier = -", 1, true), nil)
+        H.truthy(runtime:find("shadow_sub_buff.multiplier = Policy.ADVENTURE_DAMAGE_TAKEN", 1, true))
+        H.truthy(runtime:find("shadow_sub_buff.multiplier = nil", 1, true))
+        H.truthy(runtime:find("_apply_adventure_multiplier()", 1, true))
+        H.truthy(runtime:find("_restore_vanilla_multiplier()", 1, true))
     end)
 
     H.test("Event Tweaker Shadow adapter never spawns weave-only assets", function()
