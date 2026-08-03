@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.488-dev (2026-08-03) -- melee-slot musket reload drains the shared reserve (#1107) [verify-fix][untested]
+
+- Vanilla only charges ammo reserve for the ranged slot
+  (generic_ammo_user_extension.lua reload path), so the melee-slot Old Musket
+  reloaded for free. The pool controller now charges any chamber refill vanilla
+  left uncharged, mirroring vanilla''s no-ammo-consumed buff exemptions; the
+  shared 20-round pool depletes identically from either slot. Ammo state is
+  owner-local, so host and client each drain correctly with no wire traffic.
+- Regression: issue1107_melee_slot_reload_drains_reserve synthetic controller
+  check plus a contract tripwire.
 ## 0.1.486-dev (2026-08-03) -- preview spawn-safety contract repaired; picker dump audible (#237, #317) [verify-fix][untested]
 
 - Preview/browser mesh swap (#237, issue 419): the resolved-3p helper''s and/or
