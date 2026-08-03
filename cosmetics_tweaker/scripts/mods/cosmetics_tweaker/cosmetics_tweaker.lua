@@ -10109,7 +10109,7 @@ _cos_runtime_checks.install(mod, _rt_register, {
     offhand_preload_lifecycle = OFFHAND_PRELOAD_LIFECYCLE, mh_embed = MH_EMBED,
     cwv_peer_identity = mod._cos_cwv_peer_identity,
     la_instance_policy = mod._la_instance_policy,
-    modded_illusion_swap_owner = mod._cos_modded_illusion_swap_owner,
+    modded_illusion_swap_owner = mod._cos_modded_illusion_swap_owner, active_skin = _cos_active_skin, offhand_selection = _offhand_selection, -- #25
     issue704_picker_family = function(surface, family, _, owner_item_type)
         return mod._cos.classify_issue704_picker_family(surface, family, mod._cwv_dual_offhand_contract, owner_item_type)
     end,

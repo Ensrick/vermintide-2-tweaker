@@ -113,8 +113,16 @@ function M.install(mod, deps)
         end)
 
     mod:command("cos_persist_clear", "Wipe all saved LA persistence entries", function()
-        mod:set("la_persisted_equips", { schema = 1, careers = {}, illusions = {} })
-        mod:echo("[la-persist] cleared all saved entries (in-memory cache will refresh on next save)")
+        -- #25: route through the module so the process mirror resets with the
+        -- setting. The old direct mod:set left the mirror stale and the next
+        -- save_* call wrote every "cleared" record straight back.
+        if la_persist and la_persist.reset_all then
+            la_persist.reset_all()
+        else
+            mod:set("la_persisted_equips",
+                { schema = 1, careers = {}, illusions = {}, offhands = {} })
+        end
+        mod:echo("[la-persist] cleared all saved entries")
     end)
 
     local owner = {
