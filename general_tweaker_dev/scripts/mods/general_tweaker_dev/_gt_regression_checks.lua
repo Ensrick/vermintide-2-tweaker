@@ -1903,15 +1903,47 @@ function M.install(mod, _rt_register, deps)
         for _, n in ipairs((lists and lists.boss_units) or {}) do
             if n == probe then found_boss = true break end
         end
-        rebuild() -- rebuild clean without the probe
         if not found_all then
+            rebuild() -- rebuild clean without the probe
             return "late-registered probe breed missing from all_units (boot-snapshot regression)"
         end
         if not found_boss then
+            rebuild()
             return "probe breed with boss=true missing from boss_units (dynamic categorization regression)"
         end
         if unsorted then
+            rebuild()
             return "all_units not A-Z sorted: " .. unsorted
+        end
+        -- #1138: a special-flagged breed must list under Regular AND Special,
+        -- mirroring the curated overlay (every vanilla special is
+        -- { "regular", "special" }). Guards the default-lap reachability of
+        -- late-registered mod specials (skaven_doomrocket, et al.).
+        local special_probe = "gt_rt_probe_breed_1138"
+        if Breeds[special_probe] ~= nil then
+            return "special probe breed name collision in Breeds"
+        end
+        Breeds[special_probe] = {
+            base_unit = "units/gameplay/training_dummy/training_dummy_bob",
+            unit_template = "gt_rt_probe_template",
+            behavior = "gt_rt_probe_behavior",
+            special = true,
+        }
+        lists = rebuild()
+        Breeds[special_probe] = nil
+        local found_regular, found_special = false, false
+        for _, n in ipairs((lists and lists.regular_units) or {}) do
+            if n == special_probe then found_regular = true break end
+        end
+        for _, n in ipairs((lists and lists.special_units) or {}) do
+            if n == special_probe then found_special = true break end
+        end
+        rebuild() -- rebuild clean without the probe
+        if not found_regular then
+            return "probe breed with special=true missing from regular_units (#1138 regression)"
+        end
+        if not found_special then
+            return "probe breed with special=true missing from special_units (dynamic categorization regression)"
         end
     end)
 
