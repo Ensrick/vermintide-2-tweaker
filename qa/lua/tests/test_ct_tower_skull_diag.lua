@@ -293,4 +293,21 @@ return function(H, repo_root)
         H.truthy(entry:find('spawned_object_sets[#spawned_object_sets + 1] = "adventure"', 1, true))
         H.equal(entry:find("collectibles are the `gargoyle_head`", 1, true), nil)
     end)
+
+    H.test("CT #52 regression check is registered with the /ct_regression_test suite", function()
+        -- The pinned live-test card says "the #52 diagnostic checks must pass";
+        -- without this registration the suite passes while proving nothing about
+        -- #52. Register at the wiring site, direct-reference pattern like
+        -- issue533_native_tab_diagnostics_armed / issue458_start_shrine_config.
+        local install_at = assert(entry:find("pcall(mod._ct_diag_skull52.install)", 1, true))
+        local reg_at = assert(
+            entry:find('_rt_register("issue52_skull_diag_installed", mod._ct_diag_skull52.regression)', 1, true),
+            "#52 M.regression must be registered via _rt_register at the skull52 wiring site")
+        H.truthy(install_at < reg_at, "registration must follow the module install at the wiring site")
+        -- The registered function must exist in the module and honor the
+        -- _rt_register contract (string = FAIL; falls through to nil = PASS).
+        H.truthy(diag:find("function M.regression()", 1, true))
+        H.truthy(diag:find('return "#52 diagnostic record caps drifted"', 1, true))
+        H.truthy(diag:find('return "#52 diagnostic lifecycle missing"', 1, true))
+    end)
 end

@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.51-dev"
+local MOD_VERSION = "0.1.52-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -2585,8 +2585,11 @@ _rt_register("issue655_blightreaper_trait_contract", function()
 	end
 end)
 
--- Applied marker (§3.6): always fires (operational telemetry); surfaces the live
--- config hash in the console log even with VMF mod logging off.
+-- Load banners (§3.6, ct model): the pcall(printf) line below is the
+-- log-provable banner - engine printf survives VMF mod logging OFF, so pinned
+-- live-test cards key on "[WOC:LOAD]". The mod:info line is operational
+-- telemetry visible only with mod logging ON.
+pcall(printf, "[WOC:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
 mod:info("[WOC] enabled v%s settings_fp=%s (Blightreaper)", MOD_VERSION, _settings_fingerprint())
 
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print version

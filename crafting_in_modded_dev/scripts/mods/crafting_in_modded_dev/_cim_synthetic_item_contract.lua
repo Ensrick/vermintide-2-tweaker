@@ -456,6 +456,18 @@ function M.is_salvage_eligible(item, record, state)
     return true
 end
 
+-- #628: vanilla ItemHelper.is_favorite_backend_id ends
+-- `return favorite_item_ids and favorite_item_ids[item_id]` (decompile
+-- scripts/helpers/item_helper.lua:453) - it returns NIL for a non-favorited
+-- item, never false. The salvage state gate above only yields its fail-closed
+-- `is_favorite = true` default to a real boolean, so an uncoerced pass-through
+-- rejected EVERY recovered row with verdict=favorite. Runtime accessors route
+-- the raw helper verdict through this shared coercion; keeping it here makes
+-- the truthiness rule provable in the engine-free suite.
+function M.coerce_favorite_verdict(raw)
+    return raw and true or false
+end
+
 -- Reconsider exact CIM instances that vanilla excluded from its dense result.
 -- The source inventory remains a backend-id keyed map, so this function owns
 -- the `pairs` boundary and is executable under the engine-free Lua suite.

@@ -1,8 +1,15 @@
 -- Bounded, observation-only loot diagnostics for issue #607.
 --
 -- The native chest roll is produced by PlayFab CloudScript, not Lua. This
--- helper records only the already-returned official-realm callback payload;
--- it never opens a chest, queues a request, or mutates backend state.
+-- helper records only the already-returned callback payload observed in the
+-- MODDED realm; it never opens a chest, queues a request, or mutates backend
+-- state. Official-realm observation is structurally impossible for this mod:
+-- unapproved Workshop mods never load there (decompile
+-- scripts/managers/mod/mod_manager.lua:275 passes
+-- `not script_data["eac-untrusted"]` to Mod.start_scan, and the realm flag is
+-- fixed at launch, foundation/scripts/util/application_parameter.lua:150), so
+-- the capture gate requires eac_untrusted == true - the only realm where this
+-- code can exist to observe loot delivery at all.
 
 local M = {}
 
@@ -12,9 +19,12 @@ M.MAX_ITEMS = 6
 M.MAX_RARITIES = 10
 M.ACTIVE = true -- retire by setting false once #607's contracts are captured
 
+-- Modded realm only (eac_untrusted == true), fail-closed on nil: the flag is
+-- always a boolean once application_parameter.lua:150 runs, so a nil here
+-- means we were called before realm state existed and must not capture.
 function M.should_capture(eac_untrusted, active)
     if active == nil then active = M.ACTIVE end
-    return active == true and eac_untrusted ~= true
+    return active == true and eac_untrusted == true
 end
 
 local function bounded_string(value, limit)

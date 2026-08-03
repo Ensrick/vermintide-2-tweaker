@@ -116,4 +116,14 @@ return function(H, repo_root)
 		H.equal(source:find("._max_ammo =", 1, true), nil,
 			"the pool must not widen an engine max-ammo field")
 	end)
+
+	H.test("CWV #932 no dangling _cwv_musket_sync_pool call survives", function()
+		-- The nil-guarded _om._cwv_musket_sync_pool call was silently dead:
+		-- the helper was never defined anywhere after the v0.1.307-era
+		-- refactor. Reserve sync is owned by the #932 pool controller above;
+		-- lock the dangling name out of the shipped runtime source.
+		local combined = require("cwv_source").combined(repo_root)
+		H.equal(combined:find("_cwv_musket_sync_pool", 1, true), nil,
+			"dangling _cwv_musket_sync_pool reference reintroduced")
+	end)
 end

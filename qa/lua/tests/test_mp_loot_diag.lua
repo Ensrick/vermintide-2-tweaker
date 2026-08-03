@@ -39,12 +39,20 @@ H.test("MP #607 summarizes native loot without retaining backend ids", function(
     H.equal(contains(ledger, "sensitive-chest-id"), false)
 end)
 
-H.test("MP #607 captures only while active on the official realm", function()
+H.test("MP #607 captures only while active on the modded realm", function()
     local D = load_module()
-    H.equal(D.should_capture(nil, true), true)
-    H.equal(D.should_capture(false, true), true)
-    H.equal(D.should_capture(true, true), false)
+    -- Modded realm (eac_untrusted == true) is the ONLY realm where this mod
+    -- can load (decompile mod_manager.lua:275: unapproved Workshop mods are
+    -- excluded from the official-realm scan), so the gate must open there.
+    H.equal(D.should_capture(true, true), true)
+    -- Official realm and unknown realm state both fail closed.
+    H.equal(D.should_capture(false, true), false)
+    H.equal(D.should_capture(nil, true), false)
+    -- Retirement flag wins regardless of realm.
+    H.equal(D.should_capture(true, false), false)
     H.equal(D.should_capture(nil, false), false)
+    -- Omitted `active` defaults to M.ACTIVE (currently armed).
+    H.equal(D.should_capture(true), D.ACTIVE)
     H.equal(D.is_mission_chest("loot_chest_01_01"), true)
     H.equal(D.is_mission_chest("loot_chest_04_06"), true)
     H.equal(D.is_mission_chest("loot_chest_05_01"), false)

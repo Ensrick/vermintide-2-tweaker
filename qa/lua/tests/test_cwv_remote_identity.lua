@@ -4,7 +4,9 @@ return function(H, repo_root)
     H.test("CWV remote identity is carried on bounded lifecycle edges", function()
         H.truthy(source:find('mod:network_register("cwv_item_identity"', 1, true))
         H.truthy(source:find('_send_identity_slots(slots, "game_object_initialized", true)', 1, true))
-        H.truthy(source:find('"spawn_resynced_loadout", false)', 1, true))
+        -- #476 Defect B: the per-slot resync is a PARTIAL publish (trailing
+        -- `true`) so the absent slot cannot emit an explicit native record.
+        H.truthy(source:find('"spawn_resynced_loadout", false, nil, true)', 1, true))
         H.truthy(source:find('_send_identity_slots(slots, "hot_join_sync", true, peer_id)', 1, true))
         H.truthy(source:find('mod._cwv_identity_surfaces.peer_ready = true', 1, true))
         -- #741: semantic identity retries may be bounded, but a numeric CWV skin

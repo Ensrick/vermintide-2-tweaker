@@ -225,9 +225,11 @@ weapon units; each catalogue row points at the boss inventory mesh instead.
 
 `/woc_boss_catalog` writes the bounded seven-row source audit plus one bounded
 authored-resource row per relic descriptor to the console. WOC emits the same
-audit once at load. `resident_now` only reports current PackageManager state;
-false means unloaded, not absent. The authored facet uses only
-`Application.can_get("unit", ...)`; neither facet triggers a load or spawn.
+audit once at load. The runtime residency column prints
+`residency=unknown(package-level probe unavailable)`: `PackageManager:has_loaded`
+keys on package names only (package_manager.lua:286-294) while the rows record
+enemy unit paths, so no truthful runtime probe exists. The authored facet uses
+only `Application.can_get("unit", ...)`; neither facet triggers a load or spawn.
 
 ---
 

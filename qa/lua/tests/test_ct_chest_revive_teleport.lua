@@ -88,4 +88,24 @@ return function(H, repo_root)
         H.truthy(move_at < free_at)
         H.truthy(source:find('retained == false and "DEGRADED" or "PASS"', 1, true))
     end)
+
+    H.test("CT #299 POSITION_LOOKUP write is a guarded in-place refresh, kept for teleport_to", function()
+        local source = read(root .. "chaos_wastes_tweaker_dev.lua")
+        -- KEPT: teleport_to's last line (set_falling_height,
+        -- player_unit_locomotion_extension.lua:1022) reads POSITION_LOOKUP[unit].z
+        -- (generic_status_extension.lua:2590), a dead frame-pool handle in the
+        -- mod.update phase (BUG_CLASSES section 21) - without the refresh the
+        -- move-then-free transaction aborts after the player already moved.
+        H.truthy(source:find(
+            "if lookup and lookup[unit] then lookup[unit] = Vector3(x, y, z) end", 1, true),
+            "#299 must refresh an EXISTING POSITION_LOOKUP entry before teleport_to")
+        -- NEVER seed: an unguarded write can create an entry the engine is not
+        -- maintaining, flipping ALIVE[unit] truthy (ALIVE = POSITION_LOOKUP,
+        -- global_utils.lua:15) and leaving dangling frame-pool userdata behind.
+        H.equal(source:find("if lookup then lookup[unit] =", 1, true), nil,
+            "#299 must not seed POSITION_LOOKUP entries the engine does not maintain")
+        -- The mod's own readback never consumes the lookup - it re-derives live
+        -- positions through _world_xyz (Unit.world_position).
+        H.truthy(source:find("local ux, uy, uz = _world_xyz(unit)", 1, true))
+    end)
 end

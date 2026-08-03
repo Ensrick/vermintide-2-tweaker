@@ -44,6 +44,118 @@ return function(H, repo_root)
         H.equal(next(overlay), nil)
     end)
 
+    H.test("issue 1033 reset preserves the #954 bot designation across the clear", function()
+        local designated = {
+            selected_index = 3,
+            _seeded = true,
+            _slot_integrity_v2 = true,
+            bot_index = 2,
+            bot_loadout = { slot_melee = "bot_hammer", slot_ranged = "bot_pistols" },
+            _bot_designation_snapshot_v2 = true,
+            loadouts = {
+                [1] = { slot_melee = "modded_sword" },
+                [2] = { slot_melee = "bot_hammer", slot_ranged = "bot_pistols" },
+            },
+        }
+        local store = {
+            mercenary = designated,
+            ranger = { selected_index = 1, _seeded = true, loadouts = { [1] = {} } },
+        }
+        local overlay = { mercenary = { [1] = { slot_hat = "mod_hat" } } }
+        local snapshot_identity = designated.bot_loadout
+
+        local count = Policy.clear_modded_loadouts(store, overlay)
+        H.equal(count, 2)
+        -- Designated career: exactly the designation set survives on a bare
+        -- re-seedable shell; every modded-loadout field is wiped.
+        local kept = store.mercenary
+        H.truthy(kept, "bot designation dropped by full reset")
+        H.equal(kept.bot_index, 2)
+        H.equal(kept.bot_loadout, snapshot_identity)
+        H.equal(kept._bot_designation_snapshot_v2, true,
+            "one-time native-import marker wiped: next read would re-import PlayerData (#954)")
+        H.equal(kept._seeded, nil, "seed marker must clear so DEFAULT forces a reseed")
+        H.equal(kept._slot_integrity_v2, nil)
+        H.equal(next(kept.loadouts), nil, "modded saved rows must clear")
+        H.equal(kept.selected_index, 1)
+        -- Undesignated career and the cosmetic overlay clear exactly as before.
+        H.equal(store.ranger, nil)
+        H.equal(next(overlay), nil)
+
+        -- Explicit-career reset takes the same boundary.
+        local store2 = { mercenary = {
+            bot_index = 1,
+            bot_loadout = { slot_melee = "bot" },
+            _bot_designation_snapshot_v2 = true,
+            loadouts = { [1] = { slot_melee = "modded" } },
+        } }
+        local overlay2 = { mercenary = { [1] = { slot_skin = "mod_skin" } } }
+        local count2, found2 = Policy.clear_modded_loadouts(store2, overlay2, "mercenary")
+        H.equal(count2, 1)
+        H.equal(found2, true)
+        H.truthy(store2.mercenary, "bot designation dropped by explicit-career reset")
+        H.equal(store2.mercenary.bot_index, 1)
+        H.equal(store2.mercenary._bot_designation_snapshot_v2, true)
+        H.equal(next(store2.mercenary.loadouts), nil)
+        H.equal(overlay2.mercenary, nil)
+
+        -- A partial designation (pre-#954 store shape: index only, no marker) is
+        -- still the user's choice and survives field-for-field.
+        local store3 = { mercenary = { bot_index = 3, loadouts = { [3] = {} } } }
+        Policy.clear_modded_loadouts(store3, {})
+        H.equal(store3.mercenary.bot_index, 3)
+        H.equal(store3.mercenary._bot_designation_snapshot_v2, nil)
+    end)
+
+    H.test("issue 273 gear capture requires durable slot ownership, cosmetics exempt", function()
+        -- Gear slots: capture-eligible only on an explicit true owner verdict (fail closed).
+        H.equal(Policy.capture_slot_durable("slot_melee", true), true)
+        H.equal(Policy.capture_slot_durable("slot_melee", false), false)
+        H.equal(Policy.capture_slot_durable("slot_ranged", nil), false)
+        H.equal(Policy.capture_slot_durable("slot_necklace", false), false)
+        -- Cosmetic slots keep current behavior: Deus maps them to "items"
+        -- (backend_interface_deus_base.lua:7-14), so they stay unconditionally eligible.
+        H.equal(Policy.capture_slot_durable("slot_skin", false), true)
+        H.equal(Policy.capture_slot_durable("slot_hat", nil), true)
+        H.equal(Policy.capture_slot_durable("slot_frame", false), true)
+        H.equal(Policy.capture_slot_durable("slot_pose", false), true)
+
+        -- End-to-end with the exit path's true-table-identity owner semantics
+        -- (_gut_exit_snapshot_core.lua): a Deus-owned melee slot is rejected, an
+        -- items-owned one accepted, unknown ownership fails closed.
+        local core_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_exit_snapshot_core.lua"
+        local Core = assert(loadfile(core_path))()
+        local items_interface, deus_interface = {}, {}
+        H.equal(Policy.capture_slot_durable("slot_melee",
+            Core.slot_owned_by_items(deus_interface, items_interface)), false)
+        H.equal(Policy.capture_slot_durable("slot_melee",
+            Core.slot_owned_by_items(items_interface, items_interface)), true)
+        H.equal(Policy.capture_slot_durable("slot_ranged",
+            Core.slot_owned_by_items(nil, items_interface)), false)
+    end)
+
+    H.test("issue 273 BackendUtils capture hook wires the owner gate for gear", function()
+        local runtime_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua"
+        local file = assert(io.open(runtime_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        local gate_use = source:find(
+            "if Policy.capture_slot_durable(slot_name, _slot_owned_by_items(slot_name)) then",
+            1, true)
+        H.truthy(gate_use, "equip capture does not consult the durable-owner gate")
+        local owner_def = source:find("local function _slot_owned_by_items(slot_name)", 1, true)
+        H.truthy(owner_def, "shared slot-owner resolver missing")
+        H.truthy(owner_def < gate_use,
+            "owner resolver must be defined before the capture hook that captures it")
+        H.truthy(source:find(
+            "return ok and ExitSnapshotCore.slot_owned_by_items(slot_interface, items_interface)",
+            1, true), "owner resolver no longer uses true-table-identity semantics")
+        H.truthy(source:find("reason=foreign-loadout-interface", 1, true),
+            "foreign-owner skip evidence missing")
+    end)
+
     H.test("issue 1033 plans deterministic official career copies", function()
         local mirror = { _career_data = {
             zealot = { { slot_melee = "hammer" } },

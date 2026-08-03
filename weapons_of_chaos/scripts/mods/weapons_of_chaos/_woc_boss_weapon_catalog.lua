@@ -90,7 +90,20 @@ local rows = {
 					sha256 = "FAD2FF7065C878DE9CEB6BF11750776DD325B958F38BAEBDD3255F63B2C8649E",
 				},
 			},
-			material = "units/weapons/enemy/wpn_skaven_set/wpn_skaven_set",
+			-- #615 owns the authored Skarrik material closure. Evidence: both
+			-- authored unit families bind exactly this path
+			-- (units/woc_skarrik_dual_swords/skarrik_sword_right.unit:2,
+			-- units/woc_skarrik_halberd/skarrik_halberd.unit:2), the shipped
+			-- closure is units/woc_skarrik_dual_swords/skarrik_swords.material,
+			-- and tools/SKARRIK_DUAL_SWORDS_ASSET_PIPELINE.md declares it the
+			-- single owned closure. The prior value here (the vanilla enemy
+			-- family "units/weapons/enemy/wpn_skaven_set/wpn_skaven_set",
+			-- introduced alongside the halberd row in commit be76c562) was the
+			-- NATIVE source family the closure was extracted from; it is kept
+			-- below as provenance, not as the mod-owned material.
+			material = "units/woc_skarrik_dual_swords/skarrik_swords",
+			material_owner_issue = 615,
+			native_material = "units/weapons/enemy/wpn_skaven_set/wpn_skaven_set",
 		},
 		registration_enabled = false,
 	},
@@ -292,19 +305,26 @@ function M.audit(args)
 	return results
 end
 
-local function runtime_resident(unit_name)
-	local package_manager = Managers and Managers.package
-	if not package_manager or type(package_manager.has_loaded) ~= "function" then
-		return false
-	end
-	return package_manager:has_loaded(unit_name)
+-- Honest residency semantics. PackageManager:has_loaded keys on PACKAGE names
+-- only (decompile foundation/scripts/managers/package/package_manager.lua:286-
+-- 294); the source rows record enemy UNIT paths and no descriptor carries a
+-- proven unit-to-owning-package mapping, so no truthful runtime probe exists.
+-- The former runtime probe passed unit paths to has_loaded and therefore read
+-- false unconditionally - a claimed measurement it never made. A nil resident
+-- value now prints an explicit unknown marker instead. An injected
+-- `is_resident` probe (offline fixtures) still reports true/false.
+M.RESIDENCY_UNKNOWN = "unknown(package-level probe unavailable)"
+
+function M.residency_label(resident)
+	if resident == nil then return M.RESIDENCY_UNKNOWN end
+	return tostring(resident)
 end
 
 function M.runtime_snapshot()
+	-- Deliberately no is_resident probe: see M.residency_label above.
 	return M.audit({
 		breeds = rawget(_G, "Breeds"),
 		inventories = rawget(_G, "InventoryConfigurations"),
-		is_resident = runtime_resident,
 	})
 end
 
@@ -313,12 +333,12 @@ function M.emit_runtime()
 	for i = 1, #results do
 		local row = results[i]
 		printf(
-			"[WOC:642] id=%s issue=%s status=%s breed=%s breed_present=%s inventory=%s expected_inventory=%s inventory_match=%s unit=%s unit_match=%s resident_now=%s",
+			"[WOC:642] id=%s issue=%s status=%s breed=%s breed_present=%s inventory=%s expected_inventory=%s inventory_match=%s unit=%s unit_match=%s residency=%s",
 			tostring(row.id), tostring(row.issue), tostring(row.status),
 			tostring(row.breed), tostring(row.breed_present),
 			tostring(row.actual_inventory), tostring(row.expected_inventory),
 			tostring(row.inventory_match), tostring(row.expected_unit),
-			tostring(row.unit_match), tostring(row.resident))
+			tostring(row.unit_match), M.residency_label(row.resident))
 	end
 	return results
 end

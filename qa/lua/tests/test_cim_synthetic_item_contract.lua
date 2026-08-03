@@ -318,6 +318,10 @@ return function(H, repo_root)
         })
         H.equal(#result, 0)
 
+        -- An UNCOERCED non-boolean verdict stays fail-closed at the contract
+        -- boundary: coercion is the accessor's job (_cim_inventory_filter.lua
+        -- routes through contract.coerce_favorite_verdict; vanilla-shape
+        -- cases below lock the runtime path).
         result = recover("favorite-non-boolean", {
             is_favorite = function() return "false" end,
         })
@@ -325,6 +329,38 @@ return function(H, repo_root)
 
         result = recover("favorite-helper-missing", {})
         H.equal(#result, 0)
+
+        -- #628 regression: the REAL vanilla helper shape.
+        -- ItemHelper.is_favorite_backend_id ends `return favorite_item_ids
+        -- and favorite_item_ids[item_id]` (item_helper.lua:453) - NIL for a
+        -- non-favorited item, never false. Routed through the same coercion
+        -- the runtime accessor uses, the row MUST recover; the pre-fix raw
+        -- pass-through rejected every recovered row verdict=favorite.
+        local favorite_item_ids = nil   -- no favorites ever recorded
+        result = recover("favorite-vanilla-nil", {
+            is_favorite = function(backend_id)
+                return contract.coerce_favorite_verdict(
+                    favorite_item_ids and favorite_item_ids[backend_id])
+            end,
+        })
+        H.equal(#result, 1,
+            "vanilla nil (non-favorited) verdict must not reject recovery")
+
+        -- Favorited direction: vanilla stores a truthy marker, not
+        -- necessarily boolean true; coercion must still reject the row.
+        result = recover("favorite-vanilla-truthy", {
+            is_favorite = function(backend_id)
+                local ids = { ["favorite-vanilla-truthy"] = 1 }
+                return contract.coerce_favorite_verdict(ids[backend_id])
+            end,
+        })
+        H.equal(#result, 0,
+            "coerced truthy favorite verdict must stay salvage-ineligible")
+
+        H.equal(contract.coerce_favorite_verdict(nil), false)
+        H.equal(contract.coerce_favorite_verdict(false), false)
+        H.equal(contract.coerce_favorite_verdict(true), true)
+        H.equal(contract.coerce_favorite_verdict(1), true)
 
         result = recover("item-instance-id-appended", {
             is_favorite = function() return false end,

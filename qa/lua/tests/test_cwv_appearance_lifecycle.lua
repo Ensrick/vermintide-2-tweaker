@@ -82,6 +82,58 @@ return function(H, repo_root)
         H.equal(sent[5][4], "hot_join")
     end)
 
+    H.test("CWV #476 partial publish never emits native records for absent slots", function()
+        local sent = {}
+        local lifecycle = Policy.new({
+            resolve_local = function(slot)
+                return slot and slot.exact or nil, slot and slot.base or nil
+            end,
+            resolve_remote = function() return nil, "unused" end,
+            send = function(_, _, payload, edge)
+                sent[#sent + 1] = { slot = payload.slot,
+                    item_key = payload.item_key, edge = edge }
+                return true
+            end,
+        })
+        local plain = descriptor(nil)
+        local reskinned = descriptor("selected_skin", "skin_right", "skin_left")
+        local full = {
+            slot_melee = { exact = plain, base = "vanilla_base" },
+            slot_ranged = { exact = plain, base = "vanilla_ranged" },
+        }
+        H.equal(lifecycle:publish(full, "equip", "others", false), 2)
+
+        -- Vanilla _spawn_resynced_loadout resyncs ONE slot. A partial publish
+        -- of the changed melee slot must emit exactly that slot and NO
+        -- explicit native (item_key == "") record for the untouched ranged
+        -- slot - the pre-fix complete-snapshot iteration reverted the other
+        -- slot to base on every remote for the session (#476 Defect B).
+        sent = {}
+        local single = { slot_melee = { exact = reskinned, base = "vanilla_base" } }
+        H.equal(lifecycle:publish(
+            single, "spawn_resynced_loadout", "others", false, true), 1)
+        H.equal(#sent, 1)
+        H.equal(sent[1].slot, "slot_melee")
+        H.truthy(sent[1].item_key ~= "",
+            "partial publish emitted an empty (native) record")
+
+        -- The untouched slot's dedupe signature must survive the partial
+        -- publish: a follow-up COMPLETE snapshot with the same ranged
+        -- identity re-sends nothing. Pre-fix, the partial publish pinned a
+        -- false native signature for slot_ranged, so this complete publish
+        -- would have had to re-send it after remotes already reverted.
+        full.slot_melee = { exact = reskinned, base = "vanilla_base" }
+        H.equal(lifecycle:publish(full, "equip", "others", false), 0)
+
+        -- Complete snapshots keep clear-to-native semantics: an absent slot
+        -- in a COMPLETE publish still emits the explicit native record.
+        full.slot_melee = nil
+        sent = {}
+        H.equal(lifecycle:publish(full, "unequip", "others", false), 1)
+        H.equal(sent[1].slot, "slot_melee")
+        H.equal(sent[1].item_key, "")
+    end)
+
     H.test("CWV #660 hot-join identity retry is acknowledged and bounded", function()
         local sent = {}
         local d = descriptor(nil)
@@ -447,6 +499,7 @@ return function(H, repo_root)
             '_om._appearance_husk_wield_context = {',
             '_om._husk_identity_descriptor',
             '_send_identity_slots(slots, "hot_join_sync", true, peer_id)',
+            '"spawn_resynced_loadout", false, nil, true)',
             'lifecycle:track_delivery(peer_id, slots, "hot_join_retry")',
             'lifecycle:begin_request(generation',
             'lifecycle:accept_request(sender_peer_id, schema, payload)',

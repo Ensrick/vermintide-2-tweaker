@@ -1,5 +1,11 @@
 # Modded Progression — Changelog
 
+## 0.2.34-dev (2026-08-02) - #607 modded-realm loot capture gate [diag]
+
+- #607: fixed the loot-capture diagnostic being structurally unreachable. `should_capture` required the OFFICIAL realm (`eac_untrusted ~= true`), but unapproved Workshop mods never load there (decompile `scripts/managers/mod/mod_manager.lua:275` - `Mod.start_scan(not script_data["eac-untrusted"])`; realm fixed at launch, `foundation/scripts/util/application_parameter.lua:150`), so zero `[mp:607]` captures could ever occur. The gate now requires the MODDED realm (`eac_untrusted == true`) and fails closed on nil realm state; the capture stays observe-only (no writes to loot state), keeps the bounded-ledger discipline (12 records / 6 items / 10 rarities, sanitized strings, serial read-back verification), and stays printf-visible via `_dbg_alert` with mod logging OFF.
+- #607: corrected the module header and hook-site rationale (observing modded-realm loot delivery is the point; official-realm observation is impossible for this mod), renamed the runtime regression to `mp607_modded_loot_capture_is_bounded_and_realm_gated` (REGRESSION_CHECKLIST updated), and updated `/mp_loot_diag reset` echo text.
+- #607: retargeted the engine-free gate tests in `qa/lua/tests/test_mp_loot_diag.lua` - modded realm opens the gate, official/nil realm and the retirement flag fail closed, default `active` tracks `M.ACTIVE`.
+
 ## 0.2.33-dev (2026-07-19) - #840 fresh-profile ownership census [diagnostics-armed]
 
 - Adds a bounded, observation-only census of all nine profile-owned backend interfaces and eight direct bypass methods after the modded backend is ready.

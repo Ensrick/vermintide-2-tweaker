@@ -84,6 +84,23 @@ return function(H, repo_root)
 		H.truthy(row.authored_units.left_1p ~= row.authored_units.right_1p)
 	end)
 
+	H.test("WOC #614/#615 rows agree on the mod-owned Skarrik material", function()
+		-- The owned closure is proven by the authored unit files
+		-- (skarrik_sword_right.unit:2, skarrik_halberd.unit:2) and shipped as
+		-- units/woc_skarrik_dual_swords/skarrik_swords.material.
+		local swords = catalog.get("skarrik_dual_swords")
+		local halberd = catalog.get("skarrik_halberd")
+		H.equal(swords.asset.material,
+			"units/woc_skarrik_dual_swords/skarrik_swords")
+		H.equal(swords.asset.material_owner_issue, 615)
+		H.equal(swords.asset.material, halberd.asset.material)
+		-- The native enemy family stays recorded as provenance only, never as
+		-- the owned material path.
+		H.equal(swords.asset.native_material,
+			"units/weapons/enemy/wpn_skaven_set/wpn_skaven_set")
+		H.truthy(swords.asset.material ~= swords.asset.native_material)
+	end)
+
 	H.test("WOC #642 registration descriptors map exported boss identities", function()
 		local expected = {
 			nurgloth_scythe = "wpn_chaos_sorcerer_scythe_01",
@@ -121,6 +138,26 @@ return function(H, repo_root)
 		end
 		H.equal(results[1].resident, true)
 		H.equal(results[2].resident, false)
+	end)
+
+	H.test("WOC residency column is honest about the missing runtime probe", function()
+		-- PackageManager:has_loaded keys on package names (decompile
+		-- package_manager.lua:286-294); the rows record unit paths, so the
+		-- runtime path must report unknown rather than a fabricated false.
+		H.equal(catalog.RESIDENCY_UNKNOWN,
+			"unknown(package-level probe unavailable)")
+		H.equal(catalog.residency_label(nil), catalog.RESIDENCY_UNKNOWN)
+		H.equal(catalog.residency_label(true), "true")
+		H.equal(catalog.residency_label(false), "false")
+
+		-- Without an injected probe (the runtime configuration), every row's
+		-- resident field stays nil - no boolean claim is synthesized.
+		local args = fixture()
+		args.is_resident = nil
+		local results = catalog.audit(args)
+		for i = 1, #results do
+			H.equal(results[i].resident, nil)
+		end
 	end)
 
 	H.test("WOC source audit keeps Rasknitt explicitly deferred", function()
@@ -215,6 +252,12 @@ return function(H, repo_root)
 		H.equal(module:find("mod:hook", 1, true), nil)
 		H.equal(module:find("spawn_queued_unit", 1, true), nil)
 		H.equal(module:find("package_manager:load", 1, true), nil)
+		-- The unit-path residency probe must stay dead: has_loaded keys on
+		-- package names, so probing it with unit paths always read false.
+		-- (Comments may cite has_loaded; the CALL form must be absent.)
+		H.equal(module:find(":has_loaded(", 1, true), nil)
+		H.equal(module:find("resident_now=", 1, true), nil)
+		H.truthy(module:find("residency=%s", 1, true))
 		H.truthy(main:find('mod:command("woc_boss_catalog"', 1, true))
 		H.truthy(main:find("_boss_weapon_catalog.emit_runtime()", 1, true))
 		H.truthy(main:find("_boss_weapon_catalog.emit_authored_runtime()", 1, true))

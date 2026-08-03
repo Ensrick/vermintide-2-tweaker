@@ -1,5 +1,32 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.485-dev (2026-08-02) - #476 partial-publish remote revert fix + #932 dead call removal [untested]
+
+- Fixed #476 Defect B, the live cross-peer illusion revert: the appearance
+  lifecycle `publish` iterated both `SLOT_ORDER` slots and emitted an
+  explicit native (`item_key = ""`) record for any slot absent from the
+  passed table - correct for complete snapshots, wrong for the
+  `_spawn_resynced_loadout` hook, which hands over ONE slot (vanilla
+  `_queue_item_spawn` resyncs per-slot). Changing one slot's illusion
+  therefore published an empty record for the OTHER slot; receivers mapped
+  empty to native, husk paths refused to re-key, and the `_sent` dedupe
+  cached the false signature, so the untouched slot reverted to base on
+  every remote for the session. `publish` now takes a `partial` flag:
+  partial publishes emit records only for slots PRESENT in the table
+  (per-`recipient|slot` `_sent` routes keep their last truthful signature;
+  no new payload cache, no stale-snapshot replay risk), while complete
+  snapshots (`game_object_initialized`, `hot_join_sync`, `musket_mode`,
+  `peer_ready_reply`) keep their clear-to-native semantics for absent
+  slots. Offline test locks: partial publish emits no empty record for the
+  absent slot, the absent slot's dedupe signature survives, and complete
+  publishes still clear a removed variant to native. (#476)
+- Removed the silently dead nil-guarded `_om._cwv_musket_sync_pool(new_ext)`
+  call in the stance-toggle ammo restore: the helper was never defined after
+  the v0.1.307-era refactor, and the #932 pool controller
+  (`_cwv_musket_ammo_pool.lua`) owns owner-scoped shared-reserve sync
+  through its installed hooks. Offline test locks the dangling name out of
+  the combined runtime source. (#932)
+
 ## 0.1.484-dev (2026-08-02) - #914 #474 #279 #401 #922 critical-audit render fixes [untested]
 
 - Fixed the dead #914 peer-pull trigger: the exact-identity request from `game_object_initialized` guarded on `Managers.player:local_player(1).player_unit == unit`, but vanilla assigns `player_unit` only AFTER that broadcast (spawn at `bulldozer_player.lua:365` -> `unit_spawner.lua:349` `sync_unit_extensions` fires GO-init -> ownership at `bulldozer_player.lua:393`), so the request never fired. Locality now derives from the unit's own inventory extension at hook time (`SimpleInventoryExtension.init` sets `player`/`is_bot` before GO-init, `simple_inventory_extension.lua:31-32`; local human = `BulldozerPlayer.local_player`, `bulldozer_player.lua:9`; bots refused via `bot_player`, `player_bot.lua:23`). Retry cap and request-generation coalescing unchanged. (#914)

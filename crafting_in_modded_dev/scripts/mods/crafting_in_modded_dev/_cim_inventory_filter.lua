@@ -226,7 +226,16 @@ mod:hook("BackendInterfaceCommon", "filter_items", function(func, self, items, f
             if not ItemHelper or not ItemHelper.is_favorite_backend_id then
                 return nil
             end
-            return ItemHelper.is_favorite_backend_id(backend_id, item)
+            -- #628: the vanilla helper ends `return favorite_item_ids and
+            -- favorite_item_ids[item_id]` (item_helper.lua:453) - NIL for a
+            -- non-favorited item, never false. The contract's fail-closed
+            -- favorite default only yields to a real boolean, so coerce here;
+            -- a raw pass-through rejected every recovered row as "favorite".
+            local favorite = ItemHelper.is_favorite_backend_id(backend_id, item)
+            if type(contract.coerce_favorite_verdict) == "function" then
+                return contract.coerce_favorite_verdict(favorite)
+            end
+            return favorite and true or false
         end,
         backend_dirty = backend_items._dirty == true,
         trace = function(...)
