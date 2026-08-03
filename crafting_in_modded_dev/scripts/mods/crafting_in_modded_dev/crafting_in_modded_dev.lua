@@ -3698,15 +3698,12 @@ end)
 
 mod:hook("BackendInterfaceWeavesPlayFab", "get_property_mastery_costs", function(func, self, property_name)
     if _custom_forge_active then
-        -- Button slot count = #costs (renderer reads it as `total_uses` in
-        -- hero_window_weave_properties.lua). Return exactly `cap` zero-cost
-        -- entries so stamina renders 2 slots, movespeed renders 1 (or 5
-        -- when the 2pct toggle is on), everything else renders 5 fillable
-        -- bubbles (the default — see `_bubble_cap`).
-        local cap = _bubble_cap(property_name)
-        local out = {}
-        for i = 1, cap do out[i] = 0 end
-        return out
+        -- #costs = cap (`total_uses` in hero_window_weave_properties.lua);
+        -- #959: reads PAST the array resolve to 0 - the amulet paint indexes
+        -- costs with the GLOBAL per-key use count (up to cap*3 across layers,
+        -- :1594-1637) and the old nil aborted the sibling accessory's repaint.
+        return mod._cim959_accessory_property_policy.build_zero_mastery_costs(
+            _bubble_cap(property_name))
     end
     return func(self, property_name)
 end)
@@ -4152,19 +4149,17 @@ local function _seed_one_item(item, props_out, traits_out, slot_index)
     if item.properties then
         local wp = rawget(_G, "WeaveProperties")
         local wp_props = wp and wp.properties
+        local policy = mod._cim959_accessory_property_policy
         local next_slot = layer_offset + 1
         for prop_key, value in pairs(item.properties) do
             local weave_key = "weave_" .. prop_key
             if wp_props and wp_props[weave_key] then
-                local filled = _bubbles_for_value(weave_key, value)
-                local indices = {}
-                for i = 1, filled do
-                    indices[i] = next_slot
-                    next_slot = next_slot + 1
-                end
-                if #indices > 0 then
-                    props_out[weave_key] = indices
-                end
+                -- #959: APPEND into the shared amulet aggregate (assignment
+                -- here overwrote sibling-accessory indices for the same key on
+                -- every reopen), clamped to this accessory's ten-slot layer.
+                next_slot = policy.seed_property_indices(
+                    props_out, weave_key, next_slot, _bubbles_for_value(weave_key, value),
+                    layer_offset, _AMULET_LAYER_SIZE, printf)
             else
                 mod:info("Forge seed: no weave mapping for prop '%s' (tried '%s')", prop_key, weave_key)
             end
@@ -4197,12 +4192,15 @@ local function _forge_seed_item(career_name, item_backend_id)
         if item then _seed_one_item(item, props, traits, 1) end
     elseif items_backend and career_name then
         -- Amulet case: aggregate the three equipped accessories into one
-        -- bubble grid (necklace=layer 1, charm=layer 2, trinket=layer 3).
+        -- bubble grid (charm=layer 1, necklace=layer 2, trinket=layer 3).
         for slot_index, slot_name in ipairs(_AMULET_SLOT_BY_INDEX) do
             local bid = items_backend:get_loadout_item_id(career_name, slot_name)
             local item = bid and items_backend:get_item_from_id(bid)
             _seed_one_item(item, props, traits, slot_index)
         end
+        -- #959 evidence: bounded per-key layer census per Athanor open.
+        mod._cim959_accessory_property_policy.log_seed_census(
+            props, _AMULET_LAYER_SIZE, printf)
     end
 
     _forge_item_props[key] = {properties = props, traits = traits}
@@ -4487,7 +4485,7 @@ mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property", function(func,
         local cap = _bubble_cap and _bubble_cap(property_key) or 5
         local arr = _store_property_slot(props, property_key, slot_index, layer_size)
         if mod._cim_autodump_property_array then
-            pcall(mod._cim_autodump_property_array, "set_property", property_key, arr, cap)
+            pcall(mod._cim_autodump_property_array, "set_property", property_key, arr, cap, layer_size)
         end
         if not item_backend_id then _mark_amulet_property_dirty(slot_index) end
         _forge_apply_to_item(career_name, item_backend_id)

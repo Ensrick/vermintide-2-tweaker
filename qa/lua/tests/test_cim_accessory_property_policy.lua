@@ -219,4 +219,56 @@ return function(H, repo_root)
         _G.UIUtils = old_ui_utils
         if not ok then error(err) end
     end)
+
+    H.test("CIM #959 faked mastery costs survive the layered global use count", function()
+        local costs = policy.build_zero_mastery_costs(5)
+        H.equal(#costs, 5)
+        H.equal(costs[1], 0)
+        H.equal(costs[5], 0)
+        -- Vanilla paints each occupied slot with the GLOBAL per-key count
+        -- (hero_window_weave_properties.lua:1594-1637); with 5 charm + 1
+        -- necklace entries that is 6, and a nil here aborted the repaint.
+        H.equal(costs[6], 0)
+        H.equal(costs[15], 0)
+        -- Bounded: past cap*LAYER_COUNT reads stay nil so ipairs terminates.
+        H.equal(costs[16], nil)
+        H.equal(costs[0], nil)
+        H.equal(costs.foo, nil)
+
+        local stamina_costs = policy.build_zero_mastery_costs(2)
+        H.equal(#stamina_costs, 2)
+        H.equal(stamina_costs[6], 0)
+        H.equal(stamina_costs[7], nil)
+    end)
+
+    H.test("CIM #959 amulet re-seed merges sibling layers under one key", function()
+        local seeded = {}
+        local next_slot, dropped = policy.seed_property_indices(
+            seeded, "weave_health", 1, 5, 0, 10)
+        H.equal(next_slot, 6)
+        H.equal(dropped, 0)
+
+        -- Second accessory, same key: must APPEND, not overwrite (the reopen
+        -- bleed that wiped the first accessory's entries and then its item).
+        next_slot, dropped = policy.seed_property_indices(
+            seeded, "weave_health", 11, 2, 10, 10)
+        H.equal(next_slot, 13)
+        H.equal(dropped, 0)
+        H.equal(#seeded.weave_health, 7)
+        H.equal(policy.count_slots(seeded.weave_health, "offence_accessory", 10), 5)
+        H.equal(policy.count_slots(seeded.weave_health, "defence_accessory", 10), 2)
+
+        -- Clamp: an over-valued accessory can never spill into its sibling.
+        next_slot, dropped = policy.seed_property_indices(
+            seeded, "weave_attack_speed", 9, 4, 0, 10)
+        H.equal(next_slot, 11)
+        H.equal(dropped, 2)
+        H.equal(#seeded.weave_attack_speed, 2)
+        H.equal(policy.count_slots(seeded.weave_attack_speed, "defence_accessory", 10), 0)
+
+        -- Invalid input degrades to a no-op instead of corrupting the seed.
+        local before = #seeded.weave_health
+        policy.seed_property_indices(seeded, "weave_health", nil, 1, 0, 10)
+        H.equal(#seeded.weave_health, before)
+    end)
 end

@@ -574,7 +574,7 @@ end
 -- the prior fixes trusted the display and missed it. Pairs the visible cap with
 -- the actual array so a future regression is visible in the log without code
 -- changes. `arr` is the live array; we snapshot its values for the log line.
-mod._cim_autodump_property_array = function(verb, key, arr, cap)
+mod._cim_autodump_property_array = function(verb, key, arr, cap, layer_size)
     if not _enabled() then return end
     local label = "property_array/" .. tostring(verb)
     local n = (type(arr) == "table") and #arr or -1
@@ -582,12 +582,26 @@ mod._cim_autodump_property_array = function(verb, key, arr, cap)
     if type(arr) == "table" then
         for i = 1, n do vals[i] = tostring(arr[i]) end
     end
-    local over = (type(cap) == "number" and n > cap) and " OVER-CAP!" or ""
+    -- #959: in the amulet editor (layer_size set) one key legitimately spans
+    -- layers, so the over-cap verdict compares the WORST single layer's count
+    -- against the cap - the old global-count compare false-flagged every legal
+    -- second-accessory write (Rain's 2026-08-03 log) and spammed chat warnings.
+    local worst = n
+    if type(layer_size) == "number" and layer_size > 0 and type(arr) == "table" then
+        local per_layer = {}
+        worst = 0
+        for i = 1, n do
+            local layer = math.ceil((tonumber(arr[i]) or 0) / layer_size)
+            per_layer[layer] = (per_layer[layer] or 0) + 1
+            if per_layer[layer] > worst then worst = per_layer[layer] end
+        end
+    end
+    local over = (type(cap) == "number" and worst > cap) and " OVER-CAP!" or ""
     _info(label, "key=%s persisted_slots=%d cap=%s indices=[%s]%s",
         tostring(key), n, tostring(cap), table.concat(vals, ","), over)
     if over ~= "" then
-        mod:warning("[cim:diag] Property '%s' persisted %d slot indices but cap is %s — it will occupy %d grid slots and block the rest. (#86 over-occupancy)",
-            tostring(key), n, tostring(cap), n)
+        mod:warning("[cim:diag] Property '%s' persisted %d slot indices in one layer but cap is %s — it will occupy %d grid slots and block the rest. (#86 over-occupancy)",
+            tostring(key), worst, tostring(cap), worst)
     end
 end
 

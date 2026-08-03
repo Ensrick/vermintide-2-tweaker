@@ -16,7 +16,7 @@ Last updated: 2026-07-22.
 | Category | SOLO |
 | Repro | In the Athanor accessory editor, set Necklace Health to five bubbles. Click Health on Charm and Trinket and confirm each click visibly applies rather than only playing a sound. Right-click Health in each category, then use Clear in one category. |
 | Expected post-fix | Each accessory independently admits, shows, and edits its own Health bubbles. Per-key and ten-distinct-property capacity are enforced inside the active layer. Right-click removes from the open accessory; Clear leaves the other two accessories unchanged. Weapon property editing retains its global cap. |
-| Detection | Offline `test_cim_accessory_property_policy.lua` performs the production-equivalent sibling-layer store and passes. `/cim_regression_test` passes `issue959_accessory_property_layers_are_independent`; bounded `[cim:959] property store` rows report `result=stored` for each accessory layer. |
+| Detection | Offline `test_cim_accessory_property_policy.lua` performs the production-equivalent sibling-layer store, the layered mastery-costs over-index read, and the re-seed merge/clamp, and passes. `/cim_regression_test` passes `issue959_accessory_property_layers_are_independent`; bounded `[cim:959] property store` rows report `result=stored` with advancing slot indices for each accessory layer, `[cim:959] seed key=... layers=a,b,c` proves both sibling accessories survive an Athanor reopen, and no `[cim:404] _sync_backend_loadout threw` row follows a store. |
 
 ---
 
