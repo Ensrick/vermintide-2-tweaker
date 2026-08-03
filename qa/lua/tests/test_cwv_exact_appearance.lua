@@ -30,6 +30,7 @@ return function(H, repo_root)
         local appearance = {
             skin = "dual_exact", right_hand_unit = "axe_right", left_hand_unit = "axe_left",
         }
+        local resident = function(unit) return unit .. "_3p" end
         for surface, adapter in pairs(Policy.SURFACES) do
             if adapter == "item_units" then
                 local result = { right_hand_unit = "base_r", left_hand_unit = "base_l" }
@@ -41,11 +42,65 @@ return function(H, repo_root)
                     { right_hand = true, unit_name = "base_r_3p" },
                     { left_hand = true, unit_name = "base_l_3p" },
                 }
-                H.equal(Policy.apply_spawn_data(appearance, recipe), 2, surface)
+                H.equal(Policy.apply_spawn_data(appearance, recipe, resident), 2, surface)
                 H.equal(recipe[1].unit_name, "axe_right_3p", surface)
                 H.equal(recipe[2].unit_name, "axe_left_3p", surface)
             end
         end
+    end)
+
+    H.test("CWV #237/#419 spawn targets honor the residency resolver, never blind concat", function()
+        -- The historical collapsed guard (`resolver or base .. "_3p"`) rewrote
+        -- the spawn target even when the resolver declined, voiding the
+        -- documented degrade-to-base safety contract on both preview adapters.
+        local descriptor = assert(Policy.resolve_spawn_descriptor({
+            variant = { item_key = "cwv_gate", right_hand_unit = "variant_right" },
+            base = { right_hand_unit = "base_right" },
+        }))
+        local inventory = { { right_hand = true, unit_name = "base_right_3p" } }
+        local browser = { { unit_name = "base_right_3p" } }
+        H.equal(Policy.apply_spawn_descriptor(descriptor, inventory, nil, "hand_flags"), 0,
+            "missing resolver must fail closed (no spawn-target rewrite)")
+        H.equal(Policy.apply_spawn_descriptor(descriptor, browser,
+            function() return nil end, "base_identity"), 0,
+            "resolver decline must degrade to the base mesh")
+        H.equal(inventory[1].unit_name, "base_right_3p")
+        H.equal(browser[1].unit_name, "base_right_3p")
+        -- Legacy surface API carries the same contract.
+        local legacy = { { right_hand = true, unit_name = "base_right_3p" } }
+        H.equal(Policy.apply_spawn_data(
+            { right_hand_unit = "variant_right" }, legacy), 0,
+            "apply_spawn_data without a resolver must not blind-concat")
+        H.equal(legacy[1].unit_name, "base_right_3p")
+    end)
+
+    H.test("CWV #237/#419 preview gate: sentinel/non-resident degrade, packaged families resolve", function()
+        local gate = Policy.resolve_preview_3p
+        local yes = function() return true end
+        local no = function() return false end
+        -- 1. The husk resolver's answer is final (co-op unchanged); the spawn
+        --    floor must not even be consulted.
+        H.equal(gate("units/weapons/player/w/w", function(u) return u .. "_3p" end,
+            function() error("spawn floor must not be consulted") end),
+            "units/weapons/player/w/w_3p")
+        -- 2. Collapsed-guard shape must fail: silent resolver + declined floor.
+        H.equal(gate("units/weapons/player/w/w", nil, no), nil)
+        -- 3. Sentinel degrades even when spawnable.
+        H.equal(gate("units/weapons/player/wpn_invisible_weapon/wpn_invisible_weapon", nil, yes), nil)
+        -- 4. Arbitrary non-player prefixes degrade even when spawnable.
+        H.equal(gate("units/beings/player/x/x", nil, yes), nil)
+        -- 5. Floor-confirmed vanilla targets resolve (preview swap preserved).
+        H.equal(gate("units/weapons/player/w/w", nil, yes), "units/weapons/player/w/w_3p")
+        -- 6. Packaged units/cwv_ families resolve through the floor...
+        H.equal(gate("units/cwv_crowbill/imperial_01/imperial_01", nil, yes),
+            "units/cwv_crowbill/imperial_01/imperial_01_3p")
+        H.equal(gate("units/cwv_es_greataxe/axe_01/axe_01", nil, yes),
+            "units/cwv_es_greataxe/axe_01/axe_01_3p")
+        -- ...and the musket-class floor decline (#474 donor gate) degrades.
+        H.equal(gate("units/cwv_es_musket_custom/cwv_es_musket_custom", nil, no), nil)
+        -- 7. A missing floor fails closed.
+        H.equal(gate("units/weapons/player/w/w", nil, nil), nil)
+        H.equal(gate(nil, nil, yes), nil)
     end)
 
     H.test("CWV #660 preview adapters consume one immutable unit descriptor", function()
@@ -241,9 +296,17 @@ return function(H, repo_root)
             'mod:hook("MenuWorldPreviewer", "_spawn_item"',
             'mod:hook("LootItemUnitPreviewer", "spawn_units"',
             '_om._husk_preselect_units(result, item_data, backend_id, skin, career_name)',
+            -- #237/#419: both preview adapters must receive the gated preview
+            -- resolver, never the raw HUSK_OVERRIDE_REF resident check (whose
+            -- nil answer the old call sites collapsed into blind base.."_3p").
+            '_om._preview_override_3p, "hand_flags"',
+            '_om._preview_override_3p, "base_identity"',
+            '_om._preview_override_3p = function',
         }) do
             H.truthy(source:find(marker, 1, true), "missing canonical surface route: " .. marker)
         end
+        H.equal(source:find('_om._resident_override_3p, "', 1, true), nil,
+            "raw resident resolver must never be passed to a preview adapter (#237/#419)")
     end)
 
     H.test("CWV #579 explicit render identity wins over stale stores", function()
@@ -262,7 +325,8 @@ return function(H, repo_root)
             { right_hand = true, unit_name = "base_3p" },
             { left_hand = true, unit_name = "independent_offhand_3p" },
         }
-        H.equal(Policy.apply_spawn_data(appearance, recipe, nil, fallback), 1)
+        local resident = function(unit) return unit .. "_3p" end
+        H.equal(Policy.apply_spawn_data(appearance, recipe, resident, fallback), 1)
         H.equal(recipe[1].unit_name, "runed_3p")
         H.equal(recipe[2].unit_name, "independent_offhand_3p")
 

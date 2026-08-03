@@ -135,6 +135,22 @@ local function _enabled()
     return mod:get("gut_scoreboard_live_native") == true
 end
 
+-- (#272) An installed-but-DISABLED external scoreboard must not suppress gut's
+-- page: VMF get_mod() returns the mod object even when the user toggled the mod
+-- off, so gate on presence AND :is_enabled() (the _gut_uitweaks_sync.lua:91-100
+-- pattern). An unreadable is_enabled counts as enabled, so a present-but-
+-- uncheckable external mod still owns the surface (never double-draw).
+-- `external` is injectable for the rt check; nil means the live lookup.
+local function _external_scoreboard_active(external)
+    external = external or get_mod("reikland-scoreboard")
+    if not external then return false end
+    if type(external.is_enabled) == "function" then
+        local ok, enabled = pcall(external.is_enabled, external)
+        if ok and enabled == false then return false end
+    end
+    return true
+end
+
 local function _is_adventure(game_mode_key)
     if game_mode_key == "adventure" then return true end
     local managers = rawget(_G, "Managers")
@@ -202,7 +218,7 @@ local function _render_page(renderer, input, dt, page, surface)
     if fingerprint ~= last_evidence and evidence_count < 8 then
         evidence_count = evidence_count + 1
         last_evidence = fingerprint
-        mod:info("[gut:272] native_page evidence=%d/8 surface=%s players=%d topics=%d sort=%s",
+        pcall(printf, "[gut:272] native_page evidence=%d/8 surface=%s players=%d topics=%d sort=%s",
             evidence_count, tostring(surface), #page.players, #page.topics, sort_topic)
     end
 
@@ -216,10 +232,10 @@ end
 
 mod:hook_safe("IngamePlayerListUI", "_draw", function(self, dt)
     if not _enabled() then return end
-    if get_mod("reikland-scoreboard") then
+    if _external_scoreboard_active() then
         if not external_reported then
             external_reported = true
-            mod:info("[gut:272] native_tab skipped reason=external_scoreboard_loaded")
+            pcall(printf, "[gut:272] native_tab skipped reason=external_scoreboard_loaded")
         end
         return
     end
@@ -245,7 +261,7 @@ end)
 -- lifecycle. Reuse the exact same detached model and renderer so live and final
 -- pages cannot disagree about topic order or sorting.
 mod:hook_safe("EndViewStateScore", "draw", function(self, input_service, dt)
-    if not _enabled() or get_mod("reikland-scoreboard")
+    if not _enabled() or _external_scoreboard_active()
             or not _is_adventure(self.game_mode_key) then return end
     local helper = rawget(_G, "ScoreboardHelper")
     local players = self._context and self._context.players_session_score
@@ -267,6 +283,20 @@ return {
                 local helper = rawget(_G, "ScoreboardHelper")
                 if type(helper) ~= "table" or #helper.scoreboard_topic_stats ~= 11 then
                     return "native scoreboard topic catalog unavailable"
+                end
+            end,
+        },
+        {
+            name = "issue272_external_scoreboard_gate_respects_enabled",
+            fn = function()
+                if _external_scoreboard_active({ is_enabled = function() return false end }) then
+                    return "disabled external scoreboard still suppresses the native page"
+                end
+                if not _external_scoreboard_active({ is_enabled = function() return true end }) then
+                    return "enabled external scoreboard is not detected"
+                end
+                if not _external_scoreboard_active({}) then
+                    return "external mod without is_enabled must count as present"
                 end
             end,
         },

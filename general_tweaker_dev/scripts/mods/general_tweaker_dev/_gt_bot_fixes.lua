@@ -777,7 +777,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         local next_hb = blackboard._gt_rescue_hb_t or 0
         if t >= next_hb then
             blackboard._gt_rescue_hb_t = t + 3.0
-            mod:debug("[gt:bot-rescue] scan roster=%d prior_need=%s", #player_and_bot_units, tostring(need_type))
+            pcall(printf, "[gt:bot-rescue] scan roster=%d prior_need=%s", #player_and_bot_units, tostring(need_type))
         end
     end
 
@@ -800,7 +800,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
                 local _, allowed_aid_path = self:_ally_path_allowed(unit, player_unit, t)
                 local cand_pos = POSITION_LOOKUP[player_unit]
 
-                mod:debug("[gt:bot-rescue] candidate idx=%d ready=true health_alive=%s aid_path=%s has_pos=%s",
+                pcall(printf, "[gt:bot-rescue] candidate idx=%d ready=true health_alive=%s aid_path=%s has_pos=%s",
                     k, tostring(alive), tostring(allowed_aid_path and true or false), tostring(cand_pos ~= nil))
 
                 if not alive then
@@ -826,7 +826,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         local next_t = blackboard._gt_rescue_log_t or 0
         if t >= next_t then
             blackboard._gt_rescue_log_t = t + 2.0
-            mod:debug("[gt:bot-rescue] awaiting=%d picked=%s not_health_alive=%d path_blocked=%d range_blocked=%d cap_m=%s prior_need=%s",
+            pcall(printf, "[gt:bot-rescue] awaiting=%d picked=%s not_health_alive=%d path_blocked=%d range_blocked=%d cap_m=%s prior_need=%s",
                 considered, best_unit and "yes" or "no", not_alive, blocked_path, blocked_range,
                 rescue_distance_cap and string.format("%.1f", rescue_distance_cap) or "unlimited", tostring(need_type))
         end
@@ -838,7 +838,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         -- (Gated on gt_bot_rescue_awaiting so the awaiting scan above can run for
         -- the priority toggles without rescuing awaiting allies when its own
         -- toggle is off.)
-        mod:debug("[gt:bot-rescue] RESCUE picked awaiting ally dist=%.1f -> relabel knocked_down", best_dist or -1)
+        pcall(printf, "[gt:bot-rescue] RESCUE picked awaiting ally dist=%.1f -> relabel knocked_down", best_dist or -1)
         _gt384_arm_pin(blackboard, best_unit, "knocked_down")
         return best_unit, best_dist, "knocked_down", false
     end

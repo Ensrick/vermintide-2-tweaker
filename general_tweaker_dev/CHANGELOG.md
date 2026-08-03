@@ -1,5 +1,10 @@
-﻿# General Tweaker Changelog
+# General Tweaker Changelog
 
+## 0.2.261-dev (2026-08-03) -- bot-rescue evidence lines reach the log (#300) [verify-fix][untested]
+
+- The four [gt:bot-rescue] markers moved from mod:debug (a channel the user''s
+  config provably drops) to printf, so the #300 card can finally capture
+  evidence. Payloads unchanged; offline needles pin the channel.
 ## v0.2.260-dev (2026-08-02) -- #242 spawn-disable nil-id crash fix + pickup passthrough [untested]
 
 - **Fixed a latent crash in Disable Enemy Spawns (#242).** [untested] The hard refusal in the

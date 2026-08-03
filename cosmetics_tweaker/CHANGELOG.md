@@ -1,5 +1,10 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.184-dev (2026-08-03) -- husk-hat paint failures name the hat (#697) [verify-fix][untested]
+
+- A residual LA paint failure now emits the armoury key and vanilla key on the
+  printf-backed alert channel instead of a keyless error, so the next failure
+  identifies the hat without a debug-channel session.
 ## 0.9.183-dev (2026-08-02) — #518 solo-visible deus-yield probes [diag]
 
 - **#518 diagnostics: solo-visible probe coverage for the CW deus-yield path [diag].** The pinned live-test falsifier ("the log records the wielded weapon with a non-empty skin= value") had no solo-visible emitter - the only skin= printf repo-wide is CWV's husk-wield line, remote-only, and both #518 failure-path decisions logged via _dbg only (invisible with user mod-logging OFF). New owner module `_cos_518_probe.lua` (the entry file sits at its decomposition ceiling) carries a bounded emitter `mod._cos518_emit` (engine printf only, rawget-guarded, `[cos:518]` prefix, deduped per key, capped at 16 records per channel, no chat) plus three probes the entry wires in:

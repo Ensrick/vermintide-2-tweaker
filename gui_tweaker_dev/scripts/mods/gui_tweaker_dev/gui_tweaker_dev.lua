@@ -35,7 +35,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.328-dev"
+local MOD_VERSION = "0.2.329-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -96,7 +96,7 @@ local function _settings_fingerprint()
     return string.format("%08x", h)
 end
 
-mod:info("[gut:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+pcall(printf, "[gut:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
 
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
 -- version to chat on load so the user can see what's active. Stable
@@ -1658,10 +1658,66 @@ end)
 -- simple_lookup, so registering the string there resolves on every path natively —
 -- no wrapped closure to bypass. (LA already hooks _base_lookup in the field,
 -- confirming that table is the universal chokepoint.)
+--
+-- (#153/#292) The same defect class covers every gut key the ENGINE localizes:
+-- the hidden-passive perk rows render display_name/description through GLOBAL
+-- Localize (hero_window_talents.lua:477, hero_window_talents_console.lua:672),
+-- and the Video-tab profile widgets localize their title text, tooltip keys and
+-- the dropdown label (setup third return, consumed at options_view.lua:1280)
+-- through localize=true widget fields. Those keys lived only in VMF's mod-local
+-- table, so they drew as raw "<key>" text. Supply them to the SAME backend table
+-- here. The English strings are read from the mod localization file (single
+-- source of truth); VMF's "%%" escapes are collapsed to a literal "%" because
+-- the engine path has NO string.format pass for these strings (a perk row with
+-- no description_values returns Localize(str) untouched, ui_utils.lua:36-38).
+-- The dropdown OPTION texts are deliberately absent: they are pre-resolved via
+-- mod:localize inside the setup callbacks and never hit the engine localizer.
+local ENGINE_UI_LOC_KEYS = {
+    -- #153 hidden career passives (native Perks rows).
+    "gut_hidden_passive_whc_headshot_name",
+    "gut_hidden_passive_whc_headshot_desc",
+    "gut_hidden_passive_whc_crit_name",
+    "gut_hidden_passive_whc_crit_desc",
+    "gut_hidden_passive_whc_combined_name",
+    "gut_hidden_passive_whc_combined_desc",
+    -- #292 Video-tab profile controls (title, dropdown labels, tooltips).
+    "gut_video_profiles_header",
+    "gut_video_profile_selector",
+    "gut_video_profile_selector_tooltip",
+    "gut_video_profile_action",
+    "gut_video_profile_action_tooltip",
+}
+
+local engine_ui_loc_cache  -- built once; re-registration re-USES it (dofile is not free)
+local function _engine_ui_localizations()
+    if engine_ui_loc_cache then return engine_ui_loc_cache end
+    local strings = {}
+    local ok, loc_table = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization")
+    if not ok or type(loc_table) ~= "table" then
+        return strings
+    end
+    local complete = true
+    for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
+        local entry = loc_table[key]
+        local text = type(entry) == "table" and entry.en
+        if type(text) == "string" then
+            strings[key] = text:gsub("%%%%", "%%")
+        else
+            complete = false
+        end
+    end
+    -- Cache only a complete harvest so a failed early read retries next call.
+    if complete then engine_ui_loc_cache = strings end
+    return strings
+end
+
 local function _register_button_loc()
     local loc = Managers and Managers.localizer
     if loc and loc.append_backend_localizations then
         pcall(loc.append_backend_localizations, loc, { mod_tweaker_button_name = "Mod Tweaker" })
+        -- (#153/#292) engine-rendered gut UI keys (see ENGINE_UI_LOC_KEYS above).
+        pcall(loc.append_backend_localizations, loc, _engine_ui_localizations())
         -- #352 uses the same native backend-localization path for the explicit
         -- legacy THP names. Re-supply them after language/localizer re-init.
         local thp_names = mod._gut_original_thp_names
@@ -1696,6 +1752,35 @@ end)
 -- IngameView.on_enter — distinct pair, no duplicate.)
 mod:hook_safe("IngameView", "on_enter", function()
     _register_button_loc()
+end)
+
+-- (#153/#292) Lock: every engine-rendered gut UI key must resolve through the
+-- GLOBAL localizer path (same structure as issue352's loc validation in
+-- _gut_original_thp_names.lua). FAILS whenever a key is missing from the loc
+-- file, still carries a VMF %% escape, or is not being served by the engine
+-- localizer (Localize falls through to "<key>" when unsupplied).
+_rt_register("issue153_292_engine_ui_loc_supplied", function()
+    local strings = _engine_ui_localizations()
+    for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
+        local text = strings[key]
+        if type(text) ~= "string" then
+            return "engine-UI localization source missing key: " .. key
+        end
+        if text:find("%%%%") then
+            return "engine-UI localization still carries a VMF %% escape: " .. key
+        end
+    end
+    local localize = rawget(_G, "Localize")
+    if type(localize) ~= "function" then
+        return "global Localize unavailable (engine-UI keys cannot resolve)"
+    end
+    for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
+        local ok, resolved = pcall(localize, key)
+        if not ok or resolved ~= strings[key] then
+            return string.format("engine localizer does not serve %s (got %s)",
+                key, tostring(resolved))
+        end
+    end
 end)
 
 -- ESC/keep-menu button-overflow compaction (v0.2.56; REWRITTEN v0.2.64-dev — was
@@ -2064,10 +2149,12 @@ end
 -- Floating Damage Numbers (MIGRATED from general_tweaker 2026-06-29): client-side,
 -- networking-free numbers over enemies you damage, via the engine's own
 -- DamageNumbersUI + DamageUtils.add_unit_floating_damage_numbers. Registers its OWN
--- hooks on DamageUtils.add_damage_network / add_damage_network_player (PRE-FLIGHT:
--- gut has no other hook on either method — it only reads DamageUtils.is_in_inn), and
--- chains mod.on_setting_changed / mod.on_game_state_changed (dofile'd after both are
--- defined). See _gut_damage_numbers.lua.
+-- hooks on DamageUtils.add_damage_network / add_damage_network_player plus the #938
+-- burst-aggregation hook on DamageUtils.add_unit_floating_damage_numbers itself
+-- (PRE-FLIGHT: gut has no other hook on any of the three methods — it only reads
+-- DamageUtils.is_in_inn), and chains mod.update / mod.on_setting_changed /
+-- mod.on_game_state_changed (dofile'd after all are defined).
+-- See _gut_damage_numbers.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_damage_numbers")
 
 -- Main Menu & Startup (MIGRATED from general_tweaker 2026-06-29, #190): two

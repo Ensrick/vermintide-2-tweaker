@@ -434,6 +434,26 @@ do
 		return ok and res == true
 	end
 
+	-- (#237/#419) Preview-time resolved-3p gate for the two solo-keep preview
+	-- adapters (_cwv_preview_meshswap_apply "hand_flags" and
+	-- _cwv_browser_meshswap_apply "base_identity" in the entry).
+	-- _om._resident_override_3p demands HUSK_OVERRIDE_REF residency, which only
+	-- the boot force-load pass and the husk leases above (:379/:402) establish --
+	-- outside that set the old adapter call sites collapsed a nil resolver answer
+	-- into a blind `base .. "_3p"` spawn target, silently voiding the documented
+	-- degrade-to-base contract (entry :8900-:8907). This predicate keeps the husk
+	-- resolver's answer when it speaks (co-op unchanged) and otherwise applies the
+	-- #478 crash floor above (_om._husk_unit_spawnable, incl. the #474
+	-- donor-material gate for units/cwv_* custom meshes -- the Old Musket's
+	-- MeshObject-AV class can no longer reach World.spawn_unit unguarded through
+	-- a preview). Decision shape is pure and shared with the offline lock:
+	-- exact_appearance.resolve_preview_3p. _om fields are read at CALL time so
+	-- entry-load order stays irrelevant.
+	_om._preview_override_3p = function(base_unit)
+		return _om.exact_appearance.resolve_preview_3p(base_unit,
+			_om._resident_override_3p, _om._husk_unit_spawnable)
+	end
+
 	-- Husk MESH re-key (issues 396/401, restructured for #474/#475). Runs BEFORE
 	-- the vanilla spawn (the caller mutates item_units in place). Resolution
 	-- order + invariants: the RESOLUTION ORDER block above; the actual decision

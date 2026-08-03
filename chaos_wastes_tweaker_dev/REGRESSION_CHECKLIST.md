@@ -193,12 +193,12 @@ Interpret `/ct_426_diag` without changing the run:
 | Field | Value |
 |---|---|
 | Symptom | Consecutive timed blocks retain the vanilla proc cooldown even though CT intends both parry boons to proc every time. |
-| Root cause | The boon-roll hook referenced a function local to another Lua chunk as a bare global; `pcall(nil)` swallowed the scope failure. |
-| Fix version(s) | ct_dev 0.7.269-dev |
+| Root cause | Three stacked no-ops (2026-08-03 audit): the strip guarded on a `DeusPowerUpTemplates.power_ups` sub-table that never existed (flat name-keyed map), mutated SOURCE data that registration `table.clone`s per rarity, and `boon_skulls_03` has no strippable field (proc hard-codes `boon_skulls_03_cooldown`). Earlier v0.7.269 fix only repaired the bare-global call scope. |
+| Fix version(s) | ct_dev 0.7.269-dev; retargeted post-audit 2026-08-03 |
 | Category | SOLO |
 | Repro | Acquire `static_blade` or `boon_skulls_03`, then make consecutive successful timed blocks. |
-| Expected post-fix | The target template's `cooldown_buff` field is absent and each timed block may proc. |
-| Detection | `/ct_regression_test` passes `parry_cooldowns_stripped_post_load`; contract failures emit bounded `[ct:342]` warnings. |
+| Expected post-fix | The REGISTERED runtime cooldown-buff templates (`static_blade_cooldown_buff` per registered rarity, `boon_skulls_03_cooldown`) carry `duration = 0`, so the cooldown expires on the next buff update and each timed block may proc. `cooldown_buff` fields stay intact (nil'ing them crashes the proc's trailing `add_buff`). |
+| Detection | Offline `test_ct_parry_cooldown_contract.lua` (policy strip + crash guard); `/ct_regression_test` `parry_cooldowns_stripped_post_load` FAILS on unreadable tables or residual durations (run after the first boon roll); `[ct128]` bounded log lines. |
 
 ### anath-raema-registry-retry - issue #288
 

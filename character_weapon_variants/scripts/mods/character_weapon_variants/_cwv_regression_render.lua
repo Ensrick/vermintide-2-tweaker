@@ -982,6 +982,41 @@ _rt_register("preview_meshswap_guards", function()
     if c.spawn_data[1].unit_name ~= "BASE_3p" then
         return "#579 guard: info.skin_name must win when copied preview callback drops skin arg"
     end
+    -- #237/#419 resolved-3p contract: the historical collapsed guard
+    -- (`resolver or blind base.."_3p" concat`) must FAIL. The spawn-target
+    -- resolver honors the husk answer, then the injected spawn floor; a
+    -- sentinel, foreign-prefix, or floor-declined target degrades to the base
+    -- mesh; packaged units/cwv_ families still resolve through the floor.
+    local gate = _om.exact_appearance and _om.exact_appearance.resolve_preview_3p
+    if type(gate) ~= "function" then return "#237/#419 resolve_preview_3p policy missing" end
+    if type(_om._preview_override_3p) ~= "function" then
+        return "#237/#419 _om._preview_override_3p production gate missing"
+    end
+    local yes, no = function() return true end, function() return false end
+    if gate("units/weapons/player/wpn_rt237/wpn_rt237", nil, no) ~= nil then
+        return "#237/#419 collapsed guard regressed: floor-declined vanilla target must degrade to base"
+    end
+    if gate("units/weapons/player/wpn_invisible_weapon/wpn_invisible_weapon", nil, yes) ~= nil then
+        return "#237/#419 invisible-weapon sentinel must degrade to base, never blind concat"
+    end
+    if gate("units/beings/player/rt237/rt237", nil, yes) ~= nil then
+        return "#237/#419 non-player-prefix target must degrade to base, never blind concat"
+    end
+    if gate("units/weapons/player/wpn_rt237/wpn_rt237", nil, yes)
+            ~= "units/weapons/player/wpn_rt237/wpn_rt237_3p" then
+        return "#237/#419 floor-confirmed vanilla target must still resolve (preview swap lost)"
+    end
+    if gate("units/cwv_es_musket_custom/cwv_es_musket_custom", nil, yes)
+            ~= "units/cwv_es_musket_custom/cwv_es_musket_custom_3p" then
+        return "#237/#419 packaged units/cwv_ family must still resolve (preview swap lost)"
+    end
+    if gate("units/cwv_es_musket_custom/cwv_es_musket_custom", nil, no) ~= nil then
+        return "#474 musket floor decline must degrade to base (MeshObject AV guard lost)"
+    end
+    if gate("units/weapons/player/wpn_rt237/wpn_rt237",
+            function(u) return u .. "_3p" end, no) ~= "units/weapons/player/wpn_rt237/wpn_rt237_3p" then
+        return "#418 husk-resident resolver answer must stay final (co-op path changed)"
+    end
 end)
 
 _rt_register("browser_meshswap_guards", function()
@@ -1002,6 +1037,31 @@ _rt_register("browser_meshswap_guards", function()
     sd = { { unit_name = UNTOUCHED } }
     apply({ backend_id = "cwv_es_greataxe_001", skin = "some_skin", data = nil }, sd)
     if sd[1].unit_name ~= UNTOUCHED then return "#419 guard: applied illusion (skin) must win, no rewrite" end
+    -- #237/#419 resolved-3p contract on the base_identity adapter: when the
+    -- residency resolver declines, the adapter must DEGRADE to the recipe's
+    -- authored base mesh -- the historical collapsed guard blind-concatenated
+    -- base.."_3p" and rewrote anyway (the #403 class the safety contract at
+    -- the descriptor site documents).
+    local policy = _om.exact_appearance
+    if type(policy) ~= "table" or type(policy.resolve_spawn_descriptor) ~= "function" then
+        return "#419 exact_appearance descriptor policy missing"
+    end
+    local descriptor = policy.resolve_spawn_descriptor({
+        variant = { item_key = "cwv_rt419",
+            right_hand_unit = "units/weapons/player/wpn_rt419v/wpn_rt419v" },
+        base = { right_hand_unit = "units/weapons/player/wpn_rt419/wpn_rt419" },
+    })
+    if not descriptor then return "#419 degrade-probe descriptor failed to resolve" end
+    local probe = { { unit_name = UNTOUCHED } }
+    local swapped = policy.apply_spawn_descriptor(
+        descriptor, probe, function() return nil end, "base_identity")
+    if swapped ~= 0 or probe[1].unit_name ~= UNTOUCHED then
+        return "#419 resolver decline must degrade to the base mesh (blind concat regressed)"
+    end
+    swapped = policy.apply_spawn_descriptor(descriptor, probe, nil, "base_identity")
+    if swapped ~= 0 or probe[1].unit_name ~= UNTOUCHED then
+        return "#419 missing resolver must fail closed to the base mesh (collapsed guard regressed)"
+    end
 end)
 
 _rt_register("issue660_preview_descriptor_adapter_parity", function()

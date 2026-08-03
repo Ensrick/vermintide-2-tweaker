@@ -331,6 +331,8 @@ local suites = {
     "test_et_boss_behavior",
     "test_gut_revive_scoreboard",
     "test_gut_scoreboard_diagnostics",
+    "test_gut_dev_printf_receipts",
+    "test_gut_engine_ui_loc",
     "test_gut_hidden_passives",
     "test_gut_original_thp_names",
     "test_gut_loadout_capacity",

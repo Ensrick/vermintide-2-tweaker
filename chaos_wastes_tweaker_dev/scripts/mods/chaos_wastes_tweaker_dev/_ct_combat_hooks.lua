@@ -1083,40 +1083,45 @@ mod._ct_ensure_warlord_trial()
 
 -- ---- Items 5 + 6: strip cooldown from parry-proc boons ----
 --
--- `static_blade` (deus_power_up_settings.lua:4205, "lightning bolt on parry"
--- — fx/cw_chain_lightning + boon_career_ability_lightning_aoe damage) and
--- `boon_skulls_03` (deus_power_up_settings.lua:3140, drakegun explosion on
--- parry) both ship a `cooldown_buff` field that gates the `on_timed_block`
--- proc to once per cooldown duration via vanilla buff_extension cooldown
--- check (buff_extension.lua:1378-1390). Nuking that field at mod boot makes
--- every successful timed block fire the proc — no cooldown.
+-- `static_blade` (deus_power_up_settings.lua:4204, "lightning bolt on parry")
+-- and `boon_skulls_03` (deus_power_up_settings.lua:3140, drakegun explosion
+-- on parry) both gate their `on_timed_block` proc behind a cooldown BUFF.
+-- #342 audit (2026-08-03): the previous strip here was a provable triple
+-- no-op - it guarded on a `DeusPowerUpTemplates.power_ups` sub-table that has
+-- never existed (the table is FLAT name-keyed,
+-- deus_power_up_settings.lua:1182/:7040/:7128), it mutated SOURCE data that
+-- registration table.clone's per rarity (deus_power_up_settings.lua:7146-7161
+-- -> global BuffTemplates via morris_buff_settings.lua:7310), and
+-- boon_skulls_03 has no strippable field at all (its proc hard-codes
+-- "boon_skulls_03_cooldown", morris_buff_settings.lua:4632/:4655). The
+-- working mechanism now lives in _ct_parry_cooldown_policy.lua: zero the
+-- DURATION on the REGISTERED runtime cooldown-buff templates, enumerating
+-- static_blade's rarities from the game's own DeusPowerUps registration. The
+-- policy header cites why nil'ing `cooldown_buff` itself would crash the proc
+-- (unconditional add_buff(cooldown_buff) at morris_buff_settings.lua:4323).
+local PARRY_CD = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_parry_cooldown_policy")
+mod._ct342_parry_cooldown_policy = PARRY_CD  -- consumed by _ct_regression.lua
 mod._ct128_strip_parry_cooldowns = function()
-    local templates = rawget(_G, "DeusPowerUpTemplates")
-    if not (templates and templates.power_ups) then
-        _dbg("[ct128] DeusPowerUpTemplates not ready; parry-cooldown strip skipped")
+    local runtime_buffs = rawget(_G, "BuffTemplates")
+    local deus_power_ups = rawget(_G, "DeusPowerUps")
+    if not (runtime_buffs and deus_power_ups) then
+        _dbg("[ct128] registered runtime buff tables not ready; parry-cooldown strip skipped")
         return false
     end
-    local function strip(name)
-        local pu = templates.power_ups[name]
-        if not (pu and pu.buff_template and pu.buff_template.buffs) then
-            _dbg("[ct128] %s missing or unexpected shape; cooldown strip skipped", name)
-            return
-        end
-        local n_stripped = 0
-        for _, b in ipairs(pu.buff_template.buffs) do
-            if b.cooldown_buff then
-                _dbg("[ct128] %s: stripped cooldown_buff=%s", name, tostring(b.cooldown_buff))
-                b.cooldown_buff = nil
-                n_stripped = n_stripped + 1
-            end
-        end
-        if n_stripped == 0 then
-            _dbg("[ct128] %s: already cooldown-free (no cooldown_buff field)", name)
+    local ok, summary = PARRY_CD.strip(runtime_buffs, deus_power_ups)
+    for _, row in ipairs(summary.static_blade) do
+        if row.result == "neutralized" then
+            _dbg("[ct128] static_blade (%s): cooldown %s duration zeroed",
+                tostring(row.rarity), tostring(row.cooldown_name))
         end
     end
-    strip("static_blade")
-    strip("boon_skulls_03")
-    return true
+    if summary.skulls == "neutralized" then
+        _dbg("[ct128] boon_skulls_03: cooldown %s duration zeroed", PARRY_CD.SKULLS_COOLDOWN_NAME)
+    end
+    for _, problem in ipairs(summary.problems) do
+        _dbg("[ct128] parry-cooldown strip problem: %s", problem)
+    end
+    return ok
 end
 -- v0.7.130-dev: the boot-time `pcall(_ct128_strip_parry_cooldowns)` was
 -- removed here. DeusPowerUpTemplates is reliably absent at mod-load time in

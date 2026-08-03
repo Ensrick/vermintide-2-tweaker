@@ -2223,6 +2223,21 @@ runtime dump), `[memory: note]` (a memory note that itself cites ground truth),
    cheap on purpose.
 4. **When an in-game dump is collected** (the gt name-dump, ANIMATION_RESEARCH
    probes, a `/dump_*` capture) → reference it `[dump: <file>]`.
+5. **When the Lua decompile cannot answer** (engine-native behavior: network
+   type_info bounds, resource/package residency semantics, unit/material/scene
+   graph internals, animation state machines) → consult the OFFICIAL Stingray /
+   Bitsquid documentation online (Autodesk Stingray help + Lua API reference)
+   and cite it `[engine-doc: <URL>]` (user directive 2026-08-03). An engine-doc
+   citation outranks `[unverified]` but never outranks `[src:]` — where the
+   decompile and the docs disagree, the decompile describes THIS game.
+6. **Before designing any fix, cross-reference the issue against its siblings —
+   open AND closed** (`gh search issues state:all`, `docs/BUG_CLASSES.md`, the
+   per-mod census/coverage docs). If a sibling solved the same mechanism class,
+   reuse that solution or record in the issue why it does not transfer. If the
+   fix lands on one surface, enumerate the OTHER surfaces of the same class in
+   the same pass and either fix them or file the parity gap — "works in one
+   area, broken in another" is the failure mode this rule exists to kill
+   (user directive 2026-08-03).
 
 ### Invariants
 

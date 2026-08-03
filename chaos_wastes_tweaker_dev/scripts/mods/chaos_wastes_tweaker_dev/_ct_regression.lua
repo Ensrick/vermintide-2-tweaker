@@ -599,35 +599,28 @@ _rt_register("open_chest_hook_singleton", function()
     end
 end)
 
--- v0.7.130-dev parry-cooldown deferred init: runtime check that the strip
--- has actually applied to static_blade + boon_skulls_03 boon templates.
--- Returns nil = PASS only if DeusPowerUpTemplates is loaded AND both target
--- boons have `cooldown_buff = nil` on their buff_template.buffs[1] entry.
--- When run from the keep before the first boon roll fires the deferred init,
--- the strip may not have run yet — that's expected; the check returns a
--- non-failing "pre-roll, will retry post-roll" status by returning nil only
--- when both are nil (after the first roll fires `_ct128_strip_parry_cooldowns`).
+-- #342 parry-cooldown deferred init (2026-08-03 audit repair): runtime check
+-- that the neutralization reached the REGISTERED runtime cooldown-buff
+-- templates (global BuffTemplates, enumerated through the game's own
+-- DeusPowerUps registration - never the DeusPowerUpTemplates source data,
+-- which registration table.clone's per rarity). FAILS - never silently
+-- passes - when the runtime tables are unreadable or a registered cooldown
+-- still carries a non-zero duration. The strip arms lazily inside the
+-- generate_random_power_ups hook, so run this after the first boon roll of a
+-- Chaos Wastes run; before that the vanilla durations correctly FAIL with the
+-- roll-a-boon hint below.
 _rt_register("parry_cooldowns_stripped_post_load", function()
     if type(mod._ct128_strip_parry_cooldowns) ~= "function" then
         return "#342 REGRESSION: deferred parry-cooldown strip is not published on mod"
     end
-    local templates = rawget(_G, "DeusPowerUpTemplates")
-    if not (templates and templates.power_ups) then
-        return nil  -- pre-load, can't verify yet
+    local policy = mod._ct342_parry_cooldown_policy
+    if type(policy) ~= "table" or type(policy.residual_report) ~= "function" then
+        return "#342 REGRESSION: parry-cooldown policy module is not published on mod"
     end
-    local function inspect(name)
-        local pu = templates.power_ups[name]
-        if not (pu and pu.buff_template and pu.buff_template.buffs) then return nil end
-        for _, b in ipairs(pu.buff_template.buffs) do
-            if b.cooldown_buff then return b.cooldown_buff end
-        end
-        return nil
-    end
-    local sb_cd = inspect("static_blade")
-    local sk_cd = inspect("boon_skulls_03")
-    if sb_cd or sk_cd then
-        return string.format("cooldown_buff still present (run /ct_regression_test after first boon roll fires deferred init): static_blade=%s boon_skulls_03=%s",
-            tostring(sb_cd), tostring(sk_cd))
+    local report = policy.residual_report(rawget(_G, "BuffTemplates"), rawget(_G, "DeusPowerUps"))
+    if report then
+        return "#342: " .. report
+            .. " (the strip arms on the first boon roll of a CW run - roll a boon, then re-run)"
     end
 end)
 

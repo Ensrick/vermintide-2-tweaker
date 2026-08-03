@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.485-dev"
+local MOD_VERSION = "0.1.486-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -8940,12 +8940,13 @@ end
 -- vanilla base-unit identity. This retires the duplicated #237/#419 fallback
 -- resolvers that drifted into two separate fixes for the same concern.
 --
--- SAFETY: only vanilla `units/weapons/player/` meshes are swapped — a mod-bundled
--- custom mesh (the Old Musket's units/cwv_*) has no per-unit `_3p` package and
--- World.spawn_unit would engine-fatal (issue 403 class); the musket keeps its
--- bespoke handling. The invisible-weapon sentinel is skipped. Ammo-unit entries
--- are skipped (ranged variants carry their own handling). A user-selected
--- illusion (non-empty `skin` arg) wins, mirroring the get_item_units guard.
+-- SAFETY (#237/#419): the spawn target is gated by `_om._preview_override_3p`:
+-- husk residency resolver first (co-op unchanged); else only a non-sentinel
+-- vanilla `units/weapons/player/` or mod-bundled `units/cwv_` mesh passing the
+-- #478 spawn floor (`_om._husk_unit_spawnable`, incl. the #474 Old Musket donor
+-- gate) swaps; anything else degrades to the base mesh, never an engine-fatal
+-- World.spawn_unit (issue 403 class). Ammo-unit entries are skipped. A
+-- user-selected illusion (non-empty `skin` arg) wins, as in get_item_units.
 _om._cwv_resolve_spawn_descriptor = function(backend_id, item_data, explicit_skin, stored_skin)
     local cwv_key = _om._cwv_key_for_item(backend_id, item_data)
     local def = cwv_key and _find_def(cwv_key) or nil
@@ -8973,7 +8974,7 @@ _om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
         backend_id, nil, skin, stored_skin)
     if not descriptor then return end
     local swapped = _om.exact_appearance.apply_spawn_descriptor(
-        descriptor, info and info.spawn_data, _om._resident_override_3p, "hand_flags")
+        descriptor, info and info.spawn_data, _om._preview_override_3p, "hand_flags")
     if swapped > 0 then
         printf("[cwv:660] surface=inventory descriptor=%s key=%s bid=%s swapped=%d source=%s R=%s L=%s",
             tostring(descriptor.fingerprint), tostring(cwv_key), tostring(backend_id), swapped,
@@ -8999,14 +9000,13 @@ mod._cwv_preview_meshswap_apply = _om._cwv_preview_meshswap_apply; mod._cwv_reso
 -- cannot miss a stamped instance.
 --
 -- Guards mirror `_cwv_preview_meshswap_apply` (issue 237): an applied illusion
--- wins (skin data already carries the variant units for cwv skins); only
--- vanilla-player, non-sentinel, cwv-force-loaded-resident meshes swap
--- (`_om._resident_override_3p`, issue 418) — else degrade to the base mesh,
--- never an engine-fatal World.spawn_unit (issue 403 class). Hand identity by
--- exact base-unit-name match ("_3p" already appended by _load_item_units,
--- loot_item_unit_previewer.lua:286/302): ammo-unit entries and entries the
--- data level already swapped simply don't match and pass through untouched
--- (idempotent vs the get_item_units hook — no double-handling).
+-- wins (skin data already carries the variant units for cwv skins); the spawn
+-- target is gated by `_om._preview_override_3p` (#237/#419: husk resolver, then
+-- the #478/#474 spawn floor) — else degrade to the base mesh, never an
+-- engine-fatal World.spawn_unit (issue 403 class). Hand identity by exact
+-- base-unit-name match ("_3p" already appended by _load_item_units,
+-- loot_item_unit_previewer.lua:286/302): ammo/already-swapped entries don't
+-- match, pass through untouched (idempotent vs get_item_units — no double-handling).
 _om._cwv_browser_meshswap_apply = function(item, spawn_data)
     if not item or type(spawn_data) ~= "table" then return end
     local stored_skin = item.data and item.data.mod_data and item.data.mod_data.skin
@@ -9014,7 +9014,7 @@ _om._cwv_browser_meshswap_apply = function(item, spawn_data)
         item.backend_id, item.data, item.skin, stored_skin)
     if not descriptor then return end
     local swapped = _om.exact_appearance.apply_spawn_descriptor(
-        descriptor, spawn_data, _om._resident_override_3p, "base_identity")
+        descriptor, spawn_data, _om._preview_override_3p, "base_identity")
     if swapped > 0 then
         printf("[cwv:660] surface=browser descriptor=%s key=%s bid=%s swapped=%d source=%s R=%s L=%s",
             tostring(descriptor.fingerprint), tostring(cwv_key), tostring(item.backend_id), swapped,

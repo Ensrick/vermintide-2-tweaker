@@ -126,6 +126,15 @@
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_ai_takeover.lua'; needle='gt-247-keep-slot-v1'; literal=$true; polarity='present'; issueRef='#247'; note='keep-slot takeover marker remains present.' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_ai_takeover.lua'; needle='remove_peer_from_party|unassign_profiles_of_peer|set_override_player'; literal=$false; polarity='absent'; issueRef='#247'; note='retired owner-destructive takeover operations remain absent.' }
 
+    # -- #300: the four [gt:bot-rescue] evidence lines must emit via engine
+    #    printf (pcall-guarded), never mod:debug -- the reporting user config
+    #    drops the [DEBUG] channel entirely (1931 [INFO] lines, zero [DEBUG]
+    #    in the newest log), so mod:debug evidence never lands in the console
+    #    log the pinned card reads. Runtime twin: the io-nil note inside
+    #    issue300_rescue_awaiting_range_policy (_gt_regression_checks.lua).
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='pcall(printf, "[gt:bot-rescue]'; literal=$true; polarity='present'; minCount=4; issueRef='#300'; note='all four bot-rescue evidence lines route through pcall(printf, ...) (visible with mod logging OFF).' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='mod:debug("[gt:bot-rescue]'; literal=$true; polarity='absent'; issueRef='#300'; note='no bot-rescue evidence line may regress to the invisible mod:debug channel.' }
+
     # ============================ wt ============================
     # #218: the CW trait widget groups were removed in a7012f3. Keep the stale
     # CIM strip/detection scaffold absent, while preserving three hidden,
@@ -206,6 +215,13 @@
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua'; needle='if not GlowPicker._open or not GlowPicker._dirty then return false end'; literal=$true; polarity='present'; issueRef='#574'; note='Apply remains the sole dirty transaction and repeated Apply stays a no-op.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='state_pull = "piggyback_cos_la_state_req"'; literal=$true; polarity='present'; issueRef='#574'; note='join recovery reuses the acknowledged post-ingame state pull.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='retry_network = false'; literal=$true; polarity='present'; issueRef='#574'; note='the bounded join retry repaints locally and cannot create an RPC stream.' }
+
+    # -- #697: a genuine LA-hat husk paint failure must NAME the hat through the
+    #    printf-backed _dbg_alert channel. The key-bearing _dbg line beside it is
+    #    mod:debug (invisible with mod logging OFF), so without the key on the
+    #    alert line a residual failure stays anonymous.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='_dbg_alert("[husk-hat-create] paint err key=%s vanilla=%s: %s"'; literal=$true; polarity='present'; issueRef='#697'; note='the husk-hat paint failure line carries the armoury key + vanilla variant on the visible alert channel.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='if not pcall(printf, "[cosmetics:dbg] " .. fmt, ...) then'; literal=$true; polarity='present'; issueRef='#697'; note='_dbg_alert stays printf-backed (lands in console log with mod logging OFF); rerouting it blinds every alert.' }
 
     # ============================ cim_dev ============================
     # Source: crafting_in_modded_dev/CHANGELOG.md 0.8.57-dev (issue 511). The two

@@ -1,5 +1,10 @@
 # Crafting in Modded Changelog
 
+## 0.8.113-dev (2026-08-03) -- CIM-absent glow notice reaches the log (#48) [verify-fix][untested]
+
+- The once-per-session notice that saved custom_glow data will not apply
+  without Crafting in Modded moved from mod:info to printf, so the #48 card''s
+  evidence step works under any logging config. Dev stream only.
 ## 0.8.112-dev (2026-08-02) - #628 favorite-verdict coercion unblocks salvage recovery [untested]
 
 - Fixed the #628 salvage recovery rejecting EVERY recovered row as

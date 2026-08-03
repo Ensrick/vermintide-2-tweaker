@@ -61,4 +61,23 @@ return function(H, repo_root)
         H.truthy(string.find(enforce_zone, "apply_anath_raema_permanent_tweak()", 1, true),
             "enforcement no longer re-applies the template swap before vanilla resolves it")
     end)
+
+    -- #288 audit repair (2026-08-03): /ct_verify_anath_raema emitted only
+    -- mod:echo, which is invisible in the console log with VMF mod logging OFF
+    -- (the user's configuration; NON-NEGOTIABLE 9). Every echo line must carry
+    -- a pcall(printf, ...) mirror tagged [ct:288].
+    H.test("CT #288 verifier mirrors every echo line through printf", function()
+        local cmd_pos = assert(string.find(balance_src,
+            'mod:command("ct_verify_anath_raema"', 1, true),
+            "/ct_verify_anath_raema command missing")
+        local cmd_end = assert(string.find(balance_src, "end)", cmd_pos, true))
+        local block = string.sub(balance_src, cmd_pos, cmd_end + 4)
+        local _, echoes = block:gsub("mod:echo%(", "")
+        local _, mirrors = block:gsub("pcall%(printf,", "")
+        H.truthy(echoes >= 5, "echo lines must be KEPT alongside the mirrors")
+        H.truthy(mirrors >= echoes,
+            "every mod:echo in /ct_verify_anath_raema needs a pcall(printf, ...) mirror")
+        H.truthy(string.find(block, "[ct:288]", 1, true),
+            "printf mirrors must be tagged [ct:288] for log grep")
+    end)
 end
