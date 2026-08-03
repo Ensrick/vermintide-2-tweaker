@@ -918,34 +918,45 @@ end
 
 sync_anath_raema_permanent()
 
+-- #288 audit repair (2026-08-03): every echo line below is mirrored through
+-- pcall(printf, ...) so the values land in the console log even with VMF mod
+-- logging OFF (mod:echo is chat-only in that configuration; NON-NEGOTIABLE 9).
 mod:command("ct_verify_anath_raema", "Report #288 template and active reload-buff state (wield the trait weapon first)", function()
     local bt = rawget(_G, "BuffTemplates")
     local tpl = bt and bt.deus_ammo_pickup_reload_speed
     local sb = tpl and tpl.buffs and tpl.buffs[1]
     mod:echo("=== ct #288 Anath Raema (v%s) ===", MOD_VERSION)
-    mod:echo("setting=%s template_child=%s stat=%s multiplier=%s event=%s",
+    pcall(printf, "[ct:288] === Anath Raema (v%s) ===", MOD_VERSION)
+    local setting_line = string.format("setting=%s template_child=%s stat=%s multiplier=%s event=%s",
         tostring(effective_setting("tweak_anath_raema_permanent")),
         tostring(sb and sb.name), tostring(sb and sb.stat_buff),
         tostring(sb and sb.multiplier), tostring(sb and sb.event))
+    mod:echo("%s", setting_line)
+    pcall(printf, "[ct:288] %s", setting_line)
 
     local pl = Managers.player and Managers.player:local_player()
     local unit = pl and pl.player_unit
     local be = unit and Unit.alive(unit) and ScriptUnit.has_extension(unit, "buff_system")
     if not be then
         mod:echo("active=unavailable (enter the keep/mission and wield the trait weapon)")
+        pcall(printf, "[ct:288] active=unavailable (enter the keep/mission and wield the trait weapon)")
         return
     end
     local active = 0
     for _, buff in pairs(be._buffs or {}) do
         if buff.buff_template_name == "deus_ammo_pickup_reload_speed" then
             active = active + 1
-            mod:echo("active[%d] child=%s stat=%s multiplier=%s event=%s",
+            local active_line = string.format("active[%d] child=%s stat=%s multiplier=%s event=%s",
                 active, tostring(buff.buff_type), tostring(buff.template and buff.template.stat_buff),
                 tostring(buff.multiplier), tostring(buff.template and buff.template.event))
+            mod:echo("%s", active_line)
+            pcall(printf, "[ct:288] %s", active_line)
         end
     end
-    mod:echo("active_count=%d total_reload_time_scale=%s expected_trait_scale=0.5",
+    local total_line = string.format("active_count=%d total_reload_time_scale=%s expected_trait_scale=0.5",
         active, tostring(be:apply_buffs_to_value(1, "reload_speed")))
+    mod:echo("%s", total_line)
+    pcall(printf, "[ct:288] %s", total_line)
 end)
 
 -- ============================================================

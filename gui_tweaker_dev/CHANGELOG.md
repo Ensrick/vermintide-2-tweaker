@@ -1,5 +1,18 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.329-dev (2026-08-03) -- moderate-audit repair wave (#153, #292, #272, #250, #938) [verify-fix][untested]
+
+- Supplies the six hidden-passive keys (#153) and five video-profile keys (#292)
+  to the engine localizer via the existing backend-localization pass, so the
+  Talents and Video pages render words instead of raw <key> markers.
+- Scoreboard page (#272): both draw hooks now require the external scoreboard
+  mod to be enabled, not merely registered; receipts moved to printf.
+- Hold-Tab talent receipt (#250) moved to printf.
+- Damage numbers (#938): reworked from a provable no-op into a burst aggregator
+  on DamageUtils.add_unit_floating_damage_numbers - one popup carries the summed
+  pre-split value; display-only, toggle-gated, exact call-through when off.
+- [gut:LOAD] banner hardened to printf so build confirmation survives any
+  logging config.
 ## 0.2.328-dev (2026-08-02) -- slider release parity in the keep (#167) [verify-fix]
 
 - Ports the existing one-shot slider drag-release edge from the standalone

@@ -39,6 +39,33 @@ local function count_readable(object, names)
     return count
 end
 
+-- #141 audit repair (2026-08-03): the audit printf reported only COUNTS, but
+-- the issue card asks WHICH getters are missing. These pure helpers name them;
+-- the join is bounded so the log line cannot grow unbounded.
+M.MISSING_NAME_CAP = 6
+
+function M.missing(object, names)
+    local out = {}
+    for _, name in ipairs(names) do
+        if not (object and type(object[name]) == "function") then
+            out[#out + 1] = name
+        end
+    end
+    return out
+end
+
+function M.joined_missing(object, names)
+    local missing = M.missing(object, names)
+    if #missing == 0 then return "none" end
+    local shown = {}
+    for i = 1, math.min(#missing, M.MISSING_NAME_CAP) do shown[i] = missing[i] end
+    local joined = table.concat(shown, ",")
+    if #missing > M.MISSING_NAME_CAP then
+        joined = joined .. string.format("+%d more", #missing - M.MISSING_NAME_CAP)
+    end
+    return joined
+end
+
 function M.inspect(controller)
     local state = controller and controller._run_state
     local shared = state and state._shared_state

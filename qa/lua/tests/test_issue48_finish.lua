@@ -47,6 +47,26 @@ return function(H, repo_root)
         H.equal(read(stable_path), read(dev_path))
     end)
 
+    H.test("CIM #48 dev absence notice emits via pcall(printf), not mod:info", function()
+        -- The user runs with mod logging OFF, so mod:info never reaches their
+        -- console log and the pinned card's step 4 evidence goes missing.
+        -- Dev stream only: stable picks the conversion up at promotion.
+        local entry = read(repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua")
+        local line
+        for candidate in entry:gmatch("[^\n]+") do
+            if candidate:find("custom_glow blobs that won't apply", 1, true) then
+                line = candidate
+                break
+            end
+        end
+        H.truthy(line, "custom_glow absence notice emission line missing from dev entry file")
+        H.truthy(line:find("pcall(printf,", 1, true),
+            "notice must emit through pcall(printf, ...) so it lands with mod logging OFF")
+        H.equal(line:find("mod:info", 1, true), nil,
+            "notice must not regress to the invisible mod:info channel")
+    end)
+
     H.test("CIM #48 custom-glow absence notice emits once and remains log-only", function()
         local notice = Notice.new()
         local records = {

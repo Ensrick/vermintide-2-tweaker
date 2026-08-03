@@ -60,4 +60,34 @@ return function(H, repo_root)
         H.equal(picker_source:find("NetworkLookup", 1, true), nil,
             "picker must not add a network payload")
     end)
+
+    H.test("CWV issue 317 dump reaches the engine console via printf", function()
+        -- Source shape: the dump body must route every line through
+        -- pcall(printf, ...) and never mod:info (invisible in the user's
+        -- normal config -- mod logging OFF, repo NON-NEGOTIABLE 9).
+        local picker_file = assert(io.open(path, "rb"))
+        local picker_source = picker_file:read("*a")
+        picker_file:close()
+        local dump_body = picker_source:match("function M%.dump%(%)(.-)\nend")
+        H.truthy(dump_body, "M.dump body not found in picker source")
+        H.equal(dump_body:find("mod:info", 1, true), nil,
+            "dump must not route through mod:info (#317)")
+        H.truthy(dump_body:find("pcall(printf", 1, true),
+            "dump must route through pcall(printf, ...) (#317)")
+
+        -- Runtime capture: the dump emits printf lines end to end.
+        settings.enable_cwv_dev_anim_picker = nil
+        settings["cwv_dev_anim_saltz_dual_axes_attack_swing_heavy_right"] = nil
+        local captured = 0
+        local old_printf = rawget(_G, "printf")
+        rawset(_G, "printf", function() captured = captured + 1 end)
+        local ok = pcall(Picker.dump)
+        rawset(_G, "printf", old_printf)
+        H.truthy(ok, "dump crashed under printf capture")
+        H.truthy(captured >= 4, "dump did not emit its banner/entry lines via printf")
+
+        -- The in-game regression_check must itself pin the printf routing
+        -- (it captures through the dump's environment) and still pass clean.
+        H.equal(Picker.regression_check(), nil)
+    end)
 end

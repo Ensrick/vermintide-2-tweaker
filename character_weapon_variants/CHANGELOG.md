@@ -1,5 +1,17 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.486-dev (2026-08-03) -- preview spawn-safety contract repaired; picker dump audible (#237, #317) [verify-fix][untested]
+
+- Preview/browser mesh swap (#237, issue 419): the resolved-3p helper''s and/or
+  collapse silently bypassed the documented residency guard, so every preview
+  target fell through to blind base.."_3p" concatenation. New preview gate:
+  husk resolver answers are final, the invisible-weapon sentinel and non-player
+  prefixes degrade to the base mesh, and everything else must pass the
+  spawnable crash floor (including the #474 donor-material gate) before
+  World.spawn_unit. Packaged _3p families still swap exactly as before.
+- 3P Animation Picker (#317): /cwv_dump_anim_picks output moved to printf so
+  the card''s evidence step produces evidence; regression check now captures
+  the dump at runtime.
 ## 0.1.485-dev (2026-08-02) - #476 partial-publish remote revert fix + #932 dead call removal [untested]
 
 - Fixed #476 Defect B, the live cross-peer illusion revert: the appearance

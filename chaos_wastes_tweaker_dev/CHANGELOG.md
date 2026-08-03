@@ -1,5 +1,21 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.317-dev (2026-08-03) -- parry-cooldown strip made real; verifier visibility (#342, #288, #912) [verify-fix][untested]
+
+- Parry cooldown strip (#342): the shipped strip was a no-op (guarded on a
+  power_ups sub-table that never existed, and stripped source tables the game
+  had already cloned). Retargeted to the REGISTERED runtime cooldown-buff
+  templates: durations zeroed (nil''ing cooldown_buff would crash the
+  static_blade proc), rarities enumerated from the game''s own registration;
+  boon_skulls_03 covered through the same seam. Regression check now fails
+  loudly instead of silently passing.
+- Anath Raema verifier (#288): /ct_verify_anath_raema mirrors every line
+  through printf so the values reach the log with mod logging off.
+- Starting coins verifier (#912): /verify_coins reports BOTH the local slider
+  and the host-broadcast applied value, with an explicit mismatch marker.
+- Resume audit (issue 141): capture budget raised with a manual reserve so
+  /ct_resume_audit works after the automatic mission-entry reports, and the
+  printf now names the missing getters.
 ## 0.7.316-dev (2026-08-02) - shorten the same-tier temper prompt (#252) [verify-fix]
 
 - Replaced the overflow-prone same-tier temper-altar text with the approved

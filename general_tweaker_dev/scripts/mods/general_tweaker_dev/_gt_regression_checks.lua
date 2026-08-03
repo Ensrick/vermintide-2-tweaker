@@ -1981,6 +1981,15 @@ function M.install(mod, _rt_register, deps)
         if not within(40, 40) or within(40.1, 40) or not within(1000, nil) then
             return "range boundary/unlimited predicate failed"
         end
+
+        -- #300 evidence channel: the four [gt:bot-rescue] lines in
+        -- _gt_bot_fixes.lua must emit via pcall(printf, ...), never mod:debug
+        -- (this user's config drops the [DEBUG] channel entirely - 1931 [INFO]
+        -- lines, zero [DEBUG] in the newest log). io is nil in the retail
+        -- sandbox (#511), so the source-shape half of this check is pinned
+        -- offline in qa/rt_textual_invariants.psd1: present needle
+        -- 'pcall(printf, "[gt:bot-rescue]' (minCount 4) + absent needle
+        -- 'mod:debug("[gt:bot-rescue]'.
     end)
 
     _rt_register("no_bots_setting_registered", function()

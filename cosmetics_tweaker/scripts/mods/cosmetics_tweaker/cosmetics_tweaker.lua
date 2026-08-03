@@ -102,7 +102,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.183-dev"
+local MOD_VERSION = "0.9.184-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -8981,7 +8981,7 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
             _dbg("[husk-hat-create] paint %s on hat_unit=%s ok=%s",
                 tostring(cached.armoury_key), tostring(hat_unit), tostring(paint_ok))
             if not paint_ok then
-                _dbg_alert("[husk-hat-create] paint err: %s", tostring(paint_err))
+                _dbg_alert("[husk-hat-create] paint err key=%s vanilla=%s: %s", tostring(cached.armoury_key), tostring(cached.vanilla_key), tostring(paint_err)) -- #697: key must ride the printf-backed channel
             end
         end
     elseif not la then

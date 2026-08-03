@@ -23,6 +23,12 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+          # This job runs one policy script; it does not need the mod trees or
+          # any *.mod_bundle. A full-tree checkout died at the 5-minute job
+          # timeout twice on 2026-08-03 (conclusion=cancelled inside Checkout).
+          sparse-checkout: |
+            qa
+            tools
 
       - name: Validate PR issue-closure references
         shell: pwsh

@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.316-dev"
+local MOD_VERSION = "0.7.317-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -3306,8 +3306,8 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     -- strip skipped"), so the cooldowns survived and items 5+6 never actually
     -- shipped. This hook fires on every boon roll AFTER morris settings are loaded
     -- and BEFORE any altar interaction (rolls happen at chest spawn, before player
-    -- opens it). The strip body is idempotent — once `cooldown_buff` is nil, the
-    -- next call's `for` loop is a no-op. Safe to call from every roll.
+    -- opens it). The strip body is idempotent — registered cooldown durations
+    -- already at zero are left untouched (#342). Safe to call from every roll.
     local strip = mod._ct128_strip_parry_cooldowns
     if type(strip) ~= "function" then
         mod:warning("[ct:342] parry-cooldown strip unavailable after combat-hook load")
@@ -11173,28 +11173,35 @@ end)
 -- v0.7.95: starting_coins verification (setter vs adder regression).
 -- Prints current coin balance, the active setting, and whether the override
 -- hook is registered. Use during a CW run to confirm the value applied.
-mod:command("verify_coins", "Verify starting_coins: live coin balance vs setting, and override-hook registration", function()
+-- #912 audit repair (2026-08-03): the value the setup_run hook APPLIES is the
+-- host-broadcast effective_setting, not the local mod:get value, so report
+-- BOTH - a client whose local setting differs from the host now sees the
+-- mismatch instead of a falsely reassuring local-only readout.
+mod:command("verify_coins", "Verify starting_coins: live coin balance vs local + host-effective setting, and override-hook registration", function()
     local mechanism = Managers and Managers.mechanism and Managers.mechanism:game_mechanism()
     local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
-    local raw_setting = mod:get("starting_coins")
-    local setting, configured = mod._ct_starting_coins_policy.resolve(raw_setting, nil)
+    local local_setting, local_valid = mod._ct_starting_coins_policy.resolve(mod:get("starting_coins"), nil)
+    local eff_setting, eff_valid = mod._ct_starting_coins_policy.resolve(effective_setting("starting_coins"), nil)
+    local settings_desc = string.format("local=%s (valid=%s) host-effective=%s (valid=%s, APPLIED)%s",
+        tostring(local_setting), tostring(local_valid), tostring(eff_setting), tostring(eff_valid),
+        local_setting ~= eff_setting and " MISMATCH: host value wins on every peer" or "")
     local marker_present = (type(STARTING_COINS_MODE_MARKER) == "string"
         and STARTING_COINS_MODE_MARKER == mod._ct_starting_coins_policy.MARKER)
     local hook_registered_str = marker_present and "yes (setter-override mode marker present)" or "NO (marker missing)"
     if not rc then
-        mod:echo(string.format("/verify_coins: setting=%s, valid=%s, override-hook=%s, live balance=N/A (no active CW run — use during run)",
-            tostring(setting), tostring(configured), hook_registered_str))
-        pcall(printf, "[verify_coins] no active DeusRunController; setting=%s valid=%s marker=%s",
-            tostring(setting), tostring(configured), tostring(marker_present))
+        mod:echo(string.format("/verify_coins: %s, override-hook=%s, live balance=N/A (no active CW run - use during run)",
+            settings_desc, hook_registered_str))
+        pcall(printf, "[verify_coins] no active DeusRunController; %s marker=%s",
+            settings_desc, tostring(marker_present))
         return
     end
     local own_peer_id = rc.get_own_peer_id and rc:get_own_peer_id()
     local balance = rc.get_player_soft_currency and own_peer_id and rc:get_player_soft_currency(own_peer_id)
     local is_server = rc.is_server and rc:is_server()
-    pcall(printf, "[verify_coins] is_server=%s own_peer_id=%s setting=%s valid=%s live_balance=%s marker=%s",
-        tostring(is_server), tostring(own_peer_id), tostring(setting), tostring(configured), tostring(balance), tostring(marker_present))
-    mod:echo(string.format("/verify_coins: setting=%s, live=%s, override-hook=%s, host=%s. NOTE: match expected only at run-start; mid-run balance reflects pickups/spends.",
-        tostring(setting), tostring(balance), hook_registered_str, tostring(is_server)))
+    pcall(printf, "[verify_coins] is_server=%s own_peer_id=%s %s live_balance=%s marker=%s",
+        tostring(is_server), tostring(own_peer_id), settings_desc, tostring(balance), tostring(marker_present))
+    mod:echo(string.format("/verify_coins: %s, live=%s, override-hook=%s, host=%s. NOTE: match expected only at run-start; mid-run balance reflects pickups/spends.",
+        settings_desc, tostring(balance), hook_registered_str, tostring(is_server)))
 end)
 
 -- v0.7.97: career-exclusive pickup blocklist verifier.

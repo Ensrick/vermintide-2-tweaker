@@ -36,12 +36,12 @@
 --
 -- inventory_preview           IMPLEMENTED baseline. Path 3 (MenuWorldPreviewer):
 --   mesh-swap pre-pass MenuWorldPreviewer.equip_item (:1765) ->
---   _cwv_preview_meshswap_apply (:9181); transform via MenuWorldPreviewer.
+--   _cwv_preview_meshswap_apply (:8971); transform via MenuWorldPreviewer.
 --   _spawn_item (:12264) -> _cwv_spawn_item_post.
 --
 -- illusion_browser / cim_preview   IMPLEMENTED baseline. Path 4 + Athanor both
---   ride LootItemUnitPreviewer.spawn_units (:12284) -> _cwv_browser_meshswap_apply
---   (:9221, base_identity adapter) which resolves the #482 crafted-UUID ladder
+--   ride LootItemUnitPreviewer.spawn_units (:11481) -> _cwv_browser_meshswap_apply
+--   (:9010, base_identity adapter) which resolves the #482 crafted-UUID ladder
 --   against self._item; transform in the same hook body.
 --
 -- husk                        UNSUPPORTED baseline. The re-key path exists -
@@ -297,7 +297,7 @@ families.old_musket = {
 		{
 			-- cim_preview stays IMPLEMENTED: #617's resource-gated painter
 			-- (:12103, verified Athanor closure) binds the custom textures.
-			illusion_browser = "#227 (Old Musket illusion entry renders red/transparent in the cosmetic browser). The mesh spawns via _cwv_browser_meshswap_apply (:9221) and #617's shared per-unit painter should close the texture, but the illusion-browser pane is not yet verified. Degrades to the base es_handgun rifle mesh.",
+			illusion_browser = "#227 (Old Musket illusion entry renders red/transparent in the cosmetic browser). The mesh spawns via _cwv_browser_meshswap_apply (:9010) and #617's shared per-unit painter should close the texture, but the illusion-browser pane is not yet verified. Degrades to the base es_handgun rifle mesh.",
 		}),
 }
 

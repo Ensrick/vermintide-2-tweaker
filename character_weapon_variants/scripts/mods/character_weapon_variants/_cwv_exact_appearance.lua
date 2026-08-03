@@ -25,6 +25,57 @@ local function nonempty(value)
     return type(value) == "string" and value ~= "" and value or nil
 end
 
+-- #237/#419: spawn-target 3P resolution honors the injected residency resolver
+-- STRICTLY. nil means DEGRADE: the entry keeps the recipe's authored base unit
+-- -- never the historical blind `base .. "_3p"` concatenation, which collapsed
+-- every resolver decline (sentinel, non-vanilla prefix, non-resident target)
+-- into an ungated World.spawn_unit target (the #403/#474 crash class).
+-- Match-key comparisons use concat_3p instead: they name what vanilla ALREADY
+-- authored into the recipe and must not shrink when a resolver declines the
+-- spawn target (a nil match key would break skin-over-variant idempotency).
+local function concat_3p(base)
+    return base and (base .. "_3p") or nil
+end
+
+local function resolved_3p(base, resolve_3p)
+    if not base or type(resolve_3p) ~= "function" then return nil end
+    return resolve_3p(base)
+end
+
+-- #237/#419 preview-time residency gate (pure decision shape; production wires
+-- it as _om._preview_override_3p in _cwv_husk_path.lua). The husk resolver
+-- (_om._resident_override_3p, issue 418) demands cwv's HUSK_OVERRIDE_REF
+-- residency, which only the boot force-load pass and the husk leases establish
+-- -- at solo keep preview time it is silent for skin/custom targets, so a
+-- second, preview-safe floor decides:
+--   1. the husk resolver's answer is final when it speaks (co-op unchanged);
+--   2. the invisible-weapon sentinel always degrades to the base mesh;
+--   3. only vanilla player meshes and the mod's own bundled `units/cwv_`
+--      namespace are eligible at all (any other prefix degrades);
+--   4. the injected `spawnable` predicate (production: _om._husk_unit_spawnable,
+--      the #478 crash floor incl. the #474 donor-material gate for the Old
+--      Musket's MeshObject-AV class) must positively confirm the spawn.
+-- Application.can_get inside the production floor is a spawn-SAFETY check only
+-- (bundle stubs may still render invisible); it is never a loader gate.
+M.VANILLA_PLAYER_PREFIX = "units/weapons/player/"
+M.MOD_BUNDLE_PREFIX = "units/cwv_"
+M.INVISIBLE_SENTINEL = "wpn_invisible_weapon"
+
+function M.resolve_preview_3p(base, husk_resolver, spawnable)
+    if type(base) ~= "string" or base == "" then return nil end
+    if type(husk_resolver) == "function" then
+        local resolved = husk_resolver(base)
+        if resolved ~= nil then return resolved end
+    end
+    if base:find(M.INVISIBLE_SENTINEL, 1, true) then return nil end
+    if base:find(M.VANILLA_PLAYER_PREFIX, 1, true) ~= 1
+            and base:find(M.MOD_BUNDLE_PREFIX, 1, true) ~= 1 then
+        return nil
+    end
+    if type(spawnable) ~= "function" or spawnable(base) ~= true then return nil end
+    return base .. "_3p"
+end
+
 function M.resolve(args)
     args = args or {}
     local skin = nonempty(args.explicit_skin) or nonempty(args.stored_skin)
@@ -66,11 +117,10 @@ function M.apply_spawn_data(appearance, spawn_data, resolve_3p, fallback)
         if type(entry) == "table" and not entry.is_ammo_unit then
             local base = entry.right_hand and appearance.right_hand_unit
                 or (entry.left_hand and appearance.left_hand_unit)
-            local want = base and (resolve_3p and resolve_3p(base) or (base .. "_3p"))
+            local want = resolved_3p(base, resolve_3p)
             local default_base = entry.right_hand and fallback and fallback.right_hand_unit
                 or (entry.left_hand and fallback and fallback.left_hand_unit)
-            local default_3p = default_base
-                and (resolve_3p and resolve_3p(default_base) or (default_base .. "_3p"))
+            local default_3p = concat_3p(default_base)
             -- A different non-default hand may be Cosmetics' exact per-instance
             -- offhand. CWV owns the primary skin but must compose, not clobber.
             local may_replace = not fallback or entry.unit_name == nil
@@ -168,11 +218,6 @@ function M.resolve_spawn_descriptor(args)
     return descriptor
 end
 
-local function resolved_3p(base, resolve_3p)
-    if not base then return nil end
-    return resolve_3p and resolve_3p(base) or (base .. "_3p")
-end
-
 -- Apply a previously resolved descriptor to one of the two engine recipe
 -- shapes. `hand_flags` is MenuWorldPreviewer's recipe; `base_identity` is the
 -- LootItemUnitPreviewer recipe after it rebound item_data to the vanilla base.
@@ -230,7 +275,7 @@ function M.apply_spawn_descriptor(descriptor, spawn_data, resolve_3p, adapter)
             local may_replace = true
             if hand and descriptor.source == "skin" then
                 local variant_base = descriptor["variant_" .. hand .. "_hand_unit"]
-                local variant_3p = resolved_3p(variant_base, resolve_3p)
+                local variant_3p = concat_3p(variant_base)
                 may_replace = entry.unit_name == nil or entry.unit_name == want
                     or (variant_3p and entry.unit_name == variant_3p)
             end

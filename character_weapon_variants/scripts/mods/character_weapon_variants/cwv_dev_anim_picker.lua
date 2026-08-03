@@ -129,18 +129,22 @@ function M.resolve(item_key, career, source_event)
 end
 
 
+-- #317: dump goes through engine printf, NOT mod:info -- the user runs with
+-- mod logging OFF (NON-NEGOTIABLE 9), so mod:info output never reaches the
+-- console log and /cwv_dump_anim_picks looked silent. pcall keeps a missing
+-- printf (stripped env) from turning a diagnostics command into an error.
 function M.dump()
-	mod:info("[cwv:317] ==== CWV 3P animation picker ====")
+	pcall(printf, "[cwv:317] ==== CWV 3P animation picker ====")
 	for _, entry in ipairs(_ENTRIES) do
-		mod:info("[cwv:317] %s", entry.label)
+		pcall(printf, "[cwv:317] %s", entry.label)
 		for _, source_event in ipairs(_SOURCE_EVENTS) do
 			local value = mod:get(_sid_event(entry, source_event))
 			if value ~= nil and value ~= UNSET then
-				mod:info("[cwv:317]   %s = %q,", source_event, value)
+				pcall(printf, "[cwv:317]   %s = %q,", source_event, value)
 			end
 		end
 	end
-	mod:info("[cwv:317] ==== end ====")
+	pcall(printf, "[cwv:317] ==== end ====")
 end
 
 
@@ -163,6 +167,22 @@ function M.regression_check()
 				return string.format("%s stores out-of-vocabulary event %s", sid, tostring(value))
 			end
 		end
+	end
+	-- #317: the dump must reach the engine console via printf (mod:info is
+	-- invisible with mod logging OFF, the user's normal config). Runtime
+	-- capture through the dump's own environment: shadow `printf` with a
+	-- collector, run the dump, restore. Side-effect free -- dump only reads
+	-- settings. getfenv is Lua 5.1; if a stripped sandbox removes it, the
+	-- offline source-shape lock in qa/lua still pins the printf routing.
+	if type(getfenv) == "function" then
+		local captured = 0
+		local env = getfenv(M.dump)
+		local saved = rawget(env, "printf")
+		rawset(env, "printf", function() captured = captured + 1 end)
+		local ok = pcall(M.dump)
+		rawset(env, "printf", saved)
+		if not ok then return "anim-picker dump crashed under printf capture (#317)" end
+		if captured < 2 then return "anim-picker dump does not route through printf (#317)" end
 	end
 end
 
