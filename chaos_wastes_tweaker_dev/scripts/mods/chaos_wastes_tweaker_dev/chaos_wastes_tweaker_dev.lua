@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.315-dev"
+local MOD_VERSION = "0.7.316-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -1606,6 +1606,7 @@ end)
 -- (localize=false / white) to a plain re-roll message (no em dash). Everything is pcall-guarded, so
 -- any API drift degrades to vanilla's (red) presentation rather than crashing.
 CT_RELIQUARY_REROLL_MARKER = "reliquary_reroll_message:same_tier_upgrade_altar_v0.7.215"
+CT_RELIQUARY_REROLL_PROMPT = "Reroll this weapon?"
 mod:hook_safe("DeusUpgradeWeaponInteractionUI", "_populate_widget", function(self, interactable_unit, wielded_slot_name)
     pcall(function()
         local DCT = rawget(_G, "DEUS_CHEST_TYPES")
@@ -1651,7 +1652,7 @@ mod:hook_safe("DeusUpgradeWeaponInteractionUI", "_populate_widget", function(sel
         chest_info_widget.content.cost_text = soft .. "/" .. cost
         chest_info_widget.style.cost_text.text_color = (cost <= soft)
             and { 255, 255, 255, 255 } or { 255, 255, 0, 0 }
-        chest_info_widget.content.reward_info_text = "Re-rolls this weapon's traits and properties"
+        chest_info_widget.content.reward_info_text = CT_RELIQUARY_REROLL_PROMPT
         chest_info_widget.content.show_coin_icon = true
         chest_info_widget.content.disabled_text = nil
         self._calculate_offset = true
