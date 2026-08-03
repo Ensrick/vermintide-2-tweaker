@@ -1,5 +1,14 @@
 # General Tweaker Changelog
 
+## 0.2.263-dev (2026-08-03) -- republish of 0.2.262 with synced cfg title (#1138) [verify-fix][untested]
+
+- No code change from 0.2.262-dev. That build failed publication at the
+  launcher's title-version sync gate (v0.5.8 requires the committed
+  itemV2.cfg title to carry the MOD_VERSION suffix), and a cfg-only
+  follow-up cannot satisfy release-bundle atomicity, so this version
+  bump carries the title sync. The #1138 live-test steps under
+  0.2.262-dev apply to this build.
+
 ## 0.2.262-dev (2026-08-03) -- Creature Spawner: dynamic specials join the Regular lap (#1138) [verify-fix][untested]
 
 - Mod-added specials (skaven_doomrocket, and any breed a mod registers with
