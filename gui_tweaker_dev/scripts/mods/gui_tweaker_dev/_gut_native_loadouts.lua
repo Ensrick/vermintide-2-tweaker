@@ -55,6 +55,7 @@ local WTTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_wt_loadout_tra
 local SelectedLoadoutTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_selected_loadout_trace_core")
 local BackendCommit = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_backend_commit")
 local ExitSnapshotCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_exit_snapshot_core")
+local DefaultRefresh = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_default_reset_refresh")
 
 local MARKER = "native_loadouts_v1"
 
@@ -1246,6 +1247,14 @@ function M.reset_modded_loadouts(career_arg, source, echo_result)
     end
     printf("[gut:1033] source=%s cleared=%d seeded=%d adventure_mirror=%s writes=2 dirtify=1",
         tostring(source or "command"), cleared, seeded, tostring(adventure and true or false))
+    -- #1033 presentation half: the transaction above only rebuilds backend interfaces;
+    -- the LIVE keep character (and its husk on every peer) still renders the pre-reset
+    -- equipment until one of vanilla's publish seams runs (equip-request drain ->
+    -- rpc_add_equipment, simple_inventory_extension.lua:1455, or the skin-change profile
+    -- respawn, hero_view_state_overview.lua:1158-1162 -> ingame_ui.lua:1290-1303).
+    -- The refresh owner mirrors that respawn for the ACTIVE career, keep only; in a
+    -- mission it defers to the next spawn boundary. All failures are contained.
+    pcall(DefaultRefresh.request, source or "command", adventure and true or false, career_arg)
     return true, { cleared = cleared, seeded = seeded, mirror = adventure and true or false }
 end
 
@@ -1776,6 +1785,37 @@ M.rt_checks = {
         if names[1] ~= "mercenary" or names[2] ~= "zealot" or names[3] ~= nil then
             return "official career plan is not deterministic"
         end
+        -- Presentation half: the refresh owner and its pure classifier must be wired,
+        -- and the policy must respawn ONLY in the live keep, defer in a mission (the
+        -- force_respawn teleport/health reset is unacceptable there), and skip when
+        -- the Adventure mirror was not live.
+        if type(DefaultRefresh) ~= "table" or type(DefaultRefresh.request) ~= "function" then
+            return "default reset refresh owner missing"
+        end
+        local RC = DefaultRefresh.core
+        if type(RC) ~= "table" or type(RC.classify) ~= "function" or type(RC.match) ~= "function" then
+            return "default refresh pure core missing"
+        end
+        local act = RC.classify({ mirror_live = true, reset_scope_active = true,
+            has_player = true, unit_alive = true,
+            game_mode_key = RC.KEEP_GAME_MODE, requester_available = true })
+        if act ~= "respawn" then return "keep-live classify not respawn: " .. tostring(act) end
+        act = RC.classify({ mirror_live = true, reset_scope_active = true,
+            has_player = true, unit_alive = true,
+            game_mode_key = "adventure", requester_available = true })
+        if act ~= "defer" then return "mission classify not defer: " .. tostring(act) end
+        act = RC.classify({ mirror_live = false, reset_scope_active = true,
+            has_player = true, unit_alive = true,
+            game_mode_key = RC.KEEP_GAME_MODE, requester_available = true })
+        if act ~= "skip" then return "non-adventure classify not skip: " .. tostring(act) end
+        act = RC.classify({ mirror_live = true, reset_scope_active = false,
+            has_player = true, unit_alive = true,
+            game_mode_key = RC.KEEP_GAME_MODE, requester_available = true })
+        if act ~= "skip" then return "inactive-career reset classify not skip: " .. tostring(act) end
+        local matched = RC.match({ slot_melee = "a" }, { slot_melee = "a" })
+        if matched ~= true then return "receipt match failed on identical identities" end
+        matched = RC.match({ slot_melee = "a" }, { slot_melee = "b" })
+        if matched ~= false then return "receipt match missed a stale identity" end
     end },
     { name = "issue273_capture_owner_gate", fn = function()
         -- Capture side of the #273 owner invariant: gear capture fails closed unless the
