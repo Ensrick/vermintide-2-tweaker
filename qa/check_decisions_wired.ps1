@@ -349,6 +349,44 @@ function Parse-UnlockMap([string]$path) {
         }
         $map[$career] = $keys
     }
+
+    # Apply explicit post-table removals. wt_unlock_data.lua keeps some old
+    # literals in the readable source lists, then removes them from the returned
+    # DATA table to enforce ownership/tombstone decisions. Treating only the
+    # literal table as live produced false ORPHAN rows for ports that runtime
+    # deliberately deletes (for example #594's dr_shield_hammer removal).
+    #
+    # Scope each receiver loop to the next receiver loop (or EOF), and only
+    # interpret it when the body actually calls table.remove on `weapons`.
+    $receiverLoops = [regex]::Matches(
+        $text,
+        'for\s+_,\s*career\s+in\s+ipairs\s*\(\s*\{([^}]*)\}\s*\)\s*do',
+        [System.Text.RegularExpressions.RegexOptions]::Singleline
+    )
+    for ($loopIndex = 0; $loopIndex -lt $receiverLoops.Count; $loopIndex++) {
+        $loop = $receiverLoops[$loopIndex]
+        $bodyStart = $loop.Index + $loop.Length
+        $bodyEnd = if ($loopIndex + 1 -lt $receiverLoops.Count) {
+            $receiverLoops[$loopIndex + 1].Index
+        } else {
+            $text.Length
+        }
+        $loopBody = $text.Substring($bodyStart, $bodyEnd - $bodyStart)
+        if ($loopBody -notmatch 'table\.remove\s*\(\s*weapons\s*,') { continue }
+
+        $careers = @()
+        foreach ($careerMatch in [regex]::Matches($loop.Groups[1].Value, '"([^"]+)"')) {
+            $careers += $careerMatch.Groups[1].Value
+        }
+        $removedKeys = @()
+        foreach ($keyMatch in [regex]::Matches($loopBody, 'weapons\s*\[\s*i\s*\]\s*==\s*"([^"]+)"')) {
+            $removedKeys += $keyMatch.Groups[1].Value
+        }
+        foreach ($career in $careers) {
+            if (-not $map.ContainsKey($career)) { continue }
+            $map[$career] = @($map[$career] | Where-Object { $removedKeys -notcontains $_ })
+        }
+    }
     return $map
 }
 
@@ -443,16 +481,29 @@ function Invoke-SelfTest {
 | Planted Skip (`dr_planted_skip`) | something |
 '@ | Set-Content -Path $docPath -Encoding UTF8
 
-        # Map: dr_planted_skip present (LEAK), dr_planted_shipped absent (REGRESSION).
+        # Map: dr_planted_skip present (LEAK), dr_planted_shipped absent
+        # (REGRESSION), and dr_planted_removed starts in the literal table but is
+        # deleted by the same post-table pattern used by wt_unlock_data.lua.
         @'
-return {
+local DATA = {
     weapon_unlock_map = {
-        es_mercenary      = { "dr_planted_skip" },
-        es_huntsman       = { "dr_planted_skip" },
-        es_knight         = { "dr_planted_skip" },
-        es_questingknight = { "dr_planted_skip" },
+        es_mercenary      = { "dr_planted_skip", "dr_planted_removed" },
+        es_huntsman       = { "dr_planted_skip", "dr_planted_removed" },
+        es_knight         = { "dr_planted_skip", "dr_planted_removed" },
+        es_questingknight = { "dr_planted_skip", "dr_planted_removed" },
     },
 }
+
+for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
+    local weapons = DATA.weapon_unlock_map[career]
+    for i = #weapons, 1, -1 do
+        if weapons[i] == "dr_planted_removed" then
+            table.remove(weapons, i)
+        end
+    end
+end
+
+return DATA
 '@ | Set-Content -Path $mapPath -Encoding UTF8
 
         '-- no checkboxes' | Set-Content -Path $dataPath -Encoding UTF8
@@ -461,6 +512,7 @@ return {
         $result = Invoke-DecisionsCheck -DocPath $docPath -MapPath $mapPath -DataPath $dataPath -LocPath $locPath -Quiet
         $regHit = $result.Regressions | Where-Object { $_.Key -eq "dr_planted_shipped" }
         $leakHit = $result.Leaks | Where-Object { $_.Key -eq "dr_planted_skip" }
+        $removedOrphan = $result.Orphans | Where-Object { $_.Key -eq "dr_planted_removed" }
 
         $pass = $true
         if ($regHit) { Write-Host "  PASS: REGRESSION fired for planted shipped-but-missing key (dr_planted_shipped)" -ForegroundColor Green }
@@ -468,6 +520,9 @@ return {
 
         if ($leakHit) { Write-Host "  PASS: LEAK fired for planted skip-but-present key (dr_planted_skip)" -ForegroundColor Green }
         else { Write-Host "  FAIL: LEAK did NOT fire for dr_planted_skip" -ForegroundColor Red; $pass = $false }
+
+        if (-not $removedOrphan) { Write-Host "  PASS: post-table removal excluded dr_planted_removed from live-map orphans" -ForegroundColor Green }
+        else { Write-Host "  FAIL: post-table removal left dr_planted_removed as an orphan" -ForegroundColor Red; $pass = $false }
 
         if ($pass) { Write-Host "[self-test] OK" -ForegroundColor Green; return 0 }
         else { Write-Host "[self-test] FAILED" -ForegroundColor Red; return 2 }
