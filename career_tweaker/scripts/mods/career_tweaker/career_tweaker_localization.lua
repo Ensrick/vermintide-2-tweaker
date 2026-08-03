@@ -233,6 +233,8 @@ local localization = {
     rework_wh_zealot_smite_random_crits_description     = { en = "Smite no longer turns off random critical hits, so lucky crits can still land between the guaranteed ones." },
     rework_wh_zealot_power_5_to_10                      = { en = "Zealot: +5%% Power talent to +10%%" },
     rework_wh_zealot_power_5_to_10_description          = { en = "Doubles Zealot's flat power talent from +5%% to +10%%." },
+    rework_wh_zealot_feel_nothing_refresh               = { en = "Zealot: Refresh Feel Nothing" },
+    rework_wh_zealot_feel_nothing_refresh_description   = { en = "Using Holy Fervour while Feel Nothing is active restarts its five-second duration." },
     rework_wh_zealot_ability_green_to_thp               = { en = "Zealot: Ability converts green HP to THP" },
     rework_wh_zealot_ability_green_to_thp_description   = { en = "Using Holy Fervour converts all of your normal health into temporary health. This pairs well with Zealot's bonus damage from missing health." },
     rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30                 = { en = "Zealot: Fiery Faith +1%%/5 missing HP, max 30 stacks" },

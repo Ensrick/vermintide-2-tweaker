@@ -688,6 +688,7 @@ return {
                                 sub_widgets = {
                                     { setting_id = "rework_wh_zealot_smite_random_crits",                     type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_zealot_power_5_to_10",                          type = "checkbox", default_value = false },
+                                    { setting_id = "rework_wh_zealot_feel_nothing_refresh",                   type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_zealot_ability_green_to_thp",                   type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30",       type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_zealot_castigate_4pct_as_per_fiery_faith",      type = "checkbox", default_value = false },

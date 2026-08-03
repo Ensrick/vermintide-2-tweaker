@@ -48,6 +48,7 @@ local suites = {
 	"test_wt_weapon_action_lifecycle",
     "test_attack_labeler",
     "test_crt_ale_decay",
+    "test_crt_feel_nothing",
     "test_crt_ale_animation",
     "test_crt_bardin_disabler_probe",
     "test_crt_damage_classification",

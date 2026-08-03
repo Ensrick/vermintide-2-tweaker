@@ -239,6 +239,10 @@ local CRT_DESC_OVERRIDES = {
         setting = "rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30",
         text = "Gain 1%% power for every 5 health missing, stacking up to 30 times.",
     },
+    ["victor_zealot_activated_ability_ignore_death_desc"] = {
+        setting = "rework_wh_zealot_feel_nothing_refresh",
+        text = "Holy Fervour prevents your health from dropping below 1 for 5 seconds. Using Holy Fervour again while this effect is active restarts its duration.",
+    },
     -- NOTE: the rework counts 30 missing health per stack (chunk_size 30), which
     -- is NOT one Fiery Faith stack (5 HP per stack) -- the old text was wrong.
     ["victor_zealot_attack_speed_on_health_percent_desc"] = {
