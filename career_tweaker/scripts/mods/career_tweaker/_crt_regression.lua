@@ -806,6 +806,25 @@ _rt_register("issue283_talent_menu_noop_guard", function()
     end
 end)
 
+_rt_register("issue999_feel_nothing_refresh", function()
+    local defs = balance and balance.BALANCE_MODS
+    local rework = defs and defs.rework_wh_zealot_feel_nothing_refresh
+    local patch = rework and rework.patches and rework.patches[1]
+    if type(rework) ~= "table" or #rework.patches ~= 1
+       or patch.buff ~= "victor_zealot_activated_ability_ignore_death"
+       or patch.field ~= "refresh_durations" or patch.value ~= true then
+        return "Feel Nothing refresh patch contract missing"
+    end
+    if mod:get("rework_wh_zealot_feel_nothing_refresh") then
+        local template = BuffTemplates and BuffTemplates.victor_zealot_activated_ability_ignore_death
+        local sub = template and template.buffs and template.buffs[1]
+        if not sub or sub.max_stacks ~= 1 or sub.duration ~= 5
+           or sub.refresh_durations ~= true then
+            return "enabled Feel Nothing refresh did not reach the live five-second buff"
+        end
+    end
+end)
+
 _rt_register("issue366_ale_independent_stack_decay", function()
     local defs = balance and balance.BALANCE_MODS
     local rework = defs and defs.rework_dr_ranger_ale_independent_decay

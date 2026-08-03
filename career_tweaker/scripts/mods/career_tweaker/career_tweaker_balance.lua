@@ -440,6 +440,18 @@ local BALANCE_MODS = {
     -- Career-specific template — patch doesn't bleed into other careers'
     -- equivalents.
     rework_wh_zealot_power_5_to_10 = _build_stat_buff_rework("victor_zealot_power", "multiplier", 0.10),
+    -- Issue #999: vanilla Feel Nothing has max_stacks=1 but omits
+    -- refresh_durations. BuffExtension therefore rejects a second application
+    -- while the first five-second buff is active without moving its end time.
+    -- This opt-in patch uses the engine's native refresh path; no replacement
+    -- buff, RPC, timer, or per-frame hook is needed.
+    rework_wh_zealot_feel_nothing_refresh = {
+        character = "victor",
+        career = "wh_zealot",
+        patches = {
+            { buff = "victor_zealot_activated_ability_ignore_death", field = "refresh_durations", value = true },
+        },
+    },
     -- Ranger Veteran's row-2 +5% attack speed talent
     -- (bardin_ranger_attack_speed, multiplier 0.05). Career-specific.
     rework_dr_ranger_attack_speed_5_to_10 = _build_stat_buff_rework("bardin_ranger_attack_speed", "multiplier", 0.10),
@@ -3433,23 +3445,10 @@ mod:hook_safe("ActionMeleeStart", "client_owner_post_update", function(self, dt,
     end
 end)
 
--- ============================================================
--- Hook: Zealot ability converts permanent → temporary health
--- ============================================================
--- When the toggle is on, every Zealot ability activation (Holy Fervour) moves
--- the player's current permanent (green) HP into temporary (white) HP. Uses
--- vanilla `PlayerUnitHealthExtension.convert_to_temp`, which self-routes:
---   * server  → mutates GameSession fields directly
---   * client  → sends `rpc_request_convert_temp` to the server, which calls
---               the server-side convert and the result replicates back.
--- Server-side `convert_to_temp` clamps via `math.min(current_health, amount)`,
--- so passing the read-back permanent value is safe (no overflow, no negative).
--- Existing THP is preserved (the field is added to, not overwritten).
---
--- hook_safe on `_run_ability` runs after vanilla has fired the ability buffs
--- and lunge — the conversion lands during the post-activation frame, so the
--- ignore-death talent (`victor_zealot_activated_ability_ignore_death`) is
--- already up if the player has it.
+-- Zealot Holy Fervour green-to-THP rework. The vanilla convert_to_temp route
+-- mutates GameSession on the server or requests the server from a client,
+-- clamps to current permanent health, and adds rather than replaces THP.
+-- hook_safe runs after the ability buffs/lunge, so Feel Nothing is already up.
 mod:hook_safe("CareerAbilityWHZealot", "_run_ability", function(self)
     if not mod:get("rework_wh_zealot_ability_green_to_thp") then return end
     local owner_unit = self._owner_unit

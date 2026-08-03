@@ -1,5 +1,15 @@
 # Career Tweaker Changelog
 
+## 0.4.18-beta (2026-08-02) - refresh Feel Nothing on repeated Holy Fervour (#999)
+
+- Added an opt-in Zealot toggle that makes a second Holy Fervour activation
+  restart Feel Nothing's five-second duration while the buff is already active.
+- Uses the native `max_stacks = 1` plus `refresh_durations = true` behavior on
+  the existing vanilla buff; it adds no replacement buff, RPC, timer, or update
+  loop, and restores the exact original field when disabled.
+- Updates the live talent description and adds offline/runtime regression
+  coverage for the authored patch and the active five-second buff shape.
+
 ## 0.4.17-beta (2026-08-02) - #472/#473/#699 live-test readiness
 
 ### Focused Spirit retained-state diagnostics and talent text (#472)
