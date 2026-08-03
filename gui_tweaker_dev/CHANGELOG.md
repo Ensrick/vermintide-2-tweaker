@@ -1,5 +1,14 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.330-dev (2026-08-03) -- Mod Tweaker gear-parent accent hardened to one policy site (#717) [verify-fix][untested]
+
+- The #611 warm-tan accent for enabled gear-parent and master rows now lives in
+  a single shared helper, defs.apply_gear_parent_accent, consumed by BOTH the
+  keep and mission twins, closing the twin-parity drift class by construction.
+  Disabled VMF rows keep their grey; ordinary child rows are untouched. Accent
+  color verified against the game''s font_button_normal.
+- /gut_regression_test gains issue717_gear_parent_accent_policy: synthetic rows
+  prove enabled parent goes tan, disabled grey is preserved, child unchanged.
 ## 0.2.329-dev (2026-08-03) -- moderate-audit repair wave (#153, #292, #272, #250, #938) [verify-fix][untested]
 
 - Supplies the six hidden-passive keys (#153) and five video-profile keys (#292)

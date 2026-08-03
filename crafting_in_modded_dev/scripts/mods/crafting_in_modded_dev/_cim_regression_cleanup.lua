@@ -183,6 +183,41 @@ return function(context)
         then
             return "same property did not count independently in each accessory layer"
         end
+
+        -- Write-crash guard: the faked mastery-costs table must resolve the
+        -- GLOBAL per-key use count (up to cap*3 across layers) to 0, not nil -
+        -- a nil there aborts vanilla's slot repaint mid-loop and freezes the
+        -- sibling accessory's grid (Rain's 2026-08-03 log, v0.8.112-dev).
+        if type(policy.build_zero_mastery_costs) ~= "function" then
+            return "#959 zero-mastery-costs builder missing"
+        end
+        local costs = policy.build_zero_mastery_costs(5)
+        if #costs ~= 5 or costs[5] ~= 0 or costs[6] ~= 0 or costs[15] ~= 0
+            or costs[16] ~= nil
+        then
+            return "faked mastery costs cannot cover the layered global use count"
+        end
+
+        -- Reopen bleed: seeding must APPEND sibling layers under one key, not
+        -- overwrite, and must clamp to the accessory's authored layer.
+        if type(policy.seed_property_indices) ~= "function" then
+            return "#959 seed merge helper missing"
+        end
+        local seeded = {}
+        policy.seed_property_indices(seeded, "weave_health", 1, 5, 0, 10)
+        local _, dropped = policy.seed_property_indices(seeded, "weave_health", 11, 1, 10, 10)
+        if dropped ~= 0
+            or policy.count_slots(seeded.weave_health, "offence_accessory", 10) ~= 5
+            or policy.count_slots(seeded.weave_health, "defence_accessory", 10) ~= 1
+        then
+            return "amulet re-seed dropped a sibling accessory's property entries"
+        end
+        local _, clamped = policy.seed_property_indices(seeded, "weave_stamina", 9, 4, 0, 10)
+        if clamped ~= 2
+            or policy.count_slots(seeded.weave_stamina, "defence_accessory", 10) ~= 0
+        then
+            return "amulet re-seed spilled indices into the sibling layer"
+        end
     end)
 
     register("issue246_tab_preview_exact_skin_icon", function()

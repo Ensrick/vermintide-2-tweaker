@@ -9,8 +9,9 @@ local mod = get_mod("event_tweaker")
 -- either engine-resource failure.
 --
 -- The gameplay itself needs neither asset. Fatshark's server path gives enemies
--- outside six metres of every hero mutator_shadow_damage_reduction (-90% damage
--- taken); its client path fades enemies outside the same radius. This adapter
+-- outside six metres of every hero mutator_shadow_damage_reduction (-80% damage
+-- taken, the WindSettings.shadow value); its client path fades enemies outside
+-- the same radius. This adapter
 -- preserves those mechanics using only boot-registered code/buff identities and
 -- deliberately omits the non-resident lantern and shadow VFX.
 --
@@ -26,10 +27,37 @@ local Policy = require("scripts/mods/event_tweaker/event_tweaker_shadow_policy")
 local SHADOW_CHANNEL = "et_shadow_adventure_v1"
 local SHADOW_SCHEMA = 1
 local shadow_template
+local shadow_sub_buff
 local adapter_ready = false
 
 local function _in_native_weave()
     return ET.weave_wind_active and ET.weave_wind_active() == true
+end
+
+-- Issue 1123: the damage-reduction multiplier is session-scoped, never a boot
+-- write. Vanilla ships this sub-buff with NO multiplier (only stat_buff +
+-- wind_mutator, buff_templates.lua), so outside a Weave BuffExtension resolves
+-- "multiplier or 0" and the buff is a zero-effect marker - exactly what Chaos
+-- Wastes' mutator_curse_belakors_shadows expects when it adds the SAME shared
+-- buff. A load-time template write leaked 90 percent damage reduction into
+-- every CW Be'lakor run. Apply on Adventure Shadow start, restore on stop.
+-- Real Weaves are unaffected either way: BuffExtension overwrites from active
+-- wind settings at both add and remove time.
+local multiplier_applied = false
+local function _apply_adventure_multiplier()
+    if shadow_sub_buff and not multiplier_applied then
+        shadow_sub_buff.multiplier = Policy.ADVENTURE_DAMAGE_TAKEN
+        multiplier_applied = true
+        pcall(printf, "[et:1123] shadow damage_taken multiplier "
+            .. tostring(Policy.ADVENTURE_DAMAGE_TAKEN) .. " applied for Adventure Shadow")
+    end
+end
+local function _restore_vanilla_multiplier()
+    if shadow_sub_buff and multiplier_applied then
+        shadow_sub_buff.multiplier = nil
+        multiplier_applied = false
+        pcall(printf, "[et:1123] shadow damage_taken multiplier restored to vanilla nil")
+    end
 end
 
 local function _position(unit)
@@ -56,6 +84,7 @@ local function _server_start(context, data)
     data.et413_buffs = {}
     data.buff_system = entity and entity:system("buff_system") or nil
     data.hero_side = side and side:get_side_from_name("heroes") or nil
+    _apply_adventure_multiplier()
 end
 
 local function _remove_server_buff(data, unit)
@@ -134,6 +163,10 @@ local function _server_stop(context, data, is_destroy)
         for unit in pairs(data.et413_buffs or {}) do
             _remove_server_buff(data, unit)
         end
+        -- Safe before pending client-side removals: BuffExtension removal
+        -- subtracts the multiplier captured on the buff INSTANCE at add time
+        -- (buff_extension.lua _remove_stat_buff), not the template value.
+        _restore_vanilla_multiplier()
     end
     return shadow_template._et413_original_server_stop(context, data, is_destroy)
 end
@@ -148,6 +181,7 @@ local function _client_start(context, data)
     data.et413_client_index = 0
     data.et413_faded_units = {}
     data.hero_side = side and side:get_side_from_name("heroes") or nil
+    _apply_adventure_multiplier()
 end
 
 local function _client_update(context, data, dt, t)
@@ -214,6 +248,7 @@ local function _client_stop(context, data, is_destroy)
                 end
             end
         end
+        _restore_vanilla_multiplier()
     end
     return shadow_template._et413_original_client_stop(context, data, is_destroy)
 end
@@ -268,10 +303,12 @@ do
         shadow_template.client.update = _client_update
         shadow_template.server.stop_function = _server_stop
         shadow_template.client.stop_function = _client_stop
-        -- Outside a Weave BuffExtension otherwise leaves this wind-mutator buff
-        -- at its nil/default multiplier (zero effect). Real Weaves override it
-        -- from active wind settings at add/remove time.
-        sub_buff.multiplier = -0.9
+        -- Issue 1123: capture the shared sub-buff only. The damage-reduction
+        -- multiplier is applied per Adventure Shadow session (start/stop
+        -- above), never at load: a boot-time write leaks into Chaos Wastes,
+        -- where mutator_curse_belakors_shadows adds this same shared buff and
+        -- vanilla expects it to resolve to zero outside a Weave.
+        shadow_sub_buff = sub_buff
         adapter_ready = true
     else
         pcall(printf, "[et:413] Adventure Shadow adapter unavailable: vanilla template/buff contract changed")
@@ -335,6 +372,12 @@ ET.shadow_adventure_adapter_ready = function() return adapter_ready end
 
 rt_register("issue413_shadow_adventure_adapter", function()
     if not adapter_ready then return "Adventure Shadow template adapter was not installed" end
+    if not multiplier_applied and shadow_sub_buff and shadow_sub_buff.multiplier ~= nil then
+        return "Shadow damage-reduction multiplier leaked into the dormant shared template (issue 1123)"
+    end
+    if Policy.ADVENTURE_DAMAGE_TAKEN ~= -0.8 then
+        return "Adventure Shadow damage_taken constant drifted from the vanilla wind value -0.8"
+    end
     if not shadow_parity or not shadow_parity:is_installed() then
         return "Adventure Shadow capability beacon was not installed"
     end

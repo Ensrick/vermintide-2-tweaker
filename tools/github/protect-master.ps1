@@ -20,10 +20,18 @@ function Fail {
 
 function New-ProtectionPayload {
     param([string[]]$Contexts)
+    # The legacy contexts array carries no app binding, which left
+    # stable-promotion-authorization pinned to app_id null - satisfiable by ANY
+    # token that can POST a commit status under that context name (#540).
+    # The checks form binds every required context to GitHub Actions (15368).
+    $checks = @()
+    foreach ($context in $Contexts) {
+        $checks += [ordered]@{ context = $context; app_id = 15368 }
+    }
     return [ordered]@{
         required_status_checks = [ordered]@{
             strict = $true
-            contexts = @($Contexts)
+            checks = @($checks)
         }
         enforce_admins = $true
         required_pull_request_reviews = $null
@@ -59,11 +67,15 @@ function Invoke-GhCapture {
 function Invoke-SelfTest {
     $payload = New-ProtectionPayload -Contexts @("qa-gate", "stable-promotion-authorization", "pr-autoclose-authorization")
     if (-not $payload.required_status_checks.strict) { throw "status checks must require an up-to-date branch" }
-    if ($payload.required_status_checks.contexts.Count -ne 3 -or
-            $payload.required_status_checks.contexts[0] -ne "qa-gate" -or
-            $payload.required_status_checks.contexts[1] -ne "stable-promotion-authorization" -or
-            $payload.required_status_checks.contexts[2] -ne "pr-autoclose-authorization") {
+    $checks = @($payload.required_status_checks.checks)
+    if ($checks.Count -ne 3 -or
+            $checks[0].context -ne "qa-gate" -or
+            $checks[1].context -ne "stable-promotion-authorization" -or
+            $checks[2].context -ne "pr-autoclose-authorization") {
         throw "required QA/authorization contexts drift"
+    }
+    foreach ($check in $checks) {
+        if ($check.app_id -ne 15368) { throw "required check '$($check.context)' is not bound to GitHub Actions (app_id 15368)" }
     }
     if (-not $payload.enforce_admins) { throw "administrators must not bypass protection" }
     if ($payload.allow_force_pushes -or $payload.allow_deletions) { throw "force push/deletion must stay disabled" }

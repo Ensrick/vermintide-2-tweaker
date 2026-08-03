@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.115-dev (2026-08-03) -- accessory property isolation repaired (#959) [verify-fix][untested]
+
+- Athanor accessory editing no longer freezes after a sibling accessory holds
+  the same property: the faked mastery-costs table resolves the layered global
+  use count (up to three layers) to 0 instead of nil, so vanilla''s slot
+  repaint cannot abort mid-loop and strand the second accessory''s grid.
+- Athanor reopen no longer bleeds or wipes a property shared by two
+  accessories: the amulet re-seed appends sibling layers under one key instead
+  of overwriting, clamped to each accessory''s ten-slot layer.
+- Issue 86 diagnostic: the over-occupancy warning is now layer-aware for the
+  amulet, ending false chat warnings on legal second-accessory writes.
 ## 0.8.113-dev (2026-08-03) -- CIM-absent glow notice reaches the log (#48) [verify-fix][untested]
 
 - The once-per-session notice that saved custom_glow data will not apply

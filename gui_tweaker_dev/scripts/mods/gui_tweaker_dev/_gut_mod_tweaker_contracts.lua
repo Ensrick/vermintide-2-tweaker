@@ -952,6 +952,42 @@ _rt_register("issue89_cosmetics_only_customize_mount", function()
     end
 end)
 
+_rt_register("issue717_gear_parent_accent_policy", function()
+    -- (#717) Drive the ONE shared gear-parent accent decision (both twins'
+    -- _append_row consume defs.apply_gear_parent_accent) with synthetic rows:
+    -- an enabled gear parent must take Colors.font_button_normal
+    -- {255,160,146,101} (scripts/utils/colors.lua:1021-1026), a VMF-disabled
+    -- row must keep its existing grey, and an ordinary non-gear child must
+    -- pass through untouched.
+    local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
+    if type(defs) ~= "table" or type(defs.apply_gear_parent_accent) ~= "function" then
+        return "#717 defs.apply_gear_parent_accent missing"
+    end
+    local apply = defs.apply_gear_parent_accent
+    local function color_is(c, r, g, b, a)
+        return c[1] == r and c[2] == g and c[3] == b and c[4] == a
+    end
+    local parent = { style = { label = { text_color = { 255, 255, 255, 255 } } } }
+    if apply(parent, true) ~= true
+        or not color_is(parent.style.label.text_color, 255, 160, 146, 101)
+        or parent._advanced_parent_accent ~= true then
+        return "#717 enabled gear parent did not take the warm-tan accent"
+    end
+    local disabled = { _disabled_in_vmf = true,
+        style = { label = { text_color = { 255, 128, 128, 128 } } } }
+    if apply(disabled, true) ~= false
+        or not color_is(disabled.style.label.text_color, 255, 128, 128, 128) then
+        return "#717 disabled gear parent lost its grey tint"
+    end
+    local child = { style = { label = { text_color = { 255, 255, 255, 255 } } } }
+    if apply(child, false) ~= false
+        or not color_is(child.style.label.text_color, 255, 255, 255, 255)
+        or child._advanced_parent_accent ~= nil then
+        return "#717 ordinary child row was recolored by the accent policy"
+    end
+    pcall(printf, "[gut:717] accent policy OK parent=tan disabled=grey child=plain")
+end)
+
     return true
 end
 

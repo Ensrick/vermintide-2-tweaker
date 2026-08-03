@@ -26,6 +26,10 @@ jobs:
           # This job runs one policy script; it does not need the mod trees or
           # any *.mod_bundle. A full-tree checkout died at the 5-minute job
           # timeout twice on 2026-08-03 (conclusion=cancelled inside Checkout).
+          # Sparse-checkout alone prunes the working tree but NOT the fetch;
+          # blob:none is what actually skips the ~7 GiB of bundle blobs
+          # (measured 174s -> ~18s on the same runner class, issue #540).
+          filter: 'blob:none'
           sparse-checkout: |
             qa
             tools
