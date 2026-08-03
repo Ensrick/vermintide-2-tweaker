@@ -1,5 +1,28 @@
 # General Tweaker Changelog
 
+## 0.2.262-dev (2026-08-03) -- Creature Spawner: dynamic specials join the Regular lap (#1138) [verify-fix][untested]
+
+- Mod-added specials (skaven_doomrocket, and any breed a mod registers with
+  `special = true`) were unreachable when cycling the default Regular list:
+  the curated overlay files every VANILLA special under both Regular and
+  Special, but the dynamic fallback for uncurated breeds returned
+  `{ "special" }` only. Evidence: the 2026-08-03 session log's 114 cycle
+  echoes walk exactly the 35 curated regular breeds with zero mod breeds,
+  while the same log shows the doomrocket breed registered clean. The
+  fallback now mirrors the curated convention: `special` breeds categorize
+  `{ "regular", "special" }`. Boss/dummy/regular fallbacks unchanged.
+- Extended the `gt_cs_breed_list_dynamic` regression check with a
+  `special = true` probe asserting membership in regular_units AND
+  special_units, and made every early-return path rebuild the lists clean.
+
+1. In the keep or a mission, leave "Available Unit List" on Regular and cycle
+   with the next/prev keybinds: skaven_doomrocket (with the doomrocket mod
+   enabled) must appear in the lap between skaven_clan_rat_with_shield and
+   skaven_gutter_runner.
+2. Switch the list to Special: it must appear there too; spawn it to confirm
+   the selection is spawnable.
+3. `/gt_regression_test` must pass `gt_cs_breed_list_dynamic`.
+
 ## 0.2.261-dev (2026-08-03) -- bot-rescue evidence lines reach the log (#300) [verify-fix][untested]
 
 - The four [gt:bot-rescue] markers moved from mod:debug (a channel the user''s

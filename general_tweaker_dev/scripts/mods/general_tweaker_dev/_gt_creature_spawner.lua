@@ -245,9 +245,12 @@ end
 -- breed_chaos_tether_sorcerer.lua `special = true` - both missing from the
 -- old hardcoded map); `race = "dummy"` marks the training dummy
 -- (breed_training_dummy.lua:43). Everything else lists as a regular enemy.
+-- Specials additionally list under Regular, mirroring the curated overlay
+-- (every vanilla special above is { "regular", "special" }); without this,
+-- late-registered mod specials never enter the default Regular lap (#1138).
 local function _gt_cs_dynamic_categories(breed)
     if breed.boss then return { "boss" } end
-    if breed.special then return { "special" } end
+    if breed.special then return { "regular", "special" } end
     if breed.race == "dummy" then return { "dummy", "misc" } end
     return { "regular" }
 end
