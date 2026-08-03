@@ -300,6 +300,12 @@ function HeroViewStateModTweaker:_handle_input(input_service)
         if self:_handle_dropdown_input(input_service) then return end
     end
 
+    -- (#167/#158) Shared-node release flags can remain true after a drag ends.
+    -- Swallow that stale release until a genuinely new press begins the next
+    -- input cycle, matching the standalone ModTweakerView path.
+    if Mouse.pressed(0) then self._dd_block_until_press = false end
+    if self._dd_block_until_press then return end
+
     -- Scroll: mouse wheel (1 notch ~= 1 row) + scrollbar thumb drag. The wheel reads
     -- scroll_axis off the menu input service; the thumb drag tracks the cursor like
     -- the vanilla scrollbar held_function (inverse-scaled cursor vs the track top).
@@ -406,6 +412,19 @@ function HeroViewStateModTweaker:_handle_input(input_service)
         end
     end
 
+    -- (#167) A slider drag is modal through its release frame. This prevents the
+    -- release from activating a different row under the cursor and keeps the
+    -- keep/hero-view path in lockstep with the standalone in-mission view.
+    self._slider_dragging = nil
+    for i = 1, #self._rows do
+        local r = self._rows[i]
+        local cc = r.content
+        if (cc and cc.track_hs and cc.track_hs.is_held) or r._dragging then
+            self._slider_dragging = r
+            break
+        end
+    end
+
     -- Rows. Persist on change via _cat_set (routes to the real VMF mod object, or
     -- the gut controller for the dogfood category).
     for i = 1, #self._rows do
@@ -416,7 +435,8 @@ function HeroViewStateModTweaker:_handle_input(input_service)
         end
         -- Skip rows culled this frame (outside the list_mask) so a click on a
         -- scrolled-away row can't register.
-        if not row._readonly and row._middle_visible ~= false then
+        if not row._readonly and row._middle_visible ~= false
+           and not (self._slider_dragging and row ~= self._slider_dragging) then
             local c = row.content
             if row._is_gear then
                 -- GEAR click: drill INTO this setting's advanced sub-options. Captures
@@ -548,7 +568,7 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                 -- ~18KB config to clients — so firing it every drag frame floods the
                 -- network and crashes. One commit on release matches VMF's behaviour.
                 local ths = c.track_hs
-                if ths and (ths.is_held or ths.on_left_release) and c.track_w then
+                if ths and ths.is_held and c.track_w then
                     local cursor = input_service and input_service:get("cursor")
                     if cursor then
                         local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
@@ -559,8 +579,15 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                         local m = (nd > 0) and (10 ^ nd) or 1
                         cur = math.floor(cur * m + 0.5) / m
                         moved = true
-                        if ths.on_left_release then commit = true end  -- drag ended
+                        row._dragging = true
                     end
+                elseif row._dragging then
+                    -- (#167) is_held is the real edge. on_left_release remains
+                    -- latched for several frames on this shared node, so using it
+                    -- repeated both cursor math and the commit/click sound.
+                    self._dd_block_until_press = true
+                    row._dragging = false
+                    commit = true
                 end
                 if c.dec and (c.dec.on_release or c.dec.on_left_release) then cur = math.clamp(cur - (c.step or 1), c.min, c.max); moved = true; commit = true end
                 if c.inc and (c.inc.on_release or c.inc.on_left_release) then cur = math.clamp(cur + (c.step or 1), c.min, c.max); moved = true; commit = true end

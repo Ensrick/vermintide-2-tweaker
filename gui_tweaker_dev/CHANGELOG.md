@@ -1,5 +1,17 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.328-dev (2026-08-02) -- slider release parity in the keep (#167) [verify-fix]
+
+- Ports the existing one-shot slider drag-release edge from the standalone
+  in-mission Mod Tweaker view to the keep/hero-view state. The keep path no
+  longer follows the cursor or repeats its click/commit while the shared
+  `on_left_release` flag remains latched.
+- Keeps a slider drag modal through its release frame and swallows the stale
+  release until the next fresh mouse press, so releasing over another setting
+  cannot activate that row.
+- Adds offline parity coverage that requires both Mod Tweaker input paths to
+  use the held-to-released edge and rejects the old latched-release condition.
+
 ## 0.2.327-dev (2026-08-02) -- preserve bot designation through resets + gate Deus gear capture (#954, #273) [untested]
 
      the claimed version and the issue-lifecycle tag). Suggested title:
