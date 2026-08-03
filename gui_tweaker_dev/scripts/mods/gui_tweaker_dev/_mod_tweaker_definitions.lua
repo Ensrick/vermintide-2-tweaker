@@ -1838,6 +1838,31 @@ local function create_gear_button(y)
     })
 end
 
+-- (#611/#717) Gear-parent accent policy — the ONE decision site both twins call
+-- from their _append_row gear branch (twin-parity regression: 7d31174 accented
+-- only the mission twin, so keep rows rendered plain font_default; 3353d708
+-- mirrored the block, and this helper collapses the two copies into a single
+-- callable so they can never drift again). Enabled gear parents take the
+-- warm-tan chrome accent Colors.font_button_normal {255,160,146,101}
+-- (scripts/utils/colors.lua:1021-1026); VMF-disabled rows keep their existing
+-- grey instead of falsely advertising; non-gear rows are never touched.
+-- PURE (row tables in, style writes out; no engine deps) so the
+-- issue717_gear_parent_accent_policy /gut_regression_test check can drive it
+-- with synthetic rows. Returns true when the accent color was written.
+local function apply_gear_parent_accent(row, has_gear)
+    if not (row and has_gear) then
+        return false
+    end
+    row._advanced_parent_accent = true
+    local accent = not row._disabled_in_vmf and row.style
+        and row.style.label and row.style.label.text_color
+    if accent then
+        accent[1], accent[2], accent[3], accent[4] = 255, 160, 146, 101
+        return true
+    end
+    return false
+end
+
 -- ---------------------------------------------------------------
 -- (v0.2.75-dev) SHARED DRILL SUBTREE PLAN — fixes "VMF dropdowns show no options".
 --
@@ -2292,6 +2317,9 @@ return {
     create_group_header = create_group_header,
     create_dialogue_row = create_dialogue_row,
     create_gear_button = create_gear_button,
+    -- (#611/#717) Single shared gear-parent accent decision (see the function's
+    -- banner); consumed by BOTH twins' _append_row and by /gut_regression_test.
+    apply_gear_parent_accent = apply_gear_parent_accent,
     create_back_row = create_back_row,
     -- (v0.2.75-dev) Shared drill subtree planner — both twins build a drilled view's
     -- child rows from this so a 3-deep dropdown (checkbox -> group -> dropdown) is reached.

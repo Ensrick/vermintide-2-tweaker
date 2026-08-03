@@ -230,19 +230,32 @@ return function(H, repo_root)
     end)
 
     H.test("WT #611 advanced gear parents receive GUI Tweaker accent in both streams", function()
-        local paths = {
-            "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua",
-            "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua",
+        -- Two accepted shapes per stream: the historical inline accent block in
+        -- _mod_tweaker_view.lua, or (#717 hardening, dev first) the ONE shared
+        -- policy call defs.apply_gear_parent_accent whose marker + warm-tan
+        -- literal live in that stream's _mod_tweaker_definitions.lua.
+        local streams = {
+            "/gui_tweaker/scripts/mods/gui_tweaker/",
+            "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/",
         }
-        for _, relative in ipairs(paths) do
+        local function read(relative)
             local file = assert(io.open(repo_root .. relative, "rb"))
             local source = file:read("*a")
             file:close()
-            H.truthy(source:find("row._advanced_parent_accent = true", 1, true),
-                relative .. " must mark and style gear-parent rows")
-            H.truthy(source:find(
+            return source
+        end
+        for _, stream in ipairs(streams) do
+            local view = stream .. "_mod_tweaker_view.lua"
+            local source = read(view)
+            local policy = source
+            if source:find("defs.apply_gear_parent_accent(row, has_gear)", 1, true) then
+                policy = read(stream .. "_mod_tweaker_definitions.lua")
+            end
+            H.truthy(policy:find("row._advanced_parent_accent = true", 1, true),
+                view .. " must mark and style gear-parent rows")
+            H.truthy(policy:find(
                 "accent[1], accent[2], accent[3], accent[4] = 255, 160, 146, 101",
-                1, true), relative .. " must use the warm-tan menu accent")
+                1, true), view .. " must use the warm-tan menu accent")
         end
     end)
 end
