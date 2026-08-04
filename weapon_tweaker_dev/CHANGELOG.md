@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.292-dev (2026-08-04) - appearance census re-keyed to surface x edge cells (#1157) [untested]
+
+- Mirrors beta `0.12.291-beta`: `_wt_appearance_census.lua` is re-keyed from two
+  independent surface/edge vectors to a full surface x edge matrix, byte-exact
+  with the public stream.
+- Census data only - the file is inert pure data consumed by the offline QA
+  gate and never loaded at runtime, so no dev overlay, tuning, diagnostic, or
+  gameplay path changes.
+- The whole husk row is now honestly unsupported on all four families: wt owns
+  no appearance replication channel, so the husk path is each observer
+  re-deriving locally and is never replayed on hot-join. Six surfaces were added
+  (`specials`, `remote_audio`, `hud_panels`, `portraits`, `item_card_2d`,
+  `inventory_tooltip`); `cross_character_port` owns `hud_panels` on the cited
+  issue 388 overcharge presentation.
+- 393 of 512 declared pairs are unsupported; full list in
+  `docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`.
+
 ## 0.12.291-dev (2026-08-02) - #420 shared appearance runtime
 
 - Mirrors beta `0.12.290-beta`: ordinary spawn and inventory-preview scale/grip

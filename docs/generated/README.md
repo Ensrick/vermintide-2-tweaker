@@ -15,6 +15,7 @@ hand-maintained catalogs drift and then get trusted while stale).
 | `OPEN_ISSUE_CONTINGENCIES.generated.md` | Human-readable form of the open/closed audit. Every open issue retains three evidence-triggered fallback approaches and its top closed-history candidates. |
 | `BRANCH_RECONCILIATION.generated.json` | Machine-readable, report-only census of local and remote `agent/*` and `codex/*` refs. Identical tips are deduplicated; ancestry, `git cherry`, issue, path-overlap, version, and manifest evidence remain explicit. |
 | `BRANCH_RECONCILIATION.generated.md` | Concise human view of the same branch census. Only exact ancestors and complete pure patch-equivalent tips are automatic; all semantic cases require review. |
+| `APPEARANCE_CENSUS_GAPS.generated.md` | The enumerated issue-660 backlog: every `(mod, family, surface, edge)` pair the per-mod appearance censuses declare **unsupported**, with each pair's fallback note, grouped by surface then edge, plus per-mod / per-surface / per-edge totals. Expanded from the censuses through the shared `M.expand_matrix`, so it and `qa/lua/tests/test_appearance_census.lua` agree by construction. |
 
 ## Regenerate
 
@@ -35,6 +36,11 @@ pwsh -NoProfile -File tools/github/branch-reconciliation-census.ps1 `
   -BaseRef origin/master `
   -OutputPath docs/generated/BRANCH_RECONCILIATION.generated.json `
   -MarkdownPath docs/generated/BRANCH_RECONCILIATION.generated.md
+
+# Offline. Reads only the per-mod appearance censuses; -GenDate is required for
+# the same clock reason as the name map. Run after ANY census edit - the
+# blocking gate qa/check_appearance_census_gaps.ps1 fails on a stale report.
+pwsh -NoProfile -File tools/gen-appearance-gaps/gen-appearance-gaps.ps1 -GenDate 2026-08-04
 ```
 
 Deterministic + sorted output → regeneration produces a clean, reviewable diff.

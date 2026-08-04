@@ -85,16 +85,50 @@ return function(H, repo_root)
 		H.equal(ok, false)
 	end)
 
-	H.test("census cell and edge vocabularies are closed and complete", function()
-		H.equal(#D.CELLS, 10)
+	H.test("census surface and edge vocabularies are closed and complete", function()
+		H.equal(#D.CELLS, 16)
 		H.equal(#D.EDGES, 8)
+		H.equal(D.SURFACES, D.CELLS)
 		local want = { owner_1p = true, owner_3p = true, bot = true, husk = true,
 			inventory_preview = true, illusion_browser = true, cim_preview = true,
-			lobby = true, score_team = true, hold_tab = true }
+			lobby = true, score_team = true, hold_tab = true,
+			specials = true, remote_audio = true, hud_panels = true, portraits = true,
+			item_card_2d = true, inventory_tooltip = true }
 		for _, cell in ipairs(D.CELLS) do
-			H.truthy(want[cell], "unexpected cell " .. tostring(cell))
+			H.truthy(want[cell], "unexpected surface " .. tostring(cell))
 			want[cell] = nil
 		end
 		H.equal(next(want), nil)
+	end)
+
+	H.test("matrix expansion is total and never invents a state", function()
+		local decl = {}
+		for _, surface in ipairs(D.CELLS) do
+			decl[surface] = { default = "implemented" }
+		end
+		decl.husk = {
+			default = "implemented",
+			note = "row fallback",
+			edges = { peer_ready = "unsupported", mission_transition = "unsupported" },
+			notes = { peer_ready = "hot-join has no replication channel" },
+		}
+		local matrix, errors = D.expand_matrix(decl)
+		H.equal(#errors, 0, table.concat(errors, "\n"))
+		H.equal(matrix.husk.equip.state, "implemented")
+		H.equal(matrix.husk.peer_ready.state, "unsupported")
+		H.equal(matrix.husk.peer_ready.note, "hot-join has no replication channel")
+		-- The row note covers an overridden edge that has no per-edge note.
+		H.equal(matrix.husk.mission_transition.note, "row fallback")
+
+		local count = 0
+		D.each_pair(matrix, function() count = count + 1 end)
+		H.equal(count, #D.CELLS * #D.EDGES)
+
+		-- Dropping one row must fail rather than default the surface.
+		decl.portraits = nil
+		local incomplete, row_errors = D.expand_matrix(decl)
+		H.equal(incomplete, nil)
+		H.equal(#row_errors, 1)
+		H.truthy(row_errors[1]:find("portraits", 1, true))
 	end)
 end
