@@ -37,6 +37,23 @@ known class or STEP 2 finds a stale build.
   to start; do not stall the loop asking for detail you can get from the log.
 - [ ] **Restate each item in your own words before acting** so the user can
   correct a misread early.
+- [ ] **Route repeats by ACCEPTANCE TEST, not by weapon or by architecture**
+  (Ensrick ruling 2026-08-04, the #660 campaign). The unit of an issue is the
+  live test that proves it fixed. If one test would prove both reports, they
+  are the same issue: close the new report as a duplicate of the CELL issue
+  that owns that test (never of the master directly), so the closure names the
+  exact test that will retire it. If proving one report leaves the other
+  unproven - different surface, different transport, different presentation
+  channel (audio vs visual), different topology - they are DIFFERENT issues
+  even when the architecture class is identical. Example: two weapons missing
+  illusions on the husk = one cell; the same husk adapter dropping sound
+  instead of a mesh = a separate cell.
+- [ ] **Campaign-scale classes get one MASTER issue plus GitHub sub-issues:**
+  the master owns the shared architecture and vocabulary; each open sub-issue
+  is one acceptance cell with its own lifecycle label and test card; true
+  repeats are closed duplicates attached under their cell. Closed = no
+  separate proof needed; open leaf = owes its own in-game pass; master = owes
+  the architecture. #660 is the reference implementation of this model.
 
 Every later step operates per-item. If item 1 is a known class and item 2 is
 novel, run STEP 3 on item 1 and STEP 5 on item 2 in parallel.

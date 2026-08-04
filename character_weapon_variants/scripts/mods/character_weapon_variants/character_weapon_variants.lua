@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.488-dev"
+local MOD_VERSION = "0.1.489-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -97,6 +97,11 @@ mod._cwv_preview_descriptor = _om.old_musket_preview
 _om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.profile_package_wire })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
 _om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
+-- #1145 (#660 Wave A): per-wearer re-wield coalescer + mid-destroy guard; both
+-- CWV re-wield edges enqueue here. Rationale in the module header. Loaded
+-- BEFORE _cwv_exact_pair_state so that module can see mod._cwv_rewield.
+mod._cwv_rewield = mod:dofile("scripts/mods/character_weapon_variants/_cwv_rewield_coalescer")
+mod._cwv_rewield.install(mod)
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
 
 -- Single source of truth for the husk override-unit package ref (issue #418).
@@ -205,6 +210,10 @@ mod:command("cwv_regression_test", "Run regression smoke checks for past bugs", 
     mod:echo("=== %d passed, %d failed ===", pass, fail)
 end)
 mod:info("[regression-test-command] registered as /cwv_regression_test")
+
+-- #1145: checks register from the module that owns the guarded code (§2.2a
+-- rule 6), keeping marker and reader in one file (the #1148 scope-loss class).
+mod._cwv_rewield.install_checks(mod, _rt_register)
 
 -- ============================================================================
 -- Debug-mode logging helper (v0.1.336; gate renamed v0.1.340)
@@ -10681,20 +10690,11 @@ do
 			tostring(sender_peer_id), tostring(payload and payload.slot),
 			tostring(payload and payload.item_key),
 			tostring(descriptor and descriptor.fingerprint or "vanilla"), tostring(reason))
-		-- If vanilla equipment arrived first, rebuild the currently wielded husk
-		-- once. If identity arrived first, the following vanilla wield RPC is the
-		-- rebuild. Either ordering converges without polling.
-		local pm = Managers and Managers.player
-		local player = pm and pm.player_from_peer_id and pm:player_from_peer_id(sender_peer_id)
-		local unit = player and player.player_unit
-		if unit and Unit.alive(unit) then
-			local inventory
-			pcall(function() inventory = ScriptUnit.extension(unit, "inventory_system") end)
-			if inventory and payload and inventory.wielded_slot == payload.slot
-					and type(inventory.wield) == "function" then
-				pcall(inventory.wield, inventory, payload.slot)
-			end
-		end
+		-- Rebuild the currently wielded husk once, DEFERRED through the per-wearer
+		-- coalescer (#1145: one re-wield per wearer per frame, husk game object
+		-- re-checked at drain). Arrival ordering converges without polling; the
+		-- resolution and both gates live in the coalescer module.
+		mod._cwv_rewield.request_peer_rewield(sender_peer_id, payload and payload.slot)
 	end)
 
 	-- Issues #476/#741 diagnostic. The vanilla decision is now invariant: NULL.

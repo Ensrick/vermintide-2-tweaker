@@ -1,5 +1,37 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.186-dev (2026-08-04) -- per-wearer re-wield coalescer + mid-destroy guard (#1145) [untested]
+
+- Client CTD fix. A single host illusion click fans out over four independent
+  sync channels, and each one drove a wield PULSE on the same husk, so one click
+  produced 8 full husk re-wield cycles in 220 ms (2026-08-03 client log). That
+  churn collapsed the husk's destroy+respawn into ONE frame; the stranded old
+  husk's locomotion extension then polled the dead game object id for 33 frames
+  to the engine fatal `third_person_idle_fullbody_animation_control.lua:69`
+  (via `player_husk_locomotion_extension.lua:59`, an unguarded
+  `GameSession.game_object_field` read).
+- New owner module `_cos_rewield_coalescer.lua`. Every wield pulse this mod
+  initiates -- `_ensure_offhand_mesh` and `mod._la_native_pulse` -- now enqueues
+  per wearer instead of firing inline. The drain runs once from `mod.update` and
+  executes AT MOST ONE pulse per wearer per frame; same-frame duplicates merge
+  and the newest request wins. The queue is swapped out before executors run, so
+  a pulse that re-enters cannot recurse within a frame.
+- Mid-destroy guard: immediately before executing, the wearer's husk game object
+  is re-checked with `GameSession.game_object_exists`, the same gate vanilla uses
+  at `simple_husk_inventory_extension.lua:59`. A husk whose game object is gone
+  gets its pending pulse DROPPED, never queued across the respawn -- the fresh
+  husk re-derives appearance through the normal spawn path.
+- `_la_reconcile` now queues the paint re-apply into the pending drain when the
+  pulse was coalesced, so deferral cannot silently swallow the re-paint.
+- Diagnostics (always-on, bounded to 200 lines): `[cos:1145] DRAIN depth= ...
+  executed= merged= dropped_dead_go=` and `[cos:1145] DROP wearer= ... reason=`.
+- Regression: `cos_issue1145_coalescer_marker`, `cos_issue1145_coalescer_live`
+  (drives the real queue and proves 4 same-frame requests execute exactly once),
+  `cos_issue1145_mid_destroy_guard` (proves a dead wearer's pulse is dropped, not
+  executed). Marker constant and the check that reads it live in the same file,
+  avoiding the #1148 scope-loss class.
+- No new hook, no RPC, no `World.destroy_unit`.
+
 ## 0.9.185-dev (2026-08-03) -- cold-load persistence contract locked; clear command repaired (#25) [verify-fix][untested]
 
 - New named regression check cos_la_cold_load_contract_25: seeds LA hat,

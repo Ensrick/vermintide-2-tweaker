@@ -1,5 +1,36 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.489-dev (2026-08-04) -- per-wearer re-wield coalescer + mid-destroy guard (#1145) [untested]
+
+- Client CTD fix. CWV re-wields a remote wearer's husk from two independent
+  arrival edges (exact-identity arrival on `cwv_item_identity`, generated-pair
+  state arrival on `cwv_exact_pair_state_v1`), neither aware of the other nor of
+  cosmetics_tweaker's la-state pulses. On 2026-08-03 one host illusion click
+  fanned out over four channels and drove 8 husk re-wield cycles in 220 ms,
+  collapsing the husk destroy+respawn into ONE frame; the stranded old husk's
+  locomotion extension polled the dead game object id for 33 frames to an engine
+  fatal (`player_husk_locomotion_extension.lua:59` reads
+  `GameSession.game_object_field` with no existence guard).
+- New owner module `_cwv_rewield_coalescer.lua`. Both edges now enqueue per
+  wearer instead of calling `inventory.wield` inline. The drain runs from a
+  preserving `mod.update` wrap and executes AT MOST ONE re-wield per wearer per
+  frame; same-frame duplicates merge and the newest request wins. The queue is
+  swapped out before executors run, so a re-wield that re-enters lands in the
+  next frame and cannot recurse within one.
+- Mid-destroy guard: the wearer's husk game object is re-checked with
+  `GameSession.game_object_exists` immediately before executing, the same gate
+  vanilla uses at `simple_husk_inventory_extension.lua:59`. A mid-destroy husk
+  has its pending re-wield DROPPED, never carried across the respawn.
+- `_cwv_exact_pair_state.apply` keeps `add_equipment` synchronous (it is the
+  state change) and defers only the wield.
+- Diagnostics (always-on, bounded to 200 lines): `[cwv:1145] DRAIN depth= ...
+  executed= merged= dropped_dead_go=` and `[cwv:1145] DROP wearer= ... reason=`.
+- Regression: `cwv_issue1145_coalescer_marker` (also fails if the `mod.update`
+  drain is unwired), `cwv_issue1145_coalescer_live`, and
+  `cwv_issue1145_mid_destroy_guard`. Marker constant and the check that reads it
+  live in the same file, avoiding the #1148 scope-loss class.
+- No new hook, no RPC, no `World.destroy_unit`.
+
 ## 0.1.488-dev (2026-08-03) -- melee-slot musket reload drains the shared reserve (#1107) [verify-fix][untested]
 
 - Vanilla only charges ammo reserve for the ranged slot
