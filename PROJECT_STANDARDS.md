@@ -154,7 +154,8 @@ skips the purity guard because that flag authorizes documentation edits.
 **Tier (b) - In-game regression harnesses.** A per-mod runtime self-check suite,
 invoked from chat as `/<mod>_regression_test`. Each check is a closure
 registered via `_rt_register("<name>", function() ... end)` that returns a
-failure STRING if the invariant broke and nil/false if it held. Checks assert on
+failure STRING if the invariant broke and nil if it held (a boolean first
+return is a malformed check - §5.1d rule 3). Checks assert on
 live engine state: hook installed, table shape intact, `NetworkLookup` entry
 present, or the singleton-hook invariant via a source-pattern marker (a check
 greps its own mod source for a required banner such as
@@ -796,6 +797,78 @@ log or a single-surface check does NOT earn the label.
 Cross-ref: §5.1a (apply-site log line), §5.1b (appearance contracts census),
 §11 Labels (verify-* prerequisites), `docs/WEAPON_APPEARANCE_STANDARD.md` (the
 canonical render-path contract).
+
+### 5.1d Postcondition-first verification (binding, issue #1156)
+
+A check that renders a verdict is an INSTRUMENT. When the instrument lies,
+every downstream session aims its fix at the wrong target, and a green suite
+actively hides the defect. The five rules below bind every `_rt_register`
+check, every `/verify_<feature>` command, and every offline QA gate that
+decides whether a fix landed. #1156 is the program issue; the symptom /
+diagnosis catalog is `docs/BUG_CLASSES.md` § 85 "Lying instrument (harness
+misreport)".
+
+1. **Assert RETAINED, player-visible state against INDEPENDENT ground truth.**
+   The expectation comes from authored data the defect cannot move (an
+   `ItemMasterList` entry, a catalog table, an authored settings default),
+   never from setter success, and never from a value the code path or state
+   under test just produced. Evidence: the cwv offline checks
+   `issue579_dual_axes_preview_and_husk_skin_continuity` and
+   `issue719_imperial_crowbill_remote_identity` both PASSED while both defects
+   reproduced in the live co-op session; the 579 check compared against an
+   expectation derived from the already-collapsed state the defect itself
+   produces, so it could only ever agree with the bug. This generalizes §5.1c
+   from appearance state to every check.
+
+2. **Disconnecting, relocating, or shadowing a live hook, marker, or needle
+   MUST fail a contract check loudly.** A check that can silently read `nil`
+   and still return a verdict (pass OR fail) is malformed: it is reporting on
+   nothing. Assert that the read resolved before asserting on its value.
+   Evidence: #1148, where the marker constants are file-scope locals in
+   `character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua:26-38`
+   while the relocated checks in `_cwv_regression_identity.lua` read them as
+   bare globals, producing false "was the fix reverted?" FAILs on
+   verifiably present code. Same class in the other direction: the cosmetics
+   `0.9.65-dev` transition self-heal shipped inert and stayed inert 3+
+   versions because no gate noticed a live hook had been disconnected (#233).
+
+3. **Runner return-shape contract.** A check returns `nil` on success and a
+   reason STRING on failure. A runner passes ONLY on `nil`, and treats boolean
+   `true` as a LOUD malformed-check failure: not a pass, and not an ordinary
+   FAIL to be triaged as a code bug. Evidence: #1153, where a gt check returns
+   `true` on success while the runner passes only on `nil`, so healthy wiring
+   reports FAIL permanently and the real signal is buried. Current reality: the
+   gt_dev runner gives a boolean return its own loud BAD-SHAPE verdict as of
+   `0.2.264-dev`, and the cwv runner renders XFAIL/XPASS as of `0.1.490-dev`
+   (both #1156 Phase 1); the cwv runner does not yet flag a boolean return
+   specially.
+
+4. **Known-open defects are annotated as EXPECTED failures, never
+   assertion-weakened.** A check locking a defect that is still open carries an
+   XFAIL annotation naming the issue, so the suite is honest about what is
+   broken. An XFAIL that PASSES (XPASS) is itself a loud failure: it demands
+   either removing the annotation or verifying the fix, because the suite's
+   model of reality has drifted. Never make a suite green by loosening an
+   assertion, widening a tolerance, or deleting a case; that converts a known
+   defect into an unknown one.
+
+5. **Any needle a test card relies on must be ALWAYS-ON and TEXT-STABLE.**
+   Bounded engine `printf`, never `mod:debug` / `mod:info` and never behind a
+   `_dbg` flag or menu toggle - a needle that cannot appear with mod logging
+   off false-PASSes its card, which is how the user always plays. The emitted
+   TEXT is part of the same contract: the issue-154 husk preflight instruments
+   were already always-on, but the strings the card greps
+   (`NOT in resource manager`, `cache_has_wearer=`) had been reworded out of
+   the emissions in cosmetics `0.9.42-dev`, so a tester greps the needle,
+   finds nothing, and scores the absence as a pass. Rewording an emitted
+   needle requires updating every card that greps it in the same change
+   (needles restored in `0.9.187-dev`). Same rule as §3.6 "critical always-on
+   telemetry" and §2.2b tier-(c), applied to the card's evidence line
+   specifically.
+
+Cross-ref: §5.1a (apply-site log line), §5.1c (retained-state readback),
+§2.2b (test and diagnostic tiers), §3.6 (printf vs VMF logging),
+`docs/BUG_CLASSES.md` § 85, `docs/BUG_TRIAGE_RUNBOOK.md` STEP 8.
 
 ### 5.2 Manual smoke test expectation
 For changes affecting load-bearing systems (cosmetics, weapon hooks, attachment

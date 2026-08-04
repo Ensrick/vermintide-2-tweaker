@@ -1,5 +1,41 @@
 # General Tweaker Changelog
 
+## 0.2.264-dev (2026-08-04) -- regression runner: false-FAIL on healthy checks fixed (#1153, #1156) [untested]
+
+- `/gt_regression_test` scores a check by its FIRST return value: nil is PASS,
+  a reason string is FAIL. Six checks returned a truthy non-nil value on
+  success, so healthy wiring printed a permanent FAIL with the boolean as its
+  "reason". The 2026-08-04 session proved the case that surfaced this: the
+  issue 309 disconnect trace fired pre/post/sample/rejoin completely while
+  `issue309_disconnect_grace_diagnostics_armed` reported
+  `FAIL: ... -- true`.
+- Fixed all six to the repo convention (nil on success, reason string on
+  failure): `issue309_disconnect_grace_diagnostics_armed`
+  (`_gt_disconnect_grace_diag.lua`), `issue347_closed_chest_pickup_diagnostics`
+  (`_gt_bot_pickups.lua`), `issue753_disconnect_failure_diagnostics_armed`
+  (`_gt_diag_disconnect_failure.lua`), `issue659_necromancer_keep_trace_armed`
+  (`_gt_necro_keep_trace.lua`), `gt_bot_utility_nil_guard`
+  (`_gt_bot_fixes.lua`, dropped a trailing `return true`), and
+  `issue332_client_ragdoll_retention` (`_gt_client_ragdolls.lua`, which
+  returned its whole assertion conjunction -- so it printed FAIL either way and
+  never named the failing clause; now three explicit checks with reasons).
+- Hardened the runner so the class cannot silently recur: a boolean first
+  return now prints its own verdict, `BAD-SHAPE: <name> returned boolean
+  <value>; checks must return nil on success`, counted as a failure and logged
+  through the same warning channel as a real FAIL. A shape defect in a check is
+  now distinguishable from a defect in the code it guards.
+- No gameplay code changed; this is diagnostics-harness repair only. Part of
+  the Phase 1 instrument-repair sweep (#1156).
+
+1. In the keep, run `/gt_regression_test`.
+2. `issue309_disconnect_grace_diagnostics_armed`,
+   `issue347_closed_chest_pickup_diagnostics`,
+   `issue753_disconnect_failure_diagnostics_armed`,
+   `issue659_necromancer_keep_trace_armed`, `gt_bot_utility_nil_guard`, and
+   `issue332_client_ragdoll_retention` must all print PASS.
+3. No line may start with `BAD-SHAPE:`. If one does, that named check still
+   returns a boolean and needs the same fix.
+
 ## 0.2.263-dev (2026-08-03) -- republish of 0.2.262 with synced cfg title (#1138) [verify-fix][untested]
 
 - No code change from 0.2.262-dev. That build failed publication at the

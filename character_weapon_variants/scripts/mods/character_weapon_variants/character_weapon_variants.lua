@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.489-dev"
+local MOD_VERSION = "0.1.490-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -36,6 +36,7 @@ local CT_CWV_ITEMMASTERLIST_RAWGET_MARKER_v0_1_333 = "cwv-itemmasterlist-rawget-
 -- careers). Source-pattern: must walk `_variant_definitions` and union the
 -- `careers` arrays of every entry with `cross_slot = true`.
 local CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 = "cwv-slot-extension-scoped-to-cross-slot-variant-careers"
+mod._cwv_fix_markers = { nl_rawget = CT_CWV_NETWORKLOOKUP_RAWGET_MARKER_v0_1_332, iml_rawget = CT_CWV_ITEMMASTERLIST_RAWGET_MARKER_v0_1_333, slot_extension = CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 } -- #1148
 -- v0.1.339 (Issue #33): belt-and-suspenders counter that the consolidated
 -- `mod:hook_safe("SimpleInventoryExtension", "wield", ...)` registration site
 -- (~line 1336) increments exactly once. Regression test
@@ -53,23 +54,16 @@ local CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 = "cwv-slot-extension-scoped-to-cros
 -- what broke the v0.1.330/331 attempt). Fields keep their original names so the
 -- refactor is a pure `_om.` prefix with no behavior change.
 local _om = {}
-_om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
-_om.javelin_gate = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_gate")
+_om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear"); _om.javelin_gate = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_gate")
 _om.cross_slot_filter = mod:dofile("scripts/mods/character_weapon_variants/_cwv_cross_slot_filter")
-_om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
-_om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
+_om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance"); _om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
 _om.identity_peer_pull = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_pull")
 _om.husk_transform_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_transform_policy"); _om.appearance_fade = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_fade")(mod, _om)
-_om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
-_om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
-_om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_family")
-_om.crowbill_hammer_mode = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_hammer_mode")
-_om.crowbill_presentation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_presentation")
-_om.peer_resolver = mod:dofile("scripts/mods/character_weapon_variants/_cwv_peer_resolver")
-_om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_runtime")
-_om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
-_om.rapier_contract = mod:dofile("scripts/mods/character_weapon_variants/_cwv_rapier_contract")
-_om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inventory_icons")
+_om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe"); _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
+_om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_family"); _om.crowbill_hammer_mode = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_hammer_mode")
+_om.crowbill_presentation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_presentation"); _om.peer_resolver = mod:dofile("scripts/mods/character_weapon_variants/_cwv_peer_resolver")
+_om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_runtime"); _om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
+_om.rapier_contract = mod:dofile("scripts/mods/character_weapon_variants/_cwv_rapier_contract"); _om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inventory_icons")
 _om.outrider_animation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_outrider_animation")
 -- Public sibling-renderer contract: call resolve(icon, renderer), never guess atlas residency.
 mod._cwv_inventory_icons = _om.inventory_icons
@@ -189,25 +183,31 @@ mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- Renamed from `regression_test` per `feedback_vt2_chat_command_syntax.md` /
 -- ct v0.7.91 — chat commands are globally namespaced and `regression_test`
 -- is already claimed by `cim`.
+-- #1156: opts.known_defect marks a check as a KNOWN OPEN defect - its failure is an XFAIL (never a suite failure), its success an XPASS (a LOUD failure: verify the fix or drop the annotation).
 local _RT_CHECKS = {}
-local function _rt_register(name, fn)
-    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+local function _rt_register(name, fn, opts)
+    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn, defect = opts and opts.known_defect }
 end
 mod:command("cwv_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail = 0, 0
+    local pass, fail, xfail = 0, 0, 0
     mod:echo("=== cwv regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
-        if ok and err == nil then
-            mod:echo("  PASS: %s", c.name); pass = pass + 1
-            mod:info("[regression] PASS %s", c.name)
+        local d = c.defect and tostring(c.defect)
+        if ok and err == nil and d then
+            mod:echo("  XPASS: %s -- open issue %s no longer reproduces; verify the fix or drop known_defect", c.name, d); fail = fail + 1
+            pcall(printf, "[regression] XPASS %s -- open issue %s no longer reproduces; verify the fix or drop known_defect", c.name, d)
+        elseif ok and err == nil then
+            mod:echo("  PASS: %s", c.name); pass = pass + 1; mod:info("[regression] PASS %s", c.name)
+        elseif d then
+            mod:echo("  XFAIL: %s (open issue %s) -- %s", c.name, d, tostring(err)); xfail = xfail + 1
+            pcall(printf, "[regression] XFAIL %s (open issue %s): %s", c.name, d, tostring(err))
         else
-            local msg = (not ok and tostring(err)) or tostring(err)
-            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
-            mod:warning("[regression] FAIL %s: %s", c.name, msg)
+            mod:echo("  FAIL: %s -- %s", c.name, tostring(err)); fail = fail + 1
+            mod:warning("[regression] FAIL %s: %s", c.name, tostring(err))
         end
     end
-    mod:echo("=== %d passed, %d failed ===", pass, fail)
+    mod:echo("=== %d passed, %d failed, %d xfail (known defects) ===", pass, fail, xfail)
 end)
 mod:info("[regression-test-command] registered as /cwv_regression_test")
 
@@ -3034,7 +3034,7 @@ local function _cwv_collect_cross_slot_careers()
 	end
 	return set
 end
-do
+do _om._collect_cross_slot_careers = _cwv_collect_cross_slot_careers   -- #1148: the relocated check reads it through _om, not as a bare global
 	local function _do_extend()
 		if not CareerSettings then
 			mod:warning("[cwv slot] CareerSettings nil — skip extension")

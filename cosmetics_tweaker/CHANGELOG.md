@@ -1,5 +1,34 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.187-dev (2026-08-04) -- husk preflight/mesh-gate needles restored to the exact card text (#1156) [untested]
+
+- Instrument repair for the issue 154 family, so a co-op test card cannot
+  false-pass while the tester runs with mod logging OFF. Both instruments were
+  already always-on engine `printf` (`_dbg_alert` was converted to a
+  pcall-guarded `printf` under issue 240, and the mesh-gate rides the default-on
+  `[cos:sync]` PROBE emitter), so the false-pass risk was NOT a logging-level
+  problem - it was NEEDLE TEXT DRIFT. The strings the card greps had been
+  reworded out of the code, so their absence read as a pass.
+- `[husk-wield-wrap] PREFLIGHT WARN` now re-emits the literal phrase
+  `NOT in resource manager` inside the RESOLVED field
+  (`RESOLVED=<unit>(resident=false, NOT in resource manager)`), which is the
+  token the issue 154 evidence and its card quote. Bounded by the existing
+  per-(career, template, field, resolved-unit) dedup set `mod._preflight_seen`:
+  one line per distinct weapon, never per frame.
+- The always-on `[cos:sync]` husk mesh-gate emit now carries the
+  `[husk-mesh-swap probe]` tag and the exact `cache_has_wearer=` /
+  `cache_has_entry=` / `entry_key=` field names (previously `cache_wearer=` /
+  `cache_entry=` / `key=`), matching the paired needle in the issue 154 evidence.
+  Bounded by the PROBE rate limiter: first-sight plus changed-payload only,
+  unchanged repeats capped at 4 per key inside a 90 s startup window, hard
+  session cap 900 lines.
+- The sibling `_dbg("[husk-mesh-swap probe] ...")` line stays file-only. It fires
+  on every husk wield including successful swaps, so it is routine chatter; the
+  failure-signal subset it carries is fully covered by the always-on emit above.
+- No behaviour change: all three sites remain read-only diagnostics, no new hook,
+  no RPC, no line-count growth in the entry file (contracts check green at
+  9739/9740).
+
 ## 0.9.186-dev (2026-08-04) -- per-wearer re-wield coalescer + mid-destroy guard (#1145) [untested]
 
 - Client CTD fix. A single host illusion click fans out over four independent

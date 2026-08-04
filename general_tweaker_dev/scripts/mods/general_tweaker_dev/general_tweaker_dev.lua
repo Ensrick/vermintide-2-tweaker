@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.263-dev"
+local MOD_VERSION = "0.2.264-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -395,6 +395,16 @@ mod:command("gt_regression_test", "Run regression smoke checks for past bugs", f
         if ok and err == nil then
             mod:echo("  PASS: %s", c.name); pass = pass + 1
             mod:info("[regression] PASS %s", c.name)
+        elseif ok and type(err) == "boolean" then
+            -- issue #1153: a check that reports success as `true` scored a
+            -- permanent "FAIL -- true" against healthy wiring. The contract is
+            -- nil on success, a reason string on failure, so a boolean first
+            -- return is a defect in the CHECK, not in the code under test, and
+            -- gets its own loud verdict rather than hiding among real failures.
+            mod:echo("  BAD-SHAPE: %s returned boolean %s; checks must return nil on success",
+                c.name, tostring(err)); fail = fail + 1
+            mod:warning("[regression] BAD-SHAPE %s returned boolean %s; checks must return nil on success",
+                c.name, tostring(err))
         else
             local msg = (not ok and tostring(err)) or tostring(err)
             mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1

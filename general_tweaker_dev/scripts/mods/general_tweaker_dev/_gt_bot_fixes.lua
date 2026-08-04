@@ -116,8 +116,8 @@ if type(mod._gt_rt_register) == "function" then
         if unrelated_ready then
             return "unknown numeric input did not fail closed"
         end
-
-        return true
+        -- Runner contract: fall off the end (nil) to PASS. `return true` scored
+        -- healthy wiring as "FAIL -- true" (issue #1153).
     end)
 end
 

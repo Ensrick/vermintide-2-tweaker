@@ -166,6 +166,7 @@ mod._gt753_disconnect_diagnostics = {
 
 if type(mod._gt_rt_register) == "function" then
     mod._gt_rt_register("issue753_disconnect_failure_diagnostics_armed", function()
+        -- Runner contract: nil == PASS, a reason string == FAIL (issue #1153).
         local state = mod._gt753_disconnect_diagnostics
         local ok = type(state) == "table"
             and state.steam_hook == true
@@ -173,8 +174,9 @@ if type(mod._gt_rt_register) == "function" then
             and state.network_hook == true
             and type(state.policy) == "table"
             and type(state.policy.classify) == "function"
-        return ok, ok and "three transition-only service probes installed"
-            or "disconnect service probe wiring incomplete"
+        if not ok then
+            return "disconnect service probe wiring incomplete"
+        end
     end)
 end
 

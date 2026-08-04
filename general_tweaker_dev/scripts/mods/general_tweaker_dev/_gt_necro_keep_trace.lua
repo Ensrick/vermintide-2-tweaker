@@ -156,6 +156,7 @@ GT_NECRO_KEEP_TRACE_MARKER_659 = "gt-necro-activation-target-passive-server-trac
 
 if type(mod._gt_rt_register) == "function" then
     mod._gt_rt_register("issue659_necromancer_keep_trace_armed", function()
+        -- Runner contract: nil == PASS, a reason string == FAIL (issue #1153).
         local ok = GT_NECRO_KEEP_TRACE_MARKER_659
                 == "gt-necro-activation-target-passive-server-trace"
             and type(mod._gt_necro_keep_trace_core) == "table"
@@ -165,8 +166,9 @@ if type(mod._gt_rt_register) == "function" then
             and core.LIMITS.spawn_pet == 8
             and core.LIMITS.spawn_server == 8
 
-        return ok, ok and "bounded activation-to-server trace wired"
-            or "issue #659 trace wiring incomplete"
+        if not ok then
+            return "issue 659 trace wiring incomplete"
+        end
     end)
 end
 
