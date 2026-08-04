@@ -3265,3 +3265,106 @@ cosmetics `_mh_package_lifecycle.lua`).
   flight, and register the path in the owning mod's inventory diagnostic.
 - Lock the asymmetry in an offline test that asserts the ledger has no unload
   method AND that repeated triggers do not grow the reference count.
+
+## 85. Lying instrument (harness misreport)
+
+**First codified:** program issue
+[#1156](https://github.com/Ensrick/vermintide-2-tweaker/issues/1156) on
+2026-08-04, out of the #660 verification-integrity sweep.
+**Lives in:** any `_rt_register` check, `/verify_<feature>` command, or offline
+QA gate whose verdict is used to decide whether a fix landed.
+
+The bug is in the INSTRUMENT, not the code it measures. Five sub-patterns have
+bitten this repo:
+
+**(a) Setter-success or self-derived expectation.** The check asserts that a
+call returned cleanly, or compares live state against an expectation computed
+from the same code path / state under test, so it agrees with the defect by
+construction. The cwv checks
+`issue579_dual_axes_preview_and_husk_skin_continuity` and
+`issue719_imperial_crowbill_remote_identity` both PASSED offline while both
+defects reproduced in the live co-op session; the 579 check's expectation was
+derived from the already-collapsed state the defect itself produces.
+Historically the same shape in WOC, which logged transform TARGET values while
+the engine-retained state stayed identity (#660 body, and class 57 / 58 for the
+transform-side mechanics).
+
+**(b) Marker scope-break after file relocation.** A source-pattern marker moves
+out from under its constant. #1148: the marker constants are file-scope locals
+in `character_weapon_variants.lua` while the relocated checks in
+`_cwv_regression_identity.lua` read them as bare globals, so the read returns
+`nil` and the check reports "was the fix reverted?" FAIL on code that is
+verifiably present. The same relocation can also break a CALL instead of a
+read: `cwv_slot_extension_scoped` invoked an entry-file local collector as a
+bare global and ERRORED rather than misreading (fixed with the markers in
+`0.1.490-dev`).
+
+**(c) Success-return shape mismatch.** The check and the runner disagree on
+what success looks like. #1153: a gt check returns `true` on success while the
+runner passes only on `nil`, so healthy wiring reports FAIL permanently.
+
+**(d) Inert hook / disconnected instrument shipped unnoticed.** The needle
+itself stops firing and nothing fails. The cosmetics `0.9.65-dev` transition
+self-heal shipped inert and stayed inert 3+ versions with no gate noticing that
+a live hook had been disconnected (#233).
+
+**(e) Needle text drift.** The card and the code disagree on the needle
+string. The issue-154 husk preflight instruments were already always-on
+`printf`, but the strings the card greps (`NOT in resource manager`,
+`cache_has_wearer=`) had been reworded out of the emissions in cosmetics
+`0.9.42-dev`; a tester greps the card needle, finds nothing, and scores the
+absence as a pass. Restored to the exact card text in `0.9.187-dev` (#1156).
+The card's evidence line and the emission are one contract: rewording either
+side alone converts the card into a false-PASS generator.
+
+### Symptoms
+- An offline suite is green (or a `/verify_*` prints PASS) while the user
+  reproduces the defect in a live session, or the inverse: a permanent FAIL on
+  code you have just read and confirmed present.
+- A verdict does not move when the underlying behavior does: the same PASS
+  before and after a fix, or the same FAIL across a revert.
+- A check "passes" in a state where its inputs cannot exist yet (keep-only
+  data read mid-mission, husk state read solo).
+- A card's evidence line is missing from the log entirely, and the card is
+  scored as PASS on the absence.
+
+### Diagnosis pattern
+1. **When a verdict contradicts live logs, suspect the INSTRUMENT before
+   re-fixing the code.** Re-diagnosing from a lying verdict is how a session
+   burns a whole fix wave on a defect that was never there, or ships nothing
+   for one that was.
+2. Confirm by reading the check's ground-truth SOURCE. Where does its
+   expectation come from? If it traces back to the code path or state under
+   test, to a setter's return value, or to a symbol the check cannot actually
+   resolve (`nil` marker, moved local, unloaded module), the verdict is
+   meaningless regardless of which way it points.
+3. Prove the read resolved, not just that the comparison passed. Log the value
+   the check actually saw. A `nil == nil` comparison is the signature of
+   sub-pattern (b).
+4. Check the return shape against the runner (sub-pattern (c)): the gt runner
+   passes on `pcall` success AND `err == nil`
+   (`general_tweaker_dev.lua:394-395`), so a `true` return is a permanent FAIL.
+5. For a needle that never appears: confirm it is engine `printf` and not
+   `mod:debug` / `_dbg`-gated. The user plays with mod logging OFF, so a gated
+   needle is invisible and its card can false-PASS on absence (#154).
+
+### Fix template
+- Rewrite the check per `PROJECT_STANDARDS.md` §5.1d "Postcondition-first
+  verification": assert RETAINED, player-visible state against independent
+  authored ground truth; make an unresolved marker / hook / needle a loud
+  contract failure; return `nil` on success and a reason string on failure;
+  annotate still-open defects as XFAIL naming the issue and treat an XPASS as
+  a loud failure; keep every card needle always-on and bounded.
+- Fix the instrument in its own change, and re-run the suite BEFORE touching
+  the code it measures, so you can tell which verdicts moved because the
+  instrument was repaired and which because the code was.
+- Never make the suite green by weakening an assertion. If the defect is real
+  and open, the honest state is an annotated expected failure.
+
+### Related Issues / commits
+- #1156 (program issue: instrument repair + this standard), #1148 (marker
+  scope-break), #1153 (return-shape mismatch), #233 (inert self-heal), #154
+  (`_dbg`-gated needle), #579 / #719 (offline PASS vs live co-op FAIL), #660
+  (appearance-unification program; setter-success false-positive class).
+- Adjacent classes: 57 (one-shot transform reset by animation) and 58 (partial
+  setter success) are the transform-side mechanics that (a) misreported.

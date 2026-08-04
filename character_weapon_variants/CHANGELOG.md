@@ -1,5 +1,64 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.490-dev (2026-08-04) -- regression-instrument repair (#1148 #1156) [untested]
+
+- Instruments only. No gameplay, registration, wire, render, or animation
+  behavior changed; this release repairs the `/cwv_regression_test` harness so
+  its verdicts can be trusted again.
+- #1148 marker scope break. The `CT_CWV_*_MARKER_*` constants are file-scope
+  locals in `character_weapon_variants.lua`, but the checks that read them moved
+  to `_cwv_regression_identity.lua` during the OOP decomposition, where the bare
+  names resolve as globals (= nil). Three checks therefore reported a permanent
+  "was the fix reverted?" FAIL while the guarded `rawget` hardening was present
+  and correct. The constants are now published as `mod._cwv_fix_markers`
+  (`nl_rawget` / `iml_rawget` / `slot_extension`) and the relocated checks read
+  them from the mod table with a nil-check, so a genuinely missing marker still
+  FAILs. Same class, same fix, for `_cwv_collect_cross_slot_careers`: the
+  `cwv_slot_extension_scoped` check was calling a nil global and erroring out;
+  the collector is now published on `_om._collect_cross_slot_careers`.
+- #1156 known-defect annotation. `_rt_register` takes an optional third `opts`
+  table; `{ known_defect = <issue> }` marks a check whose failure is EXPECTED.
+  The runner reports it as `XFAIL: <name> (open issue N) -- <reason>` and counts
+  it separately from failures, and reports a passing annotated check as
+  `XPASS`, counted as a LOUD failure telling the operator to verify the fix or
+  drop the annotation. Both lines also go out through engine `printf`, so they
+  are visible with mod logging off. The summary line is now
+  `=== N passed, N failed, N xfail (known defects) ===`. Two-argument
+  registrations are unchanged.
+- `issue719_imperial_crowbill_remote_identity` re-pointed at postconditions and
+  annotated `known_defect = 719`. Expectation now comes from the authored
+  Crowbill catalog and variant table, not from the resolver under test. Beyond
+  the existing payload round-trip it asserts (1) the remote peer can resolve the
+  exact variant at wield time from the vanilla wire alone OR owns a
+  late-identity re-apply mechanism, and (2) the authored mesh is admissible on a
+  remote husk at all. Postcondition 2 currently FAILs: the five
+  `units/cwv_crowbill/...` models are registered in neither husk admission arm
+  (`_om._husk_custom_bundle_unit` covers only the Old Musket's custom unit, and
+  `_om._husk_lease_override` accepts only `units/weapons/player/` paths), so a
+  peer keeps the shadowed `bw_1h_crowbill` donor for the whole mission. That
+  matches the co-op session where the exact identity arrived 41 s after wield
+  and nothing ever re-swapped the mesh.
+- `issue579_dual_axes_preview_and_husk_skin_continuity` re-pointed and annotated
+  `known_defect = 579`. The old form compared the resolved pair against
+  `WeaponSkins.skins[<clone>]`, whose two hands are byte-identical for an
+  identical-mesh dual wield, so a pair collapsed onto one model still satisfied
+  every equality and the check passed while the live session failed. It now
+  takes the two-handle shape from the authored variant def, validates EVERY
+  generated clone against the vanilla cosmetic it was cut from (not a `next()`
+  sample), and then drives preview and wire with two clones whose meshes
+  actually differ, which is the player-visible case named on the 0.1.408-dev
+  card: distinct right and offhand illusions saved on one pair. A pair
+  reconstructed as one model now FAILs with both hands named.
+- Entry-file line budget held at its ceiling by joining seven adjacent
+  `_om.<name> = mod:dofile(...)` statements onto shared lines, the same form the
+  file already used for `husk_transform_policy` / `appearance_fade`. No load
+  order changed.
+
+**DoD:** Repository-only instrument change; no variant traits gated. Verify in
+the keep with `/cwv_regression_test`: the three marker checks and
+`cwv_slot_extension_scoped` must move off FAIL, issue 579 and issue 719 must
+report XFAIL, and the summary must carry a non-zero xfail count.
+
 ## 0.1.489-dev (2026-08-04) -- per-wearer re-wield coalescer + mid-destroy guard (#1145) [untested]
 
 - Client CTD fix. CWV re-wields a remote wearer's husk from two independent

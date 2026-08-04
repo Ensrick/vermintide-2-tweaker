@@ -430,10 +430,13 @@ mod:hook_safe(InteractionDefinitions.chest.server, "stop", function(world, inter
 end)
 
 mod._gt_rt_register("issue347_closed_chest_pickup_diagnostics", function()
+    -- Runner contract: nil == PASS, a reason string == FAIL (issue #1153).
     local ok = _gt347_core.MAX_RECORDS == 16
         and _gt347_core.MAX_CLASSIFICATIONS == 32
         and type(_gt347_probe_available) == "function"
-    return ok, ok and "bounded availability/nav/loot/consume trace wired" or "closed-chest trace wiring incomplete"
+    if not ok then
+        return "closed-chest trace wiring incomplete"
+    end
 end)
 
 local function _gt_clear_reserved_mule_claims(bot_ai_data)

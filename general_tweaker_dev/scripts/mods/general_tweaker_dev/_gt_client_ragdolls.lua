@@ -219,11 +219,21 @@ end) -- hook-test: issue332_client_ragdoll_retention
 
 if type(mod._gt_rt_register) == "function" then
     mod._gt_rt_register("issue332_client_ragdoll_retention", function()
-        return mod._gt332_should_capture(false, true, 24,
-                true, true, false, true, false)
-            and not mod._gt332_should_capture(true, true, 24,
-                true, true, false, true, false)
-            and not mod._gt332_should_capture(false, false, 24,
-                true, true, false, true, false)
+        -- Runner contract: nil == PASS, a reason string == FAIL (issue #1153).
+        -- The prior body returned the conjunction itself, so a healthy gate
+        -- scored "FAIL -- true" and a broken one scored "FAIL -- false" with no
+        -- indication of which clause gave way.
+        if not mod._gt332_should_capture(false, true, 24,
+                true, true, false, true, false) then
+            return "client dead-AI husk capture refused on the eligible client case"
+        end
+        if mod._gt332_should_capture(true, true, 24,
+                true, true, false, true, false) then
+            return "capture gate opened on the server (host must take the vanilla path)"
+        end
+        if mod._gt332_should_capture(false, false, 24,
+                true, true, false, true, false) then
+            return "capture gate opened for a live (non-dead-AI) unit"
+        end
     end)
 end

@@ -163,11 +163,15 @@ end)
 
 if type(mod._gt_rt_register) == "function" then
     mod._gt_rt_register("issue309_disconnect_grace_diagnostics_armed", function()
+        -- Runner contract: nil == PASS, a reason string == FAIL. Returning the
+        -- boolean `ok` scored a healthy probe as "FAIL -- true" (issue #1153).
         local ok = mod._gt_disconnect_grace_hook_installed == true
             and mod._gt_disconnect_grace_update_registered == true
             and type(mod._gt_disconnect_grace_on_remote_join) == "function"
             and core.MAX_RECORDS == 10
-        return ok, ok and "bounded pre/post/replacement/rejoin trace wired" or "disconnect trace wiring incomplete"
+        if not ok then
+            return "disconnect trace wiring incomplete"
+        end
     end)
 end
 

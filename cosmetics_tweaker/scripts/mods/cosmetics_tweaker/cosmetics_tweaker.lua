@@ -106,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.186-dev"
+local MOD_VERSION = "0.9.187-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -4134,14 +4134,14 @@ if BackendUtils then
                         tostring(template), dispo)
                 end
             end
-            -- [cos:sync] #154: husk cross-character weapon mesh-swap gate. The
-            -- reported failure is an EMPTY husk cache at wield time
-            -- (cache_entry=false) so the swap never fires and the teammate's
-            -- weapon renders wrong. printf so it survives mod-logging-OFF.
+            -- [cos:sync] issue 154 / #1156: husk cross-char weapon mesh-swap gate.
+            -- Failure signal is an EMPTY husk cache at wield (cache_has_entry=false):
+            -- the swap never fires and the teammate's weapon renders wrong. Emits the
+            -- exact [husk-mesh-swap probe] needle via printf so mod-logging-OFF shows it.
             if PROBE then
                 PROBE.emit("cos:sync",
                     "husk_meshgate/" .. tostring(_current_husk_wield.wearer_peer) .. "/" .. tostring(template),
-                    string.format("peer=husk wearer=%s slot=%s template=%s cache_wearer=%s cache_entry=%s entry_kind=%s key=%s decision=%s",
+                    string.format("[husk-mesh-swap probe] peer=husk wearer=%s slot=%s template=%s cache_has_wearer=%s cache_has_entry=%s entry_kind=%s entry_key=%s decision=%s",
                         tostring(_current_husk_wield.wearer_peer), tostring(_current_husk_wield.slot_name),
                         tostring(template), tostring(equips ~= nil), tostring(entry ~= nil),
                         tostring(entry and entry.kind), tostring(entry and entry.armoury_key),
@@ -8557,8 +8557,8 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
     -- wield to a missing unit, not just the rare engine-assert case the
     -- pre-flight was guarding against. Net regression. Reverted — vanilla
     -- runs and pcall is the only catch. The pre-flight remains as a
-    -- LOG-ONLY diagnostic so we can see when we're flying toward a
-    -- potential resource-not-loaded scenario without changing behavior.
+    -- LOG-ONLY diagnostic (always-on printf via _dbg_alert, dedup'd below) so a
+    -- co-op card cannot false-pass with mod logging off - issue 154 / #1156.
     -- v0.9.42-dev (#154): ENRICHED PREFLIGHT PROBE. The old warn read only the
     -- BASE item_data.<field>, but vanilla _wield_slot resolves the unit through
     -- BackendUtils.get_item_units (backend_utils.lua:144-190), which (a) prefers
@@ -8621,7 +8621,7 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
                             -- The unit vanilla WILL actually spawn is missing on
                             -- this peer → real risk (wt force-load gap for husks,
                             -- or a non-wt cross-char weapon nobody preloaded).
-                            _dbg_alert("[husk-wield-wrap] PREFLIGHT WARN wearer=%s career=%s slot=%s field=%s template=%s base=%s(resident=%s) RESOLVED=%s(resident=false) via_skin=%s — vanilla will spawn a NON-resident unit; cross-char weapon force-load (weapon_tweaker's) may have missed this for husks",
+                            _dbg_alert("[husk-wield-wrap] PREFLIGHT WARN wearer=%s career=%s slot=%s field=%s template=%s base=%s(resident=%s) RESOLVED=%s(resident=false, NOT in resource manager) via_skin=%s - vanilla will spawn a NON-resident unit; cross-char weapon force-load (weapon_tweaker's) may have missed this for husks",
                                 tostring(wearer_peer), tostring(career), tostring(slot_name), field,
                                 tostring(item_data.name), tostring(base), tostring(base_resident),
                                 tostring(resolved), tostring(via_skin))

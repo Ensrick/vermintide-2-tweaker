@@ -521,11 +521,18 @@ _rt_register("issue719_imperial_crowbill_remote_identity", function()
 			or surfaces.hot_join_sync ~= true or surfaces.peer_ready ~= true then
 		return "#719 exact identity lifecycle surface coverage is incomplete"
 	end
+	-- GROUND TRUTH (#1156): the authored Crowbill catalog and variant table, never
+	-- the resolver under test and never state the defect itself produces.
 	local model = family.model_for_variant
 		and family.model_for_variant("cwv_es_imperial_crowbill")
 	if not model or type(model.right_hand_unit) ~= "string"
 			or model.right_hand_unit == family.PLACEHOLDER_UNIT then
 		return "#719 Imperial Crowbill model is absent or still resolves to Sienna's donor"
+	end
+	local authored = _find_def("cwv_es_imperial_crowbill")
+	if not authored or authored.base_weapon ~= family.SOURCE_ITEM
+			or authored.right_hand_unit ~= model.right_hand_unit then
+		return "#719 authored variant def lost the Imperial model or its bw_1h_crowbill base"
 	end
 	local payloads = plan({
 		slot_melee = {
@@ -568,7 +575,43 @@ _rt_register("issue719_imperial_crowbill_remote_identity", function()
 	if duplicate then
 		return "#719 duplicate identity scheduled a second husk rebuild"
 	end
-end)
+
+	-- POSTCONDITION 1 (what the player sees): the remote peer must either know
+	-- the exact variant at WIELD time from the vanilla wire alone, or own a
+	-- mechanism that re-applies an identity that lands after the wield. The
+	-- 2026-08-04 co-op session measured the exact identity arriving 41 s late.
+	local career = family.IMPERIAL_DEFAULTS and family.IMPERIAL_DEFAULTS[1]
+	local wield_def = career and type(_om._husk_resolve_display_def) == "function"
+		and _om._husk_resolve_display_def(family.SOURCE_ITEM, career, nil) or nil
+	local rewield = mod._cwv_rewield
+	local late_reapply = type(rewield) == "table"
+		and type(rewield.request_peer_rewield) == "function"
+		and mod._cwv_rewield_update_installed == true
+	if not ((wield_def and wield_def.item_key == "cwv_es_imperial_crowbill") or late_reapply) then
+		return "#719 husk can neither resolve the Imperial Crowbill at wield time nor re-apply a late identity"
+	end
+
+	-- POSTCONDITION 2: neither path renders anything while the AUTHORED mesh is
+	-- inadmissible on a remote peer. A husk admits a non-vanilla mesh only through
+	-- the cwv custom-bundle arm (_om._husk_custom_bundle_unit, donor-material
+	-- gated) or a units/weapons/player/ bounded lease (_om._husk_lease_override).
+	-- A Crowbill model registered in neither keeps the shadowed bw_1h_crowbill
+	-- donor for the whole mission, which is exactly the reported symptom.
+	local inadmissible = {}
+	for _, m in ipairs(family.usable_models and family.usable_models() or {}) do
+		local unit = m.right_hand_unit
+		local bundled = type(_om._husk_custom_bundle_unit) == "function"
+			and _om._husk_custom_bundle_unit(unit) == true
+		local leasable = type(unit) == "string"
+			and unit:find("units/weapons/player/", 1, true) == 1
+		if not (bundled or leasable) then inadmissible[#inadmissible + 1] = m.key end
+	end
+	if #inadmissible > 0 then
+		return "#719 remote husk cannot admit the authored Crowbill mesh for "
+			.. #inadmissible .. " model(s) (" .. table.concat(inadmissible, ", ")
+			.. "): neither a registered cwv custom-bundle unit nor leasable -- the peer keeps the bw_1h_crowbill donor"
+	end
+end, { known_defect = 719 })
 
 _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
     local source_by_target = _om._dual_axes_source_by_skin
@@ -590,37 +633,76 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
     end
 
     for _, target_key in ipairs({ "cwv_es_dual_axes", "cwv_wh_dual_axes" }) do
+        -- GROUND TRUTH (#1156): the authored variant table declares a TWO-HANDLE
+        -- pair, and each generated illusion's mesh is the vanilla cosmetic it was
+        -- cut from. Neither expectation comes from the identity path under test,
+        -- and neither is the already-collapsed value the defect produces.
+        local authored = _find_def(target_key)
+        if not authored or type(authored.right_hand_unit) ~= "string"
+                or type(authored.left_hand_unit) ~= "string" or authored.no_left_hand then
+            return target_key .. " authored def is no longer a two-handle pair"
+        end
         local clones = source_by_target[target_key]
-        local generated_skin = clones and next(clones)
-        local skin = generated_skin and ws.skins[generated_skin]
-        if not skin then return target_key .. " has no generated skin for continuity test" end
-        if type(skin.right_hand_unit) ~= "string" or type(skin.left_hand_unit) ~= "string" then
-            return generated_skin .. " does not preserve both generated hands"
+        if type(clones) ~= "table" then
+            return target_key .. " has no generated illusion family for the continuity test"
+        end
+        -- Every generated skin, not a `next()` sample: one bad clone is the bug.
+        local keys, mesh_of = {}, {}
+        for clone in pairs(clones) do keys[#keys + 1] = clone end
+        table.sort(keys)
+        for _, clone in ipairs(keys) do
+            local skin = ws.skins[clone]
+            if type(skin) ~= "table" or type(skin.right_hand_unit) ~= "string"
+                    or type(skin.left_hand_unit) ~= "string" then
+                return clone .. " does not preserve both generated hands"
+            end
+            local source = ws.skins[clones[clone]]
+            if type(source) ~= "table" or source.right_hand_unit ~= skin.right_hand_unit then
+                return clone .. " drifted from its vanilla source mesh " .. tostring(clones[clone])
+            end
+            mesh_of[clone] = skin.right_hand_unit
+        end
+        -- The player-visible case from the 0.1.408-dev card: DISTINCT right and
+        -- offhand illusions saved on one pair. Pick two clones whose authored
+        -- meshes actually differ, so a pair collapsed onto a single model cannot
+        -- satisfy the assertion by string equality (the pre-#1156 blind spot).
+        local right_skin, left_skin
+        for _, clone in ipairs(keys) do
+            if not right_skin then
+                right_skin = clone
+            elseif mesh_of[clone] ~= mesh_of[right_skin] then
+                left_skin = clone
+                break
+            end
+        end
+        if not left_skin then
+            return target_key .. " family carries fewer than two distinct meshes; per-hand identity is unprovable"
         end
 
-        -- Vanilla has already built spawn_data from the selected skin. The
-        -- copied preview callback may pass skin=nil; info.skin_name is the
-        -- authoritative stored identity and must prevent the def-default swap.
+        -- Preview: each hand keeps the illusion saved for THAT hand. info.skin_name
+        -- is the stored primary identity and must not clobber the exact offhand.
         local info = {
-            skin_name = generated_skin,
+            skin_name = right_skin,
             spawn_data = {
-                { right_hand = true, unit_name = skin.right_hand_unit .. "_3p" },
-                { left_hand = true, unit_name = skin.left_hand_unit .. "_3p" },
+                { right_hand = true, unit_name = mesh_of[right_skin] .. "_3p" },
+                { left_hand = true, unit_name = mesh_of[left_skin] .. "_3p" },
             },
         }
-        apply_preview("dr_dual_wield_axes", target_key .. "_001", nil, info)
-        if info.spawn_data[1].unit_name ~= skin.right_hand_unit .. "_3p"
-                or info.spawn_data[2].unit_name ~= skin.left_hand_unit .. "_3p" then
-            return generated_skin .. " was overwritten by the preview fallback"
+        apply_preview(authored.base_weapon, target_key .. "_001", nil, info)
+        if info.spawn_data[1].unit_name ~= mesh_of[right_skin] .. "_3p"
+                or info.spawn_data[2].unit_name ~= mesh_of[left_skin] .. "_3p" then
+            return target_key .. " preview collapsed the pair onto a single illusion"
         end
 
-        -- The vanilla equipment wire receives n/a. The same-mod semantic channel
-        -- must preserve target variant + generated skin string, from which the
-        -- receiver reconstructs both authored hand units without numeric indexes.
+        -- Wire: the vanilla equipment wire receives n/a, so the same-mod semantic
+        -- channel is the only transport for the pair. It must reconstruct the SAME
+        -- per-hand pair on the receiver; one model for two authored hands is the
+        -- husk collapse the player reports.
         local payloads = plan_identity({
             slot_melee = {
-                item_data = { name = "dr_dual_wield_axes", cwv_key = target_key },
-                skin = generated_skin,
+                item_data = { name = authored.base_weapon, cwv_key = target_key },
+                skin = right_skin,
+                left_skin = left_skin,
             },
             slot_ranged = { item_data = { name = "wh_crossbow" } },
         })
@@ -629,27 +711,31 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
             if candidate.slot == "slot_melee" then payload = candidate end
         end
         if not payload or payload.item_key ~= target_key
-                or payload.base_item_key ~= "dr_dual_wield_axes"
-                or payload.skin_key ~= generated_skin then
-            return generated_skin .. " semantic payload lost variant/base/skin identity"
+                or payload.base_item_key ~= authored.base_weapon
+                or payload.skin_key ~= right_skin then
+            return target_key .. " semantic payload lost variant/base/skin identity"
         end
         local peer_id = "rt579-" .. target_key
         local changed, accepted = accept_identity(peer_id,
             _om.appearance_lifecycle_policy.SCHEMA, payload)
-        local descriptor = resolve_identity(peer_id, "slot_melee", "dr_dual_wield_axes")
-        if changed ~= true or not accepted or not descriptor
-                or descriptor.skin ~= generated_skin
-                or descriptor.right_hand_unit ~= skin.right_hand_unit
-                or descriptor.left_hand_unit ~= skin.left_hand_unit then
-            return generated_skin .. " did not reconstruct both hands from semantic identity"
+        local descriptor = resolve_identity(peer_id, "slot_melee", authored.base_weapon)
+        if changed ~= true or not accepted or not descriptor then
+            return target_key .. " receiver did not reconstruct the pair at all"
         end
-        local def, reason = _om._husk_resolve_display_def("dr_dual_wield_axes",
-            target_key == "cwv_es_dual_axes" and "es_mercenary" or "wh_captain", generated_skin)
+        if descriptor.right_hand_unit ~= mesh_of[right_skin]
+                or descriptor.left_hand_unit ~= mesh_of[left_skin] then
+            return string.format(
+                "%s husk pair collapsed to one model: reconstructed right=%s left=%s, authored right=%s left=%s",
+                target_key, tostring(descriptor.right_hand_unit),
+                tostring(descriptor.left_hand_unit), mesh_of[right_skin], mesh_of[left_skin])
+        end
+        local def, reason = _om._husk_resolve_display_def(authored.base_weapon,
+            target_key == "cwv_es_dual_axes" and "es_mercenary" or "wh_captain", right_skin)
         if not def or def.item_key ~= target_key or reason ~= "skin" then
-            return generated_skin .. " does not resolve to its target on the husk"
+            return right_skin .. " does not resolve to its target on the husk"
         end
     end
-end)
+end, { known_defect = 579 })
 
 _rt_register("issue416_483_transition_generated_skin_identity", function()
     local exact_skin = "cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1"
@@ -1319,8 +1405,11 @@ _rt_register("cwv_itemmasterlist_uses_rawget", function()
     -- catches static-pattern regressions; this catches metatable behavior
     -- changes at runtime).
     --
-    -- 1. Source-pattern: marker constant must be present.
-    if CT_CWV_ITEMMASTERLIST_RAWGET_MARKER_v0_1_333 ~= "cwv-itemmasterlist-rawget-auto-register-all" then
+    -- 1. Source-pattern: marker constant must be present. #1148: the constant is
+    --    a file-scope local in the ENTRY file, so this relocated check reads it
+    --    through the mod-table publication, never as a bare (nil) global.
+    if not (mod._cwv_fix_markers
+            and mod._cwv_fix_markers.iml_rawget == "cwv-itemmasterlist-rawget-auto-register-all") then
         return "ITEMMASTERLIST RAWGET marker absent — was the v0.1.333 fix reverted?"
     end
     -- 2. Runtime-state: rawget on a known-bad key against ItemMasterList must
@@ -1349,8 +1438,9 @@ _rt_register("cwv_networklookup_uses_rawget", function()
     -- check is the belt-and-suspenders companion required by §15 of
     -- PROJECT_STANDARDS.md.
     --
-    -- 1. Source-pattern: marker constant must be present.
-    if CT_CWV_NETWORKLOOKUP_RAWGET_MARKER_v0_1_332 ~= "cwv-networklookup-rawget-hardened-3-sites" then
+    -- 1. Source-pattern: marker constant must be present (#1148 mod-table read).
+    if not (mod._cwv_fix_markers
+            and mod._cwv_fix_markers.nl_rawget == "cwv-networklookup-rawget-hardened-3-sites") then
         return "RAWGET marker absent — was the v0.1.330 three-site RPC hardening reverted?"
     end
     -- 2. Runtime-state: rawget on a known-bad key against the two NL subtables
@@ -1380,8 +1470,9 @@ _rt_register("cwv_slot_extension_scoped", function()
     -- wrong-grip / corrupted-looking first-person weapons. See marker
     -- constant `CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338`.
     --
-    -- 1. Source-pattern: marker constant must be present.
-    if CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 ~= "cwv-slot-extension-scoped-to-cross-slot-variant-careers" then
+    -- 1. Source-pattern: marker constant must be present (#1148 mod-table read).
+    if not (mod._cwv_fix_markers
+            and mod._cwv_fix_markers.slot_extension == "cwv-slot-extension-scoped-to-cross-slot-variant-careers") then
         return "SLOT EXTENSION marker absent — was the v0.1.338 scoping fix reverted?"
     end
     if not _om._slot_extension_log_only then
@@ -1391,7 +1482,11 @@ _rt_register("cwv_slot_extension_scoped", function()
     --    Walk every def, union the `careers` arrays of entries with
     --    `cross_slot = true`. As of v0.1.338 only `cwv_es_musket_old` is
     --    cross-slot, so the expected set is the four Empire careers.
-    local expected = _cwv_collect_cross_slot_careers()
+    --    #1148: the collector is an entry-file local, published on `_om`.
+    if type(_om._collect_cross_slot_careers) ~= "function" then
+        return "cross-slot career collector not published on _om (#1148 scope break)"
+    end
+    local expected = _om._collect_cross_slot_careers()
     local expected_count = 0
     for _ in pairs(expected) do expected_count = expected_count + 1 end
     if expected_count == 0 then

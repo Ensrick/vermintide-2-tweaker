@@ -362,6 +362,9 @@ shipping. Agent publication is headless and opens no interactive window.
   "shipped v0.12.152-dev, please check X" - not "fixed". Repository-only work
   closes after its documented autonomous verification passes without entering
   the live-test queue.
+- [ ] **A FAIL/PASS that contradicts live logs enters through the
+  Lying-instrument class** (`docs/BUG_CLASSES.md` § 85): suspect the check
+  before re-fixing the code.
 - [ ] **If it is still broken, believe them.** Return to STEP 2 with the NEW
   log (they must be on the version you just shipped - re-verify the echoed
   version first). Do not re-defend the previous diagnosis.

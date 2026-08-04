@@ -176,7 +176,8 @@ return function(H, repo_root)
         H.equal(unit.marked, nil)
         H.equal(#prints, 1)
         H.truthy(prints[1]:find("[gt:332] retained client-local corpse", 1, true))
-        H.truthy(registrations.issue332_client_ragdoll_retention())
+        -- Runner contract (#1153 / PROJECT_STANDARDS 5.1d rule 3): nil == PASS.
+        H.equal(registrations.issue332_client_ragdoll_retention(), nil)
     end)
 
     H.test("GT #332 preserves vanilla teardown outside its exact client corpse scope", function()
