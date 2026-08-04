@@ -1,5 +1,40 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.188-dev (2026-08-04) -- appearance census re-keyed to surface x edge cells (#1157) [untested]
+
+- Census data only. `_cos_appearance_census.lua` is inert pure data consumed by
+  the offline QA gate; it is never loaded at runtime, so there is NO cosmetic,
+  LA-bridge, glow, wire, or render behavior change in this release.
+- The census previously declared surfaces and lifecycle edges as two
+  INDEPENDENT vectors, so `la_hat_skin_clones` could read "husk = implemented"
+  and "mission_transition = implemented" simultaneously - a combination that
+  hides the one thing issue 233 actually recorded, namely that persisted
+  pre-equipped state stays absent on an observer until a live change happens.
+  Every (surface, edge) PAIR is now declared: 16 surfaces x 8 edges x 8
+  families = 1024 pairs.
+- Six surfaces the old vocabulary could not name were added, so their gaps are
+  declared rather than invisible: `specials`, `remote_audio`, `hud_panels`,
+  `portraits`, `item_card_2d`, `inventory_tooltip`. `portraits` is honestly
+  unsupported for every family: that surface moved to
+  dynamic_cosmetic_portraits and cosmetics supplies it no descriptor.
+- Conversion was conservative: a pair starts at min(old surface, old edge)
+  state, then any pair with a known open issue or documented doubt is FORCED
+  unsupported with the issue named. Applied here: husk x peer_ready, husk x
+  customize and husk x mission_transition on all eight families (issues 233,
+  738, 1145). The two authored score/lobby one-offs stay implemented where they
+  were earned - `la_hat_skin_clones` score_team and `authored_custom_cosmetics`
+  lobby + score_team via the issue 730 post-visibility replay - but both are
+  forced unsupported at peer_ready, since a peer that becomes ready before the
+  `cos_la_apply` broadcast has no authored key to retain. Glow lobby/score stay
+  unsupported and now name issue 1147 as their tracker.
+- `item_card_2d` is implemented for the two icon-owning families on cited code
+  (`_cos_composite_icons.lua` and the LA icon provider, wired at
+  `cosmetics_tweaker.lua:63` and `:79`), not by default.
+- Result for this mod: 813 of 1024 pairs declared unsupported. That is the
+  enumerated backlog, not a regression - the holes existed before and were
+  simply unnameable. Full list in
+  `docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`.
+
 ## 0.9.187-dev (2026-08-04) -- husk preflight/mesh-gate needles restored to the exact card text (#1156) [untested]
 
 - Instrument repair for the issue 154 family, so a co-op test card cannot

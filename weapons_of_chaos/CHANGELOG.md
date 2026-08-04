@@ -1,5 +1,34 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.53-dev (2026-08-04) - appearance census re-keyed to surface x edge cells (#1157) [untested]
+
+- Census data only. `_woc_appearance_census.lua` is inert pure data consumed by
+  the offline QA gate and never loaded at runtime, so there is NO registration,
+  mesh, transform, audio, icon, or wire behavior change in this release.
+- The census previously declared surfaces and lifecycle edges as two
+  INDEPENDENT vectors. Every (surface, edge) PAIR is now declared: 16 surfaces
+  x 8 edges = 128 pairs for the single `enemy_weapon_relic` family.
+- Three honest downgrades came out of the conversion. `lobby` and `score_team`
+  were previously "implemented" purely because the shared
+  `HeroPreviewer/MenuWorldPreviewer._spawn_item` hook's own comment lists those
+  surfaces - an inference from a sibling surface, which the census truthfulness
+  rule bans; WOC resolves no lobby or score-row wearer identity there and
+  neither surface was separately verified, so both are now unsupported. The
+  husk row is forced unsupported at peer_ready and customize, because
+  `_remote_blightreaper[peer]` is published over the same-mod sideband when the
+  wearer equips and is not republished afterwards. And `mission_transition` is
+  unsupported on every transform-carrying surface, because the issues 712 and
+  613 render-node retention caveat this file already documented is precisely a
+  replay doubt.
+- Six surfaces were added (`specials`, `remote_audio`, `hud_panels`,
+  `portraits`, `item_card_2d`, `inventory_tooltip`). One earned "implemented"
+  from cited code: `item_card_2d`, via the renderer allow-list and resident
+  vanilla fallback in `_woc_inventory_icons.lua:12-17`, wired at
+  `weapons_of_chaos.lua:217` and `:1276`. `remote_audio` is unsupported and
+  names issue 747 as its open cross-mod tracker.
+- Result: 81 of 128 pairs declared unsupported. Full list in
+  `docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`.
+
 ## v0.1.52-dev (2026-08-02) - [WOC:LOAD] banner + honest #642 residency + #615 material reconcile [diag]
 
 - Added the canonical log-provable load banner: `[WOC:LOAD] v<version> enabled

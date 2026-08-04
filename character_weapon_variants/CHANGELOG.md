@@ -1,5 +1,40 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.491-dev (2026-08-04) -- appearance census re-keyed to surface x edge cells (#1157) [untested]
+
+- Census data only. `_cwv_appearance_census.lua` is inert pure data consumed by
+  the offline QA gate; nothing in it is loaded at runtime, so there is NO
+  gameplay, registration, wire, render, or animation behavior change in this
+  release.
+- The census previously declared surfaces and lifecycle edges as two
+  INDEPENDENT vectors, so "husk = implemented" and "mission_transition =
+  unsupported" could coexist with no way to state the thing that actually
+  breaks: husk AT mission transition. That is the recurring failure class
+  behind issues 914, 476 and 738. Every (surface, edge) PAIR is now declared
+  individually - 16 surfaces x 8 edges x 21 families = 2688 pairs.
+- Six surfaces the old vocabulary could not name at all were added, so their
+  gaps are now declared instead of invisible: `specials`, `remote_audio`,
+  `hud_panels`, `portraits`, `item_card_2d`, `inventory_tooltip`.
+- Conversion was conservative: a pair starts at min(old surface, old edge)
+  state, then any pair with a known open issue or documented doubt is FORCED
+  unsupported with that issue named. Applied to CWV: husk x peer_ready, husk x
+  customize and husk x mission_transition on every family; lobby and score_team
+  on every family except crowbill; and `imperial_longsword` x customize on all
+  six owner-side surfaces, because issues 657, 786 and 692 show Combat Style
+  model/template replay is not part of the generic appearance lifecycle.
+- Two of the new surfaces earned an "implemented" from cited code rather than
+  from a default: crowbill `specials` (the pick/hammer face is a weapon-special
+  toggle at `_cwv_crowbill_family.lua:39` driving the 9-surface rotation owner
+  in `_cwv_crowbill_presentation.lua:13-23`) and dual_axes `item_card_2d` (the
+  private paired-axe atlas in `_cwv_inventory_icons.lua`, wired at
+  `character_weapon_variants.lua:66`). Crowbill's remote-facing pairs are still
+  forced unsupported at peer_ready, because issue 719 recorded a client
+  resolving the wrong variant - a disproof, not merely a gap.
+- Result for this mod: 2052 of 2688 pairs declared unsupported. That number is
+  the enumerated backlog, not a regression - the holes existed before and were
+  simply unnameable. Full list in
+  `docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`.
+
 ## 0.1.490-dev (2026-08-04) -- regression-instrument repair (#1148 #1156) [untested]
 
 - Instruments only. No gameplay, registration, wire, render, or animation

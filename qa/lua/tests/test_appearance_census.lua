@@ -1,23 +1,22 @@
 return function(H, repo_root)
 	local D = dofile(repo_root .. "/tools/shared_lib/_lib_appearance_descriptor.lua")
 
-	-- The four mods that override weapon/cosmetic appearance. Each must ship
-	-- a pure-data census file declaring, for EVERY registered family, every
-	-- acceptance cell (implemented | unsupported) and lifecycle edge - the
-	-- W0 gate of docs/APPEARANCE_UNIFICATION_PLAN.md. An unsupported cell
-	-- must carry a fallback note (why it is safe / which issue tracks it).
-	local CENSUS_FILES = {
-		character_weapon_variants = "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_appearance_census.lua",
-		cosmetics_tweaker = "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_appearance_census.lua",
-		weapon_tweaker = "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_appearance_census.lua",
-		weapons_of_chaos = "weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_appearance_census.lua",
-	}
+	-- The mods that override weapon/cosmetic appearance. Each must ship a
+	-- pure-data census file declaring, for EVERY registered family, EVERY
+	-- (surface, edge) PAIR as implemented or unsupported - the W0 gate of
+	-- docs/APPEARANCE_UNIFICATION_PLAN.md, re-keyed from two independent
+	-- vectors to the full matrix on 2026-08-04 (#1157). Every unsupported
+	-- pair carries a fallback note (why it is safe / which issue tracks it).
+	-- The registry is owned by the descriptor library so this gate and the gap
+	-- report generator can never disagree about coverage.
+	local CENSUS_FILES = {}
+	for _, entry in ipairs(D.CENSUS_FILES) do CENSUS_FILES[entry.mod] = entry.path end
 
 	-- Bootstrap allowlist: mods whose retroactive census has not landed yet.
 	-- Every entry here is DEBT - remove the entry in the same change that
 	-- adds the mod's census file. Do NOT add new entries: a new appearance
-	-- mod must ship its census from day one. (All four retroactive censuses
-	-- landed 2026-07-18; the list is empty and must stay that way.)
+	-- mod must ship its census from day one. (All retroactive censuses landed
+	-- 2026-07-18; the list is empty and must stay that way.)
 	local PENDING_CENSUS = {}
 
 	local function file_exists(path)
@@ -26,56 +25,32 @@ return function(H, repo_root)
 		return false
 	end
 
-	local CELL_SET, EDGE_SET = {}, {}
-	for _, c in ipairs(D.CELLS) do CELL_SET[c] = true end
-	for _, e in ipairs(D.EDGES) do EDGE_SET[e] = true end
-
 	local function validate_census(mod_name, census)
 		local errors = {}
 		if type(census) ~= "table" or type(census.families) ~= "table" then
 			return { mod_name .. ": census must return { families = { ... } }" }
 		end
+		if census.schema_version ~= D.CENSUS_SCHEMA_VERSION then
+			errors[#errors + 1] = mod_name .. ": census schema_version must be "
+				.. tostring(D.CENSUS_SCHEMA_VERSION) .. " (surface x edge matrix, #1157)"
+		end
 		local family_count = 0
 		for family, decl in pairs(census.families) do
 			family_count = family_count + 1
 			local prefix = mod_name .. "." .. tostring(family)
-			if type(decl) ~= "table" or type(decl.cells) ~= "table" then
-				errors[#errors + 1] = prefix .. ": missing cells table"
+			if type(decl) ~= "table" then
+				errors[#errors + 1] = prefix .. ": family declaration must be a table"
+			elseif decl.cells ~= nil or decl.edges ~= nil then
+				-- The pre-#1157 form declared surfaces and edges as independent
+				-- vectors, which cannot express "husk AT mission transition".
+				-- Reject it outright rather than infer a matrix from it.
+				errors[#errors + 1] = prefix
+					.. ": legacy cells/edges vectors are no longer accepted - declare a matrix (#1157)"
+			elseif type(decl.matrix) ~= "table" then
+				errors[#errors + 1] = prefix .. ": missing matrix table"
 			else
-				for _, cell in ipairs(D.CELLS) do
-					local v = decl.cells[cell]
-					if v ~= "implemented" and v ~= "unsupported" then
-						errors[#errors + 1] = prefix .. ": cell '" .. cell
-							.. "' must be declared implemented or unsupported"
-					elseif v == "unsupported" then
-						local note = decl.unsupported_fallback and decl.unsupported_fallback[cell]
-						if type(note) ~= "string" or #note == 0 then
-							errors[#errors + 1] = prefix .. ": unsupported cell '" .. cell
-								.. "' needs an unsupported_fallback note"
-						end
-					end
-				end
-				for cell in pairs(decl.cells) do
-					if not CELL_SET[cell] then
-						errors[#errors + 1] = prefix .. ": unknown cell '" .. tostring(cell) .. "'"
-					end
-				end
-			end
-			if type(decl.edges) ~= "table" then
-				errors[#errors + 1] = prefix .. ": missing edges table"
-			else
-				for _, edge in ipairs(D.EDGES) do
-					local v = decl.edges[edge]
-					if v ~= "implemented" and v ~= "unsupported" then
-						errors[#errors + 1] = prefix .. ": edge '" .. edge
-							.. "' must be declared implemented or unsupported"
-					end
-				end
-				for edge in pairs(decl.edges) do
-					if not EDGE_SET[edge] then
-						errors[#errors + 1] = prefix .. ": unknown edge '" .. tostring(edge) .. "'"
-					end
-				end
+				local _, matrix_errors = D.expand_matrix(decl.matrix, prefix .. ".matrix")
+				for _, e in ipairs(matrix_errors) do errors[#errors + 1] = e end
 			end
 		end
 		if family_count == 0 then
@@ -95,7 +70,7 @@ return function(H, repo_root)
 		end
 	end)
 
-	H.test("landed appearance censuses declare every cell and edge", function()
+	H.test("landed appearance censuses declare every surface x edge pair", function()
 		local validated = 0
 		for mod_name, rel in pairs(CENSUS_FILES) do
 			local path = repo_root .. "/" .. rel
@@ -109,22 +84,98 @@ return function(H, repo_root)
 		H.truthy(validated >= 0)
 	end)
 
+	-- Helper: a complete, minimal matrix every surface row of which is honest.
+	local function full_matrix(default, note)
+		local m = {}
+		for _, surface in ipairs(D.CELLS) do
+			m[surface] = { default = default, note = note }
+		end
+		return m
+	end
+
 	H.test("census self-check rejects a planted incomplete declaration", function()
-		local bad = { families = { planted = {
-			cells = { owner_1p = "implemented" },
-			edges = {},
+		-- Only one surface declared: every other surface row is missing.
+		local bad = { schema_version = D.CENSUS_SCHEMA_VERSION, families = { planted = {
+			matrix = { owner_1p = { default = "implemented" } },
 		} } }
 		local errors = validate_census("planted_mod", bad)
-		H.truthy(#errors >= 10)
+		H.equal(#errors, #D.CELLS - 1)
 
-		local good_cells, good_edges = {}, {}
-		for _, c in ipairs(D.CELLS) do good_cells[c] = "implemented" end
-		for _, e in ipairs(D.EDGES) do good_edges[e] = "implemented" end
-		local ok_census = { families = { planted = { cells = good_cells, edges = good_edges } } }
+		local ok_census = { schema_version = D.CENSUS_SCHEMA_VERSION, families = {
+			planted = { matrix = full_matrix("implemented") },
+		} }
 		H.equal(#validate_census("planted_mod", ok_census), 0)
 
-		good_cells.husk = "unsupported"
-		local missing_note = validate_census("planted_mod", ok_census)
-		H.equal(#missing_note, 1)
+		-- An unsupported row with no note is a hole with no accounting.
+		ok_census.families.planted.matrix.husk = { default = "unsupported" }
+		H.equal(#validate_census("planted_mod", ok_census), #D.EDGES)
+
+		-- A row note covers the whole row; a per-edge note covers one pair.
+		ok_census.families.planted.matrix.husk = {
+			default = "unsupported",
+			note = "degrades to the resident vanilla base weapon",
+		}
+		H.equal(#validate_census("planted_mod", ok_census), 0)
+	end)
+
+	H.test("census self-check rejects an implicit or unresolvable pair", function()
+		local census = { schema_version = D.CENSUS_SCHEMA_VERSION, families = {
+			planted = { matrix = full_matrix("implemented") },
+		} }
+		local matrix = census.families.planted.matrix
+
+		-- A row that omits its default is implicit, not compact.
+		matrix.husk = { edges = { peer_ready = "unsupported" }, note = "n" }
+		local errors = validate_census("planted_mod", census)
+		H.equal(#errors, 1 + #D.EDGES - 1)
+
+		-- Unknown vocabulary must not pass silently in either direction.
+		matrix.husk = { default = "implemented", edges = { not_an_edge = "unsupported" } }
+		H.equal(#validate_census("planted_mod", census), 1)
+		matrix.husk = { default = "implemented" }
+		matrix.not_a_surface = { default = "implemented" }
+		H.equal(#validate_census("planted_mod", census), 1)
+		matrix.not_a_surface = nil
+
+		-- A misspelled state is never coerced to a neighbouring value.
+		matrix.husk = { default = "partially" }
+		local misspelled = validate_census("planted_mod", census)
+		H.equal(#misspelled, 1 + #D.EDGES)
+	end)
+
+	H.test("census self-check rejects the pre-1157 vector declaration", function()
+		local legacy_cells, legacy_edges = {}, {}
+		for _, c in ipairs(D.CELLS) do legacy_cells[c] = "implemented" end
+		for _, e in ipairs(D.EDGES) do legacy_edges[e] = "implemented" end
+		local census = { schema_version = D.CENSUS_SCHEMA_VERSION, families = {
+			planted = { cells = legacy_cells, edges = legacy_edges },
+		} }
+		local errors = validate_census("planted_mod", census)
+		H.equal(#errors, 1)
+		H.truthy(errors[1]:find("legacy cells/edges", 1, true))
+	end)
+
+	H.test("every landed census resolves to a total matrix with noted holes", function()
+		for mod_name, rel in pairs(CENSUS_FILES) do
+			local path = repo_root .. "/" .. rel
+			if file_exists(path) then
+				local census = dofile(path)
+				for family, decl in pairs(census.families) do
+					local matrix, errors = D.expand_matrix(decl.matrix,
+						mod_name .. "." .. family .. ".matrix")
+					H.equal(#errors, 0, table.concat(errors, "\n"))
+					local pairs_seen = 0
+					D.each_pair(matrix, function(surface, edge, state, note)
+						pairs_seen = pairs_seen + 1
+						if state == "unsupported" then
+							H.truthy(type(note) == "string" and #note > 0,
+								mod_name .. "." .. family .. "." .. surface .. "." .. edge)
+						end
+					end)
+					H.equal(pairs_seen, #D.CELLS * #D.EDGES,
+						mod_name .. "." .. family .. " must expand to a total matrix")
+				end
+			end
+		end
 	end)
 end

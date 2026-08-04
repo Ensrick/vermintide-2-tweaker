@@ -11,19 +11,167 @@ local M = {}
 
 M.EVIDENCE_KINDS = { backend_id = true, loadout_snapshot = true, preview_slot = true }
 
--- The acceptance cells every registered family must declare (implemented or
--- unsupported-with-fallback). qa/check_appearance_census.ps1 enforces this
--- list; keep the two in sync via M.CELLS.
+-- The acceptance SURFACES every registered family must declare against every
+-- lifecycle edge. qa/lua/tests/test_appearance_census.lua enforces this list.
+-- M.CELLS keeps its historical name (the surface vector); M.SURFACES is the
+-- clearer alias. A "cell" in the #1157 schema is one (surface, edge) PAIR.
 M.CELLS = {
 	"owner_1p", "owner_3p", "bot", "husk",
 	"inventory_preview", "illusion_browser", "cim_preview",
 	"lobby", "score_team", "hold_tab",
+	-- Added 2026-08-04 (#1157). Six surfaces the vector-era census could not
+	-- name at all, so their gaps were invisible rather than declared.
+	"specials", "remote_audio", "hud_panels", "portraits",
+	"item_card_2d", "inventory_tooltip",
 }
+
+M.SURFACES = M.CELLS
 
 M.EDGES = {
 	"instance_load", "peer_ready", "equip", "customize",
 	"preview_open", "mission_transition", "respawn", "mod_disable_restore",
 }
+
+M.CELL_STATES = { implemented = true, unsupported = true }
+
+M.CENSUS_SCHEMA_VERSION = 2
+
+-- Every mod that overrides weapon/cosmetic appearance, and where its census
+-- lives. Shared by qa/lua/tests/test_appearance_census.lua and by
+-- tools/gen-appearance-gaps so coverage can never drift between the gate and
+-- the report. Order is the report order; `mirror_of` marks a byte-parity clone
+-- whose pairs are the same backlog counted twice.
+M.CENSUS_FILES = {
+	{ mod = "character_weapon_variants",
+	  path = "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_appearance_census.lua" },
+	{ mod = "cosmetics_tweaker",
+	  path = "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_appearance_census.lua" },
+	{ mod = "weapon_tweaker",
+	  path = "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_appearance_census.lua" },
+	{ mod = "weapon_tweaker_dev", mirror_of = "weapon_tweaker",
+	  path = "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_appearance_census.lua" },
+	{ mod = "weapons_of_chaos",
+	  path = "weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_appearance_census.lua" },
+}
+
+local SURFACE_SET, EDGE_SET = {}, {}
+for _, s in ipairs(M.CELLS) do SURFACE_SET[s] = true end
+for _, e in ipairs(M.EDGES) do EDGE_SET[e] = true end
+
+M.SURFACE_SET, M.EDGE_SET = SURFACE_SET, EDGE_SET
+
+-- Surface x edge matrix expansion (#1157).
+--
+-- WHY the matrix. The vector-era census declared surfaces and edges as two
+-- INDEPENDENT lists, so "husk = implemented" and "mission_transition =
+-- unsupported" could coexist with no way to say "husk AT mission transition is
+-- the thing that breaks" - which is the exact recurring failure class (#914,
+-- #233, #692/#786). Declaring the pair removes that blind spot.
+--
+-- AUTHORING FORMAT (compact, one row per surface; expanded here to the full
+-- matrix). A row states its default EXPLICITLY and may override single edges:
+--
+--   matrix = {
+--     husk = {
+--       default = "implemented",
+--       note    = "row-level fallback note, used by any unsupported pair",
+--       edges   = { peer_ready = "unsupported", mission_transition = "unsupported" },
+--       notes   = { peer_ready = "per-edge note; wins over the row note" },
+--     },
+--     ... one row for EVERY entry of M.CELLS ...
+--   }
+--
+-- EXPANSION RULE. state(surface, edge) = row.edges[edge] or row.default, and
+-- note(surface, edge) = row.notes[edge] or row.note. Nothing is implicit: a
+-- missing row, a missing/invalid default, an unknown surface or edge, or an
+-- unsupported pair with no note is an ERROR. The expander never guesses a
+-- state, because a false "implemented" is the failure this gate exists to kill.
+--
+-- Returns (matrix, {}) on success where matrix[surface][edge] = { state=,
+-- note= }, or (nil, errors) with every problem listed.
+function M.expand_matrix(decl, path)
+	path = path or "matrix"
+	local errors = {}
+	if type(decl) ~= "table" then
+		return nil, { path .. " must be a table" }
+	end
+	for surface in pairs(decl) do
+		if not SURFACE_SET[surface] then
+			errors[#errors + 1] = path .. ": unknown surface '" .. tostring(surface) .. "'"
+		end
+	end
+	local out = {}
+	for _, surface in ipairs(M.CELLS) do
+		local row = decl[surface]
+		local prefix = path .. "." .. surface
+		if type(row) ~= "table" then
+			errors[#errors + 1] = prefix .. ": missing surface row (every surface must be declared)"
+		else
+			if not M.CELL_STATES[row.default] then
+				errors[#errors + 1] = prefix
+					.. ".default must be stated explicitly as implemented or unsupported"
+			end
+			local overrides, notes = row.edges, row.notes
+			if overrides ~= nil and type(overrides) ~= "table" then
+				errors[#errors + 1] = prefix .. ".edges must be a table when present"
+				overrides = nil
+			end
+			if notes ~= nil and type(notes) ~= "table" then
+				errors[#errors + 1] = prefix .. ".notes must be a table when present"
+				notes = nil
+			end
+			if overrides then
+				for edge in pairs(overrides) do
+					if not EDGE_SET[edge] then
+						errors[#errors + 1] = prefix .. ".edges: unknown edge '" .. tostring(edge) .. "'"
+					end
+				end
+			end
+			if notes then
+				for edge in pairs(notes) do
+					if not EDGE_SET[edge] then
+						errors[#errors + 1] = prefix .. ".notes: unknown edge '" .. tostring(edge) .. "'"
+					end
+				end
+			end
+			if row.note ~= nil and type(row.note) ~= "string" then
+				errors[#errors + 1] = prefix .. ".note must be a string when present"
+			end
+			local row_out = {}
+			for _, edge in ipairs(M.EDGES) do
+				local state = (overrides and overrides[edge]) or row.default
+				local note = (notes and notes[edge]) or row.note
+				if not M.CELL_STATES[state] then
+					errors[#errors + 1] = prefix .. "." .. edge
+						.. ": unresolved state '" .. tostring(state) .. "'"
+				else
+					if state == "unsupported" and (type(note) ~= "string" or #note == 0) then
+						errors[#errors + 1] = prefix .. "." .. edge
+							.. ": unsupported pair needs a fallback note"
+					end
+					row_out[edge] = { state = state, note = note }
+				end
+			end
+			out[surface] = row_out
+		end
+	end
+	if #errors > 0 then return nil, errors end
+	return out, errors
+end
+
+-- Convenience for report generators: walk the expanded matrix in the canonical
+-- surface-then-edge order so output is deterministic across runs and hosts.
+function M.each_pair(matrix, fn)
+	for _, surface in ipairs(M.CELLS) do
+		local row = matrix[surface]
+		if row then
+			for _, edge in ipairs(M.EDGES) do
+				local pair = row[edge]
+				if pair then fn(surface, edge, pair.state, pair.note) end
+			end
+		end
+	end
+end
 
 local function is_triplet(v)
 	return type(v) == "table" and #v == 3

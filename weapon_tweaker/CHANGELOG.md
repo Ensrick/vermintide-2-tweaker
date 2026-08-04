@@ -1,5 +1,33 @@
 # Weapon Tweaker Changelog
 
+## 0.12.291-beta (2026-08-04) - appearance census re-keyed to surface x edge cells (#1157) [untested]
+
+- Census data only. `_wt_appearance_census.lua` is inert pure data consumed by
+  the offline QA gate and never loaded at runtime, so there is NO availability,
+  animation-remap, mesh-substitution, grip, or scale behavior change here.
+- The census previously declared surfaces and lifecycle edges as two
+  INDEPENDENT vectors, and the combination "husk = implemented" plus
+  "peer_ready = implemented" read as a claim wt has never been able to make: wt
+  owns no appearance replication channel at all. The husk path is each observer
+  re-deriving locally from the wielded item, which holds only when that observer
+  also runs wt with matching toggles and is never replayed on hot-join. Every
+  (surface, edge) PAIR is now declared: 16 surfaces x 8 edges x 4 families =
+  512 pairs, and the ENTIRE husk row is now honestly unsupported.
+- Six surfaces the old vocabulary could not name were added: `specials`,
+  `remote_audio`, `hud_panels`, `portraits`, `item_card_2d`,
+  `inventory_tooltip`. `remote_audio` is unsupported by construction - wt
+  re-keys 3P animation and mesh but never weapon audio, so every peer hears the
+  source weapon's authentic cues.
+- One new surface earned "implemented" from cited code rather than a default:
+  `cross_character_port` owns `hud_panels`, because issue 388's overcharge
+  presentation projects the Deepwood profile onto the receiving career's HUD
+  and screen FX (`weapon_tweaker_backend.lua:54` ->
+  `_wt_overcharge_presentation.lua`).
+- Result for this mod: 393 of 512 pairs declared unsupported. That is the
+  enumerated backlog, not a regression - the holes existed before and the husk
+  row in particular was previously overstated. Full list in
+  `docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`.
+
 ## 0.12.290-beta (2026-08-02) - #420 shared appearance runtime
 
 - Routed ordinary spawn-time and inventory-preview scale/grip transforms through
