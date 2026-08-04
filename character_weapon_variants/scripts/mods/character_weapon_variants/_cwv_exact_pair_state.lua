@@ -100,7 +100,24 @@ function M.install(mod, om)
         applying[inv] = true
         local was_wielded = equipment.wielded_slot == slot_name or inv.wielded_slot == slot_name
         local ok = pcall(inv.add_equipment, inv, slot_name, BASE_ITEM, skin)
-        if ok and was_wielded then ok = pcall(inv.wield, inv, slot_name) end
+        -- #1145: `add_equipment` is the state change and stays synchronous; only
+        -- the re-wield is deferred through the per-wearer coalescer, so this
+        -- arrival edge can no longer stack a wield on top of the identity-arrival
+        -- and la-state pulses landing in the same frame. The drain re-checks the
+        -- husk game object, so a mid-destroy wearer is skipped rather than
+        -- re-entering wield on a dead id. The deferred wield runs outside this
+        -- `applying` bracket by design: it re-enters `apply` only through
+        -- `_exact_pair_on_husk_wield`, which short-circuits on `slot.skin == skin`.
+        local owner_unit = inv.owner_unit or inv._unit
+        if ok and was_wielded then
+            if owner_unit and mod._cwv_rewield then
+                mod._cwv_rewield.request(owner_unit,
+                    "exact-pair:" .. tostring(surface) .. ":" .. slot_name,
+                    function() pcall(inv.wield, inv, slot_name) end)
+            else
+                ok = pcall(inv.wield, inv, slot_name)
+            end
+        end
         applying[inv] = nil
         log_once("apply:" .. tostring(inv) .. ":" .. slot_name .. ":" .. skin .. ":" .. surface,
             "exact-pair apply surface=%s slot=%s skin=%s accepted=%s wielded=%s",

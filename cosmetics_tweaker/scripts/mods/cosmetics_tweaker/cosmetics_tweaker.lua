@@ -90,6 +90,10 @@ mod._cos_husk_identity = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_husk_id
 local OFFHAND_PRELOAD_LIFECYCLE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_preload_lifecycle")
 mod._cos_weapon_pose_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_weapon_pose_policy")
 local WEAPON_POSES = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_weapon_poses")
+-- #1145 (#660 Wave A): per-wearer re-wield coalescer + mid-destroy guard; every
+-- wield pulse this mod initiates routes through it. Rationale in the module
+-- header. On `mod`, not a local: this chunk is near the Lua 200-local ceiling.
+mod._cos_rewield = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_rewield_coalescer")
 -- v0.9.24-dev: UI diagnostic dump harness. No-op at runtime unless the
 -- enable_debug_logging VMF toggle is on. See _ui_dump.lua header for
 -- what gets dumped per window class.
@@ -102,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.185-dev"
+local MOD_VERSION = "0.9.186-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -266,6 +270,10 @@ local _rt_register = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_command_own
         version = MOD_VERSION, local_player_safe = _local_player_safe,
         la_persist = LA_PERSIST, printf = printf,
     })
+
+-- #1145: checks register from the module that owns the guarded code (§2.2a
+-- rule 6), keeping marker and reader in one file (the #1148 scope-loss class).
+mod._cos_rewield.install_checks(mod, _rt_register)
 
 -- ============================================================
 -- Material tinting research (TODO: cloned + recolored cosmetics)
@@ -7254,12 +7262,11 @@ end
 -- per-owner cooldown + a hard try-cap (so a mesh that can't converge -- e.g. an
 -- unresolved get_item_units case -- pulses a few times then stops, no endless
 -- flicker), and a re-entrancy guard for the pulse's own _wield_slot fire.
-local _offhand_reswap_active = false
 local _offhand_reswap_state = setmetatable({}, { __mode = "k" })  -- owner_unit -> { t, key, tries }
 local _OFFHAND_RESWAP_COOLDOWN = 1.5
 local _OFFHAND_RESWAP_MAX_TRIES = 3
 local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
-    if _offhand_reswap_active then return false, "pulse-active" end
+    if mod._cos_rewield.pulsing() then return false, "pulse-active" end
     if not (owner_unit and armoury_key and Unit.alive(owner_unit)) then return false, "owner-not-ready" end
     hand_field = hand_field or "left_hand_unit"
     local la = get_mod("Loremasters-Armoury")
@@ -7294,43 +7301,34 @@ local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
         if st.tries >= _OFFHAND_RESWAP_MAX_TRIES then return false, "try-cap" end
         if (os.clock() - st.t) < _OFFHAND_RESWAP_COOLDOWN then return false, "cooldown" end
     end
-    -- Need an alternate weapon slot to pulse through; end on the ORIGINAL wielded
-    -- slot so nothing the player is holding visibly changes.
     local orig_slot = LA_REPLAY_POLICY.wielded_slot(inv, equipment)
     if not orig_slot then return false, "wielded-slot-missing" end
-    local slots = equipment.slots
-    local pulse_slot
-    if orig_slot == "slot_melee" and slots["slot_ranged"] then
-        pulse_slot = "slot_ranged"
-    elseif orig_slot == "slot_ranged" and slots["slot_melee"] then
-        pulse_slot = "slot_melee"
-    else
-        for sn, sd in pairs(slots) do
-            if sn ~= orig_slot and sd and (sn == "slot_melee" or sn == "slot_ranged") then
-                pulse_slot = sn
-                break
-            end
-        end
-    end
+    local pulse_slot = mod._cos_rewield.alternate_slot(equipment.slots, orig_slot)
     if not pulse_slot then return false, "alternate-slot-missing" end
     local from_mesh = (live and Unit.alive(live)) and _unit_mesh_name(live) or "<none>"
     local tries = (st and st.key == armoury_key) and (st.tries + 1) or 1
     _offhand_reswap_state[owner_unit] = { t = os.clock(), key = armoury_key, tries = tries }
-    _offhand_reswap_active = true
-    local ok1 = pcall(inv.wield, inv, pulse_slot)
-    local ok2 = pcall(inv.wield, inv, orig_slot)
-    _offhand_reswap_active = false
-    mod:info("[cos-la-sync] RE-SWAP tag=%s owner=%s hand=%s armoury=%s try=%d from_mesh=%s -> %s pulse=%s<->%s ok=%s/%s",
-        tostring(tag), tostring(owner_unit), tostring(hand_field), tostring(armoury_key), tries,
-        tostring(from_mesh), tostring(la_unit), tostring(orig_slot), tostring(pulse_slot),
-        tostring(ok1), tostring(ok2))
-    return ok1 and ok2, (ok1 and ok2) and "pulsed" or "wield-failed"
+    -- #1145: the wield pair is DEFERRED through the per-wearer coalescer (one
+    -- pulse per wearer per frame, game-object re-checked at drain) instead of
+    -- firing inline. The re-entrancy flag brackets the DEFERRED wields, which is
+    -- where the re-entrancy actually is.
+    local _, why = mod._cos_rewield.request(owner_unit, "offhand-mesh:" .. tostring(tag), function()
+        local ok1, ok2 = mod._cos_rewield.pulse_now(inv, pulse_slot, orig_slot)
+        mod:info("[cos-la-sync] RE-SWAP tag=%s owner=%s hand=%s armoury=%s try=%d from_mesh=%s -> %s pulse=%s<->%s ok=%s/%s",
+            tostring(tag), tostring(owner_unit), tostring(hand_field), tostring(armoury_key), tries,
+            tostring(from_mesh), tostring(la_unit), tostring(orig_slot), tostring(pulse_slot),
+            tostring(ok1), tostring(ok2))
+    end)
+    -- The pulse has NOT happened yet, so the caller must not treat the mesh as
+    -- repaired this frame; "coalesced" tells _la_reconcile to queue the paint
+    -- re-apply behind the deferred pulse.
+    return false, "coalesced:" .. tostring(why)
 end
 
 -- v0.9.69-dev (#265, LA_SYNC_CORE_AUDIT Slice 1): revert-side primitives.
 -- Attached to `mod` (no new top-level locals; the main chunk is near the Lua
 -- 200-local ceiling) but defined HERE so the closures capture the same
--- upvalues the apply path uses (_la_equips_by_peer, _offhand_reswap_active,
+-- upvalues the apply path uses (_la_equips_by_peer,
 -- _wearer_unit_for_peer, ...).
 
 -- Slot-level re-equip pulse that restores the NATIVE offhand/illusion render
@@ -7342,7 +7340,7 @@ end
 -- regardless of LA variant state, because the target state is vanilla.
 -- Safe contexts only (network recv callback / mod.update), like the caller.
 mod._la_native_pulse = function(owner_unit, tag)
-    if _offhand_reswap_active then return end
+    if mod._cos_rewield.pulsing() then return end
     if not (owner_unit and Unit.alive(owner_unit)) then return end
     local inv = ScriptUnit and ScriptUnit.has_extension and ScriptUnit.has_extension(owner_unit, "inventory_system")
     local equipment = inv and inv._equipment
@@ -7351,29 +7349,18 @@ mod._la_native_pulse = function(owner_unit, tag)
     if st and st.key == "__native__" and (os.clock() - st.t) < _OFFHAND_RESWAP_COOLDOWN then return end
     local orig_slot = LA_REPLAY_POLICY.wielded_slot(inv, equipment)
     if not orig_slot then return end
-    local slots = equipment.slots
-    local pulse_slot
-    if orig_slot == "slot_melee" and slots["slot_ranged"] then
-        pulse_slot = "slot_ranged"
-    elseif orig_slot == "slot_ranged" and slots["slot_melee"] then
-        pulse_slot = "slot_melee"
-    else
-        for sn, sd in pairs(slots) do
-            if sn ~= orig_slot and sd and (sn == "slot_melee" or sn == "slot_ranged") then
-                pulse_slot = sn
-                break
-            end
-        end
-    end
+    local pulse_slot = mod._cos_rewield.alternate_slot(equipment.slots, orig_slot)
     if not pulse_slot then return end
     _offhand_reswap_state[owner_unit] = { t = os.clock(), key = "__native__", tries = 1 }
-    _offhand_reswap_active = true
-    local ok1 = pcall(inv.wield, inv, pulse_slot)
-    local ok2 = pcall(inv.wield, inv, orig_slot)
-    _offhand_reswap_active = false
-    if printf then printf("[la-state] NATIVE-PULSE tag=%s owner=%s pulse=%s<->%s ok=%s/%s",
-        tostring(tag), tostring(owner_unit), tostring(orig_slot), tostring(pulse_slot),
-        tostring(ok1), tostring(ok2)) end
+    -- #1145: same deferral as _ensure_offhand_mesh. Keyed "__native__", this
+    -- pulse does NOT share the per-armoury_key cooldown, so it was free to stack
+    -- on a mesh pulse in the same frame; the coalescer is the shared choke point.
+    mod._cos_rewield.request(owner_unit, "native-pulse:" .. tostring(tag), function()
+        local ok1, ok2 = mod._cos_rewield.pulse_now(inv, pulse_slot, orig_slot)
+        if printf then printf("[la-state] NATIVE-PULSE tag=%s owner=%s pulse=%s<->%s ok=%s/%s",
+            tostring(tag), tostring(owner_unit), tostring(orig_slot), tostring(pulse_slot),
+            tostring(ok1), tostring(ok2)) end
+    end)
 end
 
 -- Re-create the wearer's NATIVE hat attachment after a hat revert. Only
@@ -7503,9 +7490,17 @@ mod._la_reconcile = function(wearer_peer, slot_name, tag, allow_pulse)
             local equipment = inv and inv._equipment
             local matches = mod._la_wielded_item_matches(inv, equipment, slot_name, eq.kind == "illusion")
             if matches then
-                local repaired = _ensure_offhand_mesh(wu, eq.hand_field, eq.armoury_key, tag)
+                local repaired, why = _ensure_offhand_mesh(wu, eq.hand_field, eq.armoury_key, tag)
                 if not applied and repaired then
                     applied = _apply_la_on_unit(wu, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key)
+                elseif type(why) == "string" and why:sub(1, 9) == "coalesced" then
+                    -- #1145: pulse deferred, so the mesh it repairs does not
+                    -- exist yet. Hand the paint re-apply to the pending drain
+                    -- (the same convergence the wield-context branch below uses);
+                    -- without this the deferral silently drops the re-paint.
+                    _la_pending_apply[#_la_pending_apply + 1] = {
+                        wearer_peer, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key, os.clock() + 5,
+                    }
                 end
             end
         elseif applied then
@@ -9300,6 +9295,11 @@ mod._cos_complete_set_rebroadcast_tick = mod._cos_complete_set_rebroadcast.new({
 -- is cheap insurance.
 local _la_bridge_missing_dep_logged = false
 mod.update = function(dt)
+    -- #1145 FIRST: flush at most one deferred wield pulse per wearer, each
+    -- re-gated on a live husk game object. Top-of-frame guarantees a full frame
+    -- between the queuing burst and the pulse, so a husk destroyed in between is
+    -- seen as destroyed and its pulse is dropped.
+    mod._cos_rewield.drain()
 	CUSTOM_HATS.tick(dt)
     -- v0.9.12-dev: pump persistence-restore queue. SimpleInventoryExtension
     -- .extensions_ready queues a Player for restore; tick processes the queue
