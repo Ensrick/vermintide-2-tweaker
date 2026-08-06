@@ -194,7 +194,7 @@ return function(H, repo_root)
 
             -- Derive every literal buff-field overlap from production sources.
             -- Zealot's helper-built patch is covered by the explicit table above.
-            local balance_source = read_all(base .. "career_tweaker_balance.lua")
+            local balance_source = require("crt_source").combined(repo_root)
             local balance_owners = {}
             local current_id
             for line in balance_source:gmatch("[^\r\n]+") do

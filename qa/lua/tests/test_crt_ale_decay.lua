@@ -1,9 +1,5 @@
 return function(H, repo_root)
-    local path = repo_root
-        .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua"
-    local file = assert(io.open(path, "rb"))
-    local source = file:read("*a")
-    file:close()
+    local source = require("crt_source").combined(repo_root)
 
     local function literal_count(text, needle)
         local count, from = 0, 1

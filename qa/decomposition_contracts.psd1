@@ -38,10 +38,10 @@
         }
         @{
             Name = 'career_tweaker_balance'
-            State = 'partial'
+            State = 'complete'
             Entry = 'career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua'
-            CeilingLines = 3889
-            RequiredModules = @('_career_tweaker_balance_hooks.lua', '_crt_foot_knight.lua')
+            CeilingLines = 910
+            RequiredModules = @('_career_tweaker_balance_hooks.lua', '_crt_foot_knight.lua', '_crt_balance_catalog.lua')
         }
         @{
             Name = 'crafting_in_modded_dev'

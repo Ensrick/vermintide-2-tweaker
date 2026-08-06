@@ -169,14 +169,10 @@ return function(H, repo_root)
     end)
 
     H.test("CRT #447 is catalogued and mutexed as a Zealot THP alternative", function()
-        local balance_path = repo_root
-            .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua"
         local main_path = repo_root
             .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua"
-        local f = assert(io.open(balance_path, "rb"))
-        local balance = f:read("*a")
-        f:close()
-        f = assert(io.open(main_path, "rb"))
+        local balance = require("crt_source").combined(repo_root)
+        local f = assert(io.open(main_path, "rb"))
         local main = f:read("*a")
         f:close()
         H.truthy(balance:find("rework_wh_zealot_flagellation = {", 1, true))

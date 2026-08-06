@@ -1,5 +1,13 @@
 # Career Tweaker Changelog
 
+## 0.4.19-beta (2026-08-06) - complete the balance-owner decomposition (#1159, #504, #2)
+
+- Extracted the unchanged `BALANCE_MODS` definitions into two dependency-injected, hook-neutral catalogs below the 2,500-line hard limit. `_crt_balance_catalog.lua` composes their disjoint setting owners and rejects collisions; the entry explicitly supplies its mod, wire policy, stub helpers, and THP floor while retaining hook order, apply/restore transactions, and lifecycle ownership.
+- Reduced the balance entry from 3,888 to 910 gate-measured lines and marked its decomposition contract complete below the 1,500-line standard. The contract now requires the catalogue, hook, and Foot Knight owners.
+- Updated source-contract tests to consume the entry and both catalogs together, preserving every existing runtime assertion without reintroducing monolithic ownership.
+
+**Behavior:** structural-only; settings, defaults, buff data, hook cardinality, network behavior, and persistence are unchanged.
+
 ## 0.4.18-beta (2026-08-02) - refresh Feel Nothing on repeated Holy Fervour (#999)
 
 - Added an opt-in Zealot toggle that makes a second Holy Fervour activation

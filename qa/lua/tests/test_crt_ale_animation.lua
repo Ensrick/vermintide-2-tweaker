@@ -1,9 +1,5 @@
 return function(H, repo_root)
-    local balance_path = repo_root
-        .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua"
-    local file = assert(io.open(balance_path, "rb"))
-    local source = file:read("*a")
-    file:close()
+    local source = require("crt_source").combined(repo_root)
 
     H.test("CRT Ranger ale derives one native scale for a 0.75-second target", function()
         H.truthy(source:find("rework_dr_ranger_ale_one_second_drink = {", 1, true))

@@ -173,7 +173,7 @@ local function register(H, repo_root)
 
     H.test("CRT #776 production uses exact parity, one receiver floor, and native timed sync", function()
         local entry = read("career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua")
-        local balance = read("career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua")
+        local balance = require("crt_source").combined(repo_root)
         local runtime = read("career_tweaker/scripts/mods/career_tweaker/_crt_wire_runtime.lua")
         local hooks = read("career_tweaker/scripts/mods/career_tweaker/_career_tweaker_balance_hooks.lua")
         H.truthy(entry:find("local CRT_RPC_SCHEMA = 2", 1, true))
