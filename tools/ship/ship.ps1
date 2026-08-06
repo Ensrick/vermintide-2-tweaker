@@ -106,6 +106,12 @@ if (-not (Test-Path -LiteralPath $buildOutputNormalizationHelpers -PathType Leaf
 }
 . $buildOutputNormalizationHelpers
 
+$transactionLeaseHelpers = Join-Path $PSScriptRoot 'transaction-lease.ps1'
+if (-not (Test-Path -LiteralPath $transactionLeaseHelpers -PathType Leaf)) {
+    throw "Machine transaction lease helpers not found: $transactionLeaseHelpers"
+}
+. $transactionLeaseHelpers
+
 function Fail {
     param([string]$Message)
     Write-Host ""
@@ -443,97 +449,125 @@ function Invoke-WithShipVmbRc {
     }
 }
 
-# Run one action with VMBLauncher's machine-global ProjectRoot bound to the
-# repository that owns this copy of ship.ps1 (issue #647). Multiple git
-# worktrees share %APPDATA%\VMBLauncher\settings.json; trusting its last GUI
-# value let a ship launched from worktree A build stale source from worktree B.
-# Preserve the file byte-for-byte and restore it in finally on both success and
-# failure. Callers validate the bound identity before invoking `all`.
-function Invoke-WithBoundLauncherProjectRoot {
+# Create one ship-private launcher config from the machine settings after the
+# machine transaction is held. The global settings file is discovery input
+# only: canonical ship never rewrites it, so a hard kill cannot strand a
+# temporary ProjectRoot or race a GUI save (issue #1180).
+function Assert-ShipMachineTransactionOwned {
+    $recordPath = $env:VMBLAUNCHER_TRANSACTION_RECORD_PATH
+    $leaseId = $env:VMBLAUNCHER_TRANSACTION_LEASE_ID
+    if ([string]::IsNullOrWhiteSpace($recordPath) -or
+        [string]::IsNullOrWhiteSpace($leaseId) -or
+        -not (Test-Path -LiteralPath $recordPath -PathType Leaf)) {
+        throw 'Ship-private settings require an authenticated machine transaction record.'
+    }
+    try { $record = [IO.File]::ReadAllText($recordPath, [Text.Encoding]::UTF8) | ConvertFrom-Json }
+    catch { throw "Ship-private settings cannot authenticate the transaction record: $($_.Exception.Message)" }
+    $current = Get-Process -Id $PID
+    try {
+        $startTicks = $current.StartTime.ToUniversalTime().Ticks
+        $sessionId = $current.SessionId
+    }
+    finally { $current.Dispose() }
+    $processTreeJobName = [VmbTransactionProcessTreeGuard]::Ensure()
+    if ("$($record.schema)" -ne '2' -or
+        "$($record.lease_id)" -ne "$leaseId" -or
+        "$($record.owner_pid)" -ne "$PID" -or
+        "$($record.owner_start_utc_ticks)" -ne "$startTicks" -or
+        "$($record.session_id)" -ne "$sessionId" -or
+        "$($record.process_tree_job_name)" -ne "$processTreeJobName") {
+        throw 'Ship-private settings transaction identity does not match its durable owner record.'
+    }
+}
+
+function Remove-StaleShipPrivateLauncherSettings {
+    param([int]$MaximumCandidates = 256)
+
+    Assert-ShipMachineTransactionOwned
+    $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/')
+    $candidates = @(Get-ChildItem -LiteralPath $tempRoot -Filter 'vmblauncher-ship-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTimeUtc |
+        Select-Object -First $MaximumCandidates)
+    foreach ($candidate in $candidates) {
+        if ($candidate.Name -cnotmatch '^vmblauncher-ship-(\d+)-(\d+)-([0-9a-f]{32})\.json$') { continue }
+        $ownerPid = 0
+        $ownerStartTicks = [long]0
+        if (-not [int]::TryParse($matches[1], [ref]$ownerPid) -or
+            -not [long]::TryParse($matches[2], [ref]$ownerStartTicks)) { continue }
+        $exactOwnerLive = $false
+        try {
+            $ownerProcess = Get-Process -Id $ownerPid -ErrorAction Stop
+            try {
+                $exactOwnerLive = ($ownerProcess.StartTime.ToUniversalTime().Ticks -eq $ownerStartTicks)
+            }
+            finally { $ownerProcess.Dispose() }
+        }
+        catch { $exactOwnerLive = $false }
+        if (-not $exactOwnerLive) {
+            Remove-Item -LiteralPath $candidate.FullName -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function New-ShipPrivateLauncherSettings {
     param(
-        [string]$SettingsPath,
-        [string]$ProjectRoot,
-        [scriptblock]$Action,
-        [string]$MutexName = 'Local\Ensrick.VT2Tweaker.VMBLauncher.ProjectRoot'
+        [string]$SourceSettingsPath,
+        [string]$ProjectRoot
     )
 
-    $mutex = New-Object System.Threading.Mutex($false, $MutexName)
-    $hasMutex = $false
+    Assert-ShipMachineTransactionOwned
+    if (-not (Test-Path -LiteralPath $SourceSettingsPath -PathType Leaf)) {
+        throw "VMBLauncher settings not found: $SourceSettingsPath"
+    }
+    Remove-StaleShipPrivateLauncherSettings
+    $sourceText = [System.Text.Encoding]::UTF8.GetString(
+        [System.IO.File]::ReadAllBytes($SourceSettingsPath))
+    if ($sourceText.Length -gt 0 -and $sourceText[0] -eq [char]0xFEFF) {
+        $sourceText = $sourceText.Substring(1)
+    }
+    try { $settings = $sourceText | ConvertFrom-Json }
+    catch { throw "VMBLauncher settings are not valid JSON: $SourceSettingsPath ($($_.Exception.Message))" }
+    if ($null -eq $settings) { throw "VMBLauncher settings decoded to null: $SourceSettingsPath" }
+    $root = [System.IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\', '/')
+    if ($settings.PSObject.Properties.Name -contains 'ProjectRoot') {
+        $settings.ProjectRoot = $root
+    }
+    else {
+        $settings | Add-Member -NotePropertyName ProjectRoot -NotePropertyValue $root
+    }
+    $json = $settings | ConvertTo-Json -Depth 20
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($json)
+    $currentProcess = Get-Process -Id $PID
+    try { $ownerStartTicks = $currentProcess.StartTime.ToUniversalTime().Ticks }
+    finally { $currentProcess.Dispose() }
+    $path = Join-Path ([System.IO.Path]::GetTempPath()) `
+        ("vmblauncher-ship-{0}-{1}-{2}.json" -f $PID, $ownerStartTicks, [guid]::NewGuid().ToString('N'))
+    $stream = New-Object System.IO.FileStream(
+        $path,
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::Write,
+        [System.IO.FileShare]::None,
+        4096,
+        [System.IO.FileOptions]::WriteThrough)
     try {
-        try { $hasMutex = $mutex.WaitOne([System.TimeSpan]::FromSeconds(30)) }
-        catch [System.Threading.AbandonedMutexException] { $hasMutex = $true }
-        if (-not $hasMutex) {
-            throw "Another ship owns the VMBLauncher ProjectRoot binding lock. Wait for it to finish, then retry."
-        }
-
-        if (-not (Test-Path -LiteralPath $SettingsPath)) {
-            throw "VMBLauncher settings not found: $SettingsPath"
-        }
-
-        $originalBytes = [System.IO.File]::ReadAllBytes($SettingsPath)
-        $restoreFailure = $null
-        try {
-            $originalText = [System.Text.Encoding]::UTF8.GetString($originalBytes)
-            # ConvertFrom-Json treats a decoded U+FEFF as payload under some
-            # PowerShell/.NET combinations. Accept the ordinary UTF-8 BOM at
-            # the machine-owned settings boundary, while still restoring the
-            # original bytes exactly after the temporary ProjectRoot binding.
-            if ($originalText.Length -gt 0 -and $originalText[0] -eq [char]0xFEFF) {
-                $originalText = $originalText.Substring(1)
-            }
-            try { $settings = $originalText | ConvertFrom-Json }
-            catch { throw "VMBLauncher settings are not valid JSON: $SettingsPath ($($_.Exception.Message))" }
-
-            if ($null -eq $settings) {
-                throw "VMBLauncher settings decoded to null: $SettingsPath"
-            }
-            if ($settings.PSObject.Properties.Name -contains 'ProjectRoot') {
-                $settings.ProjectRoot = $ProjectRoot
-            }
-            else {
-                $settings | Add-Member -NotePropertyName ProjectRoot -NotePropertyValue $ProjectRoot
-            }
-
-            $boundText = $settings | ConvertTo-Json -Depth 20
-            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-            [System.IO.File]::WriteAllText($SettingsPath, $boundText, $utf8NoBom)
-
-            $roundTrip = ([System.IO.File]::ReadAllText($SettingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json).ProjectRoot
-            $expected = [System.IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\', '/')
-            $actual = if ($roundTrip) { [System.IO.Path]::GetFullPath([string]$roundTrip).TrimEnd('\', '/') } else { '' }
-            if (-not [string]::Equals($actual, $expected, [System.StringComparison]::OrdinalIgnoreCase)) {
-                throw "VMBLauncher ProjectRoot binding failed: expected '$expected', read back '$actual'."
-            }
-
-            & $Action
-        }
-        finally {
-            try {
-                [System.IO.File]::WriteAllBytes($SettingsPath, $originalBytes)
-                $restored = [System.IO.File]::ReadAllBytes($SettingsPath)
-                if ($restored.Length -ne $originalBytes.Length) {
-                    throw "restored byte length $($restored.Length) != original $($originalBytes.Length)"
-                }
-                for ($i = 0; $i -lt $originalBytes.Length; $i++) {
-                    if ($restored[$i] -ne $originalBytes[$i]) {
-                        throw "restored byte mismatch at offset $i"
-                    }
-                }
-            }
-            catch {
-                $restoreFailure = $_.Exception.Message
-            }
-            if ($restoreFailure) {
-                throw "CRITICAL: could not restore VMBLauncher settings exactly after temporary ProjectRoot binding: $restoreFailure"
-            }
-        }
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
     }
-    finally {
-        if ($hasMutex) {
-            try { $mutex.ReleaseMutex() } catch { }
-        }
-        $mutex.Dispose()
+    catch {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+        throw
     }
+    finally { $stream.Dispose() }
+    $roundTrip = ([System.IO.File]::ReadAllText(
+        $path, [System.Text.Encoding]::UTF8) | ConvertFrom-Json).ProjectRoot
+    $actual = if ($roundTrip) {
+        [System.IO.Path]::GetFullPath([string]$roundTrip).TrimEnd('\', '/')
+    } else { '' }
+    if (-not [string]::Equals($actual, $root, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+        throw "Private VMBLauncher ProjectRoot binding failed: expected '$root', read back '$actual'."
+    }
+    return $path
 }
 
 # Pure identity comparison used by the live preflight and offline fixtures.
@@ -1013,7 +1047,7 @@ function Invoke-ShipSelfTest {
     $publisherAssetMutationPos = $pubTxt.IndexOf('Publish-GitHubReleaseAssetsById -Repo $ghRepo')
     Assert ($publisherCapabilityPos -ge 0 -and
         $publisherCapabilityPos -lt $publisherLookupPos -and
-        $publisherCapabilityPos -lt $publisherAssetMutationPos) "launcher 0.5.7 capability probe precedes every GitHub release lookup/mutation"
+        $publisherCapabilityPos -lt $publisherAssetMutationPos) "launcher 0.6.0 machine-transaction and crash-safe ACL capability probe precedes every GitHub release lookup/mutation"
     Assert ($pubTxt -match 'New-GitHubReleaseAssetSnapshots' -and
         $pubTxt -match '-AssetSnapshots \$assetSnapshots') "zip, manifest, and receipt uploads consume immutable byte snapshots"
     Assert ($pubTxt -match 'Get-PublicationCommitSnapshot' -and
@@ -1038,65 +1072,65 @@ function Invoke-ShipSelfTest {
     Assert ($hiddenProbe.ExitCode -eq 0) "no-window process boundary preserves native exit code"
     Assert (($hiddenProbe.Lines -join '') -eq 'ship-hidden-probe') "no-window process boundary captures redirected output"
 
-    # Issue #647: multiple worktrees share one VMBLauncher settings file. The
-    # ship wrapper must bind ProjectRoot only for the launcher window, restore
-    # the original bytes on success/failure, and reject any identity mismatch.
+    # Issues #647/#1180: canonical ship reads shared settings only for launcher
+    # discovery and gives every launcher call one durable private config.
     $bindingDir = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-ship-647-" + [guid]::NewGuid().ToString('N'))
     [System.IO.Directory]::CreateDirectory($bindingDir) | Out-Null
     try {
         $settingsPath = Join-Path $bindingDir 'settings.json'
-        $mutexProbePath = Join-Path $bindingDir 'mutex-probe.ps1'
-        $testMutexName = 'Local\Ensrick.VT2Tweaker.ShipSelfTest.' + [guid]::NewGuid().ToString('N')
         $originalSettings = [string][char]0xFEFF + "{`r`n  `"ProjectRoot`": `"C:\\old-root`",`r`n  `"Sentinel`": `"preserve exactly`"`r`n}`r`n"
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         [System.IO.File]::WriteAllText($settingsPath, $originalSettings, $utf8NoBom)
-        $mutexProbeSource = @'
-param([string]$Name, [string]$Expected)
-$m = New-Object System.Threading.Mutex($false, $Name)
-$got = $false
-try {
-    try { $got = $m.WaitOne(0) }
-    catch [System.Threading.AbandonedMutexException] { $got = $true }
-    $state = if ($got) { 'free' } else { 'busy' }
-    if ($state -ne $Expected) { exit 2 }
-    exit 0
-}
-finally {
-    if ($got) { try { $m.ReleaseMutex() } catch { } }
-    $m.Dispose()
-}
-'@
-        [System.IO.File]::WriteAllText($mutexProbePath, $mutexProbeSource, $utf8NoBom)
         $originalSettingsBytes = [System.IO.File]::ReadAllBytes($settingsPath)
-
-        $seenPath = Join-Path $bindingDir 'seen-root.txt'
-        Invoke-WithBoundLauncherProjectRoot -SettingsPath $settingsPath -ProjectRoot $bindingDir -MutexName $testMutexName -Action {
-            $seenBoundRoot = ([System.IO.File]::ReadAllText($settingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json).ProjectRoot
-            [System.IO.File]::WriteAllText($seenPath, [string]$seenBoundRoot, $utf8NoBom)
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $mutexProbePath -Name $testMutexName -Expected busy
-            if ($LASTEXITCODE -ne 0) { throw 'named ship mutex was not held during the bound action' }
-        }
-        $seenBoundRoot = [System.IO.File]::ReadAllText($seenPath, [System.Text.Encoding]::UTF8)
-        Assert ($seenBoundRoot -eq $bindingDir) "launcher action sees the invoking worktree root (issue #647)"
-        $afterSuccess = [System.IO.File]::ReadAllBytes($settingsPath)
-        Assert (($afterSuccess.Length -eq $originalSettingsBytes.Length) -and
-                (([System.BitConverter]::ToString($afterSuccess)) -eq ([System.BitConverter]::ToString($originalSettingsBytes)))) "global launcher settings restore byte-exactly after success"
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $mutexProbePath -Name $testMutexName -Expected free
-        Assert ($LASTEXITCODE -eq 0) "named ship mutex releases after successful action"
-
-        $threwExpected = $false
+        $privateFixture = $null
+        $settingsFixtureLease = $null
+        $liveTempFixture = $null
+        $unknownTempFixture = $null
         try {
-            Invoke-WithBoundLauncherProjectRoot -SettingsPath $settingsPath -ProjectRoot $bindingDir -MutexName $testMutexName -Action {
-                throw 'fixture action failure'
+            $settingsFixtureLease = Enter-VmbMachineTransactionLease `
+                -Action 'ship-private-settings-selftest' `
+                -ProjectRoot $bindingDir `
+                -MutexName ('Local\Ensrick.VT2Tweaker.ShipPrivateSelfTest.' + [guid]::NewGuid().ToString('N')) `
+                -RecordPath (Join-Path $bindingDir 'transaction.json')
+            $current = Get-Process -Id $PID
+            try { $currentStart = $current.StartTime.ToUniversalTime().Ticks }
+            finally { $current.Dispose() }
+            $liveTempFixture = Join-Path ([IO.Path]::GetTempPath()) `
+                ("vmblauncher-ship-{0}-{1}-{2}.json" -f $PID, $currentStart, [guid]::NewGuid().ToString('N'))
+            $staleTempFixture = Join-Path ([IO.Path]::GetTempPath()) `
+                ("vmblauncher-ship-2147483647-1-{0}.json" -f [guid]::NewGuid().ToString('N'))
+            $unknownTempFixture = Join-Path ([IO.Path]::GetTempPath()) `
+                ("vmblauncher-ship-unknown-{0}.json" -f [guid]::NewGuid().ToString('N'))
+            [IO.File]::WriteAllText($liveTempFixture, '{}')
+            [IO.File]::WriteAllText($staleTempFixture, '{}')
+            [IO.File]::WriteAllText($unknownTempFixture, '{}')
+            $privateFixture = New-ShipPrivateLauncherSettings `
+                -SourceSettingsPath $settingsPath -ProjectRoot $bindingDir
+            $seenBoundRoot = ([System.IO.File]::ReadAllText(
+                $privateFixture, [System.Text.Encoding]::UTF8) | ConvertFrom-Json).ProjectRoot
+            Assert ($seenBoundRoot -eq $bindingDir) "private launcher config binds the invoking worktree root"
+            Assert ($privateFixture -ne $settingsPath) "private launcher config never aliases shared settings"
+            Assert (Test-Path -LiteralPath $liveTempFixture) "private-config cleanup preserves an exact live PID/start owner"
+            Assert (-not (Test-Path -LiteralPath $staleTempFixture)) "private-config cleanup removes an exact stale PID/start owner"
+            Assert (Test-Path -LiteralPath $unknownTempFixture) "private-config cleanup preserves unknown filename schemas"
+        }
+        finally {
+            if ($privateFixture -and (Test-Path -LiteralPath $privateFixture)) {
+                Remove-Item -LiteralPath $privateFixture -Force
+            }
+            if ($liveTempFixture -and (Test-Path -LiteralPath $liveTempFixture)) {
+                Remove-Item -LiteralPath $liveTempFixture -Force
+            }
+            if ($unknownTempFixture -and (Test-Path -LiteralPath $unknownTempFixture)) {
+                Remove-Item -LiteralPath $unknownTempFixture -Force
+            }
+            if ($null -ne $settingsFixtureLease) {
+                Exit-VmbMachineTransactionLease -Lease $settingsFixtureLease
             }
         }
-        catch { $threwExpected = ($_.Exception.Message -match 'fixture action failure') }
-        Assert $threwExpected "bound launcher action propagates its failure"
-        $afterFailure = [System.IO.File]::ReadAllBytes($settingsPath)
-        Assert (($afterFailure.Length -eq $originalSettingsBytes.Length) -and
-                (([System.BitConverter]::ToString($afterFailure)) -eq ([System.BitConverter]::ToString($originalSettingsBytes)))) "global launcher settings restore byte-exactly after failure"
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $mutexProbePath -Name $testMutexName -Expected free
-        Assert ($LASTEXITCODE -eq 0) "named ship mutex releases after failed action"
+        $after = [System.IO.File]::ReadAllBytes($settingsPath)
+        Assert (($after.Length -eq $originalSettingsBytes.Length) -and
+                (([System.BitConverter]::ToString($after)) -eq ([System.BitConverter]::ToString($originalSettingsBytes)))) "canonical ship never changes shared launcher settings bytes"
 
         $identity = Test-ShipIdentityValues 'C:\repo\mod' 'c:\repo\mod' '1.2.3-dev' '1.2.3-dev' 'abc123' 'abc123' '42' '42'
         Assert $identity.Ok "matching root/version/source/id identity passes"
@@ -1243,6 +1277,9 @@ finally {
     Assert ($selfTxt.IndexOf("'build-output-normalization.ps1'") -ge 0) "ship sources the shared build-output normalizer"
     Assert ($selfTxt.IndexOf('BUILD-ONLY COMPLETE') -ge 0) "build-only exits before deploy/upload/release handling"
     $mainDispatchPos = $selfTxt.LastIndexOf('if ($SelfTest) { exit (Invoke-ShipSelfTest) }')
+    $canonicalShipSource = $selfTxt.Substring($mainDispatchPos)
+    Assert ($canonicalShipSource.IndexOf('Invoke-WithBoundLauncherProjectRoot', [System.StringComparison]::Ordinal) -lt 0) "canonical ship never rewrites shared launcher settings"
+    Assert ($canonicalShipSource.IndexOf('New-ShipPrivateLauncherSettings', [System.StringComparison]::Ordinal) -ge 0) "canonical ship creates one durable private launcher config"
     $initialAuthorizationPos = $selfTxt.IndexOf('publicationAuthorization = Get-LivePublicationAuthorization', $mainDispatchPos)
     $cleanBuildPos = $selfTxt.IndexOf("launcherArgs = @('build', `$Mod, '--clean')", $mainDispatchPos)
     $buildNormalizationPos = $selfTxt.IndexOf('buildNormalization = Invoke-BuildOutputNormalization', $mainDispatchPos)
@@ -1318,6 +1355,14 @@ if ($EmergencyPublicationReason) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $modDir   = Join-Path $repoRoot $Mod
 if (-not (Test-Path $modDir)) { Fail "Mod directory not found: $modDir" }
+
+$transactionLease = $null
+$privateLauncherSettings = $null
+try {
+    $transactionLease = Enter-VmbMachineTransactionLease `
+        -Action $(if ($BuildOnly) { 'build-only' } else { 'ship' }) `
+        -Mod $Mod `
+        -ProjectRoot $repoRoot
 
 $cfgPath = Join-Path $modDir 'itemV2.cfg'
 if (-not (Test-Path $cfgPath)) { Fail "itemV2.cfg not found: $cfgPath" }
@@ -1503,12 +1548,12 @@ if (($stableSplitDirs -contains $Mod) -and (Test-Path $promoGate)) {
     }
 }
 
-$launcherSettings = Join-Path $env:APPDATA 'VMBLauncher\settings.json'
-if (-not (Test-Path -LiteralPath $launcherSettings -PathType Leaf)) {
-    Fail "VMBLauncher settings not found: $launcherSettings"
+$globalLauncherSettings = Join-Path $env:APPDATA 'VMBLauncher\settings.json'
+if (-not (Test-Path -LiteralPath $globalLauncherSettings -PathType Leaf)) {
+    Fail "VMBLauncher settings not found: $globalLauncherSettings"
 }
 try {
-    $configuredProjectRoot = Get-ShipConfiguredProjectRoot -SettingsPath $launcherSettings
+    $configuredProjectRoot = Get-ShipConfiguredProjectRoot -SettingsPath $globalLauncherSettings
     $primaryWorktreeRoot = Get-ShipPrimaryWorktreeRoot -RepoRoot $repoRoot
     $launcherResolution = Resolve-ShipLauncherPath `
         -RepoRoot $repoRoot `
@@ -1524,6 +1569,9 @@ try {
 catch {
     Fail $_.Exception.Message
 }
+$privateLauncherSettings = New-ShipPrivateLauncherSettings `
+    -SourceSettingsPath $globalLauncherSettings -ProjectRoot $repoRoot
+$launcherSettings = $privateLauncherSettings
 $launcher = $launcherResolution.Path
 try {
     $launcherCapability = Assert-VmbLauncherPublicationCapability -LauncherPath $launcher
@@ -1600,13 +1648,12 @@ Write-Host ""
 Write-Host "==> VMBLauncher $($launcherArgs -join ' ')" -ForegroundColor Cyan
 # Do NOT pipe the launcher's pipeline output through Select-Object/head -- that
 # trips the PowerShell broken-pipe quirk that reports $LASTEXITCODE = -1 on a
-# clean exit. The wrapper stages validated machine-local tooling, binds the
-# shared ProjectRoot, and validates source identity before allowing it to run.
+# clean exit. The wrapper stages validated machine-local tooling and the
+# ship-private config binds the exact ProjectRoot before source validation.
 try {
     Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
-        Invoke-WithBoundLauncherProjectRoot -SettingsPath $launcherSettings -ProjectRoot $repoRoot -Action {
-            # Ask the launcher which mod it resolved while the temporary binding is
-            # active. Abort before build (therefore before deploy/upload) if root,
+            # Ask the launcher which mod it resolved from the private config.
+            # Abort before build (therefore before deploy/upload) if root,
             # version, source commit, or Workshop identity differs from Step 1.
             $info = Invoke-ShipLauncherNoWindow -FilePath $launcher `
                 -ArgumentList @('info', $Mod, '--no-banner', '--config', $launcherSettings)
@@ -1652,7 +1699,6 @@ try {
             if ($launcherExit -ne 0) {
                 throw "VMBLauncher 'build $Mod' exited $launcherExit (see output above)."
             }
-        }
     }
 }
 catch {
@@ -1721,11 +1767,9 @@ if (-not $isFirstUploadBootstrap) {
     Write-Host "==> VMBLauncher $($deployArgs -join ' ')" -ForegroundColor Cyan
     try {
         Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
-            Invoke-WithBoundLauncherProjectRoot -SettingsPath $launcherSettings -ProjectRoot $repoRoot -Action {
-                $deployRun = Invoke-ShipLauncherNoWindow -FilePath $launcher -ArgumentList $deployArgs -ReplayOutput
-                if ($deployRun.ExitCode -ne 0) {
-                    throw "VMBLauncher 'deploy $Mod' exited $($deployRun.ExitCode) (see output above)."
-                }
+            $deployRun = Invoke-ShipLauncherNoWindow -FilePath $launcher -ArgumentList $deployArgs -ReplayOutput
+            if ($deployRun.ExitCode -ne 0) {
+                throw "VMBLauncher 'deploy $Mod' exited $($deployRun.ExitCode) (see output above)."
             }
         }
     }
@@ -1876,11 +1920,9 @@ Write-Host "==> VMBLauncher $($uploadArgs -join ' ')" -ForegroundColor Cyan
 $uploadFailure = $null
 try {
     Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
-        Invoke-WithBoundLauncherProjectRoot -SettingsPath $launcherSettings -ProjectRoot $repoRoot -Action {
-            $uploadRun = Invoke-ShipLauncherNoWindow -FilePath $launcher -ArgumentList $uploadArgs -ReplayOutput
-            if ($uploadRun.ExitCode -ne 0) {
-                throw "VMBLauncher 'upload $Mod' exited $($uploadRun.ExitCode) (see output above)."
-            }
+        $uploadRun = Invoke-ShipLauncherNoWindow -FilePath $launcher -ArgumentList $uploadArgs -ReplayOutput
+        if ($uploadRun.ExitCode -ne 0) {
+            throw "VMBLauncher 'upload $Mod' exited $($uploadRun.ExitCode) (see output above)."
         }
     }
 }
@@ -2264,3 +2306,15 @@ if (-not $NoClaim) {
 }
 
 exit 0
+}
+finally {
+    if ($privateLauncherSettings -and (Test-Path -LiteralPath $privateLauncherSettings)) {
+        Remove-Item -LiteralPath $privateLauncherSettings -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $privateLauncherSettings) {
+            Write-Warning "Could not remove ship-private launcher settings: $privateLauncherSettings"
+        }
+    }
+    if ($null -ne $transactionLease) {
+        Exit-VmbMachineTransactionLease -Lease $transactionLease
+    }
+}

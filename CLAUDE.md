@@ -276,6 +276,34 @@ build/deploy as an incidental smoke test. A visible launcher window is a tooling
 defect; stop before publication. **Read `PROJECT_STANDARDS.md` section 6.6 and
 the separate VMBLauncher repository's `CLAUDE.md` for the full doctrine.**
 
+Both `ship.ps1 -BuildOnly` and final publication hold one continuous
+`Global\Ensrick.VMBLauncher.Transaction.v1` lease from before the first
+settings/VMB mutation through final parity, deploy, release, upload, Workshop
+verification, card refresh, and claim finalization. Required lock order is
+machine transaction -> GitHub-release mutex -> legacy upload semaphore. The
+publication probe requires VMBLauncher 0.6.0 plus
+`machine-transaction-lease-v1` and `crash-safe-upload-acl-journal-v1`; 0.5.9
+cannot pass. Canonical ship never rewrites shared launcher `settings.json`: it
+reads it once for dependency discovery and passes every launcher child the same
+durable private `--config` bound to the exact worktree.
+
+Mutating descendants inherit the transaction's kill-on-close Windows Job. A
+hard-kill recovery polls the persisted named job's `ActiveProcesses` count,
+closing each temporary query handle immediately; it never treats the Job as a
+zero-process synchronization signal. Normal release
+drains authenticated residue and deletes its authenticated owner record while
+still holding the mutex. Every acquisition recovers any pre-existing durable
+record even if Windows destroyed the crashed sole owner's named object and a
+fresh non-abandoned mutex was created. Never parallel-retry VMB,
+delete transaction/ACL journals, manually reset staging ACLs, or downgrade an
+ambiguous recovery failure. The launcher alone owns the exact journaled and
+legacy-v0.5.9 ACL recovery lanes.
+If abandoned-owner recovery itself fails, the dedicated mutex thread must exit
+without `ReleaseMutex` while a retained kernel handle preserves abandonment;
+never normally release (which normalizes the failure) or leave a live owner
+thread blocked until process exit. Repeated contenders must re-enter the same
+fail-closed recovery gate.
+
 ### Ship doctrine (2026-07-01 canonical)
 
 **The ship decision keys off the MOD_VERSION suffix, nothing else** - not the directory, not Workshop visibility.

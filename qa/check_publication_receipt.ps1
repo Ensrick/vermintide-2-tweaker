@@ -31,25 +31,25 @@ function Assert-PublicationFixture {
 
 $goodCapability = Test-VmbLauncherPublicationCapabilityOutput -Lines @(
     'capability_schema=1',
-    'version=0.5.7',
+    'version=0.6.0',
+    'publication_receipt_schema=3',
+    'capabilities=hosted-publication-receipt-v3,locked-upload-snapshot-v1,git-commit-blob-snapshot-v1,constrained-first-upload-bootstrap-v1,machine-transaction-lease-v1,crash-safe-upload-acl-journal-v1'
+)
+Assert-PublicationFixture $goodCapability.Ok 'accepts launcher 0.6.0 with every publication capability'
+$oldCapability = Test-VmbLauncherPublicationCapabilityOutput -Lines @(
+    'capability_schema=1',
+    'version=0.5.9',
     'publication_receipt_schema=3',
     'capabilities=hosted-publication-receipt-v3,locked-upload-snapshot-v1,git-commit-blob-snapshot-v1,constrained-first-upload-bootstrap-v1'
 )
-Assert-PublicationFixture $goodCapability.Ok 'accepts launcher 0.5.7 with every publication capability'
-$oldCapability = Test-VmbLauncherPublicationCapabilityOutput -Lines @(
-    'capability_schema=1',
-    'version=0.5.6',
-    'publication_receipt_schema=1',
-    'capabilities=hosted-publication-receipt-v1'
-)
-Assert-PublicationFixture (-not $oldCapability.Ok) 'rejects pre-0.5.7 launcher before release mutation'
+Assert-PublicationFixture (-not $oldCapability.Ok) 'rejects launcher 0.5.9 before release mutation even with its complete legacy capability set'
 $partialCapability = Test-VmbLauncherPublicationCapabilityOutput -Lines @(
     'capability_schema=1',
-    'version=0.5.7',
+    'version=0.6.0',
     'publication_receipt_schema=3',
-    'capabilities=hosted-publication-receipt-v3,locked-upload-snapshot-v1'
+    'capabilities=hosted-publication-receipt-v3,locked-upload-snapshot-v1,git-commit-blob-snapshot-v1,constrained-first-upload-bootstrap-v1,machine-transaction-lease-v1'
 )
-Assert-PublicationFixture (-not $partialCapability.Ok) 'rejects launcher with incomplete publication capabilities'
+Assert-PublicationFixture (-not $partialCapability.Ok) 'rejects launcher 0.6.0 without crash-safe ACL recovery capability'
 
 $wocReceiptAsset = Get-WorkshopPublicationReceiptAssetName -Mod 'weapons_of_chaos'
 Assert-PublicationFixture ($wocReceiptAsset -ceq 'publication-receipt-weapons_of_chaos.json') 'WOC receipt coordinate uses canonical lowercase source folder'

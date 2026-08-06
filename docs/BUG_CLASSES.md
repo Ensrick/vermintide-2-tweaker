@@ -2046,24 +2046,27 @@ worktrees share `%APPDATA%\VMBLauncher\settings.json`.
   invoking worktree instead of consuming the already-approved dependency.
 
 ### Fix template
-- At the wrapper boundary, temporarily bind the launcher's ProjectRoot to the
-  repository that owns the invoked ship script. Do not change VMB's build,
-  deploy, or upload semantics.
+- At the wrapper boundary, read shared launcher settings only for approved
+  dependency discovery. Under the machine transaction, create one durable
+  private `--config` whose ProjectRoot is the repository that owns the invoked
+  ship script, and pass that same file to info/build/deploy/upload. Never
+  temporarily rewrite and restore the shared settings file: a hard kill can
+  strand it and a waiting GUI can replay stale bytes.
 - Before invoking the full pipeline, require the launcher-resolved mod folder,
   source `MOD_VERSION`, git commit, and `published_id` to match the invoking
   checkout. Abort before any build/deploy/upload action on a mismatch.
-- Preserve the machine-global settings bytes and restore them in `finally` on
-  success and failure. Hold a named OS mutex across binding, the launcher
-  action, and restoration so concurrent ships cannot swap the root underneath
-  each other.
+- Preserve machine-global settings byte-exactly because canonical ship never
+  writes them. Clean the private file in `finally`; recover only exact stale
+  PID/start filename records under the authenticated machine transaction.
 - Resolve launcher bytes once through a shared approved-candidate policy, pass
   the exact path, provenance source, and approval anchor into every later
   phase, and revalidate that immutable snapshot before reading version
   metadata. Do not reread mutable global settings during the handoff. A direct
   sub-tool may perform the same bounded fallback, but an explicit unapproved
   path or source mismatch must fail closed.
-- Test two distinct worktree roots, every identity field, action failure, mutex
-  cleanup, byte-exact restoration, clean external dependency handoff, invalid
+- Test two distinct worktree roots, every identity field, action failure,
+  byte-exact shared-settings preservation, stale/live private-file cleanup,
+  clean external dependency handoff, invalid
   explicit paths, and provenance mismatch. Issues #647 and #683 own the wrapper
   and cross-phase gates.
 
@@ -3486,3 +3489,60 @@ end
 - Adjacent classes: 32 (destroyed-World use-after-free; the other half of the
   "pcall cannot catch this" family, and the source of the `has_world`-before-
   `:world()` fassert rule).
+
+## 87. Transaction unlocks while mutating process residue survives
+
+**First confirmed:** 2026-08-06 (stranded SDK staging ACLs, issue #1180).
+**Lives in:** wrappers and launchers that serialize only the parent call while
+VMB, Stingray, upload tools, or grandchildren can outlive it.
+
+### Symptoms
+- A second build/upload enters after the first parent exits while a descendant
+  still writes shared project, SDK staging, release, or Workshop state.
+- `sample_item` or `content` retains an explicit same-user DENY after launcher
+  death; later staging cannot delete or replace it.
+- A timeout reports no usable owner, or recovery mutates ACLs before the dead
+  owner's process tree is proven gone.
+- An ordinary successful action leaves a helper/grandchild that overlaps the
+  next transaction.
+
+### Fix template
+- Use one machine-global named Mutex held by a dedicated owning thread and a
+  durable schema-versioned owner record containing PID/start, session, action,
+  mod/root, random lease identity, and named process-tree Job identity.
+- Assign the launcher/wrapper to a named kill-on-close Windows Job before the
+  first mutating child can spawn. On abandoned ownership, repeatedly open the
+  exact recorded Job for query, read
+  `JobObjectBasicAccountingInformation.ActiveProcesses`, and close the query
+  handle immediately; zero or `ERROR_FILE_NOT_FOUND` means drained. Do not use
+  `WaitForSingleObject`: an ordinary zero-active Job is not thereby signalled,
+  and retaining a recovery handle can delay the last-handle
+  `KILL_ON_JOB_CLOSE`. Only after bounded accounting proves empty/absent may the
+  owner record be replaced or mutation begin. On
+  normal release, authenticate Job membership, terminate/wait for residue, then
+  authenticate/delete the owner record while still holding the Mutex, then
+  release it. On every acquisition, inspect and recover any prior durable record
+  even when the kernel reports no abandonment (the crashed sole owner's named
+  object may have been destroyed and recreated). PID alone is never kill authority.
+- If abandoned recovery fails, end the dedicated owner thread without
+  `ReleaseMutex` and retain a non-owning kernel handle so a same-process retry
+  receives abandonment again. Do not normalize the Mutex with ordinary
+  disposal, and do not strand a live GUI/PowerShell owner thread until exit.
+- Journal and flush exact original/frozen ACL descriptors before the first DACL
+  mutation. Recovery requires exact SID/session/root/path/file identity and
+  original-or-launcher-owned descriptor state; validate every candidate before
+  any repair. Ambiguity fails closed.
+- Keep user shell actions outside containment only through an allowlisted,
+  canonical full-path breakaway boundary. All mutating tools remain contained.
+- Test prequeued contenders, hard parent death, child+grandchild residue,
+  an ordinarily emptied but still-open Job, ordinary-success residue, PID
+  reuse defense, repeated failed recovery with no owner-thread residue,
+  settings lost updates, PS7 and
+  PS5.1 hosts, and exact legacy ACL recovery using fake processes/directories
+  only. Never invoke real VMB, Stingray, deployment, Steam, or Workshop in the
+  regression suite.
+
+### Related issues
+- #1180 owns the machine transaction, process-tree recovery, settings boundary,
+  and crash-safe ACL journal. #647/#683 own exact worktree/dependency identity;
+  #724 owns reviewed publication provenance.

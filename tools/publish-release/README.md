@@ -31,12 +31,14 @@ revalidates its path/provenance without rereading mutable global settings
 before recording the builder version. Do not hand-author those parameters for
 routine publishing.
 
-Publication requires VMBLauncher 0.5.7 or newer with
+Publication requires VMBLauncher 0.6.0 or newer with
 `hosted-publication-receipt-v3`, `git-commit-blob-snapshot-v1`, and
 `locked-upload-snapshot-v1`, plus
-`constrained-first-upload-bootstrap-v1`. The launcher release must land and be
+`constrained-first-upload-bootstrap-v1`, `machine-transaction-lease-v1`, and
+`crash-safe-upload-acl-journal-v1`. The launcher release must land and be
 installed before this monorepo guard lands. Both `ship.ps1` and this publisher
-probe those capabilities before any GitHub release mutation. Release zip,
+probe the version and all six capabilities before any GitHub release mutation;
+VMBLauncher 0.5.9 cannot pass this boundary. Release zip,
 receipt, and manifest inputs are captured once as immutable bytes; new releases
 remain drafts until those bytes are uploaded, with the manifest last. Before
 mutation, every entry inside each immutable ZIP snapshot is independently
@@ -105,9 +107,9 @@ staged, and uploaded; sibling mods are never rebuilt, restaged, or re-uploaded:
   missing from the base release is dropped with a warning; a full publish restores it.
 - A `-Mods` name not present in `tools/mod-inventory.psd1` fails loudly (typo guard).
 
-Known residual: two concurrent filtered publishes race on `manifest.json` (last clobber wins,
-computed from the manifest each fetched at its own start). The pre-filter behavior had the same
-race across *all* assets; serialize ships if it ever matters.
+Concurrent filtered publishes are serialized by the machine-wide transaction
+and the subordinate GitHub-release mutex. They cannot independently read and
+then clobber the same `manifest.json` snapshot.
 
 ### Degraded release-by-tag endpoint (issue #651)
 
