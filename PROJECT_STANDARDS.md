@@ -1655,6 +1655,13 @@ session's start.
    budget is 8 secondary trees / 12 GiB, enforced by
    `qa/check_worktree_budget.ps1` in Quick QA, pre-commit, full QA, and ship
    preflight.
+5. **QA is invariant to valid nested worktree placement.** Repository scanners
+   MUST discover active mods from `tools/mod-inventory.psd1` (or another named
+   canonical root list), not by recursively treating arbitrary top-level
+   directories as mods. A registered checkout under `.claude/worktrees/` is
+   another workspace, not a pseudo-mod, and must not create duplicate findings
+   or require deletion before exact-master QA. `check_command_collisions.ps1
+   -SelfTest` plants this regression shape under both supported PowerShell hosts.
 
 Cross-ref: §6.5 / §6.6 (ship pipeline + protected-`master` landing), `CLAUDE.md`
 NON-NEGOTIABLES (worktree / VMBLauncher discipline).
