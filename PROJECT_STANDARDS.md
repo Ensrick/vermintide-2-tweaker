@@ -1111,6 +1111,16 @@ from release lookup through carry-forward, immutable snapshot capture, and
 release-ID mutation; removing or narrowing that transaction revives lost
 manifest updates.
 
+**Pinned-card refresh is stream-specific, not load-tag-specific.** A runtime
+tag such as `[wt:LOAD]` may be intentionally shared by public and development
+streams. The post-ship refresher must bind a version rewrite to the exact mod
+directory, Workshop item, and display/stream identity. A shared tag alone is
+ambiguous and fails closed. When a card names the shipped item only as a mirror
+receipt but its runtime anchor explicitly belongs to a sibling stream, only the
+shipped item's manifest may advance; the sibling version remains byte-exact.
+This is the #1102 boundary that prevents one stream's ship from rewriting the
+other stream's test queue.
+
 **Atomic source/root-bundle gate (issue #724).** A PR that changes an active
 mod's runtime source, `itemV2.cfg`, or newest CHANGELOG release identity must
 also change that mod's exact root `.mod_bundle`, identified by the canonical

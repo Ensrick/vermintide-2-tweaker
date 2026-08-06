@@ -231,6 +231,7 @@ function Invoke-SelfTest {
         $inProgressScript = Join-Path $repoRootPath "qa/check_in_progress.ps1"
         $runAllScript = Join-Path $repoRootPath "qa/run_all.ps1"
         $diffWhitespaceScript = Join-Path $repoRootPath "qa/check_diff_whitespace.ps1"
+        $refreshCardsScript = Join-Path $repoRootPath "tools/ship/refresh-cards.ps1"
         foreach ($hostInfo in $hosts) {
             if (Test-Path -LiteralPath $sentinelPath) { Remove-Item -LiteralPath $sentinelPath }
             $zero = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $inProgressScript -ScriptArguments @("-RepoRoot", $fixtureRoot, "-SkipGitDiff")
@@ -264,6 +265,11 @@ function Invoke-SelfTest {
             $diffWhitespace = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $diffWhitespaceScript -ScriptArguments @('-SelfTest')
             if ($diffWhitespace.ExitCode -ne 0 -or $diffWhitespace.Output -notmatch 'SELF-TEST OK') {
                 $failures += "$($hostInfo.Name) diff-whitespace self-test failed (exit $($diffWhitespace.ExitCode))"
+            }
+
+            $refresh = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $refreshCardsScript -ScriptArguments @("-SelfTest")
+            if ($refresh.ExitCode -ne 0 -or $refresh.Output -notmatch '\[refresh-cards -SelfTest\] OK') {
+                $failures += "$($hostInfo.Name) stream-aware card-refresh self-test failed (exit $($refresh.ExitCode))"
             }
         }
     }
