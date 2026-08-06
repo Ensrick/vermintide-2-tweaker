@@ -15,6 +15,7 @@ bug-class-to-detection map.
 .\qa\run_all.ps1 -Quick             # fast blocking checks + Lua 5.1 units
 .\qa\run_all.ps1 -SkipLua           # if luacheck not installed locally
 .\qa\run_all.ps1 -FixStale          # auto-banner stale audit docs
+.\qa\check_diff_whitespace.ps1 -Staged # exact index patch (pre-commit surface)
 ```
 
 Normal Quick and full runs are read-only. `run_all.ps1` fingerprints the exact
@@ -61,6 +62,8 @@ complete gate; `run_all.ps1` is the executable source of truth for both lists.
 - **Before every Workshop upload**: `.\qa\run_all.ps1 -Quick` minimum.
 - **Before every push**: `run_all.ps1` (full).
 - **In CI**: every push and PR (see `.github/workflows/qa.yml`).
+- **Before every commit**: install `tools/install-hooks.ps1`; its first gate is
+  `git diff --cached --check` through `check_diff_whitespace.ps1 -Staged`.
 - **Periodically (weekly)**: with `-FixStale` to banner stale audits.
 - **After either normal command**: require the final `[worktree-purity] OK`;
   mutation is a blocking QA failure even if the individual check passed.

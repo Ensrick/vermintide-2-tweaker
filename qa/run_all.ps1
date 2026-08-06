@@ -217,6 +217,10 @@ Run-Check "check_cfg"                         { & (Join-Path $here "check_cfg.ps
 Run-Check "check_mod_inventory"               { & (Join-Path $here "check_mod_inventory.ps1")               -Quiet:$Quiet }
 Run-Check "check_published_ids"               { & (Join-Path $here "check_published_ids.ps1") }               -Policy 'Blocking'
 Run-Check "check_versions"                    { & (Join-Path $here "check_versions.ps1")                    -Quiet:$Quiet }
+# Issue #1174: cover both ordinary unstaged work and any staged index patch.
+# In hosted PR QA the check also resolves origin/$GITHUB_BASE_REF...HEAD; the
+# workflow invokes that exact range explicitly before this policy-engine pass.
+Run-Check "check_diff_whitespace"             { & (Join-Path $here "check_diff_whitespace.ps1")             -Quiet:$Quiet }
 # Issue #724: runtime/version/config/newest-release deltas must carry the
 # owning mod's exact root bundle in the same diff. This is diff-scoped and
 # blocking; docs/tests-only and bundle-only reconciliation changes pass.

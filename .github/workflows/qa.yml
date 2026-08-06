@@ -92,6 +92,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./qa/check_pr_autoclose.ps1
 
+      - name: Reject pull-request whitespace defects
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: ./qa/check_diff_whitespace.ps1 -Range "origin/${{ github.base_ref }}...HEAD"
+
       - name: run_all.ps1 (full QA gate — the policy engine decides)
         shell: pwsh
         env:
