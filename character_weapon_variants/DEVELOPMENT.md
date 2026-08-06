@@ -14,6 +14,11 @@ explicit engine-surface review:
   `SimpleInventoryExtension.wield` observer and the pre-RPC
   `WeaponUnitExtension._play_3p_anim` substitution. Never register either
   surface a second time; VMF duplicate hooks replace rather than chain.
+- `_cwv_core_templates.lua` owns the shared damage-profile cloner and the
+  Infantry Spear through Outrider Grenade Launcher core template constructors.
+  It receives every engine table it uses through an explicit dependency table,
+  runs those constructors in their original order, and owns no hooks, commands,
+  appearance, parity, or lifecycle behavior.
 - `_cwv_commands_lifecycle.lua` owns diagnostic commands and the final
   `on_game_state_changed`, `on_enabled`, `on_disabled`, and `on_unload`
   callbacks. Appearance replay, dual-weapon package leases, Crowbill state,
@@ -25,6 +30,18 @@ explicit engine-surface review:
 Offline source-contract tests that need the historical composed surface must
 use `qa/lua/cwv_source.lua`. Tests concerned specifically with entry size or
 load order should read the entry file directly.
+
+## Where new code goes
+
+- Put core weapon-template and damage-profile construction for the extracted
+  Infantry Spear-through-Outrider family in `_cwv_core_templates.lua`; inject a
+  new engine dependency explicitly rather than reading an undeclared global.
+- Keep crossbow/preview hooks, appearance/parity logic, and lifecycle callbacks
+  in their existing owners. Do not move them into the core-template owner merely
+  because they consume a template defined there.
+- Preserve the constructor order at the single entry-file install point. Tests
+  that need definitions across owners must use `qa/lua/cwv_source.lua`; only
+  entry-size and module-install-order tests should read the entry directly.
 
 ## Registration and acquisition contract
 

@@ -22,6 +22,7 @@ return function(H, repo_root)
     local entry = read("character_weapon_variants.lua")
     local catalog = read("_cwv_variant_catalog.lua")
     local cross_access = read("_cwv_cross_access.lua")
+    local core_templates = read("_cwv_core_templates.lua")
     local husk = read("_cwv_husk_path.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
@@ -30,17 +31,18 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 11084 = 2026-07-18 OOP W5 husk-path extraction: the 740-line husk
-        -- display/transform/ledger/postcondition `do...end` block moved verbatim
-        -- to _cwv_husk_path.lua (was 11791). The ceiling only ratchets DOWN as
-        -- the ct_dev/cwv decomposition (OOP W5) extracts modules.
-        H.truthy(lines <= 11084, "entry line count exceeded frozen 11084-line baseline")
+        -- 9633 = 2026-08-06 OOP W5 core-template extraction. The shared
+        -- profile cloner and eleven ordered template constructors moved
+        -- byte-for-byte to _cwv_core_templates.lua. This ceiling only ratchets
+        -- DOWN as later CWV decomposition slices land.
+        H.truthy(lines <= 9633, "entry line count exceeded frozen 9633-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
         local modules = {
             "_cwv_variant_catalog",
             "_cwv_cross_access",
+            "_cwv_core_templates",
             "_cwv_husk_path",
             "_cwv_commands_lifecycle",
             "_cwv_regression_identity",
@@ -51,14 +53,69 @@ return function(H, repo_root)
         end
 
         local cross_at = assert(entry:find("_cwv_cross_access", 1, true))
+        local core_at = assert(entry:find("_cwv_core_templates", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
         local render_at = assert(entry:find("_cwv_regression_render", 1, true))
-        H.truthy(cross_at < husk_at)
+        H.truthy(cross_at < core_at)
+        H.truthy(core_at < husk_at)
         H.truthy(husk_at < lifecycle_at)
         H.truthy(lifecycle_at < identity_at)
         H.truthy(identity_at < render_at)
+    end)
+
+    H.test("CWV core-template owner injects once and preserves constructor order", function()
+        H.equal(count_plain(entry, "_cwv_core_templates"), 1)
+        H.equal(count_plain(entry, "CWV_CORE_TEMPLATES_INSTALL_ONCE_v1"), 1)
+        H.equal(count_plain(core_templates, "mod:hook"), 0)
+        H.equal(count_plain(core_templates, "mod:command"), 0)
+        H.equal(count_plain(core_templates, "mod:dofile("), 0)
+        H.equal(count_plain(entry, "local function _clone_damage_profile"), 0)
+        H.equal(count_plain(core_templates, "local _clone_damage_profile"), 1)
+        H.equal(count_plain(core_templates, "_clone_damage_profile = function"), 1)
+        H.truthy(entry:find("}).clone_damage_profile", 1, true))
+
+        local dependencies = {
+            "Weapons", "DamageProfileTemplates", "PowerLevelTemplates",
+            "NetworkLookup", "ItemMasterList", "AttachmentNodeLinking",
+            "Projectiles", "ActionTemplates", "printf",
+        }
+        H.truthy(entry:find("om = _om", 1, true))
+        H.truthy(core_templates:find("local _om = deps.om", 1, true))
+        for _, name in ipairs(dependencies) do
+            H.truthy(entry:find(name .. " = " .. name, 1, true), "entry injects " .. name)
+            H.truthy(core_templates:find("local " .. name .. " = deps." .. name, 1, true),
+                "owner localizes " .. name)
+        end
+
+        local ordered_calls = {
+            "_create_infantry_spear_template()",
+            "_create_imperial_longsword_template()",
+            "_create_imperial_longsword_shield_template()",
+            "_create_elven_sword_shield_template()",
+            "_create_imperial_dual_swords_template()",
+            "_create_cudgel_template()",
+            "_create_sword_and_mace_template()",
+            "_create_shortsword_template()",
+            "_create_maul_template()",
+            "_create_greataxe_template()",
+            "_create_outrider_grenade_launcher_template()",
+        }
+        local cursor = 1
+        for _, call in ipairs(ordered_calls) do
+            local plain = core_templates:find("\n" .. call, cursor, true)
+            local indented = core_templates:find("\n\t" .. call, cursor, true)
+            local at = plain
+            if indented and (not at or indented < at) then at = indented end
+            H.truthy(at, "missing ordered constructor call " .. call)
+            cursor = at + #call
+        end
+
+        local combined = require("cwv_source").combined(repo_root)
+        H.truthy(combined:find("_clone_damage_profile = function", 1, true))
+        H.truthy(combined:find("Created outrider_grenade_launcher_template", 1, true))
+        H.equal(combined:find("_cwv_preview_meshswap_apply", 1, true) ~= nil, true)
     end)
 
     H.test("CWV canonical network animation hooks still have one owner", function()
