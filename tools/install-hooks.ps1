@@ -3,10 +3,10 @@
 # Idempotent installer for the repo's local git pre-commit hook.
 #
 # Writes a small bash shim into `.git/hooks/pre-commit` that delegates to
-# `tools/hooks/pre-commit.ps1`. The PowerShell wrapper runs
-# `qa/run_all.ps1 -Quick -SkipLua` and `tools/mod-lint/lint-mod.ps1` against
-# the working tree on every commit, blocking commits that would have failed
-# the CI QA workflow.
+# `tools/hooks/pre-commit.ps1`. The PowerShell wrapper first checks the exact
+# staged patch for whitespace defects, then runs `qa/run_all.ps1 -Quick
+# -SkipLua` and `tools/mod-lint/lint-mod.ps1` for relevant source changes.
+# It blocks commits that would have failed the CI QA workflow.
 #
 # Re-running this script is a no-op when the hook is already installed.
 # Bypass the hook on a specific commit with `git commit --no-verify` — see

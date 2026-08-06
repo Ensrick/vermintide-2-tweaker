@@ -25,6 +25,7 @@ $ps51Targets = @(
     "qa/check_promotion.ps1",
     "qa/check_mod_inventory.ps1",
     "qa/check_ci_hardening.ps1",
+    "qa/check_diff_whitespace.ps1",
     "qa/run_all.ps1",
     "qa/run_selftests.ps1",
     "tools/ship/ship.ps1",
@@ -229,6 +230,7 @@ function Invoke-SelfTest {
 
         $inProgressScript = Join-Path $repoRootPath "qa/check_in_progress.ps1"
         $runAllScript = Join-Path $repoRootPath "qa/run_all.ps1"
+        $diffWhitespaceScript = Join-Path $repoRootPath "qa/check_diff_whitespace.ps1"
         foreach ($hostInfo in $hosts) {
             if (Test-Path -LiteralPath $sentinelPath) { Remove-Item -LiteralPath $sentinelPath }
             $zero = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $inProgressScript -ScriptArguments @("-RepoRoot", $fixtureRoot, "-SkipGitDiff")
@@ -257,6 +259,11 @@ function Invoke-SelfTest {
             $policy = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $runAllScript -ScriptArguments @("-SelfTest", "-Quiet")
             if ($policy.ExitCode -ne 0 -or $policy.Output -notmatch '\[run_all:selftest\] PASS') {
                 $failures += "$($hostInfo.Name) run_all policy self-test failed (exit $($policy.ExitCode))"
+            }
+
+            $diffWhitespace = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $diffWhitespaceScript -ScriptArguments @('-SelfTest')
+            if ($diffWhitespace.ExitCode -ne 0 -or $diffWhitespace.Output -notmatch 'SELF-TEST OK') {
+                $failures += "$($hostInfo.Name) diff-whitespace self-test failed (exit $($diffWhitespace.ExitCode))"
             }
         }
     }
