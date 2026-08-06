@@ -471,6 +471,11 @@ return function(H, repo_root)
         local f = assert(io.open(source_path, "rb"))
         local source = f:read("*a")
         f:close()
+        local lifecycle_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle.lua"
+        f = assert(io.open(lifecycle_path, "rb"))
+        local lifecycle = f:read("*a")
+        f:close()
         local runtime_path = repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_complete_set_rebroadcast.lua"
         f = assert(io.open(runtime_path, "rb"))
@@ -478,7 +483,7 @@ return function(H, repo_root)
         f:close()
         H.truthy(source:find(
             "LA_REPLAY_POLICY.should_publish_local_on_peer_ready", 1, true))
-        H.truthy(source:find(
+        H.truthy(lifecycle:find(
             "mod._la_self_rebroadcast_pending = true", 1, true))
         H.truthy(source:find(
             "mod._cos_complete_set_rebroadcast_tick()", 1, true))

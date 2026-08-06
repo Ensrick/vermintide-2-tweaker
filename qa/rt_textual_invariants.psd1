@@ -275,7 +275,8 @@
     #    re-opens #282; one bounded process-session ref is released only by
     #    PackageManager.destroy.
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook_safe("StateIngame", "on_exit"'; literal=$true; polarity='absent'; issueRef='#282'; note='BUG_CLASSES 35: no StateIngame callback may manually release the renderer-backed MH donor graph.' }
-    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='teardown_owner=PackageManager.destroy'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#282'; note='BUG_CLASSES 35: transition diagnostics preserve bounded session ownership without mutating package state.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle.lua'; needle='mod:hook_safe("StateIngame", "on_exit"'; literal=$true; polarity='absent'; issueRef='#282'; note='BUG_CLASSES 35: the extracted lifecycle owner adds no StateIngame hook or renderer-backed MH release.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle.lua'; needle='teardown_owner=PackageManager.destroy'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#282'; note='BUG_CLASSES 35: transition diagnostics preserve bounded session ownership without mutating package state.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; needle='manager_package(?:\.|:)unload'; literal=$false; polarity='absent'; issueRef='#282'; note='BUG_CLASSES 35: the MH embed exposes no direct manual unload seam; PackageManager.destroy is the sole release owner.' }
     # -- BUG_CLASSES 35: the force-load reference name must be mod-owned
     #    ("cosmetics_tweaker_mh"), never the shared "global" ref no consumer can

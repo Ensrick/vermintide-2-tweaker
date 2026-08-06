@@ -1,5 +1,27 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.190-dev (2026-08-06) -- mod lifecycle owner extracted (#1159, #504, #2)
+
+### Behavior-neutral extraction
+
+- Moved the existing `on_game_state_changed`, `on_disabled`, and `on_unload`
+  callbacks into the idempotent `_cos_mod_lifecycle.lua` owner at their
+  historical install point.
+- Preserved callback cardinality, callback order, and every existing side-effect
+  sequence. The owner adds no hook, RPC, update loop, persistence write, or new
+  runtime behavior.
+- Added structural and executable boundary coverage and ratcheted the Cosmetics
+  entry ceiling from 9,461 to the measured 9,341 lines.
+
+### Publication metadata
+
+- Advanced the source and descriptor version surfaces to `0.9.190-dev` and
+  rebuilt the tracked root bundle through the canonical hidden BuildOnly path.
+  BuildOnly does not deploy locally or upload to the Workshop.
+
+This structural slice advances #1159/#504 without completing either umbrella
+and does not enter the in-game test queue.
+
 ## 0.9.189-dev (2026-08-06) -- item-grid presentation owner extracted (#1159, #504, #2)
 
 - Moved the existing #377 glow badges, #650 composite item-grid layers, and
