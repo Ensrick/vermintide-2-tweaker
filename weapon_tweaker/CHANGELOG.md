@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.294-beta (2026-08-06) - isolate exact damage-profile handshake generation (#431, #1158)
+
+- Moved the exact damage-profile proof from legacy `wt_peer_parity_present` to
+  `wt_damage_profiles_exact_v1`. The legacy schema-1 presence handler ignores
+  appended proof fields, so sharing its channel could let an older host mark a
+  newer exact peer safe even though the newer peer rejected the old response.
+- Old and exact WT generations now fail closed symmetrically. Matching exact
+  peers retain the same catalog identity, challenge, epoch, replay bounds, and
+  unconditional vanilla-profile sender floor.
+- Added an offline two-generation transport regression proving neither side
+  acknowledges the other and locked beta/dev channel parity.
+
 ## 0.12.293-beta (2026-08-06) - shared peer-parity exact-mode capability (#1158)
 
 - Synchronized the shared peer-parity library with its optional exact catalog,

@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.295-dev (2026-08-06) - isolate exact damage-profile handshake generation (#431, #1158)
+
+- Mirrors beta `0.12.294-beta`: the exact catalog handshake now uses dedicated
+  channel `wt_damage_profiles_exact_v1`, so deployed presence-only schema-1
+  peers cannot acknowledge the newer protocol by ignoring appended fields.
+- The legacy/exact boundary is symmetric and fail-closed; matching exact peers
+  preserve the existing challenge, epoch, replay, and sender-floor behavior.
+
 ## 0.12.294-dev (2026-08-06) - shared peer-parity exact-mode capability (#1158)
 
 - Mirrors beta `0.12.293-beta`: synchronized the optional shared exact-mode
