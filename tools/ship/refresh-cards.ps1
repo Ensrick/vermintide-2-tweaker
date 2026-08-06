@@ -17,8 +17,11 @@
 # Card step text, expected needles, topology, and every other mod's tokens are
 # NEVER touched. When a card's version surfaces do not match the expected
 # patterns exactly (no anchor for the shipped tag, two distinct anchored
-# versions, a version string shared with another mod's anchor, unrecognized
-# manifest syntax), the card is SKIPPED and reported instead of guessed at.
+# versions, a version token on a sibling-attributed line, a version string
+# shared with another mod's anchor, unrecognized manifest syntax), the card is
+# SKIPPED and reported instead of guessed at. The #138 WT card is the canonical
+# sibling-line case: normalize that card through the sanctioned lifecycle path;
+# never weaken stream attribution to make the bulk refresher accept it.
 # The edit is a GraphQL updateIssueComment on the pinned comment in place, so
 # pin state and comment identity survive; it is idempotent (a second run finds
 # every token already current and writes nothing).
@@ -26,7 +29,10 @@
 # Selection: every OPEN issue currently carrying a ready lifecycle label
 # (verify-fix / diagnostics-armed -- the only issues doctrine allows pinned
 # cards on) whose PINNED exact card names the shipped mod's Workshop item id
-# OR carries the shipped mod's exact runtime anchor. Pin state comes from the
+# or carries the shipped mod's exact runtime anchor. When a load tag is shared
+# by multiple streams, the exact mod directory + display/stream identity must
+# attribute the anchor; a same-tag anchor alone can never authorize a version
+# rewrite. Pin state comes from the
 # same paginated GraphQL comment read the CI cardinality guard uses; every
 # list is cursor-paginated (the 30-item default-page bug class of #1129).
 #
@@ -38,6 +44,8 @@
 #   pwsh -File tools\ship\refresh-cards.ps1 -SelfTest
 #   pwsh -File tools\ship\refresh-cards.ps1 -DryRun `
 #       -PublishedId 3716869446 -NewVersion 0.1.485-dev -LoadTag cwv `
+#       -ModDirectory character_weapon_variants `
+#       -StreamIdentity "Career Weapon Variants" `
 #       -NewManifest 1229843190245484744
 #   The -DryRun pass prints every intended per-line edit (- old / + new) and
 #   the per-card verdict (refreshed / current / skipped-unparseable /
@@ -56,6 +64,8 @@ param(
     [string]$PublishedId,
     [string]$NewVersion,
     [string]$LoadTag,
+    [string]$ModDirectory,
+    [string]$StreamIdentity,
     [string]$NewManifest,
     [string]$Repository = 'Ensrick/vermintide-2-tweaker',
     [int]$MaxIssues = 100,
@@ -112,6 +122,75 @@ function Get-VtCardVersionAnchors {
     return $pairs
 }
 
+function Get-VtStreamIdentityPattern {
+    param([string]$Identity)
+    if ([string]::IsNullOrWhiteSpace($Identity)) { return $null }
+    $trimmed = $Identity.Trim()
+    if ($trimmed -match '^(.*?)[ \t]+Dev$') {
+        $base = [regex]::Escape($matches[1].Trim())
+        return '(?i)(?<![0-9A-Za-z])' + $base +
+            '[ \t]*(?:Dev|\([ \t]*Dev[ \t]*\))(?![0-9A-Za-z])'
+    }
+
+    $literal = [regex]::Escape($trimmed)
+    # A public identity must not match the prefix of its Dev sibling.
+    return '(?i)(?<![0-9A-Za-z])' + $literal +
+        '(?![0-9A-Za-z]|[ \t]+Dev\b|[ \t]*\([ \t]*Dev\b)'
+}
+
+function Test-VtStreamIdentityPresent {
+    param([string]$Body, [string]$Identity)
+    if ([string]::IsNullOrWhiteSpace($Body)) { return $false }
+    $pattern = Get-VtStreamIdentityPattern -Identity $Identity
+    return [bool]($pattern -and $Body -match $pattern)
+}
+
+function Get-VtMatchRangeDistance {
+    param($Left, $Right)
+    $leftStart = [int]$Left.Index
+    $leftEnd = $leftStart + [int]$Left.Length
+    $rightStart = [int]$Right.Index
+    $rightEnd = $rightStart + [int]$Right.Length
+    if ($leftEnd -le $rightStart) { return $rightStart - $leftEnd }
+    if ($rightEnd -le $leftStart) { return $leftStart - $rightEnd }
+    return 0
+}
+
+function Get-VtCfgStreamIdentity {
+    param([string]$CfgText, [string]$Directory)
+    if ([string]::IsNullOrWhiteSpace($CfgText) -or
+        $CfgText -notmatch 'title[ \t]*=[ \t]*"([^"]+)"') { return $null }
+    $identity = $matches[1] -replace ('[ \t]+v' + $script:VtSemverPattern + '$'), ''
+    if ($Directory -match '_dev$' -and $identity -notmatch '(?i)[ \t]+Dev$') {
+        $identity += ' Dev'
+    }
+    return $identity
+}
+
+function Get-VtStreamInventory {
+    param([string]$RepoRoot)
+    $rows = @()
+    foreach ($directory in Get-ChildItem -LiteralPath $RepoRoot -Directory) {
+        $name = $directory.Name
+        $cfgPath = Join-Path $directory.FullName 'itemV2.cfg'
+        $luaPath = Join-Path $directory.FullName "scripts\mods\$name\$name.lua"
+        if (-not (Test-Path -LiteralPath $cfgPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $luaPath -PathType Leaf)) { continue }
+        $cfg = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+        $lua = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
+        $publishedMatch = [regex]::Match($cfg, 'published_id[ \t]*=[ \t]*(\d+)L')
+        $loadMatch = [regex]::Match($lua, '\[([A-Za-z][A-Za-z0-9_-]*):LOAD\]')
+        if (-not $publishedMatch.Success -or -not $loadMatch.Success) { continue }
+        $rows += [pscustomobject]@{
+            Directory = $name
+            PublishedId = $publishedMatch.Groups[1].Value
+            LoadTag = $loadMatch.Groups[1].Value
+            Identity = Get-VtCfgStreamIdentity -CfgText $cfg -Directory $name
+        }
+    }
+    return $rows
+}
+
 # Pure per-card decision + rewrite. Returns Status:
 #   'not-applicable'  - not an exact card, or names neither the shipped item
 #                       id nor the shipped tag's anchor
@@ -126,7 +205,11 @@ function Get-VtCardRefreshPlan {
         [string]$PublishedId,
         [string]$NewVersion,
         [string]$LoadTag,
-        [string]$NewManifest
+        [string]$NewManifest,
+        [bool]$SharedLoadTag = $false,
+        [string]$StreamIdentity,
+        [string[]]$SiblingPublishedIds = @(),
+        [string[]]$SiblingStreamIdentities = @()
     )
 
     $result = [pscustomobject]@{
@@ -143,6 +226,100 @@ function Get-VtCardRefreshPlan {
     $pidPresent = $false
     if ($pidEsc) { $pidPresent = [bool]($Body -match ('(?<!\d)' + $pidEsc + '(?!\d)')) }
 
+    $ourIdentityPresent = Test-VtStreamIdentityPresent -Body $Body -Identity $StreamIdentity
+    $siblingIdentityPresent = $false
+    foreach ($identity in @($SiblingStreamIdentities)) {
+        if (Test-VtStreamIdentityPresent -Body $Body -Identity $identity) {
+            $siblingIdentityPresent = $true
+            break
+        }
+    }
+    $siblingIdPresent = $false
+    foreach ($siblingId in @($SiblingPublishedIds)) {
+        if ($siblingId -and $Body -match ('(?<!\d)' + [regex]::Escape($siblingId) + '(?!\d)')) {
+            $siblingIdPresent = $true
+            break
+        }
+    }
+
+    $anchorLineOurIdentity = $false
+    $anchorLineSiblingIdentity = $false
+    $itemLineOurIdentity = $false
+    $itemLineSiblingIdentity = $false
+    $lineAttributions = @()
+    $tagEsc = [regex]::Escape($LoadTag)
+    $anchorLinePattern = '(?i)(?:\[' + $tagEsc + ':LOAD\]`?[ \t]*`?v' +
+        $script:VtSemverPattern + '|v' + $script:VtSemverPattern +
+        '`?[ \t]*`?\[' + $tagEsc + ':LOAD\]|\[' + $tagEsc + '\][ \t]+v' +
+        $script:VtSemverPattern + '[ \t]+loaded)'
+    foreach ($line in ($Body -split "`r?`n")) {
+        $ourIdentityPattern = Get-VtStreamIdentityPattern -Identity $StreamIdentity
+        $ourIdentityMatches = @()
+        if ($ourIdentityPattern) {
+            $ourIdentityMatches = @([regex]::Matches($line, $ourIdentityPattern))
+        }
+        $lineHasOurIdentity = $ourIdentityMatches.Count -gt 0
+        $siblingIdentityMatches = @()
+        foreach ($identity in @($SiblingStreamIdentities)) {
+            $identityPattern = Get-VtStreamIdentityPattern -Identity $identity
+            if ($identityPattern) {
+                $siblingIdentityMatches += @([regex]::Matches($line, $identityPattern))
+            }
+        }
+        $lineHasSiblingIdentity = $siblingIdentityMatches.Count -gt 0
+        $lineAnchors = @()
+        foreach ($anchorMatch in @([regex]::Matches($line, $anchorLinePattern))) {
+            $anchorOwnership = 'none'
+            if ($lineHasOurIdentity -and $lineHasSiblingIdentity) {
+                $ourDistance = [int]::MaxValue
+                foreach ($m in $ourIdentityMatches) {
+                    $ourDistance = [Math]::Min($ourDistance,
+                        (Get-VtMatchRangeDistance -Left $m -Right $anchorMatch))
+                }
+                $siblingDistance = [int]::MaxValue
+                foreach ($m in $siblingIdentityMatches) {
+                    $siblingDistance = [Math]::Min($siblingDistance,
+                        (Get-VtMatchRangeDistance -Left $m -Right $anchorMatch))
+                }
+                if ($ourDistance -lt $siblingDistance) { $anchorOwnership = 'owned' }
+                elseif ($siblingDistance -lt $ourDistance) { $anchorOwnership = 'foreign' }
+                else {
+                    $anchorOwnership = 'ambiguous'
+                }
+            }
+            else {
+                if ($lineHasOurIdentity) { $anchorOwnership = 'owned' }
+                elseif ($lineHasSiblingIdentity) { $anchorOwnership = 'foreign' }
+            }
+            if ($anchorOwnership -eq 'owned') { $anchorLineOurIdentity = $true }
+            elseif ($anchorOwnership -eq 'foreign') { $anchorLineSiblingIdentity = $true }
+            elseif ($anchorOwnership -eq 'ambiguous') {
+                $anchorLineOurIdentity = $true
+                $anchorLineSiblingIdentity = $true
+            }
+            $lineAnchors += [pscustomobject]@{
+                Match = $anchorMatch
+                Ownership = $anchorOwnership
+            }
+        }
+        if ($pidEsc -and $line -match ('(?<!\d)' + $pidEsc + '(?!\d)') -and $lineHasOurIdentity) {
+            $itemLineOurIdentity = $true
+        }
+        foreach ($siblingId in @($SiblingPublishedIds)) {
+            if ($siblingId -and $line -match ('(?<!\d)' + [regex]::Escape($siblingId) + '(?!\d)') -and
+                $lineHasSiblingIdentity) {
+                $itemLineSiblingIdentity = $true
+                break
+            }
+        }
+        $lineAttributions += [pscustomobject]@{
+            Line = $line
+            OurIdentityMatches = @($ourIdentityMatches)
+            SiblingIdentityMatches = @($siblingIdentityMatches)
+            Anchors = @($lineAnchors)
+        }
+    }
+
     $anchors = @(Get-VtCardVersionAnchors -Body $Body)
     $ourAnchors = @()
     $otherAnchors = @()
@@ -156,13 +333,63 @@ function Get-VtCardRefreshPlan {
     }
 
     if (-not $pidPresent -and $ourAnchors.Count -eq 0) { return $result }
+
+    $versionOwnership = 'owned'
+    if ($SharedLoadTag) {
+        if ($anchorLineOurIdentity -and -not $anchorLineSiblingIdentity) {
+            $versionOwnership = 'owned'
+        }
+        elseif ($anchorLineSiblingIdentity -and -not $anchorLineOurIdentity) {
+            $versionOwnership = 'foreign'
+        }
+        elseif ($anchorLineOurIdentity -and $anchorLineSiblingIdentity) {
+            $versionOwnership = 'ambiguous'
+        }
+        elseif ($itemLineOurIdentity -and -not $itemLineSiblingIdentity) {
+            $versionOwnership = 'owned'
+        }
+        elseif ($itemLineSiblingIdentity -and -not $itemLineOurIdentity) {
+            $versionOwnership = 'foreign'
+        }
+        elseif ($itemLineOurIdentity -and $itemLineSiblingIdentity) {
+            $versionOwnership = 'ambiguous'
+        }
+        elseif ($ourIdentityPresent -and -not $siblingIdentityPresent) {
+            $versionOwnership = 'owned'
+        }
+        elseif ($siblingIdentityPresent -and -not $ourIdentityPresent) {
+            $versionOwnership = 'foreign'
+        }
+        elseif ($ourIdentityPresent -and $siblingIdentityPresent) {
+            $versionOwnership = 'ambiguous'
+        }
+        elseif ($pidPresent -and -not $siblingIdPresent) {
+            $versionOwnership = 'owned'
+        }
+        elseif ($siblingIdPresent -and -not $pidPresent) {
+            $versionOwnership = 'foreign'
+        }
+        else {
+            $versionOwnership = 'ambiguous'
+        }
+
+        if ($versionOwnership -eq 'foreign' -and -not $pidPresent) { return $result }
+        if ($versionOwnership -eq 'ambiguous') {
+            $result.Status = 'unparseable'
+            $result.Reason = "shared load tag '$LoadTag' has no unique '$StreamIdentity' stream attribution"
+            return $result
+        }
+    }
     if ($pidPresent -and $ourAnchors.Count -gt 0) { $result.MatchedBy = 'item-id+load-tag' }
     elseif ($pidPresent) { $result.MatchedBy = 'item-id' }
     else { $result.MatchedBy = 'load-tag' }
 
     # ---- version surface -------------------------------------------------
     $ourVersions = @($ourAnchors | ForEach-Object { [string]$_.Version } | Select-Object -Unique)
-    if ($ourVersions.Count -eq 0) {
+    if ($versionOwnership -eq 'foreign') {
+        $ourVersions = @()
+    }
+    elseif ($ourVersions.Count -eq 0) {
         $result.Status = 'unparseable'
         $result.Reason = "no exact runtime anchor for load tag '$LoadTag' -- cannot attribute version tokens"
         return $result
@@ -172,9 +399,9 @@ function Get-VtCardRefreshPlan {
         $result.Reason = "load tag '$LoadTag' anchors " + $ourVersions.Count + ' distinct versions (' + ($ourVersions -join ', ') + ')'
         return $result
     }
-    $oldVersion = $ourVersions[0]
+    $oldVersion = if ($ourVersions.Count -eq 1) { $ourVersions[0] } else { $null }
 
-    if ($oldVersion -ne $cleanVersion) {
+    if ($oldVersion -and $oldVersion -ne $cleanVersion) {
         foreach ($pair in $otherAnchors) {
             if ([string]$pair.Version -eq $oldVersion) {
                 $result.Status = 'unparseable'
@@ -182,11 +409,61 @@ function Get-VtCardRefreshPlan {
                 return $result
             }
         }
+        if ($SharedLoadTag) {
+            $oldEsc = [regex]::Escape($oldVersion)
+            $oldToken = '(?<![0-9A-Za-z.-])v?' + $oldEsc +
+                '(?![0-9A-Za-z-])(?!\.[0-9A-Za-z])'
+            foreach ($row in $lineAttributions) {
+                $oldMatches = @([regex]::Matches([string]$row.Line, $oldToken))
+                if ($oldMatches.Count -eq 0 -or $row.SiblingIdentityMatches.Count -eq 0) { continue }
+
+                $ownedTokenCount = 0
+                foreach ($oldMatch in $oldMatches) {
+                    $insideOwnedAnchor = $false
+                    foreach ($anchor in @($row.Anchors)) {
+                        $anchorMatch = $anchor.Match
+                        if ($anchor.Ownership -eq 'owned' -and
+                            $oldMatch.Index -ge $anchorMatch.Index -and
+                            ($oldMatch.Index + $oldMatch.Length) -le
+                                ($anchorMatch.Index + $anchorMatch.Length)) {
+                            $insideOwnedAnchor = $true
+                            break
+                        }
+                    }
+                    if ($insideOwnedAnchor) {
+                        $ownedTokenCount++
+                        continue
+                    }
+
+                    $ourDistance = [int]::MaxValue
+                    foreach ($identityMatch in @($row.OurIdentityMatches)) {
+                        $ourDistance = [Math]::Min($ourDistance,
+                            (Get-VtMatchRangeDistance -Left $identityMatch -Right $oldMatch))
+                    }
+                    $siblingDistance = [int]::MaxValue
+                    foreach ($identityMatch in @($row.SiblingIdentityMatches)) {
+                        $siblingDistance = [Math]::Min($siblingDistance,
+                            (Get-VtMatchRangeDistance -Left $identityMatch -Right $oldMatch))
+                    }
+                    if ($ourDistance -lt $siblingDistance) { $ownedTokenCount++ }
+                }
+
+                # A shared-tag line may mention both streams (the established
+                # #290 warning shape), but every old-version token must still
+                # be exactly attributable to this stream. Any extra token tied
+                # to sibling prose makes the all-card sweep unsafe.
+                if ($ownedTokenCount -ne $oldMatches.Count) {
+                    $result.Status = 'unparseable'
+                    $result.Reason = "version v$oldVersion is also associated with a sibling stream on the same line"
+                    return $result
+                }
+            }
+        }
     }
 
     $newBody = $Body
     $changes = @()
-    if ($oldVersion -ne $cleanVersion -and $cleanVersion) {
+    if ($oldVersion -and $oldVersion -ne $cleanVersion -and $cleanVersion) {
         # Standalone token: no alnum/hyphen may follow, and a following dot
         # only blocks the match when it would EXTEND the version (".2"); a
         # sentence-ending period ("on v0.7.315-dev.") must not shield a token.
@@ -340,6 +617,162 @@ function Invoke-RefreshCardsSelfTest {
     $plan = Get-VtCardRefreshPlan -Body $twoVersions -PublishedId '3733366926' -NewVersion '1.0.2-dev' -LoadTag 'ct'
     Assert ($plan.Status -eq 'unparseable') 'two distinct anchored versions for one tag is skipped'
 
+    $wtDevCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Weapons Dev `v0.12.294-dev`; confirm `[wt:LOAD] v0.12.294-dev`
+**Current WT receipt:** Tweaker: Weapons Dev, Workshop item `3748824853`, manifest `700`.
+**Stream note:** public Tweaker: Weapons prints the same `[wt:LOAD]` prefix; do not enable both.
+**Topology:** Solo
+
+1. Test the dev-only command.
+
+**Expected:** Works on v0.12.294-dev.
+'@
+    $plan = Get-VtCardRefreshPlan -Body $wtDevCard -PublishedId '3712896117' `
+        -NewVersion '0.12.294-beta' -LoadTag 'wt' -NewManifest '800' `
+        -SharedLoadTag $true -StreamIdentity 'Tweaker: Weapons' `
+        -SiblingPublishedIds @('3748824853') -SiblingStreamIdentities @('Tweaker: Weapons Dev')
+    Assert ($plan.Status -eq 'not-applicable') 'public WT cannot select a Dev card through the shared load tag'
+    Assert ($null -eq $plan.NewBody) 'cross-stream rejection leaves the Dev card untouched'
+
+    $plan = Get-VtCardRefreshPlan -Body $wtDevCard -PublishedId '3748824853' `
+        -NewVersion '0.12.295-dev' -LoadTag 'wt' -NewManifest '900' `
+        -SharedLoadTag $true -StreamIdentity 'Tweaker: Weapons Dev' `
+        -SiblingPublishedIds @('3712896117') -SiblingStreamIdentities @('Tweaker: Weapons')
+    Assert ($plan.Status -eq 'refresh') 'same-stream WT Dev card refreshes'
+    Assert ($plan.NewBody -notmatch '0\.12\.294-dev') 'same-stream refresh advances every Dev token'
+    Assert (([regex]::Matches($plan.NewBody, '0\.12\.295-dev')).Count -eq 3) 'same-stream Dev version count is exact'
+    Assert ($plan.NewBody -match 'manifest `900`') 'same-stream Dev manifest advances'
+
+    $wtSiblingThenVersion = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Weapons Dev v0.12.294-dev; confirm `[wt:LOAD] v0.12.294-dev`
+**Compatibility note:** public Tweaker: Weapons is mentioned with deliberately long intervening prose that exceeds every former distance guess before v0.12.294-dev.
+**Topology:** Solo
+
+1. Test the dev-only command.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtCardRefreshPlan -Body $wtSiblingThenVersion -PublishedId '3748824853' `
+        -NewVersion '0.12.295-dev' -LoadTag 'wt' -SharedLoadTag $true `
+        -StreamIdentity 'Tweaker: Weapons Dev' -SiblingPublishedIds @('3712896117') `
+        -SiblingStreamIdentities @('Tweaker: Weapons')
+    Assert ($plan.Status -eq 'unparseable') 'sibling then distant old version fails closed before the global sweep'
+    Assert ($plan.Reason -match 'associated with a sibling stream') 'sibling prose collision reports its owner'
+    Assert ($null -eq $plan.NewBody) 'sibling-then-version collision cannot partially rewrite the card'
+
+    $wtVersionThenSibling = $wtSiblingThenVersion -replace
+        'public Tweaker: Weapons is mentioned with deliberately long intervening prose that exceeds every former distance guess before v0\.12\.294-dev',
+        'v0.12.294-dev is separated by deliberately long prose that exceeds every former distance guess before public Tweaker: Weapons'
+    $plan = Get-VtCardRefreshPlan -Body $wtVersionThenSibling -PublishedId '3748824853' `
+        -NewVersion '0.12.295-dev' -LoadTag 'wt' -SharedLoadTag $true `
+        -StreamIdentity 'Tweaker: Weapons Dev' -SiblingPublishedIds @('3712896117') `
+        -SiblingStreamIdentities @('Tweaker: Weapons')
+    Assert ($plan.Status -eq 'unparseable') 'distant old version then sibling fails closed regardless of token order'
+    Assert ($null -eq $plan.NewBody) 'version-then-sibling collision cannot partially rewrite the card'
+
+    $wtIssue290Shape = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Weapons Dev v0.12.294-dev; confirm `[wt:LOAD] v0.12.294-dev` and do not enable public Tweaker: Weapons simultaneously
+**Current WT receipt:** Tweaker: Weapons Dev `v0.12.294-dev`, Workshop item `3748824853`, manifest `700`.
+**Topology:** Solo
+
+1. Test the dev-only command.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtCardRefreshPlan -Body $wtIssue290Shape -PublishedId '3748824853' `
+        -NewVersion '0.12.295-dev' -LoadTag 'wt' -SharedLoadTag $true `
+        -StreamIdentity 'Tweaker: Weapons Dev' -SiblingPublishedIds @('3712896117') `
+        -SiblingStreamIdentities @('Tweaker: Weapons')
+    Assert ($plan.Status -eq 'refresh') '#290 same-line unversioned public warning preserves exact Dev ownership'
+    Assert (([regex]::Matches($plan.NewBody, 'v0\.12\.295-dev')).Count -eq 3) '#290 shape advances exactly its three owned tokens'
+
+    $wtIssue290Collision = $wtIssue290Shape -replace
+        'public Tweaker: Weapons simultaneously',
+        'public Tweaker: Weapons v0.12.294-dev simultaneously'
+    $plan = Get-VtCardRefreshPlan -Body $wtIssue290Collision -PublishedId '3748824853' `
+        -NewVersion '0.12.295-dev' -LoadTag 'wt' -SharedLoadTag $true `
+        -StreamIdentity 'Tweaker: Weapons Dev' -SiblingPublishedIds @('3712896117') `
+        -SiblingStreamIdentities @('Tweaker: Weapons')
+    Assert ($plan.Status -eq 'unparseable') '#290 same-line warning with a sibling old version fails closed'
+    Assert ($null -eq $plan.NewBody) '#290 sibling collision cannot partially rewrite the card'
+
+    $wtIssue138Shape = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Weapons Dev `v0.12.294-dev`; confirm `[wt:LOAD] v0.12.294-dev`
+**Stream note:** public Tweaker: Weapons (`v0.12.290-beta`) shares the prefix. Read the Dev chat header `=== wt regression_test (v0.12.294-dev) ===` instead.
+**Topology:** Solo
+
+1. Test the dev-only command.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtCardRefreshPlan -Body $wtIssue138Shape -PublishedId '3748824853' `
+        -NewVersion '0.12.295-dev' -LoadTag 'wt' -SharedLoadTag $true `
+        -StreamIdentity 'Tweaker: Weapons Dev' -SiblingPublishedIds @('3712896117') `
+        -SiblingStreamIdentities @('Tweaker: Weapons')
+    Assert ($plan.Status -eq 'unparseable') '#138 sibling-only line with a Dev token is deliberately skipped'
+    Assert ($plan.Reason -match 'associated with a sibling stream') '#138 skip records the exact attribution reason'
+    Assert ($null -eq $plan.NewBody) '#138 skip leaves the entire card untouched for sanctioned normalization'
+
+    $wtMirrorCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Weapons (Dev) v0.12.294-dev; confirm `[wt:LOAD] v0.12.294-dev`
+**Workshop receipts:** Dev item `3748824853`, manifest `700`; public beta mirror item `3712896117`, manifest `600`.
+**Topology:** Solo
+
+1. Run the dev-only command.
+
+**Expected:** Works on v0.12.294-dev.
+'@
+    $plan = Get-VtCardRefreshPlan -Body $wtMirrorCard -PublishedId '3712896117' `
+        -NewVersion '0.12.294-beta' -LoadTag 'wt' -NewManifest '800' `
+        -SharedLoadTag $true -StreamIdentity 'Tweaker: Weapons' `
+        -SiblingPublishedIds @('3748824853') -SiblingStreamIdentities @('Tweaker: Weapons Dev')
+    Assert ($plan.Status -eq 'refresh') 'sibling-anchored card permits an exact item-only manifest refresh'
+    Assert ($plan.NewBody -match '\[wt:LOAD\] v0\.12\.294-dev') 'item-only manifest refresh preserves the Dev anchor'
+    Assert ($plan.NewBody -match 'Dev item `3748824853`, manifest `700`') 'item-only manifest refresh preserves sibling receipt'
+    Assert ($plan.NewBody -match 'public beta mirror item `3712896117`, manifest `800`') 'item-only manifest refresh advances only its item'
+
+    $plan = Get-VtCardRefreshPlan -Body $wtMirrorCard -PublishedId '3748824853' `
+        -NewVersion '0.12.295-dev' -LoadTag 'wt' -NewManifest '900' `
+        -SharedLoadTag $true -StreamIdentity 'Tweaker: Weapons Dev' `
+        -SiblingPublishedIds @('3712896117') -SiblingStreamIdentities @('Tweaker: Weapons')
+    Assert ($plan.Status -eq 'refresh') 'Dev stream owns its named anchor despite a public mirror receipt'
+    Assert ($plan.NewBody -match '\[wt:LOAD\] v0\.12\.295-dev') 'Dev stream advances its own anchor'
+    Assert ($plan.NewBody -match 'public beta mirror item `3712896117`, manifest `600`') 'Dev refresh preserves public mirror receipt'
+
+    $wtAmbiguousCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** confirm `[wt:LOAD] v0.12.294-dev`
+**Topology:** Solo
+
+1. Test the weapon.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtCardRefreshPlan -Body $wtAmbiguousCard -PublishedId '3712896117' `
+        -NewVersion '0.12.294-beta' -LoadTag 'wt' -SharedLoadTag $true `
+        -StreamIdentity 'Tweaker: Weapons' -SiblingPublishedIds @('3748824853') `
+        -SiblingStreamIdentities @('Tweaker: Weapons Dev')
+    Assert ($plan.Status -eq 'unparseable') 'shared-tag card with no stream identity fails closed'
+    Assert ($plan.Reason -match 'no unique') 'shared-tag ambiguity reports its exact reason'
+
+    Assert (Test-VtStreamIdentityPresent -Body 'Enable Tweaker: Weapons (Dev).' -Identity 'Tweaker: Weapons Dev') `
+        'Dev stream identity accepts the parenthesized display form'
+    Assert (-not (Test-VtStreamIdentityPresent -Body 'Enable Tweaker: Weapons Dev.' -Identity 'Tweaker: Weapons')) `
+        'public stream identity rejects the Dev suffix'
+    Assert (Test-VtStreamIdentityPresent -Body 'Enable public Tweaker: Weapons.' -Identity 'Tweaker: Weapons') `
+        'public stream identity matches its exact display form'
+
     $wocCard = @'
 ## CURRENT LIVE TEST
 
@@ -430,8 +863,10 @@ if ($SelfTest) { Invoke-RefreshCardsSelfTest }
 # a ready lifecycle label -- the only issues doctrine allows pinned cards on.
 # ---------------------------------------------------------------------------
 
-if ([string]::IsNullOrWhiteSpace($PublishedId) -or [string]::IsNullOrWhiteSpace($NewVersion)) {
-    Write-Host 'refresh-cards: -PublishedId and -NewVersion are required (or use -SelfTest).' -ForegroundColor Red
+if ([string]::IsNullOrWhiteSpace($PublishedId) -or [string]::IsNullOrWhiteSpace($NewVersion) -or
+    [string]::IsNullOrWhiteSpace($LoadTag) -or [string]::IsNullOrWhiteSpace($ModDirectory) -or
+    [string]::IsNullOrWhiteSpace($StreamIdentity)) {
+    Write-Host 'refresh-cards: -PublishedId, -NewVersion, -LoadTag, -ModDirectory, and -StreamIdentity are required (or use -SelfTest).' -ForegroundColor Red
     exit 2
 }
 if ($Repository -notmatch '^([^/]+)/([^/]+)$') {
@@ -441,6 +876,30 @@ if ($Repository -notmatch '^([^/]+)/([^/]+)$') {
 $repoOwner = $Matches[1]
 $repoName = $Matches[2]
 $displayVersion = 'v' + $NewVersion.TrimStart('v', 'V')
+
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$streamInventory = @(Get-VtStreamInventory -RepoRoot $repoRoot)
+$currentStreams = @($streamInventory | Where-Object { $_.Directory -eq $ModDirectory })
+if ($currentStreams.Count -ne 1) {
+    Write-Host "refresh-cards: exact mod directory '$ModDirectory' did not resolve to one stream." -ForegroundColor Red
+    exit 2
+}
+$currentStream = $currentStreams[0]
+if ([string]$currentStream.PublishedId -ne $PublishedId -or
+    -not ([string]$currentStream.LoadTag).Equals($LoadTag, [System.StringComparison]::OrdinalIgnoreCase) -or
+    -not ([string]$currentStream.Identity).Equals($StreamIdentity, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Write-Host ("refresh-cards: stream identity mismatch for {0}: expected item={1}, tag={2}, identity={3}; got item={4}, tag={5}, identity={6}." -f `
+        $ModDirectory, $currentStream.PublishedId, $currentStream.LoadTag, $currentStream.Identity,
+        $PublishedId, $LoadTag, $StreamIdentity) -ForegroundColor Red
+    exit 2
+}
+$siblingStreams = @($streamInventory | Where-Object {
+    $_.Directory -ne $ModDirectory -and
+    ([string]$_.LoadTag).Equals($LoadTag, [System.StringComparison]::OrdinalIgnoreCase)
+})
+$sharedLoadTag = $siblingStreams.Count -gt 0
+$siblingPublishedIds = @($siblingStreams | ForEach-Object { [string]$_.PublishedId })
+$siblingStreamIdentities = @($siblingStreams | ForEach-Object { [string]$_.Identity })
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Write-Host 'refresh-cards: GitHub CLI (gh) is required.' -ForegroundColor Red
@@ -579,7 +1038,7 @@ function Write-VtCardLineDiff {
 }
 
 $modeLabel = if ($DryRun) { 'DRY RUN (no comment is written)' } else { 'live' }
-Write-Host ("refresh-cards: item {0} -> {1}{2} [{3}]" -f $PublishedId, $displayVersion,
+Write-Host ("refresh-cards: {0} ({1}, item {2}) -> {3}{4} [{5}]" -f $StreamIdentity, $ModDirectory, $PublishedId, $displayVersion,
     $(if ($NewManifest) { ", manifest $NewManifest" } else { ', manifest unchanged' }), $modeLabel)
 
 $summary = @{ refreshed = 0; current = 0; 'skipped-unparseable' = 0; 'skipped-closed' = 0; failed = 0 }
@@ -609,7 +1068,9 @@ try {
 
         foreach ($card in $pinnedCards) {
             $plan = Get-VtCardRefreshPlan -Body ([string]$card.body) -PublishedId $PublishedId `
-                -NewVersion $NewVersion -LoadTag $LoadTag -NewManifest $NewManifest
+                -NewVersion $NewVersion -LoadTag $LoadTag -NewManifest $NewManifest `
+                -SharedLoadTag $sharedLoadTag -StreamIdentity $StreamIdentity `
+                -SiblingPublishedIds $siblingPublishedIds -SiblingStreamIdentities $siblingStreamIdentities
             if ($plan.Status -eq 'not-applicable') { continue }
             $cardsSeen++
             $cardRef = "#$issueNumber comment $($card.databaseId)"

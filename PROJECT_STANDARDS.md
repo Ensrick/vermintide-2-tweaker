@@ -1111,6 +1111,16 @@ from release lookup through carry-forward, immutable snapshot capture, and
 release-ID mutation; removing or narrowing that transaction revives lost
 manifest updates.
 
+**Pinned-card refresh is stream-specific, not load-tag-specific.** A runtime
+tag such as `[wt:LOAD]` may be intentionally shared by public and development
+streams. The post-ship refresher must bind a version rewrite to the exact mod
+directory, Workshop item, and display/stream identity. A shared tag alone is
+ambiguous and fails closed. When a card names the shipped item only as a mirror
+receipt but its runtime anchor explicitly belongs to a sibling stream, only the
+shipped item's manifest may advance; the sibling version remains byte-exact.
+This is the #1102 boundary that prevents one stream's ship from rewriting the
+other stream's test queue.
+
 **Atomic source/root-bundle gate (issue #724).** A PR that changes an active
 mod's runtime source, `itemV2.cfg`, or newest CHANGELOG release identity must
 also change that mod's exact root `.mod_bundle`, identified by the canonical
@@ -1645,6 +1655,13 @@ session's start.
    budget is 8 secondary trees / 12 GiB, enforced by
    `qa/check_worktree_budget.ps1` in Quick QA, pre-commit, full QA, and ship
    preflight.
+5. **QA is invariant to valid nested worktree placement.** Repository scanners
+   MUST discover active mods from `tools/mod-inventory.psd1` (or another named
+   canonical root list), not by recursively treating arbitrary top-level
+   directories as mods. A registered checkout under `.claude/worktrees/` is
+   another workspace, not a pseudo-mod, and must not create duplicate findings
+   or require deletion before exact-master QA. `check_command_collisions.ps1
+   -SelfTest` plants this regression shape under both supported PowerShell hosts.
 
 Cross-ref: §6.5 / §6.6 (ship pipeline + protected-`master` landing), `CLAUDE.md`
 NON-NEGOTIABLES (worktree / VMBLauncher discipline).

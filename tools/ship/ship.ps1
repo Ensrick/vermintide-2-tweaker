@@ -1271,6 +1271,9 @@ finally {
     Assert ($publisherSource.IndexOf('published_id=0 is accepted only for a one-mod canonical first-upload receipt handoff') -ge 0) "publisher constrains zero-ID release mutation to the exact receipt handoff"
     Assert ($selfTxt.IndexOf('BOOTSTRAP COMPLETE - NOT TEST READY', $uploadActionPos) -ge 0) "first-upload bootstrap stops before live-test labeling and readiness output"
     Assert ($selfTxt.IndexOf('The machine-global claim remains held', $uploadActionPos) -ge 0) "first-upload bootstrap retains its claim until the ID-only reconciliation merges"
+    Assert ($selfTxt.IndexOf('ModDirectory = "$Mod"', $mainDispatchPos) -ge 0) "card refresh receives the exact source-directory stream identity"
+    Assert ($selfTxt.IndexOf('StreamIdentity = "$streamIdentity"', $mainDispatchPos) -ge 0) "card refresh receives the exact display/stream identity"
+    Assert ($selfTxt.IndexOf("if (`$Mod -match '_dev$'", $mainDispatchPos) -ge 0) "mirrored dev titles gain an explicit Dev stream discriminator"
 
     Write-Host ""
     if ($script:__stpass) {
@@ -1336,6 +1339,7 @@ $modVersion = '(unknown)'
 # the restart-reminder tells the user the exact token to grep for. Fall back to the
 # dir name if no marker is present.
 $loadTag = $Mod
+$streamIdentity = $Mod
 if (Test-Path $luaPath) {
     $luaTxt = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
     if ($luaTxt -match 'MOD_VERSION\s*=\s*"([^"]+)"') { $modVersion = $matches[1] }
@@ -1343,6 +1347,19 @@ if (Test-Path $luaPath) {
 }
 if ($modVersion -eq '(unknown)') {
     Fail "No MOD_VERSION found in $luaPath."
+}
+if ($cfgTxt -match 'title[ \t]*=[ \t]*"([^"]+)"') {
+    $streamIdentity = $matches[1]
+    $versionSuffix = " v$modVersion"
+    if ($streamIdentity.EndsWith($versionSuffix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $streamIdentity = $streamIdentity.Substring(0, $streamIdentity.Length - $versionSuffix.Length)
+    }
+}
+# Some historical dev cfg titles intentionally mirror the public display title.
+# The exact source directory remains the stream authority, so make that identity
+# explicit for live-test cards without changing Workshop metadata.
+if ($Mod -match '_dev$' -and $streamIdentity -notmatch '(?i)[ \t]+Dev$') {
+    $streamIdentity += ' Dev'
 }
 $changelogPath = Join-Path $modDir 'CHANGELOG.md'
 if (-not (Test-Path -LiteralPath $changelogPath -PathType Leaf)) {
@@ -2140,6 +2157,8 @@ try {
                 PublishedId = "$publishedId"
                 NewVersion  = "$modVersion"
                 LoadTag     = "$loadTag"
+                ModDirectory = "$Mod"
+                StreamIdentity = "$streamIdentity"
                 Repository  = 'Ensrick/vermintide-2-tweaker'
                 MaxIssues   = 300
             }

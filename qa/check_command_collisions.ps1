@@ -11,93 +11,136 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
-    [switch]$Quiet
+    [string]$RepoRoot,
+    [switch]$Quiet,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path $RepoRoot).Path
-
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) { $RepoRoot = Join-Path $scriptDir '..' }
 function Read-FileUtf8([string]$path) {
     return [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
 }
 
-function Find-ModLuas {
-    Get-ChildItem -Path $repoRoot -Filter "*.lua" -Recurse -File -ErrorAction SilentlyContinue `
-        | Where-Object {
-            $p = $_.FullName
-            # A command belongs to a VMF mod only when it lives below the
-            # canonical <mod>/scripts/mods/<mod>/ source seam.  The old
-            # repo-wide scan also classified qa/lua fixtures as a mod named
-            # "qa", so literal command strings in tests produced false
-            # cross-mod collisions and kept CI red (2026-07-15 audit).
-            $p -match '[\\/]scripts[\\/]mods[\\/][^\\/]+[\\/]' `
-                -and $p -notlike "*\_archive\*" `
-                -and $p -notlike "*\bundleV2\*" `
-                -and $p -notlike "*\.build\*" `
-                -and $p -notlike "*\.temp\*" `
-                -and $p -notlike "*\.spawn_tweaks_ref\*" `
-                -and $p -notlike "*\tweaker\*" `
-                -and $p -notlike "*\sample_*\*" `
-                -and $p -notlike "*\Vermintide-2-Source-Code\*" `
-                -and $p -notlike "*\misc-vermintide-mods\*" `
-                -and $p -notlike "*.lua.processed"
-        }
-}
-
-function Get-ModNameForPath([string]$path) {
-    # Path looks like: <repo>/<mod>/scripts/mods/<mod>/<file>.lua
-    # Walk path segments and find the one immediately under repo root.
-    $rel = $path.Substring($repoRoot.Length).TrimStart('\','/')
-    return ($rel -split '[\\/]')[0]
-}
-
-# Collect all command registrations: { name => @{ mods = @(...), sites = @(...) } }
-$commands = @{}
-
-foreach ($lua in Find-ModLuas) {
-    $modName = Get-ModNameForPath $lua.FullName
-    $text = Read-FileUtf8 $lua.FullName
-
-    # Match: mod:command("name", ...) — captures the literal string name.
-    # Permissive on whitespace, doesn't match dynamic-key forms (those are rare
-    # and intentional — we only care about literal collisions).
-    foreach ($m in [regex]::Matches($text, 'mod:command\s*\(\s*"([^"]+)"')) {
-        $cmd = $m.Groups[1].Value
-        # Line number for the report
-        $offset = $m.Index
-        $lineNum = ([regex]::Matches($text.Substring(0, $offset), "`n")).Count + 1
-
-        if (-not $commands.ContainsKey($cmd)) {
-            $commands[$cmd] = @{ mods = @(); sites = @() }
-        }
-        if ($commands[$cmd].mods -notcontains $modName) {
-            $commands[$cmd].mods += $modName
-        }
-        $commands[$cmd].sites += "${modName}:$($lua.Name):$lineNum"
+function Get-CanonicalModDirectories([string]$root) {
+    $inventoryPath = Join-Path $root 'tools\mod-inventory.psd1'
+    if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
+        throw "canonical mod inventory not found: $inventoryPath"
     }
+    $inventory = Import-PowerShellDataFile -LiteralPath $inventoryPath
+    return @($inventory.Mods | ForEach-Object { [string]$_.Dir })
 }
 
-# Find collisions: any command name owned by 2+ distinct BASE mods.
-# audit 2026-06-07: dev/stable twins (`<mod>` and `<mod>_dev`) are SEPARATE VMF
-# registrations that coexist by design (see CLAUDE.md "Dev/stable split workflow")
-# and legitimately share every command name — a tester runs one stream at a time.
-# Treating those as collisions hard-failed run_all on 140 expected duplicates and
-# masked genuine cross-mod collisions. Collapse a trailing `_dev` so only DISTINCT
-# base mods count. (The only `_dev` dirs are the four public-mod dev clones, all of
-# the form `<base>_dev`, so the strip is unambiguous.)
-$collisions = @()
-foreach ($cmd in $commands.Keys) {
-    $entry = $commands[$cmd]
-    $baseMods = @($entry.mods | ForEach-Object { $_ -replace '_dev$', '' } | Sort-Object -Unique)
-    if ($baseMods.Count -gt 1) {
-        $collisions += [PSCustomObject]@{
-            Name = $cmd
-            Mods = $entry.mods -join ", "
-            Sites = $entry.sites
+function Find-ModLuas([string]$root, [string[]]$modDirectories) {
+    $files = @()
+    foreach ($modName in @($modDirectories)) {
+        # Inventory-owned top-level roots are the authority. Never recurse from
+        # the repository root: a valid nested worktree may contain a complete
+        # second checkout under .claude/worktrees and is not another mod.
+        $sourceRoot = Join-Path $root (Join-Path $modName 'scripts\mods')
+        if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) { continue }
+        foreach ($lua in Get-ChildItem -LiteralPath $sourceRoot -Filter '*.lua' -Recurse -File -ErrorAction SilentlyContinue) {
+            if ($lua.FullName -like '*.lua.processed') { continue }
+            $files += [pscustomobject]@{
+                FullName = $lua.FullName
+                Name = $lua.Name
+                ModName = $modName
+            }
         }
     }
+    return $files
 }
+
+function Get-CommandInventory([string]$root, [string[]]$modDirectories) {
+    $commands = @{}
+    foreach ($lua in Find-ModLuas -root $root -modDirectories $modDirectories) {
+        $modName = $lua.ModName
+        $text = Read-FileUtf8 $lua.FullName
+
+        # Match: mod:command("name", ...) - captures the literal string name.
+        # Permissive on whitespace; dynamic-key forms remain intentional.
+        foreach ($m in [regex]::Matches($text, 'mod:command\s*\(\s*"([^"]+)"')) {
+            $cmd = $m.Groups[1].Value
+            $lineNum = ([regex]::Matches($text.Substring(0, $m.Index), "`n")).Count + 1
+            if (-not $commands.ContainsKey($cmd)) {
+                $commands[$cmd] = @{ mods = @(); sites = @() }
+            }
+            if ($commands[$cmd].mods -notcontains $modName) {
+                $commands[$cmd].mods += $modName
+            }
+            $commands[$cmd].sites += "${modName}:$($lua.Name):$lineNum"
+        }
+    }
+    return $commands
+}
+
+function Get-CommandCollisions($commands) {
+    # Dev/stable twins intentionally share commands and are mutually exclusive.
+    $collisions = @()
+    foreach ($cmd in $commands.Keys) {
+        $entry = $commands[$cmd]
+        $baseMods = @($entry.mods | ForEach-Object { $_ -replace '_dev$', '' } | Sort-Object -Unique)
+        if ($baseMods.Count -gt 1) {
+            $collisions += [pscustomobject]@{
+                Name = $cmd
+                Mods = $entry.mods -join ', '
+                Sites = $entry.sites
+            }
+        }
+    }
+    return $collisions
+}
+
+function Invoke-CommandCollisionSelfTest {
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('vt2-command-collision-' + [guid]::NewGuid().ToString('N'))
+    $script:__ccPass = $true
+    function Assert($condition, [string]$description) {
+        $verdict = if ($condition) { 'PASS' } else { 'FAIL' }
+        Write-Host "  [$verdict] $description"
+        if (-not $condition) { $script:__ccPass = $false }
+    }
+    function Write-Fixture([string]$relativePath, [string]$content) {
+        $path = Join-Path $tmp $relativePath
+        [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($path)) | Out-Null
+        [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
+    }
+    try {
+        Write-Fixture 'tools\mod-inventory.psd1' "@{ Mods = @(@{ Dir = 'mod_a' }, @{ Dir = 'mod_b' }) }"
+        Write-Fixture 'mod_a\scripts\mods\mod_a\a.lua' 'mod:command("alpha", "", function() end)'
+        Write-Fixture 'mod_a\scripts\mods\mod_a\a_second.lua' 'mod:command("alpha", "", function() end)'
+        Write-Fixture 'mod_b\scripts\mods\mod_b\b.lua' 'mod:command("beta", "", function() end)'
+        Write-Fixture '.claude\worktrees\copy\mod_b\scripts\mods\mod_b\b.lua' 'mod:command("alpha", "", function() end)'
+
+        $mods = @(Get-CanonicalModDirectories -root $tmp)
+        $commands = Get-CommandInventory -root $tmp -modDirectories $mods
+        $collisions = @(Get-CommandCollisions $commands)
+        Assert ($mods.Count -eq 2) 'canonical roots come from tools/mod-inventory.psd1'
+        Assert ($commands['alpha'].mods.Count -eq 1) 'nested worktree copy is not a pseudo-mod'
+        Assert ($commands['alpha'].sites.Count -eq 2) 'same-owner registrations retain existing owner policy and evidence'
+        Assert ($collisions.Count -eq 0) 'nested copy and same-owner sites do not create a cross-mod collision'
+
+        Write-Fixture 'mod_b\scripts\mods\mod_b\b.lua' 'mod:command("alpha", "", function() end)'
+        $commands = Get-CommandInventory -root $tmp -modDirectories $mods
+        $collisions = @(Get-CommandCollisions $commands)
+        Assert ($collisions.Count -eq 1) 'real duplicate across canonical mod owners still fails'
+        Assert ($collisions[0].Name -eq 'alpha') 'real collision reports the exact command'
+        Assert ($collisions[0].Mods -match 'mod_a' -and $collisions[0].Mods -match 'mod_b') 'real collision reports both owners'
+    }
+    finally {
+        if (Test-Path -LiteralPath $tmp) { [System.IO.Directory]::Delete($tmp, $true) }
+    }
+    if (-not $script:__ccPass) { exit 2 }
+    Write-Host '[check_command_collisions -SelfTest] OK' -ForegroundColor Green
+    exit 0
+}
+
+if ($SelfTest) { Invoke-CommandCollisionSelfTest }
+
+$repoRoot = (Resolve-Path $RepoRoot).Path
+$modDirectories = @(Get-CanonicalModDirectories -root $repoRoot)
+$commands = Get-CommandInventory -root $repoRoot -modDirectories $modDirectories
+$collisions = @(Get-CommandCollisions $commands)
 
 # Report
 Write-Host ""
