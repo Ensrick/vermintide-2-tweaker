@@ -62,6 +62,31 @@
             ExpectedErrors = 1
         }
         @{
+            Name = 'validated exact title-only sync without root bundle'
+            Changes = @(@{ Path = 'example_mod/itemV2.cfg' })
+            TrustedTitleSyncs = @('example_mod')
+            ExpectedErrors = 0
+        }
+        @{
+            Name = 'validated title sync never exempts runtime'
+            Changes = @(
+                @{ Path = 'example_mod/itemV2.cfg' },
+                @{ Path = 'example_mod/scripts/mods/example_mod/example_mod.lua' }
+            )
+            TrustedTitleSyncs = @('example_mod')
+            ExpectedErrors = 1
+        }
+        @{
+            Name = 'validated title sync never exempts newest release identity'
+            Changes = @(
+                @{ Path = 'example_mod/itemV2.cfg' },
+                @{ Path = 'example_mod/CHANGELOG.md' }
+            )
+            TopReleaseChanged = @('example_mod')
+            TrustedTitleSyncs = @('example_mod')
+            ExpectedErrors = 1
+        }
+        @{
             Name = 'newest changelog release without root bundle'
             Changes = @(@{ Path = 'example_mod/CHANGELOG.md' })
             TopReleaseChanged = @('example_mod')

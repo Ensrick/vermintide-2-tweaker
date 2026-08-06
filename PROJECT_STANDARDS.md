@@ -1126,6 +1126,17 @@ exempts a runtime source delta.
 This closes the PR #759/#765/#766/#767/#769 class where
 source/version/config merged first and its compiled artifact followed later.
 
+An exact `itemV2.cfg` title-only synchronization is the sole non-promotion
+metadata exception because VMB BuildOnly proves that Workshop config is not
+compiled into `bundleV2`. The checker accepts it only when the title line is
+the entire cfg diff, `MOD_VERSION` is unchanged from the merge base, and the
+new title is exactly `<unchanged base name> v<MOD_VERSION>`. Any description,
+visibility, content, `published_id`, runtime, or newest-release identity change
+still requires the canonical root bundle. This boundary was planted after WT
+0.12.292-beta failed closed before Workshop upload on 2026-08-06: both WT
+BuildOnly roots reproduced byte-identically, while the reviewed cfg title was
+one version behind.
+
 Tracked bundle deletion is a separate fail-closed boundary (issue #1100).
 Deleting any `bundleV2/<16-hex>.mod_bundle` requires a newly added exact trailer
 in that mod's newest CHANGELOG release:

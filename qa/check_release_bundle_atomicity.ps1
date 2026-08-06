@@ -13,6 +13,10 @@
 # root bundle only when it is metadata-only AND is explicitly sanctioned by the
 # existing VT2-Promotion trailer (or VT2_PROMOTION=1 locally). Runtime source is
 # never exempted by that trailer.
+# A second, narrower exception covers an exact itemV2 title synchronization:
+# only the title line may change, MOD_VERSION must be unchanged from the base,
+# and the new title must end in that exact current version. Any other cfg,
+# runtime, or newest-release identity delta still requires the root bundle.
 #
 # Exit codes: 0 = clean/indeterminate, 2 = atomicity error.
 
@@ -174,6 +178,48 @@ function Get-DeclaredBundleRetirements([string]$Text) {
     return $declared
 }
 
+function Get-ModVersionFromText([string]$Text) {
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
+    $match = [regex]::Match($Text, 'MOD_VERSION\s*=\s*"(?<version>[^"]+)"')
+    if (-not $match.Success) { return $null }
+    return $match.Groups['version'].Value
+}
+
+function Test-ExactCfgTitleSync {
+    param(
+        [string]$BaseCfg,
+        [string]$HeadCfg,
+        [string]$BaseVersion,
+        [string]$HeadVersion
+    )
+    if ([string]::IsNullOrWhiteSpace($BaseCfg) -or
+            [string]::IsNullOrWhiteSpace($HeadCfg) -or
+            [string]::IsNullOrWhiteSpace($BaseVersion) -or
+            $BaseVersion -ne $HeadVersion) {
+        return $false
+    }
+    $pattern = '(?m)^(?<prefix>\s*title\s*=\s*")(?<title>[^"]+)(?<suffix>"\s*;\s*)$'
+    $baseMatches = [regex]::Matches($BaseCfg, $pattern)
+    $headMatches = [regex]::Matches($HeadCfg, $pattern)
+    if ($baseMatches.Count -ne 1 -or $headMatches.Count -ne 1) { return $false }
+    $baseTitle = $baseMatches[0].Groups['title'].Value
+    $headTitle = $headMatches[0].Groups['title'].Value
+    if ($baseTitle -eq $headTitle) { return $false }
+    $baseStem = [regex]::Replace($baseTitle, '\s+v\d+(?:\.\d+){1,3}(?:-[A-Za-z0-9+.-]+)?$', '')
+    if ($baseStem -eq $baseTitle -or $headTitle -ne "$baseStem v$HeadVersion") { return $false }
+    $replaceTitle = {
+        param($match)
+        return $match.Groups['prefix'].Value + '__VT2_TITLE__' + $match.Groups['suffix'].Value
+    }
+    # git-show line joining omits the terminal newline while worktree reads
+    # retain it; normalize only line endings and that transport artifact.
+    $baseNormalized = ($BaseCfg -replace "`r`n", "`n").TrimEnd([char[]]@("`r", "`n"))
+    $headNormalized = ($HeadCfg -replace "`r`n", "`n").TrimEnd([char[]]@("`r", "`n"))
+    $baseSkeleton = [regex]::Replace($baseNormalized, $pattern, $replaceTitle)
+    $headSkeleton = [regex]::Replace($headNormalized, $pattern, $replaceTitle)
+    return $baseSkeleton -ceq $headSkeleton
+}
+
 function Test-RuntimePath([string]$RelativePath) {
     $rel = Normalize-RepoPath $RelativePath
     if ($rel -match '^bundleV2/') { return $false }
@@ -190,10 +236,12 @@ function Test-ReleaseBundleAtomicity {
         [object[]]$Changes,
         [hashtable]$TopReleaseChanged,
         [hashtable]$TrustedPromotions,
+        [hashtable]$TrustedTitleSyncs,
         [hashtable]$DeclaredBundleRetirements
     )
     $errors = @()
     if ($null -eq $DeclaredBundleRetirements) { $DeclaredBundleRetirements = @{} }
+    if ($null -eq $TrustedTitleSyncs) { $TrustedTitleSyncs = @{} }
     $deletionErrors = @{}
 
     # Bundle-only reconciliation remains valid, but deletion is never ordinary
@@ -260,6 +308,12 @@ function Test-ReleaseBundleAtomicity {
             $TrustedPromotions.ContainsKey($dir) -and [bool]$TrustedPromotions[$dir]
         if ($trustedMetadataOnlyPromotion) { continue }
 
+        $trustedTitleOnlySync = $runtimeHits.Count -eq 0 -and
+            $metadataHits.Count -eq 1 -and
+            $metadataHits[0] -ieq "$dir/itemV2.cfg" -and
+            $TrustedTitleSyncs.ContainsKey($dir) -and [bool]$TrustedTitleSyncs[$dir]
+        if ($trustedTitleOnlySync) { continue }
+
         $triggers = @($runtimeHits) + @($metadataHits)
         $errors += "${dir}: release/runtime delta lacks root bundle '$rootPath'; trigger(s): $($triggers -join ', ')"
     }
@@ -281,10 +335,11 @@ function Invoke-SelfTest {
         })
         $top = @{}; foreach ($name in @($case.TopReleaseChanged)) { $top[[string]$name] = $true }
         $trusted = @{}; foreach ($name in @($case.TrustedPromotions)) { $trusted[[string]$name] = $true }
+        $titleSyncs = @{}; foreach ($name in @($case.TrustedTitleSyncs)) { $titleSyncs[[string]$name] = $true }
         $retired = @{}; foreach ($path in @($case.DeclaredBundleRetirements | Where-Object { $_ })) {
             $retired[([string]$path).ToLowerInvariant()] = $true
         }
-        $actual = @(Test-ReleaseBundleAtomicity -Mods $mods -Changes $changes -TopReleaseChanged $top -TrustedPromotions $trusted -DeclaredBundleRetirements $retired)
+        $actual = @(Test-ReleaseBundleAtomicity -Mods $mods -Changes $changes -TopReleaseChanged $top -TrustedPromotions $trusted -TrustedTitleSyncs $titleSyncs -DeclaredBundleRetirements $retired)
         $expected = [int]$case.ExpectedErrors
         if ($actual.Count -ne $expected) {
             throw "fixture '$($case.Name)' expected $expected error(s), got $($actual.Count): $($actual -join '; ')"
@@ -298,6 +353,14 @@ function Invoke-SelfTest {
     }
     if (Test-RuntimePath 'DEVELOPMENT.md') { throw 'markdown doc classified as runtime' }
     if (-not (Test-RuntimePath 'scripts/mods/example_mod/example_mod.lua')) { throw 'Lua source not classified as runtime' }
+    $baseCfg = 'title = "Example v1.2.2-dev";' + "`n" + 'visibility = "friends_only";'
+    $headCfg = 'title = "Example v1.2.3-dev";' + "`n" + 'visibility = "friends_only";'
+    if (-not (Test-ExactCfgTitleSync $baseCfg $headCfg '1.2.3-dev' '1.2.3-dev')) { throw 'exact title-only sync was rejected' }
+    $visibilityChanged = 'title = "Example v1.2.3-dev";' + "`n" + 'visibility = "public";'
+    if (Test-ExactCfgTitleSync $baseCfg $visibilityChanged '1.2.3-dev' '1.2.3-dev') { throw 'title plus visibility change was trusted' }
+    if (Test-ExactCfgTitleSync $baseCfg $headCfg '1.2.3-dev' '1.2.4-dev') { throw 'title sync with changed MOD_VERSION was trusted' }
+    $wrongVersion = 'title = "Example v1.2.2-dev";' + "`n" + 'visibility = "friends_only";'
+    if (Test-ExactCfgTitleSync $baseCfg $wrongVersion '1.2.3-dev' '1.2.3-dev') { throw 'title-only wrong-version sync was trusted' }
     $emptyGit = Invoke-GitLines @('diff', 'HEAD', '--name-only', '--', '__release_atomicity_fixture_path_that_does_not_exist__')
     if ($null -eq $emptyGit -or $emptyGit.Count -ne 0) { throw 'successful empty git output collapsed into indeterminate state' }
     Write-Host "[check_release_bundle_atomicity -SelfTest] PASS $passed fixture cases" -ForegroundColor Green
@@ -349,6 +412,20 @@ try {
     }
 
     $trustedPromotions = @{}
+    $trustedTitleSyncs = @{}
+    foreach ($mod in $mods) {
+        $dir = [string]$mod.Dir
+        $cfgPath = "$dir/itemV2.cfg"
+        if (@($changes | Where-Object { $_.Path -ieq $cfgPath }).Count -eq 0) { continue }
+        $luaPath = "$dir/scripts/mods/$dir/$dir.lua"
+        $baseCfg = Read-ContextText $context $cfgPath 'Base' $root
+        $headCfg = Read-ContextText $context $cfgPath 'Head' $root
+        $baseVersion = Get-ModVersionFromText (Read-ContextText $context $luaPath 'Base' $root)
+        $headVersion = Get-ModVersionFromText (Read-ContextText $context $luaPath 'Head' $root)
+        if (Test-ExactCfgTitleSync $baseCfg $headCfg $baseVersion $headVersion) {
+            $trustedTitleSyncs[$dir] = $true
+        }
+    }
     if ($env:VT2_PROMOTION -eq '1') {
         if ($env:GITHUB_ACTIONS) {
             # Issue #676: CI promotion authority is emitted only after the live
@@ -366,13 +443,13 @@ try {
         }
     }
 
-    $errors = @(Test-ReleaseBundleAtomicity -Mods $mods -Changes $changes -TopReleaseChanged $topReleaseChanged -TrustedPromotions $trustedPromotions -DeclaredBundleRetirements $declaredBundleRetirements)
+    $errors = @(Test-ReleaseBundleAtomicity -Mods $mods -Changes $changes -TopReleaseChanged $topReleaseChanged -TrustedPromotions $trustedPromotions -TrustedTitleSyncs $trustedTitleSyncs -DeclaredBundleRetirements $declaredBundleRetirements)
     if ($errors.Count -gt 0) {
         Write-Host '[check_release_bundle_atomicity] ERRORS - releasable mod changes and root bundles must land atomically (#724):' -ForegroundColor Red
         foreach ($message in $errors) { Write-Host "  X $message" -ForegroundColor Red }
         Write-Host '  Build with the serialized VMB path, commit the exact root bundle in the same PR, then rerun QA.' -ForegroundColor Yellow
         Write-Host '  Bundle-only additions/modifications and docs/tests-only changes remain valid. Deletions require a new exact VT2-Bundle-Retirement trailer; active roots cannot be deleted.' -ForegroundColor Yellow
-        Write-Host '  VT2-Promotion only exempts stable metadata-only promotions.' -ForegroundColor Yellow
+        Write-Host '  VT2-Promotion only exempts stable metadata-only promotions; exact title-only synchronization is separately validated.' -ForegroundColor Yellow
         exit 2
     }
     if (-not $Quiet) { Write-Host '[check_release_bundle_atomicity] OK - every releasable mod delta has its exact root bundle delta.' -ForegroundColor Green }
