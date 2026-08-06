@@ -8,8 +8,8 @@
 -- Neither mutates any cim state; both read only engine globals + the backend
 -- interfaces, so they have NO dependency on the entry's file-locals. Distinct
 -- from cim_debug.lua (which owns the mod._cim_autodump_* helpers) and from the
--- forge_dump* commands (those gate on the entry-local _custom_forge_active and
--- therefore stay in the entry).
+-- forge_dump* commands (those consume mutable CIM state and therefore live in
+-- the accessor-backed _cim_command_owner rather than this read-only owner).
 --
 -- Extracted verbatim from crafting_in_modded_dev.lua (v0.8.55-dev OOP split).
 -- Owned by: crafting_in_modded_dev.lua entry point. Consumed via: mod:dofile.

@@ -47,8 +47,8 @@
             Name = 'crafting_in_modded_dev'
             State = 'partial'
             Entry = 'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'
-            CeilingLines = 5723
-            RequiredModules = @('_cim_forge_preview.lua', '_cim_inventory_filter.lua', '_cim_regression_checks.lua')
+            CeilingLines = 5110
+            RequiredModules = @('_cim_forge_preview.lua', '_cim_inventory_filter.lua', '_cim_command_owner.lua', '_cim_regression_checks.lua')
         }
         @{
             Name = 'chaos_wastes_tweaker_dev'

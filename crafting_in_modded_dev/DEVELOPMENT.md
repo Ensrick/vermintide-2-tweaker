@@ -6,9 +6,9 @@ Workshop 3733366851). The engine contact surface (every hooked vanilla
 doc is the code-layout map. Stable `crafting_in_modded/` is its read-only public
 twin - all in-flight work happens here (repo `CLAUDE.md` dev/stable split).
 
-## Module map (v0.8.93-dev, Phase 2 regression split)
+## Module map (v0.8.116-dev, Phase 5 command-owner split)
 
-`crafting_in_modded_dev.lua` is still the primary file (~6,150 lines) - this is an
+`crafting_in_modded_dev.lua` is still the primary file (5,110 nonblank lines) - this is an
 IN-PROGRESS decomposition (PROJECT_STANDARDS 2.2a), not a finished one. Phase 1
 carved out the three cleanest self-contained concerns; the craft-store + backend
 mirror, the cross-peer wire-safety region (issue 278/371), the LA equip-capture,
@@ -25,7 +25,8 @@ new module needs only its manifest dofile line + a row here.
 
 | Module | Owns / public surface |
 |---|---|
-| `crafting_in_modded_dev.lua` (entry) | MOD_VERSION (launcher parses it here - never move it), the boot banner + rehook-warning interceptor, the settings fingerprint/dump, the `/cim_regression_test` harness (`_RT_CHECKS`, `_rt_register`, runner), four initialization-time identity/contract checks that must remain beside their local helpers, the ordered dofile manifest, and everything NOT yet extracted: the craft-store + backend mirror (`_forge_*`, `_forged_weapons`, `mod._cim_register_craft`/`_get_craft`/`_is_modded_*`), cross-peer wire safety (issue 278/371, `sync_loadout_slot` + `cim_modded_slot` RPC), the LA equip-capture (dormant), the modded-loadout store + restore, the Athanor opener (`open_forge`/`open_standard_crafting`) + the whole Athanor UI + `~25` `BackendInterfaceWeavesPlayFab` economy hooks (gated on `_custom_forge_active`), the amulet/accessory craft buttons, bubble-cap math, the forge-freedom picker widener, and the remaining `forge_dump*` / manual `/forge*` commands. Keeps the issue-88 `HeroView.on_enter` inventory-access hook (shares the entry-local `_cim_open_standard_inv_pending`). |
+| `crafting_in_modded_dev.lua` (entry) | MOD_VERSION (launcher parses it here - never move it), the boot banner + rehook-warning interceptor, the settings fingerprint/dump, the `/cim_regression_test` harness (`_RT_CHECKS`, `_rt_register`, runner), four initialization-time identity/contract checks that must remain beside their local helpers, the ordered dofile manifest, and everything NOT yet extracted: the craft-store + backend mirror (`_forge_*`, `_forged_weapons`, `mod._cim_register_craft`/`_get_craft`/`_is_modded_*`), cross-peer wire safety (issue 278/371, `sync_loadout_slot` + `cim_modded_slot` RPC), the LA equip-capture (dormant), the modded-loadout store + restore, the Athanor opener (`open_forge`/`open_standard_crafting`) + the whole Athanor UI + `~25` `BackendInterfaceWeavesPlayFab` economy hooks (gated on `_custom_forge_active`), the amulet/accessory craft buttons, bubble-cap math, and the forge-freedom picker widener. Keeps the issue-88 `HeroView.on_enter` inventory-access hook (shares the entry-local `_cim_open_standard_inv_pending`). |
+| `_cim_command_owner.lua` | Hook-free Phase 5 owner for the three `forge_dump*` diagnostics, seven manual `/forge*` transaction commands, `/salvage_debug`, `/forge_list`, `/forge_delete`, the flat `mod._cim277_delete_owned_ids` exact-owner transaction, and the existing `/forge_delete_all` adapter install. Owns the pending manual-forge state; consumes reassigned craft/loadout stores through getters so restore cannot leave a stale table. Registration order and the stable `standard_forge.lua` public API remain unchanged. |
 | `_cim_regression_checks.lua` | The 78-check late `/cim_regression_test` block, in its frozen registration order. Loaded once at the end of the entry after production hooks/helpers exist. Receives narrow function/state accessors for entry locals that are reassigned; checks still consume the established flat `mod._cim_*` runtime API. |
 | `_cim_bulk_cleanup_core.lua` + `_cim_bulk_cleanup_command.lua` | Issue #277 exact-owner cleanup. The pure core classifies/fingerprints candidates and clears persistence references; the one-time command adapter owns `/forge_delete_all` and receives narrow accessors for the entry's reassigned craft store plus backend interfaces. Destructive scope comes only from `_cim_synthetic_item_contract.lua` and fails closed on unreadable identity or equip state. |
 | `modded_rarities.lua` | Custom "modded" rarity registration (Colors/UISettings/RaritySettings/NetworkLookup table contacts), `_G.Localize` supply, deus weapon-pool scrub, Jewellery->Accessories relabel. Pre-existing. |
@@ -72,7 +73,7 @@ new module needs only its manifest dofile line + a row here.
 - **New Athanor property value/range rule** -> `_cim_property_value_policy.lua`; keep it engine-free, symmetric, and preserve the entry's special discrete-property paths.
 - **New read-only diagnostic dump command** with no cim-state dependency ->
   `_cim_dump_commands.lua`. A dump that reads `_custom_forge_active` / `_forged_weapons`
-  stays in the entry until those locals are promoted (Phase 2).
+  belongs in accessor-backed `_cim_command_owner.lua`.
 - **New regression check** -> add `_rt_register("name", fn)` in
   `_cim_regression_checks.lua` in the existing registration order. A check that SOURCE-SCANS a module's file
   must anchor `debug.getinfo` on a function DEFINED in that module (e.g.
@@ -103,5 +104,7 @@ cross-file alias would go stale) or are load-bearing crash paths needing a coop 
   crash-load-bearing; leave byte-intact until a coop re-verify window (ENGINE_SURFACE
   Surface 3/5).
 
-Recommended Phase 2: promote `_custom_forge_active` (+ `_forged_weapons`) to a `mod._cim`
-state table, then extract the Athanor UI, the Weaves economy hooks, and the craft-store.
+The command owner proves reassigned stores can cross a module boundary through narrow
+getter closures without inventing a second state table or widening the flat namespace.
+A later bounded slice should apply that accessor pattern to one coherent Athanor or
+craft-store owner at a time; cross-peer wire safety remains separately review-gated.
