@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.293-dev (2026-08-06) - exact custom damage-profile wire identity (#431, #1158) [untested]
+
+- Mirrors beta `0.12.292-beta`: custom damage-profile repoints now require an
+  exact numeric lookup-catalog identity, including toggle-independent Dual Axes
+  generation, rather than mod-presence/schema evidence alone.
+- The unconditional sender fallback, bounded disconnect-epoch retirement, and
+  exact Mod Tweaker runtime gates preserve vanilla wire values and saved
+  settings whenever parity is unavailable.
+- Verify with matching and mismatched peers, including a rapid reconnect: only
+  exact peers may use the affected custom profiles, no stale ACK may re-enable
+  them, and no peer may decode an appended WT-only profile id.
+
 ## 0.12.292-dev (2026-08-04) - appearance census re-keyed to surface x edge cells (#1157) [untested]
 
 - Mirrors beta `0.12.291-beta`: `_wt_appearance_census.lua` is re-keyed from two

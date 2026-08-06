@@ -184,33 +184,52 @@ function M.new()
         self.generated_profiles[source_name] = key
         return key
     end
-    function state:apply_dual_cleave(enabled, weapons, profiles, power_levels, clone, register)
-        enabled = not not enabled
-        if not enabled and enabled == self.dual_cleave_enabled then return end
-        if enabled then
-            for _, key in ipairs(M.DUAL_AXES_TEMPLATES) do
-                each_sub_action(weapons and weapons[key], function(_, action)
-                    if is_direct(action) and not self.dual_profile_originals[action] then
-                        local originals = {}
-                        for _, field in ipairs(PROFILE_FIELDS) do
-                            local source = action[field]
-                            if type(source) == "string" then
-                                originals[field] = source
-                                action[field] = self:_profile(source, profiles, power_levels, clone)
-                                if register then register(action[field]) end
-                            end
-                        end
-                        self.dual_profile_originals[action] = originals
+    function state:apply_dual_cleave(enabled, weapons, profiles, power_levels, clone,
+            register, fallback_map, parity_allowed)
+        local targets, source_names, source_seen = {}, {}, {}
+        for _, key in ipairs(M.DUAL_AXES_TEMPLATES) do
+            each_sub_action(weapons and weapons[key], function(_, action)
+                if not is_direct(action) then return end
+                local originals = self.dual_profile_originals[action]
+                if not originals then
+                    originals = {}
+                    for _, field in ipairs(PROFILE_FIELDS) do
+                        if type(action[field]) == "string" then originals[field] = action[field] end
                     end
-                end)
-            end
-        else
-            for action, originals in pairs(self.dual_profile_originals) do
-                for field, source in pairs(originals) do action[field] = source end
-            end
-            self.dual_profile_originals = {}
+                    self.dual_profile_originals[action] = originals
+                end
+                targets[#targets + 1] = { action = action, originals = originals }
+                for _, source in pairs(originals) do
+                    if not source_seen[source] then
+                        source_seen[source] = true
+                        source_names[#source_names + 1] = source
+                    end
+                end
+            end)
         end
-        self.dual_cleave_enabled = enabled
+
+        -- Registration order and membership are independent of the local
+        -- toggle. Every WT peer builds the same catalog before exact parity is
+        -- evaluated; only the action repoint is gated.
+        table.sort(source_names)
+        for _, source in ipairs(source_names) do
+            local generated = self:_profile(source, profiles, power_levels, clone)
+            if generated ~= source then
+                if fallback_map then fallback_map[generated] = source end
+                if register then register(generated) end
+            end
+        end
+
+        -- Nil preserves the pure helper's pre-#1158 caller contract; production
+        -- always supplies an explicit fail-closed boolean from issue #431.
+        local apply_custom = enabled == true and parity_allowed ~= false
+        for _, target in ipairs(targets) do
+            for field, source in pairs(target.originals) do
+                target.action[field] = apply_custom
+                    and self:_profile(source, profiles, power_levels, clone) or source
+            end
+        end
+        self.dual_cleave_enabled = apply_custom
     end
 
     function state:_one_hand_profile(source_name, profiles, power_levels, clone)

@@ -53,17 +53,35 @@
 local mod = get_mod("wt_dev")
 
 local _printf = rawget(_G, "printf") or function() end
+local _wire_contract = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt431_wire_contract")
+local _wire_identity, _wire_identity_err, _wire_names =
+    _wire_contract.build_wire_identity(mod._wt431_custom_profile_fallback,
+        NetworkLookup and NetworkLookup.damage_profiles)
+mod._wt431_wire_catalog_identity = _wire_identity
+mod._wt431_wire_catalog_count = _wire_names and #_wire_names or 0
+if _wire_identity then
+    pcall(_printf, "[wt:431] exact damage-profile catalog=%s entries=%d",
+        _wire_identity, mod._wt431_wire_catalog_count)
+else
+    pcall(_printf, "[wt:431] WARN exact damage-profile catalog unavailable (%s); custom profiles stay inert",
+        tostring(_wire_identity_err))
+end
 
 -- ============================================================
 -- Peer-parity beacon (COPIED single-source lib; master:
 -- tools/shared_lib/_lib_peer_parity.lua -- edit the master, re-copy verbatim)
 -- ============================================================
 do
-    local ok, factory = pcall(function()
-        return mod:dofile("scripts/mods/weapon_tweaker_dev/_lib_peer_parity")
-    end)
+    local parity_transport = _wire_identity
+        and _wire_contract.wrap_parity_transport(mod, _wire_identity) or nil
+    local ok, factory = false, nil
+    if parity_transport then
+        ok, factory = pcall(function()
+            return mod:dofile("scripts/mods/weapon_tweaker_dev/_lib_peer_parity")
+        end)
+    end
     if ok and type(factory) == "function" then
-        local ok2, inst = pcall(factory, mod, {
+        local ok2, inst = pcall(factory, parity_transport, {
             channel     = "wt_peer_parity_present",
             schema      = 1,
             mod_label   = "Weapon Tweaker",
@@ -71,8 +89,10 @@ do
         })
         if ok2 and type(inst) == "table" then
             mod._wt_peer_parity = inst
+            parity_transport:_bind_parity_instance(inst)
+            mod._wt431_wire_transport = parity_transport
             pcall(function() inst:install() end)
-            pcall(_printf, "[wt:431] peer-parity beacon installed (channel=wt_peer_parity_present)")
+            pcall(_printf, "[wt:431] exact-catalog peer beacon installed (channel=wt_peer_parity_present)")
         end
     end
     if not mod._wt_peer_parity then
@@ -90,6 +110,53 @@ if mod._wt_peer_parity then
         if not pp then return false end
         local ok, state = pcall(function() return pp:applied_state() end)
         return ok and state == "enabled"
+    end
+    -- Real disconnect boundary: retire the peer's transport epoch before a
+    -- rapid same-Steam-id rejoin can deliver a delayed acknowledgement. WT has
+    -- no other hook on this (Class, method); level transitions do not call it.
+    mod:hook_safe("GameNetworkManager", "remove_peer", function(_, peer_id)
+        mod._wt_peer_parity:forget_peer(peer_id)
+    end)
+    mod._wt431_disconnect_epoch_guard = true
+end
+
+-- Optional presentation bridge. Gameplay safety never depends on GUT: this
+-- merely greys the exact settings while the owner gate is closed. Registration
+-- is retried because mod load order is not a dependency contract, and saved
+-- values are never changed.
+do
+    local gate_registered = false
+    local retry_elapsed = 0
+    local runtime_mod_id = "wt"
+    local ok_name, live_name = pcall(function() return mod:get_name() end)
+    if ok_name and type(live_name) == "string" and live_name ~= "" then
+        runtime_mod_id = live_name
+    end
+    local gate_id = runtime_mod_id .. ":431:exact-damage-profile-catalog"
+    local function try_runtime_gate()
+        if gate_registered then return end
+        local spec = _wire_contract.runtime_gate_spec(runtime_mod_id, function()
+                local available = type(mod._wt431_profiles_allowed) == "function"
+                    and mod._wt431_profiles_allowed() == true
+                return available, available and nil
+                    or "Unavailable until every player has the same Weapon Tweaker damage-profile catalog."
+            end)
+        local ok = _wire_contract.try_register_runtime_gate(
+            rawget(_G, "get_mod"), gate_id, spec)
+        gate_registered = ok == true
+        mod._wt431_runtime_gate_registered = gate_registered
+    end
+    try_runtime_gate()
+    local previous_update = mod.update
+    mod.update = function(dt)
+        if previous_update then previous_update(dt) end
+        if not gate_registered then
+            retry_elapsed = retry_elapsed + (dt or 0)
+            if retry_elapsed >= 1 then
+                retry_elapsed = 0
+                try_runtime_gate()
+            end
+        end
     end
 end
 
@@ -133,11 +200,8 @@ end
 -- construction, so it is structurally ungateable). Exposed on the mod table
 -- for /wt_regression_test.
 mod._wt431_wire_safe_profile_name = function(profile_name, parity_confirmed)
-    if parity_confirmed then return profile_name end
-    local map = mod._wt431_custom_profile_fallback
-    local fb = map and map[profile_name]
-    if type(fb) == "string" then return fb end
-    return profile_name
+    return _wire_contract.safe_profile_name(
+        mod._wt431_custom_profile_fallback, profile_name, parity_confirmed)
 end
 
 local _floor_logged = {}
@@ -195,6 +259,16 @@ if WT and type(WT.rt_register) == "function" then
             return "fail-safe posture changed (must init disabled / inert-until-confirmed)"
         end
         if mod._wt431_parity_gated ~= true then return "wiring marker _wt431_parity_gated not set" end
+        if type(mod._wt431_wire_catalog_identity) ~= "string"
+                or mod._wt431_wire_catalog_count < 1 then
+            return "exact damage-profile catalog identity missing"
+        end
+        if type(mod._wt431_wire_transport) ~= "table" then
+            return "exact-catalog transport wrapper missing"
+        end
+        if mod._wt431_disconnect_epoch_guard ~= true then
+            return "disconnect epoch invalidation hook missing"
+        end
         if type(mod._wt431_profiles_allowed) ~= "function" then
             return "_wt431_profiles_allowed missing (apply fns would read nil -> permanently inert)"
         end
@@ -223,10 +297,22 @@ if WT and type(WT.rt_register) == "function" then
         local NL = rawget(_G, "NetworkLookup")
         if not (NL and NL.damage_profiles) then return "skip: NetworkLookup not loaded" end
         for custom, fb in pairs(map) do
+            local custom_id = rawget(NL.damage_profiles, custom)
+            if type(custom_id) ~= "number" or rawget(NL.damage_profiles, custom_id) ~= custom then
+                return string.format("custom profile %s is not bidirectionally registered", tostring(custom))
+            end
             if not rawget(NL.damage_profiles, fb) then
                 return string.format("fallback %s (for %s) not in NetworkLookup.damage_profiles", tostring(fb), tostring(custom))
             end
         end
+        if not map.wt_executioner_light_headshot_130 then
+            return "executioner custom profile missing from the wire fallback registry"
+        end
+        local dual_count = 0
+        for custom in pairs(map) do
+            if custom:find("wt_axe_cleave_", 1, true) == 1 then dual_count = dual_count + 1 end
+        end
+        if dual_count == 0 then return "dual-axes cleave profiles missing from fallback registry" end
         -- Pure coercion helper: correct AND takes no toggle argument (class-31
         -- fix template -- the parity flag is its ONLY gate).
         local f = mod._wt431_wire_safe_profile_name
