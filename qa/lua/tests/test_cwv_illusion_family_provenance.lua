@@ -38,7 +38,9 @@ return function(H, repo_root)
 
     local function compile_predicate(condition_text)
         local chunk = assert(loadstring(
-            "return function(mod, entry) return (" .. condition_text .. ") and true or false end",
+            "return function(mod, entry) local _illusion_provenance = "
+                .. "mod._cwv_illusion_provenance; return (" .. condition_text
+                .. ") and true or false end",
             "scan_predicate"))
         return chunk()
     end

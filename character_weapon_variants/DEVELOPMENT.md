@@ -19,6 +19,13 @@ explicit engine-surface review:
   It receives every engine table it uses through an explicit dependency table,
   runs those constructors in their original order, and owns no hooks, commands,
   appearance, parity, or lifecycle behavior.
+- `_cwv_skin_registry.lua` owns base variant skin/combinations registration and
+  the curated custom-illusion catalog. `_cwv_illusion_families.lua` immediately
+  extends the returned `custom_skin_keys` table with the generated Spear,
+  dual-weapon, Greataxe/Crowbill, Rapier, and shield-pair families. Both modules
+  receive engine registries explicitly, own no hooks/RPC/lifecycle callbacks,
+  and must remain adjacent at their original registration boundary because
+  their `NetworkLookup.weapon_skins` / `item_names` append order is wire-visible.
 - `_cwv_commands_lifecycle.lua` owns diagnostic commands and the final
   `on_game_state_changed`, `on_enabled`, `on_disabled`, and `on_unload`
   callbacks. Appearance replay, dual-weapon package leases, Crowbill state,
@@ -42,6 +49,10 @@ load order should read the entry file directly.
 - Preserve the constructor order at the single entry-file install point. Tests
   that need definitions across owners must use `qa/lua/cwv_source.lua`; only
   entry-size and module-install-order tests should read the entry directly.
+- Put skin registration or generated illusion-family registration in the two
+  ordered skin owners. Never reorder a registrar or rebuild `custom_skin_keys`:
+  the backend-unlock, appearance, wire-policy, and regression consumers retain
+  the exact table returned by `_cwv_skin_registry.lua`.
 
 ## Registration and acquisition contract
 
