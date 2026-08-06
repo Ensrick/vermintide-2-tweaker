@@ -185,6 +185,7 @@ local suites = {
     "test_wt_cwv_tuskgor_default",
     "test_wt_cwv_effective_template",
     "test_cim_skin_persistence",
+    "test_cim_entry_decomposition",
     "test_cim_bulk_cleanup",
     "test_cim_cwv_template_selector",
     "test_cim_cwv_template_catalog",

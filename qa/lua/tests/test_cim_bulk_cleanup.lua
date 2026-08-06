@@ -516,17 +516,18 @@ return function(H, repo_root)
         end
         local standard = read("standard_forge.lua")
         local entry = read("crafting_in_modded_dev.lua")
+        local command_owner = read("_cim_command_owner.lua")
         local boundary_source = read("_cim_salvage_local_boundary.lua")
         local dispatch_source = read("_cim_craft_dispatch.lua")
         local first = assert(standard:find("synth.salvage = function", 1, true))
         local last = assert(standard:find(
             "-- ---- apply_weapon_skin", first, true))
         local production_salvage = standard:sub(first, last - 1)
-        local deletion_first = assert(entry:find(
+        local deletion_first = assert(command_owner:find(
             "mod._cim277_delete_owned_ids = function", 1, true))
-        local deletion_last = assert(entry:find(
+        local deletion_last = assert(command_owner:find(
             'mod:command("forge_delete"', deletion_first, true))
-        local production_deletion = entry:sub(deletion_first, deletion_last - 1)
+        local production_deletion = command_owner:sub(deletion_first, deletion_last - 1)
         H.truthy(production_salvage:find("_salvage_local.execute", 1, true))
         H.truthy(production_salvage:find(
             "delete_owned_ids = mod._cim277_delete_owned_ids", 1, true))
@@ -574,10 +575,11 @@ return function(H, repo_root)
             return source
         end
         local entry = read("crafting_in_modded_dev.lua")
+        local command_owner = read("_cim_command_owner.lua")
         local source = read("_cim_bulk_cleanup_command.lua")
         local deletion_source = read("_cim_owned_deletion.lua")
         local regression_source = read("_cim_regression_cleanup.lua")
-        H.truthy(entry:find(
+        H.truthy(command_owner:find(
             "scripts/mods/crafting_in_modded_dev/_cim_bulk_cleanup_command", 1, true))
         H.truthy(source:find(
             "core.classify(forged, item_master, contract)", 1, true))

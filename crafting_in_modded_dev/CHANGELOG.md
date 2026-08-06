@@ -1,5 +1,13 @@
 # Crafting in Modded Changelog
 
+## 0.8.116-dev (2026-08-06) -- command owner decomposition (#1159, #504, #2) [not deployed]
+
+- Moved the existing forge diagnostic, manual `/forge*`, salvage diagnostic,
+  list/delete, and bulk-cleanup command wiring into one hook-free owner without
+  changing command order, persistence schema, public APIs, or runtime behavior.
+- Reassigned craft/loadout stores remain accessor-backed, preserving exact
+  post-load state while the CIM-dev entry ceiling ratchets downward.
+
 ## 0.8.115-dev (2026-08-03) -- accessory property isolation repaired (#959) [verify-fix][untested]
 
 - Athanor accessory editing no longer freezes after a sibling accessory holds
