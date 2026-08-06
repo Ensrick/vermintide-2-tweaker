@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.292-beta (2026-08-06) - exact custom damage-profile wire identity (#431, #1158) [untested]
+
+- Peers now prove the exact numeric `NetworkLookup.damage_profiles` identity of
+  every WT-generated profile before custom profile repoints can activate;
+  matching mod presence or schema alone is no longer treated as wire safety.
+- The generated registry includes Dual Axes cleave profiles regardless of the
+  local toggle. A sender-side vanilla-profile substitution remains an
+  unconditional final safety floor, and disconnect epochs reject delayed ACKs
+  from rapid same-peer rejoin.
+- Mod Tweaker greys only the six affected profile-backed settings while exact
+  parity is unavailable, without changing their saved values.
+- Verify with two matching WT peers, then with one peer absent/mismatched: exact
+  peers may use each affected rework; mismatched peers must keep vanilla damage
+  profiles without a decode crash, and reconnecting must not reuse a stale ACK.
+
 ## 0.12.291-beta (2026-08-04) - appearance census re-keyed to surface x edge cells (#1157) [untested]
 
 - Census data only. `_wt_appearance_census.lua` is inert pure data consumed by

@@ -90,7 +90,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.292-dev"
+local MOD_VERSION = "0.12.293-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -2754,18 +2754,6 @@ do
 end
 
 -- ============================================================
--- Issue 431: peer-parity gate + wire floor for the custom damage profiles
--- ============================================================
--- Loaded AFTER the three fallback-map registration sites and BEFORE
--- weapon_backend.install assigns mod.update (issue 664 root cause, fixed
--- v0.12.283: that assignment must chain prev_update, or the parity tick
--- dies and every gated toggle stays parity=false forever - even solo).
-mod:dofile("scripts/mods/weapon_tweaker_dev/_wt431_damage_profile_parity")
--- NOTE: the beacon starts "disabled" (fail-safe), so at this instant all three
--- toggles sit on their vanilla profiles; the first beacon tick (sub-second, in
--- solo) flips to enabled and its callbacks re-run the three apply functions.
-
--- ============================================================
 -- Moonfire Bow pre-nerf AOE restoration
 -- ============================================================
 -- One toggle in weapon_overrides:
@@ -4167,10 +4155,14 @@ do
         end
         if not setting_id or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING then
             if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
+                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
+                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
+                    and mod._wt431_profiles_allowed() == true
                 _wt_axe_balance:apply_dual_cleave(
                     enabled(_wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING, true), Weapons,
                     DamageProfileTemplates, PowerLevelTemplates,
-                    function(value) return table.clone(value, true) end, register_profile)
+                    function(value) return table.clone(value, true) end, register_profile,
+                    mod._wt431_custom_profile_fallback, parity_allowed)
             end
         end
         if not setting_id or setting_id == _wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING then
@@ -4211,6 +4203,16 @@ do
     end
     mod._wt_apply_axe_balance(nil, false)
 end
+
+-- ============================================================
+-- Issue 431: exact peer-catalog gate + unconditional wire floor
+-- ============================================================
+-- Load only after every custom-profile family above has registered its full,
+-- toggle-independent fallback catalog. Presence alone cannot prove that the
+-- process-local NetworkLookup.damage_profiles integers match (BUG_CLASSES 64).
+-- This still precedes weapon_backend.install, whose mod.update assignment
+-- chains the parity/runtime-gate drivers installed by this module.
+mod:dofile("scripts/mods/weapon_tweaker_dev/_wt431_damage_profile_parity")
 
 -- Normalize a stale master flag from an older/custom settings file without
 -- mutating any leaf. Programmatic write is non-notifying and bounded to one.
