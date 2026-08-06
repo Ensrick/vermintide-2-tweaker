@@ -1,5 +1,22 @@
 -- Engine-free coverage for the appearance-parity comparison core
 -- (tools/shared_lib/_lib_appearance_parity.lua), issue 371 / issue 737.
+local function read(path)
+    local file = assert(io.open(path, "rb"))
+    local content = file:read("*a")
+    file:close()
+    return content
+end
+
+local function occurrences(haystack, needle)
+    local count, position = 0, 1
+    while true do
+        local first, last = haystack:find(needle, position, true)
+        if not first then return count end
+        count = count + 1
+        position = last + 1
+    end
+end
+
 return function(H, repo_root)
     local MASTER = repo_root .. "/tools/shared_lib/_lib_appearance_parity.lua"
     local COPY   = repo_root
@@ -156,14 +173,25 @@ return function(H, repo_root)
         H.equal(#P.parse_manifest(""), 0)
     end)
 
-    H.test("gt_dev runtime copy is byte-identical to the shared-lib master", function()
-        local function slurp(p)
-            local f = assert(io.open(p, "rb"))
-            local s = f:read("*a")
-            f:close()
-            return s
-        end
-        H.equal(slurp(COPY), slurp(MASTER),
+    H.test("gt_dev runtime copy is byte-identical and manifested", function()
+        H.equal(read(COPY), read(MASTER),
             "copy drift: re-copy tools/shared_lib/_lib_appearance_parity.lua into general_tweaker_dev")
+        local manifest = read(repo_root .. "/tools/shared_lib/manifest.psd1")
+        H.truthy(manifest:find(
+            '"general_tweaker_dev/scripts/mods/general_tweaker_dev/_lib_appearance_parity.lua"',
+            1, true), "gt_dev appearance-parity consumer is absent from the shared-library manifest")
+    end)
+
+    H.test("gt_dev loads the appearance-parity owner and library exactly once", function()
+        local entry = read(repo_root
+            .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua")
+        local owner = read(repo_root
+            .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_lobby_appearance_parity.lua")
+        H.equal(occurrences(entry,
+            'mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_appearance_parity")'), 1,
+            "gt_dev entry must load the appearance-parity owner exactly once")
+        H.equal(occurrences(owner,
+            'local PARITY = mod:dofile("scripts/mods/general_tweaker_dev/_lib_appearance_parity")'), 1,
+            "appearance-parity owner must load its shared-library copy exactly once")
     end)
 end

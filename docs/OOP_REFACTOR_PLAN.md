@@ -62,7 +62,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 | CIM Dev | Partial | Forge/inventory/diagnostic/command owners and regression suite extracted; entry ceiling 5,110 lines | #1159 / #504 / #2 |
 | CT Dev | Partial | Combat, boon, and regression owners extracted; entry ceiling 11,333 lines | #504 / #2 |
 | CWV | Partial | Catalog, core-template constructors, commands, regression, exact-appearance, and husk owners extracted; entry ceiling 9,633 lines | #504 / #2 |
-| Shared copied libraries | Partial | exact-byte sync gate is green for five manifested libraries; roadmap items remain under #428 | #428 |
+| Shared copied libraries | Partial | exact-byte sync gate covers 12 canonical libraries across 37 manifested consumer copies; roadmap items remain under #428 | #428 |
 | Appearance consistency | Separate architecture program | descriptor/census work and live diagnostics are owned by #660; module splitting alone does not prove render-surface consistency | #660 |
 
 #504 owns the staged structural decomposition and its module contracts. #2 owns
@@ -129,19 +129,18 @@ sender-side substitution on it (BUG_CLASSES 31).
 
 ### WS4 - Shared-lib extraction (#428, respects the standalone invariant: copied `_lib_*.lua`, build-time sync, never `get_mod` deps)
 
-> **STATUS: PARTIAL 2026-07-19.** `tools/shared_lib/manifest.psd1` currently
-> enforces exact copies for `_lib_peer_parity`, `_lib_debug`,
-> `_lib_weapon_appearance`, `_lib_career_weapon_actions`, and
-> `_lib_effective_weapon_templates`. `_lib_netlookup`, wire substitution,
-> DLC ownership, the regression harness, and MIL/build-entry consolidation remain
-> roadmap items. Canonical files that are not in the manifest are not migrated
-> consumers and do not count as completion.
+> **STATUS: PARTIAL 2026-08-06.** `tools/shared_lib/manifest.psd1` currently
+> enforces 12 canonical libraries across 37 consumer copies, including the
+> existing General Tweaker appearance-parity consumer. Remaining-consumer
+> migrations for `_lib_network_lookup`, wire substitution, DLC ownership, the
+> regression harness, and MIL/build-entry consolidation remain roadmap items.
+> Canonical files that are not in the manifest are not migrated consumers and
+> do not count as completion.
 
-Priority order by crash-risk: `_lib_dbg` (fixes #427 chat-spam, ~18 mods) ->
-`_lib_peer_parity` (WS1.5) -> `_lib_netlookup` (the append idiom is copy-pasted 15+
-times in cwv alone) -> wire-substitution helper (cosmetics has 4 inline copies) ->
-`_diag_probe` (triplicated) -> MoreItemsLibrary embed (#82) -> WeaponAppearance (#420)
--> CWV<->WOC `_build_entry`/wire-hook single-source.
+Remaining priority order by crash-risk: `_lib_network_lookup` per-owner
+migrations (bounded individually, not bulk) -> wire-substitution helper
+(cosmetics has 4 inline copies) -> `_diag_probe` (triplicated) ->
+MoreItemsLibrary embed (#82) -> CWV<->WOC `_build_entry`/wire-hook single-source.
 
 ### WS5 - God-file decomposition (#2, ratcheted)
 
