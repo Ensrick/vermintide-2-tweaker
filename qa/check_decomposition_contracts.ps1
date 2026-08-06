@@ -9,6 +9,11 @@
 param(
     [string]$RepoRoot,
     [string]$ManifestPath,
+    # Optional comparison point for the per-PR ceiling-debt delta. In GitHub
+    # pull-request CI this defaults to origin/$GITHUB_BASE_REF.
+    [string]$BaseRef,
+    # Deterministic/offline fixture alternative to -BaseRef.
+    [string]$BaseManifestPath,
     [switch]$Quiet,
     [switch]$SelfTest
 )
@@ -97,6 +102,101 @@ function Test-DecompositionContracts {
     return [pscustomobject]@{ Failures = @($failures); Rows = @($rows) }
 }
 
+function Compare-DecompositionDebt {
+    param(
+        [Parameter(Mandatory)]$CurrentManifest,
+        [Parameter(Mandatory)]$BaseManifest
+    )
+
+    $failures = @()
+    $rows = @()
+    $currentByName = @{}
+    $baseByName = @{}
+    $currentSum = 0
+    $baseSum = 0
+
+    foreach ($contract in @($CurrentManifest.Contracts)) {
+        $name = [string]$contract.Name
+        $ceiling = 0
+        if ([string]::IsNullOrWhiteSpace($name) -or -not [int]::TryParse([string]$contract.CeilingLines, [ref]$ceiling) -or $ceiling -le 0) {
+            continue
+        }
+        $currentByName[$name] = $ceiling
+        $currentSum += $ceiling
+    }
+    foreach ($contract in @($BaseManifest.Contracts)) {
+        $name = [string]$contract.Name
+        $ceiling = 0
+        if ([string]::IsNullOrWhiteSpace($name) -or -not [int]::TryParse([string]$contract.CeilingLines, [ref]$ceiling) -or $ceiling -le 0) {
+            $failures += "base manifest has invalid ceiling for '$name'"
+            continue
+        }
+        $baseByName[$name] = $ceiling
+        $baseSum += $ceiling
+    }
+
+    foreach ($name in @($baseByName.Keys | Sort-Object)) {
+        if (-not $currentByName.ContainsKey($name)) {
+            $failures += "ratchet contract removed since base: $name"
+            $rows += [pscustomobject]@{ Name = $name; Base = $baseByName[$name]; Current = $null; Delta = $null; Kind = 'removed' }
+            continue
+        }
+        $delta = $currentByName[$name] - $baseByName[$name]
+        if ($delta -gt 0) {
+            $failures += "ratchet ceiling grew since base: $name $($baseByName[$name]) -> $($currentByName[$name]) (+$delta)"
+        }
+        $rows += [pscustomobject]@{ Name = $name; Base = $baseByName[$name]; Current = $currentByName[$name]; Delta = $delta; Kind = 'existing' }
+    }
+    foreach ($name in @($currentByName.Keys | Where-Object { -not $baseByName.ContainsKey($_) } | Sort-Object)) {
+        $rows += [pscustomobject]@{ Name = $name; Base = $null; Current = $currentByName[$name]; Delta = $null; Kind = 'added' }
+    }
+
+    return [pscustomobject]@{
+        Failures = @($failures)
+        Rows = @($rows)
+        BaseSum = $baseSum
+        CurrentSum = $currentSum
+        Delta = $currentSum - $baseSum
+        Added = @($rows | Where-Object Kind -eq 'added').Count
+        Removed = @($rows | Where-Object Kind -eq 'removed').Count
+        Regrown = @($rows | Where-Object { $_.Kind -eq 'existing' -and $_.Delta -gt 0 }).Count
+    }
+}
+
+function Get-RepoRelativePath {
+    param([string]$Root, [string]$Path)
+    $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $rootUri = New-Object System.Uri($rootPath)
+    $pathUri = New-Object System.Uri($fullPath)
+    return [System.Uri]::UnescapeDataString($rootUri.MakeRelativeUri($pathUri).ToString()).Replace('\', '/')
+}
+
+function Import-GitDataManifest {
+    param([string]$Root, [string]$Ref, [string]$RepoPath)
+    $oldPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $content = @(& git -C $Root show "$Ref`:$RepoPath" 2>&1 | ForEach-Object { $_.ToString() })
+        $code = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $oldPreference
+    }
+    if ($code -ne 0) {
+        throw "cannot read decomposition baseline $Ref`:$RepoPath (git exit $code): $($content -join ' | ')"
+    }
+
+    $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-decomposition-base-" + [guid]::NewGuid().ToString('N') + '.psd1')
+    try {
+        [System.IO.File]::WriteAllText($temp, ($content -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        return Import-PowerShellDataFile -LiteralPath $temp
+    }
+    finally {
+        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
+    }
+}
+
 function Invoke-SelfTest {
     $temp = Join-Path ([IO.Path]::GetTempPath()) ("vt2-decomposition-contracts-" + [guid]::NewGuid().ToString('N'))
     try {
@@ -119,10 +219,50 @@ function Invoke-SelfTest {
         if ((Test-DecompositionContracts $badGrowth $temp @('demo')).Failures.Count -eq 0) { throw 'planted growth was not detected' }
         if ((Test-DecompositionContracts $badOwner $temp @('demo')).Failures.Count -eq 0) { throw 'planted missing owner was not detected' }
         if ((Test-DecompositionContracts $good $temp @('demo', 'missing')).Failures.Count -eq 0) { throw 'planted missing phase was not detected' }
-        if (-not $Quiet) { Write-Host '[check_decomposition_contracts:selftest] OK - positive, growth, owner, and coverage paths verified.' -ForegroundColor Green }
+
+        $baseDebt = @{ Version = 1; Contracts = @(
+            @{ Name = 'demo'; CeilingLines = 10 },
+            @{ Name = 'other'; CeilingLines = 20 }
+        ) }
+        $burnDebt = @{ Version = 1; Contracts = @(
+            @{ Name = 'demo'; CeilingLines = 8 },
+            @{ Name = 'other'; CeilingLines = 20 }
+        ) }
+        $burn = Compare-DecompositionDebt $burnDebt $baseDebt
+        if ($burn.Failures.Count -ne 0 -or $burn.BaseSum -ne 30 -or $burn.CurrentSum -ne 28 -or $burn.Delta -ne -2) {
+            throw 'debt burn-down fixture did not report exact -2 ceiling delta'
+        }
+        $growthDebt = @{ Version = 1; Contracts = @(
+            @{ Name = 'demo'; CeilingLines = 11 },
+            @{ Name = 'other'; CeilingLines = 20 }
+        ) }
+        $growth = Compare-DecompositionDebt $growthDebt $baseDebt
+        if ($growth.Failures.Count -eq 0 -or $growth.Regrown -ne 1 -or $growth.Delta -ne 1) {
+            throw 'planted per-contract ceiling growth was not detected'
+        }
+        $removedDebt = @{ Version = 1; Contracts = @(@{ Name = 'demo'; CeilingLines = 10 }) }
+        if ((Compare-DecompositionDebt $removedDebt $baseDebt).Failures.Count -eq 0) {
+            throw 'planted ratchet-contract removal was not detected'
+        }
+        $expandedDebt = @{ Version = 1; Contracts = @(
+            @{ Name = 'demo'; CeilingLines = 10 },
+            @{ Name = 'other'; CeilingLines = 20 },
+            @{ Name = 'new_inventory'; CeilingLines = 5 }
+        ) }
+        $expanded = Compare-DecompositionDebt $expandedDebt $baseDebt
+        if ($expanded.Failures.Count -ne 0 -or $expanded.Added -ne 1 -or $expanded.Delta -ne 5) {
+            throw 'newly inventoried debt was not distinguished from existing-ceiling regrowth'
+        }
+        if (-not $Quiet) { Write-Host '[check_decomposition_contracts:selftest] OK - current ceilings, owner retention, debt burn, planted regrowth/removal, and inventory-expansion paths verified.' -ForegroundColor Green }
         return 0
     } finally {
-        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+        if (Test-Path -LiteralPath $temp) {
+            foreach ($file in @(Get-ChildItem -LiteralPath $modDir -File -ErrorAction SilentlyContinue)) {
+                Remove-Item -LiteralPath $file.FullName -Force
+            }
+            if (Test-Path -LiteralPath $modDir) { Remove-Item -LiteralPath $modDir -Force }
+            Remove-Item -LiteralPath $temp -Force
+        }
     }
 }
 
@@ -130,21 +270,70 @@ if ($SelfTest) { exit (Invoke-SelfTest) }
 
 try {
     $root = (Resolve-Path -LiteralPath $RepoRoot).Path
-    $manifest = Import-PowerShellDataFile -LiteralPath $ManifestPath
+    $resolvedManifest = (Resolve-Path -LiteralPath $ManifestPath).Path
+    $manifest = Import-PowerShellDataFile -LiteralPath $resolvedManifest
     $result = Test-DecompositionContracts $manifest $root $script:RequiredContractNames
+    $debt = $null
+    $debtSource = $null
+    if (-not $BaseRef -and -not $BaseManifestPath -and $env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:GITHUB_BASE_REF) {
+        $BaseRef = "origin/$($env:GITHUB_BASE_REF)"
+    }
+    if ($BaseManifestPath) {
+        $resolvedBase = (Resolve-Path -LiteralPath $BaseManifestPath).Path
+        $baseManifest = Import-PowerShellDataFile -LiteralPath $resolvedBase
+        $debtSource = $resolvedBase
+        $debt = Compare-DecompositionDebt $manifest $baseManifest
+    }
+    elseif ($BaseRef) {
+        $manifestRepoPath = Get-RepoRelativePath $root $resolvedManifest
+        $baseManifest = Import-GitDataManifest $root $BaseRef $manifestRepoPath
+        $debtSource = $BaseRef
+        $debt = Compare-DecompositionDebt $manifest $baseManifest
+    }
+    if ($debt) { $result.Failures += @($debt.Failures) }
 } catch {
     Write-Host "[check_decomposition_contracts] ERROR - $($_.Exception.Message)" -ForegroundColor Red
     exit 2
 }
 
-if ($result.Failures.Count -gt 0) {
-    foreach ($failure in $result.Failures) { Write-Host "[check_decomposition_contracts] ERROR - $failure" -ForegroundColor Red }
-    exit 2
-}
 if (-not $Quiet) {
     foreach ($row in $result.Rows) {
         Write-Host ("  {0,-28} {1,-8} entry={2,5}/{3,5} owners={4}" -f $row.Name, $row.State, $row.Lines, $row.Ceiling, $row.Owners) -ForegroundColor DarkGray
     }
+}
+if ($debt) {
+    $status = if ($debt.Regrown -gt 0) {
+        'REGROWTH'
+    }
+    elseif ($debt.Delta -lt 0) {
+        'BURN-DOWN'
+    }
+    elseif ($debt.Delta -gt 0 -and $debt.Added -gt 0) {
+        'INVENTORY-EXPANSION'
+    }
+    else {
+        'FLAT'
+    }
+    $deltaText = if ($debt.Delta -gt 0) { "+$($debt.Delta)" } else { "$($debt.Delta)" }
+    Write-Host ("[decomposition-ratchet] base={0} ceiling_sum={1} current={2} delta={3} status={4} regrown={5} added={6} removed={7}" -f $debtSource, $debt.BaseSum, $debt.CurrentSum, $deltaText, $status, $debt.Regrown, $debt.Added, $debt.Removed)
+    if (-not $Quiet) {
+        foreach ($row in @($debt.Rows | Where-Object { $_.Kind -ne 'existing' -or $_.Delta -ne 0 })) {
+            if ($row.Kind -eq 'added') {
+                Write-Host ("  + {0}: NEW ceiling {1}" -f $row.Name, $row.Current) -ForegroundColor Yellow
+            }
+            elseif ($row.Kind -eq 'removed') {
+                Write-Host ("  ! {0}: REMOVED (base ceiling {1})" -f $row.Name, $row.Base) -ForegroundColor Red
+            }
+            else {
+                $rowDelta = if ($row.Delta -gt 0) { "+$($row.Delta)" } else { "$($row.Delta)" }
+                Write-Host ("  {0} {1}: {2} -> {3} ({4})" -f $(if ($row.Delta -gt 0) { '!' } else { '-' }), $row.Name, $row.Base, $row.Current, $rowDelta)
+            }
+        }
+    }
+}
+if ($result.Failures.Count -gt 0) {
+    foreach ($failure in $result.Failures) { Write-Host "[check_decomposition_contracts] ERROR - $failure" -ForegroundColor Red }
+    exit 2
 }
 $complete = @($result.Rows | Where-Object State -eq 'complete').Count
 $partial = @($result.Rows | Where-Object State -eq 'partial').Count
