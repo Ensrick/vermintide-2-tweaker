@@ -70,6 +70,14 @@ the executable hard-limit gate, #428 owns cross-mod copied-library migration, an
 #660 owns appearance descriptors/adapters across render and lifecycle surfaces.
 Completion evidence from one of those issues must not be used to close another.
 
+**Process-residue instrumentation (2026-08-06, #1160).** The decomposition
+registry is also the numeric debt owner: pull-request QA compares its total
+ceiling sum with the manifest at the target master ref, prints the exact delta,
+and blocks an existing ceiling increase or contract removal. The separate
+promotion owner remains `docs/PROMOTION_PROCESS.md`; canonical split-stream
+ships now print the exact dev/public versions and uncited dev issue references
+before the build boundary. Neither signal performs a promotion automatically.
+
 ## Workstreams
 
 ### WS1 - Cross-peer wire safety (crash-risk, do first)

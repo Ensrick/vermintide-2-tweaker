@@ -26,23 +26,34 @@ header so the tracker knows it is promotion-critical in the first place.
 
 ## Tracking: `tools/promote/promotion-status.ps1`
 
-Read-only. Run it **before every stable ship** and in CI. For each split pair it prints:
+Read-only. The canonical `ship.ps1` invokes it automatically for every stable or
+dev split-stream ship, before any build/deploy/upload boundary. Run it directly
+for review at any time. For each split pair it prints:
 
 - **stable vs dev MOD_VERSION**, and how many source files stable trails dev in
   (id-normalized diff — the magnitude of the gap).
-- **crash/critical fixes flagged for review**: issue numbers taken from dev CHANGELOG
-  *headers* tagged `[crash]`/`0-critical` that are **not cited in the stable CHANGELOG**.
-  These are the "did this reach stable?" cases. Confirm each.
+- a loud **STRANDED-FIX REVIEW** block bound to the exact dev and public versions:
+  every issue number cited by a dev CHANGELOG *header* but absent from the stable
+  CHANGELOG. This is a review inventory, not an instruction to promote every dev
+  feature; selective promotion remains user-triggered.
+- a separate red crash/critical subset taken from headers tagged `[crash]` or
+  `0-critical`. `-Strict` exits 1 only for this danger subset, preserving its CI
+  behavior while ordinary issue backlog remains advisory.
 
 ```powershell
 pwsh tools/promote/promotion-status.ps1              # all split mods
 pwsh tools/promote/promotion-status.ps1 -Mod crafting_in_modded -Detailed
 pwsh tools/promote/promotion-status.ps1 -Strict      # exit 1 on backlog (CI gate)
+pwsh tools/promote/promotion-status.ps1 -SelfTest    # offline planted fixtures
 ```
 
 Older stable CHANGELOGs are summary rollups that don't enumerate issues, so historical
 fixes may show as "review" until their entries are back-filled or superseded — that is
 expected. Going forward, the citation habit above keeps it exact.
+
+The ship wrapper treats failure to produce this report as a pre-publication error,
+but an advisory backlog does not auto-copy source and does not block a dev ship.
+The report exists to make the release decision visible before the canonical boundary.
 
 ---
 
