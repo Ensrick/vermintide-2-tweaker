@@ -16,7 +16,7 @@ return function(mod, deps)
 	-- ============================================================
 	-- Custom skin registration
 	-- ============================================================
-	
+
 	-- Registry of cwv_es_dual_swords skin keys (default + the 17 Kruber 1h-sword
 	-- illusion clones registered by `_register_kruber_1h_sword_dual_illusions`).
 	-- INERT MARKER as of v0.1.145 — no runtime hook consumes it. Previously read by
@@ -27,7 +27,7 @@ return function(mod, deps)
 	-- Kept declared here in case a future hook needs to filter on
 	-- cwv_es_dual_swords skin lineage; safe to remove if unused 6 months out.
 	local _kruber_1h_dual_skin_keys = {}
-	
+
 	-- QUESTION: skin_only entries (e.g. cwv_es_longsword_nordland) are NOT skipped
 	-- here — only def.no_skin gates skin registration. That's deliberate: skin_only
 	-- entries exist precisely to provide a selectable cosmetic skin without giving
@@ -98,7 +98,7 @@ return function(mod, deps)
 					end
 				end
 			end
-	
+
 			-- DUAL-WIELD DISPLAY RIG.
 			-- The cosmetic illusion picker attaches each hand's weapon unit to a
 			-- named node on the `display_unit` pivot. Single-sword rigs only author
@@ -156,7 +156,7 @@ return function(mod, deps)
 					_kruber_1h_dual_skin_keys[skin_key] = true
 				end
 			end
-	
+
 			WeaponSkins.skins[skin_key] = {
 				display_name              = def.item_key .. "_skin_name",
 				description               = def.item_key .. "_description",
@@ -177,7 +177,7 @@ return function(mod, deps)
 				skin_key, tostring(ammo_unit),
 				tostring(def.projectile_units_template or base.projectile_units_template),
 				tostring(display_unit))
-	
+
 			-- ItemMasterList registration for the skin entry. WITHOUT this,
 			-- vanilla `HeroWindowItemCustomization._apply_skin_to_item` (the
 			-- inventory illusion picker) does `ItemMasterList[skin_key]`, gets
@@ -242,14 +242,14 @@ return function(mod, deps)
 			if type(registered_skin) == "table" then
 				registered_skin.cwv_owner_item_type = def.item_key
 			end
-	
+
 			if NetworkLookup and NetworkLookup.weapon_skins and not rawget(NetworkLookup.weapon_skins, skin_key) then
 				local idx = #NetworkLookup.weapon_skins + 1
 				rawset(NetworkLookup.weapon_skins, idx, skin_key)
 				rawset(NetworkLookup.weapon_skins, skin_key, idx)
 				mod:info("Injected '%s' into NetworkLookup.weapon_skins at index %d", skin_key, idx)
 			end
-	
+
 			-- Mirror the skin key into NetworkLookup.item_names too. Vanilla
 			-- weapon-skin backend RPCs and equipment-grid widgets do
 			-- `NetworkLookup.item_names[key]` on the skin key — without this, any
@@ -267,9 +267,9 @@ return function(mod, deps)
 			::skip_skin::
 		end
 	end
-	
+
 	_register_variant_skins()
-	
+
 	local function _empty_skin_tiers()
 		return {
 			default   = {},
@@ -280,10 +280,10 @@ return function(mod, deps)
 			unique    = {},
 		}
 	end
-	
+
 	local function _register_cwv_skin_combinations()
 		if not WeaponSkins or not WeaponSkins.skin_combinations then return end
-	
+
 		-- Each item_type gets its own skin_combination_table seeded with the
 		-- variant's auto-generated `<item_key>_skin` entries. Cross-character
 		-- illusion functions (e.g. `_register_kruber_1h_sword_dual_illusions`)
@@ -315,7 +315,7 @@ return function(mod, deps)
 			cwv_es_musket                    = "cwv_es_musket_skins",
 			cwv_es_musket_old                = "cwv_es_musket_old_skins",
 		}
-	
+
 		local seeded = {}
 		for item_type, table_name in pairs(_seed_targets) do
 			seeded[table_name] = _empty_skin_tiers()
@@ -333,9 +333,9 @@ return function(mod, deps)
 			mod:info("Registered %s skin_combination_table", table_name)
 		end
 	end
-	
+
 	_register_cwv_skin_combinations()
-	
+
 	do
 		local outrider
 		for _, def in ipairs(_variant_definitions) do
@@ -350,7 +350,7 @@ return function(mod, deps)
 				"cwv_es_outrider_grenade_launcher_skin")
 		end
 	end
-	
+
 	-- #620 retirement bridge: the three authored Imperial/Black Guard/Helmgart
 	-- looks are now ordinary native-Greatsword illusions. Keep their stable skin
 	-- keys for existing saves, but expose them through exactly one canonical
@@ -375,14 +375,14 @@ return function(mod, deps)
 			end
 		end
 	end
-	
+
 	-- ============================================================
 	-- Cross-character greatsword illusions
 	-- ============================================================
-	
+
 	local _es_careers = { "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }
 	local _wh_careers = { "wh_zealot", "wh_bountyhunter", "wh_captain" }
-	
+
 	local _custom_illusions = {
 		-- Saltzpyre greatsword models on Kruber's greatsword
 		{ skin_key = "cwv_es_2h_sword_wh_01",          matching_weapon = "es_2h_sword", source_skin = "wh_2h_sword_skin_01",          can_wield = _es_careers },
@@ -394,7 +394,7 @@ return function(mod, deps)
 		{ skin_key = "cwv_es_2h_sword_wh_05_runed_01", matching_weapon = "es_2h_sword", source_skin = "wh_2h_sword_skin_05_runed_01", can_wield = _es_careers },
 		{ skin_key = "cwv_es_2h_sword_wh_05_runed_02", matching_weapon = "es_2h_sword", source_skin = "wh_2h_sword_skin_05_runed_02", can_wield = _es_careers },
 		{ skin_key = "cwv_es_2h_sword_wh_04_magic_01", matching_weapon = "es_2h_sword", source_skin = "wh_2h_sword_skin_04_magic_01", can_wield = _es_careers },
-	
+
 		-- Kruber greatsword models on Saltzpyre's greatsword
 		{ skin_key = "cwv_wh_2h_sword_es_01",          matching_weapon = "wh_2h_sword", source_skin = "es_2h_sword_skin_01",          can_wield = _wh_careers },
 		{ skin_key = "cwv_wh_2h_sword_es_02",          matching_weapon = "wh_2h_sword", source_skin = "es_2h_sword_skin_02",          can_wield = _wh_careers },
@@ -407,7 +407,7 @@ return function(mod, deps)
 		{ skin_key = "cwv_wh_2h_sword_es_05",          matching_weapon = "wh_2h_sword", source_skin = "es_2h_sword_skin_05",          can_wield = _wh_careers },
 		{ skin_key = "cwv_wh_2h_sword_es_06",          matching_weapon = "wh_2h_sword", source_skin = "es_2h_sword_skin_06",          can_wield = _wh_careers },
 		{ skin_key = "cwv_wh_2h_sword_es_03_magic_01", matching_weapon = "wh_2h_sword", source_skin = "es_2h_sword_skin_03_magic_01", can_wield = _wh_careers },
-	
+
 		-- Vanilla 2h-sword looks retained under their stable cwv_il_* illusion
 		-- keys. #620 reroutes their canonical matching owner and target pool to
 		-- native es_2h_sword during registration; the selected Combat Style owns
@@ -438,7 +438,7 @@ return function(mod, deps)
 		{ skin_key = "cwv_il_wh_05",          matching_weapon = "es_bastard_sword", source_skin = "wh_2h_sword_skin_05",          target_combo = "cwv_imperial_longsword_skins", can_wield = _es_careers },
 		{ skin_key = "cwv_il_wh_05_runed_01", matching_weapon = "es_bastard_sword", source_skin = "wh_2h_sword_skin_05_runed_01", target_combo = "cwv_imperial_longsword_skins", can_wield = _es_careers },
 		{ skin_key = "cwv_il_wh_05_runed_02", matching_weapon = "es_bastard_sword", source_skin = "wh_2h_sword_skin_05_runed_02", target_combo = "cwv_imperial_longsword_skins", can_wield = _es_careers },
-	
+
 		-- Kruber greathammer (es_2h_hammer) skins as illusions on the curated
 		-- `cwv_es_warpriest_hammer` variant — give the rescaled 2H mesh as a
 		-- cosmetic option for the new 1H priest-hammer Kruber clone. Sources used:
@@ -460,7 +460,7 @@ return function(mod, deps)
 		{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_04_runed_02", matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_04_runed_02", target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
 		{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_06",          matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_06",          target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
 		{ skin_key = "cwv_es_warpriest_hammer_2h_hammer_06_runed_01", matching_weapon = "wh_1h_hammer", source_skin = "es_2h_hammer_skin_06_runed_01", target_combo = "cwv_es_warpriest_hammer_skins", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
-	
+
 		-- Same 8 greathammer sources mirrored onto cwv_es_dual_warpriest_hammers
 		-- (dual Skullsplitters). `mirror_to_left = true` mirrors the source's
 		-- right_hand_unit into left_hand_unit so each hand gets the same
@@ -477,7 +477,7 @@ return function(mod, deps)
 		{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_04_runed_02", matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_04_runed_02", target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset_1p = { 0, 0, -0.1 }, right_hand_offset_3p = { 0, 0, -0.35 }, left_hand_offset_1p = { 0, 0, -0.1 }, left_hand_offset_3p = { 0, 0, -0.35 }, can_wield = _es_careers },
 		{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_06",          matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_06",          target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset_1p = { 0, 0, -0.1 }, right_hand_offset_3p = { 0, 0, -0.35 }, left_hand_offset_1p = { 0, 0, -0.1 }, left_hand_offset_3p = { 0, 0, -0.35 }, can_wield = _es_careers },
 		{ skin_key = "cwv_es_dual_warpriest_hammers_2h_hammer_06_runed_01", matching_weapon = "wh_dual_hammer", source_skin = "es_2h_hammer_skin_06_runed_01", target_combo = "cwv_es_dual_warpriest_hammers_skins", mirror_to_left = true, display_unit_override = "units/weapons/weapon_display/display_dual_hammers", right_hand_scale = { 0.85, 0.85, 0.675 }, left_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset_1p = { 0, 0, -0.1 }, right_hand_offset_3p = { 0, 0, -0.35 }, left_hand_offset_1p = { 0, 0, -0.1 }, left_hand_offset_3p = { 0, 0, -0.35 }, can_wield = _es_careers },
-	
+
 		-- Same 8 greathammer sources on cwv_es_warpriest_hammer_shield (Skullsplitter
 		-- and Shield). Right hand = source greathammer mesh; left hand = Empire shield
 		-- (preserved via override since the source skins have no left_hand_unit set).
@@ -491,7 +491,7 @@ return function(mod, deps)
 		{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_04_runed_02", matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_04_runed_02", target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
 		{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_06",          matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_06",          target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
 		{ skin_key = "cwv_es_warpriest_hammer_shield_2h_hammer_06_runed_01", matching_weapon = "wh_hammer_shield", source_skin = "es_2h_hammer_skin_06_runed_01", target_combo = "cwv_es_warpriest_hammer_shield_skins", left_hand_unit_override = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02", display_unit_override = "units/weapons/weapon_display/display_shield_hammer", right_hand_scale = { 0.85, 0.85, 0.675 }, right_hand_offset = { 0, 0, -0.275 }, can_wield = _es_careers },
-	
+
 		-- Sigmarite Greathammer (cwv_es_priest_greathammer) — Kruber 2H mesh +
 		-- Saltzpyre wh_2h_hammer (Warrior Priest) moveset. The variant has its
 		-- own item_type/skin_combination_table so vanilla skins of either source
@@ -520,7 +520,7 @@ return function(mod, deps)
 		{ skin_key = "cwv_es_priest_wh_02_magic_01", matching_weapon = "wh_2h_hammer", source_skin = "wh_2h_hammer_skin_02_magic_01", target_combo = "cwv_es_priest_greathammer_skins", can_wield = _es_careers },
 		{ skin_key = "cwv_es_priest_wh_02_magic_02", matching_weapon = "wh_2h_hammer", source_skin = "wh_2h_hammer_skin_02_magic_02", target_combo = "cwv_es_priest_greathammer_skins", can_wield = _es_careers },
 	}
-	
+
 	local _custom_skin_keys = {}
 	local _custom_skin_owner_by_combo = {
 		cwv_es_warpriest_hammer_skins = "cwv_es_warpriest_hammer",
@@ -528,10 +528,10 @@ return function(mod, deps)
 		cwv_es_warpriest_hammer_shield_skins = "cwv_es_warpriest_hammer_shield",
 		cwv_es_priest_greathammer_skins = "cwv_es_priest_greathammer",
 	}
-	
+
 	local function _register_custom_illusions()
 		if not ItemMasterList or not WeaponSkins then return end
-	
+
 		for _, illusion in ipairs(_custom_illusions) do
 			local skin_key = illusion.skin_key
 			if _custom_skin_keys[skin_key] then goto continue end
@@ -543,13 +543,13 @@ return function(mod, deps)
 			local matching_weapon = retired_longsword_pool and "es_2h_sword" or illusion.matching_weapon
 			local skin_owner = retired_longsword_pool and matching_weapon
 				or _custom_skin_owner_by_combo[illusion.target_combo] or matching_weapon
-	
+
 			local source = WeaponSkins.skins[illusion.source_skin]
 			if not source then
 				mod:warning("Source skin '%s' not found in WeaponSkins — skipping %s", illusion.source_skin, skin_key)
 				goto continue
 			end
-	
+
 			-- Hand-unit overrides: when the source skin's hand units don't match
 			-- the matching_weapon's slot shape (e.g. greathammer source has only
 			-- right_hand_unit but target is mace+shield which needs left_hand_unit),
@@ -566,7 +566,7 @@ return function(mod, deps)
 			local right_unit = illusion.right_hand_unit_override or source.right_hand_unit
 			local left_unit  = illusion.left_hand_unit_override  or source.left_hand_unit
 			if illusion.mirror_to_left then left_unit = right_unit end
-	
+
 			-- `display_unit_override`: force a specific display rig on the cloned
 			-- skin entry (vs inheriting from source). Required when the source's
 			-- rig doesn't author both attach nodes for the target's slot shape —
@@ -575,7 +575,7 @@ return function(mod, deps)
 			-- display_shield_hammer respectively. See
 			-- `J_LEFTWEAPONATTACH_INVESTIGATION.md` for the rule.
 			local effective_display_unit = illusion.display_unit_override or source.display_unit
-	
+
 			local iml_entry = {
 				item_type         = "weapon_skin",
 				slot_type         = "weapon_skin",
@@ -597,7 +597,7 @@ return function(mod, deps)
 				iml_entry.material_settings_name = source.material_settings_name
 			end
 			ItemMasterList[skin_key] = iml_entry
-	
+
 			local ws_entry = {
 				description            = source.description,
 				display_name           = source.display_name,
@@ -613,7 +613,7 @@ return function(mod, deps)
 				ws_entry.material_settings_name = source.material_settings_name
 			end
 			WeaponSkins.skins[skin_key] = ws_entry
-	
+
 			-- target_combo: explicit override for the skin_combination_table this
 			-- illusion gets appended to. Used when the illusion lives on a
 			-- different weapon than its `matching_weapon` — e.g. vanilla 2h-sword
@@ -637,7 +637,7 @@ return function(mod, deps)
 					end
 				end
 			end
-	
+
 			-- REVIEW: NetworkLookup.weapon_skins has an error-throwing __index per
 			-- CHANGELOG v0.1.12 — `tbl[#tbl + 1] = ...` and `tbl[skin_key] = ...` set
 			-- new keys, which goes through __newindex (not __index) and is fine. But
@@ -652,20 +652,20 @@ return function(mod, deps)
 				tbl[#tbl + 1] = skin_key
 				tbl[skin_key] = #tbl
 			end
-	
+
 			if NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, skin_key) then
 				local tbl = NetworkLookup.item_names
 				local idx = #tbl + 1
 				rawset(tbl, idx, skin_key)
 				rawset(tbl, skin_key, idx)
 			end
-	
+
 			_custom_skin_keys[skin_key] = true
 			mod:info("Registered custom illusion: %s (from %s) -> %s", skin_key, illusion.source_skin, matching_weapon)
 			::continue::
 		end
 	end
-	
+
 	_register_custom_illusions()
 -- CWV_SKIN_REGISTRY_PAYLOAD_END_v1
 
@@ -677,4 +677,3 @@ return function(mod, deps)
 		kruber_1h_dual_skin_keys = _kruber_1h_dual_skin_keys,
 	}
 end
-
