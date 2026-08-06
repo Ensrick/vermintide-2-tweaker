@@ -58,7 +58,7 @@ matrix per item family, and TODAY every cell is opt-in:
 
 | Wave | Deliverable | Gate | State |
 |---|---|---|---|
-| W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, enumerated once: 3,339 unsupported pairs of 4,352 (docs/generated/APPEARANCE_CENSUS_GAPS.generated.md). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-04 (#1157: re-keyed to surface-x-edge cells, 6 surfaces added, wt_dev brought under validation) |
+| W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, currently 3,353 unsupported pairs of 4,352 (`docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-04 (#1157: re-keyed to surface-x-edge cells, 6 surfaces added, wt_dev brought under validation) |
 | W1 | **Descriptor library + contract tests**: `_lib_appearance_descriptor.lua` (pure build/validate/fingerprint) + engine-free tests in `qa/lua/tests/`; CWV owns the first synchronized runtime copy. | 966+ suite green | DONE 2026-08-06 (#1155 pilot prerequisite) |
 | W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | source and Workshop deployment complete in CWV 0.1.495-dev; solo/co-op runtime proof pending |
 | W3 | **Extraction-420 cutover completion**: CWV textures, cosmetics transforms, cosmetics texture fallback, WT transforms (steps 2-5 of that doc). | per-step four-render-path regression + in-game verify | pending |
@@ -67,12 +67,13 @@ matrix per item family, and TODAY every cell is opt-in:
 
 ### W2 exact readiness (2026-08-06)
 
-The deployed `0.1.495-dev` Old Musket pilot routes all 128 declared
-surface-x-edge cells through one descriptor/reconciler contract. Eleven cells
-apply and read back the authored custom presentation: owner 1P equip/customize,
-owner 3P equip/customize, bot equip, remote husk equip/peer-ready, and
-preview-open for inventory, illusion browser, lobby, and score/team. The other
-117 cells are declared vanilla-safe fallbacks; they are enumerated, not fixed.
+The deployed `0.1.495-dev` Old Musket pilot declares all 128 surface-x-edge
+cells under one descriptor/reconciler contract. Eleven cells have runtime
+delivery/adapters that apply and read back the authored custom presentation:
+owner 1P equip/customize, owner 3P equip/customize, bot equip, remote husk
+equip/peer-ready, and preview-open for inventory, illusion browser, lobby, and
+score/team. The other 117 cells are census declarations with vanilla-safe
+fallbacks; many have no runtime call site and are enumerated, not fixed.
 
 CIM currently shares `LootItemUnitPreviewer` with the illusion browser, but the
 shared previewer instance has no empirical CIM marker. The pilot therefore
