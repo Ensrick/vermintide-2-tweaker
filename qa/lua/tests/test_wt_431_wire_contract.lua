@@ -172,6 +172,55 @@ local function register(H, repo_root)
         H.truthy(Contract.max_json_envelope_length() <= Contract.MAX_VMF_JSON_LENGTH)
     end)
 
+    H.test("WT #431 legacy and exact protocol generations cannot acknowledge", function()
+        local factory = assert(loadfile(repo_root
+            .. "/tools/shared_lib/_lib_peer_parity.lua"))()
+        local handlers = {}
+        local function fake_mod(peer_id)
+            return {
+                network_register = function(_, channel, callback)
+                    handlers[channel] = handlers[channel] or {}
+                    handlers[channel][peer_id] = callback
+                end,
+                network_send = function(_, channel, recipient, ...)
+                    local by_peer = handlers[channel] or {}
+                    if recipient == "others" then
+                        for target, callback in pairs(by_peer) do
+                            if target ~= peer_id then callback(peer_id, ...) end
+                        end
+                    elseif by_peer[recipient] then
+                        by_peer[recipient](peer_id, ...)
+                    end
+                end,
+                debug = function() end,
+                echo = function() end,
+                localize = function(_, value) return value end,
+            }
+        end
+
+        local legacy_mod = fake_mod("legacy")
+        local exact_mod = fake_mod("exact")
+        local legacy = assert(factory(legacy_mod, {
+            channel = "wt_peer_parity_present", schema = 1,
+            poll_interval = 0, settle_enable = 0,
+        }))
+        local proxy = assert(Contract.wrap_parity_transport(exact_mod,
+            "wt431-v1:2:12345678:abcdef01", { session_epoch = "exact-e1" }))
+        local exact = assert(factory(proxy, {
+            channel = "wt_damage_profiles_exact_v1", schema = 1,
+            poll_interval = 0, settle_enable = 0,
+        }))
+        proxy:_bind_parity_instance(exact)
+        legacy:install()
+        exact:install()
+        legacy:require_peer("exact")
+        exact:require_peer("legacy")
+        H.equal(legacy:peer_has("exact"), false,
+            "legacy host must not mistake an exact peer for presence-only parity")
+        H.equal(exact:peer_has("legacy"), false,
+            "exact peer must not accept a legacy presence acknowledgement")
+    end)
+
     H.test("WT #431 Dual Axes profiles register while the action repoint fails closed", function()
         local Axe = assert(loadfile(repo_root
             .. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_axe_balance.lua"))()
@@ -262,6 +311,10 @@ local function register(H, repo_root)
             :gsub('gate_id = "wt_dev:', 'gate_id = "wt:')
             :gsub('runtime_gate_spec%("wt_dev"', 'runtime_gate_spec("wt"')
         H.equal(beta, dev, "beta/dev runtime policy drifted beyond namespace normalization")
+        H.truthy(beta:find('channel     = "wt_damage_profiles_exact_v1"', 1, true),
+            "exact WT transport must use its dedicated protocol-generation channel")
+        H.equal(beta:find('channel     = "wt_peer_parity_present"', 1, true), nil,
+            "exact WT transport must never reuse the legacy presence channel")
     end)
 end
 

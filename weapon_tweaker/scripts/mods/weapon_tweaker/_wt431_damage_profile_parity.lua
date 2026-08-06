@@ -82,7 +82,11 @@ do
     end
     if ok and type(factory) == "function" then
         local ok2, inst = pcall(factory, parity_transport, {
-            channel     = "wt_peer_parity_present",
+            -- Protocol-generation boundary: the deployed presence-only build used
+            -- wt_peer_parity_present/schema 1 and would ignore the appended exact
+            -- proof while still acknowledging us. A dedicated channel makes old
+            -- and exact peers fail closed in BOTH directions.
+            channel     = "wt_damage_profiles_exact_v1",
             schema      = 1,
             mod_label   = "Weapon Tweaker",
             echo_prefix = "[wt]",
@@ -92,7 +96,7 @@ do
             parity_transport:_bind_parity_instance(inst)
             mod._wt431_wire_transport = parity_transport
             pcall(function() inst:install() end)
-            pcall(_printf, "[wt:431] exact-catalog peer beacon installed (channel=wt_peer_parity_present)")
+            pcall(_printf, "[wt:431] exact-catalog peer beacon installed (channel=wt_damage_profiles_exact_v1)")
         end
     end
     if not mod._wt_peer_parity then
