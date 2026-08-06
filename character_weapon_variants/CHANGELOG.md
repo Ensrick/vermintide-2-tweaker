@@ -1,5 +1,21 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.494-dev (2026-08-06) -- core-template owner decomposition (#504/#2) [not deployed]
+
+- Moved the 1,281-line Infantry Spear-through-Outrider constructor region
+  into `_cwv_core_templates.lua` without reordering its registrations. The new
+  owner receives its engine tables explicitly and returns only the shared
+  damage-profile cloner needed by the following entry-file code.
+- The owner contains no hooks, commands, lifecycle callbacks, appearance, or
+  parity logic. Its install marker, one-time load, dependency list, constructor
+  order, and composed-source visibility are covered by offline regression tests.
+- Reduced the orchestration entry from 10,784 to 9,633 nonblank lines and
+  ratcheted the decomposition contract to that new ceiling.
+- No bundle, deployment, Workshop, or live gameplay state changed in this
+  checkpoint.
+
+**DoD:** Structural decomposition only; strict offline gates must pass before review.
+
 ## 0.1.492-dev (2026-08-06) -- Phase-3 Old Musket appearance pilot (#1155/#474/#660) [not deployed]
 
 - Added the synchronized immutable appearance-descriptor runtime and its

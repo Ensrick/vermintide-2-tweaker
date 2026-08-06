@@ -4,6 +4,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_illusion_provenance.lua",
     "_cwv_variant_catalog.lua",
     "_cwv_cross_access.lua",
+    "_cwv_core_templates.lua",
     "_cwv_old_musket_wire.lua",
     "_cwv_old_musket_preview_pose.lua",
 	"_cwv_javelin_gate.lua",

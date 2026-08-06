@@ -9,12 +9,13 @@ return function(H, repo_root)
         return source
     end
 
+    local cwv_source = require("cwv_source").combined(repo_root)
+
     H.test("CWV #597 Greataxe replaces Poleaxe with exact Bardin behavior", function()
         H.equal(policy.ITEM_KEY, "cwv_es_greataxe")
         H.equal(policy.BASE_WEAPON, "dr_2h_axe")
         H.equal(policy.TEMPLATE_KEY, "cwv_greataxe_template")
-        local source = read(repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        local source = cwv_source
         H.truthy(source:find("table.clone(Weapons.two_handed_axes_template_1, true)", 1, true))
         H.equal(source:find("_POLEAXE_SPEED_MULT", 1, true), nil)
         H.equal(source:find("_POLEAXE_POWER_MULT", 1, true), nil)
@@ -83,8 +84,7 @@ return function(H, repo_root)
             H.equal(control.right_hand_offset_3p, nil)
             H.equal(control.right_hand_rotation_3p, nil)
         end
-        local source = read(repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        local source = cwv_source
         H.truthy(source:find('_skin_transform_map[_om.greataxe.ITEM_KEY .. "_skin"] = transform_def', 1, true))
         H.truthy(source:find("Every later model gets a", 1, true))
     end)
