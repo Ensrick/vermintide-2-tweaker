@@ -106,7 +106,22 @@ function Test-DescriptionVersionMatch([string]$expectedVersion, [string]$cfgText
     return $null -eq $bannerVersion -or $bannerVersion -eq $expectedVersion
 }
 
+function Test-TitleVersionMatch([string]$expectedVersion, [string]$cfgText) {
+    $match = [regex]::Match($cfgText, 'title\s*=\s*"(?<title>[^"]+)"')
+    if (-not $match.Success) { return $true }
+    $expectedSuffix = " v$expectedVersion"
+    return $match.Groups['title'].Value -match ([regex]::Escape($expectedSuffix) + '(\s|$)')
+}
+
 if ($SelfTest) {
+    $staleTitle = 'title = "Version Probe v1.2.2-dev";'
+    $matchingTitle = 'title = "Version Probe v1.2.3-dev";'
+    if (Test-TitleVersionMatch "1.2.3-dev" $staleTitle) {
+        throw "planted title-version mismatch was not rejected"
+    }
+    if (-not (Test-TitleVersionMatch "1.2.3-dev" $matchingTitle)) {
+        throw "matching title version did not pass"
+    }
     $stale = 'description = "[b]Version Probe v1.2.2-dev[/b]\nProbe";'
     $matching = 'description = "[b]Version Probe v1.2.3-dev[/b]\nProbe";'
     $unversioned = 'description = "Probe";'
@@ -143,7 +158,7 @@ if ($SelfTest) {
     if ($vanishedRead.Ok) {
         throw 'vanished-file read did not fail closed'
     }
-    Write-Host "[check_versions] SELF-TEST PASS - banner drift, release identity, agent-worktree exclusion, and vanished reads covered." -ForegroundColor Green
+    Write-Host "[check_versions] SELF-TEST PASS - title/banner drift, release identity, agent-worktree exclusion, and vanished reads covered." -ForegroundColor Green
     exit 0
 }
 
@@ -189,8 +204,8 @@ foreach ($modLua in Find-ModLuas) {
             $cfgTitle = $matches[1]
             # Should end with " v<stripped_version>"
             $expectedSuffix = " v$strippedVersion"
-            if ($cfgTitle -notmatch [regex]::Escape($expectedSuffix) + "(\s|$)") {
-                $warnings += "${modName}: cfg title '$cfgTitle' should include suffix '$expectedSuffix' (lua MOD_VERSION='$rawVersion')"
+            if (-not (Test-TitleVersionMatch $strippedVersion $cfgText)) {
+                $errors += "${modName}: cfg title '$cfgTitle' must include suffix '$expectedSuffix' (lua MOD_VERSION='$rawVersion')"
             }
         }
 

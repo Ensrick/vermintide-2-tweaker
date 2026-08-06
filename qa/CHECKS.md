@@ -154,7 +154,7 @@ of the local checkout.
 | 9 | Missing preview file referenced by cfg | various | `check_cfg.ps1` file-exists check | AUTO (script) |
 | 10 | MOD_VERSION constant missing in main lua | `feedback_version_in_workshop_title.md` + CLAUDE.md §"Version bumping" | `check_versions.ps1` regex scan | AUTO (script) |
 | 10a | 4-segment MOD_VERSION (e.g. `0.9.9.4-dev`) — the retired within-patch-hotfix anti-pattern; semver is 3-segment `MAJOR.MINOR.PATCH[-track]`. Burned cosmetics_tweaker 2026-05-23. | CLAUDE.md §"Version bumping" | `check_versions.ps1` — flags a 4th numeric segment as a WARNING (exit 1) instead of silently stripping it (issue #429). Normalize on the next bump. | AUTO (script) |
-| 11 | cfg title doesn't carry the current version suffix, or an optional leading tester-visible `[b]... vX[/b]` description banner drifts from `MOD_VERSION` | `feedback_version_in_workshop_title.md` | `check_versions.ps1` cross-check; new banner drift is blocking, while three exact pre-existing metadata triplets are frozen as a ratchet until intentionally updated. `-SelfTest` plants a stale banner. | AUTO (script) |
+| 11 | cfg title doesn't carry the current version suffix, or an optional leading tester-visible `[b]... vX[/b]` description banner drifts from `MOD_VERSION`. A 2026-08-06 WT 0.12.292-beta publication reached the final launcher gate before the stale 0.12.291-beta title failed closed; no Workshop upload occurred. | `feedback_version_in_workshop_title.md` | `check_versions.ps1` cross-check; title and new banner drift are blocking, while three exact pre-existing description triplets are frozen as a ratchet until intentionally updated. `-SelfTest` plants stale title and banner fixtures. | AUTO (blocking script) |
 | 12 | Visibility accidentally flipped to public | `feedback_workshop_metadata_user_dictates.md` | `check_cfg.ps1` whitelist visibility per mod | AUTO (script) |
 | 13 | Description doesn't include bug-reporting block | (PROJECT_STANDARDS §7) | `check_cfg.ps1` regex for "issues" link + log path | AUTO (script) |
 | 14 | BMC link missing or modified | `reference_bmc_button.md` | `check_cfg.ps1` regex for BMC SVG URL | AUTO (script) |
@@ -372,7 +372,7 @@ metadata remain independent presentation/history surfaces.
 | Check | Last run | Notes |
 |---|---|---|
 | `check_cfg.ps1` | ✅ OK | all 20 cfgs pass |
-| `check_versions.ps1` | ⚠ warnings only | cfg title drift (waiting on launcher auto-rewrite) + missing-CHANGELOG warnings. Now also flags 4-segment MOD_VERSIONs as a warning (row 10a, issue #429). |
+| `check_versions.ps1` | ✅ title/release identity blocking; semver debt advisory | cfg title drift is blocking after the failed-closed WT 0.12.292-beta publication; description triplet debt and 4-segment MOD_VERSIONs retain their documented ratchets (row 10a). |
 | `check_unpack_safety.ps1` | ✅ OK | all sites in ct/mp/wt either explicit-j or annotated (post-Issue #36 audit) |
 | `check_vmf_widget_types.ps1` | ✅ OK | all 23 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |

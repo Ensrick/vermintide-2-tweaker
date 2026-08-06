@@ -25,7 +25,7 @@ $repoRoot = Split-Path $here -Parent
 # Gate semantics (2026-07-01): a check's exit 1 = advisory WARNINGS, which are
 # REPORTED but never fail the gate; exit >=2 = ERRORS, which fail the gate. This
 # is what stops pre-existing advisory warnings (e.g. bare-unpack in stable
-# files, cfg title drift, stale sentinels) from blocking unrelated commits and
+# files and stale sentinels) from blocking unrelated commits and
 # training sessions to bypass the pre-commit hook with --no-verify.
 #
 # Two checks break the 0/1/2 convention and are pinned via -Policy:
