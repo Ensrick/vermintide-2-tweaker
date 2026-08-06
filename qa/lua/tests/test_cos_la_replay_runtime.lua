@@ -1,0 +1,209 @@
+return function(H, repo_root)
+    local function read(relative_path)
+        local file = assert(io.open(repo_root .. "/" .. relative_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
+
+    local function occurrences(haystack, needle)
+        local count, offset = 0, 1
+        while true do
+            local at = haystack:find(needle, offset, true)
+            if not at then return count end
+            count = count + 1
+            offset = at + #needle
+        end
+    end
+
+    local entry = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+    local module_path = "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_la_replay_runtime.lua"
+    local source = read(module_path)
+    local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
+
+    H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
+        H.equal(occurrences(entry, "_cos_la_replay_runtime"), 1)
+        H.truthy(entry:find(
+            'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_runtime").install',
+            1, true))
+        H.equal(entry:find("mod._cos_replay.apply = function", 1, true), nil)
+        H.equal(entry:find("mod._cos_replay.on_edge = function", 1, true), nil)
+
+        local reconcile = assert(entry:find("mod._la_reconcile = function", 1, true))
+        local install = assert(entry:find("_cos_la_replay_runtime", reconcile, true))
+        local first_rpc = assert(entry:find(
+            'mod:network_register("cos_la_apply_req"', install, true))
+        H.truthy(reconcile < install and install < first_rpc)
+    end)
+
+    H.test("Cosmetics replay extraction preserves transport and hook cardinality", function()
+        local entry_exec = entry:gsub("%-%-[^\n]*", "")
+        local module_exec = source:gsub("%-%-[^\n]*", "")
+        H.equal(occurrences(entry_exec, "mod:network_register("), 6)
+        H.equal(occurrences(entry_exec, "mod:hook("), 28)
+        H.equal(occurrences(entry_exec, "mod:hook_safe("), 18)
+        H.equal(occurrences(entry_exec, "mod:hook_origin("), 1)
+        H.equal(occurrences(module_exec, "network_register"), 0)
+        H.equal(occurrences(module_exec, "network_send"), 0)
+        H.equal(occurrences(module_exec, "mod:hook"), 0)
+        H.equal(occurrences(module_exec, "mod.on_"), 0)
+        H.equal(occurrences(module_exec, "mod.update"), 0)
+        H.equal(occurrences(source, "replay.apply = function"), 1)
+        H.equal(occurrences(source, "replay.on_edge = function"), 1)
+    end)
+
+    H.test("Cosmetics replay owner is idempotent and preserves status mapping", function()
+        local calls = {
+            new_state = 0,
+            reconcile = 0,
+            pulse = 0,
+            logs = 0,
+        }
+        local units = {
+            alive = { alive = true },
+            dead = { alive = false },
+        }
+        local policy = {}
+        function policy.new_replay_state()
+            calls.new_state = calls.new_state + 1
+            return { generation = 1 }
+        end
+        function policy.invalidate_all(state)
+            calls.invalidate_all = state
+        end
+        function policy.invalidate(state, peer)
+            calls.invalidated_state = state
+            calls.invalidated_peer = peer
+        end
+        function policy.build_records(equips, offhands, options)
+            calls.equips = equips
+            calls.offhands = offhands
+            calls.only_peer = options.only_peer
+            return { marker = "records" }
+        end
+        function policy.reconcile_edge(state, edge, records, apply)
+            calls.edge_state = state
+            calls.edge = edge
+            calls.records = records
+            calls.apply = apply
+            return { per_peer = { peer_a = 1 }, deferred = 0, coalesced = 0 }
+        end
+
+        local mod = {
+            _offhand_mesh_by_peer = { peer_a = { slot_melee = {} } },
+        }
+        mod._la_native_pulse = function(unit, tag)
+            calls.pulse = calls.pulse + 1
+            calls.pulse_unit = unit
+            calls.pulse_tag = tag
+        end
+        mod._la_reconcile = function(peer, slot, tag, allow_pulse)
+            calls.reconcile = calls.reconcile + 1
+            calls.reconcile_args = { peer, slot, tag, allow_pulse }
+            return calls.reconcile_result, calls.reconcile_reason
+        end
+
+        local equips = { peer_a = { slot_melee = { armoury_key = "key" } } }
+        local owner = Runtime.install(mod, {
+            policy = policy,
+            wearer_unit_for_peer = function(peer) return units[peer] end,
+            unit_alive = function(unit) return unit.alive end,
+            is_local_server = function() return false end,
+            la_equips_by_peer = equips,
+            printf = function() calls.logs = calls.logs + 1 end,
+        })
+        H.equal(Runtime.install(mod, {}), owner)
+        H.equal(calls.new_state, 1)
+        H.equal(owner.replay, mod._cos_replay)
+        H.equal(owner.policy, policy)
+
+        H.equal(mod._cos_replay.apply("missing", "slot", {}), "defer")
+        H.equal(mod._cos_replay.apply("dead", "slot", {}), "defer")
+        H.equal(mod._cos_replay.apply("alive", "slot", nil), "skip")
+        H.equal(mod._cos_replay.apply("alive", "slot", {
+            offhand_unit = "unit_path",
+        }), "applied")
+        H.equal(calls.pulse, 1)
+        H.equal(calls.pulse_unit, units.alive)
+        H.equal(calls.pulse_tag, "replay")
+
+        calls.reconcile_result, calls.reconcile_reason = true, nil
+        H.equal(mod._cos_replay.apply("alive", "slot", {}), "applied")
+        H.deep_equal(calls.reconcile_args, { "alive", "slot", "replay", true })
+        calls.reconcile_result, calls.reconcile_reason = false, "no-entry"
+        H.equal(mod._cos_replay.apply("alive", "slot", {}), "skip")
+        calls.reconcile_result, calls.reconcile_reason = false, "deus-yield"
+        H.equal(mod._cos_replay.apply("alive", "slot", {}), "skip")
+        calls.reconcile_result, calls.reconcile_reason = false, "not-ready"
+        H.equal(mod._cos_replay.apply("alive", "slot", {}), "defer")
+    end)
+
+    H.test("Cosmetics replay edges preserve bounded invalidation and re-arm order", function()
+        local calls = {}
+        local state = { generation = 3 }
+        local policy = {
+            new_replay_state = function() return state end,
+            invalidate = function(got_state, peer)
+                calls[#calls + 1] = "invalidate_peer"
+                H.equal(got_state, state)
+                H.equal(peer, "peer_b")
+            end,
+            invalidate_all = function(got_state)
+                calls[#calls + 1] = "invalidate_all"
+                H.equal(got_state, state)
+            end,
+            build_records = function(equips, offhands, options)
+                calls[#calls + 1] = "build"
+                H.equal(equips.marker, "equips")
+                H.equal(offhands.marker, "offhands")
+                H.equal(options.only_peer, "peer_b")
+                return { marker = "records" }
+            end,
+            reconcile_edge = function(got_state, edge, records, apply)
+                calls[#calls + 1] = "reconcile"
+                H.equal(got_state, state)
+                H.equal(edge, "peer-ready")
+                H.equal(records.marker, "records")
+                H.truthy(type(apply) == "function")
+                return { per_peer = {}, deferred = 1, coalesced = 2 }
+            end,
+        }
+        local mod = {
+            _offhand_mesh_by_peer = { marker = "offhands" },
+            _la_state_pull_exhausted = true,
+            _la_reconcile = function() return false, "not-ready" end,
+        }
+        Runtime.install(mod, {
+            policy = policy,
+            wearer_unit_for_peer = function() return nil end,
+            unit_alive = function() return false end,
+            is_local_server = function() return false end,
+            la_equips_by_peer = { marker = "equips" },
+        })
+        local result = mod._cos_replay.on_edge("peer-ready", {
+            only_peer = "peer_b",
+            invalidate_peer = "peer_b",
+        })
+        H.deep_equal(calls, { "invalidate_peer", "build", "reconcile" })
+        H.equal(result.deferred, 1)
+        H.equal(result.coalesced, 2)
+        H.equal(mod._la_state_pull_exhausted, nil)
+        H.deep_equal(mod._la_state_pull_pending, { attempts = 0, next_at = 0 })
+
+        policy.build_records = function()
+            calls[#calls + 1] = "build_all"
+            return {}
+        end
+        policy.reconcile_edge = function()
+            calls[#calls + 1] = "reconcile_all"
+            return { per_peer = {}, deferred = 0, coalesced = 0 }
+        end
+        mod._cos_replay.on_edge("session-ready", { invalidate_all = true })
+        H.deep_equal(calls, {
+            "invalidate_peer", "build", "reconcile",
+            "invalidate_all", "build_all", "reconcile_all",
+        })
+    end)
+end

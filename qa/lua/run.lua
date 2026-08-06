@@ -308,6 +308,7 @@ local suites = {
     "test_cos_la_instance_policy",
     "test_cos_la_option_icon_policy",
     "test_cos_la_replay_policy",
+    "test_cos_la_replay_runtime",
     "test_cos_weapon_pose_policy",
     "test_cos_deus_yield_policy",
     "test_gt_disconnect_grace",
