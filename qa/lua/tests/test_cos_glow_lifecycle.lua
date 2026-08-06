@@ -12,6 +12,9 @@ return function(H, repo_root)
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua")
     local button_owner = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_editor_button.lua")
+    local item_grid_presentation = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_item_grid_presentation.lua")
     local instance_policy = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy.lua")
     local preview_policy_path = repo_root
@@ -208,11 +211,16 @@ return function(H, repo_root)
         H.truthy(picker:find("The native info_window frame/background remains", 1, true))
         H.equal(picker:find('local function _widget_panel_bg()', 1, true), nil)
         H.truthy(entry:find("GlowPicker.is_open_for(bid, { skin = skin })", 1, true))
-        H.truthy(entry:find('mod:hook_safe("ItemGridUI", "init"', 1, true))
-        H.truthy(entry:find('mod:hook_safe("ItemGridUI", "_populate_inventory_page"', 1, true))
-        H.truthy(entry:find("widget._ct_glow_badge_enriched", 1, true))
-        H.truthy(entry:find("GlowPicker.committed_state_for", 1, true))
-        H.truthy(entry:find("mod._cos_glow_badges_refresh = function", 1, true))
+        H.truthy(item_grid_presentation:find(
+            'mod:hook_safe("ItemGridUI", "init"', 1, true))
+        H.truthy(item_grid_presentation:find(
+            'mod:hook_safe("ItemGridUI", "_populate_inventory_page"', 1, true))
+        H.truthy(item_grid_presentation:find(
+            "widget._ct_glow_badge_enriched", 1, true))
+        H.truthy(item_grid_presentation:find(
+            "GlowPicker.committed_state_for", 1, true))
+        H.truthy(item_grid_presentation:find(
+            "mod._cos_glow_badges_refresh = function", 1, true))
         H.truthy(entry:find("GlowPicker.draw_native_information(func, self, ui_renderer, dt,", 1, true))
         H.truthy(picker:find("PANEL_LAYOUT.without_native_information(", 1, true))
         H.truthy(picker:find("Information contents for this exact editor identity", 1, true))
@@ -221,18 +229,19 @@ return function(H, repo_root)
 
         -- #795: illusion-button passes must exist before UIWidget.init creates
         -- its positional pass_data twin. Never append a pass to live widgets.
-        local enrich = assert(entry:find(
-            "local illusion_added = _enrich_illusion_glow_badge(widget_definition)",
+        local enrich = assert(item_grid_presentation:find(
+            "local illusion_added = enrich_illusion_glow_badge(widget_definition)",
             1, true))
-        local init = assert(entry:find(
+        local init = assert(item_grid_presentation:find(
             "return func(widget_definition, ui_renderer)", enrich, true))
         H.truthy(enrich < init)
-        local refresh_start = assert(entry:find(
-            "local function _refresh_illusion_glow_badges(self)", 1, true))
-        local refresh_end = assert(entry:find("\nend", refresh_start, true))
-        local refresh = entry:sub(refresh_start, refresh_end)
-        H.equal(refresh:find("_enrich_illusion_glow_badge(widget)", 1, true), nil)
-        H.truthy(entry:find(
+        local refresh_start = assert(item_grid_presentation:find(
+            "local function refresh_illusion_glow_badges(self)", 1, true))
+        local refresh_end = assert(item_grid_presentation:find(
+            "\n    end", refresh_start, true))
+        local refresh = item_grid_presentation:sub(refresh_start, refresh_end)
+        H.equal(refresh:find("enrich_illusion_glow_badge(widget)", 1, true), nil)
+        H.truthy(item_grid_presentation:find(
             "GLOW_BADGE.is_illusion_definition(widget)", 1, true))
 
         local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")

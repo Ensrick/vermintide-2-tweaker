@@ -42,9 +42,10 @@ exactly once from the manifest.
 
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
-| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest, the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks, and everything not yet extracted: render-path hooks, per-peer glow broadcast RPCs, LA-bridge/husk integration, remaining offhand/customization UI, the #377 badge/grid presentation, and #282 MH session-residency diagnostics. |
+| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest, the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks, and everything not yet extracted: render-path hooks, per-peer glow broadcast RPCs, LA-bridge/husk integration, remaining offhand/customization UI, and #282 MH session-residency diagnostics. |
 | `_cos_command_owner.lua` | Single #504 command-lifecycle owner. Owns the lazy regression registry and `/cos_regression_test` runner plus `/cos_persist_dump`, `/cos_persist_replay`, and `/cos_persist_clear`. Returns the register function consumed by `_cos_runtime_checks.lua`; repeated install is idempotent. It owns no hook, RPC, renderer, or lifecycle callback. |
 | `_cos_glow_editor_button.lua` | Idempotent #377/#504 contextual Edit Glow button owner. Owns family/open-state policy binding, enabled/selected styling, and widget construction. The host customization view retains position, input, and draw ownership; this module adds no hook, RPC, polling, persistence, or renderer mutation. |
+| `_cos_item_grid_presentation.lua` | Idempotent #377/#650/#795 item-grid and illusion-card presentation owner. Owns the single pre-`pass_data` `UIWidget.init` enrichment hook, the three existing `ItemGridUI` refresh hooks, weak live-surface registries, and the committed glow/composite refresh callback. It receives the existing policies and late-bound composed-appearance resolver; it adds no lifecycle callback, RPC, persistence, or appearance semantics. |
 | `_cos_runtime_checks.lua` | Registers the 60 late runtime checks in historical order plus the single `/verify_gk_set` command. Receives every entry-private table/helper through one explicit dependency table; closures remain lazy so live state is inspected only when the registry runs. It owns no hooks, RPCs, or lifecycle callback. |
 | `_cos_glow_probe.lua` | Owns `/glow_dump`, `/glow_probe`, `/glow_scan`, `/glow_scan_stop`, `/glow_restore`, `/la_shield_glow_probe`, both bounded scan tick functions, and the exported `wielded_units_for_probe` helper consumed by the later manual picker command. It receives only player-safety, unit-liveness, and log-flush helpers. |
 | `_cos_la_commands.lua` | Owns the read-only LA diagnostic commands `/la_dump`, `/la_trace`, `/la_force`, `/la_attach`, `/la_loadout`, and `/la_hats`. Captures the already-loaded bridge plus career/log helpers; no hook or lifecycle ownership. |
@@ -86,6 +87,12 @@ their internals alone.
   fallback, and byte-color behavior in `_cos_composite_icons.lua`. A new UI
   surface is only an adapter and must prove exact/synchronized identity plus
   renderer-local materials before consuming the descriptor.
+
+- **New item-grid or illusion-card glow/composite presentation adapter** ->
+  `_cos_item_grid_presentation.lua`. Preserve its one pre-`pass_data`
+  `UIWidget.init` owner and three `ItemGridUI` refresh hooks; do not add a
+  second hook for the same class/method or move appearance resolution into the
+  UI owner.
 
 - **New diagnostic dump/probe command** → `_cos_diagnostics.lua`. Route through
   engine `printf` / `mod:info` (users run with mod logs OFF), `_flush_log` at the end.
