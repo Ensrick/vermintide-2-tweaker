@@ -25,11 +25,7 @@ return function(H, repo_root)
     end)
 
     H.test("CRT #473 production wiring is reversible and parity gated", function()
-        local path = repo_root
-            .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua"
-        local f = assert(io.open(path, "rb"))
-        local source = f:read("*a")
-        f:close()
+        local source = require("crt_source").combined(repo_root)
         H.truthy(source:find("rework_we_maidenguard_dance_of_blades", 1, true))
         H.truthy(source:find("network_unsafe = true", 1, true))
         H.truthy(source:find("dance_talent_buffs_original", 1, true))

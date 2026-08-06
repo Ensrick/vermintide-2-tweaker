@@ -35,7 +35,7 @@ return function(H, repo_root)
             return source
         end
         local armor = read("career_tweaker_armor_overcharge.lua")
-        local balance = read("career_tweaker_balance.lua")
+        local balance = require("crt_source").combined(repo_root)
         local loc = read("career_tweaker_localization.lua")
 
         H.truthy(armor:find("FOCUSED_DIAG_CAP = 48", 1, true))

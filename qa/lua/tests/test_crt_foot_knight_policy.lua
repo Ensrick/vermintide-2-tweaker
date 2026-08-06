@@ -285,11 +285,7 @@ return function(H, repo_root)
         H.truthy(diagnostics_source:find('hud._is_spectator and hud._spectated_player_unit', 1, true))
         H.truthy(diagnostics_source:find('subject=%s', 1, true))
 
-        local balance_path = repo_root
-            .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua"
-        local balance_file = assert(io.open(balance_path, "rb"))
-        local balance_source = balance_file:read("*a")
-        balance_file:close()
+        local balance_source = require("crt_source").combined(repo_root)
         local hook_path = repo_root
             .. "/career_tweaker/scripts/mods/career_tweaker/_career_tweaker_balance_hooks.lua"
         local hook_file = assert(io.open(hook_path, "rb"))

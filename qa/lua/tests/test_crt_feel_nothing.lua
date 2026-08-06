@@ -8,7 +8,7 @@ return function(H, repo_root)
         return source
     end
 
-    local balance = read("career_tweaker_balance.lua")
+    local balance = require("crt_source").combined(repo_root)
     local data = read("career_tweaker_data.lua")
     local localization = read("career_tweaker_localization.lua")
     local hooks = read("_career_tweaker_balance_hooks.lua")

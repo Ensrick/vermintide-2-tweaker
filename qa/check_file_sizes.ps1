@@ -106,7 +106,7 @@ function Invoke-SelfTest {
         if (-not $condition) { $script:FileSizeSelfTestPass = $false }
     }
 
-    $canonicalRel = 'career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua'
+    $canonicalRel = 'chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'
     $canonicalPath = Join-Path $repoRoot ($canonicalRel.Replace('/', '\'))
     $canonicalFile = Get-Item -LiteralPath $canonicalPath -ErrorAction Stop
     $clonedSuffix = 'career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua'
@@ -122,9 +122,10 @@ function Invoke-SelfTest {
 
     $baseline = Load-Baseline
     $internalBaselineKeys = @($baseline.Keys | Where-Object { Test-RepositoryInternalWorktreePath $_ })
-    Assert ($baseline.Count -eq 9) 'baseline contains exactly the 9 canonical oversized modules'
+    Assert ($baseline.Count -eq 8) 'baseline contains exactly the 8 remaining canonical oversized modules'
     Assert ($internalBaselineKeys.Count -eq 0) 'baseline contains no nested-worktree entries'
-    Assert ($baseline.ContainsKey($canonicalRel)) 'baseline retains the canonical career balance module'
+    Assert ($baseline.ContainsKey($canonicalRel)) 'baseline retains a canonical oversized module'
+    Assert (-not $baseline.ContainsKey('career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua')) 'completed Career decomposition is removed from frozen debt'
 
     if ($script:FileSizeSelfTestPass) {
         Write-Host '[check_file_sizes -SelfTest] OK -- worktree exclusion and canonical enforcement intact.' -ForegroundColor Green
