@@ -613,8 +613,9 @@ open report.
    not automatically reuse identity or lifecycle.
 3. **Lifecycle replay is feature-owned.** LA, glow, Combat Styles, WOC, and CWV
    each react to different subsets of equip, spawn, transition, preview-open,
-   peer-ready, and hot-join edges. No bounded reconciler currently proves that
-   one descriptor generation reached every applicable consumer.
+   peer-ready, and hot-join edges. The #1155 Old Musket pilot is the first
+   bounded descriptor-generation reconciler; other families still lack that
+   proof and must not infer coverage from the pilot.
 4. **Earlier tests often proved registration or call success.** #613 supplied
    the concrete counterexample: target Z/scale were logged, one channel applied,
    and immediate retained Z/scale remained native. Postconditions must compare

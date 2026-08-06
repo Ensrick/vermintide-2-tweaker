@@ -375,14 +375,36 @@ families.outrider_grenade_launcher = {
 -- cross-slot stance toggle, NetworkLookup.inventory_packages alias (:4358).
 families.old_musket = {
 	matrix = matrix(
-		"474 (Old Musket husk custom mesh + remote shot audio). _husk_custom_bundle_unit (:4326) makes the LA-pattern mesh resident, but husk parity is diagnostics-armed + coop-required and 738 audited the pre-join replay case. Degrades to the resident vanilla es_handgun rifle.",
+		"474 fallback: the Phase-3 descriptor adapter declines custom state unless exact semantic identity, the custom 3P unit, and retained pose/material postconditions all prove locally; otherwise it preserves the resident vanilla es_handgun rifle.",
 		{
-			-- cim_preview stays IMPLEMENTED: 617's resource-gated painter
-			-- (:12103, verified Athanor closure) binds the custom textures.
+			owner_1p = row(UNSUP,
+				"Only create_equipment/spawn and explicit tuner generation are empirically routed. Mission transition and respawn may recreate equipment, but are not claimed until their own edge is observed.",
+				{ equip=IMPL, customize=IMPL }),
+			owner_3p = row(UNSUP,
+				"Only create_equipment/spawn and explicit tuner generation are empirically routed. Mission transition and respawn may recreate equipment, but are not claimed until their own edge is observed.",
+				{ equip=IMPL, customize=IMPL }),
+			bot = row(UNSUP,
+				"Bot create_equipment is explicitly classified; transition and respawn are not separately observed and therefore remain unsupported.",
+				{ equip=IMPL }),
+			husk = row(UNSUP,
+				"The observer has no safe custom target at this surface/edge. Exact identity/resource ambiguity preserves the resident es_handgun rather than transmitting a mod unit path.",
+				{ equip=IMPL, peer_ready=IMPL }),
+			inventory_preview = row(UNSUP,
+				"Inventory preview presentation exists only after the derived previewer creates and stabilizes the exact slot; other edges preserve vanilla.",
+				{ preview_open=IMPL }),
 			illusion_browser = row(UNSUP,
-				"227 (Old Musket illusion entry renders red/transparent in the cosmetic browser). The mesh spawns via _cwv_browser_meshswap_apply (:9010) and 617's shared per-unit painter should close the texture, but the illusion-browser pane is not yet verified. Degrades to the base es_handgun rifle mesh."),
+				"LootItemUnitPreviewer applies only at construction after exact recipe/unit pairing and strict material closure; other edges preserve vanilla.",
+				{ preview_open=IMPL }),
+			cim_preview = row(UNSUP,
+				"CIM reuses LootItemUnitPreviewer, but the shared instance currently carries no empirical CIM surface marker; the pilot must not relabel its browser call as CIM coverage."),
+			lobby = row(UNSUP,
+				"The shared derived character preview adapter applies only when the lobby preview creates the exact slot; other edges preserve vanilla.",
+				{ preview_open=IMPL }),
+			score_team = row(UNSUP,
+				"The shared derived character preview adapter applies only when the score/team preview creates the exact slot; other edges preserve vanilla.",
+				{ preview_open=IMPL }),
 			remote_audio = row(UNSUP,
-				"474: the Old Musket's authored shot audio is not reproduced for remote players (398 class); observing peers hear the resident vanilla es_handgun report. Safe (vanilla)."),
+				"Remote fire remains the pre-existing bounded Old Musket audio channel, outside the Phase-3 visual descriptor adapter. It preserves the resident es_handgun report when identity is unavailable (398/474)."),
 		}),
 }
 

@@ -1,6 +1,12 @@
 @{
     Libraries = @(
         @{
+            Source = "_lib_appearance_descriptor.lua"
+            Consumers = @(
+                "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_appearance_descriptor.lua"
+            )
+        }
+        @{
             Source = "_lib_peer_parity.lua"
             Consumers = @(
                 "career_tweaker/scripts/mods/career_tweaker/_lib_peer_parity.lua"

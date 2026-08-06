@@ -86,45 +86,30 @@ function M.alias_collected_packages(package_names)
 	return package_names, replaced
 end
 
--- One descriptor is shared by the ordinary cosmetic/item browser and CIM's
--- Athanor because both are LootItemUnitPreviewer consumers.  Runtime transform
--- triplets are injected by the owner so this pure policy does not depend on
--- Stingray vector/quaternion types.
-function M.resolve(item, mode, transform, canonical_key)
-	local key, skin = item_identity(item, canonical_key)
-	if key ~= M.ITEM_KEY then return nil end
-	return {
-		item_key = key,
-		skin_key = skin or M.SKIN_KEY,
-		mode = mode == "melee" and "melee" or "ranged",
-		unit = M.UNIT,
-		unit_3p = M.UNIT_3P,
-		package = M.PREVIEW_PACKAGE_ALIAS,
-		fallback_unit = M.PREVIEW_PACKAGE_ALIAS,
-		material = M.PREVIEW_MATERIAL,
-		textures = M.TEXTURES,
-		transform = transform,
-	}
-end
-
 -- Returns a render mode rather than a boolean: a missing Workshop resource may
 -- safely degrade to the vanilla handgun, while a missing fallback is unsafe.
 function M.resource_mode(descriptor, can_get)
 	if type(descriptor) ~= "table" or type(can_get) ~= "function" then
 		return nil, "resolver_unavailable"
 	end
-	local ok_unit, custom_ready = pcall(can_get, "unit", descriptor.unit_3p)
-	local ok_pkg, package_ready = pcall(can_get, "package", descriptor.package)
+	local hand = descriptor.right_hand_unit or {}
+	local fallback = descriptor.fallback and descriptor.fallback.right_hand_unit or {}
+	local unit_3p = descriptor.unit_3p or hand.unit_3p
+	local package = descriptor.package or hand.package
+	local fallback_unit = descriptor.fallback_unit or fallback.unit_3p or fallback.unit
+	local ok_unit, custom_ready = pcall(can_get, "unit", unit_3p)
+	local ok_pkg, package_ready = pcall(can_get, "package", package)
 	if ok_unit and custom_ready == true and ok_pkg and package_ready == true then
 		for _, binding in ipairs(descriptor.textures or {}) do
 			local ok, ready = pcall(can_get, "texture", binding.texture)
 			if not ok or ready ~= true then return "fallback", "texture_missing" end
 		end
-		local ok_mat, material_ready = pcall(can_get, "material", descriptor.material)
+		local material = descriptor.material or (descriptor.materials and descriptor.materials.preview)
+		local ok_mat, material_ready = pcall(can_get, "material", material)
 		if not ok_mat or material_ready ~= true then return "fallback", "material_missing" end
 		return "custom", "ready"
 	end
-	local ok_fallback, fallback_ready = pcall(can_get, "unit", descriptor.fallback_unit)
+	local ok_fallback, fallback_ready = pcall(can_get, "unit", fallback_unit)
 	if ok_pkg and package_ready == true and ok_fallback and fallback_ready == true then
 		return "fallback", "custom_unit_missing"
 	end

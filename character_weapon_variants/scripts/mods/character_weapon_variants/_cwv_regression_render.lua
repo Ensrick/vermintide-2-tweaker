@@ -914,23 +914,31 @@ _rt_register("issue617_old_musket_preview_texture_consumer", function()
 		return "Old Musket LootItemUnitPreviewer target planner missing"
 	end
 	local custom_3p, vanilla_fallback, custom_base = {}, {}, {}
-	local def = {
-		item_key = "cwv_es_musket_old",
-		right_hand_unit = "units/cwv_es_musket_custom/cwv_es_musket_custom",
-	}
+	local def = _om._old_musket_preview_descriptor({
+		backend_id = "cwv_es_musket_old_regression_617",
+		cwv_key = "cwv_es_musket_old",
+	})
+	if not def or not def.right_hand_unit or not def.right_hand_unit.unit then
+		return "canonical Old Musket descriptor did not resolve for preview regression"
+	end
+	local custom_path = def.right_hand_unit.unit
 	local targets = plan(def,
 		{ custom_3p, vanilla_fallback, custom_base },
 		{
-			{ unit_name = def.right_hand_unit .. "_3p" },
+			{ unit_name = def.right_hand_unit.unit_3p },
 			{ unit_name = "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p" },
-			{ unit_name = def.right_hand_unit },
+			{ unit_name = custom_path },
 		})
 	if #targets ~= 2 or targets[1] ~= custom_3p or targets[2] ~= custom_base then
 		return "preview target planner must paint both custom paths and reject vanilla fallback"
 	end
-	if #plan({ item_key = "es_handgun", right_hand_unit = def.right_hand_unit },
-			{ custom_3p }, { { unit_name = def.right_hand_unit .. "_3p" } }) ~= 0 then
-		return "preview target planner painted a non-Old-Musket item"
+	if #plan(def, { vanilla_fallback }, { {
+			unit_name = def.fallback.right_hand_unit.unit_3p,
+		} }) ~= 0 then
+		return "preview target planner painted the canonical vanilla fallback"
+	end
+	if #plan(nil, { custom_3p }, { { unit_name = def.right_hand_unit.unit_3p } }) ~= 0 then
+		return "preview target planner accepted a missing/non-Old-Musket descriptor"
 	end
 end)
 

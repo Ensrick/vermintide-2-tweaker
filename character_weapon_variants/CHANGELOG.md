@@ -1,5 +1,28 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.492-dev (2026-08-06) -- Phase-3 Old Musket appearance pilot (#1155/#474/#660) [not deployed]
+
+- Added the synchronized immutable appearance-descriptor runtime and its
+  bounded lifecycle reconciler. Duplicate `(target, surface, edge,
+  fingerprint, generation)` deliveries coalesce; failed retained
+  postconditions retry at most twice and there is no per-frame owner.
+- Migrated Old Musket owner 1P/3P, bot, remote husk, inventory mannequin,
+  illusion/CIM preview, lobby, and score/team unit presentation through one
+  descriptor adapter. Unsupported 2D/HUD/portrait surfaces explicitly retain
+  resident vanilla presentation.
+- Removed the Old Musket raw three-setter transform writer, four per-mode weak
+  tracking buckets, and surface-local preview painter/transform calls. Dev
+  tuning now creates one new descriptor generation and replays tracked live
+  targets through the same adapter.
+- Retained proof now reads position, scale, quaternion, live material handles,
+  and exact custom-unit identity back from the target. Setter success alone is
+  never a passing result. Engine-free tests plant pose rejection, material
+  rejection, duplicate delivery, disconnect cleanup, and all 128 surface-edge
+  adapter outcomes.
+- No version, bundle, deployment, or Workshop state changed in this checkpoint.
+
+**DoD:** Gates: G-APPEARANCE (structural pilot only; paired in-game matrix still required before any fixed claim).
+
 ## 0.1.491-dev (2026-08-04) -- appearance census re-keyed to surface x edge cells (#1157) [untested]
 
 - Census data only. `_cwv_appearance_census.lua` is inert pure data consumed by

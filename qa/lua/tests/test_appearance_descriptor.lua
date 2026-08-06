@@ -131,4 +131,67 @@ return function(H, repo_root)
 		H.equal(#row_errors, 1)
 		H.truthy(row_errors[1]:find("portraits", 1, true))
 	end)
+
+	H.test("Appearance #1155 reconciler proves retained state independently and coalesces", function()
+		local descriptor = D.build(musket_spec())
+		local writes, reads = 0, 0
+		local target = { retained = false }
+		local reconciler = D.new_reconciler({
+			apply = function(_, surface, edge, live)
+				H.equal(surface, "owner_3p")
+				H.equal(edge, "equip")
+				writes = writes + 1
+				live.retained = true
+				return { setter_ok = true }
+			end,
+			observe = function(_, _, _, live, context)
+				reads = reads + 1
+				H.equal(context.probe, "engine-readback")
+				return { retained = live.retained == true, reason = "retained" }
+			end,
+		})
+		local first = reconciler.reconcile(descriptor, "owner_3p", "equip", target,
+			{ probe = "engine-readback" })
+		H.equal(first.retained, true)
+		H.equal(writes, 1)
+		H.equal(reads, 1)
+		local duplicate = reconciler.reconcile(descriptor, "owner_3p", "equip", target,
+			{ probe = "engine-readback" })
+		H.equal(duplicate.coalesced, true)
+		H.equal(writes, 1)
+		H.equal(reads, 1)
+	end)
+
+	H.test("Appearance #1155 reconciler caps failures and clears disconnected targets", function()
+		local descriptor = D.build(musket_spec())
+		local writes = 0
+		local target = {}
+		local reconciler = D.new_reconciler({
+			max_attempts = 2,
+			apply = function() writes = writes + 1; return { setter_ok = true } end,
+			observe = function() return { retained = false, reason = "engine-rejected" } end,
+		})
+		H.equal(reconciler.reconcile(descriptor, "husk", "peer_ready", target).ok, false)
+		H.equal(reconciler.reconcile(descriptor, "husk", "peer_ready", target).ok, false)
+		local capped = reconciler.reconcile(descriptor, "husk", "peer_ready", target)
+		H.equal(capped.coalesced, true)
+		H.equal(writes, 2)
+		H.equal(reconciler.disconnect(), true)
+		reconciler.reconcile(descriptor, "husk", "peer_ready", target)
+		H.equal(writes, 3)
+	end)
+
+	H.test("Appearance #1155 fallback cells are bounded without a custom-retained claim", function()
+		local descriptor = D.build(musket_spec())
+		local reconciler = D.new_reconciler({
+			apply = function()
+				return { fallback = true, reason = "renderer-has-no-custom-adapter" }
+			end,
+			observe = function() error("fallback must not claim custom readback") end,
+		})
+		local result = reconciler.reconcile(descriptor, "hold_tab", "instance_load", {})
+		H.equal(result.ok, true)
+		H.equal(result.fallback, true)
+		H.equal(result.reason, "renderer-has-no-custom-adapter")
+	end)
 end
