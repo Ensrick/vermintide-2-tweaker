@@ -67,6 +67,13 @@
 --   inst:tick(dt)                                    -- driven automatically by install(); safe to call manually too
 --   introspection for the host's regression suite:
 --     inst:is_installed() / inst:feature_count() / inst:applied_state() / inst.__classify
+--
+-- OPTIONAL EXACT-CATALOG MODE
+--   Pass opts.wire_identity to require byte-exact feature/catalog identity in
+--   addition to same-mod presence. Legacy consumers that omit it keep the
+--   original two-field [schema, reply] payload exactly. Exact mode uses
+--   [schema, reply, identity, session_epoch, challenge, reply_echo], rejects
+--   stale/replayed proof, and bounds retired epoch history.
 -- ============================================================================
 
 local function new_peer_parity(mod, opts)
@@ -87,6 +94,44 @@ local function new_peer_parity(mod, opts)
 
     local api = {}   -- the instance; methods below take an implicit `self` == api
 
+    -- Exact mode is strictly opt-in. These limits are shared with the proven
+    -- WT #431 transport and keep the VMF JSON envelope below Stingray's 500
+    -- character string cap. The restricted alphabet also prevents JSON escape
+    -- expansion from invalidating the calculation.
+    local MAX_SAFE_STRING = 64
+    local MAX_VMF_JSON_LENGTH = 500
+    local MAX_RETIRED_EPOCHS_PER_PEER = 8
+    local MAX_RETIRED_PEERS = 32
+    local EXACT_MODE = opts.wire_identity ~= nil
+    local WIRE_IDENTITY = opts.wire_identity
+
+    local function _safe_wire_string(value)
+        return type(value) == "string" and value ~= "" and #value <= MAX_SAFE_STRING
+            and value:match("^[%w_.:%-]+$") ~= nil
+    end
+
+    if EXACT_MODE and not _safe_wire_string(WIRE_IDENTITY) then
+        return nil, "wire-identity-invalid"
+    end
+
+    local function _default_epoch()
+        local sequences = mod and rawget(mod, "_peer_parity_epoch_sequences")
+        if type(sequences) ~= "table" then
+            sequences = {}
+            if mod then rawset(mod, "_peer_parity_epoch_sequences", sequences) end
+        end
+        local sequence = tonumber(sequences[CHANNEL]) or 0
+        sequence = sequence + 1
+        sequences[CHANNEL] = sequence
+        local entropy = tostring(api):match("0x(%x+)") or "0"
+        return string.format("e%d-%s", sequence, entropy:lower()):sub(1, MAX_SAFE_STRING)
+    end
+
+    local LOCAL_EPOCH = EXACT_MODE and (opts.session_epoch or _default_epoch()) or nil
+    if EXACT_MODE and not _safe_wire_string(LOCAL_EPOCH) then
+        return nil, "session-epoch-invalid"
+    end
+
     -- State ------------------------------------------------------------------
     local _features       = {}          -- feature_id -> { on_enable, on_disable, label }
     local _feature_order  = {}          -- deterministic apply order
@@ -102,10 +147,31 @@ local function new_peer_parity(mod, opts)
     local _enable_at      = nil         -- monotonic time a pending enable fires
     local _notify_at      = nil         -- grace deadline for a disable notice
     local _notified_state = nil         -- last state we told the user about
+    local _peer_epoch     = {}          -- exact mode: peer_id -> current process epoch
+    local _retired_epoch  = {}          -- exact mode: bounded peer -> { set, order }
+    local _retired_peers  = {}          -- exact mode: FIFO peer ids
+    local _outstanding    = {}          -- exact mode: recipient/broadcast -> challenge
+    local _reply_to       = {}          -- exact mode: peer -> challenge to echo
+    local _challenge_seq  = 0
+    local _reject_logged  = {}
+    local _reject_count   = 0
 
     -- Immutable record of the chosen posture (asserted by the regression suite).
     api._initial_applied  = "disabled"
     api.FAILSAFE_POSTURE  = "feature_inert_until_confirmed"
+    api.EXACT_MODE = EXACT_MODE
+    api.WIRE_IDENTITY = WIRE_IDENTITY
+    api.LOCAL_EPOCH = LOCAL_EPOCH
+    api.MAX_SAFE_STRING = MAX_SAFE_STRING
+    api.MAX_VMF_JSON_LENGTH = MAX_VMF_JSON_LENGTH
+    api.MAX_RETIRED_EPOCHS_PER_PEER = MAX_RETIRED_EPOCHS_PER_PEER
+    api.MAX_RETIRED_PEERS = MAX_RETIRED_PEERS
+
+    function api:max_json_envelope_length()
+        -- Exact upper bound for the restricted-alphabet payload:
+        -- [schema,reply,"identity","epoch","challenge","reply_echo"]
+        return EXACT_MODE and (2 + 5 + 10 + (MAX_SAFE_STRING + 2) * 4) or 0
+    end
 
     -- Logging (log-only debug channel; never chat). Self-contained + guarded so
     -- the lib works even if the host's helpers differ.
@@ -286,14 +352,95 @@ local function new_peer_parity(mod, opts)
         return table.concat(parts, ", ")
     end
 
-    -- Presence protocol ------------------------------------------------------
-    -- One channel, one payload flag. is_reply=0 is a broadcast query; a peer
-    -- that has the mod records the sender and replies is_reply=1 directly. We
-    -- do NOT reply to a reply, so there is no ping-pong loop.
+    -- Presence / exact-catalog protocol --------------------------------------
+    local function _challenge()
+        _challenge_seq = _challenge_seq + 1
+        -- Monotonic prefix cannot be truncated away by a maximum-length epoch.
+        return string.format("q%d-%s", _challenge_seq, LOCAL_EPOCH):sub(1, MAX_SAFE_STRING)
+    end
+
+    local function _retire_epoch(peer_id, epoch)
+        if not EXACT_MODE or type(peer_id) ~= "string" or not _safe_wire_string(epoch) then return end
+        local retired = _retired_epoch[peer_id]
+        if not retired then
+            retired = { set = {}, order = {} }
+            _retired_epoch[peer_id] = retired
+            _retired_peers[#_retired_peers + 1] = peer_id
+            if #_retired_peers > MAX_RETIRED_PEERS then
+                local oldest_peer = table.remove(_retired_peers, 1)
+                _retired_epoch[oldest_peer] = nil
+            end
+        end
+        if retired.set[epoch] then return end
+        retired.set[epoch] = true
+        retired.order[#retired.order + 1] = epoch
+        if #retired.order > MAX_RETIRED_EPOCHS_PER_PEER then
+            local oldest = table.remove(retired.order, 1)
+            retired.set[oldest] = nil
+        end
+    end
+
+    local function _transport_forget(peer_id)
+        if not EXACT_MODE or type(peer_id) ~= "string" then return end
+        _retire_epoch(peer_id, _peer_epoch[peer_id])
+        _peer_epoch[peer_id] = nil
+        _outstanding[peer_id] = nil
+        _reply_to[peer_id] = nil
+    end
+
+    local function _accept_epoch(peer_id, epoch, challenged)
+        if not _safe_wire_string(epoch) then return false end
+        local retired = _retired_epoch[peer_id]
+        if retired and retired.set[epoch] then return false end
+        local current = _peer_epoch[peer_id]
+        if current == nil or current == epoch then
+            _peer_epoch[peer_id] = epoch
+            return true
+        end
+        if not challenged then return false end
+        _retire_epoch(peer_id, current)
+        _peer_epoch[peer_id] = epoch
+        return true
+    end
+
+    local function _reject(peer_id, reason)
+        if type(peer_id) == "string" and peer_id ~= "" then
+            _acked[peer_id] = nil
+            _pending[peer_id] = true
+            _enable_at = nil
+            _force_disable()
+        end
+        local key = tostring(peer_id) .. ":" .. tostring(reason)
+        if _reject_count < 64 and not _reject_logged[key] then
+            _reject_logged[key] = true
+            _reject_count = _reject_count + 1
+            _log("%s %s exact proof rejected from %s (%s)",
+                ECHO_PREFIX, CHANNEL, tostring(peer_id), tostring(reason))
+        end
+    end
+
+    -- Legacy mode retains its original two-field payload. Exact mode appends
+    -- identity/session/challenge proof; replies echo the received challenge.
     local function _announce(is_reply, recipient)
         if not (mod and type(mod.network_send) == "function") then return end
         pcall(function()
-            mod:network_send(CHANNEL, recipient or "others", SCHEMA, is_reply)
+            if not EXACT_MODE then
+                mod:network_send(CHANNEL, recipient or "others", SCHEMA, is_reply)
+                return
+            end
+            local query, echo = "", ""
+            if is_reply == 0 or is_reply == nil then
+                query = _challenge()
+                if type(recipient) == "string" and recipient ~= "others" then
+                    _outstanding[recipient] = query
+                else
+                    _outstanding.__broadcast = query
+                end
+            elseif type(recipient) == "string" then
+                echo = _reply_to[recipient] or ""
+            end
+            mod:network_send(CHANNEL, recipient or "others", SCHEMA, is_reply,
+                WIRE_IDENTITY, LOCAL_EPOCH, query, echo)
         end)
     end
 
@@ -321,25 +468,58 @@ local function new_peer_parity(mod, opts)
 
     function api:forget_peer(peer_id)
         if type(peer_id) ~= "string" then return end
+        _transport_forget(peer_id)
         _pending[peer_id] = nil
         _acked[peer_id] = nil
         _seen[peer_id] = nil
         _absent_since[peer_id] = nil
     end
 
+    function api:retired_peer_count() return #_retired_peers end
+    function api:is_epoch_retired(peer_id, epoch)
+        local retired = _retired_epoch[peer_id]
+        return retired ~= nil and retired.set[epoch] == true
+    end
+
     function api:install()
         if _installed then return end
         if mod and type(mod.network_register) == "function" then
             local ok = pcall(function()
-                mod:network_register(CHANNEL, function(sender_peer_id, schema, is_reply)
+                mod:network_register(CHANNEL, function(sender_peer_id, schema, is_reply,
+                        remote_identity, remote_epoch, remote_query, remote_echo)
                     -- Schema gate (VMF_RECIPES section 10): drop a mismatched peer
                     -- rather than mis-parse its payload. Never error().
                     if schema ~= SCHEMA then
                         _log("%s %s schema mismatch from %s (got %s, want %d) -- dropping",
                             ECHO_PREFIX, CHANNEL, tostring(sender_peer_id), tostring(schema), SCHEMA)
+                        if EXACT_MODE then _reject(sender_peer_id, "schema") end
                         return
                     end
                     if type(sender_peer_id) == "string" then
+                        if EXACT_MODE then
+                            if remote_identity ~= WIRE_IDENTITY then
+                                _reject(sender_peer_id, "identity")
+                                return
+                            end
+                            local is_query = is_reply == 0 or is_reply == nil
+                            if is_query then
+                                if not _safe_wire_string(remote_query)
+                                        or not _accept_epoch(sender_peer_id, remote_epoch, false) then
+                                    _reject(sender_peer_id, "query-or-epoch")
+                                    return
+                                end
+                                _reply_to[sender_peer_id] = remote_query
+                            else
+                                local expected = _outstanding[sender_peer_id]
+                                    or _outstanding.__broadcast
+                                if not _safe_wire_string(remote_echo) or remote_echo ~= expected
+                                        or not _accept_epoch(sender_peer_id, remote_epoch, true) then
+                                    _reject(sender_peer_id, "echo-or-epoch")
+                                    return
+                                end
+                                _outstanding[sender_peer_id] = nil
+                            end
+                        end
                         _acked[sender_peer_id] = true
                         if is_reply == 0 or is_reply == nil then
                             _announce(1, sender_peer_id)   -- answer a query; never answer an answer
@@ -395,8 +575,10 @@ local function new_peer_parity(mod, opts)
         end
         for pid, since in pairs(_absent_since) do
             if not peers[pid] and not _retain_ack(_acked[pid], _clock - since) then
-                _acked[pid] = nil
-                _absent_since[pid] = nil
+                -- Expiry is a real proof boundary in exact mode: retire the
+                -- process epoch so a delayed pre-expiry acknowledgement cannot
+                -- authorize a later peer-id reuse.
+                api:forget_peer(pid)
             end
         end
         _seen = peers

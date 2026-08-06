@@ -1,5 +1,13 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.495-dev (2026-08-06) -- shared peer-parity exact-mode capability (#1158) [not deployed]
+
+- Synchronized the shared peer-parity library with its optional exact catalog,
+  challenge, epoch, and bounded replay defenses.
+- CWV remains on the byte-compatible legacy handshake in this release. Its
+  damage-profile and multi-axis projectile contracts require their own catalog
+  ownership work before exact mode can be enabled safely.
+
 ## 0.1.494-dev (2026-08-06) -- core-template owner decomposition (#504/#2) [not deployed]
 
 - Moved the 1,281-line Infantry Spear-through-Outrider constructor region

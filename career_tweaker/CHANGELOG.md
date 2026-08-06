@@ -1,5 +1,21 @@
 # Career Tweaker Changelog
 
+## 0.4.20-beta (2026-08-06) - exact shared buff-catalog proof (#776, #1158)
+
+- Replaced CRT's private parity transport adapter with the shared peer-parity
+  library's opt-in exact mode and a shared deterministic wire-catalog builder.
+- Schema 3 proves the exact owned `NetworkLookup.buff_templates` name/index
+  catalog, binds every reply to the current challenge and peer epoch, and
+  retires bounded disconnect epochs so delayed acknowledgements cannot revive
+  an old session.
+- Kept the unconditional sender substitution, hot-join filtering, and receiver
+  collision floor. Exact proof permits CRT-owned numeric buff traffic; it never
+  replaces those fail-closed boundaries.
+- Added an optional Mod Tweaker runtime gate over the exact nine
+  `networked_unsafe` setting rows (eight balance reworks and one Tourney aura).
+  Closed parity makes those rows read-only/grey without changing their saved
+  values; the existing gameplay gate remains authoritative when GUT is absent.
+
 ## 0.4.19-beta (2026-08-06) - complete the balance-owner decomposition (#1159, #504, #2)
 
 - Extracted the unchanged `BALANCE_MODS` definitions into two dependency-injected, hook-neutral catalogs below the 2,500-line hard limit. `_crt_balance_catalog.lua` composes their disjoint setting owners and rejects collisions; the entry explicitly supplies its mod, wire policy, stub helpers, and THP floor while retaining hook order, apply/restore transactions, and lifecycle ownership.

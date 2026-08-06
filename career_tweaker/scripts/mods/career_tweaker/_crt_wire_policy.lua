@@ -11,63 +11,9 @@
 
 local M = {}
 
-M.WIRE_IDENTITY_VERSION = 2
 M.TIMED_DURATION_SECONDS = 20
 M.TIMED_MAX_STACKS = 1
 M.TIMED_SYNC_TYPE = "LocalAndServer"
-
-local function _positive_integer(value)
-    return type(value) == "number" and value > 0 and math.floor(value) == value
-end
-
-local function _feed_hash(seed, multiplier, modulus, text)
-    local value = seed
-    for i = 1, #text do
-        -- Products remain far below Lua's exact-integer limit (2^53).
-        value = (value * multiplier + string.byte(text, i)) % modulus
-    end
-    return value
-end
-
--- Returns a compact fingerprint whose canonical input contains every registered
--- CRT wire name and its actual process-local numeric lookup id. A missing or
--- malformed mapping fails closed instead of manufacturing partial identity.
-function M.build_wire_identity(registry, lookup)
-    if type(registry) ~= "table" or type(lookup) ~= "table" then
-        return nil, "registry-or-lookup-missing"
-    end
-
-    local names = {}
-    for name, present in pairs(registry) do
-        if present == true then
-            if type(name) ~= "string" or name == "" then
-                return nil, "invalid-registry-name"
-            end
-            names[#names + 1] = name
-        end
-    end
-    table.sort(names)
-    if #names == 0 then return nil, "registry-empty" end
-
-    local canonical = { "crt-wire-v", tostring(M.WIRE_IDENTITY_VERSION), "\n" }
-    for i = 1, #names do
-        local name = names[i]
-        local id = rawget(lookup, name)
-        if not _positive_integer(id) or rawget(lookup, id) ~= name then
-            return nil, "lookup-mismatch:" .. name
-        end
-        canonical[#canonical + 1] = name
-        canonical[#canonical + 1] = "="
-        canonical[#canonical + 1] = tostring(id)
-        canonical[#canonical + 1] = "\n"
-    end
-
-    local input = table.concat(canonical)
-    local h1 = _feed_hash(104729, 131, 2147483647, input)
-    local h2 = _feed_hash(130363, 257, 2147483629, input)
-    return string.format("crt-wire-v%d:%d:%08x:%08x",
-        M.WIRE_IDENTITY_VERSION, #names, h1, h2), nil, names
-end
 
 function M.make_timed_stat_buff(name, stat_buff, multiplier)
     assert(type(name) == "string" and name ~= "", "timed buff name required")
@@ -125,6 +71,43 @@ function M.rpc_add_buff_decision(args)
         if index then return "drop_server_controlled_duration", index end
     end
     return "accept"
+end
+
+-- Optional Mod Tweaker presentation bridge. Gameplay safety never depends on
+-- GUT: this only describes which saved rows should be read-only/grey while the
+-- owning exact parity gate is closed.
+function M.runtime_gate_spec(mod_id, setting_ids, evaluate)
+    if type(mod_id) ~= "string" or mod_id == ""
+            or type(setting_ids) ~= "table" or type(evaluate) ~= "function" then
+        return nil
+    end
+    local copied, seen = {}, {}
+    for i = 1, #setting_ids do
+        local setting_id = setting_ids[i]
+        if type(setting_id) ~= "string" or setting_id == "" or seen[setting_id] then
+            return nil
+        end
+        seen[setting_id] = true
+        copied[#copied + 1] = setting_id
+    end
+    if #copied == 0 then return nil end
+    return { mod_id = mod_id, setting_ids = copied, evaluate = evaluate }
+end
+
+function M.try_register_runtime_gate(get_mod_fn, gate_id, spec)
+    if type(get_mod_fn) ~= "function" or type(gate_id) ~= "string"
+            or gate_id == "" or type(spec) ~= "table" then
+        return false, "runtime-gate-arguments-invalid"
+    end
+    for _, gut_id in ipairs({ "gut_dev", "gut" }) do
+        local ok, gut = pcall(get_mod_fn, gut_id)
+        local tweaker = ok and type(gut) == "table" and gut.mod_tweaker or nil
+        if type(tweaker) == "table"
+                and type(tweaker.register_runtime_gate) == "function" then
+            return tweaker:register_runtime_gate(gate_id, spec)
+        end
+    end
+    return false, "mod-tweaker-unavailable"
 end
 
 return M

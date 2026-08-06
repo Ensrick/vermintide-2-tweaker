@@ -41,6 +41,12 @@ there is no copied implementation.
 - `tests/test_attack_labeler.lua`: production-helper coverage.
 - `tests/test_mod_tweaker_search.lua`: #559 search expansion snapshot/restore/dismissal coverage,
   including last-changed preference and top-result fallback.
+- `tests/test_peer_parity_transition.lua`: shared legacy-payload compatibility,
+  exact challenge/epoch/replay rejection, and bounded-envelope coverage.
+- `tests/test_shared_wire_catalog.lua`: deterministic namespaced catalog identity,
+  numeric drift sensitivity, malformed lookup rejection, and payload-size coverage.
+- `tests/test_crt_wire_contract.lua`: CRT schema-3 integration plus the independent
+  sender, hot-join, receiver, and timed-buff safety floors.
 - `vendor/lua-5.1.5-win64/`: pinned Windows interpreter and provenance.
 
 Add a test file to the manifest in `run.lua`. The explicit list keeps ordering

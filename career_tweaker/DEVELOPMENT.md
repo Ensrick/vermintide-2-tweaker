@@ -56,7 +56,7 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `career_tweaker_data.lua` | VMF widget tree (the settings UI). | returns the widget table | before script (VMF) |
 | `career_tweaker_localization.lua` | Localized strings. | returns the loc table | before data (VMF) |
 | `_crt_damage_classification.lua` | Pure #334/#472 damage-category policy: chip/AOE, self-DoT, and Focused Spirit's Ratling extension. Engine-free and unit-tested. | returns `{ is_chip_or_aoe, is_self_dot, focused_spirit_ignores }`, published as `mod._crt.damage_classification` | first script module, before balance |
-| `_crt_wire_policy.lua` | Pure #776 exact name+numeric-index fingerprint, `rpc_add_buff` receiver decision, and one-stack timed-effect policy. Engine-free and unit-tested. | `mod._crt.wire_policy`; returns catalog identity, duration validator, timed-buff builder/refresh semantics | after damage classification, before balance |
+| `_crt_wire_policy.lua` | Pure #776 `rpc_add_buff` receiver decision, one-stack timed-effect policy, and optional Mod Tweaker runtime-gate registration/spec policy. Engine-free and unit-tested. | `mod._crt.wire_policy`; returns duration validation, timed-buff build/refresh semantics, and GUT bridge helpers | after damage classification, before balance |
 | `_crt_wire_runtime.lua` | #776 engine adapter for parity-gated `LocalAndServer` timed buff emission. | `ensure_timed_proc`; owns the sole `add_buff_synced` call and bounded route logs | loaded by `career_tweaker_balance.lua`; no hooks |
 | `career_tweaker_balance.lua` | The 910-line balance orchestrator: apply/restore engine, crt_* buff pre-registration, issue-425/#776 parity/wire-safe proc wrappers, and ordered hook/catalog owner installation. | returns `{ apply, restore, active_count, parity_gate_ok, wire_parity_live, network_unsafe_ids, BALANCE_MODS }`; sets `mod._crt_registered_buff_names`, `mod._crt_mod_registered_buff_names` | after the pure policies (entry captures `balance`) |
 | `_crt_balance_catalog.lua` | Hook-neutral composition owner for the two bounded declarative catalogs; rejects duplicate setting ownership. | returns `build(ctx)` | loaded once by `career_tweaker_balance.lua` |
@@ -79,6 +79,7 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `_crt_bardin_disabler_probe.lua` | Dormant #440 comparison probe retained for a future diagnostic build. | none in the beta | **not loaded in the beta line** |
 | `_crt_umbrella_audit_policy.lua` | Read-only #221 ownership census for the deferred subgroup-master boundary. It counts the live native/Tourney catalogs and the cross-owner Unchained, Engineer, and armor clusters without writing settings or installing hooks. | `mod._crt.umbrella_audit_policy`; `mod._crt.umbrella_audit()`; `/crt_umbrella_audit` | after the #445 policy, before master callbacks |
 | `_lib_peer_parity.lua` | COPIED single-source shared lib (master: `tools/shared_lib/_lib_peer_parity.lua`). The issue-371 peer-parity beacon factory. Do NOT diverge from master. | returns a factory function | dofile'd inside the beacon block |
+| `_lib_wire_catalog.lua` | COPIED single-source shared lib (master: `tools/shared_lib/_lib_wire_catalog.lua`). Builds a deterministic, namespaced identity over exact owned forward/reverse numeric lookup assignments. Do NOT diverge from master. | `mod._crt.wire_catalog`; returns `build_identity` | loaded immediately before the beacon block |
 | `_crt_regression.lua` | The `/crt_regression_test` harness + all check bodies, in frozen registration order. | `mod._crt.rt_register` (for future phases) | LAST |
 
 ## Where new code goes
@@ -175,10 +176,18 @@ increases coupling. Full mechanic + the five-gate model:
 Issue #776 proved that presence is not catalog parity: three client crashes all
 decoded host numeric id `1574` as timed Impetuous AS while carrying positive
 server ids, even though the Impetuous proc itself only used the server-id-zero
-path. The entry therefore fingerprints every registered CRT name together with
-its live numeric lookup id. The shared beacon accepts only an exact identity.
-CRT supplies that identity through `_crt_wire_runtime.wrap_parity_transport`;
-the copied shared library itself remains byte-identical for every consumer.
+path. The entry therefore asks `_lib_wire_catalog.lua` to fingerprint every
+registered CRT name together with its live forward and reverse numeric lookup
+assignment. CRT opts `_lib_peer_parity.lua` into its schema-3 exact mode with
+that identity; the other consumers remain byte-compatible on the legacy
+four-argument payload unless and until they explicitly opt in. Exact replies
+are bound to the current challenge and peer epoch, and bounded retired epochs
+reject delayed reconnect acknowledgements. Both copied shared libraries remain
+byte-identical to their canonical `tools/shared_lib` sources.
+The entry combines the owners' exact nine `network_unsafe` setting IDs and
+optionally registers one GUT runtime gate. That bridge only greys and locks the
+rows while exact parity is closed; it never writes saved values and gameplay
+continues to fail closed through the balance/Tourney apply engines without GUT.
 The hook module owns the complementary receiver floor because an unrelated old
 host can emit a colliding id before/without a safe CRT sender path. Never remove
 either layer, replace the exact identity with version-only presence, or fall

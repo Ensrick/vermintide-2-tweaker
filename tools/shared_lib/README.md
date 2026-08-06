@@ -21,6 +21,25 @@ The default mode is read-only and checks exact bytes, including line endings:
 Never edit a per-mod copy directly. A consumer needing different semantics gets
 a differently named canonical library rather than a drifted local fork.
 
+## Peer parity modes and wire catalogs
+
+`_lib_peer_parity.lua` preserves its original four-argument VMF payload unless
+the consumer explicitly supplies `opts.wire_identity`. Legacy consumers therefore
+remain byte-compatible when the canonical library gains exact-mode support.
+
+Exact mode sends a bounded identity, peer epoch, challenge, and challenge echo.
+It rejects schema or identity mismatches, replies not bound to the current
+challenge, unchallenged epoch changes, and epochs retired on disconnect/roster
+expiry. Retirement is bounded per peer and across peers so the replay defense
+cannot grow without limit.
+
+`_lib_wire_catalog.lua` builds the exact identity. Call
+`build_identity(namespace, entries, lookup)` with a stable semantic namespace,
+the complete owned-name registry, and the live bidirectional numeric lookup.
+Optional fallback mappings are included explicitly in `entries`; missing or
+asymmetric numeric proof fails closed. Do not use a mod version or presence bit
+as a substitute for the catalog identity.
+
 ## Native renderer residency contract
 
 `_lib_resource_residency.lua` V2 separates two contracts that must not be

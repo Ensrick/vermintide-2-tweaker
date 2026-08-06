@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.294-dev (2026-08-06) - shared peer-parity exact-mode capability (#1158)
+
+- Mirrors beta `0.12.293-beta`: synchronized the optional shared exact-mode
+  implementation while retaining WT's existing exact damage-profile adapter.
+- No channel, schema, payload, catalog, fallback, or setting behavior changes
+  in this release.
+
 ## 0.12.293-dev (2026-08-06) - exact custom damage-profile wire identity (#431, #1158) [untested]
 
 - Mirrors beta `0.12.292-beta`: custom damage-profile repoints now require an

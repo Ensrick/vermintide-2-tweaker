@@ -18,6 +18,12 @@
             )
         }
         @{
+            Source = "_lib_wire_catalog.lua"
+            Consumers = @(
+                "career_tweaker/scripts/mods/career_tweaker/_lib_wire_catalog.lua"
+            )
+        }
+        @{
             Source = "_lib_debug.lua"
             Consumers = @(
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_debug.lua"

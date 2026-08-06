@@ -344,4 +344,12 @@ return {
     apply = apply_tourney_mods,
     restore = restore_all_tourney_mods,
     active_count = get_active_count,
+    network_unsafe_ids = (function()
+        local ids = {}
+        for setting_id, def in pairs(TOURNEY_MODS) do
+            if def.network_unsafe then ids[#ids + 1] = setting_id end
+        end
+        table.sort(ids)
+        return ids
+    end)(),
 }

@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.318-dev (2026-08-06) -- shared peer-parity exact-mode capability (#1158)
+
+- Synchronized the shared peer-parity library with its optional exact catalog,
+  challenge, epoch, and bounded replay defenses.
+- Chaos Wastes Tweaker does not opt into that mode in this release: its channel,
+  schema, payload arguments, and legacy acknowledgement behavior are unchanged.
+
 ## 0.7.317-dev (2026-08-03) -- parry-cooldown strip made real; verifier visibility (#342, #288, #912) [verify-fix][untested]
 
 - Parry cooldown strip (#342): the shipped strip was a no-op (guarded on a

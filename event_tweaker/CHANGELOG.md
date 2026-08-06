@@ -1,5 +1,13 @@
 # Tweaker: Events — Changelog
 
+## 0.4.44-dev (2026-08-06) -- shared peer-parity exact-mode capability (#1158)
+
+- Synchronized the shared peer-parity library with its optional exact catalog,
+  challenge, epoch, and bounded replay defenses.
+- Event Tweaker remains on the byte-compatible legacy handshake. Event package
+  and curse capabilities need a purpose-built identity before exact mode can be
+  enabled; the existing hot-join lock remains the safety floor.
+
 ## 0.4.43-dev (2026-08-03) -- Adventure Shadow no longer leaks into Chaos Wastes (#1123) [verify-fix][untested]
 
 - The shared mutator_shadow_damage_reduction template is patched only for the
