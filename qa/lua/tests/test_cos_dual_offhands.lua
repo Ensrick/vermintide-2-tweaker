@@ -1,6 +1,8 @@
 return function(H, repo_root)
     local cos_path = repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
+    local lifecycle_path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle.lua"
     local persist_path = repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_persistence.lua"
     local commit_path = repo_root
@@ -22,6 +24,7 @@ return function(H, repo_root)
     end
 
     local cos = read(cos_path)
+    local lifecycle = read(lifecycle_path)
     local persist = read(persist_path)
     local commit = read(commit_path)
     local diagnostics = read(diagnostics_path)
@@ -84,7 +87,7 @@ return function(H, repo_root)
         H.truthy(cos:find("mod._offhand_mesh_by_peer", 1, true))
         H.truthy(cos:find("HUSK-VANILLA-SWAP", 1, true))
         H.truthy(cos:find("_override_package_ready(unit_path)", 1, true))
-        H.truthy(cos:find("_la_self_rebroadcast_pending = true", 1, true))
+        H.truthy(lifecycle:find("_la_self_rebroadcast_pending = true", 1, true))
         H.truthy(cos:find('mod:network_send("cos_la_apply"', 1, true))
         H.equal(cos:find('mod:network_register("cos_dual_offhand', 1, true), nil)
     end)

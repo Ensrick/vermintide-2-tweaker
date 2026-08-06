@@ -15,7 +15,9 @@ live in the entry file, pending later phases (run in fresh sessions). Phase 4a
 carved out the three #421 weapon-skin wire-safety senders as one indivisible
 network boundary. Phase 4b moved the lazy runtime-check registrations, glow-probe
 tools, and LA read-only commands behind explicit install contracts without moving
-their registration order. Note the split carried forward from Phase 2 and extended in Phase 3:
+their registration order. The next #1159 slice moved the three mod-wide transition
+and teardown callbacks into one idempotent lifecycle owner without changing their
+registration or side-effect order. Note the split carried forward from Phase 2 and extended in Phase 3:
 the render HOOKS (`create_equipment` / `_spawn_item_post` /
 `LootItemUnitPreviewer.spawn_units`) stay in the entry, but the scale/grip apply
 helpers (Phase 2) and the glow apply / owner-peer helpers (Phase 3) they call moved
@@ -42,7 +44,8 @@ exactly once from the manifest.
 
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
-| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest, the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks, and everything not yet extracted: render-path hooks, per-peer glow broadcast RPCs, LA-bridge/husk integration, remaining offhand/customization UI, and #282 MH session-residency diagnostics. |
+| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest, the `mod._cos` namespace setup + `_cos_*` manifest, and everything not yet extracted: render-path hooks, per-peer glow broadcast RPCs, LA-bridge/husk integration, remaining offhand/customization UI, and #282 MH session-residency diagnostics. |
+| `_cos_mod_lifecycle.lua` | Idempotent owner of the existing `on_game_state_changed`, `on_disabled`, and `on_unload` callbacks. Preserves transition telemetry, bounded LA/glow/replay arming, TPE/LA disable cleanup, and offhand-package unload order. It receives the four earlier entry locals explicitly and adds no hook, RPC, update loop, or persistence surface. |
 | `_cos_command_owner.lua` | Single #504 command-lifecycle owner. Owns the lazy regression registry and `/cos_regression_test` runner plus `/cos_persist_dump`, `/cos_persist_replay`, and `/cos_persist_clear`. Returns the register function consumed by `_cos_runtime_checks.lua`; repeated install is idempotent. It owns no hook, RPC, renderer, or lifecycle callback. |
 | `_cos_glow_editor_button.lua` | Idempotent #377/#504 contextual Edit Glow button owner. Owns family/open-state policy binding, enabled/selected styling, and widget construction. The host customization view retains position, input, and draw ownership; this module adds no hook, RPC, polling, persistence, or renderer mutation. |
 | `_cos_item_grid_presentation.lua` | Idempotent #377/#650/#795 item-grid and illusion-card presentation owner. Owns the single pre-`pass_data` `UIWidget.init` enrichment hook, the three existing `ItemGridUI` refresh hooks, weak live-surface registries, and the committed glow/composite refresh callback. It receives the existing policies and late-bound composed-appearance resolver; it adds no lifecycle callback, RPC, persistence, or appearance semantics. |
@@ -93,6 +96,10 @@ their internals alone.
   `UIWidget.init` owner and three `ItemGridUI` refresh hooks; do not add a
   second hook for the same class/method or move appearance resolution into the
   UI owner.
+
+- **New mod-wide transition or teardown side effect** ->
+  `_cos_mod_lifecycle.lua`. Preserve the single three-callback owner and the
+  existing within-callback order; do not wrap or replace a callback elsewhere.
 
 - **New diagnostic dump/probe command** → `_cos_diagnostics.lua`. Route through
   engine `printf` / `mod:info` (users run with mod logs OFF), `_flush_log` at the end.

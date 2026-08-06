@@ -249,6 +249,7 @@ local suites = {
     "test_cos_glow_slider_geometry",
     "test_cos_glow_badge_policy",
     "test_cos_item_grid_presentation",
+    "test_cos_mod_lifecycle",
     "test_cos_glow_instance_policy",
     "test_cos_glow_cim_bridge",
     "test_cos_cwv_dawi_mace_contract",

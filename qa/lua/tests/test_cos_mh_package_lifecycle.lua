@@ -110,6 +110,11 @@ return function(H, repo_root)
         local file = assert(io.open(entry_path, "rb"))
         local source = file:read("*a")
         file:close()
+        local lifecycle_path = repo_root ..
+            "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle.lua"
+        file = assert(io.open(lifecycle_path, "rb"))
+        source = source .. "\n" .. file:read("*a")
+        file:close()
         local _, hook_count = source:gsub(
             'mod:hook_safe%("StateIngame", "on_exit"', "")
         H.equal(hook_count, 0)
