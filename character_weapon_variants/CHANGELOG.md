@@ -1,5 +1,20 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.496-dev (2026-08-06) -- skin-registry owner decomposition (#504/#2) [not deployed]
+
+- Moved the ordered base/custom skin registrars and generated illusion-family
+  registrars out of the orchestration entry into two explicit-dependency owners.
+  Their single adjacent install seam preserves shared table identity and the
+  exact `weapon_skins` / `item_names` append order.
+- The new owners contain no hooks, commands, RPC registration, gameplay,
+  appearance lifecycle, or peer-admission behavior. Offline decomposition and
+  registration-equivalence tests pin ownership, install order, exported table
+  identity, and deterministic lookup appends.
+- Reduced the orchestration entry below its prior 9,633-nonblank-line ceiling.
+  No deployment, Workshop mutation, or live-game verification is claimed.
+
+**DoD:** Structural decomposition only; strict offline gates must pass before review.
+
 ## 0.1.495-dev (2026-08-06) -- shared peer-parity exact-mode capability (#1158) [not deployed]
 
 - Synchronized the shared peer-parity library with its optional exact catalog,

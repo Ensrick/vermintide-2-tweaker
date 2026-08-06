@@ -9,8 +9,6 @@ return function(H, repo_root)
     local mod_root = repo_root .. "/character_weapon_variants"
     local catalog_path = mod_root
         .. "/scripts/mods/character_weapon_variants/_cwv_variant_catalog.lua"
-    local entry_path = mod_root
-        .. "/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
     local package_path = mod_root
         .. "/resource_packages/character_weapon_variants/character_weapon_variants.package"
     local blunderbuss =
@@ -33,10 +31,10 @@ return function(H, repo_root)
     end)
 
     H.test("CWV #762 generated skins retain the definition's one visual owner", function()
-        local entry = read(entry_path)
-        H.truthy(entry:find("right_hand_unit           = def.right_hand_unit", 1, true))
-        H.truthy(entry:find("[cwv:762] Outrider visual owner", 1, true))
-        H.equal(entry:find("_om.launcher_family", 1, true), nil)
+        local source = require("cwv_source").combined(repo_root)
+        H.truthy(source:find("right_hand_unit           = def.right_hand_unit", 1, true))
+        H.truthy(source:find("[cwv:762] Outrider visual owner", 1, true))
+        H.equal(source:find("_om.launcher_family", 1, true), nil)
     end)
 
     H.test("CWV #762 runtime regression checks definition, item, and skin parity", function()

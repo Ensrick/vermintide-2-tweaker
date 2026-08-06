@@ -23,6 +23,8 @@ return function(H, repo_root)
     local catalog = read("_cwv_variant_catalog.lua")
     local cross_access = read("_cwv_cross_access.lua")
     local core_templates = read("_cwv_core_templates.lua")
+    local skin_registry = read("_cwv_skin_registry.lua")
+    local illusion_families = read("_cwv_illusion_families.lua")
     local husk = read("_cwv_husk_path.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
@@ -31,11 +33,11 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 9633 = 2026-08-06 OOP W5 core-template extraction. The shared
-        -- profile cloner and eleven ordered template constructors moved
-        -- byte-for-byte to _cwv_core_templates.lua. This ceiling only ratchets
-        -- DOWN as later CWV decomposition slices land.
-        H.truthy(lines <= 9633, "entry line count exceeded frozen 9633-line baseline")
+        -- 7825 = 2026-08-06 Phase-5 ordered skin/illusion registry extraction.
+        -- Base/custom registration and generated families moved to two
+        -- sub-1500-line owners at one adjacent install seam. This ceiling only
+        -- ratchets DOWN as later CWV decomposition slices land.
+        H.truthy(lines <= 7825, "entry line count exceeded frozen 7825-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
@@ -43,6 +45,8 @@ return function(H, repo_root)
             "_cwv_variant_catalog",
             "_cwv_cross_access",
             "_cwv_core_templates",
+            "_cwv_skin_registry",
+            "_cwv_illusion_families",
             "_cwv_husk_path",
             "_cwv_commands_lifecycle",
             "_cwv_regression_identity",
@@ -54,15 +58,115 @@ return function(H, repo_root)
 
         local cross_at = assert(entry:find("_cwv_cross_access", 1, true))
         local core_at = assert(entry:find("_cwv_core_templates", 1, true))
+        local skin_at = assert(entry:find("_cwv_skin_registry", 1, true))
+        local families_at = assert(entry:find("_cwv_illusion_families", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
         local render_at = assert(entry:find("_cwv_regression_render", 1, true))
         H.truthy(cross_at < core_at)
-        H.truthy(core_at < husk_at)
+        H.truthy(core_at < skin_at)
+        H.truthy(skin_at < families_at)
+        H.truthy(families_at < husk_at)
         H.truthy(husk_at < lifecycle_at)
         H.truthy(lifecycle_at < identity_at)
         H.truthy(identity_at < render_at)
+    end)
+
+    H.test("CWV skin owners inject once and preserve registrar order", function()
+        H.equal(count_plain(entry, "_cwv_skin_registry"), 1)
+        H.equal(count_plain(entry, "_cwv_illusion_families"), 1)
+        H.equal(count_plain(entry, "CWV_SKIN_REGISTRY_INSTALL_ONCE_v1"), 1)
+
+        for _, source in ipairs({ skin_registry, illusion_families }) do
+            H.equal(count_plain(source, "mod:hook"), 0)
+            H.equal(count_plain(source, "mod:network_register"), 0)
+            H.equal(count_plain(source, "mod:command"), 0)
+            H.equal(count_plain(source, "mod.on_game_state_changed"), 0)
+            H.equal(count_plain(source, "mod.on_enabled"), 0)
+            H.equal(count_plain(source, "mod.on_disabled"), 0)
+            H.equal(count_plain(source, "mod.on_unload"), 0)
+        end
+
+        local registrars = {
+            { skin_registry, "_register_variant_skins" },
+            { skin_registry, "_register_cwv_skin_combinations" },
+            { skin_registry, "_register_custom_illusions" },
+            { illusion_families, "_register_infantry_spear_illusions" },
+            { illusion_families, "_register_kruber_1h_sword_dual_illusions" },
+            { illusion_families, "_register_saltzpyre_1h_axe_dual_illusions" },
+            { illusion_families, "_register_es_1h_mace_dual_illusions" },
+            { illusion_families, "_register_macesword_mace_maul_illusions" },
+            { illusion_families, "_register_greataxe_model_illusions" },
+            { illusion_families, "_register_rapier_illusions" },
+            { illusion_families, "_register_imperial_longsword_shield_illusions" },
+            { illusion_families, "_register_axe_shield_illusions" },
+            { illusion_families, "_register_sword_and_mace_illusions" },
+        }
+        for _, registrar in ipairs(registrars) do
+            local source, name = registrar[1], registrar[2]
+            H.equal(count_plain(source, "local function " .. name .. "()"), 1,
+                name .. " owner count")
+            H.equal(count_plain(entry, "local function " .. name .. "()"), 0,
+                name .. " entry duplicate")
+        end
+
+        local skin_call_order = {
+            "_register_variant_skins()",
+            "_register_cwv_skin_combinations()",
+            "_register_custom_illusions()",
+        }
+        local cursor = 1
+        for _, call in ipairs(skin_call_order) do
+            local name = call:sub(1, -3)
+            local definition = assert(skin_registry:find(
+                "local function " .. name .. "()", cursor, true))
+            local at = skin_registry:find(call, definition + #call, true)
+            H.truthy(at, "missing ordered registrar call " .. call)
+            cursor = at + #call
+        end
+
+        local family_call_order = {
+            "_register_infantry_spear_illusions()",
+            "_register_kruber_1h_sword_dual_illusions()",
+            "_register_saltzpyre_1h_axe_dual_illusions()",
+            "_register_es_1h_mace_dual_illusions()",
+            "_register_macesword_mace_maul_illusions()",
+            "_register_greataxe_model_illusions()",
+            "_register_rapier_illusions()",
+            "_register_imperial_longsword_shield_illusions()",
+            "_register_axe_shield_illusions()",
+            "_register_sword_and_mace_illusions()",
+        }
+        cursor = 1
+        for _, call in ipairs(family_call_order) do
+            local name = call:sub(1, -3)
+            local definition = assert(illusion_families:find(
+                "local function " .. name .. "()", cursor, true))
+            local at = illusion_families:find(call, definition + #call, true)
+            H.truthy(at, "missing ordered registrar call " .. call)
+            cursor = at + #call
+        end
+
+        local unlock_at = assert(entry:find(
+            'mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins"',
+            1, true))
+        local unlocks_applied_at = assert(entry:find("_apply_weapon_unlocks()", 1, true))
+        local skin_at = assert(entry:find("_cwv_skin_registry", 1, true))
+        local families_at = assert(entry:find("_cwv_illusion_families", 1, true))
+        H.truthy(unlocks_applied_at < skin_at)
+        H.truthy(skin_at < families_at)
+        H.truthy(families_at < unlock_at)
+
+        H.truthy(skin_registry:find("custom_illusions = _custom_illusions", 1, true))
+        H.truthy(skin_registry:find("custom_skin_keys = _custom_skin_keys", 1, true))
+        H.truthy(entry:find("local _custom_illusions = _skin_state.custom_illusions", 1, true))
+        H.truthy(entry:find("local _custom_skin_keys = _skin_state.custom_skin_keys", 1, true))
+        H.truthy(entry:find("custom_skin_keys = _custom_skin_keys", 1, true))
+        H.truthy(illusion_families:find(
+            "local _custom_skin_keys = assert(deps.custom_skin_keys", 1, true))
+        H.truthy(illusion_families:find(
+            "local _illusion_provenance = assert(deps.illusion_provenance", 1, true))
     end)
 
     H.test("CWV core-template owner injects once and preserves constructor order", function()
