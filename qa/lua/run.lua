@@ -255,6 +255,7 @@ local suites = {
     "test_cos_cwv_dawi_mace_contract",
     "test_cos_wire",
     "test_cos_custom_illusion_sync",
+    "test_shared_wire_catalog",
     "test_peer_parity_transition",
     "test_ct_boon_catalog",
     "test_ct_boon_split",

@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.293-beta (2026-08-06) - shared peer-parity exact-mode capability (#1158)
+
+- Synchronized the shared peer-parity library with its optional exact catalog,
+  challenge, epoch, and bounded replay defenses.
+- WT retains its already-shipped exact damage-profile adapter and payload in
+  this release; the shared option is dormant, so wire behavior is unchanged.
+
 ## 0.12.292-beta (2026-08-06) - exact custom damage-profile wire identity (#431, #1158) [untested]
 
 - Peers now prove the exact numeric `NetworkLookup.damage_profiles` identity of

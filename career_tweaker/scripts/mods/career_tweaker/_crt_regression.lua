@@ -454,7 +454,20 @@ local _CRT_NETWORK_UNSAFE_EXPECTED = {
     "rework_es_mercenary_blade_barrier_60x_minus_10_on_hit",
     "rework_es_mercenary_enhanced_training_tiered",
     "rework_es_questingknight_virtue_of_impetuous_buffed",
+    "rework_we_maidenguard_dance_of_blades",
     "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
+}
+
+local _CRT_NETWORK_UNSAFE_ALL_EXPECTED = {
+    "rework_bw_unchained_abandon_innate_flame_unending",
+    "rework_bw_unchained_natural_talent_ranged",
+    "rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit",
+    "rework_es_mercenary_blade_barrier_60x_minus_10_on_hit",
+    "rework_es_mercenary_enhanced_training_tiered",
+    "rework_es_questingknight_virtue_of_impetuous_buffed",
+    "rework_we_maidenguard_dance_of_blades",
+    "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
+    "trn_wh_priest_prayer_movement_speed",
 }
 
 _rt_register("crt_network_unsafe_catalog_parity", function()
@@ -479,6 +492,27 @@ _rt_register("crt_network_unsafe_catalog_parity", function()
     if not (balance and type(balance.parity_gate_ok) == "function"
             and type(balance.wire_parity_live) == "function") then
         return "balance parity helpers (parity_gate_ok / wire_parity_live) not exported"
+    end
+end)
+
+_rt_register("crt_wire_runtime_gate_catalog_exact_776", function()
+    local ids = mod._crt.network_unsafe_setting_ids
+    if type(ids) ~= "table" then
+        return "combined network_unsafe_setting_ids missing"
+    end
+    if #ids ~= #_CRT_NETWORK_UNSAFE_ALL_EXPECTED then
+        return string.format("runtime-gate catalog size mismatch: got %d expected %d",
+            #ids, #_CRT_NETWORK_UNSAFE_ALL_EXPECTED)
+    end
+    for i = 1, #ids do
+        if ids[i] ~= _CRT_NETWORK_UNSAFE_ALL_EXPECTED[i] then
+            return string.format("runtime-gate catalog mismatch at %d: got %q expected %q",
+                i, tostring(ids[i]), _CRT_NETWORK_UNSAFE_ALL_EXPECTED[i])
+        end
+    end
+    if type(mod._crt.wire_policy.runtime_gate_spec) ~= "function"
+            or type(mod._crt.wire_policy.try_register_runtime_gate) ~= "function" then
+        return "optional Mod Tweaker runtime-gate policy missing"
     end
 end)
 
@@ -1158,11 +1192,13 @@ end)
 
 -- New checks append after the frozen historical sequence above.
 _rt_register("crt_wire_catalog_identity_exact_776", function()
-    if type(wire_policy) ~= "table" or type(wire_policy.build_wire_identity) ~= "function" then
-        return "issue-776 wire policy unavailable"
+    local wire_catalog = mod._crt and mod._crt.wire_catalog
+    if type(wire_catalog) ~= "table" or type(wire_catalog.build_identity) ~= "function" then
+        return "shared issue-776 wire catalog unavailable"
     end
     local lookup = rawget(_G, "NetworkLookup")
-    local identity, err, names = wire_policy.build_wire_identity(
+    local identity, err, names = wire_catalog.build_identity(
+        "crt.buff_templates",
         mod._crt_mod_registered_buff_names,
         lookup and lookup.buff_templates)
     if not identity then return "wire identity unavailable: " .. tostring(err) end
@@ -1175,8 +1211,13 @@ _rt_register("crt_wire_catalog_identity_exact_776", function()
             tostring(mod._crt.wire_catalog_count), tostring(#names))
     end
     local pp = mod._crt_peer_parity
-    if type(pp) ~= "table" or mod._crt_wire_transport_identity ~= identity then
+    if type(pp) ~= "table" or pp.EXACT_MODE ~= true
+            or pp.WIRE_IDENTITY ~= identity
+            or mod._crt_wire_transport_identity ~= identity then
         return "peer-parity beacon is not bound to the exact live wire identity"
+    end
+    if mod._crt_wire_disconnect_guard ~= true then
+        return "exact peer proof is not retired at real disconnect"
     end
 end)
 

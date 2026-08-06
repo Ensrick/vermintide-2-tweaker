@@ -11,69 +11,6 @@ local function log_once(key, fmt, ...)
     pcall(printf, "[crt:776] " .. fmt, ...)
 end
 
--- Adapt the established issue-425 presence beacon without changing the copied
--- shared library (and therefore without forcing unrelated mods to rebuild).
--- The proxy appends this process's exact catalog identity to every beacon and
--- only forwards an incoming acknowledgement to the presence library when the
--- remote identity is byte-for-byte equal. A later mismatch revokes an earlier
--- acknowledgement synchronously through the library's public API.
-function M.wrap_parity_transport(mod, identity)
-    if type(mod) ~= "table" or type(identity) ~= "string" or identity == "" then
-        return nil, "mod-or-identity-invalid"
-    end
-
-    local parity_instance = nil
-    local rejected = {}
-    local mismatch_logged = {}
-    local proxy = {}
-
-    local function revoke(peer_id)
-        if not parity_instance or type(peer_id) ~= "string" then return end
-        pcall(parity_instance.forget_peer, parity_instance, peer_id)
-        pcall(parity_instance.require_peer, parity_instance, peer_id)
-    end
-
-    function proxy:network_send(channel, recipient, schema, is_reply)
-        return mod:network_send(channel, recipient, schema, is_reply, identity)
-    end
-
-    function proxy:network_register(channel, receiver)
-        return mod:network_register(channel,
-            function(sender_peer_id, schema, is_reply, remote_identity)
-                if remote_identity ~= identity then
-                    if type(sender_peer_id) == "string" and not rejected[sender_peer_id] then
-                        rejected[sender_peer_id] = true
-                        revoke(sender_peer_id)
-                    end
-                    if not mismatch_logged[sender_peer_id] then
-                        mismatch_logged[sender_peer_id] = true
-                        log_once("catalog-mismatch:" .. tostring(sender_peer_id),
-                            "wire catalog mismatch sender=%s got=%s want=%s; parity revoked",
-                            tostring(sender_peer_id), tostring(remote_identity), identity)
-                    end
-                    return
-                end
-                rejected[sender_peer_id] = nil
-                return receiver(sender_peer_id, schema, is_reply)
-            end)
-    end
-
-    function proxy:_bind_parity_instance(instance)
-        parity_instance = instance
-        for peer_id in pairs(rejected) do revoke(peer_id) end
-    end
-
-    function proxy:debug(...) return mod:debug(...) end
-    function proxy:echo(...) return mod:echo(...) end
-    function proxy:localize(...) return mod:localize(...) end
-
-    setmetatable(proxy, {
-        __index = mod,
-        __newindex = function(_, key, value) mod[key] = value end,
-    })
-    return proxy
-end
-
 function M.ensure_timed_proc(PF, policy, parity_live, log_block, log_clear)
     if type(PF) ~= "table" or PF.crt_wire_safe_add_timed_buff ~= nil then return end
     PF.crt_wire_safe_add_timed_buff = function(unit, buff, params)

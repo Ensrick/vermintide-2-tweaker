@@ -3,12 +3,12 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.19-beta"
+local MOD_VERSION = "0.4.20-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
 -- exact wire-catalog identity to the issue-425 beacon transport.
-local CRT_RPC_SCHEMA = 2
+local CRT_RPC_SCHEMA = 3
 _MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([crt] enabled v<X> settings_fp=<hash>) is the canonical version surface
@@ -98,6 +98,7 @@ mod._crt.damage_classification = mod:dofile("scripts/mods/career_tweaker/_crt_da
 -- Pure issue-776 wire contract. The balance catalog consumes its timed-buff
 -- constants; the beacon and receiver floor consume its exact catalog policy.
 mod._crt.wire_policy = mod:dofile("scripts/mods/career_tweaker/_crt_wire_policy")
+mod._crt.wire_catalog = mod:dofile("scripts/mods/career_tweaker/_lib_wire_catalog")
 
 -- Safe-stub fallback (CHANGELOG 0.2.2): if dofile fails we substitute no-op
 -- functions so on_game_state_changed / on_setting_changed / on_disabled
@@ -301,6 +302,28 @@ end
 mod._crt.rework_master_policy = rework_master_policy
 mod._crt.rework_master_module = rework_master_module
 mod._crt.tourney = tourney
+
+-- One exact presentation catalog for issue #776. Keep both gameplay owners in
+-- the list: eight native balance rows plus the Tourney Warrior Priest aura.
+-- This table is read-only metadata; neither collection nor the optional GUT
+-- bridge writes a saved setting.
+do
+    local ids, seen = {}, {}
+    for _, owner in ipairs({ balance, tourney }) do
+        local owned = type(owner) == "table" and owner.network_unsafe_ids or nil
+        if type(owned) == "table" then
+            for i = 1, #owned do
+                local setting_id = owned[i]
+                if type(setting_id) == "string" and not seen[setting_id] then
+                    seen[setting_id] = true
+                    ids[#ids + 1] = setting_id
+                end
+            end
+        end
+    end
+    table.sort(ids)
+    mod._crt.network_unsafe_setting_ids = ids
+end
 
 -- Issue #619: Foot Knight's capability-aware career mechanics load before the
 -- armor module because that module owns crt's singleton
@@ -766,7 +789,8 @@ end
 -- dump retry) and would capture nil if run earlier.
 do
     local wire_identity, wire_identity_err, wire_names =
-        mod._crt.wire_policy.build_wire_identity(
+        mod._crt.wire_catalog.build_identity(
+            "crt.buff_templates",
             mod._crt_mod_registered_buff_names,
             NetworkLookup and NetworkLookup.buff_templates)
     mod._crt.wire_catalog_identity = wire_identity
@@ -780,30 +804,33 @@ do
     end
 
     local ok, factory = false, nil
-    local parity_transport = nil
     if wire_identity then
-        local wire_runtime = mod:dofile("scripts/mods/career_tweaker/_crt_wire_runtime")
-        parity_transport = wire_runtime and wire_runtime.wrap_parity_transport
-            and wire_runtime.wrap_parity_transport(mod, wire_identity)
         ok, factory = pcall(function()
             return mod:dofile("scripts/mods/career_tweaker/_lib_peer_parity")
         end)
     end
-    if wire_identity and parity_transport and ok and type(factory) == "function" then
-        local ok2, inst = pcall(factory, parity_transport, {
+    if wire_identity and ok and type(factory) == "function" then
+        local ok2, inst = pcall(factory, mod, {
             channel     = "crt_peer_parity_present",
             schema      = CRT_RPC_SCHEMA,
             mod_label   = "Career Tweaker",
             echo_prefix = "[crt]",
+            wire_identity = wire_identity,
         })
         if ok2 and type(inst) == "table" then
             mod._crt_peer_parity = inst
-            parity_transport:_bind_parity_instance(inst)
             mod._crt_wire_transport_identity = wire_identity
             pcall(function() inst:install() end)
+            -- A real network departure retires the exact process epoch. Level
+            -- transitions do not call remove_peer, so bounded transition
+            -- retention remains intact without allowing peer-id replay.
+            mod:hook_safe("GameNetworkManager", "remove_peer", function(_, peer_id)
+                inst:forget_peer(peer_id)
+            end)
+            mod._crt_wire_disconnect_guard = true
             pcall(printf, "[crt:425] peer-parity beacon installed (channel=crt_peer_parity_present schema=%d exact_identity=%s)",
                 CRT_RPC_SCHEMA, wire_identity)
-            -- ONE gated feature covering every networked_unsafe entry (seven
+            -- ONE gated feature covering every networked_unsafe entry (eight
             -- balance reworks + the trn_wh_priest tourney port). On a parity
             -- transition the beacon fires these callbacks; each just re-runs the
             -- two apply engines, which read the beacon's settled state directly
@@ -825,6 +852,46 @@ do
                     pcall(_reconcile_rework_engines)
                 end,
             })
+
+            -- Optional Mod Tweaker presentation bridge. Runtime/network safety
+            -- above remains authoritative when GUT is absent; this bridge only
+            -- makes all nine affected saved rows read-only/grey while exact
+            -- parity is unavailable. Retry because mod load order is not a
+            -- dependency contract, and preserve the existing update owner.
+            local runtime_mod_id = "crt"
+            local ok_name, live_name = pcall(function() return mod:get_name() end)
+            if ok_name and type(live_name) == "string" and live_name ~= "" then
+                runtime_mod_id = live_name
+            end
+            local runtime_gate_id = runtime_mod_id .. ":776:exact-buff-catalog"
+            local runtime_gate_registered = false
+            local runtime_gate_retry = 0
+            local function try_runtime_gate()
+                if runtime_gate_registered then return end
+                local spec = mod._crt.wire_policy.runtime_gate_spec(
+                    runtime_mod_id, mod._crt.network_unsafe_setting_ids,
+                    function()
+                        local available = inst:applied_state() == "enabled"
+                        return available, available and nil
+                            or "Unavailable until every player has the same Tweaker: Careers buff catalog."
+                    end)
+                local registered = mod._crt.wire_policy.try_register_runtime_gate(
+                    rawget(_G, "get_mod"), runtime_gate_id, spec)
+                runtime_gate_registered = registered == true
+                mod._crt_wire_runtime_gate_registered = runtime_gate_registered
+            end
+            try_runtime_gate()
+            local previous_update = mod.update
+            mod.update = function(dt)
+                if previous_update then previous_update(dt) end
+                if not runtime_gate_registered then
+                    runtime_gate_retry = runtime_gate_retry + (dt or 0)
+                    if runtime_gate_retry >= 1 then
+                        runtime_gate_retry = 0
+                        try_runtime_gate()
+                    end
+                end
+            end
         else
             pcall(printf, "[crt:425] WARNING peer-parity factory failed (%s); networked reworks stay vanilla (fail-safe)", tostring(inst))
         end

@@ -168,13 +168,16 @@ positive server IDs 12, 13, and 9. `ProcFunctions.add_buff` sends server ID 0
 [src: `scripts/settings/buff/proc_functions.lua:1956-1972`], so these were numeric
 catalog collisions, not the Impetuous proc originating those messages.
 
-The gate is therefore the `_lib_peer_parity.lua` beacon plus CRT's transport
-adapter in `_crt_wire_runtime.lua` (issues 371/425/776): a VMF-channel
-exact-catalog handshake (`crt_peer_parity_present`, schema 2). Its
+The gate is therefore `_lib_peer_parity.lua` in its opt-in exact mode, with the
+identity built by `_lib_wire_catalog.lua` (issues 371/425/776): a VMF-channel
+exact-catalog handshake (`crt_peer_parity_present`, schema 3). The namespaced
 identity hashes every CRT-registered buff name together with the ACTUAL forward
-and reverse numeric assignment in the live `NetworkLookup.buff_templates`. A missing
-reply, missing identity, or any different name/index pair is negative evidence and
-disables networked reworks immediately. The beacon payload is a VMF-serialized string
+and reverse numeric assignment in the live `NetworkLookup.buff_templates`.
+Replies are bound to the current challenge and peer epoch; disconnect retirement
+prevents a delayed old-session acknowledgement from proving a new session. A
+missing reply, missing/oversized identity, stale challenge echo, unchallenged
+epoch change, or any different name/index pair is negative evidence and disables
+networked reworks immediately. The beacon payload is a VMF-serialized string
 [src: VMF `modules/core/network.lua:186-196`], so it never adds a vanilla lookup.
 It POLLS `Managers.player:human_players()` rather than hooking
 `add_remote_player`/`remove_player`, deliberately - the lib is COPIED into the host
@@ -190,6 +193,13 @@ max-one-stack timed effects use the native
 as `morris_buff_settings.lua:4618-4627`), never a positive server-controlled ID.
 The user's saved setting is never overwritten; a held rework stays vanilla until
 exact parity re-establishes.
+
+Presentation is a separate optional boundary: when Mod Tweaker is present, CRT
+registers one runtime gate covering the exact nine `networked_unsafe` rows
+(eight balance entries plus the Tourney Warrior Priest aura). A closed exact
+gate makes those rows read-only/grey with a player-facing reason. It never calls
+`mod:set`, never changes saved values, and is not part of the gameplay safety
+proof; balance/Tourney still restore to vanilla when GUT is absent.
 
 ## What the engine will NOT let us do (dead ends, already paid for)
 

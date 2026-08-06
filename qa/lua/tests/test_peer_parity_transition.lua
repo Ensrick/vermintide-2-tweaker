@@ -135,6 +135,234 @@ local function register(Harness, repo_root)
         end)
     end)
 
+    Harness.test("peer parity legacy mode preserves the two-field wire payload", function()
+        with_network_stubs(function()
+            local factory = load_factory()
+            local receiver, explicit_args
+            local fake_mod = {
+                network_register = function(_, _, callback) receiver = callback end,
+                network_send = function(_, ...)
+                    explicit_args = select("#", ...)
+                end,
+                debug = function() end,
+                echo = function() end,
+            }
+            local inst = assert(factory(fake_mod, { schema = 7, poll_interval = 0 }))
+            inst:install()
+            Harness.equal(explicit_args, 4,
+                "legacy transport must remain channel/recipient/schema/reply only")
+            Harness.equal(inst.EXACT_MODE, false)
+            receiver("peer-legacy", 7, 1)
+            Harness.truthy(inst:peer_has("peer-legacy"))
+        end)
+    end)
+
+    Harness.test("shared exact mode is opt-in only for CRT in this release", function()
+        local paths = {
+            "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua",
+            "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
+            "event_tweaker/scripts/mods/event_tweaker/_evt_guard430_curse_parity.lua",
+            "event_tweaker/scripts/mods/event_tweaker/_evt_shadow_adventure.lua",
+            "weapon_tweaker/scripts/mods/weapon_tweaker/_wt431_damage_profile_parity.lua",
+            "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt431_damage_profile_parity.lua",
+        }
+        for i = 1, #paths do
+            local file = assert(io.open(repo_root .. "/" .. paths[i], "rb"))
+            local source = file:read("*a")
+            file:close()
+            Harness.equal(source:find("[^_%w]wire_identity%s*="), nil,
+                "shared exact opt-in is not yet authorized for " .. paths[i])
+        end
+
+        local file = assert(io.open(repo_root
+            .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua", "rb"))
+        local career = file:read("*a")
+        file:close()
+        Harness.truthy(career:find("[^_%w]wire_identity%s*=%s*wire_identity") ~= nil,
+            "CRT must be the sole shared exact-mode opt-in")
+    end)
+
+    local function build_exact(factory, identity)
+        local receiver, latest = nil, {}
+        local fake_mod = {
+            network_register = function(_, _, callback) receiver = callback end,
+            network_send = function(_, channel, recipient, schema, reply,
+                    sent_identity, epoch, query, echo)
+                latest[recipient] = {
+                    channel = channel, schema = schema, reply = reply,
+                    identity = sent_identity, epoch = epoch,
+                    query = query, echo = echo,
+                }
+            end,
+            debug = function() end,
+            echo = function() end,
+        }
+        local inst = assert(factory(fake_mod, {
+            channel = "exact_presence",
+            schema = 9,
+            wire_identity = identity,
+            session_epoch = "local-e1",
+            poll_interval = 0,
+            settle_enable = 0,
+        }))
+        inst:install()
+        return inst, function() return receiver end, latest
+    end
+
+    Harness.test("peer parity exact mode requires identity epoch and current challenge", function()
+        with_network_stubs(function()
+            local factory = load_factory()
+            local identity = "wire-v1:2:12345678:abcdef01"
+            local inst, receiver_fn, latest = build_exact(factory, identity)
+            local receiver = assert(receiver_fn())
+            Harness.truthy(inst.EXACT_MODE)
+            Harness.equal(inst.WIRE_IDENTITY, identity)
+            Harness.truthy(inst:max_json_envelope_length() <= inst.MAX_VMF_JSON_LENGTH)
+
+            inst:require_peer("peer-a")
+            local query = latest["peer-a"].query
+            receiver("peer-a", 9, 1, "wrong", "remote-e1", "", query)
+            Harness.truthy(not inst:peer_has("peer-a"))
+
+            inst:require_peer("peer-a")
+            local fresh = latest["peer-a"].query
+            receiver("peer-a", 9, 1, identity, "remote-e1", "", query)
+            Harness.truthy(not inst:peer_has("peer-a"), "stale echo must not acknowledge")
+            receiver("peer-a", 9, 1, identity, "remote-e1", "", fresh)
+            Harness.truthy(inst:peer_has("peer-a"), "current challenge must acknowledge")
+
+            receiver("peer-a", 9, 0, identity, "remote-e2", "remote-query", "")
+            Harness.truthy(not inst:peer_has("peer-a"),
+                "unchallenged process-epoch change must revoke proof")
+            inst:require_peer("peer-a")
+            local restart = latest["peer-a"].query
+            receiver("peer-a", 9, 1, identity, "remote-e2", "", restart)
+            Harness.truthy(inst:peer_has("peer-a"),
+                "fresh challenged process restart must recover")
+        end)
+    end)
+
+    Harness.test("peer parity exact reply acceptance matrix fails closed", function()
+        with_network_stubs(function()
+            local factory = load_factory()
+            local identity = "wire-v1:2:12345678:abcdef01"
+            local cases = {
+                { label = "schema mismatch", schema = 8, identity = identity,
+                    epoch = "remote-e1", echo = "current", accepted = false },
+                { label = "missing identity", schema = 9, identity = nil,
+                    epoch = "remote-e1", echo = "current", accepted = false },
+                { label = "wrong identity", schema = 9, identity = "wire-v1:other",
+                    epoch = "remote-e1", echo = "current", accepted = false },
+                { label = "missing epoch", schema = 9, identity = identity,
+                    epoch = nil, echo = "current", accepted = false },
+                { label = "unsafe epoch", schema = 9, identity = identity,
+                    epoch = "remote epoch", echo = "current", accepted = false },
+                { label = "missing echo", schema = 9, identity = identity,
+                    epoch = "remote-e1", echo = nil, accepted = false },
+                { label = "stale echo", schema = 9, identity = identity,
+                    epoch = "remote-e1", echo = "stale", accepted = false },
+                { label = "current echo", schema = 9, identity = identity,
+                    epoch = "remote-e1", echo = "current", accepted = true },
+            }
+
+            for i = 1, #cases do
+                local case = cases[i]
+                local inst, receiver_fn, latest = build_exact(factory, identity)
+                local receiver = assert(receiver_fn())
+                inst:require_peer("peer-matrix")
+                local current = latest["peer-matrix"].query
+                local echo = case.echo == "current" and current or case.echo
+                receiver("peer-matrix", case.schema, 1, case.identity,
+                    case.epoch, "", echo)
+                Harness.equal(inst:peer_has("peer-matrix"), case.accepted,
+                    "unexpected exact reply verdict: " .. case.label)
+            end
+        end)
+    end)
+
+    Harness.test("peer parity exact query acceptance matrix echoes only valid proof", function()
+        with_network_stubs(function()
+            local factory = load_factory()
+            local identity = "wire-v1:2:12345678:abcdef01"
+            local inst, receiver_fn, latest = build_exact(factory, identity)
+            local receiver = assert(receiver_fn())
+
+            receiver("peer-query", 9, 0, identity, "remote-e1", "remote-q1", "")
+            Harness.truthy(inst:peer_has("peer-query"))
+            Harness.equal(latest["peer-query"].reply, 1)
+            Harness.equal(latest["peer-query"].echo, "remote-q1")
+
+            receiver("peer-query", 9, 0, identity, "remote-e2", "remote-q2", "")
+            Harness.truthy(not inst:peer_has("peer-query"),
+                "unchallenged query epoch change must revoke exact proof")
+
+            receiver("peer-bad-query", 9, 0, identity, "remote e1", "remote-q", "")
+            Harness.truthy(not inst:peer_has("peer-bad-query"))
+            Harness.equal(latest["peer-bad-query"], nil,
+                "malformed query proof must not receive a reply")
+        end)
+    end)
+
+    Harness.test("peer parity exact mismatch immediately disables an enabled feature", function()
+        with_network_stubs(function()
+            local factory = load_factory()
+            local identity = "wire-v1:2:12345678:abcdef01"
+            local inst, receiver_fn = build_exact(factory, identity)
+            local enabled, disabled = 0, 0
+            inst:register_gated_feature("exact-live", {
+                on_enable = function() enabled = enabled + 1 end,
+                on_disable = function() disabled = disabled + 1 end,
+            })
+            inst:tick(0)
+            Harness.equal(inst:applied_state(), "enabled")
+            Harness.equal(enabled, 1)
+            Harness.equal(disabled, 0)
+
+            local receiver = assert(receiver_fn())
+            receiver("peer-mismatch", 9, 0, "wire-v1:wrong",
+                "remote-e1", "remote-query", "")
+            Harness.equal(inst:applied_state(), "disabled",
+                "identity mismatch must synchronously revoke the enabled state")
+            Harness.equal(disabled, 1,
+                "identity mismatch must synchronously invoke on_disable once")
+            Harness.truthy(not inst:peer_has("peer-mismatch"))
+        end)
+    end)
+
+    Harness.test("peer parity exact mode retires disconnect epochs with hard bounds", function()
+        with_network_stubs(function()
+            local factory = load_factory()
+            local identity = "wire-v1:1:12345678:abcdef01"
+            local inst, receiver_fn, latest = build_exact(factory, identity)
+            local receiver = assert(receiver_fn())
+
+            for epoch = 1, 9 do
+                inst:require_peer("peer-one")
+                receiver("peer-one", 9, 1, identity, "remote-e" .. epoch, "",
+                    latest["peer-one"].query)
+                Harness.truthy(inst:peer_has("peer-one"))
+                inst:forget_peer("peer-one")
+            end
+            Harness.truthy(not inst:is_epoch_retired("peer-one", "remote-e1"),
+                "oldest retired epoch must be evicted at the per-peer cap")
+            Harness.truthy(inst:is_epoch_retired("peer-one", "remote-e9"))
+
+            for peer = 2, 40 do
+                local id = "peer-" .. peer
+                inst:require_peer(id)
+                receiver(id, 9, 1, identity, "epoch-" .. peer, "", latest[id].query)
+                inst:forget_peer(id)
+            end
+            Harness.equal(inst:retired_peer_count(), inst.MAX_RETIRED_PEERS)
+
+            inst:require_peer("peer-40")
+            local replay_query = latest["peer-40"].query
+            receiver("peer-40", 9, 1, identity, "epoch-40", "", replay_query)
+            Harness.truthy(not inst:peer_has("peer-40"),
+                "retired process epoch must not authorize a reused peer id")
+        end)
+    end)
+
     Harness.test("ct hot-join preflight precedes native sync and has bounded fallback", function()
         local path = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua"
         local file = assert(io.open(path, "rb"))

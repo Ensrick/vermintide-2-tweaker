@@ -5,6 +5,9 @@ local function register(H, repo_root)
     local runtime_path = repo_root
         .. "/career_tweaker/scripts/mods/career_tweaker/_crt_wire_runtime.lua"
     local Runtime = assert(loadfile(runtime_path))()
+    local catalog_path = repo_root
+        .. "/career_tweaker/scripts/mods/career_tweaker/_lib_wire_catalog.lua"
+    local Catalog = assert(loadfile(catalog_path))()
 
     local function read(relative)
         local file = assert(io.open(repo_root .. "/" .. relative, "rb"))
@@ -30,8 +33,10 @@ local function register(H, repo_root)
             crt_a = 1574, crt_z = 1600, victor_mod = 1601,
             [1574] = "crt_a", [1600] = "crt_z", [1601] = "victor_mod",
         }
-        local a, err_a, names_a = Policy.build_wire_identity(registry_a, lookup)
-        local b, err_b, names_b = Policy.build_wire_identity(registry_b, lookup)
+        local a, err_a, names_a = Catalog.build_identity(
+            "crt.buff_templates", registry_a, lookup)
+        local b, err_b, names_b = Catalog.build_identity(
+            "crt.buff_templates", registry_b, lookup)
         H.equal(err_a, nil)
         H.equal(err_b, nil)
         H.equal(a, b, "registry insertion order must not affect identity")
@@ -42,7 +47,8 @@ local function register(H, repo_root)
             crt_a = 1575, crt_z = 1600, victor_mod = 1601,
             [1575] = "crt_a", [1600] = "crt_z", [1601] = "victor_mod",
         }
-        local shifted_identity = assert(Policy.build_wire_identity(registry_a, shifted))
+        local shifted_identity = assert(Catalog.build_identity(
+            "crt.buff_templates", registry_a, shifted))
         H.truthy(shifted_identity ~= a,
             "same names at different process-local ids must not establish parity")
 
@@ -51,14 +57,78 @@ local function register(H, repo_root)
             crt_a = 1574, crt_z = 1600, victor_other = 1601,
             [1574] = "crt_a", [1600] = "crt_z", [1601] = "victor_other",
         }
-        local changed_identity = assert(Policy.build_wire_identity(changed_names, changed_lookup))
+        local changed_identity = assert(Catalog.build_identity(
+            "crt.buff_templates", changed_names, changed_lookup))
         H.truthy(changed_identity ~= a,
             "same ids assigned to different names must not establish parity")
 
         lookup[1600] = "wrong_reverse_name"
-        local invalid, invalid_err = Policy.build_wire_identity(registry_a, lookup)
+        local invalid, invalid_err = Catalog.build_identity(
+            "crt.buff_templates", registry_a, lookup)
         H.equal(invalid, nil)
         H.truthy(invalid_err:find("lookup%-mismatch") ~= nil)
+    end)
+
+    H.test("CRT #776 optional runtime gate preserves settings and supports GUT load order", function()
+        local ids = { "setting_a", "setting_b" }
+        local spec = assert(Policy.runtime_gate_spec("crt", ids, function()
+            return false, "catalog unavailable"
+        end))
+        ids[1] = "mutated"
+        H.deep_equal(spec.setting_ids, { "setting_a", "setting_b" },
+            "runtime gate must own a defensive setting-id copy")
+        local available, reason = spec.evaluate()
+        H.equal(available, false)
+        H.equal(reason, "catalog unavailable")
+
+        local calls, captured = {}, nil
+        local ok, err = Policy.try_register_runtime_gate(function(name)
+            calls[#calls + 1] = name
+            if name == "gut" then
+                return { mod_tweaker = {
+                    register_runtime_gate = function(_, gate_id, gate_spec)
+                        captured = { id = gate_id, spec = gate_spec }
+                        return true
+                    end,
+                } }
+            end
+        end, "crt:776:exact-buff-catalog", spec)
+        H.equal(ok, true)
+        H.equal(err, nil)
+        H.deep_equal(calls, { "gut_dev", "gut" })
+        H.equal(captured.id, "crt:776:exact-buff-catalog")
+        H.equal(captured.spec, spec)
+
+        local absent, absent_err = Policy.try_register_runtime_gate(
+            function() return nil end, "crt:776:exact-buff-catalog", spec)
+        H.equal(absent, false)
+        H.equal(absent_err, "mod-tweaker-unavailable")
+        H.deep_equal(spec.setting_ids, { "setting_a", "setting_b" },
+            "registration must never change saved setting identities")
+    end)
+
+    H.test("CRT #776 runtime gate pins all nine network-unsafe setting rows", function()
+        local regression = read(
+            "career_tweaker/scripts/mods/career_tweaker/_crt_regression.lua")
+        local begin_at = assert(regression:find(
+            "local _CRT_NETWORK_UNSAFE_ALL_EXPECTED = {", 1, true))
+        local end_at = assert(regression:find("\n}", begin_at, true))
+        local block = regression:sub(begin_at, end_at)
+        local actual = {}
+        for setting_id in block:gmatch('"([%w_]+)"') do
+            actual[#actual + 1] = setting_id
+        end
+        H.deep_equal(actual, {
+            "rework_bw_unchained_abandon_innate_flame_unending",
+            "rework_bw_unchained_natural_talent_ranged",
+            "rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit",
+            "rework_es_mercenary_blade_barrier_60x_minus_10_on_hit",
+            "rework_es_mercenary_enhanced_training_tiered",
+            "rework_es_questingknight_virtue_of_impetuous_buffed",
+            "rework_we_maidenguard_dance_of_blades",
+            "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
+            "trn_wh_priest_prayer_movement_speed",
+        })
     end)
 
     H.test("CRT #776 Impetuous effects remain one refreshing 20-second stack", function()
@@ -79,52 +149,6 @@ local function register(H, repo_root)
         H.equal(state.end_time, 130)
         H.truthy(not Policy.is_expired(state, 129.999))
         H.truthy(Policy.is_expired(state, 130))
-    end)
-
-    H.test("CRT #776 parity transport accepts only the exact catalog identity", function()
-        local receiver
-        local sent_identity
-        local accepted = 0
-        local fake_mod = {
-            network_send = function(_, _, _, _, _, identity)
-                sent_identity = identity
-            end,
-            network_register = function(_, _, callback)
-                receiver = callback
-            end,
-            debug = function() end,
-            echo = function() end,
-            localize = function(_, value) return value end,
-        }
-        local proxy = assert(Runtime.wrap_parity_transport(fake_mod, "catalog:exact"))
-        proxy:network_send("channel", "others", 2, 0)
-        H.equal(sent_identity, "catalog:exact")
-
-        local forgotten, required = 0, 0
-        local instance = {
-            forget_peer = function(_, peer)
-                if peer == "peer-a" then forgotten = forgotten + 1 end
-            end,
-            require_peer = function(_, peer)
-                if peer == "peer-a" then required = required + 1 end
-            end,
-        }
-        proxy:_bind_parity_instance(instance)
-        proxy:network_register("channel", function()
-            accepted = accepted + 1
-        end)
-
-        receiver("peer-a", 2, 1, nil)
-        receiver("peer-a", 2, 1, "catalog:other")
-        H.equal(accepted, 0, "missing and mismatched identities must not acknowledge")
-        H.equal(forgotten, 1, "repeated mismatch must revoke at most once until recovery")
-        H.equal(required, 1)
-
-        receiver("peer-a", 2, 1, "catalog:exact")
-        H.equal(accepted, 1, "exact identity reaches the established parity classifier")
-        receiver("peer-a", 2, 1, "catalog:changed")
-        H.equal(forgotten, 2, "a later drift must revoke an earlier exact acknowledgement")
-        H.equal(required, 2)
     end)
 
     H.test("CRT #776 receiver floor covers all attached positive ids and collisions", function()
@@ -176,15 +200,26 @@ local function register(H, repo_root)
         local balance = require("crt_source").combined(repo_root)
         local runtime = read("career_tweaker/scripts/mods/career_tweaker/_crt_wire_runtime.lua")
         local hooks = read("career_tweaker/scripts/mods/career_tweaker/_career_tweaker_balance_hooks.lua")
-        H.truthy(entry:find("local CRT_RPC_SCHEMA = 2", 1, true))
-        H.truthy(entry:find("build_wire_identity(", 1, true))
+        H.truthy(entry:find("local CRT_RPC_SCHEMA = 3", 1, true))
+        H.truthy(entry:find('build_identity(', 1, true))
+        H.truthy(entry:find('"crt.buff_templates"', 1, true))
         H.truthy(entry:find("mod._crt_mod_registered_buff_names", 1, true))
         H.truthy(entry:find("NetworkLookup and NetworkLookup.buff_templates", 1, true))
-        H.truthy(entry:find("wrap_parity_transport(mod, wire_identity)", 1, true))
+        H.truthy(entry:find("wire_identity = wire_identity", 1, true))
         H.truthy(entry:find("_crt_wire_transport_identity = wire_identity", 1, true))
-        H.truthy(runtime:find("remote_identity ~= identity", 1, true))
-        H.truthy(runtime:find("parity_instance.forget_peer", 1, true))
-        H.truthy(runtime:find("parity_instance.require_peer", 1, true))
+        H.truthy(entry:find('mod:hook_safe("GameNetworkManager", "remove_peer"', 1, true))
+        H.truthy(entry:find("_crt_wire_disconnect_guard = true", 1, true))
+        H.equal(runtime:find("wrap_parity_transport", 1, true), nil,
+            "CRT must not retain a bespoke exact transport proxy")
+        H.truthy(entry:find("network_unsafe_setting_ids", 1, true))
+        H.truthy(entry:find("runtime_gate_spec", 1, true))
+        H.truthy(entry:find("try_register_runtime_gate", 1, true))
+        H.truthy(entry:find(":776:exact-buff-catalog", 1, true))
+        H.truthy(entry:find("Unavailable until every player has the same Tweaker: Careers buff catalog.", 1, true))
+        local gate_at = assert(entry:find("local runtime_gate_id", 1, true))
+        local gate_end = assert(entry:find("WARNING peer-parity factory failed", gate_at, true))
+        H.equal(entry:sub(gate_at, gate_end):find("mod:set(", 1, true), nil,
+            "optional runtime gate must not rewrite saved settings")
 
         H.equal(count_plain(balance, "buff_func = \"crt_wire_safe_add_timed_buff\""), 2)
         H.equal(count_plain(balance, "wire_policy.make_timed_stat_buff("), 2)
