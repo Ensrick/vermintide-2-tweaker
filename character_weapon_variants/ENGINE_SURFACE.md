@@ -239,6 +239,20 @@ material closure to `_lib_resource_residency.lua` V2 after its source-backed
 preview parent bind. The generic `_lib_weapon_appearance` texture seam remains
 censused as legacy rather than being falsely claimed covered.
 
+## #1155 Old Musket appearance pilot
+
+Old Musket is the first family routed through the immutable appearance descriptor
+and bounded reconciler. `BackendUtils.get_item_units` remains the unit-selection
+seam, while `GearUtils.create_equipment`, owner/husk wield, peer-ready replay,
+inventory/illusion/CIM previews, lobby preview, and score-team preview submit the
+resulting live unit to `_cwv_old_musket_appearance.lua`. The adapter owns the only
+model/material/texture/pose recipe; each lifecycle token permits at most two
+attempts and is accepted only after an independent local position, scale,
+quaternion, and material-handle readback. Unsupported surface/edge cells retain
+the vanilla handgun explicitly. State exit, mod disable, and unload disconnect the
+weak target ledger; dev tuning advances descriptor generation and replays tracked
+units once rather than polling per frame.
+
 ## Doc maintenance
 
 Follows `docs/engine/README.md` maintenance rules: if a cwv hook moves, a guard is

@@ -1014,9 +1014,7 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 	-- render surface ..."); this in-keep half asserts every shared entrypoint
 	-- those surfaces call actually exists and resolves.
 	local shared = {
-		"_apply_old_musket_transform",       -- owner 1P/3P, husk, both previews
-		"_track_old_musket_unit",            -- live-tune bucket membership
-		"_apply_old_musket_textures",        -- the one UV painter for every surface
+		"_apply_old_musket_textures",        -- resource-gated UV painter
 		"_old_musket_transform_components",  -- the single pos/rot/scale source
 		"_old_musket_mode_for_owner",        -- husk stance from the bounded channel
 		"_old_musket_record_and_publish",    -- owner -> channel publish
@@ -1028,6 +1026,12 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 			return "shared Old Musket presentation resolver missing: _om." .. name
 		end
 	end
+	if type(_om.old_musket_appearance) ~= "table"
+			or type(_om.old_musket_appearance.resolve) ~= "function"
+			or type(_om.old_musket_appearance.reconcile) ~= "function"
+			or type(_om.old_musket_appearance.disconnect) ~= "function" then
+		return "Old Musket immutable descriptor/reconciler pilot is incomplete"
+	end
 	if not _om.old_musket_preview_pose
 			or type(_om.old_musket_preview_pose.take_when_stable) ~= "function" then
 		return "Old Musket final preview stability owner is missing"
@@ -1037,9 +1041,8 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 		return "preview-bridge entrypoint mod._cwv_resolve_preview_descriptor missing"
 	end
 	local policy = _om.old_musket_preview
-	if type(policy) ~= "table" or type(policy.resolve) ~= "function"
-			or type(policy.resource_mode) ~= "function" then
-		return "shared Old Musket preview policy (resolve/resource_mode) missing"
+	if type(policy) ~= "table" or type(policy.resource_mode) ~= "function" then
+		return "shared Old Musket resource-mode policy missing"
 	end
 	-- All three positive-identity forms a surface can hold (item key, skin key,
 	-- backend id) must resolve to the SAME custom unit plus a full stance
@@ -1051,14 +1054,47 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 		{ backend_id = "cwv_es_musket_old_002" },
 	}) do
 		local d = _om._old_musket_preview_descriptor(probe)
-		if type(d) ~= "table" or type(d.unit) ~= "string"
+		if type(d) ~= "table" or type(d.right_hand_unit) ~= "table"
+				or type(d.right_hand_unit.unit) ~= "string"
 				or (d.mode ~= "ranged" and d.mode ~= "melee")
-				or type(d.transform) ~= "table"
-				or type(d.transform.position) ~= "table"
-				or type(d.transform.scale) ~= "table" then
+				or type(d.transform_3p) ~= "table"
+				or type(d.transform_3p.position) ~= "table"
+				or type(d.transform_3p.scale) ~= "table" then
 			return "preview descriptor incomplete for a positive Old Musket identity form"
 		end
 	end
+end)
+
+_rt_register("issue1155_old_musket_descriptor_reconciler", function()
+	local pilot, descriptor_lib = _om.old_musket_appearance, _om.appearance_descriptor
+	if type(pilot) ~= "table" or type(descriptor_lib) ~= "table" then
+		return "Phase-3 Old Musket pilot modules are unavailable"
+	end
+	local descriptor, errors = pilot.resolve({
+		backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
+	}, "ranged", "inventory_preview")
+	if not descriptor then return "descriptor rejected: " .. tostring(errors and errors[1]) end
+	if type(descriptor.transform_1p) ~= "table"
+			or type(descriptor.transform_3p) ~= "table"
+			or type(descriptor.transform_3p.rotation) ~= "table"
+			or #descriptor.transform_3p.rotation ~= 4 then
+		return "descriptor lost a canonical pose channel"
+	end
+	for _, surface in ipairs(descriptor_lib.SURFACES or {}) do
+		if not pilot.unit_surfaces[surface] then
+			local result = pilot.reconcile({}, surface, "instance_load", {
+				backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
+			}, "ranged")
+			if not result or result.fallback ~= true then
+				return "fallback adapter missing for surface " .. tostring(surface)
+			end
+		end
+	end
+	local rejected = pilot.reconciler.reconcile(descriptor, "not_a_surface", "equip", {})
+	if rejected.reason ~= "unknown-surface" then
+		return "reconciler does not reject a foreign surface"
+	end
+	if pilot.disconnect() ~= true then return "disconnect cleanup failed" end
 end)
 
 _rt_register("issue582_dual_axes_native_variant_ownership_boundary", function()
@@ -1275,12 +1311,13 @@ _rt_register("issue484_crafted_old_musket_identity", function()
 			or _om._old_musket_valid_bid(string.rep("x", 129)) then
 		return "Old Musket opaque-id wire bound is missing"
 	end
-	local descriptor = _om.old_musket_preview.resolve({
+	local descriptor = _om.old_musket_appearance.resolve({
 		ItemInstanceId = bid,
 		key = "es_handgun",
-	}, "ranged", {}, _om._cwv_key_for_item(bid, item))
+		CustomData = { cwv_key = _om._cwv_key_for_item(bid, item) },
+	}, "ranged", "illusion_browser")
 	if not descriptor or descriptor.item_key ~= "cwv_es_musket_old"
-			or descriptor.unit ~= _om.old_musket_preview.UNIT then
+			or descriptor.right_hand_unit.unit ~= _om.old_musket_preview.UNIT then
 		return "canonical UUID did not reach the authored Old Musket preview descriptor"
 	end
 	-- payload_for now emits an explicit native record for the EMPTY melee slot

@@ -77,6 +77,7 @@ function M.arm(previewer, record)
 		slot_type = record.slot_type,
 		slot_index = record.slot_index,
 		stance = record.stance,
+		surface = record.surface,
 		wield_event = record.wield_event,
 	}
 	return true
@@ -138,7 +139,7 @@ function M.install(mod, apply_transform, print_fn, debug_fn)
 						and self._equipment_units[pending.slot_index]
 					local weapon_unit = type(slot) == "table" and slot.right
 					if weapon_unit and Unit.alive(weapon_unit) and apply_transform then
-						apply_transform(weapon_unit, "3p", pending.stance)
+						apply_transform(weapon_unit, "3p", pending.stance, pending)
 						pcall(print_fn,
 							"[cwv:474/792] preview transform retained slot=%s bid=%s mode=%s edge=loading_done",
 							tostring(pending.slot_index), tostring(pending.backend_id),

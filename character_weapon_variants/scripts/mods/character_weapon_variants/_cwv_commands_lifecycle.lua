@@ -34,8 +34,9 @@ end)
 -- the FBX needs different transforms in first-person view vs other players'
 -- third-person view. State stored at top of file (search "_CWV_OLD_MUSKET_POS_1P"
 -- etc); commands mutate globals and call `_reapply_old_musket_transforms_all`
--- which walks the weak-keyed `_CWV_OLD_MUSKET_UNITS_1P/3P` sets and re-applies
--- the local-space transforms. Compose-safe with vanilla's attachment_node_linking.
+-- which advances the canonical descriptor generation and replays only the
+-- weak-keyed targets owned by the Phase-3 reconciler. Compose-safe with
+-- vanilla's attachment_node_linking.
 function _parse3(a, b, c)
 	a, b, c = tonumber(a), tonumber(b), tonumber(c)
 	if a and b and c then return { a, b, c } end
@@ -502,6 +503,9 @@ end
 -- top-level `mod.on_game_state_changed = function(status, state_name)` slot.
 _om._dual_axes_fp_game_state_retry_installed = true
 mod.on_game_state_changed = function(status, state_name)
+	if status == "exit" and _om.old_musket_appearance then
+		_om.old_musket_appearance.disconnect()
+	end
     -- #586: chunk-load normally acquires the leases, but PackageManager can be
     -- cold during unusual load ordering. Every gameplay-state enter is a safe
     -- retry boundary and catalog acquisition is idempotent.
@@ -583,6 +587,7 @@ mod.on_enabled = function()
 end
 
 mod.on_disabled = function()
+	if _om.old_musket_appearance then _om.old_musket_appearance.disconnect() end
 	if _om.crowbill_runtime and _om.crowbill_runtime.set_enabled then
 		_om.crowbill_runtime.set_enabled(false)
 	end
@@ -591,6 +596,7 @@ mod.on_disabled = function()
 end
 
 mod.on_unload = function()
+	if _om.old_musket_appearance then _om.old_musket_appearance.disconnect() end
 	if _om.crowbill_runtime and _om.crowbill_runtime.set_enabled then
 		_om.crowbill_runtime.set_enabled(false)
 	end

@@ -178,17 +178,26 @@ local function is_triplet(v)
 		and type(v[1]) == "number" and type(v[2]) == "number" and type(v[3]) == "number"
 end
 
+local function is_quaternion(v)
+	return type(v) == "table" and #v == 4
+		and type(v[1]) == "number" and type(v[2]) == "number"
+		and type(v[3]) == "number" and type(v[4]) == "number"
+end
+
 local function validate_transform(t, path, errors)
 	if t == nil then return end
 	if type(t) ~= "table" then
 		errors[#errors + 1] = path .. " must be a table"
 		return
 	end
-	for _, field in ipairs({ "scale", "offset", "rotation" }) do
+	for _, field in ipairs({ "scale", "offset", "position" }) do
 		local v = t[field]
 		if v ~= nil and not is_triplet(v) then
 			errors[#errors + 1] = path .. "." .. field .. " must be a numeric triplet"
 		end
+	end
+	if t.rotation ~= nil and not is_triplet(t.rotation) and not is_quaternion(t.rotation) then
+		errors[#errors + 1] = path .. ".rotation must be Euler XYZ or quaternion numeric data"
 	end
 end
 
@@ -326,6 +335,132 @@ function M.next_generation(descriptor)
 	for k, v in pairs(data) do copy[k] = v end
 	copy.generation = (data.generation or 0) + 1
 	return M.build(copy)
+end
+
+-- Bounded lifecycle reconciler (#1155 / #660 S3).
+--
+-- The reconciler deliberately knows nothing about Stingray.  A family injects
+-- one adapter and one independent observer.  Setter success is never accepted
+-- as proof: an apply is committed only when the observer reports the retained
+-- postcondition.  The ledger is weak-keyed by the actual render target so a
+-- destroyed world cannot be retained by diagnostics or retry bookkeeping.
+-- Duplicate lifecycle delivery is coalesced by
+-- (target, surface, edge, descriptor fingerprint, generation).  A failed
+-- postcondition may be retried only up to max_attempts (default 2); there is no
+-- update-loop or timer owned here.
+function M.new_reconciler(options)
+	options = options or {}
+	local apply = options.apply
+	local observe = options.observe
+	local max_attempts = tonumber(options.max_attempts) or 2
+	if max_attempts < 1 then max_attempts = 1 end
+	local records = setmetatable({}, { __mode = "k" })
+	local R = {}
+
+	local function valid_axis(value, set)
+		return type(value) == "string" and set[value] == true
+	end
+
+	local function token_for(descriptor, surface, edge)
+		local ok, fp = pcall(M.fingerprint, descriptor)
+		if not ok then return nil, tostring(fp) end
+		return table.concat({ surface, edge, fp, tostring(descriptor.generation or 0) }, "|")
+	end
+
+	function R.reconcile(descriptor, surface, edge, target, context)
+		if not M.raw(descriptor) then return { ok = false, reason = "descriptor-unbuilt" } end
+		if not valid_axis(surface, SURFACE_SET) then
+			return { ok = false, reason = "unknown-surface" }
+		end
+		if not valid_axis(edge, EDGE_SET) then return { ok = false, reason = "unknown-edge" } end
+		if target == nil then return { ok = false, reason = "target-missing" } end
+		local token, token_error = token_for(descriptor, surface, edge)
+		if not token then return { ok = false, reason = "fingerprint-failed", detail = token_error } end
+
+		local target_records = records[target]
+		if not target_records then target_records = {}; records[target] = target_records end
+		local record = target_records[token]
+		if record and (record.completed or record.retained or record.attempts >= max_attempts) then
+			return {
+				ok = record.retained == true or record.fallback == true,
+				retained = record.retained == true,
+				fallback = record.fallback == true,
+				coalesced = true,
+				attempts = record.attempts,
+				reason = record.reason,
+				token = token,
+			}
+		end
+		record = record or { attempts = 0, retained = false }
+		record.attempts = record.attempts + 1
+		target_records[token] = record
+
+		if type(apply) ~= "function" then
+			record.reason = "adapter-missing"
+			return { ok = false, attempts = record.attempts, reason = record.reason, token = token }
+		end
+		local call_ok, apply_report = pcall(apply, descriptor, surface, edge, target, context)
+		if not call_ok then
+			record.reason = "adapter-error"
+			record.detail = tostring(apply_report)
+			return { ok = false, attempts = record.attempts, reason = record.reason,
+				detail = record.detail, token = token }
+		end
+		if type(apply_report) == "table" and apply_report.fallback == true then
+			record.completed = true
+			record.fallback = true
+			record.reason = apply_report.reason or "vanilla-fallback"
+			return { ok = true, retained = false, fallback = true, attempts = record.attempts,
+				reason = record.reason, token = token, apply = apply_report }
+		end
+		if type(observe) ~= "function" then
+			record.reason = "observer-missing"
+			return { ok = false, attempts = record.attempts, reason = record.reason,
+				token = token, apply = apply_report }
+		end
+		-- `observe` receives the descriptor and live target, never the setter
+		-- result.  This keeps the evidence path independent by construction.
+		local observed_ok, observation = pcall(observe, descriptor, surface, edge, target, context)
+		if not observed_ok then
+			record.reason = "observer-error"
+			record.detail = tostring(observation)
+		else
+			record.retained = type(observation) == "table"
+				and observation.retained == true or observation == true
+			record.reason = type(observation) == "table" and observation.reason
+				or (record.retained and "retained" or "postcondition-failed")
+		end
+		return {
+			ok = record.retained,
+			retained = record.retained,
+			attempts = record.attempts,
+			reason = record.reason,
+			detail = record.detail,
+			token = token,
+			apply = apply_report,
+			observation = observation,
+		}
+	end
+
+	function R.forget(target)
+		if target == nil then return false end
+		local existed = records[target] ~= nil
+		records[target] = nil
+		return existed
+	end
+
+	function R.disconnect()
+		records = setmetatable({}, { __mode = "k" })
+		return true
+	end
+
+	function R.attempts(target, descriptor, surface, edge)
+		local token = target and token_for(descriptor, surface, edge)
+		local record = token and records[target] and records[target][token]
+		return record and record.attempts or 0
+	end
+
+	return R
 end
 
 return M

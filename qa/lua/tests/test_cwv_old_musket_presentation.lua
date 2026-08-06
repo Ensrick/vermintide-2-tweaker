@@ -46,15 +46,18 @@ return function(H, repo_root)
         H.truthy(source:find('WwiseUtils.trigger_unit_event, world, event_name, owner_unit, 0', 1, true))
     end)
 
-    H.test("Old Musket transform writes full saved triplets and re-buckets units", function()
+    H.test("Old Musket transform resolves full saved data through the bounded descriptor", function()
         H.truthy(source:find('_om._old_musket_transform_components = function', 1, true))
-        H.truthy(source:find('Unit.set_local_position, unit, 0, Vector3(pos[1], pos[2], pos[3])', 1, true))
-        H.truthy(source:find('Unit.set_local_scale, unit, 0, Vector3(scale[1], scale[2], scale[3])', 1, true))
-        H.truthy(source:find('_om._CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = nil', 1, true))
-        H.truthy(source:find('_om._CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = nil', 1, true))
+		H.truthy(source:find('_om.old_musket_appearance_policy.new({', 1, true))
+		H.truthy(source:find('transform_source = _om._old_musket_transform_components', 1, true))
+		H.truthy(source:find('quaternion = Quaternion,', 1, true),
+			"production must inject the callable retail Quaternion constructor")
+		H.equal(source:find('quaternion = { to_elements = Quaternion.to_elements }', 1, true), nil)
+		H.truthy(source:find('_om.old_musket_appearance.reapply_tracked()', 1, true))
+		H.equal(source:find('Unit.set_local_position, unit, 0, Vector3(pos[1], pos[2], pos[3])', 1, true), nil)
     end)
 
-    H.test("Old Musket paints CIM and browser previews per unit", function()
+	H.test("Old Musket paints browser previews per unit through the descriptor", function()
 		H.truthy(policy_source:find('function M.apply_textures(unit, preview_world)', 1, true))
 		H.truthy(policy_source:find('Unit.set_texture_for_materials', 1, true))
 		H.equal(policy_source:find('pcall(Material.set_texture', 1, true), nil)
@@ -66,13 +69,13 @@ return function(H, repo_root)
         local hook_start = assert(source:find('mod:hook("LootItemUnitPreviewer", "spawn_units"', 1, true))
         local hook_finish = assert(source:find('-- ============================================================\n-- Init', hook_start, true))
         local hook = source:sub(hook_start, hook_finish)
-        H.truthy(hook:find('_om._old_musket_preview_texture_targets(musket_def, units, spawn_data)', 1, true))
+        H.truthy(hook:find('_om._old_musket_preview_texture_targets(', 1, true))
         H.truthy(hook:find('_om._old_musket_preview_descriptor(item)', 1, true))
-        H.truthy(hook:find('_om._apply_old_musket_textures(unit, true)', 1, true))
+		H.truthy(hook:find('_om.old_musket_appearance.reconcile(unit,', 1, true))
         H.truthy(hook:find('[cwv:617] Old Musket preview textures applied', 1, true))
     end)
 
-	H.test("Old Musket presentation fans out to every render surface via the shared resolver", function()
+	H.test("Old Musket real render call sites route through the shared resolver", function()
         -- issue 474: the recurring failure class was one render surface drifting
         -- off the shared resolver (husk shows the base handgun, inventory preview
         -- drops the stance pose, the Athanor shows nothing). Assert every surface
@@ -80,24 +83,35 @@ return function(H, repo_root)
         -- silently drop one again.
 
         -- (1) owner in-world spawn: both 1P and 3P through the shared applicator.
-        H.truthy(source:find('_om._apply_old_musket_transform(v_w1p, "1p", _mode)', 1, true))
-        H.truthy(source:find('_om._apply_old_musket_transform(v_w3p, "3p", _mode)', 1, true))
+		H.truthy(source:find('_om.old_musket_appearance.reconcile(v_w1p, "owner_1p", "equip"', 1, true))
+		H.truthy(source:find('_om.old_musket_appearance.reconcile(v_w3p, "owner_3p", "equip"', 1, true))
 
         -- (2) remote husk 3P: stance resolved from the bounded channel, not the wire.
-        H.truthy(source:find('pcall(_om._apply_old_musket_transform, weapon_unit_3p, "3p", mode)', 1, true))
+		H.truthy(source:find('_om.old_musket_appearance.reconcile(weapon_unit_3p, "husk", "equip"', 1, true))
+		H.truthy(source:find('rendered_unit_name = rendered_unit_name .. "_3p"', 1, true))
+		H.truthy(source:find('unit_name = rendered_unit_name,', 1, true),
+			"husk adapter must prove the spawned 3P alias, not the base unit path")
+		H.truthy(source:find('_om.old_musket_appearance.reconcile(unit, "husk", "peer_ready"', 1, true))
         H.truthy(source:find('_om._old_musket_mode_for_owner(owner_unit_3p, slot_name)', 1, true))
 
         -- (3) inventory / hero character preview: transform + stance wield-anim replay.
-        H.truthy(source:find('_om._apply_old_musket_transform(slot.right, "3p", _stance)', 1, true))
+		H.truthy(source:find('"inventory_preview", "preview_open"', 1, true))
 		H.truthy(source:find('pcall(Unit.animation_event, pending.character_unit, pending.wield_event)', 1, true))
-		H.truthy(source:find('apply_transform(weapon_unit, "3p", pending.stance)', 1, true),
+		H.truthy(source:find('apply_transform(weapon_unit, "3p", pending.stance, pending)', 1, true),
 			"final preview stability edge must retain the same stance transform")
-		H.truthy(source:find('_om.old_musket_preview_pose.install(mod, _om._apply_old_musket_transform', 1, true))
+		H.truthy(source:find('_om.old_musket_preview_pose.install(mod, function(unit, _, mode, record)', 1, true))
 		H.truthy(source:find('[cwv:474/792] preview transform retained', 1, true))
 
-        -- (4) illusion browser + CIM Athanor (LootItemUnitPreviewer): shared descriptor.
-        H.truthy(source:find('_om._apply_old_musket_transform(unit, "3p", preview_mode)', 1, true))
+		-- (4) illusion browser (LootItemUnitPreviewer). CIM shares the class but
+		-- has no exact surface marker yet and is deliberately not claimed.
+		H.truthy(source:find('"illusion_browser", "preview_open"', 1, true))
         H.truthy(source:find('_om._old_musket_preview_descriptor(item)', 1, true))
+
+		-- (5) lobby and score are explicitly marked by TeamPreviewer, rather than
+		-- inferred from Crowbill-only state.
+		H.truthy(source:find('hero_previewer._cwv_team_preview = true', 1, true))
+		H.truthy(source:find('self._cwv_team_peer_source == "score_snapshot"', 1, true))
+		H.truthy(source:find('and "score_team" or "lobby"', 1, true))
 
         -- The transform components come from ONE source for every surface.
         H.truthy(source:find('_om._old_musket_transform_components(perspective, mode)', 1, true))

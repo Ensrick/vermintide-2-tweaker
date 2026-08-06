@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.491-dev"
+local MOD_VERSION = "0.1.492-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -83,11 +83,15 @@ _om.profile_package_wire = mod:dofile("scripts/mods/character_weapon_variants/_c
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.resource_residency = mod:dofile("scripts/mods/character_weapon_variants/_lib_resource_residency")
+_om.appearance_descriptor = mod:dofile("scripts/mods/character_weapon_variants/_lib_appearance_descriptor")
+_om.weapon_appearance = mod:dofile("scripts/mods/character_weapon_variants/_lib_weapon_appearance").new()
+_om.old_musket_appearance_policy = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_old_musket_appearance")
 _om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
 _om.old_musket_preview.set_resource_residency(_om.resource_residency)
 _om.old_musket_preview_pose = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview_pose")
 _om.musket_ammo_pool_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_ammo_pool")
-mod._cwv_preview_descriptor = _om.old_musket_preview
+mod._cwv_preview_descriptor = _om.old_musket_preview -- resource-mode compatibility; resolver is installed with the pilot below
 _om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.profile_package_wire })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
 _om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
@@ -3976,22 +3980,18 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 		_om._cwv_musket_unregister_slot(owner_unit_3p, slot_name)
 	end
 
-	-- v0.1.292: bind textures + v0.1.293: track unit for live transform tuning +
-	-- v0.1.293: spawn hidden vanilla rifle proxy for FX emission. All gated on
-	-- cwv_es_musket_old backend_id. Helpers defined globally below (search
-	-- "_apply_old_musket_textures", "_track_old_musket_unit",
-	-- "_spawn_old_musket_fx_proxy").
+	-- Old Musket exact identity enters the Phase-3 appearance reconciler for
+	-- both render perspectives, then keeps the established hidden vanilla rifle
+	-- proxy solely for FX emission. All work is gated on the canonical backend id.
 	if _spawn_is_old_musket then
 		-- v0.1.295: distinguish ranged vs melee mode for 1P transform tuning.
 		-- The user wants different pos/rot/scale per stance.
 		local _mode = (item_template == Weapons.musket_template_melee
 		               or item_template == Weapons.old_musket_template_melee) and "melee" or "ranged"
-		_om._apply_old_musket_textures(v_w1p)
-		_om._apply_old_musket_textures(v_w3p)
-		_om._track_old_musket_unit(v_w1p, "1p", _mode)
-		_om._track_old_musket_unit(v_w3p, "3p", _mode)
-		_om._apply_old_musket_transform(v_w1p, "1p", _mode)
-		_om._apply_old_musket_transform(v_w3p, "3p", _mode)
+		_om.old_musket_appearance.reconcile(v_w1p, "owner_1p", "equip",
+			item_data, _mode, { unit_name = _om.old_musket_preview.UNIT })
+		_om.old_musket_appearance.reconcile(v_w3p, "owner_3p", "equip",
+			item_data, _mode, { unit_name = _om.old_musket_preview.UNIT_3P })
 		_om._spawn_old_musket_fx_proxy(world, v_w1p, "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1",     owner_unit_1p, "j_rightweaponattach")
 		_om._spawn_old_musket_fx_proxy(world, v_w3p, "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p", owner_unit_3p, "j_rightweaponattach")
 
@@ -4485,62 +4485,11 @@ _om._CWV_OLD_MUSKET_POS_3P_MELEE   = { 0, 0.045, 0.1 }
 _om._CWV_OLD_MUSKET_ROT_3P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
 _om._CWV_OLD_MUSKET_SCALE_3P_MELEE = { 1, 1.1, 1.1 }
 
--- Weak-keyed tracking sets — one per (perspective × mode) bucket.
-_om._CWV_OLD_MUSKET_UNITS_1P_RANGED = setmetatable({}, { __mode = "k" })
-_om._CWV_OLD_MUSKET_UNITS_1P_MELEE  = setmetatable({}, { __mode = "k" })
-_om._CWV_OLD_MUSKET_UNITS_3P_RANGED = setmetatable({}, { __mode = "k" })
-_om._CWV_OLD_MUSKET_UNITS_3P_MELEE  = setmetatable({}, { __mode = "k" })
-
-_om._track_old_musket_unit = function(unit, perspective, mode)
-	if not unit or not Unit.alive(unit) then return end
-	if perspective == "1p" then
-		if mode == "melee" then
-			_om._CWV_OLD_MUSKET_UNITS_1P_RANGED[unit] = nil
-			_om._CWV_OLD_MUSKET_UNITS_1P_MELEE[unit] = true
-		else
-			_om._CWV_OLD_MUSKET_UNITS_1P_MELEE[unit] = nil
-			_om._CWV_OLD_MUSKET_UNITS_1P_RANGED[unit] = true
-		end
-	else
-		if mode == "melee" then
-			_om._CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = nil
-			_om._CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = true
-		else
-			_om._CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = nil
-			_om._CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = true
-		end
-	end
-end
-
 -- #617/#742: the dedicated policy owns every preflight and native texture write.
 _om._old_musket_texture_resources_ready = _om.old_musket_preview.texture_resources_ready
 _om._prepare_old_musket_preview_material = _om.old_musket_preview.prepare_preview_material
 _om._old_musket_unit_materials_ready = _om.old_musket_preview.unit_materials_ready
 _om._apply_old_musket_textures = _om.old_musket_preview.apply_textures
-
--- #617: LootItemUnitPreviewer powers both the ordinary illusion browser and
--- CIM's Athanor craft preview. It is not a HeroPreviewer, so the inventory-
--- mannequin texture consumer above never reaches it. Build a pure target list
--- from the authored spawn recipe: only the actual custom Old Musket unit may be
--- painted. A resource-safety fallback that substituted a vanilla handgun must
--- remain vanilla rather than receiving custom-musket UV textures.
-_om._old_musket_preview_texture_targets = function(def, units, spawn_data)
-	local targets = {}
-	if not def or def.item_key ~= "cwv_es_musket_old"
-			or type(def.right_hand_unit) ~= "string"
-			or type(units) ~= "table" or type(spawn_data) ~= "table" then
-		return targets
-	end
-	local base_path = def.right_hand_unit
-	for i, unit in ipairs(units) do
-		local row = spawn_data[i]
-		local path = row and row.unit_name
-		if unit and (path == base_path or path == base_path .. "_3p") then
-			targets[#targets + 1] = unit
-		end
-	end
-	return targets
-end
 
 _om._old_musket_transform_components = function(perspective, mode)
 	local pos, rot, scale
@@ -4560,42 +4509,38 @@ _om._old_musket_transform_components = function(perspective, mode)
 	return pos, rot, scale
 end
 
--- #474: item/skin identity, render resources and preview transform now resolve
--- through one descriptor. Both the normal item-customization pane and CIM's
--- Athanor are LootItemUnitPreviewer consumers, so neither surface may invent a
--- second Old-Musket model/material/pose recipe.
+-- #1155 Phase 3: one canonical immutable descriptor + one bounded lifecycle
+-- reconciler now owns all Old Musket surface application. The policy module
+-- above retains only resource preflight; it no longer owns a preview recipe.
+_om.old_musket_appearance = _om.old_musket_appearance_policy.new({
+	descriptor = _om.appearance_descriptor,
+	weapon_appearance = _om.weapon_appearance,
+	policy = _om.old_musket_preview,
+	unit = Unit,
+	vector = { to_elements = Vector3.to_elements },
+	-- Retail Quaternion is a callable table; the pilot needs both construction
+	-- from descriptor x/y/z/w data and independent `to_elements` readback.
+	quaternion = Quaternion,
+	transform_source = _om._old_musket_transform_components,
+	canonical_key = function(item)
+		local data = item and item.data
+		local bid = item and (item.backend_id or item.ItemInstanceId
+			or (data and (data.backend_id or data.ItemInstanceId)))
+		return _om._cwv_key_for_item and _om._cwv_key_for_item(bid, item)
+	end,
+	printf = printf,
+})
 _om._old_musket_preview_descriptor = function(item)
-	local mode = "ranged"
-	local data = item and item.data
-	local mod_data = item and (item.mod_data or (data and data.mod_data))
-	local backend_id = item and (item.backend_id or item.ItemInstanceId
-		or (data and (data.backend_id or data.ItemInstanceId))
-		or (mod_data and mod_data.backend_id))
-	local canonical_key = _om._cwv_key_for_item
-		and _om._cwv_key_for_item(backend_id, item)
-	if data and data.mod_data and data.mod_data.cwv_musket_stance == "melee" then
-		mode = "melee"
-	elseif mod_data and mod_data.cwv_musket_stance == "melee" then
-		mode = "melee"
-	elseif backend_id and _om._old_musket_modes_by_backend then
-		mode = _om._old_musket_modes_by_backend[backend_id] or mode
-	end
-	local pos, rot, scale = _om._old_musket_transform_components("3p", mode)
-	return _om.old_musket_preview.resolve(item, mode, {
-		position = pos, rotation = rot, scale = scale,
-	}, canonical_key)
+	local bid = item and (item.backend_id or item.ItemInstanceId
+		or (item.data and (item.data.backend_id or item.data.ItemInstanceId)))
+	local mode = bid and _om._old_musket_modes_by_backend
+		and _om._old_musket_modes_by_backend[bid] or nil
+	return _om.old_musket_appearance.resolve(item, mode, "illusion_browser")
+end
+_om._old_musket_preview_texture_targets = function(descriptor, units, spawn_data)
+	return _om.old_musket_appearance.preview_targets(descriptor, units, spawn_data)
 end
 mod._cwv_resolve_preview_descriptor = _om._old_musket_preview_descriptor
-
-_om._apply_old_musket_transform = function(unit, perspective, mode)
-	if not unit or not Unit.alive(unit) then return end
-	local pos, rot, scale = _om._old_musket_transform_components(perspective, mode)
-	pcall(Unit.set_local_position, unit, 0, Vector3(pos[1], pos[2], pos[3]))
-	-- rot is a QuaternionBox (or nil for identity); see v0.1.298 note.
-	-- Unbox to get a fresh raw Quaternion for the API call.
-	pcall(Unit.set_local_rotation, unit, 0, rot and rot:unbox() or Quaternion.identity())
-	pcall(Unit.set_local_scale, unit, 0, Vector3(scale[1], scale[2], scale[3]))
-end
 
 -- #474: Old Musket stance is explicit, durable presentation state. Vanilla's
 -- equipment RPC deliberately carries the base es_handgun identity, so the
@@ -4734,37 +4679,8 @@ mod:hook(Unit, "set_flow_variable", function(orig, unit, name, value)
 end)
 
 _om._reapply_old_musket_transforms_all = function()
-	local n_1p_r, n_1p_m = 0, 0
-	for unit in pairs(_om._CWV_OLD_MUSKET_UNITS_1P_RANGED) do
-		if Unit.alive(unit) then
-			_om._apply_old_musket_transform(unit, "1p", "ranged"); n_1p_r = n_1p_r + 1
-		else
-			_om._CWV_OLD_MUSKET_UNITS_1P_RANGED[unit] = nil
-		end
-	end
-	for unit in pairs(_om._CWV_OLD_MUSKET_UNITS_1P_MELEE) do
-		if Unit.alive(unit) then
-			_om._apply_old_musket_transform(unit, "1p", "melee"); n_1p_m = n_1p_m + 1
-		else
-			_om._CWV_OLD_MUSKET_UNITS_1P_MELEE[unit] = nil
-		end
-	end
-	local n_3p_r, n_3p_m = 0, 0
-	for unit in pairs(_om._CWV_OLD_MUSKET_UNITS_3P_RANGED) do
-		if Unit.alive(unit) then
-			_om._apply_old_musket_transform(unit, "3p", "ranged"); n_3p_r = n_3p_r + 1
-		else
-			_om._CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = nil
-		end
-	end
-	for unit in pairs(_om._CWV_OLD_MUSKET_UNITS_3P_MELEE) do
-		if Unit.alive(unit) then
-			_om._apply_old_musket_transform(unit, "3p", "melee"); n_3p_m = n_3p_m + 1
-		else
-			_om._CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = nil
-		end
-	end
-	mod:echo("[cwv old-musket] reapplied to %d 1P-r + %d 1P-m + %d 3P-r + %d 3P-m unit(s)", n_1p_r, n_1p_m, n_3p_r, n_3p_m)
+	local count = _om.old_musket_appearance.reapply_tracked()
+	mod:echo("[cwv old-musket] descriptor generation replayed to %d retained unit(s)", count)
 end
 
 -- v0.1.290: filter attachment_node_linking entries that reference skeleton
@@ -10993,6 +10909,18 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
 				tostring(descriptor.left_hand_unit))
 		end
 	end
+	if cwv_key == "cwv_es_musket_old" then
+		local musket_mode = item_data and item_data.mod_data
+			and item_data.mod_data.cwv_musket_stance or "ranged"
+		if not is_bot then
+			_om.old_musket_appearance.reconcile(result.right_unit_1p,
+				"owner_1p", "equip", item_data, musket_mode,
+				{ unit_name = result.right_hand_unit_name })
+		end
+		_om.old_musket_appearance.reconcile(result.right_unit_3p,
+			is_bot and "bot" or "owner_3p", "equip", item_data, musket_mode,
+			{ unit_name = _om.old_musket_preview.UNIT_3P })
+	end
 
 	local def = _resolve_cwv_def(item_data, result.skin, result.right_hand_unit_name)
 	if not def then
@@ -11205,7 +11133,7 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 			and _om._apply_crowbill_presentation then
 		local preview_rotation = _resolve_field(def, "right_hand_rotation_3p")
 			or _resolve_field(def, "right_hand_rotation")
-		local team_peer = self._cwv_crowbill_wearer_peer or self._cos_wearer_peer
+		local team_peer = self._cwv_team_wearer_peer or self._cos_wearer_peer
 		local team_identity = team_peer and _om.crowbill_runtime
 			and _om.crowbill_runtime.identity_for_peer
 			and _om.crowbill_runtime.identity_for_peer(team_peer, "slot_melee", def.item_key)
@@ -11213,8 +11141,8 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 			or _om._crowbill_render_identity(info and info.item_data, def,
 				info and info.backend_id or def.item_key .. ":preview:" .. tostring(slot_index))
 		local preview_surface = "inventory_preview"
-		if self._cwv_crowbill_team_preview then
-			preview_surface = self._cwv_crowbill_peer_source == "score_snapshot"
+		if self._cwv_team_preview then
+			preview_surface = self._cwv_team_peer_source == "score_snapshot"
 				and "score_preview" or "lobby_preview"
 		end
 		_om._apply_crowbill_presentation(slot.right, def, preview_identity,
@@ -11224,18 +11152,18 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 		-- peer from the immutable score snapshot (or live profile sync). If an
 		-- unfamiliar TeamPreviewer producer lacks both, log once per row rather
 		-- than silently claiming remote mode parity.
-		if self._cwv_crowbill_team_preview and not team_peer then
+		if self._cwv_team_preview and not team_peer then
 			_om.crowbill_preview_diag_seen = _om.crowbill_preview_diag_seen or {}
 			_om.crowbill_preview_diag_count = _om.crowbill_preview_diag_count or 0
-			local token = tostring(self._cwv_crowbill_profile_index) .. ":"
-				.. tostring(self._cwv_crowbill_career_index) .. ":" .. tostring(def.item_key)
+			local token = tostring(self._cwv_team_profile_index) .. ":"
+				.. tostring(self._cwv_team_career_index) .. ":" .. tostring(def.item_key)
 			if not _om.crowbill_preview_diag_seen[token]
 					and _om.crowbill_preview_diag_count < 16 then
 				_om.crowbill_preview_diag_seen[token] = true
 				_om.crowbill_preview_diag_count = _om.crowbill_preview_diag_count + 1
 				pcall(printf, "[cwv:604] TEAM-PREVIEW identity unresolved profile=%s career=%s family=%s evidence=%d/16 chat=false",
-					tostring(self._cwv_crowbill_profile_index),
-					tostring(self._cwv_crowbill_career_index), tostring(def.item_key),
+					tostring(self._cwv_team_profile_index),
+					tostring(self._cwv_team_career_index), tostring(def.item_key),
 					_om.crowbill_preview_diag_count)
 			end
 		end
@@ -11264,14 +11192,19 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 		-- is instantiated. Bind the known vanilla 3P parent, then use the single
 		-- resource-gated painter (#617 crash regression).
 		local unit = slot.right
-		local painted, texture_count = _om._apply_old_musket_textures(unit, true)
-		_dbg("[cwv preview] texture paint safe=%s bindings=%d", tostring(painted), texture_count or 0)
-		if _om._track_old_musket_unit then
-			_om._track_old_musket_unit(slot.right, "3p", _stance)
+		local musket_surface = "inventory_preview"
+		if self._cwv_team_preview then
+			musket_surface = self._cwv_team_peer_source == "score_snapshot"
+				and "score_team" or "lobby"
 		end
-		if _om._apply_old_musket_transform then
-			_om._apply_old_musket_transform(slot.right, "3p", _stance)
-		end
+		local appearance = _om.old_musket_appearance.reconcile(unit,
+			musket_surface, "preview_open", item_data or {
+				backend_id = info and info.backend_id,
+				cwv_key = "cwv_es_musket_old",
+			}, _stance, { unit_name = _om.old_musket_preview.UNIT_3P })
+		_dbg("[cwv preview] descriptor retained=%s reason=%s",
+			tostring(appearance and appearance.retained == true),
+			tostring(appearance and appearance.reason))
 		-- Vanilla resolves preview animation from the inherited es_handgun name,
 		-- so melee mode otherwise keeps the rifle idle even when the mesh pose is
 		-- correct. #792: do not replay here. Vanilla can still trigger a delayed
@@ -11290,6 +11223,7 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 				slot_type = slot_type,
 				slot_index = slot_index,
 				stance = _stance,
+				surface = musket_surface,
 				wield_event = wield_event,
 			})
 		end
@@ -11301,7 +11235,13 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 	end
 end
 
-_om.old_musket_preview_pose.install(mod, _om._apply_old_musket_transform, printf, _dbg)
+_om.old_musket_preview_pose.install(mod, function(unit, _, mode, record)
+	return _om.old_musket_appearance.reconcile(unit,
+		record and record.surface or "inventory_preview", "preview_open", {
+		backend_id = record and record.backend_id,
+		cwv_key = "cwv_es_musket_old", skin = "cwv_es_musket_old_skin",
+	}, mode, { unit_name = _om.old_musket_preview.UNIT_3P })
+end, printf, _dbg)
 
 -- #604 TeamPreviewer identity bridge. Score rows preserve the peer in
 -- context.players_session_score even though LevelEndView._get_hero_from_score
@@ -11337,11 +11277,11 @@ mod:hook("TeamPreviewer", "_spawn_hero", function(func, self, hero_previewer, he
 	if hero_previewer and type(hero_data) == "table" then
 		local ok, peer, source = pcall(_om._crowbill_team_peer,
 			hero_data.profile_index, hero_data.career_index, self._context)
-		hero_previewer._cwv_crowbill_team_preview = true
-		hero_previewer._cwv_crowbill_profile_index = hero_data.profile_index
-		hero_previewer._cwv_crowbill_career_index = hero_data.career_index
-		hero_previewer._cwv_crowbill_wearer_peer = ok and peer or nil
-		hero_previewer._cwv_crowbill_peer_source = ok and source or "resolver_error"
+		hero_previewer._cwv_team_preview = true
+		hero_previewer._cwv_team_profile_index = hero_data.profile_index
+		hero_previewer._cwv_team_career_index = hero_data.career_index
+		hero_previewer._cwv_team_wearer_peer = ok and peer or nil
+		hero_previewer._cwv_team_peer_source = ok and source or "resolver_error"
 	end
 	return func(self, hero_previewer, hero_data)
 end)
@@ -11556,19 +11496,16 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	-- vanilla material shell, so its three authored textures must be rebound
 	-- after every spawn just as they are for owner equipment and HeroPreviewer.
 	-- The target planner rejects vanilla resource fallbacks before any write.
-	local musket_def = preview_descriptor and {
-		item_key = preview_descriptor.item_key,
-		right_hand_unit = preview_descriptor.unit,
-	} or def
-	local musket_targets = _om._old_musket_preview_texture_targets(musket_def, units, spawn_data)
+	local musket_targets = _om._old_musket_preview_texture_targets(
+		preview_descriptor, units, spawn_data)
 	local preview_mode = preview_descriptor and preview_descriptor.mode or "ranged"
 	local applied = 0
 	for _, unit in ipairs(musket_targets) do
 		if _is_unit(unit) then
-			local ok = _om._apply_old_musket_textures(unit, true)
-			if ok then applied = applied + 1 end
-			_om._track_old_musket_unit(unit, "3p", preview_mode)
-			_om._apply_old_musket_transform(unit, "3p", preview_mode)
+			local result = _om.old_musket_appearance.reconcile(unit,
+				"illusion_browser", "preview_open", item, preview_mode,
+				{ unit_name = _om.old_musket_preview.UNIT_3P })
+			if result and result.retained then applied = applied + 1 end
 		end
 	end
 	if #musket_targets > 0 then

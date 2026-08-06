@@ -948,6 +948,11 @@ do
 		-- pre-handshake fallback.
 		if def.item_key == "cwv_es_musket_old" and hand == "right"
 				and item_units and item_units.right_hand_unit == def.right_hand_unit then
+			local rendered_unit_name = resolved_unit_name
+			if type(rendered_unit_name) == "string"
+					and rendered_unit_name:sub(-3) ~= "_3p" then
+				rendered_unit_name = rendered_unit_name .. "_3p"
+			end
 			-- #474 (2026-07-18): the stance cache is keyed by the slot the item
 			-- SITS in (the owner publishes it that way), so the lookup must use
 			-- slot_name of the unit being presented. The husk's
@@ -962,11 +967,17 @@ do
 			end
 			local mode = _om._old_musket_mode_for_owner
 				and _om._old_musket_mode_for_owner(owner_unit_3p, slot_name) or "ranged"
-			pcall(_om._apply_old_musket_textures, weapon_unit_3p)
-			pcall(_om._track_old_musket_unit, weapon_unit_3p, "3p", mode)
-			pcall(_om._apply_old_musket_transform, weapon_unit_3p, "3p", mode)
-			pcall(printf, "[cwv:474] husk old-musket presentation: textures + 3p %s pose applied (slot=%s wielded=%s hand=%s skin=%s)",
-				tostring(mode), tostring(slot_name), tostring(wielded_slot), tostring(hand), tostring(skin))
+			local presentation = _om.old_musket_appearance and _om.old_musket_appearance.reconcile
+				and _om.old_musket_appearance.reconcile(weapon_unit_3p, "husk", "equip", {
+					cwv_key = "cwv_es_musket_old", skin = skin,
+				}, mode, {
+					peer_id = tostring(owner_unit_3p), slot_name = slot_name,
+					unit_name = rendered_unit_name,
+				})
+			pcall(printf, "[cwv:474] husk old-musket descriptor presentation: mode=%s retained=%s reason=%s (slot=%s wielded=%s hand=%s skin=%s)",
+				tostring(mode), tostring(presentation and presentation.retained == true),
+				tostring(presentation and presentation.reason), tostring(slot_name),
+				tostring(wielded_slot), tostring(hand), tostring(skin))
 		end
 	end
 

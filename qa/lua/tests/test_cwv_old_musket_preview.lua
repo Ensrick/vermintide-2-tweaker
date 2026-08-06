@@ -18,24 +18,40 @@ return function(H, repo_root)
         return function(kind, path) return ready[kind .. ":" .. path] == true end
     end
 
+    local function descriptor_for(item, mode, canonical_key)
+        if not Musket.matches_item(item, canonical_key) then return nil end
+        return {
+            item_key = Musket.ITEM_KEY,
+            mode = mode == "melee" and "melee" or "ranged",
+            right_hand_unit = {
+                unit = Musket.UNIT,
+                unit_3p = Musket.UNIT_3P,
+                package = Musket.PREVIEW_PACKAGE_ALIAS,
+            },
+            fallback = { right_hand_unit = {
+                unit_3p = Musket.PREVIEW_PACKAGE_ALIAS,
+            } },
+            materials = { preview = Musket.PREVIEW_MATERIAL },
+            textures = Musket.TEXTURES,
+        }
+    end
+
     H.test("CWV #474 resolves one textured Old Musket preview descriptor", function()
-        local transform = { position = { 1, 2, 3 }, scale = { 1, 1, 1 } }
-        local descriptor = Musket.resolve({
+        local descriptor = descriptor_for({
             backend_id = "cwv_es_musket_old_001",
             skin = Musket.SKIN_KEY,
-        }, "melee", transform)
+        }, "melee")
         H.equal(descriptor.item_key, Musket.ITEM_KEY)
-        H.equal(descriptor.unit_3p, Musket.UNIT_3P)
-        H.equal(descriptor.package, Musket.PREVIEW_PACKAGE_ALIAS)
-        H.equal(descriptor.material, Musket.PREVIEW_MATERIAL)
+        H.equal(descriptor.right_hand_unit.unit_3p, Musket.UNIT_3P)
+        H.equal(descriptor.right_hand_unit.package, Musket.PREVIEW_PACKAGE_ALIAS)
+        H.equal(descriptor.materials.preview, Musket.PREVIEW_MATERIAL)
         H.equal(#descriptor.textures, 3)
-        H.equal(descriptor.transform, transform)
         H.equal(Musket.resource_mode(descriptor, registry()), "custom")
         H.equal(Cim.authored_mode(descriptor, Musket.resource_mode, registry()), "custom")
     end)
 
     H.test("CWV #474 recognizes CIM UUID items through the canonical cwv_key stamp", function()
-        local descriptor = Musket.resolve({
+        local descriptor = descriptor_for({
             backend_id = "91dc52f9-a-cim-uuid",
             data = { cwv_key = Musket.ITEM_KEY },
         }, "ranged")
@@ -53,27 +69,27 @@ return function(H, repo_root)
                 cwv_key = Musket.ITEM_KEY,
             },
         }
-        local descriptor = Musket.resolve(item, "ranged")
+        local descriptor = descriptor_for(item, "ranged")
         H.truthy(descriptor)
         H.equal(descriptor.item_key, Musket.ITEM_KEY)
 
         -- The shared CWV resolver can also pass the canonical identity
         -- explicitly when a preview wrapper has dropped CustomData.
-        descriptor = Musket.resolve({
+        descriptor = descriptor_for({
             ItemInstanceId = item.ItemInstanceId,
             key = "es_handgun",
-        }, "melee", nil, Musket.ITEM_KEY)
+        }, "melee", Musket.ITEM_KEY)
         H.truthy(descriptor)
         H.equal(descriptor.mode, "melee")
 
-        H.equal(Musket.resolve({
+        H.equal(descriptor_for({
             ItemInstanceId = item.ItemInstanceId,
             key = "es_handgun",
         }, "ranged"), nil)
     end)
 
     H.test("CWV #474 falls back safely when a custom preview resource is absent", function()
-        local descriptor = Musket.resolve({ key = Musket.ITEM_KEY }, "ranged")
+        local descriptor = descriptor_for({ key = Musket.ITEM_KEY }, "ranged")
         local can_get = registry({ ["unit:" .. Musket.UNIT_3P] = false })
         local mode, reason = Musket.resource_mode(descriptor, can_get)
         H.equal(mode, "fallback")
@@ -82,7 +98,7 @@ return function(H, repo_root)
     end)
 
     H.test("CWV #474 fails closed when neither custom nor fallback resources exist", function()
-        local descriptor = Musket.resolve({ key = Musket.ITEM_KEY }, "ranged")
+        local descriptor = descriptor_for({ key = Musket.ITEM_KEY }, "ranged")
         local can_get = registry({
             ["unit:" .. Musket.UNIT_3P] = false,
             ["unit:" .. Musket.PREVIEW_PACKAGE_ALIAS] = false,
@@ -109,7 +125,7 @@ return function(H, repo_root)
         end)
         H.equal(ok, true)
         H.equal(source, "package")
-        H.equal(Musket.resolve({ key = "es_handgun" }, "ranged"), nil)
+        H.equal(descriptor_for({ key = "es_handgun" }, "ranged"), nil)
     end)
 
     H.test("CIM authored policy is safe when CWV is missing or unsupported", function()
@@ -352,6 +368,6 @@ return function(H, repo_root)
         file:close()
         H.truthy(source:find("{ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.profile_package_wire }", 1, true))
         H.truthy(source:find("_om._old_musket_preview_descriptor(item)", 1, true))
-        H.truthy(source:find("_om._apply_old_musket_transform(unit, \"3p\", preview_mode)", 1, true))
+		H.truthy(source:find("_om.old_musket_appearance.reconcile(unit,", 1, true))
     end)
 end

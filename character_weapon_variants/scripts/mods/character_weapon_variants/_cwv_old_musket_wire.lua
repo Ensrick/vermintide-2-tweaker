@@ -18,8 +18,7 @@
 --
 -- Load-time deps: none beyond (mod, ctx.om). Runtime deps resolved lazily via
 -- _om: _cwv_key_for_item, _cwv_send_identity_slots, appearance_lifecycle_policy,
--- _track_old_musket_unit, _apply_old_musket_textures, _apply_old_musket_transform,
--- _old_musket_transform_components.
+-- old_musket_appearance and _old_musket_transform_components.
 return function(mod, ctx)
 local _om = ctx.om
 	local CHANNEL, SCHEMA = "cwv_old_musket_mode_v1", 1
@@ -80,15 +79,18 @@ local _om = ctx.om
 		if wielded_slot ~= slot_name or not equipment then return false end
 		local unit = equipment.right_hand_wielded_unit_3p
 		if not unit or not Unit.alive(unit) then return false end
-		_om._track_old_musket_unit(unit, "3p", mode)
-		_om._apply_old_musket_textures(unit)
-		_om._apply_old_musket_transform(unit, "3p", mode)
+		local result = _om.old_musket_appearance.reconcile(unit, "husk", "peer_ready", {
+			cwv_key = "cwv_es_musket_old", skin = "cwv_es_musket_old_skin",
+		}, mode, {
+			peer_id = tostring(owner_unit), slot_name = slot_name,
+			unit_name = _om.old_musket_preview.UNIT_3P,
+		})
 		local pos, _, scale = _om._old_musket_transform_components("3p", mode)
 		diag_once("apply:" .. tostring(owner_unit) .. ":" .. slot_name .. ":" .. mode .. ":" .. surface,
 			"presentation owner=%s slot=%s surface=%s mode=%s final_pos=(%.3f,%.3f,%.3f) final_scale=(%.3f,%.3f,%.3f)",
 			tostring(owner_unit), slot_name, surface, mode,
 			pos[1], pos[2], pos[3], scale[1], scale[2], scale[3])
-		return true
+		return result and result.ok == true
 	end
 
 	local function peer_for_owner(owner_unit)
