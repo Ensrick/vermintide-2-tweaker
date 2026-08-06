@@ -56,7 +56,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 |---|---|---|---|
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
-| Cosmetics | Partial | Four phase slices plus runtime/wire, exact-item offhand session-state, modded-illusion-swap, magic-family visibility, and command-lifecycle ownership; entry ceiling is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 |
+| Cosmetics | Partial | Four phase slices plus runtime/wire, exact-item offhand session-state, modded-illusion-swap, magic-family visibility, command-lifecycle ownership, and the item-grid/illusion-card presentation owner; entry ceiling is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
 | Weapon Tweaker | Partial | Animation, runtime-check, and feature-owner slices landed; beta/dev entry ceilings 4,183/4,335 lines | #504 / #2 |
 | Career Tweaker | Partial | Talent/diagnostic and hook-owner slices landed; balance entry ceiling 3,889 lines | #504 / #2 |
 | CIM Dev | Partial | Forge/inventory/diagnostic owners and regression suite extracted; entry ceiling 5,723 lines | #504 / #2 |
@@ -69,6 +69,14 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 the executable hard-limit gate, #428 owns cross-mod copied-library migration, and
 #660 owns appearance descriptors/adapters across render and lifecycle surfaces.
 Completion evidence from one of those issues must not be used to close another.
+
+**Process-residue instrumentation (2026-08-06, #1160).** The decomposition
+registry is also the numeric debt owner: pull-request QA compares its total
+ceiling sum with the manifest at the target master ref, prints the exact delta,
+and blocks an existing ceiling increase or contract removal. The separate
+promotion owner remains `docs/PROMOTION_PROCESS.md`; canonical split-stream
+ships now print the exact dev/public versions and uncited dev issue references
+before the build boundary. Neither signal performs a promotion automatically.
 
 ## Workstreams
 

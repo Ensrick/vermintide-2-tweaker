@@ -1,5 +1,21 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.189-dev (2026-08-06) -- item-grid presentation owner extracted (#1159, #504, #2)
+
+- Moved the existing #377 glow badges, #650 composite item-grid layers, and
+  #795 illusion-button pre-`pass_data` enrichment into the idempotent
+  `_cos_item_grid_presentation.lua` owner at their historical install position.
+- Preserved exact runtime cardinality and order: one `UIWidget.init` hook,
+  three `ItemGridUI` refresh hooks, and one `_cos_glow_badges_refresh`
+  callback before and after extraction. No appearance resolution, persistence,
+  lifecycle, RPC, or renderer behavior changed.
+- Added structural owner/wiring/idempotence coverage, updated the existing glow
+  and composite presentation contracts to follow the owner, and ratcheted the
+  Cosmetics entry ceiling from 9,740 to the measured 9,461 lines.
+
+This structural slice advances #1159/#504 without completing either umbrella
+and does not enter the in-game test queue.
+
 ## 0.9.188-dev (2026-08-04) -- appearance census re-keyed to surface x edge cells (#1157) [untested]
 
 - Census data only. `_cos_appearance_census.lua` is inert pure data consumed by

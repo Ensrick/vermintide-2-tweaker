@@ -273,6 +273,11 @@ Harness.test("#650 UIUtils publishes descriptors without leaking mace-only icons
     local file = assert(io.open(path, "rb"))
     local source = file:read("*a")
     file:close()
+    local presentation_file = assert(io.open(repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_item_grid_presentation.lua", "rb"))
+    source = source .. "\n" .. presentation_file:read("*a")
+    presentation_file:close()
     Harness.truthy(source:find("_cos_resolve_composed_appearance%(item, record%)"))
     Harness.truthy(source:find("COMPOSITE_ICONS%.publish%(item, descriptor%)"))
     Harness.truthy(source:find("COMPOSITE_ICONS%.descriptor_for%(item%)"))
@@ -343,7 +348,8 @@ end)
 
 Harness.test("#650 grid passes are decorated before UIWidget pass_data initialization", function()
     local path = repo_root
-        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_item_grid_presentation.lua"
     local file = assert(io.open(path, "rb"))
     local source = file:read("*a")
     file:close()
@@ -352,9 +358,9 @@ Harness.test("#650 grid passes are decorated before UIWidget pass_data initializ
     local vanilla_init = assert(source:find("return func(widget_definition, ui_renderer)",
         hook_start, true))
     local composite_enrich = assert(source:find(
-        "_enrich_item_grid_composite_icons(widget_definition)", hook_start, true))
+        "enrich_item_grid_composite_icons(widget_definition)", hook_start, true))
     local badge_enrich = assert(source:find(
-        "_enrich_item_grid_glow_badges(widget_definition)", hook_start, true))
+        "enrich_item_grid_glow_badges(widget_definition)", hook_start, true))
     Harness.truthy(composite_enrich < vanilla_init)
     Harness.truthy(badge_enrich < vanilla_init)
     Harness.truthy(source:find(
@@ -365,6 +371,6 @@ Harness.test("#650 grid passes are decorated before UIWidget pass_data initializ
         'mod:hook_safe("ItemGridUI", "init"', 1, true))
     local item_grid_hook_end = assert(source:find("end)", item_grid_hook, true))
     local item_grid_block = source:sub(item_grid_hook, item_grid_hook_end)
-    Harness.equal(item_grid_block:find("_enrich_item_grid", 1, true), nil)
+    Harness.equal(item_grid_block:find("enrich_item_grid", 1, true), nil)
 end)
 end

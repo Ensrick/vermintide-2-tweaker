@@ -1230,6 +1230,8 @@ finally {
     Assert ($selfTxt -match '(?m)^\s*\[switch\]\$BuildOnly\b') "ship exposes the canonical hidden build-only path"
     Assert ($selfTxt.IndexOf('-SkipBundleAtomicity:$BuildOnly') -ge 0) "build-only preflight defers bundle atomicity until after generation"
     Assert ($selfTxt.IndexOf('-SkipCustomUnitBundleReachability:$BuildOnly') -ge 0) "build-only preflight defers compiled custom-unit reachability until after generation"
+    Assert ($selfTxt.IndexOf("promotion-status.ps1'", $mainDispatchPos) -ge 0) "every split-stream ship invokes the stranded-fix promotion report"
+    Assert ($selfTxt.IndexOf('& $promotionStatus -Mod $Mod', $mainDispatchPos) -ge 0) "stranded-fix report is scoped to the exact ship target"
     Assert ($selfTxt.IndexOf('qa\check_custom_unit_bundle_reachability.ps1') -ge 0) "build-only runs custom-unit reachability after generation"
     Assert ($selfTxt.IndexOf("@('build', `$Mod, '--clean')") -ge 0) "build-only invokes VMBLauncher's clean build action"
     Assert ($selfTxt.IndexOf('BUILD-ONLY COMPLETE') -ge 0) "build-only exits before deploy/upload/release handling"
@@ -1452,6 +1454,19 @@ if (-not $BuildOnly) {
 # ---------------------------------------------------------------------------
 $promoGate = Join-Path $repoRoot 'qa\check_promotion.ps1'
 $stableSplitDirs = @('chaos_wastes_tweaker', 'crafting_in_modded', 'general_tweaker', 'gui_tweaker', 'verminious_dreams_lighting')
+$devSplitDirs = @('chaos_wastes_tweaker_dev', 'crafting_in_modded_dev', 'general_tweaker_dev', 'gui_tweaker_dev', 'verminious_dreams_lighting_dev')
+$promotionStatus = Join-Path $repoRoot 'tools\promote\promotion-status.ps1'
+if (($stableSplitDirs -contains $Mod) -or ($devSplitDirs -contains $Mod)) {
+    if (-not (Test-Path -LiteralPath $promotionStatus -PathType Leaf)) {
+        Fail "Stranded-fix promotion report is missing: $promotionStatus"
+    }
+    Write-Host ''
+    Write-Host "==> Stranded-fix promotion report ($Mod)" -ForegroundColor Cyan
+    & $promotionStatus -Mod $Mod
+    if ($LASTEXITCODE -ge 2) {
+        Fail "promotion-status FAILED -- the per-ship stranded-fix report could not be produced. No build, deploy, or upload was attempted."
+    }
+}
 if (($stableSplitDirs -contains $Mod) -and (Test-Path $promoGate)) {
     & $promoGate -Mod $Mod
     if ($LASTEXITCODE -ne 0) {

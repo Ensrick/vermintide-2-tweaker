@@ -50,6 +50,8 @@ $branchCensusPs1 = Join-Path $repoRoot 'tools\github\branch-reconciliation-censu
 if (Test-Path $branchCensusPs1) { $targets += $branchCensusPs1 }
 $worktreeLifecyclePs1 = Join-Path $repoRoot 'tools\worktrees\worktree.ps1'
 if (Test-Path $worktreeLifecyclePs1) { $targets += $worktreeLifecyclePs1 }
+$promotionStatusPs1 = Join-Path $repoRoot 'tools\promote\promotion-status.ps1'
+if (Test-Path $promotionStatusPs1) { $targets += $promotionStatusPs1 }
 
 $failed = @()
 foreach ($t in $targets) {
