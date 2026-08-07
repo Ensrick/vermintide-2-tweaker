@@ -1,6 +1,16 @@
 # Character Weapon Variants — Changelog
 
-## 0.1.496-dev (2026-08-06) -- skin-registry owner decomposition (#504/#2) [not deployed]
+## 0.1.497-dev (2026-08-06) -- remote Combat Style re-wield: guarded + honestly verified (#786 #1156) [untested]
+
+- **#786 Combat Style switch left the other player's weapon stale or invisible - guarded re-wield + honest verdict (Stage A).** The style receiver re-wielded the remote husk inline, bypassing the #1145 per-wearer coalescer (no mid-destroy game-object guard, no newest-wins merge) and running a second 0.25s x 8 retry loop against the coalescer's drain. It then graded the result with `right_live or left_live`, an OR of hand liveness (BUG_CLASSES 58), so a husk still wearing the pre-switch weapon, or a shield style rebuilt without its off-hand, reported success and the retry ledger stopped on a lie. The re-wield now queues through the coalescer and the verdict is evaluated post-drain with AND-semantics against the AUTHORED catalogue: the expected effective template for that family, style and member, plus every expected hand (shield families are marked `off_hand` and must return both). Partial application is failure and stays retryable in ONE bounded ledger (8 attempts, 0.25s) that retires on success, on a style change, on peer loss, and at the cap. New bounded always-on rows: `[cwv:786] style tx`, `style rx`, `rebuild target`, `rebuild queued`, `rebuild deferred`, `verdict ok|partial|wrong-template|failed`.
+- **#786 the Combat Style axis joins the identity transaction (Stage B).** A style switch published five scalars and never republished item identity, so the deferred re-wield resolved the LAST published identity. The style now rides the delivering `cwv_item_identity` payload as one compact `family:style` field (generalizing the proven #474 `musket_mode` rider; worst-case payload 246 of 500 chars) and `set_item_style` republishes identity on the commit edge. The receiver applies the style axis BEFORE the changed-dedupe gate, for the same reason as the stance rider: a style toggle leaves the identity signature byte-identical. `cwv_combat_style_v1` keeps state storage, query/reply replay and the vanilla-safe fallback but no longer triggers its own unguarded rebuild - both channels converge on one edge token, the identity path owns the re-wield, and a bare style-channel arrival arms a 0.25s grace so a peer that never receives the rider still recovers.
+- **#786 observer-side style residency probe (Stage C evidence, observation only).** `acquire_style_resource` runs owner-side only, so an observer may re-wield toward a style whose declared first-person state-machine package it never acquired. A bounded `[cwv:786] style residency` row now reports, at each remote style rebuild, whether that package is resident on this peer. It reuses the existing `Managers.package` read, acquires nothing and gates nothing.
+- Combat Style owner-side resource acquisition moved from the entry into `_cwv_combat_styles.new_resource_acquirer`, next to the authored allowlist it derives from. No behavior change.
+- Regression coverage: `issue786_peer_resolution_multi_return` now also fails if the coalescer routing, the authored expectation, or the AND-semantics verdict is unwired; nine offline cases pin the verdict arms, the three channel arrival orders, the single-ledger retirement rules, the rider budget, and the residency probe.
+
+**DoD:** G-CROSS-CHAR remote presentation - offline gates green; live co-op verification owed on the pinned card.
+
+## 0.1.496-dev (2026-08-06) -- skin-registry owner decomposition (#504/#2)
 
 - Moved the ordered base/custom skin registrars and generated illusion-family
   registrars out of the orchestration entry into two explicit-dependency owners.
@@ -15,7 +25,7 @@
 
 **DoD:** Structural decomposition only; strict offline gates must pass before review.
 
-## 0.1.495-dev (2026-08-06) -- shared peer-parity exact-mode capability (#1158) [not deployed]
+## 0.1.495-dev (2026-08-06) -- shared peer-parity exact-mode capability (#1158)
 
 - Synchronized the shared peer-parity library with its optional exact catalog,
   challenge, epoch, and bounded replay defenses.
@@ -23,7 +33,7 @@
   damage-profile and multi-axis projectile contracts require their own catalog
   ownership work before exact mode can be enabled safely.
 
-## 0.1.494-dev (2026-08-06) -- core-template owner decomposition (#504/#2) [not deployed]
+## 0.1.494-dev (2026-08-06) -- core-template owner decomposition (#504/#2)
 
 - Moved the 1,281-line Infantry Spear-through-Outrider constructor region
   into `_cwv_core_templates.lua` without reordering its registrations. The new
@@ -39,7 +49,7 @@
 
 **DoD:** Structural decomposition only; strict offline gates must pass before review.
 
-## 0.1.492-dev (2026-08-06) -- Phase-3 Old Musket appearance pilot (#1155/#474/#660) [not deployed]
+## 0.1.492-dev (2026-08-06) -- Phase-3 Old Musket appearance pilot (#1155/#474/#660)
 
 - Added the synchronized immutable appearance-descriptor runtime and its
   bounded lifecycle reconciler. Duplicate `(target, surface, edge,

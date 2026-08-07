@@ -222,6 +222,34 @@ _rt_register("issue786_peer_resolution_multi_return", function()
 			or type(_om.combat_styles.step) ~= "function" then
 		return "bounded remote style refresh owner is not installed"
 	end
+	-- #786 A1/A2 live wiring. Disconnecting either half must fail here: the
+	-- husk re-wield rides the #1145 coalescer and the verdict is AND-semantics
+	-- over the authored catalogue, never an OR of hand liveness.
+	local rewield = _om.style_rewield
+	if type(rewield) ~= "table"
+			or rewield.MARKER ~= "cwv-style-rewield-and-semantics-v1"
+			or type(rewield.queue_rebuild) ~= "function"
+			or type(mod._cwv_rewield) ~= "table"
+			or type(mod._cwv_rewield.request_peer_rewield) ~= "function" then
+		return "#786 guarded style re-wield is not installed"
+	end
+	local expectation = rewield.expectation(_om.combat_style_policy,
+		"spear_shield", "elven", "es_deus_01")
+	if not expectation or expectation.left ~= true
+			or expectation.template ~= _om.combat_style_policy.ELVEN_SPEAR_SHIELD_TEMPLATE then
+		return "#786 authored re-wield expectation drifted"
+	end
+	local observed = { wielded = true, item_key = "es_deus_01",
+		template = expectation.template, right_live = true, left_live = false }
+	if rewield.verdict(expectation, observed) ~= "partial"
+			or rewield.succeeded("partial") then
+		return "#786 verdict accepted a partial re-wield (OR predicate is back)"
+	end
+	if type(_om.combat_styles.accept_style_edge) ~= "function"
+			or _om.combat_style_policy.encode_style_rider("spear_shield", "elven")
+				~= "spear_shield:elven" then
+		return "#786 style axis is not on the identity transaction"
+	end
 end)
 
 _rt_register("issue645_reciprocal_style_descriptors", function()

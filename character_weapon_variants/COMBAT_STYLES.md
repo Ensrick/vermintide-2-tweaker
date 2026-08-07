@@ -94,18 +94,35 @@ was the exact #786 failure. Owner, local-player, direct peer, and fallback peer
 results all require positive human identity; host bots share the host's
 transport peer id and must never consume its peer+slot style row.
 
-CWV then performs one immediate husk re-wield. The
-refresh first proves that the synchronized slot is still wielded and already
-contains item data. If the style edge won the race against the ordinary
-equipment RPC, CWV keeps the existing render intact and retries only the local
-refresh at 0.25-second cadence, capped at eight total attempts. A style for an
-unwielded slot waits for the next natural wield instead of entering vanilla's
-partial empty-slot wield path.
-That path stops weapon FX/attached units and updates wield state even though
-`_wield_slot` rejects the missing item before rebuilding equipment. The
-bounded `[cwv:620/786] style husk refresh` row reports resolver source,
-effective donor template, right/left 3P liveness, edge, and attempt count.
+CWV then queues one husk re-wield through the per-wearer re-wield coalescer
+(#1145), so the wield inherits the mid-destroy game-object guard and the
+newest-wins merge instead of running inline. The queue step first proves that
+the synchronized slot is still wielded and already contains item data. A style
+for an unwielded slot waits for the next natural wield instead of entering
+vanilla's partial empty-slot wield path; that path stops weapon FX/attached
+units and updates wield state even though `_wield_slot` rejects the missing
+item before rebuilding equipment.
 [src: `scripts/unit_extensions/default_player_unit/inventory/simple_husk_inventory_extension.lua:316-326,641-658,761-775`]
+
+Because the coalescer defers the wield to its next drain, the verdict cannot be
+read from the queue call. The wield executor calls back post-drain and the
+controller's `step()` grades the result with AND-semantics against the AUTHORED
+catalogue: the expected effective template for that family, style and member,
+plus every expected hand (a family with `off_hand = true` must come back with
+both 3P hand units). Partial application is failure and stays retryable inside
+one bounded ledger at 0.25-second cadence, capped at eight attempts; the ledger
+also retires on a style change and on peer loss. Bounded always-on rows:
+`[cwv:786] style tx`, `style rx`, `rebuild target`, `rebuild queued`,
+`verdict ok|partial|wrong-template|failed`, and the observation-only
+`style residency` probe.
+
+The style axis also rides the delivering `cwv_item_identity` payload as one
+compact `family:style` field, generalizing the #474 `musket_mode` rider. It is
+applied BEFORE the receiver's changed-dedupe gate, because a style switch
+leaves the identity signature byte-identical. `cwv_combat_style_v1` keeps state
+storage, the query/reply replay and the vanilla-safe fallback: a bare arrival on
+that channel arms a 0.25-second grace and only rebuilds if no identity rider for
+the same edge lands first, so a peer running an older build still recovers.
 
 The inventory control appears only when the selected loadout item belongs to a
 supported family and reads `Switch to: <next style>`. Small unboxed text above
