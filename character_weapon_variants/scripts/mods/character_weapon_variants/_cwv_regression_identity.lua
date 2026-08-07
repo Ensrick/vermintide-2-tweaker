@@ -1393,6 +1393,13 @@ _rt_register("cwv_ammo_mirroring", function()
     -- the skin pipeline nukes these fields; without explicit mirroring the
     -- previewer/throw/pickup paths all crash on ammo-bearing variants.
     -- Skip non-ammo bases entirely (their nil ammo_unit is correct).
+    --
+    -- #399: `no_ammo_unit` defs are the deliberate opposite of this rule -- the
+    -- variant changed visual family and must NOT wear the donor's ammo mesh, so
+    -- `_build_entry` clears ammo_unit/ammo_unit_3p on purpose (entry :5416-5419)
+    -- and `cwv_outrider_no_ammo_unit` locks that. Without this exclusion the two
+    -- checks demand opposite things of the same Outrider entry and one of them
+    -- always fails, which is why the harness could not be used to close #399.
     local entries, bail = _rt_iter_cwv_entries()
     if bail then return bail end
     local iml = rawget(_G, "ItemMasterList")
@@ -1401,7 +1408,7 @@ _rt_register("cwv_ammo_mirroring", function()
     for _, e in ipairs(entries) do
         local base_key = e.def.base_weapon
         local base = base_key and rawget(iml, base_key)
-        if base and base.ammo_unit then
+        if base and base.ammo_unit and not e.def.no_ammo_unit then
             for _, f in ipairs(AMMO_FIELDS) do
                 if base[f] ~= nil and e.entry[f] == nil then
                     mismatched[#mismatched + 1] = string.format("%s missing %s (base=%s has it)", e.key, f, base_key)
@@ -1843,5 +1850,181 @@ _rt_register("cwv_husk_stale_unit_and_postcondition", function()
     end
 end)
 
+
+_rt_register("issue399_outrider_husk_ammo_adapter", function()
+    -- Issue 399 (Outrider Grenade Launcher on the REMOTE view): the husk showed
+    -- "no animation, no model, torpedo sticking out" -- one failure, not three.
+    -- Both ammo arms opened with the SAME descriptor gate the mesh re-key and the
+    -- #398 clone template use, so a single negative descriptor state collapsed
+    -- every concern to vanilla dr_deus_01 resolution. `cwv_no_ammo_strip_coverage`
+    -- only proves the (base, career) LOOKUP is populated; it never drove the
+    -- adapter, so the gate collapse was invisible to the harness. This check
+    -- drives the real arms through `_husk_adapter_pre` / `_husk_adapter_post`.
+    --
+    -- Neighbouring husk concerns are stubbed for the drive (they queue package
+    -- leases and touch spawned units); the ammo arms under test are the REAL
+    -- ones, reached through the real adapter bodies.
+    local pre, post = _om._husk_adapter_pre, _om._husk_adapter_post
+    if type(pre) ~= "function" or type(post) ~= "function" then
+        return "husk adapter halves missing -- issue 399 ammo arms are unreachable"
+    end
+    if type(_om._husk_ammo_nil_item_units) ~= "function"
+            or type(_om._husk_strip_cwv_ammo) ~= "function" then
+        return "husk ammo arms missing (_husk_ammo_nil_item_units / _husk_strip_cwv_ammo, issue 399)"
+    end
+    local def = _find_def("cwv_es_outrider_grenade_launcher")
+    if not def then return nil end -- def removed: cwv_outrider_no_ammo_unit owns that
+    local iml = rawget(_G, "ItemMasterList")
+    local base = iml and rawget(iml, "dr_deus_01")
+    if not (base and base.ammo_unit) then
+        return "dr_deus_01 no longer carries ammo_unit -- the issue 399 fixture is stale"
+    end
+
+    -- Disjointness floor for the base+career fallback: no career that can
+    -- natively wield the ammo base may sit in its strip set, or a real Bardin
+    -- Trollhammer would lose its torpedo on every remote view.
+    --
+    -- Read against the LIVE can_wield only when nothing has expanded it. `wt` is
+    -- the availability control surface and its per-(career, weapon) unlocks
+    -- (weapon_tweaker_data.lua `unlock_es_*_dr_deus_01`) rewrite this list at
+    -- runtime, so with wt installed the list is no longer the vanilla native set
+    -- and an overlap here is a wt configuration, not a cwv defect. The vanilla
+    -- sets are cited in the husk module's DESCRIPTOR-STATE POLICY block.
+    local strip = _om._no_ammo_careers_by_base and _om._no_ammo_careers_by_base.dr_deus_01
+    if type(strip) ~= "table" then
+        return "dr_deus_01 missing from the husk ammo strip lookup (issue 399)"
+    end
+    local availability_mod = rawget(_G, "get_mod") and (get_mod("wt") or get_mod("wt_dev"))
+    if not availability_mod then
+        for _, c in ipairs(base.can_wield or {}) do
+            if strip[c] then
+                return string.format(
+                    "career %s can natively wield dr_deus_01 and is in the strip set -- a real Trollhammer would be stripped (issue 399)",
+                    tostring(c))
+            end
+        end
+    end
+
+    local saved_descriptor = _om._husk_identity_descriptor
+    local saved_career = _om._husk_career_name
+    local saved_ctx = _om._appearance_husk_wield_context
+    local saved_rekey = _om._husk_rekey_units
+    local saved_template = _om._husk_template_for_spawn
+    local saved_transform = _om._husk_apply_cwv_transform
+    local saved_probe = _om._probe_579_hand_compare
+
+    local owner = { rt399 = true }          -- sentinel; the stubs answer for it
+    local ammo_handle = { rt399_ammo = true } -- non-userdata: never reaches the engine
+    local state, career_name, exact_descriptor
+
+    local function fresh_units()
+        return {
+            right_hand_unit = def.right_hand_unit,
+            ammo_unit       = base.ammo_unit,
+            ammo_unit_3p    = base.ammo_unit_3p,
+        }
+    end
+    local function ammo_cleared(units)
+        return units.ammo_unit == nil and units.ammo_unit_3p == nil
+    end
+
+    local function drive()
+        -- (1) exact Outrider descriptor, career deliberately UNRESOLVABLE:
+        -- the proven identity alone must clear the ammo.
+        exact_descriptor = { variant_key = "cwv_es_outrider_grenade_launcher",
+            base_item_key = "dr_deus_01" }
+        state, career_name = "exact", nil
+        local units = fresh_units()
+        pre("right", nil, units, "slot_ranged", { name = "dr_deus_01" }, owner)
+        if not ammo_cleared(units) then
+            return "exact Outrider descriptor did not clear item_units.ammo_unit/_3p (issue 399 pre-spawn arm)"
+        end
+
+        -- (2) native Trollhammer: real dwarf wielder, no descriptor at all.
+        exact_descriptor, state, career_name = nil, "none", "dr_ironbreaker"
+        units = fresh_units()
+        pre("right", nil, units, "slot_ranged", { name = "dr_deus_01" }, owner)
+        if ammo_cleared(units) then
+            return "native dr_ironbreaker Trollhammer lost its ammo units -- #475 Invariant 1 violated (issue 399)"
+        end
+
+        -- (3) explicit-native descriptor over a strip-set career: the ONE state
+        -- that must still hard-decline.
+        state, career_name = "native", "es_huntsman"
+        units = fresh_units()
+        pre("right", nil, units, "slot_ranged", { name = "dr_deus_01" }, owner)
+        if ammo_cleared(units) then
+            return "explicit native descriptor did not decline the ammo strip (issue 399 / #475 Invariant 1)"
+        end
+
+        -- (4/5) the #399 fix: a negative descriptor state is NOT evidence of a
+        -- native wielder, so it falls through to the career-scoped fallback.
+        for _, negative in ipairs({ "unavailable", "stale_base" }) do
+            state, career_name = negative, "es_huntsman"
+            units = fresh_units()
+            pre("right", nil, units, "slot_ranged", { name = "dr_deus_01" }, owner)
+            if not ammo_cleared(units) then
+                return string.format(
+                    "descriptor state %s still collapsed the ammo decision -- Outrider keeps the inherited torpedo on the husk (issue 399)",
+                    negative)
+            end
+        end
+
+        -- (6) deferred hand-selection branch: it preserves the vanilla HAND
+        -- selection, which has nothing to do with ammo.
+        state, career_name = "unavailable", "es_huntsman"
+        _om._appearance_husk_wield_context = {
+            hand_selection_deferred = true,
+            hand_selection_source = "rt399",
+            owner_unit_3p = owner,
+            slot_name = "slot_ranged",
+        }
+        units = fresh_units()
+        pre("right", nil, units, "slot_ranged", { name = "dr_deus_01" }, owner)
+        _om._appearance_husk_wield_context = saved_ctx
+        if not ammo_cleared(units) then
+            return "deferred hand-selection branch skipped the ammo-nil step -- torpedo survives the atomic preselection fallback (issue 399)"
+        end
+
+        -- (7) post-spawn strip signal. The entry consumes it as
+        -- `if _om._husk_adapter_post(...) then v_a3p = nil end`
+        -- (character_weapon_variants.lua :2679-2683), so a nil/false return
+        -- leaves the husk equipment tracking the torpedo it just hid.
+        exact_descriptor = { variant_key = "cwv_es_outrider_grenade_launcher",
+            base_item_key = "dr_deus_01" }
+        state, career_name = "exact", nil
+        local stripped = post("right", { name = "dr_deus_01" }, fresh_units(),
+            "slot_ranged", owner, nil, ammo_handle)
+        if stripped ~= true then
+            return string.format(
+                "post-spawn arm returned %s for the Outrider -- the entry only nils its captured ammo return on an exact true (issue 399)",
+                tostring(stripped))
+        end
+        exact_descriptor, state, career_name = nil, "none", "dr_ironbreaker"
+        if post("right", { name = "dr_deus_01" }, fresh_units(),
+                "slot_ranged", owner, nil, ammo_handle) then
+            return "post-spawn arm signalled a strip for a native dr_ironbreaker Trollhammer (issue 399)"
+        end
+    end
+
+    _om._husk_identity_descriptor = function() return exact_descriptor, state end
+    _om._husk_career_name = function() return career_name end
+    _om._husk_rekey_units = function() return false end
+    _om._husk_template_for_spawn = function() return nil end
+    _om._husk_apply_cwv_transform = function() return nil end
+    _om._probe_579_hand_compare = function() return nil end
+    local ok, result = pcall(drive)
+    _om._husk_identity_descriptor = saved_descriptor
+    _om._husk_career_name = saved_career
+    _om._appearance_husk_wield_context = saved_ctx
+    _om._husk_rekey_units = saved_rekey
+    _om._husk_template_for_spawn = saved_template
+    _om._husk_apply_cwv_transform = saved_transform
+    _om._probe_579_hand_compare = saved_probe
+    if not ok then
+        return "husk ammo adapter drive errored: " .. tostring(result)
+    end
+    return result
+end)
 
 end
