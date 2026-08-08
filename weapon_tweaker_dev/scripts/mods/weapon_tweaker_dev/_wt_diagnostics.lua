@@ -14,6 +14,7 @@
 -- this module owns only explicit, read-only diagnostic commands.
 
 local mod = get_mod("wt_dev")
+local WT = mod._wt
 -- WT_DEV_OVERLAY_BEGIN:port-coverage-audits
 -- #948 supersedes the five receiver ledgers (#109-#113). Their commands remain
 -- as explicit aliases so old tester notes do not become dead instructions, but
@@ -374,4 +375,27 @@ mod:command("wt_dump_wielded",
         _wt_dump_weapon_data(item_key, "command")
         mod:echo("[wt_dump_wielded] dumped %s -- see console log",
             tostring(item_key))
+    end)
+
+-- #1190: read-only live report for the row-scoped cross-career loadout cache.
+-- The backend installs after this command is registered, so resolve its
+-- callable at invocation time rather than capturing pre-install state.
+mod:command("verify_wt_loadout_cache",
+    "Verify Weapon Tweaker loadout-row cache isolation (use reset before testing).",
+    function(action)
+        local backend = WT and WT.weapon_backend
+        local verify = backend and backend.verify_loadout_cache
+        if type(verify) ~= "function" then
+            mod:echo("[verify_wt_loadout_cache] NOT READY - backend hooks are not installed")
+            printf("[wt:1190] verify result=not-ready")
+            return
+        end
+        local status, summary = verify(action)
+        local labels = {
+            pass = "CORE PASS", fail = "FAIL", ["not-run"] = "CORE NOT RUN",
+            ["not-ready"] = "NOT READY", armed = "ARMED",
+        }
+        printf("[wt:1190] verify result=%s %s", tostring(status), tostring(summary))
+        mod:echo("[verify_wt_loadout_cache] %s - %s",
+            labels[status] or string.upper(tostring(status)), tostring(summary))
     end)

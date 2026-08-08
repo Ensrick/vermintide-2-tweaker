@@ -36,6 +36,14 @@ WT.cwv_variant_catalog = _cwv_variant_catalog
 WT.cwv_ownership         = _cwv_ownership
 WT.cwv_availability_policy = _cwv_availability_policy
 
+-- #1190: never infer official backend ownership from live `can_wield`; it is
+-- mutable shared state and may already contain another mod's additions. The
+-- immutable game-derived catalog fails unknown pairs closed to WT's cache.
+local _native_weapon_ownership = mod:dofile(
+    "scripts/mods/weapon_tweaker/_wt_native_weapon_ownership")
+WT.native_weapon_ownership = _native_weapon_ownership.snapshot(weapon_unlock_map)
+WT.is_native_weapon = _native_weapon_ownership.is_native
+
 local function _cwv_active()
     return _cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
 end
@@ -369,6 +377,10 @@ end
 -- handle the strip step on every call, so we just clear the management state and re-call: every
 -- mod:get("unlock_*") read returns nil/false post-disable, so the add-back phase contributes nothing.
 local function clear_weapon_unlocks()
+    local backend = WT.weapon_backend
+    if backend and backend.clear_loadout_cache then
+        backend.clear_loadout_cache("mod-disabled")
+    end
     if not ItemMasterList then return end
     for career, weapons in pairs(weapon_unlock_map) do
         for _, weapon_key in ipairs(weapons) do
