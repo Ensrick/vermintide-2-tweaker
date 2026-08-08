@@ -34,6 +34,7 @@ $WtPublicCommands = @(
     'info',
     'sm_probe',
     'verify_wt_availability_sort',
+    'verify_wt_loadout_cache',
     'wt_dump_wielded',
     'wt_regression_test'
 )

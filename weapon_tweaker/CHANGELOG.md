@@ -1,5 +1,21 @@
 # Weapon Tweaker Changelog
 
+## 0.12.295-beta (2026-08-08) - row-scoped cross-career loadouts (#1190) [staged for Dev verification]
+
+- Native weapons now pass through to the game's ordinary loadout writer instead
+  of being mistaken for WT ports. Native ownership comes from an immutable
+  game-derived catalog, so another mod's earlier `can_wield` changes cannot
+  send a cross-career item to PlayFab.
+- Cross-career session overrides are keyed by career, saved loadout index, and
+  slot. Explicit row writes, selected-row reads, all-row previews, row cloning,
+  and row deletion/reindexing now preserve exact row isolation; bots remain on
+  the vanilla path.
+- Legacy rowless cache state is discarded safely, disabling the backend hooks
+  clears session state, and `/verify_wt_loadout_cache reset` arms an ordered
+  live check that remains `CORE NOT RUN` until the full row cycle is observed.
+- This paired beta source/bundle is staged only. The public Workshop item remains
+  unchanged until the friends-only Dev build is verified in game.
+
 ## 0.12.294-beta (2026-08-06) - isolate exact damage-profile handshake generation (#431, #1158)
 
 - Moved the exact damage-profile proof from legacy `wt_peer_parity_present` to
