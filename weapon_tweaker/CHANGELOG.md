@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.296-beta (2026-08-08) - public row-scoped loadout rollout (#1190) [verify-fix]
+
+- Publishes the reviewed row-scoped loadout correction from `0.12.295-beta`
+  to the public Workshop item. Native weapons use the ordinary game writer;
+  true cross-career overrides remain isolated by career, saved row, and slot.
+- The maintainer authorized this rollout without an in-game verification pass.
+  Issue #1190 remains open in `verify-fix`, and its live verifier remains the
+  acceptance authority rather than treating publication as proof of a fix.
+- Retires the exact SDK-only LUT-generator sidecar already excluded from the
+  Dev stream. It contains no Weapon Tweaker runtime resource, and a changed
+  hash fails closed during packaging.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
+
 ## 0.12.295-beta (2026-08-08) - row-scoped cross-career loadouts (#1190) [staged for Dev verification]
 
 - Native weapons now pass through to the game's ordinary loadout writer instead

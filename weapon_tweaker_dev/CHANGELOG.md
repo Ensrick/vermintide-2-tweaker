@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.297-dev (2026-08-08) - paired public rollout alignment (#1190) [verify-fix]
+
+- Keeps the required one-patch-ahead WT stream identity while public beta
+  `0.12.296-beta` publishes the already-mirrored row-scoped loadout fix.
+- No Dev-only probe, tuner, universal-availability experiment, or gameplay
+  behavior moved into public, and this version adds no runtime behavior beyond
+  `0.12.296-dev`.
+
 ## 0.12.296-dev (2026-08-08) - row-scoped cross-career loadouts (#1190) [verify-fix]
 
 - Mirrors staged beta `0.12.295-beta`: native weapons use the game's ordinary
