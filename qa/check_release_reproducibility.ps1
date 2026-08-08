@@ -3,8 +3,9 @@
 # -AuditOnly is read-only and intentionally is not wired into ship.ps1 yet. The
 # current ship doctrine commits after Workshop/GitHub publication, so a blocking
 # clean-source rule needs a maintainer-approved commit-before-build workflow.
-# The full mode builds only through VMBLauncher and compares its raw output with
-# a schema-2 manifest entry. It never deploys, uploads, or touches Workshop.
+# The full mode builds only through VMBLauncher, applies the repository's exact
+# hash-pinned output policy, and compares that canonical output with a schema-2
+# manifest entry. It never deploys, uploads, or touches Workshop.
 #
 # Exit 0 = audit/proof passed; exit 2 = source or reproducibility gate failed.
 # -SelfTest is offline and auto-discovered by qa/run_selftests.ps1.
@@ -23,6 +24,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 . (Join-Path $repoRoot 'tools\publish-release\release-manifest.ps1')
+$buildOutputNormalizationHelpers = Join-Path $repoRoot 'tools\ship\build-output-normalization.ps1'
+if (-not (Test-Path -LiteralPath $buildOutputNormalizationHelpers -PathType Leaf)) {
+    throw "Build-output normalization policy not found: $buildOutputNormalizationHelpers"
+}
+. $buildOutputNormalizationHelpers
 
 function Compare-BundleRecordSets {
     param(
@@ -216,6 +222,13 @@ try {
         exit 2
     }
 
+    try {
+        $buildNormalization = Invoke-BuildOutputNormalization -RepoRoot $CheckoutRoot -Mod $modFolder
+    } catch {
+        Write-Host "[check_release_reproducibility] ERROR -- build-output normalization failed: $($_.Exception.Message)" -ForegroundColor Red
+        exit 2
+    }
+
     $bundleDir = Join-Path (Join-Path $CheckoutRoot $modFolder) 'bundleV2'
     $actual = @(New-BundleFileRecords -BundleDirectory $bundleDir)
     $errors = @(Compare-BundleRecordSets -Expected @($entry.bundle_files) -Actual $actual)
@@ -223,7 +236,7 @@ try {
         foreach ($error in $errors) { Write-Host "[check_release_reproducibility] ERROR -- $error" -ForegroundColor Red }
         exit 2
     }
-    Write-Host "[check_release_reproducibility] PASS -- $($actual.Count) raw file(s) rebuilt byte-identically from $sourceCommit." -ForegroundColor Green
+    Write-Host "[check_release_reproducibility] PASS -- $($actual.Count) canonical post-policy file(s) rebuilt byte-identically from $sourceCommit." -ForegroundColor Green
     exit 0
 } finally {
     if (Test-Path -LiteralPath $tempSettings) { Remove-Item -LiteralPath $tempSettings -Force }
