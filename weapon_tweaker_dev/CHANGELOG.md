@@ -14,6 +14,9 @@
   `/verify_wt_loadout_cache reset` before switching distinct native and
   cross-career Slayer weapons across rows I/II/III; run the command again and
   `/wt_regression_test` after the cycle.
+- Retires a stale shared sidecar left from the Dev stream's original import;
+  clean VMB builds no longer reproduce or reference it.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
 
 ## 0.12.295-dev (2026-08-06) - isolate exact damage-profile handshake generation (#431, #1158)
 
