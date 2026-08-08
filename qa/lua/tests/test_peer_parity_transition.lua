@@ -403,6 +403,148 @@ local function register(Harness, repo_root)
         Harness.truthy(source:find("census.total == 0", command_at, true),
             "mixed parity must require zero surviving CT state")
     end)
+
+    -- Issue 426 presentation half. The module is pure, so drive the shipped
+    -- decisions directly instead of pattern-matching the call site.
+    local function load_ct_wire_policy()
+        local path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_wire_policy.lua"
+        local chunk, err = loadfile(path)
+        if not chunk then error(err) end
+        return chunk()
+    end
+
+    Harness.test("ct 426 gate spec covers every modded-content row and fails closed", function()
+        local wp = load_ct_wire_policy()
+        Harness.truthy(type(wp.GATED_SETTING_IDS) == "table" and #wp.GATED_SETTING_IDS > 0,
+            "gated row list must not be empty")
+
+        -- Every row that controls a ct-owned NetworkLookup index must be gated.
+        -- A new trait boon or miracle added without a row here would keep an
+        -- actionable toggle while the wire gate is closed.
+        local declared = {}
+        for _, id in ipairs(wp.GATED_SETTING_IDS) do
+            Harness.equal(declared[id], nil, "duplicate gated row: " .. id)
+            declared[id] = true
+        end
+        for _, required in ipairs({
+            "enable_boon_reworks",
+            "enable_boon_anath_raema_swiftness",
+            "enable_boon_asuryan_wrath",
+            "enable_boon_manann_tempest",
+            "enable_boon_taal_twinned_arrow",
+            "enable_boon_vauls_anvil",
+            "tweak_miracle_of_isha_aegis",
+            "tweak_miracle_of_isha_wounds",
+            "tweak_miracle_of_ulric_persistent",
+        }) do
+            Harness.truthy(declared[required], "modded-content row not gated: " .. required)
+        end
+
+        -- Every declared row must be a live widget in the shipped data tree,
+        -- otherwise the gate greys nothing (runtime_gate_spec cannot know).
+        local data_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_data.lua"
+        local data_file = assert(io.open(data_path, "rb"))
+        local data_source = data_file:read("*a")
+        data_file:close()
+        for _, id in ipairs(wp.GATED_SETTING_IDS) do
+            Harness.truthy(data_source:find('setting_id = "' .. id .. '"', 1, true) ~= nil,
+                "gated row is not a declared widget: " .. id)
+        end
+
+        -- Malformed input is rejected wholesale rather than half-registered.
+        Harness.equal(wp.runtime_gate_spec("", wp.GATED_SETTING_IDS, function() end), nil)
+        Harness.equal(wp.runtime_gate_spec("ct_dev", {}, function() end), nil)
+        Harness.equal(wp.runtime_gate_spec("ct_dev", { "a", "a" }, function() end), nil)
+        Harness.equal(wp.runtime_gate_spec("ct_dev", { "a", 7 }, function() end), nil)
+        Harness.equal(wp.runtime_gate_spec("ct_dev", wp.GATED_SETTING_IDS, nil), nil)
+
+        -- A valid spec copies the list, so a later caller mutation cannot
+        -- retarget a live gate.
+        local source_ids = { "enable_boon_vauls_anvil", "tweak_miracle_of_isha_aegis" }
+        local spec = wp.runtime_gate_spec("ct_dev", source_ids, function()
+            return false, wp.GATE_REASON
+        end)
+        Harness.truthy(type(spec) == "table")
+        Harness.equal(spec.mod_id, "ct_dev")
+        Harness.equal(#spec.setting_ids, 2)
+        source_ids[1] = "mutated"
+        Harness.equal(spec.setting_ids[1], "enable_boon_vauls_anvil",
+            "gate spec must own a copy of the row list")
+
+        local available, reason = spec.evaluate()
+        Harness.equal(available, false)
+        Harness.truthy(type(reason) == "string" and reason ~= "",
+            "a closed gate must carry a player-facing reason")
+        -- Player-facing text carries no lifecycle metadata and no em dash.
+        Harness.equal(reason:find("\226\128\148"), nil, "no em dash in player-facing text")
+        Harness.equal(reason:find("[", 1, true), nil, "no lifecycle metadata in player-facing text")
+
+        -- GUT absent must fail closed, never error.
+        Harness.equal(wp.try_register_runtime_gate(nil, "gate", spec), false)
+        Harness.equal(wp.try_register_runtime_gate(function() return nil end, "", spec), false)
+        Harness.equal(wp.try_register_runtime_gate(function() return nil end, "gate", spec), false)
+        Harness.equal(wp.try_register_runtime_gate(function() error("boom") end, "gate", spec), false)
+        Harness.equal(
+            wp.try_register_runtime_gate(function() return { mod_tweaker = {} } end, "gate", spec),
+            false, "a GUT without register_runtime_gate must not be treated as registered")
+
+        -- Present GUT registers exactly once, against the dev id first.
+        local seen_gate_id, seen_spec, probed = nil, nil, {}
+        local ok = wp.try_register_runtime_gate(function(id)
+            probed[#probed + 1] = id
+            return {
+                mod_tweaker = {
+                    register_runtime_gate = function(_, gate_id, gate_spec)
+                        seen_gate_id, seen_spec = gate_id, gate_spec
+                        return true
+                    end,
+                },
+            }
+        end, "ct_dev:426:peer-parity", spec)
+        Harness.equal(ok, true)
+        Harness.equal(seen_gate_id, "ct_dev:426:peer-parity")
+        Harness.equal(seen_spec, spec)
+        Harness.equal(probed[1], "gut_dev", "dev Mod Tweaker must be probed first")
+    end)
+
+    Harness.test("ct 426 presentation bridge never weakens the runtime gate", function()
+        local path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua"
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+
+        -- The bridge must sit inside the beacon-installed branch and must not
+        -- introduce a second mod.update wrap or any new hook.
+        local bridge_at = assert(source:find("_ct_wire_policy", 1, true),
+            "presentation bridge not wired")
+        Harness.truthy(source:find("inst:applied_state() == \"enabled\"", bridge_at, true) ~= nil,
+            "gate rows must track the settled beacon state")
+        -- Exactly one wrap per branch of the beacon if/else, never a third: the
+        -- installed path reuses the strip ticker and the fail-safe path owns the
+        -- only wrap it needs. A third would mean the bridge added its own.
+        local _, update_wraps = source:gsub("mod%.update%s*=%s*function", "")
+        Harness.equal(update_wraps, 2,
+            "bridge must reuse each branch's ticker, not add its own mod.update wrap")
+        local beacon_else_at = assert(source:find("peer-parity beacon UNAVAILABLE", 1, true))
+        local installed_at = assert(source:find("peer-parity beacon installed", 1, true))
+        Harness.truthy(installed_at < beacon_else_at,
+            "the two wraps must be the installed and fail-safe branches, in that order")
+        local _, hot_join_hooks = source:gsub('mod:hook%("GameNetworkManager", "hot_join_sync"', "")
+        Harness.equal(hot_join_hooks, 1, "hot_join_sync must stay a single hook")
+        local _, remove_peer_hooks = source:gsub('mod:hook%("GameNetworkManager", "remove_peer"', "")
+        Harness.equal(remove_peer_hooks, 1, "remove_peer must stay a single hook")
+
+        -- The runtime gate must not consult GUT: safety is independent.
+        local wire_safe_at = assert(source:find("mod._ct_wire_safe = function()", 1, true))
+        local wire_safe_body = source:sub(wire_safe_at, wire_safe_at + 400)
+        Harness.equal(wire_safe_body:find("mod_tweaker", 1, true), nil,
+            "wire safety must never depend on the Mod Tweaker bridge")
+        Harness.equal(wire_safe_body:find("gate_registered", 1, true), nil,
+            "wire safety must never depend on gate registration")
+    end)
 end
 
 return register

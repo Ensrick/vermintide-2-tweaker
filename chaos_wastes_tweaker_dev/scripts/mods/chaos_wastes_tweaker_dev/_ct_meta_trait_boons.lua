@@ -1779,6 +1779,64 @@ do
         local _clock = 0
         local _strip_deadline = nil
 
+        -- Mod Tweaker presentation bridge (issue 426 follow-up; mirrors
+        -- career_tweaker.lua:~866-890 for issue 425). The gate surfaces above are
+        -- the RUNTIME safety and stay authoritative whether or not GUT is
+        -- installed; this only makes the saved rows that control gated content
+        -- read as unavailable while the gate is closed, instead of looking
+        -- actionable and silently doing nothing.
+        --
+        -- Loaded OUTSIDE the `if inst` branch on purpose: when the beacon is
+        -- unavailable the content is inert for the whole session, which is
+        -- exactly when the rows most need to say so. `inst` may be nil in the
+        -- evaluator below, and a nil beacon reads as permanently closed.
+        -- pcall the load: _ct_install_peer_parity() is NOT wrapped by its caller,
+        -- so an error raised here would abort the whole wire-safety install. This
+        -- module is presentation only and must never be able to do that.
+        local ok_policy, wire_policy = pcall(function()
+            return mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_wire_policy")
+        end)
+        if not (ok_policy and type(wire_policy) == "table") then
+            pcall(printf, "[ct:426] wire-policy module unavailable (%s); Mod Tweaker rows stay ungated (runtime safety unaffected)",
+                tostring(wire_policy))
+            wire_policy = nil
+        end
+        mod._ct_wire_policy = wire_policy
+        local gate_registered = wire_policy == nil   -- nothing to register; never retry
+        local gate_retry = 0
+        local try_runtime_gate
+        do
+            local runtime_mod_id = "ct_dev"
+            local ok_name, live_name = pcall(function() return mod:get_name() end)
+            if ok_name and type(live_name) == "string" and live_name ~= "" then
+                runtime_mod_id = live_name
+            end
+            local gate_id = runtime_mod_id .. ":426:peer-parity"
+            try_runtime_gate = function()
+                if gate_registered then return end
+                local spec = wire_policy.runtime_gate_spec(
+                    runtime_mod_id, wire_policy.GATED_SETTING_IDS,
+                    function()
+                        -- Read the SETTLED gate, not all_peers_have(): the rows
+                        -- should track exactly what the boon/miracle surfaces are
+                        -- doing, including the enable settle window. No beacon at
+                        -- all means the content never activates this session.
+                        local available = inst ~= nil
+                            and inst:applied_state() == "enabled"
+                        return available, available and nil or wire_policy.GATE_REASON
+                    end)
+                local registered = wire_policy.try_register_runtime_gate(
+                    rawget(_G, "get_mod"), gate_id, spec)
+                gate_registered = registered == true
+                mod._ct_wire_runtime_gate_registered = gate_registered
+                if gate_registered then
+                    pcall(printf, "[ct:426] Mod Tweaker gate registered id=%s rows=%d beacon=%s",
+                        gate_id, #wire_policy.GATED_SETTING_IDS, tostring(inst ~= nil))
+                end
+            end
+        end
+        try_runtime_gate()
+
         if inst then
             inst:register_gated_feature("ct_modded_boons_miracles", {
                 label = "ct_gated_modded_boons",
@@ -1878,6 +1936,15 @@ do
                     _strip_deadline = nil
                     _ct_strip_modded_content("persistent_parity_loss")
                 end
+                -- Bounded retry on the SAME tick chain (no second mod.update wrap
+                -- and no new hook); stops permanently once GUT answers.
+                if not gate_registered then
+                    gate_retry = gate_retry + (dt or 0)
+                    if gate_retry >= 1 then
+                        gate_retry = 0
+                        pcall(try_runtime_gate)
+                    end
+                end
             end
 
             pcall(printf, "[ct:426] peer-parity beacon installed (channel=ct_peer_parity_present, schema=%d); modded boons/miracles inert until parity confirmed", CT_RPC_SCHEMA)
@@ -1885,6 +1952,26 @@ do
             -- Beacon unavailable: _ct_wire_safe() already returns false (fail-safe), so
             -- every gate holds modded content inert. Eject pools to match.
             _ct_eject_modded_pools()
+            -- Same bounded retry as the installed path. There is no beacon tick to
+            -- chain onto here, so wrap the existing update once; the evaluator
+            -- reads a nil beacon as permanently closed, which is the truth for
+            -- this session and is exactly what the rows should say.
+            local prev_update = mod.update
+            mod.update = function(dt)
+                if prev_update then
+                    local ok_u, err_u = pcall(prev_update, dt)
+                    if not ok_u then
+                        pcall(printf, "[ct:426] wrapped mod.update errored: %s", tostring(err_u))
+                    end
+                end
+                if not gate_registered then
+                    gate_retry = gate_retry + (dt or 0)
+                    if gate_retry >= 1 then
+                        gate_retry = 0
+                        pcall(try_runtime_gate)
+                    end
+                end
+            end
             pcall(printf, "[ct:426] peer-parity beacon UNAVAILABLE - modded boons/miracles remain inert this session (fail-safe)")
         end
     end
@@ -1898,6 +1985,52 @@ _rt_register("peer_parity_beacon_installed", function()
     if pp._initial_applied ~= "disabled" then return "fail-safe posture changed: initial applied state must be 'disabled'" end
     if pp.FAILSAFE_POSTURE ~= "feature_inert_until_confirmed" then return "fail-safe posture constant changed" end
     if pp:feature_count() < 1 then return "no gated feature registered" end
+    return nil
+end)
+
+_rt_register("issue426_runtime_gate_presentation", function()
+    -- The GUT bridge is optional, so this asserts the CONTRACT (pure policy is
+    -- loaded, the row list is well-formed, the spec builder rejects malformed
+    -- input and reports closed while the beacon is disabled) rather than
+    -- asserting that a gate is live - which would fail on any GUT-less install.
+    local wp = mod._ct_wire_policy
+    if type(wp) ~= "table" then return "mod._ct_wire_policy missing (bridge module not loaded)" end
+    if type(wp.runtime_gate_spec) ~= "function"
+            or type(wp.try_register_runtime_gate) ~= "function" then
+        return "wire policy runtime-gate API missing"
+    end
+    local ids = wp.GATED_SETTING_IDS
+    if type(ids) ~= "table" or #ids == 0 then return "no gated setting ids declared" end
+    -- Every gated row must be a real widget, else the gate greys nothing (or the
+    -- wrong thing) and the presentation silently diverges from the runtime gate.
+    -- _collect_setting_ids returns an ARRAY of live widget ids; index it.
+    local known_list = _collect_setting_ids and _collect_setting_ids()
+    if type(known_list) == "table" then
+        local known = {}
+        for i = 1, #known_list do known[known_list[i]] = true end
+        for i = 1, #ids do
+            if not known[ids[i]] then
+                return "gated setting id is not a live widget: " .. tostring(ids[i])
+            end
+        end
+    end
+    if wp.runtime_gate_spec("ct_dev", { "a", "a" }, function() end) ~= nil then
+        return "duplicate setting ids must be rejected"
+    end
+    if wp.runtime_gate_spec("ct_dev", {}, function() end) ~= nil then
+        return "empty setting id list must be rejected"
+    end
+    local spec = wp.runtime_gate_spec("ct_dev", ids, function() return false, wp.GATE_REASON end)
+    if type(spec) ~= "table" or #spec.setting_ids ~= #ids then
+        return "valid gate spec was rejected"
+    end
+    local available, reason = spec.evaluate()
+    if available ~= false or type(reason) ~= "string" or reason == "" then
+        return "closed gate must report unavailable with a player-facing reason"
+    end
+    if wp.try_register_runtime_gate(nil, "id", spec) ~= false then
+        return "invalid get_mod argument must fail closed"
+    end
     return nil
 end)
 
