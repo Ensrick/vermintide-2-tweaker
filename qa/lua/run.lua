@@ -277,6 +277,7 @@ local suites = {
     "test_ct_bot_weapon_chest_owner",
     "test_ct_boss_grudge_marks",
     "test_ct_curse_lighting_owner",
+    "test_ct_spawn_eligibility_owner",
     "test_ct_entry_decomposition",
     "test_ct_pool_floor_citadel_487",
     "test_ct_mission_graph_sync",

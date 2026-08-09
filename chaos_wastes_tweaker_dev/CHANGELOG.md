@@ -1,5 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.324-dev (2026-08-09) -- spawn-eligibility owner decomposition (#1159, #504, #2)
+
+- PickupSystem spawn-eligibility (career-exclusive blocklist denial, the
+  coin-reservation partition, unit-loadability preflight, injected-adventure
+  category fallback) moves to a dedicated owner with getter-seam access to
+  the per-run denial tables; boundary tests pin the seam on both ends.
+- Entry ceiling ratchets 9,314 -> 9,077 nonblank lines; behavior-neutral.
+- Retires the readopted SDK tool-only sidecar the clean build no longer emits;
+  the build-output normalization inventory now covers this mod.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
+
 ## 0.7.323-dev (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
 
 - The shared peer-parity library installs as an atomic transaction: receiver
