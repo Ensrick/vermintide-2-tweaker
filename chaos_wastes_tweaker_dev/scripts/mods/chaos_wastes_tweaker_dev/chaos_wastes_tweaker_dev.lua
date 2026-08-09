@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.320-dev"
+local MOD_VERSION = "0.7.321-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -287,20 +287,14 @@ mod._ct_meta_ammo_cost_multiplier = _ct_meta_ammo_cost_multiplier
 -- rename without also updating the regression check.
 local CT_DORMANT_PURGE_VERIFIED = "CT_DORMANT_PURGE_VERIFIED_v0.7.100"
 
--- 2026-05-23 v0.7.100-dev: dormant boons + Skulls event boons + ct_kill_heal FULLY purged from
--- the active code path per user request after recurring Chest-of-Trials crashes (most recent:
--- GUID 4c5d2157 at line 1144 from the v0.7.99 half-fix where `DORMANT_BOON_RARITY` was set on
--- _G as an empty table but closure references still indexed it). v0.7.100-dev removes EVERY
--- active reference to dormant data: `_should_strip` dormant branch, the boon-trace hook's
--- dormant fields, `/verify_dormants` chat command, `pre_register_dormant_lookups`,
--- `sync_dormant_boons`, the `DORMANT_BOON_RARITY` table itself, the Skulls block, the
--- ct_kill_heal block (latter two already block-commented in v0.7.98-dev). The original
--- implementation lives in block comments — re-enable is a literal uncomment, but
--- restoration requires the CW Wastes engine-level crash investigation to be closed first.
---
--- The 3 regression checks (`dormant_boons_NOT_registered`, `dormant_boons_NOT_in_pool`,
--- `dormant_boon_rarity_is_table`) plus the 2 new ones (`dormant_setting_keys_not_consumed`,
--- `dormant_chat_commands_removed`) iterate the constants below to assert the disable holds.
+-- 2026-05-23 v0.7.100-dev: the 9 vanilla dormant boons + the Skulls event boons are purged from
+-- the active code path after recurring Chest-of-Trials crashes (GUID 4c5d2157 at line 1144 -
+-- the v0.7.99 half-fix left `DORMANT_BOON_RARITY` an empty table on _G while closures still
+-- indexed it). The original implementation lives in block comments; re-enable is a literal
+-- uncomment, but restoration needs the CW Wastes engine-level crash investigation closed first.
+-- ct_kill_heal is deliberately NOT in this list: it was RE-ENABLED in v0.7.240-dev (#406) and
+-- registers unconditionally in `_ct_meta_trait_boons.lua`. The ground truth these names are
+-- asserted against lives with the checks in `_ct_regression.lua` (#1156, PROJECT_STANDARDS 5.1d).
 local CT_DISABLED_DORMANT_BOON_NAMES = {
     "deus_ammo_pickup_give_allies_ammo",
     "deus_coin_pickup_regen",
@@ -311,7 +305,6 @@ local CT_DISABLED_DORMANT_BOON_NAMES = {
     "deus_transmute_into_coins",
     "explosive_pushes_on_damage_taken",
     "squats",
-    "ct_kill_heal",
 }
 local CT_DISABLED_DORMANT_RARITIES = {
     deus_ammo_pickup_give_allies_ammo    = "rare",
@@ -323,7 +316,6 @@ local CT_DISABLED_DORMANT_RARITIES = {
     deus_transmute_into_coins            = "rare",
     explosive_pushes_on_damage_taken     = "exotic",
     squats                               = "rare",
-    ct_kill_heal                         = "exotic",
 }
 local CT_DISABLED_SKULLS_BOON_NAMES = {
     "boon_skulls_01", "boon_skulls_02", "boon_skulls_03", "boon_skulls_04", "boon_skulls_05",
@@ -333,9 +325,8 @@ local CT_DISABLED_SKULLS_BOON_NAMES = {
 pcall(printf, "[ct] dormant/skulls boons purged (v%s, sentinel=%s); %d dormants + %d skulls boons removed from active code path. See comments near L4448/L4724/L5698 in source for re-enable instructions.",
     MOD_VERSION, CT_DORMANT_PURGE_VERIFIED, #CT_DISABLED_DORMANT_BOON_NAMES, #CT_DISABLED_SKULLS_BOON_NAMES)
 
--- /regression_test scaffold. See the corresponding _rt_register calls at end
--- of file. Each registered check is a function returning nil for PASS or a
--- string for FAIL.
+-- /regression_test scaffold. See the corresponding _rt_register calls at end of file. Each
+-- check returns nil for PASS, a `skip:`-prefixed reason for SKIP, any other string for FAIL.
 local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
@@ -344,21 +335,30 @@ end
 -- Lua 5.1's 200-local ceiling). Expose the existing registrar without creating a
 -- second registry or callback owner.
 mod._ct_rt_register = _rt_register
+-- #1156 / 5.1d rule 2: a check that cannot run in the CURRENT context (keep-only globals read
+-- mid-mission) returns a reason prefixed `skip:` and scores SKIP, not FAIL; wrong context in the
+-- fail count is what scored a mid-mission run FAIL on healthy code (anath_raema_registry_retry_
+-- 288, 2026-08-04). A skip is never a pass. et/cosmetics express this as a registration-time
+-- opts.precondition (#512); ct returns it because its entry is at its ceiling - unify later.
 mod:command("ct_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail = 0, 0
+    local pass, fail, skip = 0, 0, 0
     mod:echo("=== ct regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
         if ok and err == nil then
             mod:echo("  PASS: %s", c.name); pass = pass + 1
             _dbg("[regression] PASS %s", c.name)
+        elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
+            local why = err:sub(6):gsub("^%s+", "")
+            mod:echo("  SKIP: %s -- %s", c.name, why); skip = skip + 1
+            pcall(printf, "[regression] SKIP %s: %s", c.name, why)
         else
             local msg = (not ok and tostring(err)) or tostring(err)
             mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
             mod:warning("[regression] FAIL %s: %s", c.name, msg)
         end
     end
-    mod:echo("=== %d passed, %d failed ===", pass, fail)
+    mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
 end)
 pcall(printf, "[regression-test-command] registered as /ct_regression_test")
 
