@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.21-beta"
+local MOD_VERSION = "0.4.22-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -862,23 +862,21 @@ do
             -- never registered can never receive a peer ack -- publishing it as
             -- mod._crt_peer_parity would advertise a floor that cannot close.
             --
-            -- SEAM (#1158 follow-up): the shared lib's install() returns nothing
-            -- today, so there is no commit boolean to consume. Making install()
-            -- return one is the install-transaction fanout slice -- an atomic
-            -- 6-mod change to tools/shared_lib/_lib_peer_parity.lua and its five
-            -- consumer copies -- deliberately out of scope for this crt-only
-            -- slice. Until it lands, is_installed() is the strongest signal the
-            -- lib exposes: it is set only AFTER the network_register pcall
-            -- succeeded. When the fanout lands, add the returned commit boolean
-            -- as a further conjunct here.
-            local install_ok = pcall(inst.install, inst)
+            -- #1158 install-transaction fanout (LANDED): install() now performs
+            -- receiver registration and mod.update ownership inside ONE pcall
+            -- and RETURNS the commit boolean, so the two independent signals are
+            -- both consumed here -- the returned boolean (this attempt committed)
+            -- AND is_installed() (the instance is in the committed state). A
+            -- partial attempt is terminal in the lib, so a false here is final
+            -- for the session and crt stays vanilla.
+            local install_ok, committed = pcall(inst.install, inst)
             local status_ok, installed = false, false
             if install_ok and type(inst.is_installed) == "function" then
                 status_ok, installed = pcall(inst.is_installed, inst)
             end
-            if not status_ok or installed ~= true then
-                pcall(printf, "[crt:425] WARNING peer-parity install did not commit (installed=%s); networked reworks stay vanilla (fail-safe)",
-                    tostring(installed))
+            if not install_ok or committed ~= true or not status_ok or installed ~= true then
+                pcall(printf, "[crt:425] WARNING peer-parity install did not commit (committed=%s installed=%s); networked reworks stay vanilla (fail-safe)",
+                    tostring(install_ok and committed), tostring(installed))
             else
                 mod._crt_peer_parity = inst
                 mod._crt_wire_transport_identity = wire_identity

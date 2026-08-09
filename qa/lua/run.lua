@@ -266,6 +266,7 @@ local suites = {
     "test_cos_custom_illusion_sync",
     "test_shared_wire_catalog",
     "test_peer_parity_transition",
+    "test_peer_parity_install_transaction",
     "test_ct_426_exact_catalog",
     "test_ct_boon_catalog",
     "test_ct_boon_split",

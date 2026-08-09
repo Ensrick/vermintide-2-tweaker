@@ -58,7 +58,7 @@
 --     PROJECT_STANDARDS section 4). Erroring can only ever turn features OFF.
 --
 -- API (on the instance returned by the factory)
---   inst:install()                                   -- register the VMF channel + wire the update tick (once)
+--   inst:install()  -> bool                          -- register the VMF channel + wire the update tick (once)
 --   inst:register_gated_feature(id, { on_enable=fn, on_disable=fn, label=loc_key })
 --   inst:all_peers_have()  -> bool                   -- true = safe to run gated features
 --   inst:require_peer(peer_id)                       -- synchronous pre-roster join fence
@@ -68,13 +68,91 @@
 --   introspection for the host's regression suite:
 --     inst:is_installed() / inst:feature_count() / inst:applied_state() / inst.__classify
 --
+-- INSTALL IS ONE TRANSACTION (issue 371 / issue 1158)
+--   `install()` owns TWO side effects: it hands the channel receiver to VMF and
+--   it takes ownership of `mod.update`. Either can throw (a host transport can
+--   retain the receiver and then fail; a hostile `__newindex` can store the
+--   wrapper and then fail), which would leave a beacon that LOOKS built but can
+--   never close its floor. So both happen inside ONE pcall, `_installed` commits
+--   only after both return, and the receiver is INERT until that commit. On a
+--   throw the exact previous `mod.update` is restored if the wrapper had already
+--   become externally visible. The attempt is then TERMINAL for the instance
+--   (`_install_attempted`): a retry could double-register a receiver the
+--   transport already retained, so a partial install never gets a second try.
+--   `install()` returns the commit boolean; every consumer floor consumes it.
+--   Every peer query (`all_peers_have`/`peer_has`/`require_peer`) and `tick()`
+--   hard-gate on `_installed`, so an uninstalled instance is fail-closed by
+--   construction rather than by caller discipline.
+--
 -- OPTIONAL EXACT-CATALOG MODE
 --   Pass opts.wire_identity to require byte-exact feature/catalog identity in
 --   addition to same-mod presence. Legacy consumers that omit it keep the
 --   original two-field [schema, reply] payload exactly. Exact mode uses
 --   [schema, reply, identity, session_epoch, challenge, reply_echo], rejects
 --   stale/replayed proof, and bounds retired epoch history.
+--
+-- MODULE-LEVEL REGISTRY  --  registry.all_peers_have(mod_id)   (OOP plan WS1.5)
+--   The chunk returns TWO values: the factory (value 1, unchanged -- every
+--   consumer keeps `local factory = mod:dofile(...)` and its
+--   `type(factory) == "function"` guard) and a small registry module (value 2).
+--   Each instance also carries it as `inst.registry`, which is the reachable
+--   path in-game because `mod:dofile` is not guaranteed to propagate a chunk's
+--   second return value.
+--   Instances enter the registry at their install COMMIT, keyed by
+--   `opts.mod_id` (or the host mod's VMF name). `registry.all_peers_have(id)`
+--   returns false for an unknown id and otherwise AND-folds every instance
+--   registered under it -- a mod with several beacons (cwv runs a presence
+--   channel plus two exact channels) is "all peers have it" only when EVERY
+--   one of its beacons says so. Fail-closed on unknown id, empty registry, or
+--   any error. It is a QUERY ONLY: it never installs, mutates, or reaches into
+--   another mod, so it adds no cross-mod coupling and cannot violate the
+--   standalone invariant.
+--   SCOPE: `mod:dofile` returns a FRESH module per call, so the registry spans
+--   exactly the instances built from ONE dofile of this file. That is the
+--   correct scope for the copied-lib design -- there is no shared runtime to
+--   host a repo-wide registry, and inventing one would be the get_mod()
+--   dependency MOD_DEPENDENCIES.md forbids.
 -- ============================================================================
+
+-- Module-level registry. Chunk-scoped upvalue (see SCOPE above), populated only
+-- at an install commit; instances are per-session and are never de-registered.
+local registry = {}
+local _registered = {}   -- mod_id -> array of committed instances
+
+local function _registry_add(mod_id, instance)
+    if type(mod_id) ~= "string" or mod_id == "" or type(instance) ~= "table" then
+        return false
+    end
+    local bucket = _registered[mod_id]
+    if not bucket then
+        bucket = {}
+        _registered[mod_id] = bucket
+    end
+    for i = 1, #bucket do
+        if bucket[i] == instance then return true end
+    end
+    bucket[#bucket + 1] = instance
+    return true
+end
+
+-- Fail closed: unknown id, no committed instance, or any error -> false.
+function registry.all_peers_have(mod_id)
+    if type(mod_id) ~= "string" or mod_id == "" then return false end
+    local bucket = _registered[mod_id]
+    if type(bucket) ~= "table" or #bucket == 0 then return false end
+    for i = 1, #bucket do
+        local instance = bucket[i]
+        local ok, res = pcall(instance.all_peers_have, instance)
+        if not ok or res ~= true then return false end
+    end
+    return true
+end
+
+-- Introspection for the offline suite; never a gameplay input.
+function registry.instance_count(mod_id)
+    local bucket = type(mod_id) == "string" and _registered[mod_id]
+    return type(bucket) == "table" and #bucket or 0
+end
 
 local function new_peer_parity(mod, opts)
     opts = opts or {}
@@ -91,6 +169,18 @@ local function new_peer_parity(mod, opts)
     local NOTIFY_GRACE    = opts.notify_grace       or 10.0     -- longer than observed normal join handshakes; safety still disables immediately
     local ABSENCE_GRACE   = opts.absence_grace      or 15.0     -- retain a positive ack across bounded PlayerManager level-transition gaps
     local ANNOUNCE_EVERY  = opts.announce_interval  or 10.0     -- heal-broadcast cadence
+
+    -- Registry key. Explicit `opts.mod_id` wins; otherwise fall back to the
+    -- host's VMF name. A mod whose name cannot be read simply stays unqueryable
+    -- by id -- its own instance methods are unaffected.
+    local MOD_ID = opts.mod_id
+    if type(MOD_ID) ~= "string" or MOD_ID == "" then
+        MOD_ID = nil
+        if mod and type(mod.get_name) == "function" then
+            local ok_name, name = pcall(mod.get_name, mod)
+            if ok_name and type(name) == "string" and name ~= "" then MOD_ID = name end
+        end
+    end
 
     local api = {}   -- the instance; methods below take an implicit `self` == api
 
@@ -141,6 +231,7 @@ local function new_peer_parity(mod, opts)
     local _absent_since   = {}          -- acked peer temporarily absent from PlayerManager roster -> monotonic time
     local _applied        = "disabled"  -- fail-safe default; NEVER auto-starts enabled
     local _installed      = false
+    local _install_attempted = false     -- terminal transaction latch; partial registration is never retried
     local _clock          = 0
     local _poll_accum     = 0
     local _last_announce  = -1e9
@@ -166,6 +257,10 @@ local function new_peer_parity(mod, opts)
     api.MAX_VMF_JSON_LENGTH = MAX_VMF_JSON_LENGTH
     api.MAX_RETIRED_EPOCHS_PER_PEER = MAX_RETIRED_EPOCHS_PER_PEER
     api.MAX_RETIRED_PEERS = MAX_RETIRED_PEERS
+    api.MOD_ID = MOD_ID
+    -- The reachable in-game handle on the module registry (the chunk's second
+    -- return value is not guaranteed to survive mod:dofile).
+    api.registry = registry
 
     function api:max_json_envelope_length()
         -- Exact upper bound for the restricted-alphabet payload:
@@ -271,6 +366,7 @@ local function new_peer_parity(mod, opts)
     api.NOTIFY_GRACE = NOTIFY_GRACE
 
     function api:all_peers_have()
+        if not _installed then return false end
         local ok, res = pcall(function()
             local peers, roster_known = _other_human_peers()
             return roster_known and _classify(peers, _acked)
@@ -451,10 +547,11 @@ local function new_peer_parity(mod, opts)
     -- unacknowledged peer disables gated features immediately. The owning mod
     -- then uses its vanilla-safe fallback before allowing the native sync.
     function api:peer_has(peer_id)
-        return type(peer_id) == "string" and _acked[peer_id] == true
+        return _installed and type(peer_id) == "string" and _acked[peer_id] == true
     end
 
     function api:require_peer(peer_id)
+        if not _installed then return false end
         if type(peer_id) ~= "string" or peer_id == "" then return false end
         _pending[peer_id] = true
         if _acked[peer_id] ~= true then
@@ -482,66 +579,99 @@ local function new_peer_parity(mod, opts)
     end
 
     function api:install()
-        if _installed then return end
-        if mod and type(mod.network_register) == "function" then
-            local ok = pcall(function()
-                mod:network_register(CHANNEL, function(sender_peer_id, schema, is_reply,
-                        remote_identity, remote_epoch, remote_query, remote_echo)
-                    -- Schema gate (VMF_RECIPES section 10): drop a mismatched peer
-                    -- rather than mis-parse its payload. Never error().
-                    if schema ~= SCHEMA then
-                        _log("%s %s schema mismatch from %s (got %s, want %d) -- dropping",
-                            ECHO_PREFIX, CHANNEL, tostring(sender_peer_id), tostring(schema), SCHEMA)
-                        if EXACT_MODE then _reject(sender_peer_id, "schema") end
-                        return
-                    end
-                    if type(sender_peer_id) == "string" then
-                        if EXACT_MODE then
-                            if remote_identity ~= WIRE_IDENTITY then
-                                _reject(sender_peer_id, "identity")
-                                return
-                            end
-                            local is_query = is_reply == 0 or is_reply == nil
-                            if is_query then
-                                if not _safe_wire_string(remote_query)
-                                        or not _accept_epoch(sender_peer_id, remote_epoch, false) then
-                                    _reject(sender_peer_id, "query-or-epoch")
-                                    return
-                                end
-                                _reply_to[sender_peer_id] = remote_query
-                            else
-                                local expected = _outstanding[sender_peer_id]
-                                    or _outstanding.__broadcast
-                                if not _safe_wire_string(remote_echo) or remote_echo ~= expected
-                                        or not _accept_epoch(sender_peer_id, remote_epoch, true) then
-                                    _reject(sender_peer_id, "echo-or-epoch")
-                                    return
-                                end
-                                _outstanding[sender_peer_id] = nil
-                            end
-                        end
-                        _acked[sender_peer_id] = true
-                        if is_reply == 0 or is_reply == nil then
-                            _announce(1, sender_peer_id)   -- answer a query; never answer an answer
-                        end
-                    end
-                end)
-            end)
-            if ok then _installed = true end
-        end
+        if _installed then return true end
+        -- Terminal latch: a partial attempt is never retried. The transport may
+        -- already hold the receiver from the failed attempt, so a second
+        -- install() could double-register it.
+        if _install_attempted then return false end
+        _install_attempted = true
+
+        if not mod or type(mod.network_register) ~= "function" then return false end
+
         -- Drive the tick from VMF's per-frame update, preserving any existing
         -- mod.update. (Host mods that already own mod.update should instead call
         -- inst:tick(dt) from their own update and skip this by pre-setting
         -- mod.update before install(); this preserving wrap covers the common
         -- case where the host has no mod.update.)
-        if mod then
-            local prev = mod.update
-            mod.update = function(dt)
-                if prev then pcall(prev, dt) end
-                self:tick(dt)
+        local previous_update = mod.update
+        local wrapped_update = function(dt)
+            if previous_update then pcall(previous_update, dt) end
+            api:tick(dt)
+        end
+
+        local receiver = function(sender_peer_id, schema, is_reply,
+                remote_identity, remote_epoch, remote_query, remote_echo)
+            -- A host transport can partially retain this callback and then
+            -- throw. Until registration commits, the callback is inert: no
+            -- acknowledgement, reply, or state mutation.
+            if not _installed then return end
+            -- Schema gate (VMF_RECIPES section 10): drop a mismatched peer
+            -- rather than mis-parse its payload. Never error().
+            if schema ~= SCHEMA then
+                _log("%s %s schema mismatch from %s (got %s, want %d) -- dropping",
+                    ECHO_PREFIX, CHANNEL, tostring(sender_peer_id), tostring(schema), SCHEMA)
+                if EXACT_MODE then _reject(sender_peer_id, "schema") end
+                return
+            end
+            if type(sender_peer_id) == "string" then
+                if EXACT_MODE then
+                    if remote_identity ~= WIRE_IDENTITY then
+                        _reject(sender_peer_id, "identity")
+                        return
+                    end
+                    local is_query = is_reply == 0 or is_reply == nil
+                    if is_query then
+                        if not _safe_wire_string(remote_query)
+                                or not _accept_epoch(sender_peer_id, remote_epoch, false) then
+                            _reject(sender_peer_id, "query-or-epoch")
+                            return
+                        end
+                        _reply_to[sender_peer_id] = remote_query
+                    else
+                        local expected = _outstanding[sender_peer_id]
+                            or _outstanding.__broadcast
+                        if not _safe_wire_string(remote_echo) or remote_echo ~= expected
+                                or not _accept_epoch(sender_peer_id, remote_epoch, true) then
+                            _reject(sender_peer_id, "echo-or-epoch")
+                            return
+                        end
+                        _outstanding[sender_peer_id] = nil
+                    end
+                end
+                _acked[sender_peer_id] = true
+                if is_reply == 0 or is_reply == nil then
+                    _announce(1, sender_peer_id)   -- answer a query; never answer an answer
+                end
             end
         end
+
+        local ok = pcall(function()
+            -- Registration and update ownership are ONE transaction. A transport
+            -- may retain the receiver before a later assignment fails, so the
+            -- callback stays inert until both operations have returned and
+            -- `_installed` commits below.
+            mod:network_register(CHANNEL, receiver)
+            mod.update = wrapped_update
+        end)
+        if not ok then
+            -- A hostile __newindex fixture can store and then throw. Restore the
+            -- exact previous function when the wrapper became externally
+            -- visible; if assignment itself was impossible, the old value is
+            -- already intact. The terminal latch prevents a second receiver.
+            local read_ok, current_update = pcall(function() return mod.update end)
+            if read_ok and current_update == wrapped_update then
+                pcall(function() mod.update = previous_update end)
+            end
+            return false
+        end
+
+        -- Commit boundary: update ownership, ticks, the first query, and registry
+        -- visibility become reachable only after receiver registration AND update
+        -- ownership return successfully.
+        _installed = true
+        _registry_add(MOD_ID, api)
         _announce(0)   -- initial query (covers installing mid-session)
+        return true
     end
 
     -- Core evaluation --------------------------------------------------------
@@ -634,6 +764,7 @@ local function new_peer_parity(mod, opts)
     end
 
     function api:tick(dt)
+        if not _installed then return end
         local ok, err = pcall(_tick_impl, dt)
         if not ok then
             pcall(_force_disable)   -- any beacon error -> features OFF (fail-safe)
@@ -644,4 +775,6 @@ local function new_peer_parity(mod, opts)
     return api
 end
 
-return new_peer_parity
+-- Value 1 stays the factory FUNCTION so every consumer's
+-- `type(factory) == "function"` guard is unchanged; value 2 is the registry.
+return new_peer_parity, registry

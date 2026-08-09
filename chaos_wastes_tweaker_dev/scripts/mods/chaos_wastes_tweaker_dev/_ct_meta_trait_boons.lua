@@ -1977,7 +1977,21 @@ do
 
             -- install() wraps the existing mod.update (defined near the top of this file)
             -- preserving it; grep-verified single assignment, nothing reassigns it later.
-            pcall(function() inst:install() end)
+            --
+            -- #1158 install-transaction fanout: install() runs receiver registration
+            -- and update ownership in ONE pcall and RETURNS the commit boolean.
+            -- ct's floors do not need to branch on it -- the lib hard-gates
+            -- all_peers_have()/peer_has()/require_peer()/tick() on the same commit,
+            -- so _ct_wire_safe() is closed by construction when install fails. What
+            -- the boolean buys ct is an HONEST instrument: the "beacon installed"
+            -- line below is reported only when the transport actually committed,
+            -- never on a half-install that can no longer be retried (the lib's
+            -- attempt latch is terminal).
+            local install_committed = false
+            do
+                local ok_install, committed = pcall(function() return inst:install() end)
+                install_committed = ok_install and committed == true
+            end
 
             -- Fail-safe INITIAL posture. The lib starts _applied = "disabled" but never
             -- invokes on_disable for the initial state (callbacks fire on transitions
@@ -2070,9 +2084,15 @@ do
                 end
             end
 
-            pcall(printf, "[ct:426] exact peer-parity beacon installed (channel=ct_boon_catalog_exact_v1, schema=%d, identity=%s, rows=%d); modded boons/miracles inert until catalog parity confirmed",
-                CT_RPC_SCHEMA, tostring(mod._ct_wire_catalog_identity),
-                (mod._ct_wire_catalog_power_count or 0) + (mod._ct_wire_catalog_buff_count or 0))
+            if install_committed then
+                pcall(printf, "[ct:426] exact peer-parity beacon installed (channel=ct_boon_catalog_exact_v1, schema=%d, identity=%s, rows=%d); modded boons/miracles inert until catalog parity confirmed",
+                    CT_RPC_SCHEMA, tostring(mod._ct_wire_catalog_identity),
+                    (mod._ct_wire_catalog_power_count or 0) + (mod._ct_wire_catalog_buff_count or 0))
+            else
+                -- Terminal: the lib never retries a partial attempt, so this is the
+                -- state for the whole session. Every gate stays shut.
+                pcall(printf, "[ct:426] WARNING exact peer-parity install did NOT commit (channel=ct_boon_catalog_exact_v1); modded boons/miracles remain inert this session (fail-safe)")
+            end
         else
             -- Beacon unavailable: _ct_wire_safe() already returns false (fail-safe), so
             -- every gate holds modded content inert. Eject pools to match.

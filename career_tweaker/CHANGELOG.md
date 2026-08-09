@@ -1,5 +1,15 @@
 # Career Tweaker Changelog
 
+## 0.4.22-beta (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
+
+- The shared peer-parity library installs as an atomic transaction: receiver
+  and update wrapper commit together inside one guarded call, a partial
+  install is terminal for the session (never retried, every floor stays
+  shut), and install() reports a commit boolean this mod's gates consume.
+- New all_peers_have(mod_id) registry answers cross-mod parity queries and
+  fails closed for unknown or uncommitted mods (OOP_REFACTOR_PLAN WS1.5).
+- The runtime gate and composite floor now consume the real commit verdict.
+
 ## 0.4.21-beta (2026-08-09) - authoritative paths behind composite wire floor (#1158) [untested]
 
 - Every authoritative parity read (balance apply/restore, tourney, the

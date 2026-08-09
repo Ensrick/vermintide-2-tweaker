@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.500-dev"
+local MOD_VERSION = "0.1.501-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -172,8 +172,23 @@ do
         })
         if ok2 and type(inst) == "table" then
             mod._cwv_peer_parity = inst
-            pcall(function() inst:install() end)
-            mod:info("[cwv:371] peer-parity beacon installed (channel=cwv_peer_parity_present)")
+            -- #1158 install-transaction fanout (LANDED): install() runs receiver
+            -- registration and mod.update ownership in ONE pcall and returns the
+            -- commit boolean. The instance stays published either way -- the
+            -- gated-feature registrations below need it, and the lib now
+            -- hard-gates every peer query and tick() on the same commit, so an
+            -- uninstalled beacon answers false to all of them. The boolean is
+            -- consumed as EVIDENCE so a non-committing install is visible in the
+            -- log instead of silently permanent.
+            local ok_install, committed = pcall(function() return inst:install() end)
+            if ok_install and committed == true then
+                mod:info("[cwv:371] peer-parity beacon installed (channel=cwv_peer_parity_present)")
+            else
+                -- mod:info, not mod:warning: VMF's warning channel posts to CHAT
+                -- (#427). This is log-only operational evidence.
+                mod:info("[cwv:371] WARNING peer-parity install did not commit (%s); gated features stay inert (fail-safe)",
+                    tostring(committed))
+            end
         else
             mod:warning("[cwv:371] peer-parity factory failed: %s", tostring(inst))
         end

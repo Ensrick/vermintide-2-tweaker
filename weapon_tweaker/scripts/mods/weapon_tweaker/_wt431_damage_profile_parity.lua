@@ -112,18 +112,16 @@ do
             -- the channel actually registered, so a half-installed beacon can
             -- never present itself as a confirmed gate.
             --
-            -- SEAM (#1158 follow-up): the shared lib's install() returns
-            -- nothing today, so there is no commit boolean to consume. Making
-            -- it return one is the install-transaction fanout slice -- an
-            -- atomic change to tools/shared_lib/_lib_peer_parity.lua and its
-            -- consumer copies -- deliberately out of scope for this wt-only
-            -- slice. Until it lands, is_installed() is the strongest signal
-            -- the lib exposes: it is set only AFTER the network_register pcall
-            -- succeeded (_lib_peer_parity.lua:530). When the fanout lands, add
-            -- the returned commit boolean as a further conjunct here.
-            local install_ok = pcall(inst.install, inst)
+            -- #1158 install-transaction fanout (LANDED): install() performs
+            -- receiver registration and mod.update ownership inside ONE pcall
+            -- and RETURNS the commit boolean. Both independent signals are
+            -- conjuncts here -- the returned boolean (this attempt committed)
+            -- and is_installed() (the instance is in the committed state). A
+            -- partial attempt is terminal in the lib, so a false verdict is
+            -- final for the session and custom profiles stay inert.
+            local install_ok, committed = pcall(inst.install, inst)
             local status_ok, installed = false, false
-            if install_ok and type(inst.is_installed) == "function" then
+            if install_ok and committed == true and type(inst.is_installed) == "function" then
                 status_ok, installed = pcall(inst.is_installed, inst)
             end
             if status_ok and installed == true then
