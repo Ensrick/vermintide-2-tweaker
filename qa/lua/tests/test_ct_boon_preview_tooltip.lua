@@ -271,10 +271,23 @@ return function(H, repo_root)
     end)
 
     H.test("CT #1004 production wiring is lazy and composes the singleton native-cursor draw hook", function()
+        -- #1159: the hold-Tab panel moved out of the entry into its own owner.
+        -- Every needle below is byte-identical to the pre-extraction one; only the
+        -- file supplying `source` changed.
         local main_path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_tab_panel_owner.lua"
         local f = assert(io.open(main_path, "rb"))
         local source = f:read("*a"); f:close()
+        -- Shadowing guard: no stale second copy of the draw hook or the marker in
+        -- the entry (a duplicate hook is dropped silently by VMF).
+        local ef = assert(io.open(repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua", "rb"))
+        local entry_source = ef:read("*a"); ef:close()
+        local _, entry_draw_hooks = entry_source:gsub(
+            'mod:hook_safe%("IngamePlayerListUI", "_draw"', "")
+        H.equal(entry_draw_hooks, 0, "the entry must not re-register the shared draw hook")
+        H.equal(entry_source:find("CT_BOON_TOOLTIP_1004_MARKER", 1, true), nil,
+            "the #1004 marker must be set only by the tab-panel owner")
         local helper_path = repo_root
             .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_preview_helpers.lua"
         f = assert(io.open(helper_path, "rb"))

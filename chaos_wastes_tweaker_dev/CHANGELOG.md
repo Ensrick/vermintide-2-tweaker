@@ -1,5 +1,37 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.326-dev (2026-08-09) -- hold-Tab panel owner decomposition (#1159, #2) [untested]
+
+- Every ct addition to the hold-Tab player-list panel moves to a dedicated
+  owner: the #461 Starting-Boon preview and its #1004 hover tooltip, the #533
+  Chaos Wastes collectible counters (Chests of Trials, Pilgrim's Coins) that
+  replace the tome/grimoire/dice counters inside a deus run, the #571 load-order
+  recovery, the native-panel census wiring, `/ct_preview_boons`, and the six
+  regression checks those features register.
+- #461 and #533 ship as ONE owner on purpose. They share a single
+  `IngamePlayerListUI._draw` pass because VMF silently drops a second hook on the
+  same class and method, so splitting them would leave one of the two overlays
+  registered and dead. This is the composite panel owner DEVELOPMENT.md has been
+  deferring since the 0.7.3xx preview-helper split.
+- Three hooks move, each still registered exactly once in the whole mod:
+  `_setup_deed_reward_data` (build), `_draw` (shared guarded pass),
+  `_setup_mission_data` (deus-run counter build + adventure-counter
+  suppression). Whole-mod hook registrations are unchanged at 135.
+- Entry ceiling ratchets 8,640 -> 8,114 nonblank lines; behavior-neutral verbatim
+  move, proven byte-identical. No state needed promoting to a mod field, and the
+  deliberate call-time resolution of the #571 layout seam is preserved.
+- **[untested]** - verify: in the Pilgrimage Chamber with at least one starting
+  boon configured, hold Tab and expect the preview list with icons on the right
+  panel, hovering a row showing its description tooltip (mouse wheel or right
+  shoulder to page). Then start a journey with Adventure maps injected and hold
+  Tab mid-mission: expect Chests of Trials and Pilgrim's Coins counters, and NO
+  tomes / grimoires / loot dice. `/ct_preview_boons` should list the same boons
+  as the panel, and `/ct_regression_test` should be green on
+  issue461_boon_preview_wired, issue1004_boon_hover_tooltip_wired,
+  issue556_starting_talent_identity, issue533_cw_tab_collectibles_wired,
+  issue533_native_tab_diagnostics_armed and
+  issue571_cw_tab_collectibles_safe_reflow.
+
 ## 0.7.325-dev (2026-08-09) -- pickup-spawn owner decomposition (#1159, #2) [untested]
 
 - Pickup spawn IDENTITY and payout move to a dedicated owner: the

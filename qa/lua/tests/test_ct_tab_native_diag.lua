@@ -42,10 +42,17 @@ return function(H, repo_root)
     end)
 
     H.test("CT #533 census drains from the existing post-vanilla draw seam", function()
+        -- #1159: the shared draw seam moved from the entry into the tab-panel
+        -- owner. Needles are byte-identical; only the source file changed.
         local main_path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_tab_panel_owner.lua"
         local mf = assert(io.open(main_path, "rb"))
         local main = mf:read("*a"); mf:close()
+        local ef = assert(io.open(repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua", "rb"))
+        local entry_source = ef:read("*a"); ef:close()
+        H.equal(entry_source:find('mod:hook_safe("IngamePlayerListUI", "_draw"', 1, true), nil,
+            "the entry must not keep a shadowing copy of the shared draw seam")
         local hook = assert(main:find('mod:hook_safe("IngamePlayerListUI", "_draw"', 1, true))
         local capture = assert(main:find('pcall(mod._ct_diag_tab_native533.capture, self)', hook, true))
         local early = assert(main:find('if not has_boons and not cw then return end', hook, true))
@@ -54,10 +61,17 @@ return function(H, repo_root)
     end)
 
     H.test("CT #571 collectible construction is independent of GUT hook order", function()
+        -- #1159: the shared draw seam moved from the entry into the tab-panel
+        -- owner. Needles are byte-identical; only the source file changed.
         local main_path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_tab_panel_owner.lua"
         local mf = assert(io.open(main_path, "rb"))
         local main = mf:read("*a"); mf:close()
+        local ef = assert(io.open(repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua", "rb"))
+        local entry_source = ef:read("*a"); ef:close()
+        H.equal(entry_source:find('mod:hook_safe("IngamePlayerListUI", "_draw"', 1, true), nil,
+            "the entry must not keep a shadowing copy of the shared draw seam")
         local hook = assert(main:find('mod:hook_safe("IngamePlayerListUI", "_draw"', 1, true))
         local recovery = assert(main:find('mod._ct_ensure_deus_collectibles, self, "draw_recovery"', hook, true))
         local layout_path = repo_root
