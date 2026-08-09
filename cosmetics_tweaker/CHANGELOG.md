@@ -1,5 +1,29 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.192-dev (2026-08-06) -- LA replay coordinator extracted (#1159, #504, #2)
+
+### Behavior-neutral extraction
+
+- Moved the existing #660 bounded Loremaster appearance-replay coordinator
+  into the idempotent `_cos_la_replay_runtime.lua` owner immediately after the
+  canonical `_la_reconcile` definition and before its first RPC consumer.
+- Preserved replay status mapping, state-pull re-arming, peer/all invalidation,
+  persisted-store record construction, diagnostic order, and coalesced apply
+  routing. The owner adds no hook, RPC, update loop, lifecycle callback,
+  persistence write, or renderer mutation.
+- Added executable owner/order/idempotence/status coverage, pinned the unchanged
+  entry transport/hook cardinality, and ratcheted the Cosmetics entry ceiling
+  from 9,341 to the measured 9,263 nonblank lines.
+
+### Publication metadata
+
+- Claimed and advanced source/descriptor surfaces to `0.9.192-dev`. Canonical
+  BuildOnly regenerates the tracked root bundle before commit without deploying
+  or uploading anything.
+
+This structural slice advances #1159/#504 without completing either umbrella
+and does not enter the in-game test queue.
+
 ## 0.9.190-dev (2026-08-06) -- mod lifecycle owner extracted (#1159, #504, #2)
 
 ### Behavior-neutral extraction

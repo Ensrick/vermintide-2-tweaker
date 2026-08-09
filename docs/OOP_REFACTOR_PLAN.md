@@ -56,7 +56,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 |---|---|---|---|
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
-| Cosmetics | Partial | Four phase slices plus runtime/wire, exact-item offhand session-state, modded-illusion-swap, magic-family visibility, command ownership, item-grid/illusion-card presentation, and one three-callback mod lifecycle owner; entry ceiling is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
+| Cosmetics | Partial | Four phase slices plus runtime/wire, exact-item offhand session-state, modded-illusion-swap, magic-family visibility, command ownership, item-grid/illusion-card presentation, one three-callback mod lifecycle owner, and the bounded #660 LA replay coordinator; entry ceiling is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
 | Weapon Tweaker | Partial | Animation, runtime-check, and feature-owner slices landed; beta/dev entry ceilings 4,183/4,335 lines | #504 / #2 |
 | Career Tweaker | Structural phase complete | 910-line balance orchestrator; bounded early/late declarative catalogs, composition owner, hook owner, and Foot Knight owner retained by contract | #504 / #2 / #1159 |
 | CIM Dev | Partial | Forge/inventory/diagnostic/command owners and regression suite extracted; entry ceiling 5,110 lines | #1159 / #504 / #2 |

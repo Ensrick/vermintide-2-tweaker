@@ -106,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.190-dev"
+local MOD_VERSION = "0.9.192-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -7106,97 +7106,17 @@ mod._la_reconcile = function(wearer_peer, slot_name, tag, allow_pulse)
     return applied
 end
 
--- ===========================================================================
--- #660 S3 slice: bounded appearance REPLAY reconciler (cold-join cluster
--- #233/#149/#203; pattern in #416/#476/#401). The emit/apply path already
--- works - a LIVE customization change repairs a stale husk immediately - so
--- the only thing missing was a bounded EDGE that re-drives the SAME apply from
--- the SURVIVING persisted stores when a peer's husk first becomes available
--- (peer-ready), when the mission world enters (session-ready), and on lobby
--- return. This is a thin WHEN coordinator: the coalescing state machine +
--- record extraction are engine-free in _cos_la_replay_policy (so the
--- regression suite pins the exact edge semantics), and HOW is the proven
--- mod._la_reconcile / mod._la_native_pulse machinery. Everything it drives
--- already rides the mod's own VMF channel (cos_la_apply family) - no vanilla
--- wire is touched here. Attached to `mod` (Lua 5.1 200-local ceiling).
-mod._cos_replay_state = mod._cos_replay_state or LA_REPLAY_POLICY.new_replay_state()
-mod._cos_replay = mod._cos_replay or {}
-mod._cos_replay.policy = LA_REPLAY_POLICY -- exposed for the runtime self-check
-
--- Per-record apply. Reuses the proven machinery and maps its result to the
--- reconciler's three-state status so coalescing/deferral stays in the pure
--- policy:
---   "applied" - engine re-drove the render for a spawned, ready wearer
---   "defer"   - wearer/husk not ready (Unit.alive gate; has_node enforced
---               deeper in the apply helpers) - retry on the NEXT edge
---   "skip"    - terminal (store entry gone / deus-yield) - never retry
-mod._cos_replay.apply = function(peer, slot, record)
-    if type(record) ~= "table" then return "skip" end
-    local wu = _wearer_unit_for_peer(peer)
-    -- Peer-readiness gate (BUG_CLASSES husk-skeleton-readiness): never write to
-    -- a husk that is not alive; defer to the next bounded edge, do NOT poll.
-    if not (wu and Unit.alive(wu)) then return "defer" end
-    if record.offhand_unit ~= nil then
-        -- #416 vanilla offhand mesh: the surviving store is the source of
-        -- truth; a re-wield pulse re-drives the husk get_item_units branch
-        -- which reads it. Native-pulse is per-owner cooldown-guarded, so
-        -- coalescing plus that cooldown keep this bounded (no flicker loop).
-        if mod._la_native_pulse then mod._la_native_pulse(wu, "replay") end
-        return "applied"
-    end
-    -- LA armoury entry: the single reconcile entry point (paint + gated mesh
-    -- pulse, safe pulse context). Translate its (applied, reason) to a status.
-    local applied, reason = mod._la_reconcile(peer, slot, "replay", true)
-    if applied then return "applied" end
-    if reason == "no-entry" or reason == "deus-yield" then return "skip" end
-    return "defer"
-end
-
--- Fire one bounded replay edge. opts.invalidate_all (husk-recreating
--- transition) or opts.invalidate_peer (a single joining peer) reset the
--- coalescing scope so freshly spawned husks re-apply the surviving state;
--- opts.only_peer scopes the record set. Emits one bounded printf per peer that
--- did work (<=4 peers), or a single summary line when the edge was a no-op -
--- never per item.
-mod._cos_replay.on_edge = function(edge_name, opts)
-    opts = opts or {}
-    local state = mod._cos_replay_state
-    if not state then return end
-    -- #267 follow-up: a client whose hot-join state pull exhausted all 8
-    -- attempts (host never acked - see tonight's 30x/10x session) re-arms it
-    -- here so late-join replay gets another window at this bounded edge, rather
-    -- than giving up for the session. Client-only; the host owns the store.
-    if mod._la_state_pull_exhausted and not _is_local_server() then
-        mod._la_state_pull_exhausted = nil
-        mod._la_state_pull_pending = { attempts = 0, next_at = 0 }
-        if printf then printf("[cos:replay] edge=%s state-pull re-armed after prior exhaustion",
-            tostring(edge_name)) end
-    end
-    if opts.invalidate_all then
-        LA_REPLAY_POLICY.invalidate_all(state)
-    elseif opts.invalidate_peer ~= nil then
-        LA_REPLAY_POLICY.invalidate(state, opts.invalidate_peer)
-    end
-    local records = LA_REPLAY_POLICY.build_records(
-        _la_equips_by_peer, mod._offhand_mesh_by_peer, { only_peer = opts.only_peer })
-    local result = LA_REPLAY_POLICY.reconcile_edge(
-        state, edge_name, records, mod._cos_replay.apply)
-    if printf then
-        local emitted = false
-        for peer, n in pairs(result.per_peer) do
-            if (tonumber(n) or 0) > 0 then
-                printf("[cos:replay] edge=%s peer=%s applied=%d",
-                    tostring(edge_name), tostring(peer), n)
-                emitted = true
-            end
-        end
-        if not emitted then
-            printf("[cos:replay] edge=%s peer=none applied=0 (deferred=%d coalesced=%d)",
-                tostring(edge_name), result.deferred, result.coalesced)
-        end
-    end
-    return result
-end
+-- #660 S3 bounded appearance replay coordinator. Install here, immediately
+-- after the canonical `_la_reconcile` HOW owner and before every RPC consumer,
+-- so the historical definition/registration order is unchanged.
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_runtime").install(mod, {
+    policy = LA_REPLAY_POLICY,
+    wearer_unit_for_peer = _wearer_unit_for_peer,
+    unit_alive = function(unit) return Unit.alive(unit) end,
+    is_local_server = _is_local_server,
+    la_equips_by_peer = _la_equips_by_peer,
+    printf = printf,
+})
 
 -- HOST: receives equip requests from clients, validates, records into
 -- `_la_equips_by_peer`, broadcasts the authoritative cos_la_apply to ALL.
