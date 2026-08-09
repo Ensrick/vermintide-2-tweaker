@@ -14,11 +14,81 @@ The entry manifest owns orchestration; boon behavior is split by state owner and
 
 `chaos_wastes_tweaker_dev.lua` constructs a short-lived `mod._ct_boon_runtime_context`, calls each module exactly once at the original contiguous block's load point, then clears the context. Modules localize their dependencies during load and expose only bounded return tables. They must not `dofile` one another, move hooks to a later lifecycle callback, or take ownership of settings/RPC state already owned by the entry file. Preserve this order because registry consumers in the meta module require both earlier contracts and hook registration order is observable.
 
-The structural guard is `qa/lua/tests/test_ct_boon_split.lua`; the repository size ratchet is `qa/check_file_sizes.ps1`. The entry file must remain below its frozen 12,040-physical-line baseline (the tighter 11,338 non-empty-line ceiling lives in `test_ct_entry_decomposition.lua`), and no extracted module may cross the 2,500-line hard limit.
+The structural guard is `qa/lua/tests/test_ct_boon_split.lua`; the repository size ratchet is `qa/check_file_sizes.ps1`. The entry file must remain at or below its frozen 9,872-physical-line baseline (the matching 9,314 non-empty-line ceiling lives in `qa/decomposition_contracts.psd1`), and no extracted module may cross the 2,500-line hard limit.
 
 ### `/ct_regression_test` suite module (`_ct_regression.lua`) — issue #2 / OOP W5
 
 The bulk of the `/ct_regression_test` check suite is extracted VERBATIM to `_ct_regression.lua` (2026-07-18). It is a pure installer — `return function(mod, ctx)` — dofiled ONCE at the suite's original position in the entry (after the sibling modules that set its marker globals, before the trailing feature dofiles), so append order into `_RT_CHECKS` (= the printed check order) is unchanged. It registers through `mod._ct_rt_register` (the shared registrar the entry still owns); it never creates a second `_RT_CHECKS` and never `dofile`s a sibling. Its `ctx` header wires the entry's immutable marker constants, stable helper functions (`_ct_meta_ammo_cost_multiplier`, `_clamp_network_bounded_max`, the `_dump_pickup_*` forward-decls, `_dbg`/`_dbg_alert`), config tables, and the `_ct_mutex` framework object; each check body below the header is byte-identical to its former inline form. Marker globals the checks read (e.g. `CT_NO_ROAMERS_ARITY_FIX_MARKER`, the `_CT_CHUNK_*` paced-send set, cross-module `CT_COT_471_DIAG_MARKER`/`CT_ENDLESS_BOMBS_MARKER`) stay `_G` globals set by the entry or sibling modules before any command runs, so they resolve at call time. ONE check stays inline in the entry: `starting_coins_value_matches_setting` reads the mutable `_starting_coins_applied_for_run` upvalue, which the `setup_run` starting-coins hook updates per run — moving it would freeze that read at the dofile-time nil (the dropped-upvalue burn class). New checks that lock a specific fixed issue go in `_ct_regression.lua` (name them `issueNNN_<slug>`); a check that must read live mutable entry state stays inline like the starting-coins one. The structural guard is `qa/lua/tests/test_ct_entry_decomposition.lua`.
+
+### Command owner (`_ct_command_owner.lua`) — issue #1159
+
+The 13 CT diagnostics and maintenance commands are extracted VERBATIM to one pure installer: `return function(ctx)`. The entry calls it exactly once after `mod.on_disabled` and before `_ct_regression.lua`, preserving registration order and the original settings-lifecycle boundary. Its five injected dependencies are `mod`, `AdventurePool`, `_dump_pickup_system_state`, `effective_setting`, and `MOD_VERSION`; game globals used inside callbacks remain late-bound. The owner registers no hooks, RPCs, lifecycle callbacks, or update loop. `/force_inject_pool` remains the only mutating command and runs only when explicitly invoked; command `mod:echo` output remains explicit user-requested feedback. Add new CT diagnostics/maintenance commands to this owner, not the entry. `qa/lua/tests/test_ct_command_owner.lua` guards order, cardinality, wiring, placement, and install-time inertness.
+
+### Journey-stat difficulty guard (`_ct_journey_difficulty_guard.lua`) — issue #291
+
+The verified journey-completion crash guard is a direct `return function(mod)` installer loaded once after replacement-progression setup and before the consolidated `DeusRunController.setup_run` hook. It owns the sole CT hook on `StatisticsUtil._register_completed_journey_difficulty` and assigns `CT_JOURNEY_DIFFICULTY_GUARD_MARKER` synchronously before `_ct_regression.lua` installs. The 39-line implementation is byte-identical to its former entry block: only an unsupported RECORDED journey difficulty is clamped to the final value returned by `get_default_difficulties`; gameplay difficulty is untouched. It captures only `mod`; engine globals remain late-bound. Do not fold progressive-difficulty state, settings synchronization, RPCs, or logging migrations into this owner. `qa/lua/tests/test_ct_journey_difficulty_guard.lua` guards hook cardinality/order, pass-through arity and multiple returns, clamp behavior, marker availability, test-global cleanup, and the optional decompiled vanilla source contract.
+
+### Starting-Boon Preview helper owner (`_ct_boon_preview_helpers.lua`) — issue #461 / #1159
+
+The six pure/helper surfaces for the Tab-hold Starting-Boon Preview are extracted byte-for-byte to a `return function(ctx)` installer whose only injected dependency is `mod`. It loads once after `_ct_boon_preview_tooltip.lua` plus `_ct_boon_preview_runtime.lua` and before `IngamePlayerListUI._setup_deed_reward_data` consumes the helpers. Engine globals remain late-bound. The requested whole #461 heading block is not a safe single-feature owner: its one `IngamePlayerListUI._draw` hook intentionally composes #461 tooltip/rows with #533 collectibles and #571 recovery, and VMF silently drops a duplicate hook on the same class/method pair. Therefore that shared hook, the setup hook, diagnostics, command, and inline regression checks remain at their original manifest seam. Do not move or split that hook until a dedicated composite panel owner can take all three concerns together. Add data/identity/widget-construction helpers here; keep cross-feature panel composition in the entry. `qa/lua/tests/test_ct_boon_preview_helpers.lua` guards exact extracted bytes, the one-dependency seam, helper cardinality, manifest placement, shared-hook cardinality, engine-free behavior, and global cleanup.
+
+### Weapon-trait generation owner (`_ct_weapon_trait_generation.lua`) — issue #1159
+
+Weapon trait-pool mutation and post-roll tiering are one stateful owner installed at the original generation boundary, immediately after `DeusRunController.get_deus_weapon_chest_type` and before the `force_belakor` override. Its injected contract is only `mod`, `effective_setting`, `_dbg`, and `_rt_register`; `DeusWeapons` and `WeaponTraits` stay late-bound because the engine and peer mods may populate them after script load. The owner registers exactly four `DeusWeaponGeneration` hooks, in order: `generate_weapon`, `generate_weapon_for_slot`, `generate_item_from_item_key`, then `upgrade_item`. Every wrapper preserves nilable trailing arguments, brackets vanilla with temporary trait-pool apply/restore, restores even when vanilla throws, then applies tier-by-rarity and the final detached-result ban filter in the original order.
+
+The module retains the public `mod._ct_get_trait_class_pools` and `mod._ct_strip_banned_traits_from_result` surfaces. Its two lazy caches live in `mod._ct_weapon_trait_generation_state`; `mod._ct_reset_weapon_trait_generation_caches()` clears both and is called from `mod.on_disabled`. Re-evaluating the installer refreshes injected dependencies and callback dispatch but does not register another check or hook. Do not split the four hooks from their shared save/restore state or cache lifecycle. `qa/lua/tests/test_ct_weapon_trait_generation.lua` guards the manifest boundary, exact hook/check order and cardinality, idempotence, public APIs, nilable arity, throw-path restoration/log policy, melee/ranged tier behavior, final ban stripping, and both cache resets.
+
+### Bot weapon-chest / reusable-altar owner (`_ct_bot_weapon_chest_owner.lua`) — issue #1159
+
+Bot weapon generation/equip, chest diagnostics, reusable-altar purchase presentation, and the consolidated `DeusChestExtension.open_chest` post-work form one bounded installer at their original boundary. It registers exactly `extensions_ready`, `purchase`, then `open_chest`; the latter remains the sole CT hook on that pair and still runs vanilla once before altar re-arm, boon no-repeat bookkeeping, and bot weapon mirroring. The separate #211 grant-source hooks remain inline immediately before the installer.
+
+The entry owns the resettable `_altar_uses_by_go_id` table, so the module receives a late-bound accessor rather than capturing one table generation. Its other injected dependencies are the effective-setting and log functions, altar max-use policy, collected-peer probe, and bounded probe-watch table. The public `mod._ct_bot_equip_weapon` surface is a stable dispatch wrapper; reinstall refreshes dependencies without adding hooks. Keep the purchase/open transaction together: the temporary bot altar price is restored on the vanilla error path, and the purchase flow-event filter is always restored without retrying a possibly charged purchase. `qa/lua/tests/test_ct_bot_weapon_chest_owner.lua` guards placement, grant-hook separation, hook order/cardinality, idempotence, the public surface, per-event-manager subscription, collapse filtering/restoration, vanilla-error restoration, and boon no-repeat bookkeeping.
+
+### Boss Grudge Marks owner (`_ct_boss_grudge_marks.lua`) — issue #107 / #1159
+
+The Boss Grudge subsystem is one bounded owner at its original late-runtime
+boundary. It captures the 13-entry native `_G.BossGrudgeMarks` baseline once,
+restores that stable baseline before every settings sync, filters the universal
+`TerrorEventUtils.apply_breed_enhancements` host path, and owns
+`/dump_grudge_marks` plus `/verify_grudge_marks` in their original registration
+order. The entry retains only the returned `sync` facade used by
+`on_setting_changed`; it does not move or own #426 settings collection/RPCs.
+
+The returned owner map is exactly `{ sync, names, get_baseline }` and is stable
+across reloads. Effective settings, umbrella policy, globals, Managers, debug,
+and printf are refreshed call-time dependencies; the hook and two commands are
+registered at most once. A reload therefore cannot snapshot an already-filtered
+set as its new vanilla baseline. Add Boss Grudge filtering/diagnostics here,
+never to a second terror-event hook or the general command owner.
+`qa/lua/tests/test_ct_boss_grudge_marks.lua` exhaustively guards owner headers,
+map exports, 13-name order, hook/command cardinality and order, baseline restore,
+host filtering, late dependencies, and Phase-4 wire isolation.
+
+### Curse-lighting / injected-map performance owner (`_ct_curse_lighting_owner.lua`) — issues #104 / #258 / #271 / #1159
+
+The curse sky profiles, per-map brightness overrides, current-node helpers, and
+the injected-map performance census form one bounded owner at the original
+`CameraManager.shading_callback` boundary. It registers exactly that one hook,
+after the networked-flow-state guards and before shrine replacement. The hook
+retains the original gate, census-before-theme order, log text, shading channel
+order, and scalar behavior.
+
+The private state owns stable helper and profile-table identities. Every install
+refreshes its eight action-time dependencies, then exhaustively republishes the
+seven-field public map into the current `mod._ct_curse_lighting_owner` table:
+three node helpers, two data tables, the census marker, and the five-second
+window. A reload may replace that public map and dependencies, but cannot add a
+second hook or retain removed/foreign exports. The legacy
+`CT_PERF_CENSUS_MARKER` and `CT_PERF_WINDOW` globals are republished before
+the idempotence guard; the later Be'lakor pickup seam consumes only the returned
+`current_node_is_belakor` facade.
+
+Add curse-atmosphere data, map overrides, node-state helpers, or the performance
+census here. Do not add another CameraManager shading hook, command/RPC owner,
+or Phase-4 settings-sync work. `qa/lua/tests/test_ct_curse_lighting_owner.lua`
+guards exact placement and hook cardinality, fresh-map exhaustive replay,
+function/table identity, distinct-dependency action-time dispatch, data values,
+and both legacy performance globals.
 
 ## Buff registration: dormant boons need dual-table writes
 

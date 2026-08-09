@@ -60,7 +60,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 | Weapon Tweaker | Partial | Animation, runtime-check, and feature-owner slices landed; beta/dev entry ceilings 4,183/4,335 lines | #504 / #2 |
 | Career Tweaker | Structural phase complete | 910-line balance orchestrator; bounded early/late declarative catalogs, composition owner, hook owner, and Foot Knight owner retained by contract | #504 / #2 / #1159 |
 | CIM Dev | Partial | Forge/inventory/diagnostic/command, read-only Weaves economy, Athanor preview lifecycle, picker-category lifecycle, and Athanor presentation owners plus regression suite extracted; entry ceiling 3,764 nonblank lines | #1159 / #504 / #2 |
-| CT Dev | Partial | Combat, boon, and regression owners extracted; entry ceiling 11,333 lines | #504 / #2 |
+| CT Dev | Partial | Combat, boon, Starting-Boon Preview helpers, command, journey-stat guard, weapon-trait generation, bot weapon-chest/reusable-altar, Boss Grudge Marks, curse-lighting/performance-census, and regression owners extracted; shared #461/#533/#571 draw seam retained; entry ceiling 9,314 nonblank lines | #1159 / #504 / #291 / #107 / #104 / #258 / #271 / #2 |
 | CWV | Partial | Catalog, core-template constructors, commands, regression, exact-appearance, and husk owners extracted; entry ceiling 9,633 lines | #504 / #2 |
 | Shared copied libraries | Partial | exact-byte sync gate covers 12 canonical libraries across 37 manifested consumer copies; roadmap items remain under #428 | #428 |
 | Appearance consistency | Separate architecture program | descriptor/census work and live diagnostics are owned by #660; module splitting alone does not prove render-surface consistency | #660 |

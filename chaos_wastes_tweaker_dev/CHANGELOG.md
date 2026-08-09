@@ -1,5 +1,15 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.320-dev (2026-08-09) -- command/guard/trait owner decomposition (#1159, #504, #2)
+
+- Extracted seven single-responsibility owners from the entry file: journey
+  difficulty guard, weapon-trait generation, curse-lighting, boon-preview
+  helpers, bot weapon-chest/reusable-altar boundary, Boss Grudge Marks, and
+  the 13-command owner (`_ct_command_owner`), preserving all 177 hook/RPC/
+  command registration events in exact order.
+- Entry ceiling ratchets to 9,314 nonblank lines (10 owners total);
+  behavior-neutral, no new hooks, RPCs, settings, or persistence.
+
 ## 0.7.319-dev (2026-08-08) -- modded boons/miracles now READ as gated, not just behave as gated (#426) [untested]
 
 Audit of the #426 wire-safety axis (program issue 1158, doctrine issue 371,

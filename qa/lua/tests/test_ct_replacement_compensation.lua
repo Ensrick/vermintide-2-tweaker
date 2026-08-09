@@ -151,6 +151,11 @@ return function(H, repo_root)
         local f = assert(io.open(path, "rb"))
         local entry_source = f:read("*a")
         f:close()
+        local owner_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_bot_weapon_chest_owner.lua"
+        local owner_file = assert(io.open(owner_path, "rb"))
+        local owner_source = owner_file:read("*a")
+        owner_file:close()
         local runtime_path = repo_root
             .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_replacement_runtime.lua"
         local rf = assert(io.open(runtime_path, "rb"))
@@ -167,7 +172,8 @@ return function(H, repo_root)
         H.truthy(source:find("run_state:get_server_peer_id()", 1, true))
         H.truthy(source:find("mod._ct_replacement_filtered(prepared)", 1, true))
         H.truthy(source:find("mod._ct_replacement_policy.prepare_for_target", 1, true))
-        H.truthy(entry_source:find("mod._ct_bot_equip_weapon = _bot_equip_weapon", 1, true))
+        H.truthy(owner_source:find(
+            "mod._ct_bot_equip_weapon = state.public_bot_equip_weapon", 1, true))
         H.truthy(source:find("awaiting=rpc_deus_set_initial_setup", 1, true))
         H.truthy(source:find("bot->human pre-remove selected=", 1, true))
         H.truthy(source:find('mod:command("ct_report_465"', 1, true))

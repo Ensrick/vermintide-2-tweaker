@@ -122,6 +122,7 @@ return function(H, repo_root)
         local source = read(base .. "chaos_wastes_tweaker_dev.lua")
             .. read(base .. "_ct_boon_balance.lua")
             .. read(base .. "_ct_meta_trait_boons.lua")
+            .. read(base .. "_ct_weapon_trait_generation.lua")
         for _, id in ipairs({
             "enable_altar_reuse", "disable_all_listed_curses",
             "ban_all_grudge_marks", "ban_all_traits", "enable_boon_reworks",

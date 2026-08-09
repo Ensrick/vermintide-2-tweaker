@@ -12,7 +12,7 @@
     Rows = @(
         # The census is deliberately exact. A new, removed, or moved native
         # renderer boundary must update this file and its named QA evidence.
-        @{ File='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
+        @{ File='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_curse_lighting_owner.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='material_bind'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='texture'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
