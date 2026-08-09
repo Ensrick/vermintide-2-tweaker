@@ -749,24 +749,66 @@ as `covered`, `deferred`, or `not-applicable`. Covered cells require evidence
 text and a mapping to an existing named offline test; non-covered cells require
 an explicit reason. Owner and test paths are repo-rooted and must exist.
 
-The canonical surface vocabulary is owner 1P, owner 3P, bot 3P, remote husk
-3P, inventory preview, cosmetic preview, Athanor preview, ordinary crafting
-preview, lobby preview, score screen, and Hold-Tab. The canonical replay-edge
-vocabulary is instance load, initial spawn, equip, wield, customization change,
-style change, career change, mission transition, respawn, hot join, peer ready, parity ready,
+**ONE VOCABULARY (#1158).** New appearance surface and edge names enter
+through `tools/shared_lib/_lib_appearance_descriptor.lua` (`M.CELLS` /
+`M.EDGES`) and NOWHERE ELSE. Until 2026-08-08 this registry carried its own
+spellings for surfaces the census already named (`bot_3p` vs `bot`,
+`remote_husk_3p` vs `husk`, `cosmetic_preview` vs `illusion_browser`,
+`athanor_preview` vs `cim_preview`, `lobby_preview` vs `lobby`, `score_screen`
+vs `score_team`, `customization_change` vs `customize`) and never read the
+census, so a gap could hide between the two vocabularies: neither gate could
+tell that two rows were the same row. The manifest now uses canonical
+spellings, and every name is validated against
+`tools/shared_lib/_lib_appearance_name_authority.lua`, which binds each legacy
+spelling to its canonical name, records contract names that are deliberately
+FINER than the census as refinements of a canonical edge, and records genuine
+census gaps. An unmapped name is a gate FAILURE naming that authority; a
+reverted legacy spelling fails with the exact rename to apply.
+
+That authority is deliberately NOT in the descriptor: `manifest.psd1`
+byte-syncs the descriptor into the CWV mod bundle, so a QA-only naming change
+must never edit it (see the file's PROVENANCE note).
+
+The required surface minimum is owner 1P, owner 3P, bot, husk, inventory
+preview, illusion browser, CIM/Athanor preview, ordinary crafting preview,
+lobby, score/team, and Hold-Tab. The required replay-edge vocabulary is
+instance load, initial spawn, equip, wield, customize, style change, career
+change, mission transition, respawn, hot join, peer ready, parity ready,
 rejoin, preview open, preview reopen, lobby/score creation, and mod-disable
-restore. These lists are duplicated deliberately as immutable minima in the
-checker: changing the manifest alone cannot shrink the contract universe.
+restore. These minima are declared in the checker, not derived from `M.CELLS`:
+changing the manifest alone cannot shrink the contract universe, and a future
+census surface must not silently become a mandatory rewrite of every contract.
+The six surfaces #1157 added to the census (`specials`, `remote_audio`,
+`hud_panels`, `portraits`, `item_card_2d`, `inventory_tooltip`) are accepted
+when a contract opts into them but are not yet required.
+
+Two names are recorded rather than folded away. `crafting_preview` (the vanilla
+crafting bench) is a declared CENSUS GAP: the census names `cim_preview` for the
+CIM Athanor forge and has no surface for the ordinary bench, and aliasing one
+onto the other would hide a real hole. `initial_spawn` refines `equip`, not
+`instance_load`: first unit construction is not persisted-state load.
 
 `qa/check_appearance_contracts.ps1` runs in Quick and full QA and fails closed
 on a contracted canonical vocabulary, missing surface, missing replay edge,
-absent test list, covered cell with no test mapping, or stale named-test
-reference. Its self-test plants each failure class. A contract must declare
+absent test list, covered cell with no test mapping, stale named-test
+reference, a legacy spelling, or a name unknown to the authority. Its self-test
+plants each failure class. A contract must declare
 `Claim = 'structural-only'`: this gate proves census completeness and
 source-level evidence wiring, not retained rendered state, multiplayer
 observation, or in-game verification.
 
-The initial registry entry records only #660's migrated CWV exact-unit-identity
-slice. It deliberately records respawn as deferred and does not register the
-still-unmigrated transform/material/glow/pose/template/icon/name concerns as
-covered. Add those concerns only with their real owner/adapters and tests.
+The registry now carries 15 contracts spanning the unit_identity, transform,
+material, glow, pose, fade, icon, and name concerns across CWV, cosmetics, WT,
+WOC, and CIM. (It began as #660's migrated CWV exact-unit-identity slice alone;
+that description is no longer accurate.) A concern still absent from the
+registry is unregistered, not covered. Add one only with its real
+owner/adapters and named tests, and keep honest `deferred` dispositions
+deferred - `covered` requires evidence text plus a mapping to an existing named
+offline test.
+
+Two pieces of tracked debt are deliberately visible rather than papered over.
+Issue **#1197**: the contracts cover the historical eleven surfaces, so the six
+#1157 added to the census have no contract representation; the gate names them
+on every green run instead of letting the silence read as coverage. Issue
+**#1198**: `crafting_preview`, the vanilla crafting bench, has no census surface
+at all and is recorded as a declared gap.

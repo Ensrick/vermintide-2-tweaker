@@ -58,12 +58,77 @@ matrix per item family, and TODAY every cell is opt-in:
 
 | Wave | Deliverable | Gate | State |
 |---|---|---|---|
-| W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, enumerated once: 3,339 unsupported pairs of 4,352 (docs/generated/APPEARANCE_CENSUS_GAPS.generated.md). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-04 (#1157: re-keyed to surface-x-edge cells, 6 surfaces added, wt_dev brought under validation) |
+| W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, currently 3,353 unsupported pairs of 4,352 (`docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-04 (#1157: re-keyed to surface-x-edge cells, 6 surfaces added, wt_dev brought under validation) |
 | W1 | **Descriptor library + contract tests**: `_lib_appearance_descriptor.lua` (pure build/validate/fingerprint) + engine-free tests in `qa/lua/tests/`; CWV owns the first synchronized runtime copy. | 966+ suite green | DONE 2026-08-06 (#1155 pilot prerequisite) |
-| W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | source candidate 2026-08-06; 1,950 host-Lua tests green, deployment/co-op proof pending |
+| W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | source and Workshop deployment complete in CWV 0.1.495-dev; solo/co-op runtime proof pending |
 | W3 | **Extraction-420 cutover completion**: CWV textures, cosmetics transforms, cosmetics texture fallback, WT transforms (steps 2-5 of that doc). | per-step four-render-path regression + in-game verify | pending |
 | W4 | **Remaining families**, one per change, closing their symptom issues as they migrate; #660's issue index burns down. | each family's cells green | pending |
 | W5 | **OOP completion**: ct_dev + cwv decomposition (last two god files), #727 logging sweep, doc reconciliation. | full QA green, per-mod module contracts documented | pending |
+
+### W2 exact readiness (2026-08-06)
+
+The deployed `0.1.495-dev` Old Musket pilot declares all 128 surface-x-edge
+cells under one descriptor/reconciler contract. Eleven cells have runtime
+delivery/adapters that apply and read back the authored custom presentation:
+owner 1P equip/customize, owner 3P equip/customize, bot equip, remote husk
+equip/peer-ready, and preview-open for inventory, illusion browser, lobby, and
+score/team. The other 117 cells are census declarations with vanilla-safe
+fallbacks; many have no runtime call site and are enumerated, not fixed.
+
+CIM currently shares `LootItemUnitPreviewer` with the illusion browser, but the
+shared previewer instance has no empirical CIM marker. The pilot therefore
+classifies that call as `illusion_browser`; `cim_preview` is not separately
+classified or proven. Mission-transition and respawn cells also remain
+unsupported until directly observed, even when equipment recreation may route
+through the implemented equip edge.
+
+Phase 3 merged in PR #1165 and is an ancestor of the exact source deployed as
+CWV `0.1.495-dev`. The subsequent `0.1.496-dev` source change only extracts the
+ordered skin registries; it does not change the descriptor, reconciler, Old
+Musket adapters, or their implemented-cell set. The W2 gate remains open for
+the pinned solo test followed by the remote-husk co-op matrix.
+
+## 3a. Single-vocabulary rule (#1158, 2026-08-08)
+
+**New appearance surface and edge names enter through
+`tools/shared_lib/_lib_appearance_descriptor.lua` (`M.CELLS` / `M.EDGES`) ONLY.**
+
+W0 shipped the census vocabulary, but `qa/appearance_contracts.psd1` kept its
+own older spellings for the same surfaces (`bot_3p`/`bot`,
+`remote_husk_3p`/`husk`, `cosmetic_preview`/`illusion_browser`,
+`athanor_preview`/`cim_preview`, `lobby_preview`/`lobby`,
+`score_screen`/`score_team`, `customization_change`/`customize`) and never read
+the census. Two vocabularies for one domain reintroduce the exact W0 failure at
+one remove: a hole can sit between them because neither gate can tell that two
+rows are the same row.
+
+The manifest is now spelled canonically, and
+`qa/check_appearance_contracts.ps1` validates every name - its own required
+minimum included - against
+`tools/shared_lib/_lib_appearance_name_authority.lua`. That authority binds each
+legacy spelling to its canonical name, records the contract names that are
+deliberately FINER than the census as refinements of a canonical edge (the
+contracts declare per-mod behavioural CONCERNS and replay coverage; the census
+declares per-family surface x edge SUPPORT - different measurements, one name
+space), and records genuine census gaps. An unmapped name fails the gate.
+
+Two things stay deliberately visible rather than folded away: the vanilla
+`crafting_preview` bench is a declared census gap (**#1198** - the census names
+only `cim_preview`, the CIM Athanor forge), and `initial_spawn` refines `equip`
+rather than `instance_load`. The authority lives outside the descriptor because
+`tools/shared_lib/manifest.psd1` byte-syncs the descriptor into the CWV mod
+bundle, and a QA-only naming change must not rewrite a shipped mod file.
+
+**Known directional limit - issue #1197.** The authority resolves contract name
+onto census name; the reverse is not enforced. The contracts still cover the
+historical eleven surfaces, so the six added by #1157 - `specials`,
+`remote_audio`, `hud_panels`, `portraits`, `item_card_2d`, `inventory_tooltip` -
+are accepted when a contract opts in but are not required, and would otherwise
+be invisible to this registry. `check_appearance_contracts.ps1` therefore NAMES
+the unrepresented canonical surfaces on every green run, so the debt is stated
+rather than inferred from silence. Requiring them is a coverage change tracked
+by #1197. The edge axis needs nothing: all eight canonical edges are already
+refined by at least one contract edge.
 
 ## 4. Release rule (restating #660's mandate as policy)
 
