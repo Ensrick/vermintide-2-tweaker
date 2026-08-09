@@ -26,6 +26,7 @@ return function(H, repo_root)
     local skin_registry = read("_cwv_skin_registry.lua")
     local illusion_families = read("_cwv_illusion_families.lua")
     local husk = read("_cwv_husk_path.lua")
+    local husk_residency = read("_cwv_husk_residency_owner.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
     local render = read("_cwv_regression_render.lua")
@@ -33,11 +34,10 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 7825 = 2026-08-06 Phase-5 ordered skin/illusion registry extraction.
-        -- Base/custom registration and generated families moved to two
-        -- sub-1500-line owners at one adjacent install seam. This ceiling only
+        -- 6688 = 2026-08-09 #1159 husk-residency owner extraction, measured
+        -- after the musket-runtime slice that preceded it. This ceiling only
         -- ratchets DOWN as later CWV decomposition slices land.
-        H.truthy(lines <= 7825, "entry line count exceeded frozen 7825-line baseline")
+        H.truthy(lines <= 6688, "entry line count exceeded frozen 6688-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
@@ -47,6 +47,7 @@ return function(H, repo_root)
             "_cwv_core_templates",
             "_cwv_skin_registry",
             "_cwv_illusion_families",
+            "_cwv_husk_residency_owner",
             "_cwv_husk_path",
             "_cwv_commands_lifecycle",
             "_cwv_regression_identity",
@@ -60,11 +61,16 @@ return function(H, repo_root)
         local core_at = assert(entry:find("_cwv_core_templates", 1, true))
         local skin_at = assert(entry:find("_cwv_skin_registry", 1, true))
         local families_at = assert(entry:find("_cwv_illusion_families", 1, true))
+        local residency_at = assert(entry:find("_cwv_husk_residency_owner", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
         local render_at = assert(entry:find("_cwv_regression_render", 1, true))
         H.truthy(cross_at < core_at)
+        -- #1159: the husk-residency owner force-loads at boot, long before the
+        -- skin/illusion registries and the husk-path display helpers exist.
+        H.truthy(core_at < residency_at)
+        H.truthy(residency_at < skin_at)
         H.truthy(core_at < skin_at)
         H.truthy(skin_at < families_at)
         H.truthy(families_at < husk_at)
@@ -333,5 +339,72 @@ return function(H, repo_root)
         H.truthy(husk:find("[cwv husk-transform] applied hand=%s def=%s source=%s", 1, true))
         H.equal(count_plain(entry, "[cwv husk-ammo-strip] stripped inherited ammo 3P unit"), 0,
             "husk-ammo-strip marker no longer in entry")
+    end)
+
+    H.test("CWV husk-residency owner holds the boot force-loads and the #280 crash floor", function()
+        -- #1159 slice: the base-unit force-load (#280), the data-driven
+        -- override-unit residency pass (issues 396/401) and the start_weapon_fx
+        -- nil-slot guard (#280) moved verbatim out of the entry. Each producer
+        -- must live exactly ONCE, in the owner, and nowhere in the entry.
+        local owned = {
+            "local function _force_load_axe_shield_husk_units()",
+            "local function _force_load_husk_override_units()",
+            "_om._husk_override_unit_needs_residency = function(def, field)",
+            'mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"',
+        }
+        for _, marker in ipairs(owned) do
+            H.equal(count_plain(husk_residency, marker), 1, "residency owner owns " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer defines " .. marker)
+        end
+
+        -- The four bare globals the regression suite reads are still published,
+        -- from the owner rather than the entry.
+        for _, flag in ipairs({
+            "_cwv_axe_shield_residency_ran = true",
+            "_cwv_husk_override_residency_ran = true",
+            "_cwv_husk_override_paths = _loaded",
+            "_cwv_husk_fx_guard_installed = true",
+        }) do
+            H.equal(count_plain(husk_residency, flag), 1, "residency owner publishes " .. flag)
+            H.equal(count_plain(entry, flag), 0, "entry no longer publishes " .. flag)
+        end
+
+        -- Entry-local dependencies arrive as explicit context, same shape as
+        -- _cwv_husk_path. `_variant_definitions` is bound once in the entry and
+        -- never rebound, so the captured reference cannot go stale.
+        H.truthy(husk_residency:find("local function install(mod, ctx)", 1, true))
+        H.truthy(husk_residency:find("local _om = ctx.om", 1, true))
+        H.truthy(husk_residency:find("local _variant_definitions = ctx.variant_definitions", 1, true))
+        H.truthy(entry:find("variant_definitions = _variant_definitions })", 1, true))
+
+        -- Log markers the in-game #280/#396/#401 verification greps for survived
+        -- the move byte-identical.
+        H.truthy(husk_residency:find("[cwv axe-shield-residency] force-loaded %s (ref=%s, resident=%s)", 1, true))
+        H.truthy(husk_residency:find("[cwv husk-override-residency] force-loaded %s (ref=%s, resident=%s, for=%s.%s)", 1, true))
+        H.truthy(husk_residency:find("[cwv husk-fx-guard] SKIP start_weapon_fx", 1, true))
+
+        -- BOUNDARY: the two husk owners must not overlap. Residency owns the
+        -- boot force-loads; husk_path owns the per-spawn display adapters. The
+        -- husk wield diagnostic stays in the entry because it dispatches the
+        -- exact-identity / combat-style / fade channels, not residency.
+        H.equal(count_plain(husk_residency, "_om._husk_adapter_pre"), 0,
+            "residency owner must not reach into husk-path spawn adapters")
+        H.equal(count_plain(husk_residency, "_om._husk_rekey_units"), 0,
+            "residency owner must not reach into husk-path mesh re-key")
+        H.equal(count_plain(husk, "_force_load_husk_override_units"), 0,
+            "husk-path module must not duplicate the residency pass")
+        H.equal(count_plain(husk_residency, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 0,
+            "husk wield diagnostic stays in the entry")
+        H.equal(count_plain(entry, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1,
+            "entry keeps exactly one husk _wield_slot hook")
+
+        -- Hook cardinality: VMF silently drops a duplicate registration on the
+        -- same (Class, method), so each husk-extension pair must appear once
+        -- across the whole mod. start_weapon_fx now lives in this owner.
+        local fade = read("_cwv_appearance_fade.lua")
+        local combined = entry .. husk .. husk_residency .. fade
+        H.equal(count_plain(combined, 'mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"'), 1)
+        H.equal(count_plain(combined, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1)
+        H.equal(count_plain(combined, 'mod:hook("SimpleHuskInventoryExtension", "_reapply_fade"'), 1)
     end)
 end

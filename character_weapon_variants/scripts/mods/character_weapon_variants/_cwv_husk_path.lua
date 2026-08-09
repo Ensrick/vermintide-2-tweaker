@@ -5,9 +5,12 @@
 -- ammo-strip (#399), the scale/offset transform apply (#397/#394/#604), the
 -- stale-override-unit ledger + supersession drain (#395), and the #660 huskpath
 -- postcondition log. All logic is assigned onto the shared `mod._om` namespace as
--- `_om._husk_*` fields; the three husk-reaching hooks (GearUtils.spawn_inventory_unit,
--- SimpleHuskInventoryExtension._wield_slot / start_weapon_fx) stay in the entry and
--- reach these helpers through the `_om` upvalue at call time. Pure structural
+-- `_om._husk_*` fields; the husk-reaching hooks reach these helpers through the
+-- `_om` upvalue at call time. GearUtils.spawn_inventory_unit and
+-- SimpleHuskInventoryExtension._wield_slot stay in the entry;
+-- SimpleHuskInventoryExtension.start_weapon_fx moved to
+-- _cwv_husk_residency_owner with the #280 force-loads it backs up (#1159), and
+-- reaches nothing here. Pure structural
 -- extraction (OOP W5, PROJECT_STANDARDS §2.2a) — no behavior change; every printf
 -- marker is byte-identical to its pre-split form.
 --
