@@ -482,7 +482,13 @@ mod:hook("BuffSystem", "rpc_add_buff", function(func, self, channel_id, unit_id,
         local sender_peer_id = channel_peers and channel_peers[channel_id]
         local parity = mod._crt_peer_parity
         local peer_catalog_exact = false
-        if type(sender_peer_id) == "string" and parity ~= nil
+        -- #1158: a sender ack only means something while THIS peer's own floor
+        -- holds. Without the composite check a beacon whose transport never
+        -- committed, or a catalog that shifted after the identity was broadcast,
+        -- could still let a peer_has() ack admit a decoded crt template.
+        if type(sender_peer_id) == "string"
+                and type(mod._crt_wire_safe) == "function"
+                and mod._crt_wire_safe() == true and parity ~= nil
                 and type(parity.peer_has) == "function" then
             local ok, exact = pcall(parity.peer_has, parity, sender_peer_id)
             peer_catalog_exact = ok and exact == true

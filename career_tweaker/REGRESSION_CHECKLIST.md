@@ -132,6 +132,23 @@ Last updated: 2026-07-22.
 
 ---
 
+### crt-authoritative-path-wire-floor — Parity reads bypassed the exact-catalog proof (issue 1158)
+
+**[MULTIPLAYER]** [untested]
+
+| Field | Value |
+|-------|-------|
+| Symptom | No user-visible symptom on its own. This closes three ways the #425/#776 gates could report "parity is settled" while the proof behind that answer had already lapsed: the beacon was published to every call site even when `mod:network_register` never took the channel callback; each call site re-derived its own answer straight off the beacon, so a catalog that shifted AFTER `build_identity` fingerprinted it kept the boot-time identity live; and the optional Mod Tweaker grey-out retried `get_mod()` once a second forever when GUT was absent. |
+| Root cause | The exact-catalog identity is built once at load. Nothing re-verified that `NetworkLookup.buff_templates` still resolved every owned name in BOTH directions afterwards, and nothing verified the beacon's transport had actually committed before gameplay owners started trusting it. |
+| Mod(s) | career_tweaker |
+| Fix version(s) | Candidate: crt v0.4.21-beta (composite floor + bounded runtime-gate retry) |
+| Category | INTEGRATION |
+| Repro | Offline only, via the planted-defect proofs below; there is no in-game repro that does not require forcing a lookup rewrite or a `network_register` failure. In-game this must be confirmed as a NON-regression: a 2-4 player lobby where every peer has crt must behave exactly as v0.4.20, and a mixed lobby must still degrade to vanilla and auto-re-enable. |
+| Expected post-fix | Two floors share one transport-committed + catalog-exact base. `mod._crt_wire_safe()` adds the beacon's settled state and owns apply/restore churn, the tourney port, the `rpc_add_buff` receiver, and the GUT grey-out. `mod._crt_wire_live()` adds an instant roster evaluation and owns every individual send. Keeping them separate is load-bearing: `applied_state()` is refreshed by a 0.5s poll (`_lib_peer_parity.lua` `POLL_INTERVAL`) while `all_peers_have()` re-evaluates per call, so routing a per-send guard through the settled read would keep emitting modded buff names for up to one poll interval after a non-crt peer joins — the #425 CTD. A beacon whose install did not commit is never published, and the runtime-gate retry retires after 30 attempts. |
+| Detection | Offline `test_crt_wire_contract.lua` passes `CRT #1158 catalog_intact rejects a lookup row that lost one direction`, `CRT #1158 composite floor is false when any single conjunct fails`, `CRT #1158 runtime gate retry is bounded and permits late success`, and `CRT #1158 every authoritative parity read routes through the floor`. The last is the standing lock: it fails if any apply engine reintroduces a bare `mod._crt_peer_parity` read, or if the live guard is collapsed onto the settled read. `tools\mod-lint\lint-mod.ps1 -Mod career_tweaker` stays at zero findings. In-game, `[crt:425] WARNING peer-parity install did not commit` must NOT appear in a normal session — if it does, the beacon never registered and every networked rework is correctly inert. |
+
+---
+
 ### gated-registration-divergence — Toggle-gated mod-load registration produces different network indices across peers
 
 **[MULTIPLAYER]**

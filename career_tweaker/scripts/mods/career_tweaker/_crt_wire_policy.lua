@@ -14,6 +14,11 @@ local M = {}
 M.TIMED_DURATION_SECONDS = 20
 M.TIMED_MAX_STACKS = 1
 M.TIMED_SYNC_TYPE = "LocalAndServer"
+M.RUNTIME_GATE_MAX_ATTEMPTS = 30
+
+local function _positive_integer(value)
+    return type(value) == "number" and value > 0 and math.floor(value) == value
+end
 
 function M.make_timed_stat_buff(name, stat_buff, multiplier)
     assert(type(name) == "string" and name ~= "", "timed buff name required")
@@ -73,6 +78,70 @@ function M.rpc_add_buff_decision(args)
     return "accept"
 end
 
+-- Live re-verification of the boot-time exact catalog. build_identity proves the
+-- name<->id mapping ONCE, at load; any later writer (a mod registering buffs
+-- after crt, a lookup table rebuilt across a level transition) can silently move
+-- an id out from under the identity crt already broadcast. Re-checking both
+-- directions per read is the floor that keeps the advertised identity honest.
+-- `ids` is the boot-time snapshot; `expected_count` is passed explicitly because
+-- `#` on a table with a nil hole is undefined in Lua.
+function M.catalog_intact(names, ids, lookup, expected_count)
+    if type(names) ~= "table" or type(ids) ~= "table" or type(lookup) ~= "table" then
+        return false
+    end
+    if not _positive_integer(expected_count) or #names ~= expected_count then
+        return false
+    end
+    for i = 1, expected_count do
+        local name, id = names[i], ids[i]
+        if type(name) ~= "string" or name == "" or not _positive_integer(id)
+                or rawget(lookup, name) ~= id or rawget(lookup, id) ~= name then
+            return false
+        end
+    end
+    return true
+end
+
+-- The part of the floor that is independent of the peer set. Both conjuncts are
+-- necessary: a beacon object that never committed its transport cannot have
+-- proven anything about any peer, and an identity built over a catalog that has
+-- since shifted is proof of nothing. Reads are contained because a throwing
+-- accessor must fail closed rather than escape into a gameplay path.
+function M.wire_floor(parity, catalog_intact)
+    if type(parity) ~= "table" or type(catalog_intact) ~= "function"
+            or type(parity.is_installed) ~= "function" then
+        return false
+    end
+    local ok_installed, installed = pcall(parity.is_installed, parity)
+    if not ok_installed or installed ~= true then return false end
+    local ok_catalog, intact = pcall(catalog_intact)
+    return ok_catalog and intact == true
+end
+
+-- SETTLED composite: the floor plus the beacon's debounced applied state. This
+-- is the authority for anything that churns talent tables or presentation --
+-- apply/restore engines, the tourney port, the receiver floor, the GUT grey-out
+-- -- because those must not flicker on an ack race.
+function M.wire_safe(parity, catalog_intact)
+    if not M.wire_floor(parity, catalog_intact) then return false end
+    if type(parity.applied_state) ~= "function" then return false end
+    local ok_state, state = pcall(parity.applied_state, parity)
+    return ok_state and state == "enabled"
+end
+
+-- LIVE composite: the floor plus an instant roster evaluation. Deliberately NOT
+-- expressed as wire_safe(): applied_state() is refreshed by a 0.5s poll, while
+-- all_peers_have() re-evaluates the roster on every call. Routing a per-send
+-- guard through the settled read would leave up to one poll interval in which
+-- crt still emits modded buff names at a peer that just joined without crt --
+-- the issue-425 CTD. Every individual send consults THIS; nothing else does.
+function M.wire_live(parity, catalog_intact)
+    if not M.wire_floor(parity, catalog_intact) then return false end
+    if type(parity.all_peers_have) ~= "function" then return false end
+    local ok_peers, present = pcall(parity.all_peers_have, parity)
+    return ok_peers and present == true
+end
+
 -- Optional Mod Tweaker presentation bridge. Gameplay safety never depends on
 -- GUT: this only describes which saved rows should be read-only/grey while the
 -- owning exact parity gate is closed.
@@ -104,10 +173,39 @@ function M.try_register_runtime_gate(get_mod_fn, gate_id, spec)
         local tweaker = ok and type(gut) == "table" and gut.mod_tweaker or nil
         if type(tweaker) == "table"
                 and type(tweaker.register_runtime_gate) == "function" then
-            return tweaker:register_runtime_gate(gate_id, spec)
+            local ok_register, registered = pcall(
+                tweaker.register_runtime_gate, tweaker, gate_id, spec)
+            if ok_register and registered == true then return true end
+            -- A malformed optional GUI owner must not escape into this mod's
+            -- load/update path. Fall through to the stable alias.
         end
     end
     return false, "mod-tweaker-unavailable"
+end
+
+-- One independently testable bounded registration attempt. Both spec creation
+-- and the optional GUI call are contained because neither is gameplay
+-- authority. The caller owns elapsed-time scheduling; this helper owns the
+-- terminal-at-MAX_ATTEMPTS contract so a missing or malformed GUT cannot leave
+-- crt polling get_mod() for the rest of the session.
+function M.runtime_gate_retry_step(state, make_spec, register)
+    state = type(state) == "table" and state or {}
+    state.registered = state.registered == true
+    state.terminal = state.terminal == true
+    if state.registered or state.terminal then return state end
+    state.attempts = (tonumber(state.attempts) or 0) + 1
+
+    local ok_spec, spec = pcall(make_spec)
+    local registered = false
+    if ok_spec and type(spec) == "table" and type(register) == "function" then
+        local ok_register, result = pcall(register, spec)
+        registered = ok_register and result == true
+    end
+    state.registered = registered
+    if registered or state.attempts >= M.RUNTIME_GATE_MAX_ATTEMPTS then
+        state.terminal = true
+    end
+    return state
 end
 
 return M
