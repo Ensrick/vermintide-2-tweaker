@@ -16,6 +16,42 @@ local effective_setting = context.effective_setting
 local MOD_VERSION = context.mod_version
 local REAL_PLAYER_LOCAL_ID = context.real_player_local_id
 local _ct_mutex = context.mutex
+
+-- ============================================================
+-- #426 exact-wire reservation (v0.7.322-dev)
+-- ============================================================
+-- Reserve both closed CT catalogs in SORTED order before any individual
+-- registration path below can append a name in feature order. This is what
+-- makes the assigned NetworkLookup integers a function of the catalog alone:
+-- without it, two CT peers whose toggles, DLC, or load order differ number the
+-- same boons differently, both ack the presence beacon, and the first granted
+-- boon decodes to the wrong template on the other process (#1191, the v0.7.66
+-- index-drift class; the lookup's __index is a strict error, not a nil).
+--
+-- Reservation is UNCONDITIONAL and grants nothing - it only pins the numbering
+-- (the v0.7.67 split: registration unconditional, POOL insertion toggle-gated).
+-- Failure is logged, never fatal: without a reservation the identity build in
+-- _ct_meta_trait_boons.lua fails, no beacon is created, and every gated surface
+-- holds modded content inert. An error() here would abort the whole mod.
+local ok_wire_policy, wire_policy = pcall(mod.dofile, mod,
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_wire_policy")
+if ok_wire_policy and type(wire_policy) == "table"
+        and type(wire_policy.reserve_lookups) == "function" then
+    mod._ct_wire_policy = wire_policy
+    local reserve_ok, reserved, reserve_err = pcall(
+        wire_policy.reserve_lookups, rawget(_G, "NetworkLookup"))
+    if reserve_ok and reserved then
+        pcall(printf, "[ct:426] exact catalogs reserved power_up=%d buff=%d",
+            reserved.power_up or 0, reserved.buff or 0)
+    else
+        pcall(printf, "[ct:426] exact catalog reservation failed: %s",
+            tostring(reserve_ok and reserve_err or reserved))
+    end
+else
+    pcall(printf, "[ct:426] exact wire policy failed to load: %s",
+        tostring(wire_policy))
+end
+
 -- ============================================================
 -- Activate Dormant Boons (v0.7.29-alpha)
 -- ============================================================

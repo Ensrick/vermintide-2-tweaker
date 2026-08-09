@@ -172,9 +172,8 @@ local function register(Harness, repo_root)
         return source
     end
 
-    Harness.test("shared exact mode is authorized only for CRT, Event and the CWV exact runtime", function()
+    Harness.test("shared exact mode is authorized only for CRT, Event, the CWV exact runtime and CT", function()
         local unauthorized = {
-            "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua",
             -- CWV's entry file keeps the PRESENCE beacon
             -- (cwv_peer_parity_present): deployed CWV builds already speak that
             -- protocol, and #914's appearance ledgers hang off it. CWV's exact
@@ -215,6 +214,35 @@ local function register(Harness, repo_root)
             "CWV must build every exact instance through the single guarded factory")
         Harness.truthy(cwv:find('return nil, "identity-missing"', 1, true),
             "CWV exact factory must refuse to build without an identity")
+
+        -- #426: CT is the fourth authorized consumer (v0.7.322-dev). Its boon
+        -- axes are the #1191 index-drift class: two ct peers on different builds
+        -- both acked the presence beacon while their integers disagreed. The
+        -- channel rename is part of the opt-in - an unconverted ct build would
+        -- ignore the extra exact fields on the old channel and ack anyway, so it
+        -- must be structurally unable to answer the new one.
+        local ct = read_source("chaos_wastes_tweaker_dev/scripts/mods/"
+            .. "chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua")
+        Harness.truthy(ct:find("[^_%w]wire_identity%s*=%s*wire_identity") ~= nil,
+            "CT must opt its boon catalog into exact mode")
+        Harness.truthy(ct:find('"ct_boon_catalog_exact_v1"', 1, true) ~= nil,
+            "CT #426 exact channel disappeared")
+        Harness.equal(ct:find('channel     = "ct_peer_parity_present"', 1, true), nil,
+            "the legacy CT channel would let an unconverted build ack")
+        -- The identity must be reachable before the beacon is built, and the
+        -- reservation that makes it build-stable must run in the registry.
+        local registry = read_source("chaos_wastes_tweaker_dev/scripts/mods/"
+            .. "chaos_wastes_tweaker_dev/_ct_boon_registry.lua")
+        -- Anchor the CALL, not a type check that mentions the same name: the
+        -- reservation is what makes the ids a function of the catalog alone.
+        Harness.truthy(
+            registry:find("wire_policy%.reserve_lookups,%s*rawget%(_G,%s*\"NetworkLookup\"%)") ~= nil,
+            "CT must reserve both lookup axes before feature-order registration")
+        local reserve_at = assert(registry:find("reserve_lookups", 1, true),
+            "reservation disappeared from the registry")
+        local first_register_at = registry:find("_register_in_network_lookup", 1, true)
+        Harness.truthy(first_register_at == nil or reserve_at < first_register_at,
+            "reservation must run before any per-boon lookup registration")
     end)
 
     local function build_exact(factory, identity)
@@ -519,16 +547,74 @@ local function register(Harness, repo_root)
             Harness.truthy(declared[required], "modded-content row not gated: " .. required)
         end
 
-        -- Every declared row must be a live widget in the shipped data tree,
-        -- otherwise the gate greys nothing (runtime_gate_spec cannot know).
-        local data_path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_data.lua"
-        local data_file = assert(io.open(data_path, "rb"))
-        local data_source = data_file:read("*a")
-        data_file:close()
+        -- Starting-boon rows joined the gate in v0.7.322-dev: a starting boon is
+        -- gate surface 3, so while the gate is closed those rows are as inert as
+        -- the rework toggles and must read that way.
+        for _, required in ipairs({
+            "start_boon_ct_meta_stagger",
+            "start_boon_ct_boon_vauls_anvil",
+            "start_boon_ct_kill_heal",
+        }) do
+            Harness.truthy(declared[required], "modded-content row not gated: " .. required)
+        end
+        -- Disabling modded content is safe in any lobby; greying those rows would
+        -- remove the only control that still works while parity is missing.
         for _, id in ipairs(wp.GATED_SETTING_IDS) do
-            Harness.truthy(data_source:find('setting_id = "' .. id .. '"', 1, true) ~= nil,
-                "gated row is not a declared widget: " .. id)
+            Harness.equal(id:find("disable_boon_", 1, true), nil,
+                "row must not be gated: " .. id)
+        end
+
+        -- Every declared row must be a live widget, otherwise the gate greys
+        -- nothing (runtime_gate_spec cannot know). REALIZE the tree rather than
+        -- grepping the source: the start_boon_/disable_boon_ rows are generated
+        -- from BOON_TREE and never appear as a literal setting_id assignment, and
+        -- a source grep would also accept a commented-out widget.
+        local base = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
+        local adventure = {
+            build_loc_entries = function() return {} end,
+            build_campaign_dlc_group_widgets = function() return {} end,
+            build_cw_scenarios_block = function()
+                return { setting_id = "fixture_cw", type = "group", sub_widgets = {} }
+            end,
+            build_event_missions_block = function()
+                return { setting_id = "fixture_event", type = "group", sub_widgets = {} }
+            end,
+        }
+        local missions = {
+            build_menu_group = function()
+                return { setting_id = "fixture_missions", type = "group", sub_widgets = {} }
+            end,
+            build_loc_entries = function() return {} end,
+        }
+        local fake_mod = {
+            dofile = function(_, path)
+                if path:find("_adventure_pool", 1, true) then return adventure end
+                if path:find("_ct_dev_mission_catalog", 1, true) then return missions end
+                error("unexpected dependency " .. tostring(path))
+            end,
+            localize = function(_, key) return "<" .. tostring(key) .. ">" end,
+        }
+        local previous_get_mod = get_mod
+        get_mod = function() return fake_mod end
+        local ok_data, data = pcall(function()
+            return assert(loadfile(base .. "chaos_wastes_tweaker_dev_data.lua"))()
+        end)
+        get_mod = previous_get_mod
+        Harness.truthy(ok_data, "ct data tree did not realize: " .. tostring(data))
+
+        local live = {}
+        local function walk(node)
+            if type(node) ~= "table" then return end
+            if node.setting_id then live[node.setting_id] = true end
+            for _, field in ipairs({ "widgets", "sub_widgets" }) do
+                for _, child in ipairs(node[field] or {}) do walk(child) end
+            end
+        end
+        walk(data.options)
+        Harness.truthy(next(live) ~= nil, "realized ct data tree carried no widgets")
+        for _, id in ipairs(wp.GATED_SETTING_IDS) do
+            Harness.truthy(live[id], "gated row is not a live widget: " .. id)
         end
 
         -- Malformed input is rejected wholesale rather than half-registered.
