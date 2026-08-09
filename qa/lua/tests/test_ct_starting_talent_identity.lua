@@ -4,6 +4,11 @@ return function(H, repo_root)
     local file = assert(io.open(path, "rb"))
     local source = file:read("*a")
     file:close()
+    local helper_path = repo_root
+        .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_preview_helpers.lua"
+    file = assert(io.open(helper_path, "rb"))
+    local helpers = file:read("*a")
+    file:close()
 
     H.test("CT #556 excludes a selected talent from configured starting boons", function()
         H.truthy(source:find(
@@ -18,10 +23,10 @@ return function(H, repo_root)
     end)
 
     H.test("CT #556 preview delegates talent identity to vanilla career helpers", function()
-        H.truthy(source:find('function mod._ct_start_boon_identity(', 1, true))
-        H.truthy(source:find('utils.get_power_up_name_text', 1, true))
-        H.truthy(source:find('utils.get_power_up_icon', 1, true))
-        H.truthy(source:find('player:profile_index(), player:career_index()', 1, true))
+        H.truthy(helpers:find('function mod._ct_start_boon_identity(', 1, true))
+        H.truthy(helpers:find('utils.get_power_up_name_text', 1, true))
+        H.truthy(helpers:find('utils.get_power_up_icon', 1, true))
+        H.truthy(helpers:find('player:profile_index(), player:career_index()', 1, true))
         H.truthy(source:find('issue556_starting_talent_identity', 1, true))
     end)
 end
