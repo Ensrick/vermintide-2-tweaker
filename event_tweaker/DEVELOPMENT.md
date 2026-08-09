@@ -58,9 +58,9 @@ Lets the host attempt package-bearing Chaos Wastes / Be'lakor **curses** (`MANAG
 | **Lighting** | Hook `CameraManager.shading_callback`; multiply per-god ShadingEnvironment vars (`_CURSE_SKY_PROFILES`, copied from `chaos_wastes_tweaker.lua:3247`). `_active_curse_god` cached on activate/deactivate. Reverts for free (engine re-seeds the shading_env every frame). `cursed_lighting` toggle (default on). |
 | **Mechanism gate** | All four hooks no-op unless `Managers.mechanism:current_mechanism_name() == "adventure"`, so a real CW run (Deus loads the package, ct tints) is untouched. |
 
-**Multiplayer (issue 430 wire-safety floor, `v0.4.29-dev`, hot-join closure `v0.4.35-dev`):** unlike the host-only rest of the mod, the curse group needs **every current player** to run event_tweaker because each client must load the package used by replicated curse units. A non-ET peer hard-CTDs when the engine instantiates such a unit from an unloaded package. `selected_curse_mutators()` therefore drops all curses unless the shared peer-parity beacon positively confirms every represented human peer. It also rejects an already-pending server peer not yet represented in `PlayerManager`.
+**Multiplayer (issue 430 wire-safety floor, `v0.4.29-dev`, hot-join closure `v0.4.35-dev`, prospective Phase 4 exact catalog):** unlike the host-only rest of the mod, the curse group needs **every current player** to run event_tweaker because each client must load the package used by replicated curse units. A non-ET peer hard-CTDs when the engine instantiates such a unit from an unloaded package. Presence alone is insufficient because `NetworkLookup.mutator_templates` ids are process-local. At boot, `event_tweaker_curse_wire_policy.lua` captures an exact identity over all 11 managed name/id pairs and proves that every template owns exactly `resource_packages/mutators/mutator_<curse>`. `selected_curse_mutators()` drops all curses unless the shared peer-parity beacon reaches committed `enabled` state with that byte-exact identity and the local lookup/package proof still holds. It also rejects an already-pending server peer not yet represented in `PlayerManager`.
 
-The roster gate alone cannot protect hot join. Vanilla checks `GameModeBase.is_joinable` in `PeerStates.Connecting` (`peer_states.lua:114-120`), adds an admitted peer to `GameSession` at `:393` (beginning game-object replication), and only creates the remote `PlayerManager` entry at `:450`. Event Tweaker therefore locks `GameModeBase.is_joinable` while any managed curse is selected or active. The lock is established before injection and again before the mutator start function, so no new peer can reach game-object replication during a cursed session. It blocks ET and non-ET hot joins alike; uncheck the package-bearing curses to reopen the lobby. This is deliberate: source inspection found no general synchronous teardown contract across the managed curse templates, so warning or deactivating at the late roster boundary is not proof of safety. Checks: `issue430_peer_parity_beacon_installed` / `issue430_curse_floor_failsafe` / `issue430_curse_floor_classify` / `issue430_hotjoin_session_contract`; offline `test_event_curse_join_policy`.
+The roster gate alone cannot protect hot join. Vanilla checks `GameModeBase.is_joinable` in `PeerStates.Connecting` (`peer_states.lua:114-120`), adds an admitted peer to `GameSession` at `:393` (beginning game-object replication), and only creates the remote `PlayerManager` entry at `:450`. Event Tweaker therefore locks `GameModeBase.is_joinable` while any managed curse is selected or active. The lock is established before injection and again before the mutator start function, so no new peer can reach game-object replication during a cursed session. It blocks ET and non-ET hot joins alike; uncheck the package-bearing curses to reopen the lobby. A real `GameNetworkManager.remove_peer` retires that process epoch, preventing stale acknowledgement replay if a peer id is reused. This is deliberate: source inspection found no general synchronous teardown contract across the managed curse templates, so warning or deactivating at the late roster boundary is not proof of safety. GUI Tweaker optionally greys exactly these 11 rows until committed exact parity, but saved values are untouched and the runtime floor does not depend on the GUI. Checks: `issue430_peer_parity_beacon_installed` / `issue430_curse_floor_failsafe` / `issue430_curse_floor_classify` / `issue430_hotjoin_session_contract`; offline `test_event_curse_join_policy` and `test_event_exact_curse_wire`.
 
 **Managed-curse source census (2026-07-22).** “Structural candidate” means only that the decompiled template has no direct `get_deus_run_controller`/Deus-run-state read. It does not mean functional, crash-free, or verified in Adventure.
 
@@ -117,6 +117,12 @@ Cursed Adventure curse catalog: `MANAGED_CURSES`, `BROKEN_IN_ADVENTURE`,
 `CURSE_TO_GOD`. require'd by `_evt_selection` / `_evt_diagnostics` /
 `_evt_cursed_adventure` AND `_data.lua` / `_localization.lua`.
 
+**`event_tweaker_curse_wire_policy.lua` — shared require'd PURE POLICY.**
+Issue 430 exact-wire identity, immutable boot proof, allocation-free local
+integrity check, and optional GUI Tweaker runtime-gate adapter. It owns no hooks,
+manager access, settings writes, or runtime state; `_evt_guard430_curse_parity`
+supplies all live tables.
+
 **`event_tweaker_missions.lua` — shared require'd LOGIC (same early-load rules).**
 Issue 626's closed mission allowlist, engine-contract validator, and pure
 view-local `act_celebrate` filter. require'd by `_evt_missions.lua` and
@@ -166,16 +172,25 @@ call time by `add()`): `mod._et455_guard_boss_event_mutator(name)`,
 
 **`_evt_guard430_curse_parity.lua` — manifest position 6.**
 Issue 430 Cursed Adventure curse wire-safety floor. Builds + installs the shared
-peer-parity beacon (`_lib_peer_parity`, issue 371 framework; channel
-`et_peer_parity_present`, schema 1) and registers one gated feature
+exact peer-parity beacon (`_lib_peer_parity`, issue 371 framework; channel
+`et_curse_catalog_exact_v1`, schema 3) with the immutable 11-row mutator/package
+proof and registers one gated feature
 (`et_cursed_adventure_curses`) whose label drives the beacon's peer-naming chat
 notice. It owns the singleton `GameModeBase.is_joinable` hook: selected/active
 managed curses return false before vanilla can admit a peer to `GameSession`.
-The beacon still owns `mod.update` via the lib's `install()`; nothing else in the
-mod may set `mod.update`. Registers checks `issue430_peer_parity_beacon_installed`,
+It also owns `GameNetworkManager.remove_peer` to retire exact process epochs.
+The beacon owns the first `mod.update` wrapper only after `install()` returns
+and `is_installed()` positively proves the commit; the authoritative floor
+rechecks that installed state before every arm decision. A throwing or partial install
+is terminal and leaves managed curses inert. The injection floor also requires
+positive proof that the gated feature/peer-naming notification owner registered;
+that seam failing leaves managed curses inert. This module adds one preserving
+wrapper only to retry the optional GUI runtime gate, contained and capped at 30
+attempts, so later owners must chain rather than replace it. Registers checks `issue430_peer_parity_beacon_installed`,
 `issue430_curse_floor_failsafe`, `issue430_curse_floor_classify`, and
 `issue430_hotjoin_session_contract`. Public surface: `mod._evt.curse_wire_safe`,
-the curse-session request/active setters + lock accessor, and
+the curse-session request/active setters + lock accessor, exact identity/count,
+runtime-gate status, and
 `mod._et_peer_parity` (the beacon instance, for the regression suite).
 
 **`_evt_selection.lua` — manifest position 7.**

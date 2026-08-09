@@ -1,5 +1,21 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.321-dev (2026-08-09) -- regression instruments stop lying (#1156)
+
+- The two dormant-boon checks now assert ct-owned ground truth: absence from
+  ct's injection registry and from the `power_up_<name>_<rarity>` BuffTemplates
+  entries only ct writes - not from `NetworkLookup.deus_power_up_templates`,
+  which vanilla populates for all nine names regardless of ct, making the old
+  lookup assertion permanently false. `ct_kill_heal` is removed from the
+  disabled list; it has been deliberately re-enabled since 0.7.240-dev (#406).
+- The regression runner gains a SKIP verdict: wrong-context checks (keep-only
+  probes run mid-mission and vice versa) render `SKIP` with a reason and their
+  own summary column instead of counting as FAIL - 18 sites total, 9 of which
+  had been silently mis-scoring as failures all along.
+- Four new offline suites lock the repaired contracts: gt nil-on-success for
+  all six diagnostics, cwv marker-scope + collector publication, XFAIL/XPASS
+  rendering with XPASS loud, and the dormant-boon independence proof.
+
 ## 0.7.320-dev (2026-08-09) -- command/guard/trait owner decomposition (#1159, #504, #2)
 
 - Extracted seven single-responsibility owners from the entry file: journey
