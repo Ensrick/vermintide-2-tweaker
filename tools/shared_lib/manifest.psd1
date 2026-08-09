@@ -27,6 +27,7 @@
             Source = "_lib_wire_catalog.lua"
             Consumers = @(
                 "career_tweaker/scripts/mods/career_tweaker/_lib_wire_catalog.lua"
+                "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_lib_wire_catalog.lua"
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_wire_catalog.lua"
                 "event_tweaker/scripts/mods/event_tweaker/_lib_wire_catalog.lua"
             )
