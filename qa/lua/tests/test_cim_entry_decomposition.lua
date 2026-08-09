@@ -28,8 +28,8 @@ return function(H, repo_root)
         for line in entry:gmatch("[^\r\n]*") do
             if line:find("%S") then lines = lines + 1 end
         end
-        H.truthy(lines <= 5110,
-            "CIM-dev entry exceeded the 5110-line command-owner ceiling")
+        H.truthy(lines <= 3764,
+            "CIM-dev entry exceeded the 3764-line forge-picker-owner ceiling")
     end)
 
     H.test("CIM-dev command owner installs exactly once at the original boundary", function()

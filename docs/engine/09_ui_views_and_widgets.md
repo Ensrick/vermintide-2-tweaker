@@ -46,7 +46,7 @@ Key ours:
 | `gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_gui_material_guard.lua` | The repo's Gui-material crash-class mitigation: one consolidated `UIRenderer.create` hook that DROPS non-resident materials and INJECTS keep-only atlases when resident (`:298-305` hook, `:135-293` `_prepare`) |
 | `gui_tweaker_dev/.../gui_tweaker_dev.lua:1083-1318` | Custom-view registration: `_attach_view` into `IngameUI.views`, transition closure injected into `package.loaded["scripts/ui/views/ingame_ui_settings"].transitions`, `Managers.ui:handle_transition` opener |
 | `gui_tweaker_dev/.../_mod_tweaker_view.lua` | The canonical full custom view (borrowed renderer, own scenegraph, own input service, full IngameUI view interface) |
-| `crafting_in_modded_dev/.../crafting_in_modded_dev.lua:2108-2556` + `:4078` | Weave-forge (Athanor) mid-mission enablement: viewport/env/HDR-renderer hooks + parent-state `update` driver |
+| `crafting_in_modded_dev/.../_cim_mission_forge_safety.lua` + `_cim_forge_ui_owner.lua` | Weave-forge (Athanor) mid-mission enablement: viewport/env/HDR-renderer hooks + parent-state `update` driver |
 | `crafting_in_modded_dev/.../_accessory_craft_panel.lua` | Own-scenegraph button overlay nested in a vanilla window (drawn off `HeroWindowWeaveProperties._draw`) |
 | `cosmetics_tweaker/.../_glow_picker.lua` (+ hooks `cosmetics_tweaker.lua:9602-9640`) | The proven own-scenegraph popup overlay pattern |
 
@@ -129,7 +129,7 @@ Key ours:
   `window._widgets` / `_widgets_by_name` read nil from a child-window `update`
   hook (memory `reference_vt2_widget_timing_pattern`; burned cim v0.7.57-dev).
   Drive per-frame widget mutation from the PARENT state's `update` instead
-  (cim does: `crafting_in_modded_dev.lua:4078` hooks
+  (cim does: `_cim_forge_ui_owner.lua` hooks
   `HeroViewStateWeaveForge.update`).
 - Keep-only extras: `HeroView._setup_hdr_gui` builds two extra HDR worlds +
   renderers ONLY `if self.is_in_inn` (`hero_view.lua:136-165`), each with
@@ -331,7 +331,7 @@ non-negotiable 8). gut documents its whole-mod grep in each hook site
    child-window-update widget-timing trap (§4.7) that burned cim v0.7.57.
    Either delete the hook (keep the helpers) or re-route the driver through the
    parent state's `update` like the Athanor side already does
-   (`crafting_in_modded_dev.lua:4078`).
+   (`_cim_forge_ui_owner.lua`).
 
 4. **[P2 - chat-facing noise from UI hooks in a public mod]
    cosmetics_tweaker's glow-picker hook tracer echoes to chat.**
@@ -372,5 +372,5 @@ own-scenegraph overlays instead of widget injection (`_glow_picker.lua`,
 exit (`_mod_tweaker_view.lua`); leaving CKC's vanilla Options definitions untouched
 (#528); hooking BOTH previewer classes
 (`cosmetics_tweaker.lua:5310/:5346`); parent-state update drivers
-(`crafting_in_modded_dev.lua:4078`); atlas-safe row materials
+(`_cim_forge_ui_owner.lua`); atlas-safe row materials
 (`_mod_tweaker_definitions.lua`).

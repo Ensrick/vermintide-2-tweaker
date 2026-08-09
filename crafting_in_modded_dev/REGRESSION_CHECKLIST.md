@@ -4,7 +4,53 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-22.
+Last updated: 2026-08-06.
+
+### weave-economy-owner-decomposition - read facade remains behavior-neutral
+
+| Field | Value |
+|---|---|
+| Symptom | Reloading or continuing to grow the entry can duplicate or reorder the Athanor's progression hooks, while capturing the forward-declared bubble-cap function too early makes property mastery costs crash when queried. |
+| Root cause | Eighteen read-only `BackendInterfaceWeavesPlayFab` hooks were embedded in the oversized entry and closed over both mutable forge state and a later-assigned local function. |
+| Fix version(s) | Unreleased source candidate |
+| Category | STATIC |
+| Expected post-fix | `_cim_weave_economy.lua` installs once at the original boundary, preserves all 18 hook names and order, resolves active state and bubble caps at callback time, retains exact fake values while CIM owns the Athanor, and preserves native calls/fallbacks otherwise. |
+| Detection | Offline `test_cim_weave_economy.lua` covers owner wiring, order/cardinality, idempotence, active values, native argument forwarding, and protected fallback values. `test_cim_entry_decomposition.lua` and `qa/check_decomposition_contracts.ps1` enforce the current 3,764-line ceiling and owner retention. |
+
+### forge-preview-owner-decomposition - preview lifecycle remains behavior-neutral
+
+| Field | Value |
+|---|---|
+| Symptom | The oversized entry could duplicate, reorder, or partially detach the Athanor's resource guard, placement correction, and post-spawn diagnostics from the same vanilla preview lifecycle. |
+| Root cause | Four `LootItemUnitPreviewer` hooks plus the existing properties-preview installer were inline and read the reassigned `_custom_forge_active` local directly. |
+| Fix version(s) | Unreleased source candidate |
+| Category | STATIC |
+| Expected post-fix | `_cim_forge_preview_owner.lua` installs once at the original boundary in exact `_spawn_link_unit`, `_load_item_units`, `_create_item_previewer`, `spawn_units`, `update` order. The guard remains fail-closed, accepts either a real package or resident unit, diagnostics remain bounded, and the mutable active flag is read at callback time. |
+| Detection | Offline `test_cim_forge_preview_owner.lua` executes guard, late-bound gate, order, cardinality, idempotence, and optional decompiled-source contracts. `test_cwv_old_musket_preview.lua` retains the #882 runtime contract. `/cim_regression_test` uses behavioral resident-unit proof and anchors #481 source checks on the moved public guard. |
+
+### forge-picker-owner-decomposition - category lifecycle remains behavior-neutral
+
+| Field | Value |
+|---|---|
+| Symptom | Reloading or partially changing the oversized entry can duplicate the picker hooks, retain stale setting accessors, or fail to restore temporarily widened global category arrays after the Athanor closes. |
+| Root cause | Unknown-category crash guards, native/freedom option construction, the mutable restoration backup, and two picker hooks formed one transaction but were embedded in the entry. |
+| Fix version(s) | Unreleased source candidate |
+| Category | STATIC |
+| Expected post-fix | `_cim_forge_picker_owner.lua` installs once at the original boundary, preserves `_setup_menu_options` before `_sync_backend_loadout`, retains one stable private dispatcher/backup, settles any outstanding transaction against its captured category-table targets before refreshing all seven injected dependencies on reload, exhaustively republishes exactly five operations after public-map replacement, and restores each exact original category table or prior absence. It owns no inventory, loadout, backend-write, or network state. |
+| Detection | Offline `test_cim_forge_picker_owner.lua` first widens old trait/property globals, then replaces the public owner map and all relevant dependencies/globals; it proves the old exact tables/absence are restored without polluting the new globals, exact five-operation republication, private callback continuity, unchanged hook cardinality/order, a separately applied/restored transaction on the new globals, category seeding, matched trait/property twins, native plus optional widening, and active/inactive fallbacks. The decomposition test and machine contract freeze the 3,764-line entry ceiling and require the owner module. |
+
+### forge-ui-owner-decomposition - Athanor presentation remains behavior-neutral
+
+| Field | Value |
+|---|---|
+| Symptom | Growing or reloading the oversized entry could duplicate the accessory draw/per-frame polish hooks, while capturing the forge-active or background-color flag would leave UI behavior stale after close/reopen. |
+| Root cause | Widget helpers, disabled legacy button builders, the active accessory overlay, tooltip handling, and per-frame polish formed one contiguous presentation subsystem but closed directly over reassigned entry locals. |
+| Fix version(s) | Unreleased source candidate |
+| Category | STATIC |
+| Expected post-fix | `_cim_forge_ui_owner.lua` installs exactly once between the accessory-property and read-only economy owners, preserves `_draw` before `update`, retains the legacy button enable flags, and reads mutable state through refreshed call-time dependencies. Every fresh accessory panel receives the same late-bound craft callback before the reinstall guard; an absent first-load panel remains a safe no-op and can recover later. It performs no backend, forge-store, loadout, or wire writes. |
+| Detection | Offline `test_cim_forge_ui_owner.lua` covers boundary/order, hook cardinality, the sub-1,500-line target, presentation-only exclusions, distinct-panel idempotence, full public-export identity, refreshed callback dependencies, late panel recovery, and stale-panel rejection. The decomposition test and machine contract freeze the 3,764-line entry ceiling. |
+
+---
 
 ### accessory-property-layer-isolation - issue #959
 
