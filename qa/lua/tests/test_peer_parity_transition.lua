@@ -157,29 +157,36 @@ local function register(Harness, repo_root)
         end)
     end)
 
-    Harness.test("shared exact mode is opt-in only for CRT in this release", function()
+    Harness.test("shared exact mode stays absent from unconverted consumers", function()
+        -- Exact mode is granted one converted axis at a time. A consumer only
+        -- leaves this list together with the positive opt-in assertion below,
+        -- so an accidental or partial conversion cannot land silently.
         local paths = {
             "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua",
             "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
-            "event_tweaker/scripts/mods/event_tweaker/_evt_guard430_curse_parity.lua",
             "event_tweaker/scripts/mods/event_tweaker/_evt_shadow_adventure.lua",
             "weapon_tweaker/scripts/mods/weapon_tweaker/_wt431_damage_profile_parity.lua",
             "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt431_damage_profile_parity.lua",
         }
-        for i = 1, #paths do
-            local file = assert(io.open(repo_root .. "/" .. paths[i], "rb"))
+        local function read(path)
+            local file = assert(io.open(repo_root .. "/" .. path, "rb"))
             local source = file:read("*a")
             file:close()
-            Harness.equal(source:find("[^_%w]wire_identity%s*="), nil,
+            return source
+        end
+        for i = 1, #paths do
+            Harness.equal(read(paths[i]):find("[^_%w]wire_identity%s*="), nil,
                 "shared exact opt-in is not yet authorized for " .. paths[i])
         end
 
-        local file = assert(io.open(repo_root
-            .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua", "rb"))
-        local career = file:read("*a")
-        file:close()
+        local career = read("career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua")
         Harness.truthy(career:find("[^_%w]wire_identity%s*=%s*wire_identity") ~= nil,
-            "CRT must be the sole shared exact-mode opt-in")
+            "CRT exact-mode opt-in disappeared")
+        local event = read("event_tweaker/scripts/mods/event_tweaker/_evt_guard430_curse_parity.lua")
+        Harness.truthy(event:find("[^_%w]wire_identity%s*=%s*wire_proof%.identity") ~= nil,
+            "Event must opt its managed curse catalog into exact mode")
+        Harness.truthy(event:find('"et_curse_catalog_exact_v1"', 1, true) ~= nil,
+            "Event #430 exact channel disappeared")
     end)
 
     local function build_exact(factory, identity)
@@ -360,6 +367,49 @@ local function register(Harness, repo_root)
             receiver("peer-40", 9, 1, identity, "epoch-40", "", replay_query)
             Harness.truthy(not inst:peer_has("peer-40"),
                 "retired process epoch must not authorize a reused peer id")
+        end)
+    end)
+
+    Harness.test("Event legacy and exact curse channels cannot acknowledge each other", function()
+        with_network_stubs(function()
+            local factory = load_factory()
+            local receivers = { legacy = {}, exact = {} }
+            local function fake_mod(peer_id)
+                return {
+                    network_register = function(_, channel, callback)
+                        receivers[peer_id][channel] = callback
+                    end,
+                    network_send = function(_, channel, recipient, ...)
+                        local target = receivers[recipient]
+                        local callback = target and target[channel]
+                        if callback then callback(peer_id, ...) end
+                    end,
+                    debug = function() end,
+                    echo = function() end,
+                }
+            end
+            local legacy = assert(factory(fake_mod("legacy"), {
+                channel = "et_peer_parity_present",
+                schema = 2,
+                poll_interval = 0,
+                settle_enable = 0,
+            }))
+            local exact = assert(factory(fake_mod("exact"), {
+                channel = "et_curse_catalog_exact_v1",
+                schema = 3,
+                wire_identity = "et-wire-v1:11:12345678:abcdef01",
+                session_epoch = "exact-e1",
+                poll_interval = 0,
+                settle_enable = 0,
+            }))
+            legacy:install()
+            exact:install()
+            Harness.truthy(not legacy:require_peer("exact"))
+            Harness.truthy(not exact:require_peer("legacy"))
+            Harness.truthy(not legacy:peer_has("exact"),
+                "legacy Event presence must not acknowledge an exact curse peer")
+            Harness.truthy(not exact:peer_has("legacy"),
+                "exact Event curse parity must reject a legacy presence acknowledgement")
         end)
     end)
 
