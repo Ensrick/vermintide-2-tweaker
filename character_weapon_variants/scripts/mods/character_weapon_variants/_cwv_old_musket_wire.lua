@@ -14,7 +14,8 @@
 -- _old_musket_mode_for_local_slot, _old_musket_record_and_publish,
 -- _old_musket_publish_local_loadout, _old_musket_request_states,
 -- _old_musket_publish_fire, _old_musket_accept_mode,
--- _old_musket_play_remote_fire, _old_musket_mode_channel/_schema.
+-- _old_musket_play_remote_fire, _old_musket_wwise_world,
+-- _old_musket_mode_channel/_schema.
 --
 -- Load-time deps: none beyond (mod, ctx.om). Runtime deps resolved lazily via
 -- _om: _cwv_key_for_item, _cwv_send_identity_slots, appearance_lifecycle_policy,
@@ -230,20 +231,60 @@ local _om = ctx.om
 	end
 	_om._old_musket_accept_mode = accept_mode
 
+	-- #1211: a World handle is only usable for audio if WorldManager REGISTERED
+	-- a Wwise world for it. That happens in exactly one place -- create_world
+	-- (foundation/scripts/managers/world/world_manager.lua:53) -- and
+	-- :wwise_world is a bare table read (:60-62), so a handle acquired any other
+	-- way (an Application-owned main/new world) is never a key.
+	-- Handing one to WwiseUtils reaches WwiseWorld.make_auto_source(nil, unit,
+	-- node) (scripts/helpers/wwise_utils.lua:40) and the native binding dies with
+	-- an access violation at 0x0 that pcall cannot catch (client fatal
+	-- 2026-08-09, dump local wwise_world = nil against a live world).
+	-- LevelHelper.INGAME_WORLD_NAME "level_world" (scripts/helpers/level_helper.lua:4)
+	-- is the world StateIngame runs on for the keep AND every mission
+	-- (state_ingame.lua:175), created through Managers.world:create_world by
+	-- AsyncLevelSpawner (scripts/utils/async_level_spawner.lua:63), so it is the
+	-- one name that is registered in both contexts. Probe it the way vanilla
+	-- does before a bare :world() call (scripts/helpers/item_helper.lua:334-335;
+	-- :world fasserts on a missing name, world_manager.lua:111-115).
+	local LEVEL_WORLD = "level_world"
+	local function registered_level_world()
+		local wm = Managers and Managers.world
+		if not wm or type(wm.has_world) ~= "function"
+				or type(wm.wwise_world) ~= "function" then
+			return nil, nil
+		end
+		if not wm:has_world(LEVEL_WORLD) then return nil, nil end
+		local world = wm:world(LEVEL_WORLD)
+		if not world then return nil, nil end
+		return wm:wwise_world(world), world
+	end
+	_om._old_musket_wwise_world = registered_level_world
+
+	local unregistered_reported = false
 	local function play_remote_fire(sender_peer_id, event_name, source)
 		if event_name ~= "player_combat_weapon_rifle_fire" then return false end
 		local pm = Managers and Managers.player
 		local player = _om.peer_resolver.peer_player(pm, sender_peer_id, 1)
 		local owner_unit = player and player.player_unit
-		local world = rawget(_G, "Application") and Application.main_world()
-		if owner_unit and Unit.alive(owner_unit) and world and rawget(_G, "WwiseUtils") then
-			local played = pcall(WwiseUtils.trigger_unit_event, world, event_name, owner_unit, 0)
-			diag_once("fire:" .. tostring(sender_peer_id) .. ":" .. tostring(source),
-				"remote fire peer=%s owner=%s source=%s played=%s",
-				tostring(sender_peer_id), tostring(owner_unit), tostring(source), tostring(played))
-			return played and true or false
+		if not owner_unit or not Unit.alive(owner_unit)
+				or not rawget(_G, "WwiseUtils") then
+			return false
 		end
-		return false
+		local wwise_world, world = registered_level_world()
+		if not wwise_world then
+			if not unregistered_reported then
+				unregistered_reported = true
+				pcall(printf, "[cwv:1211] remote fire audio skipped: "
+					.. "no registered wwise world (world=%s)", tostring(world))
+			end
+			return false
+		end
+		local played = pcall(WwiseUtils.trigger_unit_event, world, event_name, owner_unit, 0)
+		diag_once("fire:" .. tostring(sender_peer_id) .. ":" .. tostring(source),
+			"remote fire peer=%s owner=%s source=%s played=%s",
+			tostring(sender_peer_id), tostring(owner_unit), tostring(source), tostring(played))
+		return played and true or false
 	end
 	_om._old_musket_play_remote_fire = play_remote_fire
 
