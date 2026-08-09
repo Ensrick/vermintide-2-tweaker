@@ -65,6 +65,48 @@ matrix per item family, and TODAY every cell is opt-in:
 | W4 | **Remaining families**, one per change, closing their symptom issues as they migrate; #660's issue index burns down. | each family's cells green | pending |
 | W5 | **OOP completion**: ct_dev + cwv decomposition (last two god files), #727 logging sweep, doc reconciliation. | full QA green, per-mod module contracts documented | pending |
 
+## 3a. Single-vocabulary rule (#1158, 2026-08-08)
+
+**New appearance surface and edge names enter through
+`tools/shared_lib/_lib_appearance_descriptor.lua` (`M.CELLS` / `M.EDGES`) ONLY.**
+
+W0 shipped the census vocabulary, but `qa/appearance_contracts.psd1` kept its
+own older spellings for the same surfaces (`bot_3p`/`bot`,
+`remote_husk_3p`/`husk`, `cosmetic_preview`/`illusion_browser`,
+`athanor_preview`/`cim_preview`, `lobby_preview`/`lobby`,
+`score_screen`/`score_team`, `customization_change`/`customize`) and never read
+the census. Two vocabularies for one domain reintroduce the exact W0 failure at
+one remove: a hole can sit between them because neither gate can tell that two
+rows are the same row.
+
+The manifest is now spelled canonically, and
+`qa/check_appearance_contracts.ps1` validates every name - its own required
+minimum included - against
+`tools/shared_lib/_lib_appearance_name_authority.lua`. That authority binds each
+legacy spelling to its canonical name, records the contract names that are
+deliberately FINER than the census as refinements of a canonical edge (the
+contracts declare per-mod behavioural CONCERNS and replay coverage; the census
+declares per-family surface x edge SUPPORT - different measurements, one name
+space), and records genuine census gaps. An unmapped name fails the gate.
+
+Two things stay deliberately visible rather than folded away: the vanilla
+`crafting_preview` bench is a declared census gap (**#1198** - the census names
+only `cim_preview`, the CIM Athanor forge), and `initial_spawn` refines `equip`
+rather than `instance_load`. The authority lives outside the descriptor because
+`tools/shared_lib/manifest.psd1` byte-syncs the descriptor into the CWV mod
+bundle, and a QA-only naming change must not rewrite a shipped mod file.
+
+**Known directional limit - issue #1197.** The authority resolves contract name
+onto census name; the reverse is not enforced. The contracts still cover the
+historical eleven surfaces, so the six added by #1157 - `specials`,
+`remote_audio`, `hud_panels`, `portraits`, `item_card_2d`, `inventory_tooltip` -
+are accepted when a contract opts in but are not required, and would otherwise
+be invisible to this registry. `check_appearance_contracts.ps1` therefore NAMES
+the unrepresented canonical surfaces on every green run, so the debt is stated
+rather than inferred from silence. Requiring them is a coverage change tracked
+by #1197. The edge axis needs nothing: all eight canonical edges are already
+refined by at least one contract edge.
+
 ## 4. Release rule (restating #660's mandate as policy)
 
 No appearance/model/transform/glow/style issue receives `verify-fix` from a
