@@ -19,8 +19,8 @@
             Name = 'cosmetics_tweaker'
             State = 'partial'
             Entry = 'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
-            CeilingLines = 9341
-            RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua', '_cos_attachment_link_policy.lua', '_cos_ui_presentation_refresh.lua', '_cos_offhand_session_state.lua', '_cos_modded_illusion_swap.lua', '_cos_magic_skin_gateway.lua', '_cos_command_owner.lua', '_cos_glow_editor_button.lua', '_cos_item_grid_presentation.lua', '_cos_mod_lifecycle.lua')
+            CeilingLines = 9263
+            RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua', '_cos_attachment_link_policy.lua', '_cos_ui_presentation_refresh.lua', '_cos_offhand_session_state.lua', '_cos_modded_illusion_swap.lua', '_cos_magic_skin_gateway.lua', '_cos_command_owner.lua', '_cos_glow_editor_button.lua', '_cos_item_grid_presentation.lua', '_cos_mod_lifecycle.lua', '_cos_la_replay_runtime.lua')
         }
         @{
             Name = 'weapon_tweaker'
