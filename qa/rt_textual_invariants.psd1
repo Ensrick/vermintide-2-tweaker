@@ -226,7 +226,7 @@
     # ============================ cim_dev ============================
     # Source: crafting_in_modded_dev/CHANGELOG.md 0.8.57-dev (issue 511). The two
     # hook-registration checks whose source-text needles skip in retail.
-    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'; needle='BackendInterfaceWeavesPlayFab", "get_talent_required_forge_level"'; literal=$true; polarity='present'; issueRef='#71'; note='amulet/weave-properties crash guard hook must stay installed.' }
+    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_weave_economy.lua'; needle='BackendInterfaceWeavesPlayFab", "get_talent_required_forge_level"'; literal=$true; polarity='present'; issueRef='#71'; note='extracted amulet/weave-properties crash guard hook must stay installed.' }
     @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_accessory_property_runtime.lua'; needle='"HeroWindowWeaveProperties", "_populate_menu_option_widget"'; literal=$true; polarity='present'; issueRef='#239'; note='extracted weave-forge cost-hide hook must stay installed.' }
     @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_accessory_property_runtime.lua'; needle='widget.content.price_text = ""'; literal=$true; polarity='present'; issueRef='#239'; note='the extracted cost-hide adapter must blank the Cost:0 label.' }
     @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_accessory_property_runtime.lua'; needle='price_icon.color[1] = 0'; literal=$true; polarity='present'; issueRef='#239'; note='the extracted cost-hide adapter must also hide the separate price icon.' }

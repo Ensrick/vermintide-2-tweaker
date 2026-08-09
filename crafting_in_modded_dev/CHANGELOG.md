@@ -1,6 +1,18 @@
 # Crafting in Modded Changelog
 
-## 0.8.116-dev (2026-08-06) -- command owner decomposition (#1159, #504, #2) [not deployed]
+## 0.8.118-dev (2026-08-09) -- weaves facade + athanor preview owners (#1159, #504, #2)
+
+- Extracted the 18-hook Weaves economy facade and the five-hook Athanor
+  preview lifecycle into dedicated owners (`_cim_weave_economy`,
+  `_cim_forge_preview_owner`, `_cim_forge_picker_owner`, `_cim_forge_ui_owner`)
+  with exact hook order, cardinality, and behavior preserved.
+- Repaired a hot-reload defect: the preview runtime now routes through a
+  stable dispatcher that consumes a refreshed placement policy without
+  registering a sixth hook; pinned by a dedicated regression test.
+- Entry ceiling ratchets 5,110 -> 3,764 nonblank lines; behavior-neutral,
+  no new hooks, RPCs, settings, persistence, or lifecycle owners.
+
+## 0.8.116-dev (2026-08-06) -- command owner decomposition (#1159, #504, #2)
 
 - Moved the existing forge diagnostic, manual `/forge*`, salvage diagnostic,
   list/delete, and bulk-cleanup command wiring into one hook-free owner without
