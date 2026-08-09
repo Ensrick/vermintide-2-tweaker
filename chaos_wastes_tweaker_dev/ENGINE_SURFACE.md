@@ -197,6 +197,25 @@ full synchronized-state strip before native hot-join sync. A real `remove_peer`
 forgets the acknowledgement, while PlayerManager-only level transitions preserve
 the bounded same-session retention.
 
+Those six are the RUNTIME safety. A seventh, non-safety surface (v0.7.319-dev) is
+the Mod Tweaker presentation bridge in `_ct_wire_policy.lua`, mirroring
+`_crt_wire_policy.lua:79,97` for issue 425: while the gate is closed it makes the
+nine saved rows that control modded content (the `enable_boon_reworks` umbrella,
+five `enable_boon_*` trait boons, three `tweak_miracle_*`) read as unavailable
+instead of looking actionable and silently doing nothing. It is PRESENTATION ONLY
+and GUT is not a dependency - `mod._ct_wire_safe()` never consults it, so gameplay
+safety is identical with or without the Mod Tweaker installed. The pure policy
+module is driven directly by `qa/lua/tests/test_peer_parity_transition.lua`, which
+fails if a new trait boon or miracle is added without a matching gated row.
+
+Still NOT closed by any of the above: the beacon proves a peer runs ct, not that it
+registered the same catalog, so two ct peers on DIFFERENT builds can both ack while
+their boon indices disagree (the v0.7.66 index-drift class, re-reachable across
+versions rather than across toggles). The shared exact-catalog mode
+(`_lib_wire_catalog.lua`, `opts.wire_identity`) is the closer, but it is authorized
+for `crt` only and `qa/lua/tests/test_peer_parity_transition.lua` actively asserts
+that ct does NOT opt in. Do not add `wire_identity` here without lifting that gate.
+
 ### Boon/power-up pool + dual-table registration (owner: `docs/engine/10`)
 
 `DeusPowerUpBuffTemplates` is merged into the global `BuffTemplates` at boot [src:

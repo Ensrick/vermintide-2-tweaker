@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.496-dev"
+local MOD_VERSION = "0.1.498-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -64,7 +64,7 @@ _om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_cr
 _om.crowbill_presentation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_presentation"); _om.peer_resolver = mod:dofile("scripts/mods/character_weapon_variants/_cwv_peer_resolver")
 _om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_runtime"); _om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
 _om.rapier_contract = mod:dofile("scripts/mods/character_weapon_variants/_cwv_rapier_contract"); _om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inventory_icons")
-_om.outrider_animation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_outrider_animation")
+_om.outrider_animation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_outrider_animation"); _om.style_rewield = mod:dofile("scripts/mods/character_weapon_variants/_cwv_style_rewield")
 -- Public sibling-renderer contract: call resolve(icon, renderer), never guess atlas residency.
 mod._cwv_inventory_icons = _om.inventory_icons
 -- #787: mod data registered the private atlas before this script runs. Finish
@@ -6663,38 +6663,11 @@ do
 			tostring(spear_shield_err))
 	end
 
-	-- A style can replace the first-person state machine even though the base
-	-- item's career packages did not load it (Tuskgor Hunter -> Infantry is the
-	-- concrete case). Own one reference per curated vanilla resource and invoke
-	-- the transition only from PackageManager's completion callback. Never pass
-	-- arbitrary item/UI data to PackageManager: a nonexistent package faults in
-	-- the engine's async queue outside Lua's pcall boundary.
-	local style_resource_allowlist = {}
-	for _, family in pairs(policy.FAMILIES) do
-		for _, style in pairs(family.styles) do
-			if type(style.resource) == "string" then style_resource_allowlist[style.resource] = true end
-		end
-	end
-	local held_style_resources = {}
-	local function acquire_style_resource(path, callback)
-		if not style_resource_allowlist[path] then return false, "resource is not authored" end
-		local packages = Managers and Managers.package
-		if not packages then return false, "package manager unavailable" end
-		local reference = "cwv_combat_styles"
-		if held_style_resources[path] then
-			local loaded = false
-			pcall(function() loaded = packages:has_loaded(path, reference) and true or false end)
-			callback(loaded, loaded and nil or "held resource lost")
-			return loaded
-		end
-		held_style_resources[path] = true
-		packages:load(path, reference, function()
-			local loaded = false
-			pcall(function() loaded = packages:has_loaded(path, reference) and true or false end)
-			callback(loaded, loaded and nil or "resource completion was not resident")
-		end, true, true)
-		return true
-	end
+	-- Owner-side style resource ownership plus the #786 Stage C observer-side
+	-- residency read. Both live in the policy module next to the authored
+	-- allowlist they are derived from.
+	local acquire_style_resource, style_resource_resident =
+		policy.new_resource_acquirer(function() return Managers and Managers.package end)
 
 	local imperial_transform = _type_transforms.cwv_imperial_longsword
 	local inverse_bretonnian_scale = {
@@ -6706,6 +6679,22 @@ do
 		-imperial_transform.right_hand_offset[1],
 		-imperial_transform.right_hand_offset[2],
 		-imperial_transform.right_hand_offset[3],
+	}
+
+	-- #786: engine surfaces for the guarded husk re-wield. Policy, coalescer and
+	-- the authored catalogue are the only authorities; nothing here reads back
+	-- the state a re-wield just produced.
+	local _style_rewield_deps = {
+		policy = policy, coalescer = mod._cwv_rewield, printf = printf,
+		unit_api = Unit, script_unit = ScriptUnit, probe_state = {},
+		style_resource_resident = style_resource_resident,
+		peer_player = function(peer_id) return _om.peer_resolver.peer_player(
+			Managers and Managers.player, peer_id, 1) end,
+		item_key = function(item_data) return _om.combat_styles
+			and _om.combat_styles:member_key(item_data) end,
+		effective_template = function(item_data, unit, slot_name)
+			return _om.combat_styles and _om.combat_styles:effective_template_name(
+				item_data, nil, unit, slot_name) end,
 	}
 
 	_om.combat_styles = policy.install(mod, {
@@ -6754,33 +6743,16 @@ do
 			local nok, value = pcall(player.network_id, player)
 			return nok and value or nil
 		end,
-		rebuild_remote = function(peer_id, slot_name)
-			local pm = Managers and Managers.player
-			local player, player_source = _om.peer_resolver.peer_player(pm, peer_id, 1)
-			if not player then return false, player_source end
-			local unit = player and player.player_unit
-			if not (unit and Unit.alive(unit)) then return false, "player unit unavailable" end
-			local iok, inventory = pcall(ScriptUnit.extension, unit, "inventory_system")
-			if not iok or not inventory or type(inventory.wield) ~= "function" then
-				return false, "inventory extension unavailable"
-			end
-			local ready, reason = policy.remote_refresh_readiness(inventory, slot_name)
-			if not ready then return false, reason end
-			local wok, wield_err = pcall(inventory.wield, inventory, slot_name)
-			if not wok then return false, tostring(wield_err) end
-			local equipment = inventory._equipment or inventory.equipment
-			local slot = equipment and equipment.slots and equipment.slots[slot_name]
-			local right = equipment and equipment.right_hand_wielded_unit_3p
-			local left = equipment and equipment.left_hand_wielded_unit_3p
-			local right_live = right and Unit.alive(right) or false
-			local left_live = left and Unit.alive(left) or false
-			local effective = _om.combat_styles
-				and _om.combat_styles:effective_template_name(
-					slot and slot.item_data, nil, unit, slot_name) or nil
-			local detail = string.format("rewielded resolver=%s template=%s right_3p=%s left_3p=%s",
-				tostring(player_source), tostring(effective), tostring(right_live), tostring(left_live))
-			return right_live or left_live, detail
-		end,
+		rewield = _om.style_rewield,
+		send_identity_slots = function(slots, edge, force)
+			return _om._cwv_send_identity_slots
+				and _om._cwv_send_identity_slots(slots, edge, force) end,
+		-- #786 A1/A2: the husk re-wield DEFERS into the #1145 coalescer and the
+		-- verdict is AND-semantics against the authored catalogue; both live in
+		-- _cwv_style_rewield. Returns (queued, reason), never a sync success.
+		rebuild_remote = function(peer_id, slot_name, family_id, style_id, on_verdict)
+			return _om.style_rewield.queue_rebuild(_style_rewield_deps, peer_id,
+				slot_name, family_id, style_id, on_verdict) end,
 	})
 	mod.cycle_combat_style = function()
 		return _om.combat_styles and _om.combat_styles:cycle_wielded()
@@ -7245,6 +7217,16 @@ do
 					payload.musket_mode = mode
 				end
 			end
+			-- #786 B1: the Combat Style axis rides the SAME delivering channel,
+			-- generalized from the #474 stance rider. Stamped only when the live
+			-- local slot is this payload's exact item, so a NATIVE style member
+			-- (most of them are) publishes its style though item_key is "".
+			if payload and _om.combat_styles then
+				local ok_style, rider = pcall(_om.combat_styles.local_style_rider,
+					_om.combat_styles, payload.slot,
+					payload.item_key ~= "" and payload.item_key or payload.base_item_key)
+				if ok_style and rider then payload.style = rider end
+			end
 			local ok = pcall(mod.network_send, mod, "cwv_item_identity",
 				recipient, schema, payload)
 			if ok then
@@ -7352,6 +7334,16 @@ do
 			_om._old_musket_accept_mode(sender_peer_id, payload.slot,
 				payload.musket_mode, nil, "identity_channel")
 		end
+		-- #786 B3: apply the style axis BEFORE the changed-gate, for the same
+		-- reason as the stance rider above -- a style switch leaves the identity
+		-- signature byte-identical, so accept()'s dedupe would swallow it. Both
+		-- channels converge on ONE state; this path owns the guarded re-wield.
+		local style_owned = false
+		if type(payload) == "table" and _om.combat_styles then
+			local fam, sid = _om.combat_style_policy.decode_style_rider(payload.style)
+			if fam then style_owned = _om.combat_styles:accept_style_edge(
+				sender_peer_id, payload.slot, fam, sid, "identity") == true end
+		end
 		-- ACK both a first delivery and a duplicate retry. `descriptor` is non-nil
 		-- only after this peer reconstructed the exact local resources, so the ACK
 		-- never falsely confirms an unavailable/fingerprint-mismatched appearance.
@@ -7371,7 +7363,12 @@ do
 		-- coalescer (#1145: one re-wield per wearer per frame, husk game object
 		-- re-checked at drain). Arrival ordering converges without polling; the
 		-- resolution and both gates live in the coalescer module.
-		mod._cwv_rewield.request_peer_rewield(sender_peer_id, payload and payload.slot)
+		-- #786: skip when the style ledger already queued THIS (peer, slot) --
+		-- the coalescer keeps newest-wins, so an unverified duplicate would
+		-- replace the ledger's verifying executor and strand its verdict.
+		if not style_owned then
+			mod._cwv_rewield.request_peer_rewield(sender_peer_id, payload and payload.slot)
+		end
 	end)
 
 	-- Issues #476/#741 diagnostic. The vanilla decision is now invariant: NULL.

@@ -100,6 +100,12 @@ if (-not (Test-Path -LiteralPath $publicationReceiptHelpers -PathType Leaf)) {
 }
 . $publicationReceiptHelpers
 
+$buildOutputNormalizationHelpers = Join-Path $PSScriptRoot 'build-output-normalization.ps1'
+if (-not (Test-Path -LiteralPath $buildOutputNormalizationHelpers -PathType Leaf)) {
+    throw "Build-output normalization policy not found: $buildOutputNormalizationHelpers"
+}
+. $buildOutputNormalizationHelpers
+
 function Fail {
     param([string]$Message)
     Write-Host ""
@@ -1234,10 +1240,14 @@ finally {
     Assert ($selfTxt.IndexOf('& $promotionStatus -Mod $Mod', $mainDispatchPos) -ge 0) "stranded-fix report is scoped to the exact ship target"
     Assert ($selfTxt.IndexOf('qa\check_custom_unit_bundle_reachability.ps1') -ge 0) "build-only runs custom-unit reachability after generation"
     Assert ($selfTxt.IndexOf("@('build', `$Mod, '--clean')") -ge 0) "build-only invokes VMBLauncher's clean build action"
+    Assert ($selfTxt.IndexOf("'build-output-normalization.ps1'") -ge 0) "ship sources the shared build-output normalizer"
     Assert ($selfTxt.IndexOf('BUILD-ONLY COMPLETE') -ge 0) "build-only exits before deploy/upload/release handling"
     $mainDispatchPos = $selfTxt.LastIndexOf('if ($SelfTest) { exit (Invoke-ShipSelfTest) }')
     $initialAuthorizationPos = $selfTxt.IndexOf('publicationAuthorization = Get-LivePublicationAuthorization', $mainDispatchPos)
     $cleanBuildPos = $selfTxt.IndexOf("launcherArgs = @('build', `$Mod, '--clean')", $mainDispatchPos)
+    $buildNormalizationPos = $selfTxt.IndexOf('buildNormalization = Invoke-BuildOutputNormalization', $mainDispatchPos)
+    $remoteExclusionGuardPos = $selfTxt.IndexOf('VMBLauncher remote deploy currently copies and verifies expected files', $buildNormalizationPos)
+    $buildOnlyPostGatePos = $selfTxt.IndexOf('if ($BuildOnly) {', $buildNormalizationPos)
     $bundleParityPos = $selfTxt.IndexOf('bundleParity = Test-TrackedBundleParity', $mainDispatchPos)
     $deployActionPos = $selfTxt.IndexOf("deployArgs = @('deploy', `$Mod)", $mainDispatchPos)
     $finalAuthorizationPos = $selfTxt.LastIndexOf('publicationAuthorization = Get-LivePublicationAuthorization')
@@ -1245,6 +1255,8 @@ finally {
     $receiptHandoffPos = $selfTxt.IndexOf('-PublicationReceiptOutputPath $receiptPath', $mainDispatchPos)
     $uploadActionPos = $selfTxt.IndexOf("uploadArgs = @('upload', `$Mod)", $mainDispatchPos)
     Assert ($initialAuthorizationPos -ge 0 -and $initialAuthorizationPos -lt $cleanBuildPos) "publication authorization runs before the first build mutation"
+    Assert ($cleanBuildPos -lt $buildNormalizationPos -and $buildNormalizationPos -lt $buildOnlyPostGatePos -and $buildNormalizationPos -lt $bundleParityPos) "exact-hash normalization runs after clean build and before BuildOnly QA or final parity"
+    Assert ($buildNormalizationPos -lt $remoteExclusionGuardPos -and $remoteExclusionGuardPos -lt $buildOnlyPostGatePos -and $selfTxt.IndexOf('Re-run with -NoRemote', $remoteExclusionGuardPos) -ge 0) "artifact-exclusion publications require -NoRemote before any deploy"
     Assert ($cleanBuildPos -lt $bundleParityPos -and $bundleParityPos -lt $deployActionPos) "clean build parity is proven before deploy"
     Assert ($deployActionPos -lt $finalAuthorizationPos -and $finalAuthorizationPos -lt $uploadActionPos) "authorization is revalidated immediately before Workshop upload"
     Assert ($authorizationRecordPos -lt $finalAuthorizationPos -and $finalAuthorizationPos -lt $uploadActionPos) "authorization evidence is recorded before the last-moment upload gate"
@@ -1645,6 +1657,25 @@ try {
 }
 catch {
     Fail $_.Exception.Message
+}
+
+# Clean Stingray builds can emit inventoried SDK tool-only artifacts whose own
+# package declares BUNDLE=false. Canonicalize only exact name+SHA policy matches
+# before any BuildOnly gate, tracked parity check, deploy, or upload observes them.
+try {
+    $buildNormalization = Invoke-BuildOutputNormalization -RepoRoot $repoRoot -Mod $Mod
+}
+catch {
+    Fail $_.Exception.Message
+}
+
+# VMBLauncher remote deploy currently copies and verifies expected files but
+# cannot remove or reject stale extras. Never claim PC-B was reconciled for a
+# mod whose canonical output intentionally excludes a previously emitted file.
+if (-not $BuildOnly -and -not $NoRemote -and
+    (($buildNormalization.Removed + $buildNormalization.Absent) -gt 0)) {
+    Fail ("$Mod has a build-output exclusion, but VMBLauncher remote deploy cannot reconcile stale extra files. " +
+        "Re-run with -NoRemote. Local deploy and Workshop publication remain exact; PC-B stays intentionally unrefreshed until remote exact-set reconciliation is supported.")
 }
 
 if ($BuildOnly) {

@@ -39,13 +39,20 @@ return function(H, repo_root)
         return string.format("%08x", hash)
     end
 
-    H.test("CWV base/custom skin payload is byte-equivalent to its entry owner", function()
+    H.test("CWV base/custom skin payload matches its reviewed bytes", function()
+        -- Baselined at extraction (49723 / 9221c064) as byte-identical to the
+        -- former entry-file payload. Issue 399 is the FIRST deliberate behavioral
+        -- change inside the markers: the generated skin now honours
+        -- `def.no_ammo_unit` on both `ammo_unit` and `ammo_unit_3p`, so a def that
+        -- ever gains a `left_hand_unit` cannot re-declare the donor's torpedo.
+        -- Re-baselined here; the lock now pins the reviewed bytes, not the
+        -- extraction identity. Any further change must be re-reviewed the same way.
         local source = read("_cwv_skin_registry.lua")
         local moved = payload(source,
             "-- CWV_SKIN_REGISTRY_PAYLOAD_BEGIN_v1",
             "-- CWV_SKIN_REGISTRY_PAYLOAD_END_v1")
-        H.equal(#moved, 49723)
-        H.equal(fnv1a32(moved), "9221c064")
+        H.equal(#moved, 50389)
+        H.equal(fnv1a32(moved), "dfd65734")
     end)
 
     H.test("CWV generated-family payload preserves the surveyed registrar bytes", function()

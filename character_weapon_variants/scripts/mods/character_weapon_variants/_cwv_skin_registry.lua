@@ -68,6 +68,19 @@ return function(mod, deps)
 			-- otherwise leave nil and let vanilla's no-ammo_unit path run.
 			local base = (ItemMasterList and rawget(ItemMasterList, def.base_weapon)) or {}
 			local ammo_unit = def.ammo_unit or (base.ammo_unit and def.left_hand_unit)
+			local ammo_unit_3p = def.ammo_unit_3p or base.ammo_unit_3p
+			-- #399: `no_ammo_unit` is the def-level statement that this variant
+			-- shows NO ammo mesh (the Outrider must never wear dr_deus_01's
+			-- torpedo). The generated skin has to agree on BOTH fields.
+			-- `ammo_unit` was already nil in practice only because the fallback
+			-- above needs `def.left_hand_unit`, which every current no_ammo_unit
+			-- def happens to omit -- so the 3P line was inert by luck. Authoring a
+			-- left_hand_unit on such a def would have re-declared the donor's
+			-- torpedo on EVERY surface including the owner. Make it explicit.
+			if def.no_ammo_unit then
+				ammo_unit = nil
+				ammo_unit_3p = nil
+			end
 			local hud_icon = def.hud_icon or "weapon_generic_icon_axe1h"
 			local inventory_icon = def.inventory_icon or "icon_wpn_dw_shield_01_axe"
 			local rarity = def.skin_rarity or def.rarity or "exotic"
@@ -164,7 +177,7 @@ return function(mod, deps)
 				right_hand_unit           = def.right_hand_unit,
 				left_hand_unit            = skin_left_hand_unit,
 				ammo_unit                 = ammo_unit,
-				ammo_unit_3p              = def.ammo_unit_3p or base.ammo_unit_3p,
+				ammo_unit_3p              = ammo_unit_3p,
 				projectile_units_template = def.projectile_units_template or base.projectile_units_template,
 				pickup_template_name      = def.pickup_template_name or base.pickup_template_name,
 				link_pickup_template_name = def.link_pickup_template_name or base.link_pickup_template_name,

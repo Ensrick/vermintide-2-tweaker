@@ -156,6 +156,14 @@ end
 -- lands second is the rebuild, so the two orderings converge with no polling.
 -- The wielded-slot check is repeated at drain time because the wearer may have
 -- switched weapons during the deferral. Returns (false, reason).
+--
+-- #786: `deps.on_verify(unit, inventory, slot, wield_error)` is the POST-DRAIN
+-- verification seam. Because the wield is deferred to `drain`, a caller that
+-- must prove the re-wield landed cannot read a verdict from this call; it
+-- passes `on_verify` and is called back from inside the drain, immediately
+-- after the wield. The callback never gates, repairs, or repeats the wield, and
+-- a DROPPED request (mid-destroy husk) never calls back at all -- the caller's
+-- bounded ledger owns that timeout. `deps.tag` names the requesting edge.
 function M.request_peer_rewield(peer_id, slot, deps)
     if not (peer_id and slot) then return false, "bad-peer-slot" end
     deps = deps or {}
@@ -175,9 +183,18 @@ function M.request_peer_rewield(peer_id, slot, deps)
         return false, "no-inventory"
     end
     if inventory.wielded_slot ~= slot then return false, "slot-not-wielded" end
-    return M.request(unit, "identity-arrival:" .. tostring(slot), function()
+    local on_verify = deps.on_verify
+    local tag = deps.tag or ("identity-arrival:" .. tostring(slot))
+    return M.request(unit, tag, function()
+        local wield_error
         if inventory.wielded_slot == slot then
-            pcall(inventory.wield, inventory, slot)
+            local ok, err = pcall(inventory.wield, inventory, slot)
+            if not ok then wield_error = err end
+        else
+            wield_error = "slot-not-wielded"
+        end
+        if type(on_verify) == "function" then
+            pcall(on_verify, unit, inventory, slot, wield_error)
         end
     end)
 end
