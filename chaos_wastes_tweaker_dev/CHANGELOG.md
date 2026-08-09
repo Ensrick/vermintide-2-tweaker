@@ -1,5 +1,21 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.322-dev (2026-08-09) -- exact boon catalog parity completes the #426 axis (#426, #1158, #1191) [untested]
+
+- The wire beacon moves to a dedicated exact channel
+  (`ct_boon_catalog_exact_v1`): peers must prove the identical 33-row boon
+  catalog (12 power-ups + 21 buffs) in both lookup directions before any
+  modded boon travels; a peer on an older build or a drifted catalog reads as
+  parity-absent and every gated feature stays inert - the #1191 boon-index
+  drift class fails closed instead of decoding wrong boons.
+- Both lookup axes are reserved in sorted order before any per-boon
+  registration, making numeric ids order-independent across peers; a failed
+  reservation leaves the beacon un-built and everything inert.
+- Gated presentation rows 9 -> 21: the twelve start-boon rows join the
+  greyout bridge, which now consumes the same policy instance gameplay reads.
+- Fourteen offline tests incl. a direct #1191 drift proof; mixed-version
+  friend lobbies stay safe but inert until all peers update.
+
 ## 0.7.321-dev (2026-08-09) -- regression instruments stop lying (#1156)
 
 - The two dormant-boon checks now assert ct-owned ground truth: absence from
