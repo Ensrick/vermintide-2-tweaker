@@ -59,10 +59,10 @@ return function(H, repo_root)
         end
         local standard = read(repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua")
-        local entry = read(repo_root
-            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua")
+        local picker = read(repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_picker_owner.lua")
         H.truthy(standard:find("_cim_cw_trait_entries%(master%.slot_type%)"))
-        H.truthy(entry:find("selected_item%.data%.slot_type"))
-        H.truthy(entry:find("_cim_apply_forge_freedom, slots_progression, slot_type", 1, true))
+        H.truthy(picker:find("selected_item%.data"))
+        H.truthy(picker:find("dispatch.apply_forge_freedom, slots_progression, slot_type", 1, true))
     end)
 end

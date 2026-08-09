@@ -71,16 +71,17 @@ _rt_register("forge_preview_accepts_resident_3p_unit", function()
     if type(mod._cim_forge_preview_unsafe) ~= "function" then
         return "forge preview guard helper (_cim_forge_preview_unsafe) not exposed (#481 regression)"
     end
-    -- Source-pattern (io-safe #511; nil in retail sandbox => skip): the residency
-    -- fallback must remain in pkg_missing. Split needle so this line can't self-match.
-    local ok, info = pcall(debug.getinfo, _rt_register, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
-    if not txt then return end
-    local needle = 'if Application.can_get("unit", p) then ' .. 'return false end'
-    if not txt:find(needle, 1, true) then
-        return "#481 regression: pkg_missing dropped the resident-3p-unit fallback (LA-skinned shields lose the forge preview)"
+    -- Drive the shared policy rather than source-matching the entry. A provider
+    -- unit with no standalone package is valid when that exact unit is resident.
+    local policy = mod._cim_forge_preview_policy
+    if type(policy) ~= "table" or type(policy.unit_loadable) ~= "function" then
+        return "#481 regression: forge preview resource policy missing"
+    end
+    local loadable, reason = policy.unit_loadable("cim_rt_resident_unit", function(kind)
+        return kind == "unit"
+    end)
+    if loadable ~= true or reason ~= "resident_unit" then
+        return "#481 regression: resident-3p-unit fallback rejected (LA-skinned shields lose the forge preview)"
     end
 end)
 
@@ -136,7 +137,7 @@ _rt_register("forge_preview_la_diagnostics_armed", function()
     end
     -- Source-pattern (io-safe; nil in retail sandbox => skip). Split needles so
     -- this check's own source does not self-match.
-    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    local ok, info = pcall(debug.getinfo, mod._cim_forge_preview_unsafe, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip

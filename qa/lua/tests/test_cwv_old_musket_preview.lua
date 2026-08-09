@@ -262,6 +262,55 @@ return function(H, repo_root)
         H.equal(logged, 1)
     end)
 
+    H.test("CIM #882 runtime reload refreshes policy through one stable hook", function()
+        local Runtime = dofile(repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
+        local hook, registrations = nil, 0
+        local mod = {
+            hook = function(_, class_name, method_name, callback)
+                H.equal(class_name, "HeroWindowWeaveProperties")
+                H.equal(method_name, "_create_item_previewer")
+                registrations = registrations + 1
+                hook = callback
+            end,
+        }
+        local set_position
+        local function deps(policy)
+            return {
+                mod = mod,
+                policy = policy,
+                is_active = function() return true end,
+                unit_api = {
+                    alive = function() return true end,
+                    world_position = function() return 10 end,
+                    set_local_position = function(_, _, value)
+                        set_position = value
+                    end,
+                },
+                vector3 = function(x) return x end,
+                vector3_box = function(value) return { value = value } end,
+                printf = function() end,
+            }
+        end
+        local function policy(target_x)
+            return {
+                properties_preview_position = function()
+                    return { target_x, 3, 0 }
+                end,
+            }
+        end
+
+        H.equal(Runtime.install(deps(policy(1))), true)
+        H.equal(Runtime.install(deps(policy(2))), true)
+        H.equal(registrations, 1)
+        local previewer = hook(function()
+            return { _spawn_position = { 0, 3, 0 }, _link_unit = {} }
+        end, {}, {}, { data = { key = "es_longbow", slot_type = "ranged" } })
+        H.equal(set_position, 12)
+        H.equal(previewer._spawn_position[1], 2)
+        H.equal(previewer._unit_start_position_boxed.value, 12)
+    end)
+
     H.test("CIM #882 production correction is construction-only and zoom durable", function()
         local root = repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
@@ -271,13 +320,18 @@ return function(H, repo_root)
         local runtime_file = assert(io.open(root .. "_cim_forge_preview.lua", "rb"))
         local runtime = runtime_file:read("*a")
         runtime_file:close()
+        local owner_file = assert(io.open(root .. "_cim_forge_preview_owner.lua", "rb"))
+        local owner = owner_file:read("*a")
+        owner_file:close()
         H.truthy(entry:find('mod:dofile(\n    "scripts/mods/crafting_in_modded_dev/_cim_forge_preview")', 1, true))
-        H.truthy(entry:find("_FORGE_PREVIEW.install_runtime(", 1, true))
+        H.truthy(entry:find("scripts/mods/crafting_in_modded_dev/_cim_forge_preview_owner", 1, true))
+        H.truthy(owner:find("state.preview_runtime.install_runtime(", 1, true))
         H.truthy(runtime:find('deps.mod:hook("HeroWindowWeaveProperties", "_create_item_previewer"', 1, true))
-        H.truthy(runtime:find("deps.policy.properties_preview_position", 1, true))
+        H.truthy(runtime:find("state.callback = function(func, self, viewport_widget, item)", 1, true))
+        H.truthy(runtime:find("current.policy.properties_preview_position", 1, true))
         H.truthy(runtime:find("previewer._unit_start_position_boxed = adjusted_box", 1, true))
-        H.truthy(runtime:find("if not deps.is_active() or not previewer then return previewer end", 1, true))
-        H.truthy(runtime:find("pcall(deps.vector3, dx, dy, dz)", 1, true))
+        H.truthy(runtime:find("if not current.is_active() or not previewer then return previewer end", 1, true))
+        H.truthy(runtime:find("pcall(current.vector3, dx, dy, dz)", 1, true))
     end)
 
     H.test("CIM #882 overview separates by viewport role, not item slot type", function()
