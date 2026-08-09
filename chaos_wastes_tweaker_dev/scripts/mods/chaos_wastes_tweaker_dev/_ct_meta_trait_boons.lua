@@ -2103,7 +2103,7 @@ _rt_register("issue406_kill_heal_mod_boon_catalog", function()
     -- definition on both generated surfaces without cloning the boon itself.
     local templates = rawget(_G, "DeusPowerUpTemplates")
     if type(templates) ~= "table" or type(rawget(templates, "ct_kill_heal")) ~= "table" then
-        return "canonical DeusPowerUpTemplates.ct_kill_heal definition missing (run in keep)"
+        return "skip: canonical DeusPowerUpTemplates.ct_kill_heal definition missing (run in keep)"
     end
 
     local ok, data = pcall(mod.dofile, mod,
@@ -2167,7 +2167,10 @@ _rt_register("anath_raema_registry_retry_288", function()
     end
     apply_anath_raema_permanent_tweak()
     local entries = _anath_raema_buff_entries()
-    if #entries ~= 2 then return "expected both WeaponTraits and BuffTemplates registries in keep" end
+    -- #1156: both registries only exist keep-side. Mid-mission this used to score FAIL against
+    -- healthy code (2026-08-04 log); the context is not something the check can control, so it
+    -- skips rather than accusing the tweak of being broken.
+    if #entries ~= 2 then return "skip: WeaponTraits + BuffTemplates registries are keep-only (run in-keep)" end
     if not (balance.get_anath_raema_originals() and balance.get_anath_raema_originals().templates.weapon_traits
             and balance.get_anath_raema_originals().templates.buff_templates) then
         return "two registries must preserve independent originals"

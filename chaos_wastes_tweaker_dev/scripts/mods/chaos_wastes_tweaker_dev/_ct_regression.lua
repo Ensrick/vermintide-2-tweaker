@@ -61,12 +61,42 @@ _rt_register("dormant_boons_preregistered", function()
 end)
 --]]
 
--- 2026-05-23 v0.7.98-dev NEW: verifies the disabled boon names are NOT present in the network
--- / buff registration tables. Doctrine per feedback_vt2_verify_before_shipping.md — the disable
--- ships with a runtime proof. Iterates `CT_DISABLED_DORMANT_BOON_NAMES` (9 dormants +
--- ct_kill_heal) and checks each is absent from BOTH `NetworkLookup.deus_power_up_templates`
--- AND `_G.BuffTemplates` (variant under each name's known rarity). Returns nil for PASS,
--- error string for FAIL.
+-- GROUND TRUTH for the two dormant-disable checks below (#1156, PROJECT_STANDARDS 5.1d rule 1).
+-- Read this before changing either one.
+--
+-- All 9 names in `CT_DISABLED_DORMANT_BOON_NAMES` are top-level VANILLA keys of
+-- `DeusPowerUpTemplates` (Vermintide-2-Source-Code/scripts/settings/dlcs/morris/
+-- deus_power_up_settings.lua:1855, :1920, :2326, :2393, :2421, :2616, :2647, :2674, :3703),
+-- and `NetworkLookup.deus_power_up_templates` is built wholesale from that table
+-- (morris_common_settings.lua:823-829 `settings.network_lookups`). Vanilla therefore puts
+-- every one of these names in the lookup on EVERY install, with or without ct, and ct never
+-- removes them. Until v0.7.320-dev `dormant_boons_NOT_registered` asserted their ABSENCE from
+-- that lookup, which is an assertion that could not pass on any install - a permanent FAIL
+-- against healthy code, and a lying instrument by BUG_CLASSES 85 sub-pattern (a).
+--
+-- What ct actually OWNS for these names, and therefore what is assertable:
+--   * `_injected_dormants`         - written by `inject_dormant_boon` (_ct_boon_registry.lua:229),
+--                                    the single registry every ct-injected boon passes through.
+--                                    Read via the live accessor `mod._ct_is_modded_power_up`.
+--   * `_G.BuffTemplates["power_up_<name>_<rarity>"]`
+--                                  - written by that same injection path
+--                                    (_ct_boon_registry.lua:203-205). Vanilla builds its
+--                                    `power_up_*` templates from `DeusPowerUpRarityPool`
+--                                    (deus_power_up_settings.lua:7120-7161), which no dormant
+--                                    is in, so vanilla never creates these keys.
+--   * `DeusPowerUpRarityPool` / `DeusPowerUps`
+--                                  - written by `_add_dormant_to_pool`
+--                                    (_ct_boon_registry.lua:238-263); this is the PICKABLE pool,
+--                                    what the player can actually be offered. Verified absent
+--                                    from vanilla's pool for all 9 names.
+-- Both checks below assert only on those ct-owned surfaces, so each still FAILS loudly if a
+-- disabled dormant is re-enabled through ct's own registration path, and neither can be moved
+-- by vanilla data it does not control.
+--
+-- ct_kill_heal is NOT in the disabled list: #406 re-enabled it in v0.7.240-dev and it registers
+-- unconditionally (_ct_meta_trait_boons.lua:1262-1263, :1345). qa test `test_ct_boon_catalog`
+-- asserts its PRESENCE, so listing it here made these two checks contradict that test outright.
+--
 -- v0.7.100-dev: inverted from v0.7.99 check. After the full purge the global table
 -- MUST NOT exist (we don't want any lingering reference to dormant data). Any other
 -- mod that sets `_G.DORMANT_BOON_RARITY` would be a foreign collision and we'd want
@@ -79,15 +109,22 @@ _rt_register("dormant_boon_rarity_global_absent", function()
 end)
 
 _rt_register("dormant_boons_NOT_registered", function()
-    local NL = rawget(_G, "NetworkLookup")
-    local global_bt = rawget(_G, "BuffTemplates")
-    if not (NL and NL.deus_power_up_templates and global_bt) then
-        return "NetworkLookup.deus_power_up_templates / BuffTemplates not loaded (run in-keep)"
+    -- Rule 2: the accessor must RESOLVE before we assert on what it returns. If the wire-safety
+    -- block that publishes it ever stops running, this check must say so loudly rather than
+    -- quietly agree that nothing is injected.
+    local is_modded = mod._ct_is_modded_power_up
+    if type(is_modded) ~= "function" then
+        return "mod._ct_is_modded_power_up unresolved - the ct injection registry accessor is "
+            .. "missing, so this check cannot prove anything (see _ct_meta_trait_boons.lua)"
     end
-    local present_lookup, present_buff = {}, {}
+    local global_bt = rawget(_G, "BuffTemplates")
+    if not global_bt then
+        return "skip: _G.BuffTemplates not loaded (run in-keep)"
+    end
+    local injected, present_buff = {}, {}
     for _, name in ipairs(CT_DISABLED_DORMANT_BOON_NAMES) do
-        if rawget(NL.deus_power_up_templates, name) then
-            present_lookup[#present_lookup + 1] = name
+        if is_modded(name) then
+            injected[#injected + 1] = name
         end
         local rarity = CT_DISABLED_DORMANT_RARITIES[name]
         if rarity then
@@ -98,8 +135,8 @@ _rt_register("dormant_boons_NOT_registered", function()
         end
     end
     local parts = {}
-    if #present_lookup > 0 then parts[#parts + 1] = "NL.deus_power_up_templates still has: " .. table.concat(present_lookup, ", ") end
-    if #present_buff > 0 then parts[#parts + 1] = "BuffTemplates still has: " .. table.concat(present_buff, ", ") end
+    if #injected > 0 then parts[#parts + 1] = "ct injection registry (_injected_dormants) still has: " .. table.concat(injected, ", ") end
+    if #present_buff > 0 then parts[#parts + 1] = "ct-written BuffTemplates entries still exist: " .. table.concat(present_buff, ", ") end
     if #parts > 0 then return table.concat(parts, " | ") end
 end)
 
@@ -107,11 +144,14 @@ end)
 -- of `DeusPowerUpRarityPool` and NOT in any rarity bucket of `DeusPowerUps` (the runtime
 -- offering source). Returns nil for PASS. Note: Skulls boons stay in vanilla pools at "event"
 -- rarity by design (we just no longer clear their mutator gate), so they are NOT checked here.
+-- This is the PICKABLE-pool half of the ground truth documented above: vanilla pools none of
+-- these 9 names, `_add_dormant_to_pool` is the only writer that would, so a hit here means a
+-- ct-side re-enable and nothing else.
 _rt_register("dormant_boons_NOT_in_pool", function()
     local pool = rawget(_G, "DeusPowerUpRarityPool")
     local power_ups = rawget(_G, "DeusPowerUps")
     if not (pool and power_ups) then
-        return "DeusPowerUpRarityPool / DeusPowerUps not loaded (run in-keep)"
+        return "skip: DeusPowerUpRarityPool / DeusPowerUps not loaded (run in-keep)"
     end
     local in_pool, in_runtime = {}, {}
     local disabled_set = {}
@@ -195,7 +235,7 @@ end)
 _rt_register("trait_boons_preregistered", function()
     local NL = rawget(_G, "NetworkLookup")
     if not (NL and NL.deus_power_up_templates) then
-        return "NetworkLookup.deus_power_up_templates not loaded (run in-keep)"
+        return "skip: NetworkLookup.deus_power_up_templates not loaded (run in-keep)"
     end
     local missing = {}
     for _, spec in ipairs(mod._ct_meta_trait_boons.trait_boons) do
@@ -231,7 +271,7 @@ end)
 _rt_register("chaos_spawn_fallback_installed", function()
     local s = rawget(_G, "DeusSoftCurrencySettings")
     if not (s and s.loot_amount) then
-        return "DeusSoftCurrencySettings.loot_amount not loaded"
+        return "skip: DeusSoftCurrencySettings.loot_amount not loaded (run in-keep)"
     end
     local meta = getmetatable(s.loot_amount)
     if not (meta and meta.__index_installed_by_ct) then
@@ -271,7 +311,7 @@ _rt_register("kill_heal_uses_permanent_heal_type", function()
     -- DORMANT_BOON_RARITY-like constant marker instead by re-asserting the
     -- intended heal_type string is the one referenced near the call site).
     local buff_funcs = rawget(_G, "BuffFunctionTemplates")
-    if not buff_funcs then return "BuffFunctionTemplates not loaded (run in-keep)" end
+    if not buff_funcs then return "skip: BuffFunctionTemplates not loaded (run in-keep)" end
     if not buff_funcs.functions then return "BuffFunctionTemplates.functions missing" end
     local fn = buff_funcs.functions.ct_kill_heal_on_kill
     if fn == nil then
@@ -874,7 +914,7 @@ _rt_register("warlord_trial_injection", function()
     end
     local GTE = rawget(_G, "GenericTerrorEvents")
     if type(GTE) ~= "table" then
-        return "GenericTerrorEvents not loaded (run in keep)"
+        return "skip: GenericTerrorEvents not loaded (run in keep)"
     end
     local B = rawget(_G, "Breeds")
     local breed_present = B and type(B.et_skaven_warlord) == "table"
@@ -1250,7 +1290,7 @@ _rt_register("ct_meta_ammo_stacks_bounded", function()
 
     local buff_templates = rawget(_G, "BuffTemplates")
     if not buff_templates then
-        return "BuffTemplates not loaded (run in-keep)"
+        return "skip: BuffTemplates not loaded (run in-keep)"
     end
     -- Walk every template whose key matches `ct_meta_*_stack` and check the
     -- max_stacks ceiling on every sub-buff.
