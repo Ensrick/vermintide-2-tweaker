@@ -304,8 +304,10 @@ end
 local function apply_tourney_mods()
     if not BuffTemplates then return end
     restore_all_tourney_mods()
-    local parity = mod._crt_peer_parity
-    local parity_ok = parity ~= nil and parity:applied_state() == "enabled"
+    -- #1158: same composite floor the balance apply engine uses, so the tourney
+    -- port and the reworks can never disagree about whether parity is settled.
+    local parity_ok = type(mod._crt_wire_safe) == "function"
+        and mod._crt_wire_safe() == true
     for setting_id, def in pairs(TOURNEY_MODS) do
         if mod:get(setting_id) and not _conflict_active(setting_id) then
             if def.network_unsafe and not parity_ok then

@@ -795,6 +795,44 @@ do
             NetworkLookup and NetworkLookup.buff_templates)
     mod._crt.wire_catalog_identity = wire_identity
     mod._crt.wire_catalog_count = wire_names and #wire_names or 0
+
+    -- Boot-time snapshot of the exact ids the broadcast identity was built over.
+    -- build_identity already proved both directions resolve for every name, so
+    -- this array has no holes whenever wire_identity is non-nil.
+    local wire_ids = {}
+    if wire_identity and type(wire_names) == "table" then
+        local lookup = NetworkLookup and NetworkLookup.buff_templates
+        for i = 1, #wire_names do
+            wire_ids[i] = lookup and rawget(lookup, wire_names[i])
+        end
+    end
+    -- Live re-verification: the identity crt advertised is only meaningful while
+    -- the catalog it fingerprinted still holds. Pure decision in _crt_wire_policy.
+    local function wire_catalog_intact()
+        if not wire_identity then return false end
+        local lookup = rawget(_G, "NetworkLookup")
+        return mod._crt.wire_policy.catalog_intact(
+            wire_names, wire_ids, lookup and lookup.buff_templates,
+            mod._crt.wire_catalog_count)
+    end
+    mod._crt_wire_catalog_intact = wire_catalog_intact
+
+    -- The authoritative-path floors (#1158). Every crt read that decides whether
+    -- a modded buff name may cross the wire routes through one of these two, and
+    -- both share the same transport-committed + catalog-exact base. They differ
+    -- ONLY in which peer-set evidence they add: _wire_safe takes the beacon's
+    -- debounced settled state (correct for apply/restore churn and presentation),
+    -- _wire_live takes an instant roster evaluation (required per send, since the
+    -- settled state trails the roster by up to one 0.5s poll). Defined before the
+    -- beacon is built so a load-order failure below leaves them returning false
+    -- (fail-safe) rather than leaving call sites with no floor at all.
+    mod._crt_wire_safe = function()
+        return mod._crt.wire_policy.wire_safe(mod._crt_peer_parity, wire_catalog_intact)
+    end
+    mod._crt_wire_live = function()
+        return mod._crt.wire_policy.wire_live(mod._crt_peer_parity, wire_catalog_intact)
+    end
+
     if not wire_identity then
         pcall(printf, "[crt:776] WARNING exact wire-catalog identity unavailable (%s); networked reworks stay vanilla (fail-safe)",
             tostring(wire_identity_err))
@@ -818,77 +856,112 @@ do
             wire_identity = wire_identity,
         })
         if ok2 and type(inst) == "table" then
-            mod._crt_peer_parity = inst
-            mod._crt_wire_transport_identity = wire_identity
-            pcall(function() inst:install() end)
-            -- A real network departure retires the exact process epoch. Level
-            -- transitions do not call remove_peer, so bounded transition
-            -- retention remains intact without allowing peer-id replay.
-            mod:hook_safe("GameNetworkManager", "remove_peer", function(_, peer_id)
-                inst:forget_peer(peer_id)
-            end)
-            mod._crt_wire_disconnect_guard = true
-            pcall(printf, "[crt:425] peer-parity beacon installed (channel=crt_peer_parity_present schema=%d exact_identity=%s)",
-                CRT_RPC_SCHEMA, wire_identity)
-            -- ONE gated feature covering every networked_unsafe entry (eight
-            -- balance reworks + the trn_wh_priest tourney port). On a parity
-            -- transition the beacon fires these callbacks; each just re-runs the
-            -- two apply engines, which read the beacon's settled state directly
-            -- via pp:applied_state(). Issue 506: the shared lib now commits
-            -- _applied BEFORE firing callbacks, so an applied_state() read from
-            -- inside apply reflects the transition being delivered -- crt no
-            -- longer needs the private mod._crt_parity_settled_enabled mirror
-            -- flag it formerly set here to dodge the stale read (removed).
-            -- The lib chat-echoes the user-facing disable/re-enable notice; the
-            -- printf lines are the log-side [crt:425] trail.
-            inst:register_gated_feature("crt_networked_reworks", {
-                label = "networked talent reworks",
-                on_enable = function()
-                    pcall(printf, "[crt:425] parity established: re-applying networked talent reworks per settings")
-                    pcall(_reconcile_rework_engines)
-                end,
-                on_disable = function()
-                    pcall(printf, "[crt:425] parity degraded (peer set changed or peer lacks crt): networked talent reworks fall back to vanilla")
-                    pcall(_reconcile_rework_engines)
-                end,
-            })
+            -- Prove the transport actually committed before anything is wired to
+            -- this beacon. A factory that returned a table is not evidence that
+            -- mod:network_register() took the channel callback, and a beacon that
+            -- never registered can never receive a peer ack -- publishing it as
+            -- mod._crt_peer_parity would advertise a floor that cannot close.
+            --
+            -- SEAM (#1158 follow-up): the shared lib's install() returns nothing
+            -- today, so there is no commit boolean to consume. Making install()
+            -- return one is the install-transaction fanout slice -- an atomic
+            -- 6-mod change to tools/shared_lib/_lib_peer_parity.lua and its five
+            -- consumer copies -- deliberately out of scope for this crt-only
+            -- slice. Until it lands, is_installed() is the strongest signal the
+            -- lib exposes: it is set only AFTER the network_register pcall
+            -- succeeded. When the fanout lands, add the returned commit boolean
+            -- as a further conjunct here.
+            local install_ok = pcall(inst.install, inst)
+            local status_ok, installed = false, false
+            if install_ok and type(inst.is_installed) == "function" then
+                status_ok, installed = pcall(inst.is_installed, inst)
+            end
+            if not status_ok or installed ~= true then
+                pcall(printf, "[crt:425] WARNING peer-parity install did not commit (installed=%s); networked reworks stay vanilla (fail-safe)",
+                    tostring(installed))
+            else
+                mod._crt_peer_parity = inst
+                mod._crt_wire_transport_identity = wire_identity
+                -- A real network departure retires the exact process epoch. Level
+                -- transitions do not call remove_peer, so bounded transition
+                -- retention remains intact without allowing peer-id replay.
+                mod:hook_safe("GameNetworkManager", "remove_peer", function(_, peer_id)
+                    inst:forget_peer(peer_id)
+                end)
+                mod._crt_wire_disconnect_guard = true
+                pcall(printf, "[crt:425] peer-parity beacon installed (channel=crt_peer_parity_present schema=%d exact_identity=%s)",
+                    CRT_RPC_SCHEMA, wire_identity)
+                -- ONE gated feature covering every networked_unsafe entry (eight
+                -- balance reworks + the trn_wh_priest tourney port). On a parity
+                -- transition the beacon fires these callbacks; each just re-runs the
+                -- two apply engines, which read the beacon's settled state directly
+                -- via pp:applied_state(). Issue 506: the shared lib now commits
+                -- _applied BEFORE firing callbacks, so an applied_state() read from
+                -- inside apply reflects the transition being delivered -- crt no
+                -- longer needs the private mod._crt_parity_settled_enabled mirror
+                -- flag it formerly set here to dodge the stale read (removed).
+                -- The lib chat-echoes the user-facing disable/re-enable notice; the
+                -- printf lines are the log-side [crt:425] trail.
+                inst:register_gated_feature("crt_networked_reworks", {
+                    label = "networked talent reworks",
+                    on_enable = function()
+                        pcall(printf, "[crt:425] parity established: re-applying networked talent reworks per settings")
+                        pcall(_reconcile_rework_engines)
+                    end,
+                    on_disable = function()
+                        pcall(printf, "[crt:425] parity degraded (peer set changed or peer lacks crt): networked talent reworks fall back to vanilla")
+                        pcall(_reconcile_rework_engines)
+                    end,
+                })
 
-            -- Optional Mod Tweaker presentation bridge. Runtime/network safety
-            -- above remains authoritative when GUT is absent; this bridge only
-            -- makes all nine affected saved rows read-only/grey while exact
-            -- parity is unavailable. Retry because mod load order is not a
-            -- dependency contract, and preserve the existing update owner.
-            local runtime_mod_id = "crt"
-            local ok_name, live_name = pcall(function() return mod:get_name() end)
-            if ok_name and type(live_name) == "string" and live_name ~= "" then
-                runtime_mod_id = live_name
-            end
-            local runtime_gate_id = runtime_mod_id .. ":776:exact-buff-catalog"
-            local runtime_gate_registered = false
-            local runtime_gate_retry = 0
-            local function try_runtime_gate()
-                if runtime_gate_registered then return end
-                local spec = mod._crt.wire_policy.runtime_gate_spec(
-                    runtime_mod_id, mod._crt.network_unsafe_setting_ids,
-                    function()
-                        local available = inst:applied_state() == "enabled"
-                        return available, available and nil
-                            or "Unavailable until every player has the same Tweaker: Careers buff catalog."
-                    end)
-                local registered = mod._crt.wire_policy.try_register_runtime_gate(
-                    rawget(_G, "get_mod"), runtime_gate_id, spec)
-                runtime_gate_registered = registered == true
-                mod._crt_wire_runtime_gate_registered = runtime_gate_registered
-            end
-            try_runtime_gate()
-            local previous_update = mod.update
-            mod.update = function(dt)
-                if previous_update then previous_update(dt) end
-                if not runtime_gate_registered then
-                    runtime_gate_retry = runtime_gate_retry + (dt or 0)
-                    if runtime_gate_retry >= 1 then
-                        runtime_gate_retry = 0
-                        try_runtime_gate()
+                -- Optional Mod Tweaker presentation bridge. Runtime/network safety
+                -- above remains authoritative when GUT is absent; this bridge only
+                -- makes all nine affected saved rows read-only/grey while exact
+                -- parity is unavailable. Retry because mod load order is not a
+                -- dependency contract, and preserve the existing update owner.
+                local runtime_mod_id = "crt"
+                local ok_name, live_name = pcall(function() return mod:get_name() end)
+                if ok_name and type(live_name) == "string" and live_name ~= "" then
+                    runtime_mod_id = live_name
+                end
+                local runtime_gate_id = runtime_mod_id .. ":776:exact-buff-catalog"
+                -- Bounded: a session without GUT (or with a malformed GUT) must
+                -- retire this retry instead of polling get_mod() every second for
+                -- the rest of the process. The terminal-at-30 contract lives in
+                -- _crt_wire_policy.runtime_gate_retry_step so it is testable offline.
+                local runtime_gate_state = { attempts = 0, registered = false, terminal = false }
+                local runtime_gate_retry = 0
+                local function try_runtime_gate()
+                    runtime_gate_state = mod._crt.wire_policy.runtime_gate_retry_step(
+                        runtime_gate_state,
+                        function()
+                            return mod._crt.wire_policy.runtime_gate_spec(
+                                runtime_mod_id, mod._crt.network_unsafe_setting_ids,
+                                function()
+                                    -- Presentation follows the SAME composite floor the
+                                    -- gameplay paths use, so a grey row never disagrees
+                                    -- with whether the send would actually be allowed.
+                                    local available = mod._crt_wire_safe() == true
+                                    return available, available and nil
+                                        or "Unavailable until every player has the same Tweaker: Careers buff catalog."
+                                end)
+                        end,
+                        function(spec)
+                            return mod._crt.wire_policy.try_register_runtime_gate(
+                                rawget(_G, "get_mod"), runtime_gate_id, spec)
+                        end)
+                    mod._crt_wire_runtime_gate_registered = runtime_gate_state.registered == true
+                end
+                try_runtime_gate()
+                local previous_update = mod.update
+                mod.update = function(dt)
+                    if previous_update then previous_update(dt) end
+                    if not runtime_gate_state.terminal then
+                        runtime_gate_retry = runtime_gate_retry + (dt or 0)
+                        if runtime_gate_retry >= 1 then
+                            runtime_gate_retry = 0
+                            try_runtime_gate()
+                        end
                     end
                 end
             end
