@@ -148,7 +148,13 @@ return function(H, repo_root)
             "GearUtils.spawn_inventory_unit must be hooked exactly once")
         H.equal(count(source, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1,
             "SimpleHuskInventoryExtension._wield_slot must be hooked exactly once")
-        H.equal(count(source, 'mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"'), 1,
+        -- #1159: start_weapon_fx moved to the husk-residency owner, beside the
+        -- #280 force-loads it is the crash floor for. Still exactly one site,
+        -- and the entry must hold no shadowing registration (VMF drops dupes).
+        local residency = read(mod_root .. "_cwv_husk_residency_owner.lua")
+        H.equal(count(residency, 'mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"'), 1,
             "SimpleHuskInventoryExtension.start_weapon_fx must be hooked exactly once")
+        H.equal(count(source, 'mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"'), 0,
+            "entry must not re-register SimpleHuskInventoryExtension.start_weapon_fx")
     end)
 end
