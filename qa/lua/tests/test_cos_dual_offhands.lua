@@ -24,6 +24,10 @@ return function(H, repo_root)
     end
 
     local cos = read(cos_path)
+        .. read(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
+        .. read(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_picker.lua")
     local lifecycle = read(lifecycle_path)
     local persist = read(persist_path)
     local commit = read(commit_path)

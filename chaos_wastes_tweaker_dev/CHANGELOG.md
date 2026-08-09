@@ -1,5 +1,47 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.323-dev (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
+
+- The shared peer-parity library installs as an atomic transaction: receiver
+  and update wrapper commit together inside one guarded call, a partial
+  install is terminal for the session (never retried, every floor stays
+  shut), and install() reports a commit boolean this mod's gates consume.
+- New all_peers_have(mod_id) registry answers cross-mod parity queries and
+  fails closed for unknown or uncommitted mods (OOP_REFACTOR_PLAN WS1.5).
+- The #426 beacon report now tells the truth: "installed" prints only on a real commit; otherwise a WARNING names the terminal fail-safe.
+
+## 0.7.322-dev (2026-08-09) -- exact boon catalog parity completes the #426 axis (#426, #1158, #1191) [untested]
+
+- The wire beacon moves to a dedicated exact channel
+  (`ct_boon_catalog_exact_v1`): peers must prove the identical 33-row boon
+  catalog (12 power-ups + 21 buffs) in both lookup directions before any
+  modded boon travels; a peer on an older build or a drifted catalog reads as
+  parity-absent and every gated feature stays inert - the #1191 boon-index
+  drift class fails closed instead of decoding wrong boons.
+- Both lookup axes are reserved in sorted order before any per-boon
+  registration, making numeric ids order-independent across peers; a failed
+  reservation leaves the beacon un-built and everything inert.
+- Gated presentation rows 9 -> 21: the twelve start-boon rows join the
+  greyout bridge, which now consumes the same policy instance gameplay reads.
+- Fourteen offline tests incl. a direct #1191 drift proof; mixed-version
+  friend lobbies stay safe but inert until all peers update.
+
+## 0.7.321-dev (2026-08-09) -- regression instruments stop lying (#1156)
+
+- The two dormant-boon checks now assert ct-owned ground truth: absence from
+  ct's injection registry and from the `power_up_<name>_<rarity>` BuffTemplates
+  entries only ct writes - not from `NetworkLookup.deus_power_up_templates`,
+  which vanilla populates for all nine names regardless of ct, making the old
+  lookup assertion permanently false. `ct_kill_heal` is removed from the
+  disabled list; it has been deliberately re-enabled since 0.7.240-dev (#406).
+- The regression runner gains a SKIP verdict: wrong-context checks (keep-only
+  probes run mid-mission and vice versa) render `SKIP` with a reason and their
+  own summary column instead of counting as FAIL - 18 sites total, 9 of which
+  had been silently mis-scoring as failures all along.
+- Four new offline suites lock the repaired contracts: gt nil-on-success for
+  all six diagnostics, cwv marker-scope + collector publication, XFAIL/XPASS
+  rendering with XPASS loud, and the dormant-boon independence proof.
+
 ## 0.7.320-dev (2026-08-09) -- command/guard/trait owner decomposition (#1159, #504, #2)
 
 - Extracted seven single-responsibility owners from the entry file: journey

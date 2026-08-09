@@ -50,6 +50,10 @@ return function(H, repo_root)
         H.equal(count_plain(entry, "_cos_runtime_checks.install(mod, _rt_register"), 1)
         H.equal(count_plain(entry, "_cos_command_owner\").install(mod"), 1)
         H.equal(count_plain(entry, "MODDED_ILLUSION_SWAP.install(mod"), 1)
+        H.equal(count_plain(entry,
+            '"scripts/mods/cosmetics_tweaker/_cos_offhand_catalog").install(mod'), 1)
+        H.equal(count_plain(entry,
+            '"scripts/mods/cosmetics_tweaker/_cos_offhand_picker").install(mod'), 1)
         H.equal(count_plain(entry, "local _wielded_units_for_probe = _cos_glow_probe.wielded_units_for_probe"), 1)
     end)
 

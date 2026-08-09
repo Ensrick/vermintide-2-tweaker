@@ -1375,8 +1375,12 @@ end
 -- (never toggle-gated) per the never-crash doctrine.
 --
 -- HOW: the shared peer-parity beacon (copied single-source lib, master:
--- tools/shared_lib/_lib_peer_parity.lua; same instance pattern as cwv issue 424).
--- Presence is proven over VMF's own mod-to-mod channel - wire-safe by construction.
+-- tools/shared_lib/_lib_peer_parity.lua; same instance pattern as cwv issue 424),
+-- run in EXACT-CATALOG mode since v0.7.322-dev. Presence is proven over VMF's own
+-- mod-to-mod channel - wire-safe by construction - and exact mode additionally makes
+-- a peer echo the composite identity of both boon axes, so an ack proves not just
+-- "runs ct" but "numbers every ct boon the same way this process does" (#1191: two
+-- ct peers on different builds could both ack while their indices disagreed).
 -- Fail-safe posture: modded content is INERT until every other human peer positively
 -- acks; solo enables immediately; any beacon error forces content off. The existing
 -- ct_peer_manifest_chunk machinery stays what it is - an on-demand DIAGNOSTIC dump -
@@ -1390,6 +1394,14 @@ end
 --   5. PARITY-LOSS STRIP   - debounced host-side removal of already-granted modded
 --                            power-ups, persistent-buff names, and live modded buffs
 --                            (details on the debounce below)
+--   6. HOT-JOIN FENCE      - synchronous pre-roster strip in hot_join_sync (below)
+--
+-- The EXACT CATALOG is not a seventh surface but the precondition for all six:
+-- _ct_wire_policy.lua owns the closed catalogs, the sorted reservation runs in
+-- _ct_boon_registry.lua before any per-boon registration, the identity and the
+-- integrity snapshot are built at the top of _ct_install_peer_parity, and
+-- mod._ct_wire_safe() re-proves integrity on every call. Without an identity no
+-- beacon is built at all, so every surface above holds content inert.
 do
     -- 200-LOCAL CEILING (Lua 5.1): the main chunk carries ~194 active locals by
     -- this point, and this block's helpers pushed it past 200 (Stingray compile
@@ -1398,21 +1410,109 @@ do
     -- slot that releases at this do-block's end. Behavior is unchanged.
     local function _ct_install_peer_parity()
         local inst
+
+        -- EXACT-CATALOG FINALIZATION (v0.7.322-dev, #426 / #1191) ----------------
+        -- _ct_boon_registry.lua already reserved both axes in sorted order and
+        -- published the module; prefer that instance so reservation and identity
+        -- provably describe the same catalog (mod:dofile is NOT a singleton -
+        -- a second call would build a second, independent module).
+        local wire_policy = mod._ct_wire_policy
+        if type(wire_policy) ~= "table" then
+            -- pcall the load: _ct_install_peer_parity() is NOT wrapped by its
+            -- caller, so an error raised here would abort the whole wire-safety
+            -- install.
+            local ok_policy, loaded = pcall(mod.dofile, mod,
+                "scripts/mods/chaos_wastes_tweaker_dev/_ct_wire_policy")
+            wire_policy = (ok_policy and type(loaded) == "table") and loaded or nil
+            if wire_policy == nil then
+                pcall(printf, "[ct:426] wire-policy module unavailable (%s); modded content stays inert",
+                    tostring(loaded))
+            end
+        end
+        mod._ct_wire_policy = wire_policy
+
+        local wire_policy_valid = type(wire_policy) == "table"
+            and type(wire_policy.power_registry_ready) == "function"
+            and type(wire_policy.catalog_ready) == "function"
+            and type(wire_policy.capture_integrity) == "function"
+            and type(wire_policy.build_identity) == "function"
+            and type(wire_policy.integrity) == "function"
+            and type(wire_policy.power_up_entries) == "function"
+            and type(wire_policy.buff_entries) == "function"
+            and type(wire_policy.count) == "function"
+            and type(wire_policy.runtime_gate_spec) == "function"
+            and type(wire_policy.try_register_runtime_gate) == "function"
+
+        local wire_identity, wire_error, wire_integrity
+        local wire_power_count, wire_buff_count = 0, 0
+        local ok_catalog, Catalog = pcall(mod.dofile, mod,
+            "scripts/mods/chaos_wastes_tweaker_dev/_lib_wire_catalog")
+        if not wire_policy_valid then
+            wire_error = "wire-policy-missing-or-malformed"
+        elseif not ok_catalog or type(Catalog) ~= "table" then
+            wire_error = "wire-catalog-library-missing:" .. tostring(Catalog)
+        else
+            -- Every step is a REFUSAL to publish an identity, never a repair: an
+            -- identity that does not describe this process exactly would be
+            -- worse than none, because peers would trust it.
+            local finalize_ok, built_identity, finalize_error = pcall(function()
+                wire_power_count = wire_policy.count(wire_policy.power_up_entries())
+                wire_buff_count = wire_policy.count(wire_policy.buff_entries())
+                if wire_power_count ~= wire_policy.POWER_UP_COUNT
+                        or wire_buff_count ~= wire_policy.BUFF_COUNT then
+                    return nil, "wire-policy-catalog-count-mismatch"
+                end
+                -- Two-way: every injected boon is cataloged and every cataloged
+                -- boon was injected. A boon added without a catalog entry stops
+                -- the beacon instead of riding the wire uncovered.
+                local registry_ready, registry_err = wire_policy.power_registry_ready(
+                    _injected_dormants)
+                if not registry_ready then return nil, registry_err end
+                local ready, ready_err = wire_policy.catalog_ready(_G)
+                if not ready then return nil, ready_err end
+                local snapshot, snapshot_err = wire_policy.capture_integrity(
+                    rawget(_G, "NetworkLookup"))
+                if not snapshot then return nil, snapshot_err end
+                wire_integrity = snapshot
+                return wire_policy.build_identity(Catalog, rawget(_G, "NetworkLookup"))
+            end)
+            if finalize_ok then
+                wire_identity, wire_error = built_identity, finalize_error
+            else
+                wire_error = "catalog-finalize-error:" .. tostring(built_identity)
+            end
+        end
+        mod._ct_wire_catalog_identity = wire_identity
+        mod._ct_wire_catalog_error = wire_error
+        mod._ct_wire_catalog_integrity = wire_integrity
+        mod._ct_wire_catalog_power_count = wire_power_count
+        mod._ct_wire_catalog_buff_count = wire_buff_count
+
+        -- The beacon is built ONLY with an exact identity. Channel renamed from
+        -- ct_peer_parity_present in v0.7.322-dev and that rename is load-bearing:
+        -- a pre-0.7.322 ct peer's handler would ignore the four extra exact
+        -- fields on the old channel and ack anyway, which is exactly the false
+        -- positive #1191 is about. A distinct channel makes an unconverted build
+        -- structurally unable to answer, so it reads as parity-absent.
         local ok_lib, factory = pcall(function()
             return mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_lib_peer_parity")
         end)
-        if ok_lib and type(factory) == "function" then
+        if wire_identity and ok_lib and type(factory) == "function" then
             local ok_inst, built = pcall(factory, mod, {
-                channel     = "ct_peer_parity_present",
+                channel     = "ct_boon_catalog_exact_v1",
                 schema      = CT_RPC_SCHEMA,
                 mod_label   = "Chaos Wastes Tweaker",
                 echo_prefix = "[ct]",
+                wire_identity = wire_identity,
             })
             if ok_inst and type(built) == "table" then
                 inst = built
             else
                 pcall(printf, "[ct:426] peer-parity factory failed: %s", tostring(built))
             end
+        elseif not wire_identity then
+            pcall(printf, "[ct:426] exact catalog unavailable (%s); modded boons/miracles inert this session",
+                tostring(wire_error))
         else
             pcall(printf, "[ct:426] peer-parity lib failed to load: %s", tostring(factory))
         end
@@ -1421,30 +1521,58 @@ do
         -- mod table at call time, so file position does not matter).
         mod._ct_peer_parity = inst
 
-        -- "Is this power-up name ct-injected?" - _injected_dormants is the single registry
-        -- every ct boon passes through (inject_dormant_boon writes it for trait boons,
-        -- meta boons and ct_kill_heal alike). Vanilla names are never in it.
+        -- "Is this power-up name ct-injected?" The closed catalog and the runtime
+        -- injection registry are proven equal by power_registry_ready above, so
+        -- this reads either. The UNION is deliberate: membership feeds the strip,
+        -- where being too broad only removes more ct content, while being too
+        -- narrow leaves a modded index on the wire.
         mod._ct_is_modded_power_up = function(name)
-            return name ~= nil and _injected_dormants[name] ~= nil
+            if name == nil then return false end
+            if _injected_dormants[name] ~= nil then return true end
+            return type(wire_policy) == "table"
+                and type(wire_policy.is_power_up) == "function"
+                and wire_policy.is_power_up(name) == true
         end
 
-        -- "Is it wire-safe to grant/apply ct modded content right now?" Positive-evidence
-        -- check: true only when solo or every other human peer acked the beacon. Beacon
-        -- missing or any error = false (fail-safe: modded content stays inert; vanilla ct
-        -- features are untouched).
+        -- "Is it wire-safe to grant/apply ct modded content right now?" Four
+        -- independent positives, any one of which failing means inert:
+        --   1. the beacon installed at all;
+        --   2. the SETTLED gate is enabled - the same state the pools and the
+        --      Mod Tweaker rows report, so presentation cannot claim available
+        --      while the grant path refuses (or the reverse);
+        --   3. the LIVE roster still classifies safe, which closes the up-to-one
+        --      -poll window between a parity loss and the tick that commits it;
+        --   4. the local catalog still equals the identity the peers verified.
+        -- (4) is what the exact half adds: presence plus settled parity was
+        -- always true in the #1191 drift case, because both peers ran ct.
         mod._ct_wire_safe = function()
             local pp = mod._ct_peer_parity
             if not pp then return false end
-            local ok, res = pcall(pp.all_peers_have, pp)
-            return ok and res == true
+            local ok_installed, installed = pcall(pp.is_installed, pp)
+            if not ok_installed or installed ~= true then return false end
+            local ok_state, applied = pcall(pp.applied_state, pp)
+            if not ok_state or applied ~= "enabled" then return false end
+            local ok_live, live = pcall(pp.all_peers_have, pp)
+            if not ok_live or live ~= true then return false end
+            if not wire_policy_valid then return false end
+            local ok_integrity, exact = pcall(
+                wire_policy.integrity, mod._ct_wire_catalog_integrity)
+            return ok_integrity and exact == true
         end
 
-        -- "Is this buff TEMPLATE name ct-owned?" Used by the parity-loss strip. Covers
-        -- ct_miracle_*, ct_meta_*_stack and power_up_ct_* (trait boons, kill_heal,
-        -- meta boons). No vanilla template name starts with either prefix
-        -- (grep-verified across scripts/settings 2026-07-11).
+        -- "Is this buff TEMPLATE name ct-owned?" Used by the parity-loss strip.
+        -- The catalog names the 21 templates ct registers into the lookup; the
+        -- prefix test is retained as the wider net for anything ct writes to
+        -- BuffTemplates without a lookup row. No vanilla template name starts
+        -- with either prefix (grep-verified across scripts/settings 2026-07-11).
         mod._ct_is_ct_buff_template = function(n)
-            return type(n) == "string" and (n:find("^ct_") ~= nil or n:find("^power_up_ct_") ~= nil)
+            if type(n) ~= "string" then return false end
+            if type(wire_policy) == "table"
+                    and type(wire_policy.is_buff) == "function"
+                    and wire_policy.is_buff(n) == true then
+                return true
+            end
+            return n:find("^ct_") ~= nil or n:find("^power_up_ct_") ~= nil
         end
 
         -- Pool eject/inject ------------------------------------------------------
@@ -1786,22 +1914,17 @@ do
         -- read as unavailable while the gate is closed, instead of looking
         -- actionable and silently doing nothing.
         --
-        -- Loaded OUTSIDE the `if inst` branch on purpose: when the beacon is
+        -- Reached OUTSIDE the `if inst` branch on purpose: when the beacon is
         -- unavailable the content is inert for the whole session, which is
         -- exactly when the rows most need to say so. `inst` may be nil in the
         -- evaluator below, and a nil beacon reads as permanently closed.
-        -- pcall the load: _ct_install_peer_parity() is NOT wrapped by its caller,
-        -- so an error raised here would abort the whole wire-safety install. This
-        -- module is presentation only and must never be able to do that.
-        local ok_policy, wire_policy = pcall(function()
-            return mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_wire_policy")
-        end)
-        if not (ok_policy and type(wire_policy) == "table") then
-            pcall(printf, "[ct:426] wire-policy module unavailable (%s); Mod Tweaker rows stay ungated (runtime safety unaffected)",
-                tostring(wire_policy))
-            wire_policy = nil
-        end
-        mod._ct_wire_policy = wire_policy
+        --
+        -- `wire_policy` is the module resolved at the top of this function (the
+        -- registry's instance, the one whose reservation the identity describes).
+        -- It is deliberately NOT re-loaded here: mod:dofile is not a singleton, so
+        -- a second load would gate presentation on a different module object than
+        -- the one gameplay reads. A nil module means no gate is ever registered
+        -- and runtime safety is unaffected - it never consults this bridge.
         local gate_registered = wire_policy == nil   -- nothing to register; never retry
         local gate_retry = 0
         local try_runtime_gate
@@ -1854,7 +1977,21 @@ do
 
             -- install() wraps the existing mod.update (defined near the top of this file)
             -- preserving it; grep-verified single assignment, nothing reassigns it later.
-            pcall(function() inst:install() end)
+            --
+            -- #1158 install-transaction fanout: install() runs receiver registration
+            -- and update ownership in ONE pcall and RETURNS the commit boolean.
+            -- ct's floors do not need to branch on it -- the lib hard-gates
+            -- all_peers_have()/peer_has()/require_peer()/tick() on the same commit,
+            -- so _ct_wire_safe() is closed by construction when install fails. What
+            -- the boolean buys ct is an HONEST instrument: the "beacon installed"
+            -- line below is reported only when the transport actually committed,
+            -- never on a half-install that can no longer be retried (the lib's
+            -- attempt latch is terminal).
+            local install_committed = false
+            do
+                local ok_install, committed = pcall(function() return inst:install() end)
+                install_committed = ok_install and committed == true
+            end
 
             -- Fail-safe INITIAL posture. The lib starts _applied = "disabled" but never
             -- invokes on_disable for the initial state (callbacks fire on transitions
@@ -1947,7 +2084,15 @@ do
                 end
             end
 
-            pcall(printf, "[ct:426] peer-parity beacon installed (channel=ct_peer_parity_present, schema=%d); modded boons/miracles inert until parity confirmed", CT_RPC_SCHEMA)
+            if install_committed then
+                pcall(printf, "[ct:426] exact peer-parity beacon installed (channel=ct_boon_catalog_exact_v1, schema=%d, identity=%s, rows=%d); modded boons/miracles inert until catalog parity confirmed",
+                    CT_RPC_SCHEMA, tostring(mod._ct_wire_catalog_identity),
+                    (mod._ct_wire_catalog_power_count or 0) + (mod._ct_wire_catalog_buff_count or 0))
+            else
+                -- Terminal: the lib never retries a partial attempt, so this is the
+                -- state for the whole session. Every gate stays shut.
+                pcall(printf, "[ct:426] WARNING exact peer-parity install did NOT commit (channel=ct_boon_catalog_exact_v1); modded boons/miracles remain inert this session (fail-safe)")
+            end
         else
             -- Beacon unavailable: _ct_wire_safe() already returns false (fail-safe), so
             -- every gate holds modded content inert. Eject pools to match.
@@ -1972,7 +2117,8 @@ do
                     end
                 end
             end
-            pcall(printf, "[ct:426] peer-parity beacon UNAVAILABLE - modded boons/miracles remain inert this session (fail-safe)")
+            pcall(printf, "[ct:426] peer-parity beacon UNAVAILABLE (%s) - modded boons/miracles remain inert this session (fail-safe)",
+                tostring(mod._ct_wire_catalog_error or "beacon-not-built"))
         end
     end
     _ct_install_peer_parity()
@@ -1985,6 +2131,93 @@ _rt_register("peer_parity_beacon_installed", function()
     if pp._initial_applied ~= "disabled" then return "fail-safe posture changed: initial applied state must be 'disabled'" end
     if pp.FAILSAFE_POSTURE ~= "feature_inert_until_confirmed" then return "fail-safe posture constant changed" end
     if pp:feature_count() < 1 then return "no gated feature registered" end
+    return nil
+end)
+
+_rt_register("ct_426_exact_wire_catalog", function()
+    -- The exact half of #426 (kills the #1191 index-drift class). Asserts the
+    -- shipped identity is real, short enough for the transport, and still
+    -- describes THIS process - not that a lobby is currently parity-safe.
+    local policy = mod._ct_wire_policy
+    if type(policy) ~= "table" then return "mod._ct_wire_policy missing" end
+    if mod._ct_wire_catalog_power_count ~= policy.POWER_UP_COUNT then
+        return string.format("power-up catalog is %s, expected %d",
+            tostring(mod._ct_wire_catalog_power_count), policy.POWER_UP_COUNT)
+    end
+    if mod._ct_wire_catalog_buff_count ~= policy.BUFF_COUNT then
+        return string.format("buff catalog is %s, expected %d",
+            tostring(mod._ct_wire_catalog_buff_count), policy.BUFF_COUNT)
+    end
+    if type(mod._ct_wire_catalog_identity) ~= "string"
+            or #mod._ct_wire_catalog_identity > 64 then
+        return "no transport-safe exact identity was built: "
+            .. tostring(mod._ct_wire_catalog_error)
+    end
+    -- Recomputing from the LIVE lookups must reproduce the identity the peers
+    -- verified. A mismatch means something renumbered an axis after boot, which
+    -- is precisely the drift the beacon cannot see on its own.
+    local ok_lib, Catalog = pcall(mod.dofile, mod,
+        "scripts/mods/chaos_wastes_tweaker_dev/_lib_wire_catalog")
+    if not ok_lib or type(Catalog) ~= "table" then
+        return "shared wire-catalog library did not load: " .. tostring(Catalog)
+    end
+    local current, err = policy.build_identity(Catalog, rawget(_G, "NetworkLookup"))
+    if current == nil then
+        return "identity no longer computable: " .. tostring(err)
+    end
+    if current ~= mod._ct_wire_catalog_identity then
+        return string.format("catalog drifted since boot: now %s, committed %s",
+            tostring(current), tostring(mod._ct_wire_catalog_identity))
+    end
+    local intact, intact_err = policy.integrity(mod._ct_wire_catalog_integrity)
+    if intact ~= true then
+        return "integrity snapshot no longer holds: " .. tostring(intact_err)
+    end
+    -- The beacon must be in exact mode carrying that identity; a legacy-mode
+    -- instance would accept a same-mod peer with a different catalog.
+    local pp = mod._ct_peer_parity
+    if type(pp) ~= "table" then
+        return "no beacon built despite a valid exact identity"
+    end
+    if pp.EXACT_MODE ~= true then return "beacon is not in exact mode" end
+    if pp.WIRE_IDENTITY ~= mod._ct_wire_catalog_identity then
+        return "beacon carries a different identity than the committed catalog"
+    end
+    return nil
+end)
+
+_rt_register("ct_426_exact_gate_fails_closed", function()
+    -- Drift must FAIL CLOSED, not merely be reported. Mutates a throwaway copy
+    -- of the integrity snapshot (never the live lookups) and proves the pure
+    -- decision the wire-safe predicate depends on flips to false.
+    local policy = mod._ct_wire_policy
+    if type(policy) ~= "table" or type(policy.integrity) ~= "function" then
+        return "mod._ct_wire_policy integrity decision missing"
+    end
+    local snapshot = mod._ct_wire_catalog_integrity
+    if type(snapshot) ~= "table" or type(snapshot.rows) ~= "table" then
+        return "skip: no integrity snapshot in this context (run in keep)"
+    end
+    if policy.integrity(snapshot) ~= true then
+        return "live snapshot must read intact before the drift probe"
+    end
+    local rows = {}
+    for i = 1, #snapshot.rows do
+        local row = snapshot.rows[i]
+        rows[i] = { axis = row.axis, lookup = row.lookup, name = row.name, id = row.id }
+    end
+    -- One boon lands on a different integer: the exact #1191 shape.
+    rows[1].id = (rows[1].id or 0) + 1000
+    if policy.integrity({ network_lookup = snapshot.network_lookup, rows = rows }) ~= false then
+        return "a drifted boon index must read as parity-absent"
+    end
+    -- A truncated catalog must not pass either.
+    local short = {}
+    for i = 1, #snapshot.rows - 1 do short[i] = snapshot.rows[i] end
+    if policy.integrity({ network_lookup = snapshot.network_lookup, rows = short }) ~= false then
+        return "a short catalog must read as parity-absent"
+    end
+    if type(mod._ct_wire_safe) ~= "function" then return "mod._ct_wire_safe missing" end
     return nil
 end)
 
@@ -2103,7 +2336,7 @@ _rt_register("issue406_kill_heal_mod_boon_catalog", function()
     -- definition on both generated surfaces without cloning the boon itself.
     local templates = rawget(_G, "DeusPowerUpTemplates")
     if type(templates) ~= "table" or type(rawget(templates, "ct_kill_heal")) ~= "table" then
-        return "canonical DeusPowerUpTemplates.ct_kill_heal definition missing (run in keep)"
+        return "skip: canonical DeusPowerUpTemplates.ct_kill_heal definition missing (run in keep)"
     end
 
     local ok, data = pcall(mod.dofile, mod,
@@ -2167,7 +2400,10 @@ _rt_register("anath_raema_registry_retry_288", function()
     end
     apply_anath_raema_permanent_tweak()
     local entries = _anath_raema_buff_entries()
-    if #entries ~= 2 then return "expected both WeaponTraits and BuffTemplates registries in keep" end
+    -- #1156: both registries only exist keep-side. Mid-mission this used to score FAIL against
+    -- healthy code (2026-08-04 log); the context is not something the check can control, so it
+    -- skips rather than accusing the tweak of being broken.
+    if #entries ~= 2 then return "skip: WeaponTraits + BuffTemplates registries are keep-only (run in-keep)" end
     if not (balance.get_anath_raema_originals() and balance.get_anath_raema_originals().templates.weapon_traits
             and balance.get_anath_raema_originals().templates.buff_templates) then
         return "two registries must preserve independent originals"

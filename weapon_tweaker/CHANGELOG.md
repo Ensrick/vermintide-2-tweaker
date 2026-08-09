@@ -1,5 +1,28 @@
 # Weapon Tweaker Changelog
 
+## 0.12.298-beta (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
+
+- The shared peer-parity library installs as an atomic transaction: receiver
+  and update wrapper commit together inside one guarded call, a partial
+  install is terminal for the session (never retried, every floor stays
+  shut), and install() reports a commit boolean this mod's gates consume.
+- New all_peers_have(mod_id) registry answers cross-mod parity queries and
+  fails closed for unknown or uncommitted mods (OOP_REFACTOR_PLAN WS1.5).
+- The damage-profile floor consumes the real commit verdict alongside is_installed.
+
+## 0.12.297-beta (2026-08-09) -- damage-profile application floors hardened (#1158) [untested]
+
+- The application floor now requires a committed parity install (is_installed
+  re-check), enabled state, AND allocation-free live catalog integrity; a
+  catalog mutated after capture closes the exact gate.
+- On any policy or lookup failure the sender resolves a proven-resident
+  vanilla profile or drops the RPC - the custom numeric id can never be
+  retained on the wire. Donor residency is proven by round-trip, not presence.
+- A peer presenting an incompatible wire-schema generation is revoked before
+  its epoch is accepted; runtime-gate registration falls through gut_dev to
+  gut, pcall-guarded, bounded at 30 attempts.
+- Six planted regressions locked by offline suites; both streams byte-exact.
+
 ## 0.12.296-beta (2026-08-08) - public row-scoped loadout rollout (#1190) [verify-fix]
 
 - Publishes the reviewed row-scoped loadout correction from `0.12.295-beta`

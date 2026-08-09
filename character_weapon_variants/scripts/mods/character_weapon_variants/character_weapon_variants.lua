@@ -1,9 +1,8 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.500-dev"
+local MOD_VERSION = "0.1.502-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
-mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
 mod._cwv_smoke_bomb_probe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_smoke_bomb_probe")
@@ -78,6 +77,13 @@ mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode
 mod._cwv_crowbill_presentation = _om.crowbill_presentation
 mod._cwv_crowbill_runtime = _om.crowbill_runtime
 _om.damage_profile_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_damage_profile_wire")
+-- #423/#424 exact-catalog wire system. wire_catalog is the byte-identical copy of
+-- tools/shared_lib/_lib_wire_catalog.lua (MOD_DEPENDENCIES.md standalone invariant
+-- forbids a get_mod() runtime dep); thrown_wire_policy is the pure disposition
+-- policy; exact_wire_runtime owns both exact peer channels and the send hook.
+_om.wire_catalog = mod:dofile("scripts/mods/character_weapon_variants/_lib_wire_catalog")
+_om.thrown_wire_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_thrown_wire_policy")
+_om.exact_wire_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime")
 _om.cosmetic_skin_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_cosmetic_skin_wire")
 _om.profile_package_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_profile_package_wire")
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
@@ -123,10 +129,15 @@ _om.HUSK_OVERRIDE_REF = "cwv_husk_override_units"
 -- _om (not a top-level local) per the Lua 5.1 200-local ceiling.
 _om._cwv_damage_profile_wire_source = {}   -- cwv profile key -> vanilla source name
 _om._cwv_wire_fallback_profile_id  = nil   -- captured vanilla id; belt-and-suspenders
+-- #423 exact catalog: bumped by every producer. The snapshot pins the value it
+-- captured, so a mapping recorded AFTER finalization invalidates the catalog
+-- instead of leaving a cwv id proven by a stale identity.
+_om._cwv_damage_profile_generation = 0
 function _om._record_cwv_dp_source(cwv_key, source_name)
     -- Record only genuine vanilla sources (never chain onto another cwv profile).
     if type(cwv_key) ~= "string" or type(source_name) ~= "string" then return end
     if source_name:sub(1, 4) == "cwv_" then return end
+    _om._cwv_damage_profile_generation = _om._cwv_damage_profile_generation + 1
     _om._cwv_damage_profile_wire_source[cwv_key] = source_name
     if not _om._cwv_wire_fallback_profile_id then
         local dp = rawget(_G, "NetworkLookup")
@@ -161,8 +172,23 @@ do
         })
         if ok2 and type(inst) == "table" then
             mod._cwv_peer_parity = inst
-            pcall(function() inst:install() end)
-            mod:info("[cwv:371] peer-parity beacon installed (channel=cwv_peer_parity_present)")
+            -- #1158 install-transaction fanout (LANDED): install() runs receiver
+            -- registration and mod.update ownership in ONE pcall and returns the
+            -- commit boolean. The instance stays published either way -- the
+            -- gated-feature registrations below need it, and the lib now
+            -- hard-gates every peer query and tick() on the same commit, so an
+            -- uninstalled beacon answers false to all of them. The boolean is
+            -- consumed as EVIDENCE so a non-committing install is visible in the
+            -- log instead of silently permanent.
+            local ok_install, committed = pcall(function() return inst:install() end)
+            if ok_install and committed == true then
+                mod:info("[cwv:371] peer-parity beacon installed (channel=cwv_peer_parity_present)")
+            else
+                -- mod:info, not mod:warning: VMF's warning channel posts to CHAT
+                -- (#427). This is log-only operational evidence.
+                mod:info("[cwv:371] WARNING peer-parity install did not commit (%s); gated features stay inert (fail-safe)",
+                    tostring(committed))
+            end
         else
             mod:warning("[cwv:371] peer-parity factory failed: %s", tostring(inst))
         end
@@ -3557,44 +3583,55 @@ local _TJ_VISUAL_PULL_BACK_M    = 0
 -- The full sender/hot-join containment rationale and hooks live in
 -- _cwv_javelin_gate.lua; this entry file retains only the configured map.
 
-_om._tj_pickup_wire_map = {
-	-- cwv thrown-impact pickup key -> a base-game pickup with a boot-stable
-	-- pickup_names index on every peer (throwing axe: same pup_ unit, and the
-	-- link_ variant shares our `limited_owned_pickup_unit` template).
-	[_TJ_PICKUP_KEY]      = "ammo_throwing_axe_01_t1",
-	[_TJ_LINK_PICKUP_KEY] = "link_ammo_throwing_axe_01_t1",
-}
--- Returns a vanilla fallback while parity is unconfirmed, or nil to preserve
--- the functional CWV pickup. The optional override exists for deterministic
--- regression checks only; live callers omit it.
-function _om._wire_safe_pickup_name(pickup_name, parity_override)
-	local all_have = parity_override
-	if all_have == nil then
-		local pp = mod._cwv_peer_parity
-		if pp and type(pp.applied_state) == "function" then
-			-- Use the committed feature state, not the raw roster classifier. This
-			-- includes the enable-settle window and the synchronous hot-join fence
-			-- installed below; both must keep the sender on its vanilla fallback.
-			local ok, result = pcall(pp.applied_state, pp)
-			all_have = ok and result == "enabled"
-		else
-			all_have = false
-		end
-	end
-	return mod._cwv_javelin_pickup.wire_fallback(
-		pickup_name, _om._tj_pickup_wire_map, all_have)
-end
 _om._TJ_INFLIGHT_MODDED_UNIT   = _TJ_BOAR_SPEAR_UNIT
 _om._TJ_INFLIGHT_SAFE_TEMPLATE = "javelin"   -- vanilla ProjectileUnits key (elf javelin)
--- Returns the vanilla "javelin" projectile_units table when `projectile_units`
--- is our boar-spear entry (so its husk never reaches the wire); else unchanged.
-function _om._wire_safe_projectile_units(projectile_units)
-	if projectile_units and projectile_units.projectile_unit_name == _om._TJ_INFLIGHT_MODDED_UNIT
-		and rawget(_G, "ProjectileUnits") then
-		local safe = ProjectileUnits[_om._TJ_INFLIGHT_SAFE_TEMPLATE]
-		if safe then return safe end
+-- The exact thrown-resource spec: the five appended rows plus the proven
+-- vanilla donor each one degrades to. `pickup_fallbacks` is the ONLY declared
+-- donor map; a cwv_-prefixed pickup absent from it is not "keep the custom id"
+-- (the pre-#424 nil-ambiguity that let `cwv_tuskgor_javelin_bomb` wire its own
+-- appended index) but a DROP -- see _cwv_thrown_wire_policy.is_owned_pickup.
+_om._TJ_WIRE_SPEC = {
+	projectile_key        = _TJ_PROJECTILE_KEY,
+	safe_projectile_key   = _om._TJ_INFLIGHT_SAFE_TEMPLATE,
+	inflight_unit         = _TJ_BOAR_SPEAR_UNIT,
+	safe_projectile_unit  = "units/weapons/player/wpn_we_javelin_01/prj_we_javelin_01_3ps",
+	carrier_unit          = _TJ_PICKUP_UNIT,
+	pickup_key            = _TJ_PICKUP_KEY,
+	link_pickup_key       = _TJ_LINK_PICKUP_KEY,
+	safe_pickup_key       = "ammo_throwing_axe_01_t1",
+	safe_link_pickup_key  = "link_ammo_throwing_axe_01_t1",
+	pickup_fallbacks = {
+		-- cwv thrown-impact pickup key -> a base-game pickup with a boot-stable
+		-- pickup_names index on every peer (throwing axe: same pup_ unit, and the
+		-- link_ variant shares our `limited_owned_pickup_unit` template).
+		[_TJ_PICKUP_KEY]      = "ammo_throwing_axe_01_t1",
+		[_TJ_LINK_PICKUP_KEY] = "link_ammo_throwing_axe_01_t1",
+	},
+}
+_om._tj_pickup_wire_map = _om._TJ_WIRE_SPEC.pickup_fallbacks
+-- Three-valued by construction: RIDE_CUSTOM (send `name` as given) /
+-- SUBSTITUTE (send the returned proven vanilla donor) / DROP (suppress the
+-- spawn). The optional override exists for deterministic regression checks
+-- only; live callers omit it and the exact thrown verdict decides.
+function _om._tj_pickup_disposition(pickup_name, exact_override)
+	local exact = exact_override
+	if exact == nil then
+		local ok, safe = pcall(mod._cwv_thrown_wire_safe)
+		exact = ok and safe == true
 	end
-	return projectile_units
+	return _om.thrown_wire_policy.pickup_disposition(
+		pickup_name, exact, _om._TJ_WIRE_SPEC, _G)
+end
+-- UNCONDITIONAL in-flight floor (never parity- or toggle-gated): our boar-spear
+-- husk must never ride a vanilla GameObject. Returns the vanilla donor table,
+-- the input unchanged when it is not ours, or nil when the donor cannot be
+-- proven -- the ProjectileSystem preflight in _cwv_javelin_gate refuses the
+-- spawn on nil rather than let vanilla dereference it.
+function _om._wire_safe_projectile_units(projectile_units)
+	local disposition, resolved = _om.thrown_wire_policy.projectile_disposition(
+		projectile_units, _om._TJ_WIRE_SPEC, _G)
+	if disposition == _om.thrown_wire_policy.DROP then return nil end
+	return resolved
 end
 
 local function _register_tuskgor_javelin_assets()
@@ -4021,9 +4058,12 @@ mod:hook("PlayerProjectileUnitExtension", "_spawn_linked_pickup_projectile", fun
 	if _is_our_pickup(pickup_name) then
 		_dbg("[cwv stick:trace] _spawn_linked_pickup_projectile fired (pickup=%s)", tostring(pickup_name))
 	end
-	local safe = _om._wire_safe_pickup_name(pickup_name)
-	if safe then
-		printf("[cwv:424] linked pickup wire-safe %s -> %s", tostring(pickup_name), safe)
+	local disposition, safe = _om._tj_pickup_disposition(pickup_name)
+	if disposition == _om.thrown_wire_policy.DROP then
+		printf("[cwv:424] linked pickup DROPPED %s (no exact row and no proven vanilla donor)", tostring(pickup_name))
+		return
+	elseif disposition == _om.thrown_wire_policy.SUBSTITUTE then
+		printf("[cwv:424] linked pickup wire-safe %s -> %s", tostring(pickup_name), tostring(safe))
 		return func(self, safe, ...)
 	end
 	return func(self, pickup_name, ...)
@@ -4036,9 +4076,12 @@ mod:hook("PlayerProjectileUnitExtension", "_spawn_pickup_projectile", function(f
 	if _is_our_pickup(pickup_name) then
 		_dbg("[cwv stick:trace] _spawn_pickup_projectile (PATH B) fired (pickup=%s)", tostring(pickup_name))
 	end
-	local safe = _om._wire_safe_pickup_name(pickup_name)
-	if safe then
-		printf("[cwv:424] dropped pickup wire-safe %s -> %s", tostring(pickup_name), safe)
+	local disposition, safe = _om._tj_pickup_disposition(pickup_name)
+	if disposition == _om.thrown_wire_policy.DROP then
+		printf("[cwv:424] dropped pickup SUPPRESSED %s (no exact row and no proven vanilla donor)", tostring(pickup_name))
+		return
+	elseif disposition == _om.thrown_wire_policy.SUBSTITUTE then
+		printf("[cwv:424] dropped pickup wire-safe %s -> %s", tostring(pickup_name), tostring(safe))
 		return func(self, safe, ...)
 	end
 	return func(self, pickup_name, ...)
@@ -4478,7 +4521,11 @@ _register_tuskgor_javelin_assets()
 _create_tuskgor_javelin_template()
 
 -- ============================================================================
--- issue 424: fail-closed mixed-lobby Tuskgor Javelin feature gate
+-- issue 424: fail-closed mixed-lobby Tuskgor Javelin feature gate.
+-- ORDER MATTERS: the exact thrown channel must exist before the gate installs,
+-- because gate_state() reads mod._cwv_thrown_wire_safe. Both run AFTER
+-- _register_tuskgor_javelin_assets so every appended row is capturable.
+_om.exact_wire_runtime.install_thrown(mod, _om, _G, _om._TJ_WIRE_SPEC)
 _om.javelin_gate.install({
 	mod = mod,
 	om = _om,
@@ -4487,6 +4534,10 @@ _om.javelin_gate.install({
 	projectile_key = _TJ_PROJECTILE_KEY,
 	inflight_unit = _TJ_BOAR_SPEAR_UNIT,
 	safe_template_key = _om._TJ_INFLIGHT_SAFE_TEMPLATE,
+	wire_safe = mod._cwv_thrown_wire_safe,
+	catalog_intact = mod._cwv_thrown_catalog_intact,
+	donor_policy = _om.thrown_wire_policy,
+	globals = _G,
 })
 
 -- ============================================================================
@@ -7157,16 +7208,12 @@ do
 	end
 	_om._wire_skin_predicate = _wire_skin   -- exported for /cwv_regression_test
 
-	local function _wire_parity_live()
-		local pp = mod._cwv_peer_parity
-		if not pp then return false end   -- fail-safe: no beacon = assume mixed lobby
-		-- #423: COMMITTED state, not the roster classifier: it carries SETTLE_ENABLE and every _force_disable edge (_lib_peer_parity.lua:619-621).
-		local ok, res = pcall(pp.applied_state, pp)
-		return ok and res == "enabled"
-	end
-	-- Gameplay damage-profile fallback still needs this gate. Appearance does not:
-	-- #741 forbids numeric CWV skin ids on the vanilla wire in every lobby shape.
-	_om._wire_parity_live = _wire_parity_live
+	-- The presence-only `_wire_parity_live` predicate that used to live here was
+	-- removed with the #423 exact-catalog conversion: its one consumer (the
+	-- damage-profile send gate) now reads mod._cwv_damage_wire_safe, which
+	-- requires the exact catalog on top of the same committed applied_state.
+	-- Appearance never needed it -- #741 forbids numeric CWV skin ids on the
+	-- vanilla wire in every lobby shape.
 
 	-- #396 positive owner identity. Vanilla equipment RPCs deliberately encode a
 	-- CWV clone as its stable base item name, so the receiver cannot distinguish
@@ -7553,83 +7600,22 @@ end
 _om._skin_wire_hook_installed = true
 
 -- ============================================================================
--- issue 423 (BUG_CLASSES 31, GAMEPLAY axis): cwv damage-profile SEND-gate.
+-- issue 423 (BUG_CLASSES 31 + 64, GAMEPLAY axis): cwv damage-profile SEND-gate.
 -- ----------------------------------------------------------------------------
 -- rpc_attack_hit is client->server (weapon_system.lua:182). A cwv CLIENT landing
 -- a hit with a profile-cloning variant would ship the cwv (out-of-vanilla-range)
 -- NetworkLookup.damage_profiles index to the HOST, whose strict decode
 -- (weapon_system.lua:243 -- NetworkLookup.damage_profiles[id], NO rawget) fatals
 -- when the host lacks cwv -> lobby drop (issue 278 / BUG_CLASSES 31 class).
--- Unconditional registration only buys cwv<->cwv index parity.
+-- Unconditional registration only buys cwv<->cwv index parity, and #423 showed
+-- that same-mod presence still does not prove the INTEGERS agree.
 --
--- This is a GAMEPLAY axis (issue 371 axis map): substituting the profile changes
--- combat numbers, so it is peer-parity GATED, never substituted unconditionally.
---   * parity CONFIRMED (every lobby peer runs cwv) -> the real cwv id rides; the
---     host decodes it and the variant's tuned damage applies.
---   * parity UNCONFIRMED (or beacon absent/erroring) -> degrade to the cwv
---     profile's vanilla SOURCE id (base-weapon behavior) so a non-cwv host
---     decodes a vanilla index instead of crashing. Fail-safe: any beacon error
---     -> _wire_parity_live() false -> substitute.
---   * is_server (we ARE the host) -> never substitute: rpc_attack_hit runs
---     in-process (weapon_system.lua:179-180), no foreign peer decodes it.
--- No hot-join force-null case is needed (unlike the skin gate): rpc_attack_hit is
--- send_rpc_SERVER, so the ONLY decoder of our hit is the host; the host either has
--- cwv from mission start (parity can confirm) or never acks (parity stays false and
--- we always substitute). A mid-join non-cwv CLIENT never decodes our attack RPC.
---
--- send_rpc_attack_hit is the single choke for the profile id: every attack RPC in
--- the decompile (weapon_system / damage_utils / projectiles / area_damage / the
--- lunge + shield/push/BH actions) routes its damage_profile_id through
--- WeaponSystem.send_rpc_attack_hit (grep-verified). Sole cwv hook on it.
--- do-block: keep helpers off the 200-local top-level chunk (Lua 5.1 ceiling).
-do
-    local function _wire_safe_damage_profile_id(id)
-        local NL = rawget(_G, "NetworkLookup")
-        local dp = NL and NL.damage_profiles
-        local safe, disposition = _om.damage_profile_wire.resolve_unconfirmed(
-            dp, _om._cwv_damage_profile_wire_source, id)
-        if disposition == "vanilla" then return nil end -- legacy test helper contract
-        return safe
-    end
-    _om._wire_safe_damage_profile_id = _wire_safe_damage_profile_id
-
-    -- Pure gate decision (testable without a WeaponSystem instance): the
-    -- damage_profile_id that should actually be sent for this hit.
-    local function _wire_dp_for_send(is_server, id)
-        local NL = rawget(_G, "NetworkLookup")
-        local dp = NL and NL.damage_profiles
-        return _om.damage_profile_wire.for_send(is_server, _om._wire_parity_live(),
-            dp, _om._cwv_damage_profile_wire_source, id)
-    end
-    _om._wire_dp_for_send = _wire_dp_for_send
-
-    local _dp_sub_logged = {}   -- once per profile id; no per-hit spam
-    mod:hook("WeaponSystem", "send_rpc_attack_hit", function(func, self, damage_source_id, attacker_unit_id, hit_unit_id, hit_zone_id, hit_position, attack_direction, damage_profile_id, ...)
-        local send_id, disposition = _wire_dp_for_send(self.is_server, damage_profile_id)
-        if disposition == "drop" then
-            if not _dp_sub_logged[damage_profile_id] then
-                _dp_sub_logged[damage_profile_id] = true
-                local dp = rawget(_G, "NetworkLookup")
-                dp = dp and dp.damage_profiles
-                pcall(printf, "[cwv:423] blocked unsafe hit: profile=%s(%s) peer parity unconfirmed and no vanilla fallback resolved",
-                    tostring(dp and rawget(dp, damage_profile_id)), tostring(damage_profile_id))
-            end
-            return nil
-        end
-        if send_id ~= damage_profile_id then
-            if not _dp_sub_logged[damage_profile_id] then
-                _dp_sub_logged[damage_profile_id] = true
-                local dp = rawget(_G, "NetworkLookup")
-                dp = dp and dp.damage_profiles
-                pcall(printf, "[cwv:423] wire dmg-profile sub: %s(%s) -> %s (peer parity unconfirmed; base-weapon damage this hit)",
-                    tostring(dp and rawget(dp, damage_profile_id)), tostring(damage_profile_id), tostring(send_id))
-            end
-            damage_profile_id = send_id
-        end
-        return func(self, damage_source_id, attacker_unit_id, hit_unit_id, hit_zone_id, hit_position, attack_direction, damage_profile_id, ...)
-    end)
-    _om._dp_wire_hook_installed = true
-end
+-- The hook, the exact catalog and the send state machine now live in
+-- _cwv_exact_wire_runtime.install_damage -- the sole cwv registration on
+-- WeaponSystem.send_rpc_attack_hit; do NOT re-add one here. It must run LAST:
+-- capture() finalizes the whole cwv_* profile namespace, so every
+-- _record_cwv_dp_source producer above has to have run first.
+_om.exact_wire_runtime.install_damage(mod, _om)
 
 -- NOTE: the per-perspective 1P/3P unit swap mechanism (previously used
 -- for cwv_es_brace_repeater) was moved to weapon_tweaker in v0.1.187 —

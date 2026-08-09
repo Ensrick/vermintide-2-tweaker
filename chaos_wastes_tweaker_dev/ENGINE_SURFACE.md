@@ -150,7 +150,7 @@ registration + the `NetworkLookup.buff_templates` strict-index doctrine.
 | `PlayerBotBase.update` [safe] `_ct_blessed_bots.lua` | Per-tick bot brain update (host-authoritative; bots only exist on host) | Consolidated #331 bot surface: automatic Pilgrim's Coin interaction (1s) plus Blessed Bots survival-boon reconciliation (2s) | The mod's ONLY `PlayerBotBase.update` hook. Coin pickup mirrors vanilla Money Magnet's exact `PickupSystem.get_pickups` 10m query and forced `pickup_object` interaction [src: `morris_buff_settings.lua:1209-1257`; range/interval: `buff_tweak_data.lua:406-408`, `deus_power_up_settings.lua:3547-3554`], accepts only `deus_soft_currency`, uses a weak 1.5s claim, and never destroys/credits directly. Boon work remains independently throttled/idempotent; host-only |
 | `MutatorTemplates.curse_rotten_miasma.server.update` [hook,tbl] `_ct_miasma.lua` | Creates/retargets the relic-following safe-area unit and updates its position every server tick [src: `mutator_curse_rotten_miasma.lua:82-149`] | #361 preserves the most recent living relic carrier after drop and applies host-effective radius/exposure sliders | Call vanilla exactly once, then move the SAME safe-area unit; never spawn a parallel aura. Effective radius and visual flow data change together [src: `morris_buff_settings.lua:499-568`]. Live dispatch is `template.server.update`, not the dead authored `server_update_function` field [src: `mutator_templates.lua:532-534`] |
 | **Per-boon table tweaks (NOT hooks):** `_ct_boon_balance.lua` mutations of `DeusPowerUpTemplates.<boon>.buff_template.buffs` | Boon buff data (Reckless Swings, movespeed, Ulric pack range, poison-proof, invis potion, Moot Milk, Shard Strike, Anath Raema, Khaine's Fury) | Save-and-restore around boon rolls; per-boon numeric tuning | Reckless Swings uses hard-coded `buffs[1]`/`description_values[1]/[3]` (fragile if Fatshark reorders, AUDIT_FINDINGS #1); save-restore is NOT `pcall`-protected - a wrapped-fn throw persists the mutation (CODE_REVIEW §4) |
-| `[rpc]` `ct_peer_parity_present` (via `_lib_peer_parity.lua`) + `ct_graph_snapshot_chunk` `:6395` + `ct_sync_host_settings_chunk` + `ct_altar_uncollect` + `ct_peer_manifest_chunk` + `ct_bomb_cooldown_display_v1` (`_ct_bomb_cooldown_display.lua`) [rpc] | - | Peer-parity beacon (#426), graph snapshot, host-settings sync, altar un-collect, `/peers` manifest dump, #357 owner-local cooldown presentation | VMF `network_send` is delivered ONLY to peers with the SAME mod-id + matching handler = presence proof; #357 additionally requires schema + resolved-host sender and allowlists its fixed payload; client-local HUD templates never enter vanilla `NetworkLookup`; chunked channels stay <=400 chars (500 engine cap, memory `reference_vmf_rpc_string_cap`) |
+| `[rpc]` `ct_boon_catalog_exact_v1` (via `_lib_peer_parity.lua`, exact mode) + `ct_graph_snapshot_chunk` `:6395` + `ct_sync_host_settings_chunk` + `ct_altar_uncollect` + `ct_peer_manifest_chunk` + `ct_bomb_cooldown_display_v1` (`_ct_bomb_cooldown_display.lua`) [rpc] | - | Exact-catalog peer-parity beacon (#426/#1191; renamed from `ct_peer_parity_present` in v0.7.322-dev so an unconverted ct build cannot ack), graph snapshot, host-settings sync, altar un-collect, `/peers` manifest dump, #357 owner-local cooldown presentation | VMF `network_send` is delivered ONLY to peers with the SAME mod-id + matching handler = presence proof, and exact mode adds the echoed catalog identity + session epoch so an ack also proves matching boon indices; #357 additionally requires schema + resolved-host sender and allowlists its fixed payload; client-local HUD templates never enter vanilla `NetworkLookup`; chunked channels stay <=400 chars (500 engine cap, memory `reference_vmf_rpc_string_cap`) |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for ct's cases)
 
@@ -173,7 +173,11 @@ table lacks is a fatal decode, not a nil (§31).
 ct registers its modded boons (`power_up_ct_boon_*`, `ct_meta_*`, `ct_kill_heal`)
 and miracles (`ct_miracle_*`) into those lookups UNCONDITIONALLY - index parity
 across ct peers requires it (the v0.7.67 split: registration is unconditional,
-POOL insertion is toggle-gated). But ct's `create_network_hash` shim deliberately
+POOL insertion is toggle-gated). Since v0.7.322-dev that unconditional write is
+also SORTED and up front: `_ct_wire_policy.reserve_lookups` claims all 33 rows in
+name order from `_ct_boon_registry.lua` before any per-boon registration, so the
+integers depend on the catalog alone and not on which toggles happened to run.
+But ct's `create_network_hash` shim deliberately
 admits NON-ct peers, so once a modded boon is GRANTED or a modded buff APPLIED,
 the modded index rides the vanilla wire to a peer whose `NetworkLookup` never had
 it -> CTD. This is a GAMEPLAY axis (the substitute would change what happens), so
@@ -201,21 +205,53 @@ the bounded same-session retention.
 Those six are the RUNTIME safety. A seventh, non-safety surface (v0.7.319-dev) is
 the Mod Tweaker presentation bridge in `_ct_wire_policy.lua`, mirroring
 `_crt_wire_policy.lua:79,97` for issue 425: while the gate is closed it makes the
-nine saved rows that control modded content (the `enable_boon_reworks` umbrella,
-five `enable_boon_*` trait boons, three `tweak_miracle_*`) read as unavailable
-instead of looking actionable and silently doing nothing. It is PRESENTATION ONLY
-and GUT is not a dependency - `mod._ct_wire_safe()` never consults it, so gameplay
-safety is identical with or without the Mod Tweaker installed. The pure policy
-module is driven directly by `qa/lua/tests/test_peer_parity_transition.lua`, which
-fails if a new trait boon or miracle is added without a matching gated row.
+21 saved rows that control modded content (the `enable_boon_reworks` umbrella,
+five `enable_boon_*` trait boons, twelve `start_boon_*` starting boons added in
+v0.7.322-dev, three `tweak_miracle_*`) read as unavailable instead of looking
+actionable and silently doing nothing. `disable_boon_*` rows are deliberately NOT
+gated - disabling modded content is safe in any lobby, and greying those would
+remove the player's only control that still works. It is PRESENTATION ONLY and GUT
+is not a dependency - `mod._ct_wire_safe()` never consults it, so gameplay safety
+is identical with or without the Mod Tweaker installed. The pure policy module is
+driven directly by `qa/lua/tests/test_peer_parity_transition.lua`, which realizes
+the widget tree (the `start_boon_*` rows are BOON_TREE-generated and never appear
+as a literal `setting_id` assignment) and fails if a new boon or miracle is added
+without a matching gated row.
 
-Still NOT closed by any of the above: the beacon proves a peer runs ct, not that it
-registered the same catalog, so two ct peers on DIFFERENT builds can both ack while
-their boon indices disagree (the v0.7.66 index-drift class, re-reachable across
-versions rather than across toggles). The shared exact-catalog mode
-(`_lib_wire_catalog.lua`, `opts.wire_identity`) is the closer, but it is authorized
-for `crt` only and `qa/lua/tests/test_peer_parity_transition.lua` actively asserts
-that ct does NOT opt in. Do not add `wire_identity` here without lifting that gate.
+CLOSED in v0.7.322-dev by the EXACT CATALOG (surface 7, issue 426 / #1191). The
+beacon proves a peer runs ct, not that it registered the same catalog, so two ct
+peers on DIFFERENT builds could both ack while their boon indices disagreed (the
+v0.7.66 index-drift class, re-reachable across versions rather than across
+toggles) and the decode is a strict-`__index` fatal, not a nil. ct now opts into
+the shared exact-catalog mode (`_lib_wire_catalog.lua` + `opts.wire_identity`),
+which has three parts:
+
+* **Closed catalogs** in `_ct_wire_policy.lua`: 12 `deus_power_up_templates` names
+  and 21 `buff_templates` names, 33 wire rows total. `power_registry_ready` proves
+  the catalog and the live `_injected_dormants` registry describe the same set in
+  BOTH directions, so a boon added without a catalog entry stops the beacon rather
+  than riding the wire uncovered.
+* **Deterministic reservation** in `_ct_boon_registry.lua`, before any per-boon
+  `_register_in_network_lookup` call: both axes are reserved in SORTED name order,
+  making the assigned integers a function of the catalog alone rather than of
+  toggle/DLC/load order. Unconditional - it pins the numbering and grants nothing
+  (the v0.7.67 split).
+* **Identity + integrity** at the top of `_ct_install_peer_parity`: the composite
+  identity (`ct-wire-v1:33:<h1>:<h2>`, <=64 chars for the transport's restricted
+  alphabet) is what peers echo, and `capture_integrity`/`integrity` re-prove per
+  call that the local axes still match what those peers verified. No identity =
+  no beacon = every gated surface inert.
+
+The channel rename `ct_peer_parity_present` -> `ct_boon_catalog_exact_v1` is part
+of the closure and is load-bearing: a pre-0.7.322 ct build's handler would ignore
+the four extra exact fields on the old channel and ack anyway, which is exactly
+the false positive #1191 is about. A distinct channel makes an unconverted build
+structurally unable to answer, so it reads as parity-absent.
+
+Still open on this surface: the unconditional sender floors (#371) that would
+filter ct names inside `DeusRunState.set_*_power_ups` / `set_player_persistent_buffs`
+and `BuffSystem.add_buff` regardless of the pool gate. Those cover cached offers
+and stale state that bypass the pool, and are a separate slice.
 
 ### Boon/power-up pool + dual-table registration (owner: `docs/engine/10`)
 

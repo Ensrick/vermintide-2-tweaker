@@ -1,5 +1,28 @@
 # Career Tweaker Changelog
 
+## 0.4.22-beta (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
+
+- The shared peer-parity library installs as an atomic transaction: receiver
+  and update wrapper commit together inside one guarded call, a partial
+  install is terminal for the session (never retried, every floor stays
+  shut), and install() reports a commit boolean this mod's gates consume.
+- New all_peers_have(mod_id) registry answers cross-mod parity queries and
+  fails closed for unknown or uncommitted mods (OOP_REFACTOR_PLAN WS1.5).
+- The runtime gate and composite floor now consume the real commit verdict.
+
+## 0.4.21-beta (2026-08-09) - authoritative paths behind composite wire floor (#1158) [untested]
+
+- Every authoritative parity read (balance apply/restore, tourney, the
+  rpc_add_buff receiver, GUT grey-out) now routes through a composite floor:
+  transport install verified via is_installed, exact buff catalog proven in
+  BOTH lookup directions, and settled peer state - with per-send paths keeping
+  the stricter live roster check so a just-joined non-crt peer is never sent a
+  modded buff name inside the settle poll window.
+- Runtime-gate registration is pcall-hardened, falls through gut_dev to gut,
+  and is capped at 30 bounded retries; floor predicates moved to
+  _crt_wire_policy.lua as pure functions with offline behavioral tests and a
+  source lock preventing re-collapse of the live guard.
+
 ## 0.4.20-beta (2026-08-06) - exact shared buff-catalog proof (#776, #1158)
 
 - Replaced CRT's private parity transport adapter with the shared peer-parity

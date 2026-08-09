@@ -105,6 +105,167 @@ local function register(H, repo_root)
         H.equal(absent_err, "mod-tweaker-unavailable")
         H.deep_equal(spec.setting_ids, { "setting_a", "setting_b" },
             "registration must never change saved setting identities")
+
+        local fallback_calls = {}
+        local fallback_ok = Policy.try_register_runtime_gate(function(name)
+            fallback_calls[#fallback_calls + 1] = name
+            if name == "gut_dev" then
+                return { mod_tweaker = { register_runtime_gate = function()
+                    error("malformed dev GUI")
+                end } }
+            end
+            return { mod_tweaker = { register_runtime_gate = function() return true end } }
+        end, "crt:776:exact-buff-catalog", spec)
+        H.equal(fallback_ok, true,
+            "throwing dev presentation owner must be contained before stable fallback")
+        H.deep_equal(fallback_calls, { "gut_dev", "gut" })
+    end)
+
+    H.test("CRT #1158 runtime gate retry is bounded and permits late success", function()
+        local state = Policy.runtime_gate_retry_step({},
+            function() error("spec failure") end, function() return true end)
+        H.equal(state.attempts, 1)
+        H.equal(state.registered, false)
+        H.equal(state.terminal, false, "a throwing spec builder must not retire the retry")
+
+        state = Policy.runtime_gate_retry_step(state,
+            function() return "malformed" end, function() return true end)
+        H.equal(state.attempts, 2)
+        H.equal(state.registered, false)
+
+        local thrown = Policy.runtime_gate_retry_step({},
+            function() return {} end, function() error("register failure") end)
+        H.equal(thrown.registered, false)
+        H.equal(thrown.terminal, false,
+            "a throwing GUI owner must be contained, not escape the update path")
+
+        -- Terminal exactly at the cap, never before, with no further attempts.
+        local absent = {}
+        for i = 1, Policy.RUNTIME_GATE_MAX_ATTEMPTS do
+            absent = Policy.runtime_gate_retry_step(absent,
+                function() return {} end, function() return false end)
+            H.equal(absent.attempts, i)
+            H.equal(absent.terminal, i == Policy.RUNTIME_GATE_MAX_ATTEMPTS,
+                "retry must retire at the cap and not one attempt early or late")
+        end
+        H.equal(Policy.RUNTIME_GATE_MAX_ATTEMPTS, 30)
+        H.equal(absent.registered, false)
+        local frozen = absent.attempts
+        local register_calls = 0
+        Policy.runtime_gate_retry_step(absent, function() return {} end,
+            function() register_calls = register_calls + 1; return true end)
+        H.equal(absent.attempts, frozen, "terminal retry owner must stay retired")
+        H.equal(register_calls, 0, "a retired retry must not keep polling get_mod()")
+
+        -- A GUT that loads late still registers, and that also retires the retry.
+        local late = {}
+        for _ = 1, 5 do
+            late = Policy.runtime_gate_retry_step(late,
+                function() return {} end, function() return false end)
+        end
+        H.equal(late.terminal, false)
+        late = Policy.runtime_gate_retry_step(late,
+            function() return {} end, function() return true end)
+        H.equal(late.registered, true)
+        H.equal(late.terminal, true)
+        H.equal(late.attempts, 6)
+    end)
+
+    H.test("CRT #1158 catalog_intact rejects a lookup row that lost one direction", function()
+        local names = { "crt_a", "crt_z" }
+        local ids = { 1574, 1600 }
+        local function fresh()
+            return { crt_a = 1574, crt_z = 1600, [1574] = "crt_a", [1600] = "crt_z" }
+        end
+        H.equal(Policy.catalog_intact(names, ids, fresh(), 2), true)
+
+        -- The planted defect: forward name->id still resolves exactly as it did
+        -- when build_identity fingerprinted it, but the reverse row was
+        -- reassigned by a later writer. build_identity ran at boot and would
+        -- never see this; only the live floor can.
+        local one_way = fresh()
+        one_way[1600] = "someone_elses_buff"
+        H.equal(Policy.catalog_intact(names, ids, one_way, 2), false,
+            "a name that no longer round-trips must invalidate the advertised identity")
+
+        local moved = fresh()
+        moved.crt_z, moved[1600], moved[1601] = 1601, nil, "crt_z"
+        H.equal(Policy.catalog_intact(names, ids, moved, 2), false,
+            "an id that moved after boot must invalidate the advertised identity")
+
+        local dropped = fresh()
+        dropped.crt_z, dropped[1600] = nil, nil
+        H.equal(Policy.catalog_intact(names, ids, dropped, 2), false)
+
+        H.equal(Policy.catalog_intact(names, ids, fresh(), 3), false,
+            "a count that disagrees with the fingerprinted name set must fail closed")
+        H.equal(Policy.catalog_intact(names, { 1574 }, fresh(), 2), false,
+            "a missing boot-time id snapshot entry must fail closed")
+        H.equal(Policy.catalog_intact(names, ids, nil, 2), false,
+            "an absent NetworkLookup.buff_templates must fail closed")
+        H.equal(Policy.catalog_intact(names, ids, fresh(), 0), false)
+        H.equal(Policy.catalog_intact({ "crt_a" }, { 1574.5 },
+            { crt_a = 1574.5, [1574.5] = "crt_a" }, 1), false,
+            "a non-integer wire id is not a legal lookup identity")
+    end)
+
+    H.test("CRT #1158 composite floor is false when any single conjunct fails", function()
+        local function beacon(overrides)
+            local b = {
+                _installed = true, _state = "enabled", _peers = true,
+                is_installed  = function(self) return self._installed end,
+                applied_state = function(self) return self._state end,
+                all_peers_have = function(self) return self._peers end,
+            }
+            for k, v in pairs(overrides or {}) do b[k] = v end
+            return b
+        end
+        local function intact() return true end
+        local function broken() return false end
+
+        H.equal(Policy.wire_safe(beacon(), intact), true)
+        H.equal(Policy.wire_live(beacon(), intact), true)
+
+        -- Conjunct 1: transport never committed.
+        H.equal(Policy.wire_safe(beacon({ _installed = false }), intact), false)
+        H.equal(Policy.wire_live(beacon({ _installed = false }), intact), false)
+        -- Conjunct 2: catalog no longer exact.
+        H.equal(Policy.wire_safe(beacon(), broken), false)
+        H.equal(Policy.wire_live(beacon(), broken), false)
+        -- Conjunct 3: peer-set evidence.
+        H.equal(Policy.wire_safe(beacon({ _state = "disabled" }), intact), false)
+        H.equal(Policy.wire_live(beacon({ _peers = false }), intact), false)
+
+        -- No beacon at all (factory failed) and a beacon missing its accessors.
+        H.equal(Policy.wire_safe(nil, intact), false)
+        H.equal(Policy.wire_live(nil, intact), false)
+        H.equal(Policy.wire_safe({}, intact), false)
+        H.equal(Policy.wire_live({}, intact), false)
+        H.equal(Policy.wire_safe(beacon(), nil), false)
+
+        -- A throwing accessor or catalog check must fail closed, never propagate.
+        H.equal(Policy.wire_safe(beacon({
+            is_installed = function() error("boom") end }), intact), false)
+        H.equal(Policy.wire_safe(beacon({
+            applied_state = function() error("boom") end }), intact), false)
+        H.equal(Policy.wire_live(beacon({
+            all_peers_have = function() error("boom") end }), intact), false)
+        H.equal(Policy.wire_safe(beacon(), function() error("boom") end), false)
+
+        -- Truthy-but-not-true must not satisfy a safety conjunct.
+        H.equal(Policy.wire_safe(beacon({ _installed = "yes" }), intact), false)
+        H.equal(Policy.wire_live(beacon({ _peers = "yes" }), intact), false)
+        H.equal(Policy.wire_safe(beacon(), function() return "yes" end), false)
+
+        -- The reason the live read is not expressed as the settled read: the
+        -- beacon's applied state is refreshed by a 0.5s poll while the roster is
+        -- evaluated per call, so a peer that just joined without crt is visible
+        -- to wire_live one poll interval before wire_safe reacts. A per-send
+        -- guard routed through wire_safe would emit into that window (#425).
+        local racing = beacon({ _state = "enabled", _peers = false })
+        H.equal(Policy.wire_safe(racing, intact), true)
+        H.equal(Policy.wire_live(racing, intact), false,
+            "per-send guard must see the un-acked peer before the settled state does")
     end)
 
     H.test("CRT #776 runtime gate pins all nine network-unsafe setting rows", function()
@@ -208,6 +369,25 @@ local function register(H, repo_root)
         H.truthy(entry:find("wire_identity = wire_identity", 1, true))
         H.truthy(entry:find("_crt_wire_transport_identity = wire_identity", 1, true))
         H.truthy(entry:find('mod:hook_safe("GameNetworkManager", "remove_peer"', 1, true))
+        -- #1158 install-transaction floor: the beacon is only published after the
+        -- lib reports a committed transport, and the floors delegate to the pure
+        -- policy rather than re-deriving the conjuncts in the entry file.
+        H.truthy(entry:find("wire_catalog_intact", 1, true))
+        H.truthy(entry:find("pcall(inst.is_installed, inst)", 1, true))
+        H.truthy(entry:find("installed ~= true", 1, true))
+        -- #1158 fanout: install() now returns the commit boolean, and the entry
+        -- consumes it alongside is_installed() rather than relying on the
+        -- state read alone.
+        H.truthy(entry:find("committed ~= true", 1, true),
+            "CRT must consume install()'s commit boolean")
+        H.truthy(entry:find("wire_policy.catalog_intact(", 1, true))
+        H.truthy(entry:find("wire_policy.wire_safe(", 1, true))
+        H.truthy(entry:find("wire_policy.wire_live(", 1, true))
+        H.truthy(entry:find("runtime_gate_retry_step", 1, true))
+        local install_at = assert(entry:find("local install_ok, committed = pcall(inst.install, inst)", 1, true))
+        local publish_at = assert(entry:find("mod._crt_peer_parity = inst", 1, true))
+        H.truthy(install_at < publish_at,
+            "the commit check must precede publishing the beacon to call sites")
         H.truthy(entry:find("_crt_wire_disconnect_guard = true", 1, true))
         H.equal(runtime:find("wrap_parity_transport", 1, true), nil,
             "CRT must not retain a bespoke exact transport proxy")
@@ -246,6 +426,34 @@ local function register(H, repo_root)
         H.truthy(floor:find("return", floor:find("if decision", 1, true), true))
         H.truthy(hooks:find("_crt_rpc_floor_logged", 1, true),
             "receiver diagnostics must be bounded")
+        H.truthy(floor:find("mod._crt_wire_safe() == true", 1, true),
+            "#1158 receiver floor must require this peer's own composite floor")
+    end)
+
+    H.test("CRT #1158 every authoritative parity read routes through the floor", function()
+        local balance_src = read(
+            "career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua")
+        local tourney = read(
+            "career_tweaker/scripts/mods/career_tweaker/career_tweaker_tourney.lua")
+
+        -- The lock: no gameplay owner may reach past the floor to the beacon.
+        -- Re-introducing a bare mod._crt_peer_parity read in either apply engine
+        -- is exactly the bypass this slice exists to close, so it fails here.
+        H.equal(balance_src:find("mod._crt_peer_parity", 1, true), nil,
+            "balance apply engine must not read the beacon directly")
+        H.equal(tourney:find("mod._crt_peer_parity", 1, true), nil,
+            "tourney apply engine must not read the beacon directly")
+
+        H.truthy(balance_src:find("mod._crt_wire_live() == true", 1, true),
+            "per-send guard must keep the instant roster read")
+        H.truthy(balance_src:find("mod._crt_wire_safe() == true", 1, true),
+            "feature gate must use the settled composite")
+        H.truthy(tourney:find("mod._crt_wire_safe() == true", 1, true))
+
+        -- The two reads must stay distinct owners: collapsing the live guard onto
+        -- the settled read reopens the poll-interval send window (#425).
+        H.equal(count_plain(balance_src, "mod._crt_wire_live() == true"), 1)
+        H.equal(count_plain(balance_src, "mod._crt_wire_safe() == true"), 1)
     end)
 end
 

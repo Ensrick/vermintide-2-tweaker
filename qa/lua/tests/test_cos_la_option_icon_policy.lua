@@ -295,7 +295,7 @@ return function(H, repo_root)
     end)
 
     H.test("source does not persist or transmit external provider icon assets", function()
-        local source = read("cosmetics_tweaker.lua")
+        local source = read("cosmetics_tweaker.lua") .. read("_cos_offhand_picker.lua")
         H.truthy(source:find(
             "inventory_icon = opt.cos_authored and opt.inventory_icon or nil",
             1, true))

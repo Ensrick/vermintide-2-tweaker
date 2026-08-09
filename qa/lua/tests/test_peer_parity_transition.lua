@@ -157,29 +157,92 @@ local function register(Harness, repo_root)
         end)
     end)
 
-    Harness.test("shared exact mode is opt-in only for CRT in this release", function()
-        local paths = {
-            "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua",
+    -- Exact mode is opt-in per FILE, deliberately, because passing
+    -- `wire_identity` changes a live network protocol: an exact peer and a
+    -- presence-only peer of the same mod fail closed against each other. Exact
+    -- mode is therefore granted one converted axis at a time, and a file leaves
+    -- the unauthorized list ONLY together with its own positive opt-in
+    -- assertion below, so a partial or accidental conversion cannot land
+    -- silently. Every other file that builds a parity instance stays on the
+    -- presence protocol.
+    local function read_source(relative_path)
+        local file = assert(io.open(repo_root .. "/" .. relative_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
+
+    Harness.test("shared exact mode is authorized only for CRT, Event, the CWV exact runtime and CT", function()
+        local unauthorized = {
+            -- CWV's entry file keeps the PRESENCE beacon
+            -- (cwv_peer_parity_present): deployed CWV builds already speak that
+            -- protocol, and #914's appearance ledgers hang off it. CWV's exact
+            -- channels live in _cwv_exact_wire_runtime.lua instead.
             "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
-            "event_tweaker/scripts/mods/event_tweaker/_evt_guard430_curse_parity.lua",
             "event_tweaker/scripts/mods/event_tweaker/_evt_shadow_adventure.lua",
             "weapon_tweaker/scripts/mods/weapon_tweaker/_wt431_damage_profile_parity.lua",
             "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt431_damage_profile_parity.lua",
         }
-        for i = 1, #paths do
-            local file = assert(io.open(repo_root .. "/" .. paths[i], "rb"))
-            local source = file:read("*a")
-            file:close()
-            Harness.equal(source:find("[^_%w]wire_identity%s*="), nil,
-                "shared exact opt-in is not yet authorized for " .. paths[i])
+        for i = 1, #unauthorized do
+            Harness.equal(read_source(unauthorized[i]):find("[^_%w]wire_identity%s*="), nil,
+                "shared exact opt-in is not yet authorized for " .. unauthorized[i])
         end
 
-        local file = assert(io.open(repo_root
-            .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua", "rb"))
-        local career = file:read("*a")
-        file:close()
+        local career = read_source(
+            "career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua")
         Harness.truthy(career:find("[^_%w]wire_identity%s*=%s*wire_identity") ~= nil,
-            "CRT must be the sole shared exact-mode opt-in")
+            "CRT exact-mode opt-in disappeared")
+
+        -- #430: Event's managed curse catalog.
+        local event = read_source(
+            "event_tweaker/scripts/mods/event_tweaker/_evt_guard430_curse_parity.lua")
+        Harness.truthy(event:find("[^_%w]wire_identity%s*=%s*wire_proof%.identity") ~= nil,
+            "Event must opt its managed curse catalog into exact mode")
+        Harness.truthy(event:find('"et_curse_catalog_exact_v1"', 1, true) ~= nil,
+            "Event #430 exact channel disappeared")
+
+        -- #423/#424: CWV is the third authorized consumer. Both of its exact
+        -- channels are built through ONE factory wrapper, which refuses to
+        -- construct an instance without an identity -- so exact mode can never
+        -- be half-engaged (a channel name change without a proven catalog).
+        local cwv = read_source("character_weapon_variants/scripts/mods/"
+            .. "character_weapon_variants/_cwv_exact_wire_runtime.lua")
+        Harness.truthy(cwv:find("[^_%w]wire_identity%s*=%s*identity") ~= nil,
+            "CWV exact runtime must pass wire_identity into the parity factory")
+        local _, factories = cwv:gsub("local function new_exact_parity", "")
+        Harness.equal(factories, 1,
+            "CWV must build every exact instance through the single guarded factory")
+        Harness.truthy(cwv:find('return nil, "identity-missing"', 1, true),
+            "CWV exact factory must refuse to build without an identity")
+
+        -- #426: CT is the fourth authorized consumer (v0.7.322-dev). Its boon
+        -- axes are the #1191 index-drift class: two ct peers on different builds
+        -- both acked the presence beacon while their integers disagreed. The
+        -- channel rename is part of the opt-in - an unconverted ct build would
+        -- ignore the extra exact fields on the old channel and ack anyway, so it
+        -- must be structurally unable to answer the new one.
+        local ct = read_source("chaos_wastes_tweaker_dev/scripts/mods/"
+            .. "chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua")
+        Harness.truthy(ct:find("[^_%w]wire_identity%s*=%s*wire_identity") ~= nil,
+            "CT must opt its boon catalog into exact mode")
+        Harness.truthy(ct:find('"ct_boon_catalog_exact_v1"', 1, true) ~= nil,
+            "CT #426 exact channel disappeared")
+        Harness.equal(ct:find('channel     = "ct_peer_parity_present"', 1, true), nil,
+            "the legacy CT channel would let an unconverted build ack")
+        -- The identity must be reachable before the beacon is built, and the
+        -- reservation that makes it build-stable must run in the registry.
+        local registry = read_source("chaos_wastes_tweaker_dev/scripts/mods/"
+            .. "chaos_wastes_tweaker_dev/_ct_boon_registry.lua")
+        -- Anchor the CALL, not a type check that mentions the same name: the
+        -- reservation is what makes the ids a function of the catalog alone.
+        Harness.truthy(
+            registry:find("wire_policy%.reserve_lookups,%s*rawget%(_G,%s*\"NetworkLookup\"%)") ~= nil,
+            "CT must reserve both lookup axes before feature-order registration")
+        local reserve_at = assert(registry:find("reserve_lookups", 1, true),
+            "reservation disappeared from the registry")
+        local first_register_at = registry:find("_register_in_network_lookup", 1, true)
+        Harness.truthy(first_register_at == nil or reserve_at < first_register_at,
+            "reservation must run before any per-boon lookup registration")
     end)
 
     local function build_exact(factory, identity)
@@ -363,6 +426,49 @@ local function register(Harness, repo_root)
         end)
     end)
 
+    Harness.test("Event legacy and exact curse channels cannot acknowledge each other", function()
+        with_network_stubs(function()
+            local factory = load_factory()
+            local receivers = { legacy = {}, exact = {} }
+            local function fake_mod(peer_id)
+                return {
+                    network_register = function(_, channel, callback)
+                        receivers[peer_id][channel] = callback
+                    end,
+                    network_send = function(_, channel, recipient, ...)
+                        local target = receivers[recipient]
+                        local callback = target and target[channel]
+                        if callback then callback(peer_id, ...) end
+                    end,
+                    debug = function() end,
+                    echo = function() end,
+                }
+            end
+            local legacy = assert(factory(fake_mod("legacy"), {
+                channel = "et_peer_parity_present",
+                schema = 2,
+                poll_interval = 0,
+                settle_enable = 0,
+            }))
+            local exact = assert(factory(fake_mod("exact"), {
+                channel = "et_curse_catalog_exact_v1",
+                schema = 3,
+                wire_identity = "et-wire-v1:11:12345678:abcdef01",
+                session_epoch = "exact-e1",
+                poll_interval = 0,
+                settle_enable = 0,
+            }))
+            legacy:install()
+            exact:install()
+            Harness.truthy(not legacy:require_peer("exact"))
+            Harness.truthy(not exact:require_peer("legacy"))
+            Harness.truthy(not legacy:peer_has("exact"),
+                "legacy Event presence must not acknowledge an exact curse peer")
+            Harness.truthy(not exact:peer_has("legacy"),
+                "exact Event curse parity must reject a legacy presence acknowledgement")
+        end)
+    end)
+
     Harness.test("ct hot-join preflight precedes native sync and has bounded fallback", function()
         local path = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua"
         local file = assert(io.open(path, "rb"))
@@ -441,16 +547,74 @@ local function register(Harness, repo_root)
             Harness.truthy(declared[required], "modded-content row not gated: " .. required)
         end
 
-        -- Every declared row must be a live widget in the shipped data tree,
-        -- otherwise the gate greys nothing (runtime_gate_spec cannot know).
-        local data_path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_data.lua"
-        local data_file = assert(io.open(data_path, "rb"))
-        local data_source = data_file:read("*a")
-        data_file:close()
+        -- Starting-boon rows joined the gate in v0.7.322-dev: a starting boon is
+        -- gate surface 3, so while the gate is closed those rows are as inert as
+        -- the rework toggles and must read that way.
+        for _, required in ipairs({
+            "start_boon_ct_meta_stagger",
+            "start_boon_ct_boon_vauls_anvil",
+            "start_boon_ct_kill_heal",
+        }) do
+            Harness.truthy(declared[required], "modded-content row not gated: " .. required)
+        end
+        -- Disabling modded content is safe in any lobby; greying those rows would
+        -- remove the only control that still works while parity is missing.
         for _, id in ipairs(wp.GATED_SETTING_IDS) do
-            Harness.truthy(data_source:find('setting_id = "' .. id .. '"', 1, true) ~= nil,
-                "gated row is not a declared widget: " .. id)
+            Harness.equal(id:find("disable_boon_", 1, true), nil,
+                "row must not be gated: " .. id)
+        end
+
+        -- Every declared row must be a live widget, otherwise the gate greys
+        -- nothing (runtime_gate_spec cannot know). REALIZE the tree rather than
+        -- grepping the source: the start_boon_/disable_boon_ rows are generated
+        -- from BOON_TREE and never appear as a literal setting_id assignment, and
+        -- a source grep would also accept a commented-out widget.
+        local base = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
+        local adventure = {
+            build_loc_entries = function() return {} end,
+            build_campaign_dlc_group_widgets = function() return {} end,
+            build_cw_scenarios_block = function()
+                return { setting_id = "fixture_cw", type = "group", sub_widgets = {} }
+            end,
+            build_event_missions_block = function()
+                return { setting_id = "fixture_event", type = "group", sub_widgets = {} }
+            end,
+        }
+        local missions = {
+            build_menu_group = function()
+                return { setting_id = "fixture_missions", type = "group", sub_widgets = {} }
+            end,
+            build_loc_entries = function() return {} end,
+        }
+        local fake_mod = {
+            dofile = function(_, path)
+                if path:find("_adventure_pool", 1, true) then return adventure end
+                if path:find("_ct_dev_mission_catalog", 1, true) then return missions end
+                error("unexpected dependency " .. tostring(path))
+            end,
+            localize = function(_, key) return "<" .. tostring(key) .. ">" end,
+        }
+        local previous_get_mod = get_mod
+        get_mod = function() return fake_mod end
+        local ok_data, data = pcall(function()
+            return assert(loadfile(base .. "chaos_wastes_tweaker_dev_data.lua"))()
+        end)
+        get_mod = previous_get_mod
+        Harness.truthy(ok_data, "ct data tree did not realize: " .. tostring(data))
+
+        local live = {}
+        local function walk(node)
+            if type(node) ~= "table" then return end
+            if node.setting_id then live[node.setting_id] = true end
+            for _, field in ipairs({ "widgets", "sub_widgets" }) do
+                for _, child in ipairs(node[field] or {}) do walk(child) end
+            end
+        end
+        walk(data.options)
+        Harness.truthy(next(live) ~= nil, "realized ct data tree carried no widgets")
+        for _, id in ipairs(wp.GATED_SETTING_IDS) do
+            Harness.truthy(live[id], "gated row is not a live widget: " .. id)
         end
 
         -- Malformed input is rejected wholesale rather than half-registered.

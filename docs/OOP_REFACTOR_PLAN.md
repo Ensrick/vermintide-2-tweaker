@@ -56,7 +56,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 |---|---|---|---|
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
-| Cosmetics | Partial | Four phase slices plus runtime/wire, exact-item offhand session-state, modded-illusion-swap, magic-family visibility, command ownership, item-grid/illusion-card presentation, one three-callback mod lifecycle owner, and the bounded #660 LA replay coordinator; entry ceiling is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
+| Cosmetics | Partial | Four phase slices plus runtime/wire, exact-item offhand session-state, modded-illusion-swap, magic-family visibility, command ownership, item-grid/illusion-card presentation, one three-callback mod lifecycle owner, bounded #660 LA replay and glow transport owners, independent offhand catalog/package plus customization-picker owners, the 12-hook preview/score/package runtime owner, and the single-hook stale-news-widget safety owner; entry ceiling is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
 | Weapon Tweaker | Partial | Animation, runtime-check, and feature-owner slices landed; beta/dev entry ceilings 4,183/4,335 lines | #504 / #2 |
 | Career Tweaker | Structural phase complete | 910-line balance orchestrator; bounded early/late declarative catalogs, composition owner, hook owner, and Foot Knight owner retained by contract | #504 / #2 / #1159 |
 | CIM Dev | Partial | Forge/inventory/diagnostic/command, read-only Weaves economy, Athanor preview lifecycle, picker-category lifecycle, and Athanor presentation owners plus regression suite extracted; entry ceiling 3,764 nonblank lines | #1159 / #504 / #2 |
@@ -97,6 +97,37 @@ copied `_lib_peer_parity.lua` contract: broadcast a mod fingerprint on peer join
 `all_peers_have(mod_id)`, auto-disable + grey out gated features in the gut Mod Tweaker,
 notify the user which features are off and which peer lacks the mod. NEVER gate
 sender-side substitution on it (BUG_CLASSES 31).
+
+> **STATUS: DELIVERED 2026-08-09** (#371 / #1158, install-transaction fanout slice).
+> Evidence:
+> - **Install is one transaction.** `tools/shared_lib/_lib_peer_parity.lua`
+>   `api:install()` builds the receiver and the wrapped update first, then performs
+>   `mod:network_register(CHANNEL, receiver)` AND `mod.update = wrapped_update`
+>   inside a single `pcall`; `_installed` commits only after both return, and the
+>   receiver is inert until it does. A throw restores the exact previous
+>   `mod.update` when the wrapper became externally visible. `_install_attempted`
+>   makes a failed attempt TERMINAL, so no retry can double-register a receiver
+>   the transport already retained. `install()` returns the commit boolean.
+> - **Floors are latched, not caller-disciplined.** `all_peers_have()`,
+>   `peer_has()`, `require_peer()` and `tick()` all hard-gate on `_installed`, so
+>   an uninstalled beacon is fail-closed by construction.
+> - **`all_peers_have(mod_id)` exists.** The lib chunk returns
+>   `new_peer_parity, registry`; each instance also carries `inst.registry`.
+>   Instances enter the registry at their install commit keyed by `opts.mod_id`
+>   (or the host's VMF name). `registry.all_peers_have(mod_id)` returns false for
+>   an unknown id and otherwise AND-folds every beacon that mod installed. Query
+>   only - it adds no cross-mod coupling and no `get_mod()` dependency.
+> - **Fanout is complete.** The canonical lib is byte-identical in all six
+>   consumers (career_tweaker, chaos_wastes_tweaker_dev, character_weapon_variants,
+>   event_tweaker, weapon_tweaker, weapon_tweaker_dev); `qa/check_shared_lib_drift.ps1`
+>   is byte-exact and green. Every consumer seam consumes the commit boolean.
+> - **Tests.** `qa/lua/tests/test_peer_parity_install_transaction.lua` covers the
+>   partial-install latch, the rollback, the commit path, the aggregator, and the
+>   fanout scan, each paired with a planted source mutation proving the assertion
+>   is load-bearing.
+>
+> The Mod Tweaker grey-out half of this row shipped earlier per axis
+> (`_ct_wire_policy.runtime_gate_spec`, crt's `runtime_gate_retry_step`).
 
 ### WS2 - Enforcement machinery (the "rules without gates" fix)
 

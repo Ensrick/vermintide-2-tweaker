@@ -49,6 +49,21 @@ Last updated: 2026-08-01.
 | Detection | Offline `test_peer_parity_transition.lua` covers missing, pre-roster unknown, all-acked, and leave/rejoin states plus hook order. `/ct_regression_test`: `peer_parity_beacon_installed`, `peer_parity_gate_classify`, `issue426_hot_join_fence`, `ct_wire_strip_name_predicate`. `/ct_426_diag` reports the live gate, catalog, synchronized-state census, and whether custom state is currently present. |
 | Test sequence | Complete the solo catalog/state census first. Only then test one current-CT hot join and one no-CT hot join into an in-progress run with a CT boon active. |
 
+### exact boon-catalog parity - issue #426 / #1191 (v0.7.322-dev)
+
+| Field | Value |
+|---|---|
+| Scope | The 33 CT-owned wire rows only: 12 `deus_power_up_templates` names and 21 `buff_templates` names. Vanilla and third-party rows keep their exact ids and order; saved settings are unchanged. |
+| Crash class closed | Two CT peers on DIFFERENT builds both acked the presence beacon while their boon indices disagreed, so the first grant decoded to the wrong template on the other process (strict `__index` fatal, not a nil). Presence alone was never proof of index parity. |
+| Deterministic numbering | `_ct_wire_policy.reserve_lookups` claims both axes in SORTED name order from `_ct_boon_registry.lua`, ahead of any per-boon `_register_in_network_lookup`. Ids therefore depend on the catalog alone, not on toggles, DLC, or load order. Reservation grants nothing and is never toggle-gated. |
+| Identity | `ct-wire-v1:33:<h1>:<h2>`, at most 64 chars in the transport's restricted alphabet, built through the shared `_lib_wire_catalog.lua`. Peers echo it, so an ack now proves matching indices. No identity means no beacon and every gated surface stays inert. |
+| Channel | `ct_boon_catalog_exact_v1`, renamed from `ct_peer_parity_present`. Load-bearing: an unconverted CT build would ignore the extra exact fields on the old channel and ack anyway, so it must be structurally unable to answer. A ct_dev peer on 0.7.321 or earlier therefore reads as parity-absent, which is correct. |
+| Fail-closed | `mod._ct_wire_safe()` requires four independent positives: beacon installed, settled state enabled, live roster classification safe, and `integrity()` still true against the snapshot captured at finalization. Any error, drift, or missing catalog entry means inert. |
+| Gated rows | 21 (up from 9): the `enable_boon_reworks` umbrella, five `enable_boon_*`, twelve `start_boon_*`, three `tweak_miracle_*`. `disable_boon_*` rows stay ungated on purpose - disabling modded content is safe in any lobby. |
+| Detection | Offline `test_ct_426_exact_catalog.lua` (catalog closure and counts, two-way registry readiness, sorted/idempotent reservation, order-independent identity across two simulated peers, drift and truncation refusal, integrity failure modes, strip filters, the three-arg gate spec). `test_peer_parity_transition.lua` locks the exact opt-in, the channel rename, the reservation call site and its ordering, and realizes the widget tree to prove every gated row exists. `/ct_regression_test`: `ct_426_exact_wire_catalog`, `ct_426_exact_gate_fails_closed`. |
+| Live check | `[ct:426] exact catalogs reserved power_up=12 buff=21` at load, then `[ct:426] exact peer-parity beacon installed (channel=ct_boon_catalog_exact_v1, ... identity=ct-wire-v1:33:..., rows=33)`. An `exact catalog unavailable (<reason>)` line instead means no beacon was built and modded boons/miracles are inert for the session. |
+| Test sequence | Solo first: confirm the reserved counts, the identity line, and that boons still roll and apply. Then two CT peers on the SAME build (must enable), then one CT peer on an older build (must stay inert on both sides, no crash). |
+
 Interpret `/ct_426_diag` without changing the run:
 
 - `installed=FAIL` or `gate=FAIL` isolates beacon/hook installation or state-transition drift.

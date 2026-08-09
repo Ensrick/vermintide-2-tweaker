@@ -289,6 +289,245 @@ local function register(H, repo_root)
         H.equal(Gates.status("wt", "wt_dual_axes_cleave"), false)
     end)
 
+    -- ---------------------------------------------------------------
+    -- Application floor (#1158): installed + enabled + allocation-free live
+    -- catalog integrity. A policy or lookup failure must substitute a PROVEN
+    -- RESIDENT vanilla profile or drop the RPC -- never retain the custom id.
+    -- ---------------------------------------------------------------
+
+    H.test("WT #431 application floor never wires a custom id on any failure", function()
+        local fallbacks = { wt_custom = "vanilla_a" }
+        local live = lookup({ "vanilla_a", "vanilla_b", "wt_custom" })
+        local snapshot = assert(Contract.capture_catalog(fallbacks, live))
+        local custom_id = live.wt_custom
+        local vanilla_id = live.vanilla_a
+        H.equal(Contract.catalog_intact(snapshot, fallbacks, live), true)
+
+        -- The ONLY branch that keeps the custom id: gate open AND catalog intact.
+        local id, disposition = Contract.profile_id_for_send(false, custom_id,
+            true, snapshot, fallbacks, live)
+        H.equal(id, custom_id)
+        H.equal(disposition, "custom")
+
+        -- Every failure axis, one at a time. None may return the custom id.
+        local cases = {
+            { name = "gate closed",       exact = false, snap = snapshot, fb = fallbacks, lk = live },
+            { name = "gate nil",          exact = nil,   snap = snapshot, fb = fallbacks, lk = live },
+            { name = "gate not boolean",  exact = 1,     snap = snapshot, fb = fallbacks, lk = live },
+            { name = "snapshot missing",  exact = true,  snap = nil,      fb = fallbacks, lk = live },
+            { name = "snapshot garbage",  exact = true,  snap = 7,        fb = fallbacks, lk = live },
+            { name = "fallbacks missing", exact = true,  snap = snapshot, fb = nil,       lk = live },
+            { name = "lookup missing",    exact = true,  snap = snapshot, fb = fallbacks, lk = nil },
+        }
+        for i = 1, #cases do
+            local case = cases[i]
+            local out = Contract.profile_id_for_send(false, custom_id,
+                case.exact, case.snap, case.fb, case.lk)
+            H.truthy(out ~= custom_id,
+                "custom id leaked onto the wire under: " .. case.name)
+            H.truthy(out == nil or out == vanilla_id,
+                "floor returned an unproven id under: " .. case.name)
+        end
+    end)
+
+    H.test("WT #431 catalog mutation after capture closes the exact gate", function()
+        local fallbacks = { wt_custom = "vanilla_a" }
+        local live = lookup({ "vanilla_a", "vanilla_b", "wt_custom" })
+        local snapshot = assert(Contract.capture_catalog(fallbacks, live))
+        local custom_id = live.wt_custom
+        local vanilla_id = live.vanilla_a
+
+        -- A late third-party registration shifts our index underneath us.
+        live.wt_custom = custom_id + 5
+        live[custom_id + 5] = "wt_custom"
+        H.equal(Contract.catalog_intact(snapshot, fallbacks, live), false,
+            "a moved custom index must fail the live integrity check")
+        local id, disposition = Contract.profile_id_for_send(false, custom_id,
+            true, snapshot, fallbacks, live)
+        H.equal(disposition, "fallback")
+        H.equal(id, vanilla_id,
+            "a mutated catalog must substitute the proven vanilla donor")
+
+        -- Mutating the DONOR instead: nothing is proven, so the RPC is dropped.
+        local live2 = lookup({ "vanilla_a", "vanilla_b", "wt_custom" })
+        local snapshot2 = assert(Contract.capture_catalog(fallbacks, live2))
+        live2.vanilla_a = nil
+        live2[vanilla_id] = nil
+        H.equal(Contract.catalog_intact(snapshot2, fallbacks, live2), false)
+        H.equal(Contract.profile_id_for_send(false, live2.wt_custom, true,
+            snapshot2, fallbacks, live2), nil,
+            "an evicted donor must drop the RPC, not fall back to the custom id")
+    end)
+
+    H.test("WT #431 donor residency is proven, not assumed from presence", function()
+        local fallbacks = { wt_custom = "vanilla_a" }
+        local live = lookup({ "vanilla_a", "vanilla_b", "wt_custom" })
+        local snapshot = assert(Contract.capture_catalog(fallbacks, live))
+        local custom_id = live.wt_custom
+        local vanilla_id = live.vanilla_a
+
+        -- Present by name, but the reverse entry points elsewhere: a
+        -- half-registered donor is NOT resident and must not be wired.
+        live[vanilla_id] = "something_else"
+        H.equal(Contract.profile_id_for_send(false, custom_id, false,
+            snapshot, fallbacks, live), nil,
+            "a donor that does not round-trip is not proven resident")
+    end)
+
+    H.test("WT #431 vanilla ids pass while post-capture WT names are dropped", function()
+        local fallbacks = { wt_custom = "vanilla_a" }
+        local live = lookup({ "vanilla_a", "vanilla_b", "wt_custom" })
+        local snapshot = assert(Contract.capture_catalog(fallbacks, live))
+
+        local id, disposition = Contract.profile_id_for_send(false, live.vanilla_b,
+            false, snapshot, fallbacks, live)
+        H.equal(id, live.vanilla_b)
+        H.equal(disposition, "vanilla")
+
+        -- Registered after the snapshot: absent from custom_by_id, but the
+        -- fallback map still knows it is ours, so it must never reach the wire.
+        fallbacks.wt_late = "vanilla_b"
+        live.wt_late = 4
+        live[4] = "wt_late"
+        H.equal(Contract.profile_id_for_send(false, 4, true, snapshot,
+            fallbacks, live), nil,
+            "a WT-owned id registered after capture must be dropped, not wired")
+        H.equal(Contract.profile_id_for_send(false, 99, false, snapshot,
+            fallbacks, live), nil, "an id absent from the catalog must be dropped")
+        H.equal(Contract.profile_id_for_send(false, nil, false, snapshot,
+            fallbacks, live), nil, "a malformed id must be dropped")
+
+        -- The host never wires the id (weapon_system.lua:179 dispatches its
+        -- local receiver), so the host branch must pass through untouched --
+        -- narrowing it would drop the host's own attack RPCs.
+        H.equal(Contract.profile_id_for_send(true, 4, false, snapshot,
+            fallbacks, live), 4)
+        H.equal(Contract.profile_id_for_send("truthy", live.wt_custom, false,
+            snapshot, fallbacks, live), live.wt_custom,
+            "is_server is truthy-tested to match the engine's own branch")
+    end)
+
+    H.test("WT #431 incompatible schema generation is revoked before epoch acceptance", function()
+        local identity = "wt431-v1:2:12345678:abcdef01"
+        local receiver, accepted = nil, 0
+        local fake_mod = {
+            network_send = function() end,
+            network_register = function(_, _, callback) receiver = callback end,
+            debug = function() end,
+            echo = function() end,
+            localize = function(_, value) return value end,
+        }
+        local proxy = assert(Contract.wrap_parity_transport(fake_mod, identity,
+            { session_epoch = "local-e1", schema = 1 }))
+        local forgotten, required = 0, 0
+        local parity = {
+            forget_peer = function(_, peer)
+                if peer == "peer-a" then forgotten = forgotten + 1 end
+            end,
+            require_peer = function(_, peer)
+                if peer == "peer-a" then required = required + 1 end
+            end,
+        }
+        proxy:_bind_parity_instance(parity)
+        proxy:network_register("exact", function() accepted = accepted + 1 end)
+
+        -- A peer on another protocol generation presents an otherwise valid
+        -- identity and query. It must be revoked outright.
+        receiver("peer-a", 2, 0, identity, "peer-epoch-1", "remote-q1", "")
+        H.equal(accepted, 0, "a mismatched schema must never reach the classifier")
+        H.truthy(forgotten >= 1 and required >= 1,
+            "a mismatched-generation peer must be revoked")
+
+        -- Unmovable proof the rejected epoch was never recorded: a DIFFERENT
+        -- epoch on the correct schema is still treated as this peer's first and
+        -- passes. Had "peer-epoch-1" been accepted, an unchallenged epoch
+        -- change would fail instead.
+        receiver("peer-a", 1, 0, identity, "peer-epoch-2", "remote-q2", "")
+        H.equal(accepted, 1, "schema rejection must precede epoch acceptance")
+
+        H.equal(select(2, Contract.wrap_parity_transport(fake_mod, identity,
+            { session_epoch = "local-e2", schema = 0 })), "schema-invalid")
+    end)
+
+    H.test("WT #431 runtime gate retry is bounded and terminal at the cap", function()
+        local function make_spec()
+            return { mod_id = "wt", setting_ids = {}, evaluate = function() end }
+        end
+        local calls = 0
+        local state = {}
+        for _ = 1, Contract.RUNTIME_GATE_MAX_ATTEMPTS + 5 do
+            state = Contract.runtime_gate_retry_step(state, make_spec,
+                function() calls = calls + 1 return false end)
+        end
+        H.equal(state.registered, false)
+        H.equal(state.terminal, true)
+        H.equal(state.attempts, Contract.RUNTIME_GATE_MAX_ATTEMPTS)
+        H.equal(calls, Contract.RUNTIME_GATE_MAX_ATTEMPTS,
+            "a player without Mod Tweaker must not retry forever")
+
+        -- Success is terminal too; later ticks are no-ops.
+        local ok_calls, ok_state = 0, {}
+        for _ = 1, 10 do
+            ok_state = Contract.runtime_gate_retry_step(ok_state, make_spec,
+                function() ok_calls = ok_calls + 1 return ok_calls >= 3 end)
+        end
+        H.equal(ok_state.registered, true)
+        H.equal(ok_state.terminal, true)
+        H.equal(ok_state.attempts, 3)
+        H.equal(ok_calls, 3)
+
+        -- Neither callback may escape.
+        H.equal(Contract.runtime_gate_retry_step({}, function() error("boom") end,
+            function() return true end).registered, false)
+        H.equal(Contract.runtime_gate_retry_step({}, make_spec,
+            function() error("boom") end).registered, false)
+    end)
+
+    H.test("WT #431 runtime gate accepts either GUT stream and survives a throwing tweaker", function()
+        local spec = assert(Contract.runtime_gate_spec("wt", function() return true end))
+        local seen
+        H.equal(Contract.try_register_runtime_gate(function(name)
+            if name == "gut" then
+                return { mod_tweaker = { register_runtime_gate = function(_, id)
+                    seen = id
+                    return true
+                end } }
+            end
+        end, "wt:431:gut", spec), true, "the public GUT stream must also be tried")
+        H.equal(seen, "wt:431:gut")
+
+        H.equal(Contract.try_register_runtime_gate(function()
+            return { mod_tweaker = { register_runtime_gate = function() error("boom") end } }
+        end, "wt:431:throw", spec), false,
+            "a throwing third-party Mod Tweaker must not escape into gameplay")
+
+        H.equal(Contract.try_register_runtime_gate(nil, "wt:431:x", spec), false)
+        H.equal(Contract.try_register_runtime_gate(function() end, "", spec), false)
+        H.equal(Contract.try_register_runtime_gate(function() end, "wt:431:x", nil), false)
+    end)
+
+    H.test("WT #431 both stream copies enforce the same application floor", function()
+        local dev_contract = assert(loadfile(repo_root
+            .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt431_wire_contract.lua"))()
+        local fallbacks = { wt_custom = "vanilla_a" }
+        local streams = { { "public", Contract }, { "dev", dev_contract } }
+        for i = 1, #streams do
+            local label, C = streams[i][1], streams[i][2]
+            local live = lookup({ "vanilla_a", "vanilla_b", "wt_custom" })
+            local snapshot = assert(C.capture_catalog(fallbacks, live))
+            local custom_id, vanilla_id = live.wt_custom, live.vanilla_a
+            H.equal(C.RUNTIME_GATE_MAX_ATTEMPTS, 30, label)
+            H.equal(C.profile_id_for_send(false, custom_id, true, snapshot,
+                fallbacks, live), custom_id, label .. ": open gate keeps the custom id")
+            H.equal(C.profile_id_for_send(false, custom_id, false, snapshot,
+                fallbacks, live), vanilla_id, label .. ": closed gate substitutes")
+            live.vanilla_a = nil
+            live[vanilla_id] = nil
+            H.equal(C.profile_id_for_send(false, custom_id, false, snapshot,
+                fallbacks, live), nil, label .. ": unprovable donor drops")
+        end
+    end)
+
     H.test("WT #431 beta and dev carry normalized exact-catalog wiring", function()
         local function read(path)
             local file = assert(io.open(repo_root .. "/" .. path, "rb"))

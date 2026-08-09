@@ -40,6 +40,26 @@ Last updated: 2026-07-26.
 | Detection | Offline `test_cos_runtime_modules.lua` executes all four installers under Lua 5.1, pins command/check counts, order, idempotence, exports, and proves the entry loads each owner once. Full suite tests concatenate `_cos_runtime_checks.lua` and `_cos_command_owner.lua` when asserting moved runtime signatures. |
 
 ---
+## Phase 5 preview-runtime owner boundary
+
+| Field | Value |
+|---|---|
+| Owner | `_cos_preview_runtime.lua` owns the exact 12-hook preview/score/package and adjacent authored-outfit attachment sequence. The entry installs it once after shared render helpers and before LA bridge initialization. |
+| Late binding | Mutable customization backend identity is read through the injected getter only when `LootItemUnitPreviewer.spawn_units` runs; engine tables are not snapshotted at install. All 16 injected LA/glow/score/helper dependencies refresh through one persistent holder before the reinstall guard, and callbacks read the current shared `mod._cos` consumer map. |
+| Stability | Repeated install returns and republishes the same exact two-key owner plus `mod._cos_score_peer_for_profile` without duplicate hooks. The 12 callbacks retain only the stable state holder; no RPC, command, persistence, husk hook, or update-loop owner moved. |
+| Detection | Offline `test_cos_preview_runtime.lua` pins ownership, hook kind/order/count, a distinct replacement `mod._cos` map, 16 distinct replacement dependencies, complete owner-export identity, fresh score/getter/policy consumption, action-time identity lookup, and the 1,500-line cohesive-owner ceiling. Aggregate tests continue to prove unchanged hook/RPC cardinality. |
+
+---
+## Phase 5 news-feed safety owner boundary
+
+| Field | Value |
+|---|---|
+| Owner | `_cos_news_feed_safety.lua` owns the single existing `NewsFeedUI.draw` origin hook at the historical pre-lifecycle position. |
+| Pass safety | Begin/draw/end order is preserved. Individual draw failures are collected during the pass; only after `end_pass` are failed rows removed in descending order and their widgets recycled. Healthy rows remain ordered. |
+| Reload safety | A persistent state holder keeps one registration while a fresh module reload refreshes the action-time `UIRenderer` getter and diagnostic dependency. A replacement public owner map is cleared and republished with exactly `hook_count = 1`. |
+| Detection | Offline `test_cos_news_feed_safety.lua` pins entry ownership/order, one hook, balanced pass, healthy-row retention, stale-widget recycle, the historical five-purge diagnostic threshold, exact fresh-map publication, distinct dependency refresh, and absence of networking. |
+
+---
 ## Layered weapon item-card icons (#650)
 
 | Field | Value |
@@ -229,7 +249,7 @@ Last updated: 2026-07-26.
 | Category | INTEGRATION / MULTIPLAYER |
 | Repro | Customize native Dual Skullsplitters or any CWV dual family, choose a row-1 main illusion and a distinct offhand, Apply, restart/transition, and observe from another peer. |
 | Expected post-fix | Row 1 owns main/right and the inventory icon; one added row owns left/offhand visuals only; Follow Main clears only the offhand override. Choices persist by backend item and hand, render in preview/1P/local3P/remote husk, and converge on transition/hot join. Invalid stored or received units fail closed to the main illusion. |
-| Detection | `/cos_regression_test` passes `independent_dual_offhands_583`, `cos_la_offhand_persistence_roundtrip`, and `issue483_cwv_sword_mace_individualized_cosmetics`; offline `test_cos_cwv_remote_identity` rejects missing/stale/foreign/unregistered providers. Direct peer replay remains one last-choice queue entry per `(backend_id, hand)`, uses the existing RPC schema, and is replayed by the bounded acknowledged state pull. A valid CWV remote hand logs `APPLIED-vanilla-mesh ... item_type=<exact cwv key> identity=exact`. |
+| Detection | `/cos_regression_test` passes `independent_dual_offhands_583`, `cos_la_offhand_persistence_roundtrip`, and `issue483_cwv_sword_mace_individualized_cosmetics`; offline `test_cos_dual_offhands`, `test_cos_offhand_catalog`, `test_cos_offhand_picker`, and `test_cos_cwv_remote_identity` lock the extracted catalog/picker plus reject missing/stale/foreign/unregistered providers. Direct peer replay remains one last-choice queue entry per `(backend_id, hand)`, uses the existing RPC schema, and is replayed by the bounded acknowledged state pull. A valid CWV remote hand logs `APPLIED-vanilla-mesh ... item_type=<exact cwv key> identity=exact`. |
 | Tracking | GitHub issue #583. |
 
 ### independent-offhand-names -- weapon and shield component localization
@@ -321,7 +341,7 @@ Last updated: 2026-07-26.
 | Category | INTEGRATION |
 | Repro | Start VT2 with package debugging enabled and count `cosmetics_tweaker, sync-read` lines before the first keep frame. |
 | Expected post-fix | Offhand packages are queued as `async-read`; an unready override falls back to the base mesh; unload balances every `cosmetics_tweaker_offhand` reference; a callback retained by another owner after unload is rejected by its stale generation token. |
-| Detection | `/cos_regression_test` passes `offhand_preload_async_bounded_565`; offline lifecycle tests pass; startup contains `[cos:565] offhand bulk preload queued mode=async` and no Cosmetics-owned bulk `sync-read` storm. Shutdown prints one lifecycle summary. Any late callback is ignored and detailed rows are capped at 4. |
+| Detection | `/cos_regression_test` passes `offhand_preload_async_bounded_565`; offline `test_cos_offhand_preload_lifecycle` and executable `test_cos_offhand_catalog` pass; startup contains `[cos:565] offhand bulk preload queued mode=async` and no Cosmetics-owned bulk `sync-read` storm. Shutdown prints one lifecycle summary. Any late callback is ignored and detailed rows are capped at 4. |
 | Tracking | GitHub issue #565. |
 
 ### white-glow-unregistered-fallback -- do not require vanilla's missing template

@@ -156,31 +156,28 @@ end
 -- `_career_tweaker_balance_hooks.lua` also filters server-controlled CRT buffs
 -- from the pre-ack hot-join replay; drivers resync after parity returns.
 
--- Live parity read for the wire guards. Fail-safe: beacon missing or erroring
--- counts as "not safe" and blocks the modded send (solo still passes -- the
--- classifier treats a lobby with no OTHER humans as all-present).
+-- The two parity reads for this file. Both route through the entry file's
+-- composite floors (#1158), not the beacon directly, so an uncommitted
+-- transport or a post-boot catalog shift blocks them too. A missing or erroring
+-- floor counts as "not safe", and solo passes both (the classifier treats a
+-- lobby with no OTHER humans as all-present).
+--
+-- The split is load-bearing. Every individual send consults the LIVE read,
+-- which re-evaluates the roster per call. Apply/restore churn and the tourney
+-- port follow the SETTLED read, which the beacon debounces so talent tables do
+-- not flicker on an ack race. Collapsing live onto settled would keep sending
+-- for up to one 0.5s poll after a non-crt peer joins; wire_live in
+-- _crt_wire_policy.lua carries that rationale, and issue 506 (the lib commits
+-- _applied before firing callbacks) is what keeps the settled read correct when
+-- an apply engine calls it from inside one.
 local function _crt_wire_parity_live()
-    local pp = mod._crt_peer_parity
-    if not pp then return false end
-    local ok, res = pcall(pp.all_peers_have, pp)
-    return ok and res == true
+    return type(mod._crt_wire_live) == "function"
+        and mod._crt_wire_live() == true
 end
 
--- Settled-state read for the feature gate (debounced by the beacon: disable is
--- instant, enable waits the settle window). Distinct from the live read above
--- on purpose: apply/restore churn follows the settled state, while every
--- individual send consults the instant live state.
---
--- Reads the beacon's committed settled state via pp:applied_state(). Issue 506:
--- the shared lib now writes _applied BEFORE firing the gated-feature callbacks
--- (_lib_peer_parity.lua _apply), so this read is correct even when it runs from
--- inside the beacon's on_enable/on_disable -- which is exactly when the apply
--- engines call it. This replaced the old mod._crt_parity_settled_enabled mirror
--- flag the callbacks set to work around a stale applied_state() read. Fail-safe:
--- no beacon (factory failed) -> nil -> networked reworks stay vanilla/inert.
 local function _crt_parity_gate_ok()
-    local pp = mod._crt_peer_parity
-    return pp ~= nil and pp:applied_state() == "enabled"
+    return type(mod._crt_wire_safe) == "function"
+        and mod._crt_wire_safe() == true
 end
 
 -- [crt:425] diagnostics: engine printf (user runs with mod-logging OFF), fired

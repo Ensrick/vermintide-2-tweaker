@@ -71,11 +71,33 @@
         @{ Dir = 'dynamic_cosmetic_portraits'; ModId = 'dynamic_cosmetic_portraits'; WorkshopId = '3721036701'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Dynamic Cosmetic Portraits'; RootBundle = '4b0d338589a2926c.mod_bundle' }
         @{ Dir = 'career_tweaker';             ModId = 'crt';                        WorkshopId = '3716286199'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Career Tweaker'; RootBundle = '92ad046507348beb.mod_bundle' }
         @{ Dir = 'enemy_tweaker';              ModId = 'enemy_tweaker';              WorkshopId = '3716780252'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Enemy Tweaker'; RootBundle = '002586295f98ba25.mod_bundle' }
-        @{ Dir = 'character_weapon_variants';  ModId = 'character_weapon_variants';  WorkshopId = '3716869446'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Character Weapon Variants'; RootBundle = '0f038849957ad1b7.mod_bundle' }
+        @{
+            Dir = 'character_weapon_variants'; ModId = 'character_weapon_variants'; WorkshopId = '3716869446';
+            Visibility = 'public'; Stream = 'single'; Public = $true;
+            Name = 'Character Weapon Variants'; RootBundle = '0f038849957ad1b7.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{ Dir = 'character_dialogue';         ModId = 'character_dialogue';         WorkshopId = '3765055148'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Character Dialogue'; RootBundle = '0e14765f298dd165.mod_bundle' }
         @{ Dir = 'crafting_in_modded';         ModId = 'cim';                        WorkshopId = '3721038774'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'Crafting In Modded'; RootBundle = 'cfd4add911f06fa1.mod_bundle' }
         @{ Dir = 'crafting_in_modded_dev';     ModId = 'cim_dev';                    WorkshopId = '3733366851'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'Crafting In Modded (Dev)'; RootBundle = '05f34d542fe9a8ef.mod_bundle' }
-        @{ Dir = 'event_tweaker';              ModId = 'event_tweaker';              WorkshopId = '3721290755'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Event Tweaker'; RootBundle = 'ac2d7655ddc4f658.mod_bundle' }
+        @{
+            Dir = 'event_tweaker'; ModId = 'event_tweaker'; WorkshopId = '3721290755';
+            Visibility = 'public'; Stream = 'single'; Public = $true;
+            Name = 'Event Tweaker'; RootBundle = 'ac2d7655ddc4f658.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{ Dir = 'modded_progression';         ModId = 'mp';                         WorkshopId = '3730422873'; Visibility = 'private';      Stream = 'single'; Public = $false; Name = 'Modded Progression'; RootBundle = 'c30cf98443ecafec.mod_bundle' }
         @{ Dir = 'verminious_dreams_lighting'; ModId = 'verminious_dreams_lighting'; WorkshopId = '3727221800'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'Verminious Dreams Lighting'; RootBundle = '9acd667c38b63afe.mod_bundle' }
         @{ Dir = 'verminious_dreams_lighting_dev'; ModId = 'verminious_dreams_lighting_dev'; WorkshopId = '3733366748'; Visibility = 'friends_only'; Stream = 'dev'; Public = $false; Name = 'Verminious Dreams Lighting (Dev)'; RootBundle = '6b34ac1c97e5a1be.mod_bundle' }

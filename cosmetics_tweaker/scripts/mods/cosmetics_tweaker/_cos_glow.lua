@@ -20,8 +20,9 @@
 --     render hooks in the entry (create_equipment / _spawn_item_post /
 --     LootItemUnitPreviewer.spawn_units) call them via mod._cos.*.
 --   * mod._glow_by_peer (per-peer glow cache) is initialized here and captured as
---     a module local; the per-peer GLOW broadcast RPC layer (stays in the entry)
---     writes/reads the SAME table via a byte-identical entry-local alias.
+--     a module local; the per-peer GLOW broadcast RPC layer owned by
+--     _cos_glow_transport.lua writes/reads the SAME table through its injected
+--     byte-identical alias.
 --   * mod._unit_to_backend_id (weak unit->backend_id map) is initialized here (its
 --     primary reader _apply_glow_to_unit lives here); the render/preview hooks in
 --     the entry populate it via mod._unit_to_backend_id directly (no local alias).
@@ -31,9 +32,10 @@
 --     mod._try_install_flow_glow_hook, and the /glow_status command (stays in the
 --     entry) reads the two counter tables.
 --   * reads mod._per_item_glow_runtime (owned/written by _glow_picker.lua).
--- The /glow_status and /glow_trace commands and the per-peer glow broadcast RPC
--- layer (#421-adjacent) stay in the entry; /dump_glows (a read-only dump with no
--- apply logic) stays in _cos_diagnostics.lua.
+-- The /glow_status and /glow_trace commands stay in the entry; the per-peer glow
+-- broadcast RPC layer (#421-adjacent) is owned by _cos_glow_transport.lua;
+-- /dump_glows (a read-only dump with no apply logic) stays in
+-- _cos_diagnostics.lua.
 
 local mod = get_mod("cosmetics_tweaker")
 
