@@ -36,10 +36,24 @@ return function(H, repo_root)
     end)
 
     H.test("CT #461 builds by chamber context without duplicating the shared draw hook", function()
-        local main_path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
-        local f = assert(io.open(main_path, "rb"))
+        -- #1159: the hold-Tab panel moved out of the entry into its own owner. The
+        -- needles below are byte-identical to the pre-extraction ones; only the
+        -- file they are read from changed.
+        local owner_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_tab_panel_owner.lua"
+        local f = assert(io.open(owner_path, "rb"))
         local source = f:read("*a"); f:close()
+        -- Shadowing guard: the entry must not keep a second copy of either hook.
+        -- VMF drops a duplicate registration silently, so a stale entry copy would
+        -- shadow the owner with no error anywhere.
+        local ef = assert(io.open(repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua", "rb"))
+        local entry_source = ef:read("*a"); ef:close()
+        H.equal(entry_source:find(
+            'mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data"', 1, true), nil,
+            "the build hook must live only in the tab-panel owner")
+        H.equal(entry_source:find('mod:hook_safe("IngamePlayerListUI", "_draw"', 1, true), nil,
+            "the shared draw hook must live only in the tab-panel owner")
         local setup = assert(source:find('mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data"', 1, true))
         local draw = assert(source:find('mod:hook_safe("IngamePlayerListUI", "_draw"', setup, true))
         local setup_body = source:sub(setup, draw - 1)

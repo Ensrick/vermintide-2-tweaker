@@ -23,18 +23,20 @@ return function(H, repo_root)
     local regression = read("_ct_regression.lua")
     local weapon_traits = read("_ct_weapon_trait_generation.lua")
     local bot_weapon_chest = read("_ct_bot_weapon_chest_owner.lua")
+    local tab_panel = read("_ct_tab_panel_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 8640 = 2026-08-09 baseline after the #1159 pickup-spawn owner
-        -- extraction (the _spawn_pickup / spawn_network_unit /
-        -- _spawn_guaranteed_pickup / _get_coins_amount_and_type identity and
-        -- payout seams), atop the spawn-eligibility, Boss Grudge Marks, command,
-        -- journey, preview-helper, weapon-trait-generation, and bot
-        -- weapon-chest/reusable-altar owners. The ceiling only ratchets DOWN as
-        -- more of the ct_dev entry decomposes into modules; it must never grow.
-        H.truthy(lines <= 8640, "entry non-empty line count exceeded frozen 8640 baseline")
+        -- 8114 = 2026-08-09 baseline after the #1159 tab-panel owner extraction
+        -- (every ct addition to IngamePlayerListUI: the #461/#1004 starting-boon
+        -- preview and the #533 Chaos Wastes collectible counters, which share one
+        -- guarded _draw pass), atop the pickup-spawn, spawn-eligibility, Boss
+        -- Grudge Marks, command, journey, preview-helper, weapon-trait-generation,
+        -- and bot weapon-chest/reusable-altar owners. The ceiling only ratchets
+        -- DOWN as more of the ct_dev entry decomposes into modules; it must never
+        -- grow.
+        H.truthy(lines <= 8114, "entry non-empty line count exceeded frozen 8114 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -72,9 +74,14 @@ return function(H, repo_root)
         -- entry 34 -> 35, total 106.
         -- Issue #52 registers the skull diagnostic's M.regression at its wiring
         -- site (issue52_skull_diag_installed): entry 35 -> 36, total 107.
+        -- #1159 tab-panel owner: the six hold-Tab checks (#461, #1004, #556, #533,
+        -- the native-diag arm, and #571) move WITH their feature, so the entry
+        -- drops 35 -> 29 and the new owner holds exactly 6. The conserved total is
+        -- unchanged; no check was lost, renamed, or duplicated.
         H.equal(count_plain(regression, "_rt_register("), 71)
         -- The tier-by-rarity check moved with the only helper state it consumes.
-        H.equal(count_plain(entry, "_rt_register("), 35)
+        H.equal(count_plain(entry, "_rt_register("), 29)
+        H.equal(count_plain(tab_panel, "_rt_register("), 6)
         H.equal(count_plain(weapon_traits, "_rt_register("), 1)
         H.equal(count_plain(bot_weapon_chest,
             'mod:hook("DeusChestExtension", "open_chest"'), 1)
@@ -82,6 +89,10 @@ return function(H, repo_root)
         -- the module registers through the exposed handle, never a second registry.
         H.truthy(entry:find("mod._ct_rt_register = _rt_register", 1, true))
         H.truthy(regression:find("local _rt_register = mod._ct_rt_register", 1, true))
+        -- Same registrar seam for the #1159 tab-panel owner: it must bind the
+        -- exposed handle, never build a second _RT_CHECKS list.
+        H.truthy(tab_panel:find("local _rt_register = mod._ct_rt_register", 1, true))
+        H.equal(count_plain(tab_panel, "local _RT_CHECKS"), 0)
     end)
 
     H.test("CT #252 owns the approved short reroll prompt once", function()

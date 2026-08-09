@@ -69,18 +69,28 @@ return function(H, repo_root)
     end)
 
     H.test("ct boon-preview helper owner loads once at the safe manifest sub-boundary", function()
+        -- #1159: the hold-Tab panel (and with it this helper's load site and the
+        -- hooks that consume it) moved into _ct_tab_panel_owner.lua. The ordering
+        -- contract is unchanged and the needles are byte-identical; the file they
+        -- are read from is now the panel owner.
+        local panel = read("_ct_tab_panel_owner.lua")
         local needle = "scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_preview_helpers"
-        H.equal(count_plain(entry, needle), 1)
-        local runtime_at = assert(entry:find(
+        H.equal(count_plain(panel, needle), 1)
+        H.equal(count_plain(entry, needle), 0,
+            "the helper must no longer load from the entry")
+        local runtime_at = assert(panel:find(
             "scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_preview_runtime", 1, true))
-        local owner_at = assert(entry:find(needle, 1, true))
-        local setup_at = assert(entry:find(
+        local owner_at = assert(panel:find(needle, 1, true))
+        local setup_at = assert(panel:find(
             'mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data"', 1, true))
         H.truthy(runtime_at < owner_at, "tooltip policy/runtime must exist before helper install")
         H.truthy(owner_at < setup_at, "helpers must install before the panel hook consumes them")
-        H.equal(count_plain(entry,
+        H.equal(count_plain(panel,
             'mod:hook_safe("IngamePlayerListUI", "_draw"'), 1,
-            "the shared #461/#533 draw seam must remain singleton-owned in the entry")
+            "the shared #461/#533 draw seam must remain singleton-owned in the panel owner")
+        H.equal(count_plain(entry,
+            'mod:hook_safe("IngamePlayerListUI", "_draw"'), 0,
+            "the entry must not keep a shadowing copy of the shared draw seam")
         H.equal(count_plain(owner, "_ct_deus_collectibles"), 0,
             "the helper owner must not absorb the cross-feature draw seam")
     end)

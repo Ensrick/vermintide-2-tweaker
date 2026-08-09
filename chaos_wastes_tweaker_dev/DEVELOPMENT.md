@@ -30,7 +30,7 @@ The verified journey-completion crash guard is a direct `return function(mod)` i
 
 ### Starting-Boon Preview helper owner (`_ct_boon_preview_helpers.lua`) — issue #461 / #1159
 
-The six pure/helper surfaces for the Tab-hold Starting-Boon Preview are extracted byte-for-byte to a `return function(ctx)` installer whose only injected dependency is `mod`. It loads once after `_ct_boon_preview_tooltip.lua` plus `_ct_boon_preview_runtime.lua` and before `IngamePlayerListUI._setup_deed_reward_data` consumes the helpers. Engine globals remain late-bound. The requested whole #461 heading block is not a safe single-feature owner: its one `IngamePlayerListUI._draw` hook intentionally composes #461 tooltip/rows with #533 collectibles and #571 recovery, and VMF silently drops a duplicate hook on the same class/method pair. Therefore that shared hook, the setup hook, diagnostics, command, and inline regression checks remain at their original manifest seam. Do not move or split that hook until a dedicated composite panel owner can take all three concerns together. Add data/identity/widget-construction helpers here; keep cross-feature panel composition in the entry. `qa/lua/tests/test_ct_boon_preview_helpers.lua` guards exact extracted bytes, the one-dependency seam, helper cardinality, manifest placement, shared-hook cardinality, engine-free behavior, and global cleanup.
+The six pure/helper surfaces for the Tab-hold Starting-Boon Preview are extracted byte-for-byte to a `return function(ctx)` installer whose only injected dependency is `mod`. It loads once after `_ct_boon_preview_tooltip.lua` plus `_ct_boon_preview_runtime.lua` and before `IngamePlayerListUI._setup_deed_reward_data` consumes the helpers. Engine globals remain late-bound. The whole #461 heading block was never a safe *single-feature* owner: its one `IngamePlayerListUI._draw` hook intentionally composes #461 tooltip/rows with #533 collectibles and #571 recovery, and VMF silently drops a duplicate hook on the same class/method pair. The condition this note set — "do not move or split that hook until a dedicated composite panel owner can take all three concerns together" — was met in 0.7.326-dev: that composite owner is `_ct_tab_panel_owner.lua` (below), and the shared hook, the setup hook, the `_setup_mission_data` wrapper, the diagnostics wiring, the command, and the six regression checks all moved there together. This helper file keeps its original job and its original load position, which is now inside the panel owner rather than the entry. Add data/identity/widget-construction helpers here; add panel composition to the panel owner, never to the entry. `qa/lua/tests/test_ct_boon_preview_helpers.lua` guards exact extracted bytes, the one-dependency seam, helper cardinality, manifest placement, shared-hook cardinality, engine-free behavior, and global cleanup.
 
 ### Weapon-trait generation owner (`_ct_weapon_trait_generation.lua`) — issue #1159
 
@@ -156,6 +156,60 @@ of the reset; this owner owns every increment.
 `qa/lua/tests/test_ct_pickup_spawn_owner.lua` guards dofile cardinality, per-hook
 exclusivity across entry/owner/eligibility, install ordering, moved-local orphans,
 the mod-field counter seam, marker migration, and the eight-field public surface.
+
+### Tab-panel owner (`_ct_tab_panel_owner.lua`) — issues #461 / #533 / #556 / #571 / #1004 / #1159
+
+Every ct addition to `IngamePlayerListUI`, the hold-Tab overlay, and nothing
+else. This is the composite panel owner the boon-preview helper note above was
+waiting on: the reason #461 and #533 cannot be separate owners is that they
+**share one `_draw` hook by necessity**, and VMF silently drops a second hook on
+the same class/method pair. Splitting them would not produce two owners, it would
+produce one owner and one dead registration. Three hooks live here and nowhere
+else in the mod:
+
+| Hook | Job |
+|---|---|
+| `IngamePlayerListUI._setup_deed_reward_data` (`hook_safe`) | #461 build point. Vanilla calls it on every panel activation, so the gates (keep UI, local display toggle, exact `morris_hub` chamber level shared with #505) re-evaluate per Tab press. |
+| `IngamePlayerListUI._draw` (`hook_safe`) | the SHARED guarded pass. Draws the #461 preview rows plus their #1004 hover tooltip AND the #533 deus counters, each concern bailing independently, every `draw_widget` individually pcall-wrapped. Also drains the #533 native census and performs the #571 load-order recovery. |
+| `IngamePlayerListUI._setup_mission_data` (full hook) | #533 build point. Inside a deus run vanilla is deliberately NOT called (it would build tome/grimoire/dice counters from an injected adventure level's defaulted `loot_objectives`); everywhere else it is a pure passthrough. |
+
+`_ct_diag_tab_native533.lua` owns the fourth ct hook on this class
+(`_set_active`) and stays in its own file; the panel owner installs it. The
+`/ct_preview_boons` command and the six regression checks (#461, #1004, #556,
+#533, the native-diag arm, #571) moved with the features they lock.
+
+Like the pickup-spawn owner this is a **bare dofile**, so the body runs at file
+scope exactly where it did in the entry — that is what preserves hook
+registration order, the load order of the five side modules it drives
+(`_ct_boon_preview_tooltip`, `_ct_boon_preview_runtime`,
+`_ct_boon_preview_helpers`, `_ct_diag_tab_native533`,
+`_ct_tab_collectibles_layout`), the load-time marker globals
+(`CT_BOON_PREVIEW_461_MARKER`, `CT_BOON_TOOLTIP_1004_MARKER`,
+`CT_CW_TAB_COLLECTIBLES_533_MARKER`), and the `_RT_CHECKS` append order. The one
+entry file-local the block used, `_rt_register`, is rebound at the top of the
+module from the `mod._ct_rt_register` handle the entry already exposes, so the
+six moved check bodies are byte-identical and land in the same shared registry.
+
+Note the deliberate ordering quirk kept from the entry: the `_ct_tab_collectibles_layout`
+dofile sits **after** the `_draw` registration, and `mod._ct_ensure_deus_collectibles` /
+`mod._ct_layout_deus_collectibles` are resolved at call time (first draw), not at
+registration time. Do not "fix" this by hoisting the dofile — the module's
+load-time work would change timing.
+
+No state had to be promoted to a `mod._ct_*` field for this slice: the block's
+only file-scope local (`_ct_tab_layout_571`) is read solely by the #571 check two
+lines later, so it moved intact.
+
+This owner composes with, and must never overlap, the two spawn owners: they
+decide what exists in the world, this one only *reports* run-scoped counters read
+from the replicated deus-run SharedState (`get_cursed_chests_purified`,
+`get_player_soft_currency`) and previews the host-effective starting-boon
+configuration. `qa/lua/tests/test_ct_tab_panel_owner.lua` guards dofile
+cardinality and shape, per-hook exclusivity across entry/owner/diag/layout, the
+shared-draw invariant, wiring position between the starting-boon grant hook and
+the #458 start-shrine modules, side-module load order, the moved checks and
+markers, orphan locals, the public surface, and non-overlap with both spawn
+owners.
 
 ## Buff registration: dormant boons need dual-table writes
 
