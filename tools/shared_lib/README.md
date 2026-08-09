@@ -21,6 +21,12 @@ The default mode is read-only and checks exact bytes, including line endings:
 Never edit a per-mod copy directly. A consumer needing different semantics gets
 a differently named canonical library rather than a drifted local fork.
 
+Registration is mandatory in both directions. A `_lib_*.lua` sitting in a mod
+tree without a `Consumers` entry is compared against nothing, so the sync tool
+fails on the missing declaration itself rather than waiting for the bytes to
+fork. Likewise every canonical `_lib_*.lua` here needs a `Libraries` entry; a
+tools-only library that nothing bundles declares `Consumers = @()`.
+
 ## Peer parity modes and wire catalogs
 
 `_lib_peer_parity.lua` preserves its original four-argument VMF payload unless
