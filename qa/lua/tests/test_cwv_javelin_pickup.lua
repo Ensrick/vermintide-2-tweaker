@@ -91,6 +91,58 @@ return function(H, repo_root)
         H.equal(untouched.vanilla_safe, 4)
     end)
 
+    -- #424 world-resident pickup axis. A cwv pickup lying in the level crashes a
+    -- joining non-cwv peer with no cwv RPC involved: PickupSystem._spawn_pickup
+    -- goes through spawn_network_unit (pickup_system.lua:1278), the pickup game
+    -- object carries the name as a NetworkLookup.pickup_names INDEX
+    -- (game_object_initializers_extractors.lua:880) and the joiner decodes it
+    -- strictly at game_object_initializers_extractors.lua:3411. The fence registry
+    -- is what the hot-join sweep iterates.
+    H.test("CWV pickup fence registry appends once and rejects non-strings", function()
+        local before = #gate.fenced_pickup_names
+        H.equal(gate.fence_pickup("cwv_rt424_probe"), true)
+        H.equal(#gate.fenced_pickup_names, before + 1)
+        H.equal(gate.fence_pickup("cwv_rt424_probe"), false)
+        H.equal(#gate.fenced_pickup_names, before + 1)
+        H.equal(gate.fence_pickup(""), false)
+        H.equal(gate.fence_pickup(nil), false)
+        H.equal(gate.fence_pickup({}), false)
+        H.equal(#gate.fenced_pickup_names, before + 1)
+        H.equal(gate.fenced_pickup_names[before + 1], "cwv_rt424_probe")
+    end)
+
+    H.test("CWV grenade-slot bomb enrols in the sweep and every gate close sweeps the world", function()
+        local source = require("cwv_source").combined(repo_root)
+        -- The bomb block loads after javelin_gate.install(), so the seeded pair is
+        -- not enough; it must enrol itself.
+        H.truthy(source:find("_om.javelin_gate.fence_pickup(_TJB_PICKUP_KEY)", 1, true))
+
+        local gate_path = repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_javelin_gate.lua"
+        local file = assert(io.open(gate_path, "rb"))
+        local gate_source = file:read("*a")
+        file:close()
+        -- The sweep iterates the registry, never a hardcoded pair.
+        H.truthy(gate_source:find("for _, pickup_name in ipairs(M.fenced_pickup_names) do", 1, true))
+        H.equal(gate_source:find("ipairs({ pickup_key, link_pickup_key })", 1, true), nil)
+        H.truthy(gate_source:find("fenced=%d", 1, true))
+        -- Pool ejection retracts only FUTURE rolls, so the sweep must hang off the
+        -- gate's own close transition rather than any single detecting seam.
+        local feature = assert(gate_source:find('register_gated_feature("cwv_tuskgor_javelin_throw"', 1, true))
+        local on_disable = assert(gate_source:find("on_disable = function()", feature, true))
+        local sweep_call = assert(gate_source:find("remove_live_recovery_pickups()", on_disable, true))
+        H.truthy(feature < on_disable and on_disable < sweep_call)
+        H.truthy(gate_source:find("[cwv:424] gate closed; world sweep", 1, true))
+        H.truthy(gate_source:find("_cwv424_gate_close_sweep_installed = true", 1, true))
+        -- A parity transition reaches on_disable on EVERY peer, but retracting a
+        -- server-owned pickup unit is a host action; a client doing it locally
+        -- desyncs instead of protecting anyone.
+        local system = assert(gate_source:find('entity:system("pickup_system")', 1, true))
+        local server_guard = assert(gate_source:find("if not pickup_system.is_server then return 0 end", system, true))
+        local delete = assert(gate_source:find("spawner:mark_for_deletion(unit)", server_guard, true))
+        H.truthy(system < server_guard and server_guard < delete)
+    end)
+
     H.test("CWV source fences hot join and blocks every thrown sender before encode", function()
         local source = require("cwv_source").combined(repo_root)
         local transient = assert(source:find('mod:hook("TransientPackageLoader", "hot_join_sync"', 1, true))
