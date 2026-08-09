@@ -10,6 +10,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..' }
+$buildOutputNormalizationHelpers = Join-Path $PSScriptRoot '..\tools\ship\build-output-normalization.ps1'
+if (-not (Test-Path -LiteralPath $buildOutputNormalizationHelpers -PathType Leaf)) {
+    throw "Build-output normalization policy not found: $buildOutputNormalizationHelpers"
+}
+. $buildOutputNormalizationHelpers
 
 function Test-InventoryModel {
     param(
@@ -37,6 +42,7 @@ function Test-InventoryModel {
         if ($mod.Visibility -notin @('public', 'friends_only', 'private')) { $errors += "invalid visibility for ${dir}: $($mod.Visibility)" }
         if ($mod.Stream -notin @('single', 'stable', 'dev')) { $errors += "invalid stream for ${dir}: $($mod.Stream)" }
         if ([bool]$mod.Public -ne ($mod.Visibility -eq 'public')) { $errors += "Public flag disagrees with visibility for $dir" }
+        $errors += @(Get-BuildArtifactExclusionErrors -ModEntry $mod)
 
         if (-not $CfgByDir.ContainsKey($dir)) {
             $errors += "inventory directory missing live itemV2.cfg: $dir"
@@ -66,6 +72,15 @@ function Invoke-SelfTest {
     $readme = '| [`alpha`](./alpha/) |'
     $good = @(Test-InventoryModel $mods @('alpha', 'stale') $cfg $readme @{ stale=$true })
     if ($good.Count -ne 0) { throw "valid inventory rejected: $($good -join '; ')" }
+    $withExclusion = @(@{
+        Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true;
+        Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle';
+        BuildArtifactExclusions=@(@{
+            Name='cccccccccccccccc.mod_bundle'; Sha256=('d' * 64); Reason='fixture SDK tool-only output'
+        })
+    })
+    $goodExclusion = @(Test-InventoryModel $withExclusion @('alpha') $cfg $readme @{})
+    if ($goodExclusion.Count -ne 0) { throw "valid build exclusion rejected: $($goodExclusion -join '; ')" }
 
     $badMods = @(
         @{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$false; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle' },
@@ -77,6 +92,21 @@ function Invoke-SelfTest {
     }
     $missingRoot = @(Test-InventoryModel @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha' }) @('alpha') $cfg $readme @{})
     if (-not ($missingRoot -match 'missing RootBundle')) { throw 'planted RootBundle omission not detected' }
+    $badExclusion = @(@{
+        Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true;
+        Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle';
+        BuildArtifactExclusions=@(
+            @{ Name='..\escape.mod_bundle'; Sha256='wrong'; Reason='' },
+            @{ Name='bbbbbbbbbbbbbbbb.mod_bundle'; Sha256='wrong'; Reason='' },
+            @{ Name='aaaaaaaaaaaaaaaa.mod_bundle'; Sha256=('e' * 64); Reason='cannot exclude root' },
+            @{ Name='cccccccccccccccc.mod_bundle'; Sha256=('f' * 64); Reason='duplicate one' },
+            @{ Name='cccccccccccccccc.mod_bundle'; Sha256=('f' * 64); Reason='duplicate two' }
+        )
+    })
+    $badPolicy = @(Test-InventoryModel $badExclusion @('alpha') $cfg $readme @{})
+    foreach ($needle in @('invalid BuildArtifactExclusions name', 'invalid BuildArtifactExclusions SHA-256', 'reason is empty', 'cannot name RootBundle', 'duplicate BuildArtifactExclusions')) {
+        if (-not ($badPolicy -match $needle)) { throw "planted build exclusion failure not detected: $needle" }
+    }
     Write-Host '[check_mod_inventory -SelfTest] OK'
     return 0
 }

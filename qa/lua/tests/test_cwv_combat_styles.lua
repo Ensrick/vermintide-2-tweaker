@@ -756,11 +756,14 @@ return function(H, repo_root)
 			peer_for_owner = function(owner)
 				return owner == "remote_owner" and "peer_a" or nil
 			end,
-			rebuild_remote = function(peer_id, slot_name)
+			rebuild_remote = function(peer_id, slot_name, family_id, style_id, on_verdict)
 				H.equal(peer_id, "peer_a")
 				H.equal(slot_name, "slot_melee")
 				remote_rebuilds = remote_rebuilds + 1
-				return true, "rewielded"
+				-- #786: the coalescer DEFERS the wield, so the verdict arrives on
+				-- this callback and never as a synchronous return value.
+				if on_verdict then on_verdict("ok", "test") end
+				return true, "queued"
 			end,
 		})
 		local a = runtime:describe({ backend_id = "uuid_a", name = "es_2h_sword" })
@@ -801,8 +804,14 @@ return function(H, repo_root)
 			"bastard_sword_template")
 		H.equal(registered.channel, policy.CHANNEL)
 		registered.callback("peer_a", policy.SCHEMA, "state", "slot_melee", "greatsword", "bretonnian")
+		-- #786 B4: this channel stores state and arms the bounded fallback. The
+		-- delivering cwv_item_identity payload normally owns the rebuild; with no
+		-- rider in sight the fallback still recovers after one grace window.
+		H.equal(remote_rebuilds, 0)
+		runtime:step(policy.STYLE_IDENTITY_GRACE)
 		H.equal(remote_rebuilds, 1)
 		registered.callback("peer_a", policy.SCHEMA, "state", "slot_melee", "greatsword", "bretonnian")
+		runtime:step(policy.STYLE_IDENTITY_GRACE)
 		H.equal(remote_rebuilds, 1)
 		H.equal(runtime:effective_template_name({ name = "es_2h_sword" }, nil,
 			"remote_owner", "slot_melee"), "bastard_sword_template")
@@ -853,58 +862,60 @@ return function(H, repo_root)
         end)
 
         H.test("CWV #786 remote style refresh retries only bounded lifecycle gaps", function()
-                local registered, attempts = nil, 0
+                local attempts = 0
                 local runtime = policy.install({
                         get = function() end,
                         set = function() end,
-                        network_register = function(_, _, callback) registered = callback end,
                 }, {
-                        rebuild_remote = function()
+                        rebuild_remote = function(_, _, _, _, on_verdict)
                                 attempts = attempts + 1
                                 if attempts < 3 then return false, "player unavailable" end
-                                return true, "rewielded resolver=player_from_peer_id"
+                                if on_verdict then on_verdict("ok", "test") end
+                                return true, "queued"
                         end,
                 })
-                registered("peer-a", policy.SCHEMA, "state", "slot_melee",
-                        "greatsword", "bretonnian")
+                -- #786: the identity path is the guarded trigger; the style channel
+                -- only arms the fallback (covered separately).
+                runtime:accept_style_edge("peer-a", "slot_melee", "greatsword",
+                        "bretonnian", "identity")
                 H.equal(attempts, 1)
                 H.equal(runtime:pending_remote_refresh_count(), 1)
                 runtime:step(policy.REMOTE_REFRESH_INTERVAL - 0.01)
                 H.equal(attempts, 1)
                 runtime:step(0.01)
                 H.equal(attempts, 2)
-                local completed = runtime:step(policy.REMOTE_REFRESH_INTERVAL)
-                H.equal(completed, 1)
+                runtime:step(policy.REMOTE_REFRESH_INTERVAL)
                 H.equal(attempts, 3)
+                -- The verdict lands after the enqueue, so it settles on the NEXT
+                -- tick. A same-call "success" would be the #786 lie.
+                local completed = runtime:step(0)
+                H.equal(completed, 1)
                 H.equal(runtime:pending_remote_refresh_count(), 0)
 
                 -- An unwielded slot is terminal for active refresh; the next natural wield
                 -- consumes the already-cached style instead of an update-loop retry.
                 local terminal_calls = 0
-                local terminal_callback
                 local terminal = policy.install({
                         get = function() end,
                         set = function() end,
-                        network_register = function(_, _, callback) terminal_callback = callback end,
                 }, {
                         rebuild_remote = function()
                                 terminal_calls = terminal_calls + 1
                                 return false, "slot not wielded"
                         end,
                 })
-                terminal_callback("peer-b", policy.SCHEMA, "state", "slot_melee",
-                        "greatsword", "kerillian")
+                terminal:accept_style_edge("peer-b", "slot_melee", "greatsword",
+                        "kerillian", "identity")
                 for _ = 1, 20 do terminal:step(1) end
                 H.equal(terminal_calls, 1)
                 H.equal(terminal:pending_remote_refresh_count(), 0)
         end)
 
         H.test("CWV #786 remote style lifecycle retry is attempt bounded", function()
-                local registered, attempts, network_sends = nil, 0, 0
+                local attempts, network_sends = 0, 0
                 local runtime = policy.install({
                         get = function() end,
                         set = function() end,
-                        network_register = function(_, _, callback) registered = callback end,
                         network_send = function() network_sends = network_sends + 1 end,
                 }, {
                         rebuild_remote = function()
@@ -912,8 +923,8 @@ return function(H, repo_root)
                                 return false, "slot not ready"
                         end,
                 })
-                registered("peer-a", policy.SCHEMA, "state", "slot_melee",
-                        "greatsword", "bretonnian")
+                runtime:accept_style_edge("peer-a", "slot_melee", "greatsword",
+                        "bretonnian", "identity")
                 -- A long frame advances one local attempt, never a catch-up burst.
                 runtime:step(policy.REMOTE_REFRESH_INTERVAL * 20)
                 H.equal(attempts, 2)

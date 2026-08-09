@@ -35,7 +35,12 @@ function Invoke-GitHubReleaseApiRequest {
 
     Add-Type -AssemblyName System.Net.Http
     $client = New-Object System.Net.Http.HttpClient
-    $client.Timeout = [TimeSpan]::FromSeconds(30)
+    # The timeout is set below, once the payload size is known. A flat 30 s is
+    # right for metadata calls but silently truncates large asset uploads: the
+    # 75 MB character_weapon_variants zip cancelled mid-POST and surfaced as
+    # HTTP 0 (the catch block reports StatusCode 0), which fails the ship
+    # BEFORE the Workshop upload. Observed 2026-08-06 on cwv 0.1.497-dev, while
+    # the 60 MB cosmetics zip fit under the old budget.
     $request = New-Object System.Net.Http.HttpRequestMessage(
         [System.Net.Http.HttpMethod]::new($Method.ToUpperInvariant()),
         $Uri
@@ -61,6 +66,17 @@ function Invoke-GitHubReleaseApiRequest {
             $request.Content = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$InputBytes)
             $request.Content.Headers.ContentType = New-Object System.Net.Http.Headers.MediaTypeHeaderValue($ContentType)
         }
+
+        # Scale the budget with the payload: 30 s floor for metadata, then one
+        # second per 256 KiB (about 2 Mbit/s of headroom), capped at one hour.
+        # HttpClient.Timeout must be assigned before the first send, which has
+        # not happened yet on this per-call client.
+        $payloadLength = 0
+        if ($null -ne $InputBytes) { $payloadLength = $InputBytes.Length }
+        $timeoutSeconds = [Math]::Ceiling($payloadLength / 262144.0)
+        if ($timeoutSeconds -lt 30) { $timeoutSeconds = 30 }
+        if ($timeoutSeconds -gt 3600) { $timeoutSeconds = 3600 }
+        $client.Timeout = [TimeSpan]::FromSeconds($timeoutSeconds)
 
         try {
             $response = $client.SendAsync($request).GetAwaiter().GetResult()

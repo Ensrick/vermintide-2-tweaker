@@ -1,5 +1,20 @@
 # Regression Checklist — weapon_tweaker
 
+## #1190 - loadout-row weapon isolation
+
+| Field | Check |
+|---|---|
+| Cache contract | WT's cross-career cache is keyed `career -> loadout index -> slot`; a write or read for one Roman-numeral row cannot override another row. Baseline-native weapons bypass the WT cache and retain vanilla persistence. |
+| Native Slayer | Give Slayer distinct native weapons in loadouts I, II, and III (for example Cog Hammer, Greataxe, and Dual Hammers). Manually replace the weapon in III, switch III -> II -> I -> III, and confirm every row shows and equips only its own weapon. |
+| Genuine cross-career | Put one genuinely cross-career WT weapon in a single Slayer row and native controls in the other rows. Repeat III -> II -> I -> III; the WT weapon returns only with its authored row and is never written into the other rows. |
+| Bot isolation | Select or preview a bot loadout while the local player has a cached WT weapon. Bot reads remain vanilla and never receive the local player's cached backend ID. |
+| Add/delete lifecycle | Add a row, equip a WT weapon there, then delete a row before it and repeat with the cached row itself. Surviving rows retain their own weapons; deleting a cached row cannot leak its weapon into another index. |
+| Restart | After a full game restart, native rows retain their vanilla values. When GUT owns persisted modded rows, each cross-career row is restored independently; WT-alone never writes a cross-career item into PlayFab. |
+| Live core | Enable a genuine cross-career Slayer weapon first, then run `/verify_wt_loadout_cache reset`. Re-equip two distinct native melee weapons in rows I and II and the cross-career weapon in III. Starting on III, switch III -> I -> II -> III; run `/verify_wt_loadout_cache` once and require `CORE PASS`. Missing observations report `CORE NOT RUN`; cache bleed or a wrong route reports `FAIL`. |
+| Automated | Offline `test_wt_loadout_cache.lua` proves the immutable 83-weapon native catalog, legacy-cache reset, row isolation, add/delete shifting, and nonmutating all-row overlay. `/wt_regression_test`: `issue1190_loadout_cache_is_row_scoped` is the structural smoke check; it does not replace the armed live cycle. |
+
+---
+
 ## #664 - Executioner's Sword light headshot damage
 
 | Field | Check |

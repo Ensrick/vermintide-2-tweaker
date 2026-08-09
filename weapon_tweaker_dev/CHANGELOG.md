@@ -1,5 +1,31 @@
 # Weapon Tweaker Changelog
 
+## 0.12.297-dev (2026-08-08) - paired public rollout alignment (#1190) [verify-fix]
+
+- Keeps the required one-patch-ahead WT stream identity while public beta
+  `0.12.296-beta` publishes the already-mirrored row-scoped loadout fix.
+- No Dev-only probe, tuner, universal-availability experiment, or gameplay
+  behavior moved into public, and this version adds no runtime behavior beyond
+  `0.12.296-dev`.
+
+## 0.12.296-dev (2026-08-08) - row-scoped cross-career loadouts (#1190) [verify-fix]
+
+- Mirrors staged beta `0.12.295-beta`: native weapons use the game's ordinary
+  loadout writer, while true cross-career overrides are isolated by career,
+  saved loadout index, and slot.
+- Selected and explicit row writes, every-row menu previews, add/delete row
+  lifecycle, cache disable/clear behavior, and bot fallthrough are covered by
+  the new offline policy suite and live runtime check. Native ownership uses an
+  immutable game-derived catalog and cannot be tainted by another mod's live
+  `can_wield` changes.
+- Run a full game restart before verification, then use
+  `/verify_wt_loadout_cache reset` before switching distinct native and
+  cross-career Slayer weapons across rows I/II/III; run the command again and
+  `/wt_regression_test` after the cycle.
+- Retires a stale shared sidecar left from the Dev stream's original import;
+  clean VMB builds no longer reproduce or reference it.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
+
 ## 0.12.295-dev (2026-08-06) - isolate exact damage-profile handshake generation (#431, #1158)
 
 - Mirrors beta `0.12.294-beta`: the exact catalog handshake now uses dedicated

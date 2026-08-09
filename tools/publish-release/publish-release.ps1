@@ -399,9 +399,9 @@ foreach ($m in $releaseSet) {
     }
     Set-Content -Path (Join-Path $modStage 'vt2updater_version.txt') -Value $version -Encoding ascii -NoNewline
 
-    # Provenance hashes describe VMBLauncher's raw output, before the updater
-    # sidecar is added. Hash the copied staging files so the manifest verifies
-    # the exact bytes that will enter the release zip.
+    # Provenance hashes describe VMBLauncher's canonical post-policy output,
+    # before the updater sidecar is added. Hash the copied staging files so the
+    # manifest verifies the exact bytes that will enter the release zip.
     $bundleFiles = @(New-BundleFileRecords -BundleDirectory $modStage | Where-Object {
         $_.filename -ne 'vt2updater_version.txt'
     })

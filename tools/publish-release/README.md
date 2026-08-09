@@ -206,10 +206,11 @@ also checks whole-worktree cleanliness independently before mutation.
 
 `builder.name` is fixed to `VMBLauncher`, preserving it as the only sanctioned
 builder. `builder.version` comes from the launcher's Windows ProductVersion or
-FileVersion metadata. `bundle_files` records every raw top-level VMB output
-(`.mod_bundle` and `.mod`) by leaf filename and lowercase SHA-256. Its hashes
-describe the raw files inside the zip, while the existing entry-level `sha256`
-continues to describe the downloadable zip itself.
+FileVersion metadata. `bundle_files` records every canonical top-level VMB
+output (`.mod_bundle` and `.mod`) by leaf filename and lowercase SHA-256, after
+any repository-tracked exact-name/exact-hash build-artifact exclusions have
+been applied. Its hashes describe the canonical files inside the zip, while the
+existing entry-level `sha256` continues to describe the downloadable zip itself.
 
 `publication_authorization` must be canonical `hosted_qa` evidence. Its source
 and default-branch commits must equal the entry commit; the merged PR and exact
@@ -263,9 +264,10 @@ outputs only after all of these are complete:
    mod, with no carried pre-transition warnings.
 2. Make the release source immutable before the build so every entry records
    `source_state: clean`, then verify a fresh checkout of `source_commit` builds
-   byte-identical raw bundle files with the recorded VMBLauncher version.
+   byte-identical canonical post-policy bundle files with the recorded
+   VMBLauncher version.
 3. Teach `vt2-mod-updater` and bisect/recovery documentation how to select a
-   release by source commit and verify each raw file, while retaining legacy
+   release by source commit and verify each canonical file, while retaining legacy
    manifest compatibility.
 4. Add the generated output ignore rules in a coordinated transition commit and
    confirm VMBLauncher can bootstrap a checkout with no tracked `bundleV2`
@@ -309,10 +311,11 @@ Copy-Item C:\temp\vt2-repro\.vmbrc.example C:\temp\vt2-repro\.vmbrc
 The verifier first requires clean mod source at the manifest's exact
 `source_commit`, requires `builder.name: VMBLauncher` and an exact launcher
 version match, then invokes only `VMBLauncher build --clean` through an isolated
-temporary settings file whose `ProjectRoot` is the fresh checkout. Every raw
-`.mod_bundle` and `.mod` filename and SHA-256 must match `bundle_files`; missing,
-extra, or changed output fails the proof. It never deploys, uploads, edits
-Workshop state, or treats a zip hash alone as reproducibility evidence.
+temporary settings file whose `ProjectRoot` is the fresh checkout, applies the
+tracked exact-hash output policy, and compares the resulting canonical set.
+Every `.mod_bundle` and `.mod` filename and SHA-256 must match `bundle_files`;
+missing, extra, or changed output fails the proof. It never deploys, uploads,
+edits Workshop state, or treats a zip hash alone as reproducibility evidence.
 
 The canonical transaction is already ordered around immutable reviewed source:
 run `ship.ps1 -BuildOnly`, commit source and the exact generated bundle together,

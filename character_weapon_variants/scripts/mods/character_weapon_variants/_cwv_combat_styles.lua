@@ -20,6 +20,17 @@ M.DIAGNOSTIC_EVENT_CAP = 32
 M.MISSION_UI_DIAGNOSTIC_CAP = 24
 M.REMOTE_REFRESH_INTERVAL = 0.25
 M.MAX_REMOTE_REFRESH_ATTEMPTS = 8
+-- #786: how long a bare `cwv_combat_style_v1` arrival waits for the delivering
+-- cwv_item_identity payload that carries the same edge before it rebuilds on
+-- its own. One REMOTE_REFRESH_INTERVAL; the two sends leave the owner in the
+-- same tick, so this only ever fires for a peer that never gets the rider.
+M.STYLE_IDENTITY_GRACE = 0.25
+-- #786: one compact style axis rides the identity payload, mirroring the #474
+-- `musket_mode` rider. ONE field rather than two: a style id is meaningless
+-- outside its family so the pair is never consumed apart, one key costs 21
+-- fewer characters of JSON than `style_family` + `style_id` against VMF's
+-- 500-char RPC cap (docs/VMF_RECIPES.md), and there is a single validate site.
+M.STYLE_RIDER_MAX = 64
 M.IMPERIAL_SPEED_MULT = 1.15
 M.IMPERIAL_DAMAGE_MULT = 0.85
 M.IMPERIAL_STAGGER_MULT = 0.85
@@ -227,6 +238,11 @@ M.FAMILIES = {
 		},
 	},
 	spear_shield = {
+		-- #786: authored ground truth for the re-wield postcondition. A shield
+		-- family MUST come back with both 3P hand units; the old
+		-- `right_live or left_live` predicate passed a shield style that
+		-- rebuilt without its off-hand.
+		off_hand = true,
 		styles = {
 			empire = {
 				label = "Kruber Spear and Shield Combat Style",
@@ -253,6 +269,7 @@ M.FAMILIES = {
 		},
 	},
 	sword_shield = {
+		off_hand = true,   -- #786: see spear_shield above.
 		styles = {
 			empire = {
 				label = "Empire Sword and Shield Combat Style",
@@ -436,6 +453,12 @@ function M.validate_catalogue()
 	for family_id, family in pairs(M.FAMILIES) do
 		if type(family.styles) ~= "table" or type(family.members) ~= "table" then
 			return false, "invalid family " .. tostring(family_id)
+		end
+		-- #786: the re-wield postcondition reads this. An accidental falsy or
+		-- non-boolean value would silently downgrade a shield family back to
+		-- the single-hand expectation the OR predicate used to accept.
+		if family.off_hand ~= nil and family.off_hand ~= true then
+			return false, "invalid off_hand " .. tostring(family_id)
 		end
 		for style_id, style in pairs(family.styles) do
 			if not valid_token(style_id) or type(style.label) ~= "string"
@@ -778,6 +801,28 @@ function M.valid_wire(schema, op, slot_name, family_id, style_id)
 		and family ~= nil and family.styles[style_id] ~= nil
 end
 
+-- #786 B1. Compact style axis for the cwv_item_identity payload. Encoding is
+-- closed over the authored catalogue at both ends, so a malformed or unknown
+-- pair never reaches the receiver's state. Worst authored pair is
+-- `greathammer:warrior_priest`, i.e. 36 characters of JSON including the key.
+function M.encode_style_rider(family_id, style_id)
+	if type(family_id) ~= "string" or type(style_id) ~= "string" then return nil end
+	local family = M.FAMILIES[family_id]
+	if not family or not family.styles[style_id] then return nil end
+	local rider = family_id .. ":" .. style_id
+	if #rider > M.STYLE_RIDER_MAX then return nil end
+	return rider
+end
+
+function M.decode_style_rider(rider)
+	if type(rider) ~= "string" or #rider > M.STYLE_RIDER_MAX then return nil end
+	local family_id, style_id = rider:match("^([%a][%w_]*):([%a][%w_]*)$")
+	if not family_id then return nil end
+	local family = M.FAMILIES[family_id]
+	if not family or not family.styles[style_id] then return nil end
+	return family_id, style_id
+end
+
 -- A style edge may arrive before the ordinary equipment-slot RPC has finished
 -- populating the husk. Calling SimpleHuskInventoryExtension:wield in that gap
 -- enters vanilla's wield path (stopping FX/attached units and updating wield
@@ -1034,87 +1079,224 @@ function M.build_spear_shield_templates(weapons, clone)
 	}
 end
 
+-- Owner-side style resource ownership, moved out of the entry so the authored
+-- allowlist lives next to FAMILIES.
+--
+-- A style can replace the first-person state machine even though the base
+-- item's career packages did not load it (Tuskgor Hunter -> Infantry is the
+-- concrete case). Own one reference per curated vanilla resource and invoke the
+-- transition only from PackageManager's completion callback. Never pass
+-- arbitrary item/UI data to PackageManager: a nonexistent package faults in the
+-- engine's async queue outside Lua's pcall boundary.
+--
+-- Returns (acquire, resident). `resident` is the #786 Stage C OBSERVER-side
+-- read: same PackageManager, no reference name so any holder counts, acquires
+-- nothing and gates nothing. `package_manager` is a lazy getter because this
+-- binds before Managers.package necessarily exists.
+function M.new_resource_acquirer(package_manager)
+	local allowlist, held, REFERENCE = {}, {}, "cwv_combat_styles"
+	for _, family in pairs(M.FAMILIES) do
+		for _, style in pairs(family.styles) do
+			if type(style.resource) == "string" then allowlist[style.resource] = true end
+		end
+	end
+	local function manager()
+		return type(package_manager) == "function" and package_manager() or nil
+	end
+	local function acquire(path, callback)
+		if not allowlist[path] then return false, "resource is not authored" end
+		local packages = manager()
+		if not packages then return false, "package manager unavailable" end
+		if held[path] then
+			local loaded = false
+			pcall(function() loaded = packages:has_loaded(path, REFERENCE) and true or false end)
+			callback(loaded, loaded and nil or "held resource lost")
+			return loaded
+		end
+		held[path] = true
+		packages:load(path, REFERENCE, function()
+			local loaded = false
+			pcall(function() loaded = packages:has_loaded(path, REFERENCE) and true or false end)
+			callback(loaded, loaded and nil or "resource completion was not resident")
+		end, true, true)
+		return true
+	end
+	local function resident(path)
+		if not allowlist[path] then return nil end
+		local packages = manager()
+		if type(packages) ~= "table" or type(packages.has_loaded) ~= "function" then
+			return nil
+		end
+		local ok, loaded = pcall(packages.has_loaded, packages, path)
+		if not ok then return nil end
+		return loaded == true
+	end
+	return acquire, resident
+end
+
 function M.install(mod, deps)
 	deps = deps or {}
 	local store = M.normalize_store(mod:get(M.SETTING_KEY))
 	local remote = {}
 	local presentations = type(deps.presentations) == "table" and deps.presentations or {}
+	-- _cwv_style_rewield owns the verdict vocabulary; the fallback keeps this
+	-- runtime testable stand-alone without duplicating the status strings.
+	local rewield = type(deps.rewield) == "table" and deps.rewield
+		or { OK = "ok", succeeded = function(status) return status == "ok" end }
 	local runtime = { store = store, remote = remote, pending = {}, pending_remote = {},
-		diagnostic_counts = {}, diagnostic_seen = {} }
+		fallback_remote = {}, diagnostic_counts = {}, diagnostic_seen = {} }
 
 	local function remote_refresh_key(peer_id, slot_name)
 		return tostring(peer_id) .. "|" .. tostring(slot_name)
 	end
 
-	function runtime:_attempt_remote_refresh(peer_id, slot_name, edge, attempt)
+	function runtime:_emit_verdict(pending, status, detail, terminal)
+		pcall(printf,
+			"[cwv:786] verdict %s peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d terminal=%s detail=%s",
+			tostring(status), tostring(pending.peer_id), tostring(pending.slot_name),
+			tostring(pending.family_id), tostring(pending.style_id),
+			tostring(pending.edge), tonumber(pending.attempts) or 0,
+			M.MAX_REMOTE_REFRESH_ATTEMPTS,
+			terminal == nil and "retry" or tostring(terminal), tostring(detail))
+	end
+
+	-- #786 A1. The rebuild is DEFERRED into the #1145 per-wearer coalescer, so
+	-- this call can only report whether the request was ACCEPTED. The verdict is
+	-- produced post-drain and lands on `pending.verdict`, which `step()`
+	-- consumes below. Never synthesize a synchronous success here.
+	function runtime:_enqueue_remote_refresh(pending)
 		if type(deps.rebuild_remote) ~= "function" then
 			return false, "remote rebuild unavailable"
 		end
-		local ok, refreshed, detail = pcall(deps.rebuild_remote, peer_id, slot_name)
-		if not ok then detail = refreshed end
-		local succeeded = ok and refreshed == true
-		pcall(printf, "[cwv:620/786] style husk refresh peer=%s slot=%s refreshed=%s detail=%s edge=%s attempt=%d/%d",
-			tostring(peer_id), tostring(slot_name), tostring(succeeded),
-			tostring(detail), tostring(edge), tonumber(attempt) or 1,
+		local key = remote_refresh_key(pending.peer_id, pending.slot_name)
+		pending.verdict, pending.verdict_detail = nil, nil
+		local ok, queued, reason = pcall(deps.rebuild_remote, pending.peer_id,
+			pending.slot_name, pending.family_id, pending.style_id,
+			function(status, detail)
+				-- A verdict for a superseded ledger entry is discarded: the newer
+				-- entry owns this (peer, slot) and will queue its own rebuild.
+				if self.pending_remote[key] ~= pending then return end
+				pending.verdict = status or "failed"
+				pending.verdict_detail = detail
+			end)
+		if not ok then queued, reason = false, tostring(queued) end
+		if queued ~= true then
+			reason = tostring(reason or "not queued")
+			-- Bounded: at most MAX_REMOTE_REFRESH_ATTEMPTS rows per style edge.
+			pcall(printf,
+				"[cwv:786] rebuild deferred peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d reason=%s retryable=%s",
+				tostring(pending.peer_id), tostring(pending.slot_name),
+				tostring(pending.family_id), tostring(pending.style_id),
+				tostring(pending.edge), tonumber(pending.attempts) or 0,
+				M.MAX_REMOTE_REFRESH_ATTEMPTS, reason,
+				tostring(M.remote_refresh_retryable(reason)))
+			return false, reason
+		end
+		pending.phase, pending.elapsed = "verify", 0
+		pcall(printf,
+			"[cwv:786] rebuild queued peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d",
+			tostring(pending.peer_id), tostring(pending.slot_name),
+			tostring(pending.family_id), tostring(pending.style_id),
+			tostring(pending.edge), tonumber(pending.attempts) or 0,
 			M.MAX_REMOTE_REFRESH_ATTEMPTS)
-		return succeeded, detail
+		return true, reason
 	end
 
+	-- Start (or restart) the ONE bounded ledger for a (peer, slot) style edge.
+	-- #786 A3: the controller's step() is the only retry driver; the coalescer
+	-- owns the wield and the mid-destroy guard. There is no second timer.
 	function runtime:refresh_remote(peer_id, slot_name, edge)
 		local key = remote_refresh_key(peer_id, slot_name)
 		local state = remote[peer_id] and remote[peer_id][slot_name]
-		local refreshed, detail = self:_attempt_remote_refresh(peer_id, slot_name,
-			edge or "state", 1)
-		if refreshed or not M.remote_refresh_retryable(detail) or not state then
+		if not state then
 			self.pending_remote[key] = nil
-			return refreshed, detail
+			return false, "no style state"
 		end
-		self.pending_remote[key] = {
+		local pending = {
 			peer_id = peer_id,
 			slot_name = slot_name,
 			family_id = state.family_id,
 			style_id = state.style_id,
+			token = state.token,
 			edge = edge or "state",
 			attempts = 1,
 			elapsed = 0,
+			phase = "enqueue",
 		}
-		return false, detail
+		self.pending_remote[key] = pending
+		local queued, reason = self:_enqueue_remote_refresh(pending)
+		if queued then return false, "queued" end
+		pending.last_reason = reason
+		if not M.remote_refresh_retryable(reason) then
+			self.pending_remote[key] = nil
+			self:_emit_verdict(pending, "failed", reason, true)
+		end
+		return false, reason
+	end
+
+	function runtime:_step_fallbacks(dt)
+		for key, armed in pairs(self.fallback_remote) do
+			local current = remote[armed.peer_id] and remote[armed.peer_id][armed.slot_name]
+			armed.elapsed = armed.elapsed + dt
+			if not current or current.token ~= armed.token
+					or current.owner == "identity" then
+				self.fallback_remote[key] = nil
+			elseif armed.elapsed >= M.STYLE_IDENTITY_GRACE then
+				self.fallback_remote[key] = nil
+				self:refresh_remote(armed.peer_id, armed.slot_name, "style_channel_fallback")
+			end
+		end
 	end
 
 	function runtime:step(dt)
 		dt = type(dt) == "number" and math.max(dt, 0) or 0
 		local completed, expired = 0, 0
+		self:_step_fallbacks(dt)
 		for key, pending in pairs(self.pending_remote) do
 			local current = remote[pending.peer_id]
 				and remote[pending.peer_id][pending.slot_name]
 			pending.elapsed = pending.elapsed + dt
-			if not current or current.family_id ~= pending.family_id
-					or current.style_id ~= pending.style_id then
+			if not current or current.token ~= pending.token then
+				-- The style moved on (or the peer left). A newer edge owns its
+				-- own ledger entry; this one must not keep re-wielding.
 				self.pending_remote[key] = nil
-			elseif pending.attempts >= M.MAX_REMOTE_REFRESH_ATTEMPTS then
-				self.pending_remote[key] = nil
-				expired = expired + 1
-			elseif pending.elapsed >= M.REMOTE_REFRESH_INTERVAL then
-				pending.elapsed = 0
-				pending.attempts = pending.attempts + 1
-				local refreshed, detail = self:_attempt_remote_refresh(
-					pending.peer_id, pending.slot_name, "retry:" .. pending.edge,
-					pending.attempts)
-				if refreshed then
+			elseif pending.verdict ~= nil then
+				local status, detail = pending.verdict, pending.verdict_detail
+				pending.verdict, pending.verdict_detail = nil, nil
+				if rewield.succeeded(status) then
 					self.pending_remote[key] = nil
 					completed = completed + 1
-				elseif not M.remote_refresh_retryable(detail) then
-					self.pending_remote[key] = nil
-					expired = expired + 1
+					self:_emit_verdict(pending, status, detail, true)
 				elseif pending.attempts >= M.MAX_REMOTE_REFRESH_ATTEMPTS then
 					self.pending_remote[key] = nil
 					expired = expired + 1
+					self:_emit_verdict(pending, status, detail, true)
+				else
+					-- Partial application is failure and stays retryable.
+					self:_emit_verdict(pending, status, detail, nil)
+					pending.phase, pending.elapsed = "enqueue", 0
+				end
+			elseif pending.elapsed >= M.REMOTE_REFRESH_INTERVAL then
+				pending.elapsed = 0
+				if pending.attempts >= M.MAX_REMOTE_REFRESH_ATTEMPTS then
+					self.pending_remote[key] = nil
+					expired = expired + 1
+					self:_emit_verdict(pending, "failed",
+						pending.phase == "verify" and "no verdict before timeout"
+							or tostring(pending.last_reason), true)
+				else
+					pending.attempts = pending.attempts + 1
+					local queued, reason = self:_enqueue_remote_refresh(pending)
+					if not queued then
+						pending.phase, pending.last_reason = "enqueue", reason
+						if not M.remote_refresh_retryable(reason) then
+							self.pending_remote[key] = nil
+							expired = expired + 1
+							self:_emit_verdict(pending, "failed", reason, true)
+						end
+					end
 				end
 			end
-		end
-		if expired > 0 then
-			pcall(printf, "[cwv:620/786] style husk refresh complete expired=%d pending=%d",
-				expired, self:pending_remote_refresh_count())
 		end
 		return completed, expired
 	end
@@ -1123,6 +1305,51 @@ function M.install(mod, deps)
 		local count = 0
 		for _ in pairs(self.pending_remote) do count = count + 1 end
 		return count
+	end
+
+	-- ONE writer for both style channels (#786 B3/B4). `source` is
+	-- "style_channel" (cwv_combat_style_v1) or "identity" (the compact style
+	-- rider on the delivering cwv_item_identity payload). Both converge on the
+	-- same per-peer/slot state, and only ONE of them starts the rebuild ledger.
+	function runtime:accept_style_edge(peer_id, slot_name, family_id, style_id, source)
+		if not M.valid_wire(M.SCHEMA, "state", slot_name, family_id, style_id) then
+			return false, nil
+		end
+		local by_slot = remote[peer_id] or {}
+		remote[peer_id] = by_slot
+		local token = family_id .. ":" .. style_id
+		local previous = by_slot[slot_name]
+		local changed = not previous or previous.token ~= token
+		by_slot[slot_name] = { family_id = family_id, style_id = style_id,
+			token = token, owner = source }
+		local key = remote_refresh_key(peer_id, slot_name)
+		pcall(printf, "[cwv:786] style rx peer=%s slot=%s family=%s style=%s source=%s changed=%s",
+			tostring(peer_id), tostring(slot_name), family_id, style_id,
+			tostring(source), tostring(changed))
+		if source == "identity" then
+			-- The identity path is the guarded authority: it carries the item
+			-- identity the husk must rebuild against, so it cancels the style
+			-- channel's fallback for this exact edge and owns the rebuild --
+			-- including when the style channel already stored the same token.
+			local armed = self.fallback_remote[key]
+			local owned = armed ~= nil and armed.token == token
+			self.fallback_remote[key] = nil
+			if changed or owned then
+				self:refresh_remote(peer_id, slot_name,
+					changed and "identity" or "identity_after_style")
+				return true, token
+			end
+			return false, token
+		end
+		if not changed then return false, token end
+		-- Style-channel arrival. Do NOT rebuild inline: the sender republishes
+		-- identity for the same edge in the same tick and that payload is what
+		-- the husk must rebuild against. Arm a bounded grace so a peer that only
+		-- ever receives this channel (older build, or a dropped identity
+		-- payload) still recovers through the same guarded path.
+		self.fallback_remote[key] = { peer_id = peer_id, slot_name = slot_name,
+			family_id = family_id, style_id = style_id, token = token, elapsed = 0 }
+		return changed, token
 	end
 
 	local function item_identity(item, backend_id)
@@ -1159,6 +1386,13 @@ function M.install(mod, deps)
 			package.family_id, package.member
 		return { item_key = key, identity = identity, style_id = style_id, style = style,
 			family_id = family_id, member = member, package = package, item_data = item.data or item }
+	end
+
+	-- #786: the authored style-family member key for a concrete item. A husk
+	-- item carries no backend identity, so the re-wield expectation cannot go
+	-- through `describe`. Read-only; returns nil for a non-member item.
+	function runtime:member_key(item, backend_id)
+		return item_key(item, backend_id)
 	end
 
 	function runtime:owns_style(style)
@@ -1344,9 +1578,26 @@ function M.install(mod, deps)
 		local row = self:describe(item)
 		if not row then return false end
 		local ok = send(recipient, "state", slot_name, row.family_id, row.style_id)
-		if ok then pcall(printf, "[cwv:620] style tx slot=%s family=%s style=%s reason=%s",
-			tostring(slot_name), row.family_id, row.style_id, tostring(reason)) end
+		if ok then pcall(printf, "[cwv:786] style tx slot=%s family=%s style=%s recipient=%s reason=%s",
+			tostring(slot_name), row.family_id, row.style_id,
+			tostring(recipient or "others"), tostring(reason)) end
 		return ok
+	end
+
+	-- Owner-side style axis for one of the LOCAL player's slots, resolved
+	-- exactly the way the #474 musket wire resolves its stance rider (through
+	-- `local_equipment`, never a new resolver). `identity_key` is the payload's
+	-- own item identity, so a bot payload published from this peer -- or a slot
+	-- that changed under the publish -- can never inherit this player's style.
+	function runtime:local_style_rider(slot_name, identity_key)
+		local inventory = local_equipment()
+		local equipment = inventory and inventory:equipment()
+		local slot = equipment and equipment.slots and equipment.slots[slot_name]
+		local item_data = slot and slot.item_data
+		local row = item_data and self:describe(item_data)
+		if not row then return nil end
+		if identity_key ~= nil and row.item_key ~= identity_key then return nil end
+		return M.encode_style_rider(row.family_id, row.style_id)
 	end
 
 	function runtime:set_item_style(item, backend_id, desired, reason, rebuild)
@@ -1398,6 +1649,16 @@ function M.install(mod, deps)
 					return false, "rebuild failed"
 				end
 				self:publish(inventory, slot_name, item, nil, reason or "transition")
+				-- #786 B2: the style axis joins the identity TRANSACTION. The
+				-- five scalars above are state only; re-publishing identity on
+				-- the same commit is what re-states the item the husk must
+				-- rebuild against and drives the guarded re-wield. Same caller
+				-- shape as the #474 musket edge, and forced because a style
+				-- toggle leaves the identity signature byte-identical.
+				if type(deps.send_identity_slots) == "function"
+						and equipment and equipment.slots then
+					pcall(deps.send_identity_slots, equipment.slots, "combat_style", true)
+				end
 			end
 		end
 		-- Persistence and the commit diagnostic intentionally happen only after
@@ -1507,13 +1768,12 @@ function M.install(mod, deps)
 		mod:network_register(M.CHANNEL, function(sender_peer_id, schema, op, slot_name, family_id, style_id)
 			if not M.valid_wire(schema, op, slot_name, family_id, style_id) then return end
 			if op == "query" then runtime:publish_loadout(sender_peer_id, "query_reply"); return end
-			remote[sender_peer_id] = remote[sender_peer_id] or {}
-			local previous = remote[sender_peer_id][slot_name]
-			if previous and previous.family_id == family_id and previous.style_id == style_id then return end
-			remote[sender_peer_id][slot_name] = { family_id = family_id, style_id = style_id }
-			pcall(printf, "[cwv:620] style rx peer=%s slot=%s family=%s style=%s",
-				tostring(sender_peer_id), slot_name, family_id, style_id)
-			runtime:refresh_remote(sender_peer_id, slot_name, "state")
+			-- #786 B4: this channel keeps state storage, the query/reply replay
+			-- and the vanilla-safe fallback, but it no longer triggers its own
+			-- unguarded rebuild. `accept_style_edge` dedupes both channels on
+			-- one edge token and arms the bounded fallback.
+			runtime:accept_style_edge(sender_peer_id, slot_name, family_id, style_id,
+				"style_channel")
 		end)
 	end
 

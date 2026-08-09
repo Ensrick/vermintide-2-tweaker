@@ -268,7 +268,9 @@ Thrown weapons need a 7-layer fix stack: template clone, projectile
 system swap (init hook), pickup template registration, impact_data
 swap, carrier-unit pattern (held meshes have 0 actors), package
 force-load, derived-class hooks. Canonical:
-`cwv_es_outrider_grenade_launcher` and Tuskgor Javelin. Reference:
+Tuskgor Javelin. (`cwv_es_outrider_grenade_launcher` is NOT canon here - it
+is fire-and-forget ammo with no carrier unit and no pickup template, so it
+belongs to G-RANGED; miscited until 2026-08-07, issue #1187.) Reference:
 `reference_cwv_thrown_weapon_recipe.md`,
 `reference_cwv_thrown_weapon_template_clone.md`.
 
