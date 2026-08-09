@@ -1,5 +1,7 @@
 return function(H, repo_root)
     local source = require("cwv_source").combined(repo_root)
+    local install_wire = dofile(repo_root
+        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_wire.lua")
 
     H.test("CWV cross-access remap owns the pre-RPC 3P animation seam", function()
         H.truthy(source:find('mod:hook("WeaponUnitExtension", "_play_3p_anim"', 1, true))
@@ -18,5 +20,172 @@ return function(H, repo_root)
         H.truthy(hook:find("func(self, target, event, owner_unit, looping_event, anim_time_scale)", 1, true))
         H.equal(hook:find("WwiseWorld.trigger_event", 1, true), nil)
         H.equal(hook:find("rpc_play_sound_event", 1, true), nil)
+    end)
+
+    -- #1211: the remote Old Musket shot fed Application.main_world() into
+    -- WwiseUtils. WorldManager Wwise-registers a world ONLY in create_world, so
+    -- that handle is never a key and wwise_utils.lua:40 called
+    -- WwiseWorld.make_auto_source(nil, ...) -- a native access violation that the
+    -- surrounding pcall cannot catch. Both delivery wires (the bounded mode
+    -- channel and the cwv_item_identity musket-fire sentinel) route through the
+    -- single play_remote_fire choke point, so the guard is asserted there.
+    local function play_remote_fire_slice()
+        local start = assert(source:find("local function play_remote_fire(", 1, true))
+        local finish = assert(source:find(
+            "_om._old_musket_play_remote_fire = play_remote_fire", start, true))
+        return source:sub(start, finish)
+    end
+
+    H.test("CWV remote musket fire never resolves a world outside WorldManager", function()
+        H.equal(source:find("Application.main_world", 1, true), nil,
+            "an Application-owned world is never a WorldManager wwise key (#1211)")
+        H.equal(source:find("Application.new_world", 1, true), nil)
+        H.truthy(source:find('local LEVEL_WORLD = "level_world"', 1, true))
+        H.truthy(source:find("if not wm:has_world(LEVEL_WORLD) then return nil, nil end", 1, true))
+        H.truthy(source:find("return wm:wwise_world(world), world", 1, true))
+
+        local fire = play_remote_fire_slice()
+        H.equal(fire:find("main_world", 1, true), nil)
+        H.truthy(fire:find("local wwise_world, world = registered_level_world()", 1, true))
+        H.truthy(fire:find("if not wwise_world then", 1, true))
+        H.truthy(fire:find("[cwv:1211] remote fire audio skipped: ", 1, true))
+        H.truthy(fire:find("no registered wwise world (world=%s)", 1, true))
+
+        -- Both entry wires must keep calling the shared acceptor rather than
+        -- reimplementing the audio call with their own world handle.
+        H.truthy(source:find('if valid_bid(bid) then play_remote_fire(sender_peer_id, mode, "mode_channel") end',
+            1, true))
+        H.truthy(source:find("_om._old_musket_play_remote_fire(sender_peer_id, payload.fire_event", 1, true))
+    end)
+
+    -- Behavioral half: install the real wire module against stub engine globals
+    -- and prove the native Wwise entry point is reached ONLY when the resolved
+    -- level world has a registered wwise world.
+    local function with_stub_engine(registered, body)
+        local saved = {
+            Managers = _G.Managers,
+            Unit = _G.Unit,
+            WwiseUtils = _G.WwiseUtils,
+            printf = _G.printf,
+        }
+        local level_world = { "level_world_handle" }
+        local wwise_world = { "wwise_world_handle" }
+        local native, logged = {}, {}
+        _G.Unit = { alive = function() return true end }
+        _G.printf = function(format, ...)
+            logged[#logged + 1] = string.format(format, ...)
+        end
+        _G.WwiseUtils = {
+            trigger_unit_event = function(world, event, unit, node_id)
+                native[#native + 1] = {
+                    world = world, event = event, unit = unit, node_id = node_id,
+                }
+                return 41, "source", wwise_world
+            end,
+        }
+        _G.Managers = {
+            player = {},
+            world = {
+                has_world = function(_, name) return name == "level_world" end,
+                world = function(_, name)
+                    if name ~= "level_world" then error("unexpected world " .. tostring(name)) end
+                    return level_world
+                end,
+                -- The retail accessor is a bare table read over worlds registered
+                -- by create_world; an unregistered world simply returns nil.
+                wwise_world = function(_, world)
+                    if registered and world == level_world then return wwise_world end
+                    return nil
+                end,
+            },
+        }
+
+        local channels = {}
+        local om = {
+            peer_resolver = {
+                peer_player = function(_, peer_id)
+                    if peer_id == "peer-rain" then return { player_unit = "owner-unit" } end
+                    return nil, "player unavailable"
+                end,
+            },
+        }
+        install_wire({
+            network_register = function(_, channel, handler) channels[channel] = handler end,
+        }, { om = om })
+
+        local ok, err = pcall(body, {
+            om = om,
+            channels = channels,
+            native = native,
+            logged = logged,
+            level_world = level_world,
+        })
+        _G.Managers, _G.Unit, _G.WwiseUtils, _G.printf =
+            saved.Managers, saved.Unit, saved.WwiseUtils, saved.printf
+        if not ok then error(err, 0) end
+    end
+
+    local function find_line(lines, needle)
+        for _, line in ipairs(lines) do
+            if line:find(needle, 1, true) then return line end
+        end
+        return nil
+    end
+
+    H.test("CWV remote musket fire skips audio when no wwise world is registered", function()
+        with_stub_engine(false, function(env)
+            local played = env.om._old_musket_play_remote_fire(
+                "peer-rain", "player_combat_weapon_rifle_fire", "identity_channel")
+            H.equal(played, false)
+            H.equal(#env.native, 0,
+                "the native Wwise binding must not be reached without a registered world")
+            H.truthy(find_line(env.logged,
+                "[cwv:1211] remote fire audio skipped: no registered wwise world (world="),
+                "the bail must emit its always-on needle")
+
+            -- Bounded: a repeated skip does not spam the console.
+            env.om._old_musket_play_remote_fire(
+                "peer-rain", "player_combat_weapon_rifle_fire", "mode_channel")
+            local skips = 0
+            for _, line in ipairs(env.logged) do
+                if line:find("[cwv:1211]", 1, true) then skips = skips + 1 end
+            end
+            H.equal(skips, 1)
+            H.equal(#env.native, 0)
+        end)
+    end)
+
+    H.test("CWV remote musket fire triggers the event on the registered level world", function()
+        with_stub_engine(true, function(env)
+            local played = env.om._old_musket_play_remote_fire(
+                "peer-rain", "player_combat_weapon_rifle_fire", "identity_channel")
+            H.equal(played, true)
+            H.equal(#env.native, 1)
+            H.equal(env.native[1].world, env.level_world)
+            H.equal(env.native[1].event, "player_combat_weapon_rifle_fire")
+            H.equal(env.native[1].unit, "owner-unit")
+            H.equal(env.native[1].node_id, 0)
+            H.equal(find_line(env.logged, "[cwv:1211]"), nil)
+
+            -- The mode-channel receiver is the second entry wire; it must inherit
+            -- the same guarded choke point rather than call Wwise itself.
+            local handler = env.channels.cwv_old_musket_mode_v1
+            H.truthy(handler, "the bounded mode channel must still register")
+            handler("peer-rain", 1, "fire", "slot_ranged",
+                "player_combat_weapon_rifle_fire", "bid-old-musket")
+            H.equal(#env.native, 2)
+            H.equal(env.native[2].world, env.level_world)
+
+            -- Unresolvable peer fails closed with no native call.
+            H.equal(env.om._old_musket_play_remote_fire(
+                "peer-unknown", "player_combat_weapon_rifle_fire", "rt"), false)
+            H.equal(#env.native, 2)
+        end)
+    end)
+
+    H.test("CWV in-keep regression proves a registered wwise world resolves", function()
+        H.truthy(source:find("_om._old_musket_wwise_world = registered_level_world", 1, true))
+        H.truthy(source:find("remote fire audio resolved a world Wwise never registered", 1, true))
+        H.truthy(source:find("remote fire acceptor must fail closed on an unresolvable peer", 1, true))
     end)
 end
