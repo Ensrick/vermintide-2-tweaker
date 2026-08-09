@@ -31,7 +31,8 @@ $script:RequiredContractNames = @(
     'career_tweaker_balance',
     'crafting_in_modded_dev',
     'chaos_wastes_tweaker_dev',
-    'character_weapon_variants'
+    'character_weapon_variants',
+    'weapons_of_chaos'
 )
 
 function Test-DecompositionContracts {

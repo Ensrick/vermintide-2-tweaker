@@ -7,6 +7,16 @@
             )
         }
         @{
+            # Tools-only: qa/check_appearance_contracts.ps1 reads the authority
+            # under the vendored Lua host. Nothing bundles a copy, and nothing
+            # may - it stays outside _lib_appearance_descriptor.lua precisely
+            # because that descriptor IS byte-synced into the CWV bundle.
+            # Declared with no consumers so the canonical source is still
+            # covered by the manifest census.
+            Source = "_lib_appearance_name_authority.lua"
+            Consumers = @()
+        }
+        @{
             Source = "_lib_appearance_parity.lua"
             Consumers = @(
                 "general_tweaker_dev/scripts/mods/general_tweaker_dev/_lib_appearance_parity.lua"
@@ -35,6 +45,7 @@
         @{
             Source = "_lib_debug.lua"
             Consumers = @(
+                "crafting_in_modded/scripts/mods/crafting_in_modded/_lib_debug.lua"
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_debug.lua"
                 "general_tweaker_dev/scripts/mods/general_tweaker_dev/_lib_debug.lua"
                 "verminious_dreams_lighting_dev/scripts/mods/verminious_dreams_lighting_dev/_lib_debug.lua"
