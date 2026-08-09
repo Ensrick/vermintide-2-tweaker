@@ -275,13 +275,17 @@ return function(H, repo_root)
             .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
         local f = assert(io.open(main_path, "rb"))
         local source = f:read("*a"); f:close()
+        local helper_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_preview_helpers.lua"
+        f = assert(io.open(helper_path, "rb"))
+        local helpers = f:read("*a"); f:close()
         f = assert(io.open(runtime_path, "rb"))
         local runtime = f:read("*a"); f:close()
         local _, draw_hooks = source:gsub(
             'mod:hook_safe%("IngamePlayerListUI", "_draw"', "")
         H.equal(draw_hooks, 1, "#461/#533/#571/#1004 must share one draw hook")
         H.truthy(source:find('CT_BOON_TOOLTIP_1004_MARKER', 1, true))
-        H.truthy(source:find('pass_type = "hotspot"', 1, true))
+        H.truthy(helpers:find('pass_type = "hotspot"', 1, true))
         H.truthy(source:find('self._cursor_active and hotspot and hotspot.is_hover', 1, true))
         H.truthy(runtime:find('ui_utils.get_text_height(ui_renderer, { width, 0 }', 1, true),
             "production tooltip must use live renderer font metrics")
@@ -293,7 +297,7 @@ return function(H, repo_root)
             "controller paging must explicitly debounce the held action")
         H.truthy(source:find('widget._ct_boon_tooltip_data, r', 1, true),
             "tooltip measurement and construction must be lazy on first hover")
-        H.truthy(source:find('icon_widget._ct_boon_tooltip_attempted = false', 1, true))
+        H.truthy(helpers:find('icon_widget._ct_boon_tooltip_attempted = false', 1, true))
         H.truthy(source:find('pcall(UIRenderer.draw_widget, r, tooltip)', 1, true))
 
         local start = assert(source:find('CT_BOON_TOOLTIP_1004_MARKER', 1, true))
@@ -301,11 +305,13 @@ return function(H, repo_root)
         local block = source:sub(start, finish - 1)
         H.equal(block:find('format_localized_description', 1, true), nil,
             "#1004 must not reconstruct canonical description values")
-        local description_start = assert(block:find(
+        H.equal(helpers:find('format_localized_description', 1, true), nil,
+            "#1004 helper owner must not reconstruct canonical description values")
+        local description_start = assert(helpers:find(
             'function mod._ct_start_boon_description', 1, true))
-        local description_finish = assert(block:find(
+        local description_finish = assert(helpers:find(
             'function mod._ct_collect_start_boons', description_start, true))
-        local description_block = block:sub(description_start, description_finish - 1)
+        local description_block = helpers:sub(description_start, description_finish - 1)
         H.equal(description_block:find('DeusPowerUpTemplates', 1, true), nil,
             "description path must not read templates outside the native resolver")
         H.equal(block:find('mod:hook_safe("IngamePlayerListUI", "update"', 1, true), nil,

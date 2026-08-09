@@ -21,14 +21,18 @@ return function(H, repo_root)
 
     local entry = read("chaos_wastes_tweaker_dev.lua")
     local regression = read("_ct_regression.lua")
+    local weapon_traits = read("_ct_weapon_trait_generation.lua")
+    local bot_weapon_chest = read("_ct_bot_weapon_chest_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 11338 = 2026-07-18 baseline after the OOP W5 regression-suite extraction
-        -- (_ct_regression.lua). The ceiling only ratchets DOWN as more of the
-        -- ct_dev entry decomposes into modules; it must never grow.
-        H.truthy(lines <= 11338, "entry non-empty line count exceeded frozen 11338 baseline")
+        -- 9560 = 2026-08-06 baseline after the #1159 Boss Grudge Marks owner
+        -- extraction, atop the command, journey, preview-helper,
+        -- weapon-trait-generation, and bot weapon-chest/reusable-altar owners.
+        -- The ceiling only ratchets DOWN as more of the ct_dev entry decomposes
+        -- into modules; it must never grow.
+        H.truthy(lines <= 9560, "entry non-empty line count exceeded frozen 9560 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -67,7 +71,11 @@ return function(H, repo_root)
         -- Issue #52 registers the skull diagnostic's M.regression at its wiring
         -- site (issue52_skull_diag_installed): entry 35 -> 36, total 107.
         H.equal(count_plain(regression, "_rt_register("), 71)
-        H.equal(count_plain(entry, "_rt_register("), 36)
+        -- The tier-by-rarity check moved with the only helper state it consumes.
+        H.equal(count_plain(entry, "_rt_register("), 35)
+        H.equal(count_plain(weapon_traits, "_rt_register("), 1)
+        H.equal(count_plain(bot_weapon_chest,
+            'mod:hook("DeusChestExtension", "open_chest"'), 1)
         -- The shared _RT_CHECKS registrar stays defined and exposed in the entry;
         -- the module registers through the exposed handle, never a second registry.
         H.truthy(entry:find("mod._ct_rt_register = _rt_register", 1, true))
