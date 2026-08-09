@@ -32,18 +32,21 @@ rules specific to this mod; architecture and recipes live in `DEVELOPMENT.md`.
 - **Manifest discipline.** Modules are `mod:dofile`'d exactly once, from the
   entry manifest, in dependency order; `mod:dofile` is not a singleton, so
   modules never dofile each other. Cross-module surface goes through `mod._evt`.
-- **One hook per (Class, method) mod-wide.** Currently 19 hooks across
+- **One hook per (Class, method) mod-wide.** Currently 20 hooks across
   `_evt_backend_hooks` / `_evt_guard386_pacing` / `_evt_diagnostics` /
   `_evt_cursed_adventure` / `_evt_preview` / `_evt_missions` (the six
   desktop/controller area/area-copy/mission-menu hooks, issues 626/802; plus the two `IngamePlayerListUI`
   `_setup_deed_reward_data` + `_draw` hooks, issue 532) — grep all `_evt_*` files
   before adding any hook.
   `_evt_guard430_curse_parity` owns the singleton `GameModeBase.is_joinable`
-  wrapper for its pre-game-session hot-join lock. Its peer-parity beacon polls
-  the player roster and OWNS `mod.update` via the shared lib's
-  `install()`, which wraps any pre-existing `mod.update`. event_tweaker defines
-  none of its own, so nothing else may set `mod.update` or it clobbers the beacon
-  tick — drive per-frame work through the beacon instead.
+  wrapper for its pre-game-session hot-join lock and the singleton
+  `GameNetworkManager.remove_peer` hook for exact-proof retirement. Its
+  peer-parity beacon polls the player roster and owns the first `mod.update`
+  wrapper via the shared lib's `install()`. Managed curses stay inert unless
+  both that installation and the gated feature/peer-notification registration
+  are positively proven. The same module adds a second preserving wrapper for
+  the optional GUI runtime-gate retry. Nothing else may
+  replace `mod.update`; any later owner must capture and call the previous chain.
 - **Ship**: `-dev` version = full pipeline every build, no ask, and the item is
   public, so always `tools\ship\ship.ps1 -Mod event_tweaker -AllowPublic`; then
   git add (new files explicitly) + commit + push in the same pass.

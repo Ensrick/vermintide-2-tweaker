@@ -1,5 +1,29 @@
 # Tweaker: Events — Changelog
 
+## 0.4.45-dev (2026-08-09) -- exact Cursed Adventure wire catalog (#430, #1158)
+
+- Replaced the Cursed Adventure presence-only handshake with an exact identity
+  over all 11 managed `NetworkLookup.mutator_templates` name/id pairs. Every
+  managed template must also retain its one authored mutator package before the
+  feature can arm; any lookup/package drift fails closed.
+- The injection floor now consumes the peer beacon's committed settled state,
+  revalidates the captured local catalog without allocation, and retires a
+  departed peer's process epoch from the real `GameNetworkManager.remove_peer`
+  boundary. The existing pending-peer fence, hot-join lock, synchronous package
+  preload, and preview side-effect isolation remain intact.
+- Added an optional GUI Tweaker runtime gate for exactly the 11 curse rows. It
+  retries across mod load order and never changes saved settings; gameplay
+  safety remains authoritative when GUI Tweaker is absent.
+- The guard arms only on a verified installed parity instance: it re-checks
+  `is_installed` rather than trusting registration, so a throwing or partial
+  shared-beacon install leaves every managed curse inert and the injection
+  floor shut. The optional GUI registration is contained and capped at 30
+  attempts.
+- Added pure Lua coverage for exact identity drift, reverse lookup and package
+  mismatch, runtime-gate load order, committed-state use, disconnect
+  retirement, and a fail-closed transport proof; brought the shared wire-catalog
+  library into the mod as a byte-exact manifested copy.
+
 ## 0.4.44-dev (2026-08-06) -- shared peer-parity exact-mode capability (#1158)
 
 - Synchronized the shared peer-parity library with its optional exact catalog,
