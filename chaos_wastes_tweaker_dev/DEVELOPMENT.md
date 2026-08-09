@@ -120,6 +120,43 @@ rules here, never as a second `_can_spawn` hook.
 hook exclusivity, wholesale helper migration, the four-field public surface,
 install ordering against the populate consumer, and the getter seam on both ends.
 
+### Pickup-spawn owner (`_ct_pickup_spawn_owner.lua`) — issue #1159
+
+The orthogonal half of the same question. Eligibility decides *may this pickup
+claim this spawner*; this owner decides **what the claimed spawner produces and
+what it pays out**. The two share no hook and no helper, and this one installs
+immediately BEFORE the eligibility owner, at the exact slot its block occupied
+pre-extraction. Four hooks live here and nowhere else in the mod:
+
+| Hook | Job |
+|---|---|
+| `PickupSystem._spawn_pickup` | collectible → Pilgrim's Coin identity rewrite, the #294 non-resident residency guard, and the #58/#143 census tap. Preserves BOTH vanilla return values (#322). |
+| `UnitSpawner.spawn_network_unit` | the same rewrite for chest loot dice, which bypass `PickupSystem` entirely (#351). |
+| `PickupSystem._spawn_guaranteed_pickup` | the book-pedestal ladder: Chest of Trials (cap-budgeted, including natively baked `deus_cursed_chest` spawners, #60) → Bel'akor locus → 1.75x big coin casket → empty. |
+| `GameModeDeus._get_coins_amount_and_type` | the 3x payout for the `ct_big_casket`-tagged casket. |
+
+Unlike the eligibility owner, this one is a **bare dofile** (no `install(ctx)`),
+so the body runs at file scope exactly as it did in the entry — that is what
+keeps hook-registration order and the load-time provenance markers
+(`CT_MORGRIM143_MARKER`, `CT_MORGRIM143_RENORM_MARKER`,
+`CT_PICKUP_RESIDENCY_GUARD_MARKER`, `CT_SPAWN_PICKUP322_MARKER`) byte-identical.
+Entry helpers arrive through the `mod._ct_*` seams the entry publishes earlier in
+its own chunk: `mod._ct_effective_setting`, `mod._ct_on_injected_adventure_level`,
+`mod._ct_adventure_base_from_level_key`, and
+`mod._ct_curse_lighting_owner.current_node_is_belakor`.
+
+The two per-level counters `populate_pickups` resets —
+`mod._ct_chest_conversions_this_level` and
+`mod._ct_belakor_altar_spawned_this_level` — are **`mod` fields, not file-locals**.
+They were entry locals only so the lexically-earlier populate hook could bind them
+at closure-creation time; a separate chunk cannot reach that binding, and a
+surviving `local` would split the state (the entry resetting a local nobody reads
+while this owner increments a nil field). `populate_pickups` keeps sole ownership
+of the reset; this owner owns every increment.
+`qa/lua/tests/test_ct_pickup_spawn_owner.lua` guards dofile cardinality, per-hook
+exclusivity across entry/owner/eligibility, install ordering, moved-local orphans,
+the mod-field counter seam, marker migration, and the eight-field public surface.
+
 ## Buff registration: dormant boons need dual-table writes
 
 When ct injects a previously-dormant CW boon into the active loot pool at runtime (e.g. the `activate_dormant_*` toggles), the buff template **must** be registered in BOTH:

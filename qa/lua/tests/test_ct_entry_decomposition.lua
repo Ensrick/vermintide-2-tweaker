@@ -27,13 +27,14 @@ return function(H, repo_root)
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 9077 = 2026-08-09 baseline after the #1159 spawn-eligibility owner
-        -- extraction (PickupSystem._can_spawn + the coin-reservation partition),
-        -- atop the Boss Grudge Marks, command, journey, preview-helper,
-        -- weapon-trait-generation, and bot weapon-chest/reusable-altar owners.
-        -- The ceiling only ratchets DOWN as more of the ct_dev entry decomposes
-        -- into modules; it must never grow.
-        H.truthy(lines <= 9077, "entry non-empty line count exceeded frozen 9077 baseline")
+        -- 8640 = 2026-08-09 baseline after the #1159 pickup-spawn owner
+        -- extraction (the _spawn_pickup / spawn_network_unit /
+        -- _spawn_guaranteed_pickup / _get_coins_amount_and_type identity and
+        -- payout seams), atop the spawn-eligibility, Boss Grudge Marks, command,
+        -- journey, preview-helper, weapon-trait-generation, and bot
+        -- weapon-chest/reusable-altar owners. The ceiling only ratchets DOWN as
+        -- more of the ct_dev entry decomposes into modules; it must never grow.
+        H.truthy(lines <= 8640, "entry non-empty line count exceeded frozen 8640 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
