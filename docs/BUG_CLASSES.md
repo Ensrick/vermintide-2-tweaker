@@ -3368,3 +3368,106 @@ side alone converts the card into a false-PASS generator.
   (appearance-unification program; setter-success false-positive class).
 - Adjacent classes: 57 (one-shot transform reset by animation) and 58 (partial
   setter success) are the transform-side mechanics that (a) misreported.
+
+## 86. Live but UNREGISTERED World handle passed into a native binding (Wwise)
+
+**First seen:** 2026-08-09 (cwv issue 1211; the line shipped 2026-07-18 in
+`c964b7e8` and this is the first session in which its channel delivered)
+**Canonical Issue:** [#1211](https://github.com/Ensrick/vermintide-2-tweaker/issues/1211)
+**Lives in:** any mod that plays audio for a REMOTE actor out of a network
+receiver, and more generally any code that obtains a `World` handle from
+somewhere other than `Managers.world` and then hands it to an engine helper.
+cwv's Old Musket shot report (`_cwv_old_musket_wire.lua` `play_remote_fire`) is
+the canonical instance.
+
+### Symptoms
+- Hard CTD on the RECEIVING peer: access violation **at address 0x0** inside
+  `wwise_pluginw64_release.dll`, roughly one network hop after the sender's
+  dispatch line appears in the other peer's log.
+- The crashing call is wrapped in `pcall` and crashes anyway (same C-level AV
+  rule as class 32: `pcall` catches Lua errors, not a native null deref).
+- Crash-frame locals show `wwise_world = nil` while `world` is a live
+  `[World]`. The world is NOT destroyed - liveness is not the defect.
+- The success diagnostic that should follow the call has **zero** occurrences
+  in any log, in any session: the first delivery that ever reached the line was
+  the fatal one.
+
+### Diagnosis pattern
+1. A world is Wwise-registered in exactly ONE place:
+   `self._wwise_worlds[world] = Wwise.wwise_world(world)` inside
+   `WorldManager:create_world`
+   (`foundation/scripts/managers/world/world_manager.lua:53`).
+   `WorldManager.wwise_world` (`:60-62`) is a bare table read, so ANY handle
+   that did not come out of `create_world` returns `nil`.
+2. `WwiseUtils` does not nil-check that lookup. `make_unit_auto_source`
+   (`scripts/helpers/wwise_utils.lua:37-41`) passes the result straight into
+   `WwiseWorld.make_auto_source(wwise_world, unit, node_id)`; the position
+   variant (`:25-26`) has the same shape. A `nil` first argument is the AV.
+3. Grep the mod for every `World` handle that is not
+   `Managers.world:world(<name>)`: `Application.main_world()`,
+   `Application.new_world(...)`, a previewer's cached `self._world`, a world
+   captured in a closure that outlived the state that made it. Vanilla has zero
+   callers that feed such a handle to a Wwise helper.
+4. Check the world NAME as well as the source. The in-session world is
+   `LevelHelper.INGAME_WORLD_NAME` = `"level_world"`
+   (`scripts/helpers/level_helper.lua:4`), created via
+   `Managers.world:create_world` by `AsyncLevelSpawner`
+   (`scripts/utils/async_level_spawner.lua:63`) and run by `StateIngame`
+   (`scripts/game_state/state_ingame.lua:175`) for the KEEP as well as every
+   mission - so it is the one name that resolves in both contexts. A world name
+   that only exists in missions reintroduces the crash in the keep.
+5. Distinguish from class 32. There the cached world was DEAD and the fix was
+   an identity comparison against the live world; here the world is alive and
+   the missing property is REGISTRATION. `has_world` alone does not prove it.
+
+### Fix template
+```lua
+local LEVEL_WORLD = "level_world"
+local function registered_level_world()
+    local wm = Managers and Managers.world
+    if not wm or type(wm.has_world) ~= "function"
+            or type(wm.wwise_world) ~= "function" then
+        return nil, nil
+    end
+    if not wm:has_world(LEVEL_WORLD) then return nil, nil end   -- :world fasserts
+    local world = wm:world(LEVEL_WORLD)
+    if not world then return nil, nil end
+    return wm:wwise_world(world), world                          -- nil = UNREGISTERED
+end
+
+local reported = false
+local function play_remote_sound(unit, event_name)
+    local wwise_world, world = registered_level_world()
+    if not wwise_world then                    -- HARD REQUIRE, never "try anyway"
+        if not reported then
+            reported = true
+            pcall(printf, "[mod:NNN] audio skipped: no registered wwise world (world=%s)",
+                tostring(world))
+        end
+        return false
+    end
+    return pcall(WwiseUtils.trigger_unit_event, world, event_name, unit, 0) and true or false
+end
+```
+- **The probe is the fix; the pcall is decoration.** Never call a Wwise helper
+  on a world you have not just proven is a `_wwise_worlds` key.
+- Keep the resolution at the single choke point every wire routes through. cwv
+  has two delivery wires into the same shot report (the bounded
+  `cwv_old_musket_mode_v1` channel and the `cwv_item_identity` musket-fire
+  sentinel); fixing only the one that happened to deliver leaves the other
+  armed.
+- The bail needs an always-on bounded `printf`, not silence: a remote sound
+  that stops playing with no log line is indistinguishable from a wire that
+  never delivered, which is exactly how this line sat latent for three weeks.
+- Offline coverage has to assert the NEGATIVE (no native call when the world is
+  unregistered), because the positive path passes just as happily with the bug
+  present.
+
+### Related Issues / commits
+- #1211 (this class; cwv `play_remote_fire` world resolution + the
+  `issue474_old_musket_presentation_surface_coverage` in-keep assertion that a
+  registered wwise world resolves in the KEEP, where the client died), #474
+  (Old Musket umbrella - this is its fire-audio arm regressing into a crash).
+- Adjacent classes: 32 (destroyed-World use-after-free; the other half of the
+  "pcall cannot catch this" family, and the source of the `has_world`-before-
+  `:world()` fassert rule).

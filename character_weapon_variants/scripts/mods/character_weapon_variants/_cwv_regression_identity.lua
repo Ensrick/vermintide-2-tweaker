@@ -1018,6 +1018,25 @@ _rt_register("issue474_old_musket_hot_join_identity_and_remote_fire", function()
 	if _om._old_musket_play_remote_fire("rt474_no_such_peer", "not_the_rifle_event", "rt") ~= false then
 		return "remote fire acceptor must reject a non-rifle event"
 	end
+	-- #1211: the shot report killed a client with a native access violation
+	-- because it fed an Application-owned world handle -- one WorldManager never
+	-- Wwise-registered -- into WwiseUtils. Prove the replacement resolver finds a
+	-- REGISTERED wwise world right here in the keep, which is exactly where the
+	-- client died, and that the acceptor still fails closed on an unknown peer.
+	if type(_om._old_musket_wwise_world) ~= "function" then
+		return "remote fire audio has no registered-wwise-world resolver"
+	end
+	local wwise_world, level_world = _om._old_musket_wwise_world()
+	if not level_world then
+		return "remote fire audio cannot resolve the level world"
+	end
+	if not wwise_world then
+		return "remote fire audio resolved a world Wwise never registered"
+	end
+	if _om._old_musket_play_remote_fire("rt1211_no_such_peer",
+			"player_combat_weapon_rifle_fire", "rt") ~= false then
+		return "remote fire acceptor must fail closed on an unresolvable peer"
+	end
 	for _, perspective in ipairs({ "1p", "3p" }) do
 		for _, mode in ipairs({ "ranged", "melee" }) do
 			local pos, rot, scale = _om._old_musket_transform_components(perspective, mode)

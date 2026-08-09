@@ -1,5 +1,12 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.502-dev (2026-08-09) -- remote musket fire: registered-world audio floor (#1211) [untested]
+
+- **Fix (#1211): the host firing the Old Musket crashed the client with an uncatchable native AV.** The remote-fire audio handler passed `Application.main_world()` into the Wwise binding, but only `WorldManager:create_world` registers a world with Wwise (`world_manager.lua:53`), so the client reached `WwiseWorld.make_auto_source(nil, ...)` and died at address zero inside the wwise plugin - a C-level access violation the surrounding pcall cannot catch (new BUG_CLASSES 86, the live-but-unregistered sibling of class 32). The defect was latent since 0.1.44x behind a mode channel whose own 2026-07-18 commit message records zero deliveries; this week the channel began delivering, and the first fire event to arrive killed the client in one shot (2026-08-09 client dump: `wwise_world = nil` in the crash-frame locals). The handler now resolves the level world through `Managers.world` with a `has_world` probe (`LevelHelper.INGAME_WORLD_NAME`, valid in keep and missions) and HARD-REQUIRES a registered wwise world before any audio call, at the single choke point both delivery wires share (the mode channel receiver and the identity-channel fire sentinel); when no registered world exists it skips the audio with one bounded `[cwv:1211]` row instead of crashing. `Application.main_world()` is now absent from cwv, cosmetics, and wt entirely, enforced by a new offline source gate.
+- Regression coverage: the issue 474 musket rt check now also proves a registered wwise world resolves live from the keep and that the fire acceptor fails closed on an unresolvable peer; four new offline tests (`test_cwv_remote_audio.lua`) pin the skip path, the trigger path, the both-wires routing, and the no-main-world source gate. Relates to the issue 474 musket umbrella (this was its fire-audio arm).
+- Carries forward the 0.1.500-dev sibling-bundle retirement through this merge commit (the exact-wire chunk shift no longer produces it).
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
+
 ## 0.1.501-dev (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
 
 - The shared peer-parity library installs as an atomic transaction: receiver
