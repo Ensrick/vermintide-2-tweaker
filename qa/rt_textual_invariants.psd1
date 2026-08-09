@@ -149,8 +149,11 @@
 
     # ============================ ct_dev ============================
     # Source: chaos_wastes_tweaker_dev/CHANGELOG.md 0.7.245-dev (issue 511 item).
-    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='local spawned, go_id = func('; literal=$true; polarity='present'; issueRef='#322'; note='_spawn_pickup hook captures BOTH vanilla returns (linked-pickup client sync).' }
-    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='return spawned, go_id'; literal=$true; polarity='present'; issueRef='#322'; note='_spawn_pickup hook re-returns BOTH values (multi-return collapse guard).' }
+    # File retargeted by the #1159 pickup-spawn owner extraction: the _spawn_pickup
+    # hook moved verbatim out of the entry into _ct_pickup_spawn_owner.lua. The
+    # invariant itself is unchanged.
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_pickup_spawn_owner.lua'; needle='local spawned, go_id = func('; literal=$true; polarity='present'; issueRef='#322'; note='_spawn_pickup hook captures BOTH vanilla returns (linked-pickup client sync).' }
+    @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_pickup_spawn_owner.lua'; needle='return spawned, go_id'; literal=$true; polarity='present'; issueRef='#322'; note='_spawn_pickup hook re-returns BOTH values (multi-return collapse guard).' }
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='saved_grenade_weights = {}'; literal=$true; polarity='present'; issueRef='#143'; note='Morgrim grenade-weight renorm fix keeps the saved-weights table.' }
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='key == "description_deus_crit_chain_lightning"'; literal=$true; polarity='present'; issueRef='#133'; note='Manann tempest-trait cooldown-note Localize branch key.' }
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='mod._ct_boon_scroll_setup(self, boon_widgets, 4)'; literal=$true; polarity='present'; issueRef='#115'; note='boon-offer scrollbar wired on the boon-widgets surface (4).' }

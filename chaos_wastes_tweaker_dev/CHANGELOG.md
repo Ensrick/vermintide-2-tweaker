@@ -1,5 +1,31 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.325-dev (2026-08-09) -- pickup-spawn owner decomposition (#1159, #2) [untested]
+
+- Pickup spawn IDENTITY and payout move to a dedicated owner: the
+  collectible -> Pilgrim's Coin rewrite on both seams (PickupSystem._spawn_pickup
+  and the chest-loot-dice UnitSpawner.spawn_network_unit bypass), the #294
+  non-resident residency guard, the book-pedestal ladder in
+  PickupSystem._spawn_guaranteed_pickup (Chest of Trials -> Bel'akor locus ->
+  big coin casket -> empty), the big-casket 3x payout on
+  GameModeDeus._get_coins_amount_and_type, and the #58/#134/#143/#351 census
+  probes those seams carry.
+- Composes with the 0.7.324-dev spawn-eligibility owner rather than overlapping
+  it: eligibility answers "may this pickup claim this spawner", this owner
+  answers "what does the claimed spawner produce". No hook or helper is shared.
+- The two per-level counters populate_pickups resets (chest conversions, Bel'akor
+  altar placed) become mod fields so the moved hook can reach them across the
+  chunk boundary; reset site, timing, and values are unchanged.
+- Entry ceiling ratchets 9,077 -> 8,640 nonblank lines; behavior-neutral
+  verbatim move, hook set and registration order identical.
+- **[untested]** - verify: run a Chaos Wastes journey with Adventure maps
+  injected and cursed_chest_count set to 2. Expect unchanged behaviour on every
+  seam - book pedestals yield 2 Chests of Trials then a Bel'akor locus (on the
+  Bel'akor-cursed mission) then 1.75x-scale coin caskets paying 3x, loot dice /
+  lore pages / Ravaged Art arriving as Pilgrim's Coin, and `/ct_regression_test`
+  green on pickup_residency_guard_installed, spawn_pickup_returns_both_values,
+  morgrim143_* and the #134/#351 collectible checks.
+
 ## 0.7.324-dev (2026-08-09) -- spawn-eligibility owner decomposition (#1159, #504, #2)
 
 - PickupSystem spawn-eligibility (career-exclusive blocklist denial, the

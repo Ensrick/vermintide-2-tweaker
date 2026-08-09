@@ -51,11 +51,22 @@ return function(H, repo_root)
     end)
 
     H.test("CT production wires host spawn and PickupSystem conversion boundaries", function()
-        local file = assert(io.open(path .. "chaos_wastes_tweaker_dev.lua", "rb"))
+        -- #1159: both conversion seams moved out of the entry into the
+        -- pickup-spawn owner. The wiring contract is unchanged; only the file
+        -- that carries it moved, so assert against the owner and confirm the
+        -- entry no longer holds a second (shadowing) copy.
+        local file = assert(io.open(path .. "_ct_pickup_spawn_owner.lua", "rb"))
         local source = file:read("*a"); file:close()
         H.truthy(source:find('mod:hook("UnitSpawner", "spawn_network_unit"', 1, true))
         H.truthy(source:find("_ct_collectible_policy.route_name", 1, true))
         H.truthy(source:find("self.is_server == true", 1, true))
         H.truthy(source:find("mod._ct351_rewrite_network_spawn", 1, true))
+
+        local entry_file = assert(io.open(path .. "chaos_wastes_tweaker_dev.lua", "rb"))
+        local entry = entry_file:read("*a"); entry_file:close()
+        H.equal(entry:find('mod:hook("UnitSpawner", "spawn_network_unit"', 1, true), nil,
+            "a second spawn_network_unit hook would be silently dropped by VMF")
+        H.equal(entry:find("mod._ct351_rewrite_network_spawn =", 1, true), nil,
+            "the rewrite export must be published only by the owner")
     end)
 end

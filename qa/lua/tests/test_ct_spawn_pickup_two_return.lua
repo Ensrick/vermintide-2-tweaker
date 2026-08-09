@@ -8,12 +8,20 @@
 -- own early returns at :1212-:1228).
 
 return function(H, repo_root)
-    local main_path = repo_root
+    local dir = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
-        .. "chaos_wastes_tweaker_dev.lua"
-    local file = assert(io.open(main_path, "rb"))
-    local source = file:read("*a")
-    file:close()
+
+    local function read(name)
+        local file = assert(io.open(dir .. name, "rb"))
+        local text = file:read("*a")
+        file:close()
+        return text
+    end
+
+    -- #1159: the hook moved verbatim from the entry into the pickup-spawn owner.
+    -- The two-value contract is unchanged; the entry must hold no second copy.
+    local source = read("_ct_pickup_spawn_owner.lua")
+    local entry = read("chaos_wastes_tweaker_dev.lua")
 
     local HOOK_HEAD = 'mod:hook("PickupSystem", "_spawn_pickup"'
 
@@ -22,6 +30,8 @@ return function(H, repo_root)
         H.truthy(first, "hook registration missing")
         H.equal(string.find(source, HOOK_HEAD, first + 1, true), nil,
             "second _spawn_pickup hook registration would be silently dropped by VMF")
+        H.equal(string.find(entry, HOOK_HEAD, 1, true), nil,
+            "the entry must not re-register the hook the owner now holds")
     end)
 
     -- Extract the hook body: from the registration to the issue 511 load-time
