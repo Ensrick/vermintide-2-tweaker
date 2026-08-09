@@ -47,10 +47,15 @@ local function _dbg(fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    -- (warnings noise) demoted mod:warning -> mod:debug. These [gut:dbg] traces (e.g. HUD
+    -- (warnings noise) mod:warning was demoted here because these [gut:dbg] traces (e.g. HUD
     -- widget_init_skip when a scenegraph node isn't present in the keep) are diagnostics, not
-    -- real problems, and at warning level they spammed the in-game chat. Debug is off by default.
-    mod:debug("[gut:dbg] " .. fmt, ...)
+    -- real problems, and at warning level they spammed the in-game chat.
+    -- #427: mod:debug was the wrong landing spot -- it is gated off by default, so the alert
+    -- emitted nothing at all. Route to LOG-ONLY pcall-guarded engine printf like every other
+    -- migrated `_dbg_alert`: printf survives mod-logging-OFF and never reaches chat.
+    if not pcall(printf, "[gut:dbg] " .. fmt, ...) then
+        pcall(printf, "[gut:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
