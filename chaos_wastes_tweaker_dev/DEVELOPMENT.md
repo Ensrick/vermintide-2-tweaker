@@ -90,6 +90,36 @@ guards exact placement and hook cardinality, fresh-map exhaustive replay,
 function/table identity, distinct-dependency action-time dispatch, data values,
 and both legacy performance globals.
 
+### Spawn-eligibility owner (`_ct_spawn_eligibility_owner.lua`) — issue #1159
+
+Every "may this pickup claim this spawner?" decision is one bounded installer:
+the career-exclusive blocklist denial (v0.7.97), the v0.7.165-dev coin-starvation
+reservation that guarantees a ~40% coin-only spawner slice under the
+Abundance-of-Life curse, the v0.7.78 unit-loadability pre-flight, and the v0.7.64
+injected-adventure campaign-category fallback. It registers exactly one hook,
+`PickupSystem._can_spawn`, which stays the sole CT hook on that pair. The
+Belakor-locus gate deliberately remains inline in the entry: it is the
+`force_belakor` feature's gate, not a spawn-eligibility decision.
+
+The owner installs LATER in the entry than the `populate_pickups` hook that calls
+`mod._ct_rebuild_coin_reserved_set`. That is safe and intentional — the populate
+hook resolves the field at call time, and the entry's script body completes
+before any hook fires — so the install site must stay after it, exactly where the
+pre-extraction helper block sat.
+
+Its public surface is unchanged: `mod._ct_coin_reservation_test` (the
+`coin_reservation_partition` regression marker), `mod._ct_rebuild_coin_reserved_set`,
+`mod._ct_clear_coin_reserved_set`, and `mod._ct_spawner_reserved_for_coins`.
+The two per-run telemetry tables arrive as **getters, not values**: the entry
+REASSIGNS `_career_exclusive_denial_counts` and `_career_exclusive_logged_this_run`
+to fresh tables at every populate entry (run boot), so a captured reference would
+pin this owner to the load-time tables — denial counts would accumulate across
+runs and the once-per-run log gate would never reset. Add spawner-eligibility
+rules here, never as a second `_can_spawn` hook.
+`qa/lua/tests/test_ct_spawn_eligibility_owner.lua` guards dofile cardinality,
+hook exclusivity, wholesale helper migration, the four-field public surface,
+install ordering against the populate consumer, and the getter seam on both ends.
+
 ## Buff registration: dormant boons need dual-table writes
 
 When ct injects a previously-dormant CW boon into the active loot pool at runtime (e.g. the `activate_dormant_*` toggles), the buff template **must** be registered in BOTH:
