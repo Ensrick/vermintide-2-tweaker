@@ -1,5 +1,18 @@
 # Career Tweaker Changelog
 
+## 0.4.21-beta (2026-08-09) - authoritative paths behind composite wire floor (#1158) [untested]
+
+- Every authoritative parity read (balance apply/restore, tourney, the
+  rpc_add_buff receiver, GUT grey-out) now routes through a composite floor:
+  transport install verified via is_installed, exact buff catalog proven in
+  BOTH lookup directions, and settled peer state - with per-send paths keeping
+  the stricter live roster check so a just-joined non-crt peer is never sent a
+  modded buff name inside the settle poll window.
+- Runtime-gate registration is pcall-hardened, falls through gut_dev to gut,
+  and is capped at 30 bounded retries; floor predicates moved to
+  _crt_wire_policy.lua as pure functions with offline behavioral tests and a
+  source lock preventing re-collapse of the live guard.
+
 ## 0.4.20-beta (2026-08-06) - exact shared buff-catalog proof (#776, #1158)
 
 - Replaced CRT's private parity transport adapter with the shared peer-parity
