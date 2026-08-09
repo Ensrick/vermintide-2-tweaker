@@ -59,12 +59,23 @@ local _wire_identity, _wire_identity_err, _wire_names =
         NetworkLookup and NetworkLookup.damage_profiles)
 mod._wt431_wire_catalog_identity = _wire_identity
 mod._wt431_wire_catalog_count = _wire_names and #_wire_names or 0
+-- Exact numeric snapshot taken once at load, after every registration site has
+-- run. The per-hit sender floor compares the LIVE lookup against this instead
+-- of trusting that our indices never moved.
+local _wire_snapshot, _wire_snapshot_err = _wire_contract.capture_catalog(
+    mod._wt431_custom_profile_fallback,
+    NetworkLookup and NetworkLookup.damage_profiles)
+mod._wt431_wire_catalog_snapshot = _wire_snapshot
 if _wire_identity then
     pcall(_printf, "[wt:431] exact damage-profile catalog=%s entries=%d",
         _wire_identity, mod._wt431_wire_catalog_count)
 else
     pcall(_printf, "[wt:431] WARN exact damage-profile catalog unavailable (%s); custom profiles stay inert",
         tostring(_wire_identity_err))
+end
+if not _wire_snapshot then
+    pcall(_printf, "[wt:431] WARN exact damage-profile snapshot unavailable (%s); custom profiles stay inert",
+        tostring(_wire_snapshot_err))
 end
 
 -- ============================================================
@@ -73,7 +84,8 @@ end
 -- ============================================================
 do
     local parity_transport = _wire_identity
-        and _wire_contract.wrap_parity_transport(mod, _wire_identity) or nil
+        and _wire_contract.wrap_parity_transport(mod, _wire_identity, { schema = 1 })
+        or nil
     local ok, factory = false, nil
     if parity_transport then
         ok, factory = pcall(function()
@@ -92,11 +104,33 @@ do
             echo_prefix = "[wt]",
         })
         if ok2 and type(inst) == "table" then
-            mod._wt_peer_parity = inst
+            -- Bind BEFORE install(): install() announces immediately, and the
+            -- transport's revoke path needs the instance to already be bound.
             parity_transport:_bind_parity_instance(inst)
-            mod._wt431_wire_transport = parity_transport
-            pcall(function() inst:install() end)
-            pcall(_printf, "[wt:431] exact-catalog peer beacon installed (channel=wt_damage_profiles_exact_v1)")
+            --
+            -- Install-commit check. mod._wt_peer_parity is published ONLY once
+            -- the channel actually registered, so a half-installed beacon can
+            -- never present itself as a confirmed gate.
+            --
+            -- SEAM (#1158 follow-up): the shared lib's install() returns
+            -- nothing today, so there is no commit boolean to consume. Making
+            -- it return one is the install-transaction fanout slice -- an
+            -- atomic change to tools/shared_lib/_lib_peer_parity.lua and its
+            -- consumer copies -- deliberately out of scope for this wt-only
+            -- slice. Until it lands, is_installed() is the strongest signal
+            -- the lib exposes: it is set only AFTER the network_register pcall
+            -- succeeded (_lib_peer_parity.lua:530). When the fanout lands, add
+            -- the returned commit boolean as a further conjunct here.
+            local install_ok = pcall(inst.install, inst)
+            local status_ok, installed = false, false
+            if install_ok and type(inst.is_installed) == "function" then
+                status_ok, installed = pcall(inst.is_installed, inst)
+            end
+            if status_ok and installed == true then
+                mod._wt_peer_parity = inst
+                mod._wt431_wire_transport = parity_transport
+                pcall(_printf, "[wt:431] exact-catalog peer beacon installed (channel=wt_damage_profiles_exact_v1)")
+            end
         end
     end
     if not mod._wt_peer_parity then
@@ -109,11 +143,22 @@ end
 -- true ONLY when the beacon has positively confirmed every other human peer
 -- runs wt (settled state). Solo / no-other-humans counts as confirmed.
 if mod._wt_peer_parity then
+    -- The application floor: installed AND enabled AND the live catalog still
+    -- matches the load-time snapshot. Dropping any one conjunct would let a
+    -- custom numeric id reach the wire on a catalog that had shifted under us.
     mod._wt431_profiles_allowed = function()
         local pp = mod._wt_peer_parity
-        if not pp then return false end
-        local ok, state = pcall(function() return pp:applied_state() end)
-        return ok and state == "enabled"
+        if type(pp) ~= "table" or type(pp.is_installed) ~= "function"
+                or type(pp.applied_state) ~= "function" then return false end
+        local ok_installed, installed = pcall(pp.is_installed, pp)
+        if not ok_installed or installed ~= true then return false end
+        local ok_state, state = pcall(pp.applied_state, pp)
+        if not ok_state or state ~= "enabled" then return false end
+        local lookup = rawget(_G, "NetworkLookup")
+        lookup = lookup and lookup.damage_profiles
+        local ok_catalog, intact = pcall(_wire_contract.catalog_intact,
+            _wire_snapshot, mod._wt431_custom_profile_fallback, lookup)
+        return ok_catalog and intact == true
     end
     -- Real disconnect boundary: retire the peer's transport epoch before a
     -- rapid same-Steam-id rejoin can deliver a delayed acknowledgement. WT has
@@ -129,7 +174,7 @@ end
 -- is retried because mod load order is not a dependency contract, and saved
 -- values are never changed.
 do
-    local gate_registered = false
+    local gate_state = { attempts = 0, registered = false, terminal = false }
     local retry_elapsed = 0
     local runtime_mod_id = "wt"
     local ok_name, live_name = pcall(function() return mod:get_name() end)
@@ -138,23 +183,28 @@ do
     end
     local gate_id = runtime_mod_id .. ":431:exact-damage-profile-catalog"
     local function try_runtime_gate()
-        if gate_registered then return end
-        local spec = _wire_contract.runtime_gate_spec(runtime_mod_id, function()
-                local available = type(mod._wt431_profiles_allowed) == "function"
-                    and mod._wt431_profiles_allowed() == true
-                return available, available and nil
-                    or "Unavailable until every player has the same Weapon Tweaker damage-profile catalog."
+        gate_state = _wire_contract.runtime_gate_retry_step(gate_state,
+            function()
+                return _wire_contract.runtime_gate_spec(runtime_mod_id, function()
+                    local available = type(mod._wt431_profiles_allowed) == "function"
+                        and mod._wt431_profiles_allowed() == true
+                    return available, available and nil
+                        or "Unavailable until every player has the same Weapon Tweaker damage-profile catalog."
+                end)
+            end,
+            function(spec)
+                return _wire_contract.try_register_runtime_gate(
+                    rawget(_G, "get_mod"), gate_id, spec)
             end)
-        local ok = _wire_contract.try_register_runtime_gate(
-            rawget(_G, "get_mod"), gate_id, spec)
-        gate_registered = ok == true
-        mod._wt431_runtime_gate_registered = gate_registered
+        mod._wt431_runtime_gate_registered = gate_state.registered == true
     end
     try_runtime_gate()
     local previous_update = mod.update
     mod.update = function(dt)
         if previous_update then previous_update(dt) end
-        if not gate_registered then
+        -- Terminal covers both outcomes: registered, or the attempt cap was
+        -- reached (a player with no GUT installed must not retry forever).
+        if not gate_state.terminal then
             retry_elapsed = retry_elapsed + (dt or 0)
             if retry_elapsed >= 1 then
                 retry_elapsed = 0
@@ -209,40 +259,58 @@ mod._wt431_wire_safe_profile_name = function(profile_name, parity_confirmed)
 end
 
 local _floor_logged = {}
+local _drop_logged = {}
 
--- id-level wrapper around the pure helper. Returns the id to put on the wire.
+-- id-level wrapper around the pure helper. Returns the id to put on the wire,
+-- or nil when no id could be PROVEN safe -- in which case the caller drops the
+-- RPC rather than wiring an id the host may not be able to decode. The custom
+-- id is never returned once the gate or the catalog check fails.
 local function _wire_safe_profile_id(weapon_system, damage_profile_id)
-    -- Host path never wires the id: weapon_system.lua:179-180 dispatches the
-    -- local receiver directly, and the host (running wt) decodes fine.
-    if weapon_system and weapon_system.is_server then return damage_profile_id end
     local parity_confirmed = type(mod._wt431_profiles_allowed) == "function"
         and mod._wt431_profiles_allowed() == true
-    if parity_confirmed then return damage_profile_id end
     local NL = rawget(_G, "NetworkLookup")
     local lookup = NL and NL.damage_profiles
-    if not lookup then return damage_profile_id end
-    local name = rawget(lookup, damage_profile_id)
-    if type(name) ~= "string" then return damage_profile_id end
-    local safe_name = mod._wt431_wire_safe_profile_name(name, false)
-    if safe_name == name then return damage_profile_id end
-    local safe_id = rawget(lookup, safe_name)
-    if not safe_id then return damage_profile_id end
-    if not _floor_logged[name] then
-        _floor_logged[name] = true
-        pcall(_printf, "[wt:431] wire floor: coerced %s -> %s on rpc_attack_hit (unconfirmed peer present; parity gate should already have reverted the repoint)", name, safe_name)
+    -- is_server is forwarded so the pure helper can short-circuit the host
+    -- path, which never wires the id: weapon_system.lua:179-180 dispatches the
+    -- local receiver directly, and the host (running wt) decodes fine.
+    local safe_id, disposition = _wire_contract.profile_id_for_send(
+        weapon_system and weapon_system.is_server, damage_profile_id,
+        parity_confirmed, _wire_snapshot,
+        mod._wt431_custom_profile_fallback, lookup)
+    if disposition ~= "fallback" then return safe_id, disposition end
+    local name = lookup and rawget(lookup, damage_profile_id)
+    local safe_name = lookup and safe_id and rawget(lookup, safe_id)
+    if not _floor_logged[tostring(name)] then
+        _floor_logged[tostring(name)] = true
+        pcall(_printf, "[wt:431] wire floor: coerced %s -> %s on rpc_attack_hit (unconfirmed peer present; parity gate should already have reverted the repoint)", tostring(name), tostring(safe_name))
     end
-    return safe_id
+    return safe_id, disposition
 end
 
--- Hook pre-flight (CLAUDE.md NON-NEGOTIABLE 8): grepped 2026-07-13 -- wt has
--- NO other hook on WeaponSystem (any method). This is the single registration.
+-- Hook pre-flight (CLAUDE.md NON-NEGOTIABLE 8): re-grepped 2026-08-08 -- this
+-- is wt's only hook on WeaponSystem.send_rpc_attack_hit in either stream. The
+-- mod's other WeaponSystem hooks target different methods (_summon_vortex in
+-- _wt_deepwood_runtime.lua, rpc_start_flamethrower and
+-- update_synced_flamethrower_particle_effects in _wt_flamestorm_fx.lua), so
+-- there is no (Class, method) collision.
 -- Every named RPC param is forwarded positionally; the tail key/value varargs
 -- ride `...` untouched (memory reference_vmf_hook_drops_skip_sync_rpc_loop).
 mod:hook("WeaponSystem", "send_rpc_attack_hit", function(func, self, damage_source_id, attacker_unit_id, hit_unit_id, hit_zone_id, hit_position, attack_direction, damage_profile_id, ...)
     local ok, safe_id = pcall(_wire_safe_profile_id, self, damage_profile_id)
-    if ok and safe_id ~= nil then
-        damage_profile_id = safe_id
+    if not ok or safe_id == nil then
+        -- No provably resident id: drop rather than wire a key the host may
+        -- not own. This also skips the function's local boss-health-bar
+        -- registration (weapon_system.lua:185-200) -- an accepted cost, since
+        -- the alternative on this branch is a hard NetworkLookup error on the
+        -- host. Bounded per distinct id so a hot path cannot spam the log.
+        local key = tostring(damage_profile_id)
+        if not _drop_logged[key] then
+            _drop_logged[key] = true
+            pcall(_printf, "[wt:431] wire floor: dropped rpc_attack_hit (damage_profile_id=%s) because no validated profile id was available", key)
+        end
+        return nil
     end
+    damage_profile_id = safe_id
     return func(self, damage_source_id, attacker_unit_id, hit_unit_id, hit_zone_id, hit_position, attack_direction, damage_profile_id, ...)
 end)
 
@@ -266,6 +334,9 @@ if WT and type(WT.rt_register) == "function" then
         if type(mod._wt431_wire_catalog_identity) ~= "string"
                 or mod._wt431_wire_catalog_count < 1 then
             return "exact damage-profile catalog identity missing"
+        end
+        if type(mod._wt431_wire_catalog_snapshot) ~= "table" then
+            return "exact damage-profile numeric snapshot missing (sender floor would drop every hit)"
         end
         if type(mod._wt431_wire_transport) ~= "table" then
             return "exact-catalog transport wrapper missing"

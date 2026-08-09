@@ -13,6 +13,7 @@ M.MAX_SAFE_STRING = 64
 M.MAX_VMF_JSON_LENGTH = 500
 M.MAX_RETIRED_EPOCHS_PER_PEER = 8
 M.MAX_RETIRED_PEERS = 32
+M.RUNTIME_GATE_MAX_ATTEMPTS = 30
 M.RUNTIME_GATE_SETTINGS = {
     "authentic_brace_of_pistols",
     "wt_brett_sword_shield_buff",
@@ -81,6 +82,109 @@ function M.build_wire_identity(fallbacks, lookup)
         M.WIRE_IDENTITY_VERSION, #names, h1, h2), nil, names
 end
 
+-- Capture the exact custom/fallback ids once, after every producer has
+-- registered. The hot sender floor reads these arrays instead of rebuilding
+-- names or hashes, so the per-hit path allocates nothing.
+function M.capture_catalog(fallbacks, lookup)
+    if type(fallbacks) ~= "table" or type(lookup) ~= "table" then
+        return nil, "fallbacks-or-lookup-missing"
+    end
+    local names = {}
+    -- Validate before table.sort: a non-string key would make sort throw, and
+    -- this runs unprotected at module load.
+    for custom in pairs(fallbacks) do
+        if type(custom) ~= "string" or type(fallbacks[custom]) ~= "string" then
+            return nil, "invalid-fallback-entry"
+        end
+        names[#names + 1] = custom
+    end
+    table.sort(names)
+    if #names == 0 then return nil, "fallback-registry-empty" end
+    local snapshot = { names = names, custom_ids = {}, fallback_ids = {}, custom_by_id = {} }
+    for i = 1, #names do
+        local custom = names[i]
+        local fallback = fallbacks[custom]
+        local custom_id = rawget(lookup, custom)
+        local fallback_id = rawget(lookup, fallback)
+        if not _positive_integer(custom_id) or rawget(lookup, custom_id) ~= custom then
+            return nil, "custom-lookup-mismatch:" .. tostring(custom)
+        end
+        if not _positive_integer(fallback_id) or rawget(lookup, fallback_id) ~= fallback then
+            return nil, "fallback-lookup-mismatch:" .. tostring(fallback)
+        end
+        snapshot.custom_ids[i] = custom_id
+        snapshot.fallback_ids[i] = fallback_id
+        snapshot.custom_by_id[custom_id] = i
+    end
+    return snapshot
+end
+
+-- Live-catalog integrity: every captured name must STILL resolve to the exact
+-- id it had at capture, in both directions. A late registration by another mod
+-- that shifts our indices makes this false, which closes the gate.
+function M.catalog_intact(snapshot, fallbacks, lookup)
+    if type(snapshot) ~= "table" or type(snapshot.names) ~= "table"
+            or type(snapshot.custom_ids) ~= "table"
+            or type(snapshot.fallback_ids) ~= "table"
+            or type(fallbacks) ~= "table" or type(lookup) ~= "table" then
+        return false
+    end
+    for i = 1, #snapshot.names do
+        local custom = snapshot.names[i]
+        local fallback = fallbacks[custom]
+        local custom_id = snapshot.custom_ids[i]
+        local fallback_id = snapshot.fallback_ids[i]
+        if not _positive_integer(custom_id) or rawget(lookup, custom) ~= custom_id
+                or rawget(lookup, custom_id) ~= custom
+                or not _positive_integer(fallback_id)
+                or rawget(lookup, fallback) ~= fallback_id
+                or rawget(lookup, fallback_id) ~= fallback then
+            return false
+        end
+    end
+    return true
+end
+
+-- Numeric sender disposition -- the application floor in one pure function.
+-- A WT-owned id may stay custom ONLY under an installed exact gate plus an
+-- intact live catalog. Every other branch either returns a fallback id proven
+-- RESIDENT in the live lookup (both directions, not mere table presence) or
+-- returns nil so the caller drops the RPC. The custom id can never survive a
+-- policy or lookup failure.
+function M.profile_id_for_send(is_server, damage_profile_id, exact_safe,
+        snapshot, fallbacks, lookup)
+    -- Truthy, mirroring the engine's own branch at weapon_system.lua:179
+    -- (`if self.is_server or LEVEL_EDITOR_TEST`). A host dispatches its local
+    -- receiver rather than wiring the id, so narrowing this to `== true` would
+    -- risk dropping a host's own attack RPCs.
+    if is_server then return damage_profile_id, "local" end
+    if type(lookup) ~= "table" or type(fallbacks) ~= "table" then
+        return nil, "drop"
+    end
+    if not _positive_integer(damage_profile_id) then return nil, "drop" end
+    local index = type(snapshot) == "table" and type(snapshot.custom_by_id) == "table"
+        and rawget(snapshot.custom_by_id, damage_profile_id) or nil
+    if index then
+        if exact_safe == true and M.catalog_intact(snapshot, fallbacks, lookup) then
+            return damage_profile_id, "custom"
+        end
+        local fallback = fallbacks[snapshot.names[index]]
+        local fallback_id = snapshot.fallback_ids[index]
+        if not _positive_integer(fallback_id) or rawget(lookup, fallback) ~= fallback_id
+                or rawget(lookup, fallback_id) ~= fallback then
+            return nil, "drop"
+        end
+        return fallback_id, "fallback"
+    end
+    -- Not in the snapshot: prove the id is a resident vanilla entry. An id
+    -- whose name is WT-owned but absent from the snapshot (registered after
+    -- capture) is dropped rather than wired.
+    local name = rawget(lookup, damage_profile_id)
+    if type(name) ~= "string" or rawget(lookup, name) ~= damage_profile_id
+            or fallbacks[name] ~= nil then return nil, "drop" end
+    return damage_profile_id, "vanilla"
+end
+
 -- Class-31 sender floor. Deliberately has no setting/toggle argument: once a
 -- WT-owned profile reaches the sender, an unconfirmed peer always receives the
 -- vanilla lookup entry. The owner-side repoint is only the first line of
@@ -122,6 +226,8 @@ function M.wrap_parity_transport(mod, identity, opts)
     local proxy = {}
     local local_epoch = opts.session_epoch or _default_epoch(mod, proxy)
     if not _safe_string(local_epoch) then return nil, "session-epoch-invalid" end
+    local expected_schema = opts.schema or 1
+    if not _positive_integer(expected_schema) then return nil, "schema-invalid" end
 
     local function challenge()
         sequence = sequence + 1
@@ -198,6 +304,15 @@ function M.wrap_parity_transport(mod, identity, opts)
     function proxy:network_register(channel, receiver)
         return mod:network_register(channel, function(sender_peer_id, schema, is_reply,
                 remote_identity, remote_epoch, remote_query, remote_echo)
+            -- Protocol-generation gate. The wrapped shared helper runs in
+            -- legacy two-field mode, so reject the schema HERE -- before any
+            -- epoch or challenge is accepted and before delegating -- so a
+            -- previously acknowledged peer cannot stay exact-safe after
+            -- presenting an incompatible generation.
+            if schema ~= expected_schema then
+                revoke(sender_peer_id)
+                return
+            end
             if type(sender_peer_id) ~= "string" or remote_identity ~= identity then
                 revoke(sender_peer_id)
                 return
@@ -254,14 +369,26 @@ function M.wrap_parity_transport(mod, identity, opts)
     return proxy
 end
 
+-- Presentation-only bridge, so every failure is soft. Both GUT stream ids are
+-- tried because a player may run either the public or the dev build, and the
+-- register call itself is pcall'd -- a throwing third-party Mod Tweaker must
+-- never take the gameplay module down with it.
 function M.try_register_runtime_gate(get_mod_fn, gate_id, spec)
-    if type(get_mod_fn) ~= "function" then return false, "get-mod-missing" end
-    local ok, gut = pcall(get_mod_fn, "gut_dev")
-    local tweaker = ok and type(gut) == "table" and gut.mod_tweaker or nil
-    if type(tweaker) ~= "table" or type(tweaker.register_runtime_gate) ~= "function" then
-        return false, "mod-tweaker-unavailable"
+    if type(get_mod_fn) ~= "function" or type(gate_id) ~= "string"
+            or gate_id == "" or type(spec) ~= "table" then
+        return false, "runtime-gate-arguments-invalid"
     end
-    return tweaker:register_runtime_gate(gate_id, spec)
+    for _, gut_id in ipairs({ "gut_dev", "gut" }) do
+        local ok, gut = pcall(get_mod_fn, gut_id)
+        local tweaker = ok and type(gut) == "table" and gut.mod_tweaker or nil
+        if type(tweaker) == "table"
+                and type(tweaker.register_runtime_gate) == "function" then
+            local ok_register, registered = pcall(
+                tweaker.register_runtime_gate, tweaker, gate_id, spec)
+            if ok_register and registered == true then return true end
+        end
+    end
+    return false, "mod-tweaker-unavailable"
 end
 
 function M.runtime_gate_spec(mod_id, evaluate)
@@ -273,6 +400,30 @@ function M.runtime_gate_spec(mod_id, evaluate)
         setting_ids[i] = M.RUNTIME_GATE_SETTINGS[i]
     end
     return { mod_id = mod_id, setting_ids = setting_ids, evaluate = evaluate }
+end
+
+-- Bounded retry for the optional presentation bridge: GUT may load after us,
+-- so we re-try, but a player without GUT must not retry forever. State goes
+-- terminal on the first success or at RUNTIME_GATE_MAX_ATTEMPTS, and the
+-- caller stops ticking once terminal. Both callbacks are pcall'd.
+function M.runtime_gate_retry_step(state, make_spec, register)
+    state = type(state) == "table" and state or {}
+    state.registered = state.registered == true
+    state.terminal = state.terminal == true
+    if state.registered == true or state.terminal == true then return state end
+    state.attempts = (tonumber(state.attempts) or 0) + 1
+
+    local ok_spec, spec = pcall(make_spec)
+    local registered = false
+    if ok_spec and type(spec) == "table" and type(register) == "function" then
+        local ok_register, result = pcall(register, spec)
+        registered = ok_register and result == true
+    end
+    state.registered = registered
+    if registered or state.attempts >= M.RUNTIME_GATE_MAX_ATTEMPTS then
+        state.terminal = true
+    end
+    return state
 end
 
 return M
