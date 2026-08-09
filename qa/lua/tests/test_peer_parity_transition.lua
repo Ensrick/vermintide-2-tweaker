@@ -157,36 +157,64 @@ local function register(Harness, repo_root)
         end)
     end)
 
-    Harness.test("shared exact mode stays absent from unconverted consumers", function()
-        -- Exact mode is granted one converted axis at a time. A consumer only
-        -- leaves this list together with the positive opt-in assertion below,
-        -- so an accidental or partial conversion cannot land silently.
-        local paths = {
+    -- Exact mode is opt-in per FILE, deliberately, because passing
+    -- `wire_identity` changes a live network protocol: an exact peer and a
+    -- presence-only peer of the same mod fail closed against each other. Exact
+    -- mode is therefore granted one converted axis at a time, and a file leaves
+    -- the unauthorized list ONLY together with its own positive opt-in
+    -- assertion below, so a partial or accidental conversion cannot land
+    -- silently. Every other file that builds a parity instance stays on the
+    -- presence protocol.
+    local function read_source(relative_path)
+        local file = assert(io.open(repo_root .. "/" .. relative_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
+
+    Harness.test("shared exact mode is authorized only for CRT, Event and the CWV exact runtime", function()
+        local unauthorized = {
             "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua",
+            -- CWV's entry file keeps the PRESENCE beacon
+            -- (cwv_peer_parity_present): deployed CWV builds already speak that
+            -- protocol, and #914's appearance ledgers hang off it. CWV's exact
+            -- channels live in _cwv_exact_wire_runtime.lua instead.
             "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
             "event_tweaker/scripts/mods/event_tweaker/_evt_shadow_adventure.lua",
             "weapon_tweaker/scripts/mods/weapon_tweaker/_wt431_damage_profile_parity.lua",
             "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt431_damage_profile_parity.lua",
         }
-        local function read(path)
-            local file = assert(io.open(repo_root .. "/" .. path, "rb"))
-            local source = file:read("*a")
-            file:close()
-            return source
-        end
-        for i = 1, #paths do
-            Harness.equal(read(paths[i]):find("[^_%w]wire_identity%s*="), nil,
-                "shared exact opt-in is not yet authorized for " .. paths[i])
+        for i = 1, #unauthorized do
+            Harness.equal(read_source(unauthorized[i]):find("[^_%w]wire_identity%s*="), nil,
+                "shared exact opt-in is not yet authorized for " .. unauthorized[i])
         end
 
-        local career = read("career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua")
+        local career = read_source(
+            "career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua")
         Harness.truthy(career:find("[^_%w]wire_identity%s*=%s*wire_identity") ~= nil,
             "CRT exact-mode opt-in disappeared")
-        local event = read("event_tweaker/scripts/mods/event_tweaker/_evt_guard430_curse_parity.lua")
+
+        -- #430: Event's managed curse catalog.
+        local event = read_source(
+            "event_tweaker/scripts/mods/event_tweaker/_evt_guard430_curse_parity.lua")
         Harness.truthy(event:find("[^_%w]wire_identity%s*=%s*wire_proof%.identity") ~= nil,
             "Event must opt its managed curse catalog into exact mode")
         Harness.truthy(event:find('"et_curse_catalog_exact_v1"', 1, true) ~= nil,
             "Event #430 exact channel disappeared")
+
+        -- #423/#424: CWV is the third authorized consumer. Both of its exact
+        -- channels are built through ONE factory wrapper, which refuses to
+        -- construct an instance without an identity -- so exact mode can never
+        -- be half-engaged (a channel name change without a proven catalog).
+        local cwv = read_source("character_weapon_variants/scripts/mods/"
+            .. "character_weapon_variants/_cwv_exact_wire_runtime.lua")
+        Harness.truthy(cwv:find("[^_%w]wire_identity%s*=%s*identity") ~= nil,
+            "CWV exact runtime must pass wire_identity into the parity factory")
+        local _, factories = cwv:gsub("local function new_exact_parity", "")
+        Harness.equal(factories, 1,
+            "CWV must build every exact instance through the single guarded factory")
+        Harness.truthy(cwv:find('return nil, "identity-missing"', 1, true),
+            "CWV exact factory must refuse to build without an identity")
     end)
 
     local function build_exact(factory, identity)

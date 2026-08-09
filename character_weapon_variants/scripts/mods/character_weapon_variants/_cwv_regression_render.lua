@@ -578,22 +578,24 @@ _rt_register("cwv_wire_safe_thrown_variant_installed", function()
     if _om.javelin_gate.should_block({ item_data = { name = "we_javelin" } }, "disabled") then
         return "mixed-lobby gate disabled the native Kerillian Javelin control"
     end
-    if type(_om._wire_safe_pickup_name) ~= "function" then
-        return "_om._wire_safe_pickup_name helper missing"
+    if type(_om._tj_pickup_disposition) ~= "function" then
+        return "_om._tj_pickup_disposition helper missing"
     end
     if type(_om._tj_pickup_wire_map) ~= "table" or next(_om._tj_pickup_wire_map) == nil then
         return "no cwv thrown pickups tracked -- wire-safety would coerce nothing"
     end
+    local policy = _om.thrown_wire_policy
+    if type(policy) ~= "table" then return "thrown wire policy module missing" end
     local NL = rawget(_G, "NetworkLookup")
     local pn = NL and NL.pickup_names
-    -- Drive every tracked cwv pickup key through the helper: it must coerce to
+    -- Drive every tracked cwv pickup key through the helper: it must SUBSTITUTE to
     -- its declared vanilla target, and that target must be a non-cwv key present
     -- in NetworkLookup.pickup_names on every peer.
     for cwv_key, vanilla_key in pairs(_om._tj_pickup_wire_map) do
-        local safe = _om._wire_safe_pickup_name(cwv_key, false)
-        if safe ~= vanilla_key then
-            return string.format("pickup %s did not coerce to its vanilla target (got %s)",
-                tostring(cwv_key), tostring(safe))
+        local disposition, safe = _om._tj_pickup_disposition(cwv_key, false)
+        if disposition ~= policy.SUBSTITUTE or safe ~= vanilla_key then
+            return string.format("pickup %s did not coerce to its vanilla target (got %s/%s)",
+                tostring(cwv_key), tostring(disposition), tostring(safe))
         end
         if type(safe) ~= "string" or safe:sub(1, 4) == "cwv_" then
             return string.format("pickup substitute %s is not a vanilla key", tostring(safe))
@@ -601,13 +603,22 @@ _rt_register("cwv_wire_safe_thrown_variant_installed", function()
         if type(pn) == "table" and rawget(pn, safe) == nil then
             return string.format("pickup substitute %s absent from NetworkLookup.pickup_names", tostring(safe))
         end
-        if _om._wire_safe_pickup_name(cwv_key, true) ~= nil then
-            return string.format("pickup %s was substituted despite confirmed peer parity", tostring(cwv_key))
+        if _om._tj_pickup_disposition(cwv_key, true) ~= policy.RIDE_CUSTOM then
+            return string.format("pickup %s was substituted despite a proven exact catalog", tostring(cwv_key))
         end
     end
-    -- Negative control: a genuine vanilla pickup must pass through unchanged (nil),
-    -- so the coercion can only ever touch the tracked cwv keys.
-    if _om._wire_safe_pickup_name("ammo_throwing_axe_01_t1", false) ~= nil then
+    -- #424 three-valued invariant: a cwv-owned pickup with NO declared donor must
+    -- resolve to DROP, never to "keep the custom id". This is the exact hole the
+    -- grenade-slot bomb key fell through while the helper returned nil for both
+    -- "parity confirmed" and "no fallback declared".
+    if _om._tj_pickup_disposition("cwv_tuskgor_javelin_bomb", false) ~= policy.DROP then
+        return "an undeclared cwv pickup key did not fail closed to DROP (issue 424 nil-ambiguity)"
+    end
+    -- Negative control: a genuine vanilla pickup rides unchanged, so the coercion
+    -- can only ever touch cwv-owned keys.
+    local vanilla_disposition, vanilla_name =
+        _om._tj_pickup_disposition("ammo_throwing_axe_01_t1", false)
+    if vanilla_disposition ~= policy.RIDE_CUSTOM or vanilla_name ~= "ammo_throwing_axe_01_t1" then
         return "wire-safe helper coerced a vanilla pickup name (should only map cwv keys)"
     end
     -- In-flight projectile axis: a fake projectile_units carrying the cwv
@@ -682,18 +693,21 @@ _rt_register("cwv_wire_safe_damage_profile_gate", function()
         end
     end
     if cwv_id then
-        local real_pp = mod._cwv_peer_parity
-        -- Both accessors are stubbed on every fixture: the sender reads the
-        -- COMMITTED applied_state(), and a fixture that supplied only the raw
-        -- classifier would pass for the wrong reason (pcall on the missing
-        -- accessor fails safe to "substitute", masking a real regression).
-        mod._cwv_peer_parity = {
+        -- #423 exact catalog: the sender reads mod._cwv_damage_peer_parity (the
+        -- dedicated exact channel), not the presence beacon. Every accessor the
+        -- verdict consults is stubbed, so a fixture that supplied only the raw
+        -- classifier would pass for the wrong reason (a pcall on a missing
+        -- accessor fails safe to "substitute" and would mask a real regression).
+        local real_pp = mod._cwv_damage_peer_parity
+        mod._cwv_damage_peer_parity = {
+            is_installed   = function() return true end,
             all_peers_have = function() return false end,
             applied_state  = function() return "disabled" end,
         }
         local unconfirmed_client = decide(false, cwv_id)
         local host_authoritative = decide(true,  cwv_id)
-        mod._cwv_peer_parity = {
+        mod._cwv_damage_peer_parity = {
+            is_installed   = function() return true end,
             all_peers_have = function() return true end,
             applied_state  = function() return "enabled" end,
         }
@@ -703,17 +717,18 @@ _rt_register("cwv_wire_safe_damage_profile_gate", function()
         -- shape during SETTLE_ENABLE (_lib_peer_parity.lua:619-621) and after the
         -- synchronous hot-join fence force-disables. The sender must follow the
         -- committed state and keep substituting.
-        mod._cwv_peer_parity = {
+        mod._cwv_damage_peer_parity = {
+            is_installed   = function() return true end,
             all_peers_have = function() return true end,
             applied_state  = function() return "disabled" end,
         }
         local settling_client = decide(false, cwv_id)
-        mod._cwv_peer_parity = real_pp
+        mod._cwv_damage_peer_parity = real_pp
         if unconfirmed_client ~= src_id then
             return "parity-unconfirmed client did not degrade the cwv profile to its vanilla source (issue 423 CTD shape live)"
         end
         if confirmed_client ~= cwv_id then
-            return "parity-confirmed client degraded the cwv profile (variant damage would regress under full cwv parity)"
+            return "exact-confirmed client degraded the cwv profile (variant damage would regress under a proven exact catalog)"
         end
         if host_authoritative ~= cwv_id then
             return "is_server path substituted (host is authoritative; rpc_attack_hit runs in-process, no foreign decode)"

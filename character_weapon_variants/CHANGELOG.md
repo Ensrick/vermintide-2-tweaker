@@ -1,5 +1,28 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.500-dev (2026-08-09) -- exact wire catalogs for damage + thrown axes (#423, #424, #1158) [untested]
+
+- CWV joins the exact-catalog wire system on two new dedicated channels
+  (`cwv_damage_profiles_exact_v1`, `cwv_thrown_resources_exact_v1`); the
+  deployed presence beacon is untouched so older CWV peers keep working. The
+  javelin/bomb gate now requires presence AND a proven exact catalog.
+- Three-valued pickup disposition (ride / substitute / drop) replaces the
+  nil-ambiguous fallback: an undeclared custom pickup (the Tuskgor bomb
+  included) now DROPS instead of sending its appended index; every vanilla
+  donor is revalidated across forward+reverse lookups, AllPickups, husk and
+  go_type rows before substitution.
+- `ProjectileSystem.spawn_player_projectile` preflight blocks malformed
+  resolution before vanilla's unconditional projectile_unit_name dereference.
+- The non-cwv join fence now also sweeps in-flight tracked projectiles,
+  re-reads both trackers after removal, and refuses to report success on a
+  retained unit; peer disconnect retires the exact proofs on all three parity
+  instances so a fast same-id rejoin can never reuse a stale ack.
+- Sender-side substitution floors remain unconditional (BUG_CLASSES 31).
+  Fourteen planted regressions locked by the new offline suites (2,125 tests).
+- Retires the stale tracked sibling bundle the exact-wire chunk shift no
+  longer produces; caught by the ship reproducibility gate.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
+
 ## 0.1.499-dev (2026-08-08) -- world-resident javelin bomb fenced on hot join; damage-profile sender reads the committed gate (#424 #423) [untested]
 
 Both axes were already largely live. This entry states per axis what shipped before, what this build adds, and what window remains.

@@ -155,6 +155,7 @@ local suites = {
     "test_cwv_anim_picker",
     "test_cwv_acquisition",
     "test_cwv_javelin_pickup",
+    "test_cwv_thrown_wire_policy",
     "test_cwv_damage_profile_wire",
     "test_cwv_cosmetic_skin_wire",
     "test_cwv_profile_package_wire",

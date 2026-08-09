@@ -10,6 +10,8 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_old_musket_wire.lua",
     "_cwv_old_musket_preview_pose.lua",
 	"_cwv_javelin_gate.lua",
+	"_cwv_thrown_wire_policy.lua",
+	"_cwv_exact_wire_runtime.lua",
 	"_cwv_identity_peer_pull.lua",
 	"_cwv_transform_evidence.lua",
 	"_cwv_crowbill_transform_runtime.lua",
