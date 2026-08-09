@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.498-dev"
+local MOD_VERSION = "0.1.499-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -4826,6 +4826,7 @@ do
 			end
 		end
 		mod:info("Ejected '%s' from the grenade pickup pool (peer-parity: a peer lacks cwv)", _TJB_PICKUP_KEY)
+		-- #424: an already-spawned bomb is retracted by the javelin gate's on_disable.
 	end
 
 	-- Registration (UNCONDITIONAL when the feature is on -- class-31: registration
@@ -4855,6 +4856,8 @@ do
 	-- ItemMasterList registration above stays unconditional (registration parity
 	-- is never gated); only this spawn/pool FEATURE gates.
 	_om._TJB_REGISTRATION_UNGATED_MARKER = "cwv-tjb-networklookup-registration-never-peer-gated"
+	-- #424: enrol the bomb in the javelin gate's world sweep (install() ran above).
+	_om.javelin_gate.fence_pickup(_TJB_PICKUP_KEY)
 	if mod._cwv_peer_parity and type(mod._cwv_peer_parity.register_gated_feature) == "function" then
 		mod._cwv_peer_parity:register_gated_feature("cwv_tuskgor_javelin_bomb_pool", {
 			label      = "cwv_gated_javelin_bomb_pool",
@@ -7157,8 +7160,9 @@ do
 	local function _wire_parity_live()
 		local pp = mod._cwv_peer_parity
 		if not pp then return false end   -- fail-safe: no beacon = assume mixed lobby
-		local ok, res = pcall(pp.all_peers_have, pp)
-		return ok and res == true
+		-- #423: COMMITTED state, not the roster classifier: it carries SETTLE_ENABLE and every _force_disable edge (_lib_peer_parity.lua:619-621).
+		local ok, res = pcall(pp.applied_state, pp)
+		return ok and res == "enabled"
 	end
 	-- Gameplay damage-profile fallback still needs this gate. Appearance does not:
 	-- #741 forbids numeric CWV skin ids on the vanilla wire in every lobby shape.

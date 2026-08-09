@@ -105,6 +105,30 @@ function M.begin_ref_shadow(refs, custom_key, safe_key, safe_registered)
     end, true
 end
 
+-- #424: every cwv pickup key whose already-spawned world unit must be removed
+-- before a non-cwv peer can extract its game object. A pickup that is merely
+-- LYING IN THE LEVEL is a crash for that peer even though no cwv RPC ever ran:
+-- PickupSystem._spawn_pickup routes through spawn_network_unit
+-- (pickup_system.lua:1278), the pickup game object carries the name as a
+-- NetworkLookup.pickup_names INDEX (game_object_initializers_extractors.lua:880),
+-- and the joining client decodes that index STRICTLY - no rawget - at
+-- game_object_initializers_extractors.lua:3411.
+--
+-- install() seeds the two thrown-javelin recovery pickups. The grenade-slot
+-- bomb pickup registers itself through fence_pickup() because its entry block
+-- loads AFTER install(), and pool ejection alone only stops future rolls.
+M.fenced_pickup_names = {}
+
+function M.fence_pickup(pickup_name)
+    if type(pickup_name) ~= "string" or pickup_name == "" then return false end
+    local list = M.fenced_pickup_names
+    for index = 1, #list do
+        if list[index] == pickup_name then return false end
+    end
+    list[#list + 1] = pickup_name
+    return true
+end
+
 -- Own every live hook for the mixed-lobby javelin boundary. Keeping the hook
 -- graph here prevents the already-large CWV entry chunk from regrowing while
 -- leaving the pure identity/ref-shadow helpers above independently testable.
@@ -174,6 +198,9 @@ function M.install(ctx)
     end)
     om._cwv424_actionutils_sender_guard_installed = true
 
+    M.fence_pickup(pickup_key)
+    M.fence_pickup(link_pickup_key)
+
     local function remove_live_recovery_pickups()
         local state = Managers and Managers.state
         local entity = state and state.entity
@@ -182,8 +209,16 @@ function M.install(ctx)
         local ok, removed_or_err = pcall(function()
             local pickup_system = entity:system("pickup_system")
             if not pickup_system then return 0 end
+            -- Server-only. Retracting a spawned pickup is a host action: the unit
+            -- is a server-owned network unit and PickupSystem refuses even the
+            -- spawn side on a client (pickup_system.lua:1209-1213), so a client
+            -- destroying it locally would desync the session rather than protect
+            -- anyone. Every caller before the gate-close on_disable was already
+            -- host-side (the set_peer_synchronizing fence); this keeps that true
+            -- now that a parity transition can reach here on any peer.
+            if not pickup_system.is_server then return 0 end
             local removed = 0
-            for _, pickup_name in ipairs({ pickup_key, link_pickup_key }) do
+            for _, pickup_name in ipairs(M.fenced_pickup_names) do
                 local units = pickup_system:get_pickups_by_type(pickup_name) or {}
                 local snapshot = {}
                 for _, unit in pairs(units) do snapshot[#snapshot + 1] = unit end
@@ -206,8 +241,21 @@ function M.install(ctx)
     if pp and type(pp.register_gated_feature) == "function" then
         pp:register_gated_feature("cwv_tuskgor_javelin_throw", {
             label = "cwv_gated_tuskgor_javelin_throw",
+            -- #424: closing the gate stops new emissions but cannot retract a cwv
+            -- pickup ALREADY lying in the level, and the grenade-slot bomb's own
+            -- gated feature can only eject the spawn pool (future rolls). Sweep
+            -- every fenced key on the same transition that closes the gate, so the
+            -- world is clean regardless of which seam detected the missing peer -
+            -- the set_peer_synchronizing fence below is only one of them. Bounded:
+            -- one row per gate close.
+            on_disable = function()
+                local swept, detail = remove_live_recovery_pickups()
+                pcall(printf, "[cwv:424] gate closed; world sweep ok=%s removed=%s fenced=%d",
+                    tostring(swept), tostring(detail), #M.fenced_pickup_names)
+            end,
         })
         om._cwv424_feature_registered = true
+        om._cwv424_gate_close_sweep_installed = true
     end
 
     mod:hook("TransientPackageLoader", "hot_join_sync", function(func, self, peer_id)
@@ -258,8 +306,11 @@ function M.install(ctx)
                     return
                 end
                 rejected_peers[peer_id] = nil
-                pcall(printf, "[cwv:424] hot-join preflight peer=%s gate=disabled removed_pickups=%d",
-                    tostring(peer_id), detail)
+                -- fenced= proves WHICH keys the sweep covered: a log line reading
+                -- fenced=2 means the grenade-slot bomb never enrolled and a
+                -- world-resident bomb pickup can still CTD this joiner (#424).
+                pcall(printf, "[cwv:424] hot-join preflight peer=%s gate=disabled removed_pickups=%d fenced=%d",
+                    tostring(peer_id), detail, #M.fenced_pickup_names)
             end
         end
         return func(self, peer_id)

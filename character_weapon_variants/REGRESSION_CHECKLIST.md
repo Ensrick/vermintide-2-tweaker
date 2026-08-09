@@ -88,10 +88,24 @@ Last updated: 2026-07-19.
 
 | Field | Check |
 |---|---|
-| Fix version(s) | CWV v0.1.380-dev; hardened v0.1.435-dev |
+| Fix version(s) | CWV v0.1.380-dev; hardened v0.1.435-dev; committed-state read v0.1.499-dev |
 | Repro | A non-CWV player hosts. A CWV client lands melee and ranged hits with Imperial Longsword and Old Musket. Repeat with both peers on CWV. |
-| Expected post-fix | Mixed or unknown parity sends only the recorded vanilla donor id, then vanilla `default` as a fallback; if neither is provable the unsafe hit is suppressed. A `cwv_*` damage-profile index never reaches the non-CWV host. Positive CWV parity and the authoritative server path retain tuned CWV damage. |
-| Detection | Offline `test_cwv_damage_profile_wire.lua` passes all six policy cases; `/cwv_regression_test` passes `cwv_wire_safe_damage_profile_gate`; mixed-lobby substitutions emit one bounded `[cwv:423]` row per profile and the host remains connected. |
+| Expected post-fix | Mixed or unknown parity sends only the recorded vanilla donor id, then vanilla `default` as a fallback; if neither is provable the unsafe hit is suppressed. A `cwv_*` damage-profile index never reaches the non-CWV host. Positive CWV parity and the authoritative server path retain tuned CWV damage. The sender follows the COMMITTED gate state (`applied_state`), so it degrades on exactly the edges the thrown-pickup sender and wt's `_wt431_profiles_allowed` do - including the enable-settle window and every force-disable. |
+| Detection | Offline `test_cwv_damage_profile_wire.lua` passes all policy cases plus the divergent-beacon fixture (classifier says all-acked, committed state still disabled -> must still substitute); `/cwv_regression_test` passes `cwv_wire_safe_damage_profile_gate`; mixed-lobby substitutions emit one bounded `[cwv:423]` row per profile and the host remains connected. |
+| Known bypass (not reachable) | `rpc_request_spawn_drones` -> `rpc_spawn_drones` forwards a client-supplied profile id unvalidated (`projectile_system.lua:1287`, `:1335`, strict decode `:1367`). CWV has no drone / Deus power-up surface, so no gate is shipped for it. Re-check if CWV ever registers a Deus power-up. |
+
+---
+
+## #424 Thrown-variant NetworkLookup indices never reach a non-CWV peer
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.352-dev onward (senders, hot-join fence); world-resident bomb sweep v0.1.499-dev |
+| Repro (sender axes) | A CWV client throws the Tuskgor Javelin and the grenade-slot Tuskgor Javelin in a lobby whose host lacks CWV; repeat with the javelin sticking in a wall, in an enemy, and landing on the ground. |
+| Repro (world axis, the v0.1.499-dev gap) | All-CWV lobby. Host plays until the grenade pool rolls a Tuskgor Javelin bomb pickup and LEAVES IT ON THE GROUND. A player WITHOUT CWV then joins mid-mission. |
+| Expected post-fix | No `cwv_*` `pickup_names`, `husks`, or `projectile_units` index reaches a peer that lacks CWV, by any route. Throws are refused before the encode while the gate is closed; impact pickups degrade to the vanilla throwing-axe keys; the in-flight mesh degrades to the vanilla javelin unconditionally. On the world axis the joining player loads in without a crash: the bomb pickup is removed from the level before the join completes, not merely removed from the spawn pool. |
+| Detection | `/cwv_regression_test` passes `cwv_wire_safe_thrown_variant_installed`, which now fails if the bomb key or any mapped thrown pickup is absent from the fence registry or the gate-close sweep is unwired. Offline `test_cwv_javelin_pickup.lua` covers registry idempotence, the enrolment, the sweep-on-gate-close ordering, and the server-only guard. Log: `[cwv:424] hot-join preflight ... fenced=N` must report the full fenced count (`fenced=2` means the bomb never enrolled), and each gate close emits one `[cwv:424] gate closed; world sweep ok=... removed=... fenced=...`. |
+| Residual | Sweep and fence are host-side by construction (a client cannot retract a server-owned pickup unit). A bomb spawning between the sweep and the joiner's game-object extraction is theoretically reachable; a javelin in flight at join time is covered on the husk axis but is not despawned. |
 
 ---
 

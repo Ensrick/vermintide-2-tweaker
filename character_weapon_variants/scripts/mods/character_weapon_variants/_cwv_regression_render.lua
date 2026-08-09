@@ -540,6 +540,34 @@ _rt_register("cwv_wire_safe_thrown_variant_installed", function()
             or type(_om.javelin_gate.should_block) ~= "function" then
         return "Tuskgor Javelin pure gate policy missing"
     end
+    -- Hot-join world sweep coverage. A cwv pickup that is merely LYING IN THE
+    -- LEVEL crashes a joining non-cwv peer with no cwv RPC involved: the pickup
+    -- game object carries a NetworkLookup.pickup_names INDEX and the joiner
+    -- decodes it strictly at game_object_initializers_extractors.lua:3411. The
+    -- grenade-slot bomb is the one that pool ejection alone cannot retract, so
+    -- assert it is enrolled alongside the two thrown-javelin recovery pickups.
+    local fenced = _om.javelin_gate.fenced_pickup_names
+    if type(fenced) ~= "table" or #fenced == 0 then
+        return "hot-join pickup fence registry empty (world-resident cwv pickups would reach a joiner)"
+    end
+    local fenced_set = {}
+    for i = 1, #fenced do fenced_set[fenced[i]] = true end
+    for _, required in ipairs({ "cwv_tuskgor_javelin_bomb" }) do
+        if not fenced_set[required] then
+            return string.format("%s not enrolled in the hot-join pickup fence (issue 424 world-resident pickup CTD)", required)
+        end
+    end
+    for cwv_key in pairs(_om._tj_pickup_wire_map or {}) do
+        if not fenced_set[cwv_key] then
+            return string.format("%s not enrolled in the hot-join pickup fence", tostring(cwv_key))
+        end
+    end
+    if type(_om._cwv424_remove_live_recovery_pickups) ~= "function" then
+        return "hot-join world sweep not exposed"
+    end
+    if _om._cwv424_gate_close_sweep_installed ~= true then
+        return "gate-close world sweep not installed (pool eject alone cannot retract a spawned bomb)"
+    end
     local fake_cwv = { item_data = { mod_data = { backend_id = "cwv_es_javelin_001" } } }
     if not _om.javelin_gate.should_block(fake_cwv, "disabled") then
         return "unconfirmed parity did not disable a concrete Tuskgor Javelin"
@@ -655,11 +683,31 @@ _rt_register("cwv_wire_safe_damage_profile_gate", function()
     end
     if cwv_id then
         local real_pp = mod._cwv_peer_parity
-        mod._cwv_peer_parity = { all_peers_have = function() return false end }
+        -- Both accessors are stubbed on every fixture: the sender reads the
+        -- COMMITTED applied_state(), and a fixture that supplied only the raw
+        -- classifier would pass for the wrong reason (pcall on the missing
+        -- accessor fails safe to "substitute", masking a real regression).
+        mod._cwv_peer_parity = {
+            all_peers_have = function() return false end,
+            applied_state  = function() return "disabled" end,
+        }
         local unconfirmed_client = decide(false, cwv_id)
         local host_authoritative = decide(true,  cwv_id)
-        mod._cwv_peer_parity = { all_peers_have = function() return true end }
+        mod._cwv_peer_parity = {
+            all_peers_have = function() return true end,
+            applied_state  = function() return "enabled" end,
+        }
         local confirmed_client = decide(false, cwv_id)
+        -- The divergent fixture is the point of the check: the roster classifier
+        -- answers "all acked" while the gate has NOT committed. That is the live
+        -- shape during SETTLE_ENABLE (_lib_peer_parity.lua:619-621) and after the
+        -- synchronous hot-join fence force-disables. The sender must follow the
+        -- committed state and keep substituting.
+        mod._cwv_peer_parity = {
+            all_peers_have = function() return true end,
+            applied_state  = function() return "disabled" end,
+        }
+        local settling_client = decide(false, cwv_id)
         mod._cwv_peer_parity = real_pp
         if unconfirmed_client ~= src_id then
             return "parity-unconfirmed client did not degrade the cwv profile to its vanilla source (issue 423 CTD shape live)"
@@ -669,6 +717,9 @@ _rt_register("cwv_wire_safe_damage_profile_gate", function()
         end
         if host_authoritative ~= cwv_id then
             return "is_server path substituted (host is authoritative; rpc_attack_hit runs in-process, no foreign decode)"
+        end
+        if settling_client ~= src_id then
+            return "sender followed the raw roster classifier, not the committed parity state (issue 423 settle / hot-join window)"
         end
     end
 
