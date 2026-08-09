@@ -359,6 +359,7 @@ local suites = {
     "test_character_dialogue",
     "test_appearance_descriptor",
     "test_appearance_census",
+    "test_appearance_name_authority",
     "test_resource_residency_census",
 }
 
