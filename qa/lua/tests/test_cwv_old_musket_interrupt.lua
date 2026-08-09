@@ -73,11 +73,9 @@ return function(H, repo_root)
     end)
 
     H.test("CWV issue 412 wires both Old Musket templates without new transport", function()
-        local source_path = repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
-        local file = assert(io.open(source_path, "rb"))
-        local source = file:read("*a")
-        file:close()
+        -- Template construction moved to _cwv_musket_runtime.lua (0.1.503-dev);
+        -- the entry keeps the interrupt-policy dofile. Scan both.
+        local source = require("cwv_source").combined(repo_root)
         local _, calls = source:gsub('mod%._cwv_old_musket_interrupt%.install%(template, "action_three"%)', "")
         H.equal(calls, 2)
         H.truthy(source:find('mod._cwv_old_musket_interrupt = mod:dofile(', 1, true))

@@ -7,6 +7,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_core_templates.lua",
     "_cwv_skin_registry.lua",
     "_cwv_illusion_families.lua",
+    "_cwv_musket_runtime.lua",
     "_cwv_old_musket_wire.lua",
     "_cwv_old_musket_preview_pose.lua",
 	"_cwv_javelin_gate.lua",
