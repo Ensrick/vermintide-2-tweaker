@@ -1,5 +1,46 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.319-dev (2026-08-08) -- modded boons/miracles now READ as gated, not just behave as gated (#426) [untested]
+
+Audit of the #426 wire-safety axis (program issue 1158, doctrine issue 371,
+siblings 425/431/422). The runtime gate itself was already source-complete and
+is unchanged by this release; what was missing was the presentation half that
+the sibling axes ship.
+
+- **Already in place, re-verified this pass, NOT re-implemented:** the
+  peer-parity beacon and its six gate surfaces (boon pool eject/inject, the
+  grant choke point in `add_power_ups`, the starting-boon filter, miracle
+  degrade-to-vanilla, the debounced parity-loss strip, and the synchronous
+  `hot_join_sync` fence) have shipped since 0.7.240-dev / 0.7.291-dev. No
+  ct-owned `NetworkLookup` index reaches a peer that lacks the mod.
+- **New:** the saved rows that control modded content now read as unavailable
+  while the gate is closed, instead of looking actionable and silently doing
+  nothing. Nine rows are covered: the boon-rework umbrella, the five trait
+  boons, and the three miracles. Registration is a bounded retry on the
+  existing tick, because mod load order is not a dependency contract.
+- Gameplay safety is unchanged whether or not the Mod Tweaker is installed.
+  The bridge is presentation only; it cannot open the gate, and the wire-safety
+  check does not consult it.
+- Regression coverage: one new in-game check (`issue426_runtime_gate_presentation`,
+  which also fails if a gated row stops being a live widget) and two offline
+  tests that drive the shipped policy module directly, including that a new
+  trait boon or miracle added without a gated row fails the suite.
+
+**Edges: what is fenced and what is not.** A peer joining while modded boons are
+live is fenced synchronously before native sync, and a peer that never
+acknowledges gets the full state strip. Losing parity in any other way still
+carries the deliberate 15-second debounce before the destructive strip runs, so
+a brief window remains where already-granted content exists but cannot be newly
+emitted; that debounce is load-bearing (a shorter one stripped a real ct
+friend's boons on a single lost announce) and is not changed here.
+
+**Known residual, unchanged and out of scope for this issue.** The beacon proves
+a peer runs ct, not that it registered the same catalog. Two ct peers on
+different builds can therefore both acknowledge while their boon indices
+disagree. The shared exact-catalog mode that closes this exists but is
+authorized for Career Tweaker only, enforced by a QA test; ct deliberately does
+not opt in here (see 0.7.318-dev).
+
 ## 0.7.318-dev (2026-08-06) -- shared peer-parity exact-mode capability (#1158)
 
 - Synchronized the shared peer-parity library with its optional exact catalog,

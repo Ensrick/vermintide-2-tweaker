@@ -136,6 +136,7 @@ local suites = {
     "test_wt_cwv_independence",
     "test_wt_axe_shield_heavy_chain",
     "test_wt_native_ownership",
+    "test_wt_loadout_cache",
     "test_wt_ranger_dual_preview",
     "test_cwv_remote_audio",
     "test_cwv_remote_identity",

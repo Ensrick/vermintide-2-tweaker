@@ -214,6 +214,17 @@ do
 	}
 	_om._cwv_husk_retained_diag = _husk_retained_diag
 
+	-- (#399 candidate B) Husk career lookup, two sources in priority order:
+	--   1. `career_system` extension `:career_name()` -- the live authority.
+	--   2. `inventory_system._career_name` -- the husk inventory extension caches
+	--      the career at init (simple_husk_inventory_extension.lua:39/52, set from
+	--      `player:career_name()` BEFORE extensions_ready runs our hooks), so it is
+	--      populated on the exact seam the husk ammo/mesh adapters run on even when
+	--      the career extension is not yet resolvable on this peer.
+	-- A nil career fails the (base, career) strip gate, which is how #399's
+	-- inherited torpedo survived on the remote view: candidate B of the two live
+	-- holes. Both reads use ScriptUnit.has_extension (a pure Entities[unit] table
+	-- lookup, script_unit.lua:72 -> local_extension) and stay pcall-safe.
 	local function _husk_career_name(owner_unit_3p)
 		if not owner_unit_3p then return nil end
 		local name
@@ -222,8 +233,20 @@ do
 				name = ScriptUnit.extension(owner_unit_3p, "career_system"):career_name()
 			end
 		end)
+		if type(name) ~= "string" or name == "" then
+			name = nil
+			pcall(function()
+				local inv = ScriptUnit.has_extension(owner_unit_3p, "inventory_system")
+				local cached = inv and inv._career_name
+				if type(cached) == "string" and cached ~= "" then name = cached end
+			end)
+		end
 		return name
 	end
+	-- Exposed so the husk ammo arms resolve the career through one swappable
+	-- seam (the issue399_outrider_husk_ammo_adapter regression drives it) and so
+	-- a future module can reuse the hardened lookup instead of re-deriving it.
+	_om._husk_career_name = _husk_career_name
 
 	-- #474/#660 atomic hand-selection admission. Preselection runs before
 	-- vanilla decides which hand spawns exist, so writing an unspawnable custom
@@ -605,6 +628,29 @@ do
 	--      CWV variant). This is descriptor evidence, NOT a bare `item_key` guess.
 	-- A bare base-key match alone is never sufficient (a real dwarf Trollhammer
 	-- shares the base name on the husk).
+	--
+	-- DESCRIPTOR-STATE POLICY (#399 fix, 2026-08-07). The gate used to decline on
+	-- EVERY non-exact/non-none state, which put the ammo concern behind the same
+	-- switch as the mesh re-key and the #398 clone template: one descriptor
+	-- decline collapsed all of them, and the husk fell back to complete vanilla
+	-- dr_deus_01 resolution -- the reported "no animation, no model, torpedo
+	-- sticking out" triple. The ammo decision does not need the descriptor:
+	--   * "native"                -> HARD DECLINE. The sender explicitly proved a
+	--                                native wielder; #475 Invariant 1 says never
+	--                                touch a genuine vanilla ammo weapon.
+	--   * "unavailable"/"stale_base" -> FALL THROUGH to the base+career fallback.
+	--                                Absent/mismatched provider evidence is no
+	--                                evidence, and the fallback carries its own
+	--                                positive proof (a career that cannot natively
+	--                                wield the ammo base).
+	--   * "exact"                 -> the resolved def decides (strip iff no_ammo_unit).
+	--   * "none"                  -> base+career fallback (unchanged).
+	-- Safety: `_no_ammo_careers_by_base` is career-scoped and the two contributing
+	-- bases are disjoint from their vanilla can_wield sets -- dr_deus_01 admits
+	-- only dr_ironbreaker (item_master_list_morris.lua:23-25) and wh_fencing_sword
+	-- only wh_bountyhunter/wh_captain/wh_zealot
+	-- (item_master_list_exported.lua:7574-7578), while both no_ammo_unit defs list
+	-- es_* careers only. A real Bardin Trollhammer can never enter the strip set.
 	_om._husk_strip_cwv_ammo = function(item_data, owner_unit_3p, ammo_unit_3p, slot_name)
 		if not (item_data and ammo_unit_3p) then return false end
 		local base_name = item_data.name
@@ -615,9 +661,8 @@ do
 		if _om._husk_identity_descriptor then
 			exact, identity_state = _om._husk_identity_descriptor(owner_unit_3p, slot_name, base_name)
 		end
-		if identity_state and identity_state ~= "none" and identity_state ~= "exact" then
-			-- Sender proved this slot native, or its exact descriptor is
-			-- unavailable locally: never strip on the ambiguous base+career guess.
+		if identity_state == "native" then
+			-- Sender proved this slot native: never strip a real ammo weapon.
 			return false
 		end
 		if exact then
@@ -634,7 +679,7 @@ do
 			-- (2) skinless base+career fallback.
 			local careers = base_name and _no_ammo_careers_by_base[base_name]
 			if not careers then return false end
-			career = _husk_career_name(owner_unit_3p)
+			career = (_om._husk_career_name or _husk_career_name)(owner_unit_3p)
 			if not (career and careers[career]) then
 				-- The base IS a no_ammo variant's base (careers table present), but
 				-- the wielder's career isn't in the strip set. Two possibilities: a
@@ -650,8 +695,12 @@ do
 			why = "base_career"
 		end
 
-		local alive = false
-		pcall(function() alive = Unit.alive(ammo_unit_3p) and true or false end)
+		-- `_is_unit` is a typed predicate (userdata + Unit.alive, _cwv_peer_resolver
+		-- .lua:9-14), so a non-unit handle can never reach the engine calls below.
+		-- The strip DECISION still reports true: the caller nils its captured
+		-- ammo return either way, and the regression drives this arm with a
+		-- sentinel handle.
+		local alive = _is_unit(ammo_unit_3p)
 		if alive then
 			pcall(Unit.set_unit_visibility, ammo_unit_3p, false)
 			if Managers and Managers.state and Managers.state.unit_spawner then
@@ -1002,6 +1051,11 @@ do
 	-- second; explicit-native / unavailable-provider evidence declines. The
 	-- strip stays installed as the belt-and-suspenders net for a spawn that
 	-- reached vanilla before identity arrived.
+	--
+	-- Same DESCRIPTOR-STATE POLICY as the strip arm above (#399 fix, 2026-08-07):
+	-- only an explicit "native" declines; "unavailable" and "stale_base" fall
+	-- through to the career-scoped base+career fallback. Read that arm's policy
+	-- block for the disjointness argument that keeps a real Trollhammer safe.
 	_om._husk_ammo_nil_item_units = function(item_data, item_units, owner_unit_3p, slot_name)
 		if not (item_data and item_units) then return false end
 		if item_units.ammo_unit == nil and item_units.ammo_unit_3p == nil then return false end
@@ -1011,7 +1065,7 @@ do
 		if _om._husk_identity_descriptor then
 			exact, identity_state = _om._husk_identity_descriptor(owner_unit_3p, slot_name, base_name)
 		end
-		if identity_state and identity_state ~= "none" and identity_state ~= "exact" then
+		if identity_state == "native" then
 			return false
 		end
 		if exact then
@@ -1023,8 +1077,17 @@ do
 		if not why then
 			local careers = base_name and _no_ammo_careers_by_base[base_name]
 			if not careers then return false end
-			local career = _husk_career_name(owner_unit_3p)
-			if not (career and careers[career]) then return false end
+			local career = (_om._husk_career_name or _husk_career_name)(owner_unit_3p)
+			if not (career and careers[career]) then
+				-- Mirrors the post-spawn arm's SKIP needle so BOTH ammo arms are
+				-- diagnosable from one log. A career=nil line here is candidate B
+				-- of #399 (husk career-lookup miss); a real career that simply is
+				-- not in the strip set is the correct native-wielder no-op.
+				_husk_log_once("399_prenil_career_miss:" .. tostring(base_name) .. ":" .. tostring(career),
+					"[cwv husk-ammo-nil] SKIP: base=%s is a no_ammo variant base but career=%s not in strip set (state=%s) -- native wielder OR husk career-lookup miss (issue 399 diag)",
+					tostring(base_name), tostring(career), tostring(identity_state))
+				return false
+			end
 			why = "base_career"
 		end
 		item_units.ammo_unit = nil
@@ -1133,10 +1196,18 @@ do
 					.. tostring(wield_ctx.hand_selection_source),
 				"[cwv:474/660] lifecycle=husk_wield adapter=spawn deferred source=%s slot=%s base_preserved=true -- hand-selection transaction declined",
 				tostring(wield_ctx.hand_selection_source), tostring(slot_name))
-			-- Preserve the COMPLETE vanilla transaction: no per-hand re-key,
-			-- ammo strip, or clone-template override after an atomic preselection
-			-- residency miss. Keep the #478 crash floor, however: an inherited
-			-- cross-character base can itself be unavailable on this peer.
+			-- Preserve the vanilla HAND SELECTION: no per-hand re-key or
+			-- clone-template override after an atomic preselection residency miss.
+			-- (#399) The ammo decision is NOT part of that transaction -- it
+			-- chooses whether an inherited torpedo attaches, never which hand
+			-- spawns -- so it runs here too. Without this the deferred branch
+			-- returned at the crash floor / tail below and left the inherited
+			-- dr_deus_01 torpedo bolted to the Outrider on every remote view.
+			if _om._husk_ammo_nil_item_units then
+				_om._husk_ammo_nil_item_units(item_data, item_units, owner_unit_3p, slot_name)
+			end
+			-- Keep the #478 crash floor: an inherited cross-character base can
+			-- itself be unavailable on this peer.
 			local field = (hand == "right") and "right_hand_unit" or "left_hand_unit"
 			local base_unit = item_units and item_units[field]
 			if type(base_unit) == "string" and base_unit ~= ""

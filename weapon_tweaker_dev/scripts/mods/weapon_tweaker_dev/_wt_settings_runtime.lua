@@ -7,7 +7,9 @@ function M.install(c)
     mod.on_setting_changed = function(setting_id)
         if c.rework_runtime:is_batching() then return end
         if c.rework_runtime:on_master_changed(setting_id) then return end
-        if setting_id and setting_id:find("^wtmaster_") then
+        if setting_id == "enable_weapon_backend_hooks" then
+            c.backend.clear_loadout_cache("backend-hook-setting-changed")
+        elseif setting_id and setting_id:find("^wtmaster_") then
             c.master_toggles.on_master_changed(mod, setting_id)
             c.apply_weapon_unlocks()
             c.patch_career_actions()
@@ -45,6 +47,12 @@ function M.install(c)
 
     -- #1002: N silent persisted writes, master reconciliation, one live apply.
     mod.on_settings_batch_changed = function(setting_ids)
+        for _, setting_id in ipairs(setting_ids or {}) do
+            if setting_id == "enable_weapon_backend_hooks" then
+                c.backend.clear_loadout_cache("backend-hook-setting-batch")
+                break
+            end
+        end
         c.master_toggles.reconcile_batch(mod, setting_ids)
         if not c.rework_runtime:prepare_batch(setting_ids) then
             error("WT rework master batch reconciliation failed")
