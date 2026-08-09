@@ -19,6 +19,9 @@
   instances so a fast same-id rejoin can never reuse a stale ack.
 - Sender-side substitution floors remain unconditional (BUG_CLASSES 31).
   Fourteen planted regressions locked by the new offline suites (2,125 tests).
+- Retires the stale tracked sibling bundle the exact-wire chunk shift no
+  longer produces; caught by the ship reproducibility gate.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
 
 ## 0.1.499-dev (2026-08-08) -- world-resident javelin bomb fenced on hot join; damage-profile sender reads the committed gate (#424 #423) [untested]
 
