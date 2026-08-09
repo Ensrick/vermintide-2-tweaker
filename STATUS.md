@@ -45,7 +45,7 @@
 - **User in-game verify queue** (full Steam restart FIRST): cwv 0.1.375-dev 2-player javelin+bomb with a vanilla client (`/cwv_regression_test`, `[cwv:424]` lines), cim v0.8.34 public equip, cosmetics ct_* illusion, woc Blightreaper, ct v0.7.131-beta kill-heal client, mp `/mp_regression_test`, crt/gut suites.
 - **User decisions:** #433 (dead BR code: archive-and-delete vs keep-dormant), #435 (dcp portraits career-scoped - intended?).
 - **Wave 2b (GATED on the cwv beacon verify):** wire `_lib_peer_parity` into crt #425, ct #426, et #430, wt #431, cwv damage axis #423 + gut grey-out surface.
-- **#427:** migrate 16 warn-chat sites to printf (worklist = `pwsh qa/check_logging.ps1`).
+- **#427:** dev-side migration COMPLETE (worklist = `pwsh qa/check_logging.ps1`). The 3 remaining warn-chat sites are stable-promotion debt only - `chaos_wastes_tweaker`, `general_tweaker`, `verminious_dreams_lighting` - and need a user-named stable version before they can be ported (dev twins are already console-only). `check_logging` now also catches self-tagged `[<mod>:dbg]` warnings outside a helper, the shape that hid two cosmetics sites.
 - **PC-B catch-up deploy** when reachable.
 
 ## 📌 2026-07-01 SESSION — repo-wide settings-menu reorg (7 parallel agents, 8 mods shipped)

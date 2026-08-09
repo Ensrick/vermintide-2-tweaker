@@ -1,5 +1,11 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.331-dev (2026-08-09) -- debug alerts stay out of chat (#427)
+
+- The gut debug alert helper emitted nothing with mod logging off (mod:debug
+  is gated); it now emits via engine printf so diagnostic evidence reaches the
+  console log (#427).
+
 ## 0.2.330-dev (2026-08-03) -- Mod Tweaker gear-parent accent hardened to one policy site (#717) [verify-fix][untested]
 
 - The #611 warm-tan accent for enabled gear-parent and master rows now lives in

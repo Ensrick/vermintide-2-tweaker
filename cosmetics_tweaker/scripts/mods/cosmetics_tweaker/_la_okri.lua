@@ -57,6 +57,16 @@ local M = {}
 
 local SETTING = "la_disable_okri_challenges"
 
+-- Byte-identical copy of the entry's `_dbg_alert` (PROJECT_STANDARDS.md section
+-- 3.6), so this module's unexpected-path diagnostics stay LOG-ONLY via
+-- pcall-guarded engine printf (#427/issue 240: mod:warning posts to CHAT under
+-- VMF defaults; printf survives mod-logging-OFF, never chat).
+local function _dbg_alert(fmt, ...)
+    if not pcall(printf, "[cosmetics:dbg] " .. fmt, ...) then
+        pcall(printf, "[cosmetics:dbg] (alert format error: %s)", tostring(fmt))
+    end
+end
+
 -- LA's achievement keys are `main_quest` plus the `sub_quest_*` family. Detect
 -- by key shape so we stay version-independent (the installed LA may register a
 -- different subset than the reference clone).
@@ -138,7 +148,7 @@ mod:hook("AchievementManager", "outline", function(func, self)
     local ok, result = pcall(_build_filtered, outline)
     if ok and result then return result, err end
     if not ok then
-        mod:warning("[cosmetics:dbg] [la-okri] outline filter errored: %s", tostring(result))
+        _dbg_alert("[la-okri] outline filter errored: %s", tostring(result))
     end
     return outline, err
 end)
@@ -185,7 +195,7 @@ function M.scrub()
             if ok then
                 n = n + 1
             else
-                mod:warning("[cosmetics:dbg] [la-okri] inert mutation failed for %s: %s", tostring(key), tostring(err))
+                _dbg_alert("[la-okri] inert mutation failed for %s: %s", tostring(key), tostring(err))
             end
         end
     end

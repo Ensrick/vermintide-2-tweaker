@@ -92,6 +92,12 @@ $rxWarning   = [regex]'\bmod:warning\s*\('
 $rxModVer    = [regex]'\bMOD_VERSION\b'
 $rxHookAny   = [regex]'\bmod:hook\w*\s*\('
 $rxHookUpd   = [regex]'\bmod:hook\w*\s*\([^)]*["'']update["'']'
+# A mod:warning whose message literal opens with a debug tag ("[cosmetics:dbg] ...",
+# "[dbg] ..."). #427: helper-shaped detection alone missed direct prefix-tagged
+# warnings in sibling modules (cosmetics_tweaker\_la_okri.lua carried two for five
+# audit passes). The author's own :dbg tag is the intent signal -- it is a
+# diagnostic, so it must not reach chat, whatever scope it sits in.
+$rxWarnDbgTag = [regex]'\bmod:warning\s*\(\s*["'']\s*\[[A-Za-z_][\w\-]*:dbg\]|\bmod:warning\s*\(\s*["'']\s*\[dbg\]'
 
 # escape comments (accepted on the flagged line OR the line directly above)
 $rxAllowEcho = [regex]'--\s*allow-echo\s*:'
@@ -285,6 +291,16 @@ function Scan-LoggingFile {
                 $findings += [pscustomobject]@{ File = $Path; Line = $i + 1; Category = 'warn-chat'; Text = $raw.Trim() }
             }
         }
+        # (d) self-tagged debug warning ("[<mod>:dbg] ...") ANYWHERE, not just inside a
+        #     helper -- the (c) rule only sees helper-shaped sites. Skip when (b) or (c)
+        #     already flagged this line so a site is never counted twice.
+        # `$code` has string interiors blanked (see Get-CodePart), so the tag is only
+        # visible in `$raw`; require the CALL in $code so a commented-out line is inert.
+        if ($rxWarning.IsMatch($code) -and $rxWarnDbgTag.IsMatch($raw) -and ($null -eq $alertFloor) -and ($null -eq $updateFloor)) {
+            if (-not ($rxAllowWarn.IsMatch($raw) -or $rxAllowWarn.IsMatch($prev))) {
+                $findings += [pscustomobject]@{ File = $Path; Line = $i + 1; Category = 'warn-chat'; Text = $raw.Trim() }
+            }
+        }
 
         # ---- apply block-depth delta, then close any scope that has ended ----
         $depth += (Get-Delta -Code $code)
@@ -332,6 +348,7 @@ function Invoke-SelfTest {
         @{ Path = "logging_echo_bad.lua";     Echo = 2; Frame = 0; Warn = 0; Desc = "hook-body + on_setting_changed echo flagged; command / dev-banner / annotated echo suppressed" },
         @{ Path = "logging_perframe_bad.lua"; Echo = 0; Frame = 2; Warn = 0; Desc = "mod:info + mod:warning in update() flagged; annotated one suppressed" },
         @{ Path = "logging_warn_helper_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Desc = "mod:warning in _dbg_alert flagged; genuine-guard warning + annotated one suppressed" },
+        @{ Path = "logging_warn_dbgtag_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Desc = "self-tagged [x:dbg] mod:warning outside any helper flagged; annotated one + untagged player-facing warning suppressed" },
         @{ Path = "logging_string_dash.lua";  Echo = 1; Frame = 0; Warn = 0; Desc = "`--`-in-string with a `while` keyword must not desync scope; command echoes stay clean" },
         @{ Path = "logging_clean.lua";        Echo = 0; Frame = 0; Warn = 0; Desc = "all sanctioned forms — zero findings" }
     )

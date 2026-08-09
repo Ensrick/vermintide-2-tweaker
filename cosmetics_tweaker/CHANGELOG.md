@@ -1,5 +1,12 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.194-dev (2026-08-09) -- debug alerts stay out of chat (#427)
+
+- Two Loremaster's Armoury debug alerts in the Okri's-book filter no longer
+  post to chat: the self-tagged outline-filter and inert-mutation warnings now
+  route through the log-only debug alert helper. No behavior change on the
+  filter itself (#427).
+
 ## 0.9.193-dev (2026-08-09) -- glow/offhand/preview/news owner decomposition (#1159, #504, #2)
 
 - Extracted five single-responsibility owners from the entry file: glow

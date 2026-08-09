@@ -836,6 +836,8 @@ A mod routes "log-only" diagnostics through `mod:warning` on the assumption the 
 
 **Diagnosis:** grep the mod for `mod:warning` and classify each site: routine/expected condition = misrouted; genuine anomaly = acceptable (chat visibility is arguably desirable there).
 
+**Detection gap (#427, 2026-08-09):** classifying only *helper-shaped* sites (`_dbg_alert` / `_alert` function bodies) misses direct, prefix-tagged warnings sitting in an ordinary sibling module — `cosmetics_tweaker\_la_okri.lua` carried two `mod:warning("[cosmetics:dbg] ...")` calls through five audit passes because neither sat inside a dbg-named function. The author's own `:dbg` tag is the intent signal, so `check_logging.ps1` rule (d) now flags a tagged warning in ANY scope. Note the tag is only visible in the raw line: `Get-CodePart` blanks string interiors before scope analysis, so a content match against `$code` silently never fires.
+
 **Fix template (et v0.7.25-dev, Issue #240):** route log-only alert helpers through pcall-guarded raw engine `printf` (keeps grep-stable prefixes, survives mod-logging-OFF sessions); keep direct `mod:warning` only on genuine failure paths; guard with an `_rt_register` marker check (`et_alert_helpers_log_only_240`).
 
 **Watch list:** `ct_dev` is the § 3.6 reference implementation with the same `_dbg_alert -> mod:warning` routing — same chat spam when its alerts fire. Fold into #169's VMF-native logging sweep.
