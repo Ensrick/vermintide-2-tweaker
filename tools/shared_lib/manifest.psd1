@@ -7,6 +7,12 @@
             )
         }
         @{
+            Source = "_lib_appearance_parity.lua"
+            Consumers = @(
+                "general_tweaker_dev/scripts/mods/general_tweaker_dev/_lib_appearance_parity.lua"
+            )
+        }
+        @{
             Source = "_lib_peer_parity.lua"
             Consumers = @(
                 "career_tweaker/scripts/mods/career_tweaker/_lib_peer_parity.lua"
