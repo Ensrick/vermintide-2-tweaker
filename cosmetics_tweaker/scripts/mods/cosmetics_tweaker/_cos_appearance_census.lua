@@ -53,8 +53,9 @@
 --                           ItemMasterList / WeaponSkins / skin_combinations.
 --   weapon_model_scale_grip Bretonnian-sword scale ("thiccc") + grip-offset
 --                           apply layer (_cos_render.lua); unit-path/data-driven.
---   glow_overrides          Rune/magic glow template-mutation + per-peer
---                           cos_glow_apply broadcast (_cos_glow.lua).
+--   glow_overrides          Rune/magic glow template mutation/read/paint
+--                           (_cos_glow.lua) + per-peer cos_glow_apply
+--                           transport/replay (_cos_glow_transport.lua).
 --   authored_custom_cosmetics  Encarmine Helmet (612) + Grail Knight
 --                           Purpure/Azure set (629): authored items over vanilla
 --                           donor units, per-instance texture bindings.
@@ -316,8 +317,9 @@ return {
 		-- owner 1p/3p: apply_material_settings x3 template mutation is the only
 		--   writer that paints 1p (_cos_glow.lua; GLOW_SYSTEM section 12); re-paint
 		--   at wield/visibility (SimpleInventoryExtension._wield_slot :10253 / :9875).
-		-- husk: per-peer cos_glow_apply broadcast + _glow_by_peer cache paint
-		--   (_cos_glow.lua:127-142).
+		-- husk: per-peer cos_glow_apply transport/replay
+		--   (_cos_glow_transport.lua) + _glow_by_peer cache paint
+		--   (_cos_glow.lua).
 		-- illusion_browser/cim_preview: glow re-key runs on the in-game +
 		--   inventory-mannequin paths only; browser/forge show baked glow (650).
 		-- customize (edge): toggling a preset does NOT live-repaint a spawned
@@ -349,7 +351,7 @@ return {
 					open, open_notes,
 					{
 						husk = husk_row(open, open_notes,
-							"The per-peer cos_glow_apply broadcast paints from the _glow_by_peer cache (_cos_glow.lua:127-142); a peer without Cosmetics, or a paint that lands before the mesh is resident, renders the mesh's baked glow. Degrades to the resident vanilla baked glow."),
+							"The per-peer cos_glow_apply transport (_cos_glow_transport.lua) paints from the _glow_by_peer cache through _cos_glow.lua; a peer without Cosmetics, or a paint that lands before the mesh is resident, renders the mesh's baked glow. Degrades to the resident vanilla baked glow."),
 					})
 			end)(),
 		},

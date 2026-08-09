@@ -81,7 +81,8 @@ All paths relative to `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/`.
 | `_cos_glow_preview_policy.lua` | Exact-item validation and the bounded native `loadout_sync_id` refresh edge used by Apply/Restore for the separate inventory character preview. |
 | `_cos_glow_instance_policy.lua` | **Issue 48.** Single owner of exact-instance identity (`identity_key`), runtime rebinding (`resolve_runtime`), remote matching (`remote_match`), and the durable disable round trip (`carry_disabled` / `is_disabled`). Pure policy: no game globals, no VMF, no rendering. Both the picker and the renderer `mod:dofile` it so they cannot drift apart. Covered by `qa/lua/tests/test_cos_glow_instance_policy.lua`. |
 | `_cos_glow_cim_bridge.lua` | **Issue 48.** Pure optional-persistence bridge. Owns the bounded blob schema, state sanitization, `cim_dev`/`cim` precedence, exact-identity import, and identity-safe clear through CIM's public APIs. Covered by `qa/lua/tests/test_cos_glow_cim_bridge.lua`. |
-| `cosmetics_tweaker.lua` | Equipment/preview hooks plus the host-authoritative `cos_glow_apply_req` / `cos_glow_apply` transport. |
+| `_cos_glow_transport.lua` | Host-authoritative `cos_glow_apply_req` / `cos_glow_apply` transport, coalesced publisher, bounded local hot-join rehydrate, and replay helpers. |
+| `cosmetics_tweaker.lua` | Equipment/preview hooks, the shared LA/glow husk-wield adapter, and the existing lifecycle/update call sites that consume the transport owner. |
 | `cosmetics_tweaker_data.lua` | Existing global glow VMF settings (master toggle, presets, per-channel dropdowns). These are the "old" UI; the popup is the per-item UI that supersedes them. |
 
 ### Key tables and functions
