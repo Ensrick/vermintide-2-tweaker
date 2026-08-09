@@ -1,5 +1,15 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.323-dev (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
+
+- The shared peer-parity library installs as an atomic transaction: receiver
+  and update wrapper commit together inside one guarded call, a partial
+  install is terminal for the session (never retried, every floor stays
+  shut), and install() reports a commit boolean this mod's gates consume.
+- New all_peers_have(mod_id) registry answers cross-mod parity queries and
+  fails closed for unknown or uncommitted mods (OOP_REFACTOR_PLAN WS1.5).
+- The #426 beacon report now tells the truth: "installed" prints only on a real commit; otherwise a WARNING names the terminal fail-safe.
+
 ## 0.7.322-dev (2026-08-09) -- exact boon catalog parity completes the #426 axis (#426, #1158, #1191) [untested]
 
 - The wire beacon moves to a dedicated exact channel

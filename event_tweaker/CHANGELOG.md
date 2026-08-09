@@ -1,5 +1,18 @@
 # Tweaker: Events — Changelog
 
+## 0.4.46-dev (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
+
+- The shared peer-parity library installs as an atomic transaction: receiver
+  and update wrapper commit together inside one guarded call, a partial
+  install is terminal for the session (never retried, every floor stays
+  shut), and install() reports a commit boolean this mod's gates consume.
+- New all_peers_have(mod_id) registry answers cross-mod parity queries and
+  fails closed for unknown or uncommitted mods (OOP_REFACTOR_PLAN WS1.5).
+- The curse guard adds the commit verdict as a further conjunct; the failure line reports both signals.
+- Retires the readopted SDK tool-only sidecar the clean build no longer emits;
+  the build-output normalization inventory now covers this mod.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
+
 ## 0.4.45-dev (2026-08-09) -- exact Cursed Adventure wire catalog (#430, #1158)
 
 - Replaced the Cursed Adventure presence-only handshake with an exact identity

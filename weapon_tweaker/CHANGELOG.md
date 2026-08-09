@@ -1,5 +1,15 @@
 # Weapon Tweaker Changelog
 
+## 0.12.298-beta (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
+
+- The shared peer-parity library installs as an atomic transaction: receiver
+  and update wrapper commit together inside one guarded call, a partial
+  install is terminal for the session (never retried, every floor stays
+  shut), and install() reports a commit boolean this mod's gates consume.
+- New all_peers_have(mod_id) registry answers cross-mod parity queries and
+  fails closed for unknown or uncommitted mods (OOP_REFACTOR_PLAN WS1.5).
+- The damage-profile floor consumes the real commit verdict alongside is_installed.
+
 ## 0.12.297-beta (2026-08-09) -- damage-profile application floors hardened (#1158) [untested]
 
 - The application floor now requires a committed parity install (is_installed

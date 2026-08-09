@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.501-dev (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
+
+- The shared peer-parity library installs as an atomic transaction: receiver
+  and update wrapper commit together inside one guarded call, a partial
+  install is terminal for the session (never retried, every floor stays
+  shut), and install() reports a commit boolean this mod's gates consume.
+- New all_peers_have(mod_id) registry answers cross-mod parity queries and
+  fails closed for unknown or uncommitted mods (OOP_REFACTOR_PLAN WS1.5).
+- Repairs the inert exact gates in 0.1.500-dev: the exact-wire factory required a commit boolean the library did not yet return, so both exact channels answered install-failed and the #423/#424 exact enforcement never armed. With the transaction landed, the factory arms.
+
 ## 0.1.500-dev (2026-08-09) -- exact wire catalogs for damage + thrown axes (#423, #424, #1158) [untested]
 
 - CWV joins the exact-catalog wire system on two new dedicated channels
