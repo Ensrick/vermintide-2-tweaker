@@ -62,7 +62,18 @@
             )
         }
         @{ Dir = 'chaos_wastes_tweaker';       ModId = 'ct';                         WorkshopId = '3712929235'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'Chaos Wastes Tweaker'; RootBundle = 'c37627d549d8ce88.mod_bundle' }
-        @{ Dir = 'chaos_wastes_tweaker_dev';   ModId = 'ct_dev';                     WorkshopId = '3733366926'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'Chaos Wastes Tweaker (Dev)'; RootBundle = '195af59fc68656a5.mod_bundle' }
+        @{
+            Dir = 'chaos_wastes_tweaker_dev'; ModId = 'ct_dev'; WorkshopId = '3733366926';
+            Visibility = 'friends_only'; Stream = 'dev'; Public = $false;
+            Name = 'Chaos Wastes Tweaker (Dev)'; RootBundle = '195af59fc68656a5.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{ Dir = 'general_tweaker';            ModId = 'gt';                         WorkshopId = '3713619122'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'General Tweaker'; RootBundle = '73ac92d9c37dbb6c.mod_bundle' }
         @{ Dir = 'general_tweaker_dev';        ModId = 'gt_dev';                     WorkshopId = '3733367409'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'General Tweaker (Dev)'; RootBundle = 'e6ffaaca2a71199e.mod_bundle' }
         @{ Dir = 'gui_tweaker';                ModId = 'gut';                        WorkshopId = '3732144878'; Visibility = 'friends_only'; Stream = 'stable'; Public = $false; Name = 'GUI Tweaker'; RootBundle = 'ff654aa303c38f8c.mod_bundle' }
