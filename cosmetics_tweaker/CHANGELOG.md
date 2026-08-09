@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.193-dev (2026-08-09) -- glow/offhand/preview/news owner decomposition (#1159, #504, #2)
+
+- Extracted five single-responsibility owners from the entry file: glow
+  transport (2 RPC channels), offhand package/catalog (with the annotated
+  package-preload boundary), offhand picker, the 12-hook preview/score/package
+  runtime, and the stale-news-widget guard.
+- All 65 hook/RPC/command registration events preserved in byte-identical
+  order; entry ceiling ratchets 9,263 -> 6,665 nonblank lines (18 owners).
+- Behavior-neutral; no new hooks, RPCs, settings, persistence, or lifecycle
+  owners.
+
 ## 0.9.192-dev (2026-08-06) -- LA replay coordinator extracted (#1159, #504, #2)
 
 ### Behavior-neutral extraction
