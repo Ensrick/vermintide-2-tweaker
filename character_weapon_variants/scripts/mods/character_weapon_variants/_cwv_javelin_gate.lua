@@ -129,6 +129,21 @@ function M.fence_pickup(pickup_name)
     return true
 end
 
+-- A peer acknowledgement is only ONE axis of exact wire safety. Revalidate the
+-- committed receiver AND the local numeric/resource catalog at the actual
+-- hot-join boundary, so a registry drift that happened after the ack cannot
+-- authorize custom data for that peer. Any missing arm reads false.
+function M.exact_peer_safe(parity, peer_id, catalog_intact)
+    if type(parity) ~= "table" or type(catalog_intact) ~= "function" then
+        return false
+    end
+    local ok_i, installed = pcall(parity.is_installed, parity)
+    local ok_p, has = pcall(parity.peer_has, parity, peer_id)
+    local ok_c, intact = pcall(catalog_intact)
+    return ok_i and installed == true and ok_p and has == true
+        and ok_c and intact == true
+end
+
 -- Own every live hook for the mixed-lobby javelin boundary. Keeping the hook
 -- graph here prevents the already-large CWV entry chunk from regrowing while
 -- leaving the pure identity/ref-shadow helpers above independently testable.
@@ -140,12 +155,34 @@ function M.install(ctx)
     local projectile_key = assert(ctx.projectile_key, "javelin gate requires projectile key")
     local inflight_unit = assert(ctx.inflight_unit, "javelin gate requires inflight unit")
     local safe_template_key = assert(ctx.safe_template_key, "javelin gate requires safe template")
+    -- #423/#424 exact-catalog wiring. `wire_safe` is mod._cwv_thrown_wire_safe
+    -- (installed by _cwv_exact_wire_runtime BEFORE this call); donor_policy is
+    -- _cwv_thrown_wire_policy; globals is the live global table.
+    local wire_safe = ctx.wire_safe
+    local catalog_intact = ctx.catalog_intact
+    local donor_policy = assert(ctx.donor_policy, "javelin gate requires donor policy")
+    local globals = assert(ctx.globals, "javelin gate requires live globals")
+
+    -- Per-peer verdict for the hot-join boundary: the joining peer must have
+    -- acknowledged BOTH the presence beacon and the exact thrown catalog, and
+    -- our own catalog must still be undrifted.
+    local function exact_peer_safe(peer_id)
+        return M.exact_peer_safe(mod._cwv_peer_parity, peer_id, catalog_intact)
+            and M.exact_peer_safe(mod._cwv_thrown_peer_parity, peer_id, catalog_intact)
+    end
 
     local function gate_state()
         local pp = mod._cwv_peer_parity
         if not (pp and type(pp.applied_state) == "function") then return "disabled" end
         local ok, state = pcall(pp.applied_state, pp)
-        return ok and state or "disabled"
+        if not (ok and state == "enabled") then return "disabled" end
+        -- Presence parity proves every peer HAS cwv; it does not prove their
+        -- appended NetworkLookup integers mean the same thing (BUG_CLASSES 64).
+        -- The thrown feature additionally requires the exact thrown-resource
+        -- channel to be installed, agreed, and undrifted. An absent or erroring
+        -- wire_safe reads disabled -- the feature never opens on a missing proof.
+        local ok_exact, exact = pcall(wire_safe)
+        return (ok_exact and exact == true) and "enabled" or "disabled"
     end
 
     local function wielded_javelin(owner_unit)
@@ -156,8 +193,13 @@ function M.install(ctx)
         return ok and M.is_cwv_javelin(slot_data) or false
     end
 
+    -- Match the action's OWN item_name as well as the wielded slot. The two
+    -- disagree in real frames: a grenade-slot throw runs while the melee slot
+    -- reads as wielded, and an action mid-flight outlives a wield swap. The
+    -- slot read alone let those throws through the gate.
     local function block_throw(self)
-        return self and wielded_javelin(self.owner_unit)
+        return self and (M.is_cwv_javelin(self.item_name)
+                or wielded_javelin(self.owner_unit))
             and not M.feature_enabled(gate_state())
     end
 
@@ -166,6 +208,9 @@ function M.install(ctx)
             self._cwv424_throw_blocked = true
             if not self._cwv424_notice_shown then
                 self._cwv424_notice_shown = true
+                -- The player pressed throw and nothing happened, so the reason
+                -- belongs in chat, not only in the log.
+                -- allow-echo: user-triggered safety block
                 mod:echo("[cwv] Tuskgor Javelin is unavailable until every player in the lobby has Career Weapon Variants.")
                 pcall(printf, "[cwv:424] throw BLOCKED before projectile spawn: peer capability=%s",
                     tostring(gate_state()))
@@ -183,6 +228,45 @@ function M.install(ctx)
         end
         return func(self)
     end)
+
+    -- Last-resort source-shaped floor for any action class that reaches
+    -- ProjectileSystem directly. `_get_projectile_units_names` has NO nil
+    -- contract: vanilla dereferences `.projectile_unit_name` on the very next
+    -- line (projectile_system.lua:247-249). Now that donor revalidation can
+    -- legitimately produce a DROP, that dereference is reachable -- so probe the
+    -- already-hooked resolver here and refuse the native spawn when neither the
+    -- exact row nor a proven vanilla donor is available.
+    -- Hook pre-flight (NON-NEGOTIABLE 8): grepped 2026-08-08 -- cwv hooks
+    -- ProjectileSystem._get_projectile_units_names and .rpc_spawn_pickup_projectile
+    -- in the entry file; this is the ONLY registration on spawn_player_projectile.
+    mod:hook("ProjectileSystem", "spawn_player_projectile", function(func, self,
+            owner_unit, position, rotation, scale, angle, target_vector, speed,
+            item_name, item_template_name, action_name, sub_action_name,
+            fast_forward_time, is_critical_strike, power_level, gaze_settings,
+            charge_level)
+        if M.is_cwv_javelin(item_name) then
+            local ok, projectile_units = pcall(function()
+                local weapon_template = WeaponUtils.get_weapon_template(item_template_name)
+                local actions = weapon_template and weapon_template.actions
+                local action = actions and actions[action_name]
+                action = action and action[sub_action_name]
+                local projectile_info = action and action.projectile_info
+                if not projectile_info then return nil end
+                return self:_get_projectile_units_names(projectile_info, owner_unit)
+            end)
+            if not ok or type(projectile_units) ~= "table"
+                    or type(projectile_units.projectile_unit_name) ~= "string" then
+                pcall(printf, "[cwv:424] ProjectileSystem spawn BLOCKED: no exact row and no proven vanilla donor for item=%s",
+                    tostring(item_name))
+                return
+            end
+        end
+        return func(self, owner_unit, position, rotation, scale, angle,
+            target_vector, speed, item_name, item_template_name, action_name,
+            sub_action_name, fast_forward_time, is_critical_strike, power_level,
+            gaze_settings, charge_level)
+    end)
+    om._cwv424_projectile_preflight_installed = true
     om._cwv424_throw_gate_installed = true
 
     mod:hook("ActionUtils", "spawn_pickup_projectile", function(func, world, weapon_unit,
@@ -201,14 +285,25 @@ function M.install(ctx)
     M.fence_pickup(pickup_key)
     M.fence_pickup(link_pickup_key)
 
+    -- GameSession.add_peer replays every live network GameObject after
+    -- set_peer_synchronizing returns. Shadowing TransientPackageLoader.refs
+    -- protects that component's package-id RPC only; it cannot rewrite an
+    -- ALREADY-SPAWNED projectile GameObject carrying a custom husk id. Both
+    -- live resource classes -- world pickups AND in-flight projectiles -- are
+    -- therefore removed as one transaction, and their absence is PROVEN from
+    -- the authoritative trackers before the joiner is allowed through.
     local function remove_live_recovery_pickups()
         local state = Managers and Managers.state
+        local transition = Managers and Managers.level_transition_handler
         local entity = state and state.entity
         local spawner = state and state.unit_spawner
-        if not entity or not spawner then return true, 0 end
-        local ok, removed_or_err = pcall(function()
+        local loader = transition and transition.transient_package_loader
+        local tracked = loader and loader._tracked_projectiles
+        local tracked_units = tracked and tracked.units
+        if not entity or not spawner then return true, 0, { projectiles = 0, pickups = 0 } end
+        local ok, removed_or_err, projectiles, pickups = pcall(function()
             local pickup_system = entity:system("pickup_system")
-            if not pickup_system then return 0 end
+            if not pickup_system then return 0, 0, 0 end
             -- Server-only. Retracting a spawned pickup is a host action: the unit
             -- is a server-owned network unit and PickupSystem refuses even the
             -- spawn side on a client (pickup_system.lua:1209-1213), so a client
@@ -217,23 +312,61 @@ function M.install(ctx)
             -- host-side (the set_peer_synchronizing fence); this keeps that true
             -- now that a parity transition can reach here on any peer.
             if not pickup_system.is_server then return 0 end
-            local removed = 0
+            local removed, projectiles, pickups = 0, 0, 0
+            local seen = {}
+            local function mark(unit)
+                if not (unit and Unit.alive(unit)) or seen[unit] then return false end
+                seen[unit] = true
+                if not spawner:is_marked_for_deletion(unit) then
+                    spawner:mark_for_deletion(unit)
+                end
+                removed = removed + 1
+                return true
+            end
+            -- In-flight axis. TransientPackageLoader.add_projectile stores the
+            -- exact ProjectileUnits template string in `.units[unit]`
+            -- (transient_package_loader.lua:155), so this table is the
+            -- authoritative census of live custom projectiles.
+            if type(tracked_units) == "table" then
+                for unit, template_name in pairs(tracked_units) do
+                    if template_name == projectile_key and mark(unit) then
+                        projectiles = projectiles + 1
+                    end
+                end
+            end
             for _, pickup_name in ipairs(M.fenced_pickup_names) do
                 local units = pickup_system:get_pickups_by_type(pickup_name) or {}
                 local snapshot = {}
                 for _, unit in pairs(units) do snapshot[#snapshot + 1] = unit end
                 for _, unit in ipairs(snapshot) do
-                    if unit and Unit.alive(unit) and not spawner:is_marked_for_deletion(unit) then
-                        spawner:mark_for_deletion(unit)
-                        removed = removed + 1
-                    end
+                    if mark(unit) then pickups = pickups + 1 end
                 end
             end
             if removed > 0 then spawner:commit_and_remove_pending_units() end
-            return removed
+            -- Re-read BOTH authoritative trackers after the synchronous commit.
+            -- A retained projectile row can still become a custom husk
+            -- GameObject and a retained pickup already carries a custom
+            -- pickup_names id, so a failed deletion must hold the peer outside
+            -- the GameSession rather than be reported as a successful sweep.
+            if type(tracked_units) == "table" then
+                for unit, template_name in pairs(tracked_units) do
+                    if template_name == projectile_key and unit and Unit.alive(unit) then
+                        error("custom projectile retained after cleanup")
+                    end
+                end
+            end
+            for _, pickup_name in ipairs(M.fenced_pickup_names) do
+                local units = pickup_system:get_pickups_by_type(pickup_name) or {}
+                for _, unit in pairs(units) do
+                    if unit and Unit.alive(unit) then
+                        error("custom recovery pickup retained after cleanup: " .. tostring(pickup_name))
+                    end
+                end
+            end
+            return removed, projectiles, pickups
         end)
         if not ok then return false, tostring(removed_or_err) end
-        return true, removed_or_err
+        return true, removed_or_err, { projectiles = projectiles or 0, pickups = pickups or 0 }
     end
     om._cwv424_remove_live_recovery_pickups = remove_live_recovery_pickups
 
@@ -249,9 +382,11 @@ function M.install(ctx)
             -- the set_peer_synchronizing fence below is only one of them. Bounded:
             -- one row per gate close.
             on_disable = function()
-                local swept, detail = remove_live_recovery_pickups()
-                pcall(printf, "[cwv:424] gate closed; world sweep ok=%s removed=%s fenced=%d",
-                    tostring(swept), tostring(detail), #M.fenced_pickup_names)
+                local swept, detail, counts = remove_live_recovery_pickups()
+                pcall(printf, "[cwv:424] gate closed; world sweep ok=%s removed=%s projectiles=%s pickups=%s fenced=%d",
+                    tostring(swept), tostring(detail),
+                    tostring(counts and counts.projectiles), tostring(counts and counts.pickups),
+                    #M.fenced_pickup_names)
             end,
         })
         om._cwv424_feature_registered = true
@@ -269,15 +404,22 @@ function M.install(ctx)
         local safe_template = safe_units and safe_units[safe_template_key]
         local safe_unit = safe_template and safe_template.projectile_unit_name
         local lookups = rawget(_G, "NetworkLookup")
-        local safe_projectile_registered = lookups and lookups.projectile_units
-            and rawget(lookups.projectile_units, safe_template_key)
-        local safe_unit_registered = safe_unit and lookups and lookups.husks
-            and rawget(lookups.husks, safe_unit)
+        -- UNCONDITIONAL shadow (never gated on parity or a toggle -- memory
+        -- reference_vt2_wire_safety_never_toggle_gated, #278/#371): the custom
+        -- ref is removed for EVERY hot-join encode. What the donor proof
+        -- decides is only whether a vanilla key may be written in its place; a
+        -- donor that is merely PRESENT is not enough, because the joiner
+        -- decodes it strictly and a half-registered row fatals the same way.
+        local safe_projectile_intact = donor_policy.projectile_donor_intact(
+            globals, safe_template_key)
+        local safe_unit_intact = safe_projectile_intact and safe_unit ~= nil
+            and lookups ~= nil
+            and donor_policy.lookup_row_intact(lookups.husks, safe_unit)
         local restore_projectile = M.begin_ref_shadow(
             projectile_refs, projectile_key, safe_template_key,
-            safe_projectile_registered ~= nil)
+            safe_projectile_intact == true)
         local restore_unit = M.begin_ref_shadow(
-            unit_refs, inflight_unit, safe_unit, safe_unit_registered ~= nil)
+            unit_refs, inflight_unit, safe_unit, safe_unit_intact == true)
         local ok, err = pcall(func, self, peer_id)
         restore_unit()
         restore_projectile()
@@ -291,13 +433,13 @@ function M.install(ctx)
         if type(peer_id) == "string" and parity
                 and type(parity.require_peer) == "function"
                 and type(parity.peer_has) == "function" then
-            local confirmed = parity:peer_has(peer_id)
+            local confirmed = exact_peer_safe(peer_id)
             parity:require_peer(peer_id)
             if not confirmed then
-                local safe, detail = remove_live_recovery_pickups()
+                local safe, detail, counts = remove_live_recovery_pickups()
                 if not safe then
                     rejected_peers[peer_id] = true
-                    pcall(printf, "[cwv:424] hot-join sync REJECTED peer=%s: recovery pickup cleanup failed: %s",
+                    pcall(printf, "[cwv:424] hot-join sync REJECTED peer=%s: live thrown-resource cleanup failed: %s",
                         tostring(peer_id), tostring(detail))
                     local server = self and self.network_server
                     if server and type(server.kick_peer) == "function" then
@@ -309,8 +451,9 @@ function M.install(ctx)
                 -- fenced= proves WHICH keys the sweep covered: a log line reading
                 -- fenced=2 means the grenade-slot bomb never enrolled and a
                 -- world-resident bomb pickup can still CTD this joiner (#424).
-                pcall(printf, "[cwv:424] hot-join preflight peer=%s gate=disabled removed_pickups=%d fenced=%d",
-                    tostring(peer_id), detail, #M.fenced_pickup_names)
+                pcall(printf, "[cwv:424] hot-join preflight peer=%s gate=disabled removed_pickups=%s removed_projectiles=%s fenced=%d",
+                    tostring(peer_id), tostring(counts and counts.pickups),
+                    tostring(counts and counts.projectiles), #M.fenced_pickup_names)
             end
         end
         return func(self, peer_id)
@@ -326,10 +469,26 @@ function M.install(ctx)
     -- (CLAUDE.md NON-NEGOTIABLE #8).
     mod:hook_safe("GameNetworkManager", "remove_peer", function(self, peer_id)
         rejected_peers[peer_id] = nil
-        local parity = mod._cwv_peer_parity
-        if parity and type(parity.forget_peer) == "function" then
-            parity:forget_peer(peer_id)
+        -- Retire the peer's proof on EVERY parity instance cwv owns: the
+        -- presence beacon and both exact channels (#423 damage, #424 thrown).
+        -- The parity library expires an ack on its own only after a bounded
+        -- ABSENCE window (_lib_peer_parity.lua:576-583); a disconnect followed
+        -- by a fast rejoin under the same peer id lands inside that window, so
+        -- without this an exact channel would still read the departed peer as
+        -- having proven our catalog and authorize custom ids to a peer that
+        -- never re-handshaked. Deduplicated by instance identity so a build
+        -- where two of these resolve to the same table forgets once.
+        local forgotten = {}
+        local function forget_once(instance)
+            if type(instance) == "table" and not forgotten[instance]
+                    and type(instance.forget_peer) == "function" then
+                forgotten[instance] = true
+                pcall(instance.forget_peer, instance, peer_id)
+            end
         end
+        forget_once(mod._cwv_peer_parity)
+        forget_once(mod._cwv_thrown_peer_parity)
+        forget_once(mod._cwv_damage_peer_parity)
         -- #914: clear the appearance lifecycle's per-peer ledgers (exact
         -- identity states, accepted request generations, pending deliveries)
         -- so a later rejoin under the same peer id cannot reuse stale exact
@@ -341,6 +500,7 @@ function M.install(ctx)
             pcall(lifecycle.clear_peer, lifecycle, peer_id)
         end
     end)
+    om._cwv424_exact_epoch_retirement_installed = true
     om._cwv424_hot_join_fence_installed = true
 end
 
