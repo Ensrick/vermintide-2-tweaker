@@ -375,11 +375,16 @@ local function register(H, repo_root)
         H.truthy(entry:find("wire_catalog_intact", 1, true))
         H.truthy(entry:find("pcall(inst.is_installed, inst)", 1, true))
         H.truthy(entry:find("installed ~= true", 1, true))
+        -- #1158 fanout: install() now returns the commit boolean, and the entry
+        -- consumes it alongside is_installed() rather than relying on the
+        -- state read alone.
+        H.truthy(entry:find("committed ~= true", 1, true),
+            "CRT must consume install()'s commit boolean")
         H.truthy(entry:find("wire_policy.catalog_intact(", 1, true))
         H.truthy(entry:find("wire_policy.wire_safe(", 1, true))
         H.truthy(entry:find("wire_policy.wire_live(", 1, true))
         H.truthy(entry:find("runtime_gate_retry_step", 1, true))
-        local install_at = assert(entry:find("local install_ok = pcall(inst.install, inst)", 1, true))
+        local install_at = assert(entry:find("local install_ok, committed = pcall(inst.install, inst)", 1, true))
         local publish_at = assert(entry:find("mod._crt_peer_parity = inst", 1, true))
         H.truthy(install_at < publish_at,
             "the commit check must precede publishing the beacon to call sites")

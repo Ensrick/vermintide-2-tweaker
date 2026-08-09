@@ -227,13 +227,17 @@ if inst then
     -- a non-throwing factory result is not sufficient proof. Treat a failed or
     -- partial install as terminal for this session: keep the sender floor shut
     -- and do not attach downstream hooks to an uninstalled instance.
-    local ok_install, install_err = pcall(inst.install, inst)
+    --
+    -- #1158 install-transaction fanout (LANDED): install() now runs receiver
+    -- registration and mod.update ownership in ONE pcall and RETURNS the commit
+    -- boolean, so `committed` joins is_installed() as a conjunct here. The lib
+    -- makes a failed attempt terminal, so this verdict is final for the session.
+    local ok_install, committed = pcall(inst.install, inst)
     local ok_status, installed = pcall(inst.is_installed, inst)
-    if not ok_install or not ok_status or installed ~= true then
+    if not ok_install or committed ~= true or not ok_status or installed ~= true then
         pcall(printf,
-            "[et:430] exact beacon install failed terminally; managed curses remain inert: %s",
-            tostring(ok_install and (ok_status and installed or "status-error")
-                or install_err))
+            "[et:430] exact beacon install failed terminally; managed curses remain inert: committed=%s installed=%s",
+            tostring(committed), tostring(ok_status and installed or "status-error"))
         inst = nil
         mod._et_peer_parity = nil
     end

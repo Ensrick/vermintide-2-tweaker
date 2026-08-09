@@ -72,6 +72,11 @@ local function new_exact_parity(mod, channel, identity)
 		wire_identity = identity,
 	})
 	if not ok_new or type(instance) ~= "table" then return nil, tostring(instance) end
+	-- Two independent commit signals, both required. `installed` is install()'s
+	-- own return; `is_installed` is the instance's committed state. #1158's
+	-- install-transaction fanout is what makes the first one real -- before it,
+	-- install() returned nothing, so this factory answered "install-failed" for
+	-- every exact channel and cwv's #423/#424 gates were permanently inert.
 	local ok_install, installed = pcall(instance.install, instance)
 	local ok_state, is_installed = pcall(instance.is_installed, instance)
 	if not (ok_install and installed == true and ok_state and is_installed == true) then

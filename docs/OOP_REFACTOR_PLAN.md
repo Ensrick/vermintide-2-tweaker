@@ -98,6 +98,37 @@ copied `_lib_peer_parity.lua` contract: broadcast a mod fingerprint on peer join
 notify the user which features are off and which peer lacks the mod. NEVER gate
 sender-side substitution on it (BUG_CLASSES 31).
 
+> **STATUS: DELIVERED 2026-08-09** (#371 / #1158, install-transaction fanout slice).
+> Evidence:
+> - **Install is one transaction.** `tools/shared_lib/_lib_peer_parity.lua`
+>   `api:install()` builds the receiver and the wrapped update first, then performs
+>   `mod:network_register(CHANNEL, receiver)` AND `mod.update = wrapped_update`
+>   inside a single `pcall`; `_installed` commits only after both return, and the
+>   receiver is inert until it does. A throw restores the exact previous
+>   `mod.update` when the wrapper became externally visible. `_install_attempted`
+>   makes a failed attempt TERMINAL, so no retry can double-register a receiver
+>   the transport already retained. `install()` returns the commit boolean.
+> - **Floors are latched, not caller-disciplined.** `all_peers_have()`,
+>   `peer_has()`, `require_peer()` and `tick()` all hard-gate on `_installed`, so
+>   an uninstalled beacon is fail-closed by construction.
+> - **`all_peers_have(mod_id)` exists.** The lib chunk returns
+>   `new_peer_parity, registry`; each instance also carries `inst.registry`.
+>   Instances enter the registry at their install commit keyed by `opts.mod_id`
+>   (or the host's VMF name). `registry.all_peers_have(mod_id)` returns false for
+>   an unknown id and otherwise AND-folds every beacon that mod installed. Query
+>   only - it adds no cross-mod coupling and no `get_mod()` dependency.
+> - **Fanout is complete.** The canonical lib is byte-identical in all six
+>   consumers (career_tweaker, chaos_wastes_tweaker_dev, character_weapon_variants,
+>   event_tweaker, weapon_tweaker, weapon_tweaker_dev); `qa/check_shared_lib_drift.ps1`
+>   is byte-exact and green. Every consumer seam consumes the commit boolean.
+> - **Tests.** `qa/lua/tests/test_peer_parity_install_transaction.lua` covers the
+>   partial-install latch, the rollback, the commit path, the aggregator, and the
+>   fanout scan, each paired with a planted source mutation proving the assertion
+>   is load-bearing.
+>
+> The Mod Tweaker grey-out half of this row shipped earlier per axis
+> (`_ct_wire_policy.runtime_gate_spec`, crt's `runtime_gate_retry_step`).
+
 ### WS2 - Enforcement machinery (the "rules without gates" fix)
 
 > **STATUS: COMPLETE 2026-07-17.** #429 installed the full policy engine in CI;

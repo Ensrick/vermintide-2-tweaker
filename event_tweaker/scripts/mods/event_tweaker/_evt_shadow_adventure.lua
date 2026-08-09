@@ -329,7 +329,16 @@ do
         })
         if ok_inst and type(instance) == "table" then
             shadow_parity = instance
-            pcall(function() shadow_parity:install() end)
+            -- #1158 install-transaction fanout (LANDED): install() runs receiver
+            -- registration and mod.update ownership in ONE pcall and returns the
+            -- commit boolean. The capability floor below already re-checks
+            -- is_installed(), and the lib hard-gates every peer query on the same
+            -- commit, so this consumes the boolean as log evidence.
+            local ok_install, committed = pcall(function() return shadow_parity:install() end)
+            if not (ok_install and committed == true) then
+                pcall(printf, "[et:413] WARNING Adventure Shadow beacon install did not commit (%s); capability stays unproven",
+                    tostring(committed))
+            end
             pcall(function()
                 shadow_parity:register_gated_feature("et_shadow_adventure", {
                     label = "peer_parity_shadow_feature_label",

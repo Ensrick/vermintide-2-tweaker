@@ -1822,6 +1822,20 @@ then re-copy to every consumer in the same pass. A mod needing divergent
 behavior gets a differently-named fork, not a silently drifted copy. Each
 lib's header names its master path so drift is detectable by diff.
 
+**Copied-lib install transactions** (binding; #371/#1158). A shared lib whose
+`install()` has more than one side effect - registering a network receiver AND
+taking ownership of `mod.update` is the worked example
+(`tools/shared_lib/_lib_peer_parity.lua`) - performs them inside ONE `pcall`,
+commits its installed flag only after all of them return, keeps any externally
+reachable callback inert until that commit, restores the exact previous value of
+anything it overwrote if the transaction throws, makes a failed attempt TERMINAL
+for the instance (a retry could double-register a receiver the transport already
+retained), and RETURNS the commit boolean. Consumers must consume that boolean:
+a factory that returned a table is not evidence the transport took the channel.
+Safety queries on the instance hard-gate on the same commit flag, so an
+uninstalled instance is fail-closed by construction rather than by caller
+discipline.
+
 ---
 
 ## 9b. Pusfume non-interference (binding; user directive 2026-07-21)
