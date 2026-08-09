@@ -27,6 +27,7 @@
             Source = "_lib_wire_catalog.lua"
             Consumers = @(
                 "career_tweaker/scripts/mods/career_tweaker/_lib_wire_catalog.lua"
+                "event_tweaker/scripts/mods/event_tweaker/_lib_wire_catalog.lua"
             )
         }
         @{

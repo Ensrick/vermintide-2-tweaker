@@ -90,6 +90,7 @@ local suites = {
     "test_event_high_intensity_probe",
     "test_event_mission_allowlist",
     "test_event_curse_join_policy",
+    "test_event_exact_curse_wire",
     "test_ct_mission_progress",
     "test_ct_profile_snapshot",
     "test_ct_starting_coins",
