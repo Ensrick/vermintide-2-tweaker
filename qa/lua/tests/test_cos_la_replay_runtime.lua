@@ -21,6 +21,18 @@ return function(H, repo_root)
     local module_path = "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_la_replay_runtime.lua"
     local source = read(module_path)
+    local glow_transport = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_glow_transport.lua")
+    local offhand_picker = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_offhand_picker.lua")
+    local preview_runtime = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_preview_runtime.lua")
+    local news_feed_safety = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_news_feed_safety.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -40,8 +52,13 @@ return function(H, repo_root)
 
     H.test("Cosmetics replay extraction preserves transport and hook cardinality", function()
         local entry_exec = entry:gsub("%-%-[^\n]*", "")
+            .. offhand_picker:gsub("%-%-[^\n]*", "")
+            .. preview_runtime:gsub("%-%-[^\n]*", "")
+            .. news_feed_safety:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
-        H.equal(occurrences(entry_exec, "mod:network_register("), 6)
+        H.equal(occurrences(entry_exec, "mod:network_register("), 4)
+        H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),
+            "mod:network_register("), 2)
         H.equal(occurrences(entry_exec, "mod:hook("), 28)
         H.equal(occurrences(entry_exec, "mod:hook_safe("), 18)
         H.equal(occurrences(entry_exec, "mod:hook_origin("), 1)

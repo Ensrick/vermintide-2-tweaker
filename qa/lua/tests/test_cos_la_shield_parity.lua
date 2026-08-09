@@ -194,6 +194,9 @@ return function(Harness, repo_root)
         local f = assert(io.open(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua", "rb"))
         local source = f:read("*a"); f:close()
+        local catalog = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua", "rb"))
+        source = source .. catalog:read("*a"); catalog:close()
         Harness.truthy(source:find('item_type ~= "es_1h_sword_shield_breton"', 1, true))
         Harness.truthy(source:find('left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.es_1h_sword_shield)', 1, true))
         Harness.truthy(source:find('if not variant.new_units then', 1, true),

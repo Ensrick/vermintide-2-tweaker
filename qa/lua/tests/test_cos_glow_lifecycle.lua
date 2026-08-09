@@ -8,6 +8,8 @@ return function(H, repo_root)
 
     local picker = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua")
     local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+        .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua")
+        .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_picker.lua")
     local command_owner = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua")
     local button_owner = read(
@@ -15,6 +17,9 @@ return function(H, repo_root)
     local item_grid_presentation = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_item_grid_presentation.lua")
+    local glow_transport = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_glow_transport.lua")
     local instance_policy = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy.lua")
     local preview_policy_path = repo_root
@@ -157,10 +162,10 @@ return function(H, repo_root)
         local _, refresh_calls = picker:gsub(
             "GlowPicker%.request_inventory_preview_refresh%(GlowPicker%._preview_host, backend_id%)", "")
         H.equal(refresh_calls, 2)
-        H.truthy(entry:find("GLOW_PREVIEW_POLICY.resolve_spawn(item", 1, true))
+        H.truthy(entry:find("state.glow_preview_policy.resolve_spawn(item", 1, true))
         H.truthy(preview_policy_source:find("if not dirty then picker.restore_runtime_for", 1, true))
         H.truthy(preview_policy_source:find("glow.bind_glow_unit(unit, backend_id", 1, true))
-        local bind_at = assert(entry:find("GLOW_PREVIEW_POLICY.bind_spawned", 1, true))
+        local bind_at = assert(entry:find("state.glow_preview_policy.bind_spawned", 1, true))
         local paint_at = assert(entry:find("mod._cos.apply_glow_override({ units[1], units[2] })", bind_at, true))
         H.truthy(bind_at < paint_at)
         H.truthy(preview_policy_source:find("[glow:796] preview spawn rebound", 1, true))
@@ -168,12 +173,12 @@ return function(H, repo_root)
     end)
 
     H.test("Cosmetics glow replay is host-authoritative and locally bounded", function()
-        H.truthy(entry:find('mod:network_register("cos_glow_apply_req"', 1, true))
-        H.truthy(entry:find('mod:network_register("cos_glow_apply"', 1, true))
-        H.truthy(entry:find('state_pull = "piggyback_cos_la_state_req"', 1, true))
-        H.truthy(entry:find("local _COS574_REHYDRATE_MAX_ATTEMPTS = 40", 1, true))
-        H.truthy(entry:find("local _COS574_REHYDRATE_WINDOW = 10", 1, true))
-        H.truthy(entry:find("retry_network = false", 1, true))
+        H.truthy(glow_transport:find('mod:network_register("cos_glow_apply_req"', 1, true))
+        H.truthy(glow_transport:find('mod:network_register("cos_glow_apply"', 1, true))
+        H.truthy(glow_transport:find('state_pull = "piggyback_cos_la_state_req"', 1, true))
+        H.truthy(glow_transport:find("local COS574_REHYDRATE_MAX_ATTEMPTS = 40", 1, true))
+        H.truthy(glow_transport:find("local COS574_REHYDRATE_WINDOW = 10", 1, true))
+        H.truthy(glow_transport:find("retry_network = false", 1, true))
         H.truthy(entry:find("if mod._cos574_glow_rehydrate_tick then mod._cos574_glow_rehydrate_tick() end", 1, true))
     end)
 
