@@ -140,6 +140,7 @@ local suites = {
     "test_wt_loadout_cache",
     "test_wt_ranger_dual_preview",
     "test_wt_moonfire_aoe_owner",
+    "test_wt_template_patch_owners",
     "test_cwv_remote_audio",
     "test_cwv_remote_identity",
     "test_cwv_husk_path",

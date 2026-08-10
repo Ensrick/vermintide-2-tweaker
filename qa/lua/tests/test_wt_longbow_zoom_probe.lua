@@ -40,7 +40,10 @@ return function(H, repo_root)
             file:close()
             return source
         end
-        local main = read("/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")
+        -- #1159 moved the source-template patchers out of the entry into their
+        -- own owner; this gate follows the code.
+        local main = read(
+            "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_cross_char_template_patches.lua")
         local core = read("/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua")
         for _, career in ipairs({ "es_mercenary", "es_knight", "es_questingknight" }) do
             H.truthy(main:find("longbow_empire_template." .. career .. "%s*=%s*false"),
