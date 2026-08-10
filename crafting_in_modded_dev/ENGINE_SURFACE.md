@@ -23,7 +23,8 @@ prefix, which is stream-agnostic.
 module source: every hook signature (grep-confirmed, **139 `mod:hook`/`hook_safe`
 sites + 1 `mod:network_register`**), the full body of `standard_forge.lua`,
 `illusion_swap.lua`, `modded_rarities.lua`, and the main-file craft-record shape
-(`:282-582`), wire-safety core (`:753-903`), LA equip-capture (`:1543-1576`),
+(`:282-582`), wire-safety core (`:753-903`), LA equip-capture (moved verbatim to
+`_cim_modded_loadout_owner.lua:800-837` at v0.8.119-dev),
 item-filter (`:1701-1818`), and Athanor opener + shading-env substitution
 (`:1825-2055`, `:3088-3218`). The `[src:]` citations INTO the decompile
 (`loadout_utils.lua`, `network_lookup.lua`, `backend_utils.lua`,
@@ -156,12 +157,18 @@ gated on `_custom_forge_active`. `docs/engine/09` owns the view/material model.
 | `{bloom-window}._set_background_bloom_intensity` [hook] `_cim_mission_forge_safety.lua` / `{upgrade-anim}._start_transition_animation` [hook] `_cim_mission_forge_safety.lua` | Background bloom intensity + forge upgrade transition animation [src: weave-forge window defs] | Full `mod:hook` (SKIP the vanilla body, not run-after) to suppress the mid-mission bloom/transition that references keep-only materials | Class resolved by `rawget` at install; `[hook]` deliberately does not call `func` |
 | `HeroViewStateWeaveForge.on_exit` [safe] `crafting_in_modded_dev.lua`; restore dispatcher in `_cim_forge_picker_owner.lua` | Leaves the weave-forge state [src: `hero_view_state_weave_forge.lua`] | Clear `_custom_forge_active`; restore the widened freedom-toggle category arrays | The ONLY reset point for `_custom_forge_active`. The entry keeps the complete forge reset and calls the picker owner's stable restore dispatcher; no second exit hook or duplicate reset owner is introduced. |
 
-### Surface 3 - Loadout equip-capture via the LA dispatch (DORMANT) (owner: `docs/engine/11`, `/06`; `crafting_in_modded_dev.lua`)
+### Surface 3 - Loadout equip-capture via the LA dispatch (DORMANT) (owner: `docs/engine/11`, `/06`; `_cim_modded_loadout_owner.lua`)
+
+Both captures moved out of the entry into `_cim_modded_loadout_owner.lua` at
+v0.8.119-dev (#1159), byte-identical. The `PlayerManager.rpc_sync_loadout_slot`
+row below stays in `crafting_in_modded_dev.lua`, deliberately ABOVE that seam:
+it is sender/receiver crash safety (#278/#371) and must never sit behind the
+loadout owner's persistence gate.
 
 | Class.method (kind) | Vanilla behavior | Why cim hooks it | Trap / invariant |
 |---|---|---|---|
-| `BackendUtils.set_loadout_item` [hook,tbl] `crafting_in_modded_dev.lua:1568` | The STABLE outer equip entry point; dispatches to `get_loadout_interface_by_slot(slot):set_loadout_item(...)` [src: `backend_utils.lua:22`] | Capture every MENU equip BEFORE the LA dispatch (with Loremaster's Armoury active the inner interface is an LA CLONE that bypasses the class hook) | Table-form on the post-LA `BackendUtils` ref, installed DEFERRED from `mod.update` once interfaces exist (memory `reference_cim_equip_capture_la_dispatch`); a `_restoring` flag gates capture OFF during cim's own restore writes |
-| `BackendInterfaceItemPlayfab.set_loadout_item` [safe] `crafting_in_modded_dev.lua:1543` | Direct interface loadout write (restore path, or a bot's designated loadout) [src: `backend_interface_item_playfab.lua`] | Capture direct/data writes; record under the `optional_loadout_index` (4th arg) so a non-selected-index write lands on that index | `from_live_equip=false` (a bare data write does not re-spawn the unit) |
+| `BackendUtils.set_loadout_item` [hook,tbl] `_cim_modded_loadout_owner.lua:830` | The STABLE outer equip entry point; dispatches to `get_loadout_interface_by_slot(slot):set_loadout_item(...)` [src: `backend_utils.lua:22`] | Capture every MENU equip BEFORE the LA dispatch (with Loremaster's Armoury active the inner interface is an LA CLONE that bypasses the class hook) | Table-form on the post-LA `BackendUtils` ref, installed DEFERRED from `mod.update` once interfaces exist (memory `reference_cim_equip_capture_la_dispatch`); a `_restoring` flag gates capture OFF during cim's own restore writes |
+| `BackendInterfaceItemPlayfab.set_loadout_item` [safe] `_cim_modded_loadout_owner.lua:805` | Direct interface loadout write (restore path, or a bot's designated loadout) [src: `backend_interface_item_playfab.lua`] | Capture direct/data writes; record under the `optional_loadout_index` (4th arg) so a non-selected-index write lands on that index | `from_live_equip=false` (a bare data write does not re-spawn the unit) |
 | `PlayerManager.rpc_sync_loadout_slot` [hook] `crafting_in_modded_dev.lua:873` | RECEIVER: decodes a synced loadout slot, `NetworkLookup.item_names[item_id]` on the numeric wire id, stores under `_player_loadouts` [src: `player_manager.lua:69`, relay at `:83`] | CONSOLIDATED: (1) #278 PRE-decode guard - `rawget(names, item_id)==nil` drops the RPC before the strict `__index` fatal; (2) post-decode "modded" rarity restore for cim clients | Thread EVERY vanilla param through unchanged (dropping trailing args corrupts the relay re-send, §19); became a full `mod:hook` (was `hook_safe`) because the guard must run BEFORE vanilla decode |
 
 **DORMANT.** Loadout persistence is force-OFF (`mod:set("persist_modded_loadouts", false)` at `:745`, no menu toggle remains). The capture/sync/restore machinery stays wired but no-ops - a bot gets its DESIGNATED vanilla loadout, byte-identical to not having cim. Replacement lands in `gut`. The `_capture_loadout_equip` + `_restore_modded_loadout` bodies still exist so the regression sandbox can exercise the round-trip.
