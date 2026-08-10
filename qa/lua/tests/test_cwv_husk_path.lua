@@ -144,8 +144,26 @@ return function(H, repo_root)
 
     H.test("husk hooks are consolidated to one site per (Class, method)", function()
         local source = read(main_path)
-        H.equal(count(source, 'mod:hook("GearUtils", "spawn_inventory_unit"'), 1,
+        -- #1159: spawn_inventory_unit moved to the musket equip-surface owner --
+        -- the bayonet attach and the melee-stance transform are applied inline in
+        -- that hook body, so the hook travelled with them. The husk branch inside
+        -- it is unchanged and still dispatches here through _om. Assert on the
+        -- WHOLE load chain, not one file: VMF drops a duplicate registration on
+        -- the same (Class, method), so a re-added entry copy would shadow the
+        -- owner and silently strand every husk-side fix.
+        local chain = require("cwv_source").combined(repo_root)
+        local equip_surface = read(mod_root .. "_cwv_musket_equip_surface.lua")
+        H.equal(count(chain, 'mod:hook("GearUtils", "spawn_inventory_unit"'), 1,
             "GearUtils.spawn_inventory_unit must be hooked exactly once")
+        H.equal(count(equip_surface, 'mod:hook("GearUtils", "spawn_inventory_unit"'), 1,
+            "the musket equip-surface owner holds the spawn chokepoint")
+        H.equal(count(source, 'mod:hook("GearUtils", "spawn_inventory_unit"'), 0,
+            "entry must not re-register GearUtils.spawn_inventory_unit")
+        -- Both husk adapter halves must still be dispatched from that hook body.
+        H.truthy(equip_surface:find("_om._husk_adapter_pre(hand, item_template", 1, true),
+            "spawn chokepoint still calls the pre-spawn husk adapter")
+        H.truthy(equip_surface:find("_om._husk_adapter_post(hand, item_data", 1, true),
+            "spawn chokepoint still calls the post-spawn husk adapter")
         H.equal(count(source, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1,
             "SimpleHuskInventoryExtension._wield_slot must be hooked exactly once")
         -- #1159: start_weapon_fx moved to the husk-residency owner, beside the

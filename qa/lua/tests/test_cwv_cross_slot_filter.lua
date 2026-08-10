@@ -75,8 +75,11 @@ return function(H, repo_root)
 	end)
 
 	H.test("#935 production carries slot context and gates Javelin before CWV narrowing", function()
+		-- #1159: the three grid hooks moved verbatim into the musket
+		-- equip-surface owner, which is where the `_is_cwv_musket_item`
+		-- recognizer they narrow with now lives too.
 		local path = repo_root
-			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_equip_surface.lua"
 		local file = assert(io.open(path, "rb"))
 		local source = file:read("*a")
 		file:close()
