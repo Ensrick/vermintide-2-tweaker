@@ -319,7 +319,8 @@ local function _build_entry(def, backend_id)
 	-- the entry keeps its inherited slot_type ("ranged" for the musket).
 	-- Cross-slot visibility comes from career-level "ranged" inclusion in
 	-- slot_melee plus a post-filter on `get_filtered_items` that scopes
-	-- which ranged items survive the melee filter (search "_CWV_CROSS_SLOT_PREFIXES").
+	-- which ranged items survive the melee filter (`_CWV_CROSS_SLOT_PREFIXES`,
+	-- in _cwv_musket_equip_surface.lua since the #1159 slice).
 	-- The `def.cross_slot` field on variants is still meaningful — it's
 	-- used by the post-filter to identify allowlisted items.
 	-- Per-item_type custom skin_combination_table. Each entry has its own

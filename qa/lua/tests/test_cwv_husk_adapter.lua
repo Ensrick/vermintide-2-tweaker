@@ -440,8 +440,18 @@ return function(H, repo_root)
         H.deep_equal(calls, { "strip", "transform", "probe" })
     end)
 
-    H.test("entry wiring: all-four-returns capture + adapter seams + fail-closed anchors", function()
-        local main = read(main_path)
+    H.test("call-site wiring: all-four-returns capture + adapter seams + fail-closed anchors", function()
+        -- #1159: the GearUtils.spawn_inventory_unit hook that carries both adapter
+        -- seams moved verbatim out of the entry into the musket equip-surface
+        -- owner, because the bayonet attach and the melee-stance transform are
+        -- applied inline in the same hook body. The seams themselves are
+        -- unchanged, so these anchors just follow the code. The entry must hold no
+        -- second copy: VMF drops a duplicate (Class, method) registration, which
+        -- would silently shadow the whole husk adapter.
+        local main = read(mod_root .. "_cwv_musket_equip_surface.lua")
+        H.equal(select(2, read(main_path):gsub(
+            'mod:hook%("GearUtils", "spawn_inventory_unit"', "")), 0,
+            "entry must not re-register the spawn chokepoint")
         for _, marker in ipairs({
             -- gear_utils.lua:13 multi-return: weapon_3p, ammo_3p, weapon_1p, ammo_1p.
             "local v_w3p, v_a3p, v_w1p, v_a1p =",

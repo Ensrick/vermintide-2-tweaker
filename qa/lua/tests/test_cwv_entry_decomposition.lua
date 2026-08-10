@@ -31,6 +31,7 @@ return function(H, repo_root)
     local menu_preview = read("_cwv_menu_preview_owner.lua")
     local weapon_transform = read("_cwv_weapon_transform_owner.lua")
     local custom_mesh = read("_cwv_custom_mesh_runtime.lua")
+    local equip_surface = read("_cwv_musket_equip_surface.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
     local render = read("_cwv_regression_render.lua")
@@ -38,10 +39,10 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 4737 = 2026-08-10 #1159 custom-mesh runtime owner extraction, measured
-        -- after the weapon-transform slice that preceded it. This ceiling only
+        -- 3849 = 2026-08-10 #1159 musket equip-surface owner extraction, measured
+        -- after the custom-mesh runtime slice that preceded it. This ceiling only
         -- ratchets DOWN as later CWV decomposition slices land.
-        H.truthy(lines <= 4737, "entry line count exceeded frozen 4737-line baseline")
+        H.truthy(lines <= 3849, "entry line count exceeded frozen 3849-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
@@ -353,11 +354,15 @@ return function(H, repo_root)
             H.equal(count_plain(entry, marker), 0, "entry no longer defines " .. marker)
         end
 
-        -- Entry reaches the moved helpers through the COMPLETE husk adapter seams
+        -- The moved helpers are reached through the COMPLETE husk adapter seams
         -- (issues 394/398/399/401/474/476/482/719): one pre-spawn call and one
-        -- post-spawn call; the module owns the per-concern dispatch.
-        H.truthy(entry:find("_om._husk_adapter_pre(hand, item_template", 1, true))
-        H.truthy(entry:find("_om._husk_adapter_post(hand, item_data", 1, true))
+        -- post-spawn call; the module owns the per-concern dispatch. #1159 moved
+        -- the spawn_inventory_unit hook that carries both seams into the musket
+        -- equip-surface owner (the bayonet attach and the melee-stance transform
+        -- are inline in that same hook body), so the calls are asserted there.
+        -- The get_item_units seam stayed in the entry.
+        H.truthy(equip_surface:find("_om._husk_adapter_pre(hand, item_template", 1, true))
+        H.truthy(equip_surface:find("_om._husk_adapter_post(hand, item_data", 1, true))
         H.truthy(entry:find("_om._husk_preselect_units(result, item_data", 1, true))
         H.truthy(husk:find("_om._husk_rekey_units(hand, item_data", 1, true))
         H.truthy(husk:find("_om._husk_apply_cwv_transform(hand, item_data", 1, true))
@@ -750,20 +755,25 @@ return function(H, repo_root)
             "the nested load is the #474 Old Musket stance channel")
 
         -- BOUNDARY. This owner covers the MESH, not the weapon. The Old Musket's
-        -- item/template/stance behavior, the bayonet child-unit lifecycle (a
-        -- second VANILLA unit linked to the rifle, not a custom-mesh gap) and
-        -- every wield-side hook stay in the entry.
-        local entry_only = {
-            'mod:hook("BackendUtils", "get_item_template"',
-            'mod:hook("SimpleInventoryExtension", "_wield_slot"',
-            'mod:hook("GearUtils", "destroy_wielded"',
-            "local function _attach_musket_bayonets",
-            "_om._destroy_old_musket_fx_proxy(wielded_unit)",
+        -- item/template/stance behavior stays in the entry's consolidated
+        -- get_item_template hook; the bayonet child-unit lifecycle (a second
+        -- VANILLA unit linked to the rifle, not a custom-mesh gap) and every
+        -- wield-side hook belong to the musket equip-surface owner, which #1159
+        -- lifted out of the entry AFTER this owner landed. Either way they are
+        -- not this owner's job, and each must exist exactly once mod-wide.
+        local not_custom_mesh = {
+            { marker = 'mod:hook("BackendUtils", "get_item_template"', home = entry },
+            { marker = 'mod:hook("SimpleInventoryExtension", "_wield_slot"', home = equip_surface },
+            { marker = 'mod:hook("GearUtils", "destroy_wielded"', home = equip_surface },
+            { marker = "local function _attach_musket_bayonets", home = equip_surface },
+            { marker = "_om._destroy_old_musket_fx_proxy(wielded_unit)", home = equip_surface },
         }
-        for _, marker in ipairs(entry_only) do
-            H.equal(count_plain(entry, marker), 1, "entry keeps " .. marker)
-            H.equal(count_plain(custom_mesh, marker), 0,
-                "custom-mesh owner must not absorb " .. marker)
+        for _, row in ipairs(not_custom_mesh) do
+            H.equal(count_plain(row.home, row.marker), 1, "owner of record keeps " .. row.marker)
+            H.equal(count_plain(combined, row.marker), 1,
+                "exactly one definition of " .. row.marker)
+            H.equal(count_plain(custom_mesh, row.marker), 0,
+                "custom-mesh owner must not absorb " .. row.marker)
         end
 
         -- No overlap with the sibling owners: no registration path, no command /
@@ -813,6 +823,199 @@ return function(H, repo_root)
         }
         for _, marker in ipairs(markers) do
             H.equal(count_plain(custom_mesh, marker), 1, "owner keeps marker " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer prints " .. marker)
+        end
+    end)
+
+    H.test("CWV musket equip-surface owner holds the whole inventory-to-destroy path", function()
+        local combined = require("cwv_source").combined(repo_root)
+
+        -- PRODUCERS. Every definition the moved block owns lives exactly once, in
+        -- the owner, and nowhere in the entry. A surviving entry copy would be a
+        -- second, divergent bayonet ledger or a second career mutation.
+        local producers = {
+            "local _CWV_CROSS_SLOT_PREFIXES = {",
+            "local function _is_cwv_musket_item(item)",
+            "local function _cwv_collect_cross_slot_careers()",
+            "local _MUSKET_BAYONET_UNIT_1P",
+            "local _MUSKET_BAYONET_UNIT_3P",
+            "local _MUSKET_BAYONET_DATA_KEY = ",
+            'local _musket_bayonet_pairs = setmetatable({}, { __mode = "k" })',
+            "local function _force_load_musket_bayonet_units()",
+            "local _MUSKET_MELEE_STATE_MACHINE = ",
+            "local function _force_load_musket_melee_assets()",
+            "local function _spawn_and_link_musket_bayonet(",
+            "local function _attach_musket_bayonets(",
+            "local function _detach_musket_bayonet(",
+            "local function _sync_all_bayonets_visibility(",
+            "local function _item_backend_id(item_data)",
+        }
+        for _, marker in ipairs(producers) do
+            H.equal(count_plain(equip_surface, marker), 1, "owner defines " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer defines " .. marker)
+        end
+
+        -- HOOK CARDINALITY. VMF silently DROPS a duplicate registration on the
+        -- same (Class, method), so a re-added entry copy would shadow this owner
+        -- rather than chain with it. Each moved pair appears exactly once across
+        -- the whole load chain, and never in the entry.
+        local hooks = {
+            'mod:hook("ItemGridUI", "_on_category_index_change"',
+            'mod:hook("ItemGridUI", "_get_items_by_filter"',
+            'mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items"',
+            'mod:hook_safe("WeaponSpreadExtension", "init"',
+            'mod:hook("WeaponSpreadExtension", "update"',
+            'mod:hook("GearUtils", "spawn_inventory_unit"',
+            'mod:hook("SimpleInventoryExtension", "_wield_slot"',
+            'mod:hook_safe("SimpleInventoryExtension", "show_first_person_inventory"',
+            'mod:hook_safe("SimpleInventoryExtension", "show_third_person_inventory"',
+            'mod:hook("GearUtils", "destroy_wielded"',
+        }
+        for _, hook in ipairs(hooks) do
+            H.equal(count_plain(equip_surface, hook), 1, "owner registers " .. hook)
+            H.equal(count_plain(entry, hook), 0, "entry no longer registers " .. hook)
+            H.equal(count_plain(combined, hook), 1, "exactly one registration of " .. hook)
+        end
+
+        -- TWO-PHASE INSTALL. The block was INTERLEAVED: the recognizer, career
+        -- override, spread guard and bayonet constants ran BEFORE the dual-weapon
+        -- FP residency, the husk-residency owner load and the husk wield
+        -- diagnostic; the spawn and wield hooks ran AFTER all three. So `install`
+        -- returns the second half and the entry calls it back at the second
+        -- former position. Both halves must exist, in that order, and the entry
+        -- must load the owner exactly once -- a second dofile would build a
+        -- SECOND bayonet ledger, because mod:dofile is not a singleton.
+        H.truthy(equip_surface:find("local function install(mod, ctx)", 1, true))
+        H.equal(count_plain(equip_surface, "return function("), 0,
+            "owner must use a named install wrapper, not an anonymous chunk")
+        H.equal(count_plain(equip_surface, "local function install_spawn_surface()"), 1,
+            "owner declares the phase-two closure")
+        H.equal(count_plain(equip_surface, "return install_spawn_surface"), 1,
+            "install hands the phase-two closure back to the entry")
+        H.equal(count_plain(entry,
+            'mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_equip_surface")(mod, {'), 1,
+            "entry installs the musket equip-surface owner exactly once")
+        H.equal(count_plain(entry, "_install_musket_spawn_surface()"), 1,
+            "entry calls phase two exactly once")
+        local phase_one = assert(entry:find("_cwv_musket_equip_surface\")(mod, {", 1, true),
+            "phase-one load missing")
+        local phase_two = assert(entry:find("_install_musket_spawn_surface()", phase_one, true),
+            "phase-two call must come after the load")
+        H.truthy(phase_one < phase_two)
+        -- Phase two must still land AFTER the husk-residency owner load and the
+        -- husk wield diagnostic, or the hook registration order changes.
+        local residency = assert(entry:find("_cwv_husk_residency_owner\")(mod, {", 1, true))
+        local husk_diag = assert(entry:find(
+            'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true))
+        H.truthy(phase_one < residency)
+        H.truthy(residency < husk_diag)
+        H.truthy(husk_diag < phase_two)
+
+        -- CONTEXT. Entry-local dependencies arrive explicitly. All three are
+        -- declared once at entry file scope above the load point and never
+        -- rebound, so the by-value capture cannot go stale; `_om` is a shared
+        -- table reference, so the slots this owner publishes stay the entry's own.
+        for _, field in ipairs({ "om", "dbg", "variant_definitions" }) do
+            H.equal(count_plain(equip_surface, "local _" .. field), 1,
+                "owner localizes ctx." .. field)
+            H.truthy(equip_surface:find("ctx." .. field, 1, true),
+                "owner reads ctx." .. field)
+            H.truthy(entry:find(field .. " = _" .. field .. ",", 1, true),
+                "entry injects ctx." .. field)
+        end
+
+        -- PUBLICATIONS other files read back off `_om`. The relocated
+        -- cwv_slot_extension_scoped regression check (#1148) calls the collector
+        -- and reads the log-only flag through the namespace, never as a global.
+        for _, publication in ipairs({
+            "_om._collect_cross_slot_careers = _cwv_collect_cross_slot_careers",
+            "_om._slot_extension_log_only = true",
+            "_om._cwv_filter_slot_name = self._cwv_filter_slot_name",
+        }) do
+            H.equal(count_plain(equip_surface, publication), 1, "owner publishes " .. publication)
+            H.equal(count_plain(entry, publication), 0, "entry no longer publishes " .. publication)
+        end
+
+        -- RESOURCE SAFETY. Three package leases travelled with the block -- both
+        -- bayonet sword units and the polearm state machine -- across TWO literal
+        -- `Managers.package:load` call sites, because the two bayonet units share
+        -- one `_load(unit_path, ref)` helper. One file-level marker covers both;
+        -- check_native_resource_safety collects markers per FILE. The token also
+        -- has to occur under qa/, which this line satisfies:
+        -- resource-safety: cwv1159-musket-equip-surface-force-load
+        H.truthy(equip_surface:find(
+            "resource-safety: cwv1159-musket-equip-surface-force-load", 1, true),
+            "owner carries its native-resource evidence marker")
+        H.equal(count_plain(entry, "resource-safety: cwv1159-musket-equip-surface-force-load"), 0,
+            "entry must not claim the owner's resource-safety marker")
+        H.equal(count_plain(equip_surface, "Managers.package:load("), 2,
+            "the marker covers exactly the two known force-load call sites")
+        for _, ref in ipairs({
+            '_load(_MUSKET_BAYONET_UNIT_1P, "cwv_musket_bayonet_1p")',
+            '_load(_MUSKET_BAYONET_UNIT_3P, "cwv_musket_bayonet_3p")',
+            'Managers.package:load(_MUSKET_MELEE_STATE_MACHINE, "cwv_musket_melee_sm", nil, true, true)',
+        }) do
+            H.equal(count_plain(equip_surface, ref), 1, "owner holds lease " .. ref)
+        end
+        H.equal(count_plain(equip_surface, "Managers.package:unload("), 0,
+            "all three leases are held for the mod's lifetime, never released")
+        -- The spawn helper fails CLOSED rather than loading on demand: a bayonet
+        -- that is not resident is skipped for this equip, never force-loaded from
+        -- inside the spawn path.
+        H.truthy(equip_surface:find(
+            "if not (Managers and Managers.package and Managers.package:has_loaded(bayonet_unit_path, package_ref)) then",
+            1, true), "bayonet spawn is residency-gated")
+
+        -- BOUNDARY vs the 13 sibling owners. This owner covers the equip path, so
+        -- it must not absorb another owner's job: no item registration, no
+        -- template construction, no command / network / regression surface, no
+        -- husk helper DEFINITIONS (it only dispatches to them), and no javelin
+        -- template or thrown-wire work (the #424 availability gate call it
+        -- inherited is a one-line dispatch into _cwv_javelin_gate, not the gate).
+        for _, forbidden in ipairs({
+            "local function _build_entry",
+            "_om._husk_rekey_units = function",
+            "_om._husk_adapter_pre = function",
+            "_force_load_husk_override_units",
+            "mod:command",
+            "mod:network_register",
+            "_rt_register",
+            "Weapons.javelin_template",
+            "NetworkLookup.damage_profiles",
+            "mod:hook(BackendUtils",
+            'mod:hook("BackendUtils"',
+        }) do
+            H.equal(count_plain(equip_surface, forbidden), 0,
+                "musket equip-surface owner must not contain " .. forbidden)
+        end
+
+        -- ...with ONE deliberate exception: `mod.on_all_mods_loaded`. The career
+        -- slot_melee mutation has always re-run there because CareerSettings can
+        -- still be partial at load time, and it must keep assigning BEFORE the
+        -- husk-residency owner, which CHAINS whatever handler is installed at its
+        -- own position. Phase one runs above that load, so the chain is intact.
+        H.equal(count_plain(equip_surface, "function mod.on_all_mods_loaded()"), 1,
+            "owner keeps the career re-extension handler")
+        H.equal(count_plain(entry, "function mod.on_all_mods_loaded()"), 0,
+            "entry no longer assigns on_all_mods_loaded")
+        H.equal(count_plain(combined, "function mod.on_all_mods_loaded()"), 2,
+            "exactly two handlers mod-wide: this assignment and the residency chain")
+        H.truthy(read("_cwv_husk_residency_owner.lua"):find(
+            "if previous_on_all_mods_loaded then previous_on_all_mods_loaded() end", 1, true),
+            "the residency owner still chains the handler assigned above it")
+
+        -- LOG MARKERS the in-game greps rely on survived the move byte-identical.
+        local markers = {
+            "[cwv slot] extended slot_melee with 'ranged' on %d careers (scoped to cross_slot variants; %d non-allowed careers reverted)",
+            "[cwv melee-grid filter] kept=%d  dropped_ranged=%d  drop_samples=[%s]",
+            "[cwv musket-bayonet] attach: 3p=%s 1p=%s (skipped: 3p=%s 1p=%s) total_pairs=%d",
+            "[cwv musket-bayonet] sync: orphans=%d shown=%d hidden=%d",
+            "[cwv musket-bayonet] pruned %d orphan(s) before new attach",
+            "[cwv:935] preserved combined equipment category slot=%s",
+            "[cwv:424] hid %d Tuskgor Javelin row(s): peer capability is %s",
+        }
+        for _, marker in ipairs(markers) do
+            H.equal(count_plain(equip_surface, marker), 1, "owner keeps marker " .. marker)
             H.equal(count_plain(entry, marker), 0, "entry no longer prints " .. marker)
         end
     end)

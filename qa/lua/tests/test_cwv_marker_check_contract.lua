@@ -186,8 +186,14 @@ return function(H, repo_root)
         H.equal(type(verdict), "string")
         H.truthy(verdict:find("collector", 1, true))
         H.truthy(verdict:find("1148", 1, true) or verdict:find("scope break", 1, true))
-        H.truthy(entry:find("_collect_cross_slot_careers", 1, true),
-            "the entry no longer publishes the cross-slot collector on _om")
+        -- #1159: the collector and its `_om` publication moved into the musket
+        -- equip-surface owner with the career slot_melee override it feeds. The
+        -- publication is what matters, not which file holds it -- the check in
+        -- _cwv_regression_identity.lua reads it back off `_om`.
+        H.truthy(read("_cwv_musket_equip_surface.lua"):find("_collect_cross_slot_careers", 1, true),
+            "the musket equip-surface owner no longer publishes the cross-slot collector on _om")
+        H.equal(entry:find("_collect_cross_slot_careers", 1, true), nil,
+            "the entry must not keep a second cross-slot collector")
     end)
 
     H.test("CWV slot-extension check still guards the issue-570 log-only state", function()
