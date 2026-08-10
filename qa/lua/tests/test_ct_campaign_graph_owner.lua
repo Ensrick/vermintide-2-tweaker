@@ -170,11 +170,14 @@ return function(H, repo_root)
         H.equal(count_plain(owner, 'local FINALE_GODS = {'), 0)
     end)
 
-    H.test("the runtime curse-disable hooks stay in the entry, unsplit", function()
-        -- Generation-time filtering (owner) and runtime nulling (entry) are the two
+    H.test("the runtime curse-disable hooks live in the node-entry owner, unsplit", function()
+        -- Generation-time filtering (this owner) and runtime nulling are the two
         -- halves of the same curse policy. They share only the is_curse_disabled
-        -- predicate, which the entry owns and passes in. Splitting the runtime half
-        -- out too would be a separate slice; assert it did NOT happen here.
+        -- predicate, which the entry still owns and passes to BOTH. The runtime
+        -- half became its own slice in 0.7.334-dev (_ct_node_entry_owner); what
+        -- this test pins now is that the five hooks stayed together when they
+        -- moved, and that not one of them leaked into the generation owner.
+        local node_entry = read("_ct_node_entry_owner.lua")
         for _, needle in ipairs({
             'mod:hook("MutatorHandler", "_activate_mutator"',
             'mod:hook("DeusMechanism", "get_current_node_curse"',
@@ -182,9 +185,15 @@ return function(H, repo_root)
             'mod:hook("DeusMechanism", "start_next_round"',
             'mod:hook("DeusMapDecisionView", "_enable_hover"',
         }) do
-            H.equal(count_plain(entry, needle), 1, needle .. " stays in the entry")
+            H.equal(count_plain(node_entry, needle), 1,
+                needle .. " stays in the node-entry owner")
+            H.equal(count_plain(entry, needle), 0, needle .. " left the entry")
             H.equal(count_plain(owner, needle), 0, needle .. " must not move to the owner")
         end
+        -- The shared predicate is still ONE entry-owned function handed to both.
+        H.equal(count_plain(entry, "is_curse_disabled = function(curse_name)"), 1)
+        H.equal(count_plain(owner, "is_curse_disabled = function(curse_name)"), 0)
+        H.equal(count_plain(node_entry, "is_curse_disabled = function(curse_name)"), 0)
         -- The generation-time filter and its restore moved as a pair.
         H.equal(count_plain(owner, "local function filter_available_curses(config)"), 1)
         H.equal(count_plain(owner, "local function restore_available_curses(saved)"), 1)

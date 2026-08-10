@@ -295,6 +295,70 @@ live table, palette determinism and the all-blue tzeentch contract, the "no
 curse / not injected means no tint" bails, the pickup dump firing even when the
 tint path bails, and that no census slot leaks to `_G` on either side.
 
+### Node-entry owner (`_ct_node_entry_owner.lua`) — issues #470 / #1159
+
+One seam, not two features: everything ct does when the run moves INTO a Chaos
+Wastes graph node. Every branch here starts from the same walk — the run state's
+current or next node key, resolved against the run controller's graph — and
+either decides what that node does to the player or repairs the vanilla data the
+node is about to read. Eight hooks live here and nowhere else in the mod:
+`MutatorHandler._activate_mutator`, `MutatorHandler.initialize_mutators`,
+`DeusMechanism.get_current_node_curse`, `DeusMechanism._transition_next_node`,
+`DeusMechanism.start_next_round`, `DeusMapDecisionView._enable_hover`,
+`DeusRunController.get_own_weapon_pool_excludes` and
+`DeusRunController.get_deus_weapon_chest_type`.
+
+**Where the boundary with the campaign-graph owner is.** This is the RUNTIME half
+of the curse-disable policy; `_ct_campaign_graph_owner` owns the GENERATION half
+(`filter_available_curses` / `restore_available_curses`, which shape the graph
+before the run reads it). The two share exactly one thing — the
+`is_curse_disabled` predicate, which stays an entry local and is handed to both
+as a late-binding wrapper. That owner's test used to assert these five curse
+hooks had *not* moved; it now asserts they moved TOGETHER and that none of them
+leaked into the generation owner. Do not fold graph shaping into this owner, and
+do not add a runtime curse hook to that one.
+
+**Why the two `DeusThemeSettings` backfills live here.** They look like generic
+data fixups and are not. `wastes` is the only theme with no
+`curse_description_color` and no string `icon`, so forcing `node.theme = "wastes"`
+onto a still-cursed node — which is exactly what `start_next_round` in this file
+does — is the sole way vanilla reaches the nil-colour glow crash and the
+`string expected, got table` texture-pass crash. They are the crash guard for this
+owner's own hooks. If the theme force ever moves, they move with it.
+
+**Why the chest guards ride the same seam.** `_ct_ensure_deus_chest_distribution`
+resolves its level through the identical `run_state:get_current_node_key()` →
+`graph[node_key]` → `node.level` chain the curse hooks use, and the custom
+altar-mix distribution is shuffled off that same node's `level_seed`. The
+unknown-rarity strip and the Trollhammer property-pool alias are the two remaining
+reasons a chest on that node could yield nothing, so they stay with it.
+`_ct_altar_reuse_owner` owns `DeusChestExtension` — the altar unit once it has been
+OPENED; this owner only decides what type the next chest on this node will be, and
+neither may register the other's hooks. The trait side of the same vanilla upgrade
+table belongs to `_ct_weapon_trait_generation`, which installs immediately below.
+
+**The one deviation.** `_transition_next_node` used to reset the entry local
+`_defeat_recovery_triggered_this_round` by direct assignment. That flag is also
+read and written through the accessor the entry hands `_ct_combat_hooks`, so
+re-declaring it at module scope would split one flag into two silently diverging
+slots. The line calls that SAME accessor (`ctx.defeat_recovery_triggered`)
+instead — one storage slot, still entry-owned. Everything else in the moved chunk
+is byte-identical to entry lines 2728-3221, MD5
+`3309e60ddf14a3fce34c68b5f891fb81` against a pristine `git archive`.
+
+`qa/lua/tests/test_ct_node_entry_owner.lua` guards installer shape, dofile
+cardinality, install position between the two neighbouring owner installs,
+entry-side absence of every moved surface, the ctx contract (each of the six keys
+dropped in turn must fail at install), and the boundary against the campaign-graph,
+boon-offer-view, weapon-trait and altar-reuse owners. By loading and installing the
+real module against a recording stub it also makes executable: hook and
+regression-check registration order, both data backfills plus their idempotence and
+their skip-not-fail degradation when the vanilla tables are absent, curse veto and
+pass-through, node.curse and node.theme save-restore on transition, hover and
+round-start, multi-return preservation across an interior nil, the per-mission
+Chest-of-Trials reset, the unknown-rarity strip, the fallback injection and its
+idempotence, the Default-sentinel altar mix, and that nothing leaks to `_G`.
+
 ### Tab-panel owner (`_ct_tab_panel_owner.lua`) — issues #461 / #533 / #556 / #571 / #1004 / #1159
 
 Every ct addition to `IngamePlayerListUI`, the hold-Tab overlay, and nothing

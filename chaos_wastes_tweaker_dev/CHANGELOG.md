@@ -1,5 +1,62 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.334-dev (2026-08-10) -- node-entry owner decomposition (#1159, #2) [untested]
+
+- Everything ct does when a run moves INTO a Chaos Wastes graph node now lives in
+  one owner, `_ct_node_entry_owner.lua`: the RUNTIME half of the curse-disable
+  policy (the `MutatorHandler._activate_mutator` veto and the `node.curse`
+  save-restore across `DeusMechanism._transition_next_node` and
+  `.start_next_round`, including the `theme = "wastes"` force), the two
+  curse-display suppressions (`get_current_node_curse` and
+  `DeusMapDecisionView._enable_hover`), the two `DeusThemeSettings` backfills, the
+  #470 `curse_mutator_sorcerer` rank-8 `max_health` backfill, and the four guards
+  that decide whether the node's weapon chest can produce a result at all - the
+  `deus_weapon_chest_distribution` fallback for native CW path missions, the
+  custom altar-mix distribution on `get_deus_weapon_chest_type`, the unknown-rarity
+  strip on `get_own_weapon_pool_excludes`, and the Trollhammer Torpedo property-pool
+  alias.
+- These ship as ONE owner because they are one seam, not two features. Every
+  branch starts from the same walk - the run state's current or next node key,
+  resolved against the run controller's graph. The chest fallback resolves its
+  level through exactly the `get_current_node_key()` -> `graph[node_key]` ->
+  `node.level` chain the curse hooks use, and the altar mix is shuffled off that
+  same node's `level_seed`.
+- **The two theme backfills are this owner's own crash guard, not general data
+  fixups.** `wastes` is the single theme with no `curse_description_color` and no
+  string `icon`, so forcing it onto a still-cursed node is precisely what makes
+  `DeusCurseUI` index a nil colour table and hand a table to
+  `UIRenderer.draw_texture`. They belong with the code that forces the theme.
+- **Runtime half only.** GENERATION-time curse filtering
+  (`filter_available_curses` / `restore_available_curses`) stays in
+  `_ct_campaign_graph_owner`, whose own test previously asserted these five hooks
+  had NOT moved - that assertion now pins the opposite invariant: they moved
+  together, and none of them leaked into the generation owner. The two halves
+  still share exactly one thing, the entry-owned `is_curse_disabled` predicate,
+  which the entry passes to both.
+- **One deviation.** One contiguous 494-line chunk (entry lines 2728-3221, 455
+  non-empty) moved and every line in it is byte-identical to the pre-extraction
+  entry region, MD5 `3309e60ddf14a3fce34c68b5f891fb81`, verified against a
+  pristine `git archive` of the pre-slice tree - with a single substitution. The
+  node transition used to reset the entry local
+  `_defeat_recovery_triggered_this_round` by direct assignment; that flag is also
+  read and written by the accessor the entry hands `_ct_combat_hooks`, so
+  re-declaring it in the owner would split one flag into two silently diverging
+  slots. The line calls that SAME accessor instead, and
+  `test_ct_node_entry_owner.lua` installs against a recording accessor and asserts
+  the transition still drives it to false.
+- Hook cardinality is unchanged mod-wide: 110 distinct (Class, method) pairs
+  before and after, verified against a pristine `git archive`. The eight moved
+  hooks keep their verbs, their order, and their neighbours - the installer sits
+  at the exact line the block occupied, between the `_ct_boon_offer_view_owner`
+  install above and the `_ct_weapon_trait_generation` install below. All 123
+  `_rt_register` occurrences are conserved; the four checks inside the moved
+  region (`curse_sorcerer_rank8_backfill`, `trollhammer_property_pool_aliased`,
+  `curse_theme_color_backfilled`, `deus_chest_distribution_fallback`) travelled
+  with the code they assert, so `/ct_regression_test` append order is unchanged.
+- ct_dev entry: 5,133 -> 4,717 non-empty lines. The frozen decomposition ceiling
+  and the `file_sizes.json` baseline ratchet down with it.
+- No gameplay change. No setting added, removed or renamed.
+
 ## 0.7.333-dev (2026-08-10) -- level-load owner decomposition (#1159, #2) [untested]
 
 - Everything ct does between "a Chaos Wastes mission's level begins loading" and

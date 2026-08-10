@@ -31,11 +31,27 @@ return function(H, repo_root)
     local boon_offer_view = read("_ct_boon_offer_view_owner.lua")
     local pickup_population = read("_ct_pickup_population_owner.lua")
     local level_load = read("_ct_level_load_owner.lua")
+    local node_entry = read("_ct_node_entry_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 5133 = 2026-08-10 baseline after the #1159 level-load owner extraction
+        -- 4717 = 2026-08-10 baseline after the #1159 node-entry owner extraction
+        -- (everything ct does when the run moves INTO a Chaos Wastes node: the
+        -- runtime half of the curse-disable policy - the MutatorHandler veto and
+        -- the node.curse save-restore across DeusMechanism._transition_next_node
+        -- and .start_next_round - the two curse-display suppressions
+        -- (get_current_node_curse, DeusMapDecisionView._enable_hover), the two
+        -- DeusThemeSettings backfills that only exist because start_next_round
+        -- forces theme="wastes" onto a still-cursed node, the #470
+        -- curse_mutator_sorcerer rank-8 MAX_HEALTH backfill, and the node weapon
+        -- chest's ability to produce a result at all - the
+        -- deus_weapon_chest_distribution fallback keyed off the same current-node
+        -- walk, the altar-mix distribution shuffled off that node's level_seed,
+        -- the unknown-rarity strip on get_own_weapon_pool_excludes, and the
+        -- Trollhammer property-pool alias the upgrade chest reads).
+        --
+        -- It replaces the 5133 baseline set by the #1159 level-load owner extraction
         -- (everything ct does between "a Chaos Wastes mission's level begins
         -- loading" and "the local player's mission has started": the
         -- EnemyPackageLoader random-director forcing for injected adventure and
@@ -79,7 +95,7 @@ return function(H, repo_root)
         -- weapon-trait-generation, and bot weapon-chest owners. The ceiling only
         -- ratchets DOWN as more of the ct_dev entry decomposes into modules; it
         -- must never grow.
-        H.truthy(lines <= 5133, "entry non-empty line count exceeded frozen 5133 baseline")
+        H.truthy(lines <= 4717, "entry non-empty line count exceeded frozen 4717 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -131,9 +147,27 @@ return function(H, repo_root)
         -- citadel145_force_finale_god_fix) already lived in _ct_regression.lua and
         -- read the CT_CITADEL145_* globals plus the mod._ct_* exports at call
         -- time, so they keep working across the chunk boundary untouched.
+        -- #1159 node-entry owner: the FIRST post-tab-panel slice whose moved
+        -- region carried its own checks. All four travel WITH the code they
+        -- assert - curse_sorcerer_rank8_backfill (#470),
+        -- trollhammer_property_pool_aliased, curse_theme_color_backfilled and
+        -- deus_chest_distribution_fallback - so the entry drops 27 -> 23 and the
+        -- new owner holds exactly 4. Conserved total unchanged; nothing lost,
+        -- renamed or duplicated, and /ct_regression_test append order is
+        -- unchanged because the owner installs at the exact line the block held.
         H.equal(count_plain(regression, "_rt_register("), 71)
         -- The tier-by-rarity check moved with the only helper state it consumes.
-        H.equal(count_plain(entry, "_rt_register("), 27)
+        H.equal(count_plain(entry, "_rt_register("), 23)
+        H.equal(count_plain(node_entry, "_rt_register("), 4)
+        for _, name in ipairs({
+            "curse_sorcerer_rank8_backfill", "trollhammer_property_pool_aliased",
+            "curse_theme_color_backfilled", "deus_chest_distribution_fallback",
+        }) do
+            H.equal(count_plain(node_entry, '_rt_register("' .. name .. '"'), 1,
+                name .. " must be registered by the node-entry owner")
+            H.equal(count_plain(entry, '_rt_register("' .. name .. '"'), 0,
+                name .. " must have left the entry")
+        end
         H.equal(count_plain(tab_panel, "_rt_register("), 6)
         H.equal(count_plain(boon_grant, "_rt_register("), 2)
         H.equal(count_plain(campaign_graph, "_rt_register("), 0)
