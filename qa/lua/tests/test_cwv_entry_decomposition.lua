@@ -30,6 +30,7 @@ return function(H, repo_root)
     local registration = read("_cwv_item_registration_owner.lua")
     local menu_preview = read("_cwv_menu_preview_owner.lua")
     local weapon_transform = read("_cwv_weapon_transform_owner.lua")
+    local custom_mesh = read("_cwv_custom_mesh_runtime.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
     local render = read("_cwv_regression_render.lua")
@@ -37,10 +38,10 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 5072 = 2026-08-10 #1159 weapon-transform owner extraction, measured
-        -- after the keep/menu preview-surface slice that preceded it. This
-        -- ceiling only ratchets DOWN as later CWV decomposition slices land.
-        H.truthy(lines <= 5072, "entry line count exceeded frozen 5072-line baseline")
+        -- 4737 = 2026-08-10 #1159 custom-mesh runtime owner extraction, measured
+        -- after the weapon-transform slice that preceded it. This ceiling only
+        -- ratchets DOWN as later CWV decomposition slices land.
+        H.truthy(lines <= 4737, "entry line count exceeded frozen 4737-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
@@ -51,6 +52,7 @@ return function(H, repo_root)
             "_cwv_skin_registry",
             "_cwv_illusion_families",
             "_cwv_husk_residency_owner",
+            "_cwv_custom_mesh_runtime",
             "_cwv_item_registration_owner",
             "_cwv_weapon_transform_owner",
             "_cwv_husk_path",
@@ -68,6 +70,7 @@ return function(H, repo_root)
         local skin_at = assert(entry:find("_cwv_skin_registry", 1, true))
         local families_at = assert(entry:find("_cwv_illusion_families", 1, true))
         local residency_at = assert(entry:find("_cwv_husk_residency_owner", 1, true))
+        local custom_mesh_at = assert(entry:find("_cwv_custom_mesh_runtime", 1, true))
         local registration_at = assert(entry:find("_cwv_item_registration_owner", 1, true))
         local transform_at = assert(entry:find("_cwv_weapon_transform_owner", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
@@ -79,6 +82,14 @@ return function(H, repo_root)
         -- #1159: the husk-residency owner force-loads at boot, long before the
         -- skin/illusion registries and the husk-path display helpers exist.
         H.truthy(core_at < residency_at)
+        -- #1159: the custom-mesh runtime owner installs the LA-pattern package
+        -- shims, the inventory-package wire aliases and the Old Musket FX-proxy
+        -- redirects at the same point in load its inline blocks ran: after the
+        -- husk-residency boot force-loads, and well before the skin/illusion
+        -- registrars and every later render surface that resolves through the
+        -- `_om` seams it publishes.
+        H.truthy(residency_at < custom_mesh_at)
+        H.truthy(custom_mesh_at < skin_at)
         H.truthy(residency_at < skin_at)
         H.truthy(core_at < skin_at)
         H.truthy(skin_at < families_at)
@@ -663,6 +674,145 @@ return function(H, repo_root)
         }
         for _, marker in ipairs(markers) do
             H.equal(count_plain(menu_preview, marker), 1, "owner keeps marker " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer prints " .. marker)
+        end
+    end)
+
+    H.test("CWV custom-mesh runtime owner holds every mod-bundled mesh shim", function()
+        -- #1159 slice: a mod-bundled custom mesh has no sibling .package, no
+        -- NetworkLookup.inventory_packages entry, no skeleton for the vanilla
+        -- template's attachment links and no flow graph for weapon FX. The four
+        -- inline blocks that patched those gaps moved verbatim out of the entry
+        -- as ONE contiguous block. Each producer lives exactly ONCE, in the owner.
+        local owned = {
+            "local _LA_PATTERN_CUSTOM_PACKAGES = {",
+            "_om._husk_custom_bundle_unit = function(base_unit)",
+            "_om._old_musket_transform_components = function(perspective, mode)",
+            "_om.old_musket_appearance = _om.old_musket_appearance_policy.new({",
+            "mod._cwv_resolve_preview_descriptor = _om._old_musket_preview_descriptor",
+            "_om._spawn_old_musket_fx_proxy = function(world, our_unit, vanilla_path, owner_unit, owner_hand_node_name)",
+            "_om._destroy_old_musket_fx_proxy = function(our_unit)",
+            "_om._reapply_old_musket_transforms_all = function()",
+            "local _orig_unit_has_node = Unit.has_node",
+        }
+        for _, marker in ipairs(owned) do
+            H.equal(count_plain(custom_mesh, marker), 1, "custom-mesh owner owns " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer defines " .. marker)
+        end
+
+        -- Hook cardinality: VMF silently DROPS a duplicate registration on the
+        -- same (Class, method), so a re-added entry copy would shadow this owner
+        -- rather than chain with it. Each of the eight moved pairs must appear
+        -- exactly once across the whole load chain, and never in the entry.
+        local combined = require("cwv_source").combined(repo_root)
+        local hooks = {
+            'mod:hook(PackageManager, "load"',
+            'mod:hook(PackageManager, "unload"',
+            'mod:hook(PackageManager, "has_loaded"',
+            'mod:hook(Unit, "node"',
+            'mod:hook(Unit, "has_node"',
+            'mod:hook(Unit, "flow_event"',
+            'mod:hook(Unit, "set_flow_variable"',
+            'mod:hook("GearUtils", "link_units"',
+        }
+        for _, hook in ipairs(hooks) do
+            H.equal(count_plain(custom_mesh, hook), 1, "custom-mesh owner registers " .. hook)
+            H.equal(count_plain(entry, hook), 0, "entry no longer registers " .. hook)
+            H.equal(count_plain(combined, hook), 1, "exactly one registration of " .. hook)
+        end
+
+        -- Entry-local dependencies arrive as explicit context. All three are
+        -- declared exactly once at entry file scope above the load point and
+        -- never rebound, so the by-value capture cannot go stale; `_om` is a
+        -- shared table reference, so the slots this owner publishes and the ones
+        -- it reads later from a hook body stay the entry's own.
+        H.truthy(custom_mesh:find("local function install(mod, ctx)", 1, true))
+        H.equal(count_plain(custom_mesh, "return function("), 0,
+            "owner must use a named install wrapper, not an anonymous chunk")
+        for _, field in ipairs({ "om", "dbg", "dbg_alert" }) do
+            H.equal(count_plain(custom_mesh, "local _" .. field .. " = ctx." .. field), 1,
+                "owner localizes ctx." .. field)
+            H.truthy(entry:find(field .. " = _" .. field .. ",", 1, true),
+                "entry injects ctx." .. field)
+        end
+        H.equal(count_plain(entry,
+            'mod:dofile("scripts/mods/character_weapon_variants/_cwv_custom_mesh_runtime")(mod, {'), 1,
+            "entry installs the custom-mesh runtime owner exactly once")
+
+        -- The #474 stance channel is dofiled from INSIDE the moved block and has
+        -- to stay there: its `_om` exports must exist before the fire dispatch
+        -- above it runs and before the identity register far below routes into
+        -- them. That is the owner's ONLY nested load.
+        H.equal(count_plain(custom_mesh, "mod:dofile("), 1,
+            "custom-mesh owner performs exactly one nested load")
+        H.equal(count_plain(custom_mesh,
+            'mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_wire")(mod, { om = _om })'), 1,
+            "the nested load is the #474 Old Musket stance channel")
+
+        -- BOUNDARY. This owner covers the MESH, not the weapon. The Old Musket's
+        -- item/template/stance behavior, the bayonet child-unit lifecycle (a
+        -- second VANILLA unit linked to the rifle, not a custom-mesh gap) and
+        -- every wield-side hook stay in the entry.
+        local entry_only = {
+            'mod:hook("BackendUtils", "get_item_template"',
+            'mod:hook("SimpleInventoryExtension", "_wield_slot"',
+            'mod:hook("GearUtils", "destroy_wielded"',
+            "local function _attach_musket_bayonets",
+            "_om._destroy_old_musket_fx_proxy(wielded_unit)",
+        }
+        for _, marker in ipairs(entry_only) do
+            H.equal(count_plain(entry, marker), 1, "entry keeps " .. marker)
+            H.equal(count_plain(custom_mesh, marker), 0,
+                "custom-mesh owner must not absorb " .. marker)
+        end
+
+        -- No overlap with the sibling owners: no registration path, no command /
+        -- network / lifecycle / regression surface.
+        for _, forbidden in ipairs({
+            "_om._husk_adapter_pre", "_om._husk_rekey_units",
+            "_force_load_husk_override_units", "local function _build_entry",
+            "mod:command", "mod:network_register", "mod.on_", "_rt_register",
+        }) do
+            H.equal(count_plain(custom_mesh, forbidden), 0,
+                "custom-mesh owner must not contain " .. forbidden)
+        end
+
+        -- The inventory_packages alias is FORWARD-ONLY by design (v0.1.287): we
+        -- give our custom paths a vanilla network index, but never overwrite the
+        -- index -> vanilla-name direction, which would hijack vanilla equip
+        -- events. Both reads stay on rawget because that table has a strict
+        -- __index that errors on an unknown key.
+        H.truthy(custom_mesh:find(
+            'nl_inventory["units/cwv_es_musket_custom/cwv_es_musket_custom"] = vanilla_1p_idx', 1, true))
+        H.truthy(custom_mesh:find(
+            'nl_inventory["units/cwv_es_musket_custom/cwv_es_musket_custom_3p"] = vanilla_3p_idx', 1, true))
+        H.equal(count_plain(custom_mesh, "nl_inventory[vanilla"), 0,
+            "the reverse index -> name mapping must stay untouched")
+        H.equal(count_plain(custom_mesh, "local vanilla_1p_idx = rawget(nl_inventory,"), 1)
+        H.equal(count_plain(custom_mesh, "local vanilla_3p_idx = rawget(nl_inventory,"), 1)
+
+        -- v0.1.298: a raw Stingray Quaternion is a per-frame temporary, so all
+        -- four authored rotations must be stored BOXED or the pose turns to
+        -- garbage a frame after equip.
+        H.equal(count_plain(custom_mesh, "= QuaternionBox(Quaternion."), 4,
+            "all four authored rotations stay boxed for long-term storage")
+
+        -- v0.1.290/291: Stingray's Unit.node throws an engine-level fatal that
+        -- pcall cannot catch, so the attachment filter must test existence with
+        -- Unit.has_node before linking.
+        H.truthy(custom_mesh:find(
+            'if type(tgt) == "string" and not Unit.has_node(target, tgt) then', 1, true))
+
+        -- Log markers the in-game #597/#604 alias and Old Musket FX verification
+        -- greps for survived the move byte-identical.
+        local markers = {
+            "[cwv:597] installed %d Greataxe inventory-package wire aliases",
+            "[cwv:604] installed %d Crowbill inventory-package wire aliases",
+            "[cwv old-musket fx] proxy spawned: path=%s linked_to=%s link_ok=%s vis_ok=%s",
+            "[cwv old-musket] descriptor generation replayed to %d retained unit(s)",
+        }
+        for _, marker in ipairs(markers) do
+            H.equal(count_plain(custom_mesh, marker), 1, "owner keeps marker " .. marker)
             H.equal(count_plain(entry, marker), 0, "entry no longer prints " .. marker)
         end
     end)
