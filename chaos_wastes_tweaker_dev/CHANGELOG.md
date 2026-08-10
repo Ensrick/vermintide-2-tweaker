@@ -1,5 +1,62 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.332-dev (2026-08-10) -- pickup-population owner decomposition (#1159, #2) [untested]
+
+- Everything ct does at `PickupSystem.populate_pickups` moves to a dedicated
+  owner, `_ct_pickup_population_owner.lua`: the per-mission BUDGET (altar,
+  Chest-of-Trials and arena-ammo counts patched into `LevelSettings`
+  `pickup_settings` and restored around vanilla's call), the two pool mutations
+  the spread pass samples from (campaign-potion injection with full-group
+  renormalization, and the #143 Morgrim's grenade redistribution), the #58 / #156
+  spawn census with its 8s delayed `printf`, the `[ct-probe]` /
+  `[populate_pickups]` / `[ct:456]` entry probes, and the #132
+  `DeusCursedChestExtension.extensions_ready` chest ground truth.
+- These ship as ONE owner because they are one question asked twice: how many
+  pickups is this mission allowed to make, and how many did it actually make. The
+  census is armed by the same hook that sets the budget and exists specifically to
+  prove that budget produced something, so splitting them would put the arm and
+  the emit in different chunks for no gain.
+- **Population only.** WHAT materializes at one spawn seam stays with
+  `_ct_pickup_spawn_owner`; WHETHER a candidate may spawn at all stays with
+  `_ct_spawn_eligibility_owner`; the per-mission cursed-chest reconcile ledger
+  stays with `_ct_diag_cursed_chest132.lua`. Three owners now sit on
+  `PickupSystem` and none of them collide, because each holds a different
+  `(Class, method)` pair.
+- Counter ownership stays split exactly as it was:
+  `mod._ct_chest_conversions_this_level` and
+  `mod._ct_belakor_altar_spawned_this_level` are RESET by this owner (populate is
+  the only per-mission run-boot seam, and both resets were consolidated into that
+  one hook to avoid VMF's rehook warning) and INCREMENTED only by
+  `_ct_pickup_spawn_owner`. The coin-reservation set is still rebuilt once per
+  pass here and consulted by `_ct_spawn_eligibility_owner`.
+- No behaviour change. One contiguous 500-line chunk moved and it is byte-identical
+  to the pre-extraction entry region apart from TWO documented lines: the
+  per-mission reset of the two career-exclusive telemetry tables **reassigns**
+  entry locals, and a module cannot assign another chunk's local, so both now cross
+  as `ctx` setters that rebind to a fresh table exactly as the original lines did.
+- Three entry locals cross as late-binding wrappers. Two of them -
+  `_dump_pickup_system_state` and `_dump_pickup_spawners_verbose` - have their
+  bodies assigned BELOW the install site, so a by-value bind would freeze `nil` and
+  both post-populate dumps would silently no-op forever. That pair is why three
+  earlier attempts at this cluster failed, and it is now pinned by a test whose
+  wrapper targets are assigned only after install.
+- The installer sits at the exact line the moved code occupied, so every hook in
+  the mod still registers in its original relative order and the mod-wide census
+  (102 `hook` / 33 `hook_safe` / 7 `network_register` / 45 `command`, 116
+  `(Class, method)` pairs) is unchanged, verified against a pristine `git archive`
+  of the pre-slice tree.
+- The settings-sync, graph-snapshot and peer-manifest RPC transports did NOT move.
+  They all sit in the entry prefix above the extracted region: a line-by-line
+  compare of lines 1-3565 against the pristine tree reports exactly ONE differing
+  line, `:44`, the `MOD_VERSION` bump itself, and each transport's own range
+  (settings-sync 1084-1590, graph-snapshot 1591-1827, peer-manifest 1828-2129) is
+  byte-identical on its own.
+- Entry: 6,108 -> 5,665 non-blank lines. `qa/decomposition_contracts.psd1` and
+  `qa/baselines/file_sizes.json` ratchet down to match; the new module is the 19th
+  required ct_dev owner.
+- Guarded by 36 new checks in `qa/lua/tests/test_ct_pickup_population_owner.lua`,
+  most of them executable against the real module.
+
 ## 0.7.331-dev (2026-08-10) -- boon-offer view owner decomposition (#1159, #2) [untested]
 
 - Everything ct does to WHERE the offered-boon widgets sit in the two views that

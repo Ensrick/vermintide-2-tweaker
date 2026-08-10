@@ -27,6 +27,10 @@ return function(H, repo_root)
     local entry = read("chaos_wastes_tweaker_dev.lua")
     local owner = read("_ct_pickup_spawn_owner.lua")
     local eligibility = read("_ct_spawn_eligibility_owner.lua")
+    -- #1159 wave 10: populate_pickups and the #58/#156 census moved out of the
+    -- entry into their own owner. The gates below follow the code - same needles,
+    -- new file - and keep the entry-side absence assertion.
+    local population = read("_ct_pickup_population_owner.lua")
 
     -- The four vanilla seams that decide WHAT a spawn produces. Each is hooked
     -- exactly once in the whole mod; VMF silently drops a second hook on the same
@@ -116,10 +120,16 @@ return function(H, repo_root)
             H.equal(count_plain(owner, "local " .. sym), 0,
                 sym .. " must not become an owner local either")
         end
+        H.equal(count_plain(population, "local " .. "_chest_conversions_this_level"), 0,
+            "nor an owner local in the population owner that now holds the reset")
         -- populate_pickups keeps sole ownership of the reset (load-time init +
-        -- the per-populate reset); the owner never zeroes them.
-        H.equal(count_plain(entry, "mod._ct_chest_conversions_this_level = 0"), 2)
-        H.equal(count_plain(entry, "mod._ct_belakor_altar_spawned_this_level = false"), 2)
+        -- the per-populate reset); THIS owner never zeroes them. #1159 wave 10
+        -- moved populate_pickups into _ct_pickup_population_owner.lua, so the two
+        -- resets now live there and the entry must hold neither.
+        H.equal(count_plain(population, "mod._ct_chest_conversions_this_level = 0"), 2)
+        H.equal(count_plain(population, "mod._ct_belakor_altar_spawned_this_level = false"), 2)
+        H.equal(count_plain(entry, "mod._ct_chest_conversions_this_level = 0"), 0)
+        H.equal(count_plain(entry, "mod._ct_belakor_altar_spawned_this_level = false"), 0)
         H.equal(count_plain(owner, "mod._ct_chest_conversions_this_level = 0"), 0)
         H.equal(count_plain(owner, "mod._ct_belakor_altar_spawned_this_level = false"), 0)
         -- And the owner does read/advance them.
@@ -158,8 +168,12 @@ return function(H, repo_root)
         }) do
             H.truthy(owner:find(field, 1, true), field .. " must be published by the owner")
         end
-        -- The census tally stays in the entry and is resolved at CALL time here.
-        H.truthy(entry:find("mod._ct_tally_count = function", 1, true))
+        -- The census tally is resolved at CALL time here, so it keeps working no
+        -- matter which chunk defines it. #1159 wave 10 moved the definition out of
+        -- the entry into _ct_pickup_population_owner.lua; the entry must not keep a
+        -- second copy, and this owner must still reach it only through `mod`.
+        H.truthy(population:find("mod._ct_tally_count = function", 1, true))
+        H.equal(count_plain(entry, "mod._ct_tally_count = function"), 0)
         H.truthy(owner:find("mod._ct_tally_count(pickup_name, spawned)", 1, true))
     end)
 
