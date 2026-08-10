@@ -146,6 +146,17 @@
     @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap_data.lua'; needle='for source, target in pairs(_3p_remap_billhook_to_polearm) do'; literal=$true; polarity='present'; issueRef='#290'; note='Billhook bake merges the complete receiver safety map before overlaying picks.' }
     @{ mod='wt_dev'; file='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_anim_remap.lua'; needle='[wt:290] weapon=wh_2h_billhook'; literal=$true; polarity='present'; issueRef='#290'; note='friends-only bounded automatic diagnostic identifies the next actual Kruber Billhook attack.' }
     @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'; needle='mod._wt.build_3p_template_remaps = mod:dofile("scripts/mods/weapon_tweaker/_wt_anim_remap_data")'; literal=$true; polarity='present'; issueRef='#2'; note='the manifest loads the split template catalog builder exactly once before the event-hot dispatch module.' }
+    # Source: weapon_tweaker/CHANGELOG.md 0.12.299-beta (#1159 Moonfire AOE owner).
+    # The #535 registration pair and the impact-hook loop moved verbatim out of
+    # both entries into _wt_moonfire_aoe.lua. The needles follow the code, and
+    # the paired absent rows keep a duplicate registration out of the entries -
+    # VMF silently drops a second hook on the same Class/method pair.
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_moonfire_aoe.lua'; needle='ExplosionTemplates[_MOONFIRE_AOE_NAME] = _MOONFIRE_AOE_TEMPLATE'; literal=$true; polarity='present'; issueRef='#535'; note='the AoE template stays registered for ExplosionUtils.get_template; without it area_damage_system nil-derefs on the buffer drain.' }
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_moonfire_aoe.lua'; needle='rawset(lookup, _MOONFIRE_AOE_NAME, idx)'; literal=$true; polarity='present'; issueRef='#535'; note='forward NetworkLookup.explosion_templates append kept with the code (index determinism across wt peers).' }
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'; needle='local _MOONFIRE_AOE_TEMPLATE'; literal=$true; polarity='absent'; issueRef='#1159'; note='the entry must not re-declare the moved template; a second copy would register a divergent table under the same name.' }
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'; needle='mod:hook_safe(cls, method_name,'; literal=$true; polarity='absent'; issueRef='#1159'; note='the projectile-impact hook loop is owned once by _wt_moonfire_aoe.lua; a re-add in the entry is silently dropped by VMF.' }
+    @{ mod='wt_dev'; file='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_moonfire_aoe.lua'; needle='ExplosionTemplates[_MOONFIRE_AOE_NAME] = _MOONFIRE_AOE_TEMPLATE'; literal=$true; polarity='present'; issueRef='#535'; note='mirror stream carries the identical registration; parity gate rejects any drift between the two owners.' }
+    @{ mod='wt_dev'; file='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua'; needle='mod:hook_safe(cls, method_name,'; literal=$true; polarity='absent'; issueRef='#1159'; note='mirror stream entry must stay free of the moved hook loop for the same VMF cardinality reason.' }
 
     # ============================ ct_dev ============================
     # Source: chaos_wastes_tweaker_dev/CHANGELOG.md 0.7.245-dev (issue 511 item).
