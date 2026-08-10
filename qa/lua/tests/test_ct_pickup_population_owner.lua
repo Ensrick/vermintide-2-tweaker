@@ -243,12 +243,18 @@ return function(H, repo_root)
             "the round-end hook must still register before the owner")
         H.truthy(install_at < grenade_at,
             "the owner must still install before the Holy Hand Grenade section")
-        -- And still ABOVE the two dump definitions it late-binds, which is the
-        -- whole reason those two cross as wrappers rather than by value.
-        local dump_def_at = assert(entry:find(
-            "function _dump_pickup_system_state(prefix, also_echo)", 1, true))
-        H.truthy(install_at < dump_def_at,
-            "the dump definitions must stay BELOW the install site (the late-binding premise)")
+        -- And still ABOVE the point where the entry's two dump slots are FILLED,
+        -- which is the whole reason those two cross as wrappers rather than by
+        -- value. v0.7.333-dev (#1159) moved the bodies themselves into
+        -- _ct_level_load_owner.lua; the entry now assigns its forward-declared
+        -- slots from that owner's exports, at the same place in the file the
+        -- definitions used to sit. The premise is unchanged - the slots are still
+        -- nil while this installer runs - so the assertion just follows the code.
+        local dump_fill_at = assert(entry:find(
+            "_dump_pickup_system_state     = _ct_level_load_owner.dump_pickup_system_state",
+            1, true))
+        H.truthy(install_at < dump_fill_at,
+            "the dump slots must still be FILLED below the install site (the late-binding premise)")
     end)
 
     -- ------------------------------------------------------------------
