@@ -1,5 +1,63 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.328-dev (2026-08-10) -- campaign-graph owner decomposition (#1159, #2) [untested]
+
+- Everything ct does to the GENERATED Chaos Wastes journey graph moves to a
+  dedicated owner, `_ct_campaign_graph_owner.lua`: the exact cursed-mission count
+  (hot-spot min/max, the 0/0 spread range, the negative `CURSES_MIN_PROGRESS`
+  floor), the `disable_dominant_god` four-god rotation, the disabled-curse filter
+  on `config.AVAILABLE_CURSES` and its restore, the `replace_shrines_with_missions`
+  SHOP -> TRAVEL base-graph conversion, the #145/#146 Citadel finale and approach
+  god rewrite on the finished graph, and the three read-only divergence probes
+  those seams carry (#145 host-only resolved-god census, #56 Citadel curse, #136
+  all-node).
+- These ship as ONE owner because they are one causal surface: `deus_populate_graph`
+  is a single deterministic call per run, so every graph-shaping toggle has to ride
+  the same wrap, and each mutation is save-and-restore around that one call. The
+  hook is still registered exactly once in the whole mod; whole-mod hook
+  registrations are unchanged at 135 raw call sites / 116 resolved Class.method
+  pairs, verified against a pristine `git archive` of the pre-slice tree.
+- **The graph-snapshot RPC transport did NOT move.** The chunked send/receive, the
+  mutable host-snapshot file-local, `apply_host_graph_snapshot_to_live_run`, and
+  the `DeusMapScene.on_enter` late-arrival apply all stay in the entry. The owner
+  only CALLS the host broadcast and the client apply at the two post-generator
+  branches. That boundary is now mechanically enforced: the owner test and two new
+  `qa/rt_textual_invariants.psd1` rows assert `mod:network_register(` and the
+  snapshot-state identifier are absent from the owner file.
+- **The runtime curse-disable hooks did NOT move.** `MutatorHandler._activate_mutator`,
+  `DeusMechanism.get_current_node_curse` / `_transition_next_node` /
+  `start_next_round`, and `DeusMapDecisionView._enable_hover` stay in the entry.
+  They are the generation-time filter's runtime counterpart (when a god's whole
+  curse list is disabled the generator deliberately leaves the vanilla list alone,
+  because an empty array crashes `assign_random_curse`, and those hooks null the
+  picked curse instead), but the two halves share no state - only the
+  `is_curse_disabled` predicate, which the entry owns and hands over.
+- Behaviour-neutral verbatim move with **zero** deviations: the 379 moved lines are
+  byte-identical to the pre-extraction entry region (MD5
+  `1f9ead1771e2472ecf876803f381bed0`, proven against `git show HEAD`), because each
+  of the six injected `ctx` values is rebound to a local of the same name. No
+  late-binding accessor was needed: every one of `_dbg`, `effective_setting`,
+  `is_curse_disabled`, `FINALE_GODS`, `apply_graph_snapshot` and
+  `broadcast_graph_snapshot` is assigned exactly once and above the installer, and
+  the owner test asserts both properties per name so a future reassignment fails
+  the gate instead of silently freezing the owner on a stale object.
+- An `assert` block at the top of `install` turns a dropped `ctx` key into a
+  load-time failure rather than a nil call during graph generation, which on a
+  client would otherwise surface only as silent host/client map divergence.
+- Entry ceiling ratchets 7,675 -> 7,346 nonblank lines. No regression check moved:
+  the region carried none, and `citadel145_probe_installed` /
+  `citadel145_force_finale_god_fix` already lived in `_ct_regression.lua` and read
+  the `CT_CITADEL145_*` globals and `mod._ct_*` exports at call time, so they keep
+  working across the chunk boundary untouched.
+- **[untested]** - verify: start a Chaos Wastes run with a non-default
+  Cursed Mission Count and at least one curse disabled, and confirm on Olesya's map
+  that the cursed-node count matches the slider, that no disabled curse appears,
+  and that a cursed node still shows its god's theme. Then set Finale God (and
+  optionally a different Finale Approach God) and confirm the Citadel approach and
+  arena maps both render the chosen god. Console should show `[ct:citadel145]`,
+  `[ct:curse56]` and `[ct:136]` lines at run start exactly as before. Multiplayer:
+  host and client `[ct:136]` dumps must still agree node-for-node.
+
 ## 0.7.327-dev (2026-08-09) -- boon grant/purchase owner decomposition (#1159, #2) [untested]
 
 - Every seam that fires when a Chaos Wastes boon changes hands moves to a

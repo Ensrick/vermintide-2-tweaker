@@ -3,7 +3,7 @@
   "hard_limit": 2500,
   "generated": "2026-08-09",
   "files": {
-    "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua": 7675,
+    "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua": 7346,
     "chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua": 12761,
     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua": 6058,
     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua": 6315,
