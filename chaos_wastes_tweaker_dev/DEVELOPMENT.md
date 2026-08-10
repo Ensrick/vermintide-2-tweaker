@@ -211,6 +211,59 @@ the #458 start-shrine modules, side-module load order, the moved checks and
 markers, orphan locals, the public surface, and non-overlap with both spawn
 owners.
 
+### Boon grant/purchase owner (`_ct_boon_grant_owner.lua`) — issues #211 / #426 / #458 / #466 / #467 / #1159
+
+Every seam that fires when a boon changes hands, and nothing else. The four hooks
+are one causal surface rather than four features, and each is registered exactly
+once in the whole mod:
+
+| Hook | Job |
+|---|---|
+| `DeusRunController.add_power_ups` (full hook) | the universal apply choke point. Every grant source funnels through it (shrine pick, altar reward, cursed chest, Bel'akor temple, set reward, end-of-level, debug), so the #211 `disable_boon_<name>` gate and the #426 peer-parity eject run here — BEFORE vanilla activates the boon — and the `[boon-trace]` audit is emitted here. The v0.7.76 bot mirror hangs off the same hook. |
+| `DeusRunController._try_buy_power_up` (full hook) | the ONLY other seam that hands a player a boon: a shrine-shop buy writes the buyer's SharedState row directly and never reaches `add_power_ups`. #458 start-shrine policy and #467 per-boon pricing are both delegated from this one hook — the `_ct_consolidated_try_buy_power_up_hook` marker comment moved with it. |
+| `DeusShopView._init_power_up_widget` (full hook) | renders the #467 price for that purchase. |
+| `DeusShopView._on_power_up_bought` (full hook) | records the #467 price on the telemetry row for that purchase. |
+
+**Policy did not move.** `_ct_bot_economy.lua` is still the pure ledger
+(`charge` / `credit` / `weapon_cost` / `shop_boon_cost` / `grant_cost`);
+`_ct_start_shrine_runtime.lua` and `_ct_boon_pricing_runtime.lua` are still the
+purchase and price policies; `_ct_bot_weapon_chest_owner.lua` still owns the
+WEAPON side of bot mirroring on `DeusChestExtension.open_chest`. This owner
+contains no arithmetic of its own — it calls them. The entry keeps the
+`mod._ct_bot_economy_*` runtime adapters (`players`, `charge`, `log`,
+`credit_all`, `seed_all`) because the coin-pickup and weapon-chest paths use them
+too.
+
+Like the pickup-spawn and tab-panel owners this is a **bare dofile**, so the body
+runs at file scope exactly where it did in the entry. Its position matters in both
+directions: the #458 and #467 runtimes are dofile'd on the four lines immediately
+above it (the `_try_buy_power_up` body reads them), and the #211 grant-source
+wrappers that stay in the entry (`_check_set_completed`,
+`DeusCursedChestView._on_button_pressed`) register immediately below it. Those
+wrappers write the `mod._ct_grant_source` this owner's audit reads, and
+`_ct_bot_weapon_chest_owner` writes the `mod._ct_bot_altar_cost` it reads to price
+an altar boon — both resolved at call time, unchanged by the move.
+
+`mod._ct_is_modded_power_up` and `mod._ct_wire_safe` come from
+`_ct_meta_trait_boons.lua`, which loads LATER. Every call site here is written
+`mod._ct_is_modded_power_up and ...` and resolves at call time; that was already
+true inside the entry, so do not "fix" it by hoisting the meta-trait dofile.
+
+No state had to be promoted to a `mod._ct_*` field: the block's only file-scope
+local, the mirror reentry guard `_ct_bot_mirror_active`, appears outside the moved
+lines only as a prose mention in an entry comment, so it moved with the block. The
+three entry file-locals the block consumed (`_dbg`, `effective_setting`,
+`_rt_register`) are replaced by the two landed shim idioms — a verbatim `_dbg`
+re-declaration, and late-binding accessors onto `mod._ct_effective_setting` and
+`mod._ct_rt_register` — so the moved bodies stay byte-identical and the two
+regression checks land in the same shared `_RT_CHECKS` list in the same order.
+`qa/lua/tests/test_ct_boon_grant_owner.lua` guards dofile cardinality and shape,
+per-hook exclusivity across entry/owner/policy modules, whole-mod method
+cardinality, the two-sided wiring position, the shim seams and their publication
+order, the reentry-guard orphan check, the moved checks and published helpers, the
+read-only cross-owner state, policy non-duplication, and non-overlap with the
+tab-panel owner.
+
 ## Buff registration: dormant boons need dual-table writes
 
 When ct injects a previously-dormant CW boon into the active loot pool at runtime (e.g. the `activate_dormant_*` toggles), the buff template **must** be registered in BOTH:

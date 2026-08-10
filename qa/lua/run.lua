@@ -281,6 +281,7 @@ local suites = {
     "test_ct_spawn_eligibility_owner",
     "test_ct_pickup_spawn_owner",
     "test_ct_tab_panel_owner",
+    "test_ct_boon_grant_owner",
     "test_ct_entry_decomposition",
     "test_ct_pool_floor_citadel_487",
     "test_ct_mission_graph_sync",

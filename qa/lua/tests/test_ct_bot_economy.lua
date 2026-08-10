@@ -42,11 +42,17 @@ return function(H, repo_root)
         local f = assert(io.open(path, "rb"))
         local source = f:read("*a")
         f:close()
-        local owner_path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_bot_weapon_chest_owner.lua"
-        local owner_file = assert(io.open(owner_path, "rb"))
-        source = source .. "\n" .. owner_file:read("*a")
-        owner_file:close()
+        -- #1159: the economy's call sites now live in two owner modules as well as
+        -- the entry -- the weapon side in _ct_bot_weapon_chest_owner, the boon side
+        -- in _ct_boon_grant_owner. Concatenate all three so this contract keeps
+        -- checking the whole surface rather than one file's slice of it.
+        for _, owner in ipairs({ "_ct_bot_weapon_chest_owner.lua", "_ct_boon_grant_owner.lua" }) do
+            local owner_path = repo_root
+                .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/" .. owner
+            local owner_file = assert(io.open(owner_path, "rb"))
+            source = source .. "\n" .. owner_file:read("*a")
+            owner_file:close()
+        end
         H.truthy(source:find("CT_BOT_ECONOMY_MARKER", 1, true))
         H.truthy(source:find("mod._ct_bot_economy_credit_all(self._run_state, args[1])", 1, true))
         H.truthy(source:find('mod:hook("DeusRunController", "_try_buy_power_up"', 1, true))
