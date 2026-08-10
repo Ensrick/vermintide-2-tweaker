@@ -55,6 +55,14 @@ return function(H, repo_root)
     local equipment_assembly = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_equipment_assembly.lua")
+    -- #1159: the LA apply / revert / reconcile owner joined this census when the
+    -- unified apply core, the offhand mesh re-swap and the three revert
+    -- primitives moved out of the entry. That block registered NOTHING, so the
+    -- family totals below are unchanged - which is the point: the owner is in the
+    -- census from day one, so the first hook anyone adds to it moves a total.
+    local apply_runtime = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_la_apply_runtime.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -65,7 +73,15 @@ return function(H, repo_root)
         H.equal(entry:find("mod._cos_replay.apply = function", 1, true), nil)
         H.equal(entry:find("mod._cos_replay.on_edge = function", 1, true), nil)
 
-        local reconcile = assert(entry:find("mod._la_reconcile = function", 1, true))
+        -- #1159: mod._la_reconcile is no longer DEFINED in the entry - it moved
+        -- verbatim into _cos_la_apply_runtime. The ordering invariant is the same
+        -- one, measured at the install site that replaced the definition: the
+        -- reconcile owner, then this coordinator, then every RPC consumer.
+        H.equal(entry:find("mod._la_reconcile = function", 1, true), nil)
+        H.truthy(apply_runtime:find("mod._la_reconcile = function", 1, true))
+        local reconcile = assert(entry:find(
+            'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime").install',
+            1, true))
         local install = assert(entry:find("_cos_la_replay_runtime", reconcile, true))
         local first_rpc = assert(entry:find(
             'mod:network_register("cos_la_apply_req"', install, true))
@@ -80,6 +96,7 @@ return function(H, repo_root)
             .. view_lifecycle:gsub("%-%-[^\n]*", "")
             .. attachment_spawn_sync:gsub("%-%-[^\n]*", "")
             .. equipment_assembly:gsub("%-%-[^\n]*", "")
+            .. apply_runtime:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),

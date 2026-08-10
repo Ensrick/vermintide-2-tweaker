@@ -1,5 +1,73 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.198-dev (2026-08-10) -- LA apply/revert/reconcile owner extracted (#1159, #2) [untested]
+
+### Behavior-neutral extraction
+
+- Moved the LA appearance RENDER runtime out of the entry file into
+  `_cos_la_apply_runtime.lua`: the unified apply core `_apply_la_on_unit` and its
+  four kind lanes (hat attachment teardown/create/paint with the #14
+  cross-skeleton guard, armor body texture or Grail Knight authored variant, and
+  the offhand/illusion lanes with the #204 mesh-mismatch warp guard and the #203
+  3P+1P paint pair), the post-spawn offhand mesh re-swap `_ensure_offhand_mesh`,
+  the three revert primitives (`mod._la_native_pulse`,
+  `mod._la_restore_native_hat`, `mod._la_apply_revert_recv`), and the single
+  render-reconcile entry point `mod._la_reconcile` (#264 Slice 2, invariant I3).
+- Apply and revert are one owner, not two. `_offhand_reswap_state` -- the weak
+  per-owner pulse cooldown and try-cap table -- is written by BOTH the apply-side
+  mesh re-swap (keyed by armoury_key) and the revert-side native pulse (keyed
+  "__native__"), so splitting them would have left a shared mutable rate limit on
+  the entry serving two owners that no longer live there. Nothing outside the
+  moved block reads any of its six file-scope locals.
+- The move is registration-free. The relocated range contained no `mod:hook`,
+  `mod:hook_safe`, `mod:hook_origin`, `mod:command`, `mod:network_register` or
+  `mod:dofile` of any kind, so mod-wide registration cardinality AND order are
+  unchanged by construction rather than by inspection: 11 hooks, 11 safe hooks, 0
+  origin hooks, 6 commands and 4 RPC registrations before and after, counted by a
+  comment-and-string-aware tokenizer against a pristine `git archive` copy.
+- The moved body is proven byte-identical to the 683 relocated entry lines by
+  SHA-256, after de-indenting the module block by exactly four spaces. NO original
+  statement was modified: the move ADDS four statements and changes none.
+- `_la_pending_apply` -- the LA retry queue -- crosses as a GETTER **and** a
+  SETTER, the first crossing in this mod to need both halves. Both of its drains
+  REBIND it (`_la_pending_apply = kept`) instead of mutating in place, and one of
+  those drains moved into the owner while the other stayed on the entry in
+  `mod.update`. By value it would have failed in both directions: the owner would
+  append its deferred re-paints to a table the entry's drain had already
+  discarded, and the owner's revert purge would be invisible to the entry, so
+  `mod.update` would re-impose the cosmetic that was just reverted. Each read
+  resolves at the exact statement that used to perform the first inline read; the
+  setter fires immediately after the untouched rebind. `_la_equips_by_peer` stays
+  by value on a single-assignment proof: it is reassigned once, at file scope
+  ~750 lines above the install, by an identity-preserving `x = x or {}`.
+- Carried across unchanged and deliberately: `_try_apply_by_peer` has no call site
+  anywhere in the mod. The v0.9.66-dev comment in `mod.update` claiming to call it
+  was made stale by v0.9.70-dev, which routed that walk through
+  `mod._la_reconcile`. Removing a function is a behaviour question and belongs in
+  its own change, so this pure structural move relocates it verbatim.
+- Entry ceiling ratchets 5,425 -> 4,806 nonblank lines (22 owners). No new hooks,
+  RPCs, commands, settings, persistence, or lifecycle owners.
+
+### Coverage
+
+- Added `qa/lua/tests/test_cos_la_apply_runtime.lua` (11 boundary and behaviour
+  tests) covering install position and ordering between the husk-init hook and
+  the replay coordinator, the registration void, exclusive ownership of the apply
+  core and all three revert primitives, non-interference with the two
+  deliberately entry-kept hooks, and the reconcile terminal reasons.
+- Two matched accessor pairs carry signals the fix cannot move, each verified by
+  actually running the mutation. Dropping the setter reddens ONLY "revert purge is
+  VISIBLE TO THE ENTRY" and leaves its by-value control green; freezing the getter
+  at install time reddens ONLY "appends into a REBOUND queue" and leaves its
+  control green. A first attempt at the setter pair had no working control -- both
+  halves failed the mutation -- and was rebuilt against the by-value store so the
+  pair discriminates.
+- Retargeted the eight path-pinned gates the suite caught, across seven test
+  files, onto the moved code with entry-side absence assertions where the pin is
+  about ownership; added the owner to the hook-cardinality census so the family
+  total stays 28/18/1 and the first hook anyone adds to it moves a total; added
+  twelve source-text invariant rows.
+
 ## 0.9.197-dev (2026-08-10) -- live equipment-assembly owner extracted (#1159, #2) [untested]
 
 ### Behavior-neutral extraction

@@ -102,7 +102,13 @@ return function(H, repo_root)
     H.test("cos attachment spawn sync crossing state uses the correct hand-off kind", function()
         -- REBOUND by the entry -> must cross as a getter, and the owner must not
         -- shadow it with a local of its own.
-        H.equal(occurrences(entry, "get_la_pending_apply = function() return _la_pending_apply end,"), 1)
+        -- #1159: TWO owners now take the retry queue this way - this one, and
+        -- _cos_la_apply_runtime, which additionally needs the matching SETTER
+        -- because the drain that rebinds the queue moved into it. The census is
+        -- raised to 2 rather than relaxed, so a hand-off that silently reverts to
+        -- by-value still fails here.
+        H.equal(occurrences(entry, "get_la_pending_apply = function() return _la_pending_apply end,"), 2)
+        H.equal(occurrences(entry, "set_la_pending_apply = function(t) _la_pending_apply = t end,"), 1)
         H.equal(source:find("local _la_pending_apply", 1, true), nil)
         H.equal(occurrences(source, "local _pending = _get_la_pending_apply()"), 1)
         -- Handed over BY REFERENCE: the owner writes these two fields and the

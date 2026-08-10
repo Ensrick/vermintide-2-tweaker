@@ -188,13 +188,30 @@ return function(Harness, repo_root)
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
         local f = assert(io.open(path, "rb"))
         local source = f:read("*a"); f:close()
+        local function read_owner()
+            local o = assert(io.open(repo_root
+                .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+                .. "_cos_la_apply_runtime.lua", "rb"))
+            local text = o:read("*a"); o:close()
+            return text
+        end
         local attach_at = source:find("_cos_husk_cache_bridge\").attach(mod", 1, true)
         Harness.truthy(attach_at, "entry file must attach the #154 bridge")
-        local reconcile_at = source:find("mod._la_reconcile = function", 1, true)
-        local revert_at = source:find("mod._la_apply_revert_recv = function", 1, true)
-        Harness.truthy(reconcile_at and reconcile_at < attach_at,
-            "bridge must attach after mod._la_reconcile is defined")
-        Harness.truthy(revert_at and revert_at < attach_at,
-            "bridge must attach after mod._la_apply_revert_recv is defined")
+        -- #1159: both seams moved verbatim into _cos_la_apply_runtime, so the
+        -- entry no longer DEFINES them - it installs the owner that does. The
+        -- ordering invariant is unchanged and still checked, just against the
+        -- install site, which is exactly where the definitions used to sit.
+        local owner_at = source:find("_cos_la_apply_runtime\").install(mod", 1, true)
+        Harness.truthy(owner_at and owner_at < attach_at,
+            "bridge must attach after the apply/revert owner is installed")
+        Harness.equal(source:find("mod._la_reconcile = function", 1, true), nil,
+            "mod._la_reconcile belongs to _cos_la_apply_runtime, not the entry")
+        Harness.equal(source:find("mod._la_apply_revert_recv = function", 1, true), nil,
+            "mod._la_apply_revert_recv belongs to _cos_la_apply_runtime, not the entry")
+        local owner = read_owner()
+        Harness.truthy(owner:find("mod._la_reconcile = function", 1, true),
+            "the owner must define mod._la_reconcile")
+        Harness.truthy(owner:find("mod._la_apply_revert_recv = function", 1, true),
+            "the owner must define mod._la_apply_revert_recv")
     end)
 end
