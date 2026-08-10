@@ -1,5 +1,39 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.195-dev (2026-08-09) -- customization view lifecycle owner extracted (#1159, #2) [untested]
+
+### Behavior-neutral extraction
+
+- Moved the HeroWindowItemCustomization view lifecycle out of the entry file
+  into `_cos_customization_view_lifecycle.lua`: the mount-side #228 / #235
+  in-mission preview shading-environment guard (re-point to the resident
+  studio-lit env, else pin the blend target to "default") and the exit-side
+  screen teardown (clear the active customization identity, close the glow
+  picker, #200 offhand apply-gate revert, deferred LA offhand emit drain,
+  pulse-wield refresh, per-backend-id gate cleanup).
+- The moved body is diff-proven byte-identical to the 389 relocated entry lines
+  apart from three accessor statements. Three hooks move as a unit and the
+  whole-mod hook count is unchanged at 102; the installer runs at the exact
+  point the inline block previously executed, so registration order holds.
+- Two entry locals stay entry-owned and cross the chunk boundary as accessors
+  rather than values. `_send_la_apply` is forward-declared and only assigned
+  far below the install call, so an install-time hand-off would have captured
+  nil and silently killed the exit drain; the mutable customization backend id
+  keeps one authoritative slot because the offhand picker writes it too.
+- Entry ceiling ratchets 6,665 -> 6,315 nonblank lines (19 owners). No new
+  hooks, RPCs, commands, settings, persistence, or lifecycle owners.
+
+### Coverage
+
+- Added `qa/lua/tests/test_cos_customization_view_lifecycle.lua` (11 boundary
+  and behaviour tests) covering install position and ordering, exclusive hook
+  ownership, non-overlap with the four sibling owners of the same view class,
+  the keep pass-through, the resident and non-resident re-point paths, the
+  blend-target fallback, the apply-gate revert, and the call-time resolution of
+  the forward-declared LA sender.
+- Retargeted four path-pinned gates onto the moved code and added entry-side
+  absence assertions, plus nine source-text invariant rows.
+
 ## 0.9.194-dev (2026-08-09) -- debug alerts stay out of chat (#427)
 
 - Two Loremaster's Armoury debug alerts in the Okri's-book filter no longer

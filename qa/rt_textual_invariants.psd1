@@ -226,6 +226,24 @@
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='_dbg_alert("[husk-hat-create] paint err key=%s vanilla=%s: %s"'; literal=$true; polarity='present'; issueRef='#697'; note='the husk-hat paint failure line carries the armoury key + vanilla variant on the visible alert channel.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='if not pcall(printf, "[cosmetics:dbg] " .. fmt, ...) then'; literal=$true; polarity='present'; issueRef='#697'; note='_dbg_alert stays printf-backed (lands in console log with mod logging OFF); rerouting it blinds every alert.' }
 
+    # -- #1159: the HeroWindowItemCustomization view lifecycle owner. The three
+    #    hooks below moved verbatim out of the entry into
+    #    _cos_customization_view_lifecycle.lua. VMF silently drops a second
+    #    registration on the same (Class, method) pair per mod, so the entry-side
+    #    ABSENCE rows are what keep a future re-inline from shadowing the owner.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='"HeroWindowItemCustomization", "_create_preview_widget"'; literal=$true; polarity='absent'; issueRef='#1159'; note='the mount-side preview-world guard belongs to _cos_customization_view_lifecycle; a second entry registration would be silently dropped.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='"HeroWindowItemCustomization", "_update_environment"'; literal=$true; polarity='absent'; issueRef='#1159'; note='the #228 blend-variation hook belongs to _cos_customization_view_lifecycle; re-inlining it re-opens the ShadingEnvironment.blend AV.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='"HeroWindowItemCustomization", "on_exit"'; literal=$true; polarity='absent'; issueRef='#1159'; note='the screen-exit teardown belongs to _cos_customization_view_lifecycle; a second entry registration would be silently dropped.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; needle='mod:hook_safe("HeroWindowItemCustomization", "_create_preview_widget"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#235'; note='the mission preview world is re-pointed to the studio-lit resident env exactly once per mount.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; needle='World.set_data(world, "cos_preview_env_repointed", true)'; literal=$true; polarity='present'; issueRef='#235'; note='the re-point flag is what lets _update_environment allow the vanilla weapons_default_01 variation instead of pinning "default".' }
+    # -- #1159: `_send_la_apply` is FORWARD-DECLARED in the entry and only assigned
+    #    ~2400 lines below this install call. Handing the sender over BY VALUE here
+    #    would capture nil and silently kill the exit-time deferred LA emit drain,
+    #    so the entry must pass a getter and the owner must call it at drain time.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='get_send_la_apply = function() return _send_la_apply end,'; literal=$true; polarity='present'; issueRef='#1159'; note='the LA sender crosses the chunk boundary as a late-bound getter, never as an install-time value.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; needle='LA_PERSIST, _get_send_la_apply(), function(unit) return Unit.alive(unit) end)'; literal=$true; polarity='present'; issueRef='#1159'; note='the drain resolves the forward-declared sender at call time; a captured upvalue would be nil.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; needle='local _send_la_apply'; literal=$true; polarity='absent'; issueRef='#1159'; note='the owner must never shadow the entry-owned sender with a local of its own.' }
+
     # ============================ cim_dev ============================
     # Source: crafting_in_modded_dev/CHANGELOG.md 0.8.57-dev (issue 511). The two
     # hook-registration checks whose source-text needles skip in retail.
