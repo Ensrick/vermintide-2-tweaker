@@ -10,6 +10,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_item_registration_owner.lua",
     "_cwv_musket_runtime.lua",
     "_cwv_husk_residency_owner.lua",
+    "_cwv_custom_mesh_runtime.lua",
     "_cwv_old_musket_wire.lua",
     "_cwv_old_musket_preview_pose.lua",
 	"_cwv_javelin_gate.lua",
