@@ -25,20 +25,22 @@ return function(H, repo_root)
     local bot_weapon_chest = read("_ct_bot_weapon_chest_owner.lua")
     local tab_panel = read("_ct_tab_panel_owner.lua")
     local boon_grant = read("_ct_boon_grant_owner.lua")
+    local campaign_graph = read("_ct_campaign_graph_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 7675 = 2026-08-09 baseline after the #1159 boon-grant owner extraction
-        -- (every seam that fires when a boon changes hands: the add_power_ups
-        -- disable/parity gate and grant audit, the bot boon mirror, the
-        -- consolidated _try_buy_power_up purchase hook, and the two DeusShopView
-        -- price seams), atop the tab-panel, pickup-spawn, spawn-eligibility, Boss
+        -- 7346 = 2026-08-10 baseline after the #1159 campaign-graph owner
+        -- extraction (everything ct does to the GENERATED journey graph: the exact
+        -- cursed-mission count, the disable_dominant_god rotation, the
+        -- disabled-curse pool filter/restore, the SHOP -> TRAVEL conversion, the
+        -- #145/#146 Citadel god rewrite, and the #145/#56/#136 divergence probes),
+        -- atop the boon-grant, tab-panel, pickup-spawn, spawn-eligibility, Boss
         -- Grudge Marks, command, journey, preview-helper, weapon-trait-generation,
         -- and bot weapon-chest/reusable-altar owners. The ceiling only ratchets
         -- DOWN as more of the ct_dev entry decomposes into modules; it must never
         -- grow.
-        H.truthy(lines <= 7675, "entry non-empty line count exceeded frozen 7675 baseline")
+        H.truthy(lines <= 7346, "entry non-empty line count exceeded frozen 7346 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -84,11 +86,18 @@ return function(H, repo_root)
         -- bot_boon_economy_installed) likewise move WITH their feature, so the
         -- entry drops 29 -> 27 and that owner holds exactly 2. Conserved total
         -- still unchanged.
+        -- #1159 campaign-graph owner: the moved region carried NO _rt_register at
+        -- all, so every count below is unchanged by that extraction. The two
+        -- checks that guard its code (citadel145_probe_installed and
+        -- citadel145_force_finale_god_fix) already lived in _ct_regression.lua and
+        -- read the CT_CITADEL145_* globals plus the mod._ct_* exports at call
+        -- time, so they keep working across the chunk boundary untouched.
         H.equal(count_plain(regression, "_rt_register("), 71)
         -- The tier-by-rarity check moved with the only helper state it consumes.
         H.equal(count_plain(entry, "_rt_register("), 27)
         H.equal(count_plain(tab_panel, "_rt_register("), 6)
         H.equal(count_plain(boon_grant, "_rt_register("), 2)
+        H.equal(count_plain(campaign_graph, "_rt_register("), 0)
         H.equal(count_plain(weapon_traits, "_rt_register("), 1)
         H.equal(count_plain(bot_weapon_chest,
             'mod:hook("DeusChestExtension", "open_chest"'), 1)
