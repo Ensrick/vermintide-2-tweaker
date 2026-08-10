@@ -19,6 +19,7 @@ local MODULES_IN_INSTALL_ORDER = {
 	"_cwv_transform_evidence.lua",
 	"_cwv_crowbill_transform_runtime.lua",
     "_cwv_husk_path.lua",
+    "_cwv_menu_preview_owner.lua",
     "_cwv_commands_lifecycle.lua",
     "_cwv_regression_identity.lua",
     "_cwv_regression_render.lua",

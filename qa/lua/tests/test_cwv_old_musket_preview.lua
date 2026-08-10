@@ -421,7 +421,16 @@ return function(H, repo_root)
         local source = file:read("*a")
         file:close()
         H.truthy(source:find("{ _om.greataxe, _om.crowbill_family, _om.old_musket_preview, _om.profile_package_wire }", 1, true))
-        H.truthy(source:find("_om._old_musket_preview_descriptor(item)", 1, true))
-		H.truthy(source:find("_om.old_musket_appearance.reconcile(unit,", 1, true))
+        -- #1159: the lease registration stays in the entry, but its two preview
+        -- CONSUMERS (the illusion-browser descriptor lookup and the per-unit
+        -- appearance reconcile) moved verbatim into the keep/menu preview-surface
+        -- owner. Read them where they now live rather than weakening the gate.
+        local owner_path = repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_menu_preview_owner.lua"
+        local owner_file = assert(io.open(owner_path, "rb"))
+        local owner = owner_file:read("*a")
+        owner_file:close()
+        H.truthy(owner:find("_om._old_musket_preview_descriptor(item)", 1, true))
+		H.truthy(owner:find("_om.old_musket_appearance.reconcile(unit,", 1, true))
     end)
 end

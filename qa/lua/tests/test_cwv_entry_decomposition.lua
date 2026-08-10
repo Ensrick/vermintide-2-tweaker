@@ -28,6 +28,7 @@ return function(H, repo_root)
     local husk = read("_cwv_husk_path.lua")
     local husk_residency = read("_cwv_husk_residency_owner.lua")
     local registration = read("_cwv_item_registration_owner.lua")
+    local menu_preview = read("_cwv_menu_preview_owner.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
     local render = read("_cwv_regression_render.lua")
@@ -35,10 +36,10 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 6058 = 2026-08-10 #1159 item-registration owner extraction, measured
-        -- after the husk-residency slice that preceded it. This ceiling only
-        -- ratchets DOWN as later CWV decomposition slices land.
-        H.truthy(lines <= 6058, "entry line count exceeded frozen 6058-line baseline")
+        -- 5606 = 2026-08-10 #1159 keep/menu preview-surface owner extraction,
+        -- measured after the item-registration slice that preceded it. This
+        -- ceiling only ratchets DOWN as later CWV decomposition slices land.
+        H.truthy(lines <= 5606, "entry line count exceeded frozen 5606-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
@@ -51,6 +52,7 @@ return function(H, repo_root)
             "_cwv_husk_residency_owner",
             "_cwv_item_registration_owner",
             "_cwv_husk_path",
+            "_cwv_menu_preview_owner",
             "_cwv_commands_lifecycle",
             "_cwv_regression_identity",
             "_cwv_regression_render",
@@ -66,6 +68,7 @@ return function(H, repo_root)
         local residency_at = assert(entry:find("_cwv_husk_residency_owner", 1, true))
         local registration_at = assert(entry:find("_cwv_item_registration_owner", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
+        local menu_preview_at = assert(entry:find("_cwv_menu_preview_owner", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
         local render_at = assert(entry:find("_cwv_regression_render", 1, true))
@@ -82,6 +85,12 @@ return function(H, repo_root)
         H.truthy(families_at < registration_at)
         H.truthy(registration_at < husk_at)
         H.truthy(families_at < husk_at)
+        -- #1159: the keep/menu preview-surface owner registers the last render
+        -- hooks in the chain. It must load after the husk display helpers and
+        -- before the commands/lifecycle owner, which the entry deliberately
+        -- installs only once every gameplay and render hook is registered.
+        H.truthy(husk_at < menu_preview_at)
+        H.truthy(menu_preview_at < lifecycle_at)
         H.truthy(husk_at < lifecycle_at)
         H.truthy(lifecycle_at < identity_at)
         H.truthy(identity_at < render_at)
@@ -528,6 +537,122 @@ return function(H, repo_root)
         }
         for _, marker in ipairs(markers) do
             H.equal(count_plain(registration, marker), 1, "owner keeps marker " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer prints " .. marker)
+        end
+    end)
+
+    H.test("CWV menu preview owner holds every keep-menu reconstruction surface", function()
+        -- #1159 slice: the previewer def resolver, the shared HeroPreviewer /
+        -- MenuWorldPreviewer applier, the #604 TeamPreviewer identity bridge, the
+        -- cosmetic picker's illusion filter, the two preview teardown edges and
+        -- the illusion-browser spawn path moved verbatim out of the entry as ONE
+        -- contiguous block. Each producer lives exactly ONCE, in the owner.
+        local owned = {
+            "local function _find_preview_slot_info(self, item_name, spawn_data)",
+            "local function _crowbill_def_from_spawn_data(spawn_data)",
+            "local function _resolve_preview_def(self, item_name, spawn_data)",
+            "local function _cwv_spawn_item_post(self, item_name, spawn_data)",
+            "local function _is_cwv_item(item)",
+            "_om._crowbill_team_peer = function(profile_index, career_index, context)",
+            "_om.old_musket_preview_pose.install(mod, function(unit, _, mode, record)",
+        }
+        for _, marker in ipairs(owned) do
+            H.equal(count_plain(menu_preview, marker), 1, "menu preview owner owns " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer defines " .. marker)
+        end
+
+        -- Hook cardinality: VMF silently DROPS a duplicate registration on the
+        -- same (Class, method), so a re-added entry copy would shadow this owner
+        -- rather than chain with it. Each of the seven moved pairs must appear
+        -- exactly once across the whole load chain, and never in the entry.
+        local combined = require("cwv_source").combined(repo_root)
+        local hooks = {
+            'mod:hook("TeamPreviewer", "_spawn_hero"',
+            'mod:hook("HeroWindowItemCustomization", "_setup_illusions"',
+            'mod:hook("HeroPreviewer", "_spawn_item"',
+            'mod:hook("MenuWorldPreviewer", "_spawn_item"',
+            'mod:hook("HeroPreviewer", "_destroy_item_units_by_slot"',
+            'mod:hook("LootItemUnitPreviewer", "_destroy_units"',
+            'mod:hook("LootItemUnitPreviewer", "spawn_units"',
+        }
+        for _, hook in ipairs(hooks) do
+            H.equal(count_plain(menu_preview, hook), 1, "menu preview owner registers " .. hook)
+            H.equal(count_plain(entry, hook), 0, "entry no longer registers " .. hook)
+            H.equal(count_plain(combined, hook), 1, "exactly one registration of " .. hook)
+        end
+
+        -- Entry-local dependencies arrive as explicit context, same shape as the
+        -- sibling owners. Every one of these ten is declared once at entry file
+        -- scope above the load point and never rebound, so the by-value capture
+        -- cannot go stale; the three maps are shared table references whose
+        -- in-place population after this point still reaches the owner.
+        H.truthy(menu_preview:find("local function install(mod, ctx)", 1, true))
+        H.equal(count_plain(menu_preview, "return function("), 0,
+            "owner must use a named install wrapper, not an anonymous chunk")
+        local ctx_fields = {
+            "om", "dbg", "dbg_alert", "resolve_field", "is_unit", "transform_unit",
+            "apply_cwv_hand_transform", "transform_map", "skin_transform_map",
+            "crowbill_transform_by_unit",
+        }
+        for _, field in ipairs(ctx_fields) do
+            H.equal(count_plain(menu_preview, "local _" .. field .. " = ctx." .. field), 1,
+                "owner localizes ctx." .. field)
+            -- Presence, not count: several sibling owners are handed the same
+            -- entry locals through their own ctx tables.
+            H.truthy(entry:find(field .. " = _" .. field .. ",", 1, true),
+                "entry injects ctx." .. field)
+        end
+        H.equal(count_plain(entry,
+            'mod:dofile("scripts/mods/character_weapon_variants/_cwv_menu_preview_owner")(mod, {'), 1,
+            "entry installs the menu preview owner exactly once")
+
+        -- BOUNDARY. CWV has three presentation surfaces and this owner is only
+        -- the MENU one. The WORLD/BOT equipment hook and its transform-miss
+        -- evidence counters stay in the entry, as do the shared def resolvers
+        -- both surfaces call. `_resolve_cwv_def` and the counters are named in
+        -- the owner's header comment, so pin the CODE forms, not the names.
+        local entry_only = {
+            'mod:hook("GearUtils", "create_equipment"',
+            "local function _resolve_cwv_def(item_data, skin, resolved_unit_name)",
+            "local function _find_def(item_key)",
+            "local def = _resolve_cwv_def(item_data, result.skin",
+            "_crowbill_transform_miss_total = _crowbill_transform_miss_total + 1",
+        }
+        for _, marker in ipairs(entry_only) do
+            H.equal(count_plain(entry, marker), 1, "entry keeps " .. marker)
+            H.equal(count_plain(menu_preview, marker), 0,
+                "menu preview owner must not absorb " .. marker)
+        end
+
+        -- No overlap with the sibling owners: no husk spawn/residency reach, no
+        -- registration path, no command / network / lifecycle / loader surface.
+        for _, forbidden in ipairs({
+            "_om._husk_adapter_pre", "_om._husk_rekey_units",
+            "_force_load_husk_override_units", "local function _build_entry",
+            "mod:command", "mod:network_register", "mod.on_", "mod:dofile(",
+        }) do
+            H.equal(count_plain(menu_preview, forbidden), 0,
+                "menu preview owner must not contain " .. forbidden)
+        end
+
+        -- The KEY BRIDGE that keyed `_equipment_units` by numeric slot_index has
+        -- been reintroduced as a string-keyed loop twice (v0.1.84 here, 0.7.88 in
+        -- cosmetics_tweaker). Pin both the warning and the code it guards.
+        H.truthy(menu_preview:find("KEY BRIDGE", 1, true))
+        H.truthy(menu_preview:find("DO NOT remove or refactor to a string-keyed loop.", 1, true))
+        H.truthy(menu_preview:find("and info.spawn_data[1].slot_index", 1, true))
+
+        -- Log markers the in-game #474/#604/#617/#760 verification greps for
+        -- survived the move byte-identical.
+        local markers = {
+            "[cwv:604] TEAM-PREVIEW identity unresolved profile=%s career=%s family=%s evidence=%d/16 chat=false",
+            "[cwv:617] Old Musket preview textures applied: item=%s mode=%s targets=%d applied=%d descriptor=true",
+            "[cwv preview] _resolve_preview_def returned nil for item_name=%s (info bid=%s)",
+            "[cwv preview hook] HeroPreviewer._spawn_item fired item_name=%s self=%s",
+            "[cwv preview hook] MenuWorldPreviewer._spawn_item fired item_name=%s self=%s",
+        }
+        for _, marker in ipairs(markers) do
+            H.equal(count_plain(menu_preview, marker), 1, "owner keeps marker " .. marker)
             H.equal(count_plain(entry, marker), 0, "entry no longer prints " .. marker)
         end
     end)
