@@ -264,6 +264,66 @@ order, the reentry-guard orphan check, the moved checks and published helpers, t
 read-only cross-owner state, policy non-duplication, and non-overlap with the
 tab-panel owner.
 
+### Campaign-graph owner (`_ct_campaign_graph_owner.lua`) — issues #56 / #136 / #145 / #146 / #1159
+
+Everything ct does to the **generated** Chaos Wastes journey graph, and nothing
+else. The whole surface is one hook, `_G deus_populate_graph`, registered exactly
+once in the mod: the generator is a single deterministic call per run, so every
+graph-shaping toggle has to ride the same wrap.
+
+| Concern | What the owner does |
+|---|---|
+| exact cursed-mission count | forces `CURSES_HOT_SPOTS_MIN/MAX_COUNT` to the setting, pins the hot-spot range to 0/0 so a cluster curses only its centre, and drops `CURSES_MIN_PROGRESS` to **-1** (0 is not enough: vanilla `get_nodes_above_progress` uses a strict `<`, so `run_progress == 0` nodes stay excluded at 0) |
+| `disable_dominant_god` | sets `config.NO_DOMINANT_GOD`, putting all four gods in the non-final rotation |
+| disabled curses | `filter_available_curses` strips them from `config.AVAILABLE_CURSES` for the duration of the call so a node re-rolls **within its god**; if a god's whole list is disabled the vanilla list is left alone, because an empty array crashes `assign_random_curse` |
+| `replace_shrines_with_missions` | shallow-clones each SHOP node to TRAVEL with `label = 0` and passes the clone map to vanilla, never mutating the shared baked graph |
+| #145 / #146 Citadel | `mod._ct_force_finale_god` rewrites the god segment of `arena_citadel_*` and `sig_citadel_*` on the FINISHED graph and re-matches the curse from the synced `level_seed`, restoring the finale override without touching `NO_DOMINANT_GOD` |
+| probes | `_ct_citadel145_dump` (host only), `_ct_curse56_dump`, `_ct_mission136_dump` — all read-only `printf` |
+
+Every mutation is save-and-restore around one `func(...)` call, in both branches
+of the hook. Adding a new graph toggle means extending `restore_curse_count`
+too; a mutation that leaks past the call poisons the next run's generation.
+
+**The graph-snapshot RPC transport did NOT move.** The chunked send/receive, the
+mutable host-snapshot file-local, `apply_host_graph_snapshot_to_live_run`, and
+the `DeusMapScene.on_enter` late-arrival apply all stay in the entry. This owner
+only *calls* `broadcast_graph_snapshot` (host) and `apply_graph_snapshot`
+(client) at the two post-generator branches, and both arrive through `ctx`. The
+owner test and `qa/rt_textual_invariants.psd1` assert the absence of
+`mod:network_register(` and of the snapshot-state identifier in this file, so the
+split cannot quietly erode.
+
+**The runtime curse-disable hooks did NOT move either.** `MutatorHandler.
+_activate_mutator`, `DeusMechanism.get_current_node_curse` /
+`_transition_next_node` / `start_next_round`, and
+`DeusMapDecisionView._enable_hover` stay in the entry. They are the other half of
+the same curse policy — the half that nulls a curse the generator was forced to
+leave in place — but the two halves share no state, only the
+`is_curse_disabled` predicate, which the entry owns and passes in. Splitting them
+apart is safe; merging them would be a second slice, not a fix.
+
+Shape is the named `local function install(mod, ctx)` installer, dofile'd once at
+the exact former block position (after the `DeusMapScene.on_enter` hook, before
+the per-career weapon override recovery) so hook order and the load-time
+`CT_CITADEL145_*` marker globals keep their original timing. All six entry
+file-locals the block consumed (`_dbg`, `effective_setting`, `is_curse_disabled`,
+`FINALE_GODS`, `apply_graph_snapshot`, `broadcast_graph_snapshot`) are passed
+**by value**, which is only sound because each is assigned exactly once and above
+the installer — the owner test proves both properties per name. If a future edit
+ever reassigns one of them, that name must become a getter (the
+`_cim_weave_loadout_owner` `_bubble_cap` idiom) or the owner will hold a stale
+object. The `assert` block at the top of `install` turns a dropped `ctx` key into
+a load-time failure instead of a nil call during graph generation, which on a
+client would surface only as silent host/client map divergence in a live run.
+The moved region is byte-identical to the pre-extraction entry lines (MD5
+`1f9ead1771e2472ecf876803f381bed0`); there are **zero** behaviour-preserving
+deviations, because each `ctx` value is rebound to a local of the same name.
+`qa/lua/tests/test_ct_campaign_graph_owner.lua` guards installer shape and
+cardinality, the two-sided load position, hook exclusivity across the entry and
+all fourteen sibling owners, both #145 call sites, marker-global single
+ownership, probe migration, the transport and runtime-hook boundaries, `ctx`
+completeness in both directions, and the single-assignment precondition.
+
 ## Buff registration: dormant boons need dual-table writes
 
 When ct injects a previously-dormant CW boon into the active loot pool at runtime (e.g. the `activate_dormant_*` toggles), the buff template **must** be registered in BOTH:
