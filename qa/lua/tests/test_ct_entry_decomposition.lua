@@ -26,21 +26,24 @@ return function(H, repo_root)
     local tab_panel = read("_ct_tab_panel_owner.lua")
     local boon_grant = read("_ct_boon_grant_owner.lua")
     local campaign_graph = read("_ct_campaign_graph_owner.lua")
+    local altar_reuse = read("_ct_altar_reuse_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 7346 = 2026-08-10 baseline after the #1159 campaign-graph owner
-        -- extraction (everything ct does to the GENERATED journey graph: the exact
-        -- cursed-mission count, the disable_dominant_god rotation, the
-        -- disabled-curse pool filter/restore, the SHOP -> TRAVEL conversion, the
-        -- #145/#146 Citadel god rewrite, and the #145/#56/#136 divergence probes),
-        -- atop the boon-grant, tab-panel, pickup-spawn, spawn-eligibility, Boss
-        -- Grudge Marks, command, journey, preview-helper, weapon-trait-generation,
-        -- and bot weapon-chest/reusable-altar owners. The ceiling only ratchets
-        -- DOWN as more of the ct_dev entry decomposes into modules; it must never
-        -- grow.
-        H.truthy(lines <= 7346, "entry non-empty line count exceeded frozen 7346 baseline")
+        -- 6801 = 2026-08-10 baseline after the #1159 altar-reuse owner extraction
+        -- (everything that depends on a DeusChestExtension ALTAR having been
+        -- opened before: the #61 use ledger and its two settings policies, the
+        -- mult^uses price curve, the re-roll seed mixing on all three generators,
+        -- the #102 relaxed lit/interactable gates, the #252 upgrade-panel repaint,
+        -- the v0.7.151 collected_by_peers retraction with its ct_altar_uncollect
+        -- RPC, and the read-only v0.7.157 altar_visual_probe watcher), atop the
+        -- campaign-graph, boon-grant, tab-panel, pickup-spawn, spawn-eligibility,
+        -- Boss Grudge Marks, command, journey, preview-helper,
+        -- weapon-trait-generation, and bot weapon-chest owners. The ceiling only
+        -- ratchets DOWN as more of the ct_dev entry decomposes into modules; it
+        -- must never grow.
+        H.truthy(lines <= 6801, "entry non-empty line count exceeded frozen 6801 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -98,6 +101,21 @@ return function(H, repo_root)
         H.equal(count_plain(tab_panel, "_rt_register("), 6)
         H.equal(count_plain(boon_grant, "_rt_register("), 2)
         H.equal(count_plain(campaign_graph, "_rt_register("), 0)
+        -- #1159 altar-reuse owner: like the campaign-graph slice, the moved region
+        -- carried NO _rt_register at all, so every count here is unchanged by that
+        -- extraction. The checks that guard its code all read globals or mod._ct_*
+        -- fields at CALL time, so they keep working across the new chunk boundary
+        -- untouched, and each stays where it already lived:
+        --   _ct_regression.lua  reliquary_reroll_message_hook (CT_RELIQUARY_REROLL_*,
+        --                       both now defined by the owner)
+        --   _ct_regression.lua  upgrade_altar_rarity_decouple (its marker global is
+        --                       declared at entry ~line 743, ABOVE the moved region,
+        --                       so it did not move)
+        --   _ct_regression.lua  altar_reuse_hook_on_open_chest (the open_chest write
+        --                       seam, which belongs to _ct_bot_weapon_chest_owner)
+        --   entry               boon_altar_no_repeat (reads the taken-boon table the
+        --                       owner now initialises at load time)
+        H.equal(count_plain(altar_reuse, "_rt_register("), 0)
         H.equal(count_plain(weapon_traits, "_rt_register("), 1)
         H.equal(count_plain(bot_weapon_chest,
             'mod:hook("DeusChestExtension", "open_chest"'), 1)
@@ -115,12 +133,21 @@ return function(H, repo_root)
     end)
 
     H.test("CT #252 owns the approved short reroll prompt once", function()
-        H.equal(count_plain(entry,
+        -- #1159: the prompt moved to the altar-reuse owner WITH the hook that
+        -- paints it. The gate follows the code - same needles, new file - plus an
+        -- entry-side absence assertion so a stray second definition in the entry
+        -- (which would shadow nothing but drift silently) fails the suite.
+        H.equal(count_plain(altar_reuse,
             'CT_RELIQUARY_REROLL_PROMPT = "Reroll this weapon?"'), 1)
-        H.equal(count_plain(entry,
+        H.equal(count_plain(entry, "CT_RELIQUARY_REROLL_PROMPT"), 0)
+        H.equal(count_plain(altar_reuse,
             "Re-rolls this weapon's traits and properties"), 0)
         H.equal(count_plain(entry,
+            "Re-rolls this weapon's traits and properties"), 0)
+        H.equal(count_plain(altar_reuse,
             "reward_info_text = CT_RELIQUARY_REROLL_PROMPT"), 1)
+        -- _ct_regression.lua reads both globals at CALL time, so the runtime check
+        -- keeps working across the new chunk boundary.
         H.truthy(regression:find(
             'CT_RELIQUARY_REROLL_PROMPT ~= "Reroll this weapon?"', 1, true))
     end)

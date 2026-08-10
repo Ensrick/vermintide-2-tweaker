@@ -1,5 +1,61 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.329-dev (2026-08-10) -- altar-reuse owner decomposition (#1159, #2) [untested]
+
+- Everything that depends on a Chaos Wastes ALTAR having been opened before moves
+  to a dedicated owner, `_ct_altar_reuse_owner.lua`: the #61 per-type use ledger
+  and its max-uses / cost-multiplier policies, the `mult ^ uses` price curve, the
+  re-roll seed mixing on all three generators (`_generate_stored_power_up`,
+  `_generate_stored_weapon`, `_generate_upgraded_weapon`), the #102 relaxed
+  keep-lit / keep-interactable gates on `update_upgrade_chest_color` and
+  `can_be_unlocked`, the #252 `DeusUpgradeWeaponInteractionUI` repaint that stops
+  the panel contradicting them, the v0.7.151 `collected_by_peers` retraction with
+  its `ct_altar_uncollect` RPC, the boon-altar no-repeat ledger's load-time
+  initialisation, and the read-only v0.7.157 `altar_visual_probe` watcher.
+- An ALTAR is `DeusChestExtension` (boon shrine, the two weapon-swap shrines, the
+  weapon-upgrade shrine). It is NOT a Chest of Trials, which is
+  `DeusCursedChestExtension` with no purchase step at all. The terminology banner
+  that spells this out moved into the owner with the code it governs.
+- These ship as ONE owner because they are one causal surface: every one of them
+  branches on the same per-`go_id` use count, and none of them does anything at
+  all on an altar's first use.
+- **The `open_chest` WRITE seam did NOT move.** The single consolidated
+  `(DeusChestExtension, open_chest)` hook -- the only place the count is
+  incremented and the only place the re-arm runs -- stays in
+  `_ct_bot_weapon_chest_owner.lua`. The split is exactly write-site vs
+  read-sites; that owner now receives the ledger accessor and the max-uses policy
+  from this one, forwarded by the entry, and still reaches
+  `mod._ct_altar_uncollect` through the mod namespace. VMF silently drops a
+  second registration on a pair, which is how the v0.7.129/.130 altar-reuse "fix"
+  shipped dead for two releases, so the owner test and
+  `qa/rt_textual_invariants.psd1` both pin the pair to exactly one file.
+- **The settings-sync / graph-snapshot / peer-manifest RPC transports did NOT
+  move** and are asserted absent from the new file.
+- Behaviour-neutral: the moved region is byte-identical to the pre-extraction
+  entry lines (MD5 `4cf9d91f4008207f7583993a3d7ca8ce`) with zero interior
+  deviations, proven by two independent extractions. Whole-mod hook registrations
+  are unchanged -- 97 `mod:hook` / 29 `mod:hook_safe` / 7 `mod:network_register`
+  / 44 `mod:command` call sites and 109 distinct `Class.method` pairs with no
+  duplicates, counted two ways (raw text census and a comment-stripped parse)
+  against a pristine `git archive` of the pre-slice tree. Seven hooks, one safe
+  hook and one RPC moved out of the entry and into the owner; nothing else
+  changed on either side.
+- Two seam deviations, both OUTSIDE the moved block and both test-pinned:
+  `effective_setting` crosses as a late-binding wrapper closure because its
+  forward slot is only assigned BELOW this install site (a by-value bind would
+  freeze nil into every altar-reuse setting), and the run-start
+  `_altar_uses_by_go_id = {}` became the owner's exported `reset_uses()`, which
+  runs the identical rebind inside the chunk every reader lives in. The ledger is
+  handed out as an accessor, never as the table, because a rebind would otherwise
+  leave a consumer incrementing last run's copy.
+- `ctx` keys are load-time asserted, so a dropped key fails at boot instead of
+  surfacing as a nil settings read the first time a player walks up to an altar.
+- Entry 7346 -> 6801 non-blank lines; the decomposition ceiling ratchets down and
+  `_ct_altar_reuse_owner.lua` becomes the 16th mandatory ct_dev owner. The new
+  `qa/lua/tests/test_ct_altar_reuse_owner.lua` loads and installs the real module
+  against a recording stub, so the registration census, the ctx asserts, the
+  published globals and both deviations are executable checks, not just needles.
+
 ## 0.7.328-dev (2026-08-10) -- campaign-graph owner decomposition (#1159, #2) [untested]
 
 - Everything ct does to the GENERATED Chaos Wastes journey graph moves to a

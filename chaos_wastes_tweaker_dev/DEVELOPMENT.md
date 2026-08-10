@@ -324,6 +324,80 @@ all fourteen sibling owners, both #145 call sites, marker-global single
 ownership, probe migration, the transport and runtime-hook boundaries, `ctx`
 completeness in both directions, and the single-assignment precondition.
 
+### Altar-reuse owner (`_ct_altar_reuse_owner.lua`) — issues #61 / #102 / #252 / #1159
+
+Everything that depends on a Chaos Wastes **altar** having been opened before,
+and nothing else. An altar is `DeusChestExtension` — the boon shrine (`power_up`),
+the two weapon-swap shrines, and the weapon-upgrade shrine. It is **not** a Chest
+of Trials: that is `DeusCursedChestExtension`, which has no `_chest_type` and no
+purchase step at all (you pay by fighting the wave). The terminology banner that
+spells this out moved into the owner with the code it governs, because every
+past mistake in this area started by confusing the two.
+
+Vanilla altars are single-use. #61 makes max uses configurable per type, and this
+owner is the full consequence of that one decision:
+
+| Concern | What the owner does |
+|---|---|
+| use ledger | `_altar_uses_by_go_id`, a per-`go_id` count, plus `_altar_max_uses` / `_altar_cost_mult` read through `mod._ct_umbrella_policy.value` so the host's values reach clients over the standard VMF broadcast |
+| price curve | `get_purchase_cost` scales vanilla by `mult ^ uses_so_far`, floored at 1 |
+| fresh offerings | `_generate_stored_power_up` mixes the use count into the seed; `_generate_stored_weapon` and `_generate_upgraded_weapon` offset the `go_id` argument, which flows through vanilla's internal `fnv32_hash` and yields a new roll without copying the function |
+| #102 keep-lit | `update_upgrade_chest_color` and `can_be_unlocked` reimplement vanilla with the rarity test relaxed `<=` -> `<` for a re-armed upgrade altar, so a same-tier re-roll stays lit and interactable while a genuine downgrade still greys out. `self._rarity` is deliberately **not** bumped: it is also the reward tier, and bumping it made rewards climb |
+| #252 panel agreement | a `hook_safe` on `DeusUpgradeWeaponInteractionUI._populate_widget` repaints the same-tier case, which vanilla paints red because it runs its own `<` test. Everything is `pcall`-guarded, so API drift degrades to vanilla's red presentation rather than crashing |
+| network un-loot | `mod._ct_remove_peer_from_collected` retracts the own peer from the chest's server-owned `collected_by_peers`; a client opener round-trips through the `ct_altar_uncollect` RPC. Without this, vanilla `update` re-derives "looted" one tick after every re-arm and the re-rolled hologram never displays |
+| probes | the read-only v0.7.157 `altar_visual_probe` watcher on `DeusChestExtension.update` and `_ct_probe_collected_by_peers`, both diagnose-only |
+
+**The `open_chest` WRITE seam did NOT move.** The one consolidated
+`(DeusChestExtension, open_chest)` hook — the only place the use count is
+incremented and the only place the re-arm runs — stays in
+`_ct_bot_weapon_chest_owner.lua`. The split is exactly write-site vs read-sites,
+which is why the ledger has to cross: that owner receives `altar_uses` and
+`altar_max_uses` from this one (forwarded by the entry at its install site) and
+reaches `mod._ct_altar_uncollect` through the mod namespace. A second
+registration on that pair is silently dropped by VMF, which is how the
+v0.7.129/.130 altar-reuse "fix" shipped dead for two releases; the owner test and
+`qa/rt_textual_invariants.psd1` both assert the pair appears in exactly one file.
+
+**The settings-sync, graph-snapshot and peer-manifest RPC transports did NOT
+move.** They stay in the entry and are asserted absent from this file.
+
+Shape is the named `local function install(mod, ctx)` installer, dofile'd once at
+the exact former block position (after the bot-economy `on_soft_currency_picked_up`
+hook, before the multiplayer settings-sync block) so hook order and the load-time
+definition of `_ct_altar_probe_watch`, `_ct_probe_collected_by_peers`, the
+`CT_RELIQUARY_REROLL_*` globals, the four `mod._ct_*` altar helpers and
+`mod._ct_boon_altar_taken_boons` all keep their original timing. The moved region
+is byte-identical to the pre-extraction entry lines (MD5
+`4cf9d91f4008207f7583993a3d7ca8ce`) with **zero** interior deviations.
+
+Two deviations live at the seam, both in the entry, both test-pinned:
+
+1. **`effective_setting` crosses as a late-binding wrapper closure, not by
+   value.** Its forward slot is declared around entry line 785 but only assigned
+   in the settings-sync block far *below* this install site, so a by-value bind
+   would freeze `nil` and every altar-reuse setting would read as nil in game.
+   This is the opposite situation from the campaign-graph owner, whose six ctx
+   values are all assigned above its (much later) install site. `_dbg`,
+   `_dbg_alert` and `CT_RPC_SCHEMA` are defined above line 110 and do cross by
+   value.
+2. **The run-start ledger wipe became `_ct_altar_reuse.reset_uses()`.** The entry
+   used to run `_altar_uses_by_go_id = {}` inside its `DeusRunController.setup_run`
+   hook; the exported `reset_uses` runs the identical statement inside the owner
+   chunk, where every reader's upvalue follows it. `altar_uses` stays an
+   *accessor* precisely because this is a rebind: a consumer that captured the
+   table would keep incrementing the previous run's copy.
+
+`qa/lua/tests/test_ct_altar_reuse_owner.lua` guards installer shape, dofile
+cardinality, the two-sided load position, exclusivity of all nine registrations
+across the entry and every sibling owner, the write-seam boundary, ledger single
+ownership, the transport boundary, `#252` marker/prompt single ownership, `ctx`
+completeness in both directions, and — by loading and installing the real module
+against a recording stub — the registration census (7 hooks / 1 safe / 1 RPC),
+load-time failure on any dropped `ctx` key, the globals and `mod._ct_*` helpers
+the install must publish, and both seam deviations: that `reset_uses` **rebinds**
+rather than clearing in place, and that a wrapper whose target is assigned only
+*after* install still resolves.
+
 ## Buff registration: dormant boons need dual-table writes
 
 When ct injects a previously-dormant CW boon into the active loot pool at runtime (e.g. the `activate_dormant_*` toggles), the buff template **must** be registered in BOTH:
