@@ -1,5 +1,36 @@
 # Weapon Tweaker Changelog
 
+## 0.12.300-dev (2026-08-10) -- Moonfire Bow AOE revert becomes its own owner module (#1159) [untested]
+
+- Extracted the Moonfire Bow pre-nerf AOE revert into its own owner module,
+  `_wt_moonfire_aoe.lua`: the toggle read, the ExplosionTemplates +
+  NetworkLookup.explosion_templates registration (#535), the recorded
+  wire-safe `machinegun_poison_arrow` fallback, the
+  `wt_535_moonfire_explosion_registered` regression check, and the
+  PlayerProjectile Unit/Husk impact-hook loop.
+- Behavior is unchanged by construction. The 186 moved lines are byte-identical
+  to the block they replaced, the entry keeps a bare `mod:dofile` at the exact
+  former execution position (after `_wt_regression`, before the 3P swap
+  dispatch), and hook cardinality is unchanged. The only additions are two
+  documented accessors the chunk boundary needs: `local mod = get_mod(...)` and
+  a re-read of the published `mod._wt.rt_register`.
+- Entry drops from 4,318 to 4,148 non-blank lines; both
+  decomposition ceilings and both file-size baselines ratcheted to the new
+  counts.
+- New offline suite `test_wt_moonfire_aoe_owner` (6 checks per stream, 13 cases
+  total with the cross-stream identity check) locks the wiring position,
+  hook ownership, entry-side absence of every moved local, the #535 needles, and
+  the single annotated `World.create_particles` boundary. Six new
+  `rt_textual_invariants` rows follow the code.
+- **Verify (single player, no coop needed).** Load line `[wt:LOAD] v0.12.300-dev`;
+  `/wt_regression_test` all-pass including
+  `wt_535_moonfire_explosion_registered`. Enable `moonfire_aoe_revert` (Weapon
+  Tweaks), equip a Moonfire Bow on any Kerillian career, and fire charged shots
+  into enemy packs and props: the pre-nerf poison-puff AoE and the 4-puff visual
+  cluster must behave exactly as on 0.12.299-dev. Files:
+  `weapon_tweaker_dev.lua` (MOD_VERSION; block replaced by the dofile),
+  `_wt_moonfire_aoe.lua` (new).
+
 ## 0.12.299-dev (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
 
 - The shared peer-parity library installs as an atomic transaction: receiver
