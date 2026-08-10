@@ -157,6 +157,72 @@ of the reset; this owner owns every increment.
 exclusivity across entry/owner/eligibility, install ordering, moved-local orphans,
 the mod-field counter seam, marker migration, and the eight-field public surface.
 
+### Pickup-population owner (`_ct_pickup_population_owner.lua`) — issues #58 / #60 / #132 / #143 / #156 / #1159
+
+The third and last question at the pickup seam. Eligibility decides *may this
+pickup claim this spawner*; the spawn owner decides *what the claimed spawner
+produces*; this owner decides **how many the mission gets in the first place, and
+counts what actually arrived**. It sits on `PickupSystem.populate_pickups`, the
+one host-side call that runs once per mission load before any pickup unit exists,
+plus the `DeusCursedChestExtension.extensions_ready` ground truth. Those two hooks
+live here and nowhere else in the mod.
+
+| Concern | What the owner does |
+|---|---|
+| the BUDGET | patches `LevelSettings[level].pickup_settings` in place for the duration of vanilla's call so the mission spawns the configured altars (`deus_weapon_chest` = the sum of the four altar sliders), Chests of Trials (`deus_cursed_chest`) and arena ammo (`ammo`). Every touched field is saved and restored; arena levels are detected by the ABSENCE of a `deus_weapon_chest` key and take the ammo path; the `-1` sentinel is "Default, do not override" and is distinct from an explicit `0` |
+| the POOLS | clones the three campaign potions into `Pickups.deus_potions` and renormalizes the **whole group** to sum 1.0 — vanilla's `_spawn_spread_pickups` breaks on the first cumulative `>=` roll, so anything past cumulative 1.0 is simply unreachable — and applies the #143 Morgrim's fix by halving `holy_hand_grenade` and redistributing the freed half **proportionally**, leaving the pool SUM unchanged. Both unwind after vanilla returns |
+| the CENSUS (#58 / #156) | the `mod._ct_tally_*` ledger: reset / count / tick / cursed_count, tallying by final `pickup_name` and emitting ONE raw `printf` ~8s later, after the guaranteed-spawn pass. `total=0` on an injected level is the unambiguous "this map is broken" signal, and raw `printf` means it lands on a logging-OFF host with no dump command and no debug toggle |
+| the PROBES | `[ct-probe]` cursed-chest cap, `[populate_pickups]` (level, mechanism, difficulty, `has_pickup_settings`, injection gate, spawner-list counts) and the `[ct:456]` book-spawner census dispatch |
+| #132 ground truth | `DeusCursedChestExtension.extensions_ready` fires for every cursed chest that exists regardless of spawn path, so it catches chests that bypass the pickup system and the cap entirely. Read-only: cap and census go to `_ct_diag_cursed_chest132.lua`, which owns the counter and the reconcile |
+
+**Why the census ships with the pass rather than as a diagnostics module.** The
+ledger is armed by `populate_pickups`, drained by the entry's single `mod.update`,
+fed by `_ct_pickup_spawn_owner`, and read by the #132 probe — but only ONE of
+those is a lexical dependency. Splitting it out would put the arm and the emit in
+different chunks for no gain, while the census exists specifically to answer "did
+the budget this hook just set actually produce anything". Same feature, one file.
+
+**Three crossings, and the one that mattered.** `effective_setting` crosses as a
+late-binding wrapper. `_dump_pickup_system_state` and
+`_dump_pickup_spawners_verbose` **must** cross that way: their `function` bodies
+are assigned *below* the install site, so a by-value bind would freeze `nil` and
+both post-populate dumps would silently no-op forever. That forward-declaration
+pair is what sank three earlier attempts at this cluster; the third supposed
+crossing, `_ct_book_spawner_census`, was never real — the moved code already
+reached it as `mod._ct_book_spawner_census` at call time.
+
+**The one deviation.** The per-mission reset of `_career_exclusive_denial_counts`
+and `_career_exclusive_logged_this_run` **reassigns** those entry locals, and a
+module cannot assign another chunk's local, so both cross as `ctx` setters. One
+line in, one line out, same order. `table.clear` in place was rejected: identity
+would survive, which is a real semantic difference, and it would make the "fresh
+table per mission" contract untestable. Everything else in the 500-line chunk is
+byte-identical to the pre-extraction entry region.
+
+**Counter ownership is split on purpose.** `mod._ct_chest_conversions_this_level`
+and `mod._ct_belakor_altar_spawned_this_level` are RESET here (populate_pickups is
+the only per-mission run-boot seam, and both resets were consolidated into this
+single hook to avoid VMF's "rehook active hook" warning) and INCREMENTED only by
+`_ct_pickup_spawn_owner`. Likewise the coin-reservation set is rebuilt here once
+per pass and consulted by `_ct_spawn_eligibility_owner`.
+
+The owner **returns nothing**. Every seam it publishes is a `mod` field the moved
+code already assigned, because every consumer resolves them off `mod` at call
+time.
+
+`qa/lua/tests/test_ct_pickup_population_owner.lua` guards installer shape, dofile
+cardinality, hook exclusivity across all three pickup owners, and the install
+position (including that the two dump definitions stay BELOW it, which is the
+late-binding premise). By loading and installing the real module against a
+recording stub it also makes executable: the late binding of both dumps and of
+`effective_setting`, fresh-table rebinding of the two career counters on every
+pass, budget patch-and-restore on normal and arena levels, the `-1` versus `0`
+sentinel split, the early-bail pass-through, potion injection with a 1.0 group
+sum and full unwind, sum-preserving grenade redistribution plus the
+only-grenade guard, host/client reservation behaviour, census arming, counting,
+the 8s single emit and the `ZERO=true` signal, and the #132 dispatch with its
+Default-cap resolution.
+
 ### Tab-panel owner (`_ct_tab_panel_owner.lua`) — issues #461 / #533 / #556 / #571 / #1004 / #1159
 
 Every ct addition to `IngamePlayerListUI`, the hold-Tab overlay, and nothing

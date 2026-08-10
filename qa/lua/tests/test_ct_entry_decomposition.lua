@@ -29,18 +29,27 @@ return function(H, repo_root)
     local altar_reuse = read("_ct_altar_reuse_owner.lua")
     local chest_revive = read("_ct_chest_revive_owner.lua")
     local boon_offer_view = read("_ct_boon_offer_view_owner.lua")
+    local pickup_population = read("_ct_pickup_population_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 6108 = 2026-08-10 baseline after the #1159 boon-offer view owner
+        -- 5665 = 2026-08-10 baseline after the #1159 pickup-population owner
+        -- extraction (everything ct does at PickupSystem.populate_pickups: the
+        -- per-mission altar / Chest-of-Trials / arena-ammo BUDGET patched into
+        -- LevelSettings pickup_settings and restored around vanilla's call, the
+        -- campaign-potion injection with full-group renormalization, the #143
+        -- Morgrim's grenade redistribution, the #58/#156 spawn census with its
+        -- 8s delayed printf, the entry probes, and the #132
+        -- DeusCursedChestExtension.extensions_ready chest ground truth).
+        --
+        -- It replaces the 6108 baseline set by the #1159 boon-offer view owner
         -- extraction (everything ct does to WHERE the offered-boon widgets sit
         -- in the shrine DeusShopView and the Chest of Trials
         -- DeusCursedChestView: the degenerate-arc NaN repair, both build hooks,
         -- the #115/#114 scroll block, and the two wrapping update hooks that
-        -- drive its per-frame reflow and input).
-        --
-        -- It replaces the 6433 baseline set by the #1159 chest-revive owner
+        -- drive its per-frame reflow and input), which in turn replaced the 6433
+        -- baseline set by the #1159 chest-revive owner
         -- extraction (everything ct does to the PARTY when a Chest of Trials
         -- completes: the host-gated OPEN detector, the three-downed-state
         -- triage, the #299 move-before-free rescue transaction with its arm /
@@ -59,7 +68,7 @@ return function(H, repo_root)
         -- weapon-trait-generation, and bot weapon-chest owners. The ceiling only
         -- ratchets DOWN as more of the ct_dev entry decomposes into modules; it
         -- must never grow.
-        H.truthy(lines <= 6108, "entry non-empty line count exceeded frozen 6108 baseline")
+        H.truthy(lines <= 5665, "entry non-empty line count exceeded frozen 5665 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -150,6 +159,21 @@ return function(H, repo_root)
         -- across the new chunk boundary and stays a live boundary assertion.
         H.equal(count_plain(boon_offer_view, "_rt_register("), 0)
         H.equal(count_plain(regression, '_rt_register("boon_offer_scrollbar_wired"'), 1)
+        -- #1159 pickup-population owner: same story once more. The moved region
+        -- carried NO _rt_register, so every count above is unchanged by it. The
+        -- two checks that guard its code stay in _ct_regression.lua and keep
+        -- working across the new chunk boundary because neither reads anything
+        -- the move relocated: pickup_dump_helpers_forward_declared asserts the
+        -- entry's two forward-declared dump slots (still entry locals, now ALSO
+        -- reached by the owner through late-binding ctx wrappers), and
+        -- diag_132_134_136_present resolves mod._ct_tally_cursed_count off `mod`
+        -- at CALL time - which the owner still publishes. That makes both live
+        -- boundary assertions for this slice.
+        H.equal(count_plain(pickup_population, "_rt_register("), 0)
+        H.equal(count_plain(regression, '_rt_register("pickup_dump_helpers_forward_declared"'), 1)
+        H.equal(count_plain(regression, '_rt_register("diag_132_134_136_present"'), 1)
+        H.truthy(regression:find("mod._ct_tally_cursed_count", 1, true),
+            "the #132 cross-check must keep reading the census off mod at call time")
         H.equal(count_plain(weapon_traits, "_rt_register("), 1)
         H.equal(count_plain(bot_weapon_chest,
             'mod:hook("DeusChestExtension", "open_chest"'), 1)

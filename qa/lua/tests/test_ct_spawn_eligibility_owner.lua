@@ -75,7 +75,24 @@ return function(H, repo_root)
         -- may install later in the script body -- but it must still install during
         -- the body, i.e. after the populate hook's definition and before any hook
         -- can fire. Locking the relative order keeps a future reorder honest.
-        local populate_at = assert(entry:find("mod._ct_rebuild_coin_reserved_set({", 1, true))
+        -- #1159 wave 10 moved populate_pickups itself into
+        -- _ct_pickup_population_owner.lua, so the consumer call now lives there and
+        -- what the entry orders is the two INSTALL sites. Both halves are asserted:
+        -- the call is in the population owner (and nowhere in the entry), and the
+        -- population owner installs before this one.
+        local population_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
+            .. "_ct_pickup_population_owner.lua"
+        local pf = assert(io.open(population_path, "rb"))
+        local population = pf:read("*a")
+        pf:close()
+        H.truthy(population:find("mod._ct_rebuild_coin_reserved_set({", 1, true),
+            "the populate consumer must live with populate_pickups")
+        H.equal(entry:find("mod._ct_rebuild_coin_reserved_set({", 1, true), nil,
+            "the entry must not keep a second consumer call")
+
+        local populate_at = assert(entry:find(
+            "mods/chaos_wastes_tweaker_dev/_ct_pickup_population_owner", 1, true))
         local install_at = assert(entry:find(
             "mods/chaos_wastes_tweaker_dev/_ct_spawn_eligibility_owner", 1, true))
         H.truthy(populate_at < install_at,

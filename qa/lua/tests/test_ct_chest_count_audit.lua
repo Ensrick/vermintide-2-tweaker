@@ -19,15 +19,28 @@ return function(H, repo_root)
     end)
 
     H.test("CT issue 349 audit is wired after delayed census", function()
-        local main_path = repo_root
+        -- #1159 wave 10: the delayed census and its finalize call moved verbatim
+        -- from the entry into _ct_pickup_population_owner.lua. The gate follows the
+        -- code - same needles, new file - plus an entry-side absence assertion, so
+        -- a stray second copy left in the entry fails here instead of drifting.
+        local owner_path = repo_root
             .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
-            .. "chaos_wastes_tweaker_dev.lua"
-        local file = assert(io.open(main_path, "rb"))
+            .. "_ct_pickup_population_owner.lua"
+        local file = assert(io.open(owner_path, "rb"))
         local source = file:read("*a")
         file:close()
         local tally = assert(string.find(source, "[ct-spawn-tally]", 1, true))
         local finalize = assert(string.find(source, "mod._ct_chest132.finalize(_level", 1, true))
         H.truthy(finalize > tally)
+
+        local main_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
+            .. "chaos_wastes_tweaker_dev.lua"
+        local mf = assert(io.open(main_path, "rb"))
+        local main_src = mf:read("*a")
+        mf:close()
+        H.equal(string.find(main_src, "mod._ct_chest132.finalize(_level", 1, true), nil,
+            "the entry must not keep a second settled-finalize call")
     end)
 
     H.test("CT chest audit finalizes once and includes zero-chest missions", function()
@@ -120,14 +133,26 @@ return function(H, repo_root)
         -- Explicit-cap gate: Default (-1) must leave vanilla counts alone.
         H.truthy(string.find(diag, 'if raw == nil or raw == -1 then return end', 1, true))
 
+        -- #1159 wave 10: the census that feeds the pickup-path ledger moved out of
+        -- the entry into _ct_pickup_population_owner.lua. Same needle, new file,
+        -- plus the entry-side absence assertion.
+        local census_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
+            .. "_ct_pickup_population_owner.lua"
+        local cf = assert(io.open(census_path, "rb"))
+        local census_src = cf:read("*a")
+        cf:close()
+        H.truthy(string.find(census_src, "mod._ct_chest132.pickup_chest", 1, true),
+            "pickup-path ledger feed missing from the delayed census")
+
         local main_path = repo_root
             .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
             .. "chaos_wastes_tweaker_dev.lua"
         local mf = assert(io.open(main_path, "rb"))
         local main_src = mf:read("*a")
         mf:close()
-        H.truthy(string.find(main_src, "mod._ct_chest132.pickup_chest", 1, true),
-            "pickup-path ledger feed missing from the _spawn_pickup census")
+        H.equal(string.find(main_src, "mod._ct_chest132.pickup_chest", 1, true), nil,
+            "the entry must not keep a second pickup-path ledger feed")
     end)
 
     H.test("CT injected pickup_settings cover every reachable difficulty key", function()
