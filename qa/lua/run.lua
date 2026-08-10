@@ -290,6 +290,7 @@ local suites = {
     "test_ct_altar_reuse_owner",
     "test_ct_chest_revive_owner",
     "test_ct_boon_offer_view_owner",
+    "test_ct_pickup_population_owner",
     "test_ct_entry_decomposition",
     "test_ct_pool_floor_citadel_487",
     "test_ct_mission_graph_sync",
