@@ -8,8 +8,12 @@ return function(H, repo_root)
 
     local provider = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_reikland_griffin.lua")
     local painter = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_grail_knight_set.lua")
+    -- #1159: the appearance-replay armor paint (GK_SET.apply_armor_to_owner in
+    -- the unified LA apply core) moved verbatim out of the entry into
+    -- _cos_la_apply_runtime, so that owner joins the source this test reads.
     local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua")
+        .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime.lua")
     local data = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data.lua")
     local localization = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization.lua")
     local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")

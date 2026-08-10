@@ -392,6 +392,7 @@ Last updated: 2026-07-26.
 | Repro | 1. Host equips an LA hat on Grail Knight (or any career). 2. Lobby has a teammate (bot or remote player) whose career differs from the host's, e.g. Warrior Priest. 3. Host starts a mission. 4. Without fix: GK LA hat may attach to WP body on host's view. |
 | Expected post-fix | LA hat stays on the host's GK body. WP body wears its vanilla WP hat. The mismatch guard logs and skips the cross-skeleton patch. A host-owned bot may produce `CROSS-SKELETON MISMATCH` plus `BOT-OWNER-ALIAS retained`; that is expected evidence that the host store was preserved, not a failed attach. |
 | Detection | (a) `/cos_regression_test` passes the `la_chars_compatible_*` checks and `cos_la_score_screen_apply_wired`. (b) A bot mismatch must be paired with `BOT-OWNER-ALIAS retained`; no bot receives a mesh swap. (c) Manual: equip an LA hat on GK, start a mission with a WP bot, and confirm GK keeps the LA hat while WP remains vanilla through the score lineup. |
+| Owner | `_cos_la_apply_runtime.lua` (#1159) owns `_apply_la_on_unit` and therefore this guard. Because every apply trigger funnels through that one function, the guard cannot be bypassed by a new caller. Offline `test_cos_la_apply_runtime.lua` pins exclusive ownership of the apply core and the entry-side absence of any re-declaration; `qa/rt_textual_invariants.psd1` holds the matching present/absent needle pair. |
 | Tracking | GitHub issue #14. |
 
 ### issue698-career-scoped-husk-material — stale Grail Knight armor cannot repaint Foot Knight

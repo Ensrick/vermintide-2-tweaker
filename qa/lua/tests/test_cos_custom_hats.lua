@@ -290,6 +290,14 @@ return function(H, repo_root)
         local attachment_sync = attachment_sync_file:read("*a")
         attachment_sync_file:close()
         source = source .. "\n" .. attachment_sync
+        -- #1159: the "appearance-replay" paint surface (the unified LA apply
+        -- core's hat lane: Encarmine spawn_unit + apply_surface) moved verbatim
+        -- out of the entry into the apply/revert owner, so that owner joins the
+        -- source this census reads. The surface list itself is unchanged.
+        local apply_runtime_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime.lua", "rb"))
+        source = source .. "\n" .. apply_runtime_file:read("*a")
+        apply_runtime_file:close()
         for _, surface in ipairs({
             "appearance-replay", "remote-husk", "local-attachment",
             "live-attachment", "hero-preview",

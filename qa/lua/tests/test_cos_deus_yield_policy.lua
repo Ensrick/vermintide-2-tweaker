@@ -28,6 +28,11 @@ return function(H, repo_root)
     -- The gates below are pinned on the owner, with entry-side absence asserted,
     -- so a re-inlined copy fails instead of silently shadowing the owner.
     local assembly = read("_cos_equipment_assembly.lua")
+    -- #1159: the unified apply core (_apply_la_on_unit) - the TERMINAL funnel
+    -- every weapon-side apply trigger runs through - moved verbatim into the
+    -- apply/revert owner. Same treatment: the gate is pinned on the owner and
+    -- asserted absent from the entry.
+    local apply_runtime = read("_cos_la_apply_runtime.lua")
 
     H.test("Cos #518 yield boundary is mechanism AND game mode (staging never yields)", function()
         local body = main:match(
@@ -58,9 +63,17 @@ return function(H, repo_root)
         -- Terminal funnel: every apply trigger (RPC recv, reconcile, transition
         -- walk, pending drain, husk/local wield re-paint) runs _apply_la_on_unit;
         -- weapon-side kinds gate there, hats/armor pass untouched.
-        H.truthy(main:find(
+        H.truthy(apply_runtime:find(
             'if (kind == "offhand" or kind == "illusion") and mod._la_deus_weapon_yield() then',
             1, true), "terminal weapon-side yield gate missing from _apply_la_on_unit")
+        H.equal(main:find(
+            'if (kind == "offhand" or kind == "illusion") and mod._la_deus_weapon_yield() then',
+            1, true), nil,
+            "the terminal apply gate must live with its apply core, not in the entry")
+        H.truthy(apply_runtime:find("local function _apply_la_on_unit(", 1, true),
+            "the apply core must live in _cos_la_apply_runtime")
+        H.equal(main:find("local function _apply_la_on_unit(", 1, true), nil,
+            "the entry must not re-declare the apply core")
         -- get_item_units resolves the gate ONCE per call and gates the husk LA
         -- swap, the husk vanilla-offhand swap, and the live-body selection.
         H.truthy(assembly:find('local _deus_yield = mod._la_deus_weapon_yield()', 1, true),

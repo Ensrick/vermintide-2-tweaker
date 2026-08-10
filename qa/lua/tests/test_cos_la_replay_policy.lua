@@ -450,15 +450,28 @@ return function(H, repo_root)
     end)
 
     H.test("Issue 149 mesh repair uses common slot resolution and retained apply", function()
-        local source_path = repo_root
-            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
-        local f = assert(io.open(source_path, "rb"))
+        -- #1159: both pulse helpers (_ensure_offhand_mesh and the revert-side
+        -- mod._la_native_pulse) moved verbatim into _cos_la_apply_runtime, along
+        -- with the apply core these three needles pin. The census is retargeted
+        -- to the owner and the entry is asserted CLEAN, so re-inlining either
+        -- helper - which is how the two would drift apart again - still fails.
+        local owner_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime.lua"
+        local f = assert(io.open(owner_path, "rb"))
         local source = f:read("*a")
         f:close()
+        local entry_f = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua", "rb"))
+        local entry_source = entry_f:read("*a")
+        entry_f:close()
         local _, resolver_calls = source:gsub(
             "local orig_slot = LA_REPLAY_POLICY%.wielded_slot%(inv, equipment%)", "")
         H.equal(resolver_calls, 2,
             "both authored and native pulse helpers must use the shared slot resolver")
+        local _, entry_calls = entry_source:gsub(
+            "local orig_slot = LA_REPLAY_POLICY%.wielded_slot%(inv, equipment%)", "")
+        H.equal(entry_calls, 0,
+            "the pulse helpers belong to _cos_la_apply_runtime, not the entry")
         H.truthy(source:find("if not applied and repaired then", 1, true),
             "replay can coalesce before repaired mesh paint succeeds")
         H.truthy(source:find("return painted", 1, true),
