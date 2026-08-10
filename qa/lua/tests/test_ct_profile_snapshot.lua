@@ -72,28 +72,49 @@ return function(H, repo_root)
         local file = assert(io.open(main_path, "rb"))
         local source = file:read("*a")
         file:close()
+        -- #1159 wave 14 moved the setup_run hook into _ct_run_creation_owner, so
+        -- the setup_run boundary is asserted against that file. The needle is
+        -- byte-identical; only the file moved. Every boundary is still wired
+        -- exactly once across the two files, and the combined-source hook count
+        -- below is what keeps "#919 must reuse the existing hook" honest.
+        local run_creation_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner.lua"
+        local rc_file = assert(io.open(run_creation_path, "rb"))
+        local run_creation = rc_file:read("*a")
+        rc_file:close()
         for _, marker in ipairs({
             '_ct919_profile_tick(dt)',
             '_ct919_log_profile_snapshot("host_sync")',
-            '_ct919_log_profile_snapshot("setup_run")',
             '_ct919_profile_setting_changed(setting_id)',
             '_ct_profile_snapshot").install(mod)',
         }) do
             H.truthy(string.find(source, marker, 1, true), "missing #919 boundary: " .. marker)
         end
+        H.truthy(string.find(run_creation,
+            '_ct919_log_profile_snapshot("setup_run")', 1, true),
+            "missing #919 boundary: the setup_run snapshot")
+        H.equal(string.find(source,
+            '_ct919_log_profile_snapshot("setup_run")', 1, true), nil,
+            "the setup_run snapshot must not also remain in the entry")
         local module_file = assert(io.open(path, "rb"))
         local module_source = module_file:read("*a")
         module_file:close()
         H.truthy(string.find(module_source,
             '_ct_rt_register("issue919_profile_snapshot_installed"', 1, true))
+        -- Cardinality is asserted over entry AND owner together: VMF silently
+        -- drops a second registration on the pair, so counting only one file
+        -- would pass vacuously the moment the hook moved.
         local hook_count, cursor = 0, 1
         local hook_text = 'mod:hook("DeusRunController", "setup_run"'
+        local combined = source .. "\n" .. run_creation
         while true do
-            local found = string.find(source, hook_text, cursor, true)
+            local found = string.find(combined, hook_text, cursor, true)
             if not found then break end
             hook_count = hook_count + 1
             cursor = found + #hook_text
         end
         H.equal(hook_count, 1, "#919 must reuse the existing setup_run hook")
+        H.equal(string.find(source, hook_text, 1, true), nil,
+            "the entry must not re-register the setup_run pair")
     end)
 end

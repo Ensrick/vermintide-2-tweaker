@@ -1,5 +1,64 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.335-dev (2026-08-10) -- run-creation owner decomposition (#1159, #2) [untested]
+
+- Everything ct does at the moment a Chaos Wastes run is CREATED now lives in one
+  owner, `_ct_run_creation_owner.lua`: the v0.7.95 starting-coins SETTER on both
+  ends (the `DeusRunController.setup_run` argument rewrite and the host-side
+  `rpc_deus_set_initial_soft_currency` enforcement for a joining peer), the
+  per-controller progressive-difficulty base with the
+  `DeusRunController.get_run_difficulty` ramp that reads it, every per-run ledger
+  wiped at run start (altar reuse, the Chest-of-Trials counter and its #117 / #463
+  rotation tables, the boon-altar no-repeat set, the replacement and bot-economy
+  caches), the run-start reporting (#487 freeze breadcrumbs around vanilla's graph
+  solve, the #467 one-shot price census, the #53 arena-node dump, the
+  host-authoritative settings dump and the host manifest baseline), and the
+  `DeusPowerUpUtils.generate_random_power_ups` roll.
+- **The boon roll ships with this seam, not with the offer view.** The
+  boon-altar no-repeat ledger it filters against is per-run state `setup_run`
+  creates, and the shared `mod._ct_boon_disabled` predicate its pool strip defines
+  is the same one the grant choke point reads. WHERE the resulting widgets sit
+  stays `_ct_boon_offer_view_owner`'s; what they COST stays with the pricing
+  modules.
+- **Three sibling loads travelled with the block.**
+  `_ct_progressive_difficulty`, `_ct_replacement_runtime` and
+  `_ct_journey_difficulty_guard` were interleaved BETWEEN the hooks above and the
+  `setup_run` hook below, so splitting them out would have reordered seven hook
+  registrations. Each is still loaded exactly once, from exactly one place, at the
+  same point in the load sequence - one stack frame deeper. None registers a
+  regression check, so `/ct_regression_test` output order is untouched. The full
+  50-entry dofile sequence was traced before and after and is identical except for
+  the owner's own insertion.
+- **One deviation.** One contiguous 500-line chunk (entry lines 2210-2709, 466
+  non-empty) moved and every line in it is byte-identical to the pre-extraction
+  entry region, MD5 `e0b45d545562537671135c60e7882085`, verified against a
+  pristine `git archive` of the pre-slice tree - with a single substitution.
+  `setup_run` recorded which run its coin setter fired for by assigning the entry
+  local `_starting_coins_applied_for_run`; the inline
+  `starting_coins_value_matches_setting` check reads that same slot as an upvalue
+  and deliberately stays in the entry. Re-declaring the local in the owner would
+  split one slot in two, and the failure is SILENT - the inline check returns a
+  no-op PASS whenever the slot does not match the live run id, so a dead write
+  disarms the verify instead of failing it. The line calls an injected accessor
+  over the entry's single slot instead.
+- **That deviation carries a mutation control.**
+  `test_ct_run_creation_owner.lua` drives `setup_run` against a recording accessor
+  AND against a no-op accessor and asserts the two outcomes differ, so the
+  positive assertion cannot pass against a dead wire (PROJECT_STANDARDS.md 5.1d
+  rule 2). Replacing the accessor call with a module-local declaration was
+  exercised and fails three tests loudly.
+- Hook cardinality is unchanged mod-wide: 123 distinct (Class, method) pairs
+  before and after with no duplicates, verified against a pristine `git archive`.
+  The `mod:network_register` census is identical (7 entries, the three chunked
+  transports still registered by the entry);
+  `rpc_deus_set_initial_soft_currency` is a vanilla RPC METHOD hooked with
+  `mod:hook`, not a VMF channel registration, so it is not part of that census.
+  The settings-sync / graph-snapshot / peer-manifest transports were proven
+  byte-identical by region SHA-256 across the extraction.
+- ct_dev entry: 4,717 -> 4,303 non-empty lines. The frozen decomposition ceiling
+  and the `file_sizes.json` baseline ratchet down with it.
+- No gameplay change. No setting added, removed or renamed.
+
 ## 0.7.334-dev (2026-08-10) -- node-entry owner decomposition (#1159, #2) [untested]
 
 - Everything ct does when a run moves INTO a Chaos Wastes graph node now lives in

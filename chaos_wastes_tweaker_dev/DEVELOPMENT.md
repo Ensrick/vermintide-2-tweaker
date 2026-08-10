@@ -26,7 +26,7 @@ The 13 CT diagnostics and maintenance commands are extracted VERBATIM to one pur
 
 ### Journey-stat difficulty guard (`_ct_journey_difficulty_guard.lua`) — issue #291
 
-The verified journey-completion crash guard is a direct `return function(mod)` installer loaded once after replacement-progression setup and before the consolidated `DeusRunController.setup_run` hook. It owns the sole CT hook on `StatisticsUtil._register_completed_journey_difficulty` and assigns `CT_JOURNEY_DIFFICULTY_GUARD_MARKER` synchronously before `_ct_regression.lua` installs. The 39-line implementation is byte-identical to its former entry block: only an unsupported RECORDED journey difficulty is clamped to the final value returned by `get_default_difficulties`; gameplay difficulty is untouched. It captures only `mod`; engine globals remain late-bound. Do not fold progressive-difficulty state, settings synchronization, RPCs, or logging migrations into this owner. `qa/lua/tests/test_ct_journey_difficulty_guard.lua` guards hook cardinality/order, pass-through arity and multiple returns, clamp behavior, marker availability, test-global cleanup, and the optional decompiled vanilla source contract.
+The verified journey-completion crash guard is a direct `return function(mod)` installer loaded once after replacement-progression setup and before the consolidated `DeusRunController.setup_run` hook. Since 0.7.335-dev all three of those neighbours live inside `_ct_run_creation_owner.lua` (below), which is what loads this guard; the relative order is unchanged, and that owner's install site is where the entry used to hold it. It owns the sole CT hook on `StatisticsUtil._register_completed_journey_difficulty` and assigns `CT_JOURNEY_DIFFICULTY_GUARD_MARKER` synchronously before `_ct_regression.lua` installs. The 39-line implementation is byte-identical to its former entry block: only an unsupported RECORDED journey difficulty is clamped to the final value returned by `get_default_difficulties`; gameplay difficulty is untouched. It captures only `mod`; engine globals remain late-bound. Do not fold progressive-difficulty state, settings synchronization, RPCs, or logging migrations into this owner. `qa/lua/tests/test_ct_journey_difficulty_guard.lua` guards hook cardinality/order, pass-through arity and multiple returns, clamp behavior, marker availability, test-global cleanup, and the optional decompiled vanilla source contract.
 
 ### Starting-Boon Preview helper owner (`_ct_boon_preview_helpers.lua`) — issue #461 / #1159
 
@@ -358,6 +358,78 @@ pass-through, node.curse and node.theme save-restore on transition, hover and
 round-start, multi-return preservation across an interior nil, the per-mission
 Chest-of-Trials reset, the unknown-rarity strip, the fallback injection and its
 idempotence, the Default-sentinel altar mix, and that nothing leaks to `_G`.
+
+### Run-creation owner (`_ct_run_creation_owner.lua`) — issues #460 / #467 / #487 / #912 / #1159
+
+One seam, not four features: everything ct does at the moment a Chaos Wastes run
+is CREATED, plus the one roll whose per-run state that creation resets. Every
+branch here is reachable only from `DeusRunController.setup_run` or from state
+`setup_run` alone establishes. Four hooks live here and nowhere else in the mod:
+`DeusRunController.setup_run`, `DeusRunController.get_run_difficulty`,
+`DeusRunController.rpc_deus_set_initial_soft_currency` and
+`DeusPowerUpUtils.generate_random_power_ups`.
+
+**Why the boon roll is here and not with the offer view.** The boon-altar
+no-repeat ledger `generate_random_power_ups` filters against
+(`mod._ct_boon_altar_taken_boons`) is per-run state `setup_run` creates, and the
+shared `mod._ct_boon_disabled` predicate its pool strip defines is the same one
+`_ct_boon_grant_owner`'s pre-grant gate reads — which is why the predicate is
+published here, before that owner loads. WHERE the offered widgets sit is
+`_ct_boon_offer_view_owner`'s (it installs immediately below); what they COST
+belongs to the pricing modules. Do not move a layout or price concern in here,
+and do not move the roll out without taking the ledger with it.
+
+**Why both starting-coins ends are one file.** The v0.7.95 fix is
+belt-and-suspenders by design: the `setup_run` wrapper rewrites `args[5]` before
+vanilla's own `set_player_soft_currency`, and the host-side
+`rpc_deus_set_initial_soft_currency` handler enforces the same host setting on a
+joining client's row. Five call sites share `_ct_starting_coins_policy.resolve`
+mod-wide; two of them are here and `qa/lua/tests/test_ct_starting_coins.lua`
+pins the split so a boundary cannot grow a sixth or lose one to a hand-rolled
+comparison.
+
+**Why three sibling loads travelled with the block.**
+`_ct_progressive_difficulty`, `_ct_replacement_runtime` and
+`_ct_journey_difficulty_guard` were loaded BETWEEN the `get_run_difficulty` hook
+above and the `setup_run` hook below. Leaving them in the entry would have
+reordered seven hook registrations, so they moved too. Each is still loaded
+exactly once, from exactly one place, at the same point in the load sequence —
+one frame deeper. None of the three registers a regression check, so
+`/ct_regression_test` append order is unchanged. This is the same reason
+`_ct_chest_revive_owner` carries its own `mod._ct_chest_revive_policy` load.
+
+**The one deviation.** `setup_run` recorded which run its coin setter fired for
+by assigning the entry local `_starting_coins_applied_for_run`. The inline
+`starting_coins_value_matches_setting` check reads that same slot as an upvalue
+and stays in the entry on purpose. Re-declaring the local at module scope would
+split one slot into two, and the failure is **silent**: that check returns a
+no-op PASS whenever the slot does not match the live run id, so a dead write
+disarms the verify rather than failing it. The line calls an injected accessor
+(`ctx.starting_coins_applied_for_run`) over the entry's single slot instead.
+Everything else in the moved chunk is byte-identical to entry lines 2210-2709,
+MD5 `e0b45d545562537671135c60e7882085` against a pristine `git archive`.
+
+**The three `sync_` crossings must stay wrappers.** `sync_reckless_swings`,
+`sync_bomb_cooldown` and `sync_boon_movespeed` are forward-declared entry locals
+that the boon-balance owner does not fill until ~2400 lines BELOW this install
+site, so a by-value capture freezes nil into every post-roll re-sync. The
+load-time ctx assert catches that in game; the offline lock is a textual
+assertion scoped to this install block, because nothing else offline reads it.
+
+`qa/lua/tests/test_ct_run_creation_owner.lua` guards installer shape, dofile
+cardinality and order, the ctx contract (each of the fifteen keys dropped in turn
+must fail at install), entry-side absence of every moved surface, the transport
+boundary, and the wrapper-vs-by-value crossing forms. By loading and installing
+the real module against a recording stub it also makes executable: hook
+registration order, the exact-total coin setter including zero and its fail-open
+on a malformed value, the host RPC override, the per-controller ramp base with
+the hot-join handoff and both gating toggles, every run-start ledger wipe
+(including the three shared `_G` counters), the host-only manifest baseline, the
+shrine/chest count override, the remove-then-restore pool strip with identity-
+and position-exact restoration on both the success and the vanilla-error path,
+bomb exclusivity, altar no-repeat, the #134 Bel'akor arity extension asserted on
+the argument vanilla RECEIVED, the post-roll re-sync order, and the
+warn-not-crash degradation when the parry strip is missing.
 
 ### Tab-panel owner (`_ct_tab_panel_owner.lua`) — issues #461 / #533 / #556 / #571 / #1004 / #1159
 
