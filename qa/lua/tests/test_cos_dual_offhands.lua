@@ -28,12 +28,18 @@ return function(H, repo_root)
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua")
     -- #1159: the exit-time OFFHAND_COMMIT.drain moved out of the entry into the
     -- view lifecycle owner, so it joins the offhand-family source this test reads.
+    -- #1159: the husk vanilla-offhand mesh swap and the live-body selection
+    -- override moved out of the entry with the BackendUtils.get_item_units seam,
+    -- so the equipment-assembly owner joins the offhand-family source too.
+    local equipment_assembly = read(repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua")
     local cos = entry_only
         .. read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
         .. read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_picker.lua")
         .. view_lifecycle
+        .. equipment_assembly
     local lifecycle = read(lifecycle_path)
     local persist = read(persist_path)
     local commit = read(commit_path)

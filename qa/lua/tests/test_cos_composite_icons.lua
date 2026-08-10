@@ -278,6 +278,13 @@ Harness.test("#650 UIUtils publishes descriptors without leaking mace-only icons
         .. "_cos_item_grid_presentation.lua", "rb"))
     source = source .. "\n" .. presentation_file:read("*a")
     presentation_file:close()
+    -- #1159: the create_equipment composed-appearance shield-glow apply moved
+    -- into the equipment-assembly owner, so it joins the source this test reads.
+    local assembly_file = assert(io.open(repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_equipment_assembly.lua", "rb"))
+    source = source .. "\n" .. assembly_file:read("*a")
+    assembly_file:close()
     Harness.truthy(source:find("_cos_resolve_composed_appearance%(item, record%)"))
     Harness.truthy(source:find("COMPOSITE_ICONS%.publish%(item, descriptor%)"))
     Harness.truthy(source:find("COMPOSITE_ICONS%.descriptor_for%(item%)"))
