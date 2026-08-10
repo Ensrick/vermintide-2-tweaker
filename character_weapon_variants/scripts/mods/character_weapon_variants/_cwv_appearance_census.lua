@@ -47,7 +47,12 @@
 -- ---------------------------------------------------------------------------
 -- Line citations are into character_weapon_variants.lua unless noted; they are
 -- against the 2026-07-17 source and should be matched by FUNCTION NAME, not a
--- fixed line, after any edit (same rule as ENGINE_SURFACE.md).
+-- fixed line, after any edit (same rule as ENGINE_SURFACE.md). #1159 has since
+-- moved several cited functions into per-owner modules without changing them,
+-- so a name that no longer resolves in the entry lives in a sibling _cwv_*
+-- owner: every menu/preview citation below (the HeroPreviewer /
+-- MenuWorldPreviewer applier, _crowbill_team_peer, the LootItemUnitPreviewer
+-- browser path) is now in _cwv_menu_preview_owner.lua.
 --
 -- owner_1p / owner_3p / bot   IMPLEMENTED at the spawn/equip/preview edges for
 --   every family. The owner + bot spawn path GearUtils.create_equipment (:11830)

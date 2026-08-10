@@ -290,6 +290,10 @@
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_outrider_animation.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+                # #1159: the inventory_preview stance replay moved verbatim out of
+                # the entry into the keep/menu preview-surface owner. The husk and
+                # gameplay replays stayed behind, so both files own this row now.
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_menu_preview_owner.lua'
             )
             Concerns = @(
                 @{
@@ -928,6 +932,10 @@
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+                # #1159: the inventory_preview and item_browser transform_decision
+                # consumers moved verbatim into the keep/menu preview-surface
+                # owner; the gameplay consumer stayed in the entry.
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_menu_preview_owner.lua'
             )
             Concerns = @(
                 @{
