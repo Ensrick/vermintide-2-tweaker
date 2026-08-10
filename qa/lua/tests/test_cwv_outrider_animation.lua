@@ -113,7 +113,16 @@ return function(H, repo_root)
 			'_rt_register("cwv_issue760_outrider_saltzpyre_repeater_stance"', 1, true))
 		local main = read(root .. "character_weapon_variants.lua")
 		H.truthy(main:find("outrider_animation.emit_evidence", 1, true))
-		H.truthy(main:find('"inventory_preview"', 1, true))
+		-- #1159: the husk replay stayed in the entry, but the inventory-preview
+		-- replay moved verbatim into the keep/menu preview-surface owner. Follow
+		-- the code instead of dropping the surface from this gate, and assert the
+		-- entry kept no second copy that could replay the stance twice.
+		local menu_preview = read(root .. "_cwv_menu_preview_owner.lua")
+		H.truthy(menu_preview:find("outrider_animation.runtime_event", 1, true))
+		H.truthy(menu_preview:find("outrider_animation.emit_evidence", 1, true))
+		H.truthy(menu_preview:find('"inventory_preview"', 1, true))
+		H.truthy(main:find('"inventory_preview"', 1, true) == nil,
+			"entry must not keep a second inventory-preview stance replay")
 	end)
 
 	H.test("CWV #760 husk replay is exact semantic identity gated", function()
