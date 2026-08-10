@@ -36,8 +36,11 @@
 --     evidence counters, which nothing in here reads.
 --   * REMOTE (husk) display stays in the husk-path module and its entry-side
 --     spawn adapters.
---   * `_resolve_cwv_def`, `_find_def` and the transform maps themselves stay in
---     the entry: they are shared producers, not menu surface.
+--   * `_resolve_cwv_def`, `_find_def` and the transform maps themselves are
+--     shared producers, not menu surface, so none of them moved here. `_find_def`
+--     stays in the entry; the resolver and the maps were subsequently gathered
+--     into _cwv_weapon_transform_owner.lua by the #1159 weapon-transform slice,
+--     and this owner still receives them by ctx exactly as before.
 -- The five moved file-scope helpers each had ZERO references outside the moved
 -- range before the move (proved with the block-depth scope probe over the
 -- pristine entry), so nothing in the entry can reach in here any more.
