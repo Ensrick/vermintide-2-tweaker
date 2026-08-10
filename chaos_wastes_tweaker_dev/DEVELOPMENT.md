@@ -481,6 +481,93 @@ bounded rescue lifecycle — a client wipes every pending job on tick, a host
 retains a job whose unit has not spawned, a timed-out job is dropped, and
 repeated exceptions retire a job at `MAX_ERRORS` instead of spinning.
 
+### Boon-offer view owner (`_ct_boon_offer_view_owner.lua`) — issues #114 / #115 / #1159
+
+Everything ct does to **where the offered-boon widgets sit** in the two views that
+offer boons, and to the input that moves them. Those views are the shrine
+(`DeusShopView`, up to 4 offers) and the Chest of Trials (`DeusCursedChestView`,
+up to 3). Both build their offer widgets onto a fixed vertical arc once and never
+scroll, so both break the same way when ct raises the offer caps — and both are
+repaired here by the same code.
+
+| Concern | What the owner does |
+|---|---|
+| degenerate-arc repair | vanilla derives each widget's arc offset from `cos(angle) * radius` with `angle = 0/0` when a view builds exactly ONE widget, so the lone offer renders at a NaN screen position and is invisible. `fix_arc_nan` detects NaN via `x ~= x` (the only value not equal to itself) and centres the widget |
+| the two build hooks | the single permitted registration on `DeusShopView._create_ui_elements` and on `DeusCursedChestView.create_ui_elements` |
+| #115 / #114 scroll | when the offer count exceeds what the arc fits, flatten it into a row-snapped vertical list (row height 194 = `power_up_root.size[2]` in both defs files), park off-window rows at `y = -20000` where no hotspot can reach them, and inject a hand-authored track+thumb scrollbar into the view's own `_widgets` array so the vanilla draw loop renders it |
+| scroll input | wheel = one row per notch, thumb drag = row-snapped jump, track click off the thumb = page one window. Driven by two **wrapping** `update` hooks so the reflow lands before vanilla draws the same frame |
+
+At or below the vanilla row counts the block does nothing at all: the vanilla arc
+(plus `fix_arc_nan`) stays byte-identical. Off-window rows are unreachable purely
+because their hotspots are off-screen — the owner never touches
+`content.button_hotspot.disable_button`, which vanilla's own `update` owns.
+
+**Layout only.** *Which* boons are offered is
+`DeusPowerUpUtils.generate_random_power_ups`, still in the entry directly above
+the install site; the owner only ever reads `#boon_widgets`, so it keeps working
+no matter what the pool produces. What an offer *costs* belongs to
+`_ct_boon_pricing_*` and `_ct_start_shrine_runtime`; what a hovered offer *says*
+belongs to `_ct_boon_preview_*`.
+
+**Four owners on two view classes, zero collisions.** VMF silently drops a second
+registration on the same `(Class, method)` pair, so every neighbour must sit on a
+different pair: `_ct_start_shrine_runtime` has `_get_power_up_costs`,
+`_update_shop_widgets` and `start`; `_ct_boon_grant_owner` has
+`_init_power_up_widget` and `_on_power_up_bought`; the entry keeps
+`DeusCursedChestView._on_button_pressed` next to the other #211 grant-source
+wrappers, because provenance is not layout.
+
+**The two passengers are not a leak.** Because only one registration per pair is
+possible, the shop build body is also where #458 and the boon-pricing runtime get
+their build-time callback, as two one-line dispatches
+(`mod._ct_start_shrine_runtime.decorate_shop(self)` and
+`mod._ct_boon_pricing_runtime.enforce_shop(self)`). This file owns the hook
+**site**, never the price policy. Both fields resolve off `mod` at call time
+behind a nil guard, and both modules are dofile'd *later* in the entry than this
+installer, so the guard is load-order-correct exactly as it was before the move.
+
+**The settings-sync, graph-snapshot and peer-manifest RPC transports did NOT
+move.** They all sit in the entry prefix above the extracted region. A
+line-by-line compare of that prefix (lines 1-2710) against a pristine
+`git archive` of the pre-slice tree reports exactly **one** differing line — `:44`,
+the `MOD_VERSION` bump itself — and each transport's own line range
+(settings-sync 1084-1590, graph-snapshot 1591-1827, peer-manifest 1828-2030) is
+byte-identical on its own, so none of the three is touched even by that line.
+
+Shape is the named `local function install(mod, ctx)` installer, dofile'd once at
+the exact line the moved code occupied. **One** contiguous chunk moved (entry
+lines 2711-3104) and it is byte-identical to the pre-extraction region (MD5
+`68f7c2a5064d66af68b3c046e1cfd240`) with **zero** interior deviations. Because
+the install site is the original position, there is **no** load-order deviation
+at all: every hook in the mod still registers in its original relative order, and
+the mod-wide census (97 hook / 29 hook_safe / 7 network_register / 44 command) is
+unchanged.
+
+`_dbg` crosses as a late-binding wrapper and is the only entry local the chunk
+closed over — one call site moved with it, the v0.7.67 blessing-offering dump in
+the shop build body. `_dbg` is a `local function` that is never reassigned, so a
+by-value bind would also be correct today; the wrapper keeps the binding correct
+if the install site ever moves, and the `ctx` key is load-time asserted.
+`fix_arc_nan`, the only main-chunk local the region declared, had zero references
+outside it and becomes an install-scope local.
+
+The owner **returns nothing**. Its one seam, `mod._ct_boon_scroll_setup`, stays a
+`mod` field because `_ct_regression.lua`'s `boon_offer_scrollbar_wired` check
+resolves it off `mod` at call time; leaving that check where it is keeps
+`/ct_regression_test` output order unchanged and doubles as a live boundary
+assertion.
+
+`qa/lua/tests/test_ct_boon_offer_view_owner.lua` guards installer shape, dofile
+cardinality, exclusivity of all four registrations across the entry, and the pair
+boundaries against the three neighbouring view owners. By loading and installing
+the real module against a recording stub it also makes the following executable
+rather than textual: the hook census (2 safe + 2 wrapping, in registration
+order), load-time failure on a dropped `ctx` key, late binding of `_dbg`,
+build-time delegation to the two price passengers only when they exist, the
+"fits the arc" no-op path, the row-snapped reflow geometry and off-window
+parking, and the guarantee that both `update` wrappers call vanilla exactly once
+even when the frame pass throws.
+
 ## Buff registration: dormant boons need dual-table writes
 
 When ct injects a previously-dormant CW boon into the active loot pool at runtime (e.g. the `activate_dormant_*` toggles), the buff template **must** be registered in BOTH:

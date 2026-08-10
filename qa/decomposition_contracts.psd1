@@ -60,8 +60,8 @@
             Name = 'chaos_wastes_tweaker_dev'
             State = 'partial'
             Entry = 'chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'
-            CeilingLines = 6433
-            RequiredModules = @('_ct_altar_reuse_owner.lua', '_ct_campaign_graph_owner.lua', '_ct_chest_revive_owner.lua', '_ct_combat_hooks.lua', '_ct_boon_grant_owner.lua', '_ct_boon_registry.lua', '_ct_boon_preview_helpers.lua', '_ct_boss_grudge_marks.lua', '_ct_bot_weapon_chest_owner.lua', '_ct_command_owner.lua', '_ct_curse_lighting_owner.lua', '_ct_journey_difficulty_guard.lua', '_ct_pickup_spawn_owner.lua', '_ct_spawn_eligibility_owner.lua', '_ct_tab_panel_owner.lua', '_ct_weapon_trait_generation.lua', '_ct_regression.lua')
+            CeilingLines = 6108
+            RequiredModules = @('_ct_altar_reuse_owner.lua', '_ct_boon_offer_view_owner.lua', '_ct_campaign_graph_owner.lua', '_ct_chest_revive_owner.lua', '_ct_combat_hooks.lua', '_ct_boon_grant_owner.lua', '_ct_boon_registry.lua', '_ct_boon_preview_helpers.lua', '_ct_boss_grudge_marks.lua', '_ct_bot_weapon_chest_owner.lua', '_ct_command_owner.lua', '_ct_curse_lighting_owner.lua', '_ct_journey_difficulty_guard.lua', '_ct_pickup_spawn_owner.lua', '_ct_spawn_eligibility_owner.lua', '_ct_tab_panel_owner.lua', '_ct_weapon_trait_generation.lua', '_ct_regression.lua')
         }
         @{
             Name = 'character_weapon_variants'
