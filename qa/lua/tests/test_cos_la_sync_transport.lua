@@ -123,12 +123,15 @@ return function(H, repo_root)
             H.truthy(source:find(needle, 1, true), needle .. " missing from the owner")
             H.equal(entry:find(needle, 1, true), nil, needle .. " must not stay in the entry")
         end
-        -- The entry keeps the OTHER net-safe substitution surfaces: those are
-        -- vanilla-RPC substitution, not this mod's own channel.
+        -- The entry keeps the net-safe hook-status table and its substitute-name
+        -- helper: those are vanilla-RPC broker state, not this mod's own channel.
+        -- The two vanilla-RPC substitution hooks themselves moved on to
+        -- _cos_la_loadout_safety (#1159 wave 14); their singleton-ness is pinned
+        -- by test_cos_la_loadout_safety, so assert only that they left the entry.
         H.truthy(entry:find("local _net_safe_hook_status = {", 1, true))
         H.truthy(entry:find("local function _la_substitute_name(", 1, true))
-        H.truthy(entry:find('mod:hook(CosmeticUtils, "update_cosmetic_slot"', 1, true))
-        H.truthy(entry:find('mod:hook(LoadoutUtils, "sync_loadout_slot"', 1, true))
+        H.equal(entry:find('mod:hook(CosmeticUtils, "update_cosmetic_slot"', 1, true), nil)
+        H.equal(entry:find('mod:hook(LoadoutUtils, "sync_loadout_slot"', 1, true), nil)
         -- Strip comments: the owner's NOT-OWNED-HERE header names them on purpose.
         H.equal(source:gsub("%-%-[^\n]*", ""):find("_net_safe_hook_status", 1, true), nil)
     end)

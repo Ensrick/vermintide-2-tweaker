@@ -161,10 +161,18 @@ return function(H, repo_root)
         local dcp = read(repo_root .. "/dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua")
         local gut = read(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua")
         H.truthy(cos:find("_cos_ui_presentation_refresh", 1, true))
-        H.truthy(cos:find("_cos925_publish_loadout", 1, true))
-        H.equal(count_plain(cos,
+        -- #1159 wave 14: the loadout-equip publish call sites and the
+        -- set_loadout_item hook that carries them moved verbatim into
+        -- _cos_la_loadout_safety. The singleton contract follows the code -
+        -- exactly one registration mod-wide, and none left behind in the entry.
+        local cos_loadout_safety = read(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_loadout_safety.lua")
+        H.truthy(cos_loadout_safety:find("_cos925_publish_loadout", 1, true))
+        H.equal(count_plain(cos_loadout_safety,
             'mod:hook(BackendUtils, "set_loadout_item"'), 1,
             "Cosmetics must compose its singleton loadout hook")
+        H.equal(count_plain(cos, 'mod:hook(BackendUtils, "set_loadout_item"'), 0,
+            "the entry must not re-register the loadout hook the owner holds")
         local illusion_owner = read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap.lua")
         H.equal(count_plain(illusion_owner,

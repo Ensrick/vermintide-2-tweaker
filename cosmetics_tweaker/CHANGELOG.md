@@ -1,5 +1,79 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.200-dev (2026-08-10) -- LA loadout-safety + net-safe sender owner extracted (#1159) [untested]
+
+### Behavior-neutral extraction
+
+- Moved the LA loadout-state machinery and the two vanilla-RPC net-safe senders
+  out of the entry file into `_cos_la_loadout_safety.lua`: the deferred installer
+  `_install_skin_loadout_safety` with its four backend hooks
+  (`BackendUtils.set_loadout_item` plus `get_loadout`, `get_loadout_item_id` and
+  `get_item_rarity` on the "items" backend interface), the one-shot
+  `_fixup_server_clones`, the #520 disk rehydrate of `mod.loadout_cache`, the
+  `_la_vanilla_fallback` / `_wire_career_for_player` resolvers, and the two
+  substitution hooks `CosmeticUtils.update_cosmetic_slot` and
+  `LoadoutUtils.sync_loadout_slot`.
+- ONE owner, not two. The substitution hooks read the very cache the loadout
+  hooks write (a cached LA clone is exactly what must not reach a peer), both
+  resolve LA -> vanilla through the same `_la_vanilla_fallback`, and both
+  maintain `_local_la_equips` so hot-join replay re-emits what is actually worn.
+  Splitting at that seam would have left `mod.loadout_cache` with two owners
+  holding opposite intents.
+- Wire safety is unchanged and still UNCONDITIONAL. The LA -> vanilla sender swap
+  is not toggle-gated, not behind a settings read, and still SKIPS the vanilla
+  call outright when no vanilla equivalent exists (issue 371 / BUG_CLASSES 31;
+  crash GUID fa479a72). The owner contains no `mod:get` of any kind, which is now
+  a machine-checked invariant rather than a review promise.
+- `_net_safe_hook_status` deliberately did NOT move, and neither did
+  `_la_substitute_name`. Scoring: no moved statement reads or writes either one.
+  The status table is the ENTRY's startup-verification state - the entry declares
+  it, hands the same table by reference to `_cos_attachment_spawn_sync` (which
+  writes `.PUAE` / `.AttachmentUtils`), and reads it back in the "[net-safe] hook
+  registration" line. Moving it would have netted ~2 nonblank lines while adding
+  a third party to a shared mutable table and stretching the by-reference proof
+  across an extra hop. Because there are no moved writers, the "stays
+  entry-owned" branch needed no accessor at all - the strongest form. Both
+  decisions are pinned by mutation test (a code-level write to the status table
+  from the owner reddens a comment-excluding invariant row).
+- `_send_la_apply` crosses the chunk boundary as a GETTER. This owner installs
+  ABOVE the entry line that assigns the sender (the transport owner publishes it
+  ~600 lines further down), so an install-time by-value hand-off would capture
+  nil forever - which presents as "peers are simply never told about the LA hat".
+  The four call sites stay byte-identical; the move adds exactly one statement,
+  a resolve at the top of the hook body, matching the `_la_pending_apply`
+  precedent the transport owner already set.
+- Registration cardinality AND order are unchanged, verified against a pristine
+  copy of the whole mod script tree straight out of the git object store: the
+  full 128-entry (kind, class, method / channel / command name) multiset is
+  identical element by element - 53 hooks, 33 safe hooks, 1 origin hook, 35
+  commands and 6 RPC registrations before and after. `mod:dofile` moves 89 -> 90,
+  the new module's own manifest entry, and is the only delta in the whole tally.
+  The six moved hooks now register from the owner, at the same relative order,
+  from an install call placed at the exact position the moved block used to start.
+- Single-phase install is provably order-neutral here: nothing in the entry
+  executed between that position and the first moved statement (former entry
+  lines 1800-2007 were declarations only), so collapsing the range to one call
+  cannot reorder anything, and the two file-scope registrations still land before
+  the `_net_safe_hook_status` presence probe that reports on them.
+- The moved body is byte-identical to the 492 relocated entry lines (1792-1798
+  and 1800-2284) after de-indenting by four spaces - SHA-256 equal. NO original
+  statement was modified. Entry lines 1-1791 and 2285-end are byte-identical to
+  their pristine originals; the whole entry diff is two hunks, the MOD_VERSION
+  bump and the replacement window.
+- `_la_bridge_init_done` stayed in the entry (it is the entry's own first-frame
+  bridge latch, read only by `mod.update`). `_la_vanilla_fallback`,
+  `_wire_career_for_player` and `_install_skin_loadout_safety` come back out as
+  entry locals, so the consumers that stayed behind - the `_la_substitute_name`
+  wrapper, two dep tables, the complete-set rebroadcast `career_for`, and the
+  `mod.update` bridge-ready call site - all resolve the SAME function objects.
+- Entry file 3892 -> 3460 nonblank (-432); the owner is 584 nonblank. 24th
+  cosmetics owner. Five mutation tests with a green unmutated control prove the
+  new coverage is not vacuous: the getter regression reddens ONLY the
+  "sender assigned AFTER install" test while its CONTROL stays green; disabling
+  or toggle-gating the substitution reddens the wire tests; re-inlining a hook in
+  the entry reddens the singleton test and two cardinality censuses; dropping the
+  `is_bot` guard reddens the bot-loadout test. 17 new offline tests (suite 2,565).
+
 ## 0.9.199-dev (2026-08-10) -- cos_la_* peer-sync transport owner extracted (#1159) [untested]
 
 ### Behavior-neutral extraction
