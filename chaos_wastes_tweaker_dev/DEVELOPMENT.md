@@ -223,6 +223,78 @@ only-grenade guard, host/client reservation behaviour, census arming, counting,
 the 8s single emit and the `ZERO=true` signal, and the #132 dispatch with its
 Default-cap resolution.
 
+### Level-load owner (`_ct_level_load_owner.lua`) — issues #52 / #58 / #136 / #156 / #356 / #456 / #1159
+
+One window in the mission lifecycle, not one feature: everything ct does between
+*a Chaos Wastes mission's level begins loading* and *the local player's mission
+has started*. Three hooks live here and nowhere else in the mod —
+`EnemyPackageLoader.setup_startup_enemies`,
+`MutatorHandler.tweak_pack_spawning_settings`, and
+`GameModeDeus.local_player_game_starts`.
+
+| Concern | What the owner does |
+|---|---|
+| survive the load (directors) | forces `use_random_directors = true` for any injected adventure base AND for the native `_belakor_path` family, so `_resolve_breed_packages` populates `_random_director_list` and `main_path_spawning_generator.lua:314` stops dereferencing nil. Adventure-authored spawn zones carry `"random"` director choices that vanilla CW levels never do |
+| survive the load (pacing) | strips the adventure-incompatible pack mutators — today just `no_roamers` — from **both** the zone list and the mutator list when `pack_spawning_settings` has no `difficulty_overrides` (the exact field `mutator_no_roamers` iterates with `pairs()`) or the level is injected. The #356 arity form is load-bearing: the hook is STATIC, four positional params, no leading `self` |
+| look cursed | `_CURSE_LIGHT_PALETTES` + `_palette_slot` recolour every `Light` component in the level from a per-god weighted palette, distributed by a deterministic hash on the light index so the look is stable across reloads and adjacent lights group instead of producing rainbow noise |
+| report the load | `_dump_pickup_system_state` (level, difficulty, `pickup_settings` per difficulty, live spawner counts by type), `_dump_pickup_spawners_verbose` (per-unit position + tags, capped at 50 per list), `_ct_book_spawner_census` (every tome/grim-tagged unit across all five spawner lists, raw `printf`), and the `[ct:136]` per-peer `mission:start` line |
+
+**Where the boundary with the sky owner is.** `_ct_curse_lighting_owner` owns the
+curse SKY: map and mission shading profiles pushed through the single
+`CameraManager.shading_callback` hook, re-applied every frame by vanilla. This
+owner does the one-shot per-unit `Light.set_color` write at mission start.
+Different hook, different engine surface, different lifetime — and the split
+predates the extraction: the sky owner's header exists because `Light.set_color`
+cannot reach a skydome. Neither reads the other's state.
+
+**Where the boundary with the pickup owners is.** `_ct_pickup_population_owner`
+owns `populate_pickups` (the budget and the tally); `_ct_pickup_spawn_owner` owns
+`_spawn_pickup` / `_spawn_guaranteed_pickup` (what materializes);
+`_ct_spawn_eligibility_owner` owns `_can_spawn` (whether it may). This owner owns
+only the census FUNCTIONS, and calls them itself once at mission start. No hook
+is shared with any of the three.
+
+**Three crossings, all by value.** `_dbg` and the two injected-level predicates
+(`on_injected_adventure_level`, `adventure_base_from_level_key`) are `local
+function` declarations *above* the install site that are never reassigned, so a
+late-binding wrapper would buy nothing and would hand this owner a *different*
+function identity for the same gate than `_ct_curse_lighting_owner` and
+`_ct_spawn_eligibility_owner` receive. The predicates stay entry-owned because
+four owners plus `DeusMapScene.on_enter` read them; this file is a consumer.
+
+**The forward-declaration pattern is preserved, not removed.** The three census
+bodies are written `function _name(...)` with no `local`, because the
+`populate_pickups` consumer is created *above* them and Lua 5.1 has no hoisting —
+a plain `local function` there captures a nil global (the v0.7.133 burn,
+`feedback_lua_forward_reference.md`). The owner re-declares all three slots at its
+own chunk scope, so every definition line moved byte-identically and nothing
+leaks to `_G`. The two `_dump_*` bodies then come back through the exports table
+into the entry's own forward-declared slots, because two consumers still read the
+entry local by name: `_ct_pickup_population_owner` through late-binding wrappers
+(installed above), and `_ct_regression` by value (installed below).
+`_ct_book_spawner_census` had no entry-local reader — its one consumer resolves
+`mod._ct_book_spawner_census` off `mod` at call time — so its entry slot retired
+with the code.
+
+**Exports:** `dump_pickup_system_state`, `dump_pickup_spawners_verbose`, and
+`adventure_incompatible_pack_mutators` — the last as the SAME table object the
+strip hook reads, so `_ct_regression`'s `adventure_pack_compat_strip` inspects
+the live list rather than a copy. The two marker globals
+(`CT_NO_ROAMERS_DEUS_FIX_MARKER`, `CT_NO_ROAMERS_ARITY_FIX_MARKER`) stay plain
+`_G` globals, now set by this file at the same point in load order.
+
+`qa/lua/tests/test_ct_level_load_owner.lua` guards installer shape, dofile
+cardinality, hook exclusivity, install position (between the `_G.Localize` hook
+above and the `NetworkedFlowStateManager` leak fix below, and between the two
+consumers of the census slots), and the ctx contract. By loading and installing
+the real module against a recording stub it also makes executable: director
+forcing on injected and `_belakor_path` keys and pass-through on an ordinary CW
+level, the `no_roamers` strip on both lists with the #356 arity, pass-through
+with table identity intact on a healthy level, the strip list crossing as the
+live table, palette determinism and the all-blue tzeentch contract, the "no
+curse / not injected means no tint" bails, the pickup dump firing even when the
+tint path bails, and that no census slot leaks to `_G` on either side.
+
 ### Tab-panel owner (`_ct_tab_panel_owner.lua`) — issues #461 / #533 / #556 / #571 / #1004 / #1159
 
 Every ct addition to `IngamePlayerListUI`, the hold-Tab overlay, and nothing

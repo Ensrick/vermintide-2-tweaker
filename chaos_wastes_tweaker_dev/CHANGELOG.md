@@ -1,5 +1,83 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.333-dev (2026-08-10) -- level-load owner decomposition (#1159, #2) [untested]
+
+- Everything ct does between "a Chaos Wastes mission's level begins loading" and
+  "the local player's mission has started" moves to a dedicated owner,
+  `_ct_level_load_owner.lua`: the `EnemyPackageLoader.setup_startup_enemies` fix
+  that forces `use_random_directors` for injected adventure bases and the native
+  `_belakor_path` family, the `MutatorHandler.tweak_pack_spawning_settings` strip
+  that keeps `no_roamers` away from a `pack_spawning_settings` with no
+  `difficulty_overrides` (including its #356 static-arity form), the per-curse
+  `Light.set_color` palette applied at `GameModeDeus.local_player_game_starts`,
+  and the census that reports what the load produced - the two pickup dumps, the
+  `[ct:456]` book-spawner census and the `[ct:136]` per-peer `mission:start` line.
+- These ship as ONE owner because they are one window in the mission lifecycle.
+  Two of them make the load survivable, one makes the loaded level read as cursed,
+  and the third reports what the load actually produced; the census is called from
+  the same `local_player_game_starts` hook that applies the tint, so splitting
+  them would put the emit and the tint in different chunks for no gain.
+- **Load seam only.** The curse SKY - map and mission shading profiles driven
+  through the single `CameraManager.shading_callback` hook - stays with
+  `_ct_curse_lighting_owner`; that owner's own header already records that
+  `Light.set_color` cannot reach skies, which is why the two exist side by side.
+  The `#52` object-set census and the `#156` `GameModeHelper.get_object_sets` fix
+  stay in the entry with the injected-level predicates every owner shares. Nothing
+  in the new file reads a boon, a price, a coin balance or a graph node.
+- **Zero deviations.** One contiguous 594-line chunk (entry lines 3946-4539) moved
+  and every line in it is byte-identical to the pre-extraction entry region, MD5
+  `e45bf3e32d6175ef2740fb899beb576b`, verified against a pristine `git archive` of
+  the pre-slice tree. The only additions are the header, the ctx block, the exports
+  table and the closing `end` / `return install`.
+- The three census slots keep their forward-declaration pattern rather than losing
+  it. `_dump_pickup_system_state`, `_dump_pickup_spawners_verbose` and
+  `_ct_book_spawner_census` were entry forward-declarations whose bodies -
+  `function _name(...)`, deliberately without `local` - were assigned inside the
+  moved region. The owner re-declares the same three slots at ITS chunk scope, so
+  each definition line stayed byte-identical and nothing leaks to `_G`. The two
+  `_dump_*` bodies travel back through the exports table into the entry's own
+  slots, because two consumers still read the entry local by name:
+  `_ct_pickup_population_owner` (late-binding wrappers, installed above) and
+  `_ct_regression` (by value, installed below). `_ct_book_spawner_census` had no
+  entry-local reader - its only consumer resolves `mod._ct_book_spawner_census`
+  off `mod` at call time - so its entry slot is retired with the code.
+- Three ctx keys, all bound BY VALUE: `_dbg` and the two injected-level predicates
+  are `local function` declarations above the install site that are never
+  reassigned, so a late-binding wrapper would add a frame to a per-light path for
+  nothing AND would hand this owner a different function identity for the same gate
+  than `_ct_curse_lighting_owner` and `_ct_spawn_eligibility_owner` receive.
+- The installer sits at the exact line the moved code occupied, so every hook in
+  the mod still registers in its original relative order and the mod-wide census
+  (97 `hook` / 29 `hook_safe` / 7 `network_register` / 45 `command`, 126
+  `(Class, method)` pairs each registered exactly once) is unchanged, measured
+  before and after by two independent methods against the pristine tree.
+- The settings-sync, graph-snapshot and peer-manifest RPC transports did NOT move.
+  They all sit far above the extracted region, so they keep their original line
+  NUMBERS as well as their bytes: a line-by-line compare of lines 1-3945 against
+  the pristine tree reports differences at exactly `:44` (the `MOD_VERSION` bump)
+  and `:793-808` (the forward-declaration comment, rewritten to say where the
+  bodies went), and each transport range - settings-sync 1084-1212, paced chunk
+  queue 1213-1590, graph-snapshot 1591-1827, peer-manifest 1828-2129 - hashes
+  byte-identical on its own. The whole tail below the region is byte-identical too.
+- Entry: 5,665 -> 5,133 non-blank lines. `qa/decomposition_contracts.psd1` and
+  `qa/baselines/file_sizes.json` ratchet down to match; the new module is the 20th
+  required ct_dev owner.
+- Guarded by 28 new checks in `qa/lua/tests/test_ct_level_load_owner.lua`, most of
+  them executable against the real module, plus 8 new path-pinned needles in
+  `qa/rt_textual_invariants.psd1`. Five deliberate mutations were run to prove the
+  suite bites: dropping the `_belakor_path` branch, re-adding the `self` parameter
+  to the static strip hook, exporting a COPY of the strip list instead of the live
+  table, dropping a forward-declaration so a census body leaks to `_G`, and making
+  the palette slot random. Each failed exactly the checks that name it.
+- **Co-op verify (host + one client, both on 0.7.333-dev, full Steam restart
+  first):** start a Chaos Wastes expedition with at least one injected Adventure
+  map enabled and play through node 1. Expect, unchanged from 0.7.332-dev: both
+  peers print a `[ct:136] mission:start ...` line naming the same level and god;
+  a cursed injected mission still shows the per-god light tint; `/ct_regression_test`
+  still reports `adventure_pack_compat_strip`, `no_roamers_strip_arity_356` and
+  `pickup_dump_helpers_forward_declared` as passing. A Belakor node
+  (`*_belakor_path1`) must still load without the `pairs(nil)` host crash.
+
 ## 0.7.332-dev (2026-08-10) -- pickup-population owner decomposition (#1159, #2) [untested]
 
 - Everything ct does at `PickupSystem.populate_pickups` moves to a dedicated

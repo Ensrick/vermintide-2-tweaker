@@ -30,11 +30,22 @@ return function(H, repo_root)
     local chest_revive = read("_ct_chest_revive_owner.lua")
     local boon_offer_view = read("_ct_boon_offer_view_owner.lua")
     local pickup_population = read("_ct_pickup_population_owner.lua")
+    local level_load = read("_ct_level_load_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 5665 = 2026-08-10 baseline after the #1159 pickup-population owner
+        -- 5133 = 2026-08-10 baseline after the #1159 level-load owner extraction
+        -- (everything ct does between "a Chaos Wastes mission's level begins
+        -- loading" and "the local player's mission has started": the
+        -- EnemyPackageLoader random-director forcing for injected adventure and
+        -- _belakor_path levels, the MutatorHandler no_roamers strip with its
+        -- #356 static arity, the per-curse Light.set_color palette applied at
+        -- GameModeDeus.local_player_game_starts, and the three census helpers -
+        -- the two pickup dumps and the [ct:456] book-spawner census - that report
+        -- what the load produced).
+        --
+        -- It replaces the 5665 baseline set by the #1159 pickup-population owner
         -- extraction (everything ct does at PickupSystem.populate_pickups: the
         -- per-mission altar / Chest-of-Trials / arena-ammo BUDGET patched into
         -- LevelSettings pickup_settings and restored around vanilla's call, the
@@ -68,7 +79,7 @@ return function(H, repo_root)
         -- weapon-trait-generation, and bot weapon-chest owners. The ceiling only
         -- ratchets DOWN as more of the ct_dev entry decomposes into modules; it
         -- must never grow.
-        H.truthy(lines <= 5665, "entry non-empty line count exceeded frozen 5665 baseline")
+        H.truthy(lines <= 5133, "entry non-empty line count exceeded frozen 5133 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -172,6 +183,22 @@ return function(H, repo_root)
         H.equal(count_plain(pickup_population, "_rt_register("), 0)
         H.equal(count_plain(regression, '_rt_register("pickup_dump_helpers_forward_declared"'), 1)
         H.equal(count_plain(regression, '_rt_register("diag_132_134_136_present"'), 1)
+        -- #1159 level-load owner: same story once more. The moved region carried
+        -- NO _rt_register, so every count above is unchanged by it. Three checks
+        -- guard its code and all three stay in _ct_regression.lua, reading marker
+        -- globals or the entry's forward-declared slots at CALL time:
+        --   adventure_pack_compat_strip     CT_NO_ROAMERS_DEUS_FIX_MARKER, now set
+        --                                   by the owner at the same load position
+        --   no_roamers_strip_arity_356      CT_NO_ROAMERS_ARITY_FIX_MARKER, ditto,
+        --                                   plus a live drive of the real hook
+        --   pickup_dump_helpers_forward_declared  the entry's two dump slots, which
+        --                                   the owner now FILLS through its exports
+        -- That last one becomes a live boundary assertion for this slice: if the
+        -- owner ever stops exporting a dump body, the entry slot goes nil and the
+        -- in-game check fails.
+        H.equal(count_plain(level_load, "_rt_register("), 0)
+        H.equal(count_plain(regression, '_rt_register("adventure_pack_compat_strip"'), 1)
+        H.equal(count_plain(regression, '_rt_register("no_roamers_strip_arity_356"'), 1)
         H.truthy(regression:find("mod._ct_tally_cursed_count", 1, true),
             "the #132 cross-check must keep reading the census off mod at call time")
         H.equal(count_plain(weapon_traits, "_rt_register("), 1)
