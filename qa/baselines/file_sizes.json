@@ -8,7 +8,7 @@
     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua": 6058,
     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua": 6315,
     "crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua": 5748,
-    "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua": 4318,
-    "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua": 4159
+    "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua": 4148,
+    "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua": 3989
   }
 }
