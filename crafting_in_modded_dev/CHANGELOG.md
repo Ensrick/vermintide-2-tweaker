@@ -1,5 +1,43 @@
 # Crafting in Modded Changelog
 
+## 0.8.120-dev (2026-08-10) -- weave-loadout owner; entry under the hard limit (#1159, #504, #2) [untested]
+
+- **The entry is now under PROJECT_STANDARDS 2.1's 2,500-line hard limit** -
+  2,353 nonblank, down from 3,067. This is the first contracted entry in the
+  repo to get there, so its frozen `qa/baselines/file_sizes.json` row was
+  removed the same way Career balance's was; `qa/decomposition_contracts.psd1`
+  owns the ratchet from here. The contract state stays `partial`, not
+  `complete`: `complete` additionally requires the 1,500-line target.
+- Moved the WRITE half of the Athanor bubble grid into one owner,
+  `_cim_weave_loadout_owner`: the amulet slot map and per-slot CRAFT dirty
+  marks, the per-property bubble-cap math (#86, #244), the write-path slot-array
+  cap and the read-chokepoint trim, the `movespeed_2pct_mode` buff-template
+  patch and its settings-change re-apply, the seed/apply pass, and the ten
+  mutable `BackendInterfaceWeavesPlayFab` loadout hooks. It installs at the
+  exact point that block used to run, so hook order and cardinality, the
+  load-time movespeed patch, and the settings-listener registration all keep
+  their original timing.
+- Behavior-neutral: 732 nonblank lines moved diff-proven byte-identical apart
+  from 18 lines with one mechanical cause. Four entry locals the block reads are
+  reassigned after the seam - `_custom_forge_active` and `_forge_item_props`
+  (both rebound on every Athanor open and exit), `_forged_weapons` (rebound by
+  `_forge_load`), and `_amulet_dirty` - so they are now read through injected
+  accessors instead of captured references. Whole-mod hook cardinality unchanged
+  (87 `mod:hook`, 34 `mod:hook_safe`); the entry drops 10 and the owner gains 10.
+- Solved the forward-declaration coupling rather than avoiding it.
+  `_cim_weave_economy` installs ABOVE the new seam and resolves `_bubble_cap` at
+  callback time, so the entry keeps exactly that one forward declaration and
+  binds it at the seam. `_value_for_bubbles`, `_store_property_slot`, and
+  `_cap_grid_property_arrays` become ordinary locals assigned there;
+  `_bubbles_for_value` and `_strip_weave` had no entry consumer at all and are
+  now private to the owner instead of surviving as permanently-nil locals.
+- The `BackendManagerPlayFab.commit` suppression stays in the entry, immediately
+  below the seam. It is anti-tamper crash safety covering BOTH craft surfaces
+  (it also reads the standard-forge flag), so it must never end up gated on this
+  owner's install. The #278/#371 wire-safety layer is likewise untouched.
+- No new hooks, RPCs, settings, persistence schema, public APIs, or lifecycle
+  owners. The owner publishes no `mod._cim_*` field.
+
 ## 0.8.119-dev (2026-08-09) -- persisted modded-loadout owner (#1159, #504, #2) [untested]
 
 - Moved the whole persisted modded-loadout path into one owner,

@@ -4,7 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-06.
+Last updated: 2026-08-10.
+
+### weave-loadout-owner-decomposition - bubble-grid writes remain behavior-neutral
+
+| Field | Value |
+|---|---|
+| Symptom | The Athanor stops recording bubble clicks, or a property silently eats more grid slots than its cap allows, or a second Athanor open serves the previous session's seeded properties. Worst case, the first property-cost query crashes because the bubble-cap function resolved as a nil global. |
+| Root cause | The ten mutable `BackendInterfaceWeavesPlayFab` loadout hooks, the #86/#244 bubble-cap math, and the seed/apply pass were inline in the oversized entry and read four locals that are reassigned every Athanor open, exit, and backend `_create_interfaces` pass. Two of the functions were entry forward declarations assigned mid-block. |
+| Fix version(s) | Unreleased source candidate (0.8.120-dev) |
+| Category | STATIC |
+| Expected post-fix | `_cim_weave_loadout_owner.lua` installs once between the `_cim_immutable_relic_ui` install and the `BackendManagerPlayFab.commit` suppression, registering the ten hooks in their original order. `_custom_forge_active`, `_forge_item_props`, `_forged_weapons`, and `_amulet_dirty` are read through call-time accessors. The entry keeps exactly one forward declaration, `_bubble_cap`, because `_cim_weave_economy` installs above the seam and resolves it at callback time. The commit suppression and the #278/#371 wire-safety layer stay in the entry. |
+| Detection | Offline `test_cim_weave_loadout_owner.lua` (14 tests) covers seam position and ordering, hook order/cardinality, accessor liveness across a rebind, idempotence, reload rebinding, context validation, the exported surface, the forward-declaration split, the stamina/movespeed caps and their key normalization, the layer-aware #86 trim, and #959 policy delegation. `test_cim_entry_decomposition.lua` and `qa/check_decomposition_contracts.ps1` enforce the 2,353-line ceiling and owner retention; five `qa/rt_textual_invariants.psd1` rows pin the hooks and the commit block to their files. |
 
 ### weave-economy-owner-decomposition - read facade remains behavior-neutral
 

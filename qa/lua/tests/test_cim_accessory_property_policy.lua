@@ -99,21 +99,35 @@ return function(H, repo_root)
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua"
         local runtime_path = repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_accessory_property_runtime.lua"
+        -- The backend-write half of the #959 seam moved out of the entry into
+        -- `_cim_weave_loadout_owner` at v0.8.120-dev (#1159), byte-identical.
+        -- The needles follow the code and the entry gets absence assertions so
+        -- neither copy can drift back.
+        local weave_path = repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_weave_loadout_owner.lua"
         local f = assert(io.open(entry_path, "rb"))
         local entry_source = f:read("*a")
         f:close()
         f = assert(io.open(runtime_path, "rb"))
         local runtime_source = f:read("*a")
         f:close()
+        f = assert(io.open(weave_path, "rb"))
+        local weave_source = f:read("*a")
+        f:close()
         H.truthy(entry_source:find("_cim_accessory_property_runtime", 1, true))
+        H.truthy(entry_source:find("_cim_weave_loadout_owner", 1, true))
         H.truthy(runtime_source:find("CIM959_ACCESSORY_PROPERTY_LAYER_MARKER", 1, true))
         H.truthy(runtime_source:find('"_find_slot_by_key"', 1, true))
         H.truthy(runtime_source:find('"_can_clear_slots"', 1, true))
         H.truthy(runtime_source:find('"_clear_slots"', 1, true))
-        H.truthy(entry_source:find(
+        H.truthy(weave_source:find(
             "item_backend_id == nil and _AMULET_LAYER_SIZE or nil", 1, true))
-        H.truthy(entry_source:find("count_distinct_properties", 1, true))
-        H.truthy(entry_source:find("[cim:959] property store", 1, true))
+        H.truthy(weave_source:find("count_distinct_properties", 1, true))
+        H.truthy(weave_source:find("[cim:959] property store", 1, true))
+        H.equal(entry_source:find(
+            "item_backend_id == nil and _AMULET_LAYER_SIZE or nil", 1, true), nil)
+        H.equal(entry_source:find("count_distinct_properties", 1, true), nil)
+        H.equal(entry_source:find("[cim:959] property store", 1, true), nil)
     end)
 
     H.test("CIM runtime adapter keeps picker removal and Clear category-aware", function()
