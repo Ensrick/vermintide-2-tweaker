@@ -28,19 +28,26 @@ return function(H, repo_root)
     local campaign_graph = read("_ct_campaign_graph_owner.lua")
     local altar_reuse = read("_ct_altar_reuse_owner.lua")
     local chest_revive = read("_ct_chest_revive_owner.lua")
+    local boon_offer_view = read("_ct_boon_offer_view_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 6433 = 2026-08-10 baseline after the #1159 chest-revive owner
+        -- 6108 = 2026-08-10 baseline after the #1159 boon-offer view owner
+        -- extraction (everything ct does to WHERE the offered-boon widgets sit
+        -- in the shrine DeusShopView and the Chest of Trials
+        -- DeusCursedChestView: the degenerate-arc NaN repair, both build hooks,
+        -- the #115/#114 scroll block, and the two wrapping update hooks that
+        -- drive its per-frame reflow and input).
+        --
+        -- It replaces the 6433 baseline set by the #1159 chest-revive owner
         -- extraction (everything ct does to the PARTY when a Chest of Trials
         -- completes: the host-gated OPEN detector, the three-downed-state
         -- triage, the #299 move-before-free rescue transaction with its arm /
         -- process / deferred-tick adapters, and the two post-respawn
         -- compensations - 50% temporary health and the single "revived" wound
-        -- above Recruit).
-        --
-        -- It replaces the 6801 baseline set by the #1159 altar-reuse owner
+        -- above Recruit), which in turn replaced the 6801 baseline set by the
+        -- #1159 altar-reuse owner
         -- extraction (everything that depends on a DeusChestExtension ALTAR having been
         -- opened before: the #61 use ledger and its two settings policies, the
         -- mult^uses price curve, the re-roll seed mixing on all three generators,
@@ -52,7 +59,7 @@ return function(H, repo_root)
         -- weapon-trait-generation, and bot weapon-chest owners. The ceiling only
         -- ratchets DOWN as more of the ct_dev entry decomposes into modules; it
         -- must never grow.
-        H.truthy(lines <= 6433, "entry non-empty line count exceeded frozen 6433 baseline")
+        H.truthy(lines <= 6108, "entry non-empty line count exceeded frozen 6108 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -136,6 +143,13 @@ return function(H, repo_root)
         -- one of those five fields, an entry-side check fails.
         H.equal(count_plain(chest_revive, "_rt_register("), 0)
         H.equal(count_plain(entry, '_rt_register("issue299_chest_revive_team_teleport_ordered"'), 1)
+        -- #1159 boon-offer view owner: same story once more. The moved region
+        -- carried NO _rt_register, and boon_offer_scrollbar_wired - the one
+        -- check that guards it - already lived in _ct_regression.lua and asserts
+        -- mod._ct_boon_scroll_setup off `mod` at CALL time, so it keeps working
+        -- across the new chunk boundary and stays a live boundary assertion.
+        H.equal(count_plain(boon_offer_view, "_rt_register("), 0)
+        H.equal(count_plain(regression, '_rt_register("boon_offer_scrollbar_wired"'), 1)
         H.equal(count_plain(weapon_traits, "_rt_register("), 1)
         H.equal(count_plain(bot_weapon_chest,
             'mod:hook("DeusChestExtension", "open_chest"'), 1)

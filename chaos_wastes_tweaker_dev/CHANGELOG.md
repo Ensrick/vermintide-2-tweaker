@@ -1,5 +1,82 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.331-dev (2026-08-10) -- boon-offer view owner decomposition (#1159, #2) [untested]
+
+- Everything ct does to WHERE the offered-boon widgets sit in the two views that
+  offer boons moves to a dedicated owner, `_ct_boon_offer_view_owner.lua`: the
+  degenerate-arc NaN repair (`fix_arc_nan`), the two build hooks
+  (`DeusShopView._create_ui_elements`, `DeusCursedChestView.create_ui_elements`),
+  the whole `_ct_boon_scroll` block behind #115 / #114, and the two wrapping
+  `update` hooks that drive its per-frame reflow and input.
+- These ship as ONE owner because the shrine and the Chest of Trials break the
+  same way for the same reason: both lay their offer widgets on a fixed vertical
+  arc once at build time and never scroll, so raising the offer caps strands rows
+  off-screen in both. One body of code repairs both, and the two build hooks are
+  the only callers `fix_arc_nan` and `mod._ct_boon_scroll_setup` have.
+- **Layout only.** WHICH boons get offered stays in the entry
+  (`DeusPowerUpUtils.generate_random_power_ups`, directly above the install
+  site); what an offer COSTS stays with `_ct_boon_pricing_*` /
+  `_ct_start_shrine_runtime`; what a hovered offer SAYS stays with
+  `_ct_boon_preview_*`. The owner only ever reads `#boon_widgets`.
+- Four ct owners now touch these two view classes and none of them collide,
+  because each sits on a different `(Class, method)` pair: this owner has the two
+  build hooks plus both `update` hooks; `_ct_start_shrine_runtime` has
+  `_get_power_up_costs` / `_update_shop_widgets` / `start`;
+  `_ct_boon_grant_owner` has `_init_power_up_widget` / `_on_power_up_bought`; the
+  entry keeps `DeusCursedChestView._on_button_pressed`, which is #211
+  grant-source provenance and not layout.
+- The two one-line price dispatches inside the shop build body
+  (`_ct_start_shrine_runtime.decorate_shop`, `_ct_boon_pricing_runtime.enforce_shop`)
+  move with the hook because VMF permits one registration per pair. The owner
+  holds the hook SITE, never the price policy; both resolve off `mod` at call
+  time behind the same nil guards as before, and both modules still load later in
+  the entry than this installer.
+- **The settings-sync / graph-snapshot / peer-manifest RPC transports did NOT
+  move.** They sit in the entry prefix above the extracted region. A line-by-line
+  compare of that whole prefix (lines 1-2710) against a pristine `git archive` of
+  the pre-slice tree reports exactly ONE differing line -- `:44`, the MOD_VERSION
+  bump itself -- and with that single line excluded both sides hash to MD5
+  `b1d46bcbcbfd4ee11b5201b309acb901`. Each transport's own line range is
+  additionally byte-identical on its own (settings-sync 1084-1590 SHA256
+  `88deae14...`, graph-snapshot 1591-1827 `6a908643...`, peer-manifest 1828-2030
+  `272f7fd2...`), so none of the three is touched even by the version line. The
+  new module contains no `mod:network_register`, no chunk-event name and no
+  transport state identifier at all.
+- Behaviour-neutral: ONE contiguous chunk moved (entry lines 2711-3104, MD5
+  `68f7c2a5064d66af68b3c046e1cfd240`) and it is byte-identical inside the owner
+  with zero interior deviations; the entry suffix below the region (MD5
+  `20d1c1b2c1b0914fa3715368636702c1`) is byte-identical too, so the region is
+  provably the only thing that changed. Whole-mod hook registrations are
+  unchanged -- 97 `mod:hook` / 29 `mod:hook_safe` / 7 `mod:network_register` /
+  44 `mod:command` call sites, counted two ways (a Lua tokenizer census and an
+  independently written comment/string scrubber plus regex) against a pristine
+  `git archive` of the pre-slice tree.
+- **Zero load-order deviation.** The installer sits at the exact line the moved
+  code occupied, between the `generate_random_power_ups` hook and the
+  `MutatorHandler._activate_mutator` hook, so every hook in the mod still
+  registers in its original relative order. This slice needs no ordering
+  argument at all.
+- `_dbg` crosses as a late-binding wrapper and is the only entry local the chunk
+  closed over (one call site: the v0.7.67 blessing-offering dump). It is a
+  `local function` that is never reassigned, so a by-value bind would work today;
+  the wrapper keeps the binding correct if the install site ever moves, and the
+  `ctx` key is load-time asserted. `fix_arc_nan`, the only main-chunk local the
+  region declared, had zero references outside it and becomes install-scope.
+- The owner returns nothing: its one seam, `mod._ct_boon_scroll_setup`, stays a
+  `mod` field because `_ct_regression.lua`'s `boon_offer_scrollbar_wired` check
+  resolves it off `mod` at call time. Leaving that check where it is keeps
+  `/ct_regression_test` output order unchanged and makes it a live cross-chunk
+  boundary assertion.
+- Entry 6433 -> 6108 non-blank lines; the decomposition ceiling ratchets down and
+  `_ct_boon_offer_view_owner.lua` becomes the 18th mandatory ct_dev owner. The new
+  `qa/lua/tests/test_ct_boon_offer_view_owner.lua` loads and installs the real
+  module against a recording stub, so the hook census and its registration order,
+  the ctx asserts, the late binding of `_dbg`, the two price passengers, the
+  "fits the arc" no-op path, the row-snapped reflow geometry and off-window
+  parking, and guard-is-not-bail on both `update` wrappers are executable checks
+  rather than needles. The #115 / #114 rows in `qa/rt_textual_invariants.psd1`
+  follow the code with byte-identical needles plus entry-side absence assertions.
+
 ## 0.7.330-dev (2026-08-10) -- chest-revive owner decomposition (#1159, #2) [untested]
 
 - Everything ct does to the PARTY when a Chest of Trials completes moves to a
