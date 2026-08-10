@@ -33,6 +33,12 @@ return function(H, repo_root)
     -- so the equipment-assembly owner joins the offhand-family source too.
     local equipment_assembly = read(repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua")
+    -- #1159: the offhand-mesh emit/receive pair and the cos_la_apply sends that
+    -- carry it moved out of the entry into the cos_la_* transport owner, so it
+    -- joins the offhand-family source this test reads. Same rule as above: the
+    -- owner is added, no assertion is relaxed.
+    local la_sync_transport = read(repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua")
     local cos = entry_only
         .. read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
@@ -40,6 +46,7 @@ return function(H, repo_root)
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_picker.lua")
         .. view_lifecycle
         .. equipment_assembly
+        .. la_sync_transport
     local lifecycle = read(lifecycle_path)
     local persist = read(persist_path)
     local commit = read(commit_path)

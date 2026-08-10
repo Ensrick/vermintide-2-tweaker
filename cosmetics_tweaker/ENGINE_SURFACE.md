@@ -124,7 +124,9 @@ vanilla equivalent (or nulls to `"n/a"`) UNCONDITIONALLY, never behind a toggle
 
 The mod's OWN cross-peer cosmetic state travels a separate, crash-immune path: the
 VMF mod RPC channel (`cos_la_apply` / `cos_la_apply_req` / `cos_la_state_req`,
-`COS_RPC_SCHEMA`-versioned). VMF delivers a mod's RPCs ONLY to peers running that mod,
+`COS_RPC_SCHEMA`-versioned), owned end to end by `_cos_la_sync_transport.lua`
+(#1159) - senders, receivers, peer identity, emit dedup, deferred queue and peer
+purge. VMF delivers a mod's RPCs ONLY to peers running that mod,
 so a non-mod peer never decodes them - they cannot touch the #421 floor above. This is
 why per-hand cosmetic picks that vanilla can't encode (independent left/right illusions,
 #416 vanilla offhand meshes and #483 individualized CWV dual-weapon mounts) ride the mod channel and carry plain STRINGS (unit paths),

@@ -65,7 +65,11 @@ return function(H, repo_root)
         local at_replay = entry:find(
             'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_runtime").install',
             1, true)
-        local at_first_rpc = entry:find('mod:network_register("cos_la_apply_req"', 1, true)
+        -- #1159: the cos_la_* receivers moved into _cos_la_sync_transport, whose
+        -- second install phase now occupies the line the first
+        -- mod:network_register used to hold. Same anchor, measured at the call
+        -- site that replaced the registration.
+        local at_first_rpc = entry:find("LA_SYNC.install_receivers()", 1, true)
         H.truthy(at_husk_init and at_replay and at_first_rpc)
         H.truthy(at_husk_init < at_owner)
         H.truthy(at_owner < at_replay)

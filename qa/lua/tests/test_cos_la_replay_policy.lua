@@ -494,8 +494,18 @@ return function(H, repo_root)
         f = assert(io.open(runtime_path, "rb"))
         local runtime = f:read("*a")
         f:close()
-        H.truthy(source:find(
+        -- #1159: the add_remote_player hook that consults the policy moved
+        -- verbatim into the cos_la_* transport owner with the rest of the peer
+        -- lifecycle. The edge is pinned where it now lives.
+        local transport_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua"
+        f = assert(io.open(transport_path, "rb"))
+        local transport = f:read("*a")
+        f:close()
+        H.truthy(transport:find(
             "LA_REPLAY_POLICY.should_publish_local_on_peer_ready", 1, true))
+        H.equal(source:find(
+            "LA_REPLAY_POLICY.should_publish_local_on_peer_ready", 1, true), nil)
         H.truthy(lifecycle:find(
             "mod._la_self_rebroadcast_pending = true", 1, true))
         H.truthy(source:find(

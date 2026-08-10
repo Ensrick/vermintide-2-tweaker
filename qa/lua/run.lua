@@ -347,6 +347,7 @@ local suites = {
     "test_cos_customization_view_lifecycle",
     "test_cos_equipment_assembly",
     "test_cos_la_apply_runtime",
+    "test_cos_la_sync_transport",
     "test_cos_glow_transport",
     "test_cos_weapon_pose_policy",
     "test_cos_deus_yield_policy",

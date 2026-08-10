@@ -462,6 +462,13 @@ and husk application remain the #416 pipeline below.
 
 **Design (v0.9.82-dev): a parallel store, reusing the existing channel.**
 
+> **Owner (v0.9.199-dev, #1159):** every transport element named below - the
+> channel, both senders, both receivers, the deferred queue and the peer purge -
+> lives in `_cos_la_sync_transport.lua`. The entry installs it in two phases
+> (identity/send/queue, then the six registrations) at the two lines the code used
+> to occupy. Adding a transport concern means an additive optional payload field
+> handled before the `armoury_key` gate in that owner, never a fifth RPC name.
+
 - **Store:** `mod._offhand_mesh_by_peer[wearer_peer][slot_or_template][hand_field] = unit_path`.
   Deliberately SEPARATE from `_la_equips_by_peer` so the armoury-key machinery
   (reconcile / `_apply_la_on_unit` / `_ensure_offhand_mesh` / state replay) stays

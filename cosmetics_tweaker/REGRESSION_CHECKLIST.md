@@ -501,6 +501,7 @@ Last updated: 2026-07-26.
 | Expected post-fix | Friend immediately sees the LA-textured hat; texture remains after vanilla RPC arrives (vanilla now patches `item_data.unit` to LA path before spawn). |
 | Detection | Visual: friend sees the LA-colored hat without you needing to re-equip. |
 | Owner | `_cos_attachment_spawn_sync.lua` (#1159) owns this seam and the other three attachment spawn/sync paths. Offline `test_cos_attachment_spawn_sync.lua` pins exclusive hook ownership, the entry-side absence of all four registrations, the non-hat pass-through, the substitute/restore/re-emit contract, and the skeleton-not-ready deferral against a REBOUND retry queue. |
+| Transport owner | The `cos_la_apply` broadcast itself - senders, receivers, host authority, emit dedup, deferred queue and peer purge - is `_cos_la_sync_transport.lua` (#1159), installed in two phases so its four `mod:network_register` calls still fire at their original entry line, after the apply and replay owners publish the callbacks they invoke. Offline `test_cos_la_sync_transport.lua` pins that ordering, exclusive channel ownership, and the entry-side absence of every moved definition; `qa/rt_textual_invariants.psd1` holds the matching present/absent needle pairs. |
 
 
 ---

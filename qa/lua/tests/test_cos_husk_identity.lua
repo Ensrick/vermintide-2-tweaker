@@ -126,10 +126,21 @@ return function(H, repo_root)
         local f = assert(io.open(entry_path, "rb"))
         local source = f:read("*a")
         f:close()
+        -- #1159: the whole cos_la_* transport (both the emit sites that stamp the
+        -- career onto the payload and the receivers that read it back) moved
+        -- verbatim into _cos_la_sync_transport. The identity invariant is the
+        -- same one, measured where the code now lives; the schema constant and
+        -- the husk-side career consumers stay entry-owned.
+        local transport_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua"
+        local tf = assert(io.open(transport_path, "rb"))
+        local transport = tf:read("*a")
+        tf:close()
         H.truthy(source:find("local COS_RPC_SCHEMA = 2", 1, true))
-        H.truthy(source:find("wearer_career  = wearer_career", 1, true))
-        H.truthy(source:find("wearer_career  = entry.wearer_career", 1, true))
-        H.truthy(source:find("local wearer_career = payload.wearer_career", 1, true))
+        H.truthy(transport:find("wearer_career  = wearer_career", 1, true))
+        H.truthy(transport:find("wearer_career  = entry.wearer_career", 1, true))
+        H.truthy(transport:find("local wearer_career = payload.wearer_career", 1, true))
+        H.equal(source:find("local wearer_career = payload.wearer_career", 1, true), nil)
         H.truthy(source:find("invalidate_for_career", 1, true))
         H.truthy(source:find("entry_matches_career", 1, true))
         H.truthy(source:find("make_spawn_monitor", 1, true))
