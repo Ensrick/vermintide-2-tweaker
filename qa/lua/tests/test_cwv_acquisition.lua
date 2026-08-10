@@ -160,14 +160,29 @@ return function(H, repo_root)
     end)
 
     H.test("CWV source registers one bounded Blacksmith seed per definition", function()
+        -- #1159: the clone constructor and the deferred registration pass moved
+        -- from the entry to _cwv_item_registration_owner, so this gate follows
+        -- the code. The entry-side absence assertions below keep a second copy
+        -- from reappearing.
         local path = repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua"
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()
         H.truthy(source:find("mod._cwv_acquisition.register_seed_interfaces(", 1, true))
         H.truthy(source:find("entry.cwv_definition = backend_id == nil", 1, true))
         H.truthy(source:find("mod._cwv_acquisition.plan_removals(", 1, true))
+        local entry_path = repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+        local entry_file = assert(io.open(entry_path, "rb"))
+        local entry_source = entry_file:read("*a")
+        entry_file:close()
+        H.equal(entry_source:find("mod._cwv_acquisition.register_seed_interfaces(", 1, true), nil,
+            "entry must not re-register Blacksmith seeds")
+        H.equal(entry_source:find("entry.cwv_definition = backend_id == nil", 1, true), nil,
+            "entry must not re-declare the definition/instance split")
+        H.equal(entry_source:find("mod._cwv_acquisition.plan_removals(", 1, true), nil,
+            "entry must not re-plan legacy removals")
         local helper_path = repo_root
             .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_acquisition.lua"
         local helper_file = assert(io.open(helper_path, "rb"))

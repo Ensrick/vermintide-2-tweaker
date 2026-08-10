@@ -27,6 +27,7 @@ return function(H, repo_root)
     local illusion_families = read("_cwv_illusion_families.lua")
     local husk = read("_cwv_husk_path.lua")
     local husk_residency = read("_cwv_husk_residency_owner.lua")
+    local registration = read("_cwv_item_registration_owner.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
     local render = read("_cwv_regression_render.lua")
@@ -34,10 +35,10 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 6688 = 2026-08-09 #1159 husk-residency owner extraction, measured
-        -- after the musket-runtime slice that preceded it. This ceiling only
+        -- 6058 = 2026-08-10 #1159 item-registration owner extraction, measured
+        -- after the husk-residency slice that preceded it. This ceiling only
         -- ratchets DOWN as later CWV decomposition slices land.
-        H.truthy(lines <= 6688, "entry line count exceeded frozen 6688-line baseline")
+        H.truthy(lines <= 6058, "entry line count exceeded frozen 6058-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
@@ -48,6 +49,7 @@ return function(H, repo_root)
             "_cwv_skin_registry",
             "_cwv_illusion_families",
             "_cwv_husk_residency_owner",
+            "_cwv_item_registration_owner",
             "_cwv_husk_path",
             "_cwv_commands_lifecycle",
             "_cwv_regression_identity",
@@ -62,6 +64,7 @@ return function(H, repo_root)
         local skin_at = assert(entry:find("_cwv_skin_registry", 1, true))
         local families_at = assert(entry:find("_cwv_illusion_families", 1, true))
         local residency_at = assert(entry:find("_cwv_husk_residency_owner", 1, true))
+        local registration_at = assert(entry:find("_cwv_item_registration_owner", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
@@ -73,6 +76,11 @@ return function(H, repo_root)
         H.truthy(residency_at < skin_at)
         H.truthy(core_at < skin_at)
         H.truthy(skin_at < families_at)
+        -- #1159: the item-registration owner loads after the skin/illusion
+        -- registrars (its #567 rebuild consumes their pools) and before the
+        -- husk-path display helpers.
+        H.truthy(families_at < registration_at)
+        H.truthy(registration_at < husk_at)
         H.truthy(families_at < husk_at)
         H.truthy(husk_at < lifecycle_at)
         H.truthy(lifecycle_at < identity_at)
@@ -406,5 +414,121 @@ return function(H, repo_root)
         H.equal(count_plain(combined, 'mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"'), 1)
         H.equal(count_plain(combined, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1)
         H.equal(count_plain(combined, 'mod:hook("SimpleHuskInventoryExtension", "_reapply_fade"'), 1)
+    end)
+
+    H.test("CWV item-registration owner holds definition-to-backend registration", function()
+        -- #1159 slice: the #482 identity ladder, the `_build_entry` clone
+        -- constructor and the deferred `_auto_register_all` session pass moved
+        -- verbatim out of the entry. Each producer lives exactly ONCE, in the
+        -- owner, and nowhere in the entry.
+        local owned = {
+            "local _registered_keys = {}",
+            "local function _registered_cwv_key(candidate)",
+            "local function _remember_cwv_identity(backend_id, key, evidence)",
+            "_om._cwv_key_for_item = function(backend_id, item_data)",
+            "local function _build_entry(def, backend_id)",
+            "local _auto_registered = false",
+            "_om.install_deus_identities = function(reason)",
+            "mod._cwv567_validate_skin_association = function(skin_key)",
+            "local function _auto_register_all()",
+            'mod:hook_safe("StateInGameRunning", "on_enter"',
+            'mod:hook("DeusMechanism", "_setup_run"',
+        }
+        for _, marker in ipairs(owned) do
+            H.equal(count_plain(registration, marker), 1, "registration owner owns " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer defines " .. marker)
+        end
+
+        -- Hook cardinality: VMF silently drops a duplicate registration on the
+        -- same (Class, method), so each moved pair must appear exactly once
+        -- across the whole load chain.
+        local combined = require("cwv_source").combined(repo_root)
+        H.equal(count_plain(combined, 'mod:hook_safe("StateInGameRunning", "on_enter"'), 1)
+        H.equal(count_plain(combined, 'mod:hook("DeusMechanism", "_setup_run"'), 1)
+
+        -- #428 NON-FOLD: the inline bidirectional NetworkLookup.item_names
+        -- register moved BYTE-IDENTICAL. Collapsing it onto _lib_network_lookup
+        -- is a behavior-adjacent change that rides its own slice, so the owner
+        -- must not reach the shared helper.
+        H.equal(count_plain(registration, "local idx = #NetworkLookup.item_names + 1"), 1)
+        H.equal(count_plain(registration, "rawset(NetworkLookup.item_names, idx, key)"), 1)
+        H.equal(count_plain(registration, "rawset(NetworkLookup.item_names, key, idx)"), 1)
+        H.equal(count_plain(registration, "_lib_network_lookup"), 0,
+            "#428 fold must not ride this slice")
+        H.equal(count_plain(entry, "local idx = #NetworkLookup.item_names + 1"), 0)
+
+        -- Entry-local dependencies arrive as explicit context, same shape as
+        -- _cwv_husk_path / _cwv_husk_residency_owner. Every one of these is
+        -- bound exactly once in the entry and never rebound.
+        H.truthy(registration:find("local function install(mod, ctx)", 1, true))
+        H.equal(count_plain(registration, "return function("), 0,
+            "owner must use a named install wrapper, not an anonymous chunk")
+        local ctx_fields = {
+            "om", "dbg", "dbg_alert", "variant_definitions", "custom_skin_keys",
+            "career_weapon_actions", "cwv_career_weapon_actions", "career_action_owner",
+        }
+        for _, field in ipairs(ctx_fields) do
+            H.equal(count_plain(registration, "local _" .. field .. " = ctx." .. field), 1,
+                "owner localizes ctx." .. field)
+        end
+        H.truthy(entry:find("dbg_alert = _dbg_alert,", 1, true))
+        H.truthy(entry:find("cwv_career_weapon_actions = _cwv_career_weapon_actions,", 1, true))
+        H.truthy(entry:find("career_action_owner = _career_action_owner,", 1, true))
+
+        -- Seam back: the entry's two context tables consume the SAME table and
+        -- function objects through _om rather than re-declaring file-scope
+        -- locals (the top-level chunk is at the Lua 5.1 200-local ceiling).
+        H.equal(count_plain(registration, "_om.item_registration = {"), 1)
+        H.equal(count_plain(entry, "registered_keys = _om.item_registration.registered_keys,"), 2)
+        H.equal(count_plain(entry, "build_entry = _om.item_registration.build_entry,"), 1)
+        H.equal(count_plain(entry, "auto_register_all = _om.item_registration.auto_register_all,"), 1)
+
+        -- BOUNDARY. The give command is command surface owned by
+        -- _cwv_commands_lifecycle; the spawn descriptors are the #1158
+        -- exact-appearance channel; `_find_def` is reached by both plus
+        -- _cwv_husk_path. All three stay in the entry.
+        local entry_only = {
+            "local function _find_def(item_key)",
+            "local function _give_variant(item_key)",
+            "_om._give_refuses_skin_only = function(def)",
+            "_om._resident_override_3p = function(base_unit)",
+            "_om._cwv_resolve_spawn_descriptor = function(",
+            "_om._cwv_preview_meshswap_apply = function(",
+            "_om._cwv_browser_meshswap_apply = function(",
+        }
+        for _, marker in ipairs(entry_only) do
+            H.equal(count_plain(entry, marker), 1, "entry keeps " .. marker)
+            H.equal(count_plain(registration, marker), 0,
+                "registration owner must not absorb " .. marker)
+        end
+
+        -- No overlap with the sibling owners: no husk spawn/residency reach, no
+        -- skin registrar copy, no command/network/lifecycle surface.
+        for _, forbidden in ipairs({
+            -- `_register_variant_skins` is referenced in a moved COMMENT, so
+            -- pin the definition form: the registrar body must stay in
+            -- _cwv_skin_registry.
+            "_om._husk_adapter_pre", "_om._husk_rekey_units",
+            "_force_load_husk_override_units", "local function _register_variant_skins()",
+            "mod:command", "mod:network_register", "mod.on_", "mod:dofile(",
+        }) do
+            H.equal(count_plain(registration, forbidden), 0,
+                "registration owner must not contain " .. forbidden)
+        end
+
+        -- Log markers the in-game #482/#567/#592/#273/#661 verification greps
+        -- for survived the move byte-identical.
+        local markers = {
+            "[cwv:482] legacy identity recovered bid=%s key=%s evidence=%s count=%d/16",
+            "[cwv:661] career-action integration ready templates=%d prepared=%d restored=%d discarded_claims=%d",
+            "[cwv:567] cache_invalidated=%s rebuild=%s skin=%s association=%s owner=%s combination=%s rarity=%s cache_item=%s",
+            "[cwv:592] definitions=%d blacksmith_seeds=%d seed_failed=%d legacy_ids_purged=%d cim_exact_ids_preserved=true",
+            "[cwv:273] deus_identity reason=%s exact=%s installed=%d existing=%d degraded=%d skipped=%d sample=%s",
+            "[cwv:auto_register] SUMMARY built_ok=%d build_failed=%d skipped_skin_only=%d skipped_already=%d entries_added=%d (defs=%d)",
+        }
+        for _, marker in ipairs(markers) do
+            H.equal(count_plain(registration, marker), 1, "owner keeps marker " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry no longer prints " .. marker)
+        end
     end)
 end

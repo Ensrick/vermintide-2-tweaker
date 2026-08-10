@@ -344,10 +344,17 @@ return function(H, repo_root)
 		local wt_dev_backend = read("weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_backend.lua")
 		local cwv = read("character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
 		local cwv_actions = read("character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_career_weapon_actions.lua")
+		-- #1159: the CWV call site rides `_auto_register_all`, which moved to
+		-- the item-registration owner. The gate follows the code; the entry-side
+		-- absence check below keeps a second call site from reappearing.
+		local cwv_registration = read(
+			"character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua")
 		local woc = read("weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua")
 		H.truthy(wt:find("_career_weapon_actions.install", 1, true))
 		H.truthy(wt_dev:find("_career_weapon_actions.install", 1, true))
-		H.truthy(cwv:find("_cwv_career_weapon_actions.install", 1, true))
+		H.truthy(cwv_registration:find("_cwv_career_weapon_actions.install", 1, true))
+		H.equal(cwv:find("_cwv_career_weapon_actions.install", 1, true), nil,
+			"CWV entry must not hold a second career-action install site")
 		H.truthy(woc:find("_career_weapon_actions.install", 1, true))
 		H.truthy(cwv_actions:find("prepare_inherited_clone", 1, true))
 		H.truthy(woc:find("prepare_inherited_clone", 1, true))
