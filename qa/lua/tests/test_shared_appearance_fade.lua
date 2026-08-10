@@ -230,10 +230,20 @@ return function(H, repo_root)
             "Cosmetics owner enrollment is not exact-identity gated")
         local cosmetics_entry = read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
-        H.truthy(cosmetics_entry:find("APPEARANCE_FADE_RUNTIME.install", 1, true)
+        -- #1159: the fade runtime is configured from the attachment-slot LA
+        -- spawn/sync owner now, because its enroll point is that owner's husk hat
+        -- hook and the install must keep its exact sequence position.
+        local cosmetics_attachment_sync = read(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua")
+        H.truthy(cosmetics_attachment_sync:find("APPEARANCE_FADE_RUNTIME.install", 1, true)
             and cosmetics_runtime:find('"_reapply_fade"', 1, true)
             and cosmetics_runtime:find("force = true", 1, true),
             "Cosmetics does not restore attachments after vanilla husk replacement")
+        H.equal(cosmetics_entry:find("APPEARANCE_FADE_RUNTIME.install", 1, true), nil,
+            "the fade runtime must be installed exactly once, by its owner")
+        H.truthy(cosmetics_attachment_sync:find(
+            "APPEARANCE_FADE_RUNTIME.enroll_husk_attachment(husk_unit, self, spawned_hat)", 1, true),
+            "the husk hat spawn seam must still enroll the spawned attachment")
 		local woc = read(consumers[3].entry)
 		H.truthy(woc:find('"SimpleInventoryExtension", "_wield_slot"', 1, true)
 			and woc:find('"owner_wield"', 1, true),

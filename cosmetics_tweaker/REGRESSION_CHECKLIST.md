@@ -499,6 +499,7 @@ Last updated: 2026-07-26.
 | Repro | 1. Friend joins your lobby (you = host). 2. You equip an LA `kind="texture"` hat for the first time this session. 3. Friend watches your character. |
 | Expected post-fix | Friend immediately sees the LA-textured hat; texture remains after vanilla RPC arrives (vanilla now patches `item_data.unit` to LA path before spawn). |
 | Detection | Visual: friend sees the LA-colored hat without you needing to re-equip. |
+| Owner | `_cos_attachment_spawn_sync.lua` (#1159) owns this seam and the other three attachment spawn/sync paths. Offline `test_cos_attachment_spawn_sync.lua` pins exclusive hook ownership, the entry-side absence of all four registrations, the non-hat pass-through, the substitute/restore/re-emit contract, and the skeleton-not-ready deferral against a REBOUND retry queue. |
 
 
 ---

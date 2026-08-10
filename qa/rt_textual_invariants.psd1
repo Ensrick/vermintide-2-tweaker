@@ -248,7 +248,10 @@
     #    printf-backed _dbg_alert channel. The key-bearing _dbg line beside it is
     #    mod:debug (invisible with mod logging OFF), so without the key on the
     #    alert line a residual failure stays anonymous.
-    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='_dbg_alert("[husk-hat-create] paint err key=%s vanilla=%s: %s"'; literal=$true; polarity='present'; issueRef='#697'; note='the husk-hat paint failure line carries the armoury key + vanilla variant on the visible alert channel.' }
+    #    #1159: the husk-hat create seam moved verbatim into
+    #    _cos_attachment_spawn_sync.lua, so the needle follows the code and the
+    #    entry gains the matching ABSENCE row below.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua'; needle='_dbg_alert("[husk-hat-create] paint err key=%s vanilla=%s: %s"'; literal=$true; polarity='present'; issueRef='#697'; note='the husk-hat paint failure line carries the armoury key + vanilla variant on the visible alert channel.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='if not pcall(printf, "[cosmetics:dbg] " .. fmt, ...) then'; literal=$true; polarity='present'; issueRef='#697'; note='_dbg_alert stays printf-backed (lands in console log with mod logging OFF); rerouting it blinds every alert.' }
 
     # -- #1159: the HeroWindowItemCustomization view lifecycle owner. The three
@@ -268,6 +271,28 @@
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='get_send_la_apply = function() return _send_la_apply end,'; literal=$true; polarity='present'; issueRef='#1159'; note='the LA sender crosses the chunk boundary as a late-bound getter, never as an install-time value.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; needle='LA_PERSIST, _get_send_la_apply(), function(unit) return Unit.alive(unit) end)'; literal=$true; polarity='present'; issueRef='#1159'; note='the drain resolves the forward-declared sender at call time; a captured upvalue would be nil.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; needle='local _send_la_apply'; literal=$true; polarity='absent'; issueRef='#1159'; note='the owner must never shadow the entry-owned sender with a local of its own.' }
+
+    # -- #1159: the attachment-slot LA spawn/sync owner. All four seams below moved
+    #    verbatim out of the entry into _cos_attachment_spawn_sync.lua. VMF silently
+    #    drops a second registration on the same (Class, method) pair per mod, so the
+    #    entry-side ABSENCE rows are what keep a future re-inline from shadowing the
+    #    owner. AttachmentUtils is a PLAIN TABLE, so its registration must stay in the
+    #    table-form-plus-nil-guard shape - the string form never registers at all.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='"PlayerHuskAttachmentExtension", "create_attachment"'; literal=$true; polarity='absent'; issueRef='#1159'; note='the husk hat spawn seam belongs to _cos_attachment_spawn_sync; a second entry registration would be silently dropped.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='"PlayerUnitAttachmentExtension", "game_object_initialized"'; literal=$true; polarity='absent'; issueRef='#1159'; note='the local go-init name substitution belongs to _cos_attachment_spawn_sync; re-inlining it drops one of the two registrations.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='"PlayerUnitAttachmentExtension", "spawn_resynced_loadout"'; literal=$true; polarity='absent'; issueRef='#1159'; note='the resync name substitution belongs to _cos_attachment_spawn_sync; a second entry registration would be silently dropped.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook(AttachmentUtils, "hot_join_sync"'; literal=$true; polarity='absent'; issueRef='#1159'; note='the hot-join seam belongs to _cos_attachment_spawn_sync; the entry keeps only AttachmentUtils.create_attachment.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='_dbg_alert("[husk-hat-create]'; literal=$true; polarity='absent'; issueRef='#1159'; note='the husk-hat alert channel travels with its hook; an entry copy would mean the seam was re-inlined.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua'; needle='mod:hook("PlayerHuskAttachmentExtension", "create_attachment"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the husk hat spawn seam is registered exactly once, by its owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua'; needle='if AttachmentUtils then'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='AttachmentUtils is a plain table: the nil-guarded table-form registration is load-bearing and must survive the move.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua'; needle='_net_safe_hook_status.PUAE = true'; literal=$true; polarity='present'; issueRef='#1159'; note='the owner still records its registrations on the entry-owned status table the startup verification reads.' }
+    # -- #1159: `_la_pending_apply` is REBOUND by the entry at both drain sites
+    #    (`_la_pending_apply = kept`). Handing the queue over BY VALUE would leave the
+    #    husk-hat skeleton deferral appending to the table the first drain discarded,
+    #    so the entry passes a getter and the owner resolves it at enqueue time.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='get_la_pending_apply = function() return _la_pending_apply end,'; literal=$true; polarity='present'; issueRef='#1159'; note='the rebound LA retry queue crosses the chunk boundary as a getter, never as an install-time value.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua'; needle='local _pending = _get_la_pending_apply()'; literal=$true; polarity='present'; issueRef='#1159'; note='the deferral resolves the rebound queue at enqueue time; a captured upvalue would go stale after the first drain.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua'; needle='local _la_pending_apply'; literal=$true; polarity='absent'; issueRef='#1159'; note='the owner must never shadow the entry-owned retry queue with a local of its own.' }
 
     # ============================ cim_dev ============================
     # Source: crafting_in_modded_dev/CHANGELOG.md 0.8.57-dev (issue 511). The two

@@ -282,6 +282,14 @@ return function(H, repo_root)
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_appearance_fade_runtime.lua", "rb"))
         source = source .. "\n" .. runtime_file:read("*a")
         runtime_file:close()
+        -- #1159: the "remote-husk" paint surface moved verbatim out of the entry
+        -- with the husk hat spawn seam, so its owner joins the source this
+        -- surface census reads.
+        local attachment_sync_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua", "rb"))
+        local attachment_sync = attachment_sync_file:read("*a")
+        attachment_sync_file:close()
+        source = source .. "\n" .. attachment_sync
         for _, surface in ipairs({
             "appearance-replay", "remote-husk", "local-attachment",
             "live-attachment", "hero-preview",

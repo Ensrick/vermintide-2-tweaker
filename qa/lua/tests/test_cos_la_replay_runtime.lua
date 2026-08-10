@@ -41,6 +41,13 @@ return function(H, repo_root)
     local view_lifecycle = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_customization_view_lifecycle.lua")
+    -- #1159: the attachment-slot LA spawn/sync owner joined this census when its
+    -- four full hooks (husk hat create, local go-init, resync, hot join) moved out
+    -- of the entry. Same rule as above: a new owner is added to the census rather
+    -- than the expected totals being lowered, so the family total cannot drift.
+    local attachment_spawn_sync = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_attachment_spawn_sync.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -64,6 +71,7 @@ return function(H, repo_root)
             .. preview_runtime:gsub("%-%-[^\n]*", "")
             .. news_feed_safety:gsub("%-%-[^\n]*", "")
             .. view_lifecycle:gsub("%-%-[^\n]*", "")
+            .. attachment_spawn_sync:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),
