@@ -1,5 +1,46 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.196-dev (2026-08-10) -- attachment spawn/sync owner extracted (#1159, #2) [untested]
+
+### Behavior-neutral extraction
+
+- Moved the four attachment-slot LA spawn/sync seams out of the entry file into
+  `_cos_attachment_spawn_sync.lua`: the husk hat spawn (v0.9.0.9 idempotency
+  fix, v0.9.8.5 character-mismatch gate, v0.9.8.8 skeleton-readiness deferral,
+  #697 paint alert, appearance-fade enrollment), the local game-object-init and
+  resynced-loadout name substitutions, and the hot-join sync (including the
+  non-attachment replay that rides the same seam, because vanilla's
+  `hot_join_sync` is the only per-joiner callback and it walks attachment-
+  category slots only).
+- The moved body is diff-proven byte-identical to the 460 relocated entry lines
+  apart from a single statement, the accessor hand-off described below. Four
+  hooks move as a unit and the whole-mod hook count is unchanged at 90; the
+  installer runs at the exact point the inline block previously executed, so
+  registration order and the "[net-safe] hook registration" startup line hold.
+- `_la_pending_apply` stays entry-owned and crosses the chunk boundary as a
+  getter, not a value: both drain sites REBIND that local, so an install-time
+  hand-off would have left every husk-hat skeleton deferral appending to the
+  table the first drain discarded. `_net_safe_hook_status` crosses by reference
+  so the owner's two registration flags reach the entry's startup verification.
+  `_send_la_apply` is safe by value here, and the test suite pins the ordering
+  that makes it safe rather than leaving it to inspection.
+- Entry ceiling ratchets 6,315 -> 5,899 nonblank lines (20 owners). No new
+  hooks, RPCs, commands, settings, persistence, or lifecycle owners.
+
+### Coverage
+
+- Added `qa/lua/tests/test_cos_attachment_spawn_sync.lua` (11 boundary and
+  behaviour tests) covering install position and ordering, exclusive ownership
+  of all four seams, non-overlap with the appearance-fade runtime that hooks the
+  same method name on the LOCAL attachment class, the non-hat pass-through, the
+  substitute/restore/re-emit contract on go-init and resync, and the
+  skeleton-not-ready deferral. The last two tests are a matched pair: the second
+  rebinds the entry-side queue the way a real drain does, so converting the
+  getter back to a value fails exactly one test instead of failing silently.
+- Retargeted four path-pinned gates onto the moved code with entry-side absence
+  assertions, added the owner to the hook-cardinality census so the family total
+  stays 28/18/1, and added twelve source-text invariant rows.
+
 ## 0.9.195-dev (2026-08-09) -- customization view lifecycle owner extracted (#1159, #2) [untested]
 
 ### Behavior-neutral extraction

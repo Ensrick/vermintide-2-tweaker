@@ -7,10 +7,18 @@ return function(H, repo_root)
     end
 
     local module = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_grail_knight_set.lua")
-    local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+    local entry_only = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+    -- #1159: the four attachment-slot LA spawn/sync seams (husk hat create, local
+    -- go-init, resync, hot join) moved verbatim out of the entry, taking the
+    -- career-exact name substitution and the Grail Knight husk variant paint with
+    -- them, so the owner joins the source this test reads.
+    local attachment_spawn_sync =
+        read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua")
+    local entry = entry_only
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua")
+        .. attachment_spawn_sync
     local localization = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization.lua")
     local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")
 
@@ -143,13 +151,15 @@ return function(H, repo_root)
             "unknown career must not leave a custom key on the wire")
         H.truthy(entry:find("_la_vanilla_fallback(item_name, _wire_career_for_player(player))", 1, true))
         H.truthy(entry:find("_la_vanilla_fallback(item.key, _wire_career_for_player(player))", 1, true))
-        H.truthy(entry:find("_la_substitute_name(orig, career)", 1, true))
+        H.truthy(attachment_spawn_sync:find("_la_substitute_name(orig, career)", 1, true))
+        H.equal(entry_only:find("_la_substitute_name(orig, career)", 1, true), nil)
         H.truthy(entry:find("_la_vanilla_fallback(bid, career_name)", 1, true),
             "persisted loadout clones must use the exact career fallback")
         H.truthy(entry:find("_la_vanilla_fallback(raw, career_name)", 1, true),
             "loadout item lookup must use the exact career fallback")
-        H.truthy(entry:find("_la_vanilla_fallback(la_id, career)", 1, true),
+        H.truthy(attachment_spawn_sync:find("_la_vanilla_fallback(la_id, career)", 1, true),
             "hot-join replay must use the exact wearer career fallback")
+        H.equal(entry_only:find("_la_vanilla_fallback(la_id, career)", 1, true), nil)
         H.truthy(entry:find("career_for = _wire_career_for_player", 1, true),
             "self-rebroadcast must use the exact local player career fallback")
     end)
@@ -185,7 +195,10 @@ return function(H, repo_root)
         H.truthy(entry:find("GK_SET.apply_variant_to_unit", 1, true))
         H.truthy(entry:find('mod:hook_safe("PlayerUnitCosmeticExtension", "extensions_ready"', 1, true))
         H.truthy(entry:find('mod:hook_safe("HeroPreviewer", "post_update"', 1, true))
-        H.truthy(entry:find('GK_SET.apply_variant_to_unit(cached.armoury_key, spawned_hat, "remote_husk")', 1, true))
+        H.truthy(attachment_spawn_sync:find(
+            'GK_SET.apply_variant_to_unit(cached.armoury_key, spawned_hat, "remote_husk")', 1, true))
+        H.equal(entry_only:find(
+            'GK_SET.apply_variant_to_unit(cached.armoury_key, spawned_hat, "remote_husk")', 1, true), nil)
     end)
 
     H.test("Grail Knight shield is a reusable independent Kruber offhand", function()

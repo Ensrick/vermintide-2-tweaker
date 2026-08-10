@@ -236,6 +236,7 @@ local suites = {
     "test_rewield_coalescer",
     "test_cos_custom_hats",
     "test_cos_attachment_link_policy",
+    "test_cos_attachment_spawn_sync",
     "test_cos_grail_knight_set",
     "test_cos_reikland_griffin",
     "test_cos_resource_residency",
