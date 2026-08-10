@@ -119,10 +119,14 @@ return function(H, repo_root)
     end)
 
     H.test("CT #221 production gates every owner and exposes bounded diagnostics", function()
+        -- #1159: `enable_altar_reuse` is consumed by the altar-reuse owner now
+        -- that the whole reusable-altar block left the entry. The gate follows
+        -- the code: same needles, one more file in the scanned set.
         local source = read(base .. "chaos_wastes_tweaker_dev.lua")
             .. read(base .. "_ct_boon_balance.lua")
             .. read(base .. "_ct_meta_trait_boons.lua")
             .. read(base .. "_ct_weapon_trait_generation.lua")
+            .. read(base .. "_ct_altar_reuse_owner.lua")
         for _, id in ipairs({
             "enable_altar_reuse", "disable_all_listed_curses",
             "ban_all_grudge_marks", "ban_all_traits", "enable_boon_reworks",
