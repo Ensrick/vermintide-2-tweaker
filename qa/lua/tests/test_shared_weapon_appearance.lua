@@ -318,8 +318,10 @@ return function(H, repo_root)
     end)
 
     H.test("CWV #420 loads its local copy and preserves compatibility handles", function()
+        -- #1159: the WA load and both compatibility handles moved verbatim out of
+        -- the entry into the weapon-transform owner. The gate follows the code.
         local path = repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_weapon_transform_owner.lua"
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()

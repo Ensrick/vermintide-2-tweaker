@@ -438,6 +438,16 @@
     @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'; needle='mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"'; literal=$true; polarity='absent'; issueRef='#280'; note='BUG_CLASSES 27: the crash floor lives in _cwv_husk_residency_owner. A second registration in the entry would be silently dropped by VMF and shadow the owner, so the entry must stay clear of this pair.' }
     @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'; needle='if not owner_unit_1p and'; literal=$true; polarity='present'; issueRef='#392'; note='BUG_CLASSES 27: the spawn_inventory_unit husk branch is gated on the no-1P-rig discriminator (v0.1.461 husk adapter added a second conjunct); removing it strands every husk-side transform/strip fix.' }
 
+    # -- SILENT-DEGRADATION class (no crash, no log): a variant that never enters
+    #    `_transform_map` resolves a nil def, so its mesh swap still happens while
+    #    scale/grip/rotation and texture bail at the nil-def guard. Two gate signals
+    #    decide membership and both live in the weapon-transform owner: issue 409's
+    #    per-item `force_register` crutch and the issue 417 generalization that
+    #    registers on hand-unit override presence (mesh-bearing => def-resolving).
+    @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_weapon_transform_owner.lua'; needle='_resolve_field(def, "force_register")'; literal=$true; polarity='present'; issueRef='#409'; note='issue 409: the Old Musket carries no generic scale/offset, so only force_register puts it in _transform_map. Without it every resolver-driven render path early-returns at the nil-def guard and the bespoke pose/textures never apply.' }
+    @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_weapon_transform_owner.lua'; needle='_resolve_field(def, "right_hand_unit")'; literal=$true; polarity='present'; issueRef='#417'; note='issue 417: registering on hand-unit override presence keeps mesh-bearing variants def-resolving. Dropping it re-arms the silent split where _find_def swaps the mesh but transform and texture bail, which is what forced the per-item force_register crutch.' }
+    @{ mod='cwv'; file='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'; needle='local function _resolve_field(def, field)'; literal=$true; polarity='absent'; issueRef='#1159'; note='#1159: the per-variant-over-type precedence resolver has exactly one owner. A second copy in the entry would shadow the registries built against the first and split transform resolution across two tables.' }
+
     # -- BUG_CLASSES 29: client-side buff proc calls the server-only heal_network. The
     #    Fires-from-Ash THP heal MUST sit behind the Managers.player.is_server gate or
     #    a client hard-CTDs on the "Only server can heal" fassert. Burned crt (#405)
