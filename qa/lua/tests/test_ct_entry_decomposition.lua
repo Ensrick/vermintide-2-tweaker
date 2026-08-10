@@ -27,12 +27,21 @@ return function(H, repo_root)
     local boon_grant = read("_ct_boon_grant_owner.lua")
     local campaign_graph = read("_ct_campaign_graph_owner.lua")
     local altar_reuse = read("_ct_altar_reuse_owner.lua")
+    local chest_revive = read("_ct_chest_revive_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 6801 = 2026-08-10 baseline after the #1159 altar-reuse owner extraction
-        -- (everything that depends on a DeusChestExtension ALTAR having been
+        -- 6433 = 2026-08-10 baseline after the #1159 chest-revive owner
+        -- extraction (everything ct does to the PARTY when a Chest of Trials
+        -- completes: the host-gated OPEN detector, the three-downed-state
+        -- triage, the #299 move-before-free rescue transaction with its arm /
+        -- process / deferred-tick adapters, and the two post-respawn
+        -- compensations - 50% temporary health and the single "revived" wound
+        -- above Recruit).
+        --
+        -- It replaces the 6801 baseline set by the #1159 altar-reuse owner
+        -- extraction (everything that depends on a DeusChestExtension ALTAR having been
         -- opened before: the #61 use ledger and its two settings policies, the
         -- mult^uses price curve, the re-roll seed mixing on all three generators,
         -- the #102 relaxed lit/interactable gates, the #252 upgrade-panel repaint,
@@ -43,7 +52,7 @@ return function(H, repo_root)
         -- weapon-trait-generation, and bot weapon-chest owners. The ceiling only
         -- ratchets DOWN as more of the ct_dev entry decomposes into modules; it
         -- must never grow.
-        H.truthy(lines <= 6801, "entry non-empty line count exceeded frozen 6801 baseline")
+        H.truthy(lines <= 6433, "entry non-empty line count exceeded frozen 6433 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -116,6 +125,17 @@ return function(H, repo_root)
         --   entry               boon_altar_no_repeat (reads the taken-boon table the
         --                       owner now initialises at load time)
         H.equal(count_plain(altar_reuse, "_rt_register("), 0)
+        -- #1159 chest-revive owner: same story again. The moved region carried
+        -- NO _rt_register, and the one check that guards it -
+        -- issue299_chest_revive_team_teleport_ordered - deliberately STAYS in
+        -- the entry. It reads mod._ct_chest_revive_policy, mod._ct299_arm,
+        -- mod._ct299_process, mod._ct_chest_teleport_tick and
+        -- mod._ct_pending_team_teleport off `mod` at CALL time, so leaving it
+        -- put keeps /ct_regression_test's output order byte-identical AND turns
+        -- it into a live boundary assertion: if the owner ever stops publishing
+        -- one of those five fields, an entry-side check fails.
+        H.equal(count_plain(chest_revive, "_rt_register("), 0)
+        H.equal(count_plain(entry, '_rt_register("issue299_chest_revive_team_teleport_ordered"'), 1)
         H.equal(count_plain(weapon_traits, "_rt_register("), 1)
         H.equal(count_plain(bot_weapon_chest,
             'mod:hook("DeusChestExtension", "open_chest"'), 1)

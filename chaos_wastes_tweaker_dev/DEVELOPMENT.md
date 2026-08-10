@@ -398,6 +398,89 @@ the install must publish, and both seam deviations: that `reset_uses` **rebinds*
 rather than clearing in place, and that a wrapper whose target is assigned only
 *after* install still resolves.
 
+### Chest-revive owner (`_ct_chest_revive_owner.lua`) — issues #116 / #299 / #1159
+
+Everything ct does to the **party** at the moment a Chest of Trials completes,
+and nothing else. A Chest of Trials is `DeusCursedChestExtension`: it runs a
+terror event and only reaches `STATES.OPEN` (3) on the server once that event
+ends successfully. Hot-join clients enter `HOTJOIN_OPEN` (4) instead, so they
+never trigger any of this. It is **not** a `DeusChestExtension` altar — that is
+`_ct_altar_reuse_owner`'s class, and the two must not grow into each other.
+
+One toggle, `respawn_on_chest_complete`, arms the whole file:
+
+| Concern | What the owner does |
+|---|---|
+| completion detector | a single `hook_safe` on `_set_state`, filtered to state 3 and gated on `Managers.player.is_server`, so only the host ever acts |
+| #116 downed triage | walks every occupied party slot and handles all three states: awaiting-rescue (hanging at a beacon) arms the ordered rescue, bleeding-out calls `StatusUtils.set_revived_network` in place (skipping disabler-held players, who are already with the team where they fell), and dead / queued zeroes `respawn_timer` so `RespawnHandler` spawns them. A belt-and-suspenders `force_respawn_dead_players()` follows, per `feedback_redundant_safeguards_ok.md` |
+| #299 ordered rescue | `mod._ct299_arm` / `_ct299_process` / `_ct_chest_teleport_tick`. The chest position is captured ONCE as plain xyz scalars, never a frame-pool vector, and the transaction unlinks and MOVES the still-disabled player next to the nearest controllable teammate **before** freeing them. `_ct_chest_revive_policy.lua` decides the next action; this file performs it |
+| post-respawn THP | `sync_health_state` sets `temporary_health_percentage = 0.5` just before the engine reads it, so the spawn applies 50% THP without the mod touching the network game object |
+| post-respawn wound | `_respawn_player` applies one `"revived"` wound above Recruit, mirroring the engine's own post-revive wound, then clears the marker so a later chest in the same run can re-arm |
+
+**Why move before free.** July 20 host evidence: the assisted-respawn beacon sits
+~70m ahead of the front player, and a bot teleported 62.7m toward it in the same
+trace, immediately before the rescued player's `health_state` became alive. Free
+first and the whole team chases the beacon. The single `POSITION_LOOKUP` write in
+that path is a **guarded in-place refresh**, never a seed: `teleport_to`'s last
+line reads `POSITION_LOOKUP[unit].z` through `set_falling_height`, and in the
+`mod.update` phase the stored entry is a dead frame-pool handle
+(`docs/BUG_CLASSES.md` section 21). Creating an entry the engine is not
+maintaining would flip `ALIVE[unit]` truthy for every consumer, so the write is
+gated on the entry already existing.
+
+**The Chest of Trials cost and early-reward wiring did NOT move.** The six-line
+#350 block that dofiles `_ct_cot_cost` and `_ct_cot_early_reward` sat *between*
+the two moved chunks and stays in the entry. Charging to START a trial (#63) and
+presenting a reward while it RUNS (#350) are different responsibilities from
+reacting to one finishing; folding their installation in would make this owner
+the loader for two modules it has nothing to say about. `_ct_cot_early_reward`
+must never write OPEN early precisely because that would falsely trigger the
+recovery this file owns.
+
+**The settings-sync, graph-snapshot and peer-manifest RPC transports did NOT
+move.** The entire entry prefix holding them is byte-identical across the slice.
+
+Shape is the named `local function install(mod, ctx)` installer, dofile'd once at
+the exact position its `_set_state` hook occupied. Both moved chunks are
+byte-identical to the pre-extraction entry lines (MD5
+`a2630227c6605e841454c354f282b0ba` and `8fac87ad196378940ad0de8b166b193b`) with
+**zero** interior deviations.
+
+Because the #350 block stayed put, there is exactly **one** load-order deviation:
+the first chunk — three constants, `mod._ct_pending_team_teleport`, and the
+`_ct_chest_revive_policy` load — now runs *after* that block instead of before
+it. Both halves are asserted offline: none of `_ct_cot_cost`,
+`_ct_cot_early_reward` or their two policy cores mentions any of the moved state,
+and `_ct_chest_revive_policy.lua` is a pure engine-free table that cannot perturb
+modules loaded before it. Hook-registration order is untouched — the CoT
+interaction hooks still register before the completion-only OPEN hook, which is
+what the entry comment above that block asks for.
+
+`effective_setting` crosses as a late-binding wrapper closure. Unlike the
+altar-reuse owner this is **defensive rather than mandatory**: the forward slot
+is assigned around entry line 2054, well above this install site, so a by-value
+bind would work today. The wrapper keeps the binding correct if the install site
+ever moves, and the `ctx` key is load-time asserted.
+
+The owner **returns nothing**. Its seams stay `mod._ct*` fields because two entry
+readers resolve them at call time: the `mod.update` rescue tick, and the
+`issue299_chest_revive_team_teleport_ordered` regression check. That check stayed
+in the entry deliberately — it keeps `/ct_regression_test` output order unchanged
+and doubles as a live assertion that the owner still publishes all five fields
+across the chunk boundary.
+
+`qa/lua/tests/test_ct_chest_revive_owner.lua` guards installer shape, dofile
+cardinality, the #350 ordering deviation from both sides, exclusivity of all
+three registrations across the entry, and the class boundaries against the altar,
+cost, early-reward and placement owners. By loading and installing the real
+module against a recording stub it also makes the following executable rather
+than textual: the hook census (1 hook / 2 safe, in registration order), load-time
+failure on a dropped `ctx` key, late binding of `effective_setting`, the state-3
+filter (states 0/1/2/4 must not even read a setting), the host gate, and the
+bounded rescue lifecycle — a client wipes every pending job on tick, a host
+retains a job whose unit has not spawned, a timed-out job is dropped, and
+repeated exceptions retire a job at `MAX_ERRORS` instead of spinning.
+
 ## Buff registration: dormant boons need dual-table writes
 
 When ct injects a previously-dormant CW boon into the active loot pool at runtime (e.g. the `activate_dormant_*` toggles), the buff template **must** be registered in BOTH:

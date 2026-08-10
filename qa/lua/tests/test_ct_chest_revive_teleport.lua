@@ -72,9 +72,11 @@ return function(H, repo_root)
     end)
 
     H.test("CT #299 runtime wires move-before-free and visible bounded errors", function()
-        local source = read(root .. "chaos_wastes_tweaker_dev.lua")
+        -- #1159: the runtime moved verbatim into _ct_chest_revive_owner.lua, so
+        -- this gate follows the code with the same needles. The entry-side
+        -- absence check below stops a stray second copy drifting silently.
+        local source = read(root .. "_ct_chest_revive_owner.lua")
         H.truthy(source:find("_ct_chest_revive_policy", 1, true))
-        H.truthy(source:find("ct299:move_before_free_v1", 1, true))
         H.truthy(source:find("Unit.world_position", 1, true))
         H.truthy(source:find("LocomotionUtils.disable_linked_movement", 1, true))
         H.truthy(source:find("entry.moved = true", 1, true))
@@ -87,10 +89,32 @@ return function(H, repo_root)
             move_at, true))
         H.truthy(move_at < free_at)
         H.truthy(source:find('retained == false and "DEGRADED" or "PASS"', 1, true))
+
+        -- Entry-side absence: the runtime lives in exactly one chunk now. What
+        -- the entry keeps is the install call plus the two readers that resolve
+        -- the owner's seams off `mod` at call time.
+        local entry = read(root .. "chaos_wastes_tweaker_dev.lua")
+        H.equal(entry:find("entry.moved = true", 1, true), nil)
+        H.equal(entry:find("StatusUtils.set_respawned_network", 1, true), nil)
+        H.equal(entry:find("LocomotionUtils.disable_linked_movement", 1, true), nil)
+        H.truthy(entry:find("_ct_chest_revive_owner", 1, true))
+        H.truthy(entry:find("mod._ct_chest_teleport_tick(dt)", 1, true))
+
+        -- The move-before-free marker has exactly two homes and neither is the
+        -- moved runtime: _ct_chest_revive_policy.lua DEFINES it, and the entry's
+        -- issue299_chest_revive_team_teleport_ordered check COMPARES against it.
+        -- That check stayed in the entry on purpose, so it now doubles as a live
+        -- assertion that the owner still publishes the policy across the chunk
+        -- boundary.
+        H.truthy(read(root .. "_ct_chest_revive_policy.lua")
+            :find('M.MARKER = "ct299:move_before_free_v1"', 1, true))
+        H.truthy(entry:find('policy.MARKER ~= "ct299:move_before_free_v1"', 1, true))
+        H.equal(read(root .. "_ct_chest_revive_owner.lua")
+            :find("ct299:move_before_free_v1", 1, true), nil)
     end)
 
     H.test("CT #299 POSITION_LOOKUP write is a guarded in-place refresh, kept for teleport_to", function()
-        local source = read(root .. "chaos_wastes_tweaker_dev.lua")
+        local source = read(root .. "_ct_chest_revive_owner.lua")
         -- KEPT: teleport_to's last line (set_falling_height,
         -- player_unit_locomotion_extension.lua:1022) reads POSITION_LOOKUP[unit].z
         -- (generic_status_extension.lua:2590), a dead frame-pool handle in the

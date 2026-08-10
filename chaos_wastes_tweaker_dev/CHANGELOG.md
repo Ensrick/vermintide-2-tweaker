@@ -1,5 +1,70 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.330-dev (2026-08-10) -- chest-revive owner decomposition (#1159, #2) [untested]
+
+- Everything ct does to the PARTY when a Chest of Trials completes moves to a
+  dedicated owner, `_ct_chest_revive_owner.lua`: the host-gated completion
+  detector on `DeusCursedChestExtension._set_state`, the #116 per-slot triage of
+  all three downed states (awaiting-rescue hangs, bleeding-out revives in place,
+  dead players' respawn timers), the whole #299 move-before-free rescue
+  transaction with its arm / process / deferred-tick adapters, and the two
+  post-respawn compensations keyed off the same per-run marker -- the 50%
+  temporary-health override on `sync_health_state` and the single `"revived"`
+  wound applied above Recruit.
+- These ship as ONE owner because they are one causal chain: a single toggle
+  (`respawn_on_chest_complete`) arms all of it, and every piece downstream reads
+  the `pending_chest_respawn` marker or the rescue ledger that the completion
+  hook writes. Nothing here fires on a chest that has not completed.
+- **The Chest of Trials COST and EARLY-REWARD wiring did NOT move.** The six-line
+  #350 block that dofiles `_ct_cot_cost` and `_ct_cot_early_reward` sat between
+  the two moved chunks and deliberately stays in the entry: charging to START a
+  trial and presenting a reward while it RUNS are different responsibilities from
+  reacting to one finishing, and folding their installation in would make this
+  owner the loader for two modules it has nothing to say about.
+- **The settings-sync / graph-snapshot / peer-manifest RPC transports did NOT
+  move.** The whole entry prefix that holds them (lines 1-5780, MD5
+  `8d295a961c53c6105f15bc6dde0a365a`) is byte-identical before and after, and
+  each transport anchor is verified to sit on its original line.
+- Behaviour-neutral: both moved chunks are byte-identical to the pre-extraction
+  entry lines (MD5 `a2630227c6605e841454c354f282b0ba` for the constants and
+  policy load, `8fac87ad196378940ad0de8b166b193b` for the hook block) with zero
+  interior deviations, and the entry suffix below the region is byte-identical
+  too, so the region is provably the only thing that changed. Whole-mod hook
+  registrations are unchanged -- 97 `mod:hook` / 29 `mod:hook_safe` / 7
+  `mod:network_register` / 44 `mod:command` call sites and 175 distinct keys with
+  no new duplicates, counted two ways (raw text census and a comment-stripped
+  parse) against a pristine `git archive` of the pre-slice tree. A site-by-site
+  diff shows exactly three changes, all of them the same pair moving file.
+- Exactly ONE load-order deviation, because the #350 block stayed put: the first
+  moved chunk (three constants, `mod._ct_pending_team_teleport`, and the
+  `_ct_chest_revive_policy` load) now runs after that block instead of before it.
+  It is inert in both directions and both halves are asserted offline -- neither
+  CoT module nor either of their policy cores mentions any of the moved state,
+  and `_ct_chest_revive_policy.lua` is a pure engine-free table that cannot
+  perturb modules loaded before it. Hook-registration order is untouched: the
+  CoT interaction hooks still register before the completion-only OPEN hook.
+- `effective_setting` crosses as a late-binding wrapper closure. Unlike the
+  altar-reuse owner, its forward slot IS already assigned above this install
+  site, so a by-value bind would work today; the wrapper keeps the binding
+  correct if the install site ever moves. The `ctx` key is load-time asserted, so
+  a dropped key fails at boot instead of surfacing as a nil settings read the
+  first time a trial completes.
+- The owner returns nothing: its seams stay `mod._ct*` fields because two entry
+  readers resolve them at call time -- the `mod.update` rescue tick and the
+  `issue299_chest_revive_team_teleport_ordered` regression check, which stays in
+  the entry on purpose so `/ct_regression_test` output order is unchanged and the
+  check doubles as a live cross-chunk boundary assertion.
+- Entry 6801 -> 6433 non-blank lines; the decomposition ceiling ratchets down and
+  `_ct_chest_revive_owner.lua` becomes the 17th mandatory ct_dev owner. The new
+  `qa/lua/tests/test_ct_chest_revive_owner.lua` loads and installs the real module
+  against a recording stub, so the hook census, the ctx asserts, the late binding,
+  the OPEN-state filter, the host gate, guard-is-not-bail on the wrapping health
+  hook, and the bounded rescue lifecycle (client wipe, wait-for-unit, timeout,
+  error cap) are executable checks rather than needles. The #299 gate in
+  `test_ct_chest_revive_teleport.lua` and the new rows in
+  `qa/rt_textual_invariants.psd1` follow the code with byte-identical needles plus
+  entry-side absence assertions.
+
 ## 0.7.329-dev (2026-08-10) -- altar-reuse owner decomposition (#1159, #2) [untested]
 
 - Everything that depends on a Chaos Wastes ALTAR having been opened before moves
