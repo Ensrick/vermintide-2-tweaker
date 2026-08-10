@@ -1,5 +1,87 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.199-dev (2026-08-10) -- cos_la_* peer-sync transport owner extracted (#1159) [untested]
+
+### Behavior-neutral extraction
+
+- Moved the entire cos_la_* peer-sync TRANSPORT out of the entry file into
+  `_cos_la_sync_transport.lua`: the peer-identity layer (`_host_peer_id`,
+  `_local_peer_id_quick`, `_is_local_server`, `_wearer_unit_for_peer`,
+  `_local_player_peer_id`, `mod._la_career_for_unit`), all three senders
+  (`_send_la_apply`, `mod._send_la_revert`, `mod._send_offhand_mesh`) with the
+  shared 0.5s emit-dedup window and the 300s-TTL deferred-emit queue
+  (`mod._drain_deferred_la_emits`), the receiver-side vanilla offhand mesh store
+  (`mod._store_offhand_mesh_recv`), all four `mod:network_register` handlers
+  (`cos_la_apply_req`, `cos_la_state_req`, `cos_la_state_ack`, `cos_la_apply`)
+  with the host-authoritative validate/record/rebroadcast and the #416 hot-join
+  mesh replay, and the deferred peer purge (the `PlayerManager.remove_player` /
+  `add_remote_player` hook_safe pair plus `mod._la_tick_peer_purges`).
+- Send and receive are ONE owner, not two. `_last_emit_at` is written by all
+  three senders AND swept per-peer by the purge tick; the deferred queue is
+  appended by all three senders and drained by a function that must re-derive
+  host identity; the receivers call the senders' own
+  `mod._store_offhand_mesh_recv` and re-ask the identity layer the same questions.
+  Splitting at any seam would have left a mutable dedup table, a queue, or the
+  host predicate as shared entry state with two owners.
+- The owner installs in TWO PHASES from one `mod:dofile`, at the two exact line
+  positions the moved blocks used to start. Phase 1 (identity + send + queue)
+  registered NOTHING in its original form, so it cannot move a registration even
+  in principle. Phase 2 (`owner.install_receivers()`) runs the six registrations
+  at the original line, still after the apply/revert owner published
+  `mod._la_reconcile` / `mod._la_apply_revert_recv` and after the replay
+  coordinator published `mod._cos_replay`. Phase 2 is a closure built inside
+  phase 1, which is how the receive half keeps closing over the send half's
+  locals exactly as it did when both were file-scope neighbours, and it asserts
+  it is called exactly once so the registering phase is machine-checked rather
+  than comment-checked.
+- Registration cardinality AND order are unchanged, verified against a pristine
+  `git archive` copy of the whole mod tree: 62 hooks, 38 safe hooks, 1 origin
+  hook, 35 commands, 7 RPC registrations and 24 RPC sends before and after, with
+  the full 131-entry (kind, class, method / channel / command name) multiset
+  compared element by element. `mod:dofile` moves 93 -> 94, the new module's own
+  manifest entry. Entry-file counts move as expected and only as expected: 5 -> 0
+  RPC registrations, 18 -> 1 RPC sends (the surviving one is the state-pull
+  request in `mod.update`), 12 -> 10 safe hooks, 17 -> 17 hooks, 6 -> 6 commands.
+- The moved body is proven byte-identical to the 1,010 relocated entry lines
+  (2378-2881 and 3192-3697) after de-indenting phase 1 by four spaces and phase 2
+  by eight; the phase-1 block is SHA-256 identical to the original. NO original
+  statement was modified: the move ADDS three lines and changes none. Two are the
+  retry-queue accessor resolution at the `cos_la_apply` deferral, the third is a
+  forward declaration of `_send_la_apply` so its original plain-assignment
+  statement stays byte-identical instead of becoming a global write.
+- `_la_pending_apply` crosses as a GETTER: both of its drains REBIND it and the
+  receiver only appends, so a by-value hand-off would have parked deferrals in a
+  table the drain had already discarded. `_la_equips_by_peer` and `_glow_by_peer`
+  stay by value on single-assignment proofs. The five peer-identity helpers and
+  `_send_la_apply` come straight back out as entry locals, so the apply, replay,
+  glow-transport and attachment-spawn installs below and `mod.update` keep
+  resolving the same function objects.
+- Entry ceiling ratchets 4,806 -> 3,892 nonblank lines (23 owners). No new hooks,
+  RPC channels, commands, settings, persistence, or lifecycle owners; no wire
+  format, payload field, or `COS_RPC_SCHEMA` change.
+
+### Coverage
+
+- Added `qa/lua/tests/test_cos_la_sync_transport.lua`: boundary tests for the
+  two-phase install position and ordering, exclusive ownership of the four RPC
+  channels and the PlayerManager pair, entry-side absence of every moved
+  definition, the one-shot receiver guard, and behaviour tests that drive the
+  host / client / no-host-yet routing of all three senders plus the purge tick.
+- The signal the fix cannot move is the retry-queue getter, verified by running
+  the mutation: rebinding the entry-side queue the way `mod.update`'s drain does
+  and then forcing a failed apply proves the deferral lands in the NEW table.
+  Freezing the getter into an install-time value leaves the plain deferral test
+  green and reddens only that one, which is exactly the silent failure mode.
+- `qa/rt_textual_invariants.psd1` gains 15 rows for this owner: present/absent
+  pairs for all six registrations, the phase-2 call site, the one-shot guard, the
+  emit-dedup table, and the retry-queue accessor.
+- Seven existing offline gates were repointed to follow the code rather than
+  relaxed: the replay-runtime and dual-offhand family censuses ADD the new owner
+  (expected totals unchanged), the attachment-spawn-sync retry-queue census rises
+  2 -> 3 hand-offs, and the ordering anchors in the apply-runtime, replay-runtime
+  and glow-transport tests move from the first/last `cos_la_*` register to the
+  phase-2 call site that replaced it. Full offline suite: 2,490/2,490 pass.
+
 ## 0.9.198-dev (2026-08-10) -- LA apply/revert/reconcile owner extracted (#1159, #2) [untested]
 
 ### Behavior-neutral extraction

@@ -63,6 +63,14 @@ return function(H, repo_root)
     local apply_runtime = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_la_apply_runtime.lua")
+    -- #1159: the cos_la_* peer-sync transport owner joined this census when its
+    -- four mod:network_register handlers and the PlayerManager remove_player /
+    -- add_remote_player hook_safe pair moved out of the entry. Same rule as every
+    -- owner above: it is ADDED to the census and the expected family totals below
+    -- are NOT lowered, so the extracted family's registration count cannot drift.
+    local la_sync_transport = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_la_sync_transport.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -83,8 +91,16 @@ return function(H, repo_root)
             'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime").install',
             1, true))
         local install = assert(entry:find("_cos_la_replay_runtime", reconcile, true))
+        -- #1159: the four cos_la_* receivers moved verbatim into
+        -- _cos_la_sync_transport, whose second install phase runs at the exact
+        -- line the first mod:network_register used to occupy. The "every RPC
+        -- consumer comes last" half of the ordering invariant is measured at that
+        -- call site now; the entry must no longer register the channel itself.
+        H.equal(entry:find('mod:network_register("cos_la_apply_req"', 1, true), nil)
+        H.truthy(la_sync_transport:find(
+            'mod:network_register("cos_la_apply_req"', 1, true))
         local first_rpc = assert(entry:find(
-            'mod:network_register("cos_la_apply_req"', install, true))
+            "LA_SYNC.install_receivers()", install, true))
         H.truthy(reconcile < install and install < first_rpc)
     end)
 
@@ -97,6 +113,7 @@ return function(H, repo_root)
             .. attachment_spawn_sync:gsub("%-%-[^\n]*", "")
             .. equipment_assembly:gsub("%-%-[^\n]*", "")
             .. apply_runtime:gsub("%-%-[^\n]*", "")
+            .. la_sync_transport:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),

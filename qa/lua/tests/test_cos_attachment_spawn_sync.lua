@@ -102,12 +102,13 @@ return function(H, repo_root)
     H.test("cos attachment spawn sync crossing state uses the correct hand-off kind", function()
         -- REBOUND by the entry -> must cross as a getter, and the owner must not
         -- shadow it with a local of its own.
-        -- #1159: TWO owners now take the retry queue this way - this one, and
-        -- _cos_la_apply_runtime, which additionally needs the matching SETTER
-        -- because the drain that rebinds the queue moved into it. The census is
-        -- raised to 2 rather than relaxed, so a hand-off that silently reverts to
-        -- by-value still fails here.
-        H.equal(occurrences(entry, "get_la_pending_apply = function() return _la_pending_apply end,"), 2)
+        -- #1159: THREE owners now take the retry queue this way - this one,
+        -- _cos_la_apply_runtime (which additionally needs the matching SETTER
+        -- because the drain that rebinds the queue moved into it), and
+        -- _cos_la_sync_transport (the cos_la_apply receiver, which only appends).
+        -- The census is raised to 3 rather than relaxed, so a hand-off that
+        -- silently reverts to by-value still fails here.
+        H.equal(occurrences(entry, "get_la_pending_apply = function() return _la_pending_apply end,"), 3)
         H.equal(occurrences(entry, "set_la_pending_apply = function(t) _la_pending_apply = t end,"), 1)
         H.equal(source:find("local _la_pending_apply", 1, true), nil)
         H.equal(occurrences(source, "local _pending = _get_la_pending_apply()"), 1)
@@ -123,9 +124,18 @@ return function(H, repo_root)
         -- `_send_la_apply` crosses BY VALUE, which is only correct because the
         -- entry's real assignment executes ABOVE this install call. Pin the
         -- ordering so a future reorder fails here instead of handing over nil.
+        -- #1159: the sender's DEFINITION moved into _cos_la_sync_transport, so
+        -- the entry's assignment is now the line that fills the forward-declared
+        -- local from that owner's export. The ordering invariant is unchanged and
+        -- is measured at the statement that still performs it; the definition
+        -- itself is pinned in the transport source below.
         local at_decl = entry:find("local _send_la_apply", 1, true)
-        local at_assign = entry:find("_send_la_apply = function(unit, slot_name, kind,", 1, true)
+        local at_assign = entry:find("_send_la_apply              = LA_SYNC.send_la_apply", 1, true)
         local at_owner = entry:find(owner_install, 1, true)
+        local transport = read(
+            "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua")
+        H.truthy(transport:find("_send_la_apply = function(unit, slot_name, kind,", 1, true))
+        H.equal(entry:find("_send_la_apply = function(unit, slot_name, kind,", 1, true), nil)
         H.truthy(at_decl and at_assign and at_owner)
         H.truthy(at_decl < at_assign)
         H.truthy(at_assign < at_owner)

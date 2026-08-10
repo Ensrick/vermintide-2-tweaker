@@ -385,6 +385,35 @@
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime.lua'; needle='local _la_pending_apply = _get_la_pending_apply()'; literal=$true; polarity='present'; minCount=3; maxCount=3; issueRef='#1159'; note='every read of the rebound retry queue resolves at call time; a captured upvalue would append to a table the drain discarded.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime.lua'; needle='local _la_pending_apply = {}'; literal=$true; polarity='absent'; issueRef='#1159'; note='the owner must never shadow the entry-owned retry queue with a declaration of its own.' }
 
+    # -- #1159 (wave 12): the cos_la_* peer-sync transport. Unlike wave 10 this
+    #    owner DOES register - four mod:network_register handlers and the
+    #    PlayerManager remove_player / add_remote_player hook_safe pair - so the
+    #    rows below pin the registrations to the owner AND assert entry-side
+    #    absence: a resurrected entry copy of any RPC name would silently win or
+    #    lose depending on load order, and a duplicate (Class, method) hook_safe
+    #    is dropped by VMF without a word. The send/receive halves install in two
+    #    phases from ONE dofile, which is what keeps registration ORDER identical;
+    #    the phase-2 call site is pinned so a future slice cannot fold it into
+    #    phase 1 and quietly move six registrations ~800 lines earlier.
+    # The `, function(` tail is deliberate: the moved block carries a v0.9.0.7
+    # comment that names the cos_la_apply_req register in prose, so a bare channel
+    # needle would count two and a maxCount of 2 would stop policing duplicates.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='mod:network_register("cos_la_apply_req", function('; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the host-authoritative equip-request receiver is registered exactly once, by its owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='mod:network_register("cos_la_apply", function('; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the authoritative apply broadcast receiver is registered exactly once, by its owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='mod:network_register("cos_la_state_req", function('; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the hot-join pull-on-ready responder is registered exactly once, by its owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='mod:network_register("cos_la_state_ack", function('; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the pull acknowledgement receiver is registered exactly once, by its owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='mod:hook_safe(PlayerManager, "remove_player"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the deferred peer purge scheduler must stay a single hook_safe in its owner; a second registration anywhere is silently dropped by VMF.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='mod:hook_safe(PlayerManager, "add_remote_player"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the purge-cancel + peer-ready replay edge must stay a single hook_safe in its owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:network_register("cos_la_'; literal=$true; polarity='absent'; issueRef='#1159'; note='the entry must not re-register any cos_la_* channel beside the transport owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook_safe(PlayerManager,'; literal=$true; polarity='absent'; issueRef='#1159'; note='the peer lifecycle hooks belong to the transport owner; an entry copy would be the duplicate VMF drops.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='LA_SYNC.install_receivers()'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='phase 2 runs exactly once, at the line the first cos_la_* register used to occupy; folding it into phase 1 would move six registrations ~800 lines earlier.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='assert(owner.receivers_installed == false,'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the one-shot guard is what makes the registering phase machine-checked rather than comment-checked.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='_send_la_apply = function(unit, slot_name, kind,'; literal=$true; polarity='absent'; issueRef='#1159'; note='the LA apply sender belongs to the transport owner; an entry definition would shadow the export and split the emit-dedup window from the deferred queue.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='local _last_emit_at = {}'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='one dedup table serves all three senders and the per-peer purge sweep; a second copy means a purge that cannot clear the window it is supposed to clear.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='local _last_emit_at'; literal=$true; polarity='absent'; issueRef='#1159'; note='the emit-dedup window is private to the transport owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='local _la_pending_apply = _get_la_pending_apply()'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the receiver resolves the rebound retry queue at call time; a captured upvalue would append to a table the drain discarded.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='local _la_pending_apply = {}'; literal=$true; polarity='absent'; issueRef='#1159'; note='the owner must never shadow the entry-owned retry queue with a declaration of its own.' }
+
     # ============================ cim_dev ============================
     # Source: crafting_in_modded_dev/CHANGELOG.md 0.8.57-dev (issue 511). The two
     # hook-registration checks whose source-text needles skip in retail.
@@ -512,7 +541,11 @@
     #    purge is canceled by the add_remote_player hook_safe (transitions re-add within
     #    seconds, disconnects never do). Losing the cancel wipes every peer's cosmetic
     #    store on every keep<->mission change. Recurs via classes 43 and 61.
-    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook_safe(PlayerManager, "add_remote_player"'; literal=$true; polarity='present'; issueRef='BC24'; note='BUG_CLASSES 24: the add_remote_player hook_safe cancels the deferred peer purge; without it, remove_player-on-transition wipes the per-peer LA store every map change.' }
+    # #1159 wave 12: the peer lifecycle pair moved verbatim into
+    # _cos_la_sync_transport with the rest of the cos_la_* transport. The BC24
+    # invariant is unchanged, measured where the hook now lives; the entry-side
+    # absence half lives with the wave-12 rows above.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_sync_transport.lua'; needle='mod:hook_safe(PlayerManager, "add_remote_player"'; literal=$true; polarity='present'; issueRef='BC24'; note='BUG_CLASSES 24: the add_remote_player hook_safe cancels the deferred peer purge; without it, remove_player-on-transition wipes the per-peer LA store every map change.' }
 
     # ==================== issue #511: no live io.open in converted surfaces ====================
     # The retail Stingray VM registers no `io` into the shared _G that mods are
