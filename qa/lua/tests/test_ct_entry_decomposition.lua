@@ -24,19 +24,21 @@ return function(H, repo_root)
     local weapon_traits = read("_ct_weapon_trait_generation.lua")
     local bot_weapon_chest = read("_ct_bot_weapon_chest_owner.lua")
     local tab_panel = read("_ct_tab_panel_owner.lua")
+    local boon_grant = read("_ct_boon_grant_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 8114 = 2026-08-09 baseline after the #1159 tab-panel owner extraction
-        -- (every ct addition to IngamePlayerListUI: the #461/#1004 starting-boon
-        -- preview and the #533 Chaos Wastes collectible counters, which share one
-        -- guarded _draw pass), atop the pickup-spawn, spawn-eligibility, Boss
+        -- 7675 = 2026-08-09 baseline after the #1159 boon-grant owner extraction
+        -- (every seam that fires when a boon changes hands: the add_power_ups
+        -- disable/parity gate and grant audit, the bot boon mirror, the
+        -- consolidated _try_buy_power_up purchase hook, and the two DeusShopView
+        -- price seams), atop the tab-panel, pickup-spawn, spawn-eligibility, Boss
         -- Grudge Marks, command, journey, preview-helper, weapon-trait-generation,
         -- and bot weapon-chest/reusable-altar owners. The ceiling only ratchets
         -- DOWN as more of the ct_dev entry decomposes into modules; it must never
         -- grow.
-        H.truthy(lines <= 8114, "entry non-empty line count exceeded frozen 8114 baseline")
+        H.truthy(lines <= 7675, "entry non-empty line count exceeded frozen 7675 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -78,10 +80,15 @@ return function(H, repo_root)
         -- the native-diag arm, and #571) move WITH their feature, so the entry
         -- drops 35 -> 29 and the new owner holds exactly 6. The conserved total is
         -- unchanged; no check was lost, renamed, or duplicated.
+        -- #1159 boon-grant owner: the two bot-boon checks (bot_boon_announce_wired,
+        -- bot_boon_economy_installed) likewise move WITH their feature, so the
+        -- entry drops 29 -> 27 and that owner holds exactly 2. Conserved total
+        -- still unchanged.
         H.equal(count_plain(regression, "_rt_register("), 71)
         -- The tier-by-rarity check moved with the only helper state it consumes.
-        H.equal(count_plain(entry, "_rt_register("), 29)
+        H.equal(count_plain(entry, "_rt_register("), 27)
         H.equal(count_plain(tab_panel, "_rt_register("), 6)
+        H.equal(count_plain(boon_grant, "_rt_register("), 2)
         H.equal(count_plain(weapon_traits, "_rt_register("), 1)
         H.equal(count_plain(bot_weapon_chest,
             'mod:hook("DeusChestExtension", "open_chest"'), 1)
@@ -93,6 +100,9 @@ return function(H, repo_root)
         -- exposed handle, never build a second _RT_CHECKS list.
         H.truthy(tab_panel:find("local _rt_register = mod._ct_rt_register", 1, true))
         H.equal(count_plain(tab_panel, "local _RT_CHECKS"), 0)
+        -- Same registrar seam for the #1159 boon-grant owner.
+        H.truthy(boon_grant:find("local _rt_register = mod._ct_rt_register", 1, true))
+        H.equal(count_plain(boon_grant, "local _RT_CHECKS"), 0)
     end)
 
     H.test("CT #252 owns the approved short reroll prompt once", function()
@@ -112,6 +122,11 @@ return function(H, repo_root)
         H.equal(count_plain(regression, '_rt_register("no_roamers_strip_arity_356"'), 1)
         H.equal(count_plain(entry, '_rt_register("chunk_sends_paced_not_bursted"'), 0)
         H.equal(count_plain(regression, '_rt_register("chunk_sends_paced_not_bursted"'), 1)
+        -- #1159 boon-grant owner: the two bot-boon checks live ONLY there now.
+        H.equal(count_plain(entry, '_rt_register("bot_boon_announce_wired"'), 0)
+        H.equal(count_plain(boon_grant, '_rt_register("bot_boon_announce_wired"'), 1)
+        H.equal(count_plain(entry, '_rt_register("bot_boon_economy_installed"'), 0)
+        H.equal(count_plain(boon_grant, '_rt_register("bot_boon_economy_installed"'), 1)
         -- The one check that reads the mutable `_starting_coins_applied_for_run`
         -- upvalue deliberately STAYS inline in the entry (moving it would capture a
         -- stale nil - the dropped-upvalue burn class), and its upvalue stays a

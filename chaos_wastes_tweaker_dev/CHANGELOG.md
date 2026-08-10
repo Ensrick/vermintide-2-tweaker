@@ -1,5 +1,42 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.327-dev (2026-08-09) -- boon grant/purchase owner decomposition (#1159, #2) [untested]
+
+- Every seam that fires when a Chaos Wastes boon changes hands moves to a
+  dedicated owner: the pre-grant disable gate and #426 peer-parity eject on
+  `DeusRunController.add_power_ups`, the unconditional `[boon-trace]` grant audit
+  with its #211 grant-source attribution, the v0.7.76 bot boon mirror and its
+  per-bot random-roll mode, the #466 bot economy charge/refund on those grants,
+  the consolidated `DeusRunController._try_buy_power_up` shrine-purchase hook that
+  #458 and #467 are both delegated from, the two `DeusShopView` price seams for
+  that same purchase, and the two bot-boon regression checks.
+- The four hooks ship as ONE owner because they are one causal surface, not four
+  features: `add_power_ups` is the universal apply choke point every grant source
+  funnels through, `_try_buy_power_up` is the only other seam that hands a player
+  a boon (shrine buys write the SharedState row directly and never reach
+  `add_power_ups`), and the two shop-view hooks render and record the price of
+  that purchase. Each is still registered exactly once in the whole mod; VMF
+  silently drops a second hook on the same class and method.
+- Policy stays where it was: `_ct_bot_economy` remains the pure ledger,
+  `_ct_start_shrine_runtime` (#458) and `_ct_boon_pricing_runtime` (#467) remain
+  the purchase and price policies, and `_ct_bot_weapon_chest_owner` keeps the
+  weapon side of bot mirroring. The new owner only calls them.
+- Entry ceiling ratchets 8,114 -> 7,675 nonblank lines; behavior-neutral verbatim
+  move, proven byte-identical. Whole-mod hook registrations are unchanged at 135.
+  Nothing needed promoting to a `mod` field: the mirror's reentry guard
+  `_ct_bot_mirror_active` is read nowhere outside the moved lines, so it moved
+  with them and stays a plain file-local.
+- **[untested]** - verify: in a Chaos Wastes run with bots, turn on Bots Mirror
+  Host Boons and Announce Bot Boons, then buy a boon at a shrine and open a boon
+  altar. Expect a chat line per bot naming the boon it received, the host's coin
+  balance unchanged by the bots' copies, and each bot's own balance reduced by the
+  altar/shrine price (bots that cannot afford it receive nothing). Switch to Bots
+  Get Random Boons and repeat: each bot should get a DIFFERENT boon of the same
+  rarity. Disable a boon mid-run, then open an altar that had already cached it:
+  it must not be granted, and the log should carry a `[boon-trace] BLOCKED
+  disabled boon at grant` line. `/ct_regression_test` should be green on
+  bot_boon_announce_wired and bot_boon_economy_installed.
+
 ## 0.7.326-dev (2026-08-09) -- hold-Tab panel owner decomposition (#1159, #2) [untested]
 
 - Every ct addition to the hold-Tab player-list panel moves to a dedicated

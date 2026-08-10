@@ -5,6 +5,12 @@ return function(H, repo_root)
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_start_shrine_runtime.lua"
     local main_path = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
+    -- #1159: the consolidated _try_buy_power_up purchase hook #458 shares moved
+    -- out of the entry into the boon-grant owner. The singleton invariant is now
+    -- asserted THERE, plus an entry-side absence assertion below so a future
+    -- re-add to the entry (a silently shadowed second VMF hook) fails this test.
+    local grant_owner_path = repo_root
+        .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_grant_owner.lua"
     local data_path = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_data.lua"
     local policy = dofile(policy_path)
@@ -336,11 +342,30 @@ return function(H, repo_root)
         H.truthy(runtime:find("M.config_valid(cfg)", 1, true))
         H.truthy(runtime:find("restored MAP_DECISION", 1, true))
 
-        local main = read(main_path)
-        H.truthy(main:find("_ct_consolidated_try_buy_power_up_hook", 1, true))
-        H.truthy(main:find("_ct_start_shrine_runtime.try_buy", 1, true))
-        local _, hook_count = main:gsub('mod:hook%("DeusRunController", "_try_buy_power_up"', "")
+        local grant_owner = read(grant_owner_path)
+        H.truthy(grant_owner:find("_ct_consolidated_try_buy_power_up_hook", 1, true))
+        H.truthy(grant_owner:find("_ct_start_shrine_runtime.try_buy", 1, true))
+        local _, hook_count = grant_owner:gsub(
+            'mod:hook%("DeusRunController", "_try_buy_power_up"', "")
         H.equal(hook_count, 1)
+
+        -- The entry must no longer carry the hook or the delegation: a second
+        -- registration on the same Class/method pair is silently dropped by VMF,
+        -- so "present in both files" would be an invisible behaviour change.
+        local main = read(main_path)
+        local _, entry_hook_count = main:gsub(
+            'mod:hook%("DeusRunController", "_try_buy_power_up"', "")
+        H.equal(entry_hook_count, 0)
+        H.equal(main:find("_ct_consolidated_try_buy_power_up_hook", 1, true), nil)
+        H.equal(main:find("_ct_start_shrine_runtime.try_buy", 1, true), nil)
+        -- The entry still dofiles the runtime this owner delegates to, and does so
+        -- BEFORE the owner loads, so mod._ct_start_shrine_runtime is populated by
+        -- the time the hook body first runs.
+        local runtime_at = assert(main:find(
+            "mods/chaos_wastes_tweaker_dev/_ct_start_shrine_runtime", 1, true))
+        local owner_at = assert(main:find(
+            "mods/chaos_wastes_tweaker_dev/_ct_boon_grant_owner", 1, true))
+        H.truthy(runtime_at < owner_at)
     end)
 
     H.test("CT #458 settings expose stepped price and bounded purchase limit", function()
