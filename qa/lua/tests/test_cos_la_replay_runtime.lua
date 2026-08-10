@@ -33,6 +33,14 @@ return function(H, repo_root)
     local news_feed_safety = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_news_feed_safety.lua")
+    -- #1159: the HeroWindowItemCustomization view lifecycle owner joined this
+    -- census when its three hooks (one mod:hook, two mod:hook_safe) moved out of
+    -- the entry. The whole point of the census is that the extracted family's
+    -- TOTAL registration count cannot drift, so a new owner is added here rather
+    -- than the expected totals being lowered.
+    local view_lifecycle = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_customization_view_lifecycle.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -55,6 +63,7 @@ return function(H, repo_root)
             .. offhand_picker:gsub("%-%-[^\n]*", "")
             .. preview_runtime:gsub("%-%-[^\n]*", "")
             .. news_feed_safety:gsub("%-%-[^\n]*", "")
+            .. view_lifecycle:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),

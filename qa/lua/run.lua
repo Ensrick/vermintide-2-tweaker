@@ -333,6 +333,7 @@ local suites = {
     "test_cos_la_replay_runtime",
     "test_cos_preview_runtime",
     "test_cos_news_feed_safety",
+    "test_cos_customization_view_lifecycle",
     "test_cos_glow_transport",
     "test_cos_weapon_pose_policy",
     "test_cos_deus_yield_policy",

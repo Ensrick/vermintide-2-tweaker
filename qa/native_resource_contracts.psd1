@@ -33,8 +33,13 @@
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; Kind='residency_proof'; Count=3; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_weapon_appearance.lua'; Kind='texture'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; Kind='gui_lookup'; Count=1; Policy='exact-gui-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
-        @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; Kind='shading'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
-        @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
+        # #1159: the in-mission preview shading-environment re-point and the
+        # residency proof that gates it moved verbatim out of the entry into the
+        # HeroWindowItemCustomization view lifecycle owner. The boundary pair is
+        # unchanged and still travels together -- the shading write is only ever
+        # reached behind the live residency proof.
+        @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; Kind='shading'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
+        @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='crafting_in_modded/scripts/mods/crafting_in_modded/_cim_athanor_icon_policy.lua'; Kind='gui_lookup'; Count=1; Policy='exact-gui-existing'; Evidence='qa/lua/tests/test_cim_athanor_icon_policy.lua' }
         @{ File='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_athanor_icon_policy.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_athanor_icon_policy.lua' }
         @{ File='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_mission_forge_safety.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_mission_forge_widget_safety.lua' }

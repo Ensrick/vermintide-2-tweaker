@@ -23,11 +23,17 @@ return function(H, repo_root)
         return source
     end
 
-    local cos = read(cos_path)
+    local entry_only = read(cos_path)
+    local view_lifecycle = read(repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua")
+    -- #1159: the exit-time OFFHAND_COMMIT.drain moved out of the entry into the
+    -- view lifecycle owner, so it joins the offhand-family source this test reads.
+    local cos = entry_only
         .. read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
         .. read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_picker.lua")
+        .. view_lifecycle
     local lifecycle = read(lifecycle_path)
     local persist = read(persist_path)
     local commit = read(commit_path)
@@ -73,7 +79,8 @@ return function(H, repo_root)
         H.truthy(cos:find('if hand_field ~= "left_hand_unit" then return false end', 1, true))
         H.truthy(persist:find("M.commit_offhand_entry = function(entry)", 1, true))
         H.truthy(commit:find("persistence.commit_offhand_entry(entry)", 1, true))
-        H.truthy(cos:find("OFFHAND_COMMIT.drain", 1, true))
+        H.truthy(view_lifecycle:find("OFFHAND_COMMIT.drain", 1, true))
+        H.equal(entry_only:find("OFFHAND_COMMIT.drain", 1, true), nil)
         H.truthy(cos:find("mod._la_offhand_restore_done = deferred == 0", 1, true))
     end)
 

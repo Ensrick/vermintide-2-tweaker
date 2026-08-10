@@ -24,6 +24,9 @@ return function(H, repo_root)
             "_cos_custom_hats.lua",
             "_la_bridge.lua",
             "cosmetics_tweaker.lua",
+            -- #1159: carries the shading + residency_proof pair the entry used
+            -- to own, so the manifest rows citing this test stay real evidence.
+            "_cos_customization_view_lifecycle.lua",
             "_cim_athanor_icon_policy.lua",
             "_cim_mission_forge_safety.lua",
             "_gt_bot_teleport_lab.lua",

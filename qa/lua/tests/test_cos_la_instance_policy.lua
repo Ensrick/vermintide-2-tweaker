@@ -325,9 +325,16 @@ return function(H, repo_root)
         local commit_path = repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_commit_policy.lua"
         local f = assert(io.open(main_path, "rb")); local main = f:read("*a"); f:close()
+        local entry_only = main
         f = assert(io.open(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_picker.lua", "rb"))
         main = main .. f:read("*a"); f:close()
+        -- #1159: the exit-time OFFHAND_COMMIT.drain moved out of the entry into
+        -- the HeroWindowItemCustomization view lifecycle owner.
+        f = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua", "rb"))
+        local view_lifecycle = f:read("*a"); f:close()
+        main = main .. view_lifecycle
         f = assert(io.open(persist_path, "rb")); local persist = f:read("*a"); f:close()
         f = assert(io.open(commit_path, "rb")); local commit = f:read("*a"); f:close()
         H.truthy(main:find('mod:hook(UIUtils, "get_ui_information_from_item"', 1, true))
@@ -339,7 +346,8 @@ return function(H, repo_root)
         H.truthy(main:find("INSTANCE-PRUNE", 1, true))
         H.truthy(persist:find("M.commit_offhand_entry = function(entry)", 1, true))
         H.truthy(commit:find("persistence.commit_offhand_entry(entry)", 1, true))
-        H.truthy(main:find("OFFHAND_COMMIT.drain", 1, true))
+        H.truthy(view_lifecycle:find("OFFHAND_COMMIT.drain", 1, true))
+        H.equal(entry_only:find("OFFHAND_COMMIT.drain", 1, true), nil)
         H.equal(main:find("if entry and entry.player_unit and Unit.alive(entry.player_unit) then", 1, true), nil)
         H.truthy(commit:find("mod._la_self_rebroadcast_pending = true", 1, true))
         H.truthy(main:find('local cim = get_mod("cim_dev") or get_mod("cim")', 1, true))
