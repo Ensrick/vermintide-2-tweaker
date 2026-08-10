@@ -198,15 +198,18 @@ return function(H, repo_root)
 
     H.test("the install site kept the position the moved code occupied", function()
         -- No load-order deviation exists only while the installer still sits
-        -- between the boon-generation hook above it and the curse hook below it.
+        -- between the boon-generation hook above it and the curse runtime below
+        -- it. Since 0.7.334-dev that curse runtime is itself an owner
+        -- (_ct_node_entry_owner), so the neighbour below is its install site -
+        -- which sits at the exact line the curse hook block used to occupy.
         local gen_at = assert(entry:find(
             'mod:hook("DeusPowerUpUtils", "generate_random_power_ups"', 1, true))
         local install_at = assert(entry:find(
             "scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_offer_view_owner", 1, true))
         local curse_at = assert(entry:find(
-            'mod:hook("MutatorHandler", "_activate_mutator"', 1, true))
+            "scripts/mods/chaos_wastes_tweaker_dev/_ct_node_entry_owner", 1, true))
         H.truthy(gen_at < install_at, "offer GENERATION must still register before the owner")
-        H.truthy(install_at < curse_at, "the owner must still install before the curse hook")
+        H.truthy(install_at < curse_at, "the owner must still install before the curse runtime")
     end)
 
     -- ------------------------------------------------------------------
