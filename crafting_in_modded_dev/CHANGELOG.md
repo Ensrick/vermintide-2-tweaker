@@ -1,5 +1,24 @@
 # Crafting in Modded Changelog
 
+## 0.8.119-dev (2026-08-09) -- persisted modded-loadout owner (#1159, #504, #2) [untested]
+
+- Moved the whole persisted modded-loadout path into one owner,
+  `_cim_modded_loadout_owner`: the index-aware store, the flat -> indexed
+  migration, the stale purge, both `set_loadout_item` capture hooks (#22),
+  the restore and live-avatar re-equip pass, the #562 auto-equip helpers,
+  and the three loadout commands. The owner installs at the exact point that
+  block used to run, so hook order, command order, and the load-time store
+  read all keep their original timing.
+- Behavior-neutral: 723 nonblank lines moved diff-proven byte-identical apart
+  from one line. The stale purge now reads the forge store through an injected
+  accessor instead of a captured reference, because `_forge_load` rebinds that
+  table on every backend `_create_interfaces` pass and a captured one would go
+  stale. Whole-mod hook count unchanged at 142.
+- The #278/#371 cross-peer wire-safety layer stays in the entry, above the new
+  seam, so it can never end up behind this owner's persistence gate.
+- Entry ceiling ratchets 3,764 -> 3,067 nonblank lines. No new hooks, RPCs,
+  settings, persistence schema, public APIs, or lifecycle owners.
+
 ## 0.8.118-dev (2026-08-09) -- weaves facade + athanor preview owners (#1159, #504, #2)
 
 - Extracted the 18-hook Weaves economy facade and the five-hook Athanor

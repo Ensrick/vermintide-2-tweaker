@@ -193,6 +193,7 @@ local suites = {
     "test_cim_forge_preview_owner",
     "test_cim_forge_picker_owner",
     "test_cim_forge_ui_owner",
+    "test_cim_modded_loadout_owner",
     "test_cim_bulk_cleanup",
     "test_cim_cwv_template_selector",
     "test_cim_cwv_template_catalog",

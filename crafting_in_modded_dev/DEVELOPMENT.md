@@ -6,15 +6,16 @@ Workshop 3733366851). The engine contact surface (every hooked vanilla
 doc is the code-layout map. Stable `crafting_in_modded/` is its read-only public
 twin - all in-flight work happens here (repo `CLAUDE.md` dev/stable split).
 
-## Module map (v0.8.116-dev, Phase 5 owner splits)
+## Module map (v0.8.119-dev, Phase 5 owner splits)
 
-`crafting_in_modded_dev.lua` is still the primary file (3,764 nonblank lines) - this is an
+`crafting_in_modded_dev.lua` is still the primary file (3,067 nonblank lines) - this is an
 IN-PROGRESS decomposition (PROJECT_STANDARDS 2.2a), not a finished one. Phase 1
 carved out the three cleanest self-contained concerns; the craft-store + backend
-mirror, the cross-peer wire-safety region (issue 278/371), the LA equip-capture,
-and the mutable Athanor/Weaves loadout store still lives in the entry, pending later
-phases (they are coupled to the entry-mutable `_forged_weapons` /
-`_custom_forge_active` / `_modded_loadout` locals - see "Deferred" below).
+mirror, the cross-peer wire-safety region (issue 278/371), and the mutable
+Athanor/Weaves loadout store still live in the entry, pending later phases (they
+are coupled to the entry-mutable `_forged_weapons` / `_custom_forge_active`
+locals - see "Deferred" below). The persisted modded-loadout store and the LA
+equip-capture moved out at v0.8.119-dev.
 
 Every module is `mod:dofile`'d EXACTLY ONCE from the entry manifest (VMF
 `mod:dofile` is NOT a singleton - each call re-executes the file - so modules never
@@ -25,12 +26,13 @@ new module needs only its manifest dofile line + a row here.
 
 | Module | Owns / public surface |
 |---|---|
-| `crafting_in_modded_dev.lua` (entry) | MOD_VERSION (launcher parses it here - never move it), the boot banner + rehook-warning interceptor, the settings fingerprint/dump, the `/cim_regression_test` harness (`_RT_CHECKS`, `_rt_register`, runner), four initialization-time identity/contract checks that must remain beside their local helpers, the ordered dofile manifest, and everything NOT yet extracted: the craft-store + backend mirror (`_forge_*`, `_forged_weapons`, `mod._cim_register_craft`/`_get_craft`/`_is_modded_*`), cross-peer wire safety (issue 278/371, `sync_loadout_slot` + `cim_modded_slot` RPC), the LA equip-capture (dormant), the modded-loadout store + restore, the Athanor opener (`open_forge`/`open_standard_crafting`) + mutable loadout write hooks, and bubble-cap math. Keeps the issue-88 `HeroView.on_enter` inventory-access hook (shares the entry-local `_cim_open_standard_inv_pending`) and calls the picker owner's restore dispatcher from the existing forge-exit reset. |
+| `crafting_in_modded_dev.lua` (entry) | MOD_VERSION (launcher parses it here - never move it), the boot banner + rehook-warning interceptor, the settings fingerprint/dump, the `/cim_regression_test` harness (`_RT_CHECKS`, `_rt_register`, runner), four initialization-time identity/contract checks that must remain beside their local helpers, the ordered dofile manifest, and everything NOT yet extracted: the craft-store + backend mirror (`_forge_*`, `_forged_weapons`, `mod._cim_register_craft`/`_get_craft`/`_is_modded_*`), cross-peer wire safety (issue 278/371, `sync_loadout_slot` + `cim_modded_slot` RPC), the Athanor opener (`open_forge`/`open_standard_crafting`) + mutable loadout write hooks, and bubble-cap math. Keeps the issue-88 `HeroView.on_enter` inventory-access hook (shares the entry-local `_cim_open_standard_inv_pending`) and calls the picker owner's restore dispatcher from the existing forge-exit reset. |
 | `_cim_command_owner.lua` | Hook-free Phase 5 owner for the three `forge_dump*` diagnostics, seven manual `/forge*` transaction commands, `/salvage_debug`, `/forge_list`, `/forge_delete`, the flat `mod._cim277_delete_owned_ids` exact-owner transaction, and the existing `/forge_delete_all` adapter install. Owns the pending manual-forge state; consumes reassigned craft/loadout stores through getters so restore cannot leave a stale table. Registration order and the stable `standard_forge.lua` public API remain unchanged. |
 | `_cim_weave_economy.lua` | Phase 5 owner for the 18 read-only `BackendInterfaceWeavesPlayFab` progression/economy hooks. Preserves their original registration order and active/inactive return behavior, resolves the forward-declared bubble-cap function at callback time through an injected accessor, and installs idempotently so reload cannot duplicate hooks. Mutable Weaves loadout writes remain in the entry. |
 | `_cim_forge_preview_owner.lua` | Phase 5 owner for the complete Athanor weapon-preview lifecycle: unsafe-resource guard, #404/#882 properties placement install, and bounded #481 intake/spawn/post-Cosmetics diagnostics. It preserves the exact `_spawn_link_unit`, `_load_item_units`, `_create_item_previewer`, `spawn_units`, `update` registration order; the mutable forge flag is read only through a call-time accessor. Reload refreshes dependencies without duplicate hooks. It owns no forge/loadout/backend/wire writes. |
 | `_cim_forge_picker_owner.lua` | Phase 5 owner for the complete Athanor picker-category lifecycle: unknown adventure/CW category seeding, native and optional freedom twin construction, temporary category widening/restoration, and the ordered `_setup_menu_options` then `_sync_backend_loadout` hooks. Its stable private backup captures every exact category-table target and original value; reinstall settles any outstanding old transaction before refreshing seven dependencies, then exhaustively republishes exactly five operations into the replaceable public owner map plus the established flat regression adapters (PROJECT_STANDARDS 2.2a rule 10). It owns no inventory, loadout, backend-write, or wire state. |
 | `_cim_forge_ui_owner.lua` | Phase 5 owner for Athanor presentation helpers, the disabled legacy accessory/overview button injectors, the active accessory overlay, item tooltip/panel polish, and the sole `HeroWindowWeaveProperties._draw` then `HeroViewStateWeaveForge.update` hooks. Its 805 physical / 742 nonblank lines remain below 1,500. Mutable forge-active and background-color state plus engine manager/profile tables are explicit call-time dependencies held behind one stable idempotent dispatcher. Every fresh accessory-panel instance receives the stable late-bound craft callback before the reinstall guard; an initially unavailable optional panel can recover without duplicating hooks. It owns no forge store, loadout persistence, backend write, or network behavior. |
+| `_cim_modded_loadout_owner.lua` | Phase 5 owner for the entire persisted modded-loadout path: the index-aware `career -> loadout_index -> slot -> bid` store, its save/load helpers, the one-shot flat->indexed migration and its mirror-ready timing gate, the stale-entry purge, BOTH `set_loadout_item` captures (the `BackendInterfaceItemPlayfab` hook_safe and the deferred `BackendUtils` table hook that catches menu equips through a Loremaster's Armoury cloned interface, issue #22), the restore pass + live-avatar re-equip, the #562 auto-equip-on-craft helpers, the sibling-mod restore-callback list cosmetics_tweaker registers into, and `/cim_restore_loadout`, `/cim_craft_standard`, `/cim_dump_loadout` in their original order. The whole path stays dormant in production: the master `persist_modded_loadouts` gate is force-reset OFF in the entry and injected here, so this owner reads the gate but never decides it. The forge store arrives as a call-time accessor because `_forge_load` rebinds it on every `_create_interfaces` pass. Installs idempotently; publishes the unchanged flat `mod._cim_clear_modded_loadout_for_bid(s)` / `_cim_register_restore_callback` / `_cim_auto_equip_crafted_weapon` / `_cim_auto_equip_slot_type` surface and returns the six names the entry re-binds. It owns no Athanor view lifecycle and no wire state. |
 | `_cim_regression_checks.lua` | The 79-check late `/cim_regression_test` block, in its frozen registration order. Loaded once at the end of the entry after production hooks/helpers exist. Receives narrow function/state accessors for entry locals that are reassigned; checks still consume the established flat `mod._cim_*` runtime API. Together with the four initialization-time registrations retained in the entry, the complete suite has 83 checks. |
 | `_cim_bulk_cleanup_core.lua` + `_cim_bulk_cleanup_command.lua` | Issue #277 exact-owner cleanup. The pure core classifies/fingerprints candidates and clears persistence references; the one-time command adapter owns `/forge_delete_all` and receives narrow accessors for the entry's reassigned craft store plus backend interfaces. Destructive scope comes only from `_cim_synthetic_item_contract.lua` and fails closed on unreadable identity or equip state. |
 | `modded_rarities.lua` | Custom "modded" rarity registration (Colors/UISettings/RaritySettings/NetworkLookup table contacts), `_G.Localize` supply, deus weapon-pool scrub, Jewellery->Accessories relabel. Pre-existing. |
@@ -78,6 +80,11 @@ new module needs only its manifest dofile line + a row here.
 - **New Athanor trait/property category seed, native option, or freedom-toggle
   widening rule** -> `_cim_forge_picker_owner.lua`. Preserve its stable backup
   transaction and restore every temporary global category replacement at forge exit.
+- **New loadout capture, restore, persistence-schema, migration, purge, or
+  auto-equip-on-craft behavior** -> `_cim_modded_loadout_owner.lua`. Read the
+  forge store through the injected accessor, never a captured table. Anything
+  that must run regardless of the `persist_modded_loadouts` gate does NOT belong
+  here: sender-side wire safety stays in the entry above the seam (#278/#371).
 - **New physical Keep forge availability rule** -> `_cim_keep_forge_interaction.lua`; preserve the native stop and HUD callbacks and delegate every non-CIM boundary to the stored vanilla predicate.
 - **New CW trait/category eligibility rule** -> `_cim_trait_slot_policy.lua`; keep it engine-free and cover exact vanilla category names offline.
 - **New persisted trait with a string-resolved native particle** -> prove the owning vanilla package from source plus bundle inventory, then extend `_cim_cw_trait_residency.lua` with one private idempotent lease. Never load at the hit/action seam and never guess a unit path is a package.
@@ -115,11 +122,16 @@ cross-file alias would go stale) or are load-bearing crash paths needing a coop 
   `_cim_weave_economy.lua`, `_cim_forge_preview_owner.lua`,
   `_cim_forge_picker_owner.lua`, and `_cim_forge_ui_owner.lua`; moving the
   write side still requires one coherent accessor-backed store owner.
-- **Cross-peer wire safety** (issue 278/371) and **LA equip-capture** - wire-adjacent /
-  crash-load-bearing; leave byte-intact until a coop re-verify window (ENGINE_SURFACE
-  Surface 3/5).
+- **Cross-peer wire safety** (issue 278/371) - wire-adjacent / crash-load-bearing;
+  leave byte-intact until a coop re-verify window (ENGINE_SURFACE Surface 3/5).
+  It sits immediately ABOVE the `_cim_modded_loadout_owner` seam, and must stay
+  there: it is sender-side crash safety that can never be allowed to fall behind
+  the loadout owner's persistence gate.
 
 The command owner proves reassigned stores can cross a module boundary through narrow
 getter closures without inventing a second state table or widening the flat namespace.
-A later bounded slice should apply that accessor pattern to one coherent Athanor or
-craft-store owner at a time; cross-peer wire safety remains separately review-gated.
+`_cim_modded_loadout_owner` (v0.8.119-dev) extends that pattern to a whole store: the
+persisted loadout table and both LA equip-captures now live behind one seam, taking
+the reassigned `_forged_weapons` through a call-time accessor. The remaining slices
+should apply the same shape to one coherent Athanor or craft-store owner at a time;
+cross-peer wire safety remains separately review-gated.
