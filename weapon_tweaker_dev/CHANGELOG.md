@@ -1,5 +1,55 @@
 # Weapon Tweaker Changelog
 
+## 0.12.301-dev (2026-08-10) -- cross-character template patches and weapon rebalances become owner modules (#1159) [untested]
+
+- Extracted two owner modules out of the entry. `_wt_cross_char_template_patches.lua`
+  owns the five cross-character source-template patchers (brace of pistols ->
+  repeating handgun, Empire longbow -> crossbow, elf longbow -> crossbow,
+  Moonfire Bow -> crossbow, repeating pistol -> repeating handgun), the shared
+  `wield_anim_career_3p` applier fed by `wt_wield_patches.lua`, and the
+  not-loaded / no-ammo wield fallback applier (#536).
+  `_wt_weapon_balance_patches.lua` owns the three toggle-gated in-place
+  `Weapons.*` rewrites: Authentic Brace of Pistols, the issue #348 Kruber Empire
+  one-handed sword push-combo revert, and the Warrior Priest punch buff.
+- Behavior is unchanged by construction. Both moved blocks (422 and 579 lines)
+  are byte-identical to the text they replaced, and each entry keeps a bare
+  `mod:dofile` at the exact former execution position. That position is
+  load-bearing for the rebalance owner: `wt_authentic_pistol` and
+  `wt_priest_punch_buffed` append to `NetworkLookup.damage_profiles`, so the
+  append order after `_wt_brett_sword_shield_buff` and before the axe-balance
+  clones IS the index every peer has to agree on. Hook cardinality is unchanged
+  in both streams (neither moved block registers a hook).
+- The only additions are the documented accessors the chunk boundary needs:
+  `local mod = get_mod(...)`, re-reads of the published `mod._wt.dbg`,
+  `mod._wt.dbg_alert`, and `mod._wt.three_p_template_remaps`, and two new
+  publications (`mod._wt.wield_patches_module`,
+  `mod._wt.wield_anim_career_patches`) that the runtime-check dependency table
+  used to read as entry file-scope locals. The entry now publishes
+  `mod._wt.dbg_alert` beside the existing `mod._wt.dbg`.
+- The friends-only stream keeps its #316 ActionAim zoom probe in the entry,
+  relocated to sit immediately after the new template-patch dofile. The probe
+  only registers hooks and reads remap state at fire time, so all three
+  registrations and their observations are unchanged.
+- Entry drops from 4,148 to 3,230 non-blank lines; both decomposition
+  ceilings and both file-size baselines ratcheted to the new counts, and both
+  owners are mandatory modules on both contract rows.
+- New offline suite `test_wt_template_patch_owners` locks the wiring position of
+  both owners, the entry-side absence of every moved file-scope local, the
+  network-registration and wire-fallback needles, the #210 career-scoped remap
+  contract, and exact public/dev parity of both owners. Eight new
+  `rt_textual_invariants` rows follow the code.
+- **Verify (single player for most of it).** Load line `[wt:LOAD] v0.12.301-dev`;
+  `/wt_regression_test` all-pass. In the keep, equip on Kruber a Brace of
+  Pistols and a Repeating Pistol and on Saltzpyre a Longbow, an Elf Longbow, and
+  a Moonfire Bow: each must hold the same third-person stance as before both in
+  the inventory previewer and in a mission, and firing must play the same
+  third-person animations. Wield a Kerillian Repeater Crossbow with an empty
+  clip on Kruber and on Saltzpyre in a NETWORKED game (this is the #536 crash
+  path). Then enable Authentic Brace of Pistols, the Empire Sword push-combo
+  revert, and the Warrior Priest punch buff one at a time, restart, and confirm
+  each behaves exactly as on 0.12.300-dev. Files: `weapon_tweaker_dev.lua` (MOD_VERSION; both
+  blocks replaced by dofiles), `_wt_cross_char_template_patches.lua` (new),
+  `_wt_weapon_balance_patches.lua` (new).
 ## 0.12.300-dev (2026-08-10) -- Moonfire Bow AOE revert becomes its own owner module (#1159) [untested]
 
 - Extracted the Moonfire Bow pre-nerf AOE revert into its own owner module,

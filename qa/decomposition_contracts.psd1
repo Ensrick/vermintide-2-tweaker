@@ -26,15 +26,15 @@
             Name = 'weapon_tweaker'
             State = 'partial'
             Entry = 'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'
-            CeilingLines = 3989
-            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua')
+            CeilingLines = 3071
+            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_char_template_patches.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_weapon_balance_patches.lua')
         }
         @{
             Name = 'weapon_tweaker_dev'
             State = 'partial'
             Entry = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua'
-            CeilingLines = 4148
-            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua')
+            CeilingLines = 3230
+            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_char_template_patches.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_weapon_balance_patches.lua')
         }
         @{
             Name = 'career_tweaker_balance'
