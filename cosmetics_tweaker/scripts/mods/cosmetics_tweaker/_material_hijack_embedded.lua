@@ -553,8 +553,9 @@ mod:hook(Unit, "set_mesh_visibility", function (func, unit, mesh, visibility, co
 end)
 
 -- v0.9.5: GearUtils.create_equipment hook REMOVED from MH embed.
--- cosmetics_tweaker.lua already has a `mod:hook("GearUtils", "create_equipment",
--- ...)` registration via the same mod handle (line ~3331) — double registration
+-- This mod already has a `mod:hook("GearUtils", "create_equipment", ...)`
+-- registration via the same mod handle (since #1159 it lives in
+-- _cos_equipment_assembly.lua, not the entry) — double registration
 -- produced VMF `Attempting to rehook active hook` warning at boot. To eliminate
 -- the warning, the MH texture/particle work is now folded into cosmetics_tweaker's
 -- existing hook via the module exports at the bottom of this file

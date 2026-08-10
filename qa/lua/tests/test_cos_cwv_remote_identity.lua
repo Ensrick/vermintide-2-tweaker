@@ -82,8 +82,12 @@ return function(H, repo_root)
             file:close()
             return source
         end
+        -- #1159: the husk item-type resolution that consumes the CWV descriptor
+        -- moved into the equipment-assembly owner with the get_item_units seam.
         local cos = read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+            .. read(repo_root .. "/cosmetics_tweaker/scripts/mods/"
+                .. "cosmetics_tweaker/_cos_equipment_assembly.lua")
         local cwv = read(repo_root
             .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
         H.truthy(cwv:find("mod._cwv_peer_appearance = {", 1, true))

@@ -48,6 +48,13 @@ return function(H, repo_root)
     local attachment_spawn_sync = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_attachment_spawn_sync.lua")
+    -- #1159: the live equipment-assembly owner joined this census when its two
+    -- full hooks (GearUtils.create_equipment and the BackendUtils.get_item_units
+    -- resolution it brackets) moved out of the entry. Same rule again: the owner
+    -- is added, the expected totals are NOT lowered.
+    local equipment_assembly = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_equipment_assembly.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -72,6 +79,7 @@ return function(H, repo_root)
             .. news_feed_safety:gsub("%-%-[^\n]*", "")
             .. view_lifecycle:gsub("%-%-[^\n]*", "")
             .. attachment_spawn_sync:gsub("%-%-[^\n]*", "")
+            .. equipment_assembly:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),

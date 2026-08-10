@@ -14,11 +14,18 @@ return function(H, repo_root)
     -- them, so the owner joins the source this test reads.
     local attachment_spawn_sync =
         read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua")
+    -- #1159: the live equipment-assembly seam (GearUtils.create_equipment and the
+    -- BackendUtils.get_item_units resolution it brackets) moved verbatim out of
+    -- the entry, taking the create_equipment shield-variant paint and the husk
+    -- authored-mesh resolve with it, so that owner joins the source too.
+    local equipment_assembly =
+        read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua")
     local entry = entry_only
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua")
         .. attachment_spawn_sync
+        .. equipment_assembly
     local localization = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization.lua")
     local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")
 
@@ -609,7 +616,11 @@ return function(H, repo_root)
         -- Spawn-time paint handles initial local 1P/3P equipment. The two wield
         -- hooks consume the same synced descriptor after local swaps and remote
         -- husk respawns; HeroPreviewer covers inventory reopen/equip.
-        H.truthy(entry:find('GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, target, "create_equipment")', 1, true))
+        -- #1159: the create_equipment paint now lives in the equipment-assembly
+        -- owner. Pin it THERE and require the entry to have let go of it, so a
+        -- re-inlined copy (which VMF would silently shadow) fails here.
+        H.truthy(equipment_assembly:find('GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, target, "create_equipment")', 1, true))
+        H.equal(entry_only:find('GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, target, "create_equipment")', 1, true), nil)
         H.truthy(entry:find('mod:hook_safe("SimpleInventoryExtension", "_wield_slot"', 1, true))
         H.truthy(entry:find('mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true))
         H.truthy(entry:find('"hero_previewer"', 1, true))

@@ -22,6 +22,12 @@ return function(H, repo_root)
 
     local main = read("cosmetics_tweaker.lua")
     local checks = read("_cos_runtime_checks.lua")
+    -- #1159: the BackendUtils.get_item_units seam that resolves the yield gate
+    -- ONCE per call, and the GearUtils.create_equipment wrap whose flag the
+    -- live-body gate reads, moved verbatim into the equipment-assembly owner.
+    -- The gates below are pinned on the owner, with entry-side absence asserted,
+    -- so a re-inlined copy fails instead of silently shadowing the owner.
+    local assembly = read("_cos_equipment_assembly.lua")
 
     H.test("Cos #518 yield boundary is mechanism AND game mode (staging never yields)", function()
         local body = main:match(
@@ -57,12 +63,24 @@ return function(H, repo_root)
             1, true), "terminal weapon-side yield gate missing from _apply_la_on_unit")
         -- get_item_units resolves the gate ONCE per call and gates the husk LA
         -- swap, the husk vanilla-offhand swap, and the live-body selection.
-        H.truthy(main:find('local _deus_yield = mod._la_deus_weapon_yield()', 1, true),
+        H.truthy(assembly:find('local _deus_yield = mod._la_deus_weapon_yield()', 1, true),
             "get_item_units single-resolution gate missing")
-        H.truthy(main:find('and not _deus_yield', 1, true),
+        H.equal(main:find('local _deus_yield = mod._la_deus_weapon_yield()', 1, true), nil,
+            "the get_item_units gate must live with its hook, not in the entry")
+        H.truthy(assembly:find('and not _deus_yield', 1, true),
             "husk mesh-override deus gate missing")
-        H.truthy(main:find('not (_deus_yield and _in_create_equipment)', 1, true),
+        H.truthy(assembly:find('not (_deus_yield and _in_create_equipment)', 1, true),
             "live-body gate must suppress only create_equipment, not previews")
+        -- The bracket flag is now PRIVATE to the assembly owner's install scope:
+        -- the entry may still name it in prose, but must declare and write it
+        -- nowhere. Both hooks that share it live in the owner or the pairing has
+        -- been broken.
+        H.equal(main:find("local _in_create_equipment", 1, true), nil,
+            "the create_equipment bracket flag is private to the assembly owner")
+        H.equal(main:find("_in_create_equipment = true", 1, true), nil,
+            "only the assembly owner may set the create_equipment bracket flag")
+        H.truthy(assembly:find("local _in_create_equipment = false", 1, true),
+            "the assembly owner must own the bracket flag declaration")
         -- In-game LA paint skips inside a run; preview contexts stay live.
         H.truthy(main:find('if context == "ingame" and mod._la_deus_weapon_yield() then', 1, true),
             "ingame paint gate missing")
@@ -196,11 +214,13 @@ return function(H, repo_root)
             '_dbg("[LA paint] skip: deus run - CW upgrade cosmetics win (#518) bid=%s"',
             1, true), "paint-skip _dbg line must be retained")
         -- Husk-side authored-variant miss (was _dbg-only).
-        H.truthy(main:find('mod._cos518_husk_miss(entry.armoury_key', 1, true),
+        H.truthy(assembly:find('mod._cos518_husk_miss(entry.armoury_key', 1, true),
             "husk-miss promotion call missing")
+        H.equal(main:find('mod._cos518_husk_miss(', 1, true), nil,
+            "the husk-miss probe travels with the get_item_units seam")
         H.truthy(probe_module:find('mod._cos518_emit("husk-miss"', 1, true),
             "husk-miss emit site missing")
-        H.truthy(main:find(
+        H.truthy(assembly:find(
             '_dbg("[husk-mesh-swap] miss: authored variant %s unavailable"',
             1, true), "husk-miss _dbg line must be retained")
     end)

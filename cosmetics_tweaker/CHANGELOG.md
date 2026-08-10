@@ -1,5 +1,59 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.197-dev (2026-08-10) -- live equipment-assembly owner extracted (#1159, #2) [untested]
+
+### Behavior-neutral extraction
+
+- Moved the two NESTED live equipment seams out of the entry file into
+  `_cos_equipment_assembly.lua`: `BackendUtils.get_item_units`, the single place
+  this mod rewrites the unit table vanilla is about to spawn for an item (#513
+  score-screen LA hat mesh, husk LA mesh swap including the #373 same-family
+  magic-shield paint receiver, #416 husk vanilla per-hand mesh swap, and the
+  per-backend-id offhand selection override), and the `GearUtils.create_equipment`
+  wrap that brackets it (MH-embed textures and particles before the vanilla call,
+  glow unit binding, weapon scale and grip offset, LA offhand paint, Grail Knight
+  shield variant, #574 glow rehydrate, composed-appearance glow apply).
+- The pair is one owner, not two. `create_equipment` sets `_in_create_equipment`
+  around its vanilla call and `get_item_units` -- which vanilla calls from inside
+  it -- reads that flag to keep the live body on its committed mesh while the
+  customization screen browses the same backend id (#150). Nothing else in the mod
+  reads or writes the flag, so the move turns entry file-scope state into state
+  private to the owner. Splitting the seams would have left it on the entry as
+  shared mutable state serving a hook the entry no longer holds.
+- The moved body is diff-proven byte-identical to the 531 relocated entry lines
+  apart from two statements, the accessor hand-offs described below. Two hooks
+  move as a unit and the whole-mod hook count is unchanged at 53; the installer
+  runs where the LATER of the two hooks used to register, and between the two
+  former sites the entry holds only comments, two `mod:command` registrations and
+  plain local declarations -- no hook of any kind -- so registration order holds.
+  Installing at the earlier site was rejected: `_apply_la_offhand_to_units` is
+  declared below it and would have been captured as a global nil.
+- `_current_husk_wield` and `_active_customization_backend_id` stay entry-owned
+  and cross as getters, not values. The husk `_wield_slot` wrap the entry keeps
+  REBINDS the first stack-style on every husk wield, so an install-time hand-off
+  would have frozen the nil it holds at load and killed all three husk lanes
+  silently; the second is written by both the view-lifecycle owner and the offhand
+  picker, so one entry slot must stay authoritative. Each is resolved once per
+  hook call, at the exact statement that used to perform the first inline read.
+- Entry ceiling ratchets 5,899 -> 5,425 nonblank lines (21 owners). No new hooks,
+  RPCs, commands, settings, persistence, or lifecycle owners.
+
+### Coverage
+
+- Added `qa/lua/tests/test_cos_equipment_assembly.lua` (16 boundary and behaviour
+  tests) covering install position and ordering, exclusive ownership of both
+  seams, the privatised bracket flag, non-overlap with the eight sibling owners
+  whose classes it must never register, the by-value ordering pins, the committed
+  offhand pick, the #518 deus yield, and the MH-before-vanilla call order. Two
+  matched pairs carry signals the fix cannot move: driving the OUTER hook and
+  asserting the INNER hook's decision flips and then flips back proves the bracket
+  is real, and rebinding each entry-side local the way its real writer does proves
+  each accessor is live rather than latched.
+- Retargeted the nine path-pinned gates the suite caught, across seven test
+  files, onto the moved code with entry-side absence assertions where the pin is
+  about ownership; added the owner to the hook-cardinality census so the family
+  total stays 28/18/1, and added twelve source-text invariant rows.
+
 ## 0.9.196-dev (2026-08-10) -- attachment spawn/sync owner extracted (#1159, #2) [untested]
 
 ### Behavior-neutral extraction
