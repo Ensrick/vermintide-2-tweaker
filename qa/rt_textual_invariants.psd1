@@ -266,6 +266,15 @@
     @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_accessory_property_runtime.lua'; needle='"HeroWindowWeaveProperties", "_populate_menu_option_widget"'; literal=$true; polarity='present'; issueRef='#239'; note='extracted weave-forge cost-hide hook must stay installed.' }
     @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_accessory_property_runtime.lua'; needle='widget.content.price_text = ""'; literal=$true; polarity='present'; issueRef='#239'; note='the extracted cost-hide adapter must blank the Cost:0 label.' }
     @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_accessory_property_runtime.lua'; needle='price_icon.color[1] = 0'; literal=$true; polarity='present'; issueRef='#239'; note='the extracted cost-hide adapter must also hide the separate price icon.' }
+    # v0.8.120-dev (#1159): the ten MUTABLE BackendInterfaceWeavesPlayFab loadout
+    # hooks and the #86/#244 bubble-cap math moved out of the entry byte-identical.
+    # Pin them to the owner AND assert entry-side absence so a later slice cannot
+    # resurrect a second copy that VMF would silently drop as a duplicate hook.
+    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_weave_loadout_owner.lua'; needle='mod:hook("BackendInterfaceWeavesPlayFab", "set_loadout_property"'; literal=$true; polarity='present'; issueRef='#86'; note='the mutable weave write chokepoint must stay installed in its owner.' }
+    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'; needle='mod:hook("BackendInterfaceWeavesPlayFab"'; literal=$true; polarity='absent'; issueRef='#86'; note='the entry must not re-register any weave loadout hook beside the owner.' }
+    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_weave_loadout_owner.lua'; needle='_cap_grid_property_arrays(data.properties, item_backend_id)'; literal=$true; polarity='present'; issueRef='#86'; note='the read-chokepoint trim must stay on the get_loadout_properties path; the write cap alone never fixed the grid over-occupancy.' }
+    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'; needle='mod:hook("BackendManagerPlayFab", "commit"'; literal=$true; polarity='present'; issueRef='#1159'; note='the EAC commit suppression covers BOTH craft surfaces and must never move behind the weave-loadout owner install.' }
+    @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'; needle='_bubble_cap = _WEAVE_LOADOUT_OWNER.bubble_cap'; literal=$true; polarity='present'; issueRef='#1159'; note='_cim_weave_economy installs above the seam and resolves this upvalue at callback time; unbound it reads a nil global and the Athanor crashes on the first property-cost query.' }
 
     # ============================ mp ============================
     # #589: un-gating StoreLoginRewardsPopup without owning the authenticated

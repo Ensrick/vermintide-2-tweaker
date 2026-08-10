@@ -28,8 +28,14 @@ return function(H, repo_root)
         for line in entry:gmatch("[^\r\n]*") do
             if line:find("%S") then lines = lines + 1 end
         end
-        H.truthy(lines <= 3067,
-            "CIM-dev entry exceeded the 3067-line modded-loadout-owner ceiling")
+        H.truthy(lines <= 2353,
+            "CIM-dev entry exceeded the 2353-line weave-loadout-owner ceiling")
+        -- The weave-loadout owner is the slice that brought this entry under
+        -- PROJECT_STANDARDS 2.1's 2500-line HARD limit, which is why its
+        -- qa/baselines/file_sizes.json row was removed. Pin the limit itself so
+        -- a later slice cannot quietly ratchet the ceiling back above it.
+        H.truthy(lines <= 2500,
+            "CIM-dev entry crossed back over the 2500-line hard limit")
     end)
 
     H.test("CIM-dev command owner installs exactly once at the original boundary", function()

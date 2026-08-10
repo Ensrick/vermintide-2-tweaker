@@ -42,11 +42,23 @@ return function(H, repo_root)
     H.test("CIM production wires symmetric issue 244 conversion", function()
         local path = repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua"
+        -- The entry still publishes the policy singleton and its marker; the two
+        -- CALL sites are the bubble-cap math, which moved into
+        -- `_cim_weave_loadout_owner` at v0.8.120-dev (#1159) byte-identical. The
+        -- needles follow the code, with entry-side absence pinning the split.
+        local weave_path = repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_weave_loadout_owner.lua"
         local f = assert(io.open(path, "rb"))
         local source = f:read("*a")
         f:close()
+        f = assert(io.open(weave_path, "rb"))
+        local weave_source = f:read("*a")
+        f:close()
         H.truthy(source:find("CIM244_PROPERTY_VALUE_POLICY_MARKER_v0_8_74", 1, true))
-        H.truthy(source:find("policy.storage_for_bubbles", 1, true))
-        H.truthy(source:find("policy.bubbles_for_storage", 1, true))
+        H.truthy(source:find("mod._cim244_property_value_policy = mod:dofile(", 1, true))
+        H.truthy(weave_source:find("policy.storage_for_bubbles", 1, true))
+        H.truthy(weave_source:find("policy.bubbles_for_storage", 1, true))
+        H.equal(source:find("policy.storage_for_bubbles", 1, true), nil)
+        H.equal(source:find("policy.bubbles_for_storage", 1, true), nil)
     end)
 end
