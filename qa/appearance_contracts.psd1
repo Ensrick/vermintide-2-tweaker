@@ -936,6 +936,11 @@
                 # consumers moved verbatim into the keep/menu preview-surface
                 # owner; the gameplay consumer stayed in the entry.
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_menu_preview_owner.lua'
+                # #1159: the `_resolve_cwv_def` transform_decision rung and the
+                # authored inverse-Bretonnian presentation records both resolve
+                # through the weapon-transform owner now. The entry still holds
+                # the Combat Style install that AUTHORS those records.
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_weapon_transform_owner.lua'
             )
             Concerns = @(
                 @{

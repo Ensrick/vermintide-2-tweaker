@@ -29,6 +29,7 @@ return function(H, repo_root)
     local husk_residency = read("_cwv_husk_residency_owner.lua")
     local registration = read("_cwv_item_registration_owner.lua")
     local menu_preview = read("_cwv_menu_preview_owner.lua")
+    local weapon_transform = read("_cwv_weapon_transform_owner.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
     local render = read("_cwv_regression_render.lua")
@@ -36,10 +37,10 @@ return function(H, repo_root)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 5606 = 2026-08-10 #1159 keep/menu preview-surface owner extraction,
-        -- measured after the item-registration slice that preceded it. This
+        -- 5072 = 2026-08-10 #1159 weapon-transform owner extraction, measured
+        -- after the keep/menu preview-surface slice that preceded it. This
         -- ceiling only ratchets DOWN as later CWV decomposition slices land.
-        H.truthy(lines <= 5606, "entry line count exceeded frozen 5606-line baseline")
+        H.truthy(lines <= 5072, "entry line count exceeded frozen 5072-line baseline")
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
@@ -51,6 +52,7 @@ return function(H, repo_root)
             "_cwv_illusion_families",
             "_cwv_husk_residency_owner",
             "_cwv_item_registration_owner",
+            "_cwv_weapon_transform_owner",
             "_cwv_husk_path",
             "_cwv_menu_preview_owner",
             "_cwv_commands_lifecycle",
@@ -67,6 +69,7 @@ return function(H, repo_root)
         local families_at = assert(entry:find("_cwv_illusion_families", 1, true))
         local residency_at = assert(entry:find("_cwv_husk_residency_owner", 1, true))
         local registration_at = assert(entry:find("_cwv_item_registration_owner", 1, true))
+        local transform_at = assert(entry:find("_cwv_weapon_transform_owner", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
         local menu_preview_at = assert(entry:find("_cwv_menu_preview_owner", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
@@ -83,6 +86,12 @@ return function(H, repo_root)
         -- registrars (its #567 rebuild consumes their pools) and before the
         -- husk-path display helpers.
         H.truthy(families_at < registration_at)
+        -- #1159: the weapon-transform owner builds the transform registries the
+        -- husk display helpers and every later render surface resolve against,
+        -- and it must load after the registration owner publishes the #482
+        -- backend-id resolver its `_resolve_cwv_def` ladder calls.
+        H.truthy(registration_at < transform_at)
+        H.truthy(transform_at < husk_at)
         H.truthy(registration_at < husk_at)
         H.truthy(families_at < husk_at)
         -- #1159: the keep/menu preview-surface owner registers the last render
@@ -608,12 +617,13 @@ return function(H, repo_root)
 
         -- BOUNDARY. CWV has three presentation surfaces and this owner is only
         -- the MENU one. The WORLD/BOT equipment hook and its transform-miss
-        -- evidence counters stay in the entry, as do the shared def resolvers
-        -- both surfaces call. `_resolve_cwv_def` and the counters are named in
-        -- the owner's header comment, so pin the CODE forms, not the names.
+        -- evidence counters stay in the entry, as does `_find_def`. The counters
+        -- are named in the owner's header comment, so pin the CODE forms, not the
+        -- names. `_resolve_cwv_def`'s DEFINITION moved on to the weapon-transform
+        -- owner (its own suite pins that); what matters here is that the entry
+        -- still owns the world-surface CALL and the menu owner never absorbed it.
         local entry_only = {
             'mod:hook("GearUtils", "create_equipment"',
-            "local function _resolve_cwv_def(item_data, skin, resolved_unit_name)",
             "local function _find_def(item_key)",
             "local def = _resolve_cwv_def(item_data, result.skin",
             "_crowbill_transform_miss_total = _crowbill_transform_miss_total + 1",

@@ -67,8 +67,8 @@
             Name = 'character_weapon_variants'
             State = 'partial'
             Entry = 'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
-            CeilingLines = 5606
-            RequiredModules = @('_cwv_variant_catalog.lua', '_cwv_core_templates.lua', '_cwv_skin_registry.lua', '_cwv_illusion_families.lua', '_cwv_husk_path.lua', '_cwv_musket_runtime.lua', '_cwv_husk_residency_owner.lua', '_cwv_item_registration_owner.lua', '_cwv_menu_preview_owner.lua', '_cwv_regression_identity.lua', '_cwv_illusion_provenance.lua')
+            CeilingLines = 5072
+            RequiredModules = @('_cwv_variant_catalog.lua', '_cwv_core_templates.lua', '_cwv_skin_registry.lua', '_cwv_illusion_families.lua', '_cwv_husk_path.lua', '_cwv_musket_runtime.lua', '_cwv_husk_residency_owner.lua', '_cwv_item_registration_owner.lua', '_cwv_menu_preview_owner.lua', '_cwv_weapon_transform_owner.lua', '_cwv_regression_identity.lua', '_cwv_illusion_provenance.lua')
         }
         @{
             # Inventoried at 2455 nonblank lines, 45 under the 2500 hard limit.

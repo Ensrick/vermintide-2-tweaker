@@ -176,6 +176,7 @@ local suites = {
 	"test_cwv_durable_transform",
 	"test_cwv_relative_scale",
 	"test_cwv_entry_decomposition",
+	"test_cwv_weapon_transform_owner",
 	"test_cwv_skin_registry",
     "test_cwv_dawi_maces",
     "test_cwv_crowbill_family",
