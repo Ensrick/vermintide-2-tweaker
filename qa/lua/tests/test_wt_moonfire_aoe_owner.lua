@@ -63,10 +63,13 @@ return function(H, repo_root)
         H.test(stream.tag .. ": dofile sits between _wt_regression and the 3P swap dispatch", function()
             local regression_at = entry:find('mod:dofile("scripts/mods/' .. stream.ns .. '/_wt_regression")', 1, true)
             local owner_at = entry:find(dofile_call, 1, true)
-            local swap_at = entry:find("local _wt_longbow_3p_swap_apply", 1, true)
+            -- The 3P swap dispatch became its own owner in the #1159 wave-14
+            -- slice, so its bare dofile is now the downstream anchor that the
+            -- forward declarations used to be.
+            local swap_at = entry:find('mod:dofile("scripts/mods/' .. stream.ns .. '/_wt_ingame_3p_swap_owner")', 1, true)
             H.truthy(regression_at, "_wt_regression dofile must exist in the entry")
             H.truthy(owner_at, "moonfire owner dofile must exist in the entry")
-            H.truthy(swap_at, "3P swap forward declarations must exist in the entry")
+            H.truthy(swap_at, "the 3P swap owner dofile must exist in the entry")
             -- _rt_register must already be published, and the impact hooks must
             -- still register before the cross-character swap dispatch below.
             H.truthy(regression_at < owner_at, "moonfire owner must load after _wt_regression")

@@ -35,9 +35,12 @@ return function(H, repo_root)
     H.test("WT #701 world adapters retain owner bot husk and preview fan-out", function()
         local entry = read(public_root .. "weapon_tweaker.lua")
         local policy_source = read(public_root .. "_wt_grip_offset_policy.lua")
+        -- The preview fan-out moved to _wt_menu_preview_owner.lua in the #1159
+        -- wave-14 slice; the owner/bot/husk adapters stayed in the entry.
+        local preview_owner = read(public_root .. "_wt_menu_preview_owner.lua")
         H.truthy(entry:find('is_bot and "bot" or "owner"', 1, true))
         H.truthy(entry:find('slot_name, "remote_husk"', 1, true))
-        H.truthy(entry:find("_wt_grip_offset_policy.preview_slot_field(item_template)", 1, true))
+        H.truthy(preview_owner:find("_wt_grip_offset_policy.preview_slot_field(item_template)", 1, true))
         H.truthy(entry:find("_wt_grip_offset_policy.log_issue701_retained_once", 1, true))
         H.truthy(policy_source:find("Unit.local_position(unit, 0)", 1, true))
         H.truthy(policy_source:find("[wt:701] retained", 1, true))

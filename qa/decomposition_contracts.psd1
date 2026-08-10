@@ -23,18 +23,26 @@
             RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua', '_cos_attachment_link_policy.lua', '_cos_ui_presentation_refresh.lua', '_cos_offhand_session_state.lua', '_cos_modded_illusion_swap.lua', '_cos_magic_skin_gateway.lua', '_cos_command_owner.lua', '_cos_glow_editor_button.lua', '_cos_item_grid_presentation.lua', '_cos_mod_lifecycle.lua', '_cos_la_replay_runtime.lua', '_cos_glow_transport.lua', '_cos_offhand_catalog.lua', '_cos_offhand_picker.lua', '_cos_preview_runtime.lua', '_cos_news_feed_safety.lua', '_cos_customization_view_lifecycle.lua', '_cos_attachment_spawn_sync.lua', '_cos_equipment_assembly.lua', '_cos_la_apply_runtime.lua', '_cos_la_sync_transport.lua')
         }
         @{
+            # Brought under the 2500-line HARD limit at 0.12.301-beta (issue
+            # #1159), together with its wt_dev mirror below - check_wt_stream_parity
+            # forbids one stream decomposing without the other. State stays
+            # 'partial': 'complete' additionally requires the entry to be at or
+            # under the 1500-line TARGET. Both qa/baselines/file_sizes.json rows
+            # were removed in the same slice, matching cim_dev.
             Name = 'weapon_tweaker'
             State = 'partial'
             Entry = 'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'
-            CeilingLines = 3071
-            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_char_template_patches.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_weapon_balance_patches.lua')
+            CeilingLines = 2212
+            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_weapon_balance_patches.lua')
         }
         @{
+            # Mirror of the row above; the ceiling difference is the 159-line
+            # WT_DEV_OVERLAY surface the parity gate permits.
             Name = 'weapon_tweaker_dev'
             State = 'partial'
             Entry = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua'
-            CeilingLines = 3230
-            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_char_template_patches.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_weapon_balance_patches.lua')
+            CeilingLines = 2371
+            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_weapon_balance_patches.lua')
         }
         @{
             Name = 'career_tweaker_balance'
