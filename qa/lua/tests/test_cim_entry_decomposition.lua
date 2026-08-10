@@ -28,8 +28,8 @@ return function(H, repo_root)
         for line in entry:gmatch("[^\r\n]*") do
             if line:find("%S") then lines = lines + 1 end
         end
-        H.truthy(lines <= 3764,
-            "CIM-dev entry exceeded the 3764-line forge-picker-owner ceiling")
+        H.truthy(lines <= 3067,
+            "CIM-dev entry exceeded the 3067-line modded-loadout-owner ceiling")
     end)
 
     H.test("CIM-dev command owner installs exactly once at the original boundary", function()
@@ -40,8 +40,14 @@ return function(H, repo_root)
         H.equal(count_plain(entry,
             "scripts/mods/crafting_in_modded_dev/_cim_bulk_cleanup_command"), 0)
 
+        -- The persistence closures moved to _cim_modded_loadout_owner; the
+        -- ordering invariant is unchanged, only its anchor. The command owner
+        -- still cannot install before the store exists, because it consumes
+        -- accessors the loadout owner returns.
+        H.equal(count_plain(entry, "local function _modded_loadout_save()"), 0,
+            "persistence closures must not survive in the entry")
         local loadout_at = assert(entry:find(
-            "local function _modded_loadout_save()", 1, true))
+            "scripts/mods/crafting_in_modded_dev/_cim_modded_loadout_owner", 1, true))
         local owner_at = assert(entry:find(
             "scripts/mods/crafting_in_modded_dev/_cim_command_owner", 1, true))
         local regression_at = assert(entry:find(
