@@ -31,6 +31,8 @@ return function(H, repo_root)
     -- so that owner joins the source too.
     local la_loadout_safety =
         read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_loadout_safety.lua")
+    local local_wield_runtime =
+        read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_local_wield_runtime.lua")
     local entry = entry_only
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
@@ -39,6 +41,7 @@ return function(H, repo_root)
         .. equipment_assembly
         .. la_apply_runtime
         .. la_loadout_safety
+        .. local_wield_runtime
     local localization = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization.lua")
     local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")
 
@@ -634,7 +637,10 @@ return function(H, repo_root)
         -- re-inlined copy (which VMF would silently shadow) fails here.
         H.truthy(equipment_assembly:find('GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, target, "create_equipment")', 1, true))
         H.equal(entry_only:find('GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, target, "create_equipment")', 1, true), nil)
-        H.truthy(entry:find('mod:hook_safe("SimpleInventoryExtension", "_wield_slot"', 1, true))
+        H.truthy(local_wield_runtime:find(
+            'mod:hook_safe("SimpleInventoryExtension", "_wield_slot"', 1, true))
+        H.equal(entry_only:find(
+            'mod:hook_safe("SimpleInventoryExtension", "_wield_slot"', 1, true), nil)
         H.truthy(entry:find('mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true))
         H.truthy(entry:find('"hero_previewer"', 1, true))
         H.truthy(entry:find('"network_husk"', 1, true))

@@ -33,6 +33,7 @@ return function(H, repo_root)
     -- apply/revert owner. Same treatment: the gate is pinned on the owner and
     -- asserted absent from the entry.
     local apply_runtime = read("_cos_la_apply_runtime.lua")
+    local local_wield_runtime = read("_cos_local_wield_runtime.lua")
 
     H.test("Cos #518 yield boundary is mechanism AND game mode (staging never yields)", function()
         local body = main:match(
@@ -101,7 +102,8 @@ return function(H, repo_root)
         H.truthy(main:find('reason ~= "deus-yield"', 1, true),
             "pending drain must treat deus-yield as a terminal reason")
         -- Local wield re-apply (the observed stomper) is gated too.
-        H.truthy(main:find('and not mod._la_deus_weapon_yield()', 1, true),
+        H.truthy(local_wield_runtime:find(
+            'and not mod._la_deus_weapon_yield()', 1, true),
             "local wield re-apply deus gate missing")
     end)
 
@@ -197,13 +199,17 @@ return function(H, repo_root)
     H.test("Cos #518 owner-wield probe rides the single local _wield_slot hook", function()
         -- Merge-into-existing-hook doctrine: exactly ONE registration on
         -- (SimpleInventoryExtension, _wield_slot) - VMF drops a second.
-        local _, hook_count = main:gsub(
+        local _, hook_count = local_wield_runtime:gsub(
             'mod:hook_safe%("SimpleInventoryExtension", "_wield_slot"', "")
         H.equal(hook_count, 1,
             "expected exactly one SimpleInventoryExtension._wield_slot hook")
         H.truthy(main:find('mod:dofile("scripts/mods/cosmetics_tweaker/_cos_518_probe")', 1, true),
             "probe module not wired by the entry")
-        H.truthy(main:find('mod._cos518_owner_wield(slot_data, wielded_slot)', 1, true),
+        H.equal(main:find(
+            'mod:hook_safe("SimpleInventoryExtension", "_wield_slot"', 1, true), nil,
+            "entry must not retain the extracted local wield hook")
+        H.truthy(local_wield_runtime:find(
+            'mod._cos518_owner_wield(slot_data, wielded_slot)', 1, true),
             "owner-wield probe call missing from the local _wield_slot hook body")
         H.truthy(probe_module:find('mod._cos518_emit("wield"', 1, true),
             "owner-wield probe emit site missing")

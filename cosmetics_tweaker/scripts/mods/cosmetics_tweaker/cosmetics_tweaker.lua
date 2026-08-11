@@ -106,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.201-dev"
+local MOD_VERSION = "0.9.202-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3262,300 +3262,33 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_husk_cache_bridge").attach(mod, 
     probe = PROBE, printf = rawget(_G, "printf"),
 })
 -- ============================================================
--- Glow Picker integration (v0.9.1-dev — M1 scaffold)
+-- Glow picker host integration -> _cos_glow_picker_host.lua (#1159)
 -- ============================================================
--- Hooks the cosmetic-changing screen lifecycle to give the picker its own
--- input + draw phases. M1: popup panel renders, close button works,
--- placeholder text confirms the chain is alive. M2: replace placeholder with
--- per-component R/G/B + intensity sliders + persistence.
---
--- The picker draws AFTER the host window's own draw, layering above the
--- cosmetic grid. Input handling fires BEFORE the host window's input so
--- popup clicks (close button, slider drags) intercept before reaching the
--- cosmetic grid behind it.
+-- Owns the five verified cosmetic-window hooks plus the two manual diagnostic
+-- commands. Installed at the former inline position to preserve registration
+-- order; dependencies refresh through a stable hot-reload state holder.
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_picker_host").install(mod, {
+    glow_picker = GlowPicker,
+    printf = printf,
+    mod_version = MOD_VERSION,
+    wielded_units_for_probe = _wielded_units_for_probe,
+})
 
--- Resolve the backend_id of the currently-selected cosmetic slot. Used to
--- key per-item glow customization. Returns nil if no slot is selected, the
--- selected slot is empty, or the selected slot is not a weapon (hats/skins
--- don't carry glow shader variables — glow customization only applies to
--- weapon meshes).
-local function _selected_slot_backend_id_and_data(host_window)
-    local idx = host_window and host_window._selected_cosmetic_slot_index
-    local items = host_window and host_window._equipment_items
-    if not idx or not items then return nil, nil end
-    local item = items[idx]
-    if not item then return nil, nil end
-    -- item here is the backend item record (carries backend_id and data).
-    return item.backend_id, item
-end
-
--- M1.2: throttled draw-hook tracer so we can confirm whether the hook is
--- firing while the user is on the screen. First fire is console-only (#570).
-mod._glow_hook_fired_once = mod._glow_hook_fired_once or {}
-
-local function _glow_hook_trace(class_name, event)
-    local key = class_name .. ":" .. event
-    if not mod._glow_hook_fired_once[key] then
-        mod._glow_hook_fired_once[key] = true
-        pcall(printf, "[cos:570] [glow_picker:hook] FIRST FIRE %s (open=%s)", key, tostring(GlowPicker.is_open()))
-        mod:info("[glow_picker:hook] FIRST FIRE %s (open=%s)", key, tostring(GlowPicker.is_open()))
-    end
-end
-
--- M1.4: scoped hooks on the TWO verified-correct screen classes only.
--- Earlier diag pass blindly hooked five candidate windows including ones
--- whose draw method doesn't exist (HeroWindowItemCustomization has _draw,
--- not draw) AND whose on_exit was already hooked elsewhere in this file
--- (rehook warning). Fixed here.
---
--- 1) HeroWindowCosmeticsLoadout (loadout grid) — has public `draw`,
---    `update`, `on_exit`. ALL three safe to hook here; no existing hooks.
--- 2) HeroWindowItemCustomization (per-weapon illusion-change) — has
---    `update` (line 459 of source) and INTERNAL `_draw(self, input_service,
---    dt)` at source line 1004. NO public `draw`. on_exit ALREADY hooked
---    elsewhere in this file (don't re-hook it here).
-local function _resolve_input_service(self)
-    return self.parent and self.parent.window_input_service
-        and self.parent:window_input_service()
-end
-
--- (1) HeroWindowCosmeticsLoadout — full hook set.
-mod:hook_safe("HeroWindowCosmeticsLoadout", "on_exit", function(self, params)
-    _glow_hook_trace("HeroWindowCosmeticsLoadout", "on_exit")
-    GlowPicker.close()
-end)
-
-mod:hook_safe("HeroWindowCosmeticsLoadout", "update", function(self, dt, t)
-    _glow_hook_trace("HeroWindowCosmeticsLoadout", "update")
-    if not GlowPicker.is_open() then return end
-    GlowPicker.handle_input(_resolve_input_service(self))
-end)
-
-mod:hook_safe("HeroWindowCosmeticsLoadout", "draw", function(self, dt)
-    _glow_hook_trace("HeroWindowCosmeticsLoadout", "draw")
-    if not GlowPicker.is_open() then return end
-    local ui_renderer = self.ui_top_renderer or self.ui_renderer
-    GlowPicker.draw(ui_renderer, _resolve_input_service(self), dt)
-end)
-
--- (2) HeroWindowItemCustomization — update + _draw (no public draw).
---     on_exit deliberately NOT re-hooked here.
-mod:hook_safe("HeroWindowItemCustomization", "update", function(self, dt, t)
-    _glow_hook_trace("HeroWindowItemCustomization", "update")
-    if not GlowPicker.is_open() then return end
-    GlowPicker.handle_input(_resolve_input_service(self), self)
-end)
-
-mod:hook_safe("HeroWindowItemCustomization", "_draw", function(self, input_service, dt)
-    _glow_hook_trace("HeroWindowItemCustomization", "_draw")
-    if not GlowPicker.is_open() then return end
-    -- v0.9.3.2-hotfix: HeroWindowItemCustomization stores renderers with
-    -- UNDERSCORE prefix (`self._ui_top_renderer` per source line 1006),
-    -- whereas HeroWindowCosmeticsLoadout stores them WITHOUT the prefix
-    -- (`self.ui_top_renderer` per source line 167). Different naming
-    -- conventions between sibling screens — check both forms. PC-A's
-    -- glow picker test 2026-05-21 17:55-17:56 hit this: 7 frames of
-    -- `ui_renderer is nil` echoed to chat because the non-underscore
-    -- lookup returned nil.
-    local ui_renderer = self._ui_top_renderer or self._ui_renderer
-        or self.ui_top_renderer or self.ui_renderer
-    GlowPicker.draw(ui_renderer, input_service, dt, self)
-end)
-
-mod:command("glow_picker_hooks", "List which cosmetic-screen draw hooks have fired this session", function()
-    mod:echo("[glow_picker:hooks] fired so far:")
-    local n = 0
-    for k, _ in pairs(mod._glow_hook_fired_once) do
-        mod:echo("  - %s", k)
-        n = n + 1
-    end
-    if n == 0 then mod:echo("  (none — go to the loadout grid or click a weapon to open the illusion-change window)") end
-    mod:echo("[glow_picker:hooks] GlowPicker.is_open=%s built=%s",
-        tostring(GlowPicker.is_open()), tostring(GlowPicker._built))
-end)
-
--- Manual entry point for M1 testing: `/glow_picker` chat command opens the
--- popup from anywhere (no cosmetic-screen requirement). Useful for verifying
--- the popup renders before we land the cosmetic-screen button injection.
--- The popup otherwise opens only from the in-view editor button.
-mod:command("glow_picker", "Open the glow customizer popup (M1 scaffold; debug-only entry point)", function()
-    mod:echo("[glow_picker] command fired. v=%s open_before=%s",
-        MOD_VERSION, tostring(GlowPicker.is_open()))
-    if GlowPicker.is_open() then
-        GlowPicker.close()
-        mod:echo("[glow_picker] closed")
-        return
-    end
-    -- v0.9.8.9: resolve backend_id from `mod._unit_to_backend_id` instead of
-    -- the non-existent `slot_data.backend_id` field. Vanilla `slot_data`
-    -- from `ext:get_wielded_slot_data()` carries item_data + unit refs but
-    -- NOT a backend_id field — `slot_data.backend_id` was always nil,
-    -- which is why every prior session's log showed
-    -- `[glow_picker] opened for backend_id=nil`. With nil bid, the picker's
-    -- _live_preview bailed → mod._per_item_glow_runtime[nil] never written
-    -- → _apply_glow_to_unit never found a per-item override. Picker was
-    -- effectively dead on the chat-command path.
-    --
-    -- Empirical evidence: every recent log shows `opened for backend_id=nil`,
-    -- never a non-nil UUID. Confirmed across PC-A sessions 2026-05-21+.
-    --
-    -- mod._unit_to_backend_id is the SAME map _apply_glow_to_unit reads.
-    -- Using it ensures the picker's write key matches the apply's read key.
-    -- The map is populated by GearUtils.create_equipment (in-game) +
-    -- HeroPreviewer/MenuWorldPreviewer.equip_item (cosmetic preview).
-    local units, slot_data = _wielded_units_for_probe()
-    local bid = nil
-    if units and units[1] and units[1].unit and mod._unit_to_backend_id then
-        bid = mod._unit_to_backend_id[units[1].unit]
-    end
-    mod:echo("[glow_picker] resolved backend_id=%s (from _unit_to_backend_id[wielded_unit])",
-        tostring(bid))
-    GlowPicker.open_for(bid, slot_data)
-    mod:echo("[glow_picker] open_after=%s built=%s. If you're NOT on a cosmetic menu, popup won't render — go to the cosmetic loadout screen. Then run /glow_picker_hooks to see which hook fires.",
-        tostring(GlowPicker.is_open()), tostring(GlowPicker._built))
-end)
-
--- v0.9.9.4-dev: switched from SimpleInventoryExtension.wield to _wield_slot.
--- _tpe.lua already hooks .wield, and VMF silently drops a second hook_safe on
--- the same Class+method (memory: reference_ct_husk_hook_shadow_tpe).
--- v0.9.54-dev (#203): SIGNATURE FIX + LOCAL LA OFFHAND RE-APPLY. Vanilla
--- SimpleInventoryExtension._wield_slot is `(self, equipment, slot_data, unit_1p,
--- unit_3p, buff_extension)` — the prior hook's `(self, world, equipment,
--- slot_name)` names were misaligned (harmless, diagnostics-only, but the trace
--- logged a unit where it meant the slot name). Corrected here.
-mod:hook_safe("SimpleInventoryExtension", "_wield_slot", function(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
-    local pm = Managers and Managers.player
-    local lp = _local_player_safe(pm)
-    if not lp then return end
-    if self._unit ~= lp.player_unit then return end
-    local wielded_slot = (slot_data and slot_data.id)
-        or (self._equipment and self._equipment.wielded_slot)
-    -- v0.9.43-dev TRANSITION trace: LOCAL player wield-slot change. Repro #4 is
-    -- "host switches to secondary weapon and back" → this fires twice (to
-    -- slot_ranged, then back to slot_melee). Logs from→to via self._ct_last_wielded.
-    _trace("TRANSITION WIELD local from=%s to=%s",
-        tostring(self._ct_last_wielded), tostring(wielded_slot))
-    self._ct_last_wielded = wielded_slot; mod._cos518_owner_wield(slot_data, wielded_slot) -- #518 owner-wield probe (see _cos_518_probe.lua)
-
-    -- v0.9.54-dev (#203): RE-APPLY the local player's committed LA offhand on
-    -- EVERY local wield. Vanilla _wield_slot only toggles set_unit_visibility on
-    -- the already-spawned units (no respawn, no create_equipment), so the LA
-    -- shield paint was lost on the player's OWN screen at mission entry and on a
-    -- primary↔secondary↔back swap — the husk path re-applies for peers, but
-    -- nothing did for the local body (the comment that used to sit here said
-    -- exactly that). Mirror the working husk _wield_slot re-paint: read
-    -- _la_equips_by_peer[local_peer] (the same synced cache the husk uses,
-    -- populated on Apply via _send_la_apply) and re-paint the wielded shield via
-    -- the SAME _apply_la_on_unit helper. ADDITIVE (paint is idempotent) + GATED
-    -- (the #204 mesh-mismatch warp guard inside _apply_la_on_unit degrades a
-    -- non-swapped kind="unit" mesh to plain rather than warping). Does NOT touch
-    -- the husk path. A kind="unit" shield whose mesh-swap was skipped at spawn
-    -- stays plain here (recovering the mesh needs a respawn — out of scope).
-    do
-        local local_peer = lp.peer_id
-        local equips = local_peer and _la_equips_by_peer and _la_equips_by_peer[local_peer]
-        if equips and self._unit and Unit.alive(self._unit) then
-            local item_data = slot_data and slot_data.item_data
-            local wielded_template = item_data and item_data.template
-            if wielded_template then
-                for stored_key, entry in pairs(equips) do
-                    -- OFFHAND only: the reported drop is the LA shield, and the
-                    -- offhand path repaints via the safe local texture paint
-                    -- (_paint_offhand_textures_locally). kind="illusion" is
-                    -- deliberately EXCLUDED — its re-apply routes through LA's
-                    -- apply_new_skin_from_texture, which permanently mutates
-                    -- WeaponSkins/IML inventory_icons (DEVELOPMENT.md "NEVER call
-                    -- LA.apply_new_skin_from_texture"); re-running that on every
-                    -- local wield would amplify that mutation. (The husk path
-                    -- already handles illusions remotely; a local illusion drop,
-                    -- if reported, is a separate fix.)
-                    -- #518: skip inside a deus run - the CW weapon shares the
-                    -- keep weapon's TEMPLATE (deus items clone the base item),
-                    -- so this template-keyed re-apply was the observed stomper
-                    -- of deus upgrade skins. The reconcile/_apply_la_on_unit
-                    -- gates also cover this; skipping here keeps the REAPPLY
-                    -- probe/trace lines truthful.
-                    if entry and entry.armoury_key and entry.kind == "offhand"
-                        and stored_key == wielded_template
-                        and not mod._la_deus_weapon_yield() then
-                        _trace("LOCAL wield-reapply stored_key=%s kind=%s armoury=%s slot=%s",
-                            tostring(stored_key), tostring(entry.kind),
-                            tostring(entry.armoury_key), tostring(wielded_slot))
-                        -- [cos:sync] #203: the local player's OWN body re-applying
-                        -- its committed LA offhand on wield (primary<->secondary
-                        -- swap / mission entry). peer=local. Absence of this line
-                        -- for a wield where the shield visibly drops = the cache
-                        -- didn't hold the entry (attribution for the #203 drop).
-                        if PROBE then
-                            PROBE.emit("cos:sync",
-                                "local_wield/" .. tostring(wielded_slot) .. "/" .. tostring(stored_key),
-                                string.format("peer=local slot=%s template=%s key=%s decision=REAPPLY",
-                                    tostring(wielded_slot), tostring(stored_key), tostring(entry.armoury_key)))
-                        end
-                        -- v0.9.70-dev (#264/#234, Slice 2 / I3): route through the
-                        -- single reconcile entry point. allow_pulse=false (inside a
-                        -- wield body); a stale kind="unit" mesh on the local body is
-                        -- deferred to the pending drain's safe pulse -- previously a
-                        -- skipped spawn-time swap was declared out of scope here.
-                        pcall(mod._la_reconcile, local_peer, stored_key, "local-wield", false)
-                    end
-                end
-            end
-        end
-    end
-
-    -- Publish the applied state for the weapon that actually became wielded.
-    -- Equipment spawn order is not wield order, so this is the authoritative
-    -- place to switch/clear the coop payload after restart or weapon swapping.
-    do
-        local bid
-        local glow_units = {}
-        if slot_data and type(slot_data) == "table" then
-            for _, field in ipairs({ "right_unit_1p", "left_unit_1p", "right_unit_3p", "left_unit_3p" }) do
-                local unit = slot_data[field]
-                if unit then
-                    glow_units[#glow_units + 1] = unit
-                    if mod._unit_to_backend_id and mod._unit_to_backend_id[unit] then
-                        bid = mod._unit_to_backend_id[unit]
-                    end
-                end
-            end
-        end
-        local item_data = slot_data and slot_data.item_data
-        local skin = slot_data and slot_data.skin
-        if bid then
-            -- Lobby leave / role transitions rebuild equipment without opening
-            -- the picker. Re-read the durable owner store before selecting the
-            -- active payload, then repaint the newly-visible 1P and 3P units.
-            GlowPicker.restore_runtime_for(bid, { skin = skin })
-        end
-        if mod._cos.bind_glow_unit then
-            for _, unit in pairs(glow_units) do
-                mod._cos.bind_glow_unit(unit, bid, skin, wielded_slot,
-                    item_data and item_data.name, item_data and item_data.template)
-            end
-        end
-        local next_state = bid and mod._per_item_glow_runtime and mod._per_item_glow_runtime[bid] or nil
-        local next_identity = bid and mod._per_item_glow_identity_runtime
-            and mod._per_item_glow_identity_runtime[bid] or nil
-        mod._active_per_item_glow_skin = next_state and (skin or "") or nil
-        mod._active_per_item_glow_slot = next_state and wielded_slot or nil
-        mod._active_per_item_glow_item_name = next_state and item_data and item_data.name or nil
-        mod._active_per_item_glow_item_template = next_state and item_data and item_data.template or nil
-        if mod._active_per_item_glow ~= next_state
-            or mod._active_per_item_glow_identity ~= next_identity then
-            mod._active_per_item_glow = next_state
-            mod._active_per_item_glow_identity = next_identity
-            if mod._emit_per_item_glow then mod._emit_per_item_glow() end
-        end
-        mod._cos.apply_glow_override(glow_units, lp.peer_id)
-        if next_state then
-            _cos574_log("rehydrate path=local_wield bid=%s skin=%s slot=%s active=true units=%d",
-                tostring(bid), tostring(skin), tostring(wielded_slot), #glow_units)
-        end
-    end
-
-end)
+-- ============================================================
+-- Local wield appearance replay -> _cos_local_wield_runtime.lua (#1159)
+-- ============================================================
+-- Owns the local player's already-spawned LA offhand and per-item glow replay.
+-- The remote husk path remains in its existing transport/render owners.
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_local_wield_runtime").install(mod, {
+    local_player_safe = _local_player_safe,
+    get_managers = function() return Managers end,
+    unit = Unit,
+    la_equips_by_peer = _la_equips_by_peer,
+    glow_picker = GlowPicker,
+    trace = _trace,
+    glow_log = _cos574_log,
+    probe = PROBE,
+})
 
 local _cos_runtime_checks = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_runtime_checks")
 _cos_runtime_checks.install(mod, _rt_register, {

@@ -79,6 +79,12 @@ return function(H, repo_root)
     local la_loadout_safety = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_la_loadout_safety.lua")
+    local glow_picker_host = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_glow_picker_host.lua")
+    local local_wield_runtime = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_local_wield_runtime.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -123,6 +129,8 @@ return function(H, repo_root)
             .. apply_runtime:gsub("%-%-[^\n]*", "")
             .. la_sync_transport:gsub("%-%-[^\n]*", "")
             .. la_loadout_safety:gsub("%-%-[^\n]*", "")
+            .. glow_picker_host:gsub("%-%-[^\n]*", "")
+            .. local_wield_runtime:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),

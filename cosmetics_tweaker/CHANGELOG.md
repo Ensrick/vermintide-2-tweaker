@@ -1,5 +1,30 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.202-dev (2026-08-11) -- glow-host + local-wield owners extracted (#1159) [untested]
+
+### Behavior-neutral extraction
+
+- Moved the five existing glow-picker host hooks and the two manual picker
+  commands from the entry into `_cos_glow_picker_host.lua` at their historical
+  registration point. The picker widget and state machine remain in
+  `_glow_picker.lua`; the new owner only adapts the two proven cosmetic windows.
+- Moved the single local-player `SimpleInventoryExtension._wield_slot` hook into
+  `_cos_local_wield_runtime.lua`. The hook retains its early local-unit ownership
+  check, bounded Loremaster offhand replay, exact-item glow restore/bind, active
+  glow publication, and material repaint. Remote husk behavior remains with its
+  existing transport and husk owners.
+- Both owners refresh injected dependencies before their reinstall guard, retain
+  stable hot-reload state on the mod table, and publish explicit hook/command
+  cardinality. They add no hook, RPC, command, lifecycle, update, persistence, or
+  renderer surface beyond the registrations moved from the entry.
+- Added dependency-injected Lua 5.1 coverage for both owners and retargeted the
+  existing lifecycle, hook-census, Deus-yield, glow, and Grail Knight assertions
+  to their new ownership boundaries. The full suite passes 2,631 tests and strict
+  Cosmetics lint reports 86 files / 102 hooks with no ownership warnings.
+- Ratcheted the Cosmetics entry from 3,460 to 3,207 nonblank lines in both the
+  decomposition contract and generated frozen-debt baseline. The entry remains
+  above the 2,500 hard limit, so #1159 remains an in-progress structural phase.
+
 ## 0.9.201-dev (2026-08-11) -- LA loadout-safety + net-safe sender owner extracted (#1159) [untested]
 
 ### Behavior-neutral extraction
