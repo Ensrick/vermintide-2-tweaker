@@ -1,6 +1,6 @@
 # Weapon Tweaker Changelog
 
-## 0.12.301-beta (2026-08-10) -- the in-game 3P swap and the inventory preview surface become owner modules (#1159) [untested]
+## 0.12.302-beta (2026-08-11) -- the in-game 3P swap and the inventory preview surface become owner modules (#1159) [untested]
 
 - Extracted the last two large blocks out of the entry.
   `_wt_ingame_3p_swap_owner.lua` owns the mod's single
