@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-11 - Worktree cleanup trusts its proven base (#1257)
+
+The approved worktree lifecycle helper now deletes a branch only after proving
+it is merged into `origin/master`, without asking Git to re-evaluate safety
+against the caller's potentially stale checked-out branch. Its dual-host
+self-test pins the fail-closed ancestry boundary, and an integration replay
+closed an exact-`origin/master` fixture from the stale primary checkout.
+
 ## 2026-08-01 - Accessory property writes retain their layer (#959)
 
 Crafting in Modded 0.8.109-dev fixes the mutation seam omitted by the first

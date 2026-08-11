@@ -69,6 +69,21 @@ function Test-IsPathInsideDirectory([string]$CandidatePath, [string]$DirectoryPa
     return $candidate.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+function Get-VtVerifiedBranchDeleteArgs([string]$BranchName, [bool]$IsMergedIntoBase) {
+    if ([string]::IsNullOrWhiteSpace($BranchName)) {
+        throw 'Refusing to delete an unnamed branch.'
+    }
+    if (-not $IsMergedIntoBase) {
+        throw "Refusing to delete branch '$BranchName' without the origin/master ancestry proof."
+    }
+
+    # `git branch -d` judges safety against the caller's checked-out branch.
+    # Close may run from an older feature worktree or stale primary checkout,
+    # so that judgment can contradict the explicit origin/master proof above.
+    # `-D` is safe only after this helper receives that proof.
+    return @('branch', '-D', $BranchName)
+}
+
 if ($SelfTest) {
     $failures = @()
     if (-not (Test-IsPathInsideDirectory 'C:\repo\wt\tools\worktrees\worktree.ps1' 'C:\repo\wt')) {
@@ -80,12 +95,25 @@ if ($SelfTest) {
     if (Test-IsPathInsideDirectory 'C:\repo\wt' 'C:\repo\wt') {
         $failures += 'directory itself was misclassified as a child file'
     }
+    $deleteArgs = @(Get-VtVerifiedBranchDeleteArgs 'release/test' $true)
+    if (($deleteArgs -join ' ') -ne 'branch -D release/test') {
+        $failures += 'merged branch deletion still depends on the caller HEAD'
+    }
+    $rejectedUnmerged = $false
+    try {
+        $null = Get-VtVerifiedBranchDeleteArgs 'release/unmerged' $false
+    } catch {
+        $rejectedUnmerged = $true
+    }
+    if (-not $rejectedUnmerged) {
+        $failures += 'unmerged branch deletion did not fail closed'
+    }
     if ($failures.Count -gt 0) {
         Write-Host '[worktree -SelfTest] FAILED' -ForegroundColor Red
         $failures | ForEach-Object { Write-Host "  X $_" -ForegroundColor Red }
         exit 2
     }
-    Write-Host '[worktree -SelfTest] OK - self-close and sibling path boundaries pass.' -ForegroundColor Green
+    Write-Host '[worktree -SelfTest] OK - path boundaries and proven-base branch deletion pass.' -ForegroundColor Green
     exit 0
 }
 
@@ -186,7 +214,8 @@ if ($DeleteMergedBranch -and -not [string]::IsNullOrWhiteSpace($branchName)) {
     if ($merged.Code -ne 0) {
         throw "Worktree closed, but branch '$branchName' is not merged into origin/master; branch retained."
     }
-    Invoke-Git $resolvedRoot @('branch', '-d', $branchName) | Out-Null
+    $deleteArgs = @(Get-VtVerifiedBranchDeleteArgs $branchName ($merged.Code -eq 0))
+    Invoke-Git $resolvedRoot $deleteArgs | Out-Null
     Write-Host "[worktree] Closed $fullTarget and deleted merged branch $branchName." -ForegroundColor Green
 } else {
     Write-Host "[worktree] Closed $fullTarget. Branch retained: $branchName" -ForegroundColor Green
