@@ -4,6 +4,24 @@ Engine gotchas, crash modes, and load-bearing patterns specific to `chaos_wastes
 
 This file is for HOW the CW-side internals work (so we don't re-burn the same crash twice). Operational rules (no rm -rf, version bump, deploy doctrine, etc.) live in `PROJECT_STANDARDS.md` and the repo root.
 
+## Peer-manifest owner (`_ct_peer_manifest_owner.lua`) — issue #1159
+
+The development-only peer-manifest diagnostics are one bounded owner installed at
+their former inline position, after host settings broadcast setup and before run
+creation. The owner constructs the deterministic local manifest, paces outbound
+`ct_peer_manifest_chunk` traffic, reassembles schema-compatible peer manifests,
+logs host/client differences, and registers `/peers`. It returns only
+`build_local_manifest`, `log_manifest_diff`, and `broadcast_local_manifest`;
+the earlier settings receiver reaches the returned broadcaster through the
+entry's existing forward slot.
+
+Keep this diagnostic transport separate from gameplay parity and settings-sync
+gates: it does not authorize content, mutate lookups, or stream unbounded state.
+Add manifest fields, chunk lifecycle, peer-diff reporting, and `/peers` behavior
+here rather than in the entry or a second RPC owner. The structural guard is
+`qa/lua/tests/test_ct_peer_manifest_owner.lua`; the Phase-5 entry ceiling is
+4,114 nonblank lines in `qa/decomposition_contracts.psd1`.
+
 ## Boon runtime module contracts
 
 The entry manifest owns orchestration; boon behavior is split by state owner and loaded once, in this order:

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-11 - Chaos Wastes peer diagnostics gain one owner (#1159)
+
+Chaos Wastes Tweaker Dev 0.7.337-dev moves peer manifest construction,
+transport, reassembly, diff logging, and `/peers` into one dependency-injected
+owner without changing its wire contract or registration order. Executable
+Lua 5.1 coverage pins the boundary, and the entry-size ceiling falls from 4,303
+to 4,114 nonblank lines.
+
 ## 2026-08-11 - Worktree cleanup trusts its proven base (#1257)
 
 The approved worktree lifecycle helper now deletes a branch only after proving
