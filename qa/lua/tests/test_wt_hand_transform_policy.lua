@@ -86,12 +86,16 @@ return function(H, repo_root)
             local entry = read(root .. entry_name)
             local preview = read(root .. "_wt_paired_preview_transform.lua")
             local checks = read(root .. "_wt_runtime_checks.lua")
+            -- The adapter's install call moved into _wt_menu_preview_owner.lua
+            -- with the rest of the previewer surface (#1159 wave 14); the baked
+            -- rotation table and the durable hand gate stayed in the entry.
+            local preview_owner = read(root .. "_wt_menu_preview_owner.lua")
             H.truthy(entry:find(
                 'local _SALTZ_KRUBER_SHIELD_ROTATION = { 25, -17.5, -15, hand = "left" }',
                 1, true))
             H.truthy(entry:find("_wt_grip_offset_policy.applies_to_hand(baked_euler, hand)",
                 1, true))
-            H.truthy(entry:find("_wt_paired_preview_transform.install", 1, true))
+            H.truthy(preview_owner:find("_wt_paired_preview_transform.install", 1, true))
             H.truthy(preview:find('mod:hook("MenuWorldPreviewer", "_spawn_item"', 1, true))
             H.truthy(preview:find("self._equipment_units[entry.slot_index]", 1, true))
             H.truthy(entry:find('role=%s career=%s weapon=%s hand=%s match=%s', 1, true)

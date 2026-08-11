@@ -560,7 +560,7 @@ Last updated: 2026-07-13.
 | Category | STATIC |
 | Repro | 1. `mod:hook("HeroPreviewer", "equip_item", ...)`. 2. Open keep inventory. 3. Watch hook never fire. |
 | Expected post-fix | Hook `MenuWorldPreviewer.equip_item` (the derived class actually instantiated). Or hook both for safety. |
-| Detection | Audit each hook on `HeroPreviewer*`/`PlayFabMirrorBase*` — should be the derived class name. |
+| Detection | Audit each hook on `HeroPreviewer*`/`PlayFabMirrorBase*` — should be the derived class name. In wt both previewer registrations live in `_wt_menu_preview_owner.lua`; `qa/lua/tests/test_wt_menu_preview_owner.lua` fails the build if either one names the base class. |
 
 
 ---
@@ -576,7 +576,7 @@ Last updated: 2026-07-13.
 | Category | STATIC |
 | Repro | 1. Hook `HeroPreviewer.equip_item` only. 2. Equip a CWV variant or override-scale weapon. 3. Open inventory. |
 | Expected post-fix | Both hooks: HeroPreviewer (for `team_previewer.lua`) AND MenuWorldPreviewer (for keep inventory). |
-| Detection | Visual: keep inventory previewer matches in-game body. |
+| Detection | Visual: keep inventory previewer matches in-game body. Static half: `qa/lua/tests/test_wt_menu_preview_owner.lua` pins the single `MenuWorldPreviewer.equip_item` / `_spawn_item_unit` pair to `_wt_menu_preview_owner.lua` in both streams. |
 
 
 ---
@@ -592,7 +592,7 @@ Last updated: 2026-07-13.
 | Category | INTEGRATION |
 | Repro | 1. Equip Kruber brace-of-pistols (which weapon_tweaker swaps to repeating handgun 3P). 2. Start mission. 3. Watch husk shows brace pistols, not repeater. |
 | Expected post-fix | Career resolved via `ScriptUnit.has_extension(unit, "inventory_system")._career_name` first; `Managers.player:owner` used only as fallback. |
-| Detection | Cross-character weapon equip in keep + mission spawn; same 3P mesh both contexts. |
+| Detection | Cross-character weapon equip in keep + mission spawn; same 3P mesh both contexts. The two sides are owned separately since #1159 wave 14 - `_wt_ingame_3p_swap_owner.lua` (mission) and `_wt_menu_preview_owner.lua` (keep) - so check both files when only one context regresses. |
 
 
 ---

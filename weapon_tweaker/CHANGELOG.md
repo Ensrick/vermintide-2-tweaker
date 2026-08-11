@@ -1,5 +1,53 @@
 # Weapon Tweaker Changelog
 
+## 0.12.302-beta (2026-08-11) -- the in-game 3P swap and the inventory preview surface become owner modules (#1159) [untested]
+
+- Extracted the last two large blocks out of the entry.
+  `_wt_ingame_3p_swap_owner.lua` owns the mod's single
+  `GearUtils.spawn_inventory_unit` registration - the cross-character 3P mesh
+  swap dispatch, with the Kruber brace-of-pistols -> repeating-handgun body
+  inline and the three helpers it calls (Saltzpyre longbow -> empire crossbow
+  including the arrow -> bolt ammo unit, Kruber repeating pistols -> repeating
+  handgun, and the #181 Skullsplitter & Tome -> 1H Skullsplitter hand policy).
+  `_wt_menu_preview_owner.lua` owns both `MenuWorldPreviewer` registrations:
+  the single `equip_item` hook_safe with its four preview swap helpers and the
+  weak-keyed item-key capture, and the full `_spawn_item_unit` wrapper
+  (pre-spawn attachment-source validation, post-spawn scale / grip offset /
+  #569 rotation, the preview wield-pose correction, and the debug-gated
+  missing-node probe). It also installs the #735 paired-preview transform
+  adapter and owns the #603 Ranger dual-wield stance selector.
+- Behavior is unchanged by construction. Both moved blocks (557 and 418 lines)
+  are byte-identical to the text they replaced - a re-inline reconstruction of
+  the entry from the two owners reproduces the previous file byte for byte in
+  both streams - and each entry keeps a bare `mod:dofile` at the exact former
+  execution position. That order is load-bearing: the swap dispatch still
+  registers after the two NetworkLookup-appending owners and before the preview
+  owner, which still registers before the lifecycle callbacks.
+- Hook cardinality is unchanged in both streams. The three moved registrations
+  (`GearUtils.spawn_inventory_unit`, `MenuWorldPreviewer.equip_item`,
+  `MenuWorldPreviewer._spawn_item_unit`) are still exactly one each, now owned
+  by the module instead of the entry, and neither entry can re-add them.
+- The only additions are the accessors the chunk boundary needs. Twelve values
+  the moved lines closed over are now published on `mod._wt` by the entry
+  immediately above each dofile and re-read as file-locals in the owner (the
+  crossbow item predicate, the three 3P unit path constants, the Skullsplitter
+  hand policy, the attachment-source validator, the scale / grip-offset /
+  rotation appliers, the #569 rotation tracker, and the grip-offset policy).
+  One value travels the other way: the #603 stance selector is published as
+  `mod._wt.post_spawn_preview_event` for the runtime-check dependency table at
+  the end of the entry, which used to read it as a file-scope local.
+- Entry size: 3071 -> 2212 non-blank lines, the first time this stream's
+  entry has been under the 2500-line hard limit. Both streams left the frozen
+  file-size debt set in `qa/baselines/file_sizes.json` in the same slice, and
+  their `qa/decomposition_contracts.psd1` ceilings were ratcheted to the new
+  counts with the two owners added to RequiredModules.
+- Offline evidence: `qa/lua/tests/test_wt_ingame_3p_swap_owner.lua` and
+  `qa/lua/tests/test_wt_menu_preview_owner.lua` (34 new assertions across both
+  streams) lock the wiring, the load-order window, single hook ownership, the
+  derived-class rule, the 3P-only invariant, and public/dev owner parity. Eight
+  mutations of those invariants were each confirmed to fail the suite.
+  `qa/check_wt_stream_parity.ps1` is green.
+
 ## 0.12.300-beta (2026-08-10) -- cross-character template patches and weapon rebalances become owner modules (#1159) [untested]
 
 - Extracted two owner modules out of the entry. `_wt_cross_char_template_patches.lua`

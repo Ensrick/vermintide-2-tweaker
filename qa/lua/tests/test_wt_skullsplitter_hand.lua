@@ -199,7 +199,13 @@ return function(H, repo_root)
         end)
 
         H.test("WT #181 " .. stream.name .. " integrates guarded 3P relink without 1P replacement", function()
+            -- The #1159 wave-14 slice moved both call sites out of the entry:
+            -- apply_runtime into the in-game 3P swap owner, apply_preview into
+            -- the menu preview owner. The invariants below are about the whole
+            -- wt surface, so assert against entry + both owners.
             local source = read(stream.root .. stream.entry)
+                .. read(stream.root .. "_wt_ingame_3p_swap_owner.lua")
+                .. read(stream.root .. "_wt_menu_preview_owner.lua")
             local module = read(stream.root .. "_wt_skullsplitter_hand.lua")
             H.truthy(source:find("_wt_skullsplitter_hand_policy.apply_runtime({", 1, true))
             H.truthy(source:find("_wt_skullsplitter_hand_policy.apply_preview(", 1, true))

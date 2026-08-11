@@ -28,8 +28,13 @@ return function(H, repo_root)
         end, "optional decompiled vanilla source is not present in this clean clone")
 
     H.test("Ranger Dual Axes corrects only the exact preview tuple", function()
+        -- The #603 selector and its preview diagnostic moved to
+        -- _wt_menu_preview_owner.lua in the #1159 wave-14 slice; the runtime
+        -- check that asserts the tuple still lives in _wt_runtime_checks.lua.
         local main = read(repo_root
             .. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")
+            .. read(repo_root
+                .. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_menu_preview_owner.lua")
             .. read(repo_root
                 .. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua")
         H.truthy(main:find("[wt:603] Ranger preview weapon=", 1, true))

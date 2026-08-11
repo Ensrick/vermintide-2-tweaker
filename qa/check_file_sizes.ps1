@@ -122,7 +122,7 @@ function Invoke-SelfTest {
 
     $baseline = Load-Baseline
     $internalBaselineKeys = @($baseline.Keys | Where-Object { Test-RepositoryInternalWorktreePath $_ })
-    Assert ($baseline.Count -eq 7) 'baseline contains exactly the 7 remaining canonical oversized modules'
+    Assert ($baseline.Count -eq 5) 'baseline contains exactly the 5 remaining canonical oversized modules'
     Assert ($internalBaselineKeys.Count -eq 0) 'baseline contains no nested-worktree entries'
     Assert ($baseline.ContainsKey($canonicalRel)) 'baseline retains a canonical oversized module'
     Assert (-not $baseline.ContainsKey('career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua')) 'completed Career decomposition is removed from frozen debt'
@@ -130,6 +130,11 @@ function Invoke-SelfTest {
     # it can no longer be "frozen at" anything, and check_decomposition_contracts
     # owns its ratchet from then on. cim_dev crossed back under at 0.8.120-dev.
     Assert (-not $baseline.ContainsKey('crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua')) 'cim_dev decomposition below the hard limit is removed from frozen debt'
+    # The wt mirror pair crossed back under together at 0.12.301-beta / 0.12.302-dev.
+    # Both stream entries leave the frozen set in the same slice, because the gate
+    # that binds them (check_wt_stream_parity) forbids one stream decomposing alone.
+    Assert (-not $baseline.ContainsKey('weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua')) 'wt decomposition below the hard limit is removed from frozen debt'
+    Assert (-not $baseline.ContainsKey('weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua')) 'wt_dev mirror decomposition below the hard limit is removed from frozen debt'
 
     if ($script:FileSizeSelfTestPass) {
         Write-Host '[check_file_sizes -SelfTest] OK -- worktree exclusion and canonical enforcement intact.' -ForegroundColor Green
