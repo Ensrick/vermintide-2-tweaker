@@ -32,11 +32,26 @@ return function(H, repo_root)
     local pickup_population = read("_ct_pickup_population_owner.lua")
     local level_load = read("_ct_level_load_owner.lua")
     local node_entry = read("_ct_node_entry_owner.lua")
+    local run_creation = read("_ct_run_creation_owner.lua")
 
     H.test("ct_dev entry stays below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 4717 = 2026-08-10 baseline after the #1159 node-entry owner extraction
+        -- 4303 = 2026-08-10 baseline after the #1159 run-creation owner extraction
+        -- (everything ct does at the moment a Chaos Wastes run is CREATED: the
+        -- v0.7.95 starting-coins SETTER on both the setup_run argument and the
+        -- host-side rpc_deus_set_initial_soft_currency handler, the
+        -- per-controller progressive-difficulty base with the get_run_difficulty
+        -- ramp that reads it, every per-run ledger wiped at run start, the
+        -- run-start reporting (#487 freeze breadcrumbs, the #467 price census,
+        -- the #53 arena-node dump, the settings dump and the host manifest
+        -- baseline), and the boon roll whose no-repeat ledger setup_run creates -
+        -- DeusPowerUpUtils.generate_random_power_ups with its count override,
+        -- Bel'akor forced rarity, remove-then-restore pool strip and post-roll
+        -- re-syncs - plus the three sibling loads that were interleaved between
+        -- those hooks and had to travel with them).
+        --
+        -- It replaces the 4717 baseline set by the #1159 node-entry owner extraction
         -- (everything ct does when the run moves INTO a Chaos Wastes node: the
         -- runtime half of the curse-disable policy - the MutatorHandler veto and
         -- the node.curse save-restore across DeusMechanism._transition_next_node
@@ -95,7 +110,7 @@ return function(H, repo_root)
         -- weapon-trait-generation, and bot weapon-chest owners. The ceiling only
         -- ratchets DOWN as more of the ct_dev entry decomposes into modules; it
         -- must never grow.
-        H.truthy(lines <= 4717, "entry non-empty line count exceeded frozen 4717 baseline")
+        H.truthy(lines <= 4303, "entry non-empty line count exceeded frozen 4303 baseline")
     end)
 
     H.test("ct_dev regression module is dofile'd exactly once, at the suite's position", function()
@@ -155,10 +170,33 @@ return function(H, repo_root)
         -- new owner holds exactly 4. Conserved total unchanged; nothing lost,
         -- renamed or duplicated, and /ct_regression_test append order is
         -- unchanged because the owner installs at the exact line the block held.
+        -- #1159 run-creation owner: the moved region carried NO _rt_register at
+        -- all, so every count below is unchanged by that extraction. The checks
+        -- that guard its code keep working across the new chunk boundary because
+        -- each reads a global or a mod._ct_* field at CALL time:
+        --   _ct_regression.lua  progressive_difficulty_marker + the two ramp
+        --                       checks (CT_PROGRESSIVE_DIFFICULTY_MARKER is still
+        --                       assigned as a GLOBAL at the same load position,
+        --                       and mod._ct_progdiff_step / mod._ct_progressive_policy
+        --                       are still published off `mod`)
+        --   entry               starting_coins_value_matches_setting, which stays
+        --                       INLINE and now reads the entry slot the owner
+        --                       writes through an injected accessor - a live
+        --                       boundary assertion for this slice, with its own
+        --                       positive control in test_ct_run_creation_owner.
+        --   entry               the #211 shared-predicate check, which resolves
+        --                       mod._ct_boon_disabled off `mod` at CALL time and
+        --                       drives it with two inputs. The owner now defines
+        --                       that predicate, so the check became a second live
+        --                       boundary assertion: if the owner stops publishing
+        --                       it, an entry-side check fails in game.
+        H.truthy(entry:find("if type(mod._ct_boon_disabled) ~= \"function\" then", 1, true),
+            "the #211 predicate check must stay in the entry as a boundary assertion")
         H.equal(count_plain(regression, "_rt_register("), 71)
         -- The tier-by-rarity check moved with the only helper state it consumes.
         H.equal(count_plain(entry, "_rt_register("), 23)
         H.equal(count_plain(node_entry, "_rt_register("), 4)
+        H.equal(count_plain(run_creation, "_rt_register("), 0)
         for _, name in ipairs({
             "curse_sorcerer_rank8_backfill", "trollhammer_property_pool_aliased",
             "curse_theme_color_backfilled", "deus_chest_distribution_fallback",
@@ -289,6 +327,20 @@ return function(H, repo_root)
         H.equal(count_plain(entry, '_rt_register("starting_coins_value_matches_setting"'), 1)
         H.equal(count_plain(regression, '_rt_register("starting_coins_value_matches_setting"'), 0)
         H.truthy(entry:find("local _starting_coins_applied_for_run", 1, true))
+        -- #1159 run-creation owner: the WRITER of that slot moved, so the slot is
+        -- now shared across a chunk boundary through one injected accessor. There
+        -- must be exactly one storage slot: the declaration and the reader in the
+        -- entry, the accessor handed to the owner at its install site, and NO
+        -- second declaration in the owner (which would silently split the slot and
+        -- turn the inline check into a permanent no-op PASS - the failure this
+        -- whole arrangement exists to prevent).
+        H.equal(count_plain(run_creation, "local _starting_coins_applied_for_run"), 0)
+        H.equal(count_plain(entry, "local _starting_coins_applied_for_run"), 1)
+        H.equal(count_plain(entry, "_starting_coins_applied_for_run = value"), 1)
+        H.truthy(run_creation:find("starting_coins_applied_for_run(run_id)", 1, true))
+        H.truthy(run_creation:find(
+            "local starting_coins_applied_for_run = ctx.starting_coins_applied_for_run",
+            1, true))
     end)
 
     H.test("ct_dev lifecycle callbacks remain single-owner in the entry", function()

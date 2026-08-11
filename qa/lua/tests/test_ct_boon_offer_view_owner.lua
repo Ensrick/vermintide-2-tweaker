@@ -202,8 +202,15 @@ return function(H, repo_root)
         -- it. Since 0.7.334-dev that curse runtime is itself an owner
         -- (_ct_node_entry_owner), so the neighbour below is its install site -
         -- which sits at the exact line the curse hook block used to occupy.
+        -- Since 0.7.336-dev the offer GENERATION hook is itself an owner
+        -- (_ct_run_creation_owner, which carries it because the boon-altar
+        -- no-repeat ledger it filters against is per-run state setup_run creates),
+        -- so the neighbour above is that owner's install site - which sits at the
+        -- exact line the generation hook used to occupy.
         local gen_at = assert(entry:find(
-            'mod:hook("DeusPowerUpUtils", "generate_random_power_ups"', 1, true))
+            "scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner", 1, true))
+        H.equal(count_plain(entry,
+            'mod:hook("DeusPowerUpUtils", "generate_random_power_ups"'), 0)
         local install_at = assert(entry:find(
             "scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_offer_view_owner", 1, true))
         local curse_at = assert(entry:find(

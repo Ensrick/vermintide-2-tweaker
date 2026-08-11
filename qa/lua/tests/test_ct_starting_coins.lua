@@ -35,9 +35,22 @@ return function(H, repo_root)
         local source = file:read("*a")
         file:close()
 
-        local _, resolves = source:gsub("_ct_starting_coins_policy%.resolve%(", "")
-        H.equal(resolves, 5,
+        -- #1159 wave 14: the setup_run and host-RPC boundaries moved into
+        -- _ct_run_creation_owner. The invariant is unchanged - FIVE call sites,
+        -- ONE policy - it is now asserted across both files, with the per-file
+        -- split pinned so a boundary cannot quietly grow a sixth resolve or lose
+        -- one to a hand-rolled comparison.
+        local owner_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner.lua"
+        local of = assert(io.open(owner_path, "rb"))
+        local owner_source = of:read("*a")
+        of:close()
+        local _, entry_resolves = source:gsub("_ct_starting_coins_policy%.resolve%(", "")
+        local _, owner_resolves = owner_source:gsub("_ct_starting_coins_policy%.resolve%(", "")
+        H.equal(entry_resolves + owner_resolves, 5,
             "setup, host RPC, command (local + host-effective), and runtime check must share policy")
+        H.equal(owner_resolves, 2, "setup_run and the host RPC handler")
+        H.equal(entry_resolves, 3, "the command's two readouts and the inline runtime check")
         H.equal(source:find("setting and setting > 0 and _starting_coins_applied_for_run ~= run_id",
             1, true), nil,
             "setup replay must not re-admit rollover currency")

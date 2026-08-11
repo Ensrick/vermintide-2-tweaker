@@ -19,8 +19,8 @@
             Name = 'cosmetics_tweaker'
             State = 'partial'
             Entry = 'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
-            CeilingLines = 3892
-            RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua', '_cos_attachment_link_policy.lua', '_cos_ui_presentation_refresh.lua', '_cos_offhand_session_state.lua', '_cos_modded_illusion_swap.lua', '_cos_magic_skin_gateway.lua', '_cos_command_owner.lua', '_cos_glow_editor_button.lua', '_cos_item_grid_presentation.lua', '_cos_mod_lifecycle.lua', '_cos_la_replay_runtime.lua', '_cos_glow_transport.lua', '_cos_offhand_catalog.lua', '_cos_offhand_picker.lua', '_cos_preview_runtime.lua', '_cos_news_feed_safety.lua', '_cos_customization_view_lifecycle.lua', '_cos_attachment_spawn_sync.lua', '_cos_equipment_assembly.lua', '_cos_la_apply_runtime.lua', '_cos_la_sync_transport.lua')
+            CeilingLines = 3460
+            RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua', '_cos_attachment_link_policy.lua', '_cos_ui_presentation_refresh.lua', '_cos_offhand_session_state.lua', '_cos_modded_illusion_swap.lua', '_cos_magic_skin_gateway.lua', '_cos_command_owner.lua', '_cos_glow_editor_button.lua', '_cos_item_grid_presentation.lua', '_cos_mod_lifecycle.lua', '_cos_la_replay_runtime.lua', '_cos_glow_transport.lua', '_cos_offhand_catalog.lua', '_cos_offhand_picker.lua', '_cos_preview_runtime.lua', '_cos_news_feed_safety.lua', '_cos_customization_view_lifecycle.lua', '_cos_attachment_spawn_sync.lua', '_cos_equipment_assembly.lua', '_cos_la_apply_runtime.lua', '_cos_la_sync_transport.lua', '_cos_la_loadout_safety.lua')
         }
         @{
             # Brought under the 2500-line HARD limit at 0.12.302-beta (issue
@@ -68,8 +68,8 @@
             Name = 'chaos_wastes_tweaker_dev'
             State = 'partial'
             Entry = 'chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'
-            CeilingLines = 4717
-            RequiredModules = @('_ct_altar_reuse_owner.lua', '_ct_boon_offer_view_owner.lua', '_ct_campaign_graph_owner.lua', '_ct_chest_revive_owner.lua', '_ct_combat_hooks.lua', '_ct_boon_grant_owner.lua', '_ct_boon_registry.lua', '_ct_boon_preview_helpers.lua', '_ct_boss_grudge_marks.lua', '_ct_bot_weapon_chest_owner.lua', '_ct_command_owner.lua', '_ct_curse_lighting_owner.lua', '_ct_journey_difficulty_guard.lua', '_ct_level_load_owner.lua', '_ct_node_entry_owner.lua', '_ct_pickup_population_owner.lua', '_ct_pickup_spawn_owner.lua', '_ct_spawn_eligibility_owner.lua', '_ct_tab_panel_owner.lua', '_ct_weapon_trait_generation.lua', '_ct_regression.lua')
+            CeilingLines = 4303
+            RequiredModules = @('_ct_altar_reuse_owner.lua', '_ct_boon_offer_view_owner.lua', '_ct_campaign_graph_owner.lua', '_ct_chest_revive_owner.lua', '_ct_combat_hooks.lua', '_ct_boon_grant_owner.lua', '_ct_boon_registry.lua', '_ct_boon_preview_helpers.lua', '_ct_boss_grudge_marks.lua', '_ct_bot_weapon_chest_owner.lua', '_ct_command_owner.lua', '_ct_curse_lighting_owner.lua', '_ct_journey_difficulty_guard.lua', '_ct_level_load_owner.lua', '_ct_node_entry_owner.lua', '_ct_pickup_population_owner.lua', '_ct_pickup_spawn_owner.lua', '_ct_run_creation_owner.lua', '_ct_spawn_eligibility_owner.lua', '_ct_tab_panel_owner.lua', '_ct_weapon_trait_generation.lua', '_ct_regression.lua')
         }
         @{
             Name = 'character_weapon_variants'

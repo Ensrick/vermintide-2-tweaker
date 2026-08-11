@@ -104,15 +104,31 @@ return function(H, repo_root)
         local pf = assert(io.open(policy_path, "rb"))
         local policy_source = pf:read("*a")
         pf:close()
-        H.truthy(source:find('effective_setting("progressive_difficulty_increase")', 1, true))
+        -- #1159 wave 14: the ramp and its per-controller base moved verbatim into
+        -- _ct_run_creation_owner (setup_run establishes the base, so the two are
+        -- one mechanism). Needles are byte-identical; only the file moved. The
+        -- coin-reduction reader stays in the entry, on the
+        -- on_soft_currency_picked_up hook.
+        local owner_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner.lua"
+        local of = assert(io.open(owner_path, "rb"))
+        local owner_source = of:read("*a")
+        of:close()
+        H.truthy(owner_source:find('effective_setting("progressive_difficulty_increase")', 1, true))
         H.truthy(source:find('effective_setting("progressive_coin_reduction")', 1, true))
         H.truthy(source:find("mod._ct_progressive_policy", 1, true))
         H.truthy(source:find("policy.coin_multiplier", 1, true))
-        H.truthy(source:find("mod._ct_progressive_policy.difficulty", 1, true))
-        H.truthy(source:find("mod._ct_progdiff_pending_host_start or args[2]", 1, true))
-        H.truthy(source:find("(self and self._ct_progdiff_start) or base", 1, true))
+        H.truthy(owner_source:find("mod._ct_progressive_policy.difficulty", 1, true))
+        H.truthy(owner_source:find("mod._ct_progdiff_pending_host_start or args[2]", 1, true))
+        H.truthy(owner_source:find("(self and self._ct_progdiff_start) or base", 1, true))
+        -- The ramp base is per-CONTROLLER, never a mod-global: an overlapping or
+        -- replaced controller must not leak its start tier into a later run. Both
+        -- files must be clean of the mod-scoped form.
         H.equal(source:find("mod._ct_progdiff_start", 1, true), nil)
-        H.truthy(source:find("install_hot_join(mod, CT_RPC_SCHEMA)", 1, true))
+        H.equal(owner_source:find("mod._ct_progdiff_start", 1, true), nil)
+        H.truthy(owner_source:find("install_hot_join(mod, CT_RPC_SCHEMA)", 1, true))
+        H.equal(source:find("install_hot_join(", 1, true), nil,
+            "a second hot-join install would double-register the ct_progdiff_start RPC")
         H.truthy(policy_source:find('mod:network_register("ct_progdiff_start"', 1, true))
         H.truthy(policy_source:find('mod:hook("DeusMechanism", "sync_mechanism_data"', 1, true))
         H.truthy(policy_source:find('mod:network_send("ct_progdiff_start", peer_id', 1, true))

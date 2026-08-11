@@ -174,9 +174,17 @@ return function(H, repo_root)
         H.equal(vanilla, "wh_sword_skin_01")
         H.equal(vanilla_subbed, false)
 
-        local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
-        H.truthy(entry:find("mod._cos_wire_safe_custom_skin(", 1, true))
-        H.truthy(entry:find("mod._cos_skin_wire_surfaces.update_cosmetic_slot = true", 1, true))
+        -- #1159 wave 14: the fourth #421 encode surface (the GameSession sender)
+        -- moved out of the entry with its CosmeticUtils.update_cosmetic_slot
+        -- hook. The consumer moved; the contract did not, so follow the code.
+        local base = "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        local loadout_safety = read(base .. "_cos_la_loadout_safety.lua")
+        H.truthy(loadout_safety:find("mod._cos_wire_safe_custom_skin(", 1, true))
+        H.truthy(loadout_safety:find(
+            "mod._cos_skin_wire_surfaces.update_cosmetic_slot = true", 1, true))
+        local entry = read(base .. "cosmetics_tweaker.lua")
+        H.equal(entry:find("mod._cos_skin_wire_surfaces.update_cosmetic_slot = true", 1, true), nil,
+            "the surface registry write travels with its hook, never duplicated in the entry")
     end)
 
     H.test("Cosmetics wire wrapper restores custom skin when vanilla raises", function()

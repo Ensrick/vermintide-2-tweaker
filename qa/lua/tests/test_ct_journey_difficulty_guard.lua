@@ -41,26 +41,45 @@ return function(H, repo_root)
     local entry = read(mod_root .. "chaos_wastes_tweaker_dev.lua")
     local owner = read(owner_path)
     local regression = read(mod_root .. "_ct_regression.lua")
+    -- #1159 wave 14: the entry no longer loads this guard directly. The load moved
+    -- into the run-creation owner along with the two neighbours it was interleaved
+    -- with, so the ordering assertions below read that file.
+    local run_creation = read(mod_root .. "_ct_run_creation_owner.lua")
 
     H.test("CT #291 guard has one owner at the preserved hook boundary", function()
         local load_needle =
             "scripts/mods/chaos_wastes_tweaker_dev/_ct_journey_difficulty_guard"
         local hook_needle =
             'mod:hook("StatisticsUtil", "_register_completed_journey_difficulty"'
-        H.equal(count_plain(entry, load_needle), 1)
+        -- #1159 wave 14: this guard's load sat BETWEEN the replacement-runtime
+        -- install above it and the setup_run hook below it, so all three moved
+        -- together into _ct_run_creation_owner rather than reordering seven hook
+        -- registrations. The needles are byte-identical and only the file moved;
+        -- the guard is still loaded exactly once, from exactly one place.
+        H.equal(count_plain(run_creation, load_needle), 1)
+        H.equal(count_plain(entry, load_needle), 0)
         H.equal(count_plain(owner, hook_needle), 1)
         H.equal(count_plain(entry, hook_needle), 0)
+        H.equal(count_plain(run_creation, hook_needle), 0)
 
-        local replacement_at = assert(entry:find(
+        local replacement_at = assert(run_creation:find(
             "mod._ct_replacement_runtime.install", 1, true))
-        local owner_at = assert(entry:find(load_needle, 1, true))
-        local setup_at = assert(entry:find(
+        local owner_at = assert(run_creation:find(load_needle, 1, true))
+        local setup_at = assert(run_creation:find(
             'mod:hook("DeusRunController", "setup_run"', 1, true))
-        local regression_at = assert(entry:find(
-            "scripts/mods/chaos_wastes_tweaker_dev/_ct_regression", 1, true))
         H.truthy(replacement_at < owner_at)
         H.truthy(owner_at < setup_at)
-        H.truthy(setup_at < regression_at)
+
+        -- The entry-side half of the same ordering: the run-creation owner (which
+        -- now carries all three) still installs before the regression suite, so
+        -- /ct_regression_test append order is unchanged.
+        local run_creation_at = assert(entry:find(
+            "scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner", 1, true))
+        local regression_at = assert(entry:find(
+            "scripts/mods/chaos_wastes_tweaker_dev/_ct_regression", 1, true))
+        H.truthy(run_creation_at < regression_at)
+        H.equal(count_plain(entry,
+            "scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner"), 1)
     end)
 
     H.test("CT #291 owner retains its marker and no unrelated runtime surface", function()

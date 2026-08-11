@@ -77,8 +77,22 @@ return function(H, repo_root)
         local f = assert(io.open(path, "rb"))
         local source = f:read("*a")
         f:close()
+        -- #1159 wave 14: the census DEFINITION stays in the entry, but its single
+        -- automatic call site rode the setup_run hook into
+        -- _ct_run_creation_owner (the audit reads the rarity arrays vanilla
+        -- materializes during setup_run, so it can only fire from there). Needle
+        -- byte-identical; only the file moved.
+        local owner_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner.lua"
+        local of = assert(io.open(owner_path, "rb"))
+        local owner_source = of:read("*a")
+        of:close()
         H.truthy(source:find("CT_BOON_PRICE_AUDIT_MARKER", 1, true))
-        H.truthy(source:find("mod._ct_boon_price_audit_once(false", 1, true))
+        H.truthy(source:find("function mod._ct_boon_price_audit_once(force, run_controller)", 1, true),
+            "the audit body stays in the entry, published before the owner installs")
+        H.truthy(owner_source:find("mod._ct_boon_price_audit_once(false", 1, true))
+        H.equal(source:find("mod._ct_boon_price_audit_once(false", 1, true), nil,
+            "a second automatic call site would emit the once-per-process census twice")
         H.truthy(source:find("max_records = 192", 1, true))
         H.truthy(source:find("[ct:467] row", 1, true))
         H.equal(source:find("DeusCostSettings.shop.power_ups[record.name]", 1, true), nil)

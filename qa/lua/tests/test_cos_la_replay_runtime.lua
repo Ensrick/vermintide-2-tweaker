@@ -71,6 +71,14 @@ return function(H, repo_root)
     local la_sync_transport = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_la_sync_transport.lua")
+    -- #1159: the LA loadout-safety owner joined this census when its six hooks
+    -- (BackendUtils.set_loadout_item, three items-interface reads, and the
+    -- CosmeticUtils / LoadoutUtils net-safe senders) moved out of the entry.
+    -- Same rule as every owner above: it is ADDED to the census and the expected
+    -- family totals below are NOT lowered, so the moved hooks cannot drift.
+    local la_loadout_safety = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_la_loadout_safety.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -114,6 +122,7 @@ return function(H, repo_root)
             .. equipment_assembly:gsub("%-%-[^\n]*", "")
             .. apply_runtime:gsub("%-%-[^\n]*", "")
             .. la_sync_transport:gsub("%-%-[^\n]*", "")
+            .. la_loadout_safety:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),

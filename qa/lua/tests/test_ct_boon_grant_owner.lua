@@ -31,6 +31,12 @@ return function(H, repo_root)
     local pricing = read("_ct_boon_pricing_runtime.lua")
     local shrine = read("_ct_start_shrine_runtime.lua")
     local tab_panel = read("_ct_tab_panel_owner.lua")
+    -- #1159 wave 14: the shared mod._ct_boon_disabled predicate moved out of the
+    -- entry into the run-creation owner, WITH the roll-pool strip that is its
+    -- other caller. It is still published before this owner loads.
+    local run_creation = read("_ct_run_creation_owner.lua")
+    local RUN_CREATION_INSTALL =
+        'mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner")'
 
     -- The four grant/purchase seams. VMF silently drops a second hook on the same
     -- Class/method pair, so a duplicate would shadow the owner with no error.
@@ -214,9 +220,17 @@ return function(H, repo_root)
             1, true))
         H.truthy(owner:find("not (mod._ct_wire_safe and mod._ct_wire_safe())", 1, true))
         H.equal(count_plain(entry, "if name and mod._ct_boon_disabled(name) then"), 0)
-        -- mod._ct_boon_disabled itself stays in the entry (shared with the roll-pool
-        -- strip), and is published before the owner loads.
-        local def_at = assert(entry:find("function mod._ct_boon_disabled(name)", 1, true))
-        H.truthy(def_at < assert(entry:find(DOFILE, 1, true)))
+        -- mod._ct_boon_disabled is defined exactly once, by the run-creation owner
+        -- (it travelled with the roll-pool strip, its other caller), and is still
+        -- published BEFORE this owner loads. Same needle, new file, plus an
+        -- entry-side absence so a stray second definition fails the suite.
+        local def_at = assert(run_creation:find(
+            "function mod._ct_boon_disabled(name)", 1, true))
+        H.equal(count_plain(entry, "function mod._ct_boon_disabled(name)"), 0)
+        H.equal(count_plain(run_creation, "function mod._ct_boon_disabled(name)"), 1)
+        H.truthy(def_at > 0)
+        local publish_at = assert(entry:find(RUN_CREATION_INSTALL, 1, true))
+        H.truthy(publish_at < assert(entry:find(DOFILE, 1, true)),
+            "the predicate must be published before the grant owner loads")
     end)
 end
