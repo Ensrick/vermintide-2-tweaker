@@ -335,6 +335,9 @@ return function(H, repo_root)
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua", "rb"))
         local view_lifecycle = f:read("*a"); f:close()
         main = main .. view_lifecycle
+        f = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_update_scheduler.lua", "rb"))
+        main = main .. f:read("*a"); f:close()
         f = assert(io.open(persist_path, "rb")); local persist = f:read("*a"); f:close()
         f = assert(io.open(commit_path, "rb")); local commit = f:read("*a"); f:close()
         H.truthy(main:find('mod:hook(UIUtils, "get_ui_information_from_item"', 1, true))

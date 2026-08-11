@@ -494,6 +494,11 @@ return function(H, repo_root)
         f = assert(io.open(runtime_path, "rb"))
         local runtime = f:read("*a")
         f:close()
+        local scheduler_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_update_scheduler.lua"
+        f = assert(io.open(scheduler_path, "rb"))
+        local scheduler = f:read("*a")
+        f:close()
         -- #1159: the add_remote_player hook that consults the policy moved
         -- verbatim into the cos_la_* transport owner with the rest of the peer
         -- lifecycle. The edge is pinned where it now lives.
@@ -508,7 +513,7 @@ return function(H, repo_root)
             "LA_REPLAY_POLICY.should_publish_local_on_peer_ready", 1, true), nil)
         H.truthy(lifecycle:find(
             "mod._la_self_rebroadcast_pending = true", 1, true))
-        H.truthy(source:find(
+        H.truthy(scheduler:find(
             "mod._cos_complete_set_rebroadcast_tick()", 1, true))
         H.truthy(runtime:find(
             "deps.policy.compose_local_snapshot", 1, true))
@@ -520,7 +525,7 @@ return function(H, repo_root)
             "mod._la_offhand_restore_done == true", 1, true))
         H.truthy(runtime:find(
             "if not result.complete then", 1, true))
-        H.truthy(source:find(
+        H.truthy(scheduler:find(
             "if LA_BRIDGE.registered then _install_skin_loadout_safety() end",
             1, true), "Cosmetics-authored set must not require LA itself")
     end)

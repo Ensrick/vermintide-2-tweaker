@@ -2,7 +2,7 @@
 -- (_cos_attachment_spawn_sync.lua).
 --
 -- The load-bearing property this file exists to pin: `_la_pending_apply` is an
--- entry local that both drain sites REBIND (`_la_pending_apply = kept`), so the
+-- entry local that both owner drains REBIND (`_la_pending_apply = kept`), so the
 -- owner must resolve the queue through a getter AT ENQUEUE TIME. The last two
 -- tests are a matched pair: the first proves a deferral reaches the queue, the
 -- second REBINDS the entry-side local the way a real drain does and proves the
@@ -102,14 +102,15 @@ return function(H, repo_root)
     H.test("cos attachment spawn sync crossing state uses the correct hand-off kind", function()
         -- REBOUND by the entry -> must cross as a getter, and the owner must not
         -- shadow it with a local of its own.
-        -- #1159: THREE owners now take the retry queue this way - this one,
+        -- #1159: FOUR owners now take the retry queue this way - this one,
         -- _cos_la_apply_runtime (which additionally needs the matching SETTER
-        -- because the drain that rebinds the queue moved into it), and
+        -- because one drain moved into it), _cos_update_scheduler (the other
+        -- drain, also with a matching SETTER), and
         -- _cos_la_sync_transport (the cos_la_apply receiver, which only appends).
-        -- The census is raised to 3 rather than relaxed, so a hand-off that
+        -- The census is raised to 4 rather than relaxed, so a hand-off that
         -- silently reverts to by-value still fails here.
-        H.equal(occurrences(entry, "get_la_pending_apply = function() return _la_pending_apply end,"), 3)
-        H.equal(occurrences(entry, "set_la_pending_apply = function(t) _la_pending_apply = t end,"), 1)
+        H.equal(occurrences(entry, "get_la_pending_apply = function() return _la_pending_apply end,"), 4)
+        H.equal(occurrences(entry, "set_la_pending_apply = function(t) _la_pending_apply = t end,"), 2)
         H.equal(source:find("local _la_pending_apply", 1, true), nil)
         H.equal(occurrences(source, "local _pending = _get_la_pending_apply()"), 1)
         -- Handed over BY REFERENCE: the owner writes these two fields and the

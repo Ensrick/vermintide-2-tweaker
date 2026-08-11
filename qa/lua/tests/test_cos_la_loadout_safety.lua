@@ -46,6 +46,7 @@ return function(H, repo_root)
 
     local entry = read(base .. "cosmetics_tweaker.lua")
     local source = read(module_relative)
+    local scheduler = read(base .. "_cos_update_scheduler.lua")
     local owner_install =
         'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_loadout_safety").install(mod, {'
 
@@ -103,7 +104,7 @@ return function(H, repo_root)
         H.truthy(entry:find(
             "local _install_skin_loadout_safety = LA_LOADOUT_SAFETY.install_skin_loadout_safety", 1, true))
         -- The entry's own consumers of those exports are still there.
-        H.truthy(entry:find("if LA_BRIDGE.registered then _install_skin_loadout_safety() end", 1, true))
+        H.truthy(scheduler:find("if LA_BRIDGE.registered then _install_skin_loadout_safety() end", 1, true))
         H.truthy(entry:find("la_vanilla_fallback = _la_vanilla_fallback,", 1, true))
         H.truthy(entry:find("career_for = _wire_career_for_player,", 1, true))
         -- The entry keeps its own bridge latch; it is not this owner's state.

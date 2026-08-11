@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-11 - Cosmetics gains one bounded frame owner (#1159)
+
+Tweaker: Cosmetics 0.9.203-dev moves its existing per-frame coordination into
+`_cos_update_scheduler.lua` without changing tick order, retry limits, or wire
+shape. Executable Lua 5.1 tests pin the scheduler boundary, action-time state,
+bridge initialization, state-pull cadence, and shared LA queue rebinding. The
+Cosmetics entry ceiling falls from 3,207 to 2,914 nonblank lines.
+
 ## 2026-08-11 - Chaos Wastes peer diagnostics gain one owner (#1159)
 
 Chaos Wastes Tweaker Dev 0.7.337-dev moves peer manifest construction,

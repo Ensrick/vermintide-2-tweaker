@@ -1,5 +1,27 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.203-dev (2026-08-11) -- frame scheduler owner extracted (#1159) [untested]
+
+### Behavior-neutral extraction
+
+- Moved the single existing `mod.update` body into
+  `_cos_update_scheduler.lua` at its historical install boundary. The owner
+  preserves the exact order of deferred rewield, registration, transition
+  replay, persistence cleanup, state-pull, glow, peer-purge, TPE, and LA retry
+  work.
+- Kept the entry-owned bridge-init latch and shared LA pending queue behind
+  getter/setter pairs. Both are rebound by runtime owners; a by-value capture
+  would silently orphan sibling consumers.
+- Preserved the state-pull retry contract: one existing RPC name, five-second
+  cadence, eight-attempt cap, self-target rejection, and no new receiver or
+  per-frame transport.
+- Added engine-free coverage for ownership, placement, registration absence,
+  tick order, dependency refresh, one-way bridge initialization, bounded pulls,
+  and shared-queue rebinding. The Lua 5.1 suite passes 2,648 tests and strict
+  Cosmetics lint reports 87 files / 102 hooks with no findings.
+- Ratcheted the Cosmetics entry from 3,207 to 2,914 nonblank lines. It remains
+  above the 2,500 hard limit, so #1159 remains an active structural phase.
+
 ## 0.9.202-dev (2026-08-11) -- glow-host + local-wield owners extracted (#1159) [untested]
 
 ### Behavior-neutral extraction

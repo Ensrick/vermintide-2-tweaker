@@ -43,6 +43,21 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
   ordered local inventory, pacing, rejection, duplicate/out-of-order receive,
   and the command refresh path.
 
+### Cosmetics keeps one bounded frame scheduler — issue #1159
+
+**[STATIC + UNIT]**
+
+- `_cos_update_scheduler.lua` exclusively owns `mod.update`; the Cosmetics
+  entry and sibling owners must not assign a competing frame callback.
+- Preserve the historical tick order and the existing state-pull limits: one
+  `cos_la_state_req` sender, five-second cadence, eight attempts, no new RPC
+  registration, and a deadline-bounded LA retry queue.
+- The bridge-init latch and LA queue are rebound shared state. Keep both entry
+  crossings as getter/setter pairs; never capture either table/value once.
+- Run `qa/check_lua_unit_tests.ps1`; `test_cos_update_scheduler.lua` executes
+  ordering, dependency refresh, bridge initialization, bounded pulls, and queue
+  rebinding under Lua 5.1.
+
 ### Pusfume remains independent of Tweaker mods
 
 **[STATIC + SOLO + MULTIPLAYER]**

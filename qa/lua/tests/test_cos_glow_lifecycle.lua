@@ -15,6 +15,7 @@ return function(H, repo_root)
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_picker.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_picker_host.lua")
+        .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_update_scheduler.lua")
     local command_owner = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua")
     local button_owner = read(
