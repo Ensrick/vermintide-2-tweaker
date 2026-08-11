@@ -2139,7 +2139,11 @@ un-mergeable.
 blocking step in `.github/workflows/qa.yml` and `.github/workflows/issue-lifecycle.yml`
 (contents:read + issues:read only). It pages open issues and fetches complete
 comment history only for ready issues through GraphQL so `IssueComment.isPinned`
-is authoritative. The lightweight lifecycle workflow runs on issue open/reopen/
+is authoritative. The GraphQL transport retries only recognized TLS, connection,
+timeout, rate-limit, and HTTP 5xx failures on a bounded 2/5/10-second schedule;
+authentication, schema, and exhausted transport failures still fail closed. The
+offline self-test pins both classifications and the retry bound. The lightweight
+lifecycle workflow runs on issue open/reopen/
 close and label/comment changes, manually, and daily. GitHub exposes comment
 pin state through GraphQL but no comment-pin workflow activity, so pin-only drift
 is caught by the next manual/daily run. Both workflows fail on cardinality,
