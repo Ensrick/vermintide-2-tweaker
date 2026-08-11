@@ -285,7 +285,12 @@ Harness.test("#650 UIUtils publishes descriptors without leaking mace-only icons
         .. "_cos_equipment_assembly.lua", "rb"))
     source = source .. "\n" .. assembly_file:read("*a")
     assembly_file:close()
-    Harness.truthy(source:find("_cos_resolve_composed_appearance%(item, record%)"))
+    local runtime_file = assert(io.open(repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_item_presentation_runtime.lua", "rb"))
+    source = source .. "\n" .. runtime_file:read("*a")
+    runtime_file:close()
+    Harness.truthy(source:find("resolve_composed_appearance%(item, record%)"))
     Harness.truthy(source:find("COMPOSITE_ICONS%.publish%(item, descriptor%)"))
     Harness.truthy(source:find("COMPOSITE_ICONS%.descriptor_for%(item%)"))
     Harness.equal(source:find("_composite_icon_descriptor_by_item"), nil)
@@ -294,7 +299,7 @@ Harness.test("#650 UIUtils publishes descriptors without leaking mace-only icons
     Harness.truthy(source:find('content%["hotspot" %.%. suffix%]'))
     Harness.truthy(source:find("hotspot_content%[icon_name%] = resolved_icon"))
     Harness.equal(source:find("current_icon = content%[icon_name%]"), nil)
-    Harness.truthy(source:find("GlowPicker%.native_state_for%(%{ skin = skin %}%)"))
+    Harness.truthy(source:find("glow_picker%.native_state_for%(%{ skin = skin %}%)"))
     Harness.truthy(source:find("apply_composed_shield_glow"))
     local glow_path = repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow.lua"

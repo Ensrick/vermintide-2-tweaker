@@ -1,5 +1,28 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.204-dev (2026-08-11) -- item-presentation runtime owner extracted (#1159) [untested]
+
+### Behavior-neutral extraction
+
+- Moved exact-instance icon/name/description resolution and the one
+  `UIUtils.get_ui_information_from_item` hook into
+  `_cos_item_presentation_runtime.lua`. The engine-free descriptor policy stays
+  in `_cos_item_presentation.lua`; the new owner is only its engine adapter.
+- Kept the Hold-Tab peer-cache adapter in the same owner, but retained its
+  historical second install phase after `LA_SYNC.install_receivers()`. Reinstall
+  refreshes both phase dependency bags without duplicating the hook or peer
+  resolver.
+- Preserved all four vanilla UIUtils returns when no exact component owns the
+  card. Provider icon assets remain local presentation data: they are neither
+  persisted nor transmitted, and an unknown exact mapping fails closed to the
+  native card.
+- Added executable Lua 5.1 coverage for exclusive ownership, historical
+  placement, idempotent dependency refresh, vanilla return preservation, and
+  action-time peer-cache replacement. The full suite passes 2,654 tests and
+  strict Cosmetics lint reports 88 files / 102 hooks with no findings.
+- Ratcheted the Cosmetics entry from 2,915 to 2,646 nonblank lines. It remains
+  above the 2,500 hard limit, so #1159 remains an active structural phase.
+
 ## 0.9.203-dev (2026-08-11) -- frame scheduler owner extracted (#1159) [untested]
 
 ### Behavior-neutral extraction
@@ -19,7 +42,7 @@
   tick order, dependency refresh, one-way bridge initialization, bounded pulls,
   and shared-queue rebinding. The Lua 5.1 suite passes 2,648 tests and strict
   Cosmetics lint reports 87 files / 102 hooks with no findings.
-- Ratcheted the Cosmetics entry from 3,207 to 2,914 nonblank lines. It remains
+- Ratcheted the Cosmetics entry from 3,207 to 2,915 nonblank lines. It remains
   above the 2,500 hard limit, so #1159 remains an active structural phase.
 
 ## 0.9.202-dev (2026-08-11) -- glow-host + local-wield owners extracted (#1159) [untested]

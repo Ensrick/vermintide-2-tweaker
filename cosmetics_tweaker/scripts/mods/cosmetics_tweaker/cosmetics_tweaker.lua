@@ -106,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.203-dev"
+local MOD_VERSION = "0.9.204-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -962,277 +962,36 @@ mod._la_restore_offhand_selections = function()
     end
 end
 
-local function _cos_ui_icon_available(icon)
-    -- #650: tristate (ok, class) - "transient-ui" = shipped material resident
-    -- (Application.can_get) but the VMF atlas injection not serving it yet.
-    return COMPOSITE_ICON_FACTORY.ui_icon_availability(icon, UIAtlasHelper,
-        Application and Application.can_get)
-end
-
-local function _cos_active_skin(item, backend_id)
-    local skin = backend_id and LA_PERSIST
-        and LA_PERSIST.get_saved_illusion(backend_id) or nil
-    if not skin or skin == "" then skin = item and item.skin end
-    local item_key = item and (item.key
-        or (item.data and (item.data.name or item.data.key)))
-    if (not skin or skin == "") and item_key and WeaponSkins
-            and WeaponSkins.default_skins then
-        skin = WeaponSkins.default_skins[item_key]
-    end
-    return skin
-end
-
--- Shared #650 exact-instance appearance resolver. Icon publication and held
--- shield material application both consume this descriptor; neither surface
--- may independently infer primary glow or offhand compatibility.
-_cos_resolve_composed_appearance = function(item, record, publish_for_icon)
-    if type(item) ~= "table" then return nil end
-    if publish_for_icon ~= false then COMPOSITE_ICONS.publish(item, nil) end
-    local backend_id = item.backend_id or item.ItemInstanceId
-    if backend_id == nil then return nil end
-    local item_data = item.data or (item.key and ItemMasterList
-        and rawget(ItemMasterList, item.key))
-    local item_type = item_data and item_data.item_type
-    local skin = _cos_active_skin(item, backend_id)
-    if not skin then return nil end
-
-    if record == nil and LA_PERSIST then
-        local live = _offhand_selection[backend_id]
-        local saved = LA_PERSIST.get_saved_offhands_for(backend_id)
-        record = live and live.left_hand_unit
-            or (saved and saved.left_hand_unit)
-    end
-    local offhand_unit = type(record) == "table"
-        and (record.unit_path or record.unit or record.intended_unit) or nil
-    local offhand_armoury_key = type(record) == "table"
-        and (record.armoury_key or record.la_armoury_key) or nil
-    if not offhand_unit and not offhand_armoury_key then
-        local skin_record = WeaponSkins and WeaponSkins.skins
-            and WeaponSkins.skins[skin]
-        local skin_data = type(skin_record) == "table"
-            and (skin_record.data or skin_record) or nil
-        offhand_unit = skin_data and skin_data.left_hand_unit
-    end
-    local glow_state = GlowPicker.committed_state_for(backend_id, { skin = skin })
-    local glow_source = glow_state and "committed" or nil
-    if not glow_state then
-        glow_state = GlowPicker.native_state_for({ skin = skin })
-        if glow_state then glow_source = "native" end
-    end
-    local resolve_args = {
-        backend_id = backend_id,
-        exact_instance = true,
-        item_type = item_type,
-        skin = skin,
-        offhand_unit = offhand_unit,
-        offhand_armoury_key = offhand_armoury_key,
-        glow_state = glow_state,
-        glow_source = glow_source,
-    }
-    local descriptor, reason = COMPOSITE_ICONS.resolve_detailed(resolve_args)
-    if descriptor and publish_for_icon ~= false then
-        local ready, icon_reason = COMPOSITE_ICONS.icon_ready(
-            descriptor, _cos_ui_icon_available)
-        if not ready then
-            descriptor = nil
-            reason = icon_reason
-        end
-    end
-    if COMPOSITE_ICONS.claim_diagnostic(reason, resolve_args) then
-        mod:info("[cosmetics:650] descriptor %s bid=%s type=%s skin=%s offhand=%s armoury=%s glow=%s held=%s primary=%s shield=%s",
-            tostring(reason), tostring(resolve_args.backend_id),
-            tostring(resolve_args.item_type), tostring(resolve_args.skin),
-            tostring(resolve_args.offhand_unit),
-            tostring(resolve_args.offhand_armoury_key),
-            tostring(resolve_args.glow_source),
-            tostring(descriptor and descriptor.shield_glow
-                and descriptor.shield_glow.variable),
-            tostring(descriptor and descriptor.primary_texture),
-            tostring(descriptor and descriptor.offhand_texture))
-    end
-    if publish_for_icon ~= false then COMPOSITE_ICONS.publish(item, descriptor) end
-    return descriptor, reason
-end
-
-local function _cos_localized_name(key)
-    if type(key) ~= "string" or key == "" then return nil end
-    local L = rawget(_G, "Localize")
-    if type(L) ~= "function" then return key end
-    local ok, value = pcall(L, key)
-    if ok and type(value) == "string" and value ~= ""
-            and value ~= key and value ~= "<" .. key .. ">" then
-        return value
-    end
-    return key
-end
-
-local function _cos_presentation_ownership(item_type)
-    if mod._independent_dual_item_types
-            and mod._independent_dual_item_types[item_type] then return "dual" end
-    if _SHIELD_ICON_OWNER_ITEM_TYPES[item_type] then return "shield" end
-    return nil
-end
-
-local function _cos_option_for_record(item, record, exact_skin)
-    if type(record) ~= "table" then return nil end
-    local item_data = item and (item.data or (item.key and ItemMasterList
-        and rawget(ItemMasterList, item.key)))
-    local item_type = item_data and item_data.item_type
-    local pools = mod._ensure_independent_dual_pool
-        and mod._ensure_independent_dual_pool(item_type) or _offhand_options[item_type]
-    local option = OFFHAND_NAMES.match_option(record,
-        pools and pools.left_hand_unit)
-    if not option and record.name
-            and (record.unit or record.intended_unit or record.la_armoury_key) then
-        option = record
-    end
-    if not option then return nil end
-    local external_la = option.la_armoury_key
-        and option.cos_authored ~= true
-    if external_la then
-        local la_mod = get_mod("Loremasters-Armoury")
-        option = mod._la_option_icon_policy.resolve_for_item(option, item_type,
-            exact_skin or (item and item.skin), la_mod and la_mod.SKIN_LIST,
-            LA_BRIDGE.normalize_weapon_type)
-    end
-    -- An external LA option may use a mesh shared by several weapon families.
-    -- Once its exact (Armoury key, target type, skin) mapping rejects or misses,
-    -- the native card is authoritative. Generic unit lookup would select a
-    -- sibling family's authored icon and recreate #923.
-    if not external_la and not option.inventory_icon
-            and (option.unit or option.intended_unit) then
-        local recovered = _inventory_icon_for_offhand_unit(
-            option.unit or option.intended_unit, nil)
-        if recovered then
-            local copy = {}
-            for key, value in pairs(option) do copy[key] = value end
-            copy.inventory_icon = recovered
-            option = copy
-        end
-    end
-    return option
-end
-
-local function _cos_primary_component_name(item, display_name, ownership, saved_illusion)
-    local fallback = _cos_localized_name(display_name)
-    if ownership ~= "shield" then return fallback end
-    local skin_key = saved_illusion or (item and item.skin)
-    local skin = skin_key and WeaponSkins and WeaponSkins.skins
-        and WeaponSkins.skins[skin_key]
-    local data = type(skin) == "table" and (skin.data or skin) or nil
-    local primary_unit = data and data.right_hand_unit
-    if not primary_unit then return fallback end
-    local records = {}
-    for key, candidate in pairs(WeaponSkins.skins or {}) do
-        local cdata = type(candidate) == "table" and (candidate.data or candidate) or nil
-        if cdata and cdata.right_hand_unit == primary_unit and cdata.display_name then
-            records[#records + 1] = {
-                key = type(key) == "string" and key or candidate.name,
-                primary_unit = primary_unit,
-                name = _cos_localized_name(cdata.display_name),
-                is_pair = cdata.left_hand_unit ~= nil,
-            }
-        end
-    end
-    return OFFHAND_NAMES.primary_name_for_unit(primary_unit, records) or fallback
-end
-
-local function _cos_publish_presentation_name(primary_name, secondary_name)
-    local key, combined = OFFHAND_NAMES.presentation_key(primary_name, secondary_name)
-    if not key then return nil end
-    mod._cos.presentation_localization[key] = combined
-    return key
-end
-
-local function _cos_resolve_presentation(item, base_icon, display_name,
-        base_description, ownership, record, saved_illusion)
-    local exact_skin = item and item.skin
-        or (type(record) == "table"
-            and (record.vanilla_skin or record.vanilla_key))
-    local option = _cos_option_for_record(item, record, exact_skin)
-    if not option then return base_icon, display_name, base_description, false end
-    local primary = _cos_primary_component_name(item, display_name, ownership, saved_illusion)
-    local descriptor = ITEM_PRESENTATION.resolve({
-        base_icon = base_icon,
-        primary_name = primary,
-        secondary_option = option,
-        ownership = ownership,
-        local_resource_available = _cos_ui_icon_available,
-    })
-    if not descriptor.changed then return base_icon, display_name, base_description, false end
-    local name_key = _cos_publish_presentation_name(
-        descriptor.primary_name, descriptor.secondary_name)
-    local description_key, description_text = OFFHAND_NAMES.description_presentation_key(
-        descriptor.secondary_description)
-    if description_key then mod._cos.presentation_localization[description_key] = description_text end
-    return descriptor.icon, name_key or display_name,
-        description_key or base_description, true
-end
-
--- #376 exact-instance icon seam. Vanilla passes the full backend item into
--- UIUtils and resolves the first return from item.skin / WeaponSkins
--- (ui_utils.lua:219-260). LA's real authored icon lives instead at
--- SKIN_LIST[armoury_key].icons[vanilla_skin] (LA funcs.lua:103-110). Override
--- only that first return for a backend id with a persisted LA choice; never
--- mutate shared WeaponSkins/ItemMasterList tables (the v0.9.9.0 failure).
-if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
-    mod:hook(UIUtils, "get_ui_information_from_item", function(func, item)
-        local inventory_icon, display_name, description, store_icon = func(item)
-        if item and item._cos_presentation_display_name then
-            display_name = item._cos_presentation_display_name
-        end
-        local backend_id = item and (item.backend_id or item.ItemInstanceId)
-        if backend_id and mod._la_instance_policy and LA_PERSIST then
-            local la = get_mod("Loremasters-Armoury")
-            local item_data = item.data or (item.key and ItemMasterList
-                and rawget(ItemMasterList, item.key))
-            local item_type = item_data and item_data.item_type
-            local ownership
-            if mod._independent_dual_item_types
-                    and mod._independent_dual_item_types[item_type] then
-                ownership = "dual"
-            elseif _SHIELD_ICON_OWNER_ITEM_TYPES[item_type] then
-                ownership = "shield"
-            end
-            local saved_offhands = LA_PERSIST.get_saved_offhands_for(backend_id)
-            local saved_left = saved_offhands and saved_offhands.left_hand_unit
-            -- Records authored before icon ownership was introduced only
-            -- persisted the exact mesh path. Derive presentation metadata on
-            -- read without mutating the persistence module's read-only table.
-            if ownership == "shield" and type(saved_left) == "table"
-                    and not saved_left.armoury_key and not saved_left.inventory_icon
-                    and saved_left.unit_path then
-                local recovered_icon = _inventory_icon_for_offhand_unit(
-                    saved_left.unit_path, item_data and item_data.template)
-                if recovered_icon then
-                    local recovered_left = {}
-                    for key, value in pairs(saved_left) do recovered_left[key] = value end
-                    recovered_left.inventory_icon = recovered_icon
-                    saved_offhands = { left_hand_unit = recovered_left }
-                end
-            end
-            local saved_illusion = LA_PERSIST.get_saved_illusion(backend_id)
-            local icon = mod._la_icon_provider.resolve(item, saved_illusion, saved_offhands,
-                LA_BRIDGE and LA_BRIDGE.backend_to_armoury,
-                LA_BRIDGE and LA_BRIDGE.backend_to_vanilla,
-                la and la.SKIN_LIST,
-                ownership)
-            if icon then inventory_icon = icon end
-            _offhand_session_state.migrate_legacy(backend_id)
-            local live_hands = _offhand_selection[backend_id]
-            local record = live_hands and live_hands.left_hand_unit
-                or (saved_offhands and saved_offhands.left_hand_unit)
-            inventory_icon, display_name, description = _cos_resolve_presentation(item,
-                inventory_icon, display_name, description, ownership, record,
-                saved_illusion)
-            -- Publish for the exact ItemGrid cell only. UIUtils also feeds
-            -- crafting and Hold-Tab, whose widgets do not own the shield/glow
-            -- passes; their returned vanilla/owned icon must stay unchanged.
-            _cos_resolve_composed_appearance(item, record)
-        end
-        return inventory_icon, display_name, description, store_icon
-    end)
-end
+-- #376/#650 engine-facing exact-instance item-card owner. The engine-free
+-- descriptor policy remains in _cos_item_presentation.lua; this adapter owns
+-- the one UIUtils hook and exports the same functions consumed later in entry.
+local _cos_item_presentation_runtime = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_item_presentation_runtime").install(mod, {
+    composite_icon_factory = COMPOSITE_ICON_FACTORY,
+    ui_atlas_helper = UIAtlasHelper,
+    get_application = function() return Application end,
+    la_persist = LA_PERSIST,
+    get_item_master_list = function() return ItemMasterList end,
+    get_weapon_skins = function() return WeaponSkins end,
+    offhand_selection = _offhand_selection,
+    glow_picker = GlowPicker,
+    composite_icons = COMPOSITE_ICONS,
+    offhand_names = OFFHAND_NAMES,
+    shield_icon_owner_item_types = _SHIELD_ICON_OWNER_ITEM_TYPES,
+    offhand_options = _offhand_options,
+    get_mod = get_mod,
+    la_bridge = LA_BRIDGE,
+    inventory_icon_for_offhand_unit = _inventory_icon_for_offhand_unit,
+    item_presentation = ITEM_PRESENTATION,
+    la_icon_provider = mod._la_icon_provider,
+    la_instance_policy = mod._la_instance_policy,
+    offhand_session_state = _offhand_session_state,
+    get_localize = function() return rawget(_G, "Localize") end,
+    ui_utils = UIUtils,
+})
+_cos_resolve_composed_appearance =
+    _cos_item_presentation_runtime.resolve_composed_appearance
+local _cos_active_skin = _cos_item_presentation_runtime.active_skin
 
 -- #925: extracted retained-card refresh/publisher; callers compose singleton seams.
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_ui_presentation_refresh").install(mod, {
@@ -2301,53 +2060,12 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_runtime").install(mod,
 -- the owner asserts that this runs exactly once.
 LA_SYNC.install_receivers()
 
--- #641/#629 contextual Hold-Tab adapter. Remote loadout snapshots deliberately
--- have no backend_id, so exact-instance persistence cannot identify their
--- independently selected hand. Reuse the existing parity-gated peer caches;
--- never add component names or resource paths to a vanilla/network payload.
-mod._cos.resolve_peer_item_presentation = function(wearer_peer, ui_slot_name,
-        item, base_icon, base_display_name, base_description)
-    local item_data = item and item.data
-    local item_type = item_data and item_data.item_type
-    local ownership = _cos_presentation_ownership(item_type)
-    if not (wearer_peer and ownership) then return nil end
-
-    local candidate_keys, seen = {}, {}
-    local function add(value)
-        if type(value) == "string" and value ~= "" and not seen[value] then
-            seen[value] = true
-            candidate_keys[#candidate_keys + 1] = value
-        end
-    end
-    add(ui_slot_name)
-    add(item_data and item_data.template)
-    add(item_data and item_data.name)
-    add(item_data and item_data.key)
-    add(item_type)
-    add(item and item.name)
-    add(item and item.key)
-
-    local record = ITEM_PRESENTATION.find_peer_record(wearer_peer,
-        candidate_keys, _la_equips_by_peer, mod._offhand_mesh_by_peer)
-    if not record then return nil end
-
-    if base_icon == nil or base_display_name == nil or base_description == nil then
-        local icon, name, description = UIUtils.get_ui_information_from_item(item)
-        base_icon = base_icon or icon
-        base_display_name = base_display_name or name
-        base_description = base_description or description
-    end
-    local icon, display_name, description, changed = _cos_resolve_presentation(item,
-        base_icon, base_display_name, base_description, ownership, record, nil)
-    if not changed then return nil end
-    return {
-        icon = icon,
-        display_name = display_name,
-        description = description,
-        ownership = ownership,
-        source = "peer_cache",
-    }
-end
+-- #641/#629 Hold-Tab peer-cache phase. Install only after LA transport owns
+-- its receivers, preserving the historical availability boundary.
+_cos_item_presentation_runtime.install_peer({
+    la_equips_by_peer = _la_equips_by_peer,
+    get_offhand_mesh_by_peer = function() return mod._offhand_mesh_by_peer end,
+})
 
 -- The host-authoritative per-peer glow transport keeps its historical
 -- post-LA-RPC, pre-husk-wield install position. The shared husk hook below

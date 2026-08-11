@@ -15,9 +15,12 @@ return function(H, repo_root)
     end
     local runtime_path = repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua"
+    local presentation_runtime_path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_item_presentation_runtime.lua"
     local catalog_path = repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua"
-    local entry, gk = read(entry_path) .. read(catalog_path) .. read(runtime_path), read(gk_path)
+    local entry, gk = read(entry_path) .. read(catalog_path) .. read(runtime_path)
+        .. read(presentation_runtime_path), read(gk_path)
 
     H.test("component localization keys are stable and independently qualified", function()
         H.equal(policy.SCHEMA_VERSION, 1)
@@ -221,7 +224,7 @@ return function(H, repo_root)
         H.truthy(entry:find("_decorate_dual_component", 1, true))
         H.truthy(entry:find("_decorate_shield_option", 1, true))
         H.truthy(entry:find("OFFHAND_NAMES.compose", 1, true))
-        H.truthy(entry:find("OFFHAND_NAMES.description_presentation_key", 1, true))
+        H.truthy(entry:find("offhand_names.description_presentation_key", 1, true))
         H.truthy(entry:find("OFFHAND_NAMES.merge_unique", 1, true))
         H.truthy(entry:find("duplicate component identity in selectable pool", 1, true))
         H.truthy(entry:find("presentation_localization[description_key]", 1, true))

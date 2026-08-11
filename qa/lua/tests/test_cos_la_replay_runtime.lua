@@ -85,6 +85,12 @@ return function(H, repo_root)
     local local_wield_runtime = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_local_wield_runtime.lua")
+    -- #1159: the exact-instance item-card owner joined the census when its one
+    -- UIUtils hook moved out of entry. Include it without lowering the family
+    -- total so hook ownership cannot silently disappear during extraction.
+    local item_presentation_runtime = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_item_presentation_runtime.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -131,6 +137,7 @@ return function(H, repo_root)
             .. la_loadout_safety:gsub("%-%-[^\n]*", "")
             .. glow_picker_host:gsub("%-%-[^\n]*", "")
             .. local_wield_runtime:gsub("%-%-[^\n]*", "")
+            .. item_presentation_runtime:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),

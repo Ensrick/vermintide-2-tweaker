@@ -1,12 +1,22 @@
 # Changelog
 
+## 2026-08-11 - Cosmetics item presentation gains one runtime owner (#1159)
+
+Tweaker: Cosmetics 0.9.204-dev moves exact-instance item-card resolution, the
+single `UIUtils.get_ui_information_from_item` hook, and the late Hold-Tab peer
+adapter into `_cos_item_presentation_runtime.lua`. The two-phase owner preserves
+the historical post-LA receiver boundary, refreshes action-time dependencies on
+reinstall, and adds no transport or lifecycle surface. Lua 5.1 coverage pins
+vanilla return preservation, hook ownership, late peer-cache refresh, and source
+cardinality. The entry ceiling falls from 2,915 to 2,646 nonblank lines.
+
 ## 2026-08-11 - Cosmetics gains one bounded frame owner (#1159)
 
 Tweaker: Cosmetics 0.9.203-dev moves its existing per-frame coordination into
 `_cos_update_scheduler.lua` without changing tick order, retry limits, or wire
 shape. Executable Lua 5.1 tests pin the scheduler boundary, action-time state,
 bridge initialization, state-pull cadence, and shared LA queue rebinding. The
-Cosmetics entry ceiling falls from 3,207 to 2,914 nonblank lines.
+Cosmetics entry ceiling falls from 3,207 to 2,915 nonblank lines.
 
 ## 2026-08-11 - Chaos Wastes peer diagnostics gain one owner (#1159)
 

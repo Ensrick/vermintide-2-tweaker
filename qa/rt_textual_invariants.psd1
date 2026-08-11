@@ -463,6 +463,16 @@
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_loadout_safety.lua'; needle='(?m)^(?!\s*--).*_net_safe_hook_status'; literal=$false; polarity='absent'; issueRef='#1159'; note='the net-safe status table stays ENTRY-owned: the entry declares it, brokers it to _cos_attachment_spawn_sync and reads it back; this owner must not become a third party to it. Comment-excluding regex - the owner NOT-OWNED-HERE header names it on purpose.' }
     @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='local _net_safe_hook_status = {'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the startup verification and the attachment-spawn owner share exactly one status table, declared here.' }
 
+    # #1159 wave 18: exact-item presentation is one two-phase runtime owner.
+    # The UIUtils hook moves in phase 1; the contextual Hold-Tab adapter is
+    # published from the same owner after LA receivers install.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='"scripts/mods/cosmetics_tweaker/_cos_item_presentation_runtime").install(mod, {'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the exact-item presentation owner is installed exactly once at its historical resolver boundary.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod:hook(UIUtils, "get_ui_information_from_item"'; literal=$true; polarity='absent'; issueRef='#1159'; note='the entry must not re-register the UIUtils presentation hook; VMF would silently drop one owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_item_presentation_runtime.lua'; needle='mod:hook(UIUtils, "get_ui_information_from_item"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the exact-instance item-card hook is registered exactly once by its runtime owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='mod._cos.resolve_peer_item_presentation = function'; literal=$true; polarity='absent'; issueRef='#1159'; note='the entry must not re-inline the Hold-Tab peer adapter beside its two-phase owner.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_item_presentation_runtime.lua'; needle='mod._cos.resolve_peer_item_presentation = function'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='the contextual peer-cache adapter is published exactly once from phase 2.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='_cos_item_presentation_runtime.install_peer({'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1159'; note='phase 2 remains an explicit one-shot call after LA_SYNC.install_receivers; executable tests pin the order.' }
+
     # ============================ cim_dev ============================
     # Source: crafting_in_modded_dev/CHANGELOG.md 0.8.57-dev (issue 511). The two
     # hook-registration checks whose source-text needles skip in retail.
