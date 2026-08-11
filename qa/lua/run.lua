@@ -352,6 +352,7 @@ local suites = {
     "test_cos_news_feed_safety",
     "test_cos_customization_view_lifecycle",
     "test_cos_bottom_runtime_owners",
+    "test_cos_update_scheduler",
     "test_cos_equipment_assembly",
     "test_cos_la_apply_runtime",
     "test_cos_la_sync_transport",

@@ -90,6 +90,12 @@ no override); `[tbl]` = table-form hook against a plain table (nil-guarded).
 > existing `NewsFeedUI.draw` origin replacement. It preserves the vanilla pass and
 > active-news iteration order, catches only per-widget stale-material failures, and
 > purges/recycles failed widgets after `end_pass`; it adds no appearance behavior.
+>
+> **Phase 5 frame scheduler owner.** `_cos_update_scheduler.lua` owns the one
+> existing `mod.update` callback and preserves its exact action order. It adds no
+> hook, RPC receiver, command, or lifecycle callback. The one existing
+> `cos_la_state_req` send remains bounded to five-second retries and eight
+> attempts; transition and material replays remain network-silent.
 
 ### Items / gear / inventory spawn - owner path (owner doc: `docs/engine/06`)
 
@@ -285,7 +291,7 @@ cache one across frames (GLOW_SYSTEM §Stingray gotcha); `Material.num_parameter
 be called (`:435-438` memo).
 
 The optional #48 CIM persistence bridge adds no engine hook, renderer, RPC, or
-network identity. The existing `mod.update` lifecycle retries one cheap
+network identity. The `_cos_update_scheduler.lua` lifecycle retries one cheap
 load-order-safe registration until `cim_dev` or `cim` exposes its complete
 public exact-craft API. CIM's bounded restore callback rehydrates already-bound
 local unit contexts; all later units use the existing spawn-time glow restore

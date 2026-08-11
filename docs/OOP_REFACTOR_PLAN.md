@@ -57,7 +57,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 |---|---|---|---|
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
-| Cosmetics | Partial | Twenty-six required owners now cover the prior slices plus glow-picker host UI/commands and the local wield appearance-replay seam; current entry ceiling 3,207 nonblank lines remains above the 2,500 hard limit and is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
+| Cosmetics | Partial | Twenty-seven required owners now cover the prior slices plus the single per-frame coordination seam; current entry ceiling 2,914 nonblank lines remains above the 2,500 hard limit and is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
 | Weapon Tweaker | Partial | Animation, availability, cross-character template, local/preview presentation, Moonfire AOE, regression, and balance owners retained; stable/dev entry ceilings 2,212/2,371 nonblank lines | #504 / #2 / #1159 |
 | Career Tweaker | Structural phase complete | 907-line balance orchestrator under its 910-line ceiling; bounded catalog, hook, and Foot Knight owners retained by contract | #504 / #2 / #1159 |
 | CIM Dev | Partial | Ten required forge/inventory/command/economy/loadout/regression owners retained; entry ceiling 2,353 nonblank lines, below the hard limit but above the 1,500 completion target | #1159 / #504 / #2 |
@@ -200,6 +200,12 @@ reassembly, diff logging, and `/peers` moved together into
 `_ct_peer_manifest_owner.lua`. The behavior-neutral boundary fixture covers the
 wire and state machine; CT Dev's ratcheted entry ceiling is now 4,114 nonblank
 lines (down from 4,303). CT remains partial.
+
+**2026-08-11 Cosmetics wave 17:** the single VMF `mod.update` scheduler moved
+into `_cos_update_scheduler.lua`. Tick order and every existing retry bound are
+executable invariants; rebound entry state crosses through paired accessors.
+Cosmetics' ratcheted entry ceiling is now 2,914 nonblank lines (down from
+3,207). Cosmetics remains partial.
 
 ### WS6 - Hygiene sweep (small, high count)
 

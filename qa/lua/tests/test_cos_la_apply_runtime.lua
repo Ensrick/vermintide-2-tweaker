@@ -7,17 +7,17 @@
 --   1. THE ACCESSOR PAIR. `_la_pending_apply` (the LA retry queue) stays an
 --      ENTRY local, and BOTH of its drains REBIND it (`_la_pending_apply = kept`)
 --      instead of mutating in place - one drain moved into this owner, the other
---      stayed on the entry in mod.update. So the queue crosses the boundary as a
+--      moved into `_cos_update_scheduler`. So the queue crosses both boundaries as a
 --      GETTER **and** a SETTER, and each half gets a matched pair of tests:
 --        * getter: the first test proves the owner appends to the queue at all;
---          the second REBINDS the entry-side local the way mod.update's drain
+--          the second REBINDS the entry-side local the way the scheduler drain
 --          does and proves the append lands in the NEW table. A by-value
 --          hand-off passes the first and fails only the second.
 --        * setter: the control test asserts the same revert call's effect on the
 --          BY-VALUE store, which the setter cannot influence; the treatment test
 --          asserts the queue rebind is VISIBLE TO THE ENTRY. Drop the setter and
 --          the control still passes - the owner's private copy is purged - while
---          the entry keeps handing the un-purged queue to mod.update, which
+--          the entry keeps handing the un-purged queue to the scheduler, which
 --          re-imposes the cosmetic that was just reverted.
 --      That second failure is invisible to a compile, to luacheck, and to every
 --      other test in this suite.
@@ -142,7 +142,7 @@ return function(H, repo_root)
     -- ================================================================
 
     -- The entry-side local the accessors front. Rebinding THIS variable is what
-    -- mod.update's drain does, and what the owner's setter must be able to do.
+    -- the scheduler's drain does, and what the owner's setter must be able to do.
     local entry_pending
     local la_equips_by_peer
     local mod
@@ -269,7 +269,7 @@ return function(H, repo_root)
         build()
         -- Hold the table the entry started with. The owner rebinds the queue
         -- (`_la_pending_apply = kept`); without the setter the entry would keep
-        -- pointing at THIS table, and mod.update would re-impose the cosmetic the
+        -- pointing at THIS table, and the scheduler would re-impose the cosmetic the
         -- revert just removed. Identity, not contents, is the assertion.
         local before = { queue("peer_a", "slot_melee"), queue("peer_b", "slot_melee") }
         entry_pending = before
@@ -306,7 +306,7 @@ return function(H, repo_root)
         la_equips_by_peer.peer_a = { slot_melee = eq }
         la_equips_by_peer.peer_b = { slot_melee = eq }
         mod._la_reconcile("peer_a", "slot_melee", "test", true)
-        -- mod.update's drain rebinds the queue to a fresh filtered table. An
+        -- the scheduler drain rebinds the queue to a fresh filtered table. An
         -- install-time value would leave the owner appending to the discarded
         -- one, and the deferred re-paint would never be drained. A second wearer
         -- is used because the mesh pulse is rate-limited per owner unit.

@@ -12,13 +12,13 @@
 --    registrations ~800 lines earlier - so the ordering is asserted at both call
 --    sites, and the owner itself asserts phase 2 runs exactly once.
 --
--- 2. THE RETRY-QUEUE GETTER. `_la_pending_apply` is an entry local that its
---    drains REBIND (`_la_pending_apply = kept`). The cos_la_apply receiver only
+-- 2. THE RETRY-QUEUE GETTER. `_la_pending_apply` is an entry local that its two
+--    owner drains REBIND (`_la_pending_apply = kept`). The cos_la_apply receiver only
 --    appends to it, so a by-value hand-off would load, would pass a plain
 --    "a failed apply is deferred" test, and would silently park every deferral
 --    in a table nobody drains. The matched pair below is the signal that cannot
 --    move: the first test proves a deferral reaches the queue, the second
---    REBINDS the entry-side local the way mod.update's drain does and proves the
+--    REBINDS the entry-side local the way the scheduler drain does and proves the
 --    NEXT deferral reaches the new table. Converting the getter back into an
 --    install-time value leaves the first green and reddens only the second.
 return function(H, repo_root)
@@ -178,7 +178,7 @@ return function(H, repo_root)
         _G.PlayerManager, _G.printf, _G.get_mod = saved.PlayerManager, saved.printf, saved.get_mod
     end
 
-    -- The entry-side local the getter fronts. Rebinding THIS is what mod.update's
+    -- The entry-side local the getter fronts. Rebinding THIS is what the scheduler's
     -- drain does, and what the receiver must be able to see.
     local entry_pending
     local la_equips_by_peer, glow_by_peer
@@ -367,7 +367,7 @@ return function(H, repo_root)
         })
         local discarded = entry_pending
         H.equal(#discarded, 1)
-        -- Exactly what mod.update's drain does: keep the survivors in a FRESH
+        -- Exactly what the scheduler drain does: keep the survivors in a FRESH
         -- table and rebind the entry local to it.
         entry_pending = {}
         handlers["cos_la_apply"]("remote-host", 2, {

@@ -34,6 +34,7 @@ return function(H, repo_root)
     -- asserted absent from the entry.
     local apply_runtime = read("_cos_la_apply_runtime.lua")
     local local_wield_runtime = read("_cos_local_wield_runtime.lua")
+    local update_scheduler = read("_cos_update_scheduler.lua")
 
     H.test("Cos #518 yield boundary is mechanism AND game mode (staging never yields)", function()
         local body = main:match(
@@ -99,8 +100,10 @@ return function(H, repo_root)
         H.truthy(main:find('if context == "ingame" and mod._la_deus_weapon_yield() then', 1, true),
             "ingame paint gate missing")
         -- Pending-apply retries treat deus-yield as terminal (no spin-to-deadline).
-        H.truthy(main:find('reason ~= "deus-yield"', 1, true),
+        H.truthy(update_scheduler:find('reason ~= "deus-yield"', 1, true),
             "pending drain must treat deus-yield as a terminal reason")
+        H.equal(main:find('reason ~= "deus-yield"', 1, true), nil,
+            "pending-drain policy must live with the frame owner, not the entry")
         -- Local wield re-apply (the observed stomper) is gated too.
         H.truthy(local_wield_runtime:find(
             'and not mod._la_deus_weapon_yield()', 1, true),
