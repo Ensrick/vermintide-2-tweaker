@@ -42,9 +42,10 @@ rules were fully enforced is historical: #429 and #540 subsequently put the full
 gate on protected `master`. Remaining decomposition debt is still real because the
 size gate ratchets nine over-limit files instead of treating them as compliant.
 
-## Current execution inventory (2026-07-19)
+## Current execution inventory (2026-08-11)
 
-Measured on `origin/master` `790c5661` with the same
+Measured on `origin/master` `77a5b4d6` plus the current bounded Cosmetics slice,
+with the same
 `(Get-Content | Measure-Object -Line).Lines` metric used by
 `qa/check_file_sizes.ps1`. The machine-readable owner is now
 `qa/decomposition_contracts.psd1`; `qa/check_decomposition_contracts.ps1`
@@ -56,12 +57,13 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 |---|---|---|---|
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
-| Cosmetics | Partial | Four phase slices plus runtime/wire, exact-item offhand session-state, modded-illusion-swap, magic-family visibility, command ownership, item-grid/illusion-card presentation, one three-callback mod lifecycle owner, bounded #660 LA replay and glow transport owners, independent offhand catalog/package plus customization-picker owners, the 12-hook preview/score/package runtime owner, and the single-hook stale-news-widget safety owner; entry ceiling is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
-| Weapon Tweaker | Partial | Animation, runtime-check, and feature-owner slices landed; beta/dev entry ceilings 4,183/4,335 lines | #504 / #2 |
-| Career Tweaker | Structural phase complete | 910-line balance orchestrator; bounded early/late declarative catalogs, composition owner, hook owner, and Foot Knight owner retained by contract | #504 / #2 / #1159 |
-| CIM Dev | Partial | Forge/inventory/diagnostic/command, read-only Weaves economy, Athanor preview lifecycle, picker-category lifecycle, and Athanor presentation owners plus regression suite extracted; entry ceiling 3,764 nonblank lines | #1159 / #504 / #2 |
-| CT Dev | Partial | Combat, boon, Starting-Boon Preview helpers, command, journey-stat guard, weapon-trait generation, bot weapon-chest/reusable-altar, Boss Grudge Marks, curse-lighting/performance-census, and regression owners extracted; shared #461/#533/#571 draw seam retained; entry ceiling 9,314 nonblank lines | #1159 / #504 / #291 / #107 / #104 / #258 / #271 / #2 |
-| CWV | Partial | Catalog, core-template constructors, commands, regression, exact-appearance, and husk owners extracted; entry ceiling 9,633 lines | #504 / #2 |
+| Cosmetics | Partial | Twenty-six required owners now cover the prior slices plus glow-picker host UI/commands and the local wield appearance-replay seam; current entry ceiling 3,207 nonblank lines remains above the 2,500 hard limit and is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
+| Weapon Tweaker | Partial | Animation, availability, cross-character template, local/preview presentation, Moonfire AOE, regression, and balance owners retained; stable/dev entry ceilings 2,212/2,371 nonblank lines | #504 / #2 / #1159 |
+| Career Tweaker | Structural phase complete | 907-line balance orchestrator under its 910-line ceiling; bounded catalog, hook, and Foot Knight owners retained by contract | #504 / #2 / #1159 |
+| CIM Dev | Partial | Ten required forge/inventory/command/economy/loadout/regression owners retained; entry ceiling 2,353 nonblank lines, below the hard limit but above the 1,500 completion target | #1159 / #504 / #2 |
+| CT Dev | Partial | Twenty-two required altar, boon, campaign, combat, curse, level/node/spawn, tab-panel, trait, and regression owners retained; entry ceiling 4,303 nonblank lines | #1159 / #504 / #291 / #107 / #104 / #258 / #271 / #2 |
+| CWV | Partial | Fourteen required catalog, template, skin/illusion, husk, registration, preview, transform, mesh, musket, and regression owners retained; entry ceiling 3,849 nonblank lines | #504 / #2 / #1159 |
+| Weapons of Chaos | Partial | Twelve required wire, Blightreaper, rarity, appearance, preview, icon, and relic owners retained; entry ceiling 2,455 nonblank lines, below the hard limit but above the 1,500 completion target | #504 / #2 / #1159 |
 | Shared copied libraries | Partial | exact-byte sync gate covers 12 canonical libraries across 37 manifested consumer copies; roadmap items remain under #428 | #428 |
 | Appearance consistency | Separate architecture program | descriptor/census work and live diagnostics are owned by #660; module splitting alone does not prove render-surface consistency | #660 |
 

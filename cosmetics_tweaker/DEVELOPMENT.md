@@ -23,9 +23,13 @@ HeroWindowItemCustomization offhand-picker UI suite without moving the shared
 husk hook. The next bounded slice moved the preview equipment/spawn/package
 lifecycle and score-lineup hooks, plus their adjacent authored-outfit attachment
 replay, into `_cos_preview_runtime.lua` at the same registration boundary. The
-LA-bridge + husk, remaining customization/glow UI, and live weapon render hooks
-remain in the entry pending later phases. The preview owner calls the Phase 2
-scale/grip helpers and Phase 3 glow helpers through `mod._cos.*`.
+latest bounded slice moved the five glow-picker host-window hooks and two manual
+picker commands into `_cos_glow_picker_host.lua`, and moved the single local-player
+`SimpleInventoryExtension._wield_slot` appearance replay into
+`_cos_local_wield_runtime.lua`. The LA-bridge + remote-husk integration, remaining
+customization UI, and live weapon render hooks remain in the entry pending later
+phases. The preview owner calls the Phase 2 scale/grip helpers and Phase 3 glow
+helpers through `mod._cos.*`.
 
 **Shared namespace `mod._cos`** (the event_tweaker `mod._evt` pattern,
 PROJECT_STANDARDS § 2.2a) carries cross-module state. It is created in the entry
@@ -57,6 +61,8 @@ exactly once from the manifest.
 | `_cos_offhand_picker.lua` | Idempotent weapon-customization offhand picker owner. Owns the existing magic-family filter; offhand row setup; hover/input/draw hooks; exact selected-primary resolver; and `_ct_on_offhand_pressed` class method. Its engine tables are action-time getters. It adds no RPC, command, lifecycle/update callback, durable persistence, render hook, package catalog, exit commit/revert, or LA pool merge. |
 | `_cos_preview_runtime.lua` | Idempotent preview presentation owner. Owns the 12 existing MenuWorldPreviewer/HeroPreviewer equipment and spawn, TeamPreviewer score-lineup, LootItemUnitPreviewer package/spawn/lifecycle, and adjacent authored-outfit attachment replay hooks in exact historical order. It exports the stable score peer resolver through its owner bag. A persistent holder refreshes all 16 injected LA/glow/score/helper dependencies before the reinstall guard; callbacks read the current shared `mod._cos` consumer map and action-time customization identity without duplicating hooks. It adds no RPC, command, persistence write, update-loop owner, or husk hook. |
 | `_cos_news_feed_safety.lua` | Idempotent stale-news-widget containment owner. Owns the single existing `NewsFeedUI.draw` origin hook, preserves vanilla pass and active-news order, closes the pass before descending purge/recycle, and retains the historical five-purge diagnostic threshold. A persistent holder refreshes its renderer getter and logger before the reinstall guard. It adds no RPC, command, lifecycle/update callback, persistence, or appearance behavior. |
+| `_cos_glow_picker_host.lua` | Idempotent host-window adapter for the existing `_glow_picker.lua` subsystem. Owns exactly five `HeroWindowCosmeticsLoadout` / `HeroWindowItemCustomization` input, draw, and exit hooks plus `/glow_picker_hooks` and `/glow_picker`, preserving their historical registration position. Hot reload refreshes injected picker, logger, version, and wielded-unit resolver dependencies without adding another registration. It owns no RPC, update loop, persistence, material mutation, or picker state machine. |
+| `_cos_local_wield_runtime.lua` | Idempotent local-player wield appearance owner. Owns the single `SimpleInventoryExtension._wield_slot` hook that replays stored LA offhand state, restores and binds exact-item glow state, updates the active glow identity, and repaints the already-spawned local weapon units. It rejects remote units before mutation and adds no RPC, command, lifecycle/update callback, persistence write, or remote-husk behavior. |
 | `_cos_command_owner.lua` | Single #504 command-lifecycle owner. Owns the lazy regression registry and `/cos_regression_test` runner plus `/cos_persist_dump`, `/cos_persist_replay`, and `/cos_persist_clear`. Returns the register function consumed by `_cos_runtime_checks.lua`; repeated install is idempotent. It owns no hook, RPC, renderer, or lifecycle callback. |
 | `_cos_glow_editor_button.lua` | Idempotent #377/#504 contextual Edit Glow button owner. Owns family/open-state policy binding, enabled/selected styling, and widget construction. The host customization view retains position, input, and draw ownership; this module adds no hook, RPC, polling, persistence, or renderer mutation. |
 | `_cos_item_grid_presentation.lua` | Idempotent #377/#650/#795 item-grid and illusion-card presentation owner. Owns the single pre-`pass_data` `UIWidget.init` enrichment hook, the three existing `ItemGridUI` refresh hooks, weak live-surface registries, and the committed glow/composite refresh callback. It receives the existing policies and late-bound composed-appearance resolver; it adds no lifecycle callback, RPC, persistence, or appearance semantics. |
@@ -157,6 +163,14 @@ their internals alone.
   `_cos_news_feed_safety.lua`. Preserve its single origin hook, vanilla active-news
   iteration, action-time renderer lookup, balanced pass, post-pass descending purge,
   recycling behavior, and bounded diagnostics.
+- **Glow-picker input/draw hosting or its two manual diagnostic commands** →
+  `_cos_glow_picker_host.lua`. The picker state machine and widgets remain in
+  `_glow_picker.lua`; preserve the five-hook/two-command cardinality and inject
+  rebound dependencies through the owner's stable state.
+- **Local-player appearance replay immediately after a wield-slot change** →
+  `_cos_local_wield_runtime.lua`. Keep its early local-unit ownership check, its
+  one `_wield_slot` hook, and its network-silent LA/glow replay. Remote husk replay
+  belongs to the existing transport/husk owners, not this seam.
 - **New custom illusion / weapon-skin or LA-shield injection** →
   `_cos_illusions.lua`. Register the key into `mod._cos.custom_skin_keys` so the
   wire-safety senders null it on the wire.

@@ -14,6 +14,7 @@ return function(H, repo_root)
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_picker.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua")
+        .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_picker_host.lua")
     local command_owner = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua")
     local button_owner = read(
@@ -153,8 +154,8 @@ return function(H, repo_root)
 
     H.test("Cosmetics glow slider, Apply, Restore, and Cancel repaint the preview pane", function()
         local glow = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow.lua")
-        H.truthy(entry:find("GlowPicker.handle_input(_resolve_input_service(self), self)", 1, true))
-        H.truthy(entry:find("GlowPicker.draw(ui_renderer, input_service, dt, self)", 1, true))
+        H.truthy(entry:find("state.glow_picker.handle_input(resolve_input_service(self), self)", 1, true))
+        H.truthy(entry:find("state.glow_picker.draw(ui_renderer, input_service, dt, self)", 1, true))
         H.truthy(picker:find("function GlowPicker.handle_input(input_service, preview_host)", 1, true))
         H.truthy(picker:find("function GlowPicker.draw(ui_renderer, input_service, dt, preview_host)", 1, true))
         H.truthy(picker:find("GlowPicker._preview_host = preview_host", 1, true))

@@ -39,6 +39,20 @@ function New-TestComment([string]$Body, [bool]$IsPinned = $true, [string]$Create
     return [pscustomobject]@{ body=$Body; createdAt=$CreatedAt; isPinned=$IsPinned }
 }
 
+function Test-VtRetryableGitHubTransportError([string]$Message) {
+    if ([string]::IsNullOrWhiteSpace($Message)) { return $false }
+    return [bool]($Message -match '(?is)(tls:|x509:|connection (?:reset|refused)|unexpected EOF|i/o timeout|context deadline exceeded|HTTP\s+(?:408|429|5\d\d)|status code\s+(?:408|429|5\d\d)|(?:502|503|504)\s+(?:Bad Gateway|Service Unavailable|Gateway Timeout))')
+}
+
+function Get-VtGraphQlRetryDelaySeconds([int]$FailedAttempt) {
+    switch ($FailedAttempt) {
+        1 { return 2 }
+        2 { return 5 }
+        3 { return 10 }
+        default { return 0 }
+    }
+}
+
 function Invoke-SelfTest {
     $validSolo = New-TestCard
     $validExactBanner = "## CURRENT LIVE TEST`n`n**Build/banner:** exact banner: [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
@@ -106,9 +120,17 @@ function Invoke-SelfTest {
     # IssuesJsonPath uses the same ConvertFrom-Json shape as this round-trip.
     # Keep isPinned in the serialized fixture so offline policy tests remain
     # capable of proving both true and false pin states.
-    $jsonFixture = @($fixture | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+    # Windows PowerShell 5.1 preserves a top-level JSON array as one nested
+    # pipeline object, while PowerShell 7 enumerates it. Round-trip each issue
+    # independently so the policy receives the same shape on both runtimes.
+    $jsonFixture = @($fixture | ForEach-Object { $_ | ConvertTo-Json -Depth 8 | ConvertFrom-Json })
     $jsonBad = @((Get-LifecycleViolations -Issues $jsonFixture -RequirePinnedCard).number | Sort-Object)
     if (($jsonBad -join ',') -ne ($bad -join ',')) { throw "JSON fixture drift: $($jsonBad -join ',')" }
+    if (-not (Test-VtRetryableGitHubTransportError 'tls: failed to verify certificate: x509: certificate signed by unknown authority')) { throw 'TLS trust failure must be retryable' }
+    if (-not (Test-VtRetryableGitHubTransportError 'HTTP 503: Service Unavailable')) { throw 'GitHub 503 must be retryable' }
+    if (Test-VtRetryableGitHubTransportError 'HTTP 401: Bad credentials') { throw 'authentication failure must fail immediately' }
+    if (Test-VtRetryableGitHubTransportError 'GraphQL: Field does not exist') { throw 'permanent GraphQL error must fail immediately' }
+    if (((1..5 | ForEach-Object { Get-VtGraphQlRetryDelaySeconds $_ }) -join ',') -ne '2,5,10,0,0') { throw 'retry schedule must remain bounded to three retries' }
     Write-Host '[check-lifecycle-cardinality -SelfTest] OK'
 }
 
@@ -123,8 +145,21 @@ function Invoke-VtGraphQl {
         $arguments += @($flag, "$name=$value")
     }
 
-    $raw = & gh @arguments 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) { throw "gh api graphql failed (exit $LASTEXITCODE): $raw" }
+    $raw = $null
+    $exitCode = 0
+    for ($attempt = 1; $attempt -le 4; $attempt++) {
+        $raw = & gh @arguments 2>&1 | Out-String
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) { break }
+
+        $delaySeconds = Get-VtGraphQlRetryDelaySeconds $attempt
+        if ($delaySeconds -le 0 -or -not (Test-VtRetryableGitHubTransportError $raw)) {
+            throw "gh api graphql failed (exit $exitCode, attempt $attempt/4): $raw"
+        }
+        Write-Warning "Transient GitHub GraphQL transport failure (attempt $attempt/4); retrying in $delaySeconds second(s)."
+        Start-Sleep -Seconds $delaySeconds
+    }
+    if ($exitCode -ne 0) { throw "gh api graphql failed (exit $exitCode after 4 attempts): $raw" }
     $payload = $raw | ConvertFrom-Json
     if ($payload.errors) {
         $messages = @($payload.errors | ForEach-Object { $_.message }) -join '; '
