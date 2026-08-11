@@ -25,6 +25,12 @@ return function(H, repo_root)
     -- apply_variant_to_unit) with it, so that owner joins the source too.
     local la_apply_runtime =
         read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime.lua")
+    -- #1159: the LA loadout-state hooks and the two vanilla-RPC net-safe senders
+    -- moved verbatim out of the entry, taking `_la_vanilla_fallback` (the sole
+    -- caller of GK_SET.wire_fallback) and every one of its call sites with them,
+    -- so that owner joins the source too.
+    local la_loadout_safety =
+        read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_loadout_safety.lua")
     local entry = entry_only
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
@@ -32,6 +38,7 @@ return function(H, repo_root)
         .. attachment_spawn_sync
         .. equipment_assembly
         .. la_apply_runtime
+        .. la_loadout_safety
     local localization = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization.lua")
     local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")
 
