@@ -1,6 +1,6 @@
 # Cosmetics Tweaker — Changelog
 
-## 0.9.200-dev (2026-08-10) -- LA loadout-safety + net-safe sender owner extracted (#1159) [untested]
+## 0.9.201-dev (2026-08-11) -- LA loadout-safety + net-safe sender owner extracted (#1159) [untested]
 
 ### Behavior-neutral extraction
 
