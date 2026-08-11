@@ -28,6 +28,12 @@ a clean registered worktree containing narrowly allowlisted build output or
 machine-local files. It never archives or guesses about source. Preserve dirty
 work in a commit/branch before retrying.
 
+Add `-DeleteMergedBranch` to remove the worktree's local branch in the same
+transaction. The helper first proves that branch is an ancestor of
+`origin/master`, then deletes it independently of whichever older branch the
+calling checkout currently has selected. A failed ancestry proof retains the
+branch and reports that the worktree was already closed.
+
 Audit at any time:
 
 ```powershell
