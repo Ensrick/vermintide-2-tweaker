@@ -294,6 +294,7 @@ local suites = {
     "test_ct_pickup_population_owner",
     "test_ct_level_load_owner",
     "test_ct_node_entry_owner",
+    "test_ct_run_creation_owner",
     "test_ct_entry_decomposition",
     "test_ct_pool_floor_citadel_487",
     "test_ct_mission_graph_sync",

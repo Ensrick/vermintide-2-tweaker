@@ -113,9 +113,17 @@ return function(H, repo_root)
             "#342: DeusPowerUpTemplates has no power_ups sub-table (flat name-keyed map)")
         H.equal(combat:find("b.cooldown_buff = nil", 1, true), nil,
             "#342: nil'ing cooldown_buff crashes the proc's trailing add_buff")
-        H.truthy(main:find("local strip = mod._ct128_strip_parry_cooldowns", 1, true))
+        -- #1159 wave 14: the lazy invocation piggybacks on the boon roll, which
+        -- moved into _ct_run_creation_owner. Needles are byte-identical; only the
+        -- file moved. The strip DEFINITION and its policy stay in _ct_combat_hooks.
+        local run_creation = read(base .. "_ct_run_creation_owner.lua")
+        H.truthy(run_creation:find("local strip = mod._ct128_strip_parry_cooldowns", 1, true))
+        H.equal(main:find("local strip = mod._ct128_strip_parry_cooldowns", 1, true), nil,
+            "a second invocation site would run the strip off a roll it does not gate")
         H.equal(main:find("pcall(_ct128_strip_parry_cooldowns)", 1, true), nil)
-        H.truthy(main:find("[ct:342] parry-cooldown strip failed", 1, true))
+        H.equal(run_creation:find("pcall(_ct128_strip_parry_cooldowns)", 1, true), nil,
+            "#130: the boot-time bare call ran before DeusPowerUpTemplates existed")
+        H.truthy(run_creation:find("[ct:342] parry-cooldown strip failed", 1, true))
     end)
 
     H.test("CT #342 regression check consumes residual_report and cannot silently pass", function()

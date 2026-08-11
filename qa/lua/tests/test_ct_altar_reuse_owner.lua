@@ -38,6 +38,9 @@ return function(H, repo_root)
 
     local entry = read("chaos_wastes_tweaker_dev.lua")
     local owner = read("_ct_altar_reuse_owner.lua")
+    -- #1159 wave 14: the setup_run hook that performs the run-start ledger wipe
+    -- now lives here, so the wipe assertions below read this file, not the entry.
+    local run_creation = read("_ct_run_creation_owner.lua")
 
     -- ------------------------------------------------------------------
     -- Executable fixture: load the real module and install it against a
@@ -164,6 +167,7 @@ return function(H, repo_root)
             "_ct_combat_hooks.lua",
             "_ct_command_owner.lua",
             "_ct_journey_difficulty_guard.lua",
+            "_ct_run_creation_owner.lua",
             "_ct_weapon_trait_generation.lua",
             "_ct_boss_grudge_marks.lua",
             "_ct_boon_registry.lua",
@@ -197,13 +201,22 @@ return function(H, repo_root)
     H.test("the ledger is a single owner file-local reached only by accessor", function()
         H.equal(count_plain(owner, "local _altar_uses_by_go_id = {}"), 1)
         H.equal(count_plain(entry, "_altar_uses_by_go_id"), 0)
-        -- The entry's run-start wipe is the exported rebind, called exactly once.
-        H.equal(count_plain(entry, "_ct_altar_reuse.reset_uses()"), 1)
-        local setup_run = assert(entry:find(
+        -- The run-start wipe is the exported rebind, called exactly once. #1159
+        -- wave 14 moved the setup_run hook that holds it into
+        -- _ct_run_creation_owner, so the needles are byte-identical and only the
+        -- file moved; the entry-side absence below is what makes a stray second
+        -- wipe (which would clear a table nothing else reads) fail.
+        H.equal(count_plain(run_creation, "_ct_altar_reuse.reset_uses()"), 1)
+        H.equal(count_plain(entry, "_ct_altar_reuse.reset_uses()"), 0)
+        local setup_run = assert(run_creation:find(
             'mod:hook("DeusRunController", "setup_run"', 1, true))
-        local reset_at = assert(entry:find("_ct_altar_reuse.reset_uses()", 1, true))
+        local reset_at = assert(run_creation:find("_ct_altar_reuse.reset_uses()", 1, true))
         H.truthy(reset_at > setup_run,
             "the ledger wipe must still sit inside the setup_run hook body")
+        -- The owner reaches the ledger only through the injected accessor, so a
+        -- by-value capture regression that froze a nil would fail load-time.
+        H.truthy(run_creation:find("local _ct_altar_reuse = ctx.altar_reuse", 1, true))
+        H.truthy(entry:find("altar_reuse = _ct_altar_reuse,", 1, true))
     end)
 
     H.test("the settings-sync / graph-snapshot / peer-manifest transports stay in the entry", function()

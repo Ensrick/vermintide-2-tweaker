@@ -161,7 +161,21 @@ return function(H, repo_root)
         local rf = assert(io.open(runtime_path, "rb"))
         local source = rf:read("*a")
         rf:close()
-        H.truthy(entry_source:find('mod._ct_replacement_runtime.install(mod, {', 1, true))
+        -- #1159 wave 14: the install sat between the get_run_difficulty hook above
+        -- it and the setup_run hook below it, so it moved into
+        -- _ct_run_creation_owner rather than reordering those registrations. Same
+        -- needle, new file, plus an entry-side absence so a stray second install
+        -- (which would re-register six hooks VMF would silently drop) fails here.
+        local run_creation_path = repo_root
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner.lua"
+        local rc_file = assert(io.open(run_creation_path, "rb"))
+        local run_creation = rc_file:read("*a")
+        rc_file:close()
+        H.truthy(run_creation:find('mod._ct_replacement_runtime.install(mod, {', 1, true))
+        H.equal(entry_source:find('mod._ct_replacement_runtime.install', 1, true), nil)
+        H.truthy(entry_source:find(
+            'mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_run_creation_owner")',
+            1, true))
         H.truthy(source:find('mod:hook("GameModeDeus", "player_left_game_session"', 1, true))
         H.truthy(source:find('mod:hook("GameModeManager", "player_left_game_session"', 1, true))
         H.truthy(source:find('mod:hook_safe("GameModeDeus", "_add_bot"', 1, true))
