@@ -339,6 +339,7 @@ local suites = {
     "test_cim_bulk_accessory_craft",
     "test_cos_offhand_names",
     "test_cos_item_presentation",
+    "test_cos_item_presentation_runtime",
     "test_cos_composite_icons",
     "test_cos_dual_offhands",
     "test_cos_offhand_commit_policy",

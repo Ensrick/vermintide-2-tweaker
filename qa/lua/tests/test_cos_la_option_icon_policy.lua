@@ -3,6 +3,8 @@ return function(H, repo_root)
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
     local policy = dofile(cos_root .. "_cos_la_option_icon_policy.lua")
     local presentation = dofile(cos_root .. "_cos_item_presentation.lua")
+    local presentation_runtime = dofile(
+        cos_root .. "_cos_item_presentation_runtime.lua")
 
     local function read(name)
         local f = assert(io.open(cos_root .. name, "rb"))
@@ -12,19 +14,51 @@ return function(H, repo_root)
     end
 
     local function production_option_resolver(environment)
-        local source = read("cosmetics_tweaker.lua")
-        local first = assert(source:find(
-            "local function _cos_option_for_record", 1, true))
-        local last = assert(source:find(
-            "\nlocal function _cos_primary_component_name", first, true))
-        local body = source:sub(first, last - 1)
-        body = body:gsub(
-            "local function _cos_option_for_record",
-            "return function", 1)
-        local chunk = assert(loadstring(body))
-        setmetatable(environment, { __index = _G })
-        setfenv(chunk, environment)
-        return chunk()
+        local mod = environment.mod
+        mod._cos = mod._cos or { presentation_localization = {} }
+        mod._la_option_icon_policy = mod._la_option_icon_policy or policy
+        function mod:hook() end
+        function mod:info() end
+        local owner = presentation_runtime.install(mod, {
+            composite_icon_factory = {
+                ui_icon_availability = function() return true end,
+            },
+            ui_atlas_helper = {},
+            la_persist = {
+                get_saved_illusion = function() return nil end,
+                get_saved_offhands_for = function() return nil end,
+            },
+            get_item_master_list = function()
+                return environment.ItemMasterList or {}
+            end,
+            get_weapon_skins = function()
+                return { skins = {}, default_skins = {} }
+            end,
+            offhand_selection = {},
+            glow_picker = {
+                committed_state_for = function() return nil end,
+                native_state_for = function() return nil end,
+            },
+            composite_icons = {
+                publish = function() end,
+                resolve_detailed = function() return nil end,
+                icon_ready = function() return true end,
+                claim_diagnostic = function() return false end,
+            },
+            offhand_names = environment.OFFHAND_NAMES,
+            shield_icon_owner_item_types = {},
+            offhand_options = environment._offhand_options or {},
+            get_mod = environment.get_mod,
+            la_bridge = environment.LA_BRIDGE,
+            inventory_icon_for_offhand_unit =
+                environment._inventory_icon_for_offhand_unit,
+            item_presentation = presentation,
+            la_icon_provider = { resolve = function() return nil end },
+            la_instance_policy = {},
+            offhand_session_state = { migrate_legacy = function() end },
+            get_localize = function() return nil end,
+        })
+        return owner.option_for_record
     end
 
     local function normalize(item_type)
@@ -295,7 +329,9 @@ return function(H, repo_root)
     end)
 
     H.test("source does not persist or transmit external provider icon assets", function()
-        local source = read("cosmetics_tweaker.lua") .. read("_cos_offhand_picker.lua")
+        local source = read("cosmetics_tweaker.lua")
+            .. read("_cos_offhand_picker.lua")
+            .. read("_cos_item_presentation_runtime.lua")
         H.truthy(source:find(
             "inventory_icon = opt.cos_authored and opt.inventory_icon or nil",
             1, true))

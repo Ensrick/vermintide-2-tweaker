@@ -58,6 +58,25 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
   ordering, dependency refresh, bridge initialization, bounded pulls, and queue
   rebinding under Lua 5.1.
 
+### Cosmetics exact-item presentation keeps one two-phase runtime owner — issue #1159
+
+**[STATIC + UNIT]**
+
+- `_cos_item_presentation_runtime.lua` exclusively owns the one
+  `UIUtils.get_ui_information_from_item` hook and the contextual
+  `mod._cos.resolve_peer_item_presentation` adapter. Do not re-inline either in
+  the entry.
+- Preserve phase order: install exact-item UI presentation at the former
+  resolver block, then call `install_peer` only after
+  `LA_SYNC.install_receivers()`. Provider icon names remain local and never enter
+  persistence or network payloads.
+- Preserve all four vanilla UIUtils returns when no exact component owns the
+  card. Reinstall must refresh both dependency bags without registering a second
+  hook or freezing the first peer-cache table.
+- Run `qa/check_lua_unit_tests.ps1`; `test_cos_item_presentation_runtime.lua`
+  covers ownership, placement, idempotence, return preservation, and action-time
+  peer-cache replacement.
+
 ### Pusfume remains independent of Tweaker mods
 
 **[STATIC + SOLO + MULTIPLAYER]**

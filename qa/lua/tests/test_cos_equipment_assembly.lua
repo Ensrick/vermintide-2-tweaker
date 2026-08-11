@@ -114,7 +114,7 @@ return function(H, repo_root)
         local at_owner = entry:find(owner_install, 1, true)
         for _, anchor in ipairs({
             "local function _apply_la_offhand_to_units",
-            "_cos_resolve_composed_appearance = function(item, record, publish_for_icon)",
+            "_cos_resolve_composed_appearance =\n    _cos_item_presentation_runtime.resolve_composed_appearance",
             "local _la_equips_by_peer = {}",
             "local function _get_offhand_options",
             "local _override_package_ready = _cos_offhand_catalog.override_package_ready",
