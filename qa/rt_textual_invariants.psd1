@@ -222,7 +222,7 @@
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_altar_reuse_owner.lua'; needle='(?m)^mod:hook\("DeusChestExtension", "open_chest"'; literal=$false; polarity='absent'; issueRef='#1159'; note='the single consolidated open_chest write seam belongs to _ct_bot_weapon_chest_owner; a copy here would be silently dropped.' }
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_altar_reuse_owner.lua'; needle='local _altar_uses_by_go_id = {}'; literal=$true; polarity='present'; maxCount=1; issueRef='#1159'; note='the use ledger is a single owner file-local; the entry reaches it only through the exported accessor.' }
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='_altar_uses_by_go_id'; literal=$true; polarity='absent'; issueRef='#1159'; note='a second ledger in the entry would silently diverge from the one every reuse hook reads.' }
-    # Retargeted by the #1159 run-creation owner extraction (ct_dev 0.7.335-dev):
+    # Retargeted by the #1159 run-creation owner extraction (ct_dev 0.7.336-dev):
     # the DeusRunController.setup_run hook that holds the wipe moved verbatim into
     # _ct_run_creation_owner.lua. Needle byte-identical; only `file` moved, and the
     # entry-side absence row below is what catches a stray second wipe.
@@ -262,7 +262,7 @@
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_level_load_owner.lua'; needle='mod:network_register('; literal=$true; polarity='absent'; issueRef='#1159'; note='the level-load seam owns no RPC; the settings-sync / graph-snapshot / peer-manifest transports stay entry-owned.' }
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='function _dump_pickup_system_state(prefix, also_echo)'; literal=$true; polarity='absent'; issueRef='#1159'; note='the census bodies live in the owner; a second definition in the entry would overwrite the slot the owner already filled.' }
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='_dump_pickup_system_state     = _ct_level_load_owner.dump_pickup_system_state'; literal=$true; polarity='present'; maxCount=1; issueRef='#1159'; note='the entry forward-declared slot is filled from the owner exports; without it the population owner wrappers and the _ct_regression by-value bind both read nil.' }
-    # Source: chaos_wastes_tweaker_dev/CHANGELOG.md 0.7.335-dev (#1159 run-creation owner).
+    # Source: chaos_wastes_tweaker_dev/CHANGELOG.md 0.7.336-dev (#1159 run-creation owner).
     # The run-CREATION seam moved verbatim out of the entry: the setup_run hook and
     # its host-side rpc_deus_set_initial_soft_currency partner, the
     # get_run_difficulty ramp, and the generate_random_power_ups roll whose

@@ -1,6 +1,6 @@
 # Chaos Wastes Tweaker Changelog
 
-## 0.7.335-dev (2026-08-10) -- run-creation owner decomposition (#1159, #2) [untested]
+## 0.7.336-dev (2026-08-11) -- run-creation owner decomposition (#1159, #2) [untested]
 
 - Everything ct does at the moment a Chaos Wastes run is CREATED now lives in one
   owner, `_ct_run_creation_owner.lua`: the v0.7.95 starting-coins SETTER on both

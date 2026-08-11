@@ -202,7 +202,7 @@ return function(H, repo_root)
         -- it. Since 0.7.334-dev that curse runtime is itself an owner
         -- (_ct_node_entry_owner), so the neighbour below is its install site -
         -- which sits at the exact line the curse hook block used to occupy.
-        -- Since 0.7.335-dev the offer GENERATION hook is itself an owner
+        -- Since 0.7.336-dev the offer GENERATION hook is itself an owner
         -- (_ct_run_creation_owner, which carries it because the boon-altar
         -- no-repeat ledger it filters against is per-run state setup_run creates),
         -- so the neighbour above is that owner's install site - which sits at the
