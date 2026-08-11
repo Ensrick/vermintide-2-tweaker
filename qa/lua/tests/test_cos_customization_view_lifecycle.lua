@@ -56,7 +56,24 @@ return function(H, repo_root)
     end)
 
     H.test("cos view lifecycle crossing locals stay entry-owned accessors", function()
-        H.equal(occurrences(entry, "get_send_la_apply = function() return _send_la_apply end,"), 1)
+        -- TWO owners install ABOVE the entry's `_send_la_apply` assignment and so
+        -- must both take it late-bound: this view-lifecycle owner and, since
+        -- #1159 wave 14, _cos_la_loadout_safety. The count is the ratchet - it
+        -- drops to 1 if either owner regresses to an install-time by-value
+        -- hand-off (which silently freezes nil), and rises if a third owner
+        -- appears without review.
+        H.equal(occurrences(entry, "get_send_la_apply = function() return _send_la_apply end,"), 2)
+        local at_lifecycle = assert(entry:find(
+            '"scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle").install',
+            1, true))
+        local at_loadout = assert(entry:find(
+            '"scripts/mods/cosmetics_tweaker/_cos_la_loadout_safety").install', 1, true))
+        for _, at in ipairs({ at_lifecycle, at_loadout }) do
+            local dep_table = entry:sub(at, at + 1400)
+            H.truthy(dep_table:find(
+                "get_send_la_apply = function() return _send_la_apply end,", 1, true),
+                "each pre-assignment owner takes the sender as a getter")
+        end
         H.truthy(entry:find("get_active_customization_backend_id = function()", 1, true))
         H.truthy(entry:find("set_active_customization_backend_id = function(value)", 1, true))
         H.truthy(entry:find("local _active_customization_backend_id", 1, true))
