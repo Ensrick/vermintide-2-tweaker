@@ -55,6 +55,7 @@ return function(H, repo_root)
 
     local entry = read("chaos_wastes_tweaker_dev.lua")
     local owner = read("_ct_run_creation_owner.lua")
+    local peer_manifest = read("_ct_peer_manifest_owner.lua")
 
     local coins_policy = assert(loadfile(root .. "_ct_starting_coins_policy.lua"))()
 
@@ -659,11 +660,9 @@ return function(H, repo_root)
         H.equal(count_plain(owner, "mod.update = "), 0)
     end)
 
-    H.test("the settings-sync / graph-snapshot / peer-manifest transports stay in the entry", function()
-        -- Out of scope for this slice: they need a 2-player window to validate.
-        -- Their mutable state is an entry file-local, so reading it from this chunk
-        -- would capture a stale nil. The owner only CALLS the two manifest helpers,
-        -- through injected by-value bindings.
+    H.test("network transports stay outside the run-creation owner", function()
+        -- Settings and graph sync remain entry-owned; peer manifests now have a
+        -- dedicated owner. Run creation only CALLS the two exported helpers.
         for _, needle in ipairs({
             "_ct_host_settings", "_ct_host_graph_snapshot", "_ct_peer_manifests",
             "_sync_inbound", "_ct_graph_inbound", "_ct_manifest_inbound",
@@ -676,10 +675,12 @@ return function(H, repo_root)
         for _, needle in ipairs({
             'mod:network_register("ct_sync_host_settings_chunk"',
             'mod:network_register("ct_graph_snapshot_chunk"',
-            'mod:network_register("ct_peer_manifest_chunk"',
         }) do
             H.equal(count_plain(entry, needle), 1, needle .. " stays in the entry")
         end
+        H.equal(count_plain(peer_manifest,
+            'mod:network_register("ct_peer_manifest_chunk"'), 1,
+            "peer-manifest RPC stays in its dedicated owner")
     end)
 
     H.test("the moved hooks and helpers left the entry entirely", function()

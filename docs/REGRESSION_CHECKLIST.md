@@ -31,6 +31,18 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 
 ## Multiplayer / Network Sync
 
+### CT peer manifests keep one paced transport owner — issue #1159
+
+**[STATIC + UNIT]**
+
+- `ct_peer_manifest_chunk` and `/peers` are registered only by
+  `_ct_peer_manifest_owner.lua`; settings and graph sync retain their own owners.
+- Manifest chunks must enter `_ct_enqueue_chunk`; never send the chunk train
+  inline. Payloads remain schema-gated and reassemble by sender/session/sequence.
+- Run `qa/check_lua_unit_tests.ps1`; `test_ct_peer_manifest_owner.lua` covers
+  ordered local inventory, pacing, rejection, duplicate/out-of-order receive,
+  and the command refresh path.
+
 ### Pusfume remains independent of Tweaker mods
 
 **[STATIC + SOLO + MULTIPLAYER]**

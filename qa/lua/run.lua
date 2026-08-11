@@ -93,6 +93,7 @@ local suites = {
     "test_event_exact_curse_wire",
     "test_ct_mission_progress",
     "test_ct_profile_snapshot",
+    "test_ct_peer_manifest_owner",
     "test_ct_starting_coins",
     "test_ct_start_shrine_policy",
     "test_ct_boon_preview_context",

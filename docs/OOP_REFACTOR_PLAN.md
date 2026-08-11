@@ -195,6 +195,12 @@ not completion of either entire entry point. Rule: every WS1/WS4 change that
 touches a god file extracts its natural owner seam as part of the change, never
 "later", without mixing behavior changes into the structural move.
 
+**2026-08-11 CT wave 16:** peer manifest construction, paced transport,
+reassembly, diff logging, and `/peers` moved together into
+`_ct_peer_manifest_owner.lua`. The behavior-neutral boundary fixture covers the
+wire and state machine; CT Dev's ratcheted entry ceiling is now 4,114 nonblank
+lines (down from 4,303). CT remains partial.
+
 ### WS6 - Hygiene sweep (small, high count)
 
 - `_MEM_PROBE_T0_*` bare `_G` globals in 6 mods -> namespace under `mod.`.

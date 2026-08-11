@@ -1,5 +1,26 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.337-dev (2026-08-11) -- peer-manifest owner decomposition (#1159, #2) [untested]
+
+- The peer/version/settings diagnostic lifecycle now has one explicit owner,
+  `_ct_peer_manifest_owner.lua`: deterministic local manifest construction,
+  paced chunk enqueue, schema-gated receive/reassembly, host comparison logging,
+  and the `/peers` command moved together.
+- The owner installs at the former inline block position, so
+  `ct_peer_manifest_chunk` and `/peers` retain their registration order. The
+  earlier host-settings receiver still reaches the broadcaster through its
+  original late-bound slot; `_ct_run_creation_owner.lua` now receives the
+  owner's exported build/log functions rather than entry-local functions.
+- The payload, FNV/fallback hash, 400-byte chunk policy, schema, targets, paced
+  queue, enabled-mod census, and user-facing command output are unchanged. The
+  ct entry is ratcheted from 4,303 to 4,114 nonblank lines.
+- `test_ct_peer_manifest_owner.lua` executes the real owner against an
+  engine-free fixture and pins dependency failure, install position, sole RPC
+  and command ownership, deterministic local inventory, paced chunking, schema
+  rejection before decode, out-of-order/duplicate reassembly, and command
+  refresh. Existing altar/run/graph boundary tests now recognize the dedicated
+  owner. This is a structural Phase 5 slice; in-game behavior remains untested.
+
 ## 0.7.336-dev (2026-08-11) -- run-creation owner decomposition (#1159, #2) [untested]
 
 - Everything ct does at the moment a Chaos Wastes run is CREATED now lives in one

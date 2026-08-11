@@ -38,6 +38,7 @@ return function(H, repo_root)
 
     local entry = read("chaos_wastes_tweaker_dev.lua")
     local owner = read("_ct_altar_reuse_owner.lua")
+    local peer_manifest = read("_ct_peer_manifest_owner.lua")
     -- #1159 wave 14: the setup_run hook that performs the run-start ledger wipe
     -- now lives here, so the wipe assertions below read this file, not the entry.
     local run_creation = read("_ct_run_creation_owner.lua")
@@ -219,10 +220,9 @@ return function(H, repo_root)
         H.truthy(entry:find("altar_reuse = _ct_altar_reuse,", 1, true))
     end)
 
-    H.test("the settings-sync / graph-snapshot / peer-manifest transports stay in the entry", function()
-        -- Explicitly out of scope for this slice: they need a 2-player window to
-        -- validate. Reading their mutable state from another chunk would capture
-        -- a stale nil, so assert the owner never mentions any of it.
+    H.test("network transports stay outside the altar owner", function()
+        -- The manifest transport now has its own owner; settings and graph sync
+        -- remain entry-owned. None may leak into this altar-only owner.
         for _, needle in ipairs({
             "_ct_host_settings",
             "_ct_host_graph_snapshot",
@@ -237,10 +237,12 @@ return function(H, repo_root)
         for _, needle in ipairs({
             'mod:network_register("ct_sync_host_settings_chunk"',
             'mod:network_register("ct_graph_snapshot_chunk"',
-            'mod:network_register("ct_peer_manifest_chunk"',
         }) do
             H.equal(count_plain(entry, needle), 1, needle .. " stays in the entry")
         end
+        H.equal(count_plain(peer_manifest,
+            'mod:network_register("ct_peer_manifest_chunk"'), 1,
+            "peer-manifest RPC stays in its dedicated owner")
     end)
 
     H.test("owner registers no command and no regression check", function()
