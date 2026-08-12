@@ -10,6 +10,8 @@ return function(H, repo_root)
 	local Policy = assert(loadfile(root
 		.. "scripts/mods/weapons_of_chaos/_woc_inventory_icons.lua"))()
 	local main = read(root .. "scripts/mods/weapons_of_chaos/weapons_of_chaos.lua")
+	local registration = read(root
+		.. "scripts/mods/weapons_of_chaos/_woc_relic_registration_owner.lua")
 	local data = read(root .. "scripts/mods/weapons_of_chaos/weapons_of_chaos_data.lua")
 	local package = read(root .. "resource_packages/weapons_of_chaos/weapons_of_chaos.package")
 
@@ -82,9 +84,9 @@ return function(H, repo_root)
 	end)
 
 	H.test("WOC item owns custom icon and resident Athanor fallback", function()
-		H.truthy(main:find("entry.inventory_icon  = INVENTORY_ICON", 1, true))
-		H.truthy(main:find("entry.cim_inventory_icon_fallback = base.inventory_icon", 1, true))
-		H.truthy(main:find("issue613_blightreaper_inventory_icon_contract", 1, true))
+		H.truthy(registration:find("entry.inventory_icon  = INVENTORY_ICON", 1, true))
+		H.truthy(registration:find("entry.cim_inventory_icon_fallback = base.inventory_icon", 1, true))
+		H.truthy(registration:find("issue613_blightreaper_inventory_icon_contract", 1, true))
 		H.truthy(main:find('local BASE_WEAPON = "es_1h_sword"', 1, true))
 	end)
 end

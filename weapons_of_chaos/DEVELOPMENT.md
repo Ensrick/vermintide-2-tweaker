@@ -12,6 +12,29 @@ weapon's `.unit`.
 > prop cannot be loaded safely. This doc remains the research foundation for
 > enemy meshes, trophy paths, and the duplicate-item constraints.
 
+### Runtime owner map
+
+`weapons_of_chaos.lua` is the composition root and remains below the repository
+1,500-line completion target. It wires cross-cutting appearance, wire safety,
+audio, and shared-relic presentation without re-owning the extracted domains.
+
+- `_woc_relic_registration_owner.lua` is the sole owner of the Blightreaper
+  item definition, attack-order settings, private Crowbill preparation,
+  career-action claims, More Items Library/backend reconciliation, and every
+  Chaos Wastes serialization, fixed-power, rarity-pool, and tempering edge.
+  Its state API exposes only registration status, backend lookup, the moveset
+  report, and idempotent poison-row installation needed by composition and
+  regression checks.
+- `_woc_spirit_runtime_owner.lua` is the sole owner of poison kill attribution,
+  the native buff-RPC observation, Shyish event registration, bounded spirit
+  spawn/chase/contact conversion, and state cleanup. The entry drives only its
+  `start`, `stop`, and `update` lifecycle methods.
+
+The refactor preserves 26 hook registrations in total: 12 remain at the
+composition root, 13 belong to relic registration, and one belongs to the
+spirit runtime. Both owners are dependency-injected, under 1,500 lines, listed
+in the compiled package, and covered by `test_woc_phase5_runtime_owners.lua`.
+
 ### Boss weapon catalogue boundary
 
 `_woc_boss_weapon_catalog.lua` is the single owner for two separate facets.

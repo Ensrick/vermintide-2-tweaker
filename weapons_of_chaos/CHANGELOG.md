@@ -1,5 +1,19 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.54-dev (2026-08-12) - structural decomposition complete (#1159)
+
+- Extracted Blightreaper item construction, private Crowbill installation,
+  backend reconciliation, Chaos Wastes serialization/tempering, and their 13
+  engine hooks into `_woc_relic_registration_owner.lua`.
+- Extracted poison attribution plus native Shyish spirit spawn, chase,
+  green-health conversion, and cleanup into `_woc_spirit_runtime_owner.lua`.
+- Preserved all 26 WOC hook registrations and their lifecycle order. Added
+  Lua 5.1 boundary coverage and moved older source-contract assertions to the
+  new canonical owners.
+- Reduced `weapons_of_chaos.lua` from 2,455 to 1,390 nonblank lines. The
+  machine decomposition contract now marks WOC complete with 14 required
+  owners; each extracted owner remains below 1,500 lines.
+
 ## v0.1.53-dev (2026-08-04) - appearance census re-keyed to surface x edge cells (#1157) [untested]
 
 - Census data only. `_woc_appearance_census.lua` is inert pure data consumed by

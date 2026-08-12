@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-12 - Weapons of Chaos reaches the structural completion target (#1159)
+
+Weapons of Chaos 0.1.54-dev extracts relic registration and Chaos Wastes
+lifecycle into one owner, and poison-attribution plus native Shyish spirit
+runtime into another. Lua 5.1 coverage pins ownership, lifecycle entry points,
+and the preserved 26-hook total. The entry falls from 2,455 to 1,390 nonblank
+lines, the required-owner inventory rises from 12 to 14, and the machine
+contract marks the WOC structural phase complete.
+
 ## 2026-08-11 - Weapon Tweaker reaches the structural completion target (#1159)
 
 Tweaker: Weapons 0.12.303-beta and 0.12.304-dev extract the canonical

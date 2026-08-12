@@ -333,6 +333,11 @@ return function(H, repo_root)
 		local file = assert(io.open(path, "rb"))
 		local source = file:read("*a")
 		file:close()
+		local registration_path = repo_root
+			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_relic_registration_owner.lua"
+		local registration_file = assert(io.open(registration_path, "rb"))
+		local registration = registration_file:read("*a")
+		registration_file:close()
 		H.truthy(source:find("_appearance_lib.new(_appearance.appearance_api(_G))", 1, true))
 		H.equal(source:find("_appearance_lib.new()", 1, true), nil)
 		H.truthy(source:find("expects_first_person_unit(owner_unit_1p)", 1, true))
@@ -343,9 +348,9 @@ return function(H, repo_root)
 		H.truthy(source:find("if ok and value ~= nil then return value end", 1, true))
 		H.equal(source:find("return ok and value ~= nil and value or fallback", 1, true), nil)
 		H.truthy(source:find("transform.rotation[1] ~= -180", 1, true))
-		H.truthy(source:find("_moveset.item_has_trait(live, _moveset.POISON_TRAIT)", 1, true))
-		H.truthy(source:find("live.properties[_moveset.CRIT_PROPERTY] == 1", 1, true))
-		H.equal(source:find("_moveset.item_has_trait(entry, _moveset.POISON_TRAIT)",
+		H.truthy(registration:find("_moveset.item_has_trait(live, _moveset.POISON_TRAIT)", 1, true))
+		H.truthy(registration:find("live.properties[_moveset.CRIT_PROPERTY] == 1", 1, true))
+		H.equal(registration:find("_moveset.item_has_trait(entry, _moveset.POISON_TRAIT)",
 			1, true), nil)
 	end)
 

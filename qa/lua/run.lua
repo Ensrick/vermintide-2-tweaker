@@ -233,6 +233,7 @@ local suites = {
 	"test_woc_data_widgets",
 	"test_woc_blightreaper_audio",
 	"test_woc_attack_order",
+	"test_woc_phase5_runtime_owners",
 	"test_woc_load_banner",
     "test_dcp_portrait_materials",
     "test_dcp_player_scope_probe",
