@@ -349,7 +349,7 @@ return function(H, repo_root)
 		-- absence check below keeps a second call site from reappearing.
 		local cwv_registration = read(
 			"character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua")
-		local woc = read("weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua")
+		local woc = read("weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_relic_registration_owner.lua")
 		H.truthy(wt:find("_career_weapon_actions.install", 1, true))
 		H.truthy(wt_dev:find("_career_weapon_actions.install", 1, true))
 		H.truthy(cwv_registration:find("_cwv_career_weapon_actions.install", 1, true))

@@ -163,7 +163,7 @@ return function(H, repo_root)
 
 	H.test("WOC production wires fixed power through every Deus boundary", function()
 		local path = repo_root
-			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_relic_registration_owner.lua"
 		local file = assert(io.open(path, "rb"))
 		local source = file:read("*a")
 		file:close()

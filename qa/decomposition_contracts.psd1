@@ -78,14 +78,14 @@
             RequiredModules = @('_cwv_variant_catalog.lua', '_cwv_core_templates.lua', '_cwv_skin_registry.lua', '_cwv_illusion_families.lua', '_cwv_husk_path.lua', '_cwv_musket_runtime.lua', '_cwv_husk_residency_owner.lua', '_cwv_item_registration_owner.lua', '_cwv_menu_preview_owner.lua', '_cwv_weapon_transform_owner.lua', '_cwv_custom_mesh_runtime.lua', '_cwv_musket_equip_surface.lua', '_cwv_regression_identity.lua', '_cwv_illusion_provenance.lua')
         }
         @{
-            # Inventoried at 2455 nonblank lines, 45 under the 2500 hard limit.
-            # Below the limit it has no baseline row in file_sizes.json, so
-            # before this contract nothing would have stopped it crossing.
+            # Completed by extracting registration/Deus lifecycle and native
+            # Shyish spirit runtime into explicit owners. Entry is 1390
+            # nonblank lines, below the 1500-line completion target.
             Name = 'weapons_of_chaos'
-            State = 'partial'
+            State = 'complete'
             Entry = 'weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
-            CeilingLines = 2455
-            RequiredModules = @('_woc_wire_policy.lua', '_woc_blightreaper_moveset.lua', '_woc_blightreaper_power.lua', '_woc_blightreaper_audio.lua', '_woc_blightreaper_pulse.lua', '_woc_blightreaper_spirits.lua', '_woc_cursed_rarity.lua', '_woc_attack_order.lua', '_woc_appearance_policy.lua', '_woc_mod_unit_preview.lua', '_woc_inventory_icons.lua', '_woc_relic_policy.lua')
+            CeilingLines = 1390
+            RequiredModules = @('_woc_wire_policy.lua', '_woc_blightreaper_moveset.lua', '_woc_blightreaper_power.lua', '_woc_blightreaper_audio.lua', '_woc_blightreaper_pulse.lua', '_woc_blightreaper_spirits.lua', '_woc_cursed_rarity.lua', '_woc_attack_order.lua', '_woc_appearance_policy.lua', '_woc_mod_unit_preview.lua', '_woc_inventory_icons.lua', '_woc_relic_policy.lua', '_woc_relic_registration_owner.lua', '_woc_spirit_runtime_owner.lua')
         }
     )
 }

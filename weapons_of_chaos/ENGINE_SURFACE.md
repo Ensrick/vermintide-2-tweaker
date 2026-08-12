@@ -28,12 +28,14 @@ resource closure; unclosed rows remain registration-disabled.
 
 ## Hook table
 
-The registration sites below are split between `weapons_of_chaos.lua` and
+The registration sites below are split among `weapons_of_chaos.lua`,
+`_woc_relic_registration_owner.lua`, `_woc_spirit_runtime_owner.lua`, and
 `_woc_mod_unit_preview.lua`. `[hook]` = full wrapper (`mod:hook`, can rewrite
 args/returns); `[safe]` = `mod:hook_safe` (post-callback, no override); `[tbl]` =
 table-form hook (plain-table target, nil-guarded). The item and NetworkLookup
 registration itself is NOT a hook - it is direct `rawset`/assignment inside the
-`_register_blightreaper` chokepoint (`:230`), covered in the subsystem notes.
+registration owner's `_register_blightreaper` chokepoint, covered in the
+subsystem notes.
 
 `_woc_relic_policy.lua` is the engine-free inventory authority for issue #637.
 It marks every WOC provider definition and actual MIL backend row as one
@@ -46,7 +48,7 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 
 | Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
 |---|---|---|---|
-| `_G.Localize` [hook,tbl] `:168` | Global loc-key -> string lookup; the inventory UI Localizes an item's `display_name` / `description` / `item_type` keys | Supply the Blightreaper display name/description/type labels for `woc_*` keys (`:168`) | VMF `_localization.lua` is NOT auto-registered into the global `Localize` (`docs/VMF_RECIPES.md`); a raw pass-through for every non-`woc_` key. `item_type` is set to `ITEM_KEY` so `Localize(item_type)` yields the item's display label, not the base weapon's |
+| `_G.Localize` [hook,tbl] | Global loc-key -> string lookup; the inventory UI Localizes an item's `display_name` / `description` / `item_type` keys | Supply the Blightreaper display name/description/type labels for `woc_*` keys | `_woc_relic_registration_owner.lua` owns the hook. VMF `_localization.lua` is NOT auto-registered into the global `Localize` (`docs/VMF_RECIPES.md`); a raw pass-through for every non-`woc_` key. `item_type` is set to `ITEM_KEY` so `Localize(item_type)` yields the item's display label, not the base weapon's |
 | VMF `custom_gui_textures` [data contract] | Injects a private GUI material only into explicitly named renderers | Register the authored `icon_wpn_blightreaper` material for inventory/equipment renderers | `_woc_inventory_icons.lua` owns the renderer allow-list. The WOC item retains its cloned vanilla icon in `cim_inventory_icon_fallback`; Athanor and any unproven renderer fail closed. Non-WOC peers receive only the vanilla-keyed loadout identity and never the custom resource name. |
 
 ### Registration timing (owner doc: `docs/engine/08`)
@@ -118,8 +120,8 @@ doc and `DEVELOPMENT.md` carry the full architecture.
 
 ### Item registration is direct table injection, not a hook (owner: `docs/engine/06`)
 
-`_register_blightreaper` (`:230`) clones the base `es_1h_sword` `ItemMasterList`
-entry via `_build_entry` (`:179`), hands it to
+`_woc_relic_registration_owner.lua` owns `_register_blightreaper`, which clones
+the base `es_1h_sword` `ItemMasterList` entry via `_build_entry`, hands it to
 `MoreItemsLibrary:add_mod_items_to_local_backend`, then mirrors it into
 `ItemMasterList[ITEM_KEY]` so vanilla equip/preview paths resolve it -
 `HeroPreviewer.equip_item` does `ItemMasterList[item_name]` [src: engine], and the
@@ -142,7 +144,7 @@ Runtime check `issue509_registered_blightreaper_wire_contract` asserts this
 against the live backend mirror rather than relying only on static source.
 
 Before MIL insertion, WOC builds its private combat template by deep-cloning
-`we_one_hand_sword_template_1`. Vanilla has already attached canonical career
+`one_handed_crowbill`. Vanilla has already attached canonical career
 ability rows to that donor (`scripts/settings/equipment/weapons.lua:241-267`).
 Deep cloning changes those rows' table identity, while
 `_lib_career_weapon_actions` intentionally uses identity to detect conflicting
@@ -164,7 +166,7 @@ one canonical row and zero removable/deferred duplicates at runtime.
 ### NetworkLookup append + the wire-safety consequence (owner: `docs/engine/03`)
 
 Registration also appends `ITEM_KEY` into `NetworkLookup.item_names` as a local
-index (`#tbl + 1`, `:264`), via `rawset` because the table has an error-throwing
+index (`#tbl + 1`), via `rawset` because the table has an error-throwing
 `__index`. That append is per-peer and order-dependent, so the numeric id a
 `woc_` key gets is not stable across peers - a host with WOC and a client without
 it disagree, and the client's decode hits the strict `__index`

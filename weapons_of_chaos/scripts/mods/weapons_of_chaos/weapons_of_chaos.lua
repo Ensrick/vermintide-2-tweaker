@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.53-dev"
+local MOD_VERSION = "0.1.54-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -186,29 +186,6 @@ local _appearance_fade = mod:dofile(
 local _career_weapon_actions = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_lib_career_weapon_actions")
 local _career_action_owner = "weapons_of_chaos"
-local _registration_attempts = 0
-local _registration_diag_budget = 12
-local _registration_diag_seen = {}
-local _registration_last_gate = "not_attempted"
-local _registration_last_reason = "not_attempted"
-
--- Registration may be retried only at StateInGameRunning.on_enter (never per
--- frame). Log each distinct deferred gate once, with a hard session budget, so
--- a load-order failure remains diagnosable without flooding the console/chat.
-local function _registration_deferred(gate, reason, detail)
-	_registration_last_gate = tostring(gate or "unknown")
-	_registration_last_reason = tostring(reason or "unknown")
-	local key = _registration_last_gate .. ":" .. _registration_last_reason
-	if not _registration_diag_seen[key] and _registration_diag_budget > 0 then
-		_registration_diag_seen[key] = true
-		_registration_diag_budget = _registration_diag_budget - 1
-		pcall(printf,
-			"[WOC:690] registration deferred attempt=%d gate=%s reason=%s detail=%s",
-			_registration_attempts, _registration_last_gate,
-			_registration_last_reason, tostring(detail or "none"))
-	end
-	return false
-end
 local _audio_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_audio")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
 mod._woc_resource_residency = mod:dofile(
@@ -550,13 +527,6 @@ end
 local HELD_UNIT = _appearance.UNIT_1P
 local INVENTORY_ICON = _inventory_icons.ICON
 
--- Assigned after the mixed-peer identity sideband is defined.  The state hook
--- lives earlier in the file, so forward functions let it stay the singleton
--- owner of StateInGameRunning.on_enter (#632 / no-duplicate-hook doctrine).
-local _start_spirit_runtime = function() end
-local _stop_spirit_runtime = function() end
-local _mark_blight_poison = function() end
-local _owner_has_wielded_trait = function() return false end
 local _spirit_package_requested = false
 local function _ensure_spirit_package()
 	if _spirit_package_requested then return true end
@@ -652,730 +622,47 @@ local _display_names = {
 	description_woc_shyish_health_curse_trait = mod:localize("description_woc_shyish_health_curse_trait"),
 }
 
-mod:hook(_G, "Localize", function(func, key)
-	if _display_names[key] then
-		return _display_names[key]
-	end
-	return func(key)
-end)
-
--- ============================================================
--- Item entry builder (minimal CWV `_build_entry` subset)
--- ============================================================
-
-local function _build_entry(base, backend_id)
-	local entry = table.clone(base, true)
-
-	-- Cross-mod marker (parity with CWV's `cwv_variant`). The clone keeps the
-	-- inherited `entry.name` ("es_1h_sword") on purpose — clobbering it breaks
-	-- the vanilla equip fallback `ItemMasterList[item.name]` (CWV clone-name
-	-- lesson, feedback_cwv_clone_name_clobber).
-	entry.woc_variant = true
-	entry.woc_item_key = ITEM_KEY
-
-	entry.display_name    = ITEM_KEY .. "_name"
-	entry.description     = ITEM_KEY .. "_description"
-	entry.right_hand_unit = HELD_UNIT
-	entry.left_hand_unit  = nil                 -- 1H sword: no off-hand / shield
-	entry.can_wield       = _careers
-	entry.template        = TEMPLATE
-	entry.item_type       = ITEM_KEY            -- own type so Localize(item_type) -> "Blightreaper"
-	entry.inventory_icon  = INVENTORY_ICON
-	-- CIM's Athanor top renderer is not one of WOC's injected Gui renderers.
-	-- Preserve the cloned vanilla sword icon as an explicit resident fallback;
-	-- never submit the private WOC material to an unproven Gui.
-	entry.cim_inventory_icon_fallback = base.inventory_icon
-	-- hud_icon remains the inherited generic sword HUD material.
-
-	-- Drop the DLC gate: this is a new mod item reusing base-package meshes;
-	-- per-career DLC ownership is enforced by the game's own equip check.
-	entry.required_dlc = nil
-
-	entry.rarity = _relic_policy.RARITY
-	entry.mod_data = {
-		backend_id     = backend_id,
-		ItemInstanceId = backend_id,
-		CustomData = {
-			traits      = '["' .. _moveset.POISON_TRAIT .. '","'
-				.. _moveset.SHYISH_CURSE_TRAIT .. '"]',
-			power_level = tostring(_power.NORMAL_POWER),
-			properties  = '{"woc_intrinsic_crit":1,"woc_power_vs_order":1}',
-			rarity      = _relic_policy.RARITY,
-		},
-		rarity      = _relic_policy.RARITY,
-		traits      = _moveset.intrinsic_traits(),
-		power_level = _power.NORMAL_POWER,
-		properties  = {
-			woc_intrinsic_crit = 1,
-			woc_power_vs_order = 1,
-		},
-	}
-	-- No skin pre-applied: the item renders from entry.right_hand_unit. WOC
-	-- trophy weapons are unique immutable relics, not craft/customize templates.
-	_relic_policy.mark_definition(entry, backend_id)
-
-	return entry
-end
-
--- ============================================================
--- Registration (deferred until the backend is ready)
--- ============================================================
-
-local _registered = false
-local _relic_definitions = {}
-local _moveset_report
-
--- The equipment buff is local to the wielder, so its WOC-only name never
--- crosses NetworkLookup. Its proc applies the game's native Hagbane DOT with
--- BuffSyncType.All; every peer therefore receives a boot-stable
--- `arrow_poison_dot` id and the native poisoned status FX.
-local function _install_blightreaper_poison()
-	local templates = rawget(_G, "BuffTemplates")
-	local procs = rawget(_G, "ProcFunctions")
-	if type(templates) ~= "table" or type(procs) ~= "table" then
-		return false, "buff_tables_unavailable"
-	end
-	if type(procs[_moveset.POISON_PROC]) ~= "function" then
-		procs[_moveset.POISON_PROC] = function(owner_unit, buff, params)
-			local hit_unit = type(params) == "table" and params[1]
-			local attack_type = type(params) == "table" and params[2]
-			if attack_type ~= "light_attack" and attack_type ~= "heavy_attack" then return end
-			if not (owner_unit and hit_unit and ALIVE[owner_unit] and HEALTH_ALIVE[hit_unit]) then return end
-			local side = Managers and Managers.state and Managers.state.side
-			if not side or not side:is_enemy(owner_unit, hit_unit) then return end
-			if not ScriptUnit.has_extension(hit_unit, "buff_system") then return end
-			local career = ScriptUnit.has_extension(owner_unit, "career_system")
-			local buff_system = Managers.state.entity and Managers.state.entity:system("buff_system")
-			local sync_types = rawget(_G, "BuffSyncType")
-			if not career or not buff_system or not sync_types then return end
-			buff_system:add_buff_synced(hit_unit, _moveset.DOT_TEMPLATE, sync_types.All, {
-				power_level = career:get_career_power_level(),
-				attacker_unit = owner_unit,
-				-- `damage_source` is itself a NetworkLookup. Keep it vanilla;
-				-- ITEM_KEY would be just as unsafe here as in loadout transport.
-				damage_source = "buff",
-			})
-			-- Poisoned Edge is reusable; Shyish spirit attribution is not. Mark
-			-- only when the currently wielded item also owns the intrinsic curse.
-			-- Client-owned Blightreaper hits reach the host through the native
-			-- rpc_add_buff_synced_params observation below.
-			if _owner_has_wielded_trait(owner_unit, _moveset.SHYISH_CURSE_TRAIT) then
-				_mark_blight_poison(hit_unit, owner_unit)
-			end
-		end
-	end
-	return _moveset.install_poison_buff(templates)
-end
-
--- ============================================================
--- Blightreaper attack order (author-picked chain permutation)
--- ============================================================
--- Reads the Blightreaper Combat dropdowns and applies the permutation plan to
--- the private clone AFTER it is fully prepared (install site below) and again
--- on every picker settings change (mod.on_setting_changed). The module fails
--- closed: a bad selection or descriptor mutates nothing and the native order
--- keeps playing. Sub_action tables are mutated in place, never replaced, so a
--- re-apply reaches the very next attack without a re-equip.
-
-local _attack_order_receipts = 16
-
-local function _attack_order_selections()
-	return {
-		lights = {
-			mod:get("woc_blightreaper_light_1"),
-			mod:get("woc_blightreaper_light_2"),
-			mod:get("woc_blightreaper_light_3"),
-			mod:get("woc_blightreaper_light_4"),
-		},
-		heavies = {
-			mod:get("woc_blightreaper_heavy_1"),
-			mod:get("woc_blightreaper_heavy_2"),
-			mod:get("woc_blightreaper_heavy_3"),
-		},
-		-- The push dropdown is not registered while the crowbill graph has only
-		-- one follow-up unit (VMF rejects single-option dropdowns; the 0.1.37
-		-- widget aborted the whole mod's options init - issue 822). Fall back
-		-- to the native unit so a nil setting can never fail the plan closed.
-		push = { mod:get("woc_blightreaper_push_follow")
-			or (_chain_descriptor.push_positions
-				and _chain_descriptor.push_positions[1]) },
-	}
-end
-
-local function _apply_attack_order(source)
-	local weapons = rawget(_G, "Weapons")
-	local template = weapons and rawget(weapons, TEMPLATE)
-	if type(template) ~= "table" then
-		return nil, "template_not_installed"
-	end
-	local report, reason = _attack_order.apply(template, _chain_descriptor,
-		_attack_order_selections())
-	if _attack_order_receipts > 0 then
-		_attack_order_receipts = _attack_order_receipts - 1
-		if report then
-			pcall(printf, "[WOC:order] attack order applied (%s): writes=%d identity=%s",
-				tostring(source), report.writes, tostring(report.identity))
-		else
-			pcall(printf, "[WOC:order] attack order NOT applied (%s): %s; native order stays",
-				tostring(source), tostring(reason))
-		end
-	end
-	return report, reason
-end
-
-mod.on_setting_changed = function(setting_id)
-	if type(setting_id) == "string" and setting_id:find("^woc_blightreaper_") then
-		_apply_attack_order("setting:" .. setting_id)
-	end
-end
-
-mod:command("woc_chains", "Show the Blightreaper attack chain map (what follows what)", function()
-	local weapons = rawget(_G, "Weapons")
-	local template = weapons and rawget(weapons, TEMPLATE)
-	if type(template) ~= "table" then
-		mod:echo("[WOC] Blightreaper template is not installed yet (enable the relic and enter the keep).")
-		return
-	end
-	local lines, reason = _attack_order.describe_chains(template, _chain_descriptor,
-		_attack_order_selections(), function(key) return mod:localize(key) end)
-	if not lines then
-		mod:echo("[WOC] chain map unavailable: %s", tostring(reason))
-		return
-	end
-	mod:echo("[WOC] Blightreaper chain map (positions are chain steps):")
-	for i = 1, #lines do
-		mod:echo("  %s", lines[i])
-	end
-end)
-
-_rt_register("attack_order_pick_vocabulary_and_apply", function()
-	local ids = {}
-	for _, unit in ipairs(_chain_descriptor.lights) do ids[unit.id] = true end
-	for _, unit in ipairs(_chain_descriptor.heavies) do ids[unit.id] = true end
-	for _, unit in ipairs(_chain_descriptor.push) do ids[unit.id] = true end
-	local selections = _attack_order_selections()
-	for pool, chosen in pairs(selections) do
-		for i, value in pairs(chosen) do
-			if value ~= nil and not ids[value] then
-				return string.format("%s pick %s stores out-of-vocabulary unit %s",
-					tostring(pool), tostring(i), tostring(value))
-			end
-		end
-	end
-	local weapons = rawget(_G, "Weapons")
-	local template = weapons and rawget(weapons, TEMPLATE)
-	if type(template) ~= "table" then
-		return "skip: Blightreaper template not installed"
-	end
-	local report, reason = _attack_order.apply(template, _chain_descriptor, selections)
-	if not report then
-		return "attack order failed to apply: " .. tostring(reason)
-	end
-end)
-
-local function _install_blightreaper_moveset()
-	if _moveset_report and _moveset_report.installed
-			and _moveset_report.ability_actions
-			and _moveset_report.ability_actions.ok then
-		return true
-	end
-	local rows_ok, rows_reason = _moveset.install_intrinsic_property_rows(
-		rawget(_G, "WeaponProperties"), rawget(_G, "BuffTemplates"))
-	if not rows_ok then
-		return false, "property_rows", rows_reason
-	end
-	local traits_ok, traits_reason = _moveset.install_intrinsic_trait_rows(
-		rawget(_G, "WeaponTraits"), rawget(_G, "BuffTemplates"))
-	if not traits_ok then
-		return false, "trait_rows", traits_reason
-	end
-	local poison_ok, poison_reason = _install_blightreaper_poison()
-	if not poison_ok then
-		return false, "poison", poison_reason
-	end
-	_moveset_report = _moveset.install(Weapons,
-		function(value) return table.clone(value, true) end)
-	if not _moveset_report.installed then
-		return false, "moveset", _moveset_report.skipped
-	end
-	local identity = _career_weapon_actions.prepare_inherited_clone(
-		Weapons[TEMPLATE], Weapons[_moveset.SOURCE_TEMPLATE],
-		rawget(_G, "ActionTemplates"),
-		tostring(TEMPLATE) .. "<-" .. tostring(_moveset.SOURCE_TEMPLATE))
-	_moveset_report.career_action_identity = identity
-	if not identity.ok then
-		_moveset_report.installed = false
-		return false, "career_action_identity",
-			tostring(identity.skipped or "clone_prepare_failed")
-	end
-	local abilities = _career_weapon_actions.install(
-		Weapons[TEMPLATE], _careers, rawget(_G, "CareerSettings"),
-		rawget(_G, "ActionTemplates"), _career_action_owner)
-	_moveset_report.ability_actions = abilities
-	if not abilities.ok then
-		_moveset_report.installed = false
-		return false, "career_action_install", string.format(
-			"reason=%s conflicts=%s missing_actions=%s missing_careers=%s",
-			tostring(abilities.skipped or "provider_conflict"),
-			table.concat(abilities.conflicting_names or {}, ","),
-			table.concat(abilities.missing_actions or {}, ","),
-			table.concat(abilities.missing_careers or {}, ","))
-	end
-	-- Attack-order picker: permute the fully prepared clone per the Blightreaper
-	-- Combat dropdowns. Never gates registration; a failed apply keeps the
-	-- native order (module is fail-closed, receipt is printf log-only).
-	local order_report = _apply_attack_order("install")
-	_moveset_report.attack_order = order_report or false
-	mod:info("[WOC:690] private Crowbill template ready (attacks=%d poison=%s crit=15%% speed=83%% executioner_audio=true career_actions=%d/%d restored_inherited=%d discarded_claims=%d)",
-		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE,
-		abilities.installed + abilities.existing, abilities.required,
-		identity.restored or 0, identity.discarded_claims or 0)
-	return true
-end
-
-local function _backend_items()
-	return Managers and Managers.backend and Managers.backend:get_interface("items")
-end
-
-local function _live_backend_item(items, backend_id)
-	if not items then return nil end
-	local live
-	local fetched = pcall(function()
-		live = items:get_item_from_id(backend_id)
-	end)
-	if fetched and live then return live end
-	local all
-	pcall(function() all = items:get_all_backend_items() end)
-	return type(all) == "table" and all[backend_id] or nil
-end
-
-local function _stamp_live_relic(items, entry)
-	local live = _live_backend_item(items, BACKEND_ID)
-	if not live then return false end
-	local enforced = _relic_policy.enforce_instance(live, entry, BACKEND_ID)
-	if enforced then _power.stamp(live, false) end
-	return enforced
-end
-
-local function _equip_state(items, backend_id)
-	local ok_current, current = pcall(items.equipped_by, items, backend_id)
-	local ok_saved, saved = pcall(items.is_equipped_by_any_loadout, items, backend_id)
-	if not ok_current or not ok_saved
-			or type(current) ~= "table" or type(saved) ~= "table" then
-		return nil
-	end
-	return #current > 0 or #saved > 0
-end
-
-local function _remove_relic_duplicates(items, ids)
-	if #ids == 0 then return 0 end
-	local cim = get_mod("cim_dev") or get_mod("cim")
-	if not cim or type(cim._cim_get_craft) ~= "function"
-			or type(cim._cim277_delete_owned_ids) ~= "function" then
-		return 0
-	end
-	local owned = {}
-	for i = 1, #ids do
-		if cim._cim_get_craft(ids[i]) then owned[#owned + 1] = ids[i] end
-	end
-	if #owned == 0 then return 0 end
-	local count, err = cim._cim277_delete_owned_ids(owned)
-	if err then
-		printf("[WOC:637] CIM duplicate cleanup deferred: %s", tostring(err))
-		return 0
-	end
-	return tonumber(count) or 0
-end
-
-local function _reconcile_relic_inventory()
-	if not _registered then return end
-	local items = _backend_items()
-	if not items then return end
-	local all
-	local ok = pcall(function() all = items:get_all_backend_items() end)
-	if not ok or type(all) ~= "table" then return end
-
-	local cim = get_mod("cim_dev") or get_mod("cim")
-	local can_delete = cim and type(cim._cim_get_craft) == "function"
-		and type(cim._cim277_delete_owned_ids) == "function"
-	local report = _relic_policy.plan_reconciliation(all, _relic_definitions,
-		function(backend_id) return _equip_state(items, backend_id) end,
-		function(backend_id)
-			return can_delete and cim._cim_get_craft(backend_id) and true or nil
-		end)
-	local removed = _remove_relic_duplicates(items, report.removable)
-	if #report.deferred > 0 then
-		printf("[WOC:637] deferred %d equipped/uncertain relic duplicate(s); retrying on next state transition",
-			#report.deferred)
-	end
-	printf("[WOC:637] unique relics canonical=%d removed_duplicates=%d deferred=%d missing=%d",
-		#report.canonical, removed, #report.deferred, #report.missing)
-end
-
-local function _register_blightreaper()
-	if _registered then
-		return
-	end
-	_registration_attempts = _registration_attempts + 1
-	if not mod:get("enable_blightreaper") then
-		return _registration_deferred("setting", "disabled")
-	end
-	-- The mod chunk can be evaluated before Morris' rarity tables finish
-	-- loading. Re-run this idempotent registration at the in-game boundary so
-	-- the Cursed presentation and lookup survive that load order.
-	local rarity_ok, rarity_reason = _cursed.install({
-		Colors = rawget(_G, "Colors"),
-		UISettings = rawget(_G, "UISettings"),
-		RaritySettings = rawget(_G, "RaritySettings"),
-		RarityIndex = rawget(_G, "RarityIndex"),
-		ORDER_RARITY = rawget(_G, "ORDER_RARITY"),
-		NetworkLookup = rawget(_G, "NetworkLookup"),
-	})
-	if not rarity_ok then
-		return _registration_deferred("cursed_rarity", rarity_reason)
-	end
-
-	local mil = get_mod("MoreItemsLibrary")
-	if not mil then
-		return _registration_deferred("more_items_library", "mod_unavailable",
-			"load MoreItemsLibrary above WOC")
-	end
-
-	local base = rawget(ItemMasterList, BASE_WEAPON)
-	if not base then
-		return _registration_deferred("base_item", "missing", BASE_WEAPON)
-	end
-	local moveset_ok, moveset_gate, moveset_reason = _install_blightreaper_moveset()
-	if not moveset_ok then
-		return _registration_deferred(moveset_gate, moveset_reason)
-	end
-
-	local entry = _build_entry(base, BACKEND_ID)
-	mil:add_mod_items_to_local_backend({ entry }, "weapons_of_chaos")
-	_relic_definitions[1] = {
+local _spirit_runtime
+local _relic_runtime = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_woc_relic_registration_owner").install(mod, {
 		item_key = ITEM_KEY,
 		backend_id = BACKEND_ID,
-		master = entry,
-	}
-
-	-- Mirror into ItemMasterList so vanilla equip/preview paths resolve it
-	-- (HeroPreviewer.equip_item does `ItemMasterList[item_name]`). rawget
-	-- bypasses the crashify __index metamethod on the missing key.
-	if ItemMasterList and not rawget(ItemMasterList, ITEM_KEY) then
-		ItemMasterList[ITEM_KEY] = entry
-	end
-	local deus_ok, deus_reason = _power.install_deus(ItemMasterList,
-		rawget(_G, "DeusStartingWeaponTypeMapping"), rawget(_G, "DeusWeapons"))
-	if not deus_ok then
-		_dbg("Blightreaper Deus identity deferred: %s", tostring(deus_reason))
-	end
-
-	-- Inject into NetworkLookup.item_names so item-name RPCs serialize. The
-	-- canonical helper preserves both directions and fails closed on half-pairs.
-	local lookup_index, _, lookup_reason = _network_lookup.register_named(
-		NetworkLookup, "item_names", ITEM_KEY)
-	if not lookup_index then
-		_registration_last_gate = "network_lookup"
-		_registration_last_reason = lookup_reason
-		_dbg("Blightreaper registration deferred: NetworkLookup.item_names %s",
-			tostring(lookup_reason))
-		return
-	end
-
-	local items = _backend_items()
-	if not _stamp_live_relic(items, entry) then
-		printf("[WOC:637] canonical backend row was not visible immediately; will restamp on state transition")
-	end
-
-	_registered = true
-	_registration_last_gate = "registered"
-	_registration_last_reason = "complete"
-	mod:info("[WOC] registered Blightreaper (%s) as backend item %s", ITEM_KEY, BACKEND_ID)
-end
-
--- ============================================================
--- Chaos Wastes fixed-power identity
--- ============================================================
-
-local _deus_setup_active = false
-local _deus_pending_relics = 0
-
-local function _pack_results(...)
-	return { n = select("#", ...), ... }
-end
-
--- Vanilla setup reads the canonical backend item by id, then immediately maps
--- item.key through DeusStartingWeaponTypeMapping. Expose a non-mutating WOC-key
--- shadow only inside that synchronous setup window. The mapping itself still
--- resolves to the vanilla elf-Sword Deus row.
-mod:hook("BackendInterfaceItemPlayfab", "get_item_from_id", function(func, self, backend_id)
-	local item = func(self, backend_id)
-	if _deus_setup_active and _power.is_relic(item) then
-		_deus_pending_relics = _deus_pending_relics + 1
-		return _power.setup_identity(item)
-	end
-	return item
-end)
-
-mod:hook("DeusMechanism", "_setup_run", function(func, self, ...)
-	_power.install_deus(ItemMasterList, rawget(_G, "DeusStartingWeaponTypeMapping"),
-		rawget(_G, "DeusWeapons"))
-	_deus_setup_active = true
-	_deus_pending_relics = 0
-	local results = _pack_results(pcall(func, self, ...))
-	_deus_setup_active = false
-	_deus_pending_relics = 0
-	if not results[1] then error(results[2]) end
-	return unpack(results, 2, results.n)
-end)
-
-mod:hook("DeusWeaponGeneration", "generate_item_from_item_key",
-		function(func, deus_item_key, ...)
-			local restore = _deus_setup_active and _deus_pending_relics > 0
-				and deus_item_key == _power.VANILLA_DEUS_KEY
-			local item = func(deus_item_key, ...)
-			if restore and type(item) == "table" then
-				_deus_pending_relics = _deus_pending_relics - 1
-				_power.restore_deus_item(item, _power.SERIALIZATION_MARKER,
-					rawget(ItemMasterList, ITEM_KEY))
+		base_weapon = BASE_WEAPON,
+		held_unit = HELD_UNIT,
+		inventory_icon = INVENTORY_ICON,
+		template = TEMPLATE,
+		careers = _careers,
+		display_names = _display_names,
+		moveset = _moveset,
+		power = _power,
+		cursed = _cursed,
+		attack_order = _attack_order,
+		chain_descriptor = _chain_descriptor,
+		relic_policy = _relic_policy,
+		inventory_icons = _inventory_icons,
+		network_lookup = _network_lookup,
+		career_weapon_actions = _career_weapon_actions,
+		career_action_owner = _career_action_owner,
+		rt_register = _rt_register,
+		dbg = _dbg,
+		ensure_appearance_aliases = _ensure_appearance_aliases,
+		reset_appearance_diag = function() _appearance_diag_budget = 32 end,
+		start_spirits = function()
+			if _spirit_runtime then return _spirit_runtime:start() end
+		end,
+		stop_spirits = function(reason)
+			if _spirit_runtime then return _spirit_runtime:stop(reason) end
+		end,
+		mark_poison = function(hit_unit, owner_unit)
+			if _spirit_runtime then
+				return _spirit_runtime:mark_poison(hit_unit, owner_unit)
 			end
-			return item
-		end)
-
-	mod:hook("DeusWeaponGeneration", "serialize_weapon", function(func, item)
-		return _power.serialize_deus_weapon(item, function(wire_item)
-			return func(wire_item)
-		end)
-	end)
-
-	mod:hook("DeusWeaponGeneration", "deserialize_weapon", function(func, serialized)
-		return _power.deserialize_deus_weapon(serialized, function(wire_string)
-			return func(wire_string)
-		end, rawget(ItemMasterList, ITEM_KEY))
-	end)
-
-	mod:hook("DeusWeaponGeneration", "upgrade_item", function(func, item, ...)
-		if _power.should_block_upgrade(item) then return item end
-		return func(item, ...)
-	end)
-
--- Setup overwrites generated starter power with the difficulty default before
--- granting it. Stamp at the grant boundary so the backend row and the run
--- controller's shared item table both retain 900/Cursed.
-mod:hook("BackendInterfaceDeusBase", "grant_deus_weapon", function(func, self, item)
-	if _power.is_relic(item) then _power.stamp_deus(item) end
-	return func(self, item)
-end)
-
-mod:hook("DeusChestExtension", "can_be_unlocked", function(func, self)
-	local weapon = self._get_wielded_weapon and self:_get_wielded_weapon()
-	if _power.should_block_upgrade(weapon) then return false end
-	return func(self)
-end)
-
--- RarityUtils.get_lower_rarities sees every registered rarity. Without this
--- repair, a Deus upgrade can write `cursed` into pool_excludes even though the
--- base weapon pool has no cursed bucket; the next chest then indexes nil.
-mod:hook("DeusRunController", "get_weapon_pool", function(func, self, ...)
-	local ok_base, base_pool = pcall(self.get_base_weapon_pool, self)
-	local state = self._run_state
-	if ok_base and type(base_pool) == "table" and state
-			and type(state.get_own_weapon_pool_excludes) == "function" then
-		local excludes = state:get_own_weapon_pool_excludes()
-		local removed = _cursed.scrub_unknown_pool_rarities(base_pool, excludes)
-		if #removed > 0 and type(state.set_own_weapon_pool_excludes) == "function" then
-			state:set_own_weapon_pool_excludes(excludes)
-			mod:info("[WOC:632] scrubbed Cursed Deus rarity exclude")
-		end
-	end
-	return func(self, ...)
-end)
-
--- StateInGameRunning.on_enter fires on entering the keep AND each mission load;
--- the `_registered` guard makes re-fires a no-op (CWV registration-timing pattern).
-mod:hook_safe("StateInGameRunning", "on_enter", function()
-	_appearance_diag_budget = 32
-	_ensure_appearance_aliases()
-	_register_blightreaper()
-	if _registered then
-		local entry = _relic_definitions[1] and _relic_definitions[1].master
-		_stamp_live_relic(_backend_items(), entry)
-		_reconcile_relic_inventory()
-		_start_spirit_runtime()
-	end
-end)
-
--- The event manager and network-unit spawner are state-owned.  Delete bounded
--- live spirits and unregister before StateInGameRunning tears those systems
--- down; retaining them into the next level would be a dead-world fault.
-mod:hook_safe("StateInGameRunning", "on_exit", function()
-	_stop_spirit_runtime("state_exit")
-end)
-
--- Crowbill attack events are authored for Sienna's (bw_) skeleton. Reuse
--- Weapon Tweaker's proven per-receiver crowbill remap at the single pre-RPC
--- animation boundary so owner 3P, bots, and remote husks all receive the same
--- vanilla animation id. The 3P wield stance is handled in data instead
--- (`wield_anim_career_3p` on the private clone; see the moveset module).
-mod:hook("WeaponUnitExtension", "_play_3p_anim",
-		function(func, self, event_3p, event, owner_unit, looping_event, anim_time_scale)
-			local lookup = self.current_action_settings and self.current_action_settings.lookup_data
-			local template_name = lookup and lookup.item_template_name
-			if template_name == TEMPLATE then
-				local career_name
-				local career = owner_unit and ScriptUnit.has_extension(owner_unit, "career_system")
-				if career and type(career.career_name) == "function" then
-					career_name = career:career_name()
-				end
-				event_3p = _moveset.remap_3p(event_3p, career_name, template_name)
-			end
-			return func(self, event_3p, event, owner_unit, looping_event, anim_time_scale)
-		end)
-
-_rt_register("issue637_unique_immutable_relic_inventory", function()
-	if not mod:get("enable_blightreaper") then return "skip: Blightreaper is disabled" end
-	if not _registered then return "WOC relic registration has not completed" end
-	local entry = rawget(ItemMasterList, ITEM_KEY)
-	if not _relic_policy.is_definition(entry) or entry.rarity ~= _relic_policy.RARITY then
-		return "canonical provider row is not marked as an immutable Cursed relic"
-	end
-	local items = _backend_items()
-	local all
-	local ok = items and pcall(function() all = items:get_all_backend_items() end)
-	if not ok or type(all) ~= "table" then return "backend inventory unavailable" end
-	local cim = get_mod("cim_dev") or get_mod("cim")
-	local can_delete = cim and type(cim._cim_get_craft) == "function"
-		and type(cim._cim277_delete_owned_ids) == "function"
-	local report = _relic_policy.plan_reconciliation(all, _relic_definitions,
-		function(backend_id) return _equip_state(items, backend_id) end,
-		function(backend_id)
-			return can_delete and cim._cim_get_craft(backend_id) and true or nil
-		end)
-	if #report.canonical ~= 1 or #report.removable ~= 0
-			or #report.deferred ~= 0 or #report.missing ~= 0 then
-		return string.format("relic inventory not singular: canonical=%d removable=%d deferred=%d missing=%d",
-			#report.canonical, #report.removable, #report.deferred, #report.missing)
-	end
-	local live = all[BACKEND_ID]
-	if not _relic_policy.is_instance(live) or live.rarity ~= _relic_policy.RARITY then
-		return "MoreItemsLibrary live row did not retain the immutable Cursed marker"
-	end
-end)
-
-_rt_register("issue613_blightreaper_inventory_icon_contract", function()
-	if not mod:get("enable_blightreaper") then return "skip: Blightreaper is disabled" end
-	if not _registered then return "WOC relic registration has not completed" end
-	local entry = rawget(ItemMasterList, ITEM_KEY)
-	if type(entry) ~= "table" or entry.inventory_icon ~= INVENTORY_ICON then
-		return "Blightreaper provider row does not own the authored inventory icon"
-	end
-	if type(entry.cim_inventory_icon_fallback) ~= "string"
-			or entry.cim_inventory_icon_fallback == "" then
-		return "Blightreaper provider row lacks a resident Athanor fallback icon"
-	end
-	local athanor_icon, custom = _inventory_icons.resolve(
-		entry.inventory_icon, "athanor_top", entry.cim_inventory_icon_fallback)
-	if not custom or athanor_icon ~= entry.cim_inventory_icon_fallback then
-		return "Blightreaper custom icon did not fail closed outside injected renderers"
-	end
-end)
-
-_rt_register("issue632_blightreaper_cursed_combat_contract", function()
-	if not mod:get("enable_blightreaper") then return "skip: Blightreaper is disabled" end
-	if not _registered then return "WOC relic registration has not completed" end
-	local entry = rawget(ItemMasterList, ITEM_KEY)
-	local template = rawget(Weapons, TEMPLATE)
-	local donor = rawget(Weapons, _moveset.SOURCE_TEMPLATE)
-	if type(entry) ~= "table" or entry.template ~= TEMPLATE then
-		return "item is not bound to the private Crowbill template"
-	end
-	if type(template) ~= "table" or type(donor) ~= "table" or template == donor then
-		return "private Crowbill clone is missing or aliases its donor"
-	end
-	-- MoreItemsLibrary copies `mod_data.traits` into the live backend row; the
-	-- ItemMasterList definition intentionally stores that acquisition payload
-	-- under `mod_data`. Test the actual runtime owner instead of the definition
-	-- table, which produced a false FAIL in the July 21 evidence log.
-	local live = _live_backend_item(_backend_items(), BACKEND_ID)
-	if not _moveset.item_has_trait(live, _moveset.POISON_TRAIT)
-			or not _moveset.item_has_trait(live, _moveset.SHYISH_CURSE_TRAIT) then
-		return "live relic is missing intrinsic poison/Shyish traits"
-	end
-	local actions = template.actions and template.actions.action_one
-	for _, required in ipairs({
-		"light_attack_left", "light_attack_right", "light_attack_last",
-		"light_attack_upper", "light_attack_bopp",
-		"heavy_attack", "heavy_attack_left", "heavy_attack_right_up",
-	}) do
-		if type(actions and actions[required]) ~= "table" then
-			return "native Crowbill action is missing: " .. tostring(required)
-		end
-	end
-	if actions.light_attack_left.impact_sound_event ~= _moveset.GREATAXE_IMPACT_SOUND
-			or actions.light_attack_left.no_damage_impact_sound_event
-				~= _moveset.GREATAXE_ARMOUR_IMPACT_SOUND
-			or actions.light_attack_left.hit_effect ~= _moveset.GREATAXE_HIT_EFFECT
-			or actions.light_attack_left.armor_impact_sound_event ~= nil then
-		return "Blightreaper Greataxe impact identity is incomplete"
-	end
-	for name, action in pairs(actions) do
-		if type(action) == "table" and action.kind == "sweep" then
-			if action.additional_critical_strike_chance ~= _moveset.INTRINSIC_CRIT_CHANCE then
-				return "intrinsic 15% critical chance drifted on " .. tostring(name)
-			end
-			if name:find("^light_attack") and action.damage_profile ~= _moveset.LIGHT_DAMAGE_PROFILE then
-				return "relic light damage profile drifted on " .. tostring(name)
-			end
-			if name:find("^heavy_attack") and action.damage_profile ~= _moveset.HEAVY_DAMAGE_PROFILE then
-				return "armor-piercing heavy profile drifted on " .. tostring(name)
-			end
-		end
-	end
-	local has_executioner_audio = false
-	for _, dependency in ipairs(template.wwise_dep_right_hand or {}) do
-		if dependency == _moveset.EXECUTIONER_WWISE_DEP then has_executioner_audio = true end
-	end
-	if not has_executioner_audio then return "Executioner Sword audio dependency is absent" end
-	if not (live and live.properties and live.properties[_moveset.CRIT_PROPERTY] == 1
-			and live.properties[_moveset.ORDER_PROPERTY] == 1) then
-		return "live relic is missing intrinsic and cosmetic property rows"
-	end
-	local procs = rawget(_G, "ProcFunctions")
-	if type(procs) ~= "table" or type(procs[_moveset.POISON_PROC]) ~= "function" then
-		return "client-safe Hagbane poison proc is unavailable"
-	end
-	if not live or live.power_level ~= _power.NORMAL_POWER
-			or live.rarity ~= _cursed.NAME then
-		return string.format("live relic expected 600/Cursed, got power=%s rarity=%s",
-			tostring(live and live.power_level), tostring(live and live.rarity))
-	end
-	local rarity_settings = rawget(_G, "RaritySettings")
-	local ui_settings = rawget(_G, "UISettings")
-	if not (rarity_settings and rarity_settings.cursed
-			and rarity_settings.cursed.order == _cursed.ORDER
-			and ui_settings and ui_settings.item_rarity_textures
-			and ui_settings.item_rarity_textures.cursed == _cursed.TEXTURE) then
-		return "Cursed rarity presentation registry is incomplete"
-	end
-	local remap_shape = { dr_ = 6, es_ = 1, wh_ = 1, _default = 4 }
-	for prefix, expected in pairs(remap_shape) do
-		local remap = _moveset.THIRD_PERSON_REMAP[prefix]
-		local count = 0
-		if type(remap) == "table" then
-			for _ in pairs(remap) do count = count + 1 end
-		end
-		if count ~= expected then
-			return string.format(
-				"crowbill 3P remap table %s expected %d entries, found %d",
-				tostring(prefix), expected, count)
-		end
-	end
-	local wield_3p = template.wield_anim_career_3p
-	if type(wield_3p) ~= "table" or wield_3p.es_mercenary ~= "to_1h_sword"
-			or wield_3p.wh_priest ~= "to_1h_hammer" or wield_3p.bw_adept ~= nil then
-		return "per-career crowbill 3P wield redirect table is incomplete"
-	end
-end)
+		end,
+		owner_has_wielded_trait = function(unit, trait_key)
+			return _spirit_runtime
+				and _spirit_runtime:owner_has_wielded_trait(unit, trait_key) or false
+		end,
+	})
 
 -- ============================================================
 -- Wire-safety: never crash a non-WOC peer (issue 278 / issue 371)
@@ -1427,446 +714,17 @@ local _shared_relic_runtime = mod:dofile(
 		rt_register = _rt_register,
 	})
 
--- ============================================================
--- Native Shyish death spirits (#632)
--- ============================================================
-
-local _spirit_state = {
-	active = {},
-	count = 0,
-	event_manager = nil,
-	poison_sources = setmetatable({}, { __mode = "k" }),
-	spawned = 0,
-	converted = 0,
-	dropped = 0,
-	damage_index = 1,
-}
-local _spirit_diag_budget = 24
-local _spirit_reject_diag_budget = 8
-
-local function _spirit_now()
-	local time = Managers and Managers.time
-	if not time or type(time.time) ~= "function" then return 0 end
-	local ok, value = pcall(time.time, time, "game")
-	return ok and tonumber(value) or 0
-end
-
-local function _spirit_diag(fmt, ...)
-	if _spirit_diag_budget <= 0 then return end
-	_spirit_diag_budget = _spirit_diag_budget - 1
-	pcall(printf, "[WOC:632] " .. fmt, ...)
-end
-
--- Rejected-identity kills get a separate small budget so ordinary teammate
--- kills cannot consume the relevant [WOC:632] trace.
-local function _spirit_reject_diag(fmt, ...)
-	if _spirit_reject_diag_budget <= 0 then return end
-	_spirit_reject_diag_budget = _spirit_reject_diag_budget - 1
-	pcall(printf, "[WOC:632] " .. fmt, ...)
-end
-
-local function _player_peer_id(unit)
-	local player
-	pcall(function() player = Managers.player:owner(unit) end)
-	if not player then return nil end
-	return player.peer_id or (player.network_id and player:network_id())
-end
-
-local function _wielded_relic(unit)
-	if not unit or not Unit.alive(unit) then return false, nil end
-	local inventory = ScriptUnit.has_extension(unit, "inventory_system")
-	if not inventory then return false, nil end
-	local slot
-	if type(inventory.get_wielded_slot_name) == "function" then
-		local ok
-		ok, slot = pcall(inventory.get_wielded_slot_name, inventory)
-		if not ok then slot = nil end
-	end
-	if slot ~= "slot_melee" and slot ~= "slot_ranged" then return false, slot end
-	local slot_data
-	if type(inventory.get_wielded_slot_data) == "function" then
-		pcall(function() slot_data = inventory:get_wielded_slot_data() end)
-	end
-	if slot_data and _power.is_relic(slot_data.item_data) then return true, slot end
-	local peer_id = _player_peer_id(unit)
-	local remote = peer_id and _remote_blightreaper[peer_id]
-	return remote and remote[slot] == true or false, slot
-end
-
-local function _owner_trait_evidence(unit, trait_key)
-	if not unit or not Unit.alive(unit) or type(trait_key) ~= "string" then
-		return false, "invalid_owner", nil, nil
-	end
-	local inventory = ScriptUnit.has_extension(unit, "inventory_system")
-	if not inventory then return false, "inventory_missing", nil, nil end
-	local slot_data
-	if type(inventory.get_wielded_slot_data) == "function" then
-		pcall(function() slot_data = inventory:get_wielded_slot_data() end)
-	end
-	local item_data = slot_data and slot_data.item_data
-	local backend_id = item_data and item_data.backend_id
-	local items = backend_id and _backend_items()
-	local item
-	if items then pcall(function() item = items:get_item_from_id(backend_id) end) end
-	if _moveset.item_has_trait(item, trait_key) then
-		return true, "live_backend_trait", backend_id,
-			item and (item.key or item.ItemId)
-	end
-	-- Blightreaper's same-mod remote identity cannot carry its custom trait on
-	-- vanilla loadout transport. Its exact relic identity is the bounded
-	-- semantic fallback for the intrinsic Shyish row only.
-	local relic, slot = _wielded_relic(unit)
-	if trait_key == _moveset.SHYISH_CURSE_TRAIT and relic then
-		return true, "exact_relic_identity:" .. tostring(slot), backend_id,
-			item_data and (item_data.key or item_data.ItemId)
-	end
-	return false, item and "live_backend_trait_absent"
-		or backend_id and "backend_item_missing"
-		or "backend_id_missing", backend_id,
-		item_data and (item_data.key or item_data.ItemId)
-end
-
-_owner_has_wielded_trait = function(unit, trait_key)
-	local has_trait = _owner_trait_evidence(unit, trait_key)
-	return has_trait
-end
-
-_mark_blight_poison = function(hit_unit, owner_unit)
-	local network = Managers and Managers.state and Managers.state.network
-	if not (network and network.is_server and hit_unit and owner_unit
-		and Unit.alive(hit_unit) and Unit.alive(owner_unit)) then return end
-	_spirit_state.poison_sources[hit_unit] = {
-		owner = owner_unit,
-		t = _spirit_now(),
-	}
-	_spirit_diag("poison marker armed peer=%s ttl=%.1f",
-		tostring(_player_peer_id(owner_unit)), _spirits.POISON_ATTRIBUTION_TTL)
-end
-
--- Client-owned Hagbane applications already traverse this native RPC with the
--- native buff-template id and attacker params.  Observe it after vanilla has
--- accepted the buff; do not add traffic and do not transmit WOC lookup ids.
--- Pre-flight: WOC has no other hook on (BuffSystem,rpc_add_buff_synced_params).
-mod:hook_safe("BuffSystem", "rpc_add_buff_synced_params", function(self, channel_id,
-		target_unit_id, template_name_id)
-	local network = Managers and Managers.state and Managers.state.network
-	if not (network and network.is_server) then return end
-	local template_name = NetworkLookup and NetworkLookup.buff_templates
-		and NetworkLookup.buff_templates[template_name_id]
-	if template_name ~= _moveset.DOT_TEMPLATE then return end
-	local peer_id = rawget(_G, "CHANNEL_TO_PEER_ID") and CHANNEL_TO_PEER_ID[channel_id]
-	local player = peer_id and Managers.player.player_from_peer_id
-		and Managers.player:player_from_peer_id(peer_id)
-	local owner_unit = player and player.player_unit
-	local is_relic = owner_unit
-		and _owner_has_wielded_trait(owner_unit, _moveset.SHYISH_CURSE_TRAIT)
-	local target_unit = self.unit_storage and self.unit_storage:unit(target_unit_id)
-	if is_relic and target_unit then _mark_blight_poison(target_unit, owner_unit) end
-end)
-
-local function _spirit_delete(entry, reason, explode)
-	local unit = entry and entry.unit
-	if unit and Unit.alive(unit) then
-		local entity = Managers and Managers.state and Managers.state.entity
-		if explode and entity then
-			local position = Unit.local_position(unit, 0)
-			local rotation = Unit.world_rotation(unit, 0)
-			local area = entity:system("area_damage_system")
-			local audio = entity:system("audio_system")
-			if area then area:create_explosion(unit, position, rotation,
-				_spirits.EXPLOSION, 1, "undefined", 0, false) end
-			if audio then audio:play_audio_unit_event(_spirits.EXPLODE_SOUND, unit) end
-		end
-		local spawner = Managers and Managers.state and Managers.state.unit_spawner
-		if spawner then spawner:mark_for_deletion(unit) end
-	end
-	if entry then _spirit_state.active[entry] = nil end
-	_spirit_state.count = math.max(_spirit_state.count - 1, 0)
-	if reason and reason ~= "hit" and reason ~= "expired" then
-		_spirit_diag("spirit removed reason=%s active=%d", tostring(reason), _spirit_state.count)
-	end
-end
-
-local function _spirit_live_position(unit)
-	return Unit.local_position(unit, 0)
-end
-
-local function _spirit_is_vector(value)
-	if value == nil or type(Vector3.to_elements) ~= "function" then return false end
-	return pcall(Vector3.to_elements, value)
-end
-
-local function _spirit_position(unit)
-	return _spirits.resolve_position(unit, _spirit_live_position,
-		rawget(_G, "POSITION_LOOKUP"), _spirit_is_vector)
-end
-
-local function _spawn_spirit(killed_unit, target_unit, attribution)
-	if _spirit_state.count >= _spirits.MAX_ACTIVE then
-		_spirit_state.dropped = _spirit_state.dropped + 1
-		_spirit_diag("spirit cap reached active=%d dropped=%d",
-			_spirit_state.count, _spirit_state.dropped)
-		return false
-	end
-	local packages = Managers and Managers.package
-	local package_ready, package_reason = _spirits.package_ready(packages)
-	if not package_ready then
-		_spirit_state.dropped = _spirit_state.dropped + 1
-		_spirit_diag("native Shyish package not ready; spawn skipped reason=%s",
-			tostring(package_reason))
-		return false
-	end
-	local spawner = Managers and Managers.state and Managers.state.unit_spawner
-	local entity = Managers and Managers.state and Managers.state.entity
-	local network = Managers and Managers.state and Managers.state.network
-	local killed_pos, killed_pos_reason = _spirit_position(killed_unit)
-	if not (spawner and entity and network and network.is_server and killed_pos
-		and target_unit and Unit.alive(target_unit)) then
-		_spirit_state.dropped = _spirit_state.dropped + 1
-		_spirit_diag("spawn prerequisites unavailable attribution=%s position=%s",
-			tostring(attribution), tostring(killed_pos_reason))
-		return false
-	end
-	local spawn_position = killed_pos + Vector3(0, 0, _spirits.SPAWN_OFFSET_Z)
-	local spirit_unit = spawner:spawn_network_unit(_spirits.UNIT,
-		_spirits.UNIT_TEMPLATE, {}, spawn_position)
-	if not spirit_unit then
-		_spirit_state.dropped = _spirit_state.dropped + 1
-		_spirit_diag("native spawn returned nil attribution=%s", tostring(attribution))
-		return false
-	end
-	local entry = {
-		unit = spirit_unit,
-		target = target_unit,
-		delay = _spirits.DELAY_TIME,
-		chase = _spirits.CHASE_TIME,
-		chase_logged = false,
-	}
-	_spirit_state.active[entry] = true
-	_spirit_state.count = _spirit_state.count + 1
-	_spirit_state.spawned = _spirit_state.spawned + 1
-	local audio = entity:system("audio_system")
-	if audio then
-		audio:play_audio_position_event(_spirits.RELEASE_SOUND, spawn_position)
-		audio:play_audio_unit_event(_spirits.LOOP_SOUND, spirit_unit)
-	end
-	_spirit_diag("spirit spawned attribution=%s active=%d total=%d",
-		tostring(attribution), _spirit_state.count, _spirit_state.spawned)
-	return true
-end
-
-local function _on_blightreaper_kill(killing_blow, _, killed_unit)
-	local network = Managers and Managers.state and Managers.state.network
-	if not (network and network.is_server and type(killing_blow) == "table"
-		and killed_unit) then return end
-	local indexes = rawget(_G, "DamageDataIndex")
-	if type(indexes) ~= "table" then return end
-	local owner_unit = killing_blow[indexes.SOURCE_ATTACKER_UNIT]
-		or killing_blow[indexes.ATTACKER]
-	if not owner_unit or not Unit.alive(owner_unit) then return end
-	local wielding, identity_reason, backend_id, item_key = _owner_trait_evidence(
-		owner_unit, _moveset.SHYISH_CURSE_TRAIT)
-	local poison = _spirit_state.poison_sources[killed_unit]
-	local poison_match = poison and poison.owner == owner_unit
-	local poison_age = poison and (_spirit_now() - poison.t) or nil
-	local damage_type = killing_blow[indexes.DAMAGE_TYPE]
-	local attributable, reason = _spirits.kill_is_attributable(
-		wielding, damage_type, poison_match, poison_age)
-	local damage_source = killing_blow[indexes.DAMAGE_SOURCE]
-	local report = (wielding or poison ~= nil)
-		and _spirit_diag or _spirit_reject_diag
-	report(
-		"kill observed peer=%s damage=%s source=%s trait=%s identity=%s backend=%s item=%s poison_match=%s age=%s attributable=%s reason=%s",
-		tostring(_player_peer_id(owner_unit)), tostring(damage_type),
-		tostring(damage_source), tostring(wielding), tostring(identity_reason),
-		tostring(backend_id), tostring(item_key), tostring(poison_match == true),
-		poison_age and string.format("%.2f", poison_age) or "nil",
-		tostring(attributable), tostring(reason))
-	_spirit_state.poison_sources[killed_unit] = nil
-	if attributable then _spawn_spirit(killed_unit, owner_unit, reason) end
-end
-
-function mod:_woc_on_blightreaper_kill(killing_blow, breed, killed_unit)
-	_on_blightreaper_kill(killing_blow, breed, killed_unit)
-end
-
-_start_spirit_runtime = function()
-	_ensure_spirit_package()
-	local network = Managers and Managers.state and Managers.state.network
-	local events = Managers and Managers.state and Managers.state.event
-	if not (network and network.is_server and events) then return end
-	if _spirit_state.event_manager == events then return end
-	if _spirit_state.event_manager then
-		pcall(_spirit_state.event_manager.unregister,
-			_spirit_state.event_manager, "on_player_killed_enemy", mod)
-	end
-	events:register(mod, "on_player_killed_enemy", "_woc_on_blightreaper_kill")
-	_spirit_state.event_manager = events
-	_spirit_state.damage_index = 1
-	_spirit_diag_budget = 24
-	_spirit_reject_diag_budget = 8
-	_spirit_diag("native Shyish listener armed cap=%d convert=%d delay=%.1f chase=%.1f/%.1f",
-		_spirits.MAX_ACTIVE, _spirits.CONVERT_AMOUNT, _spirits.DELAY_TIME,
-		_spirits.CHASE_SPEED, _spirits.CHASE_TIME)
-end
-
-_stop_spirit_runtime = function(reason)
-	local events = _spirit_state.event_manager
-	if events then pcall(events.unregister, events, "on_player_killed_enemy", mod) end
-	_spirit_state.event_manager = nil
-	local doomed = {}
-	for entry in pairs(_spirit_state.active) do doomed[#doomed + 1] = entry end
-	for i = 1, #doomed do _spirit_delete(doomed[i], reason or "stop", false) end
-	_spirit_state.poison_sources = setmetatable({}, { __mode = "k" })
-end
-
-local function _update_spirits(dt)
-	if _spirit_state.count == 0 then return end
-	local doomed = {}
-	for entry in pairs(_spirit_state.active) do
-		local unit, target = entry.unit, entry.target
-		if not (unit and Unit.alive(unit) and target and Unit.alive(target)) then
-			doomed[#doomed + 1] = { entry, "dead_unit", false }
-		else
-			entry.delay = math.max(entry.delay - dt, 0)
-			if entry.delay == 0 then
-				local target_pos, target_pos_reason = _spirit_position(target)
-				if not target_pos then
-					doomed[#doomed + 1] = {
-						entry, "target_position_invalid:" .. tostring(target_pos_reason), false,
-					}
-				else
-					local position, position_reason = _spirit_position(unit)
-					if not position then
-						doomed[#doomed + 1] = {
-							entry, "spirit_position_invalid:" .. tostring(position_reason), false,
-						}
-					else
-						if not entry.chase_logged then
-							entry.chase_logged = true
-							_spirit_diag("spirit chase started remaining=%.1f", entry.chase)
-						end
-						local destination = target_pos + Vector3.up()
-						local delta = destination - position
-					local distance_sq = Vector3.length_squared(delta)
-					local direction = Vector3.normalize(delta)
-					if distance_sq <= _spirits.HIT_DISTANCE * _spirits.HIT_DISTANCE then
-						local health = ScriptUnit.has_extension(target, "health_system")
-						local damage_utils = rawget(_G, "DamageUtils")
-						if health and type(health.current_permanent_health) == "function"
-								and type(health.current_temporary_health) == "function"
-								and type(damage_utils) == "table"
-								and type(damage_utils.add_damage_network) == "function"
-								and type(damage_utils.heal_network) == "function" then
-							local permanent = health:current_permanent_health()
-							local temporary = health:current_temporary_health()
-							local amount = _spirits.contact_damage(permanent, temporary)
-							local dealt = 0
-							if amount > 0 then
-								dealt = damage_utils.add_damage_network(target, unit, amount,
-									"torso", _spirits.DAMAGE_TYPE, nil, direction,
-									_spirits.DAMAGE_SOURCE, nil, nil, nil, nil, nil, nil,
-									nil, nil, nil, nil, _spirit_state.damage_index) or 0
-								_spirit_state.damage_index = _spirit_state.damage_index + 1
-								if dealt > 0 then
-									damage_utils.heal_network(target, target, dealt,
-										_spirits.HEAL_TYPE)
-								end
-							end
-							_spirit_state.converted = _spirit_state.converted + 1
-							_spirit_diag(
-								"spirit contact converted=%d requested=%d dealt=%.2f green=%.2f thp=%.2f",
-								_spirit_state.converted, amount, dealt, permanent, temporary)
-						else
-							_spirit_diag("spirit contact skipped; native damage/heal seam unavailable")
-						end
-						doomed[#doomed + 1] = { entry, "hit", true }
-					else
-						entry.chase = math.max(entry.chase - dt, 0)
-						Unit.set_local_position(unit, 0,
-							position + direction * (dt * _spirits.CHASE_SPEED))
-						if entry.chase == 0 then
-							doomed[#doomed + 1] = { entry, "expired", true }
-						end
-					end
-					end
-				end
-			end
-		end
-	end
-	for i = 1, #doomed do
-		_spirit_delete(doomed[i][1], doomed[i][2], doomed[i][3])
-	end
-end
-
-_rt_register("issue632_blightreaper_shyish_spirit_contract", function()
-	if _spirits.UNIT ~= "units/fx/vfx_animation_death_spirit_02"
-		or _spirits.UNIT_TEMPLATE ~= "position_synched_dummy_unit" then
-		return "native Shyish network-unit contract drifted"
-	end
-	if _spirits.SPIRIT_DAMAGE ~= 5 or _spirits.DELAY_TIME ~= 3
-		or _spirits.CHASE_SPEED ~= 1 or _spirits.CHASE_TIME ~= 6 then
-		return "rank-one Shyish conversion/chase values drifted"
-	end
-	if _spirits.MAX_ACTIVE ~= 32 then return "active spirit cap drifted" end
-	local package_ready, package_reason = _spirits.package_ready(
-		Managers and Managers.package)
-	if not package_ready then
-		return "source-backed Shyish package is not loaded: " .. tostring(package_reason)
-	end
-	local direct = _spirits.kill_is_attributable(true, "light_attack", false, nil)
-	local dot = _spirits.kill_is_attributable(false, "arrow_poison_dot", true, 3)
-	local stale = _spirits.kill_is_attributable(false, "arrow_poison_dot", true, 5)
-	if not direct or not dot or stale then return "direct/DOT attribution policy regressed" end
-	local position_key, live_position, lookup_position = {}, {}, {}
-	local position, position_reason = _spirits.resolve_position(position_key,
-		function() return live_position end,
-		{ [position_key] = lookup_position },
-		function(value) return value == live_position end)
-	if position ~= live_position or position_reason ~= "live" then
-		return "live spirit-position preference regressed"
-	end
-	position, position_reason = _spirits.resolve_position(position_key,
-		function() error("unavailable") end,
-		{ [position_key] = lookup_position },
-		function(value) return value == lookup_position end)
-	if position ~= lookup_position or position_reason ~= "lookup" then
-		return "validated spirit-position fallback regressed"
-	end
-	if _spirits.contact_damage(10, 0) ~= 5
-			or _spirits.contact_damage(3, 0) ~= 2
-			or _spirits.contact_damage(2, 4) ~= 5 then
-		return "native damage-to-mutator-heal contact amount regressed"
-	end
-	local audio = _spirits.audio_contract()
-	if audio.release ~= "Play_winds_death_gameplay_spirit_release"
-		or audio.loop ~= "Play_winds_death_gameplay_spirit_loop"
-		or audio.explode ~= "Play_winds_death_gameplay_spirit_explode" then
-		return "native Shyish audio contract drifted"
-	end
-end)
-
-_rt_register("blightreaper_all_career_ability_actions", function()
-	if mod:get("enable_blightreaper") ~= true then return "skip:Blightreaper disabled" end
-	local abilities = _moveset_report and _moveset_report.ability_actions
-	if type(abilities) ~= "table" or abilities.ok ~= true then
-		return "career ability integration report is unavailable or incomplete"
-	end
-	if abilities.required ~= 10
-			or abilities.installed + abilities.existing ~= abilities.required then
-		return string.format("expected 10/10 weapon-bound career actions, got %s/%s",
-			tostring((abilities.installed or 0) + (abilities.existing or 0)),
-			tostring(abilities.required))
-	end
-	local template = Weapons and Weapons[TEMPLATE]
-	for _, action_name in ipairs(abilities.names or {}) do
-		if not (template and template.actions
-				and template.actions[action_name] == abilities.actions[action_name]) then
-			return "missing Blightreaper career action: " .. tostring(action_name)
-		end
-	end
-end)
-
+_spirit_runtime = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_woc_spirit_runtime_owner").new({
+		mod = mod,
+		spirits = _spirits,
+		power = _power,
+		moveset = _moveset,
+		remote_identity = _remote_blightreaper,
+		backend_items = function() return _relic_runtime:backend_items() end,
+		ensure_package = _ensure_spirit_package,
+		rt_register = _rt_register,
+	})
 local function _husk_peer_id(owner_unit_3p)
 	if not owner_unit_3p then return nil end
 	local player
@@ -1877,7 +735,7 @@ end
 local function _exact_relic_resolution(item_data, backend_id)
 	if backend_id == BACKEND_ID or _power.is_relic(item_data) then return true end
 	if not backend_id then return false end
-	local items = _backend_items()
+	local items = _relic_runtime:backend_items()
 	local live
 	if items and type(items.get_item_from_id) == "function" then
 		pcall(function() live = items:get_item_from_id(backend_id) end)
@@ -2152,8 +1010,7 @@ mod.update = function(dt)
 	_transform_owner:step()
 	_audio.update(dt)
 	_shared_relic_runtime:update(dt)
-	local network = Managers and Managers.state and Managers.state.network
-	if network and network.is_server then _update_spirits(dt) end
+	_spirit_runtime:update(dt)
 end
 
 mod.on_game_state_changed = function(status, state_name)
@@ -2167,11 +1024,11 @@ end
 mod.on_enabled = function()
 	_shared_relic_runtime:on_enabled("mod-enabled")
 	_ensure_spirit_package()
-	if _registered then _start_spirit_runtime() end
+	if _relic_runtime:is_registered() then _spirit_runtime:start() end
 end
 
 mod.on_disabled = function()
-	_stop_spirit_runtime("mod-disabled")
+	_spirit_runtime:stop("mod-disabled")
 	_release_spirit_package("mod-disabled")
 	_transform_owner:clear()
 	_audio.stop_all("mod-disabled")
@@ -2179,7 +1036,7 @@ mod.on_disabled = function()
 end
 
 mod.on_unload = function()
-	_stop_spirit_runtime("mod-unload")
+	_spirit_runtime:stop("mod-unload")
 	_release_spirit_package("mod-unload")
 	_transform_owner:clear()
 	_audio.stop_all("mod-unload")
@@ -2293,7 +1150,7 @@ _rt_register("issue509_registered_blightreaper_wire_contract", function()
 	if not mod:get("enable_blightreaper") then
 		return "skip: Blightreaper setting is disabled"
 	end
-	if not _registered then
+	if not _relic_runtime:is_registered() then
 		return "Blightreaper did not register -- check MoreItemsLibrary load order"
 	end
 
@@ -2337,14 +1194,16 @@ _rt_register("issue690_blightreaper_registration_gate_contract", function()
 	if not mod:get("enable_blightreaper") then
 		return "skip: Blightreaper setting is disabled"
 	end
-	if not _registered then
+	local registration = _relic_runtime:registration_state()
+	if not registration.registered then
 		return string.format("registration deferred at gate=%s reason=%s attempts=%d",
-			tostring(_registration_last_gate), tostring(_registration_last_reason),
-			_registration_attempts)
+			tostring(registration.gate), tostring(registration.reason),
+			registration.attempts)
 	end
-	if _registration_last_gate ~= "registered" then
+	if registration.gate ~= "registered" then
 		return "registered flag and registration gate state disagree"
 	end
+	local _moveset_report = _relic_runtime:moveset_report()
 	local identity = _moveset_report and _moveset_report.career_action_identity
 	if not (identity and identity.ok) then
 		return "inherited career-action identity was not reconciled"
@@ -2540,7 +1399,7 @@ mod.on_all_mods_loaded = function(...)
 	-- evaluates the provider contract.
 	local rows_ok, rows_reason = _moveset.install_intrinsic_trait_rows(
 		rawget(_G, "WeaponTraits"), rawget(_G, "BuffTemplates"))
-	local poison_ok, poison_reason = _install_blightreaper_poison()
+	local poison_ok, poison_reason = _relic_runtime:install_poison()
 	if not rows_ok or not poison_ok then
 		printf("[WOC:655] reusable poison capability unavailable: rows=%s poison=%s",
 			tostring(rows_reason), tostring(poison_reason))
@@ -2573,7 +1432,8 @@ _rt_register("issue655_blightreaper_trait_contract", function()
 			or curse.crafting_disabled ~= true then
 		return "intrinsic Shyish curse row/icon contract drifted"
 	end
-	local live = _backend_items() and _backend_items():get_item_from_id(BACKEND_ID)
+	local items = _relic_runtime:backend_items()
+	local live = items and items:get_item_from_id(BACKEND_ID)
 	if live and (not _moveset.item_has_trait(live, _moveset.POISON_TRAIT)
 			or not _moveset.item_has_trait(live, _moveset.SHYISH_CURSE_TRAIT)) then
 		return "live Blightreaper is missing one intrinsic trait"
