@@ -4,7 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-19.
+Last updated: 2026-08-12.
+
+## #1273 Phased-bootstrap dependency transfer
+
+| Field | Contract |
+|---|---|
+| Symptom | CWV logs its load banner and then VMF aborts `mod_script` initialization because `_cwv_commands_lifecycle.lua` calls a nil `_detect_companion_mods`. |
+| Root cause | The #1269 decomposition moved the detector into the phased variant-bootstrap owner without exporting it back to the entry, while Lua silently resolved the surviving entry reference as a nil global. |
+| Fix | The completed bootstrap explicitly returns the detector beside its lookup/give functions; the entry and lifecycle owner both assert the dependency before first use. |
+| Repro | Launch CWV with and without Weapon Tweaker and Tweaker: Cosmetics enabled, then run `/cwv`. |
+| Expected post-fix | CWV reaches normal initialization without a VMF `mod_script` error. `/cwv` reports the optional companion mods accurately in every combination. |
+| Detection | Offline decomposition coverage pins the producer export, validated entry binding, and lifecycle handoff; strict lint and the full Lua 5.1 suite pass. |
 
 ## #932 Primary-slot Old Musket shared ammo
 

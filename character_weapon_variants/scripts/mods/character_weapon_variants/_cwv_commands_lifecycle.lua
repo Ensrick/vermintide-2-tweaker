@@ -5,7 +5,8 @@ return function(mod, ctx)
 local MOD_VERSION = ctx.mod_version
 local _om = ctx.om
 local _dbg = ctx.dbg
-local _detect_companion_mods = ctx.detect_companion_mods
+local _detect_companion_mods = assert(ctx.detect_companion_mods,
+	"cwv commands lifecycle requires detect_companion_mods")
 local _variant_definitions = ctx.variant_definitions
 local _registered_keys = ctx.registered_keys
 local _give_variant = ctx.give_variant

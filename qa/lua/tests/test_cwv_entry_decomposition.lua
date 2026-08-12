@@ -170,6 +170,21 @@ return function(H, repo_root)
         H.truthy(identity_at < render_at)
     end)
 
+    H.test("CWV companion detection crosses the phased bootstrap boundary", function()
+        H.equal(count_plain(variant_bootstrap,
+            "detect_companion_mods = _detect_companion_mods"), 1,
+            "bootstrap must export its diagnostic-only companion detector")
+        H.equal(count_plain(entry,
+            "local _detect_companion_mods = assert(_variant_runtime.detect_companion_mods"), 1,
+            "entry must bind and validate the completed bootstrap export")
+        H.equal(count_plain(entry,
+            "detect_companion_mods = _detect_companion_mods"), 1,
+            "entry must pass the validated detector to the lifecycle owner")
+        H.equal(count_plain(lifecycle,
+            "local _detect_companion_mods = assert(ctx.detect_companion_mods"), 1,
+            "lifecycle owner must reject a missing detector before first use")
+    end)
+
     H.test("CWV skin owners inject once and preserve registrar order", function()
         H.equal(count_plain(entry, "_cwv_skin_registry"), 1)
         H.equal(count_plain(entry, "_cwv_illusion_families"), 1)

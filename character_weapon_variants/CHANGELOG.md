@@ -1,5 +1,10 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.511-dev (2026-08-12) -- restore the companion-detector phase contract (#1273) [untested]
+
+- **Fix (#1273): CWV no longer aborts VMF initialization after the #1269 decomposition.** The diagnostic-only companion-mod detector moved into `_cwv_variant_bootstrap_owner.lua`, but `_cwv_commands_lifecycle.lua` was still handed an undefined entry-file value and called it immediately. The completed bootstrap now exports the detector with `_find_def` and `_give_variant`; the entry asserts that explicit return contract before installing later owners, and the lifecycle owner independently asserts its required callable dependency.
+- Offline decomposition coverage now pins all three sides of the phase boundary: producer export, entry binding, and lifecycle consumption. This exact missing-return regression can no longer pass QA merely because Lua resolves an undeclared underscore name as a nil global.
+
 ## 0.1.510-dev (2026-08-12) -- CWV reaches the structural completion target (#1159) [untested]
 
 - **Internal (#1159): the remaining large runtime families now have explicit owners.** `_cwv_javelin_runtime_owner.lua` owns Tuskgor Javelin registration, templates, projectile/pickup wire containment, carrier presentation and its two commands; `_cwv_rapier_runtime_owner.lua` owns the pistol-less Rapier constructor; `_cwv_variant_bootstrap_owner.lua` preserves localization/unlock, skin-unlock and post-registration lookup/give/preview work as three ordered phases; `_cwv_item_identity_transport_owner.lua` owns semantic identity publication, acknowledgement/retry, wire-safe cosmetic sending and its bounded update pump; `_cwv_world_equipment_owner.lua` owns the world/bot `GearUtils.create_equipment` presentation surface.

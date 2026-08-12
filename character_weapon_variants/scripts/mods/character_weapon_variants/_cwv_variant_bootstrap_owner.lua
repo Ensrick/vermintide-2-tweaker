@@ -365,6 +365,7 @@ local function install(mod, ctx)
 
 
 			return {
+				detect_companion_mods = _detect_companion_mods,
 				find_def = _find_def,
 				give_variant = _give_variant,
 			}
