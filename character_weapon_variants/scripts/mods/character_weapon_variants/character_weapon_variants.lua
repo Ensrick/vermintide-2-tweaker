@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.510-dev"
+local MOD_VERSION = "0.1.511-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -1055,8 +1055,8 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_item_registration_owner"
 })
 
 local _variant_runtime = _finish_variant_registration()
-local _find_def = _variant_runtime.find_def
-local _give_variant = _variant_runtime.give_variant
+local _detect_companion_mods = assert(_variant_runtime.detect_companion_mods, "cwv variant bootstrap did not export detect_companion_mods")
+local _find_def, _give_variant = _variant_runtime.find_def, _variant_runtime.give_variant
 -- ============================================================
 -- Weapon transform owner (#1159)
 -- ============================================================
