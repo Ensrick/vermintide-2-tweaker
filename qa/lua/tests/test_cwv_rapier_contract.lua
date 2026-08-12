@@ -52,7 +52,7 @@ return function(H, repo_root)
 
     H.test("CWV Rapier production constructor applies the pistol-less contract", function()
         local source = assert(io.open(repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua", "rb"))
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_rapier_runtime_owner.lua", "rb"))
         local text = source:read("*a")
         source:close()
 

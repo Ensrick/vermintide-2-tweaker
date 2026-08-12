@@ -34,6 +34,8 @@ return function(H, repo_root)
     local registration = read("_cwv_item_registration_owner.lua")
     local husk_residency = read("_cwv_husk_residency_owner.lua")
     local musket = read("_cwv_musket_runtime.lua")
+    local world_equipment = read("_cwv_world_equipment_owner.lua")
+    local bootstrap = read("_cwv_variant_bootstrap_owner.lua")
 
     H.test("CWV weapon-transform owner holds every transform producer", function()
         -- Three moved ranges, each an unbroken byte-identical block. Every
@@ -162,17 +164,23 @@ return function(H, repo_root)
         -- Four surfaces consume this producer and NONE of them moved. Pin the
         -- code forms, not the names, because the owner's header comment names
         -- all four.
-        local entry_only = {
+        local world_only = {
             -- WORLD / BOT equipment, with its own transform-miss counters.
             'mod:hook("GearUtils", "create_equipment"',
             "local def = _resolve_cwv_def(item_data, result.skin",
             "_crowbill_transform_miss_total = _crowbill_transform_miss_total + 1",
             "_apply_cwv_hand_transform(result.right_unit_3p, def, \"right\", \"3p\",",
+        }
+        local entry_descriptor = {
             -- #1158 exact-appearance descriptors and their get_item_units hook.
             "_om._cwv_resolve_world_descriptor = function(item_data, explicit_skin, resolved_unit_name,",
             'mod:hook(BackendUtils, "get_item_units"',
+        }
+        local bootstrap_only = {
             -- The shared def finder every owner reaches through.
             "local function _find_def(item_key)",
+        }
+        local entry_only = {
             -- Combat Style authors TEMPLATES; it only reads one authored record
             -- out of the type table the transform owner publishes.
             "local imperial_transform = _type_transforms.cwv_imperial_longsword",
@@ -181,6 +189,18 @@ return function(H, repo_root)
             H.equal(count_plain(entry, marker), 1, "entry keeps " .. marker)
             H.equal(count_plain(owner, marker), 0,
                 "transform owner must not absorb " .. marker)
+        end
+        for _, marker in ipairs(world_only) do
+            H.equal(count_plain(world_equipment, marker), 1, "world owner keeps " .. marker)
+            H.equal(count_plain(owner, marker), 0, "transform owner must not absorb " .. marker)
+        end
+        for _, marker in ipairs(entry_descriptor) do
+            H.equal(count_plain(entry, marker), 1, "entry keeps " .. marker)
+            H.equal(count_plain(owner, marker), 0, "transform owner must not absorb " .. marker)
+        end
+        for _, marker in ipairs(bootstrap_only) do
+            H.equal(count_plain(bootstrap, marker), 1, "bootstrap owner keeps " .. marker)
+            H.equal(count_plain(owner, marker), 0, "transform owner must not absorb " .. marker)
         end
 
         -- The MENU and REMOTE surfaces keep consuming through their ctx tables,
@@ -274,7 +294,7 @@ return function(H, repo_root)
         -- The world-surface TRANSFORM MISS counter is the paired evidence on the
         -- consumer side and must NOT have followed the producer out.
         local miss = "[cwv:604] TRANSFORM MISS surface=create_equipment"
-        H.equal(count_plain(entry, miss), 1, "entry keeps the world transform-miss marker")
+        H.equal(count_plain(world_equipment, miss), 1, "world owner keeps the transform-miss marker")
         H.equal(count_plain(owner, miss), 0, "owner must not absorb the world-surface counter")
     end)
 end

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-12 - Character Weapon Variants reaches the structural completion target (#1159)
+
+Character Weapon Variants 0.1.510-dev extracts the Tuskgor Javelin and Rapier
+runtimes, ordered variant bootstrap, semantic item-identity transport, and
+world-equipment presentation into five explicit owners. Lua 5.1 coverage pins
+the preserved 91-hook total, lifecycle and wire boundaries, install order, and
+native package-load evidence. The entry falls from 3,849 to 1,490 nonblank
+lines, the required-owner inventory rises from 14 to 19, and the machine
+contract marks the CWV structural phase complete.
+
 ## 2026-08-12 - Weapons of Chaos reaches the structural completion target (#1159)
 
 Weapons of Chaos 0.1.54-dev extracts relic registration and Chaos Wastes

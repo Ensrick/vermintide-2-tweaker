@@ -35,14 +35,50 @@ return function(H, repo_root)
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
     local render = read("_cwv_regression_render.lua")
+    local javelin_runtime = read("_cwv_javelin_runtime_owner.lua")
+    local rapier_runtime = read("_cwv_rapier_runtime_owner.lua")
+    local variant_bootstrap = read("_cwv_variant_bootstrap_owner.lua")
+    local identity_transport = read("_cwv_item_identity_transport_owner.lua")
+    local world_equipment = read("_cwv_world_equipment_owner.lua")
 
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end
-        -- 3849 = 2026-08-10 #1159 musket equip-surface owner extraction, measured
-        -- after the custom-mesh runtime slice that preceded it. This ceiling only
-        -- ratchets DOWN as later CWV decomposition slices land.
-        H.truthy(lines <= 3849, "entry line count exceeded frozen 3849-line baseline")
+        -- 1490 = 2026-08-12 #1159 structural completion after the javelin,
+        -- rapier, variant-bootstrap, identity-transport, and world-equipment
+        -- owners moved out. This ceiling only ratchets DOWN.
+        H.truthy(lines <= 1490, "entry line count exceeded frozen 1490-line baseline")
+    end)
+
+    H.test("CWV completion owners stay bounded and resource-safe", function()
+        local owners = {
+            javelin_runtime,
+            rapier_runtime,
+            variant_bootstrap,
+            identity_transport,
+            world_equipment,
+        }
+        for _, source in ipairs(owners) do
+            local lines = 0
+            for line in source:gmatch("[^\r\n]+") do
+                if line:match("%S") then lines = lines + 1 end
+            end
+            H.truthy(lines < 1500, "extracted owner exceeded the 1500-line owner ceiling")
+        end
+
+        -- resource-safety: cwv1159-javelin-runtime-force-load
+        H.equal(count_plain(javelin_runtime,
+            "resource-safety: cwv1159-javelin-runtime-force-load"), 1)
+        for _, call in ipairs({
+            'Managers.package:load(_TJ_THROWING_AXE_PUP, "cwv_throwing_axe_pup", nil, true, true)',
+            'Managers.package:load(_TJB_HELD_UNIT, "cwv_javelin_bomb", nil, true, true)',
+            'Managers.package:load(_TJB_HELD_UNIT .. "_3p", "cwv_javelin_bomb", nil, true, true)',
+        }) do
+            H.equal(count_plain(javelin_runtime, call), 1,
+                "one file-level marker covers each moved lifetime package lease")
+        end
+        H.equal(count_plain(entry,
+            "resource-safety: cwv1159-javelin-runtime-force-load"), 0)
     end)
 
     H.test("CWV decomposition modules install exactly once and in lifecycle order", function()
@@ -54,9 +90,14 @@ return function(H, repo_root)
             "_cwv_illusion_families",
             "_cwv_husk_residency_owner",
             "_cwv_custom_mesh_runtime",
+            "_cwv_javelin_runtime_owner",
+            "_cwv_rapier_runtime_owner",
+            "_cwv_variant_bootstrap_owner",
             "_cwv_item_registration_owner",
             "_cwv_weapon_transform_owner",
             "_cwv_husk_path",
+            "_cwv_item_identity_transport_owner",
+            "_cwv_world_equipment_owner",
             "_cwv_menu_preview_owner",
             "_cwv_commands_lifecycle",
             "_cwv_regression_identity",
@@ -72,9 +113,14 @@ return function(H, repo_root)
         local families_at = assert(entry:find("_cwv_illusion_families", 1, true))
         local residency_at = assert(entry:find("_cwv_husk_residency_owner", 1, true))
         local custom_mesh_at = assert(entry:find("_cwv_custom_mesh_runtime", 1, true))
+        local javelin_at = assert(entry:find("_cwv_javelin_runtime_owner", 1, true))
+        local rapier_at = assert(entry:find("_cwv_rapier_runtime_owner", 1, true))
+        local bootstrap_at = assert(entry:find("_cwv_variant_bootstrap_owner", 1, true))
         local registration_at = assert(entry:find("_cwv_item_registration_owner", 1, true))
         local transform_at = assert(entry:find("_cwv_weapon_transform_owner", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
+        local identity_transport_at = assert(entry:find("_cwv_item_identity_transport_owner", 1, true))
+        local world_equipment_at = assert(entry:find("_cwv_world_equipment_owner", 1, true))
         local menu_preview_at = assert(entry:find("_cwv_menu_preview_owner", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
@@ -90,6 +136,10 @@ return function(H, repo_root)
         -- registrars and every later render surface that resolves through the
         -- `_om` seams it publishes.
         H.truthy(residency_at < custom_mesh_at)
+        H.truthy(custom_mesh_at < javelin_at)
+        H.truthy(javelin_at < rapier_at)
+        H.truthy(rapier_at < bootstrap_at)
+        H.truthy(bootstrap_at < skin_at)
         H.truthy(custom_mesh_at < skin_at)
         H.truthy(residency_at < skin_at)
         H.truthy(core_at < skin_at)
@@ -106,6 +156,9 @@ return function(H, repo_root)
         H.truthy(transform_at < husk_at)
         H.truthy(registration_at < husk_at)
         H.truthy(families_at < husk_at)
+        H.truthy(husk_at < identity_transport_at)
+        H.truthy(identity_transport_at < world_equipment_at)
+        H.truthy(world_equipment_at < menu_preview_at)
         -- #1159: the keep/menu preview-surface owner registers the last render
         -- hooks in the chain. It must load after the husk display helpers and
         -- before the commands/lifecycle owner, which the entry deliberately
@@ -192,15 +245,15 @@ return function(H, repo_root)
             cursor = at + #call
         end
 
-        local unlock_at = assert(entry:find(
+        local unlock_at = assert(variant_bootstrap:find(
             'mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins"',
             1, true))
-        local unlocks_applied_at = assert(entry:find("_apply_weapon_unlocks()", 1, true))
+        local unlocks_applied_at = assert(variant_bootstrap:find("_apply_weapon_unlocks()", 1, true))
         local skin_at = assert(entry:find("_cwv_skin_registry", 1, true))
         local families_at = assert(entry:find("_cwv_illusion_families", 1, true))
-        H.truthy(unlocks_applied_at < skin_at)
         H.truthy(skin_at < families_at)
-        H.truthy(families_at < unlock_at)
+        H.truthy(unlocks_applied_at < unlock_at)
+        H.truthy(families_at < assert(entry:find("_finish_variant_skins(_custom_skin_keys)", 1, true)))
 
         H.truthy(skin_registry:find("custom_illusions = _custom_illusions", 1, true))
         H.truthy(skin_registry:find("custom_skin_keys = _custom_skin_keys", 1, true))
@@ -517,11 +570,10 @@ return function(H, repo_root)
         H.equal(count_plain(entry, "build_entry = _om.item_registration.build_entry,"), 1)
         H.equal(count_plain(entry, "auto_register_all = _om.item_registration.auto_register_all,"), 1)
 
-        -- BOUNDARY. The give command is command surface owned by
-        -- _cwv_commands_lifecycle; the spawn descriptors are the #1158
-        -- exact-appearance channel; `_find_def` is reached by both plus
-        -- _cwv_husk_path. All three stay in the entry.
-        local entry_only = {
+        -- BOUNDARY. Variant lookup, give semantics, and preview descriptors now
+        -- share the ordered variant-bootstrap owner; registration must not
+        -- absorb them.
+        local bootstrap_only = {
             "local function _find_def(item_key)",
             "local function _give_variant(item_key)",
             "_om._give_refuses_skin_only = function(def)",
@@ -530,8 +582,8 @@ return function(H, repo_root)
             "_om._cwv_preview_meshswap_apply = function(",
             "_om._cwv_browser_meshswap_apply = function(",
         }
-        for _, marker in ipairs(entry_only) do
-            H.equal(count_plain(entry, marker), 1, "entry keeps " .. marker)
+        for _, marker in ipairs(bootstrap_only) do
+            H.equal(count_plain(variant_bootstrap, marker), 1, "bootstrap keeps " .. marker)
             H.equal(count_plain(registration, marker), 0,
                 "registration owner must not absorb " .. marker)
         end
@@ -632,23 +684,21 @@ return function(H, repo_root)
             "entry installs the menu preview owner exactly once")
 
         -- BOUNDARY. CWV has three presentation surfaces and this owner is only
-        -- the MENU one. The WORLD/BOT equipment hook and its transform-miss
-        -- evidence counters stay in the entry, as does `_find_def`. The counters
-        -- are named in the owner's header comment, so pin the CODE forms, not the
-        -- names. `_resolve_cwv_def`'s DEFINITION moved on to the weapon-transform
-        -- owner (its own suite pins that); what matters here is that the entry
-        -- still owns the world-surface CALL and the menu owner never absorbed it.
-        local entry_only = {
+        -- the MENU one. The WORLD/BOT equipment hook and transform-miss evidence
+        -- live in their dedicated owner; `_find_def` lives in the ordered
+        -- variant bootstrap. The menu owner must absorb neither.
+        local world_only = {
             'mod:hook("GearUtils", "create_equipment"',
-            "local function _find_def(item_key)",
             "local def = _resolve_cwv_def(item_data, result.skin",
             "_crowbill_transform_miss_total = _crowbill_transform_miss_total + 1",
         }
-        for _, marker in ipairs(entry_only) do
-            H.equal(count_plain(entry, marker), 1, "entry keeps " .. marker)
+        for _, marker in ipairs(world_only) do
+            H.equal(count_plain(world_equipment, marker), 1, "world owner keeps " .. marker)
             H.equal(count_plain(menu_preview, marker), 0,
                 "menu preview owner must not absorb " .. marker)
         end
+        H.equal(count_plain(variant_bootstrap, "local function _find_def(item_key)"), 1)
+        H.equal(count_plain(menu_preview, "local function _find_def(item_key)"), 0)
 
         -- No overlap with the sibling owners: no husk spawn/residency reach, no
         -- registration path, no command / network / lifecycle / loader surface.

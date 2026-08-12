@@ -837,6 +837,7 @@ return function(H, repo_root)
 
     H.test("#786 entry + module wiring anchors", function()
         local main = read(main_path)
+            .. read(repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_identity_transport_owner.lua")
         local styles = read(styles_path)
         local rewield_source = read(rewield_path)
         local coalescer_source = read(coalescer_path)
@@ -854,9 +855,10 @@ return function(H, repo_root)
         }) do
             H.truthy(main:find(marker, 1, true), "missing entry #786 anchor: " .. marker)
         end
-        local gate = main:find("if not changed then return end", 1, true)
+        local identity_at = assert(main:find("_om.combat_style_policy.decode_style_rider(payload.style)", 1, true))
+        local gate = main:find("if not changed then return end", identity_at, true)
         H.truthy(gate, "the identity changed-dedupe gate must still exist")
-        H.truthy(main:find("decode_style_rider", 1, true) < gate,
+        H.truthy(identity_at < gate,
             "the style axis must be applied BEFORE the changed-dedupe gate (#474 precedent)")
         for _, marker in ipairs({
             "function runtime:accept_style_edge(peer_id, slot_name, family_id, style_id, source)",

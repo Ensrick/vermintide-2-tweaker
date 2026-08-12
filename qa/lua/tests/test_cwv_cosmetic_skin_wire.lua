@@ -86,10 +86,14 @@ return function(H, repo_root)
 
 	H.test("CWV #423 main file wires the update_cosmetic_slot sender to this module", function()
 		local main_path = repo_root
-			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_identity_transport_owner.lua"
 		local file = assert(io.open(main_path, "rb"))
 		local text = file:read("*a")
 		file:close()
+		local entry_file = assert(io.open(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua", "rb"))
+		text = entry_file:read("*a") .. text
+		entry_file:close()
 
 		-- Module is loaded onto _om.
 		H.truthy(text:find('_om.cosmetic_skin_wire = mod:dofile', 1, true))

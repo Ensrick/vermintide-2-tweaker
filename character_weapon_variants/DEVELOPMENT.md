@@ -26,6 +26,25 @@ explicit engine-surface review:
   receive engine registries explicitly, own no hooks/RPC/lifecycle callbacks,
   and must remain adjacent at their original registration boundary because
   their `NetworkLookup.weapon_skins` / `item_names` append order is wire-visible.
+- `_cwv_javelin_runtime_owner.lua` owns Tuskgor Javelin template construction,
+  projectile/pickup wire containment, carrier presentation, grenade-slot
+  behavior, and their bounded diagnostics. Its three package loads are lifetime
+  leases and carry the linked resource-safety proof in the decomposition suite.
+- `_cwv_rapier_runtime_owner.lua` owns the pistol-less Rapier template clone and
+  applies `_cwv_rapier_contract.lua` once after the Javelin runtime has published
+  the shared false predicate.
+- `_cwv_variant_bootstrap_owner.lua` is deliberately three-phase: localization
+  and vanilla unlocks run before skin registration; the unlocked-skin hook runs
+  after both skin registrars; definition lookup, give semantics, and exact
+  preview descriptors bind only after item registration. Do not collapse these
+  phases or move their entry calls.
+- `_cwv_item_identity_transport_owner.lua` owns semantic identity publication,
+  acknowledgement/retry, slot resync and wire-safe cosmetic sending. It is the
+  only owner of `cwv_item_identity` and its bounded update pump.
+- `_cwv_world_equipment_owner.lua` owns the `GearUtils.create_equipment` world
+  and bot presentation surface, including transform-miss evidence and complete
+  fade enrollment. Keep it separate from the transform producer and menu/husk
+  consumers.
 - `_cwv_commands_lifecycle.lua` owns diagnostic commands and the final
   `on_game_state_changed`, `on_enabled`, `on_disabled`, and `on_unload`
   callbacks. Appearance replay, dual-weapon package leases, Crowbill state,
