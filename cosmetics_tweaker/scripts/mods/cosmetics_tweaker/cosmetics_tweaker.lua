@@ -106,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.205-dev"
+local MOD_VERSION = "0.9.206-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -1117,12 +1117,11 @@ local _cos_offhand_picker = mod:dofile(
 -- Must use TABLE-form hook with a nil guard. The nil guard handles boot
 -- order — at module-load time BackendUtils may not exist yet on every
 -- VT2 build. CLAUDE.md "Hooking" section.
--- v0.9.0.6-hotfix: husk-wield context. SimpleHuskInventoryExtension._wield_slot
--- (wrapped below) sets this before calling BackendUtils.get_item_units and
--- clears it after. The get_item_units hook reads it to decide whether to
--- override left_hand_unit for kind="unit" LA mesh swaps on remote husks.
--- Lua main thread is single-threaded so the set→get→clear bracket is safe.
-local _current_husk_wield = nil
+-- The remote-husk owner keeps the stack-style wield context. It is loaded here
+-- so the equipment-assembly hook can consume its stable accessor before the
+-- actual _wield_slot hook installs at its historical position below.
+local HUSK_WIELD_RUNTIME = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_husk_wield_runtime")
 -- v0.9.0.11-hotfix: FORWARD DECLARATION. The real assignment lives at the
 -- old declaration site below (line ~3711). Without this forward decl, the
 -- BackendUtils.get_item_units hook (registered immediately below) would
@@ -1497,10 +1496,8 @@ end
 --   - Inventory previewer (HeroPreviewer._spawn_item): _cos_preview_runtime.lua
 --   - Illusion browser (LootItemUnitPreviewer.spawn_units): _cos_preview_runtime.lua
 --
--- `_current_husk_wield` and `_active_customization_backend_id` stay ENTRY-owned
--- locals reached through the accessors below, never handed over by value: the
--- husk _wield_slot wrap rebinds the first stack-style on every husk wield, and
--- the second is written by both the view-lifecycle owner and the offhand picker.
+-- The remote-husk owner and entry-owned active customization identity are
+-- reached through accessors, never handed over by value: both are rebound.
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_equipment_assembly").install(mod, {
     gk_set = GK_SET,
     glow_picker = GlowPicker,
@@ -1519,7 +1516,9 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_equipment_assembly").install(mod
     override_package_ready = _override_package_ready,
     resolve_authored_offhand_mesh = _resolve_authored_offhand_mesh,
     resolve_authored_offhand_variant = _resolve_authored_offhand_variant,
-    get_current_husk_wield = function() return _current_husk_wield end,
+    get_current_husk_wield = function()
+        return HUSK_WIELD_RUNTIME.current(mod)
+    end,
     get_active_customization_backend_id = function()
         return _active_customization_backend_id
     end,
@@ -1753,230 +1752,40 @@ assert(CUSTOM_ILLUSION_SYNC.install(mod, {
     log = printf,
 }) == true, "custom illusion semantic transport failed to install")
 
-local function _resolve_la_variant(armoury_key)
-    if GK_SET and GK_SET.resolve_variant then
-        local authored = GK_SET.resolve_variant(armoury_key)
-        if authored then return authored, nil end
-    end
-    if CUSTOM_HATS and CUSTOM_HATS.resolve_variant then
-        local custom = CUSTOM_HATS.resolve_variant(armoury_key)
-        if custom then return custom, nil end
-    end
-    local la = get_mod("Loremasters-Armoury")
-    if not la or type(la.SKIN_LIST) ~= "table" then return nil, nil end
-    return la.SKIN_LIST[armoury_key], la
-end
-
--- v0.9.13-dev: extracted from the v0.9.11 character-mismatch guard in
--- `_apply_la_on_unit` so the decision is unit-testable in isolation. Pure:
--- given the owner_unit's currently-equipped hat path (preferred source) AND
--- the profile base prefix (fallback when no hat is attached yet), decide
--- whether the LA hat's mesh is safe to attach to this body.
---
---   owner_char_path -- path to the OWNER's current vanilla slot_hat
---                      (e.g. "units/beings/player/empire_soldier_breton/
---                      headpiece/es_gk_hat_01") or nil if no slot_hat.
---   la_unit_path    -- path to the cached LA hat mesh
---                      (e.g. "units/beings/player/empire_soldier_breton/
---                      headpiece/es_gk_hat_03").
---   profile_base    -- character base from SPProfiles.unit_name (e.g.
---                      "empire_soldier") or nil if unresolvable.
---
--- Returns (true) when the LA mesh's character segment matches the owner's
--- character segment, otherwise (false, reason_string). When neither source
--- is resolvable, returns false — the conservative choice (no LA visual is
--- strictly better than a wrong-skeleton attach that may crash via
--- `Unit.node` failing the C-level attachment node lookup).
-local function _la_chars_compatible(owner_char_path, la_unit_path, profile_base)
-    local la_char = string.match(la_unit_path or "", "^units/beings/player/([^/]+)/")
-    if not la_char then return true end  -- can't extract LA char; let caller proceed
-    if owner_char_path then
-        local owner_char = string.match(owner_char_path, "^units/beings/player/([^/]+)/")
-        if owner_char then
-            if owner_char == la_char then return true end
-            return false, ("owner_char=%s la_char=%s"):format(owner_char, la_char)
-        end
-    end
-    if profile_base then
-        if la_char == profile_base
-            or string.sub(la_char, 1, #profile_base + 1) == profile_base .. "_"
-        then
-            return true
-        end
-        return false, ("profile_base=%s la_char=%s"):format(profile_base, la_char)
-    end
-    return false, "no owner_char_path AND no profile_base resolvable"
-end
-mod._la_chars_compatible = _la_chars_compatible
-
--- v0.9.13-dev: passive runtime monitor. Fires on every player spawn (host's
--- own + every bot owned by the host + every husk on a remote client). For
--- the spawned unit, compares the CACHED LA hat (`_la_equips_by_peer
--- [wearer_peer]["slot_hat"]`) against the unit's actual character body. If
--- the cached LA mesh's character segment doesn't match the spawning unit's
--- character, that's the exact failure mode from issue #14 — a host-owned bot
--- whose career differs from the host's about to receive a cross-skeleton
--- attach. The v0.9.11 guard prevents the attach itself; this monitor surfaces
--- when the situation arises so any regression is visible in console without
--- needing a manual chat command.
---
--- Mismatch detections ALWAYS log (this is the safety net). Routine "here's
--- the cache state for the spawning peer" snapshots route through mod:debug,
--- gated by VMF output_mode_debug.
-
--- v0.9.28-dev (issue #14 cache-leak follow-up): pure invalidation helper.
--- `_la_equips_by_peer` is keyed `[peer_id][slot]` only, so when a peer
--- switches career on the same peer_id (e.g. Kerillian → Saltzpyre WHC),
--- the previous career's LA hat entry persists until the peer disconnects.
--- The v0.9.11 character-mismatch guard catches the visible apply, but the
--- stale entry keeps firing CROSS-SKELETON MISMATCH warnings on every spawn
--- of the new character. Solution: when the spawn-monitor catches a
--- mismatch, purge the offending slot from the cache so it self-heals on
--- the first post-switch spawn. Subsequent legitimate cos_la_apply RPCs
--- repopulate the slot for the current career; if there isn't one, the
--- slot stays empty and the warning stops firing.
---
--- Pulled into a module-level local so the regression test can drive it
--- with synthetic inputs (no player units / LA bridge / Managers mocks).
-local function _purge_stale_peer_slot(cache, wearer_peer, slot_name)
-    if not (cache and wearer_peer and slot_name) then return false end
-    local equips = cache[wearer_peer]
-    if not (equips and equips[slot_name]) then return false end
-    equips[slot_name] = nil
-    if next(equips) == nil then cache[wearer_peer] = nil end
-    return true
-end
-mod._purge_stale_peer_slot = _purge_stale_peer_slot
-
-mod._la_spawn_monitor = mod._cos_husk_identity.make_spawn_monitor({
-    bridge = LA_BRIDGE, store = _la_equips_by_peer, persistence = LA_PERSIST,
-    score_identity = SCORE_IDENTITY, script_unit = ScriptUnit, unit_api = Unit,
-    managers = function() return Managers end,
-    profiles = function() return rawget(_G, "SPProfiles") end,
-    resolve_variant = _resolve_la_variant, chars_compatible = _la_chars_compatible,
-    purge = _purge_stale_peer_slot, debug = _dbg,
-    warning = function(...) mod:warning(...) end,
-    print = function(...) if printf then printf(...) end end,
-})
-
--- Wire-up note: SimpleInventoryExtension.extensions_ready is already hooked
--- inside `_la_persistence.lua` for the auto-restore queue. VMF's hook_safe
--- does NOT chain on (Class, method) (per VMF_RECIPES.md § 1) — a second
--- hook_safe registration here would silently overwrite the first and break
--- restore. Instead, the existing hook in _la_persistence.lua calls
--- `mod._la_spawn_monitor` if defined, so both behaviors run from a single
--- registration. The husk-side equivalent is hooked from this file because
--- _la_persistence only cares about the owned-player path.
---
--- v0.9.16-dev (issue #35): the husk class does NOT have `extensions_ready` —
--- only `Simple*Extension` (the self-owned variant) does. The husk class is a
--- separate root class with no inheritance (per CLAUDE.md "Self-owned vs husk
--- extension classes"), and its lifecycle entry point is `init`. The earlier
--- registration on `extensions_ready` silently no-op'd at hook-install time.
--- Hooking `init` with the husk signature `(self, extension_init_context, unit,
--- extension_init_data)` resolves the dead-hook and runs the spawn monitor on
--- every remote-player husk inventory init.
-mod:hook_safe("SimpleHuskInventoryExtension", "init", function(self, extension_init_context, unit, extension_init_data)
-    if mod._la_spawn_monitor then
-        local ok, err = pcall(mod._la_spawn_monitor, unit)
-        if not ok then _dbg_alert("[la-spawn-monitor] pcall err: %s", tostring(err)) end
-    end
-    -- #660 S3: a remote wearer's husk inventory is now constructed -> peer-ready
-    -- replay edge. This is the per-husk "husk became available" signal that
-    -- drains what session-ready/peer-ready deferred. The apply gate still
-    -- defers until the husk unit is alive + skeleton-ready, and the surviving
-    -- persisted stores are the source, never the live menu selection. When the
-    -- wearer peer is not yet resolvable, fire without a peer scope: the
-    -- preceding transition already invalidated all, so only not-yet-applied
-    -- records do work (coalesced).
-    if mod._cos_replay then
-        local wearer_peer
-        local pm = Managers and Managers.player
-        if pm and pm.owner then
-            local owner = pm:owner(unit)
-            wearer_peer = owner and owner.peer_id or nil
-        end
-        mod._cos_replay.on_edge("peer-ready",
-            wearer_peer and { only_peer = wearer_peer, invalidate_peer = wearer_peer } or nil)
-    end
-end)
-
--- v0.9.13-dev: mission-start state snapshot. Gated on debug_dumps. Fires
--- once when StateInGameRunning starts so the cached LA state + persisted
--- entries land in the log at the same timestamp as the mission begin —
--- makes correlating later spawn events to the snapshot trivial.
-mod._la_dump_mission_state = function(reason)
-    _dbg("[la-state-dump] reason=%s", tostring(reason))
-    local n_peers = 0
-    if _la_equips_by_peer then
-        for peer, slots in pairs(_la_equips_by_peer) do
-            n_peers = n_peers + 1
-            for slot, entry in pairs(slots) do
-                _dbg("[la-state-dump]   peer=%s slot=%s kind=%s armoury=%s vanilla=%s",
-                    tostring(peer), tostring(slot), tostring(entry.kind),
-                    tostring(entry.armoury_key), tostring(entry.vanilla_key))
-            end
-        end
-    end
-    local persisted = mod:get("la_persisted_equips") or {}
-    local n_careers = 0
-    if persisted.careers then
-        for career, slots in pairs(persisted.careers) do
-            n_careers = n_careers + 1
-            _dbg("[la-state-dump]   persisted career=%s hat=%s skin=%s",
-                tostring(career), tostring(slots.slot_hat or "-"), tostring(slots.slot_skin or "-"))
-        end
-    end
-    local n_illusions = 0
-    if persisted.illusions then
-        for _ in pairs(persisted.illusions) do n_illusions = n_illusions + 1 end
-    end
-    _dbg("[la-state-dump] totals: %d live peer(s), %d persisted career entr(ies), %d persisted illusion(s)",
-        n_peers, n_careers, n_illusions)
-end
-
-local function _level_world()
-    if Managers and Managers.world and Managers.world.has_world
-        and Managers.world:has_world("level_world")
-    then
-        return Managers.world:world("level_world")
-    end
-    return nil
-end
-
--- v0.9.85-dev (#514): weapon-identity resolution for the kind=offhand and
--- kind=illusion apply gates. Returns (match, w_item):
---   match  = true when the stored entry key (slot_name) names the WIELDED
---            item (template / name / key / item_type; plus the wielded SLOT
---            name for slot-keyed entries when allow_slot_key is true).
---   w_item = the wielded item_data, or nil when unresolvable.
--- CRITICAL field note: the wielded slot name lives at
--- `equipment.wielded_slot` on BOTH inventory classes
--- (simple_inventory_extension.lua:208/669 and
--- simple_husk_inventory_extension.lua:775). `inv.wielded_slot` exists ONLY
--- on SimpleHuskInventoryExtension (simple_husk_inventory_extension.lua:321).
--- The v0.9.72 guard read the husk-only field, so on the LOCAL wearer
--- (SimpleInventoryExtension) w_item resolved to nil and the guard fell
--- through PERMISSIVE - the spawn-time state replay then painted a
--- Bret-shield LA pick (stored under one_handed_sword_shield_template_2,
--- item_master_list_lake.lua:425) onto the left-hand MACE of CWV's wielded
--- Sword and Mace (#514). Callers MUST treat "not match" - including the
--- w_item == nil unresolvable case - as SKIP (return false): the pending
--- retry / next-wield reconcile re-applies once the matching weapon is in
--- hand, so restrictive-by-default cannot strand a pick.
-function mod._la_wielded_item_matches(inv, equipment, slot_name, allow_slot_key)
-    local w_slot_name = LA_REPLAY_POLICY.wielded_slot(inv, equipment)
-    local w_slot_data = equipment and equipment.slots and w_slot_name
-        and equipment.slots[w_slot_name]
-    local w_item = w_slot_data and w_slot_data.item_data
-    if not w_item then
-        return false, nil
-    end
-    local match = (slot_name == w_item.template) or (slot_name == w_item.name)
-        or (slot_name == w_item.key) or (slot_name == w_item.item_type)
-        or (allow_slot_key == true and slot_name == w_slot_name)
-    return match, w_item
-end
+-- ============================================================
+-- LA remote-husk identity and spawn owner
+--   -> _cos_la_husk_identity_runtime.lua (#1159)
+-- ============================================================
+-- Installs at the first declaration in the former block. No hooks, commands,
+-- or module loads occurred before its original init-hook site, so registration
+-- order is unchanged while every identity consumer shares one policy owner.
+local _cos_la_husk_identity_runtime = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_la_husk_identity_runtime").install(
+        mod, {
+            gk_set = GK_SET,
+            custom_hats = CUSTOM_HATS,
+            get_mod = get_mod,
+            husk_identity = mod._cos_husk_identity,
+            la_bridge = LA_BRIDGE,
+            la_equips_by_peer = _la_equips_by_peer,
+            la_persist = LA_PERSIST,
+            score_identity = SCORE_IDENTITY,
+            script_unit = ScriptUnit,
+            unit = Unit,
+            get_managers = function() return Managers end,
+            get_profiles = function() return rawget(_G, "SPProfiles") end,
+            la_replay_policy = LA_REPLAY_POLICY,
+            dbg = _dbg,
+            dbg_alert = _dbg_alert,
+            printf = printf,
+        })
+local _resolve_la_variant =
+    _cos_la_husk_identity_runtime.resolve_la_variant
+local _la_chars_compatible =
+    _cos_la_husk_identity_runtime.chars_compatible
+local _purge_stale_peer_slot =
+    _cos_la_husk_identity_runtime.purge_stale_peer_slot
+local _level_world = _cos_la_husk_identity_runtime.level_world
 
 -- ============================================================
 -- LA appearance apply / revert / reconcile runtime
@@ -2082,284 +1891,26 @@ local _cos_glow_transport = mod:dofile(
     })
 local _cos574_complete_glow_rehydrate = _cos_glow_transport.complete_rehydrate
 
--- v0.9.0.6-hotfix: husk-wield context wrapper.
---
--- Wraps SimpleHuskInventoryExtension._wield_slot to set a thread-local
--- `_current_husk_wield` table BEFORE the vanilla call enters
--- BackendUtils.get_item_units. The CT get_item_units hook reads the context
--- (wearer_peer, slot_name) and overrides result.left_hand_unit when the
--- wearer has a kind="unit" LA mesh selection recorded in _la_equips_by_peer.
--- This is how Ostermark / Bastonne / etc. custom-mesh shields render on
--- husks instead of the vanilla mesh.
---
--- v0.9.0.8-hotfix: switched to string-form hook so VMF defers resolution
--- until the class is loaded. Table-form `mod:hook(SimpleHuskInventoryExtension, ...)`
--- gated on `rawget(_G, "SimpleHuskInventoryExtension")` silently failed when
--- the class wasn't yet loaded at mod-init time — the rawget returned nil,
--- the `if` skipped, hook NEVER registered, and no `[husk-mesh-swap]` log
--- ever fired on PC-B. String-form lets VMF queue the hook via its delayed-
--- hooks mechanism (see boot log "Attempt to hook N delayed hooks").
-mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, world, equipment, slot_name, unit_1p, unit_3p)
-    -- Resolve which peer owns this husk extension.
-    local husk_unit = self and self._unit
-    local pm = Managers and Managers.player
-    local wearer_player = mod._cos_husk_identity.player_for_unit(pm, husk_unit)
-    local wearer_peer = wearer_player and wearer_player.peer_id
-    -- #698 regression fix: do NOT gate on is_player_controlled alone. On a host
-    -- peer the human (local_player_id 1) and its bots (2..4) share ONE peer id,
-    -- so a bot husk's wield legitimately resolves wearer_peer=<host peer> and is
-    -- correctly skipped - but if the human's controlled flag is transiently nil
-    -- during spawn/sync, the old gate ALSO skipped the human, and the log
-    -- (peer-only) made a routine bot skip read as the human being dropped
-    -- (tonight's 3-player session: 29x "wearer=<host peer>"). wearer_is_human is
-    -- local_player_id-aware: a bot never owns local_player_id 1, so this never
-    -- mis-accepts a bot, and it rescues the human under a nil controlled flag.
-    local wearer_is_human, human_reason =
-        mod._cos_husk_identity.wearer_is_human(wearer_player)
-    local wearer_lpid = mod._cos_husk_identity.local_player_id(wearer_player)
-    if wearer_peer and not wearer_is_human then
-        if printf then printf("[cos:698] HUSK identity SKIP wearer=%s local_player_id=%s controlled=%s reason=%s (host bots share the wearer peer; local_player_id~=1 => bot)",
-            tostring(wearer_peer), tostring(wearer_lpid),
-            tostring(mod._cos_husk_identity.player_controlled(wearer_player)),
-            tostring(human_reason)) end
-        wearer_peer = nil
-    elseif wearer_peer then
-        local removed, reason, removed_slots = mod._cos_husk_identity.invalidate_for_career(
-            _la_equips_by_peer, wearer_peer, self and self._career_name, true)
-        if removed > 0 and printf then
-            printf("[cos:698] HUSK career-change invalidated wearer=%s active=%s slots=%s reason=%s",
-                tostring(wearer_peer), tostring(self and self._career_name),
-                table.concat(removed_slots, ","), tostring(reason))
-        end
-    end
-    -- v0.9.0.8-hotfix: diagnostic log.
-    _dbg("[husk-wield-wrap] entry wearer=%s slot=%s husk_unit=%s",
-        tostring(wearer_peer), tostring(slot_name), tostring(husk_unit))
-    -- v0.9.69-dev (Slice 0, I6 / #264): a nil wearer_peer here silently kills
-    -- BOTH the get_item_units mesh swap AND the post-vanilla repaint for this
-    -- wield. Surface it once per husk unit in the mod-logging-OFF log.
-    if not wearer_peer and husk_unit then
-        local seen = mod._la_gate_seen
-        if not seen then seen = {}; mod._la_gate_seen = seen end
-        local sk = "wield-nopeer|" .. tostring(husk_unit)
-        if not seen[sk] and printf then
-            seen[sk] = true
-            printf("[la-state] HUSK-WIELD wearer-unresolved husk=%s slot=%s (mesh swap + repaint skipped this path)",
-                tostring(husk_unit), tostring(slot_name))
-        end
-    end
-    -- v0.9.43-dev HUSK trace: a remote peer's body (husk) is (re)wielding a
-    -- slot. This drives the husk get_item_units mesh-swap (RESOLVE husk-mesh-
-    -- swap) + the post-vanilla repaint below. Repro #4 (host swaps secondary
-    -- and back) fires this on every peer's husk view of the host.
-    _trace("HUSK wield_slot entry wearer=%s slot=%s husk_unit=%s",
-        tostring(wearer_peer), tostring(slot_name), tostring(husk_unit))
-    -- Set context (stack-style).
-    local prev = _current_husk_wield
-    _current_husk_wield = {
-        wearer_peer = wearer_peer,
-        husk_unit = husk_unit,
-        slot_name = slot_name,
-        career_name = self and self._career_name,
-    }
-    -- v0.9.2.1: ALWAYS delegate to vanilla. The v0.9.2 pre-flight bail
-    -- (skipping the vanilla call when can_get reported a missing unit)
-    -- left `self.wielded_slot` nil, which made vanilla's subsequent
-    -- `wield()` chain crash downstream at simple_husk_inventory_extension
-    -- .lua:534 (`equipment.slots[wielded_slot]` → nil-index) on EVERY husk
-    -- wield to a missing unit, not just the rare engine-assert case the
-    -- pre-flight was guarding against. Net regression. Reverted — vanilla
-    -- runs and pcall is the only catch. The pre-flight remains as a
-    -- LOG-ONLY diagnostic (always-on printf via _dbg_alert, dedup'd below) so a
-    -- co-op card cannot false-pass with mod logging off - issue 154 / #1156.
-    -- v0.9.42-dev (#154): ENRICHED PREFLIGHT PROBE. The old warn read only the
-    -- BASE item_data.<field>, but vanilla _wield_slot resolves the unit through
-    -- BackendUtils.get_item_units (backend_utils.lua:144-190), which (a) prefers
-    -- the per-career override `<field>_override[career]`, and (b) when a skin is
-    -- present, REPLACES the unit with the skin template's unit + the skin's own
-    -- per-career override. For weapon_tweaker cross-character weapons the BASE
-    -- field points at the DONOR character's mesh (frequently non-resident on this
-    -- viewer because nobody here is playing that character), while the unit
-    -- vanilla actually spawns is wt's per-career override — which weapon_tweaker
-    -- force-loads on every peer at mod init. So the old base-field warn is a
-    -- FALSE ALARM whenever the RESOLVED unit is resident, which is the 160×/
-    -- session log spam #154 quotes. This probe resolves the SAME unit vanilla
-    -- will spawn and only warns LOUD when that resolved unit is non-resident
-    -- (the genuinely risky case: wt's force-load missed this weapon for husks);
-    -- the false-alarm case is demoted to a quiet file-only line.
-    --
-    -- Cross-char MESH ownership stays with weapon_tweaker; cosmetics' store
-    -- reaches these slots via the #154 template mirror (_cos_husk_cache_bridge).
-    -- This block stays read-only diagnostics (warn+proceed, v0.9.2.1).
-    if Application and Application.can_get and equipment then
-        local slot_data = equipment.slots and equipment.slots[slot_name]
-        local item_data = slot_data and slot_data.item_data
-        local skin      = slot_data and slot_data.skin
-        local career    = self and self._career_name
-        if item_data then
-            for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
-                local override_field = field .. "_override"
-                local base = item_data[field]
-                -- Mirror vanilla BackendUtils.get_item_units resolution order.
-                local resolved = base
-                local ov = item_data[override_field]
-                if career and ov and ov[career] then resolved = ov[career] end
-                local via_skin = nil
-                if skin and WeaponSkins and WeaponSkins.skins then
-                    -- rawget: WeaponSkins.skins can carry a strict metatable on
-                    -- partially-populated peers (CLAUDE.md fragile-globals rule).
-                    local st = rawget(WeaponSkins.skins, skin)
-                    if st then
-                        via_skin = skin
-                        resolved = st[field] -- skin REPLACES the unit (may be nil)
-                        local sov = st[override_field]
-                        if career and sov and sov[career] then resolved = sov[career] or resolved end
-                    end
-                end
-                -- Vanilla spawns this hand only if the resolved unit is truthy
-                -- (simple_husk_inventory_extension.lua:665/669), so a nil resolved
-                -- means "no unit on this hand" — nothing to check.
-                if resolved and resolved ~= "" then
-                    local resolved_resident = Application.can_get("unit", resolved) and true or false
-                    local base_resident = (base and base ~= "" and Application.can_get("unit", base)) and true or false
-                    -- Dedup so a missing/false-alarm weapon logs once per
-                    -- (career, template, field, resolved) instead of every wield.
-                    mod._preflight_seen = mod._preflight_seen or {}
-                    local seen_key = (resolved_resident and "ok|" or "warn|")
-                        .. tostring(career) .. "|" .. tostring(item_data.name)
-                        .. "|" .. field .. "|" .. tostring(resolved)
-                    if not mod._preflight_seen[seen_key] then
-                        mod._preflight_seen[seen_key] = true
-                        if not resolved_resident then
-                            -- The unit vanilla WILL actually spawn is missing on
-                            -- this peer → real risk (wt force-load gap for husks,
-                            -- or a non-wt cross-char weapon nobody preloaded).
-                            _dbg_alert("[husk-wield-wrap] PREFLIGHT WARN wearer=%s career=%s slot=%s field=%s template=%s base=%s(resident=%s) RESOLVED=%s(resident=false, NOT in resource manager) via_skin=%s - vanilla will spawn a NON-resident unit; cross-char weapon force-load (weapon_tweaker's) may have missed this for husks",
-                                tostring(wearer_peer), tostring(career), tostring(slot_name), field,
-                                tostring(item_data.name), tostring(base), tostring(base_resident),
-                                tostring(resolved), tostring(via_skin))
-                        elseif not base_resident then
-                            -- Base non-resident but the RESOLVED override/skin unit
-                            -- IS resident → the old warn was a false alarm. Quiet,
-                            -- file-only (confirms wt/vanilla handled it).
-                            _dbg("[husk-wield-wrap] PREFLIGHT OK (false alarm) wearer=%s career=%s slot=%s field=%s template=%s base=%s(resident=false) RESOLVED=%s(resident=true) via_skin=%s — base-field warn was spurious; resolved unit is resident",
-                                tostring(wearer_peer), tostring(career), tostring(slot_name), field,
-                                tostring(item_data.name), tostring(base), tostring(resolved), tostring(via_skin))
-                        end
-                    end
-                end
-            end
-        end
-    end
-    local ok, r1, r2, r3, r4, r5, r6, r7, r8 = pcall(func, self, world, equipment, slot_name, unit_1p, unit_3p)
-    _current_husk_wield = prev
-    if not ok then
-        _dbg_alert("[husk-wield-wrap] vanilla _wield_slot ERRORED wearer=%s slot=%s err=%s — pcall caught it. Husk visual likely missing/stale but host stays alive.",
-            tostring(wearer_peer), tostring(slot_name), tostring(r1))
-        return nil
-    end
-
-    -- #574: husk _wield_slot bypasses GearUtils.create_equipment and creates
-    -- fresh hand units directly. Bind the receiver-visible identity and repaint
-    -- after vanilla has installed those units; backend_id is intentionally nil
-    -- because inventory instance ids are not shared between peers.
-    do
-        local glow_slot = equipment and equipment.slots and equipment.slots[slot_name]
-        local glow_item = glow_slot and glow_slot.item_data
-        local glow_units = {
-            equipment and equipment.right_hand_wielded_unit_3p,
-            equipment and equipment.left_hand_wielded_unit_3p,
-            equipment and equipment.right_hand_wielded_unit,
-            equipment and equipment.left_hand_wielded_unit,
-        }
-        local peer_state = wearer_peer and _glow_by_peer[wearer_peer]
-        local glow_matches = 0
-        if mod._cos.bind_glow_unit then
-            for _, glow_unit in pairs(glow_units) do
-                mod._cos.bind_glow_unit(glow_unit, nil, glow_slot and glow_slot.skin,
-                    slot_name, glow_item and glow_item.name, glow_item and glow_item.template)
-                if peer_state and mod._cos.remote_glow_matches
-                        and mod._cos.remote_glow_matches(glow_unit, peer_state) then
-                    glow_matches = glow_matches + 1
-                end
-            end
-        end
-        mod._cos.apply_glow_override(glow_units, wearer_peer)
-        if wearer_peer then
-            _cos574_log("repaint path=husk_wield wearer=%s skin=%s slot=%s active=%s",
-                tostring(wearer_peer), tostring(glow_slot and glow_slot.skin),
-                tostring(slot_name), tostring(peer_state and peer_state.active_per_item_glow ~= nil))
-            if peer_state and peer_state.active_per_item_glow ~= nil and glow_matches > 0 then
-                _cos574_complete_glow_rehydrate(wearer_peer, "husk_wield", glow_matches)
-            end
-        end
-    end
-
-    -- v0.9.0.10-hotfix: RE-PAINT MERGED IN. The v0.9.0.5 separate
-    -- `mod:hook_safe(SimpleHuskInventoryExtension, "wield", ...)` was
-    -- silently dropped by VMF because _tpe.lua:511 had already hooked
-    -- the same Class+method (per feedback_vmf_hook_safe_no_chain). The
-    -- re-paint never ran. Folding the same logic into the _wield_slot
-    -- wrap (above) sidesteps the shadow — _wield_slot is not multi-hooked.
-    -- Runs AFTER vanilla returns, when the just-spawned weapon units are
-    -- in the slots and ready to be painted.
-    if wearer_peer and _la_equips_by_peer then
-        local equips = _la_equips_by_peer[wearer_peer]
-        if equips then
-            local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
-            local item_data = slot_data and slot_data.item_data
-            local wielded_template = item_data and item_data.template
-            for stored_key, entry in pairs(equips) do
-                if entry and entry.kind and entry.armoury_key then
-                    local career_ok, career_reason =
-                        mod._cos_husk_identity.entry_matches_career(
-                            entry, self and self._career_name)
-                    local should_apply = false
-                    if not career_ok then
-                        if printf then printf("[cos:698] HUSK repaint SKIP wearer=%s stored_key=%s kind=%s recorded=%s active=%s reason=%s",
-                            tostring(wearer_peer), tostring(stored_key), tostring(entry.kind),
-                            tostring(entry.wearer_career), tostring(self and self._career_name),
-                            tostring(career_reason)) end
-                    elseif entry.kind == "hat" and stored_key == "slot_hat" then
-                        should_apply = (slot_name == "slot_hat")
-                    elseif entry.kind == "armor" and stored_key == "slot_skin" then
-                        should_apply = true
-                    elseif entry.kind == "offhand" or entry.kind == "illusion" then
-                        if wielded_template and stored_key == wielded_template then
-                            should_apply = true
-                        end
-                    end
-                    if should_apply then
-                        _dbg("[husk-wield-repaint] apply stored_key=%s kind=%s key=%s",
-                            tostring(stored_key), tostring(entry.kind), tostring(entry.armoury_key))
-                        -- v0.9.43-dev HUSK trace: post-vanilla re-apply of a
-                        -- cached LA cosmetic onto the just-spawned husk units.
-                        _trace("HUSK wield-repaint stored_key=%s kind=%s armoury=%s slot=%s wearer=%s",
-                            tostring(stored_key), tostring(entry.kind), tostring(entry.armoury_key),
-                            tostring(slot_name), tostring(wearer_peer))
-                        -- v0.9.70-dev (#264, Slice 2 / I3): route through the single
-                        -- reconcile entry point. allow_pulse=false -- we are INSIDE a
-                        -- _wield_slot body (pulsing would re-enter wield); if the
-                        -- in-wield get_item_units mesh swap missed, reconcile defers
-                        -- a pulse to the pending drain, which runs from mod.update a
-                        -- frame later. THIS is the switch-back repair path.
-                        mod._la_reconcile(wearer_peer, stored_key, "husk-wield", false)
-                    end
-                end
-            end
-        end
-    end
-
-    return r1, r2, r3, r4, r5, r6, r7, r8
-end)
-
--- v0.9.0.10-hotfix: the standalone re-paint hook_safe("...wield") was
--- SHADOWED by _tpe.lua:511's earlier registration (VMF hook_safe doesn't
--- chain — second registration on same Class+method silently dropped, per
--- feedback_vmf_hook_safe_no_chain). The re-paint logic is now folded
--- INTO the _wield_slot wrap above, after vanilla's spawn completes.
--- The wrap uses mod:hook (not hook_safe) on a different method
--- (_wield_slot vs wield) so there's no shadow conflict.
+-- ============================================================
+-- Remote-husk wield transaction -> _cos_husk_wield_runtime.lua (#1159)
+-- ============================================================
+-- Installs at the exact former hook site. The owner keeps the context bracket,
+-- resolved-unit residency probe, vanilla return preservation, glow repaint,
+-- and LA reconcile in one atomic callback.
+HUSK_WIELD_RUNTIME.install(mod, {
+    get_managers = function() return Managers end,
+    husk_identity = mod._cos_husk_identity,
+    la_equips_by_peer = _la_equips_by_peer,
+    get_application = function() return Application end,
+    get_weapon_skins = function() return WeaponSkins end,
+    glow_by_peer = _glow_by_peer,
+    complete_glow_rehydrate = _cos574_complete_glow_rehydrate,
+    dbg = _dbg,
+    dbg_alert = _dbg_alert,
+    trace = _trace,
+    glow_log = _cos574_log,
+    printf = printf,
+})
 
 -- ============================================================
 -- Attachment-slot LA spawn / sync seams

@@ -99,6 +99,12 @@ return function(H, repo_root)
     local moonfire_puff_runtime = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_moonfire_puff_runtime.lua")
+    local la_husk_identity_runtime = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_la_husk_identity_runtime.lua")
+    local husk_wield_runtime = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_husk_wield_runtime.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -148,6 +154,8 @@ return function(H, repo_root)
             .. item_presentation_runtime:gsub("%-%-[^\n]*", "")
             .. spawn_boundary:gsub("%-%-[^\n]*", "")
             .. moonfire_puff_runtime:gsub("%-%-[^\n]*", "")
+            .. la_husk_identity_runtime:gsub("%-%-[^\n]*", "")
+            .. husk_wield_runtime:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),

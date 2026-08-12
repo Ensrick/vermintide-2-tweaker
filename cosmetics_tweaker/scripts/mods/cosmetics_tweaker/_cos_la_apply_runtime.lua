@@ -85,12 +85,11 @@
 --     file-scope assignment scan, not by eye).
 --
 -- NOT OWNED HERE (deliberate)
---   The entry keeps `mod._la_wielded_item_matches` (entry line 3118, the
---   weapon-identity guard shared with the husk wield hook) and both
---   deliberately entry-kept hooks - SimpleHuskInventoryExtension._wield_slot
---   and AttachmentUtils.create_attachment. This owner CALLS the guard through
---   `mod.`, and calls the attachment extension's own `ext.create_attachment`
---   method, which is a different thing from the AttachmentUtils hook.
+--   `_cos_la_husk_identity_runtime` owns `mod._la_wielded_item_matches`, the
+--   weapon-identity guard shared with `_cos_husk_wield_runtime`.
+--   `_cos_spawn_boundary` owns AttachmentUtils.create_attachment. This owner
+--   CALLS the guard through `mod.`, and calls the attachment extension's own
+--   `ext.create_attachment` method, which is a different engine seam.
 --
 -- DEAD-CODE NOTE (carried across unchanged, deliberately)
 --   `_try_apply_by_peer` has no call site anywhere in the mod. The v0.9.66-dev

@@ -1028,6 +1028,19 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Expected post-fix | `_cos_spawn_boundary.lua` exclusively owns all three seams, delegates a resident unit once, skips only a non-resident `slot_hat`, and preserves the combined MH-before / appearance-after sequence. `_cos_moonfire_puff_runtime.lua` independently owns the bounded cosmetic projectile fan-out. |
 | Detection | `qa/check_lua_unit_tests.ps1`, `qa/check_rt_textual_invariants.ps1`, strict Cosmetics mod-lint, and `qa/check_decomposition_contracts.ps1`; the entry must remain at or below 2,488 nonblank lines. |
 
+### cosmetics-remote-husk-wield-transaction — One stack-safe remote wield owner
+
+| Field | Value |
+|-------|-------|
+| Symptom | A remote weapon can lose its LA mesh/glow after a wield, resolve the wrong wearer/career, or leave stale context that corrupts a later equipment assembly; a wrapper may also collapse vanilla return values or fail to restore context when vanilla raises. |
+| Root cause | Remote wearer identity, equipment assembly, and post-wield appearance replay share one nested engine transaction. Splitting the `_wield_slot` bracket among competing hooks makes context lifetime and post-vanilla ordering implicit. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.206-dev |
+| Category | STATIC |
+| Repro | Register a second `SimpleHuskInventoryExtension._wield_slot` wrapper or capture the current-wield value at module load, then run the runtime-owner tests. |
+| Expected post-fix | `_cos_husk_wield_runtime.lua` exclusively brackets vanilla, restores the prior stack context on success/error, preserves eight returns, and performs bounded glow then LA replay. `_cos_la_husk_identity_runtime.lua` exclusively owns wearer/career and spawn-monitor policy. |
+| Detection | `qa/check_lua_unit_tests.ps1`, `qa/check_rt_textual_invariants.ps1`, strict Cosmetics mod-lint, and `qa/check_decomposition_contracts.ps1`; the entry must remain at or below 2,051 nonblank lines with 32 required owners. |
+
 ---
 
 ## Build / Deploy / Workshop
@@ -1308,6 +1321,7 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 - anim-closed-vocabulary
 - anim-remap-per-unit-state
 - cosmetics-spawn-boundary-owner
+- cosmetics-remote-husk-wield-transaction
 - cross-mod-br-registration-sync
 - ct-graph-snapshot-rpc
 - ct-husk-hook-shadow-tpe

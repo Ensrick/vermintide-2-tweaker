@@ -46,6 +46,10 @@ return function(H, repo_root)
     local module_relative =
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime.lua"
     local source = read(module_relative)
+    local husk_identity_runtime = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_husk_identity_runtime.lua")
+    local husk_wield_runtime = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_husk_wield_runtime.lua")
     local owner_install =
         'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime").install(mod, {'
 
@@ -57,11 +61,11 @@ return function(H, repo_root)
     function()
         H.equal(occurrences(entry, owner_install), 1)
         local at_owner = entry:find(owner_install, 1, true)
-        -- The block sat between the husk-init hook_safe above and the bounded
+        -- The block sat between the husk-identity owner above and the bounded
         -- replay coordinator below, and the latter's own comment requires it to
         -- follow the canonical _la_reconcile owner immediately.
         local at_husk_init = entry:find(
-            'mod:hook_safe("SimpleHuskInventoryExtension", "init"', 1, true)
+            "_cos_la_husk_identity_runtime", 1, true)
         local at_replay = entry:find(
             'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_runtime").install',
             1, true)
@@ -108,15 +112,19 @@ return function(H, repo_root)
     end)
 
     H.test("cos la apply runtime leaves sibling hook owners alone", function()
-        -- The husk wield hook stays on the entry. The attachment residency hook
+        -- The husk wield hook moved to its dedicated owner. The residency hook
         -- moved to the spawn-boundary owner; this owner only CALLS the extension's
         -- create_attachment method and registers neither seam.
         local boundary_file = assert(io.open(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_spawn_boundary.lua", "rb"))
         local boundary = boundary_file:read("*a")
         boundary_file:close()
-        H.truthy(entry:find(
+        H.equal(entry:find(
+            'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true), nil)
+        H.truthy(husk_wield_runtime:find(
             'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true))
+        H.truthy(husk_identity_runtime:find(
+            'mod:hook_safe("SimpleHuskInventoryExtension", "init"', 1, true))
         H.equal(entry:find('mod:hook(AttachmentUtils, "create_attachment"', 1, true), nil)
         H.truthy(boundary:find(
             'mod:hook(attachment_utils, "create_attachment"', 1, true))

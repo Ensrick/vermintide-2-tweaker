@@ -13,9 +13,9 @@
 --      after the wrap returns. Splitting the pair, or handing the flag across a
 --      module boundary by value, fails those two tests and nothing else.
 --
---   2. THE TWO ACCESSORS. `_current_husk_wield` and
---      `_active_customization_backend_id` stay ENTRY locals that other entry code
---      REBINDS. Each has a matched pair of tests: the first proves the owner sees
+--   2. THE TWO ACCESSORS. The husk-wield owner and the entry-owned
+--      `_active_customization_backend_id` both expose values that are REBOUND.
+--      Each has a matched pair of tests: the first proves the owner sees
 --      a value, the second REBINDS the entry-side local the way the real writer
 --      does and proves the owner sees the NEW one. Converting either getter back
 --      into an install-time value still passes the first test of each pair and
@@ -41,6 +41,8 @@ return function(H, repo_root)
     local module_relative =
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua"
     local source = read(module_relative)
+    local husk_wield = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_husk_wield_runtime.lua")
     local owner_install =
         'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_equipment_assembly").install(mod, {'
 
@@ -91,10 +93,13 @@ return function(H, repo_root)
     end)
 
     H.test("cos equipment assembly crossing state uses the correct hand-off kind", function()
-        -- REBOUND by the entry -> must cross as getters, and the owner must never
-        -- shadow either with a declaration of its own.
-        H.equal(occurrences(entry, "get_current_husk_wield = function() return _current_husk_wield end,"), 1)
-        H.equal(occurrences(entry, "local _current_husk_wield = nil"), 1)
+        -- REBOUND by the husk owner -> must cross through its getter, and the
+        -- equipment owner must never shadow it with persistent state.
+        H.equal(occurrences(entry,
+            "return HUSK_WIELD_RUNTIME.current(mod)"), 1)
+        H.equal(occurrences(entry, "local _current_husk_wield = nil"), 0)
+        H.equal(occurrences(husk_wield, "state.current = {"), 1)
+        H.equal(occurrences(husk_wield, "state.current = previous"), 1)
         H.equal(occurrences(source, "local _current_husk_wield = nil"), 0)
         H.equal(occurrences(source, "local _current_husk_wield = _get_current_husk_wield()"), 1)
         H.equal(occurrences(entry, "local _active_customization_backend_id = nil"), 1)
@@ -133,9 +138,12 @@ return function(H, repo_root)
         -- Comments are stripped: the header NAMES the sibling owners it composes
         -- with, and that prose must not be mistaken for a registration.
         local code = source:gsub("%-%-[^\n]*", "")
-        -- The husk WEAPON wield path stays in the entry: it SETS the context this
-        -- owner reads, it is not a unit-resolution seam.
-        H.equal(occurrences(entry, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1)
+        -- The husk WEAPON wield owner sets the context this owner reads; it is
+        -- not a unit-resolution seam and must not return to the entry.
+        H.equal(occurrences(entry,
+            'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 0)
+        H.equal(occurrences(husk_wield,
+            'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1)
         H.equal(occurrences(code, "SimpleHuskInventoryExtension"), 0)
         -- Previewer spawn seams belong to _cos_preview_runtime; attachment spawn
         -- seams to _cos_attachment_spawn_sync; the customization screen to the

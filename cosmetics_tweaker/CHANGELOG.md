@@ -1,5 +1,28 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.206-dev (2026-08-11) -- remote-husk transaction owners extracted (#1159)
+
+### Behavior-neutral extraction
+
+- Moved remote wearer identity, LA variant resolution, stale peer-slot cleanup,
+  mission-world lookup, wielded-item matching, the bounded LA spawn monitor,
+  and its read-only mission dump into `_cos_la_husk_identity_runtime.lua`.
+- Moved the single `SimpleHuskInventoryExtension._wield_slot` transaction into
+  `_cos_husk_wield_runtime.lua`. It still brackets vanilla with the same
+  stack-style context, restores that context on normal and error returns,
+  preserves eight return values, then performs the existing remote glow and LA
+  reconciliation in the same order.
+- Both owners refresh late dependencies on reinstall without duplicating their
+  one hook each. They add no RPC, command, lifecycle/update callback,
+  persistence write, package load, or new engine seam.
+- Lua 5.1 coverage pins identity precedence, human/bot career policy, spawn and
+  peer-ready replay, vanilla-error restoration, return arity, glow rehydrate,
+  LA post-wield reconciliation, and idempotent registration. The full suite now
+  contains 2,667 assertions and the runtime textual inventory contains 292.
+- Ratcheted the Cosmetics entry from 2,488 to 2,051 nonblank lines and raised
+  the required-owner inventory from 30 to 32. #1159 remains open because
+  structural completion requires 1,500 lines or less.
+
 ## 0.9.205-dev (2026-08-11) -- spawn-boundary owners extracted (#1159)
 
 ### Behavior-neutral extraction

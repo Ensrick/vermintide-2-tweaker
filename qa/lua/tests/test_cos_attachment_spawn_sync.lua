@@ -43,11 +43,11 @@ return function(H, repo_root)
         H.equal(occurrences(entry, owner_install), 1)
         local at_owner = entry:find(owner_install, 1, true)
         local at_husk_wield = entry:find(
-            'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true)
+            "HUSK_WIELD_RUNTIME.install(mod, {", 1, true)
         local at_netsafe = entry:find(
             'mod:info("[net-safe] hook registration:', 1, true)
         H.truthy(at_husk_wield and at_netsafe)
-        -- After the husk WEAPON wield hook the entry keeps, and before the
+        -- After the husk WEAPON wield owner installs, and before the
         -- startup verification that reads the status fields this owner writes.
         H.truthy(at_husk_wield < at_owner)
         H.truthy(at_owner < at_netsafe)
@@ -73,7 +73,7 @@ return function(H, repo_root)
         H.equal(occurrences(source, "if AttachmentUtils then"), 1)
         H.equal(occurrences(source, 'mod:hook("AttachmentUtils"'), 0)
         -- The sibling spawn-boundary owner keeps the OTHER AttachmentUtils
-        -- method (the #270 residency gate); the entry keeps the husk weapon path.
+        -- method (the #270 residency gate); the husk owner keeps the weapon path.
         H.equal(occurrences(entry, 'mod:hook(AttachmentUtils, "create_attachment"'), 0)
         H.equal(occurrences(source, 'mod:hook(AttachmentUtils, "create_attachment"'), 0)
         H.equal(occurrences(spawn_boundary,
