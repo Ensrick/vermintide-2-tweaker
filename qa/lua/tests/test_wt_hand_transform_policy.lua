@@ -81,9 +81,7 @@ return function(H, repo_root)
 
     H.test("WT #735 public and dev route shield rotation through exact hand adapters", function()
         for _, root in ipairs({ public_root, dev_root }) do
-            local entry_name = root == public_root and "weapon_tweaker.lua"
-                or "weapon_tweaker_dev.lua"
-            local entry = read(root .. entry_name)
+            local entry = read(root .. "_wt_transform_runtime.lua")
             local preview = read(root .. "_wt_paired_preview_transform.lua")
             local checks = read(root .. "_wt_runtime_checks.lua")
             -- The adapter's install call moved into _wt_menu_preview_owner.lua
@@ -91,9 +89,9 @@ return function(H, repo_root)
             -- rotation table and the durable hand gate stayed in the entry.
             local preview_owner = read(root .. "_wt_menu_preview_owner.lua")
             H.truthy(entry:find(
-                'local _SALTZ_KRUBER_SHIELD_ROTATION = { 25, -17.5, -15, hand = "left" }',
+                'local saltz_shield_rotation = { 25, -17.5, -15, hand = "left" }',
                 1, true))
-            H.truthy(entry:find("_wt_grip_offset_policy.applies_to_hand(baked_euler, hand)",
+            H.truthy(entry:find("grip_policy.applies_to_hand(baked_euler, hand)",
                 1, true))
             H.truthy(preview_owner:find("_wt_paired_preview_transform.install", 1, true))
             H.truthy(preview:find('mod:hook("MenuWorldPreviewer", "_spawn_item"', 1, true))
@@ -107,7 +105,7 @@ return function(H, repo_root)
 
     H.test("WT #735 retained proof reads rotation back after the durable write", function()
         local source = read(public_root .. "_wt_grip_offset_policy.lua")
-        local entry = read(public_root .. "weapon_tweaker.lua")
+        local entry = read(public_root .. "_wt_transform_runtime.lua")
         H.truthy(source:find("Unit.local_rotation(unit, 0)", 1, true))
         H.truthy(source:find("Quaternion.to_elements", 1, true))
         H.truthy(source:find("[wt:735] retained", 1, true))

@@ -343,11 +343,13 @@ return function(H, repo_root)
         local consumers = {
             {
                 path = "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua",
+                runtime = "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_transform_runtime.lua",
                 loader = '"scripts/mods/weapon_tweaker/_lib_weapon_appearance"',
                 export = "mod._wt_weapon_appearance = _WEAPON_APPEARANCE",
             },
             {
                 path = "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua",
+                runtime = "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_transform_runtime.lua",
                 loader = '"scripts/mods/weapon_tweaker_dev/_lib_weapon_appearance"',
                 export = "mod._wt_weapon_appearance = _WEAPON_APPEARANCE",
             },
@@ -356,11 +358,11 @@ return function(H, repo_root)
             local source = read(consumer.path)
             H.truthy(source:find(consumer.loader, 1, true), consumer.path)
             H.truthy(source:find(consumer.export, 1, true), consumer.path)
-            H.truthy(source:find("_WEAPON_APPEARANCE.apply(unit", 1, true), consumer.path)
+            H.truthy(read(consumer.runtime):find("appearance.apply(unit", 1, true), consumer.runtime)
         end
 
         for _, consumer in ipairs(consumers) do
-            local source = read(consumer.path)
+            local source = read(consumer.path) .. read(consumer.runtime)
             H.equal(source:find(
                 "pcall(Unit.set_local_scale, unit, 0, scale)", 1, true), nil)
             H.equal(source:find(

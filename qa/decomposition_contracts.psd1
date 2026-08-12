@@ -26,26 +26,24 @@
             RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua', '_cos_attachment_link_policy.lua', '_cos_ui_presentation_refresh.lua', '_cos_offhand_session_state.lua', '_cos_modded_illusion_swap.lua', '_cos_magic_skin_gateway.lua', '_cos_command_owner.lua', '_cos_glow_editor_button.lua', '_cos_item_grid_presentation.lua', '_cos_mod_lifecycle.lua', '_cos_la_replay_runtime.lua', '_cos_glow_transport.lua', '_cos_offhand_catalog.lua', '_cos_offhand_picker.lua', '_cos_preview_runtime.lua', '_cos_news_feed_safety.lua', '_cos_customization_view_lifecycle.lua', '_cos_attachment_spawn_sync.lua', '_cos_equipment_assembly.lua', '_cos_la_apply_runtime.lua', '_cos_la_sync_transport.lua', '_cos_la_loadout_safety.lua', '_cos_glow_picker_host.lua', '_cos_local_wield_runtime.lua', '_cos_update_scheduler.lua', '_cos_item_presentation_runtime.lua', '_cos_spawn_boundary.lua', '_cos_moonfire_puff_runtime.lua', '_cos_la_husk_identity_runtime.lua', '_cos_husk_wield_runtime.lua', '_cos_offhand_state_runtime.lua', '_cos_offhand_apply_runtime.lua', '_cos_offhand_diagnostics.lua', '_cos_glow_diagnostics_runtime.lua', '_cos_deus_yield_policy.lua')
         }
         @{
-            # Brought under the 2500-line HARD limit at 0.12.302-beta (issue
-            # #1159), together with its wt_dev mirror below - check_wt_stream_parity
-            # forbids one stream decomposing without the other. State stays
-            # 'partial': 'complete' additionally requires the entry to be at or
-            # under the 1500-line TARGET. Both qa/baselines/file_sizes.json rows
-            # were removed in the same slice, matching cim_dev.
+            # Structural completion at 0.12.303-beta (#1159). Transform and
+            # cross-character fatal-safety ownership moved behind explicit
+            # installers; the 3P visibility repair joined its existing swap
+            # owner. Stable/dev remain a parity-locked pair.
             Name = 'weapon_tweaker'
-            State = 'partial'
+            State = 'complete'
             Entry = 'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'
-            CeilingLines = 2212
-            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_weapon_balance_patches.lua')
+            CeilingLines = 1328
+            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_character_safety.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_transform_runtime.lua', '_wt_weapon_balance_patches.lua')
         }
         @{
-            # Mirror of the row above; the ceiling difference is the 159-line
-            # WT_DEV_OVERLAY surface the parity gate permits.
+            # Mirror of the row above; the 159-line difference is the explicit
+            # WT_DEV_OVERLAY surface admitted by the parity gate.
             Name = 'weapon_tweaker_dev'
-            State = 'partial'
+            State = 'complete'
             Entry = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua'
-            CeilingLines = 2371
-            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_weapon_balance_patches.lua')
+            CeilingLines = 1487
+            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_character_safety.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_transform_runtime.lua', '_wt_weapon_balance_patches.lua')
         }
         @{
             Name = 'career_tweaker_balance'

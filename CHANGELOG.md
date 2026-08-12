@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-11 - Weapon Tweaker reaches the structural completion target (#1159)
+
+Tweaker: Weapons 0.12.303-beta and 0.12.304-dev extract the canonical
+cross-character transform transaction and the engine-fatal attachment and
+animation guards into two explicit mirrored owners. The paired inventory and
+husk visibility repair joins the existing in-game 3P swap owner. Engine-free
+Lua 5.1 coverage pins receiver/hand routing, owner/bot/husk fan-out,
+first-person boundaries, `skip_sync` forwarding, and non-mutating attachment
+fallback. Stable/dev entries fall to 1,328/1,487 nonblank lines, their required
+owner inventory rises from eight to ten, and both machine contracts now mark
+the Weapon Tweaker structural phase complete.
+
 ## 2026-08-11 - CIM Dev reaches the structural completion target (#1159)
 
 Crafting in Modded 0.8.121-dev extracts boot/regression infrastructure, forged
