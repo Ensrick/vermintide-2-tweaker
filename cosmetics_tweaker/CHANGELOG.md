@@ -1,5 +1,30 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.207-dev (2026-08-11) -- structural phase completed (#1159)
+
+### Behavior-neutral extraction
+
+- Moved independent-offhand catalog merge, bounded exact-instance restoration,
+  lazy pool lookup, and receiver-side dual-unit validation into
+  `_cos_offhand_state_runtime.lua`. The canonical option and selection tables
+  retain their identities across the picker, scheduler, equipment, and preview
+  owners.
+- Moved item-type resolution, authored mesh validation, and the shared
+  live-body/hero-preview/illusion-preview paint transaction into
+  `_cos_offhand_apply_runtime.lua`. The mesh-warp guard and paint dispatch now
+  have one owner, so no render adapter can bypass the exact spawned-mesh check.
+- Moved read-only offhand commands, bounded glow evidence/commands, and the
+  Chaos Wastes mission-only weapon-cosmetic precedence rule into
+  `_cos_offhand_diagnostics.lua`, `_cos_glow_diagnostics_runtime.lua`, and
+  `_cos_deus_yield_policy.lua`. Two-phase glow installation preserves command
+  registration order; staging and route-map Deus contexts still do not yield.
+- Added executable Lua 5.1 coverage for idempotent catalog merge, exact-instance
+  restore, dual-unit fail-closed validation, and mismatched-mesh paint refusal.
+  The full suite now contains 2,671 tests; all 292 textual invariants remain.
+- Ratcheted the Cosmetics entry from 2,051 to 1,494 nonblank lines and raised
+  the required-owner inventory from 32 to 37. The machine contract now marks
+  the Cosmetics structural phase complete at the repository's 1,500-line target.
+
 ## 0.9.206-dev (2026-08-11) -- remote-husk transaction owners extracted (#1159)
 
 ### Behavior-neutral extraction

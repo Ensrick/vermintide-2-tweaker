@@ -29,11 +29,12 @@
 --   * mod.{_reapply_glow_on_wielded, _try_install_flow_glow_hook, _glow_call_counts,
 --     _glow_hooks_installed} are set here; the glow picker calls
 --     mod._reapply_glow_on_wielded, on_game_state_changed calls
---     mod._try_install_flow_glow_hook, and the /glow_status command (stays in the
---     entry) reads the two counter tables.
+--     mod._try_install_flow_glow_hook, and the /glow_status command owned by
+--     _cos_glow_diagnostics_runtime reads the two counter tables.
 --   * reads mod._per_item_glow_runtime (owned/written by _glow_picker.lua).
--- The /glow_status and /glow_trace commands stay in the entry; the per-peer glow
--- broadcast RPC layer (#421-adjacent) is owned by _cos_glow_transport.lua;
+-- The /glow_status and /glow_trace commands live in
+-- _cos_glow_diagnostics_runtime; the per-peer glow broadcast RPC layer is
+-- owned by _cos_glow_transport.lua;
 -- /dump_glows (a read-only dump with no apply logic) stays in
 -- _cos_diagnostics.lua.
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-11 - Cosmetics structural phase reaches completion target (#1159)
+
+Tweaker: Cosmetics 0.9.207-dev extracts exact-instance offhand state/restore,
+the shared authored offhand paint transaction, read-only offhand diagnostics,
+bounded glow diagnostics, and the Deus mission-only precedence policy into five
+explicit owners. Lua 5.1 tests pin idempotent merge, bounded restoration,
+fail-closed dual validation, and mesh-mismatch refusal. The entry falls from
+2,051 to 1,494 nonblank lines, the required-owner inventory rises from 32 to 37,
+and the machine contract marks the Cosmetics structural phase complete.
+
 ## 2026-08-11 - Cosmetics remote-husk transaction gains explicit owners (#1159)
 
 Tweaker: Cosmetics 0.9.206-dev moves the remote-husk identity/spawn policy into

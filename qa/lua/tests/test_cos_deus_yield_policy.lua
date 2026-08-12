@@ -21,6 +21,8 @@ return function(H, repo_root)
     end
 
     local main = read("cosmetics_tweaker.lua")
+    local yield_policy = read("_cos_deus_yield_policy.lua")
+    local offhand_apply = read("_cos_offhand_apply_runtime.lua")
     local checks = read("_cos_runtime_checks.lua")
     -- #1159: the BackendUtils.get_item_units seam that resolves the yield gate
     -- ONCE per call, and the GearUtils.create_equipment wrap whose flag the
@@ -37,10 +39,11 @@ return function(H, repo_root)
     local update_scheduler = read("_cos_update_scheduler.lua")
 
     H.test("Cos #518 yield boundary is mechanism AND game mode (staging never yields)", function()
-        local body = main:match(
-            "mod%._la_weapon_yield_for_context%s*=%s*(function%s*%b().-\nend)")
-        H.truthy(body, "_la_weapon_yield_for_context extraction failed (renamed/moved?)")
-        local fn = assert(loadstring("return " .. body))()
+        local owner = assert(dofile(root .. "_cos_deus_yield_policy.lua"))
+        local stub_mod = {}
+        owner.install(stub_mod, { get_managers = function() return {} end })
+        local fn = stub_mod._la_weapon_yield_for_context
+        H.truthy(fn, "_la_weapon_yield_for_context owner failed to install")
         H.equal(fn("deus", "deus"), true, "active expedition mission must yield")
         H.equal(fn("deus", "inn_deus"), false, "Pilgrimage Chamber must keep LA live")
         H.equal(fn("deus", "map_deus"), false, "route/shrine map must keep LA live")
@@ -54,11 +57,13 @@ return function(H, repo_root)
         -- (map_deus); every other deus level is an ingame node
         -- (deus_mechanism.lua:49-59). The fallback must keep that split so a
         -- mission cannot briefly repaint LA while GameModeManager is starting.
-        H.truthy(main:find('if ok and level_key == "morris_hub" then', 1, true))
-        H.truthy(main:find('game_mode_key = "inn_deus"', 1, true))
-        H.truthy(main:find('elseif ok and level_key == "dlc_morris_map" then', 1, true))
-        H.truthy(main:find('game_mode_key = "map_deus"', 1, true))
-        H.truthy(main:find('game_mode_key = "deus"', 1, true))
+        H.truthy(yield_policy:find('if ok and level_key == "morris_hub" then', 1, true))
+        H.truthy(yield_policy:find('game_mode_key = "inn_deus"', 1, true))
+        H.truthy(yield_policy:find('elseif ok and level_key == "dlc_morris_map" then', 1, true))
+        H.truthy(yield_policy:find('game_mode_key = "map_deus"', 1, true))
+        H.truthy(yield_policy:find('game_mode_key = "deus"', 1, true))
+        H.equal(main:find('if ok and level_key == "morris_hub" then', 1, true), nil,
+            "the context policy must have one owner")
     end)
 
     H.test("Cos #518 every weapon-side apply/paint path routes through the yield gate", function()
@@ -97,8 +102,10 @@ return function(H, repo_root)
         H.truthy(assembly:find("local _in_create_equipment = false", 1, true),
             "the assembly owner must own the bracket flag declaration")
         -- In-game LA paint skips inside a run; preview contexts stay live.
-        H.truthy(main:find('if context == "ingame" and mod._la_deus_weapon_yield() then', 1, true),
+        H.truthy(offhand_apply:find('if context == "ingame" and mod._la_deus_weapon_yield() then', 1, true),
             "ingame paint gate missing")
+        H.equal(main:find('if context == "ingame" and mod._la_deus_weapon_yield() then', 1, true), nil,
+            "the paint gate must live with the authored offhand apply transaction")
         -- Pending-apply retries treat deus-yield as terminal (no spin-to-deadline).
         H.truthy(update_scheduler:find('reason ~= "deus-yield"', 1, true),
             "pending drain must treat deus-yield as a terminal reason")
@@ -228,11 +235,11 @@ return function(H, repo_root)
 
     H.test("Cos #518 failure-path decisions are promoted to printf, _dbg retained", function()
         -- Local paint skip (was _dbg-only at the ingame deus gate).
-        H.truthy(main:find('mod._cos518_paint_skip(bid)', 1, true),
+        H.truthy(offhand_apply:find('mod._cos518_paint_skip(bid)', 1, true),
             "paint-skip promotion call missing")
         H.truthy(probe_module:find('mod._cos518_emit("paint-skip"', 1, true),
             "paint-skip emit site missing")
-        H.truthy(main:find(
+        H.truthy(offhand_apply:find(
             '_dbg("[LA paint] skip: deus run - CW upgrade cosmetics win (#518) bid=%s"',
             1, true), "paint-skip _dbg line must be retained")
         -- Husk-side authored-variant miss (was _dbg-only).

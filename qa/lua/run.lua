@@ -335,6 +335,7 @@ local suites = {
     "test_cos_offhand_catalog",
     "test_cos_offhand_picker",
     "test_cos_offhand_session_state",
+    "test_cos_offhand_runtime_owners",
     "test_cos_mh_package_lifecycle",
     "test_cos_runtime_modules",
     "test_cos_modded_illusion_swap",

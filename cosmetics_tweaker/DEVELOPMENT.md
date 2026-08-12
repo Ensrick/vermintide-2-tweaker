@@ -2,41 +2,20 @@
 
 Detailed technical reference for the `cosmetics_tweaker` mod. Read alongside `CHANGELOG.md` (version-by-version history) and `TODO.md` (open work).
 
-## Module map (ongoing #1159 OOP split)
+## Module map (#1159 structural phase complete)
 
-`cosmetics_tweaker.lua` is still the primary file (ratcheted by
-`qa/decomposition_contracts.psd1`) — this is an
-IN-PROGRESS decomposition (OOP_REFACTOR_PLAN WS5), not a finished one. Phase 1
-carved out the three cleanest self-contained concerns; Phase 2 carved out the
-render-path scale/grip apply layer; Phase 3 carved out the glow apply subsystem.
-Phase 4a carved out the three #421 weapon-skin wire-safety senders as one indivisible
-network boundary. Phase 4b moved the lazy runtime-check registrations, glow-probe
-tools, and LA read-only commands behind explicit install contracts without moving
-their registration order. The next #1159 slice moved the three mod-wide transition
-and teardown callbacks into one idempotent lifecycle owner without changing their
-registration or side-effect order. The following bounded slice moved the #660
-Loremaster appearance-replay WHEN coordinator behind an explicit install
-contract at its historical point, while leaving every wire registration and
-render HOW owner in place. The current bounded slice extracted the per-peer glow
-transport/replay boundary, independent-offhand catalog/package owner, and
-HeroWindowItemCustomization offhand-picker UI suite without moving the shared
-husk hook. The next bounded slice moved the preview equipment/spawn/package
-lifecycle and score-lineup hooks, plus their adjacent authored-outfit attachment
-replay, into `_cos_preview_runtime.lua` at the same registration boundary. The
-latest bounded slice moved the five glow-picker host-window hooks and two manual
-  picker commands into `_cos_glow_picker_host.lua`, and moved the single local-player
-  `SimpleInventoryExtension._wield_slot` appearance replay into
-  `_cos_local_wield_runtime.lua`. The next slice moved exact-instance item-card
-  resolution, its one UIUtils hook, and the post-LA-receiver Hold-Tab adapter into
-  `_cos_item_presentation_runtime.lua`. The latest slice moved the ordered
-  attachment/preview spawn boundary and the independent Moonfire cosmetic-impact
-  hooks into `_cos_spawn_boundary.lua` and `_cos_moonfire_puff_runtime.lua`.
-  The current slice moved remote-husk identity/spawn policy and the single remote
-  wield transaction into `_cos_la_husk_identity_runtime.lua` and
-  `_cos_husk_wield_runtime.lua`. Cosmetics is now below the 2,500-line hard
-  limit; remaining customization UI and live weapon render hooks remain in the
-  entry pending the 1,500-line completion target. The preview owner calls the
-  Phase 2 scale/grip helpers and Phase 3 glow helpers through `mod._cos.*`.
+`cosmetics_tweaker.lua` is the composition root ratcheted by
+`qa/decomposition_contracts.psd1`. The bounded #1159 sequence extracted render,
+glow, wire, lifecycle, replay, transport, offhand catalog/picker/state/apply,
+preview, equipment, attachment, spawn, local/remote wield, item-presentation,
+diagnostic, and scheduler owners without changing their engine registration
+order. The final slice moved exact-instance offhand state restoration and local
+paint gating into dedicated owners, separated read-only offhand/glow diagnostics,
+and isolated the Deus mission-only precedence policy. At 1,494 nonblank lines and
+37 required owners, Cosmetics now satisfies the 1,500-line structural-completion
+target. Future changes must preserve or reduce that ceiling; behavior and
+cross-surface appearance completeness remain governed by their own issues and
+tests rather than inferred from file size alone.
 
 **Shared namespace `mod._cos`** (the event_tweaker `mod._evt` pattern,
 PROJECT_STANDARDS § 2.2a) carries cross-module state. It is created in the entry
@@ -48,7 +27,7 @@ with the offhand force-loader), and `apply_cosmetic_unlocks` (exported by the un
 module for the entry's lifecycle callbacks). Phase 2 added `is_unit`, `scale_units`,
 `offset_units`, and `apply_unit_path_scale_hand` (exported by `_cos_render`): the render
 hooks in the entry call the apply helpers via `mod._cos.*`, and the entry keeps an
-`is_unit` alias for the LA-paint + glow-dump code that still lives there. Phase 3 added
+`is_unit` alias injected into the offhand-apply and glow-probe owners. Phase 3 added
 `apply_glow_override` and `glow_owner_peer_for_unit` (exported by `_cos_glow`): the same
 three render hooks call them via `mod._cos.*` for the per-equip glow paint. `_cos_glow`
 also owns the init of the `mod._glow_by_peer` per-peer cache and the
@@ -60,7 +39,7 @@ exactly once from the manifest.
 
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
-| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest, the `mod._cos` namespace setup + `_cos_*` manifest, and everything not yet extracted: live weapon render hooks, remaining customization/glow UI, and #282 MH session-residency diagnostics. Its 2,051-line ceiling is below the hard limit but remains above the 1,500-line structural-completion target. |
+| `cosmetics_tweaker.lua` (entry) | Composition root: MOD_VERSION (launcher parses it here — never move it), load banner/echo, embed manifest, shared `mod._cos` namespace, ordered owner installation, remaining live render adapters, and #282 MH session-residency diagnostics. Its 1,494-line ceiling is the completed structural-phase ratchet. |
 | `_cos_mod_lifecycle.lua` | Idempotent owner of the existing `on_game_state_changed`, `on_disabled`, and `on_unload` callbacks. Preserves transition telemetry, bounded LA/glow/replay arming, TPE/LA disable cleanup, and offhand-package unload order. It receives the four earlier entry locals explicitly and adds no hook, RPC, update loop, or persistence surface. |
 | `_cos_la_replay_runtime.lua` | Idempotent #660 owner of the bounded Loremaster appearance-replay coordinator. Owns the replay state initialization plus `apply`/`on_edge` status and invalidation routing at the historical post-`_la_reconcile`, pre-RPC position. It receives the pure replay policy and five existing runtime dependencies explicitly and adds no hook, RPC, update loop, lifecycle callback, persistence write, or renderer mutation. |
 | `_cos_glow_transport.lua` | Idempotent host-authoritative per-peer glow transport/replay owner. Owns the existing `cos_glow_apply_req` / `cos_glow_apply` registrations, coalesced local publisher, bounded material-only rehydrate queue, and hot-join replay helpers at their historical post-LA-RPC, pre-husk-wield position. It adds no hook, lifecycle callback, persistence write, or material mutation; the frame scheduler's existing `mod.update`, hot-join, picker, and shared husk hooks consume its stable `mod._*` functions. |
@@ -69,6 +48,11 @@ exactly once from the manifest.
 | `_cos_spawn_boundary.lua` | #1159 ordered attachment/preview spawn owner. Owns the optional-headpiece `Application.can_get` gate, attachment-link policy installation, low-level `World.link_unit` LA queue, and the combined Hero/Menu `_spawn_item_unit` hook. One hook preserves MH-before-vanilla and authored-surface/glow-identity/LA-queue/score-paint-after-vanilla order. It refreshes action-time dependencies without duplicate registration and adds no RPC, command, lifecycle/update callback, persistence write, or package load. |
 | `_cos_moonfire_puff_runtime.lua` | #1159 cosmetic projectile-impact owner. Owns the existing conditional six-method Unit/Husk Moonfire hit surface, exact `we_deus_01*` classifier, setting gate, and yield to Tweaker: Weapons' AOE revert. Reinstall refreshes the particle and mod dependencies without duplicating hooks; it adds no gameplay damage, RPC, command, lifecycle/update callback, persistence write, or package load. |
 | `_cos_offhand_catalog.lua` | Idempotent independent-offhand catalog/package owner. Owns the #565 PackageManager reference lifecycle, authored mesh/readiness and inventory-icon resolvers, static shield/dual catalogs, lazy CWV pool discovery, and deferred all-pool preload implementation. It adds no hook, RPC, command, lifecycle/update callback, persistence/session state, UI, render, or LA-merge behavior; the entry consumes its returned function/data bag at the historical pre-session-state seam. |
+| `_cos_offhand_state_runtime.lua` | Exact-instance offhand catalog-state owner. Owns one-shot LA merge, bounded persisted restoration, lazy pool lookup, and receiver-side dual-unit validation over the canonical option/selection tables. It adds no hook, RPC, command, lifecycle/update callback, or render mutation. |
+| `_cos_offhand_apply_runtime.lua` | Shared authored-offhand local render transaction for live equipment, hero preview, and illusion preview. Owns item-type resolution, spawned-mesh validation, Cosmetics/LA material dispatch, customization suppression, and Deus yield. The mesh gate and paint cannot be split across adapters. |
+| `_cos_offhand_diagnostics.lua` | Read-only `/la_offhand_dump` and `/offhand_debug` owner. It reports bridge resolution, pool/selection state, and engine-surface availability without mutation. |
+| `_cos_glow_diagnostics_runtime.lua` | Bounded #574 log evidence plus `/glow_status` and `/glow_trace`. Two-phase installation exposes the logger early while retaining the commands' historical registration position. |
+| `_cos_deus_yield_policy.lua` | Weapon-only Chaos Wastes precedence owner. Keep-instance authored cosmetics yield to rolled Deus skins only in active `deus` mission nodes; `inn_deus` and `map_deus` remain live. |
 | `_cos_offhand_picker.lua` | Idempotent weapon-customization offhand picker owner. Owns the existing magic-family filter; offhand row setup; hover/input/draw hooks; exact selected-primary resolver; and `_ct_on_offhand_pressed` class method. Its engine tables are action-time getters. It adds no RPC, command, lifecycle/update callback, durable persistence, render hook, package catalog, exit commit/revert, or LA pool merge. |
 | `_cos_preview_runtime.lua` | Idempotent preview presentation owner. Owns the 12 existing MenuWorldPreviewer/HeroPreviewer equipment and spawn, TeamPreviewer score-lineup, LootItemUnitPreviewer package/spawn/lifecycle, and adjacent authored-outfit attachment replay hooks in exact historical order. It exports the stable score peer resolver through its owner bag. A persistent holder refreshes all 16 injected LA/glow/score/helper dependencies before the reinstall guard; callbacks read the current shared `mod._cos` consumer map and action-time customization identity without duplicating hooks. It adds no RPC, command, persistence write, update-loop owner, or husk hook. |
 | `_cos_news_feed_safety.lua` | Idempotent stale-news-widget containment owner. Owns the single existing `NewsFeedUI.draw` origin hook, preserves vanilla pass and active-news order, closes the pass before descending purge/recycle, and retains the historical five-purge diagnostic threshold. A persistent holder refreshes its renderer getter and logger before the reinstall guard. It adds no RPC, command, lifecycle/update callback, persistence, or appearance behavior. |
@@ -220,8 +204,9 @@ their internals alone.
   Register a new variable in `_GLOW_VAR_BRIGHTNESS` (+ `_GLOW_GROUP_COLOR_SETTING` for a
   new component) per GLOW_SYSTEM §9; the three render hooks in the entry already call
   `mod._cos.apply_glow_override`, so no new call site is needed. Glow SYNC/RPC changes
-  (per-peer `cos_glow_apply` broadcast) go to `_cos_glow_transport.lua`; the
-  `/glow_status`+`/glow_trace` commands stay in the entry.
+  (per-peer `cos_glow_apply` broadcast) go to `_cos_glow_transport.lua`;
+  `/glow_status`, `/glow_trace`, and bounded #574 evidence belong to
+  `_cos_glow_diagnostics_runtime.lua`.
 - **New custom weapon-skin wire sender or #421 null/restore change** → `_cos_wire.lua`.
   Keep all sender registrations and the frozen regression surface together; the
   substitution is never setting-gated.

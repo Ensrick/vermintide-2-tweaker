@@ -45,6 +45,15 @@ return function(H, repo_root)
             local call = 'mod:dofile("scripts/mods/cosmetics_tweaker/' .. name .. '")'
             H.equal(count_plain(entry, call), 1, name .. " load count")
         end
+        for _, name in ipairs({
+            "_cos_offhand_state_runtime", "_cos_offhand_apply_runtime",
+            "_cos_offhand_diagnostics", "_cos_glow_diagnostics_runtime",
+            "_cos_deus_yield_policy",
+        }) do
+            H.equal(count_plain(entry,
+                '"scripts/mods/cosmetics_tweaker/' .. name .. '"'), 1,
+                name .. " path count")
+        end
         H.equal(count_plain(entry, "_cos_glow_probe.install(mod"), 1)
         H.equal(count_plain(entry, "_cos_la_commands.install(mod"), 1)
         H.equal(count_plain(entry, "_cos_runtime_checks.install(mod, _rt_register"), 1)
@@ -184,7 +193,8 @@ return function(H, repo_root)
         local la_mod, la_commands = command_mod()
         local la = assert(loadfile(base .. "_cos_la_commands.lua"))()
         la.install(la_mod, {
-            la_bridge = {}, local_career_name = function() return nil end,
+            la_bridge = {}, local_player_safe = function() return nil end,
+            get_managers = function() return {} end,
             flush_log = function() end,
         })
         H.equal(#la_commands, 6)

@@ -38,6 +38,8 @@ return function(H, repo_root)
     local entry = entry_only
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
+        .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_state_runtime.lua")
+        .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_apply_runtime.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua")
         .. attachment_spawn_sync
         .. equipment_assembly

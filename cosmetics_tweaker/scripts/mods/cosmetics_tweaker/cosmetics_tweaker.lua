@@ -106,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.206-dev"
+local MOD_VERSION = "0.9.207-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -402,16 +402,11 @@ local _glow_by_peer = mod._glow_by_peer
 -- #574 verification evidence is deliberately bounded and log-only.  A normal
 -- two-player verify run exercises send/receive plus several spawn paths; the
 -- cap prevents a preview rebuild loop from growing the console log forever.
-local function _cos574_log(fmt, ...)
-    mod._cos574_diag_count = mod._cos574_diag_count or 0
-    if mod._cos574_diag_count >= 48 then return end
-    mod._cos574_diag_count = mod._cos574_diag_count + 1
-    if rawget(_G, "printf") then
-        local ok, message = pcall(string.format, fmt, ...)
-        pcall(printf, "[cos:574] %s evidence=%d/48 chat=false",
-            ok and message or tostring(fmt), mod._cos574_diag_count)
-    end
-end
+local _cos_glow_diagnostics_runtime = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_glow_diagnostics_runtime").install(mod, {
+    printf = rawget(_G, "printf"),
+})
+local _cos574_log = _cos_glow_diagnostics_runtime.log
 
 
 -- ============================================================
@@ -712,255 +707,30 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle").i
     end,
 })
 
--- LA pool merge: each weapon_type pulls the LA shields whose `icons` table
--- specifically targets that weapon_type. The bridge does the icon-driven
--- bucketing; the merge here just appends each bucket to the matching
--- vanilla-offhand list. No cross-weapon-type leakage because each
--- _offhand_options[weapon_type] is now its own table (de-aliased above).
---
--- FOCUS GATE: legacy "one shield at a time" testing whitelist. Pre-v0.8.52
--- only the 3 entries below surfaced in the picker (Ostermark, Kotbs, Reiland)
--- while the rest of LA's registered shields stayed hidden. v0.8.52-dev opens
--- this fully — every LA shield whose `icons` table targets the current weapon
--- type now appears, scoped to the wielding character per the same-character
--- rule (each LA variant's icons are already character-correct, so the merge
--- preserves the rule).
---
--- To re-enable the focus filter for debugging, populate this table with the
--- armoury_keys you want exposed; an empty table = no filter (default now).
-local _LA_FOCUS_KEYS = {}
-
-local _la_offhand_merged = false
-
-local function _merge_la_offhand_options()
-    if _la_offhand_merged then return end
-    if not LA_BRIDGE.registered then return end
-    if type(LA_BRIDGE.la_offhand_options_by_weapon_type) ~= "table" then return end
-    local has_focus, appended, duplicates = next(_LA_FOCUS_KEYS) ~= nil, 0, 0
-    -- v0.9.9.4: per-hand structure — LA_BRIDGE.la_offhand_options_by_weapon_type
-    -- is `[weapon_type][hand_field] = array_of_la_opts`.
-    for weapon_key, la_hand_pools in pairs(LA_BRIDGE.la_offhand_options_by_weapon_type) do
-        local hand_target = _offhand_options[weapon_key]
-        if not hand_target then hand_target = {}; _offhand_options[weapon_key] = hand_target end
-        for hand_field, la_pool in pairs(la_hand_pools) do
-            local target = hand_target[hand_field]
-            if not target then target = {}; hand_target[hand_field] = target end
-            for _, la_opt in ipairs(la_pool) do
-                if (not has_focus) or _LA_FOCUS_KEYS[la_opt.armoury_key] then
-                    local candidate = {
-                        name            = la_opt.name .. " (LA)",
-                        la_armoury_key  = la_opt.armoury_key,
-                        vanilla_skin    = la_opt.vanilla_skin,
-                        target_item_type = la_opt.target_item_type or weapon_key,
-                        -- mesh the LA texture was authored for; swapped in via
-                        -- BackendUtils.get_item_units so LA paints onto the right
-                        -- shield shape. nil for pure-paint variants, in which case
-                        -- the user's existing shield mesh is preserved.
-                        intended_unit   = la_opt.intended_unit,
-                        authored_family = la_opt.authored_family,
-                        variant_kind    = la_opt.variant_kind,
-                        rarity          = "promo",
-                        -- v0.9.9.1 REVERT: dropped la_opt.icon passthrough.
-                    }
-                    _decorate_shield_option(candidate); if OFFHAND_NAMES.merge_unique(target, candidate, hand_field) then appended = appended + 1 else duplicates = duplicates + 1 end
-                end
-            end
-        end
-    end
-    _la_offhand_merged = true
-    mod:info("[offhand] merged LA shield options (focus gate: %d keys, appended=%d duplicate_identity=%d)",
-        (function() local n = 0; for _ in pairs(_LA_FOCUS_KEYS) do n = n + 1 end; return n end)(), appended, duplicates)
-end
-
--- v0.9.71-dev: restore persisted offhand (shield) picks into
--- `_offhand_selection` once the LA bridge pools exist. Reconstructs the SAME
--- option record shape `_merge_la_offhand_options` builds (la_armoury_key /
--- vanilla_skin / intended_unit) by looking the armoury_key up in
--- LA_BRIDGE.la_offhand_options_by_weapon_type, so the local render path
--- (BackendUtils.get_item_units mesh override + LA paint) treats a restored
--- pick exactly like a fresh one. One-shot; arms the self-rebroadcast so
--- peers learn the restored picks through the normal emit flow.
-mod._la_restore_offhand_selections = function()
-    if mod._la_offhand_restore_done then return end
-    if not (LA_PERSIST and LA_PERSIST.get_saved_offhands) then return end
-    local restore_now = os.clock()
-    if mod._la_offhand_restore_retry_at
-            and restore_now < mod._la_offhand_restore_retry_at then return end
-    mod._la_offhand_restore_retry_at = restore_now + 0.5
-    mod._la_offhand_restore_deadline = mod._la_offhand_restore_deadline
-        or (restore_now + 15)
-    local saved = LA_PERSIST.get_saved_offhands()
-    if not next(saved) then mod._la_offhand_restore_done = true return end
-    local la_pools = LA_BRIDGE and LA_BRIDGE.registered
-        and LA_BRIDGE.la_offhand_options_by_weapon_type or nil
-    local needs_la, needs_item = false, false
-    for _, hands in pairs(saved) do
-        for _, rec in pairs(hands) do
-            if rec and rec.armoury_key
-                    and not (GK_SET and GK_SET.resolve_variant(rec.armoury_key)) then
-                needs_la = true
-            end
-            if rec then needs_item = true end
-        end
-    end
-    if needs_la and type(la_pools) ~= "table" then return end
-    -- #695: avoid warning-producing get_interface calls before backend readiness.
-    local backend_mgr = Managers and Managers.backend
-    local backend_items = backend_mgr and backend_mgr._interfaces
-        and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
-    if needs_item and not (backend_items and backend_items.get_item_from_id) then return end
-    if get_mod("character_weapon_variants") and mod._discover_cwv_dual_offhand_pools then
-        mod._discover_cwv_dual_offhand_pools()
-    end
-    -- #923: restoration is qualified by exact item type + hand + Armoury
-    -- key. A first-hit global key index can restore a sibling target option.
-    local by_target = mod._la_option_icon_policy.index_by_target(la_pools)
-    -- Cosmetics-authored offhands live in the same persisted schema but do not
-    -- require Loremaster's Armoury.  Rebuild them from the canonical component
-    -- pools so a saved GK shield survives restart even when LA is absent.
-    for item_type, hand_pools in pairs(_offhand_options) do
-        for hand_field, pool in pairs(hand_pools) do
-            for _, opt in ipairs(pool) do
-                if opt.la_armoury_key and opt.cos_authored
-                        and not mod._la_option_icon_policy.lookup(by_target, item_type,
-                            hand_field, opt.la_armoury_key) then
-                    by_target[item_type] = by_target[item_type] or {}
-                    by_target[item_type][hand_field] =
-                        by_target[item_type][hand_field] or {}
-                    by_target[item_type][hand_field][opt.la_armoury_key] = {
-                        name = opt.name,
-                        armoury_key = opt.la_armoury_key,
-                        vanilla_skin = opt.vanilla_skin,
-                        intended_unit = opt.intended_unit,
-                        authored_family = opt.authored_family,
-                        variant_kind = opt.variant_kind,
-                        inventory_icon = opt.inventory_icon,
-                        cos_authored = true,
-                    }
-                end
-            end
-        end
-    end
-    local n, miss, deferred = 0, 0, 0
-    for backend_id, hands in pairs(saved) do
-        local ok_item, item = pcall(backend_items.get_item_from_id,
-            backend_items, backend_id)
-        local item_data = ok_item and item and (item.data
-            or (item.key and ItemMasterList and rawget(ItemMasterList, item.key)))
-        local item_type = item_data and item_data.item_type
-        local exact_skin = ok_item and item and item.skin or nil
-        if not exact_skin and ok_item and item and backend_items.get_skin then
-            local ok_skin, backend_skin = pcall(backend_items.get_skin,
-                backend_items, backend_id)
-            if ok_skin then exact_skin = backend_skin end
-        end
-        local item_pending = not (ok_item and item)
-            and restore_now < mod._la_offhand_restore_deadline
-        for hand_field, rec in pairs(hands) do
-            local la_opt = rec and rec.armoury_key
-                and mod._la_option_icon_policy.lookup(by_target, item_type,
-                    hand_field, rec.armoury_key)
-            local mesh_opt = nil
-            local this_deferred = item_pending
-            if item_pending then deferred = deferred + 1 end
-            if rec and type(rec.unit_path) == "string" and rec.unit_path ~= "" then
-                -- Backend records can outlive salvaged items or removed CWV
-                -- variants. Resolve defensively and accept only a unit still in
-                -- this exact item's compatible hand pool.
-                if ok_item and item then
-                    local pools = item_type and mod._ensure_independent_dual_pool
-                        and mod._ensure_independent_dual_pool(item_type)
-                    local pool = pools and pools[hand_field]
-                    local unit_fallback, unit_ambiguous = nil, false
-                    for _, candidate in ipairs(pool or {}) do
-                        if candidate.unit == rec.unit_path then
-                            local component_key = candidate.skin_key
-                                or candidate.source_skin_key
-                            if rec.vanilla_key and component_key == rec.vanilla_key then
-                                mesh_opt = candidate
-                                break
-                            elseif not unit_fallback then
-                                unit_fallback = candidate
-                            else
-                                unit_ambiguous = true
-                            end
-                        end
-                    end
-                    if not mesh_opt and unit_fallback and not unit_ambiguous then
-                        -- Legacy records may predate the component skin key.
-                        -- A unique exact-unit hit remains deterministic.
-                        mesh_opt = unit_fallback
-                    end
-                    if not mesh_opt and (not pool or #pool == 0)
-                            and restore_now < mod._la_offhand_restore_deadline then
-                        deferred = deferred + 1
-                        this_deferred = true
-                    end
-                else
-                    -- CIM can own an exact saved instance before its backend
-                    -- mirror injection is available. Preserve that identity and
-                    -- retry boundedly instead of consuming the one-shot restore.
-                    local cim = get_mod("cim_dev") or get_mod("cim")
-                    local pending_cim = cim and cim._cim_get_craft
-                        and cim._cim_get_craft(backend_id) ~= nil
-                    if not this_deferred and pending_cim
-                            and restore_now < mod._la_offhand_restore_deadline then
-                        deferred = deferred + 1
-                        this_deferred = true
-                    end
-                end
-            end
-            if la_opt then
-                local restored = {
-                    name             = la_opt.name .. " (LA)",
-                    la_armoury_key   = la_opt.armoury_key,
-                    target_item_type = la_opt.target_item_type or item_type,
-                    intended_unit    = la_opt.intended_unit,
-                    authored_family  = la_opt.authored_family,
-                    variant_kind     = la_opt.variant_kind,
-                    inventory_icon   = la_opt.inventory_icon,
-                    cos_authored     = la_opt.cos_authored == true,
-                    rarity           = "promo",
-                }
-                if not restored.cos_authored then
-                    local la_mod = get_mod("Loremasters-Armoury")
-                    restored = mod._la_option_icon_policy.resolve_for_item(restored,
-                        item_type, exact_skin,
-                        la_mod and la_mod.SKIN_LIST,
-                        LA_BRIDGE.normalize_weapon_type)
-                end
-                _offhand_selection[backend_id] = _offhand_selection[backend_id] or {}
-                _offhand_selection[backend_id][hand_field] = restored
-                if la_opt.intended_unit then _preload_offhand_package(la_opt.intended_unit) end
-                n = n + 1
-            elseif mesh_opt then
-                _offhand_selection[backend_id] = _offhand_selection[backend_id] or {}
-                _offhand_selection[backend_id][hand_field] = mesh_opt
-                _preload_offhand_for_option(mesh_opt)
-                n = n + 1
-            elseif not this_deferred then
-                miss = miss + 1
-            end
-        end
-    end
-    if n > 0 then
-        -- Peers learn restored picks via the normal state-change re-emit walk
-        -- (it reads _offhand_selection for equipped backend_ids).
-        mod._la_self_rebroadcast_pending = true
-    end
-    mod._la_offhand_restore_done = deferred == 0
-        or restore_now >= mod._la_offhand_restore_deadline
-    if mod._la_offhand_restore_done then
-        mod._la_offhand_restore_retry_at = nil
-    end
-    local summary = string.format("%d|%d|%d|%s", n, miss, deferred,
-        tostring(mod._la_offhand_restore_done))
-    if printf and summary ~= mod._la_offhand_restore_last_summary then
-        mod._la_offhand_restore_last_summary = summary
-        printf("[la-state] OFFHAND-RESTORE restored=%d unresolvable=%d deferred=%d done=%s",
-            n, miss, deferred, tostring(mod._la_offhand_restore_done))
-    end
-end
+-- Independent-offhand catalog state owner (#1159). It shares the canonical
+-- catalog/selection tables with the picker and render owners, but owns every
+-- catalog-state transition: merge, exact-instance restore, lazy lookup, and
+-- receiver-side dual-unit validation. No hook/RPC/command/update registration.
+local _cos_offhand_state_runtime = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_offhand_state_runtime").install(mod, {
+    gk_set = GK_SET,
+    la_bridge = LA_BRIDGE,
+    la_persist = LA_PERSIST,
+    offhand_names = OFFHAND_NAMES,
+    decorate_shield_option = _decorate_shield_option,
+    offhand_options = _offhand_options,
+    offhand_selection = _offhand_selection,
+    preload_offhand_package = _preload_offhand_package,
+    preload_offhand_for_option = _preload_offhand_for_option,
+    get_mod = get_mod,
+    get_managers = function() return Managers end,
+    get_item_master_list = function() return ItemMasterList end,
+    now = os.clock,
+    printf = printf,
+})
+local _merge_la_offhand_options =
+    _cos_offhand_state_runtime.merge_la_offhand_options
+local _get_offhand_options = _cos_offhand_state_runtime.get_offhand_options
 
 -- #376/#650 engine-facing exact-instance item-card owner. The engine-free
 -- descriptor policy remains in _cos_item_presentation.lua; this adapter owns
@@ -998,85 +768,16 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_ui_presentation_refresh").instal
     la_bridge = LA_BRIDGE, rt_register = _rt_register,
 })
 
-local function _get_offhand_options(item_key)
-    if mod._ensure_independent_dual_pool then
-        mod._ensure_independent_dual_pool(item_key)
-    end
-    return _offhand_options[item_key]
-end
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_diagnostics").install(mod, {
+    la_bridge = LA_BRIDGE,
+    offhand_options = _offhand_options,
+    offhand_selection = _offhand_selection,
+    surfaces = { BackendUtils = BackendUtils, UIWidget = UIWidget, UIWidgets = UIWidgets, UIRenderer = UIRenderer, Colors = Colors },
+})
 
--- Receiver-side compatibility boundary for #583. A stale or malformed direct
--- mesh payload may only override a registered dual hand when that exact unit is
--- still present in that item type's compatible pool. Unknown/non-dual types
--- retain the older shield/LA behavior.
-mod._dual_offhand_unit_allowed = function(item_type, hand_field, unit_path)
-    if not (mod._independent_dual_item_types
-            and mod._independent_dual_item_types[item_type]) then
-        return true
-    end
-    if hand_field ~= "left_hand_unit" then return false end
-    local pools = mod._ensure_independent_dual_pool(item_type)
-    local pool = pools and pools[hand_field]
-    for _, opt in ipairs(pool or {}) do
-        if opt.unit == unit_path and unit_path ~= "" then return true end
-    end
-    return false
-end
-
-mod:command("la_offhand_dump", "Dump LA offhand variant -> intended_unit resolution", function()
-    if LA_BRIDGE and LA_BRIDGE.dump_offhand_resolution then
-        LA_BRIDGE.dump_offhand_resolution()
-    else
-        mod:echo("[LA bridge] dump_offhand_resolution unavailable")
-    end
-end)
-
-mod:command("offhand_debug", "Dump offhand system state", function()
-    mod:echo("[offhand] _offhand_options (item_type -> hand_field -> pool size):")
-    for k, hand_pools in pairs(_offhand_options) do
-        for hand, pool in pairs(hand_pools) do
-            mod:echo("  %s/%s -> %d options", k, hand, #pool)
-        end
-    end
-    mod:echo("[offhand] _offhand_selection (bid -> hand -> sel):")
-    for k, per_hand in pairs(_offhand_selection) do
-        if type(per_hand) == "table" then
-            for hand, v in pairs(per_hand) do
-                if type(v) == "table" then
-                    local label = v.la_armoury_key and ("LA:" .. v.la_armoury_key) or tostring(v.unit)
-                    mod:echo("  %s/%s -> %s", k, hand, label)
-                end
-            end
-        end
-    end
-    mod:echo("[offhand] BackendUtils hooked: %s", tostring(BackendUtils ~= nil))
-    mod:echo("[offhand] UIWidget available: %s", tostring(UIWidget ~= nil))
-    mod:echo("[offhand] UIWidgets available: %s", tostring(UIWidgets ~= nil))
-    mod:echo("[offhand] UIRenderer available: %s", tostring(UIRenderer ~= nil))
-    mod:echo("[offhand] Colors available: %s", tostring(Colors ~= nil))
-end)
-
--- The deferred bulk loader now lives in `_cos_offhand_catalog.lua`; the
--- entry-owned update loop invokes its returned function after LA bridge init.
---
--- Why this exists: when HOST picks a cross-character shield (e.g.
--- `wpn_emp_gk_shield_03` "GK Shield Blue" via the offhand picker, or equips
--- the CT custom illusion `ct_es_mace_gk_shield_01` which also uses
--- shield_03 as left_hand_unit), the CLIENT receives vanilla skin
--- propagation. Client's `SimpleHuskInventoryExtension._wield_slot` calls
--- `BackendUtils.get_item_units(item_data, nil, slot.skin, career_name)`,
--- gets shield_03's path back, then `GearUtils.spawn_inventory_unit` →
--- `unit_spawner:spawn_local_unit_with_extensions` → engine `spawn_unit`.
--- shield_03's package WAS NOT preloaded on the client — ProfileSynchronizer
--- starts an async load when peer profiles sync but it races the synchronous
--- wield RPC and loses. Result: engine spawn_unit crash, PC-B fell out of the
--- session 2026-05-19. Identical mechanism to weapon_tweaker's brace-repeater
--- crash (feedback_cwv_cross_character_unit_packages.md).
---
--- Fix: enumerate every unit_path the user might equip via CT (offhand pools
--- + custom illusions) and queue an async load at boot on EVERY peer.
--- _preload_offhand_package is idempotent via the _preloaded_offhand_packages
--- set, so re-calls are cheap.
+-- The catalog owner asynchronously preloads every selectable 1P/3P offhand
+-- package on every peer before synchronous husk wield can spawn it. Readiness
+-- gates fail closed to the base mesh; repeated requests are idempotent.
 
 local _cos_offhand_picker = mod:dofile(
     "scripts/mods/cosmetics_tweaker/_cos_offhand_picker").install(mod, {
@@ -1111,12 +812,7 @@ local _cos_offhand_picker = mod:dofile(
     la_option_icon_policy = mod._la_option_icon_policy,
 })
 
--- CLARIFY: BackendUtils is a plain table, not a class. The string-form
--- hook (`mod:hook("BackendUtils", ...)`) cannot resolve it because VMF's
--- string resolution looks for class names in the loaded class table.
--- Must use TABLE-form hook with a nil guard. The nil guard handles boot
--- order — at module-load time BackendUtils may not exist yet on every
--- VT2 build. CLAUDE.md "Hooking" section.
+-- BackendUtils is a plain table: its owner uses a nil-guarded table-form hook.
 -- The remote-husk owner keeps the stack-style wield context. It is loaded here
 -- so the equipment-assembly hook can consume its stable accessor before the
 -- actual _wield_slot hook installs at its historical position below.
@@ -1144,83 +840,10 @@ local _la_equips_by_peer = {}
 -- untouched here). Attached to `mod` (main chunk is near the Lua 200-local ceiling).
 mod._offhand_mesh_by_peer = mod._offhand_mesh_by_peer or {}
 
--- #518: DEUS-YIELD gate. In an active Chaos Wastes expedition mission every
--- weapon slot holds a
--- deus-GENERATED instance: generation rolls item.skin per rarity
--- (deus_weapon_generation.lua:246-249) and every shrine upgrade RE-rolls it at the
--- target rarity (:318-321) from WeaponSkins.skin_combinations - the skin change IS
--- the upgrade's visual feedback. Our LA/vanilla offhand overrides are stored per
--- KEEP weapon instance (backend_id) PLUS a template-key namespace, and deus items
--- clone the base item (create_item sets key = deus_item_data.base_item, same
--- weapon template - deus_weapon_generation.lua:185-202), so a keep pick leaked
--- onto every CW starting/upgraded weapon and stomped the rolled skin on every
--- wield (issue #518 log: "LOCAL wield-reapply stored_key=
--- one_handed_sword_shield_template_2" repeating during SPAWN mechanism=deus).
--- PRECEDENCE: CW upgrade cosmetics WIN only in an active expedition mission.
--- The deus mechanism also owns the Pilgrimage Chamber (game mode "inn_deus")
--- and route/shrine map ("map_deus"); only mission nodes use game mode "deus"
--- (deus_mechanism.lua:28-35,730-744; deus_node_settings.lua:3-22). LA must stay
--- live in those staging/map contexts. The gate reads both values on every call
--- and the synced stores stay warm, so returning to a hub re-enables rendering
--- without state loss. WEAPON-side only: hats/armor (kind="hat"/"armor") are the
--- player's real backend cosmetics, persist through CW, and are never gated.
--- Helpers are attached to `mod` (main chunk is near the Lua 200-local ceiling).
-mod._la_weapon_yield_for_context = function(mechanism_name, game_mode_key)
-    return mechanism_name == "deus" and game_mode_key == "deus"
-end
-
-mod._la_deus_weapon_yield = function()
-    local mm = Managers and Managers.mechanism
-    if not (mm and mm.current_mechanism_name) then return false end
-    local mechanism_ok, mechanism_name = pcall(mm.current_mechanism_name, mm)
-    if not mechanism_ok or mechanism_name ~= "deus" then return false end
-
-    -- Prefer the live manager (`GameModeManager.game_mode_key`, source :915-917).
-    -- During early equipment creation it may not exist yet, so fall back to the
-    -- promoted transition data (`LevelTransitionHandler.get_current_game_mode`,
-    -- source :387-389). Both report inn_deus/map_deus/deus using the node table.
-    local game_mode_key
-    local gm = Managers and Managers.state and Managers.state.game_mode
-    if gm and gm.game_mode_key then
-        local ok, value = pcall(gm.game_mode_key, gm)
-        if ok then game_mode_key = value end
-    end
-    local lth = Managers and Managers.level_transition_handler
-    if not game_mode_key then
-        if lth and lth.get_current_game_mode then
-            local ok, value = pcall(lth.get_current_game_mode, lth)
-            if ok then game_mode_key = value end
-        end
-    end
-    if not game_mode_key and lth and lth.get_current_level_key then
-        -- Last early-load fallback. Vanilla's level classifier reserves only
-        -- morris_hub and dlc_morris_map; every other deus level is an ingame
-        -- node (deus_mechanism.lua:49-59). This keeps the fail direction safe:
-        -- staging never yields, while a mission cannot briefly repaint LA over
-        -- its rolled skin merely because GameModeManager is still starting.
-        local ok, level_key = pcall(lth.get_current_level_key, lth)
-        if ok and level_key == "morris_hub" then
-            game_mode_key = "inn_deus"
-        elseif ok and level_key == "dlc_morris_map" then
-            game_mode_key = "map_deus"
-        elseif ok and level_key then
-            game_mode_key = "deus"
-        end
-    end
-
-    local should_yield = mod._la_weapon_yield_for_context(mechanism_name, game_mode_key)
-    if not should_yield and printf then
-        mod._la_deus_context_seen = mod._la_deus_context_seen or {}
-        local seen_key = tostring(mechanism_name) .. "/" .. tostring(game_mode_key)
-        if not mod._la_deus_context_seen[seen_key] then
-            mod._la_deus_context_seen[seen_key] = true
-            printf("[la-state] DEUS-YIELD bypass mechanism=%s game_mode=%s (LA weapon cosmetics remain live)",
-                tostring(mechanism_name), tostring(game_mode_key))
-        end
-    end
-    return should_yield
-end
-
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_deus_yield_policy").install(mod, {
+    get_managers = function() return Managers end,
+    printf = printf,
+})
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_518_probe") -- #518 bounded solo-visible probes: printf-only emitter + owner-wield / paint-skip helpers wired below, plus the husk-miss helper the equipment-assembly owner calls (#1159)
 
 -- ============================================================
@@ -1250,246 +873,48 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_518_probe") -- #518 bounded solo
 -- GearUtils/CosmeticUtils/_G.apply_material_settings, and the _cosmetics_tweaker_glow
 -- MaterialSettingsTemplate + its GearUtils.spawn_inventory_unit injection hook. The
 -- three render hooks below call mod._cos.apply_glow_override /
--- mod._cos.glow_owner_peer_for_unit. What STAYS in this file: the /glow_status +
--- /glow_trace commands below and combined LA/glow state-snapshot bookkeeping (which
--- reads mod._glow_by_peer via the entry-local alias set in the manifest). The glow
--- send/register transport itself is owned by _cos_glow_transport.lua.
+-- mod._cos.glow_owner_peer_for_unit. Status/trace commands and bounded #574
+-- evidence live in _cos_glow_diagnostics_runtime; transport lives in
+-- _cos_glow_transport.lua.
 
-mod:command("glow_status", "Report glow hook health and per-hook call counts since session start", function()
-    -- v0.9.37-dev: the global "Weapon Glow Override" VMF menu was removed; glow
-    -- is now driven by the per-item Glow Picker popup. `glow_override_enable` /
-    -- `glow_override_preset` no longer exist as settings (mod:get → nil), so the
-    -- old enable/preset echo was dropped. This command now reports apply-hook
-    -- health (still load-bearing — the Glow Picker's per-item paint flows through
-    -- the same _apply_glow_to_unit pipeline) and the Glow Picker open state.
-    local trace = mod:get("glow_trace")
-    mod:echo(string.format("[glow_status] trace=%s picker_open=%s",
-        tostring(trace), tostring(GlowPicker and GlowPicker.is_open and GlowPicker.is_open())))
-    for _, label in ipairs({ "gear", "flow", "cosmetic" }) do
-        mod:echo(string.format("[glow_status] hook[%s] installed=%s calls_this_session=%d",
-            label,
-            tostring(mod._glow_hooks_installed[label]),
-            mod._glow_call_counts[label] or 0))
-    end
-end)
-
-mod:command("glow_trace", "Toggle per-call glow trace logging (on/off). No arg toggles; pass 1/0 to set.", function(arg)
-    local current = mod:get("glow_trace") and true or false
-    local new_value
-    if arg == nil or arg == "" then
-        new_value = not current
-    else
-        new_value = (arg == "1" or arg == "on" or arg == "true")
-    end
-    mod:set("glow_trace", new_value)
-    mod:echo(string.format("[glow_trace] now %s", new_value and "ON" or "OFF"))
-end)
-
--- Live re-paint REMOVED in v0.8.10-dev. Earlier `mod._refresh_glow` walked
--- ScriptUnit.extension(player_unit, "inventory_system")._equipment.slots and
--- painted every right_unit_1p / right_unit_3p / left_unit_1p / left_unit_3p.
--- That worked for the wielded slot but destabilized adjacent units: pressing
--- X (inspect) afterwards made hand meshes disappear and 1P state break, only
--- recoverable by switching characters. Root cause not pinned — likely the
--- engine doesn't tolerate set_vector3_for_materials on currently-invisible
--- (sheathed) 1P units. To re-add live updates, hook the wield event and
--- paint only the weapon at the moment it becomes visible. For now: changing
--- the override or preset takes effect on the NEXT weapon equip / spawn via
--- the apply_material_settings hook above.
+_cos_glow_diagnostics_runtime.install_commands(GlowPicker)
+-- Do not restore bulk live repaint: painting invisible/sheathed 1P units broke
+-- inspect and hand meshes. Glow changes converge on the next bounded wield or
+-- spawn through the owned material-apply pipeline.
 
 -- _offset_units (grip-offset apply) moved to _cos_render.lua (v0.9.78-dev
 -- Phase 2 OOP split); the in-game render hook below calls mod._cos.offset_units.
 
-local function _local_career_name()
-    local pm = Managers.player
-    if not pm then return nil end
-    local pl = _local_player_safe(pm)
-    if not pl then return nil end
-    local ok, name = pcall(pl.career_name, pl)
-    return ok and name or nil
-end
-
--- Resolve a weapon's item_type, walking weapon_skin -> matching weapon if needed.
-local function _resolve_item_type(item_data)
-    if not item_data then return nil end
-    local item_type = item_data.item_type
-    if item_type == "weapon_skin" and item_data.matching_item_key and ItemMasterList then
-        local wd = rawget(ItemMasterList, item_data.matching_item_key)
-        if wd then item_type = wd.item_type end
-    end
-    return item_type
-end
-
--- If an LA offhand is selected for the given weapon item_type, paint LA
--- heraldic textures onto each provided shield unit. Vanilla offhand
--- selections (with `unit` set) are handled earlier in get_item_units;
--- LA selections are handled here, after the vanilla shield unit spawned.
---
--- `has_skin` MUST be true (a non-empty skin key/equipped illusion) — the
--- paint is gated to skinned items only, mirroring the BackendUtils.get_item_units
--- override gate. Painting the base weapon template would surprise users
--- ("base template can't have illusions applied").
--- Is it safe to paint this LA heraldry onto unit `u`? Whenever the variant
--- declares `new_units`, the spawned unit's authored mesh must be that exact 1P
--- or 3P member. This applies to both custom-unit variants and texture variants
--- which select a particular vanilla mesh. Pure-paint texture variants have no
--- declared unit and are kept safe by the authored-family pool policy.
--- Loot previewers pass the exact queued spawn_data unit path.  That evidence
--- takes precedence over runtime unit metadata and fails closed if it is absent
--- or mismatched. Other established render paths retain their runtime check.
-local function _offhand_paint_mesh_ok(u, armoury_key, proven_unit_path)
-    local variant = _resolve_authored_offhand_variant(armoury_key)
-    if not variant then return true end
-    if proven_unit_path ~= nil and variant.new_units then
-        return mod._la_instance_policy.preview_target_matches(
-            proven_unit_path, variant)
-    end
-    local actual = _unit_mesh_name(u)
-    if actual == "<no-unit_name>" or actual == "<not-unit>" then return true end
-    -- #373: an exact magic->base receiver mapping means this live magic unit
-    -- cannot accept LA's diffuse paint. Refuse the no-op paint until the bounded
-    -- wield pulse respawns the same-family receiver.
-    if not variant.new_units then
-        return LA_BRIDGE.resolve_texture_receiver(armoury_key, actual) == nil
-    end
-    return actual == tostring(variant.new_units[1])
-        or (variant.new_units[2] ~= nil and actual == tostring(variant.new_units[2]))
-end
-
--- One paint entry point for every authored offhand component.  Cosmetics owns
--- its own texture resources; Loremaster's bridge owns LA material semantics.
--- Callers never need to know which provider authored the selected row.
-local function _apply_authored_offhand_to_unit(world, unit, armoury_key,
-        vanilla_skin, context)
-    local authored = GK_SET and GK_SET.resolve_variant(armoury_key)
-    if authored then
-        return GK_SET.apply_variant_to_unit(authored, unit, context)
-    end
-    return LA_BRIDGE.apply_offhand_to_unit(
-        world, unit, armoury_key, vanilla_skin, context)
-end
-
-local function _apply_la_offhand_to_units(world, item_data, units, has_skin,
-        backend_id_arg, context, proven_unit_paths)
-    if not LA_BRIDGE.registered then _dbg("[LA paint] skip: authored bridge not registered"); return false end
-    if not world or not item_data then _dbg("[LA paint] skip: world/item_data nil"); return false end
-    if not has_skin then _dbg("[LA paint] skip: has_skin=false"); return false end
-    -- v0.8.32: read selection by backend_id. Resolve from arg first, then
-    -- from item_data.backend_id (vanilla stamps this on equipment resync).
-    local bid = backend_id_arg or (item_data and item_data.backend_id)
-    if not bid then _dbg("[LA paint] skip: no backend_id"); return false end
-    -- v0.9.41-dev (#150): suppress the browse-time LA texture paint on the LIVE
-    -- in-keep / in-mission body while the customization screen is open for this
-    -- item. Mirrors the get_item_units mesh-override suppression: only the loot
-    -- previewer shows the in-progress pick; the live body refreshes on screen
-    -- exit (pulse-wield). "ingame" is the create_equipment path; the preview
-    -- contexts ("loot_previewer"/"hero_previewer") are untouched. Missions are
-    -- unaffected (screen closed → _active_customization_backend_id is nil).
-    if context == "ingame" and _active_customization_backend_id ~= nil
-        and bid == _active_customization_backend_id then
-        _dbg("[LA paint] suppress ingame browse-paint for bid=%s (customization screen open)", tostring(bid))
-        return false
-    end
-    -- #518: deus run - the rolled rarity/upgrade skin owns the live body's
-    -- weapon visuals; skip the in-game LA offhand paint. Preview contexts
-    -- (loot_previewer / hero_previewer render the KEEP instance) stay live.
-    if context == "ingame" and mod._la_deus_weapon_yield() then
-        _dbg("[LA paint] skip: deus run - CW upgrade cosmetics win (#518) bid=%s", tostring(bid)); mod._cos518_paint_skip(bid) -- #518 printf
-        return false
-    end
-    _offhand_session_state.migrate_legacy(bid)
-    local per_hand_sel = _offhand_selection[bid]
-    if type(per_hand_sel) ~= "table" then
-        _dbg("[LA paint] skip: no _offhand_selection for backend_id=%s", tostring(bid)); return false
-    end
-    -- v0.9.9.4-dev: caller passes the units it has spawned. LA paints are
-    -- texture-only and idempotent across all matching unit meshes — we
-    -- paint EVERY selection (any hand_field) onto EVERY passed unit. The
-    -- callers below restrict `units` to the appropriate hand (e.g. ingame
-    -- passes left_unit_3p/1p; loot previewer passes index 1 = left). For
-    -- multi-mount weapons with LA picks on both hands the paint runs once
-    -- per hand selection on whichever units the caller supplied.
-    local painted = false
-    local component_claimed = false
-    local item_type = _resolve_item_type(item_data)
-    local hand_pools = item_type and _get_offhand_options(item_type)
-    for hand_field, sel in pairs(per_hand_sel) do
-        local pool = hand_pools and hand_pools[hand_field]
-        if type(sel) == "table" then component_claimed = true end
-        if type(sel) == "table" and sel.la_armoury_key
-            and mod._la_instance_policy.selection_owned(sel, pool) then
-            _dbg("[LA paint] painting %s (%s) on %d units (backend_id=%s)",
-                tostring(sel.la_armoury_key), hand_field, #units, tostring(bid))
-            for unit_index, u in ipairs(units) do
-                if u and _is_unit(u) then
-                    -- v0.9.45-dev (BUG 1/2): on the LIVE in-keep / in-mission body
-                    -- ("ingame") the kind="unit" mesh override can be skipped
-                    -- (readiness / package-load timing) leaving the VANILLA shield
-                    -- mesh (e.g. the bret heater) in hand. Painting the LA imperial
-                    -- heraldry onto that un-swapped mesh is exactly the warped
-                    -- imperial-texture-on-bret-mesh symptom. Refuse to paint when
-                    -- the target unit's authored mesh is NOT the variant's custom
-                    -- mesh.
-                    -- v0.9.53-dev (#200): EXTENDED the gate from "ingame"-only to
-                    -- every non-husk context (ingame + loot_previewer +
-                    -- hero_previewer). This is symptom B of the user's report —
-                    -- "textures wrapped around the WRONG model when previewing a
-                    -- DIFFERENT model": cycling row-1 weapon illusions re-spawns the
-                    -- previewer with the NEW illusion's paired shield mesh, but the
-                    -- stale _offhand_selection still paints the kind="unit" LA
-                    -- heraldry onto it. Gating the previewer contexts on the same
-                    -- mesh-match check stops the warp without regressing the correct
-                    -- case: when the previewer DID spawn the LA mesh the gate passes
-                    -- (mesh matches) and the paint proceeds; when the mesh is
-                    -- unreadable (<no-unit_name>), LootItemUnitPreviewer supplies its
-                    -- exact queued spawn_data path and the gate fails closed on an
-                    -- absent/mismatched target. The husk path ("network_husk") still
-                    -- always mesh-swaps first, so it is NOT gated. Non-fatal (mesh
-                    -- read is pcall-guarded in _unit_mesh_name).
-                    if context ~= "network_husk"
-                        and not _offhand_paint_mesh_ok(u, sel.la_armoury_key,
-                            proven_unit_paths and proven_unit_paths[unit_index]) then
-                        _dbg("[LA paint]   SKIP unit=%s key=%s ctx=%s — mesh is NOT the swapped LA mesh; refusing to warp heraldry onto mismatched shield",
-                            tostring(u), tostring(sel.la_armoury_key), tostring(context))
-                        -- _trace_paint routes through mod:info (visible with
-                        -- output_mode_debug OFF) and carries the [cos:weapon-leak]-
-                        -- relevant SKIP-mesh-mismatch provenance line.
-                        _trace_paint(context, context, bid, u, sel.la_armoury_key, "SKIP-mesh-mismatch")
-                        if PROBE then
-                            PROBE.emit("cos:sync",
-                                "offhand_gate/" .. tostring(context) .. "/" .. tostring(sel.la_armoury_key) .. "/" .. tostring(u),
-                                string.format("peer=local ctx=%s key=%s unit=%s decision=SKIP reason=mesh-mismatch(warp-guard)",
-                                    tostring(context), tostring(sel.la_armoury_key), tostring(u)))
-                        end
-                    else
-                    local ok = _apply_authored_offhand_to_unit(
-                        world, u, sel.la_armoury_key, sel.vanilla_skin, context)
-                    _dbg("[LA paint]   unit=%s ok=%s", tostring(u), tostring(ok))
-                    if PROBE then
-                        PROBE.emit("cos:sync",
-                            "offhand_gate/" .. tostring(context) .. "/" .. tostring(sel.la_armoury_key) .. "/" .. tostring(u),
-                            string.format("peer=local ctx=%s key=%s unit=%s decision=PAINT outcome=%s",
-                                tostring(context), tostring(sel.la_armoury_key), tostring(u), tostring(ok)))
-                    end
-                    -- v0.9.43-dev PAINT trace (full provenance). site == context
-                    -- (loot_previewer / ingame / hero_previewer). match=false here
-                    -- is the smoking gun: imperial texture painted onto a unit
-                    -- whose mesh is still the bret shield (mesh override didn't
-                    -- swap on this path). See _trace_paint.
-                    _trace_paint(context, context, bid, u, sel.la_armoury_key, ok)
-                    end
-                end
-            end
-            painted = true
-        elseif type(sel) == "table" and sel.la_armoury_key then
-            _trace("PAINT selection rejected bid=%s item_type=%s hand=%s ctx=%s reason=foreign-selection",
-                tostring(bid), tostring(item_type), tostring(hand_field),
-                tostring(context))
-        end
-    end
-    return component_claimed, painted
-end
-
+-- Local offhand apply owner (#1159). The mesh-match gate and authored paint
+-- dispatch remain one transaction shared by live equipment and both previewers.
+-- Mutable customization identity crosses through a getter; every other hand-off
+-- is bound above this install and never rebound.
+local _cos_offhand_apply_runtime = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_offhand_apply_runtime").install(mod, {
+    gk_set = GK_SET,
+    la_bridge = LA_BRIDGE,
+    probe = PROBE,
+    dbg = _dbg,
+    trace = _trace,
+    trace_paint = _trace_paint,
+    unit_mesh_name = _unit_mesh_name,
+    is_unit = _is_unit,
+    offhand_selection = _offhand_selection,
+    offhand_session_state = _offhand_session_state,
+    get_offhand_options = _get_offhand_options,
+    resolve_authored_offhand_variant = _resolve_authored_offhand_variant,
+    get_item_master_list = function() return ItemMasterList end,
+    get_active_customization_backend_id = function()
+        return _active_customization_backend_id
+    end,
+})
+local _resolve_item_type = _cos_offhand_apply_runtime.resolve_item_type
+local _offhand_paint_mesh_ok =
+    _cos_offhand_apply_runtime.offhand_paint_mesh_ok
+local _apply_authored_offhand_to_unit =
+    _cos_offhand_apply_runtime.apply_authored_offhand_to_unit
+local _apply_la_offhand_to_units =
+    _cos_offhand_apply_runtime.apply_la_offhand_to_units
 -- In-game keep / mission body + the item unit-table resolution it brackets.
 -- THREE RENDERING PATHS COVERAGE:
 --   - In-game (GearUtils.create_equipment): _cos_equipment_assembly.lua
@@ -2086,7 +1511,8 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_spawn_boundary").install(mod, {
 
 local _cos_la_commands = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_commands")
 _cos_la_commands.install(mod, {
-    la_bridge = LA_BRIDGE, local_career_name = _local_career_name, flush_log = _flush_log,
+    la_bridge = LA_BRIDGE, local_player_safe = _local_player_safe,
+    get_managers = function() return Managers end, flush_log = _flush_log,
 })
 -- #154: mirror slot-keyed weapon-side LA entries under the wearer's wielded
 -- TEMPLATE at the reconcile edge (the husk mesh gate + repaint match templates

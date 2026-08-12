@@ -41,6 +41,10 @@ return function(H, repo_root)
     local module_relative =
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua"
     local source = read(module_relative)
+    local offhand_apply = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_apply_runtime.lua")
+    local offhand_state = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_state_runtime.lua")
     local husk_wield = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_husk_wield_runtime.lua")
     local owner_install =
@@ -52,14 +56,15 @@ return function(H, repo_root)
         -- The install sits at the LATER of the two former registration sites.
         -- Installing at the earlier one would have captured a global nil for the
         -- paint helper declared below it (the v0.9.0.11 forward-reference class).
-        local at_paint_decl = entry:find("local function _apply_la_offhand_to_units", 1, true)
+        local at_paint_owner = entry:find(
+            '"scripts/mods/cosmetics_tweaker/_cos_offhand_apply_runtime").install', 1, true)
         local at_preview = entry:find(
             'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_preview_runtime").install', 1, true)
         local at_probe = entry:find(
             'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_518_probe")', 1, true)
-        H.truthy(at_paint_decl and at_preview and at_probe)
+        H.truthy(at_paint_owner and at_preview and at_probe)
         H.truthy(at_probe < at_owner)
-        H.truthy(at_paint_decl < at_owner)
+        H.truthy(at_paint_owner < at_owner)
         H.truthy(at_owner < at_preview)
     end)
 
@@ -118,19 +123,22 @@ return function(H, repo_root)
         -- reorder fails here instead of handing over nil.
         local at_owner = entry:find(owner_install, 1, true)
         for _, anchor in ipairs({
-            "local function _apply_la_offhand_to_units",
+            "local _apply_la_offhand_to_units =\n    _cos_offhand_apply_runtime.apply_la_offhand_to_units",
             "_cos_resolve_composed_appearance =\n    _cos_item_presentation_runtime.resolve_composed_appearance",
             "local _la_equips_by_peer = {}",
-            "local function _get_offhand_options",
+            "local _get_offhand_options = _cos_offhand_state_runtime.get_offhand_options",
             "local _override_package_ready = _cos_offhand_catalog.override_package_ready",
         }) do
             local at = entry:find(anchor, 1, true)
             H.truthy(at, anchor)
             H.truthy(at < at_owner, anchor)
         end
-        -- The paint helper stays entry-owned and is shared with the preview
-        -- runtime; the owner must not have taken a private copy of it.
+        -- The paint helper has one dedicated owner and is shared by dependency
+        -- injection with both equipment and preview runtimes.
         H.equal(occurrences(source, "local function _apply_la_offhand_to_units"), 0)
+        H.equal(occurrences(entry, "local function _apply_la_offhand_to_units"), 0)
+        H.equal(occurrences(offhand_apply, "local function _apply_la_offhand_to_units"), 1)
+        H.equal(occurrences(offhand_state, "local function _get_offhand_options"), 1)
         H.truthy(entry:find("apply_la_offhand_to_units = _apply_la_offhand_to_units,", 1, true))
     end)
 

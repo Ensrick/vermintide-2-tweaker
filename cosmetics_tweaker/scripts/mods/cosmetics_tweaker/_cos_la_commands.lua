@@ -3,9 +3,20 @@
 local M = {}
 
 function M.install(mod, deps)
-    local LA_BRIDGE = deps.la_bridge
-    local _local_career_name = deps.local_career_name
-    local _flush_log = deps.flush_log
+    local LA_BRIDGE = assert(deps.la_bridge, "la_bridge is required")
+    local _local_player_safe = assert(deps.local_player_safe, "local_player_safe is required")
+    local _get_managers = assert(deps.get_managers, "get_managers is required")
+    local _flush_log = assert(deps.flush_log, "flush_log is required")
+
+    local function _local_career_name()
+        local managers = _get_managers()
+        local pm = managers and managers.player
+        if not pm then return nil end
+        local pl = _local_player_safe(pm)
+        if not pl then return nil end
+        local ok, name = pcall(pl.career_name, pl)
+        return ok and name or nil
+    end
 
 mod:command("la_dump", "List LA-bridge cloned items", function() LA_BRIDGE.debug_dump() end)
 
