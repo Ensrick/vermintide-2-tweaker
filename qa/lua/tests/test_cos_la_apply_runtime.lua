@@ -107,13 +107,19 @@ return function(H, repo_root)
         end
     end)
 
-    H.test("cos la apply runtime leaves the two entry-kept hooks alone", function()
-        -- These two deliberately stay on the entry (#1159 scope note). The owner
-        -- CALLS the attachment extension's own create_attachment method, which is
-        -- a different thing from hooking AttachmentUtils.
+    H.test("cos la apply runtime leaves sibling hook owners alone", function()
+        -- The husk wield hook stays on the entry. The attachment residency hook
+        -- moved to the spawn-boundary owner; this owner only CALLS the extension's
+        -- create_attachment method and registers neither seam.
+        local boundary_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_spawn_boundary.lua", "rb"))
+        local boundary = boundary_file:read("*a")
+        boundary_file:close()
         H.truthy(entry:find(
             'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true))
-        H.truthy(entry:find('mod:hook(AttachmentUtils, "create_attachment"', 1, true))
+        H.equal(entry:find('mod:hook(AttachmentUtils, "create_attachment"', 1, true), nil)
+        H.truthy(boundary:find(
+            'mod:hook(attachment_utils, "create_attachment"', 1, true))
         H.equal(source:find('mod:hook(AttachmentUtils', 1, true), nil)
         H.truthy(source:find("pcall(ext.create_attachment, ext, slot_name", 1, true))
     end)

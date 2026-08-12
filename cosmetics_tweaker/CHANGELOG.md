@@ -1,5 +1,32 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.205-dev (2026-08-11) -- spawn-boundary owners extracted (#1159)
+
+### Behavior-neutral extraction
+
+- Moved the ordered attachment/preview spawn boundary into
+  `_cos_spawn_boundary.lua`: the optional-headpiece residency gate, attachment
+  link-policy install, low-level `World.link_unit` LA queue, and the combined
+  Hero/Menu preview spawn hook. Material-Hijack still runs before vanilla;
+  authored surfaces, preview glow identity, LA queueing, and score-hat paint
+  still run after vanilla in the same order.
+- Kept these writes in one owner because they all act on the same newly spawned
+  unit. Dividing them among competing hooks would make the final writer and
+  engine-fatal residency boundary implicit again.
+- Moved the independent cosmetic Moonfire impact adapter into
+  `_cos_moonfire_puff_runtime.lua`. It retains the exact six conditional
+  projectile hooks, the setting and weapon-family gates, and the existing
+  yield to Tweaker: Weapons when its gameplay AOE already creates the puff.
+- Both owners refresh action-time dependencies on reinstall without duplicating
+  registrations. They add no RPC, command, lifecycle/update callback,
+  persistence write, package load, or new engine seam.
+- Lua 5.1 coverage pins exclusive ownership, total hook cardinality, the
+  headpiece-only non-resident fallback, vanilla delegation for other slots,
+  authored-surface replay, idempotence, and Moonfire no-double-puff behavior.
+- Ratcheted the Cosmetics entry from 2,646 to 2,488 nonblank lines. Cosmetics
+  is now below the 2,500 hard limit and leaves the frozen-debt baseline, while
+  #1159 remains open because structural completion requires 1,500 lines or less.
+
 ## 0.9.204-dev (2026-08-11) -- item-presentation runtime owner extracted (#1159) [untested]
 
 ### Behavior-neutral extraction

@@ -44,7 +44,7 @@ size gate ratchets nine over-limit files instead of treating them as compliant.
 
 ## Current execution inventory (2026-08-11)
 
-Measured on `origin/master` `4f5a66b0` plus the current bounded Cosmetics slice,
+Measured on `origin/master` `da5f36f0` plus the current bounded Cosmetics slice,
 with the same
 `(Get-Content | Measure-Object -Line).Lines` metric used by
 `qa/check_file_sizes.ps1`. The machine-readable owner is now
@@ -57,11 +57,11 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 |---|---|---|---|
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
-| Cosmetics | Partial | Twenty-eight required owners now cover the prior slices, the single per-frame coordination seam, and the two-phase item-presentation runtime; current entry ceiling 2,646 nonblank lines remains above the 2,500 hard limit and is machine-owned in `qa/decomposition_contracts.psd1` | #504 / #2 / #1159 |
+| Cosmetics | Partial | Thirty required owners now include the ordered attachment/preview spawn boundary and Moonfire cosmetic-impact adapter; current entry ceiling 2,488 nonblank lines is below the 2,500 hard limit and no longer frozen debt, but remains above the 1,500 completion target | #504 / #2 / #1159 |
 | Weapon Tweaker | Partial | Animation, availability, cross-character template, local/preview presentation, Moonfire AOE, regression, and balance owners retained; stable/dev entry ceilings 2,212/2,371 nonblank lines | #504 / #2 / #1159 |
 | Career Tweaker | Structural phase complete | 907-line balance orchestrator under its 910-line ceiling; bounded catalog, hook, and Foot Knight owners retained by contract | #504 / #2 / #1159 |
 | CIM Dev | Partial | Ten required forge/inventory/command/economy/loadout/regression owners retained; entry ceiling 2,353 nonblank lines, below the hard limit but above the 1,500 completion target | #1159 / #504 / #2 |
-| CT Dev | Partial | Twenty-two required altar, boon, campaign, combat, curse, level/node/spawn, tab-panel, trait, and regression owners retained; entry ceiling 4,303 nonblank lines | #1159 / #504 / #291 / #107 / #104 / #258 / #271 / #2 |
+| CT Dev | Partial | Twenty-three required altar, boon, campaign, combat, curse, level/node/spawn, peer-manifest, tab-panel, trait, and regression owners retained; entry ceiling 4,114 nonblank lines | #1159 / #504 / #291 / #107 / #104 / #258 / #271 / #2 |
 | CWV | Partial | Fourteen required catalog, template, skin/illusion, husk, registration, preview, transform, mesh, musket, and regression owners retained; entry ceiling 3,849 nonblank lines | #504 / #2 / #1159 |
 | Weapons of Chaos | Partial | Twelve required wire, Blightreaper, rarity, appearance, preview, icon, and relic owners retained; entry ceiling 2,455 nonblank lines, below the hard limit but above the 1,500 completion target | #504 / #2 / #1159 |
 | Shared copied libraries | Partial | exact-byte sync gate covers 12 canonical libraries across 37 manifested consumer copies; roadmap items remain under #428 | #428 |
@@ -213,6 +213,15 @@ moved together into `_cos_item_presentation_runtime.lua`. Two install phases
 preserve the historical post-LA-receiver boundary; executable tests pin vanilla
 return preservation and action-time cache refresh. Cosmetics' ratcheted entry
 ceiling is now 2,646 nonblank lines (down from 2,915). Cosmetics remains partial.
+
+**2026-08-11 Cosmetics wave 19:** the optional-attachment residency gate,
+low-level link replay, and combined Hero/Menu unit-spawn post-processing moved
+together into `_cos_spawn_boundary.lua`; the independent Moonfire cosmetic
+impact fan-out moved into `_cos_moonfire_puff_runtime.lua`. Executable tests pin
+the original hook totals, ordering, headpiece-only fallback, and no-double-puff
+gate. Cosmetics' ratcheted entry ceiling is now 2,488 nonblank lines (down from
+2,646), below the 2,500 hard limit; Cosmetics remains partial until the
+1,500-line completion target.
 
 ### WS6 - Hygiene sweep (small, high count)
 

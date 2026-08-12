@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-11 - Cosmetics crosses the entry hard limit (#1159)
+
+Tweaker: Cosmetics 0.9.205-dev moves the shared attachment/preview spawn
+boundary into `_cos_spawn_boundary.lua` and the optional Moonfire impact hooks
+into `_cos_moonfire_puff_runtime.lua`. Executable Lua 5.1 coverage preserves
+registration totals, ordering, narrow missing-hat fallback, dependency refresh,
+and the no-double-puff WT gate. The entry falls from 2,646 to 2,488 nonblank
+lines, crossing below the 2,500 hard limit; it remains above the 1,500
+structural-completion target.
+
 ## 2026-08-11 - Cosmetics item presentation gains one runtime owner (#1159)
 
 Tweaker: Cosmetics 0.9.204-dev moves exact-instance item-card resolution, the

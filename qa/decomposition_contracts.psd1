@@ -16,11 +16,15 @@
             RequiredModules = @('_et_lifecycle.lua', '_et_regression.lua')
         }
         @{
+            # Brought under the 2500-line HARD limit at 0.9.205-dev (issue
+            # #1159). State stays 'partial': 'complete' additionally requires
+            # the entry to be at or under the 1500-line TARGET. Its frozen-debt
+            # baseline row was removed in the same slice.
             Name = 'cosmetics_tweaker'
             State = 'partial'
             Entry = 'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
-            CeilingLines = 2646
-            RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua', '_cos_attachment_link_policy.lua', '_cos_ui_presentation_refresh.lua', '_cos_offhand_session_state.lua', '_cos_modded_illusion_swap.lua', '_cos_magic_skin_gateway.lua', '_cos_command_owner.lua', '_cos_glow_editor_button.lua', '_cos_item_grid_presentation.lua', '_cos_mod_lifecycle.lua', '_cos_la_replay_runtime.lua', '_cos_glow_transport.lua', '_cos_offhand_catalog.lua', '_cos_offhand_picker.lua', '_cos_preview_runtime.lua', '_cos_news_feed_safety.lua', '_cos_customization_view_lifecycle.lua', '_cos_attachment_spawn_sync.lua', '_cos_equipment_assembly.lua', '_cos_la_apply_runtime.lua', '_cos_la_sync_transport.lua', '_cos_la_loadout_safety.lua', '_cos_glow_picker_host.lua', '_cos_local_wield_runtime.lua', '_cos_update_scheduler.lua', '_cos_item_presentation_runtime.lua')
+            CeilingLines = 2488
+            RequiredModules = @('_cos_render.lua', '_cos_wire.lua', '_cos_runtime_checks.lua', '_cos_attachment_link_policy.lua', '_cos_ui_presentation_refresh.lua', '_cos_offhand_session_state.lua', '_cos_modded_illusion_swap.lua', '_cos_magic_skin_gateway.lua', '_cos_command_owner.lua', '_cos_glow_editor_button.lua', '_cos_item_grid_presentation.lua', '_cos_mod_lifecycle.lua', '_cos_la_replay_runtime.lua', '_cos_glow_transport.lua', '_cos_offhand_catalog.lua', '_cos_offhand_picker.lua', '_cos_preview_runtime.lua', '_cos_news_feed_safety.lua', '_cos_customization_view_lifecycle.lua', '_cos_attachment_spawn_sync.lua', '_cos_equipment_assembly.lua', '_cos_la_apply_runtime.lua', '_cos_la_sync_transport.lua', '_cos_la_loadout_safety.lua', '_cos_glow_picker_host.lua', '_cos_local_wield_runtime.lua', '_cos_update_scheduler.lua', '_cos_item_presentation_runtime.lua', '_cos_spawn_boundary.lua', '_cos_moonfire_puff_runtime.lua')
         }
         @{
             # Brought under the 2500-line HARD limit at 0.12.302-beta (issue

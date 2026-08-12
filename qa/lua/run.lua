@@ -246,6 +246,7 @@ local suites = {
     "test_cos_reikland_griffin",
     "test_cos_resource_residency",
     "test_cos_spawn_boundary",
+    "test_cos_moonfire_puff_runtime",
     "test_gut_inventory_preview_lighting",
     "test_gut_native_loadout_policy",
     "test_gut_loadout_slot_policy",

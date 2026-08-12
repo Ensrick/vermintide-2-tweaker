@@ -122,7 +122,7 @@ function Invoke-SelfTest {
 
     $baseline = Load-Baseline
     $internalBaselineKeys = @($baseline.Keys | Where-Object { Test-RepositoryInternalWorktreePath $_ })
-    Assert ($baseline.Count -eq 5) 'baseline contains exactly the 5 remaining canonical oversized modules'
+    Assert ($baseline.Count -eq 4) 'baseline contains exactly the 4 remaining canonical oversized modules'
     Assert ($internalBaselineKeys.Count -eq 0) 'baseline contains no nested-worktree entries'
     Assert ($baseline.ContainsKey($canonicalRel)) 'baseline retains a canonical oversized module'
     Assert (-not $baseline.ContainsKey('career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua')) 'completed Career decomposition is removed from frozen debt'

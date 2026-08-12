@@ -298,6 +298,12 @@ return function(H, repo_root)
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime.lua", "rb"))
         source = source .. "\n" .. apply_runtime_file:read("*a")
         apply_runtime_file:close()
+        -- #1159 Wave 19: the live-attachment and hero-preview surfaces now
+        -- share the ordered attachment/preview spawn-boundary owner.
+        local spawn_boundary_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_spawn_boundary.lua", "rb"))
+        source = source .. "\n" .. spawn_boundary_file:read("*a")
+        spawn_boundary_file:close()
         for _, surface in ipairs({
             "appearance-replay", "remote-husk", "local-attachment",
             "live-attachment", "hero-preview",

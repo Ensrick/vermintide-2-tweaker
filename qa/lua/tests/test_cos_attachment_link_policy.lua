@@ -134,14 +134,20 @@ return function(H, repo_root)
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
         local module_path = repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_link_policy.lua"
+        local boundary_path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_spawn_boundary.lua"
         local entry_file = assert(io.open(entry_path, "rb"))
         local entry = entry_file:read("*a")
         entry_file:close()
         local module_file = assert(io.open(module_path, "rb"))
         local source = module_file:read("*a")
         module_file:close()
+        local boundary_file = assert(io.open(boundary_path, "rb"))
+        local boundary = boundary_file:read("*a")
+        boundary_file:close()
 
-        H.truthy(entry:find("_cos_attachment_link_policy.install(", 1, true))
+        H.equal(entry:find("_cos_attachment_link_policy.install(", 1, true), nil)
+        H.truthy(boundary:find("state.attachment_link_policy.install(", 1, true))
         H.truthy(source:find("func(world, source, target, links)", 1, true))
         H.truthy(source:find("PARTIAL attach linked=", 1, true))
         H.equal(source:find("aborting link, no partial state", 1, true), nil)

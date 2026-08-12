@@ -106,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.204-dev"
+local MOD_VERSION = "0.9.205-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2507,160 +2507,27 @@ _cos_glow_probe.install(mod, {
     local_player_safe = _local_player_safe, is_unit = _is_unit, flush_log = _flush_log,
 })
 local _wielded_units_for_probe = _cos_glow_probe.wielded_units_for_probe
--- Spawn pipeline: detect units that match one of our cloned items and push
--- them into LA's queue. AttachmentUtils is a global table so we hook with
--- table form (string form would never resolve).
-if rawget(_G, "AttachmentUtils") then
-    -- Residency check: Application.can_get("unit", path) is the engine's
-    -- authoritative "will World.spawn_unit succeed?" answer. Fail-open (treat as
-    -- resident) when the API is unavailable or errors, so we never wrongly
-    -- suppress a genuinely spawnable unit. Block-scoped so it does not consume a
-    -- main-chunk local slot (Lua 5.1 200-local ceiling).
-    local function _unit_resident(path)
-        if type(path) ~= "string" or path == "" then return true end
-        local cg = Application and Application.can_get
-        if not cg then return true end
-        local ok, res = pcall(cg, "unit", path)
-        if not ok then return true end
-        return res and true or false
-    end
-
-    -- issue #270 (crash A) -- residency gate on the attachment SPAWN choke point.
-    -- Every hat/attachment apply path (PlayerUnitAttachmentExtension.create_
-    -- attachment, PlayerHuskAttachmentExtension.create_attachment, spawn_resynced_
-    -- loadout) funnels through AttachmentUtils.create_attachment, which at
-    -- attachment_utils.lua:16 spawns `item_units.unit` via UnitSpawner.spawn_
-    -- local_unit -> World.spawn_unit. On a viewer machine the wearer's swapped
-    -- headpiece package is often NOT resident (the mod's hat-swap path equips
-    -- outside the native inventory_list declaration, so viewers never preload
-    -- it), and World.spawn_unit C-asserts (c_api_world.cpp:67), CTD'ing the
-    -- viewer. `item_units.unit` is provably identical to `item_data.unit`
-    -- (backend_utils.lua:153 `unit = item_data.unit`; the skin block only
-    -- overrides left/right_hand/ammo units, never `unit`), so we gate on
-    -- item_data.unit here BEFORE native spawns or links anything. Non-resident ->
-    -- skip cleanly, returning the SAME empty slot_data shape vanilla produces when
-    -- an item has no `.unit` (attachment_utils.lua:38-44). Viewer sees no hat
-    -- (ugly) instead of crashing. NOTE: returning early also avoids native's
-    -- unit=nil path calling AttachmentUtils.link(target=nil) -> Unit.node crash.
-    if AttachmentUtils.create_attachment then
-        mod:hook(AttachmentUtils, "create_attachment", function(func, world, owner_unit, attachments, slot_name, item_data, show)
-            -- #612: never substitute a custom unit here. The Encarmine item
-            -- points at the exact native Laurel donor and is painted after the
-            -- attachment exists.
-            local spawn_item = item_data
-            local path = spawn_item and spawn_item.unit
-            local is_headpiece = slot_name == "slot_hat"
-            if is_headpiece and type(path) == "string" and path ~= ""
-                    and not _unit_resident(path) then
-                mod:info("[cos-hat] SKIP non-resident headpiece=%s slot=%s owner=%s (viewer package not resident; no hat instead of crash)",
-                    tostring(path), tostring(slot_name),
-                    tostring(type(owner_unit) == "userdata" and "unit" or owner_unit))
-                return { unit = nil, name = item_data and item_data.name, item_data = item_data }
-            end
-            local slot_data = func(world, owner_unit, attachments, slot_name, spawn_item, show)
-            if slot_data and item_data and item_data.name == CUSTOM_HATS.ITEM_KEY then
-                CUSTOM_HATS.apply_surface(slot_data.unit, "live-attachment")
-            end
-            return slot_data
-        end)
-    end
-
-    -- #270/#950: reject dead units before Unit.node's C assertion, but preserve
-    -- every valid pair when a custom mesh omits optional attachment nodes.
-    mod._cos_attachment_link_policy.install(mod, AttachmentUtils, LA_BRIDGE, Unit)
-end
-
--- LA hooks World.link_unit too — some hats are linked via the lower-level
--- World API rather than AttachmentUtils. Cover both. World.link_unit signature:
--- World.link_unit(world, child_unit, child_node, parent_unit, parent_node)
-if rawget(_G, "World") and World.link_unit then
-    mod:hook_safe(World, "link_unit", function(world, child_unit, child_node, parent_unit, parent_node)
-        if not LA_BRIDGE.registered then return end
-        if type(child_unit) ~= "userdata" then return end
-        if not Unit.alive(child_unit) then return end
-        if not Unit.has_data(child_unit, "unit_name") then return end
-        LA_BRIDGE.maybe_queue_unit(world, child_unit, Unit.get_data(child_unit, "unit_name"))
-    end)
-end
-
-local function _spawn_item_unit_la_hook(self, unit)
-    if not LA_BRIDGE.registered then return end
-    if type(unit) ~= "userdata" then return end
-
-    local world = self._world or self.world
-    local spawning = self._cos_la_spawning
-    _dbg("[LA preview] _spawn_item_unit spawning=%s world=%s", tostring(spawning), tostring(world))
-    if spawning then
-        local ok = LA_BRIDGE.queue_unit_direct(world, unit, spawning)
-        _dbg("[LA preview]   queue_unit_direct result=%s", tostring(ok))
-        return
-    end
-
-    if Unit.has_data(unit, "unit_name") then
-        LA_BRIDGE.maybe_queue_unit(world, unit, Unit.get_data(unit, "unit_name"))
-    else
-        LA_BRIDGE.suppress_orphan(unit)
-    end
-end
-
--- v0.9.5: full mod:hook (was hook_safe) so we can fold the MH embed's
--- texture/particle/anim-extension work into the same hook instead of MH
--- registering its own. Eliminates the boot rehook warning. MH calls
--- happen BEFORE vanilla; LA bridge queue happens AFTER vanilla (matching
--- the prior hook_safe ordering).
--- v0.9.86-dev (#513): signature extended with skip_wield_anim - vanilla
--- _spawn_item passes it as the 8th arg (world_hero_previewer.lua:917) and the
--- previous 7-param wrapper silently dropped it (multi-arg truncation, VMF_RECIPES 2).
-local function _spawn_item_unit_combined(func, self, unit, item_slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings, skip_wield_anim)
-    -- MH work before vanilla (only when embed is active, not dormant).
-    if MH_EMBED and not MH_EMBED.dormant and unit then
-        MH_EMBED.replace_textures(unit)
-        MH_EMBED.add_particles(unit, self.world)
-        MH_EMBED.attach_anim_extension(unit)
-    end
-    -- Vanilla.
-    local r1, r2 = func(self, unit, item_slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings, skip_wield_anim)
-    if item_slot_type == "hat" then
-        local authored_key = self._cos_la_spawning and LA_BRIDGE.backend_to_armoury[self._cos_la_spawning]
-            or (self._cos_score_hat and self._cos_score_hat.armoury_key)
-        if authored_key and CUSTOM_HATS.is_custom_identity(authored_key) then
-            CUSTOM_HATS.apply_surface(unit, "hero-preview")
-        elseif authored_key and GK_SET.resolve_variant(authored_key) then
-            GK_SET.apply_variant_to_unit(authored_key, unit, "hero_preview")
-        end
-    end
-    -- v0.9.7: stash unit→backend_id for previewer-spawned weapon units so
-    -- the glow picker's live preview can resolve the right item. The
-    -- backend_id was captured on `self` by the equip_item hook below.
-    if unit and self._cos_current_equip_backend_id and mod._unit_to_backend_id then
-        mod._unit_to_backend_id[unit] = self._cos_current_equip_backend_id
-    end
-    -- LA bridge queue after vanilla returns.
-    _spawn_item_unit_la_hook(self, unit)
-    -- v0.9.86-dev (#513): score-screen LA hat PAINT. _cos_score_hat is stamped by
-    -- the HeroPreviewer.equip_item hook only on TeamPreviewer-owned previewers whose
-    -- wearer has a synced LA hat. kind="texture" hats need apply_new_skin_from_texture
-    -- on the JUST-SPAWNED hat unit or the mesh renders in vanilla colours
-    -- (LA_SYNC_MODEL 6.2); kind="unit" meshes carry their own baked material and the
-    -- call no-ops (variant.textures nil). Mirrors the husk hat paint call shape.
-    if self._cos_score_hat and item_slot_type == "hat"
-        and not CUSTOM_HATS.is_custom_identity(self._cos_score_hat.armoury_key)
-        and type(unit) == "userdata" and Unit.alive(unit) then
-        local la = get_mod("Loremasters-Armoury")
-        if la and type(la.apply_new_skin_from_texture) == "function" then
-            local info = self._cos_score_hat
-            LA_BRIDGE._bridge_active = true
-            local ok, err = pcall(la.apply_new_skin_from_texture, info.armoury_key, self.world, info.vanilla_key, unit)
-            LA_BRIDGE._bridge_active = false
-            if printf then printf("[la-state] SCORE-HAT paint key=%s ok=%s%s",
-                tostring(info.armoury_key), tostring(ok),
-                ok and "" or (" err=" .. tostring(err))) end
-        end
-    end
-    return r1, r2
-end
-mod:hook("HeroPreviewer", "_spawn_item_unit", _spawn_item_unit_combined)
-mod:hook("MenuWorldPreviewer", "_spawn_item_unit", _spawn_item_unit_combined)
+-- ============================================================
+-- Attachment / preview spawn boundary -> _cos_spawn_boundary.lua (#1159)
+-- ============================================================
+-- Keeps residency, safe linking, MH-before-vanilla, LA-after-vanilla, authored
+-- hat surfaces, preview glow identity, and score-hat paint in one ordered owner.
+-- Splitting these writes across hooks on the same spawn seam would make their
+-- final-writer order implicit again.
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_spawn_boundary").install(mod, {
+    application = Application,
+    attachment_utils = rawget(_G, "AttachmentUtils"),
+    world = rawget(_G, "World"),
+    unit = Unit,
+    la_bridge = LA_BRIDGE,
+    custom_hats = CUSTOM_HATS,
+    gk_set = GK_SET,
+    mh_embed = MH_EMBED,
+    attachment_link_policy = mod._cos_attachment_link_policy,
+    get_mod = get_mod,
+    dbg = _dbg,
+    printf = printf,
+})
 
 -- v0.9.8.2: the `_equip_item_capture_bid` hook_safe pair collided with the
 -- existing equip_item mod:hook registrations (VMF rehook warnings); the bid
@@ -2732,46 +2599,11 @@ _cos_runtime_checks.install(mod, _rt_register, {
     end,
 })
 -- ============================================================
--- Moonfire Bow cosmetic AOE puff (moved from weapon_tweaker 2026-06-29)
+-- Moonfire Bow cosmetic impact owner -> _cos_moonfire_puff_runtime.lua (#1159)
 -- ============================================================
--- Spawns the small blue moonfire impact puff on every Moonfire Bow (we_deus_01*)
--- arrow hit. Cosmetic only — no damage. The gameplay "pre-nerf AOE revert" stays in
--- weapon_tweaker (Weapon Overrides); when it's on it already spawns puffs as part of
--- the detonation, so we skip here to avoid doubling. Hooks BOTH the shooter's
--- PlayerProjectileUnitExtension and every other peer's PlayerProjectileHuskExtension
--- (same impact methods + fields wt used) so the puff shows on every screen. The
--- arrow's own impact FX rides the equipped Moonfire Bow's package, so create_particles
--- is safe whenever a moonfire arrow hits.
-local _COS_MOONFIRE_PUFF_FX = "fx/wpnfx_we_deus_01_impact"
-
-local function _cos_is_moonfire_arrow(item_name)
-    return item_name ~= nil and string.sub(item_name, 1, 10) == "we_deus_01"
-end
-
-local function _cos_moonfire_puff_on_hit(self, hit_position)
-    if not mod:get("cos_moonfire_cosmetic_puff") then return end
-    if not _cos_is_moonfire_arrow(self.item_name) then return end
-    -- wt's AOE revert already puffs as part of the detonation — don't double up.
-    local wt = get_mod("wt")
-    if wt and wt:get("moonfire_aoe_revert") then return end
-    local world = self._world
-    if not world or not hit_position then return end
-    World.create_particles(world, _COS_MOONFIRE_PUFF_FX, hit_position, Quaternion.identity())
-end
-
-do
-    local _moonfire_classes = { "PlayerProjectileUnitExtension", "PlayerProjectileHuskExtension" }
-    local _moonfire_methods = { "hit_enemy", "hit_level_unit", "hit_non_level_unit" }
-    for _, class_name in ipairs(_moonfire_classes) do
-        local cls = rawget(_G, class_name)
-        if cls then
-            for _, method_name in ipairs(_moonfire_methods) do
-                if cls[method_name] then
-                    mod:hook_safe(cls, method_name, function(self, impact_data, hit_unit, hit_position)
-                        _cos_moonfire_puff_on_hit(self, hit_position)
-                    end)
-                end
-            end
-        end
-    end
-end
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_moonfire_puff_runtime").install(mod, {
+    get_mod = get_mod,
+    get_class = function(class_name) return rawget(_G, class_name) end,
+    get_world = function() return World end,
+    get_quaternion = function() return Quaternion end,
+})
