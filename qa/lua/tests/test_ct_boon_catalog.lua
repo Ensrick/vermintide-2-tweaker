@@ -1,4 +1,5 @@
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local base = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
     local data_path = base .. "chaos_wastes_tweaker_dev_data.lua"
@@ -6,7 +7,10 @@ return function(H, repo_root)
     local main_path = base .. "chaos_wastes_tweaker_dev.lua"
     local meta_path = base .. "_ct_meta_trait_boons.lua"
 
-    local function read(path)
+local function read(path)
+        if tostring(path):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()

@@ -12,10 +12,14 @@
 -- static_blade proc's unconditional trailing add_buff(cooldown_buff)
 -- (morris_buff_settings.lua:4323-4325 -> buff_extension.lua:173-174).
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local base = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
 
-    local function read(path)
+local function read(path)
+        if tostring(path):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()

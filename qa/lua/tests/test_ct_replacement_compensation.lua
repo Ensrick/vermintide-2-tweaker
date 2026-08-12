@@ -1,4 +1,5 @@
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local policy = dofile(repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_replacement_compensation.lua")
 
@@ -146,11 +147,7 @@ return function(H, repo_root)
     end)
 
     H.test("CT #465 production uses exact host lifecycle seams", function()
-        local path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
-        local f = assert(io.open(path, "rb"))
-        local entry_source = f:read("*a")
-        f:close()
+        local entry_source = CTSource.expanded(repo_root)
         local owner_path = repo_root
             .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_bot_weapon_chest_owner.lua"
         local owner_file = assert(io.open(owner_path, "rb"))

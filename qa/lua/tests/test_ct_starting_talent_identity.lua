@@ -1,9 +1,7 @@
 return function(H, repo_root)
-    local path = repo_root
-        .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
-    local file = assert(io.open(path, "rb"))
-    local source = file:read("*a")
-    file:close()
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
+    local source = CTSource.expanded(repo_root)
+    local file
     local helper_path = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_preview_helpers.lua"
     file = assert(io.open(helper_path, "rb"))

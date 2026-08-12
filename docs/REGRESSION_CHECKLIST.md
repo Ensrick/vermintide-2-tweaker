@@ -36,12 +36,31 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 **[STATIC + UNIT]**
 
 - `ct_peer_manifest_chunk` and `/peers` are registered only by
-  `_ct_peer_manifest_owner.lua`; settings and graph sync retain their own owners.
+  `_ct_peer_manifest_owner.lua`; settings and graph sync live together in
+  `_ct_host_state_transport_owner.lua`.
 - Manifest chunks must enter `_ct_enqueue_chunk`; never send the chunk train
   inline. Payloads remain schema-gated and reassemble by sender/session/sequence.
 - Run `qa/check_lua_unit_tests.ps1`; `test_ct_peer_manifest_owner.lua` covers
   ordered local inventory, pacing, rejection, duplicate/out-of-order receive,
   and the command refresh path.
+
+### CT Dev keeps completion owners below the structural ceiling — issue #1159
+
+**[STATIC + UNIT]**
+
+- The entry must remain at or below 1,498 nonblank lines. Each of
+  `_ct_host_state_transport_owner.lua`, `_ct_run_runtime_owner.lua`,
+  `_ct_adventure_runtime_owner.lua`, `_ct_boon_runtime_owner.lua`, and
+  `_ct_settings_lifecycle_owner.lua` must remain below 1,500.
+- Do not bind mutable entry slots by value. Host-dependent sync, starting coins,
+  defeat recovery, pickup census helpers, and lifecycle sync functions cross
+  through explicit accessors or returned continuations.
+- `qa/lua/ct_source.lua` expands the five owners at their real install markers
+  for legacy structural tests; use `CTSource.entry` when a test intentionally
+  measures the physical entry.
+- Run `qa/check_lua_unit_tests.ps1`; the decomposition suite pins install order,
+  exact registration cardinality, lifecycle ownership, and representative
+  regression-check ownership.
 
 ### Cosmetics keeps one bounded frame scheduler — issue #1159
 

@@ -1,8 +1,6 @@
 return function(H, repo_root)
-    local path = repo_root
-        .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
-    local f = assert(io.open(path, "rb"))
-    local source = f:read("*a"); f:close()
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
+    local source = CTSource.expanded(repo_root)
 
     H.test("CT #136 host graph snapshot applies to the live run controller on receipt", function()
         H.truthy(source:find('CT_GRAPH_SNAPSHOT_LIVE_APPLY_MARKER = "graph_snapshot_live_apply_before_mission_select_v0.7.299"', 1, true))

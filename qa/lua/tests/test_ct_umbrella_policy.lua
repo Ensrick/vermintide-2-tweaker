@@ -1,9 +1,13 @@
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local base = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
     local policy = assert(loadfile(base .. "_ct_umbrella_policy.lua"))()
 
-    local function read(path)
+local function read(path)
+        if tostring(path):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()

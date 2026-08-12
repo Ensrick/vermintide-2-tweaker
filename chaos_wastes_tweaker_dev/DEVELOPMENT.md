@@ -4,6 +4,33 @@ Engine gotchas, crash modes, and load-bearing patterns specific to `chaos_wastes
 
 This file is for HOW the CW-side internals work (so we don't re-burn the same crash twice). Operational rules (no rm -rf, version bump, deploy doctrine, etc.) live in `PROJECT_STANDARDS.md` and the repo root.
 
+## Structural completion owners — issue #1159
+
+The entry is a bounded orchestrator at 1,498 nonblank lines. Five completion
+owners retain the remaining large runtime families:
+
+1. `_ct_host_state_transport_owner.lua` owns host settings collection,
+   schema-gated chunk receive, paced settings sends, graph snapshot
+   reassembly/application, and the shared outbound queue.
+2. `_ct_run_runtime_owner.lua` owns run creation and node-entry orchestration,
+   backend/loadout hardening, run diagnostics, and pickup-population setup while
+   preserving the existing specialized-owner install order.
+3. `_ct_adventure_runtime_owner.lua` owns injected-adventure identity,
+   localization, object-set and flow-state safety, map presentation, level-load
+   continuation, and campaign-graph installation.
+4. `_ct_boon_runtime_owner.lua` owns starting-boon acquisition, grant sources,
+   related verification commands, and Boss Grudge Marks synchronization.
+5. `_ct_settings_lifecycle_owner.lua` installs the boon modules and owns
+   `on_setting_changed`, `on_disabled`, the combat-hook install, and the
+   command-owner boundary.
+
+Mutable entry state crosses these files only through accessors or returned
+continuations. `qa/lua/ct_source.lua` expands owners at their actual install
+markers for structural tests; use its raw `entry` reader for physical-size
+checks. `qa/decomposition_contracts.psd1` is the authoritative ceiling/owner
+registry, and the gate proves transitive reachability so a nested owner cannot
+exist as an orphan.
+
 ## Peer-manifest owner (`_ct_peer_manifest_owner.lua`) — issue #1159
 
 The development-only peer-manifest diagnostics are one bounded owner installed at
@@ -19,8 +46,8 @@ Keep this diagnostic transport separate from gameplay parity and settings-sync
 gates: it does not authorize content, mutate lookups, or stream unbounded state.
 Add manifest fields, chunk lifecycle, peer-diff reporting, and `/peers` behavior
 here rather than in the entry or a second RPC owner. The structural guard is
-`qa/lua/tests/test_ct_peer_manifest_owner.lua`; the Phase-5 entry ceiling is
-4,114 nonblank lines in `qa/decomposition_contracts.psd1`.
+`qa/lua/tests/test_ct_peer_manifest_owner.lua`; the completed entry ceiling is
+1,498 nonblank lines in `qa/decomposition_contracts.psd1`.
 
 ## Boon runtime module contracts
 

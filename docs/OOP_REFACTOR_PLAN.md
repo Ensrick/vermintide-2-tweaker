@@ -39,13 +39,15 @@ Dimensions: 1 Decomposition, 2 Encapsulation, 3 Duplication, 4 Hook hygiene,
 `(Class, method)` pairs), while decomposition, cross-peer wire safety, and machine
 enforcement were the systemic weaknesses. The original finding that zero binding
 rules were fully enforced is historical: #429 and #540 subsequently put the full QA
-gate on protected `master`. Remaining decomposition debt is still real because the
-size gate ratchets nine over-limit files instead of treating them as compliant.
+gate on protected `master`. The original frozen-debt statement is also historical:
+the size baseline now retains only the two canonical entries that still exceed the
+2,500-line hard limit. Completed entries leave that frozen set and remain protected
+by their lower machine-contract ceilings.
 
-## Current execution inventory (2026-08-11)
+## Current execution inventory (2026-08-12)
 
-Measured on `origin/master` `3e840fee` plus the current bounded CIM slice,
-with the same
+Measured through CT Dev Wave 26 on its isolated branch, based on
+`origin/master` `723abaa5`, with the same
 `(Get-Content | Measure-Object -Line).Lines` metric used by
 `qa/check_file_sizes.ps1`. The machine-readable owner is now
 `qa/decomposition_contracts.psd1`; `qa/check_decomposition_contracts.ps1`
@@ -61,9 +63,9 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 | Weapon Tweaker | Structural phase complete | Ten required animation, availability, transform, cross-character safety/template, local/preview presentation, Moonfire AOE, regression, and balance owners retained per stream; stable/dev entry ceilings 1,328/1,487 nonblank lines meet the 1,500 completion target | #504 / #2 / #1159 |
 | Career Tweaker | Structural phase complete | 907-line balance orchestrator under its 910-line ceiling; bounded catalog, hook, and Foot Knight owners retained by contract | #504 / #2 / #1159 |
 | CIM Dev | Structural phase complete | Thirteen required bootstrap/state/wire/forge/inventory/command/economy/loadout/regression owners retained; current entry ceiling 1,433 nonblank lines meets the 1,500 completion target | #1159 / #504 / #2 |
-| CT Dev | Partial | Twenty-three required altar, boon, campaign, combat, curse, level/node/spawn, peer-manifest, tab-panel, trait, and regression owners retained; entry ceiling 4,114 nonblank lines | #1159 / #504 / #291 / #107 / #104 / #258 / #271 / #2 |
-| CWV | Partial | Fourteen required catalog, template, skin/illusion, husk, registration, preview, transform, mesh, musket, and regression owners retained; entry ceiling 3,849 nonblank lines | #504 / #2 / #1159 |
-| Weapons of Chaos | Partial | Twelve required wire, Blightreaper, rarity, appearance, preview, icon, and relic owners retained; entry ceiling 2,455 nonblank lines, below the hard limit but above the 1,500 completion target | #504 / #2 / #1159 |
+| CT Dev | Structural phase complete | Twenty-eight required owners include host-state transport, run/backend orchestration, adventure presentation, boon/grudge runtime, settings lifecycle, and every prior specialized boundary; current entry ceiling 1,498 nonblank lines meets the 1,500 completion target | #1159 / #504 / #291 / #107 / #104 / #258 / #271 / #2 |
+| CWV | Structural phase complete | Nineteen required catalog, template, skin/illusion, javelin/rapier, bootstrap, identity-transport, world/husk/menu presentation, registration, transform, mesh, musket, and regression owners retained; current entry ceiling 1,490 nonblank lines meets the 1,500 completion target | #504 / #2 / #1159 |
+| Weapons of Chaos | Structural phase complete | Fourteen required wire, Blightreaper, rarity, appearance, preview, icon, relic-registration, relic-catalog, and lifecycle owners retained; current entry ceiling 1,390 nonblank lines meets the 1,500 completion target | #504 / #2 / #1159 |
 | Shared copied libraries | Partial | exact-byte sync gate covers 12 canonical libraries across 37 manifested consumer copies; roadmap items remain under #428 | #428 |
 | Appearance consistency | Separate architecture program | descriptor/census work and live diagnostics are owned by #660; module splitting alone does not prove render-surface consistency | #660 |
 
@@ -186,20 +188,22 @@ MoreItemsLibrary embed (#82) -> CWV<->WOC `_build_entry`/wire-hook single-source
 > per-mod OOP pass. The reusable conventions are codified in PROJECT_STANDARDS
 > §2.2a; the doc deliverables per decomposition are WS8.
 
-Enemy and Event are the only phases in this umbrella whose entry points now meet
-the manifest-only target. Cosmetics, WT, CRT, CIM Dev, CT Dev, and CWV have real,
-tested extraction slices but remain partial at the sizes recorded in the current
-execution inventory. PR #744 extracted CT's regression owner and CWV's husk path;
-its title's "two remaining god files" means two remaining targets in that batch,
-not completion of either entire entry point. Rule: every WS1/WS4 change that
-touches a god file extracts its natural owner seam as part of the change, never
-"later", without mixing behavior changes into the structural move.
+All ten phases in the machine-readable decomposition inventory now meet the
+1,500-line structural target. The registry is the authority for their frozen
+ceilings and required owners; completion means the entry is bounded and its
+tested responsibilities have explicit owners, not that every in-game feature is
+verified. Rule: every WS1/WS4 change that touches a completed entry preserves or
+lowers its ceiling and extends an existing natural owner (or adds a bounded new
+one) without mixing behavior changes into a structural move.
 
-**2026-08-11 CT wave 16:** peer manifest construction, paced transport,
-reassembly, diff logging, and `/peers` moved together into
-`_ct_peer_manifest_owner.lua`. The behavior-neutral boundary fixture covers the
-wire and state machine; CT Dev's ratcheted entry ceiling is now 4,114 nonblank
-lines (down from 4,303). CT remains partial.
+**2026-08-12 CT wave 26:** host settings and graph transport, run/backend
+orchestration, adventure-map presentation, starting-boon/grudge runtime, and
+settings lifecycle moved into five explicit owners. An install-order-aware test
+source map keeps every existing boundary assertion aimed at the real runtime
+position; registration counts remain exactly 16 hooks, 5 safe hooks, 2 network
+receivers, and 23 inline regression registrations. CT Dev's entry ceiling falls
+from 4,114 to 1,498 nonblank lines, completing the final partial phase: the
+registry is now 10 complete, 0 partial.
 
 **2026-08-11 Cosmetics wave 17:** the single VMF `mod.update` scheduler moved
 into `_cos_update_scheduler.lua`. Tick order and every existing retry bound are

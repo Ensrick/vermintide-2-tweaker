@@ -16,11 +16,15 @@
 -- effective_setting bind, a swallowed vanilla call, or an unbounded rescue job
 -- fails here instead of in a Chaos Wastes run.
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local root = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
     local module_path = root .. "_ct_chest_revive_owner.lua"
 
-    local function read(name)
+local function read(name)
+        if tostring(name):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(root .. name, "rb"))
         local source = file:read("*a")
         file:close()

@@ -1,11 +1,15 @@
 -- Guards the #1159 peer-manifest owner extraction. The fixture executes the
 -- real owner without engine dependencies and pins its wire and ownership seams.
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local root = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
     local module_path = root .. "_ct_peer_manifest_owner.lua"
 
-    local function read(name)
+local function read(name)
+        if tostring(name):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(root .. name, "rb"))
         local source = file:read("*a")
         file:close()

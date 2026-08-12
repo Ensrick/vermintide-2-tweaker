@@ -1,5 +1,24 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.338-dev (2026-08-12) -- structural completion (#1159, #2) [untested]
+
+- Five bounded owners now contain host settings/graph transport, run and backend
+  orchestration, injected-adventure presentation, starting-boon and grudge
+  runtime, and settings/disable lifecycle work. They install at the original
+  inline boundaries so registration order and late-bound state remain intact.
+- The entry falls from 4,114 to 1,498 nonblank lines. CT Dev now has 28 required
+  owners, and the repository decomposition registry reaches 10 complete / 0
+  partial phases with 138 transitively reachable owner wires.
+- Expanded-source registration cardinality remains exactly 16 `mod:hook`, five
+  `mod:hook_safe`, two network registrations, and 23 entry/owner runtime checks.
+- Lua 5.1 coverage now provides a physical-entry/expanded-source map and proves
+  install order, state continuations, lifecycle ownership, registration totals,
+  and the 1,498-line completion ceiling. The decomposition gate additionally
+  rejects transitively orphaned owners, and completed CT Dev/CWV entries no
+  longer remain in frozen over-hard-limit debt.
+- This release is behavior-neutral structural work. Runtime behavior remains
+  untested; no feature-level fixed claim is made.
+
 ## 0.7.337-dev (2026-08-11) -- peer-manifest owner decomposition (#1159, #2) [untested]
 
 - The peer/version/settings diagnostic lifecycle now has one explicit owner,
