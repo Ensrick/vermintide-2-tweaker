@@ -71,11 +71,15 @@
             RequiredModules = @('_ct_altar_reuse_owner.lua', '_ct_boon_offer_view_owner.lua', '_ct_campaign_graph_owner.lua', '_ct_chest_revive_owner.lua', '_ct_combat_hooks.lua', '_ct_boon_grant_owner.lua', '_ct_boon_registry.lua', '_ct_boon_preview_helpers.lua', '_ct_boss_grudge_marks.lua', '_ct_bot_weapon_chest_owner.lua', '_ct_command_owner.lua', '_ct_curse_lighting_owner.lua', '_ct_journey_difficulty_guard.lua', '_ct_level_load_owner.lua', '_ct_node_entry_owner.lua', '_ct_peer_manifest_owner.lua', '_ct_pickup_population_owner.lua', '_ct_pickup_spawn_owner.lua', '_ct_run_creation_owner.lua', '_ct_spawn_eligibility_owner.lua', '_ct_tab_panel_owner.lua', '_ct_weapon_trait_generation.lua', '_ct_regression.lua')
         }
         @{
+            # Completed by extracting the Tuskgor Javelin and Rapier runtimes,
+            # ordered localization/skin/item bootstrap, exact item-identity
+            # transport, and world-equipment presentation into explicit owners.
+            # Entry is 1490 nonblank lines, below the 1500-line target.
             Name = 'character_weapon_variants'
-            State = 'partial'
+            State = 'complete'
             Entry = 'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
-            CeilingLines = 3849
-            RequiredModules = @('_cwv_variant_catalog.lua', '_cwv_core_templates.lua', '_cwv_skin_registry.lua', '_cwv_illusion_families.lua', '_cwv_husk_path.lua', '_cwv_musket_runtime.lua', '_cwv_husk_residency_owner.lua', '_cwv_item_registration_owner.lua', '_cwv_menu_preview_owner.lua', '_cwv_weapon_transform_owner.lua', '_cwv_custom_mesh_runtime.lua', '_cwv_musket_equip_surface.lua', '_cwv_regression_identity.lua', '_cwv_illusion_provenance.lua')
+            CeilingLines = 1490
+            RequiredModules = @('_cwv_variant_catalog.lua', '_cwv_core_templates.lua', '_cwv_skin_registry.lua', '_cwv_illusion_families.lua', '_cwv_husk_path.lua', '_cwv_musket_runtime.lua', '_cwv_husk_residency_owner.lua', '_cwv_item_registration_owner.lua', '_cwv_menu_preview_owner.lua', '_cwv_weapon_transform_owner.lua', '_cwv_custom_mesh_runtime.lua', '_cwv_musket_equip_surface.lua', '_cwv_javelin_runtime_owner.lua', '_cwv_rapier_runtime_owner.lua', '_cwv_variant_bootstrap_owner.lua', '_cwv_item_identity_transport_owner.lua', '_cwv_world_equipment_owner.lua', '_cwv_regression_identity.lua', '_cwv_illusion_provenance.lua')
         }
         @{
             # Completed by extracting registration/Deus lifecycle and native

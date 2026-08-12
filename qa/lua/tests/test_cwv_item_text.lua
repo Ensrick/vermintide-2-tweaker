@@ -12,7 +12,7 @@ return function(H, repo_root)
     end)
 
     H.test("CWV canonical localization applies item-text normalization", function()
-        local path = repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+        local path = repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_variant_bootstrap_owner.lua"
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()

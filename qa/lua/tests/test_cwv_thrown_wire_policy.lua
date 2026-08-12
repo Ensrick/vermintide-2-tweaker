@@ -656,6 +656,7 @@ return function(H, repo_root)
     H.test("CWV damage send gate lives in its owner module with one hook and two markers", function()
         local runtime = read(module_root .. "_cwv_exact_wire_runtime.lua")
         local entry = read(module_root .. "character_weapon_variants.lua")
+        local identity = read(module_root .. "_cwv_item_identity_transport_owner.lua")
         -- Exactly one registration on the (Class, method) pair, in the owner.
         local _, entry_hooks = entry:gsub('mod:hook%("WeaponSystem"', "")
         H.equal(entry_hooks, 0, "the entry file still registers a WeaponSystem hook")
@@ -668,8 +669,8 @@ return function(H, repo_root)
         H.truthy(runtime:find("[cwv:423] wire dmg-profile sub:", 1, true))
         H.truthy(runtime:find("[cwv:423] blocked unsafe hit:", 1, true))
         -- Cosmetic skin nulling is a separate axis and must not borrow it.
-        H.truthy(entry:find("[cwv:skin-wire] wire skin null", 1, true))
-        H.equal(entry:find("[cwv:423] wire skin null", 1, true), nil)
+        H.truthy(identity:find("[cwv:skin-wire] wire skin null", 1, true))
+        H.equal(identity:find("[cwv:423] wire skin null", 1, true), nil)
     end)
 
     H.test("CWV wire-catalog copy is byte-identical to the shared-lib master", function()

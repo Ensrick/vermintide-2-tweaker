@@ -200,7 +200,7 @@ return function(H, repo_root)
         local consumers = {
             {
                 copy = repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_lib_appearance_fade.lua",
-                entry = repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
+                entry = repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_world_equipment_owner.lua",
                 marker = "_om.appearance_fade.created",
             },
             {

@@ -89,7 +89,7 @@ return function(H, repo_root)
             .. read(repo_root .. "/cosmetics_tweaker/scripts/mods/"
                 .. "cosmetics_tweaker/_cos_equipment_assembly.lua")
         local cwv = read(repo_root
-            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_identity_transport_owner.lua")
         H.truthy(cwv:find("mod._cwv_peer_appearance = {", 1, true))
         H.truthy(cos:find("mod._cos_cwv_peer_identity.resolve_husk", 1, true))
         H.truthy(cos:find("item_data, mod._independent_dual_item_types", 1, true))
