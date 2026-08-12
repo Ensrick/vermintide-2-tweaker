@@ -22,6 +22,7 @@
   `mod:hook_safe`, and one network registration. The Lua 5.1 suite adds
   executable owner coverage for load migration/rebinding, backend callback order,
   sender/local wire separation, schema refusal, and unknown-id fail-closed decode.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## 0.8.120-dev (2026-08-10) -- weave-loadout owner; entry under the hard limit (#1159, #504, #2) [untested]
 
