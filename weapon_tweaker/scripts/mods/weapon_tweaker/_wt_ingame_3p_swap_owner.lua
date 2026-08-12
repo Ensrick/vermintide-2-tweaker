@@ -593,3 +593,37 @@ _wt_hammer_book_3p_swap_apply = function(v_w3p, v_a3p, v_w1p, v_a1p, world, hand
     })
     return v_w3p, v_a3p, v_w1p, v_a1p
 end
+
+-- Vanilla re-shows wielded 3P units on every visibility refresh. Re-hide the
+-- extra brace pistol or Warrior Priest book after that refresh for Kruber.
+local function _rehide_hidden_3p_units(self, show)
+    if not show then return end
+    local equipment = self._equipment
+    local wielded_slot = equipment and equipment.wielded_slot
+    local slot_data = wielded_slot and equipment.slots and equipment.slots[wielded_slot]
+    local item_data = slot_data and slot_data.item_data
+    if not item_data then return end
+
+    local unit_to_hide
+    if item_data.name == "wh_brace_of_pistols" then
+        unit_to_hide = equipment.left_hand_wielded_unit_3p
+    elseif item_data.name == "wh_hammer_book" then
+        unit_to_hide = equipment.right_hand_wielded_unit_3p
+    else
+        return
+    end
+    if not unit_to_hide or not Unit.alive(unit_to_hide) then return end
+
+    local owner_unit = self._unit
+    local career_name = owner_unit and _unit_career_name(owner_unit)
+    if not career_name or career_name:sub(1, 3) ~= "es_" then return end
+
+    if Unit.has_visibility_group(unit_to_hide, "normal") then
+        Unit.set_visibility(unit_to_hide, "normal", false)
+    else
+        Unit.set_unit_visibility(unit_to_hide, false)
+    end
+end
+
+mod:hook_safe("SimpleInventoryExtension", "show_third_person_inventory", _rehide_hidden_3p_units)
+mod:hook_safe("SimpleHuskInventoryExtension", "show_third_person_inventory", _rehide_hidden_3p_units)

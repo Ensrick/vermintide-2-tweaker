@@ -43,13 +43,16 @@ return function(H, repo_root)
         local file = assert(io.open(root .. "weapon_tweaker.lua", "rb"))
         local source = file:read("*a")
         file:close()
+        local transform = assert(io.open(root .. "_wt_transform_runtime.lua", "rb"))
+        source = source .. transform:read("*a")
+        transform:close()
         local checks = assert(io.open(root .. "_wt_runtime_checks.lua", "rb"))
         source = source .. checks:read("*a")
         checks:close()
         H.truthy(source:find("es_handgun = { wh_ = {0, -0.17, -0.05} }", 1, true))
         H.truthy(source:find("issue112_saltzpyre_handgun_baked_offset", 1, true))
         H.truthy(source:find(
-            'local _SALTZ_KRUBER_SHIELD_ROTATION = { 25, -17.5, -15, hand = "left" }',
+            'local saltz_shield_rotation = { 25, -17.5, -15, hand = "left" }',
             1, true))
         H.truthy(source:find("issue112_saltzpyre_kruber_shield_baked_rotation", 1, true))
     end)

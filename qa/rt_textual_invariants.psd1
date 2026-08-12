@@ -568,7 +568,7 @@
     #    The AnimationSystem.anim_event_with_variable_float hook MUST name skip_sync in
     #    BOTH its signature AND the func() forward, or husk replays re-broadcast and
     #    every player's 3P anim loops in a 2+ human game. Burned wt v0.12.128 -> .132.
-    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'; needle='variable_value, skip_sync)'; literal=$true; polarity='present'; minCount=2; issueRef='BC19'; note='BUG_CLASSES 19: skip_sync threaded through the anim_event_with_variable_float hook signature AND the func() forward (>=2 occurrences); dropping either re-arms the anim-event RPC feedback loop. Memory reference_vmf_hook_drops_skip_sync_rpc_loop.' }
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_cross_character_safety.lua'; needle='variable_value, skip_sync)'; literal=$true; polarity='present'; minCount=2; issueRef='BC19'; note='BUG_CLASSES 19: skip_sync threaded through the anim_event_with_variable_float hook signature AND the func() forward (>=2 occurrences); dropping either re-arms the anim-event RPC feedback loop. Memory reference_vmf_hook_drops_skip_sync_rpc_loop.' }
 
     # -- BUG_CLASSES 27: husk resolves the BASE item_data. Husk fixes must live on the
     #    husk-reachable paths - the SimpleHuskInventoryExtension.start_weapon_fx crash

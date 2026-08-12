@@ -188,6 +188,17 @@ return function(H, repo_root)
             H.truthy(count_plain(code, "Managers.package:has_loaded(") > 0,
                 "package residency checks travelled with the swap helpers")
         end)
+
+        H.test(stream.tag .. ": visibility re-hide belongs to the 3P swap owner", function()
+            local code = code_only(owner)
+            H.equal(count_plain(code,
+                'mod:hook_safe("SimpleInventoryExtension", "show_third_person_inventory"'), 1)
+            H.equal(count_plain(code,
+                'mod:hook_safe("SimpleHuskInventoryExtension", "show_third_person_inventory"'), 1)
+            H.equal(count_plain(code, "local function _rehide_hidden_3p_units"), 1)
+            H.equal(count_plain(code_only(entry), "_rehide_hidden_3p_units"), 0,
+                "the entry must not retain a second visibility owner")
+        end)
     end
 
     H.test("public and dev owners are identical after stream normalization", function()

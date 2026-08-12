@@ -1,5 +1,25 @@
 # Weapon Tweaker Changelog
 
+## 0.12.304-dev (2026-08-11) -- transform and fatal-safety owners complete the structural phase (#1159)
+
+- Moved the one canonical baked scale/grip/rotation transaction into
+  `_wt_transform_runtime.lua`. The owner retains the exact local-player, bot,
+  remote-husk, and inventory-preview helper surface, durable absolute
+  reapplication, zero transform RPC channels, and unchanged first-person
+  grip/rotation boundary.
+- Moved the Deepwood Staff finger-node refusal, animation-variable guard,
+  attachment-source validator, and sole `GearUtils.link_units` sanitizer into
+  `_wt_cross_character_safety.lua`. The animation wrapper still names and
+  forwards `skip_sync`, preventing the historical replay feedback loop.
+- Moved the paired local/husk `show_third_person_inventory` re-hide callbacks
+  beside the swaps they protect in `_wt_ingame_3p_swap_owner.lua`; registration
+  order and cardinality are unchanged.
+- Added executable coverage for receiver and hand routing, owner/bot/husk
+  registration, first-person boundaries, unknown animation-variable refusal,
+  `skip_sync` forwarding, cloned hip fallback, and stable/dev mirror parity.
+- The entry is now 1,487 nonblank lines. The machine decomposition contract
+  requires ten owners and marks the friends-only Weapon Tweaker phase complete.
+
 ## 0.12.303-dev (2026-08-11) -- the in-game 3P swap and the inventory preview surface become owner modules (#1159) [untested]
 
 - Extracted the last two large blocks out of the entry.

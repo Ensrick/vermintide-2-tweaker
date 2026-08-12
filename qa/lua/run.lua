@@ -144,6 +144,7 @@ local suites = {
     "test_wt_template_patch_owners",
     "test_wt_ingame_3p_swap_owner",
     "test_wt_menu_preview_owner",
+    "test_wt_phase5_runtime_owners",
     "test_cwv_remote_audio",
     "test_cwv_remote_identity",
     "test_cwv_husk_path",
