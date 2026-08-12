@@ -19,7 +19,10 @@ return function(H, repo_root)
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_item_presentation_runtime.lua"
     local catalog_path = repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua"
-    local entry, gk = read(entry_path) .. read(catalog_path) .. read(runtime_path)
+    local offhand_state_path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_state_runtime.lua"
+    local entry, gk = read(entry_path) .. read(catalog_path)
+        .. read(offhand_state_path) .. read(runtime_path)
         .. read(presentation_runtime_path), read(gk_path)
 
     H.test("component localization keys are stable and independently qualified", function()

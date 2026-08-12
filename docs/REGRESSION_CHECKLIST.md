@@ -1041,6 +1041,19 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Expected post-fix | `_cos_husk_wield_runtime.lua` exclusively brackets vanilla, restores the prior stack context on success/error, preserves eight returns, and performs bounded glow then LA replay. `_cos_la_husk_identity_runtime.lua` exclusively owns wearer/career and spawn-monitor policy. |
 | Detection | `qa/check_lua_unit_tests.ps1`, `qa/check_rt_textual_invariants.ps1`, strict Cosmetics mod-lint, and `qa/check_decomposition_contracts.ps1`; the entry must remain at or below 2,051 nonblank lines with 32 required owners. |
 
+### cosmetics-offhand-state-apply-owners — Exact-instance state and mesh-safe paint stay singular
+
+| Field | Value |
+|-------|-------|
+| Symptom | Restored offhand selections can attach a sibling component, duplicate catalog rows, accept a foreign dual unit, or paint authored heraldry onto a mismatched spawned shield mesh on only one render surface. |
+| Root cause | Catalog merge/restore and mesh validation/paint previously remained in the composition root and could be copied by a new picker, preview, or equipment adapter instead of consuming one canonical transaction. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.207-dev |
+| Category | STATIC + UNIT |
+| Repro | Duplicate merge/paint logic in the entry, restore an Armoury key against a sibling item type, pass an unregistered dual-unit path, or present a proven preview unit path that differs from the authored variant. |
+| Expected post-fix | `_cos_offhand_state_runtime.lua` exclusively owns idempotent merge, bounded exact-instance restore, lazy lookup, and dual validation; `_cos_offhand_apply_runtime.lua` exclusively owns item-type resolution, exact spawned-mesh validation, and local body/preview paint. Diagnostics and Deus precedence have their own non-overlapping owners. |
+| Detection | `qa/check_lua_unit_tests.ps1`, `qa/check_rt_textual_invariants.ps1`, strict Cosmetics mod-lint, and `qa/check_decomposition_contracts.ps1`; the entry must remain at or below 1,494 nonblank lines with 37 required owners and state `complete`. |
+
 ---
 
 ## Build / Deploy / Workshop

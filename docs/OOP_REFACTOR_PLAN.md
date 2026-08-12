@@ -44,7 +44,7 @@ size gate ratchets nine over-limit files instead of treating them as compliant.
 
 ## Current execution inventory (2026-08-11)
 
-Measured on `origin/master` `da5f36f0` plus the current bounded Cosmetics slice,
+Measured on `origin/master` `dbafaaf1` plus the current bounded Cosmetics slice,
 with the same
 `(Get-Content | Measure-Object -Line).Lines` metric used by
 `qa/check_file_sizes.ps1`. The machine-readable owner is now
@@ -57,7 +57,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 |---|---|---|---|
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
-| Cosmetics | Partial | Thirty-two required owners now include the remote-husk identity/spawn policy and the single remote wield transaction; current entry ceiling 2,051 nonblank lines is below the 2,500 hard limit and no longer frozen debt, but remains above the 1,500 completion target | #504 / #2 / #1159 |
+| Cosmetics | Structural phase complete | Thirty-seven required owners retain the exact-instance offhand state/apply, diagnostics, Deus precedence, and prior render/wire/lifecycle boundaries; current entry ceiling 1,494 nonblank lines meets the 1,500 completion target | #504 / #2 / #1159 |
 | Weapon Tweaker | Partial | Animation, availability, cross-character template, local/preview presentation, Moonfire AOE, regression, and balance owners retained; stable/dev entry ceilings 2,212/2,371 nonblank lines | #504 / #2 / #1159 |
 | Career Tweaker | Structural phase complete | 907-line balance orchestrator under its 910-line ceiling; bounded catalog, hook, and Foot Knight owners retained by contract | #504 / #2 / #1159 |
 | CIM Dev | Partial | Ten required forge/inventory/command/economy/loadout/regression owners retained; entry ceiling 2,353 nonblank lines, below the hard limit but above the 1,500 completion target | #1159 / #504 / #2 |
@@ -232,6 +232,15 @@ stack-context restoration across vanilla errors, eight-return preservation,
 and ordered glow/LA replay. Cosmetics' ratcheted entry ceiling is now 2,051
 nonblank lines (down from 2,488), with 32 required owners; Cosmetics remains
 partial until the 1,500-line completion target.
+
+**2026-08-11 Cosmetics wave 21:** exact-instance offhand merge/restore/lazy
+lookup moved into `_cos_offhand_state_runtime.lua`; local body and preview mesh
+validation/paint moved into `_cos_offhand_apply_runtime.lua`; read-only offhand
+and glow diagnostics and the Deus mission-only precedence rule gained dedicated
+owners. Executable tests pin idempotent merge, bounded restore, fail-closed dual
+validation, and mismatched-mesh paint refusal. The entry ceiling is now 1,494
+nonblank lines (down from 2,051), with 37 required owners. The Cosmetics
+structural phase is complete; appearance behavior remains tracked separately.
 
 ### WS6 - Hygiene sweep (small, high count)
 

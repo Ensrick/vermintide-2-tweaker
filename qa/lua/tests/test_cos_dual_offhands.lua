@@ -43,6 +43,8 @@ return function(H, repo_root)
         .. read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
         .. read(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_state_runtime.lua")
+        .. read(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_picker.lua")
         .. view_lifecycle
         .. equipment_assembly

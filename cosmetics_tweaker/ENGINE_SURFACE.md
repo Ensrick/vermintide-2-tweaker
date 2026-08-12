@@ -77,7 +77,8 @@ no override); `[tbl]` = table-form hook against a plain table (nil-guarded).
 > `mod._cos.apply_glow_override` / `mod._cos.glow_owner_peer_for_unit` (the glow
 > read/paint pipeline moved to `_cos_glow.lua`). The per-peer `cos_glow_apply`
 > broadcast RPC layer lives in `_cos_glow_transport.lua`; the shared husk-wield
-> renderer adapter and `/glow_status` + `/glow_trace` commands stay in the entry.
+> renderer adapter lives in `_cos_husk_wield_runtime.lua`, while `/glow_status`
+> and `/glow_trace` live in `_cos_glow_diagnostics_runtime.lua`.
 
 > **Phase 5 preview-runtime owner.** `_cos_preview_runtime.lua` retains the exact
 > 12-hook preview/score/package sequence. Registered callbacks close over one
