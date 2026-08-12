@@ -58,7 +58,7 @@ return function(H, repo_root)
 
     H.test("CIM #598/#921 converges owner and peer rarity state", function()
         local source = read_all(repo_root
-            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua")
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner.lua")
         H.truthy(source:find("slot_state[slot_name] = is_modded", 1, true),
             "slot state no longer retains explicit false")
         H.truthy(source:find("slot_state[slot_name] == nil", 1, true),

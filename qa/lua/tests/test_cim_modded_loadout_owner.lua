@@ -28,6 +28,7 @@ return function(H, repo_root)
 
     local entry = read("crafting_in_modded_dev.lua")
     local owner = read("_cim_modded_loadout_owner.lua")
+    local wire_owner = read("_cim_loadout_wire_owner.lua")
 
     local function load_owner()
         return assert(loadfile(root .. "_cim_modded_loadout_owner.lua"))()
@@ -76,11 +77,10 @@ return function(H, repo_root)
         H.equal(count_plain(entry,
             "scripts/mods/crafting_in_modded_dev/_cim_modded_loadout_owner"), 1)
 
-        -- The seam sits between the #278/#371 wire-safety guard (which stays in
-        -- the entry) and the Athanor UI hook section, exactly where the moved
-        -- block used to execute.
+        -- The seam follows the dedicated #278/#371 wire owner and precedes the
+        -- Athanor UI hook section, preserving the original registration order.
         local wire_at = assert(entry:find(
-            "mod._cim_rpc_loadout_guard_installed = true", 1, true))
+            "scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner", 1, true))
         local seam_at = assert(entry:find(
             "scripts/mods/crafting_in_modded_dev/_cim_modded_loadout_owner", 1, true))
         local athanor_at = assert(entry:find(
@@ -135,7 +135,7 @@ return function(H, repo_root)
         H.equal(count_plain(owner, "_get_forged_weapons()"), 2)
         H.equal(count_plain(owner, "local _forged_weapons"), 0)
         H.truthy(owner:find("state.get_forged_weapons = assert(ctx.get_forged_weapons", 1, true))
-        H.truthy(entry:find("get_forged_weapons = function() return _forged_weapons end", 1, true))
+        H.truthy(entry:find("get_forged_weapons = _forge_state.get_forged_weapons", 1, true))
 
         local mod = fake_mod({ modded_loadout = {
             es_mercenary = { [1] = { slot_melee = "gone", slot_ranged = "cwv_keep" } },
@@ -247,15 +247,18 @@ return function(H, repo_root)
         }), false)
     end)
 
-    H.test("CIM modded-loadout owner leaves the wire-safety layer in the entry", function()
+    H.test("CIM modded-loadout owner leaves wire safety in its dedicated owner", function()
         -- #278/#371: sender-side rarity coercion and the modded-slot RPC are
         -- crash safety that must never sit behind this owner's persistence gate.
         for _, needle in ipairs({
-            "local function _cim_wire_safe_rarity(rarity)",
+            "local function wire_safe_rarity(rarity)",
             'mod:network_register("cim_modded_slot"',
             'mod:hook("PlayerManager", "rpc_sync_loadout_slot"',
         }) do
-            H.equal(count_plain(entry, needle), 1, "entry must retain " .. needle)
+            H.equal(count_plain(wire_owner, needle), 1,
+                "wire owner must retain " .. needle)
+            H.equal(count_plain(entry, needle), 0,
+                "entry must not retain " .. needle)
             H.equal(count_plain(owner, needle), 0, "owner must not absorb " .. needle)
         end
     end)
@@ -288,8 +291,7 @@ return function(H, repo_root)
         H.truthy(entry:find("_restore_modded_loadout = _LOADOUT_OWNER.restore_modded_loadout", 1, true))
         H.truthy(entry:find("local _install_backendutils_capture = _LOADOUT_OWNER.install_backendutils_capture", 1, true))
         H.equal(count_plain(entry, "_install_backendutils_capture()"), 1)
-        H.equal(count_plain(entry,
-            "local _restore_modded_loadout -- forward declaration"), 1)
+        H.equal(count_plain(entry, "local _restore_modded_loadout"), 1)
         -- The late installers consume the store through the owner's accessors.
         H.equal(count_plain(entry, "get_modded_loadout = _LOADOUT_OWNER.get_modded_loadout"), 2)
         H.equal(count_plain(entry, "set_modded_loadout = _LOADOUT_OWNER.set_modded_loadout"), 1)

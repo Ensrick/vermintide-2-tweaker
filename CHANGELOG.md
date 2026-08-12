@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-11 - CIM Dev reaches the structural completion target (#1159)
+
+Crafting in Modded 0.8.121-dev extracts boot/regression infrastructure, forged
+item persistence plus backend restore, and issue #278/#371/#598 loadout wire
+safety into three explicit owners. Engine-free Lua 5.1 coverage pins live store
+rebinding, backend callback order, sender-only rarity substitution, schema
+refusal, and unknown-id predecode failure. The entry falls from 2,353 to 1,433
+nonblank lines, the required-owner inventory rises from ten to thirteen, and the
+machine contract marks the CIM Dev structural phase complete.
+
 ## 2026-08-11 - Cosmetics structural phase reaches completion target (#1159)
 
 Tweaker: Cosmetics 0.9.207-dev extracts exact-instance offhand state/restore,

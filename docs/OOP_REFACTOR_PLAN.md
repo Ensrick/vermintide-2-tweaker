@@ -44,7 +44,7 @@ size gate ratchets nine over-limit files instead of treating them as compliant.
 
 ## Current execution inventory (2026-08-11)
 
-Measured on `origin/master` `dbafaaf1` plus the current bounded Cosmetics slice,
+Measured on `origin/master` `3e840fee` plus the current bounded CIM slice,
 with the same
 `(Get-Content | Measure-Object -Line).Lines` metric used by
 `qa/check_file_sizes.ps1`. The machine-readable owner is now
@@ -60,7 +60,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 | Cosmetics | Structural phase complete | Thirty-seven required owners retain the exact-instance offhand state/apply, diagnostics, Deus precedence, and prior render/wire/lifecycle boundaries; current entry ceiling 1,494 nonblank lines meets the 1,500 completion target | #504 / #2 / #1159 |
 | Weapon Tweaker | Partial | Animation, availability, cross-character template, local/preview presentation, Moonfire AOE, regression, and balance owners retained; stable/dev entry ceilings 2,212/2,371 nonblank lines | #504 / #2 / #1159 |
 | Career Tweaker | Structural phase complete | 907-line balance orchestrator under its 910-line ceiling; bounded catalog, hook, and Foot Knight owners retained by contract | #504 / #2 / #1159 |
-| CIM Dev | Partial | Ten required forge/inventory/command/economy/loadout/regression owners retained; entry ceiling 2,353 nonblank lines, below the hard limit but above the 1,500 completion target | #1159 / #504 / #2 |
+| CIM Dev | Structural phase complete | Thirteen required bootstrap/state/wire/forge/inventory/command/economy/loadout/regression owners retained; current entry ceiling 1,433 nonblank lines meets the 1,500 completion target | #1159 / #504 / #2 |
 | CT Dev | Partial | Twenty-three required altar, boon, campaign, combat, curse, level/node/spawn, peer-manifest, tab-panel, trait, and regression owners retained; entry ceiling 4,114 nonblank lines | #1159 / #504 / #291 / #107 / #104 / #258 / #271 / #2 |
 | CWV | Partial | Fourteen required catalog, template, skin/illusion, husk, registration, preview, transform, mesh, musket, and regression owners retained; entry ceiling 3,849 nonblank lines | #504 / #2 / #1159 |
 | Weapons of Chaos | Partial | Twelve required wire, Blightreaper, rarity, appearance, preview, icon, and relic owners retained; entry ceiling 2,455 nonblank lines, below the hard limit but above the 1,500 completion target | #504 / #2 / #1159 |

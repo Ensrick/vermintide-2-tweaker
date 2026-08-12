@@ -32,6 +32,7 @@ return function(H, repo_root)
 
     local entry = read("crafting_in_modded_dev.lua")
     local owner = read("_cim_weave_loadout_owner.lua")
+    local wire_owner = read("_cim_loadout_wire_owner.lua")
 
     local function load_owner()
         return assert(loadfile(root .. "_cim_weave_loadout_owner.lua"))()
@@ -157,19 +158,28 @@ return function(H, repo_root)
         end
     end)
 
-    H.test("CIM weave-loadout owner leaves the commit block and wire safety in the entry", function()
+    H.test("CIM weave-loadout owner leaves commit and wire safety with their owners", function()
         -- The commit suppression is anti-tamper safety for BOTH craft surfaces
         -- (it also reads mod._cim_standard_forge_active), so it must never sit
         -- behind this owner's install. The #278/#371 layer stays put too.
         for _, needle in ipairs({
             'mod:hook("BackendManagerPlayFab", "commit"',
             "mod._cim_standard_forge_active",
-            "local function _cim_wire_safe_rarity(rarity)",
-            'mod:network_register("cim_modded_slot"',
-            'mod:hook("PlayerManager", "rpc_sync_loadout_slot"',
         }) do
             H.truthy(count_plain(entry, needle) >= 1, "entry must retain " .. needle)
             H.equal(count_plain(owner, needle), 0, "owner must not absorb " .. needle)
+        end
+        for _, needle in ipairs({
+            "local function wire_safe_rarity(rarity)",
+            'mod:network_register("cim_modded_slot"',
+            'mod:hook("PlayerManager", "rpc_sync_loadout_slot"',
+        }) do
+            H.equal(count_plain(wire_owner, needle), 1,
+                "wire owner must retain " .. needle)
+            H.equal(count_plain(entry, needle), 0,
+                "entry must not retain " .. needle)
+            H.equal(count_plain(owner, needle), 0,
+                "weave owner must not absorb " .. needle)
         end
     end)
 
@@ -208,7 +218,7 @@ return function(H, repo_root)
         end
         H.truthy(entry:find("is_active = function() return _custom_forge_active end", 1, true))
         H.truthy(entry:find("get_forge_item_props = function() return _forge_item_props end", 1, true))
-        H.truthy(entry:find("get_forged_weapons = function() return _forged_weapons end", 1, true))
+        H.truthy(entry:find("get_forged_weapons = _forge_state.get_forged_weapons", 1, true))
         H.truthy(entry:find("get_amulet_dirty = function() return _amulet_dirty end", 1, true))
 
         -- Drive it: rebind the store and flip the flag AFTER install, then prove

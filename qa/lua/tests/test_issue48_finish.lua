@@ -52,19 +52,16 @@ return function(H, repo_root)
         -- console log and the pinned card's step 4 evidence goes missing.
         -- Dev stream only: stable picks the conversion up at promotion.
         local entry = read(repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_state_owner.lua")
+        H.truthy(entry:find("custom_glow blobs that won't apply", 1, true),
+            "custom_glow absence notice emission missing from forge owner")
+        H.truthy(entry:find("pcall(print_line,", 1, true),
+            "notice must emit through the injected raw-print adapter")
+        local main_entry = read(repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua")
-        local line
-        for candidate in entry:gmatch("[^\n]+") do
-            if candidate:find("custom_glow blobs that won't apply", 1, true) then
-                line = candidate
-                break
-            end
-        end
-        H.truthy(line, "custom_glow absence notice emission line missing from dev entry file")
-        H.truthy(line:find("pcall(printf,", 1, true),
-            "notice must emit through pcall(printf, ...) so it lands with mod logging OFF")
-        H.equal(line:find("mod:info", 1, true), nil,
-            "notice must not regress to the invisible mod:info channel")
+        H.truthy(main_entry:find(
+            "print_line = function(fmt, ...) printf(fmt, ...) end", 1, true),
+            "production must bind the notice adapter to raw printf")
     end)
 
     H.test("CIM #48 custom-glow absence notice emits once and remains log-only", function()

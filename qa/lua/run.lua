@@ -195,6 +195,7 @@ local suites = {
     "test_wt_cwv_effective_template",
     "test_cim_skin_persistence",
     "test_cim_entry_decomposition",
+    "test_cim_phase5_runtime_owners",
     "test_cim_weave_economy",
     "test_cim_forge_preview_owner",
     "test_cim_forge_picker_owner",
