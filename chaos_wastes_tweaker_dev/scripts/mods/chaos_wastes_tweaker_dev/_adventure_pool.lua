@@ -375,6 +375,7 @@ end
 -- =====================================================================
 
 local ALL_THEMES = { "wastes", "khorne", "nurgle", "slaanesh", "tzeentch", "belakor" }
+_M.ALL_THEMES = ALL_THEMES
 
 -- Build pickup_settings for an injected adventure level. Counts mirror what
 -- adventure spawners can actually supply:
@@ -532,21 +533,66 @@ local function build_permutation_packages(vanilla)
     return out
 end
 
--- Register a level key in NetworkLookup.level_keys so the multiplayer level-load RPC
--- can serialize it. NetworkLookup.level_keys is built from LevelSettings at boot
--- (network_lookup.lua:1233) and gets a strict __index metatable (line 2354-2363) that
--- errors on unknown key access. Our post-boot LevelSettings additions are NOT in it
--- — without this registration, _setup_run crashes with "[NetworkLookup.lua] Table
--- level_keys does not contain key: <permutation_key>".
+-- Register a post-boot LevelSettings key in every vanilla lookup built from that
+-- table. NetworkLookup.level_keys serializes level-load RPCs; mission_ids validates
+-- lobby metadata. Both receive a strict __index metatable that errors on unknown
+-- keys, so missing either registration turns an ordinary lookup into a fatal error.
 --
 -- Use rawget/rawset to bypass the metatable's strict __index.
 local function register_network_lookup_key(key)
-    if not NetworkLookup or not NetworkLookup.level_keys then return end
-    local lookup = NetworkLookup.level_keys
-    if rawget(lookup, key) then return end  -- already registered
-    local n = #lookup + 1
-    rawset(lookup, n, key)
-    rawset(lookup, key, n)
+    if not NetworkLookup then return 0 end
+    local registered = 0
+    for _, lookup_name in ipairs({ "level_keys", "mission_ids" }) do
+        local lookup = rawget(NetworkLookup, lookup_name)
+        if type(lookup) == "table" and not rawget(lookup, key) then
+            local n = #lookup + 1
+            rawset(lookup, n, key)
+            rawset(lookup, key, n)
+            registered = registered + 1
+        end
+    end
+    return registered
+end
+_M.register_network_lookup_key = register_network_lookup_key
+
+-- LobbyBrowserConsoleUI._remove_invalid_lobbies reads mission_ids through the
+-- strict metatable. Filter with rawget first so a stale/foreign custom lobby is
+-- ignored rather than crashing the browser. The input list is never mutated.
+function _M.filter_lobbies_with_known_missions(lobbies, mission_ids)
+    if type(lobbies) ~= "table" or type(mission_ids) ~= "table" then
+        return lobbies
+    end
+    local filtered = {}
+    for i = 1, #lobbies do
+        local lobby = lobbies[i]
+        local selected = lobby and lobby.selected_mission_id
+        local mission = lobby and lobby.mission_id
+        if lobby
+                and (selected == nil or rawget(mission_ids, selected) ~= nil)
+                and (mission == nil or rawget(mission_ids, mission) ~= nil) then
+            filtered[#filtered + 1] = lobby
+        end
+    end
+    return filtered
+end
+
+function _M.network_lookup_parity_error()
+    if type(NetworkLookup) ~= "table" then return "NetworkLookup unavailable" end
+    local level_keys = rawget(NetworkLookup, "level_keys")
+    local mission_ids = rawget(NetworkLookup, "mission_ids")
+    if type(level_keys) ~= "table" or type(mission_ids) ~= "table" then
+        return "level_keys/mission_ids unavailable"
+    end
+    for _, mission in ipairs(_M.ADVENTURE_MISSIONS) do
+        for _, theme_name in ipairs(ALL_THEMES) do
+            local key = mission.key .. "_" .. theme_name .. "_path1"
+            if rawget(LevelSettings, key) then
+                if not rawget(level_keys, key) then return "level_keys missing " .. key end
+                if not rawget(mission_ids, key) then return "mission_ids missing " .. key end
+            end
+        end
+    end
+    return nil
 end
 
 -- Duplicate pool entries exist only to give the graph solver enough distinct

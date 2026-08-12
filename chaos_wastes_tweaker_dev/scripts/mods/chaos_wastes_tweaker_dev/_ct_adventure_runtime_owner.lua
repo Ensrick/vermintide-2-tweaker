@@ -12,6 +12,22 @@ return function(mod, ctx)
     local adventure_base_from_level_key
     local on_injected_adventure_level
 
+-- Issue #1271: vanilla validates lobby mission identifiers through the strict
+-- NetworkLookup.mission_ids metatable. CT registers its own permutations, while
+-- stale or foreign custom identifiers are discarded before vanilla indexes them.
+-- This is the sole LobbyBrowserConsoleUI._remove_invalid_lobbies hook in ct_dev.
+mod:hook("LobbyBrowserConsoleUI", "_remove_invalid_lobbies", function(func, self, lobbies)
+    local mission_ids = NetworkLookup and rawget(NetworkLookup, "mission_ids")
+    local filtered = AdventurePool.filter_lobbies_with_known_missions(lobbies, mission_ids)
+    return func(self, filtered)
+end)
+
+if mod._ct_rt_register then
+    mod._ct_rt_register("issue1271_lobby_mission_lookup_parity", function()
+        return AdventurePool.network_lookup_parity_error()
+    end)
+end
+
 -- ============================================================
 -- Holy Hand Grenade spawn rate (CW campaign-map pickup pools)
 -- ============================================================
