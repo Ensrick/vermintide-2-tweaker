@@ -1,11 +1,15 @@
 -- Issue #299: Chest-of-Trials rescue must move the disabled player to the team
 -- before assisted-respawn recovery can make bots follow the temporary beacon.
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local root = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
     local Policy = assert(loadfile(root .. "_ct_chest_revive_policy.lua"))()
 
-    local function read(path)
+local function read(path)
+        if tostring(path):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(path, "rb"))
         local content = file:read("*a")
         file:close()

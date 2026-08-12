@@ -1,4 +1,5 @@
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local path = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_profile_snapshot.lua"
     local Snapshot = assert(loadfile(path))()
@@ -67,11 +68,7 @@ return function(H, repo_root)
     end)
 
     H.test("CT #919 diagnostic is wired at each empirical boundary without a new hook", function()
-        local main_path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
-        local file = assert(io.open(main_path, "rb"))
-        local source = file:read("*a")
-        file:close()
+        local source = CTSource.expanded(repo_root)
         -- #1159 wave 14 moved the setup_run hook into _ct_run_creation_owner, so
         -- the setup_run boundary is asserted against that file. The needle is
         -- byte-identical; only the file moved. Every boundary is still wired

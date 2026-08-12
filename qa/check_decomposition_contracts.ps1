@@ -76,10 +76,10 @@ function Test-DecompositionContracts {
             $failures += "$name claims complete but entry remains above the 1500-line target ($lines)"
         }
 
-        $entrySource = Get-Content -LiteralPath $entryPath -Raw
         $entryDir = Split-Path $entryPath -Parent
         $modules = @($contract.RequiredModules)
         if ($modules.Count -eq 0) { $failures += "$name has no RequiredModules" }
+        $moduleSources = @{}
         foreach ($module in $modules) {
             $leaf = [string]$module
             if ($leaf -ne [IO.Path]::GetFileName($leaf) -or -not $leaf.EndsWith('.lua')) {
@@ -91,8 +91,31 @@ function Test-DecompositionContracts {
                 $failures += "$name required owner missing: $leaf"
                 continue
             }
-            $stem = [IO.Path]::GetFileNameWithoutExtension($leaf)
-            if (-not $entrySource.Contains($stem)) { $failures += "$name owner not wired by entry: $leaf" }
+            $moduleSources[$leaf] = Get-Content -LiteralPath $modulePath -Raw
+        }
+
+        # Owners may install bounded child owners. Prove reachability from the
+        # entry instead of requiring every owner leaf to appear in the entry
+        # text directly. Only sources reached from the entry join the search
+        # frontier, so an orphan cannot make itself reachable by naming itself.
+        $reachable = @{}
+        $frontier = New-Object 'System.Collections.Generic.Queue[string]'
+        $frontier.Enqueue((Get-Content -LiteralPath $entryPath -Raw))
+        while ($frontier.Count -gt 0) {
+            $source = $frontier.Dequeue()
+            foreach ($leaf in $moduleSources.Keys) {
+                if ($reachable.ContainsKey($leaf)) { continue }
+                $stem = [IO.Path]::GetFileNameWithoutExtension($leaf)
+                if ($source.Contains($stem)) {
+                    $reachable[$leaf] = $true
+                    $frontier.Enqueue($moduleSources[$leaf])
+                }
+            }
+        }
+        foreach ($leaf in $moduleSources.Keys) {
+            if (-not $reachable.ContainsKey($leaf)) {
+                $failures += "$name owner not transitively wired from entry: $leaf"
+            }
         }
         $rows += [pscustomobject]@{ Name = $name; State = $state; Lines = $lines; Ceiling = $ceiling; Owners = $modules.Count }
     }
@@ -204,9 +227,11 @@ function Invoke-SelfTest {
         $modDir = Join-Path $temp 'demo'
         New-Item -ItemType Directory -Force -Path $modDir | Out-Null
         Set-Content -LiteralPath (Join-Path $modDir 'entry.lua') -Value @('mod:dofile("demo/_owner")', 'return true')
-        Set-Content -LiteralPath (Join-Path $modDir '_owner.lua') -Value 'return {}'
+        Set-Content -LiteralPath (Join-Path $modDir '_owner.lua') -Value @('mod:dofile("demo/_child")', 'return {}')
+        Set-Content -LiteralPath (Join-Path $modDir '_child.lua') -Value 'return {}'
+        Set-Content -LiteralPath (Join-Path $modDir '_orphan.lua') -Value 'return {}'
         $good = @{ Version = 1; Contracts = @(@{
-            Name = 'demo'; State = 'complete'; Entry = 'demo/entry.lua'; CeilingLines = 2; RequiredModules = @('_owner.lua')
+            Name = 'demo'; State = 'complete'; Entry = 'demo/entry.lua'; CeilingLines = 2; RequiredModules = @('_owner.lua', '_child.lua')
         }) }
         $positive = Test-DecompositionContracts $good $temp @('demo')
         if ($positive.Failures.Count -ne 0) { throw "positive fixture failed: $($positive.Failures -join '; ')" }
@@ -217,8 +242,12 @@ function Invoke-SelfTest {
         $badOwner = @{ Version = 1; Contracts = @(@{
             Name = 'demo'; State = 'partial'; Entry = 'demo/entry.lua'; CeilingLines = 2; RequiredModules = @('_missing.lua')
         }) }
+        $badOrphan = @{ Version = 1; Contracts = @(@{
+            Name = 'demo'; State = 'partial'; Entry = 'demo/entry.lua'; CeilingLines = 2; RequiredModules = @('_owner.lua', '_orphan.lua')
+        }) }
         if ((Test-DecompositionContracts $badGrowth $temp @('demo')).Failures.Count -eq 0) { throw 'planted growth was not detected' }
         if ((Test-DecompositionContracts $badOwner $temp @('demo')).Failures.Count -eq 0) { throw 'planted missing owner was not detected' }
+        if ((Test-DecompositionContracts $badOrphan $temp @('demo')).Failures.Count -eq 0) { throw 'planted transitive orphan was not detected' }
         if ((Test-DecompositionContracts $good $temp @('demo', 'missing')).Failures.Count -eq 0) { throw 'planted missing phase was not detected' }
 
         $baseDebt = @{ Version = 1; Contracts = @(

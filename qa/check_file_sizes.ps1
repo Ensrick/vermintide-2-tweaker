@@ -7,7 +7,7 @@
 # qa/baselines/file_sizes.json. A file already in the baseline only fails if it
 # GROWS beyond its frozen line count; a file NOT in the baseline that crosses the
 # hard limit fails immediately. This lets the gate BLOCK on regressions without
-# being permanently red on the 9 known-oversized files (which are tracked for
+# being permanently red on the known-oversized files (which are tracked for
 # refactor in PROJECT_STANDARDS §11, not fixable per-session). Regenerate the
 # baseline ONLY with -UpdateBaseline (never automatic). Target-tier overages
 # (1500–2500) remain plain non-baselined warnings.
@@ -106,7 +106,7 @@ function Invoke-SelfTest {
         if (-not $condition) { $script:FileSizeSelfTestPass = $false }
     }
 
-    $canonicalRel = 'chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'
+    $canonicalRel = 'chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua'
     $canonicalPath = Join-Path $repoRoot ($canonicalRel.Replace('/', '\'))
     $canonicalFile = Get-Item -LiteralPath $canonicalPath -ErrorAction Stop
     $clonedSuffix = 'career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua'
@@ -122,9 +122,11 @@ function Invoke-SelfTest {
 
     $baseline = Load-Baseline
     $internalBaselineKeys = @($baseline.Keys | Where-Object { Test-RepositoryInternalWorktreePath $_ })
-    Assert ($baseline.Count -eq 4) 'baseline contains exactly the 4 remaining canonical oversized modules'
+    Assert ($baseline.Count -eq 2) 'baseline contains exactly the 2 remaining canonical oversized modules'
     Assert ($internalBaselineKeys.Count -eq 0) 'baseline contains no nested-worktree entries'
     Assert ($baseline.ContainsKey($canonicalRel)) 'baseline retains a canonical oversized module'
+    Assert (-not $baseline.ContainsKey('chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua')) 'completed CT Dev decomposition is removed from frozen debt'
+    Assert (-not $baseline.ContainsKey('character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua')) 'completed CWV decomposition is removed from frozen debt'
     Assert (-not $baseline.ContainsKey('career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua')) 'completed Career decomposition is removed from frozen debt'
     # A file that drops back under the hard limit leaves the frozen set entirely:
     # it can no longer be "frozen at" anything, and check_decomposition_contracts

@@ -8,10 +8,14 @@
 -- own early returns at :1212-:1228).
 
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local dir = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
 
-    local function read(name)
+local function read(name)
+        if tostring(name):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(dir .. name, "rb"))
         local text = file:read("*a")
         file:close()

@@ -16,9 +16,13 @@
 -- still FAIL on a genuine ct-side re-enable; and re-planting `ct_kill_heal` in the disabled list
 -- brings the permanent failure straight back.
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local ct_root = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
 
-    local function read(name)
+local function read(name)
+        if tostring(name):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(ct_root .. name, "rb"))
         local source = file:read("*a")
         file:close()

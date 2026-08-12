@@ -1,4 +1,5 @@
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local policy_path = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_starting_coins_policy.lua"
     local Policy = assert(loadfile(policy_path))()
@@ -29,11 +30,7 @@ return function(H, repo_root)
     end)
 
     H.test("CT issue 912 runtime uses one policy at setup and join boundaries", function()
-        local path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
-        local file = assert(io.open(path, "rb"))
-        local source = file:read("*a")
-        file:close()
+        local source = CTSource.expanded(repo_root)
 
         -- #1159 wave 14: the setup_run and host-RPC boundaries moved into
         -- _ct_run_creation_owner. The invariant is unchanged - FIVE call sites,
@@ -65,11 +62,7 @@ return function(H, repo_root)
     -- effective_setting, so a client with a divergent local setting got a
     -- falsely reassuring readout. The command must report both, labeled.
     H.test("CT issue 912 verify_coins reports local AND host-effective values", function()
-        local path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
-        local file = assert(io.open(path, "rb"))
-        local source = file:read("*a")
-        file:close()
+        local source = CTSource.expanded(repo_root)
 
         local cmd_pos = assert(source:find('mod:command("verify_coins"', 1, true),
             "/verify_coins command missing")

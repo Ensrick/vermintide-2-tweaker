@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-12 - Chaos Wastes Tweaker Dev reaches the structural completion target (#1159)
+
+Tweaker: Chaos Wastes Dev 0.7.338-dev extracts host-state transport,
+run/backend orchestration, injected-adventure presentation, boon/grudge runtime,
+and settings lifecycle into five explicit owners. Lua 5.1 coverage preserves
+registration cardinality and runtime ordering, while the decomposition gate now
+proves transitive owner reachability. The entry falls from 4,114 to 1,498
+nonblank lines, the required-owner inventory rises to 28, and the machine
+registry reaches 10 complete / 0 partial phases.
+
 ## 2026-08-12 - Character Weapon Variants reaches the structural completion target (#1159)
 
 Character Weapon Variants 0.1.510-dev extracts the Tuskgor Javelin and Rapier

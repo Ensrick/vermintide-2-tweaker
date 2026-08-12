@@ -15,11 +15,15 @@
 --      `late-binding effective_setting` below binds a wrapper whose target is
 --      assigned only AFTER install, so a by-value regression fails it.
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local root = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
     local module_path = root .. "_ct_altar_reuse_owner.lua"
 
-    local function read(name)
+local function read(name)
+        if tostring(name):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(root .. name, "rb"))
         local source = file:read("*a")
         file:close()

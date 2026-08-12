@@ -26,11 +26,15 @@
 -- stopped applying, or a global that leaked fails here instead of in a Chaos
 -- Wastes run.
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local root = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
     local module_path = root .. "_ct_node_entry_owner.lua"
 
-    local function read(name)
+local function read(name)
+        if tostring(name):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(root .. name, "rb"))
         local source = file:read("*a")
         file:close()
@@ -89,6 +93,7 @@ return function(H, repo_root)
     local entry = read("chaos_wastes_tweaker_dev.lua")
     local owner = read("_ct_node_entry_owner.lua")
     local owner_code = code_only(owner)
+    local run_runtime = read("_ct_run_runtime_owner.lua")
     local campaign_graph = read("_ct_campaign_graph_owner.lua")
 
     -- ------------------------------------------------------------------
@@ -310,8 +315,11 @@ return function(H, repo_root)
         H.equal(count_plain(owner_code, "_defeat_recovery_triggered_this_round"), 0,
             "the owner must not declare or assign a flag of its own")
         H.equal(count_plain(entry, "local _defeat_recovery_triggered_this_round = false"), 1)
-        H.equal(count_plain(entry, "            _defeat_recovery_triggered_this_round = value"), 2,
-            "one accessor for _ct_combat_hooks and one for the node-entry owner, over ONE local")
+        H.equal(count_plain(entry, "if value ~= nil then _defeat_recovery_triggered_this_round = value end"), 2,
+            "the entry must expose the same slot to both completion owners")
+        H.equal(count_plain(run_runtime,
+            "defeat_recovery_triggered = ctx.defeat_recovery_triggered,"), 1,
+            "the run owner must forward that accessor to the node-entry owner")
     end)
 
     -- ------------------------------------------------------------------

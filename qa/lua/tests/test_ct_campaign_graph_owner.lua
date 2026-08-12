@@ -3,10 +3,14 @@
 -- ct_dev entry into _ct_campaign_graph_owner.lua. Every assertion below is a
 -- property the move must not have changed.
 return function(H, repo_root)
+    local CTSource = dofile(repo_root .. "/qa/lua/ct_source.lua")
     local root = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
 
-    local function read(name)
+local function read(name)
+        if tostring(name):find("chaos_wastes_tweaker_dev.lua", 1, true) then
+            return CTSource.expanded(repo_root)
+        end
         local file = assert(io.open(root .. name, "rb"))
         local source = file:read("*a")
         file:close()
