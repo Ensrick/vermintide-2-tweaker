@@ -1,5 +1,17 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.339-dev (2026-08-12) -- lobby mission lookup crash guard (#1271) [untested]
+
+- Registers every injected Adventure permutation in both vanilla lookups built
+  from `LevelSettings`: `NetworkLookup.level_keys` for level-load RPCs and
+  `NetworkLookup.mission_ids` for lobby-browser validation.
+- Filters stale or foreign custom mission identifiers with `rawget` before the
+  vanilla lobby browser touches its strict lookup table, so one incompatible
+  lobby is omitted instead of terminating the game.
+- Adds engine-free coverage for dual registration, idempotence, strict-table
+  safety, input immutability, and a runtime parity check for all materialized
+  injected permutations. In-game confirmation remains required.
+
 ## 0.7.338-dev (2026-08-12) -- structural completion (#1159, #2) [untested]
 
 - Five bounded owners now contain host settings/graph transport, run and backend

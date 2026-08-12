@@ -88,15 +88,15 @@ return function(H, repo_root)
     H.test("CT virtual source conserves registration cardinality", function()
         -- These are the exact pre-extraction entry counts. The expanded view
         -- inserts each completion owner at its real installer position.
-        H.equal(count_plain(expanded, "mod:hook("), 16)
+        H.equal(count_plain(expanded, "mod:hook("), 17)
         H.equal(count_plain(expanded, "mod:hook_safe("), 5)
         H.equal(count_plain(expanded, "mod:network_register("), 2)
-        H.equal(count_plain(expanded, "_rt_register("), 23)
+        H.equal(count_plain(expanded, "_rt_register("), 24)
         H.equal(count_plain(regression, "_rt_register("), 71)
 
         H.equal(count_plain(owners.host, "_rt_register("), 4)
         H.equal(count_plain(owners.run, "_rt_register("), 0)
-        H.equal(count_plain(owners.adventure, "_rt_register("), 0)
+        H.equal(count_plain(owners.adventure, "_rt_register("), 1)
         H.equal(count_plain(owners.boon, "_rt_register("), 10)
         H.equal(count_plain(owners.lifecycle, "_rt_register("), 1)
         H.equal(count_plain(entry, "_rt_register("), 8)

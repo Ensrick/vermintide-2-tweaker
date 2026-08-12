@@ -4,7 +4,17 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-01.
+Last updated: 2026-08-12.
+
+### injected-mission lobby lookup safety - issue #1271
+
+| Field | Value |
+|---|---|
+| Symptom | Opening the modded lobby browser crashes when a listing advertises an injected Adventure permutation such as `forest_ambush_khorne_path1`. |
+| Engine boundary | Vanilla snapshots `LevelSettings` into both `NetworkLookup.level_keys` and `NetworkLookup.mission_ids` at boot; CT materializes injected permutations afterward. `LobbyBrowserConsoleUI._remove_invalid_lobbies` reads `mission_ids` through its fatal strict metatable. |
+| Expected post-fix | Every materialized CT permutation exists in both lookups. Unknown stale or foreign custom mission identifiers are omitted from the browser without mutating its input list or crashing. |
+| Detection | Offline `test_ct_lobby_mission_lookup.lua`; `/ct_regression_test`: `issue1271_lobby_mission_lookup_parity`; strict mod lint proves the lobby-browser hook is unique. |
+| Test sequence | From the modded-realm start-game screen, open Browse Games while at least one lobby is advertising an injected Chaos Wastes Adventure mission. The list remains usable and valid lobbies remain visible. |
 
 ### exact Starting Coins baseline - issue #912
 

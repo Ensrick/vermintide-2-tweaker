@@ -10,7 +10,7 @@ the named `chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/*.lua`
 module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
 
 **Dev/stable relationship.** This documents `chaos_wastes_tweaker_dev` (`ct_dev`,
-MOD_VERSION `0.7.338-dev`, friends-only Workshop 3733366926), the ACTIVE working
+MOD_VERSION `0.7.339-dev`, friends-only Workshop 3733366926), the ACTIVE working
 stream. `chaos_wastes_tweaker/` (`ct`, public Workshop 3712929235) is its
 read-only public twin; per repo `CLAUDE.md` all in-flight work happens in the dev
 dir and promotion is a separate user-triggered action, so this doc cites only
@@ -24,7 +24,7 @@ the wire-safety core (`buff_system.lua:66-97`/`:302-308`/`:430-454`,
 `deus_run_state_spec.lua:60`/`:85`, `deus_spawning.lua:249`/`:277-278`), the
 `MutatorHandler.tweak_pack_spawning_settings` arity trap (call site
 `main_path_spawning_generator.lua:327` + def `:748`), `initialize_mutators`
-(`:48`/`:85`), and every ct hook signature (strict mod-lint confirmed, 126 sites).
+(`:48`/`:85`), and every ct hook signature (strict mod-lint confirmed, 127 sites).
 The remaining `[src:]` citations (DeusChestExtension internals, DeusMechanism node
 flow, pickup spawner, per-boon `deus_power_up_settings` lines) are carried from the
 cited `ct_dev` module comments + `DEVELOPMENT.md` + `CHANGELOG.md`, which cite the
@@ -51,7 +51,7 @@ getters and reports readiness; it does not invoke setters or `SharedState.full_s
 
 ## Hook table
 
-**115 hook sites** (`mod:hook`/`mod:hook_safe`, strict mod-lint) + **6 VMF RPC channels**
+**127 hook sites** (`mod:hook`/`mod:hook_safe`, strict mod-lint) + **6 VMF RPC channels**
 (`mod:network_register`) + a set of engine-**table** contacts (registration/pool
 injection, not hooks - see Surface 2/5 notes). Grouped below into rows-of-concern.
 `[hook]` = full wrapper (`mod:hook`); `[safe]` = `mod:hook_safe` (post-callback,
@@ -102,6 +102,7 @@ pair (repo `CLAUDE.md` NON-NEGOTIABLE 8), flagged in the trap column.
 | `DeusPowerUpUtils.generate_random_power_ups` [hook] `:2627` | Rolls the shrine/chest boon offer from `DeusPowerUpRarityPool` + `existing_power_ups_lut` [src: `deus_power_up_utils.lua:189`] | CONSOLIDATED master boon-roll hook: count override + disabled-boon enforcement + bomb-boon exclusivity + Belakor force-rarity | v0.7.77 CONSOLIDATION (two hooks caused "rehook active hook"); reads `args[6]`=availability_type, `args[8]`=forced_rarity positionally; injected boon rarity MUST be `{event,rare,exotic,unique}` or `existing_power_ups_lut[rarity]` is nil -> crash (DEVELOPMENT "Deus boon rarities") |
 | `_G deus_populate_graph` [hook] `_ct_campaign_graph_owner.lua:284` | The deterministic CW node-graph generator; picks levels/curses/themes by INDEX into `LEVEL_AVAILABILITY.*` arrays | Host broadcasts resolved graph; clients overwrite in place (per-peer determinism fix) | Same seed x different arrays (ct's `inject_adventure_maps` mutates the arrays) = divergent picks; can't runtime-resync because array length folds into the lobby hash - hence the snapshot RPC (DEVELOPMENT "Graph-snapshot RPC") |
 | `_LobbyAux.create_network_hash` [hook,tbl] `:453` | Computes the lobby `combined_hash`; `num_levels` is the only field a Lua mod affects | ct's `inject_adventure_maps` raises `num_levels` (vanilla 582 -> ~774); shim lets a modded host still admit peers where safe | `LevelSettings` mutations are STICKY - can't be un-registered from Lua, only a game restart reverts `num_levels` (DEVELOPMENT "Lobby combined_hash"); the shim deliberately lets NON-ct peers join, which is exactly why the #426 wire-safety gate exists |
+| `LobbyBrowserConsoleUI._remove_invalid_lobbies` [hook] `_ct_adventure_runtime_owner.lua` | Validates `selected_mission_id` and `mission_id` through strict `NetworkLookup.mission_ids` accesses [src: `lobby_browser_console_ui.lua:336-363`] | #1271 pre-filters stale/foreign custom identifiers with `rawget`; `_adventure_pool.lua` also registers every CT permutation in both `level_keys` and `mission_ids` | Both lookups are boot snapshots of `LevelSettings` [src: `network_lookup.lua:1239-1249`]. CT writes permutations post-boot, so registering only `level_keys` leaves the browser fatal. Never index an untrusted lobby key through the strict metatable. |
 | `GameNetworkManager.hot_join_sync` [hook] / `remove_peer` [hook] | The server synchronizes entity systems and game mode before `PeerStates` adds the remote player to `PlayerManager` [src: `game_network_manager.lua:838-851`; `peer_states.lua:432,450`]; real disconnect removes the peer [src: `game_network_manager.lua:814-830`] | #426 synchronously marks the pre-roster peer pending and requires a positive CT acknowledgement. Unknown/missing CT strips every synchronized CT power-up/persistent/live-buff row before vanilla sync; real leave invalidates the acknowledgement | No timeout: positive parity passes, unknown degrades immediately. Strip failure does not call unsafe native sync and requests `NetworkServer.kick_peer` [src: `network_server.lua:476-484`]. Saved settings remain unchanged. These are the only CT hooks on both exact pairs. |
 | `GameModeDeus.local_player_game_starts` [safe] (`_ct_level_load_owner.lua`) / `evaluate_end_conditions` [hook] `:10140` / `_get_coins_amount_and_type` [hook] `:7048` | CW game-mode: local start (applies theme light tint), end-condition eval, coin pickup amount/type | Curse light tinting on injected levels, end-condition tuning, coin economy | GameMode hooks need all three modes where relevant (memory `reference_vt2_mission_gamemode_hooks_three_modes`); `local_player_game_starts` iterates `Level.units` for reflection-probe tint [src: `game_mode_deus.lua:358-378`] |
 | `GameModeDeus.player_left_game_session` [hook] / `_add_bot` [safe] / `remove_bot` [hook]; `DeusRunController.rpc_deus_set_initial_setup` [hook] | Departure is the last point with the human's keyed Deus state; bot add creates a fresh profile row; `remove_bot` returns the exact bot selected for a joining player; the setup RPC is the authoritative target-career loadout initializer and can race bot selection [src: `game_mode_deus.lua:204-235,540-607`; `deus_spawning.lua:397-405`; `deus_run_controller.lua:386-393`] | #465 transfers boons, persistent buffs, coin, and both CW weapon tiers human->bot and bot->human; same-career weapons copy exactly, cross-career handoffs project the two tiers onto target-compatible weapons; #466 seeds a newly created bot's independent economy ledger | Host-only and setting-gated; joining coin is the host's live balance; pre-setup handoffs defer once instead of suppressing vanilla initialization; writes are read back/rolled back; bot backend/talent/live slots refresh through the canonical bot equip path; CT-only identifiers are parity-filtered; no custom RPC or polling |

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-12 - Chaos Wastes lobby mission lookup crash guard (#1271)
+
+Tweaker: Chaos Wastes Dev 0.7.339-dev registers injected Adventure mission
+permutations in both `level_keys` and `mission_ids`. The lobby browser now
+pre-filters unknown custom mission identifiers through non-throwing raw lookups,
+preventing one stale or foreign listing from crashing the game.
+
 ## 2026-08-12 - Chaos Wastes Tweaker Dev reaches the structural completion target (#1159)
 
 Tweaker: Chaos Wastes Dev 0.7.338-dev extracts host-state transport,
