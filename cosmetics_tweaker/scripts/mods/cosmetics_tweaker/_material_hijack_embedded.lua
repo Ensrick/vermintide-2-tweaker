@@ -590,10 +590,10 @@ end)
 
 -- v0.9.5: HeroPreviewer._spawn_item_unit hook REMOVED from MH embed.
 -- cosmetics_tweaker.lua already has a `mod:hook_safe("HeroPreviewer",
--- "_spawn_item_unit", _spawn_item_unit_la_hook)` (line ~5697) via the same
+-- "_spawn_item_unit", spawn_item_unit_combined)` in `_cos_spawn_boundary.lua` via the same
 -- mod handle. VMF warns on mod:hook + mod:hook_safe registered on the
 -- same Class+method via the same mod. Folded the MH logic into
--- cosmetics_tweaker's existing _spawn_item_unit_la_hook path via the
+-- cosmetics_tweaker's combined `_cos_spawn_boundary` path via the
 -- module exports below (replace_textures + add_particles + new
 -- attach_anim_extension helper). Functionally equivalent.
 local function attach_anim_extension(unit)

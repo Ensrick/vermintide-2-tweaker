@@ -213,7 +213,7 @@ match the python generator's output.
 | Portrait swap (career_settings) | n/a (data-source swap, propagates to every UI surface) | n/a | n/a | Per v0.7.62 architecture decision. Single point of mutation. |
 
 `MenuWorldPreviewer._spawn_item_unit` is hooked **only for LA-clone hat
-tracking** (`_spawn_item_unit_la_hook`), not for per-hand operations.
+tracking** (the combined hook in `_cos_spawn_boundary.lua`), not for per-hand operations.
 Consistent with CLAUDE.md guidance.
 
 ## Package loading audit

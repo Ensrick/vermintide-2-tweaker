@@ -171,7 +171,7 @@ return {
 
 		-- ================================================================
 		-- LA armoury hat + armor/body-skin clones
-		-- owner_3p: AttachmentUtils.create_attachment (:9427) + LA paint;
+		-- owner_3p: AttachmentUtils.create_attachment (_cos_spawn_boundary.lua) + LA paint;
 		--   SimpleInventoryExtension.extensions_ready re-applies saved choice
 		--   (_la_persistence.lua:256).
 		-- husk: cos_la_apply broadcast + PlayerHuskAttachmentExtension.create_attachment
@@ -449,7 +449,7 @@ return {
 		-- Moonfire-arrow impact puff (we_deus_01)
 		-- owner 1p/3p + bot + husk: PlayerProjectileUnitExtension AND
 		--   PlayerProjectileHuskExtension .hit_enemy/.hit_level_unit/.hit_non_level_unit
-		--   are hooked (:10440), so any locally-simulated player projectile --
+		--   are hooked (_cos_moonfire_puff_runtime.lua), so any locally-simulated player projectile --
 		--   owner, bot, or remote-husk -- spawns the decorative world-space puff
 		--   at impact behind cos_moonfire_cosmetic_puff. FX package rides the
 		--   equipped Moonfire Bow.
@@ -484,7 +484,7 @@ return {
 						-- and that package's residency on a hot-joining observer is
 						-- exactly the class 1157 forces honest.
 						husk = husk_row(open, open_notes,
-							"The puff is spawned by the locally-simulated husk projectile extension (:10440), so no replication is required, but the FX package rides the wearer's equipped Moonfire Bow and its residency on the observing peer is unproven at the moment of the first remote shot. Degrades to the vanilla impact FX."),
+							"The puff is spawned by the locally-simulated husk projectile extension (_cos_moonfire_puff_runtime.lua), so no replication is required, but the FX package rides the wearer's equipped Moonfire Bow and its residency on the observing peer is unproven at the moment of the first remote shot. Degrades to the vanilla impact FX."),
 					})
 			end)(),
 		},

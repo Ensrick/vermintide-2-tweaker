@@ -34,6 +34,8 @@ return function(H, repo_root)
     local module_relative =
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua"
     local source = read(module_relative)
+    local spawn_boundary = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_spawn_boundary.lua")
     local owner_install =
         'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync").install(mod, {'
 
@@ -70,10 +72,12 @@ return function(H, repo_root)
         -- registers, so the nil-guarded table form must survive the move intact.
         H.equal(occurrences(source, "if AttachmentUtils then"), 1)
         H.equal(occurrences(source, 'mod:hook("AttachmentUtils"'), 0)
-        -- The entry keeps the OTHER AttachmentUtils method (the #270 residency
-        -- gate on optional attachments) and the husk WEAPON wield path.
-        H.equal(occurrences(entry, 'mod:hook(AttachmentUtils, "create_attachment"'), 1)
+        -- The sibling spawn-boundary owner keeps the OTHER AttachmentUtils
+        -- method (the #270 residency gate); the entry keeps the husk weapon path.
+        H.equal(occurrences(entry, 'mod:hook(AttachmentUtils, "create_attachment"'), 0)
         H.equal(occurrences(source, 'mod:hook(AttachmentUtils, "create_attachment"'), 0)
+        H.equal(occurrences(spawn_boundary,
+            'mod:hook(attachment_utils, "create_attachment"'), 1)
     end)
 
     H.test("cos attachment spawn sync does not overlap its sibling owners", function()

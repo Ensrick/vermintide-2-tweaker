@@ -1015,6 +1015,19 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Expected post-fix | Patch `VMFMod.hook`/`hook_safe`/`hook_origin` directly with target-name filter. Patcher loads above target. |
 | Detection | Visual: target mod's noisy log lines suppressed. |
 
+### cosmetics-spawn-boundary-owner — One ordered writer per spawned appearance unit
+
+| Field | Value |
+|-------|-------|
+| Symptom | A hat or preview unit is resident but loses its authored surface, glow identity, LA repaint, or score-lineup paint depending on which hook runs last; a non-resident remote hat can instead reach `World.spawn_unit` and terminate the viewer. |
+| Root cause | The attachment residency gate and Hero/Menu preview post-processing all act on the same newly spawned unit. Registering competing wrappers makes MH-before-vanilla and appearance-after-vanilla ordering implicit. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.205-dev |
+| Category | STATIC |
+| Repro | Re-inline `AttachmentUtils.create_attachment` or either `_spawn_item_unit` hook in the entry while `_cos_spawn_boundary.lua` is installed, then run the hook census. |
+| Expected post-fix | `_cos_spawn_boundary.lua` exclusively owns all three seams, delegates a resident unit once, skips only a non-resident `slot_hat`, and preserves the combined MH-before / appearance-after sequence. `_cos_moonfire_puff_runtime.lua` independently owns the bounded cosmetic projectile fan-out. |
+| Detection | `qa/check_lua_unit_tests.ps1`, `qa/check_rt_textual_invariants.ps1`, strict Cosmetics mod-lint, and `qa/check_decomposition_contracts.ps1`; the entry must remain at or below 2,488 nonblank lines. |
+
 ---
 
 ## Build / Deploy / Workshop
@@ -1294,6 +1307,7 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 - 3p-anim-fix-process
 - anim-closed-vocabulary
 - anim-remap-per-unit-state
+- cosmetics-spawn-boundary-owner
 - cross-mod-br-registration-sync
 - ct-graph-snapshot-rpc
 - ct-husk-hook-shadow-tpe

@@ -171,7 +171,7 @@ mod:hook("HeroPreviewer", "equip_item", function(func, self, item_name, slot, ba
     -- by our TeamPreviewer._spawn_hero hook (score screen only; the keep
     -- inventory previewer never has it). Mesh swaps via the bracketed
     -- get_item_units branch; paint happens post-spawn in
-    -- _spawn_item_unit_combined (kind="texture" hats render vanilla colours
+    -- _cos_spawn_boundary's combined spawn hook (kind="texture" hats render vanilla colours
     -- without it, LA_SYNC_MODEL 6.2).
     local swap_unit = nil
     if self._cos_wearer_peer and type(slot) == "table" and slot.name == "slot_hat" then
@@ -530,7 +530,7 @@ local function _spawn_item_wrapper(func, self, item_name, spawn_data)
         state.dbg("[LA preview]   -> spawning clone %s", item_name)
     end
     -- #612: Encarmine now spawns the package-safe Laurel donor unchanged.
-    -- `_spawn_item_unit_combined` paints only that instance after spawn, so the
+    -- `_cos_spawn_boundary` paints only that instance after spawn, so the
     -- preview keeps Laurel's complete LOD/rig/controller/fade contract.
     local result = func(self, item_name, spawn_data)
     self._cos_la_spawning = nil

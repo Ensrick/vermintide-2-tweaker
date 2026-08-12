@@ -91,6 +91,14 @@ return function(H, repo_root)
     local item_presentation_runtime = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
         .. "_cos_item_presentation_runtime.lua")
+    -- #1159 Wave 19: preserve the same total registration census after the
+    -- attachment/preview spawn hooks and Moonfire impact hook moved to owners.
+    local spawn_boundary = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_spawn_boundary.lua")
+    local moonfire_puff_runtime = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/"
+        .. "_cos_moonfire_puff_runtime.lua")
     local Runtime = assert(loadfile(repo_root .. "/" .. module_path))()
 
     H.test("Cosmetics LA replay runtime has one ordered entry owner", function()
@@ -138,6 +146,8 @@ return function(H, repo_root)
             .. glow_picker_host:gsub("%-%-[^\n]*", "")
             .. local_wield_runtime:gsub("%-%-[^\n]*", "")
             .. item_presentation_runtime:gsub("%-%-[^\n]*", "")
+            .. spawn_boundary:gsub("%-%-[^\n]*", "")
+            .. moonfire_puff_runtime:gsub("%-%-[^\n]*", "")
         local module_exec = source:gsub("%-%-[^\n]*", "")
         H.equal(occurrences(entry_exec, "mod:network_register("), 4)
         H.equal(occurrences(glow_transport:gsub("%-%-[^\n]*", ""),
