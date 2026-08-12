@@ -55,17 +55,15 @@
             RequiredModules = @('_career_tweaker_balance_hooks.lua', '_crt_foot_knight.lua', '_crt_balance_catalog.lua')
         }
         @{
-            # First entry brought under the 2500-line HARD limit (issue #1159).
-            # State stays 'partial': 'complete' additionally requires the entry
-            # to be at or under the 1500-line TARGET (see the State check in
-            # check_decomposition_contracts.ps1), which this entry is not.
-            # Its qa/baselines/file_sizes.json row was removed at the same time,
-            # matching how career_tweaker_balance left the frozen-debt set.
+            # Structural phase completed at 0.8.121-dev (#1159): the entry is
+            # at or below the 1500-line target and the contract retains every
+            # extracted bootstrap, state, wire, forge, loadout, and regression
+            # owner.
             Name = 'crafting_in_modded_dev'
-            State = 'partial'
+            State = 'complete'
             Entry = 'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'
-            CeilingLines = 2353
-            RequiredModules = @('_cim_forge_preview.lua', '_cim_forge_preview_owner.lua', '_cim_forge_picker_owner.lua', '_cim_forge_ui_owner.lua', '_cim_inventory_filter.lua', '_cim_command_owner.lua', '_cim_weave_economy.lua', '_cim_modded_loadout_owner.lua', '_cim_weave_loadout_owner.lua', '_cim_regression_checks.lua')
+            CeilingLines = 1433
+            RequiredModules = @('_cim_bootstrap_runtime.lua', '_cim_forge_state_owner.lua', '_cim_loadout_wire_owner.lua', '_cim_forge_preview.lua', '_cim_forge_preview_owner.lua', '_cim_forge_picker_owner.lua', '_cim_forge_ui_owner.lua', '_cim_inventory_filter.lua', '_cim_command_owner.lua', '_cim_weave_economy.lua', '_cim_modded_loadout_owner.lua', '_cim_weave_loadout_owner.lua', '_cim_regression_checks.lua')
         }
         @{
             Name = 'chaos_wastes_tweaker_dev'

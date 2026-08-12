@@ -39,11 +39,11 @@ return function(H, repo_root)
 
 	H.test("WOC+CIM integration remains sender-wire shadowed", function()
 		local main = assert(io.open(repo_root
-			.. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua", "rb"))
+			.. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_state_owner.lua", "rb"))
 		local cim_source = main:read("*a")
 		main:close()
 		H.truthy(cim_source:find("_cim_register_external_trait_provider", 1, true))
-		H.truthy(cim_source:find("external_traits = w.external_traits", 1, true))
+		H.truthy(cim_source:find("external_traits = weapon.external_traits", 1, true))
 
 		local woc = assert(io.open(repo_root
 			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua", "rb"))

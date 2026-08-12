@@ -28,14 +28,13 @@ return function(H, repo_root)
         for line in entry:gmatch("[^\r\n]*") do
             if line:find("%S") then lines = lines + 1 end
         end
-        H.truthy(lines <= 2353,
-            "CIM-dev entry exceeded the 2353-line weave-loadout-owner ceiling")
-        -- The weave-loadout owner is the slice that brought this entry under
-        -- PROJECT_STANDARDS 2.1's 2500-line HARD limit, which is why its
-        -- qa/baselines/file_sizes.json row was removed. Pin the limit itself so
-        -- a later slice cannot quietly ratchet the ceiling back above it.
-        H.truthy(lines <= 2500,
-            "CIM-dev entry crossed back over the 2500-line hard limit")
+        H.truthy(lines <= 1433,
+            "CIM-dev entry exceeded the 1433-line structural completion ceiling")
+        -- The bootstrap/state/wire owner slice brought the entry under the
+        -- PROJECT_STANDARDS 2.2a 1500-line completion target. Pin that target
+        -- independently so a later contract edit cannot relabel regrowth.
+        H.truthy(lines <= 1500,
+            "CIM-dev entry crossed back over the 1500-line completion target")
     end)
 
     H.test("CIM-dev command owner installs exactly once at the original boundary", function()

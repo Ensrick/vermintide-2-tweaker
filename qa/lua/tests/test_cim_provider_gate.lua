@@ -292,6 +292,7 @@ return function(H, repo_root)
     H.test("CIM #682 no multi-return-collapsing contract call survives", function()
         local files = {
             "crafting_in_modded_dev.lua",
+            "_cim_forge_state_owner.lua",
             "standard_forge.lua",
             "saveweapon_import.lua",
             "_cim_mil_entry_builder.lua",
@@ -308,9 +309,10 @@ return function(H, repo_root)
                 name .. " still collapses build_mirror_payload")
         end
         local entry = read("crafting_in_modded_dev.lua")
-        H.truthy(entry:find('gate_record("mirror_injection"', 1, true),
+        local forge_state = read("_cim_forge_state_owner.lua")
+        H.truthy(forge_state:find('gate_record("mirror_injection"', 1, true),
             "mirror-injection boundary not routed through the record gate")
-        H.truthy(entry:find('gate_record("mirror_restore"', 1, true),
+        H.truthy(forge_state:find('gate_record("mirror_restore"', 1, true),
             "mirror-restore boundary not routed through the record gate")
         H.truthy(entry:find('register_enumerators(\n    "athanor_list", "mirror_restore", "mirror_injection")', 1, true)
                 or entry:find('register_enumerators("athanor_list", "mirror_restore", "mirror_injection")', 1, true),

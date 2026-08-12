@@ -10,7 +10,7 @@ the named `crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/*.lua`
 module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
 
 **Dev/stable relationship.** This documents `crafting_in_modded_dev` (`cim_dev`,
-MOD_VERSION `0.8.106-dev`, friends-only Workshop 3733366851), the ACTIVE working
+MOD_VERSION `0.8.121-dev`, friends-only Workshop 3733366851), the ACTIVE working
 stream. `crafting_in_modded/` (`cim`, public Workshop 3721038774) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action (`tools/promote/promote.ps1`), so
@@ -19,14 +19,15 @@ so any cross-mod consumer resolving `get_mod("cim")` will NOT see the dev clone.
 cim's own render-rescue for CWV crafts, by contrast, keys on the `cwv_` backend_id
 prefix, which is stream-agnostic.
 
-**Verification split (honest).** Line-verified against the 2026-07-22 `cim_dev`
-module source: every hook signature (grep-confirmed, **139 `mod:hook`/`hook_safe`
-sites + 1 `mod:network_register`**), the full body of `standard_forge.lua`,
-`illusion_swap.lua`, `modded_rarities.lua`, and the main-file craft-record shape
-(`:282-582`), wire-safety core (`:753-903`), LA equip-capture (moved verbatim to
-`_cim_modded_loadout_owner.lua:800-837` at v0.8.119-dev),
-item-filter (`:1701-1818`), and Athanor opener + shading-env substitution
-(`:1825-2055`, `:3088-3218`). The `[src:]` citations INTO the decompile
+**Verification split (honest).** Re-verified against the 2026-08-11 `cim_dev`
+module source: every hook signature (grep-confirmed, **87 `mod:hook`, 34
+`mod:hook_safe`, and 1 `mod:network_register`**), the full body of `standard_forge.lua`,
+`illusion_swap.lua`, `modded_rarities.lua`, the forged-item state owner
+(`_cim_forge_state_owner.lua`), the wire-safety owner
+(`_cim_loadout_wire_owner.lua`), LA equip-capture in
+`_cim_modded_loadout_owner.lua`, the `_cim_inventory_filter.lua` item filter,
+and the entry-owned Athanor opener plus `_cim_mission_forge_safety.lua` shading
+environment substitution. The `[src:]` citations INTO the decompile
 (`loadout_utils.lua`, `network_lookup.lua`, `backend_utils.lua`,
 `hero_window_item_customization.lua`, `craft_page_*`, `world_hero_previewer.lua`,
 etc.) are carried from the cited `cim_dev` module comments + `CHANGELOG.md` +
@@ -45,9 +46,21 @@ salvage-eligibility, and deletion-partition policy. Its
 **`_cim_salvage_local_boundary.lua` -> `_cim_owned_deletion.lua`** path owns one
 atomic selected-set transaction for persisted CIM and foreign session-only
 Salvage rows, including exact mirror/new-marker compensation, and is consumed
-by both craft surfaces and the inventory adapter. Rows below cite the module file (name only) for moved hooks;
-everything else still lives in `crafting_in_modded_dev.lua`. Match crash logs by function
-name, not line - the module line numbers are fresh.
+by both craft surfaces and the inventory adapter. Rows below cite the owning
+module for moved hooks. Match crash logs by function name rather than old entry
+line numbers.
+
+**Structural completion (v0.8.121-dev).** The final high-coupling entry regions
+now have explicit owners. `_cim_bootstrap_runtime.lua` owns boot telemetry,
+settings dumps, debug channels, and the sole regression registry/runner.
+`_cim_forge_state_owner.lua` owns the forged-item registry, persistence
+migration, provider partition, MIL/mirror item adapters, and the ordered
+`BackendManagerPlayFab._create_interfaces` restore seam. Its getter/setter API
+prevents consumers retaining the registry table that load replaces.
+`_cim_loadout_wire_owner.lua` owns the issue #278/#371/#598 sender substitution,
+schema-gated side channel, post-decode presentation restore, and unknown-item-id
+predecode guard. Hook/RPC cardinality is unchanged; engine-free owner tests drive
+reload replacement, callback order, schema refusal, and wire/local separation.
 
 Issue #959 adds `_cim_accessory_property_policy.lua` (pure category/layer
 arithmetic, write admission, and capacity policy) and
@@ -145,7 +158,7 @@ the trap column.
 | `_FEEDBACK_PAGES._update_craft_items` [safe] `standard_forge.lua:379` (6 Console CraftPages) | Ticks the craft page; plays the completion sound only on a truthy vanilla craft return [src: `craft_page_*_console.lua`] | Emit `play_gui_craft_forge_button_completed` when a craft finishes (the local synth short-circuit skips vanilla's sound path) | `rawget`-guarded per class (§1b); one-shot `_cim_played_complete` flag |
 | `HeroWindowCraftingInventoryConsole._update_crafting_material_panel` [safe] `standard_forge.lua:410` (+ non-Console if present) | Writes the "Scrap: 0 / Dust: 0..." material stat row [src: `hero_window_crafting_inventory_console.lua`] | Hide the material panel (modded play has no materials) | `rawget`-guard the non-Console variant (it doesn't exist in current builds, §1b) |
 | `HeroWindowCrafting.update` [safe] `standard_forge.lua:1730` | Per-frame window tick [src: `hero_window_crafting.lua`] | Per-frame lazy-build/show/probe for the cim accessory craft buttons | DISABLED (`_STD_FORGE_BTNS_ENABLED=false`, v0.7.67); helpers stay defined but the driver no-ops |
-| `BackendManagerPlayFab._create_interfaces` [safe] `crafting_in_modded_dev.lua:605` | Fires once when backend interfaces are constructed (post-LA-bridge) [src: `backend_manager_play_fab.lua`] | Load the persistent craft save (`_forge_load`), re-inject saved crafts, restore the modded loadout; one-shot >10-property trim | CONSOLIDATED (the property-trim was migrated in from `standard_forge.lua`, §1); backend is nil at mod init so this is the earliest ready point |
+| `BackendManagerPlayFab._create_interfaces` [safe] `_cim_forge_state_owner.lua` | Fires once when backend interfaces are constructed (post-LA-bridge) [src: `backend_manager_play_fab.lua`] | Load the persistent craft save, re-inject saved crafts, restore the modded loadout; one-shot >10-property trim | CONSOLIDATED (the property-trim was migrated in from `standard_forge.lua`, §1); backend is nil at mod init so this is the earliest ready point. The owner invokes late-bound Athanor injection and loadout restore callbacks in the original order. |
 
 ### Surface 2 - The Athanor: the vanilla weave forge repurposed as a modded crafting UI (owner: `docs/engine/09`, `/10`; `crafting_in_modded_dev.lua`, `cim_debug.lua`)
 
@@ -176,18 +189,23 @@ gated on `_custom_forge_active`. `docs/engine/09` owns the view/material model.
 ### Surface 3 - Loadout equip-capture via the LA dispatch (DORMANT) (owner: `docs/engine/11`, `/06`; `_cim_modded_loadout_owner.lua`)
 
 Both captures moved out of the entry into `_cim_modded_loadout_owner.lua` at
-v0.8.119-dev (#1159), byte-identical. The `PlayerManager.rpc_sync_loadout_slot`
-row below stays in `crafting_in_modded_dev.lua`, deliberately ABOVE that seam:
-it is sender/receiver crash safety (#278/#371) and must never sit behind the
-loadout owner's persistence gate.
+v0.8.119-dev (#1159), byte-identical. The independent
+`_cim_loadout_wire_owner.lua` owns `PlayerManager.rpc_sync_loadout_slot` and
+force-resets the retired persistence gate before this owner installs, so
+sender/receiver crash safety (#278/#371) can never sit behind that gate.
 
 | Class.method (kind) | Vanilla behavior | Why cim hooks it | Trap / invariant |
 |---|---|---|---|
 | `BackendUtils.set_loadout_item` [hook,tbl] `_cim_modded_loadout_owner.lua:830` | The STABLE outer equip entry point; dispatches to `get_loadout_interface_by_slot(slot):set_loadout_item(...)` [src: `backend_utils.lua:22`] | Capture every MENU equip BEFORE the LA dispatch (with Loremaster's Armoury active the inner interface is an LA CLONE that bypasses the class hook) | Table-form on the post-LA `BackendUtils` ref, installed DEFERRED from `mod.update` once interfaces exist (memory `reference_cim_equip_capture_la_dispatch`); a `_restoring` flag gates capture OFF during cim's own restore writes |
 | `BackendInterfaceItemPlayfab.set_loadout_item` [safe] `_cim_modded_loadout_owner.lua:805` | Direct interface loadout write (restore path, or a bot's designated loadout) [src: `backend_interface_item_playfab.lua`] | Capture direct/data writes; record under the `optional_loadout_index` (4th arg) so a non-selected-index write lands on that index | `from_live_equip=false` (a bare data write does not re-spawn the unit) |
-| `PlayerManager.rpc_sync_loadout_slot` [hook] `crafting_in_modded_dev.lua:873` | RECEIVER: decodes a synced loadout slot, `NetworkLookup.item_names[item_id]` on the numeric wire id, stores under `_player_loadouts` [src: `player_manager.lua:69`, relay at `:83`] | CONSOLIDATED: (1) #278 PRE-decode guard - `rawget(names, item_id)==nil` drops the RPC before the strict `__index` fatal; (2) post-decode "modded" rarity restore for cim clients | Thread EVERY vanilla param through unchanged (dropping trailing args corrupts the relay re-send, §19); became a full `mod:hook` (was `hook_safe`) because the guard must run BEFORE vanilla decode |
+| `PlayerManager.rpc_sync_loadout_slot` [hook] `_cim_loadout_wire_owner.lua` | RECEIVER: decodes a synced loadout slot, `NetworkLookup.item_names[item_id]` on the numeric wire id, stores under `_player_loadouts` [src: `player_manager.lua:69`, relay at `:83`] | CONSOLIDATED: (1) #278 PRE-decode guard - `rawget(names, item_id)==nil` drops the RPC before the strict `__index` fatal; (2) post-decode "modded" rarity restore for cim clients | Thread EVERY vanilla param through unchanged (dropping trailing args corrupts the relay re-send, §19); remains a full `mod:hook` because the guard must run BEFORE vanilla decode. |
 
-**DORMANT.** Loadout persistence is force-OFF (`mod:set("persist_modded_loadouts", false)` at `:745`, no menu toggle remains). The capture/sync/restore machinery stays wired but no-ops - a bot gets its DESIGNATED vanilla loadout, byte-identical to not having cim. Replacement lands in `gut`. The `_capture_loadout_equip` + `_restore_modded_loadout` bodies still exist so the regression sandbox can exercise the round-trip.
+**DORMANT.** Loadout persistence is force-OFF (`_cim_loadout_wire_owner.lua`
+performs `mod:set("persist_modded_loadouts", false)`, no menu toggle remains).
+The capture/sync/restore machinery stays wired but no-ops - a bot gets its
+DESIGNATED vanilla loadout, byte-identical to not having cim. Replacement lands
+in `gut`. The `_capture_loadout_equip` + `_restore_modded_loadout` bodies still
+exist so the regression sandbox can exercise the round-trip.
 
 ### Surface 4 - Illusion swap: modded-realm weapon skin apply (owner: `docs/engine/06`; `illusion_swap.lua`)
 
@@ -218,12 +236,12 @@ next map in one `mod:set`, so a later ready edge can observe either the prior ma
 or the completed new map, never an intermediate delete/write. CIM forge-owned
 IDs clear this separate vanilla map because their craft record is authoritative.
 
-### Surface 5 - Custom rarity registration + cross-peer wire safety + CW compat (owner: `docs/engine/03`, `/11`; `modded_rarities.lua`, `crafting_in_modded_dev.lua`)
+### Surface 5 - Custom rarity registration + cross-peer wire safety + CW compat (owner: `docs/engine/03`, `/11`; `modded_rarities.lua`, `_cim_loadout_wire_owner.lua`)
 
 | Class.method (kind) | Vanilla behavior | Why cim hooks it | Trap / invariant |
 |---|---|---|---|
-| `LoadoutUtils.sync_loadout_slot` [hook,tbl] `crafting_in_modded_dev.lua:765` | SENDER: encodes a slot as `rpc_sync_loadout_slot` with rarity/properties/traits mapped through local `NetworkLookup` tables [src: `loadout_utils.lua:13-42`] | UNCONDITIONALLY coerce `rarity="modded"` -> `"unique"` on the wire (restore host-local after), so a non-cim client can decode it; external providers remain responsible for shadow-stripping their protected keys | Wire safety is NEVER toggle-gated (#278/#371, §31). A custom external trait is parked while its provider is absent, so it never reaches the live item or this encoder; WOC additionally strips its active keys for peers without WOC. |
-| `[rpc] cim_modded_slot` (`mod:network_register`, `crafting_in_modded_dev.lua`) | - | CIM-only presentation side-channel: fire alongside each `sync_loadout_slot` so the receiver can restore or clear Modded chrome after vanilla's decode; prime the identical tri-state locally because `"others"` excludes the sender | VMF delivers only to peers with the same mod-id + handler; a vanilla client has no handler and retains the safe `unique` wire rarity. Schema-gated on `CIM_RPC_SCHEMA`. The per-(wearer,slot) value is tri-state: `true` = Modded, `false` = explicitly ordinary, `nil` = not received. Never collapse false to nil (#598/#921). No icon/model/material resource name crosses this channel. |
+| `LoadoutUtils.sync_loadout_slot` [hook,tbl] `_cim_loadout_wire_owner.lua` | SENDER: encodes a slot as `rpc_sync_loadout_slot` with rarity/properties/traits mapped through local `NetworkLookup` tables [src: `loadout_utils.lua:13-42`] | UNCONDITIONALLY coerce `rarity="modded"` -> `"unique"` on the wire (restore host-local after), so a non-cim client can decode it; external providers remain responsible for shadow-stripping their protected keys | Wire safety is NEVER toggle-gated (#278/#371, §31). A custom external trait is parked while its provider is absent, so it never reaches the live item or this encoder; WOC additionally strips its active keys for peers without WOC. |
+| `[rpc] cim_modded_slot` (`mod:network_register`, `_cim_loadout_wire_owner.lua`) | - | CIM-only presentation side-channel: fire alongside each `sync_loadout_slot` so the receiver can restore or clear Modded chrome after vanilla's decode; prime the identical tri-state locally because `"others"` excludes the sender | VMF delivers only to peers with the same mod-id + handler; a vanilla client has no handler and retains the safe `unique` wire rarity. Schema-gated on `CIM_RPC_SCHEMA`. The per-(wearer,slot) value is tri-state: `true` = Modded, `false` = explicitly ordinary, `nil` = not received. Never collapse false to nil (#598/#921). No icon/model/material resource name crosses this channel. |
 | `DeusRunController.get_weapon_pool` [hook] `modded_rarities.lua:243` | Iterates `pool_excludes` and nils `weapon_pool[pool_rarity][group]` [src: `deus_run_controller.lua`] | Pre-hook: scrub any `pool_excludes` rarity key absent from the base deus weapon pool (cim's "modded" rarity order=4 pollutes it, then `weapon_pool["modded"]` is nil -> index crash on the NEXT chest) | Idempotent (re-runs every chest); repairs already-contaminated runs. This is why a custom rarity must never leak into `RarityUtils.get_lower_rarities` output on the CW path |
 | `_G.Localize` [hook] `modded_rarities.lua:154` | Global loc-key -> string lookup; the customization option requests `upgrade_description_text_<rarity>` [src: `hero_window_item_customization.lua:1255`] | Supply `rarity_display_name_modded`, `upgrade_description_text_modded`, and "Craft Accessories"/"Reroll Accessory *" recipe titles | VMF `_localization.lua` is NOT registered into global `Localize` (memory `reference_vmf_localize_before_registration`) |
 | `HeroWindowItemCustomization._state_setup_upgrade` [safe] `modded_rarities.lua` | Creates the detailed upgrade widgets, then returns before populating them for every rarity outside the four vanilla upgrade branches [src: `hero_window_item_customization.lua:2348-2390`] | For a current `modded` item only, copy the same description into the detailed-state widget after vanilla setup | Text-only: no recipe, lock, cost, craft-button, or rarity-transition write (#263) |
@@ -272,10 +290,10 @@ power_level, rarity="modded", properties=<cjson>, traits=<cjson> } }`. The
 `backend_id` is `Application.guid()` for normal crafts, but a `cwv_<key>_NNN` string
 (instance band 100..999) when the input key is a `character_weapon_variants` clone
 (`cwv_variant==true`) - because CWV's render-rescue hooks key on that exact pattern
-(issue #390; class 27). Persistence lives in cim's own `_forged_weapons` save
-(`mod:set("forged_weapons")`), NOT PlayFab - `_forge_load` reads it at
-`_create_interfaces` and `add_item`s each `via_mirror` entry back on session
-restore. The per-entry save shape (`:296-320`) carries `item_key`, `properties`
+(issue #390; class 27). Persistence lives in cim's own `forged_weapons` VMF save,
+NOT PlayFab - `_cim_forge_state_owner.lua` loads it at `_create_interfaces` and
+`add_item`s each `via_mirror` entry back on session restore. The per-entry save
+shape carries `item_key`, `properties`
 (dict), `traits` (active array), `external_traits` (parked provider-owned array),
 `skin`, `power_level`, `rarity`, `rerolled_*_indices`
 (shuffle-bag state), and an OPAQUE `custom_glow` pass-through slot that

@@ -4,7 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-10.
+Last updated: 2026-08-11.
+
+### phase5-runtime-owners - structural completion remains behavior-neutral
+
+| Field | Value |
+|---|---|
+| Symptom | Boot telemetry or regression commands disappear, persisted crafts stop restoring, hook order changes after backend reinitialization, or a remote modded item either leaks a non-vanilla rarity onto the wire or reaches vanilla's strict NetworkLookup decoder with an unknown item id. |
+| Root cause | Boot/regression infrastructure, the mutable forged-item registry plus backend mirror transaction, and issue #278/#371 loadout transport were the final high-coupling regions embedded in the entry. Direct consumers captured `_forged_weapons`, even though load replaced that table. |
+| Fix version(s) | Unreleased source candidate (0.8.121-dev) |
+| Category | STATIC / UNIT |
+| Expected post-fix | `_cim_bootstrap_runtime.lua` owns one regression registry and boot telemetry; `_cim_forge_state_owner.lua` owns one live forged-item registry plus exact backend restore order; `_cim_loadout_wire_owner.lua` owns sender-only rarity substitution, schema-gated metadata reconciliation, and the unknown-id predecode guard. The entry is a 1,433-nonblank-line composition root. |
+| Detection | `test_cim_phase5_runtime_owners.lua` executes all three owners engine-free, including promo migration, live registry replacement, backend callback order, sender-local state, schema mismatch refusal, rarity restoration, and unknown-id drop. Existing CIM suites consume the moved owners rather than source-matching stale entry blocks. `test_cim_entry_decomposition.lua` plus `qa/check_decomposition_contracts.ps1` enforce the 1,433-line ceiling, `complete` state, and all thirteen required owners. Strict lint preserves whole-mod hook cardinality at 87 `hook`, 34 `hook_safe`, and one network registration. |
 
 ### weave-loadout-owner-decomposition - bubble-grid writes remain behavior-neutral
 
@@ -15,7 +26,7 @@ Last updated: 2026-08-10.
 | Fix version(s) | Unreleased source candidate (0.8.120-dev) |
 | Category | STATIC |
 | Expected post-fix | `_cim_weave_loadout_owner.lua` installs once between the `_cim_immutable_relic_ui` install and the `BackendManagerPlayFab.commit` suppression, registering the ten hooks in their original order. `_custom_forge_active`, `_forge_item_props`, `_forged_weapons`, and `_amulet_dirty` are read through call-time accessors. The entry keeps exactly one forward declaration, `_bubble_cap`, because `_cim_weave_economy` installs above the seam and resolves it at callback time. The commit suppression and the #278/#371 wire-safety layer stay in the entry. |
-| Detection | Offline `test_cim_weave_loadout_owner.lua` (14 tests) covers seam position and ordering, hook order/cardinality, accessor liveness across a rebind, idempotence, reload rebinding, context validation, the exported surface, the forward-declaration split, the stamina/movespeed caps and their key normalization, the layer-aware #86 trim, and #959 policy delegation. `test_cim_entry_decomposition.lua` and `qa/check_decomposition_contracts.ps1` enforce the 2,353-line ceiling and owner retention; five `qa/rt_textual_invariants.psd1` rows pin the hooks and the commit block to their files. |
+| Detection | Offline `test_cim_weave_loadout_owner.lua` (14 tests) covers seam position and ordering, hook order/cardinality, accessor liveness across a rebind, idempotence, reload rebinding, context validation, the exported surface, the forward-declaration split, the stamina/movespeed caps and their key normalization, the layer-aware #86 trim, and #959 policy delegation. `test_cim_entry_decomposition.lua` and `qa/check_decomposition_contracts.ps1` enforce the current 1,433-line ceiling and owner retention; five `qa/rt_textual_invariants.psd1` rows pin the hooks and the commit block to their files. |
 
 ### weave-economy-owner-decomposition - read facade remains behavior-neutral
 
@@ -26,7 +37,7 @@ Last updated: 2026-08-10.
 | Fix version(s) | Unreleased source candidate |
 | Category | STATIC |
 | Expected post-fix | `_cim_weave_economy.lua` installs once at the original boundary, preserves all 18 hook names and order, resolves active state and bubble caps at callback time, retains exact fake values while CIM owns the Athanor, and preserves native calls/fallbacks otherwise. |
-| Detection | Offline `test_cim_weave_economy.lua` covers owner wiring, order/cardinality, idempotence, active values, native argument forwarding, and protected fallback values. `test_cim_entry_decomposition.lua` and `qa/check_decomposition_contracts.ps1` enforce the current 3,764-line ceiling and owner retention. |
+| Detection | Offline `test_cim_weave_economy.lua` covers owner wiring, order/cardinality, idempotence, active values, native argument forwarding, and protected fallback values. `test_cim_entry_decomposition.lua` and `qa/check_decomposition_contracts.ps1` enforce the current 1,433-line ceiling and owner retention. |
 
 ### forge-preview-owner-decomposition - preview lifecycle remains behavior-neutral
 
@@ -48,7 +59,7 @@ Last updated: 2026-08-10.
 | Fix version(s) | Unreleased source candidate |
 | Category | STATIC |
 | Expected post-fix | `_cim_forge_picker_owner.lua` installs once at the original boundary, preserves `_setup_menu_options` before `_sync_backend_loadout`, retains one stable private dispatcher/backup, settles any outstanding transaction against its captured category-table targets before refreshing all seven injected dependencies on reload, exhaustively republishes exactly five operations after public-map replacement, and restores each exact original category table or prior absence. It owns no inventory, loadout, backend-write, or network state. |
-| Detection | Offline `test_cim_forge_picker_owner.lua` first widens old trait/property globals, then replaces the public owner map and all relevant dependencies/globals; it proves the old exact tables/absence are restored without polluting the new globals, exact five-operation republication, private callback continuity, unchanged hook cardinality/order, a separately applied/restored transaction on the new globals, category seeding, matched trait/property twins, native plus optional widening, and active/inactive fallbacks. The decomposition test and machine contract freeze the 3,764-line entry ceiling and require the owner module. |
+| Detection | Offline `test_cim_forge_picker_owner.lua` first widens old trait/property globals, then replaces the public owner map and all relevant dependencies/globals; it proves the old exact tables/absence are restored without polluting the new globals, exact five-operation republication, private callback continuity, unchanged hook cardinality/order, a separately applied/restored transaction on the new globals, category seeding, matched trait/property twins, native plus optional widening, and active/inactive fallbacks. The decomposition test and machine contract freeze the 1,433-line entry ceiling and require the owner module. |
 
 ### forge-ui-owner-decomposition - Athanor presentation remains behavior-neutral
 
@@ -59,7 +70,7 @@ Last updated: 2026-08-10.
 | Fix version(s) | Unreleased source candidate |
 | Category | STATIC |
 | Expected post-fix | `_cim_forge_ui_owner.lua` installs exactly once between the accessory-property and read-only economy owners, preserves `_draw` before `update`, retains the legacy button enable flags, and reads mutable state through refreshed call-time dependencies. Every fresh accessory panel receives the same late-bound craft callback before the reinstall guard; an absent first-load panel remains a safe no-op and can recover later. It performs no backend, forge-store, loadout, or wire writes. |
-| Detection | Offline `test_cim_forge_ui_owner.lua` covers boundary/order, hook cardinality, the sub-1,500-line target, presentation-only exclusions, distinct-panel idempotence, full public-export identity, refreshed callback dependencies, late panel recovery, and stale-panel rejection. The decomposition test and machine contract freeze the 3,764-line entry ceiling. |
+| Detection | Offline `test_cim_forge_ui_owner.lua` covers boundary/order, hook cardinality, the sub-1,500-line target, presentation-only exclusions, distinct-panel idempotence, full public-export identity, refreshed callback dependencies, late panel recovery, and stale-panel rejection. The decomposition test and machine contract freeze the 1,433-line entry ceiling. |
 
 ---
 

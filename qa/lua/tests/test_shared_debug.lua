@@ -10,8 +10,8 @@ return function(H, repo_root)
     local consumers = {
         {
             copy = repo_root .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_debug.lua",
-            entry = repo_root .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua",
-            load = 'mod:dofile("scripts/mods/crafting_in_modded_dev/_lib_debug")(mod, "[cim:dbg]")',
+            entry = repo_root .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime.lua",
+            load = 'scripts/mods/crafting_in_modded_dev/_lib_debug',
         },
         {
             copy = repo_root .. "/verminious_dreams_lighting_dev/scripts/mods/verminious_dreams_lighting_dev/_lib_debug.lua",

@@ -1,5 +1,28 @@
 # Crafting in Modded Changelog
 
+## 0.8.121-dev (2026-08-11) -- structural phase complete (#1159, #504, #2)
+
+- Completed the CIM Dev Phase 5 structural target: the entry is now 1,433
+  nonblank lines, down from 2,353 and below the 1,500-line completion threshold.
+  The machine decomposition contract now marks CIM Dev complete and retains all
+  thirteen extracted owners.
+- Moved boot/version telemetry, rehook-warning capture, settings dumps, debug
+  wiring, and the sole regression registry/runner into
+  `_cim_bootstrap_runtime.lua`.
+- Moved the forged-item registry, persistence migration, provider-trait
+  partition, MIL/mirror adapters, public craft APIs, four identity checks, and
+  ordered backend-interface restore into `_cim_forge_state_owner.lua`. Every
+  late consumer now uses the owner's live registry accessor rather than retaining
+  a table that load may replace.
+- Moved issue #278/#371/#598 loadout transport into
+  `_cim_loadout_wire_owner.lua`: sender-only `modded` -> `unique` substitution,
+  schema-gated presentation metadata, exact false-state clearing, same-mod rarity
+  restoration, and the unknown-item-id predecode guard remain one transaction.
+- Behavior-neutral: whole-mod cardinality remains 87 `mod:hook`, 34
+  `mod:hook_safe`, and one network registration. The Lua 5.1 suite adds
+  executable owner coverage for load migration/rebinding, backend callback order,
+  sender/local wire separation, schema refusal, and unknown-id fail-closed decode.
+
 ## 0.8.120-dev (2026-08-10) -- weave-loadout owner; entry under the hard limit (#1159, #504, #2) [untested]
 
 - **The entry is now under PROJECT_STANDARDS 2.1's 2,500-line hard limit** -
