@@ -159,7 +159,7 @@
                 # #1159: the owner-3P enroll edge rides SimpleInventoryExtension
                 # _wield_slot, which moved verbatim into the musket equip-surface
                 # owner along with the bayonet visibility sync it shares that hook
-                # with. The husk enroll edge stayed on the entry's husk wield
+                # with. The husk enroll edge stays on the remote-husk wield
                 # diagnostic, so both files own this row now.
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_equip_surface.lua'
                 'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_appearance_fade_runtime.lua'

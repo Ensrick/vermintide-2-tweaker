@@ -96,14 +96,14 @@ return function(H, repo_root)
 
         -- #1159: the four cos_la_* receivers moved into _cos_la_sync_transport.
         -- The glow owner's position invariant is unchanged - it still installs
-        -- AFTER the LA channel is registered and BEFORE the husk wield hook - but
+        -- AFTER the LA channel is registered and BEFORE the husk wield owner - but
         -- the LA anchor is now that owner's second install phase, which runs at
         -- the exact line the last cos_la_* register used to occupy.
         H.equal(entry:find('mod:network_register("cos_la_apply"', 1, true), nil)
         local last_la_rpc = assert(entry:find("LA_SYNC.install_receivers()", 1, true))
         local install = assert(entry:find("_cos_glow_transport", last_la_rpc, true))
         local husk_hook = assert(entry:find(
-            'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', install, true))
+            "HUSK_WIELD_RUNTIME.install(mod, {", install, true))
         H.truthy(last_la_rpc < install and install < husk_hook)
     end)
 

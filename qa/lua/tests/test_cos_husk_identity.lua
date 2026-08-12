@@ -136,15 +136,24 @@ return function(H, repo_root)
         local tf = assert(io.open(transport_path, "rb"))
         local transport = tf:read("*a")
         tf:close()
+        local identity_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_husk_identity_runtime.lua", "rb"))
+        local identity_source = identity_file:read("*a")
+        identity_file:close()
+        local wield_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_husk_wield_runtime.lua", "rb"))
+        local wield_source = wield_file:read("*a")
+        wield_file:close()
         H.truthy(source:find("local COS_RPC_SCHEMA = 2", 1, true))
         H.truthy(transport:find("wearer_career  = wearer_career", 1, true))
         H.truthy(transport:find("wearer_career  = entry.wearer_career", 1, true))
         H.truthy(transport:find("local wearer_career = payload.wearer_career", 1, true))
         H.equal(source:find("local wearer_career = payload.wearer_career", 1, true), nil)
-        H.truthy(source:find("invalidate_for_career", 1, true))
-        H.truthy(source:find("entry_matches_career", 1, true))
-        H.truthy(source:find("make_spawn_monitor", 1, true))
-        H.truthy(source:find("career_name = self and self._career_name", 1, true))
+        H.truthy(wield_source:find("invalidate_for_career", 1, true))
+        H.truthy(wield_source:find("entry_matches_career", 1, true))
+        H.truthy(identity_source:find("make_spawn_monitor", 1, true))
+        H.truthy(wield_source:find(
+            "career_name = self and self._career_name", 1, true))
         local runtime_path = repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua"
         local runtime_file = assert(io.open(runtime_path, "rb"))

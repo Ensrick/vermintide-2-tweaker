@@ -33,6 +33,8 @@ return function(H, repo_root)
         read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_loadout_safety.lua")
     local local_wield_runtime =
         read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_local_wield_runtime.lua")
+    local husk_wield_runtime =
+        read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_husk_wield_runtime.lua")
     local entry = entry_only
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_catalog.lua")
@@ -42,6 +44,7 @@ return function(H, repo_root)
         .. la_apply_runtime
         .. la_loadout_safety
         .. local_wield_runtime
+        .. husk_wield_runtime
     local localization = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization.lua")
     local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")
 
@@ -641,7 +644,8 @@ return function(H, repo_root)
             'mod:hook_safe("SimpleInventoryExtension", "_wield_slot"', 1, true))
         H.equal(entry_only:find(
             'mod:hook_safe("SimpleInventoryExtension", "_wield_slot"', 1, true), nil)
-        H.truthy(entry:find('mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true))
+        H.truthy(husk_wield_runtime:find(
+            'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true))
         H.truthy(entry:find('"hero_previewer"', 1, true))
         H.truthy(entry:find('"network_husk"', 1, true))
         H.truthy(entry:find("_resolve_authored_offhand_mesh(entry.armoury_key)", 1, true))

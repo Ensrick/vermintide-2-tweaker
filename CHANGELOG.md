@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-11 - Cosmetics remote-husk transaction gains explicit owners (#1159)
+
+Tweaker: Cosmetics 0.9.206-dev moves the remote-husk identity/spawn policy into
+`_cos_la_husk_identity_runtime.lua` and the single remote weapon-wield
+transaction into `_cos_husk_wield_runtime.lua`. Executable Lua 5.1 coverage
+pins identity precedence, spawn replay, vanilla error restoration, eight-return
+preservation, and bounded glow/LA reconciliation. The entry falls from 2,488 to
+2,051 nonblank lines and the required-owner inventory rises from 30 to 32.
+
 ## 2026-08-11 - Cosmetics crosses the entry hard limit (#1159)
 
 Tweaker: Cosmetics 0.9.205-dev moves the shared attachment/preview spawn

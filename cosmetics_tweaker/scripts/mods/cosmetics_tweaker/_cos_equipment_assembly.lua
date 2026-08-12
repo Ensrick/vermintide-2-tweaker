@@ -94,8 +94,9 @@
 --   _cos_la_replay_runtime /
 --   _cos_wire                     own LA transport and wire safety. This owner
 --                                 sends no RPC and registers no network handler.
--- The entry keeps SimpleHuskInventoryExtension._wield_slot: it is the husk WEAPON
--- wield path that SETS the context this owner reads, not a unit-resolution seam.
+-- `_cos_husk_wield_runtime` owns SimpleHuskInventoryExtension._wield_slot: it is
+-- the husk WEAPON wield path that SETS the context this owner reads, not a
+-- unit-resolution seam.
 --
 -- Owned by: cosmetics_tweaker.lua entry point.
 -- Consumed via: one ordered install call at the former create_equipment position;
@@ -170,12 +171,11 @@ function EquipmentAssembly.install(mod, deps)
             -- v0.9.0.6-hotfix: kind="unit" LA mesh swap for remote husks.
             -- v0.9.0.8-hotfix: instrumented at every gate so we can see WHY a
             -- swap didn't fire (cache miss vs variant miss vs package miss).
-        -- DEVIATION 1 of 2 from the relocated entry text. `_current_husk_wield`
-        -- stays an ENTRY local because the husk _wield_slot wrap REBINDS it
+        -- `_current_husk_wield` is stack-rebound by the remote-husk runtime
         -- (save / set / restore) around every husk wield, so an install-time
-        -- hand-off would freeze the nil it holds at load. Resolve it here, at
-        -- the exact statement that performed the first read inline, and let the
-        -- three husk lanes below read the same per-call value they always did.
+        -- value hand-off would freeze the nil it holds at load. Resolve it here,
+        -- at the exact statement that performed the first read inline, and let
+        -- the three husk lanes below share the same per-call value.
         local _current_husk_wield = _get_current_husk_wield()
             if _current_husk_wield and _current_husk_wield.wearer_peer then
                 local template = item_data and item_data.template

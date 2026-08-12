@@ -57,7 +57,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 |---|---|---|---|
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
-| Cosmetics | Partial | Thirty required owners now include the ordered attachment/preview spawn boundary and Moonfire cosmetic-impact adapter; current entry ceiling 2,488 nonblank lines is below the 2,500 hard limit and no longer frozen debt, but remains above the 1,500 completion target | #504 / #2 / #1159 |
+| Cosmetics | Partial | Thirty-two required owners now include the remote-husk identity/spawn policy and the single remote wield transaction; current entry ceiling 2,051 nonblank lines is below the 2,500 hard limit and no longer frozen debt, but remains above the 1,500 completion target | #504 / #2 / #1159 |
 | Weapon Tweaker | Partial | Animation, availability, cross-character template, local/preview presentation, Moonfire AOE, regression, and balance owners retained; stable/dev entry ceilings 2,212/2,371 nonblank lines | #504 / #2 / #1159 |
 | Career Tweaker | Structural phase complete | 907-line balance orchestrator under its 910-line ceiling; bounded catalog, hook, and Foot Knight owners retained by contract | #504 / #2 / #1159 |
 | CIM Dev | Partial | Ten required forge/inventory/command/economy/loadout/regression owners retained; entry ceiling 2,353 nonblank lines, below the hard limit but above the 1,500 completion target | #1159 / #504 / #2 |
@@ -222,6 +222,16 @@ the original hook totals, ordering, headpiece-only fallback, and no-double-puff
 gate. Cosmetics' ratcheted entry ceiling is now 2,488 nonblank lines (down from
 2,646), below the 2,500 hard limit; Cosmetics remains partial until the
 1,500-line completion target.
+
+**2026-08-11 Cosmetics wave 20:** remote wearer identity, LA variant resolution,
+stale peer cleanup, mission-world lookup, and the bounded spawn monitor moved
+together into `_cos_la_husk_identity_runtime.lua`; the one remote
+`SimpleHuskInventoryExtension._wield_slot` transaction moved into
+`_cos_husk_wield_runtime.lua`. Executable tests pin identity precedence,
+stack-context restoration across vanilla errors, eight-return preservation,
+and ordered glow/LA replay. Cosmetics' ratcheted entry ceiling is now 2,051
+nonblank lines (down from 2,488), with 32 required owners; Cosmetics remains
+partial until the 1,500-line completion target.
 
 ### WS6 - Hygiene sweep (small, high count)
 

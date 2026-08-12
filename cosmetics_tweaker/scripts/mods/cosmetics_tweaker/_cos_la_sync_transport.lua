@@ -113,11 +113,12 @@
 --   they are vanilla-RPC substitution, not this mod's own channel:
 --   `_net_safe_hook_status`, `_la_substitute_name`, the CosmeticUtils
 --   `update_cosmetic_slot` hook and the LoadoutUtils `sync_loadout_slot` hook.
---   `_la_equips_by_peer` itself, `_la_pending_apply`, the `CUSTOM_ILLUSION_SYNC`
---   install (which consumes `mod._send_offhand_mesh` published here), the LA
---   spawn monitor, and both deliberately entry-kept hooks
---   (SimpleHuskInventoryExtension._wield_slot, AttachmentUtils.create_attachment)
---   also stay.
+--   `_la_equips_by_peer` itself, `_la_pending_apply`, and the
+--   `CUSTOM_ILLUSION_SYNC` install (which consumes `mod._send_offhand_mesh`
+--   published here) also stay outside this transport owner. The LA spawn
+--   monitor, remote wield transaction, and attachment residency seam belong to
+--   `_cos_la_husk_identity_runtime`, `_cos_husk_wield_runtime`, and
+--   `_cos_spawn_boundary`, respectively.
 --
 -- Consumed via: two ordered calls at the two former block positions. Exports
 -- stay on `mod` (`_la_career_for_unit`, `_drain_deferred_la_emits`,

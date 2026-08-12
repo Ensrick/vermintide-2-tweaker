@@ -90,8 +90,9 @@
 --                                 registers no network handler and no RPC of its own.
 --   _cos_la_replay_runtime        owns the reconcile/replay state machine. This owner
 --                                 is a set of spawn-time emitters that feed it.
--- The entry keeps SimpleHuskInventoryExtension._wield_slot (the husk WEAPON path)
--- and AttachmentUtils.create_attachment (the #270 residency gate on optional
+-- `_cos_husk_wield_runtime` owns SimpleHuskInventoryExtension._wield_slot (the
+-- husk WEAPON path), while `_cos_spawn_boundary` owns
+-- AttachmentUtils.create_attachment (the #270 residency gate on optional
 -- attachments); neither is an attachment-slot LA spawn/sync seam.
 --
 -- Owned by: cosmetics_tweaker.lua entry point.
