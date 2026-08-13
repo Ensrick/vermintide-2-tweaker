@@ -16,21 +16,34 @@ return function(H, repo_root)
     local function fixture(policy, options)
         options = options or {}
         local loaded = options.loaded or {}
+        local loading = options.loading or {}
         local load_calls = {}
+        local references = {}
         local fail_count = options.fail_count or 0
         local package_manager = {
             has_loaded = function(_, path)
                 return loaded[path] == true
             end,
-            load = function(_, path, reference, callback, prioritize, async)
+            is_loading = function(_, path)
+                return loading[path] == true
+            end,
+            reference_count = function(_, path, reference)
+                local by_reference = references[path]
+                return by_reference and by_reference[reference] or nil
+            end,
+            load = function(_, path, reference, callback, asynchronous, prioritize)
                 load_calls[#load_calls + 1] = {
                     path = path,
                     reference = reference,
                     callback = callback,
+                    asynchronous = asynchronous,
                     prioritize = prioritize,
-                    async = async,
                 }
                 if #load_calls <= fail_count then error("synthetic load failure") end
+                references[path] = references[path] or {}
+                references[path][reference] =
+                    (references[path][reference] or 0) + 1
+                loading[path] = true
             end,
         }
         local unlock_manager = {
@@ -41,12 +54,12 @@ return function(H, repo_root)
             package_manager = function() return package_manager end,
             unlock_manager = function() return unlock_manager end,
         })
-        return runtime, loaded, load_calls
+        return runtime, loaded, loading, load_calls
     end
 
     H.test("WT #201 Deepwood runtime is owner-gated and fail-closed", function()
         local policy = load_policy(public_root)
-        local runtime, _, calls = fixture(policy)
+        local runtime, _, _, calls = fixture(policy)
         local ready, reason = runtime.ensure()
         H.equal(ready, false)
         H.equal(reason, "not_owned_or_unresolved")
@@ -56,7 +69,7 @@ return function(H, repo_root)
 
     H.test("WT #201 Woods boot package is an early ownership proxy", function()
         local policy = load_policy(public_root)
-        local runtime, loaded, calls = fixture(policy, {
+        local runtime, loaded, loading, calls = fixture(policy, {
             loaded = { [policy.DLC_BOOT_PACKAGE] = true },
         })
         local ready, reason = runtime.ensure()
@@ -70,6 +83,7 @@ return function(H, repo_root)
         H.equal(#calls, 1, "an in-flight request must not add package references")
 
         loaded[policy.CAREER_PACKAGE] = true
+        loading[policy.CAREER_PACKAGE] = false
         ready, reason = runtime.ensure()
         H.equal(ready, true)
         H.equal(reason, "resident")
@@ -78,7 +92,7 @@ return function(H, repo_root)
 
     H.test("WT #201 failed synchronous package request remains retryable", function()
         local policy = load_policy(public_root)
-        local runtime, _, calls = fixture(policy, {
+        local runtime, _, _, calls = fixture(policy, {
             dlc_exists = true,
             dlc_owned = true,
             fail_count = 1,
@@ -95,9 +109,9 @@ return function(H, repo_root)
         H.equal(runtime.status().attempts, 2)
     end)
 
-    H.test("WT #201 state transition retries a stalled asynchronous request", function()
+    H.test("WT #282 state transition preserves an in-flight package request", function()
         local policy = load_policy(public_root)
-        local runtime, _, calls = fixture(policy, {
+        local runtime, _, loading, calls = fixture(policy, {
             dlc_exists = true,
             dlc_owned = true,
         })
@@ -108,8 +122,17 @@ return function(H, repo_root)
         local ready, reason = runtime.ensure()
         H.equal(ready, false)
         H.equal(reason, "loading")
+        H.equal(#calls, 1,
+            "a state transition must not add a second in-flight package reference")
+        H.equal(runtime.status().attempts, 1)
+        H.equal(runtime.status().loading, true)
+        H.equal(runtime.status().reference_count, 1)
+
+        loading[policy.CAREER_PACKAGE] = false
+        runtime.retry()
+        runtime.ensure()
         H.equal(#calls, 2,
-            "one state transition may retry with the same bounded package reference")
+            "a request may re-arm only after the manager no longer reports it in flight")
     end)
 
     H.test("WT #201 cast and availability reopen only for the complete package", function()
@@ -169,7 +192,7 @@ return function(H, repo_root)
             local availability = read(root .. "_wt_availability.lua")
             local runtime_source = read(root .. "_wt_deepwood_runtime.lua")
             H.truthy(entry:find(").install(mod, {", 1, true))
-            H.truthy(runtime_source:find("Deepwood runtime package state=", 1, true))
+            H.truthy(runtime_source:find("[wt:282] Deepwood package lease state=", 1, true))
             H.truthy(runtime_source:find(
                 'mod:hook("WeaponSystem", "_summon_vortex"', 1, true))
             H.equal(runtime_source:find("Application.can_get", 1, true), nil)
