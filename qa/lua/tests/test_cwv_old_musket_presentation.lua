@@ -86,7 +86,12 @@ return function(H, repo_root)
 		H.truthy(source:find('_om.old_musket_appearance.reconcile(v_w1p, "owner_1p", "equip"', 1, true))
 		H.truthy(source:find('_om.old_musket_appearance.reconcile(v_w3p, "owner_3p", "equip"', 1, true))
 
-        -- (2) remote husk 3P: stance resolved from the bounded channel, not the wire.
+		-- (1b) locally simulated bot 3P: GearUtils.create_equipment has its own
+		-- adapter and must not be mistaken for the remote-husk spawn path.
+		H.truthy(source:find('is_bot and "bot" or "owner_3p", "equip", item_data, musket_mode', 1, true),
+			"bot create_equipment must enter the shared Old Musket reconciler")
+
+		-- (2) remote husk 3P: stance resolved from the bounded channel, not the wire.
 		H.truthy(source:find('_om.old_musket_appearance.reconcile(weapon_unit_3p, "husk", "equip"', 1, true))
 		H.truthy(source:find('rendered_unit_name = rendered_unit_name .. "_3p"', 1, true))
 		H.truthy(source:find('unit_name = rendered_unit_name,', 1, true),
