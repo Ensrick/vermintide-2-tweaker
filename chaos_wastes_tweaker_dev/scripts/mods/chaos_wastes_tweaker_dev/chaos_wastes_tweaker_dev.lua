@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.340-dev"
+local MOD_VERSION = "0.7.341-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -1277,7 +1277,7 @@ _dump_pickup_spawners_verbose = _ct_adventure_runtime.dump_pickup_spawners_verbo
 local ADVENTURE_INCOMPATIBLE_PACK_MUTATORS =
     _ct_adventure_runtime.adventure_incompatible_pack_mutators
 local on_injected_adventure_level = _ct_adventure_runtime.on_injected_adventure_level
--- ============================================================
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_gargoyle1124")(mod, { adventure_base_from_level_key = mod._ct_adventure_base_from_level_key, on_injected_adventure_level = on_injected_adventure_level, rt_register = _rt_register })
 -- Per-career weapon override recovery (fixes CW bot ghost-scythe crash)
 -- ============================================================
 --

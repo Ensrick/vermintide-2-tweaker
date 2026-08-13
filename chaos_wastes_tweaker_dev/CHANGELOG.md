@@ -1,5 +1,21 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.341-dev (2026-08-13) -- Old Haunts gargoyle-objective diagnostic (#1124) [diagnostics-armed]
+
+- Adds a development-only, mutation-free ledger for the native Old Haunts
+  limited-item path when `dlc_portals` runs as an injected Chaos Wastes node.
+  Six exact wrappers retain authored spawner/group identity, spawn attempts vs
+  confirmed valid network pickups, socket transitions, and `portals_survive`
+  progress through 4/4 completion.
+- Every object read is gated to the exact injected mission and isolated from
+  vanilla success. Wrapped functions still run exactly once outside `pcall`,
+  forward future trailing arguments, and preserve all return values.
+- Raw `[ct:1124]` evidence is capped at 96 rows per run and 512 per process
+  without suppressing later native calls. Offline coverage plants observation
+  faults, no-delta and incomplete spawn results, drives both caps, and pins the
+  current decompiled objective contracts. No gameplay fix or in-game pass is
+  claimed by this diagnostic release.
+
 ## 0.7.340-dev (2026-08-13) -- restore starting-boon purchases (#1146) [verify-fix]
 
 - Accepts vanilla's boolean `false` sentinel for a non-discounted shrine offer
