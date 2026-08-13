@@ -33,6 +33,23 @@ function M.new(deps)
         return ok and loaded == true
     end
 
+    local function is_loading(path, reference_name)
+        local manager = package_manager()
+        if not (manager and manager.is_loading) then return false end
+        local ok, loading = pcall(manager.is_loading, manager, path,
+            reference_name)
+        return ok and loading and true or false
+    end
+
+    local function reference_count(path, reference_name)
+        local manager = package_manager()
+        if not (manager and manager.reference_count) then return nil end
+        local ok, count = pcall(manager.reference_count, manager, path,
+            reference_name)
+        if not ok or type(count) ~= "number" then return nil end
+        return count
+    end
+
     local function owned()
         local unlock = deps.unlock_manager and deps.unlock_manager() or nil
         if unlock and unlock.dlc_exists and unlock.is_dlc_unlocked then
@@ -76,6 +93,16 @@ function M.new(deps)
 
     local function retry()
         if ready() then return true end
+
+        -- PackageManager.load increments the named reference immediately,
+        -- including when the package is already in the async/queued set. A
+        -- state transition during that flight must preserve the request latch
+        -- or the following ensure() adds another reference and callback.
+        if is_loading(M.CAREER_PACKAGE, M.REFERENCE_NAME) then
+            state.requested = true
+            return false
+        end
+
         state.requested = false
         return false
     end
@@ -85,6 +112,9 @@ function M.new(deps)
             owned = owned(),
             ready = ready(),
             requested = state.requested,
+            loading = is_loading(M.CAREER_PACKAGE, M.REFERENCE_NAME),
+            reference_count = reference_count(M.CAREER_PACKAGE,
+                M.REFERENCE_NAME),
             attempts = state.attempts,
             last_error = state.last_error,
         }
@@ -110,13 +140,15 @@ function M.install(mod, deps)
         local is_ready, reason = runtime.ensure()
         if reason ~= last_reason then
             last_reason = reason
+            local status = runtime.status()
             if reason == "load_failed" then
-                local status = runtime.status()
-                mod:warning("[wt:201] Deepwood runtime package load failed: %s",
+                _printf("[wt:282] Deepwood runtime package load failed: %s",
                     tostring(status.last_error))
             else
-                mod:info("[wt:201] Deepwood runtime package state=%s ready=%s",
-                    tostring(reason), tostring(is_ready))
+                _printf("[wt:282] Deepwood package lease state=%s ready=%s loading=%s references=%s attempts=%s",
+                    tostring(reason), tostring(is_ready),
+                    tostring(status.loading), tostring(status.reference_count),
+                    tostring(status.attempts))
             end
         end
         return is_ready

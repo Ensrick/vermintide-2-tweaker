@@ -3284,6 +3284,12 @@ cosmetics `_mh_package_lifecycle.lua`).
 - Lock the asymmetry in an offline test that asserts the ledger has no unload
   method AND that repeated triggers do not grow the reference count.
 
+### Related issues / fixes
+- #282 owns the cross-mod package-lifetime class. Weapon Tweaker's Deepwood
+  retry regression was repaired by retaining the request latch whenever
+  `is_loading(package, "wt_deepwood_runtime")` is true and exposing the exact
+  reference count through its runtime regression suite.
+
 ## 85. Lying instrument (harness misreport)
 
 **First codified:** program issue

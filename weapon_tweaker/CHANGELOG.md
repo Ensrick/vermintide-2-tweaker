@@ -1,5 +1,24 @@
 # Weapon Tweaker Changelog
 
+## 0.12.304-beta (2026-08-13) -- bound Deepwood package references across transitions (#282)
+
+- Deepwood Staff residency retries now preserve their request latch while
+  Stingray reports the exact `wt_deepwood_runtime` package reference as loading.
+  A keep/mission state transition can no longer enqueue a second acquisition
+  during the same asynchronous flight.
+- Corrected the offline fixture that previously required the duplicate load,
+  and added a runtime regression check that fails if Weapon Tweaker owns more
+  than one Deepwood package reference.
+- Added bounded `[wt:282]` engine-log receipts with the loading state, exact
+  reference count, and request-attempt count.
+
+### Solo verify
+
+Own Sister of the Thorn, enable **Deepwood Staff** for **Huntsman**, transition
+between the Keep and a mission several times, and use charged secondary attacks.
+Run `/wt_regression_test`, exit normally, and confirm the #282 check passes and
+the log never reports more than one `wt_deepwood_runtime` reference.
+
 ## 0.12.303-beta (2026-08-11) -- transform and fatal-safety owners complete the structural phase (#1159)
 
 - Moved the one canonical baked scale/grip/rotation transaction into

@@ -146,7 +146,7 @@ What counts as loadable:
 | # | Trap | Detail / citation |
 |---|---|---|
 | 1 | pcall cannot catch package fatals | `load()` returns after enqueue; the fatal fires in `PackageManager.update -> _pop_queue -> force_load` from `boot.lua`'s frame. Crash log shows `package_manager.lua:194/137`, no mod file. BUG_CLASSES 28 (`docs/BUG_CLASSES.md:1225`), same uncatchable family as class 22 (`:1015`). |
-| 2 | Refcounts are not idempotent | Every `load()` is +1 (`package_manager.lua:26-27`). Any per-spawn / per-frame / per-toggle call site leaks. The original issue-282 producer was this class; its current regression is an early native-lifetime release (see 5.1). |
+| 2 | Refcounts are not idempotent | Every `load()` is +1 (`package_manager.lua:26-27`). Any per-spawn / per-frame / per-toggle call site leaks. Issue #282 has covered both the original Material-Hijack producer and Weapon Tweaker's Deepwood retry path; early renderer release remains a separate lifetime failure (see 5.1). |
 | 3 | `"global"` is the engine's reference name | Boot and end-of-round content live under it (`boot.lua:1759-1781`, `state_ingame_running.lua:787`). A mod leaking under `"global"` is indistinguishable from engine state in `dump_reference_counter`, and its leak spam at shutdown looks like an engine bug. |
 | 4 | Sync load blocks the frame | First-reference sync = load+flush inline (`package_manager.lua:80-86`); sync on an in-flight async = force_load blocking flush (`:29-34`). 74 sync loads at boot is a boot stall (see 5.4). |
 | 5 | Unload asserts / errors | Unknown ref asserts (`:199`); never-loaded package nil-indexes (`:197`); a still-in-use package parks in delayed removal and warns `Locking a resource that is about to be unloaded!` if raced [log signature per issue #282]. |
@@ -245,7 +245,19 @@ or delayed queue does not prove renderer retirement; conversely, generic destroy
 not identify a mod producer. Hook `PackageManager.load`/`unload` only as an observe-and-delegate
 escalation after the engine counters and named-package timeline are insufficient.
 
-### 5.7 Correct load/unload pairing idiom (the doctrine, in one block)
+### 5.7 Weapon Tweaker Deepwood retry: preserve an in-flight exact reference
+
+`PackageManager.load` increments `_references[package][reference]` before an
+asynchronous request finishes (`package_manager.lua:20-27, 41-55`). Therefore a
+game-state retry must query `is_loading(package, reference)` (`:282-284`) before
+clearing its request latch. Tweaker: Weapons 0.12.304-beta / 0.12.305-dev applies
+that rule in `_wt_deepwood_runtime.lua`: repeated transitions during one flight
+leave `wt_deepwood_runtime` at one reference, while a genuinely ended failed
+request may re-arm. The production status exposes `reference_count(package,
+reference)` (`:296-304`), and both the Lua fixture and `/wt_regression_test`
+reject a count above one.
+
+### 5.8 Correct load/unload pairing idiom (the doctrine, in one block)
 
 ```lua
 local REF = "<mod>_<purpose>"            -- unique, mod-prefixed; NEVER "global"

@@ -62,6 +62,20 @@ function M.install(mod, _rt_register, deps)
         end
     end)
 
+    _rt_register("issue282_deepwood_runtime_reference_bounded", function()
+        if type(_deepwood_runtime) ~= "table"
+                or type(_deepwood_runtime.status) ~= "function" then
+            return "#282 Deepwood runtime package owner missing"
+        end
+        local status = _deepwood_runtime.status()
+        if type(status.reference_count) == "number"
+                and status.reference_count > 1 then
+            return string.format(
+                "#282 Deepwood runtime package has %d wt references (expected at most 1)",
+                status.reference_count)
+        end
+    end)
+
     _rt_register("issue181_skullsplitter_right_hand_contract", function()
         local policy = _wt_skullsplitter_hand_policy
         if type(policy) ~= "table" then return "#181 Skullsplitter hand policy missing" end

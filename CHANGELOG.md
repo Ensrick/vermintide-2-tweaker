@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-13 - Deepwood package retries preserve one reference (#282)
+
+Tweaker: Weapons 0.12.304-beta and Tweaker: Weapons Dev 0.12.305-dev now
+retain the in-flight Deepwood Staff package latch across game-state changes.
+The corrected Lua fixture and runtime regression check enforce at most one
+`wt_deepwood_runtime` reference while the async load is pending.
+
 ## 2026-08-12 - Chaos Wastes lobby mission lookup crash guard (#1271)
 
 Tweaker: Chaos Wastes Dev 0.7.339-dev registers injected Adventure mission
