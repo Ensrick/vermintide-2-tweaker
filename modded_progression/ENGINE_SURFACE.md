@@ -74,7 +74,12 @@ current implementation boundary, not a fix. The runtime check
 `issue607_local_loot_layer_diagnostic_contract` and engine-free
 `test_mp_loot_diag.lua` lock request scope, rejection attribution, bounds,
 sanitization, local container census, one hook per seam, native delegation,
-trailing-argument forwarding, and nil-hole return preservation.
+trailing-argument forwarding, and nil-hole return preservation. All observer
+realm/context/store/persistence/logging work is pcall-contained outside the
+native call. Planted failures cover all six wrappers and first/middle/trailing
+nil returns; `pre_request` requires vanilla to return a finite positive numeric
+enqueue id. Observer-failure rows retain only their controlled stage and the
+fixed `observer_failed` reason, never raw exception text or identifiers.
 
 ### Vanilla Silver Shilling presentation and local refresh (issue 578; owner docs: `docs/engine/09`, `docs/engine/11`)
 

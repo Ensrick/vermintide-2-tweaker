@@ -89,6 +89,12 @@ H.test("MP #607 attributes only the two native loot requests", function()
     H.equal(D.request_flow("generateQuestRewards"), nil)
     H.equal(D.is_target_request("generateEndOfLevelLoot"), true)
     H.equal(D.is_target_request("generateQuestRewards"), false)
+    H.equal(D.is_positive_request_id(1), true)
+    H.equal(D.is_positive_request_id(0), false)
+    H.equal(D.is_positive_request_id(-1), false)
+    H.equal(D.is_positive_request_id("1"), false)
+    H.equal(D.is_positive_request_id(0 / 0), false)
+    H.equal(D.is_positive_request_id(math.huge), false)
 
     local queue = { _active_entry = {
         request = { FunctionName = "generateEndOfLevelLoot" },
@@ -311,6 +317,17 @@ H.test("MP #607 runtime adapters delegate and diagnose a rejected mission reques
     H.equal(diagnostic.records[3].event, "local_ledger")
     H.equal(D.diagnose(diagnostic), "local_container_award")
 
+    local records_before_invalid_ids = #diagnostic.records
+    enqueue(function() return nil, "not-enqueued" end, {},
+        { FunctionName = "generateEndOfLevelLoot" }, function() end,
+        true, function() end)
+    for _, invalid_id in ipairs({ 0, -1, "91", math.huge }) do
+        enqueue(function() return invalid_id end, {},
+            { FunctionName = "generateEndOfLevelLoot" }, function() end,
+            true, function() end)
+    end
+    H.equal(#saved.issue607_loot_diag_v1.records, records_before_invalid_ids)
+
     local queue = { _active_entry = {
         request = { FunctionName = "generateEndOfLevelLoot" },
         eac_challenge_success = true,
@@ -335,5 +352,148 @@ H.test("MP #607 runtime adapters delegate and diagnose a rejected mission reques
     H.equal(checks.issue607_local_loot_layer_diagnostic_contract(), nil)
     commands.mp_loot_diag()
     H.truthy(echoes[1]:find("first_missing=local_container_award", 1, true))
+end)
+
+H.test("MP #607 observer throws cannot alter any of the six native wrappers", function()
+    local D = load_module()
+    local hooks, saved, logs = {}, {}, {}
+    local fail = {}
+    local mod = {}
+    function mod:hook(class_name, method_name, callback)
+        hooks[class_name .. "." .. method_name] = callback
+    end
+    function mod:command() end
+    function mod:get(key)
+        if fail.persist_read then error("planted persistence read") end
+        return saved[key]
+    end
+    function mod:set(key, value)
+        if fail.persist_write then error("planted persistence write") end
+        saved[key] = value
+    end
+    function mod:echo() end
+
+    load_runtime().install(mod, {
+        loot_diag = D,
+        get_inventory_store = function()
+            if fail.inventory then error("planted inventory read") end
+            return {}
+        end,
+        rt_register = function() end,
+        realm_state = function()
+            if fail.realm then error("planted realm read") end
+            return { ["eac-untrusted"] = true }
+        end,
+        print_log = function(fmt, ...)
+            if fail.log then error("planted printf") end
+            logs[#logs + 1] = string.format(fmt, ...)
+        end,
+        item_master_list = function() return {} end,
+        now = function() return 1 end,
+    })
+
+    local native_calls = 0
+    local function nil_hole_native()
+        native_calls = native_calls + 1
+        return nil, "native-second", nil, "native-fourth", nil
+    end
+    local function assert_nil_hole_tuple(callback, ...)
+        local function pack(...)
+            return { n = select("#", ...), ... }
+        end
+        local results = pack(callback(nil_hole_native, ...))
+        H.equal(results.n, 5)
+        H.equal(results[1], nil)
+        H.equal(results[2], "native-second")
+        H.equal(results[3], nil)
+        H.equal(results[4], "native-fourth")
+        H.equal(results[5], nil)
+    end
+
+    -- Realm read throws before mission-entry capture; native still receives the
+    -- call and all first/middle/trailing nil results survive.
+    fail.realm = true
+    assert_nil_hole_tuple(assert(hooks[
+        "BackendInterfaceLootPlayfab.generate_end_of_level_loot"]), {})
+    fail.realm = nil
+    local first_logs = table.concat(logs, "\n")
+    H.truthy(first_logs:find("reason=observer_failed", 1, true))
+    H.equal(first_logs:find("planted realm read", 1, true), nil)
+
+    -- Chest-context getter throws before the open observation.
+    local throwing_context = { _backend_mirror = {
+        get_all_inventory_items = function() error("planted chest context") end,
+    } }
+    assert_nil_hole_tuple(assert(hooks[
+        "BackendInterfaceLootPlayfab.open_loot_chest"]), throwing_context,
+        "empire_soldier", "private-id", "adventure", 1)
+
+    -- A printf failure occurs after a proven positive enqueue id. The native
+    -- tuple has a middle and trailing nil and is returned byte-for-byte.
+    fail.log = true
+    local enqueue_calls = 0
+    local function enqueue_native()
+        enqueue_calls = enqueue_calls + 1
+        return 17, nil, "queue-third", nil
+    end
+    local function pack(...)
+        return { n = select("#", ...), ... }
+    end
+    local enqueue_results = pack(assert(hooks["PlayFabRequestQueue.enqueue"])(
+        enqueue_native, {}, { FunctionName = "generateEndOfLevelLoot" },
+        function() end, true, function() end))
+    H.equal(enqueue_results.n, 4)
+    H.equal(enqueue_results[1], 17)
+    H.equal(enqueue_results[2], nil)
+    H.equal(enqueue_results[3], "queue-third")
+    H.equal(enqueue_results[4], nil)
+    H.equal(enqueue_calls, 1)
+    fail.log = nil
+
+    -- Rejection context is observer-only; a throwing queue accessor cannot
+    -- prevent either native error owner.
+    local throwing_queue = { _backend_mirror = {
+        request_queue = function() error("planted queue read") end,
+    } }
+    assert_nil_hole_tuple(assert(hooks[
+        "BackendManagerPlayFab.playfab_eac_error"]), throwing_queue)
+
+    fail.inventory = true
+    local target_queue = { _active_entry = {
+        request = { FunctionName = "generateEndOfLevelLoot" },
+        eac_challenge_success = false,
+    } }
+    local valid_backend = { _backend_mirror = {
+        request_queue = function() return target_queue end,
+    } }
+    assert_nil_hole_tuple(assert(hooks[
+        "BackendManagerPlayFab.playfab_api_error"]), valid_backend,
+        {}, 500)
+    fail.inventory = nil
+
+    -- Callback context succeeds, but diagnostic persistence can fail on either
+    -- read or write without becoming a dependency of native delegation.
+    local callback_self = { _backend_mirror = {
+        get_all_inventory_items = function()
+            return { chest = { ItemId = "loot_chest_01_01" } }
+        end,
+        get_rarity_tables = function() return {} end,
+    } }
+    fail.persist_read = true
+    assert_nil_hole_tuple(assert(hooks[
+        "BackendInterfaceLootPlayfab.loot_chest_rewards_request_cb"]),
+        callback_self, { playfab_id = "chest" },
+        { FunctionResult = { items = {} } })
+    fail.persist_read = nil
+
+    fail.persist_write = true
+    assert_nil_hole_tuple(assert(hooks[
+        "BackendInterfaceLootPlayfab.loot_chest_rewards_request_cb"]),
+        callback_self, { playfab_id = "chest" },
+        { FunctionResult = { items = {} } })
+    fail.persist_write = nil
+
+    H.equal(native_calls, 6)
+    H.equal(table.concat(logs, "\n"):find("planted", 1, true), nil)
 end)
 end

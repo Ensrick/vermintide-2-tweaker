@@ -7,6 +7,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 - [ ] #607: completing one ordinary modded Adventure mission emits bounded `[mp:607]` `end_level`, `pre_request`, and `local_ledger` events without the diagnostic adding a request or mutating loot; an EAC/API refusal emits `rejection` without requiring a successful `FunctionResult`.
 - [ ] #607: `/mp_loot_diag` reports `first_missing=local_container_award`, at most 12 sanitized events, no backend/player ids, and honest `award_capable=false` / `open_capable=false`; reset clears only diagnostic evidence.
 - [ ] #607: an existing ordinary mission chest opened through Spoils of War emits the bounded `open` flow; `/mp_regression_test` passes `issue607_local_loot_layer_diagnostic_contract`; engine-free `test_mp_loot_diag.lua` passes.
+- [ ] #607: observer failures at realm, chest context, request queue, local inventory, persistence, or `printf` cannot prevent any of the six native wrappers or change first/middle/trailing nil returns; `pre_request` requires a finite positive numeric enqueue id.
 
 - [ ] #577: one modded SM purchase debits local shillings once, grants/owns the exact item immediately and after restart, and never enqueues `PurchaseItem` or `storePurchaseMade`.
 - [ ] #577: repeat/double activation, stale price, owned item, insufficient funds, unavailable/DLC/platform/bundle offer, and failed persistence cannot double-spend or partially grant; official purchase remains vanilla.
@@ -32,7 +33,7 @@ Last updated: 2026-08-13.
 | Category | INTEGRATION / DIAGNOSTIC |
 | Repro | Complete one ordinary Adventure mission in the modded realm, return through the result screens, run `/mp_loot_diag`, and inspect the newest log. |
 | Expected diagnostic | Mission entry, target request enqueue, local inventory census, and any EAC/API rejection are independently visible. The summary names `local_container_award` as the first unbuilt layer and claims no chest/item grant. |
-| Detection | `/mp_regression_test` passes `issue607_local_loot_layer_diagnostic_contract`; engine-free `test_mp_loot_diag.lua` locks request/rejection attribution, bounds, sanitization, local container census, one hook per seam, and behavioral delegation through the mission/enqueue/rejection wrappers. |
+| Detection | `/mp_regression_test` passes `issue607_local_loot_layer_diagnostic_contract`; engine-free `test_mp_loot_diag.lua` locks request/rejection attribution, bounds, sanitization, local container census, one hook per seam, positive enqueue-id evidence, and planted observer failures across all six wrappers with exact nil-hole return preservation. |
 
 ### mp-emporium-purchase-local — SM purchase must be one durable backend-free transaction
 

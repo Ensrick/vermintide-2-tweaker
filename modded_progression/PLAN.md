@@ -109,6 +109,13 @@ diagnostic observes six existing local seams without changing them:
 5. the optional native loot callback (successful-result R&D only), and
 6. MP's persisted `inventory` store (sanitized container/use census).
 
+Every observer read/write/log action is pcall-contained and cannot prevent or
+alter the native call or its complete Lua return tuple. Queue attribution is
+also evidence-gated: `pre_request` exists only when vanilla `enqueue` returns a
+finite positive numeric id; request arguments alone never prove acceptance.
+Observer-failure receipts use only a controlled stage and fixed
+`observer_failed` reason, never raw exception text or identifiers.
+
 One completed modded mission can therefore distinguish a missing mission-end
 call, a missing enqueue, and the current first unbuilt local layer
 (`local_container_award`) without any backend success. The diagnostic never

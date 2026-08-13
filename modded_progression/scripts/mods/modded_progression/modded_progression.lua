@@ -1212,8 +1212,6 @@ mod:dofile("scripts/mods/modded_progression/_mp_loot_diag_runtime").install(mod,
     realm_state = function() return script_data end,
     print_log = printf,
     item_master_list = function() return ItemMasterList end,
-    capture = _capture,
-    unpack_results = unpack,
     now = os.time,
 })
 

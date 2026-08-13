@@ -10,6 +10,14 @@
 local Runtime = {}
 
 local SETTING = "issue607_loot_diag_v1"
+local unpack_results = unpack
+
+-- Every hooked native result is packed with an explicit count. A Lua 5.1
+-- array has no reliable length when the first, middle, or trailing result is
+-- nil, so neither `#results` nor bare `unpack(results)` is acceptable here.
+local function pack_results(...)
+    return { n = select("#", ...), ... }
+end
 
 function Runtime.install(mod, deps)
     deps = deps or {}
@@ -21,9 +29,27 @@ function Runtime.install(mod, deps)
     local print_log = assert(deps.print_log, "print_log is required")
     local item_master_list = assert(deps.item_master_list,
         "item_master_list is required")
-    local capture = assert(deps.capture, "capture is required")
-    local unpack_results = assert(deps.unpack_results, "unpack_results is required")
     local now = assert(deps.now, "now is required")
+
+    -- Instrumentation is subordinate to all six native call paths. This is the
+    -- observer boundary: realm/context/store reads, persistence, summaries,
+    -- and printf formatting all run inside its pcall. Its own failure report
+    -- is also contained because logging must never become a behavior dependency.
+    local function report_observer_error(stage)
+        pcall(function()
+            print_log("[mp:607] event=instrument_error stage=%s " ..
+                "reason=observer_failed backend=none", stage)
+        end)
+    end
+
+    local function observe(stage, fn)
+        local ok, value = pcall(fn)
+        if not ok then
+            report_observer_error(stage)
+            return nil
+        end
+        return value
+    end
 
     local function ledger()
         return LootDiag.normalize(mod:get(SETTING))
@@ -55,11 +81,10 @@ function Runtime.install(mod, deps)
     end
 
     local function emit(event, context, result)
-        local realm = realm_state()
-        if type(realm) ~= "table" or
-                not LootDiag.should_capture(realm["eac-untrusted"]) then return nil end
-        local emitted
-        local ok, err = pcall(function()
+        return observe("emit", function()
+            local realm = realm_state()
+            if type(realm) ~= "table" or
+                    not LootDiag.should_capture(realm["eac-untrusted"]) then return nil end
             local next_ledger, record
             if event == "success" then
                 next_ledger, record = LootDiag.capture(ledger(), context, result, now())
@@ -81,27 +106,24 @@ function Runtime.install(mod, deps)
                 record.local_containers, record.local_container_uses,
                 tostring(record.local_award_capable), tostring(record.local_open_capable),
                 first_missing, record.backend)
-            emitted = record
+            return record
         end)
-        if not ok then
-            pcall(print_log, "[mp:607] event=instrument_error reason=%s backend=none",
-                tostring(err):gsub("[^%w_%-%.]", "_"):sub(1, 96))
-        end
-        return emitted
     end
 
     local function emit_local_ledger(flow, reason)
-        local facts = LootDiag.local_ledger_facts(get_inventory_store())
-        return emit("local_ledger", {
-            flow = flow,
-            reason = reason,
-            backend = "none",
-            local_items = facts.items,
-            local_containers = facts.containers,
-            local_container_uses = facts.container_uses,
-            local_award_capable = facts.award_capable,
-            local_open_capable = facts.open_capable,
-        })
+        return observe("local_ledger", function()
+            local facts = LootDiag.local_ledger_facts(get_inventory_store())
+            return emit("local_ledger", {
+                flow = flow,
+                reason = reason,
+                backend = "none",
+                local_items = facts.items,
+                local_containers = facts.containers,
+                local_container_uses = facts.container_uses,
+                local_award_capable = facts.award_capable,
+                local_open_capable = facts.open_capable,
+            })
+        end)
     end
 
     -- `_mp607_consolidated_loot_layer_diagnostics`: one hook per actual seam.
@@ -113,50 +135,58 @@ function Runtime.install(mod, deps)
                 versus_end_experience, loot_profile_name, deed_item_name,
                 deed_backend_id, game_mode_key, game_time,
                 end_of_level_rewards_arguments, ...)
-            emit("end_level", {
-                flow = "end_level",
-                request_name = "generateEndOfLevelLoot",
-                reason = "mission_reward_entry",
-                backend = "none",
-                won = game_won,
-                difficulty = difficulty,
-                level_key = level_key,
-                hero_name = hero_name,
-                game_mode = game_mode_key,
-                local_award_capable = LootDiag.LOCAL_CONTAINER_AWARD_IMPLEMENTED,
-                local_open_capable = LootDiag.LOCAL_CONTAINER_OPEN_IMPLEMENTED,
-            })
-            local n, results = capture(func(self, game_won, quick_play_bonus,
+            observe("end_level_entry", function()
+                emit("end_level", {
+                    flow = "end_level",
+                    request_name = "generateEndOfLevelLoot",
+                    reason = "mission_reward_entry",
+                    backend = "none",
+                    won = game_won,
+                    difficulty = difficulty,
+                    level_key = level_key,
+                    hero_name = hero_name,
+                    game_mode = game_mode_key,
+                    local_award_capable = LootDiag.LOCAL_CONTAINER_AWARD_IMPLEMENTED,
+                    local_open_capable = LootDiag.LOCAL_CONTAINER_OPEN_IMPLEMENTED,
+                })
+            end)
+            local results = pack_results(func(self, game_won, quick_play_bonus,
                 difficulty, level_key, hero_name, start_experience, end_experience,
                 versus_start_experience, versus_end_experience, loot_profile_name,
                 deed_item_name, deed_backend_id, game_mode_key, game_time,
                 end_of_level_rewards_arguments, ...))
-            emit_local_ledger("end_level", "post_native_enqueue")
-            return unpack_results(results, 1, n)
+            observe("end_level_post", function()
+                emit_local_ledger("end_level", "post_native_enqueue")
+            end)
+            return unpack_results(results, 1, results.n)
         end)
 
     mod:hook("BackendInterfaceLootPlayfab", "open_loot_chest",
         function(func, self, hero_name, backend_id, game_mode_key, num_chests, ...)
-            local context = chest_context(self, {
-                hero_name = hero_name,
-                playfab_id = backend_id,
-                game_mode_key = game_mode_key,
-                amount = num_chests,
-            })
-            if context.chest_key == "unknown" or
-                    LootDiag.is_mission_chest(context.chest_key) then
-                context.flow = "open"
-                context.request_name = "generateLootChestRewards"
-                context.reason = "spoils_of_war_entry"
-                context.backend = "none"
-                context.local_award_capable = LootDiag.LOCAL_CONTAINER_AWARD_IMPLEMENTED
-                context.local_open_capable = LootDiag.LOCAL_CONTAINER_OPEN_IMPLEMENTED
-                emit("open", context)
-            end
-            local n, results = capture(func(self, hero_name, backend_id,
+            observe("open_entry", function()
+                local context = chest_context(self, {
+                    hero_name = hero_name,
+                    playfab_id = backend_id,
+                    game_mode_key = game_mode_key,
+                    amount = num_chests,
+                })
+                if context.chest_key == "unknown" or
+                        LootDiag.is_mission_chest(context.chest_key) then
+                    context.flow = "open"
+                    context.request_name = "generateLootChestRewards"
+                    context.reason = "spoils_of_war_entry"
+                    context.backend = "none"
+                    context.local_award_capable = LootDiag.LOCAL_CONTAINER_AWARD_IMPLEMENTED
+                    context.local_open_capable = LootDiag.LOCAL_CONTAINER_OPEN_IMPLEMENTED
+                    emit("open", context)
+                end
+            end)
+            local results = pack_results(func(self, hero_name, backend_id,
                 game_mode_key, num_chests, ...))
-            emit_local_ledger("open", "post_native_enqueue")
-            return unpack_results(results, 1, n)
+            observe("open_post", function()
+                emit_local_ledger("open", "post_native_enqueue")
+            end)
+            return unpack_results(results, 1, results.n)
         end)
 
     -- The request queue is the last local seam before EAC/network work begins
@@ -165,24 +195,27 @@ function Runtime.install(mod, deps)
     mod:hook("PlayFabRequestQueue", "enqueue",
         function(func, self, request, success_callback, send_eac_challenge,
                 error_callback, ...)
-            local n, results = capture(func(self, request, success_callback,
+            local results = pack_results(func(self, request, success_callback,
                 send_eac_challenge, error_callback, ...))
-            local request_name = type(request) == "table"
-                and rawget(request, "FunctionName") or nil
-            local flow = LootDiag.request_flow(request_name)
-            if flow then
-                emit("pre_request", {
-                    flow = flow,
-                    request_name = request_name,
-                    request_id = results[1],
-                    reason = send_eac_challenge
-                        and "eac_challenge_required" or "no_eac_challenge",
-                    backend = "native_queue",
-                    local_award_capable = LootDiag.LOCAL_CONTAINER_AWARD_IMPLEMENTED,
-                    local_open_capable = LootDiag.LOCAL_CONTAINER_OPEN_IMPLEMENTED,
-                })
-            end
-            return unpack_results(results, 1, n)
+            observe("request_enqueue", function()
+                local request_name = type(request) == "table"
+                    and rawget(request, "FunctionName") or nil
+                local flow = LootDiag.request_flow(request_name)
+                local request_id = results.n > 0 and results[1] or nil
+                if flow and LootDiag.is_positive_request_id(request_id) then
+                    emit("pre_request", {
+                        flow = flow,
+                        request_name = request_name,
+                        request_id = request_id,
+                        reason = send_eac_challenge
+                            and "eac_challenge_required" or "no_eac_challenge",
+                        backend = "native_queue",
+                        local_award_capable = LootDiag.LOCAL_CONTAINER_AWARD_IMPLEMENTED,
+                        local_open_capable = LootDiag.LOCAL_CONTAINER_OPEN_IMPLEMENTED,
+                    })
+                end
+            end)
+            return unpack_results(results, 1, results.n)
         end)
 
     local function emit_rejection(backend, reason_override)
@@ -204,27 +237,35 @@ function Runtime.install(mod, deps)
     -- in the modded realm; the API owner distinguishes transport/service failure
     -- without logging the raw backend payload.
     mod:hook("BackendManagerPlayFab", "playfab_eac_error", function(func, self, ...)
-        emit_rejection(self)
-        return func(self, ...)
+        observe("eac_rejection", function() emit_rejection(self) end)
+        local results = pack_results(func(self, ...))
+        return unpack_results(results, 1, results.n)
     end)
 
     mod:hook("BackendManagerPlayFab", "playfab_api_error",
         function(func, self, result, error_code, ...)
-            emit_rejection(self, "playfab_api_error")
-            return func(self, result, error_code, ...)
+            observe("api_rejection", function()
+                emit_rejection(self, "playfab_api_error")
+            end)
+            local results = pack_results(func(self, result, error_code, ...))
+            return unpack_results(results, 1, results.n)
         end)
 
     -- An unexpected successful opening remains useful R&D evidence, but is not
     -- required to arm or complete this diagnostic.
     mod:hook("BackendInterfaceLootPlayfab", "loot_chest_rewards_request_cb",
         function(func, self, data, result, ...)
-            local context = chest_context(self, data)
-            if LootDiag.is_mission_chest(context.chest_key) then
-                emit("success", context, result)
-            end
-            local n, results = capture(func(self, data, result, ...))
-            emit_local_ledger("open", "post_native_callback")
-            return unpack_results(results, 1, n)
+            observe("callback_entry", function()
+                local context = chest_context(self, data)
+                if LootDiag.is_mission_chest(context.chest_key) then
+                    emit("success", context, result)
+                end
+            end)
+            local results = pack_results(func(self, data, result, ...))
+            observe("callback_post", function()
+                emit_local_ledger("open", "post_native_callback")
+            end)
+            return unpack_results(results, 1, results.n)
         end)
 
     rt_register("issue607_local_loot_layer_diagnostic_contract", function()
@@ -242,6 +283,11 @@ function Runtime.install(mod, deps)
             not LootDiag.is_target_request("generateLootChestRewards") or
             LootDiag.is_target_request("generateQuestRewards") then
             return "#607 request scope failed"
+        end
+        if not LootDiag.is_positive_request_id(1) or
+                LootDiag.is_positive_request_id(0) or
+                LootDiag.is_positive_request_id("1") then
+            return "#607 enqueue evidence gate failed"
         end
         local queue = { _active_entry = {
             request = { FunctionName = "generateEndOfLevelLoot" },

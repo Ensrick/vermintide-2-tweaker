@@ -50,6 +50,14 @@ function M.is_target_request(request_name)
     return M.request_flow(request_name) ~= nil
 end
 
+-- `PlayFabRequestQueue:enqueue` reports the request it actually accepted with a
+-- local numeric id. Do not infer acceptance from the request arguments alone:
+-- nil/zero/negative/string/non-finite return values are not enqueue evidence.
+function M.is_positive_request_id(value)
+    return type(value) == "number" and value == value
+        and value > 0 and value < math.huge
+end
+
 function M.active_request_name(request_queue)
     local active = type(request_queue) == "table" and rawget(request_queue, "_active_entry") or nil
     local request = type(active) == "table" and rawget(active, "request") or nil
