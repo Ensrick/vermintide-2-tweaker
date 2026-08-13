@@ -1,5 +1,8 @@
 return function(H, repo_root)
     local source = require("cwv_source").combined(repo_root)
+    local dispatch = dofile(repo_root
+        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
+        .. "_cwv_remote_audio_dispatch.lua")
     local install_wire = dofile(repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_wire.lua")
 
@@ -17,9 +20,70 @@ return function(H, repo_root)
             "_cwv_networked_3p_remap_installed = true", hook_start, true
         ))
         local hook = source:sub(hook_start, hook_end)
-        H.truthy(hook:find("func(self, target, event, owner_unit, looping_event, anim_time_scale)", 1, true))
+        H.truthy(hook:find("_om.remote_audio_dispatch.invoke(func, self, event_3p, event,", 1, true))
         H.equal(hook:find("WwiseWorld.trigger_event", 1, true), nil)
         H.equal(hook:find("rpc_play_sound_event", 1, true), nil)
+    end)
+
+    H.test("CWV #398 executable dispatch substitutes only the local receiver event", function()
+        local owner, remote = {}, {}
+        local calls = {}
+        local function spy(self, event_3p, event, got_owner, looping, scale)
+            calls[#calls + 1] = {
+                self = self, event_3p = event_3p, event = event,
+                owner = got_owner, looping = looping, scale = scale,
+            }
+            return "vanilla", event_3p
+        end
+        local before = 0
+        local applied, declined = 0, 0
+        local function resolve(source_event)
+            if source_event == "donor_heavy" then return "receiver_heavy" end
+        end
+        local function lookup(target)
+            return target == "receiver_heavy" and 77 or nil
+        end
+
+        local status, event = dispatch.invoke(spy, "self", "donor_heavy",
+            "attack_one", owner, true, 1.25, owner,
+            function() before = before + 1 end, resolve, lookup,
+            function(source, target, id)
+                H.equal(source, "donor_heavy")
+                H.equal(target, "receiver_heavy")
+                H.equal(id, 77)
+                applied = applied + 1
+            end,
+            function() declined = declined + 1 end)
+        H.equal(status, "vanilla")
+        H.equal(event, "receiver_heavy")
+        H.equal(#calls, 1)
+        H.equal(calls[1].event_3p, "receiver_heavy")
+        H.equal(calls[1].event, "attack_one")
+        H.equal(calls[1].owner, owner)
+        H.equal(calls[1].looping, true)
+        H.equal(calls[1].scale, 1.25)
+        H.equal(before, 1)
+        H.equal(applied, 1)
+        H.equal(declined, 0)
+
+        dispatch.invoke(spy, "self", "donor_heavy", "attack_one",
+            remote, false, 1, owner, function() before = before + 1 end,
+            resolve, lookup)
+        H.equal(#calls, 2)
+        H.equal(calls[2].event_3p, "donor_heavy")
+        H.equal(before, 1, "non-owner calls must not enter the remap decision")
+
+        dispatch.invoke(spy, "self", "donor_heavy", "attack_one",
+            owner, false, 1, owner, nil, resolve, function() return nil end,
+            nil, function() declined = declined + 1 end)
+        H.equal(#calls, 3)
+        H.equal(calls[3].event_3p, "donor_heavy")
+        H.equal(declined, 1)
+
+        dispatch.invoke(spy, "self", "donor_heavy", "attack_one",
+            owner, false, 1, nil, nil, resolve, lookup)
+        H.equal(#calls, 4)
+        H.equal(calls[4].event_3p, "donor_heavy")
     end)
 
     -- #1211: the remote Old Musket shot fed Application.main_world() into

@@ -1,5 +1,22 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.515-dev (2026-08-13) -- execute the remote-audio pre-RPC boundary (#398) [verify-fix]
+
+- Cross-character third-person animation remaps now pass through one explicit
+  dispatch boundary before vanilla encodes and broadcasts the animation event.
+  Local owners substitute the receiver-career event only when that target is
+  present in `NetworkLookup.anims`; remote owners, unresolved remaps, and absent
+  lookup entries preserve the original vanilla call unchanged.
+- The live hook, `/cwv_regression_test`, and the offline Lua suite execute the
+  same boundary. Spy-call coverage proves that the remapped receiver event and
+  every original call argument reach vanilla, while remote/native and missing-
+  lookup paths fail closed. This closes the prior test hole where the resolver
+  and marker could remain green even if the wrapper stopped delegating the
+  remapped event.
+- Bounded `[cwv:398]` receipts remain available for co-op verification. Remote
+  animation audio still requires a two-player in-game test before this issue is
+  considered fixed.
+
 ## 0.1.514-dev (2026-08-13) -- complete the surface census and pin clone identity (#1198/#1197/#1125) [tooling]
 
 - The appearance census now declares the distinct vanilla `crafting_preview`
