@@ -769,24 +769,25 @@ That authority is deliberately NOT in the descriptor: `manifest.psd1`
 byte-syncs the descriptor into the CWV mod bundle, so a QA-only naming change
 must never edit it (see the file's PROVENANCE note).
 
-The required surface minimum is owner 1P, owner 3P, bot, husk, inventory
-preview, illusion browser, CIM/Athanor preview, ordinary crafting preview,
-lobby, score/team, and Hold-Tab. The required replay-edge vocabulary is
-instance load, initial spawn, equip, wield, customize, style change, career
-change, mission transition, respawn, hot join, peer ready, parity ready,
-rejoin, preview open, preview reopen, lobby/score creation, and mod-disable
-restore. These minima are declared in the checker, not derived from `M.CELLS`:
-changing the manifest alone cannot shrink the contract universe, and a future
-census surface must not silently become a mandatory rewrite of every contract.
-The six surfaces #1157 added to the census (`specials`, `remote_audio`,
-`hud_panels`, `portraits`, `item_card_2d`, `inventory_tooltip`) are accepted
-when a contract opts into them but are not yet required.
+The required surface set is all 17 canonical surfaces: owner 1P, owner 3P, bot,
+husk, inventory preview, illusion browser, CIM/Athanor preview, ordinary
+crafting preview, lobby, score/team, Hold-Tab, specials, remote audio, HUD
+panels, portraits, 2D item cards, and inventory tooltips. The required
+replay-edge vocabulary is instance load, initial spawn, equip, wield,
+customize, style change, career change, mission transition, respawn, hot join,
+peer ready, parity ready, rejoin, preview open, preview reopen, lobby/score
+creation, and mod-disable restore. These minima are declared in the checker,
+not in the manifest, so changing the manifest alone cannot shrink the contract
+universe. The checker also reverse-audits its explicit surface set against the
+canonical authority; a new census surface fails until the checker, manifest,
+and every concern are expanded together (#1197).
 
-Two names are recorded rather than folded away. `crafting_preview` (the vanilla
-crafting bench) is a declared CENSUS GAP: the census names `cim_preview` for the
-CIM Athanor forge and has no surface for the ordinary bench, and aliasing one
-onto the other would hide a real hole. `initial_spawn` refines `equip`, not
-`instance_load`: first unit construction is not persisted-state load.
+Two names remain deliberately distinct rather than folded away.
+`crafting_preview` (the vanilla crafting bench) is the seventeenth canonical
+surface, not an alias of `cim_preview` (the CIM Athanor forge); every family
+therefore declares the two preview paths independently (#1198).
+`initial_spawn` refines `equip`, not `instance_load`: first unit construction
+is not persisted-state load.
 
 `qa/check_appearance_contracts.ps1` runs in Quick and full QA and fails closed
 on a contracted canonical vocabulary, missing surface, missing replay edge,
@@ -806,9 +807,8 @@ owner/adapters and named tests, and keep honest `deferred` dispositions
 deferred - `covered` requires evidence text plus a mapping to an existing named
 offline test.
 
-Two pieces of tracked debt are deliberately visible rather than papered over.
-Issue **#1197**: the contracts cover the historical eleven surfaces, so the six
-#1157 added to the census have no contract representation; the gate names them
-on every green run instead of letting the silence read as coverage. Issue
-**#1198**: `crafting_preview`, the vanilla crafting bench, has no census surface
-at all and is recorded as a declared gap.
+The #1197/#1198 vocabulary debt is now structural coverage rather than a note:
+all 17 canonical surfaces are mandatory in every concern, and the ordinary
+crafting bench has its own census row in every appearance family. Most newly
+declared cells are honestly `deferred`, `not-applicable`, or `unsupported`;
+enumeration is not a runtime-support claim.

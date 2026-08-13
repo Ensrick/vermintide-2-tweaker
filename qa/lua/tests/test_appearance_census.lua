@@ -179,6 +179,35 @@ return function(H, repo_root)
 		end
 	end)
 
+	H.test("crafting preview is a distinct total surface with conservative evidence", function()
+		H.equal(#D.CELLS, 17, "the canonical census must carry all 17 appearance surfaces")
+		H.truthy(D.SURFACE_SET.crafting_preview,
+			"the ordinary crafting bench must be a canonical census surface")
+		H.truthy(D.SURFACE_SET.cim_preview,
+			"the CIM Athanor must remain a separate canonical census surface")
+
+		for mod_name, rel in pairs(CENSUS_FILES) do
+			local census = dofile(repo_root .. "/" .. rel)
+			for family, decl in pairs(census.families) do
+				local matrix, errors = D.expand_matrix(decl.matrix,
+					mod_name .. "." .. family .. ".matrix")
+				H.equal(#errors, 0, table.concat(errors, "\n"))
+				for _, edge in ipairs(D.EDGES) do
+					local has_proven_woc_adapter = mod_name == "weapons_of_chaos"
+						and family == "enemy_weapon_relic" and edge == "preview_open"
+					local expected = has_proven_woc_adapter and "implemented" or "unsupported"
+					H.equal(matrix.crafting_preview[edge].state, expected,
+						mod_name .. "." .. family .. ".crafting_preview." .. edge)
+					if expected == "unsupported" then
+						H.truthy(type(matrix.crafting_preview[edge].note) == "string"
+							and #matrix.crafting_preview[edge].note > 0,
+							"unsupported crafting-preview pair must explain its fallback")
+					end
+				end
+			end
+		end
+	end)
+
 	H.test("CWV Old Musket census implements only CIM preview-open", function()
 		local census = dofile(repo_root .. "/character_weapon_variants/scripts/mods/"
 			.. "character_weapon_variants/_cwv_appearance_census.lua")

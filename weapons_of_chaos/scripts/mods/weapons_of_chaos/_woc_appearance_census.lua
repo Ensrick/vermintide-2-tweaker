@@ -26,6 +26,9 @@
 --      evidence shows the family implements one. One exception earned
 --      evidence: item_card_2d (_woc_inventory_icons.lua, wired at
 --      weapons_of_chaos.lua:217/:505/:551/:1276).
+--   4. crafting_preview, added by 1198, is implemented only at preview_open:
+--      the ordinary crafting item preview is a LootItemUnitPreviewer consumer,
+--      but no other lifecycle edge is evidenced on that isolated surface.
 --
 -- TRUTHFULNESS: "implemented" ONLY where a WOC code path actively produces the
 -- appearance for that pair, with a file:line citation below. "implemented"
@@ -125,6 +128,9 @@ return {
 				inventory_preview = row(IMPLEMENTED, nil, TRANSFORM_HOLES, TRANSFORM_HOLE_NOTES),
 				illusion_browser  = row(IMPLEMENTED, nil, TRANSFORM_HOLES, TRANSFORM_HOLE_NOTES),
 				cim_preview       = row(IMPLEMENTED, nil, TRANSFORM_HOLES, TRANSFORM_HOLE_NOTES),
+				crafting_preview  = row(UNSUPPORTED,
+					"The ordinary crafting bench reaches the LootItemUnitPreviewer item-preview adapter only when that preview is constructed; unrelated lifecycle edges have no bench target and retain the resident cloned vanilla sword.",
+					{ preview_open = IMPLEMENTED }),
 
 				-- FORCED unsupported (1157). The pre-1157 "implemented" for these
 				-- two came from the shared _spawn_item hook's own comment listing

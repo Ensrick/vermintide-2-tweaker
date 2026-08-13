@@ -86,11 +86,12 @@ return function(H, repo_root)
 	end)
 
 	H.test("census surface and edge vocabularies are closed and complete", function()
-		H.equal(#D.CELLS, 16)
+		H.equal(#D.CELLS, 17)
 		H.equal(#D.EDGES, 8)
 		H.equal(D.SURFACES, D.CELLS)
 		local want = { owner_1p = true, owner_3p = true, bot = true, husk = true,
 			inventory_preview = true, illusion_browser = true, cim_preview = true,
+			crafting_preview = true,
 			lobby = true, score_team = true, hold_tab = true,
 			specials = true, remote_audio = true, hud_panels = true, portraits = true,
 			item_card_2d = true, inventory_tooltip = true }

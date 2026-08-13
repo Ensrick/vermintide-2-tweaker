@@ -18,6 +18,10 @@ M.EVIDENCE_KINDS = { backend_id = true, loadout_snapshot = true, preview_slot = 
 M.CELLS = {
 	"owner_1p", "owner_3p", "bot", "husk",
 	"inventory_preview", "illusion_browser", "cim_preview",
+	-- Added 2026-08-13 (#1198). The ordinary crafting bench is not CIM's
+	-- Athanor forge; keeping separate surfaces prevents one preview adapter
+	-- from hiding a gap in the other.
+	"crafting_preview",
 	"lobby", "score_team", "hold_tab",
 	-- Added 2026-08-04 (#1157). Six surfaces the vector-era census could not
 	-- name at all, so their gaps were invisible rather than declared.
