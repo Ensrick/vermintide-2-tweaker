@@ -15,6 +15,12 @@ return function(H, repo_root)
         return out
     end
 
+    local function table_count(values)
+        local count = 0
+        for _ in pairs(values or {}) do count = count + 1 end
+        return count
+    end
+
     H.test("WT rework master owns the exact active tweak family", function()
         H.equal(#policy.LEAF_IDS, 13)
         H.equal(#dev_policy.LEAF_IDS, #policy.LEAF_IDS)
@@ -100,15 +106,20 @@ return function(H, repo_root)
         }
         for _, surface in ipairs(surfaces) do
             local data, loc = load_surface(surface[1], surface[2])
-            local masters, leaves, parent = 0, {}, nil
+            local masters, leaves, visible_tweaks, parent = 0, {}, {}, nil
             local function visit(widget, parent_id)
                 if type(widget) ~= "table" then return end
                 if widget.setting_id == policy.MASTER_ID then
                     masters = masters + 1
                     parent = parent_id
                     H.equal(widget.type, "checkbox")
-                elseif policy.is_member(widget.setting_id) and widget.type == "checkbox" then
-                    leaves[widget.setting_id] = true
+                elseif widget.type == "checkbox" then
+                    if policy.is_member(widget.setting_id) then
+                        leaves[widget.setting_id] = true
+                    end
+                    if parent_id == "weapon_overrides" then
+                        visible_tweaks[widget.setting_id] = true
+                    end
                 end
                 for _, child in ipairs(widget.sub_widgets or {}) do
                     visit(child, widget.setting_id)
@@ -117,9 +128,12 @@ return function(H, repo_root)
             for _, widget in ipairs(data.options and data.options.widgets or {}) do visit(widget, nil) end
             H.equal(masters, 1)
             H.equal(parent, "wt_rework_master_group")
+            H.equal(table_count(visible_tweaks), #policy.LEAF_IDS,
+                "every visible Weapon Tweak must belong to the master catalog")
             for i = 1, #policy.LEAF_IDS do
                 local id = policy.LEAF_IDS[i]
                 H.truthy(leaves[id], id .. " is absent from visible Weapon Tweaks")
+                H.truthy(visible_tweaks[id], id .. " is not a direct visible Weapon Tweak")
                 H.equal(loc[id].en:sub(1, #policy.LABEL_PREFIX), policy.LABEL_PREFIX)
             end
             H.equal(loc.wt_rework_master_group.en, "Master Toggles")
