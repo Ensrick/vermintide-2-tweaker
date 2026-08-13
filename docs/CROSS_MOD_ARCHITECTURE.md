@@ -97,6 +97,11 @@ toggles default ON when CWV is installed and cover CWV's own variant items per c
 - Discovers the seven authored CWV dual-weapon families and builds independent
   left/right cosmetic pools for them; package preloading and saved-offhand
   restore wait until that catalogue is available.
+- Exposes the narrow read-only
+  `mod._cos.cwv_offhand_identity(backend_id, item_type, hand_field)` provider.
+  CWV may consume only its catalog-validated, Apply-gated persisted skin key;
+  preview state and unit paths stay Cosmetics-owned and off the wire. CWV schema
+  3 fingerprints both semantic hand keys and reconstructs their meshes locally.
 - This behavior lives in `cosmetics_tweaker`. CWV's own
   `_detect_companion_mods()` helper does not enable it; that helper only records
   optional-mod presence for CWV's status/log output.

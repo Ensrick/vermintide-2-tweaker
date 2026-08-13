@@ -144,6 +144,7 @@ local function descriptor_fingerprint(descriptor)
         descriptor.variant_key or "-",
         descriptor.base_item_key or "-",
         descriptor.skin or "-",
+        descriptor.offhand_skin or "-",
         descriptor.right_hand_unit or "-",
         descriptor.left_hand_unit or "-",
         descriptor.no_ammo_unit and "no-ammo" or "ammo",
@@ -187,6 +188,23 @@ function M.resolve_spawn_descriptor(args)
         return nil, "skin_unresolved"
     end
 
+    local offhand_skin = nonempty(args.explicit_offhand_skin)
+    local offhand_exact
+    if offhand_skin then
+        local offhand_item = type(args.item_master) == "table"
+            and rawget(args.item_master, offhand_skin) or nil
+        local offhand_row = type(args.weapon_skins) == "table"
+            and rawget(args.weapon_skins, offhand_skin) or nil
+        if type(offhand_item) ~= "table"
+                or offhand_item.cwv_owner_item_type ~= variant.item_key
+                or type(offhand_row) ~= "table" then
+            return nil, "offhand_skin_unresolved"
+        end
+        local left = unit_from(offhand_row, "left_hand_unit")
+        if not left then return nil, "offhand_units_missing" end
+        offhand_exact = { skin = offhand_skin, left_hand_unit = left }
+    end
+
     local descriptor = {
         provider = nonempty(args.provider) or "cwv",
         instance_id = nonempty(args.instance_id),
@@ -196,10 +214,12 @@ function M.resolve_spawn_descriptor(args)
         fallback_item_key = nonempty(args.fallback_item_key)
             or nonempty(variant.base_weapon),
         skin = exact and exact.skin or nil,
+        offhand_skin = offhand_exact and offhand_exact.skin or nil,
         source = exact and "skin" or "variant",
         right_hand_unit = exact and exact.right_hand_unit
             or unit_from(variant, "right_hand_unit"),
-        left_hand_unit = exact and exact.left_hand_unit
+        left_hand_unit = offhand_exact and offhand_exact.left_hand_unit
+            or exact and exact.left_hand_unit
             or unit_from(variant, "left_hand_unit"),
         variant_right_hand_unit = unit_from(variant, "right_hand_unit"),
         variant_left_hand_unit = unit_from(variant, "left_hand_unit"),

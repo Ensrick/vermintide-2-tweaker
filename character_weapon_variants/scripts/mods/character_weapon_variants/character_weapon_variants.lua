@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.515-dev"
+local MOD_VERSION = "0.1.516-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -1338,8 +1338,7 @@ end
 -- how they obtain the item key, but once a CWV definition is known they resolve
 -- the same exact item/model/skin descriptor here. Unknown selected skins fail
 -- closed; no caller reconstructs a default model behind that stronger identity.
-_om._cwv_resolve_world_descriptor = function(item_data, explicit_skin, resolved_unit_name,
-		identity_key, instance_id)
+_om._cwv_resolve_world_descriptor = function(item_data, explicit_skin, resolved_unit_name, identity_key, instance_id, explicit_offhand_skin)
 	local backend_id = item_data and (item_data.backend_id
 		or (item_data.mod_data and item_data.mod_data.backend_id))
 	local cwv_key = identity_key or _om._cwv_key_for_item(backend_id, item_data)
@@ -1363,9 +1362,10 @@ _om._cwv_resolve_world_descriptor = function(item_data, explicit_skin, resolved_
 		base = base,
 		base_item_key = def.base_weapon,
 		fallback_item_key = def.base_weapon,
-		explicit_skin = skin,
+		explicit_skin = skin, explicit_offhand_skin = explicit_offhand_skin,
 		backend_id = skin and nil or backend_id,
 		weapon_skins = WeaponSkins and WeaponSkins.skins,
+		item_master = ItemMasterList,
 		skin_from_backend = function(bid)
 			local backend = Managers and Managers.backend
 			local iface = backend and backend:get_interface("items")

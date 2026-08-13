@@ -82,9 +82,44 @@ function OffhandStateRuntime.install(mod, deps)
 
     local function _get_offhand_options(item_key)
         if mod._ensure_independent_dual_pool then
-            mod._ensure_independent_dual_pool(item_key)
+            local ensured = mod._ensure_independent_dual_pool(item_key)
+            if ensured then return ensured end
         end
         return _offhand_options[item_key]
+    end
+
+    -- #579 cross-mod identity provider.  CWV owns the semantic item channel,
+    -- while Cosmetics owns the Apply-gated exact-instance offhand choice.  The
+    -- provider exposes only the committed skin key after proving that the saved
+    -- record still names an option in this exact item family's hand pool.  Unit
+    -- paths remain private renderer data and never become network identity.
+    mod._cos = mod._cos or {}
+    mod._cos.cwv_offhand_identity = function(backend_id, item_type, hand_field)
+        if backend_id == nil or type(item_type) ~= "string"
+                or (hand_field ~= "left_hand_unit"
+                    and hand_field ~= "right_hand_unit") then
+            return nil, "invalid"
+        end
+        local hands = LA_PERSIST.get_saved_offhands_for
+            and LA_PERSIST.get_saved_offhands_for(backend_id)
+        local saved = type(hands) == "table" and hands[hand_field]
+        if type(saved) ~= "table" then return nil, "follow_main" end
+        local saved_skin = saved.vanilla_key
+        if type(saved_skin) ~= "string" or saved_skin == "" then
+            return nil, "not_skin_backed"
+        end
+        local pools = _get_offhand_options(item_type)
+        local pool = pools and pools[hand_field]
+        for _, option in ipairs(pool or {}) do
+            local option_skin = option.source_skin_key or option.skin_key
+            if option_skin == saved_skin
+                    and (not saved.unit_path or saved.unit_path == ""
+                        or option.unit == saved.unit_path
+                        or option.intended_unit == saved.unit_path) then
+                return saved_skin, "committed"
+            end
+        end
+        return nil, "foreign_or_stale"
     end
 
     -- Receiver-side compatibility boundary for #583. A stale or malformed
@@ -276,6 +311,7 @@ function OffhandStateRuntime.install(mod, deps)
     return {
         merge_la_offhand_options = _merge_la_offhand_options,
         get_offhand_options = _get_offhand_options,
+        cwv_offhand_identity = mod._cos.cwv_offhand_identity,
     }
 end
 

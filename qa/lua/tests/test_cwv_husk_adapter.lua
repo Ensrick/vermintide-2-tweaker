@@ -308,6 +308,38 @@ return function(H, repo_root)
             "complete adapter deferral must emit bounded evidence")
     end)
 
+    H.test("#579 exact dual descriptor re-keys distinct right and left hands through the live adapter", function()
+        local om, _, _, env = fixture()
+        local pair = find_def("cwv_fix_pair")
+        env.Application = { can_get = function() return true end }
+        om._husk_identity_descriptor = function()
+            return {
+                variant_key = pair.item_key,
+                right_hand_unit = pair.right_hand_unit,
+                left_hand_unit = pair.left_hand_unit,
+                fingerprint = "fp:" .. pair.item_key,
+            }, "exact"
+        end
+        local item_units = {
+            right_hand_unit = "units/weapons/player/wpn_pair_base/wpn_pair_base",
+            left_hand_unit = "units/weapons/player/wpn_pair_base_left/wpn_pair_base_left",
+        }
+        with_env(env, function()
+            local suppress_right = om._husk_adapter_pre("right", {}, item_units,
+                "slot_melee", { name = "fix_pair_base" }, {})
+            local suppress_left = om._husk_adapter_pre("left", {}, item_units,
+                "slot_melee", { name = "fix_pair_base" }, {})
+            H.equal(suppress_right, false)
+            H.equal(suppress_left, false)
+        end)
+        H.equal(item_units.right_hand_unit, pair.right_hand_unit,
+            "right-hand delivery must consume descriptor.right_hand_unit")
+        H.equal(item_units.left_hand_unit, pair.left_hand_unit,
+            "offhand delivery must independently consume descriptor.left_hand_unit")
+        H.truthy(item_units.right_hand_unit ~= item_units.left_hand_unit,
+            "the test fixture must remain asymmetric so a collapsed pair cannot pass")
+    end)
+
     H.test("#474/#478 atomic deferral retains the base-unit crash floor", function()
         local om, lines, _, env = fixture()
         local owner = {}

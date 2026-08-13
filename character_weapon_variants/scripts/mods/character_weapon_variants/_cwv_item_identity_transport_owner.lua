@@ -134,8 +134,19 @@ local function install(mod, ctx)
 				local key = _om._cwv_key_for_item(backend_id, item_data)
 				if not key then return nil, base_name end
 				local skin = slot_data.skin
+				local offhand_skin
+				local cosmetics = get_mod and get_mod("cosmetics_tweaker")
+				local provider = cosmetics and cosmetics._cos
+					and cosmetics._cos.cwv_offhand_identity
+				if type(provider) == "function" and backend_id then
+					local ok, value = pcall(provider, backend_id, key,
+						"left_hand_unit")
+					if ok and type(value) == "string" and value ~= "" then
+						offhand_skin = value
+					end
+				end
 				local descriptor = _om._cwv_resolve_world_descriptor(item_data, skin,
-					nil, key, backend_id)
+					nil, key, backend_id, offhand_skin)
 				return descriptor, base_name
 			end,
 			resolve_remote = function(payload, sender_peer_id)
@@ -144,9 +155,12 @@ local function install(mod, ctx)
 					return nil, "item_or_base"
 				end
 				local skin = payload.skin_key ~= "" and payload.skin_key or nil
+				local offhand_skin = payload.offhand_skin_key ~= ""
+					and payload.offhand_skin_key or nil
 				local descriptor, _, reason = _om._cwv_resolve_world_descriptor(
 					{ name = def.base_weapon }, skin, nil, def.item_key,
-					tostring(sender_peer_id) .. ":" .. tostring(payload.slot))
+					tostring(sender_peer_id) .. ":" .. tostring(payload.slot),
+					offhand_skin)
 				return descriptor, reason
 			end,
 			send = function(recipient, schema, payload, edge)
@@ -235,7 +249,11 @@ local function install(mod, ctx)
 		local peer_pull = _om.identity_peer_pull.bind(lifecycle, _send_identity_slots, _om.appearance_lifecycle_policy, printf)
 		_om._cwv_request_peer_identities = peer_pull.request
 
-		mod:network_register("cwv_item_identity", function(sender_peer_id, schema, payload)
+		-- Named live receiver boundary (#579).  The VMF registration and the
+		-- executable regression call this exact function, so a future refactor
+		-- cannot leave the network channel registered to stale/partial logic while
+		-- helper-only tests continue to pass.
+		_om._cwv_receive_identity = function(sender_peer_id, schema, payload)
 			-- #474: the Old Musket shot report rides this channel (the dedicated
 			-- mode channel never delivered in the 2026-07-18 paired logs). The
 			-- sentinel slot fails valid_slot() in accept() on builds without this
@@ -312,7 +330,8 @@ local function install(mod, ctx)
 			if not style_owned then
 				mod._cwv_rewield.request_peer_rewield(sender_peer_id, payload and payload.slot)
 			end
-		end)
+		end
+		mod:network_register("cwv_item_identity", _om._cwv_receive_identity)
 
 		-- Issues #476/#741 diagnostic. The vanilla decision is now invariant: NULL.
 		-- Exact remote appearance is independently observable on the semantic

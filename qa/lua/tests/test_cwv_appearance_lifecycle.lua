@@ -55,6 +55,173 @@ return function(H, repo_root)
         H.equal(#d.fingerprint, 19)
     end)
 
+    H.test("CWV #579 transports distinct semantic hand skins and reconstructs locally", function()
+        local sent = {}
+        local owner = assert(Exact.resolve_spawn_descriptor({
+            provider = "cwv",
+            variant = {
+                item_key = "cwv_dual_axes",
+                base_weapon = "vanilla_axes",
+                right_hand_unit = "variant_right",
+                left_hand_unit = "variant_left",
+            },
+            base = {
+                right_hand_unit = "base_right",
+                left_hand_unit = "base_left",
+            },
+            explicit_skin = "right_skin",
+            explicit_offhand_skin = "left_skin",
+            weapon_skins = {
+                right_skin = {
+                    right_hand_unit = "skin_right",
+                    left_hand_unit = "same_as_right",
+                },
+                left_skin = {
+                    right_hand_unit = "same_as_left",
+                    left_hand_unit = "skin_left",
+                },
+            },
+            item_master = {
+                left_skin = {
+                    matching_item_key = "vanilla_axes",
+                    cwv_owner_item_type = "cwv_dual_axes",
+                },
+            },
+        }))
+        H.equal(owner.skin, "right_skin")
+        H.equal(owner.offhand_skin, "left_skin")
+        H.equal(owner.right_hand_unit, "skin_right")
+        H.equal(owner.left_hand_unit, "skin_left")
+
+        local lifecycle = Policy.new({
+            resolve_local = function(_, slot_name)
+                if slot_name == "slot_melee" then return owner, "vanilla_axes" end
+                return nil, "vanilla_ranged"
+            end,
+            resolve_remote = function()
+                return Exact.resolve_spawn_descriptor({
+                    provider = "cwv",
+                    variant = {
+                        item_key = "cwv_dual_axes",
+                        base_weapon = "vanilla_axes",
+                        right_hand_unit = "variant_right",
+                        left_hand_unit = "variant_left",
+                    },
+                    base = {
+                        right_hand_unit = "base_right",
+                        left_hand_unit = "base_left",
+                    },
+                    explicit_skin = "right_skin",
+                    explicit_offhand_skin = "left_skin",
+                    weapon_skins = {
+                        right_skin = {
+                            right_hand_unit = "skin_right",
+                            left_hand_unit = "same_as_right",
+                        },
+                        left_skin = {
+                            right_hand_unit = "same_as_left",
+                            left_hand_unit = "skin_left",
+                        },
+                    },
+                    item_master = {
+                        left_skin = {
+                            matching_item_key = "vanilla_axes",
+                            cwv_owner_item_type = "cwv_dual_axes",
+                        },
+                    },
+                })
+            end,
+            send = function(_, _, outgoing)
+                sent[#sent + 1] = outgoing
+                return true
+            end,
+        })
+        local payload = assert(lifecycle:payload_for("slot_melee", {}))
+        H.equal(payload.skin_key, "right_skin")
+        H.equal(payload.offhand_skin_key, "left_skin")
+        H.equal(payload.left_hand_unit, nil,
+            "offhand unit paths must never cross the semantic wire")
+        local changed, remote, reason = lifecycle:accept(
+            "peer-dual", Policy.SCHEMA, payload)
+        H.equal(changed, true)
+        H.equal(reason, "exact")
+        H.equal(remote.right_hand_unit, "skin_right")
+        H.equal(remote.left_hand_unit, "skin_left")
+
+        local tampered = {}
+        for key, value in pairs(payload) do tampered[key] = value end
+        tampered.offhand_skin_key = "foreign_skin"
+        local tamper_changed, tamper_exact, tamper_reason = lifecycle:accept(
+            "peer-tamper", Policy.SCHEMA, tampered)
+        H.equal(tamper_changed, true)
+        H.equal(tamper_exact, nil)
+        H.equal(tamper_reason, "fingerprint_mismatch",
+            "an independently changed offhand axis must fail closed")
+
+        H.equal(lifecycle:track_delivery("peer-hot-join", {
+            slot_melee = { exact = owner, base = "vanilla_axes" },
+        }, "hot_join_retry"), 1)
+        H.equal(lifecycle:step_deliveries(Policy.RETRY_INTERVAL), 1)
+        H.equal(sent[#sent].offhand_skin_key, "left_skin",
+            "hot-join retries must retain the committed offhand identity")
+
+        local foreign = Exact.resolve_spawn_descriptor({
+            provider = "cwv",
+            variant = {
+                item_key = "cwv_dual_axes",
+                base_weapon = "vanilla_axes",
+                right_hand_unit = "variant_right",
+                left_hand_unit = "variant_left",
+            },
+            base = {},
+            explicit_offhand_skin = "foreign_skin",
+            weapon_skins = {
+                foreign_skin = { left_hand_unit = "foreign_left" },
+            },
+            item_master = {
+                foreign_skin = {
+                    matching_item_key = "vanilla_axes",
+                    cwv_owner_item_type = "other_family",
+                },
+            },
+        })
+        H.equal(foreign, nil,
+            "foreign-family offhand identity must fail closed")
+
+        local strict = setmetatable({}, {
+            __index = function() error("strict registry lookup escaped rawget") end,
+        })
+        local ok, unknown = pcall(Exact.resolve_spawn_descriptor, {
+            provider = "cwv",
+            variant = { item_key = "cwv_dual_axes", base_weapon = "vanilla_axes" },
+            base = {}, explicit_offhand_skin = "tampered_skin",
+            weapon_skins = strict, item_master = strict,
+        })
+        H.equal(ok, true)
+        H.equal(unknown, nil,
+            "unknown offhand keys must fail closed against strict registries")
+    end)
+
+    H.test("CWV #579 missing committed offhand follows the primary skin", function()
+        local owner = descriptor("selected_skin", "skin_right", "skin_left")
+        local lifecycle = Policy.new({
+            resolve_local = function() return owner, "vanilla_base" end,
+            resolve_remote = function(payload)
+                H.equal(payload.offhand_skin_key, "")
+                return descriptor("selected_skin", "skin_right", "skin_left")
+            end,
+            send = function() return true end,
+        })
+        local payload = assert(lifecycle:payload_for("slot_melee", {}))
+        H.equal(payload.offhand_skin_key, "")
+        local changed, remote, reason = lifecycle:accept(
+            "peer-follow-main", Policy.SCHEMA, payload)
+        H.equal(changed, true)
+        H.equal(reason, "exact")
+        H.equal(remote.offhand_skin, nil)
+        H.equal(remote.left_hand_unit, "skin_left")
+    end)
+
     H.test("CWV #660 lifecycle publishes two bounded slots and coalesces duplicates", function()
         local sent = {}
         local d = descriptor(nil)

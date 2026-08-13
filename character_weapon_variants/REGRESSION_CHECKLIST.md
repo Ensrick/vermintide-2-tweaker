@@ -554,11 +554,11 @@ Last updated: 2026-08-13.
 | Symptom | A CWV variant offers only some cosmetics from the corresponding vanilla weapon; DLC/weave skins are commonly absent. |
 | Root cause | The registrar scans `ItemMasterList` at one load instant or appends only to a fixed set of rarity tiers. Vanilla's authoritative pool is the owner's `WeaponSkins.skin_combinations` table, which DLC files extend with tiers such as `magic`; the default skin is stored separately in `WeaponSkins.default_skins`. |
 | Mod(s) | character_weapon_variants |
-| Fix version(s) | CWV v0.1.390-dev, v0.1.394-dev (#579) |
+| Fix version(s) | CWV v0.1.390-dev, v0.1.394-dev, v0.1.516-dev (#579) |
 | Category | INTEGRATION |
 | Repro | Open the Dual Axes illusion picker and compare its unique cosmetic keys with `wh_1h_axe_skins` plus `WeaponSkins.default_skins.wh_1h_axe`; select one with visibly distinct hands, inspect the inventory character preview, then join as a second player and inspect the owner's husk after the parity handshake. |
 | Expected post-fix | Exact source/clone key-set parity; source tier memberships and `required_dlc` are preserved; each clone has both hands and the family display rig. The inventory character preview and remote husk preserve the exact generated skin instead of reverting to the variant default. |
-| Detection | `/cwv_regression_test` checks `dual_axes_cosmetic_family_parity` and `issue579_dual_axes_preview_and_husk_skin_continuity`; coop log contains bounded `[cwv:660]` semantic identity delivery/ack and no `rpc_add_equipment` replay carrying a CWV skin index. |
+| Detection | `/cwv_regression_test` checks `dual_axes_cosmetic_family_parity` and drives `issue579_dual_axes_preview_and_husk_skin_continuity` through the exact registered identity receiver, its one bounded re-wield, and the live husk pre-adapter for two distinct hands; coop log contains bounded `[cwv:660]` semantic identity delivery/ack and no `rpc_add_equipment` replay carrying a CWV skin index. |
 
 
 ---

@@ -1,5 +1,19 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.211-dev (2026-08-13) -- expose committed per-hand identity to CWV (#579) [verify-fix]
+
+- Added a read-only cross-mod provider for an exact backend instance's committed
+  offhand skin. It returns a semantic key only after the persisted record still
+  matches the selected hand's canonical item-family catalog; missing, stale,
+  mesh-only, and foreign-family records fail closed.
+- The provider does not expose unit paths, pending browse state, or mutable
+  persistence. Character Weapon Variants uses the key to reconstruct its own
+  local descriptor and carry distinct Dual Axes hands without placing resources
+  or numeric lookup IDs on the wire.
+- Lua coverage exercises committed, absent, and adversarial foreign-mesh records.
+  Run `/cwv_regression_test`; `issue579_dual_axes_preview_and_husk_skin_continuity`
+  must pass before two-player visual verification.
+
 ## 0.9.210-dev (2026-08-13) -- adopt the shared weapon-transform owner (#420)
 
 - Cosmetics now constructs one local `WeaponAppearance` instance before its
