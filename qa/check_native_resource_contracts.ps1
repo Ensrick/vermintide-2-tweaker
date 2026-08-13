@@ -7,6 +7,7 @@ $root = Split-Path $here -Parent
 $manifestPath = Join-Path $here 'native_resource_contracts.psd1'
 
 $patterns = [ordered]@{
+    particle = [regex]'\b(?:World|ScriptWorld|[A-Za-z_][A-Za-z0-9_]*_api)\.(?:create_particles|create_particles_linked)\s*(?:,|\()'
     texture = [regex]'\b(?:Material\.set_texture|Unit\.set_texture_for_materials|[A-Za-z_][A-Za-z0-9_]*_api\.set_texture_for_materials|material_set_texture)\s*(?:,|\()'
     material_bind = [regex]'\b(?:Unit\.(?:set_all_materials|set_material|set_material_from_id)|[A-Za-z_][A-Za-z0-9_]*_api\.(?:set_all_materials|set_material|set_material_from_id)|unit_set_material)\s*(?:,|\()'
     gui_create = [regex]'\bWorld\.create_(?:screen|world)_gui\s*\('
@@ -15,6 +16,17 @@ $patterns = [ordered]@{
     shading = [regex]'\b(?:ShadingEnvironment\.(?:set_scalar|set_vector2|set_vector3|set_vector4|blend|apply|set_resource)|World\.set_shading_environment)\s*(?:,|\()'
     residency_proof = [regex]'\b(?:RESIDENCY|residency|RESOURCE_RESIDENCY|residency_contract)\.(?:resource_resident|material_resident|shading_environment_resident|texture_bind_resident|texture_set_resident|unit_materials_resident|gui_material_resident|filter_material_pairs)\s*\('
 }
+
+# A texture table handed to a synchronized WeaponAppearance consumer makes the
+# library's one native Unit.set_texture_for_materials sink reachable. Counting
+# only that sink lets a new descriptor silently widen the native boundary. The
+# closed table-field key deliberately ignores locals such as
+# `local textures = ...`, later assignments, and report fields such as
+# `channels.textures = ...`.
+$descriptorTexturePattern = [regex]'[,{;][\t \r\n]*textures[\t ]*='
+$weaponAppearanceCallerPattern = [regex]::new(
+    '(?i)\b(?:_?wa|[A-Za-z_][A-Za-z0-9_]*appearance[A-Za-z0-9_]*)' +
+    '\.(?:apply|apply_report)\s*\(')
 
 function Get-Key([string]$File, [string]$Kind) { return "$File|$Kind" }
 
@@ -48,9 +60,74 @@ function Remove-LuaCommentsAndStrings {
     })
 }
 
+function Get-WeaponAppearanceDescriptorRows {
+    param($Manifest, [hashtable]$SourceByPath)
+
+    $detected = @{}
+    if ($null -eq $Manifest -or $null -eq $Manifest.Rows) { return $detected }
+    $libraries = @($Manifest.Rows | Where-Object {
+        ([string]$_.File).Replace('\', '/') -match '/_lib_weapon_appearance\.lua$'
+    } | ForEach-Object { ([string]$_.File).Replace('\', '/') })
+    $roots = @($libraries | ForEach-Object {
+        $_.Substring(0, $_.LastIndexOf('/'))
+    } | Sort-Object -Unique)
+    if ($roots.Count -eq 0) { return $detected }
+
+    $sources = @{}
+    if ($null -ne $SourceByPath) {
+        foreach ($path in $SourceByPath.Keys) {
+            $sources[([string]$path).Replace('\', '/')] = [string]$SourceByPath[$path]
+        }
+    } else {
+        foreach ($consumerRoot in $roots) {
+            $fullRoot = Join-Path $root $consumerRoot
+            if (-not (Test-Path -LiteralPath $fullRoot -PathType Container)) { continue }
+            Get-ChildItem -LiteralPath $fullRoot -Recurse -File -Filter '*.lua' |
+                ForEach-Object {
+                    $relative = Convert-ToRepoRelativePath $_.FullName
+                    if ($relative -notmatch '(^|/)(?:_archive|bundleV2|_test_fixtures|\.claude)(/|$)') {
+                        $sources[$relative] = [IO.File]::ReadAllText(
+                            $_.FullName, [Text.Encoding]::UTF8)
+                    }
+                }
+        }
+    }
+
+    foreach ($relative in $sources.Keys) {
+        $path = ([string]$relative).Replace('\', '/')
+        if ($libraries -contains $path) { continue }
+        $owned = $false
+        foreach ($consumerRoot in $roots) {
+            if ($path.StartsWith($consumerRoot + '/', [StringComparison]::OrdinalIgnoreCase)) {
+                $owned = $true
+                break
+            }
+        }
+        if (-not $owned -or $path -match '(^|/)(?:_archive|bundleV2|_test_fixtures|\.claude)(/|$)') {
+            continue
+        }
+        $codeOnly = Remove-LuaCommentsAndStrings ([string]$sources[$relative])
+        # A texture-shaped table in a VMF data file is not shared-writer
+        # reachability. Require the same module to call the WeaponAppearance
+        # API; this is the bounded caller/descriptor closure #1125 asks the
+        # census to pin. The library implementation itself is excluded above.
+        if (-not $weaponAppearanceCallerPattern.IsMatch($codeOnly)) { continue }
+        $count = $descriptorTexturePattern.Matches($codeOnly).Count
+        if ($count -gt 0) {
+            $detected[(Get-Key $path 'texture_descriptor')] = [pscustomobject]@{
+                File=$path; Kind='texture_descriptor'; Count=$count
+            }
+        }
+    }
+    return $detected
+}
+
 function Get-DetectedRows {
+    param($Manifest)
     $detected = @{}
     $needles = @(
+        'World.create_particles', 'ScriptWorld.create_particles',
+        '.create_particles', '.create_particles_linked',
         'Material.set_texture', 'Unit.set_texture_for_materials',
         '.set_texture_for_materials', 'material_set_texture',
         'Unit.set_all_materials', 'Unit.set_material', '.set_material',
@@ -114,6 +191,8 @@ function Get-DetectedRows {
             }
         }
     }
+    $descriptorRows = Get-WeaponAppearanceDescriptorRows -Manifest $Manifest
+    foreach ($key in $descriptorRows.Keys) { $detected[$key] = $descriptorRows[$key] }
     return $detected
 }
 
@@ -158,7 +237,7 @@ function Get-CensusFindings($Detected, $Manifest) {
     # prevents a future census update from blessing an unsafe writer merely by
     # assigning the desired policy string.
     $nativeKinds = @{
-        texture=$true; material_bind=$true; gui_create=$true
+        particle=$true; texture=$true; material_bind=$true; gui_create=$true
         renderer_hook=$true; shading=$true
     }
     foreach ($row in $Manifest.Rows) {
@@ -197,6 +276,30 @@ function Invoke-SelfTest {
     $missingProofDetected = @{
         'mod/scripts/mods/mod/a.lua|texture' = [pscustomobject]@{Count=1}
     }
+    $descriptorManifest = @{ Policies=@('deferred-legacy'); Rows=@(
+        @{ File='mod/scripts/mods/mod/_lib_weapon_appearance.lua'; Kind='texture'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
+    ) }
+    $descriptorSources = @{
+        'mod/scripts/mods/mod/_lib_weapon_appearance.lua' = 'Unit.set_texture_for_materials(unit, slot, texture)'
+        'mod/scripts/mods/mod/consumer.lua' = @'
+local descriptor = {
+    textures = { albedo = "textures/planted" },
+}
+WA.apply(unit, descriptor)
+textures = resolve_textures()
+channels.textures = true
+'@
+        'mod/scripts/mods/mod/gui_data.lua' = 'local row = { textures = {} }'
+        'other/scripts/mods/other/not_a_consumer.lua' = 'local row = { textures = {} }'
+    }
+    $descriptorDetected = @{
+        'mod/scripts/mods/mod/_lib_weapon_appearance.lua|texture' = [pscustomobject]@{Count=1}
+    }
+    $plantedDescriptorRows = Get-WeaponAppearanceDescriptorRows `
+        -Manifest $descriptorManifest -SourceByPath $descriptorSources
+    foreach ($key in $plantedDescriptorRows.Keys) {
+        $descriptorDetected[$key] = $plantedDescriptorRows[$key]
+    }
     $fakeRoot = Join-Path ([IO.Path]::GetTempPath()) '.claude\worktrees\agent'
     $insideRelative = Convert-ToRepoRelativePath (Join-Path $fakeRoot 'mod\scripts\mods\mod\a.lua') $fakeRoot
     $nestedRelative = Convert-ToRepoRelativePath (Join-Path $fakeRoot '.claude\worktrees\nested\mod\a.lua') $fakeRoot
@@ -206,8 +309,21 @@ function Invoke-SelfTest {
         @{ Name='new boundary fails'; Pass=(Get-CensusFindings $new $base).Count -gt 0 }
         @{ Name='stale row fails'; Pass=(Get-CensusFindings @{} $base).Count -gt 0 }
         @{ Name='shared policy without live proof fails'; Pass=(Get-CensusFindings $missingProofDetected $missingProofManifest).Count -gt 0 }
+        @{ Name='planted consumer texture descriptor fails without an exact reachability row'; Pass=(
+            (Get-CensusFindings $descriptorDetected $descriptorManifest) -contains
+                'uncensused native boundary mod/scripts/mods/mod/consumer.lua|texture_descriptor count=1') }
+        @{ Name='non-consumer texture descriptors stay outside the shared-writer closure'; Pass=(
+            -not $descriptorDetected.ContainsKey('other/scripts/mods/other/not_a_consumer.lua|texture_descriptor') -and
+            -not $descriptorDetected.ContainsKey('mod/scripts/mods/mod/gui_data.lua|texture_descriptor')) }
         @{ Name='parent .claude worktree path does not hide repository files'; Pass=$insideRelative -eq 'mod/scripts/mods/mod/a.lua' }
         @{ Name='nested .claude content remains repo-relative and excludable'; Pass=$nestedRelative -match '(^|/)\.claude(/|$)' }
+        @{ Name='Lua scrub rejects particle prose and keeps World/API calls'; Pass=(
+            $patterns.particle.Matches((Remove-LuaCommentsAndStrings @'
+-- World.create_particles(world, "comment")
+local text = "ScriptWorld.create_particles_linked(world, 'log')"
+World.create_particles(world, effect, position)
+world_api.create_particles(world, effect, position, rotation)
+'@)).Count -eq 2) }
         @{ Name='Lua scrub rejects prose and keeps native calls'; Pass=(
             $patterns.material_bind.Matches((Remove-LuaCommentsAndStrings @'
 -- Unit.set_all_materials(unit, "comment")
@@ -231,7 +347,7 @@ if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
     exit 2
 }
 $manifest = Import-PowerShellDataFile -LiteralPath $manifestPath
-$findings = Get-CensusFindings (Get-DetectedRows) $manifest
+$findings = Get-CensusFindings (Get-DetectedRows $manifest) $manifest
 if ($findings.Count -gt 0) {
     Write-Host "[native-resource-contracts] FAIL - $($findings.Count) census finding(s)." -ForegroundColor Red
     foreach ($finding in $findings) { Write-Host "  ! $finding" -ForegroundColor Red }

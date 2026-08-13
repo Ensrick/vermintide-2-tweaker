@@ -34,6 +34,9 @@
 --      portraits, item_card_2d, inventory_tooltip) start unsupported unless
 --      concrete code evidence shows the family implements one. Two exceptions
 --      earned evidence here: crowbill specials and dual_axes item_card_2d.
+--   4. crafting_preview, added by 1198, starts unsupported for every family:
+--      the ordinary crafting bench is distinct from both the illusion browser
+--      and CIM Athanor, and no exact CWV identity adapter is proven there.
 --
 -- Vocabulary is fixed by tools/shared_lib/_lib_appearance_descriptor.lua
 -- (M.CELLS / M.EDGES); qa/lua/tests/test_appearance_census.lua validates it.
@@ -70,6 +73,11 @@
 --   ride LootItemUnitPreviewer.spawn_units (:11481) -> _cwv_browser_meshswap_apply
 --   (:9010, base_identity adapter) which resolves the 482 crafted-UUID ladder
 --   against self._item; transform in the same hook body.
+--
+-- crafting_preview            UNSUPPORTED for ALL families. The vanilla bench
+--   is not the marked CIM Athanor previewer and exact item identity has not
+--   been proven to enter either migrated descriptor adapter there. It keeps the
+--   resident base item's preview presentation (#1198).
 --
 -- husk                        UNSUPPORTED at every edge. The re-key path exists -
 --   SimpleHuskInventoryExtension._wield_slot (:3705), the single decision point
@@ -182,9 +190,11 @@ local FB_HUD = "CWV projects no career HUD or ability-panel presentation for its
 local FB_PORTRAITS = "Portrait rendering belongs to dynamic_cosmetic_portraits, which CWV neither drives nor supplies identity to; portraits render the vanilla career art. Safe (vanilla). Tracked 925 class."
 local FB_ITEM_CARD = "This family registers no CWV-owned icon and deliberately reuses its authentic vanilla icon on the 2D item card. Correct by construction; no custom identity to lose. Tracked 660 / 638 / 641."
 local FB_TOOLTIP = "CWV supplies no tooltip-side appearance identity (mesh, transform, or material); the tooltip renders the cloned base template's vanilla text and icon. Safe (vanilla). Tracked 660."
+local FB_CRAFTING = "The ordinary crafting-bench preview is distinct from the illusion browser and CIM Athanor; no exact CWV identity adapter is proven there, so it retains the resident base item's preview presentation. Safe (vanilla). Tracked 1198 / 660."
 
 local function new_surface_rows()
 	return {
+		crafting_preview  = row(UNSUP, FB_CRAFTING),
 		specials          = row(UNSUP, FB_SPECIALS),
 		remote_audio      = row(UNSUP, FB_REMOTE_AUDIO),
 		hud_panels        = row(UNSUP, FB_HUD),

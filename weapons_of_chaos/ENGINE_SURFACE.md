@@ -97,7 +97,7 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 | `WeaponUtils.get_weapon_packages` [hook,tbl] | Collects weapon unit paths for package preparation | Replace only WOC unit package identities with resident vanilla lease aliases | Spawn data remains WOC-owned; numeric reverse network lookup remains vanilla. |
 | `HeroPreviewer._load_packages` / `MenuWorldPreviewer._load_packages` [hook] | Loads character-preview equipment packages | Borrow the vanilla lease and fall back only when `Application.can_get("unit", custom)` fails | Both classes are required because VT2 copy-inherits methods before mods load. |
 | `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` [hook] | Spawns and links inventory, lobby, and score/end-screen equipment | Apply the canonical transform to the exact spawned WOC unit | Weak per-unit guard bounds duplicate traversal; no per-frame writes. |
-| `LootItemUnitPreviewer.load_package` / `spawn_units` / `_unload_packages` [hook] | Owns item, illusion, Athanor, and crafting-preview package leases and units | Borrow/unload one vanilla lease per custom key and transform returned WOC units | Never load the WOC unit path through PackageManager; the master package owns residency. |
+| `LootItemUnitPreviewer.load_package` / `spawn_units` / `_unload_packages` [hook] | Owns generic item, illusion/customization, store, and Athanor preview package leases and units | Borrow/unload one vanilla lease per custom key and transform returned WOC units | Never load the WOC unit path through PackageManager; the master package owns residency. The ordinary forge layout does not instantiate this previewer, so this hook proves no vanilla crafting-bench surface. |
 
 ### Blightreaper audio ownership (#633)
 

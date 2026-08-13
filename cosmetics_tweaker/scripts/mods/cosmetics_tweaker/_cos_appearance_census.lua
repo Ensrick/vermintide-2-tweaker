@@ -6,7 +6,7 @@
 -- tools/shared_lib/_lib_appearance_descriptor.lua exactly.
 --
 -- WHAT THIS IS. cosmetics_tweaker's appearance overrides grouped by PIPELINE
--- (family), each declaring, for all 16 acceptance surfaces x all 8 lifecycle
+-- (family), each declaring, for all 17 acceptance surfaces x all 8 lifecycle
 -- edges, whether that exact PAIR is "implemented" or "unsupported". Every
 -- unsupported pair carries a fallback note saying why the degrade is safe and
 -- which issue tracks the hole.
@@ -28,6 +28,9 @@
 --   3. the six surfaces added by 1157 start unsupported unless concrete code
 --      evidence shows the family implements one. One exception earned
 --      evidence: item_card_2d for the two icon-owning families.
+--   4. crafting_preview, added by 1198, starts unsupported for every family:
+--      the ordinary crafting bench has no proven cosmetics adapter and must not
+--      be inferred from the illusion browser or CIM Athanor preview paths.
 --
 -- TRUTHFULNESS RULE (the whole point of W0). A pair is "implemented" ONLY when
 -- a citable code path applies THIS family's override on THAT surface at THAT
@@ -127,9 +130,11 @@ local FB_HUD = "Cosmetics projects no career HUD or ability-panel presentation; 
 local FB_PORTRAITS = "Portrait rendering was split out to dynamic_cosmetic_portraits, which resolves its own hat/skin identity; cosmetics_tweaker supplies it no appearance descriptor, so a cosmetic this family applies is not guaranteed to be reflected in the portrait. Degrades to the vanilla or dcp-resolved portrait. Tracked 925 class."
 local FB_ITEM_CARD = "This family registers no cosmetics-owned icon; the 2D item card renders the donor/base item's authentic vanilla icon. Correct by construction. Tracked 660 / 638 / 641."
 local FB_TOOLTIP = "Cosmetics supplies no tooltip-side appearance identity; the tooltip renders the base item's vanilla text and icon. Safe (vanilla). Tracked 660."
+local FB_CRAFTING = "The ordinary crafting-bench preview is distinct from the cosmetics customization browser and CIM Athanor; no family has a proven bench adapter, so the resident base-item presentation is retained. Safe (vanilla). Tracked 1198 / 660."
 
 local function new_surface_rows()
 	return {
+		crafting_preview  = row(UNSUP, FB_CRAFTING),
 		specials          = row(UNSUP, FB_SPECIALS),
 		remote_audio      = row(UNSUP, FB_REMOTE_AUDIO),
 		hud_panels        = row(UNSUP, FB_HUD),

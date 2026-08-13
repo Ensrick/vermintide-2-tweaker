@@ -6,12 +6,13 @@ Shared-primitive state: `docs/WEAPON_APPEARANCE_EXTRACTION_420.md`.
 
 ## 1. Root cause of the whack-a-mole (why fixes never generalize)
 
-Every new item (weapon, variant, illusion, cosmetic) must light up ~10
-acceptance cells (owner 1P, owner 3P, bot, remote husk, inventory hero
-preview, illusion browser, CIM craft preview, lobby, score/team, Hold-Tab)
-across ~6 lifecycle edges (equip, swap/customize, lobby-join replay, hot
-join, mission transition, cross-session persistence load). That is a ~60-cell
-matrix per item family, and TODAY every cell is opt-in:
+Every new item (weapon, variant, illusion, cosmetic) must declare 17 canonical
+acceptance surfaces (owner 1P, owner 3P, bot, remote husk, inventory hero
+preview, illusion browser, CIM/Athanor preview, ordinary crafting-bench
+preview, lobby, score/team, Hold-Tab, specials, remote audio, HUD panels,
+portraits, 2D item cards, and inventory tooltips) across eight canonical
+lifecycle edges. That is a 136-cell matrix per item family, and every cell is
+explicit rather than inferred:
 
 1. **No enumeration.** Nothing in the codebase or CI knows the matrix exists.
    A new feature that implements 52 cells and misses 8 ships silently; the 8
@@ -58,7 +59,7 @@ matrix per item family, and TODAY every cell is opt-in:
 
 | Wave | Deliverable | Gate | State |
 |---|---|---|---|
-| W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, currently 3,352 unsupported pairs of 4,352 (`docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-04 (#1157: re-keyed to surface-x-edge cells, 6 surfaces added, wt_dev brought under validation) |
+| W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, currently 3,624 unsupported pairs of 4,624 (`docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-13 (#1157: surface-x-edge schema and six new surfaces; #1198: distinct crafting preview; #1197: all 17 surfaces required by contracts; wt_dev validated as a parity mirror) |
 | W1 | **Descriptor library + contract tests**: `_lib_appearance_descriptor.lua` (pure build/validate/fingerprint) + engine-free tests in `qa/lua/tests/`; CWV owns the first synchronized runtime copy. | 966+ suite green | DONE 2026-08-06 (#1155 pilot prerequisite) |
 | W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | source complete in CWV 0.1.513-dev with exact Athanor preview identity; Workshop deployment, solo proof, then co-op runtime proof pending |
 | W3 | **Extraction-420 cutover completion**: CWV textures, cosmetics transforms, cosmetics texture fallback, WT transforms (steps 2-5 of that doc). | per-step four-render-path regression + in-game verify | pending |
@@ -67,12 +68,12 @@ matrix per item family, and TODAY every cell is opt-in:
 
 ### W2 exact readiness (updated 2026-08-13)
 
-The `0.1.513-dev` Old Musket pilot declares all 128 surface-x-edge
+The `0.1.513-dev` Old Musket pilot declares all 136 surface-x-edge
 cells under one descriptor/reconciler contract. Twelve cells have runtime
 delivery/adapters that apply and read back the authored custom presentation:
 owner 1P equip/customize, owner 3P equip/customize, bot equip, remote husk
 equip/peer-ready, and preview-open for inventory, illusion browser, CIM
-Athanor, lobby, and score/team. The other 116 cells are census declarations
+Athanor, lobby, and score/team. The other 124 cells are census declarations
 with vanilla-safe fallbacks; many have no runtime call site and are enumerated,
 not fixed.
 
@@ -125,23 +126,23 @@ contracts declare per-mod behavioural CONCERNS and replay coverage; the census
 declares per-family surface x edge SUPPORT - different measurements, one name
 space), and records genuine census gaps. An unmapped name fails the gate.
 
-Two things stay deliberately visible rather than folded away: the vanilla
-`crafting_preview` bench is a declared census gap (**#1198** - the census names
-only `cim_preview`, the CIM Athanor forge), and `initial_spawn` refines `equip`
-rather than `instance_load`. The authority lives outside the descriptor because
+Two things stay deliberately distinct rather than folded away. The vanilla
+`crafting_preview` bench is now the seventeenth canonical census surface
+(**#1198**) and is not an alias of `cim_preview`, the CIM Athanor forge;
+`initial_spawn` refines `equip` rather than `instance_load`. The authority lives
+outside the descriptor because
 `tools/shared_lib/manifest.psd1` byte-syncs the descriptor into the CWV mod
 bundle, and a QA-only naming change must not rewrite a shipped mod file.
 
-**Known directional limit - issue #1197.** The authority resolves contract name
-onto census name; the reverse is not enforced. The contracts still cover the
-historical eleven surfaces, so the six added by #1157 - `specials`,
-`remote_audio`, `hud_panels`, `portraits`, `item_card_2d`, `inventory_tooltip` -
-are accepted when a contract opts in but are not required, and would otherwise
-be invisible to this registry. `check_appearance_contracts.ps1` therefore NAMES
-the unrepresented canonical surfaces on every green run, so the debt is stated
-rather than inferred from silence. Requiring them is a coverage change tracked
-by #1197. The edge axis needs nothing: all eight canonical edges are already
-refined by at least one contract edge.
+**Bidirectional coverage - issue #1197.** Every one of the 15 behavioral
+contracts now declares all 17 canonical surfaces, including the six added by
+#1157 and `crafting_preview` from #1198. `check_appearance_contracts.ps1`
+retains an explicit required list so the manifest cannot shrink its own
+boundary, and reverse-checks that list against every canonical surface emitted
+by the descriptor authority. A future surface therefore fails until the gate,
+manifest, and every concern are expanded together. The edge axis needs no
+equivalent migration: all eight canonical edges were already represented by at
+least one contract edge or refinement.
 
 ## 4. Release rule (restating #660's mandate as policy)
 

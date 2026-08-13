@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.305-beta (2026-08-13) -- declare the vanilla crafting-preview surface (#1198/#1197) [tooling]
+
+- Added `crafting_preview` to all four appearance-family census matrices. The
+  ordinary crafting bench remains explicitly unsupported with the authentic
+  source-weapon fallback; inventory-preview and CIM Athanor evidence are not
+  inferred onto a separate renderer.
+- This is inert census data consumed by offline QA. It changes no Weapon
+  Tweaker availability, animation, model, transform, or synchronization logic.
+
 ## 0.12.304-beta (2026-08-13) -- bound Deepwood package references across transitions (#282)
 
 - Deepwood Staff residency retries now preserve their request latch while

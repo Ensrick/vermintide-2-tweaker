@@ -23,6 +23,12 @@
         'lobby'
         'score_team'
         'hold_tab'
+        'specials'
+        'remote_audio'
+        'hud_panels'
+        'portraits'
+        'item_card_2d'
+        'inventory_tooltip'
     )
     ReplayEdgeVocabulary = @(
         'instance_load'
@@ -91,6 +97,12 @@
                         lobby = @{ Disposition='deferred'; Reason='generic lobby preview native material ownership has not been migrated or empirically verified' }
                         score_team = @{ Disposition='deferred'; Reason='generic score preview native material ownership has not been migrated or empirically verified' }
                         hold_tab = @{ Disposition='deferred'; Reason='Hold-Tab icon/material closure is tracked separately and has no migrated #749 exact-Gui consumer' }
+                        specials = @{ Disposition='deferred'; Reason='borrowed-resource closure at a weapon-special presentation seam has no migrated #749 exact consumer' }
+                        remote_audio = @{ Disposition='not-applicable'; Reason='the #749 contract proves unit and Gui material handles, not Wwise or remote-audio resources' }
+                        hud_panels = @{ Disposition='deferred'; Reason='career-HUD Gui renderer and material closure is not fully migrated into the #749 exact-consumer set' }
+                        portraits = @{ Disposition='deferred'; Reason='portrait renderer and atlas closure is owned by its portrait pipeline and is not a migrated #749 exact consumer' }
+                        item_card_2d = @{ Disposition='deferred'; Reason='generic 2D item-card renderer materials have no migrated #749 exact-Gui consumer proof' }
+                        inventory_tooltip = @{ Disposition='deferred'; Reason='inventory-tooltip renderer and material ownership has not been migrated into the #749 exact-consumer set' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition='not-applicable'; Reason='residency is proved against each live consumer and stores no per-instance state' }
@@ -181,6 +193,12 @@
                         lobby = @{ Disposition = 'not-applicable'; Reason = 'lobby presentation is not a gameplay camera-proximity FadeSystem owner' }
                         score_team = @{ Disposition = 'not-applicable'; Reason = 'score presentation is not a gameplay camera-proximity FadeSystem owner' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards rather than linked player units' }
+                        specials = @{ Disposition = 'deferred'; Reason = 'special-state custom-unit enrollment and replay has not been independently proven through the shared fade owner' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'audio playback has no linked unit visibility state for the fade collector to reconcile' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not render linked player units through FadeSystem' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers are isolated from gameplay FadeSystem linked-unit state' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D item cards do not render linked player units through FadeSystem' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'inventory tooltips do not render linked player units through FadeSystem' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'not-applicable'; Reason = 'fade membership is ephemeral engine state and has no persisted instance payload' }
@@ -242,6 +260,12 @@
                         lobby = @{ Disposition = 'not-applicable'; Reason = 'lobby preview construction does not instantiate HeroWindowWeaveProperties' }
                         score_team = @{ Disposition = 'not-applicable'; Reason = 'score preview construction does not instantiate HeroWindowWeaveProperties' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards rather than the Athanor properties preview unit' }
+                        specials = @{ Disposition = 'not-applicable'; Reason = 'weapon-special presentation does not instantiate the Athanor properties preview unit' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'remote audio has no Athanor properties preview transform' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not instantiate HeroWindowWeaveProperties' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not instantiate HeroWindowWeaveProperties' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D item cards do not render the Athanor properties preview unit transform' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'inventory tooltips do not render the Athanor properties preview unit transform' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'not-applicable'; Reason = 'the correction is derived from current preview slot and native position and has no persisted state' }
@@ -316,6 +340,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'generic lobby character reconstruction is not part of the issue claim and has no paired runtime evidence for this exact item' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'score-screen character reconstruction is not part of the issue claim and has no paired runtime evidence for this exact item' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab displays item data and icons rather than an animated character body' }
+                        specials = @{ Disposition = 'deferred'; Reason = 'Outrider stance retention across a weapon-special presentation has not been independently proven' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'body stance policy does not own remote weapon audio' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not render the animated Outrider character stance' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not play the animated Outrider character stance' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D item cards do not render an animated character body pose' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'inventory tooltips do not render an animated character body pose' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'not-applicable'; Reason = 'the receiver stance is derived from exact item and career identity and has no persisted pose state' }
@@ -394,6 +424,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'generic lobby HeroPreviewer identity still has family-specific reconstruction paths' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'generic score TeamPreviewer identity still has family-specific reconstruction paths' }
                         hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab receives a loadout snapshot without exact backend instance identity and has no migrated descriptor adapter' }
+                        specials = @{ Disposition = 'deferred'; Reason = 'exact descriptor identity has not been proven through a weapon-special presentation adapter' }
+                        remote_audio = @{ Disposition = 'deferred'; Reason = 'remote weapon audio has no migrated exact-instance descriptor consumer and remains tracked by the 398/474 class' }
+                        hud_panels = @{ Disposition = 'deferred'; Reason = 'career HUD panels have no migrated exact-instance CWV descriptor consumer' }
+                        portraits = @{ Disposition = 'deferred'; Reason = 'portrait rendering has no migrated exact-instance CWV descriptor consumer' }
+                        item_card_2d = @{ Disposition = 'deferred'; Reason = 'generic 2D item cards have no migrated exact-instance CWV descriptor consumer' }
+                        inventory_tooltip = @{ Disposition = 'deferred'; Reason = 'inventory tooltips have no migrated exact-instance CWV descriptor consumer' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'deferred'; Reason = 'persisted exact-instance descriptor construction is not yet owned by one provider-neutral load edge' }
@@ -473,6 +509,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'the concrete lobby preview constructor consuming this hook has not been source-proven for #701' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'the concrete score preview constructor consuming this hook has not been source-proven for #701' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons rather than a linked weapon transform' }
+                        specials = @{ Disposition = 'deferred'; Reason = 'the Kruber crossbow left-hand transform has not been proven across weapon-special presentation' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'a linked weapon transform does not own remote audio presentation' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not render the linked crossbow hand transform' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not render the linked crossbow hand transform' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D item cards do not render linked weapon transforms' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'inventory tooltips do not render linked weapon transforms' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'not-applicable'; Reason = 'the baked transform is keyed by item and receiver career, not persisted per instance' }
@@ -540,6 +582,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'the concrete lobby preview constructor consuming the WT transform path has not been source-proven' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'the concrete score preview constructor consuming the WT transform path has not been source-proven' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons rather than linked weapon transforms' }
+                        specials = @{ Disposition = 'deferred'; Reason = 'the Saltzpyre shield rotation has not been proven across weapon-special presentation' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'an offhand transform does not own remote audio presentation' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not render linked offhand transforms' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not render linked offhand transforms' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D item cards do not render linked offhand transforms' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'inventory tooltips do not render linked offhand transforms' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'not-applicable'; Reason = 'the transform is baked by item and receiver career rather than persisted per backend instance' }
@@ -608,6 +656,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'lobby item-card description consumption is not established' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'score-screen item-card description consumption is not established' }
                         hold_tab = @{ Disposition = 'covered'; Evidence = 'parity-gated peer descriptor owns the composed title; Hold-Tab has no flavor-text field' }
+                        specials = @{ Disposition = 'not-applicable'; Reason = 'weapon-special presentation has no item-card name or flavor-text field' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'remote audio has no item-card name or flavor-text field' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not consume component item-card flavor text' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not consume component item-card text' }
+                        item_card_2d = @{ Disposition = 'covered'; Evidence = 'the canonical item-card descriptor publishes the composed title and independently selected component description' }
+                        inventory_tooltip = @{ Disposition = 'deferred'; Reason = 'inventory-tooltip consumption of independently selected component flavor text has not been observed in source or in game' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'covered'; Evidence = 'persisted record is matched back to the canonical decorated component option' }
@@ -647,7 +701,7 @@
                                 'component description never falls back to primary text'
                                 'Hold-Tab peer identity resolves only from existing local caches'
                             )
-                            Surfaces = @('inventory_preview', 'illusion_browser', 'hold_tab')
+                            Surfaces = @('inventory_preview', 'illusion_browser', 'hold_tab', 'item_card_2d')
                             ReplayEdges = @('hot_join', 'parity_ready')
                         }
                     )
@@ -678,6 +732,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'lobby item-card exact backend identity and LA atlas capability have not been proven' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'score-screen item-card exact backend identity and LA atlas capability have not been proven' }
                         hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab receives peer-safe loadout presentation through a separate adapter' }
+                        specials = @{ Disposition = 'not-applicable'; Reason = 'weapon-special presentation does not render an inventory-card icon' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'remote audio does not render an inventory-card icon' }
+                        hud_panels = @{ Disposition = 'deferred'; Reason = 'career-HUD consumption of the exact backend-instance LA icon has not been proven' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'career portraits do not consume the exact backend-instance weapon icon adapter' }
+                        item_card_2d = @{ Disposition = 'covered'; Evidence = 'the singleton UIUtils card adapter resolves the LA icon from exact backend identity and exact authored skin data' }
+                        inventory_tooltip = @{ Disposition = 'deferred'; Reason = 'inventory-tooltip use of the exact backend-instance LA icon adapter has not been proven' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'covered'; Evidence = 'persisted exact-item illusion and offhand records resolve through the same pure provider on the next card request' }
@@ -708,7 +768,7 @@
                                 'persisted row-one LA icon is exact-backend-instance only'
                                 'unknown LA metadata fails closed to vanilla icon'
                             )
-                            Surfaces = @('inventory_preview')
+                            Surfaces = @('inventory_preview', 'item_card_2d')
                             ReplayEdges = @('instance_load', 'customize', 'preview_open', 'preview_reopen', 'mod_disable_restore')
                         }
                     )
@@ -739,6 +799,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'lobby renderer provider-atlas capability has not been proven' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'score renderer provider-atlas capability has not been proven' }
                         hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab uses peer-safe native synchronized identity and cannot consume an unsynchronized provider asset' }
+                        specials = @{ Disposition = 'not-applicable'; Reason = 'weapon-special presentation does not render an item-card option icon' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'remote audio does not render an item-card option icon' }
+                        hud_panels = @{ Disposition = 'deferred'; Reason = 'career-HUD provider-atlas capability for the exact LA target icon has not been proven' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'career portraits do not consume the exact LA target-option icon adapter' }
+                        item_card_2d = @{ Disposition = 'covered'; Evidence = 'the exact item target and current skin resolve only their authored LA option icon on the native 2D card' }
+                        inventory_tooltip = @{ Disposition = 'deferred'; Reason = 'inventory-tooltip provider-atlas capability for the exact LA target icon has not been proven' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'covered'; Evidence = 'restore resolves the saved Armoury key through an item-type and hand-qualified option index for the exact backend item' }
@@ -774,7 +840,7 @@
                                 'restore lookup requires exact item type hand and Armoury key'
                                 'source does not persist or transmit external provider icon assets'
                             )
-                            Surfaces = @('inventory_preview')
+                            Surfaces = @('inventory_preview', 'item_card_2d')
                             ReplayEdges = @('instance_load', 'customize', 'career_change', 'mission_transition', 'rejoin', 'preview_open', 'preview_reopen', 'mod_disable_restore')
                         }
                     )
@@ -805,6 +871,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'lobby item-card icon residency is owned by its renderer-specific contract' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'score-screen item-card icon residency is owned by its renderer-specific contract' }
                         hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab item-card icon residency is owned by its peer-safe renderer contract' }
+                        specials = @{ Disposition = 'not-applicable'; Reason = 'weapon-special presentation does not render a 2D inventory icon' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'remote audio does not render a 2D inventory icon' }
+                        hud_panels = @{ Disposition = 'deferred'; Reason = 'career-HUD renderer ownership of the paired dual-axes atlas has not been proven' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'career portraits do not render the paired dual-axes inventory icon' }
+                        item_card_2d = @{ Disposition = 'covered'; Evidence = 'the packaged paired dual-axes atlas and renderer allow-list provide the authored icon with a resident vanilla fallback' }
+                        inventory_tooltip = @{ Disposition = 'deferred'; Reason = 'inventory-tooltip renderer ownership of the paired dual-axes atlas has not been proven' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'not-applicable'; Reason = 'the authored icon is immutable provider data, not per-instance state' }
@@ -833,7 +905,7 @@
                                 'CWV custom icon contract fails closed outside injected renderers'
                                 'CWV completes the VMF-missing masked saturated atlas variant'
                             )
-                            Surfaces = @('inventory_preview', 'cim_preview')
+                            Surfaces = @('inventory_preview', 'cim_preview', 'item_card_2d')
                             ReplayEdges = @()
                         }
                         @{
@@ -878,10 +950,16 @@
                         inventory_preview = @{ Disposition = 'covered'; Evidence = 'HeroPreviewer character-preview adapter consumes the same descriptor' }
                         illusion_browser = @{ Disposition = 'covered'; Evidence = 'LootItemUnitPreviewer item-preview adapter consumes the same descriptor' }
                         cim_preview = @{ Disposition = 'covered'; Evidence = 'Athanor reuses the LootItemUnitPreviewer item-preview adapter' }
-                        crafting_preview = @{ Disposition = 'covered'; Evidence = 'crafting item previews reuse the LootItemUnitPreviewer adapter' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'the vanilla forge layout does not instantiate LootItemUnitPreviewer, so WOC has no proven bench-specific unit-transform adapter' }
                         lobby = @{ Disposition = 'covered'; Evidence = 'MenuWorldPreviewer character-preview adapter consumes the same descriptor' }
                         score_team = @{ Disposition = 'covered'; Evidence = 'score/end character preview reuses the HeroPreviewer/MenuWorldPreviewer adapter' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons, not a weapon unit transform' }
+                        specials = @{ Disposition = 'deferred'; Reason = 'Blightreaper transform retention across weapon-special presentation has not been independently proven' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'the Blightreaper unit transform contract does not own remote audio presentation' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not render the Blightreaper unit transform' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not render the Blightreaper unit transform' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D item cards render an icon rather than the Blightreaper unit transform' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'inventory tooltips render text and icons rather than the Blightreaper unit transform' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'not-applicable'; Reason = 'the immutable transform descriptor has no per-instance persisted state' }
@@ -963,6 +1041,12 @@
                         lobby = @{ Disposition = 'covered'; Evidence = 'lobby HeroPreviewer reuses the MenuWorldPreviewer equipment-unit transform seam' }
                         score_team = @{ Disposition = 'covered'; Evidence = 'team score HeroPreviewer reuses the MenuWorldPreviewer equipment-unit transform seam' }
                         hold_tab = @{ Disposition = 'deferred'; Reason = 'Hold-Tab does not expose a proven exact backend instance style to the appearance resolver' }
+                        specials = @{ Disposition = 'deferred'; Reason = 'reciprocal Bretonnian transform retention across weapon-special presentation has not been independently proven' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'the reciprocal transform contract does not own remote weapon audio' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not render reciprocal weapon transforms' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not render reciprocal weapon transforms' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D item cards do not render reciprocal weapon transforms' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'inventory tooltips do not render reciprocal weapon transforms' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'covered'; Evidence = 'exact backend instance style is loaded from the schema-checked Combat Style store' }
@@ -1032,6 +1116,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'generic lobby weapon glow presentation has no newly migrated exact-instance adapter' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'score weapon glow presentation has no newly migrated exact-instance adapter' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab has no backend instance identity and this slice emits no custom icon/material there' }
+                        specials = @{ Disposition = 'deferred'; Reason = 'exact-instance glow retention across weapon-special presentation has not been independently proven' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'glow persistence does not own remote audio presentation' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not render the exact weapon material glow' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not render the exact weapon material glow' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D item cards render authored icons rather than live material glow' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'inventory tooltips render text and icons rather than live material glow' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'covered'; Evidence = 'a schema-validated CIM blob imports only on a Cosmetics-local exact-identity miss' }
@@ -1106,6 +1196,12 @@
                         lobby = @{ Disposition = 'deferred'; Reason = 'generic lobby preview uses separate wearer reconstruction and is not governed by the husk career boundary' }
                         score_team = @{ Disposition = 'deferred'; Reason = 'score-screen identity is governed by the separate #513 exact score-row boundary' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab does not render live wearer materials' }
+                        specials = @{ Disposition = 'deferred'; Reason = 'career-scoped husk material retention across weapon-special presentation has not been independently proven' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'career-scoped husk materials do not own remote audio presentation' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not render live remote-husk materials' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not consume the live remote-husk material store' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D item cards do not consume the live remote-husk material store' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'inventory tooltips do not consume the live remote-husk material store' }
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition = 'deferred'; Reason = 'persisted local selection loading is owned by the LA persistence layer before publication' }

@@ -112,22 +112,9 @@ M.EDGE_REFINEMENTS = {
 -- Names with NO canonical equivalent because the census cannot express them.
 -- Each entry is debt against M.CELLS / M.EDGES, not a licence to keep inventing
 -- names: closing one means adding the surface to the descriptor, which forces a
--- newly declared row in EVERY mod census. Each carries its tracking issue.
---
--- DIRECTIONALITY (issue #1197). These tables resolve CONTRACT name -> CENSUS
--- name. The reverse is not covered here: a canonical surface that no contract
--- mentions is legal, so the six surfaces #1157 added (specials, remote_audio,
--- hud_panels, portraits, item_card_2d, inventory_tooltip) currently have no
--- contract representation. qa/check_appearance_contracts.ps1 NAMES them on every
--- green run so the debt is stated rather than silent; requiring them is the
--- coverage change tracked by #1197. The edge axis needs nothing - all eight
--- canonical edges are already refined by at least one contract edge.
-M.SURFACE_CENSUS_GAPS = {
-	crafting_preview = {
-		issue = 1198,
-		reason = "issue #1198: the ordinary (non-Athanor) crafting bench preview has no census surface. M.CELLS names cim_preview for the CIM Athanor forge and nothing for the vanilla bench, and the contracts' own reasons distinguish them ('the ordinary crafting picker does not consume the Athanor sanitizer'). Aliasing one onto the other would hide a real hole, and adding the surface forces a newly declared row in every mod census, so it is recorded here instead",
-	},
-}
+-- newly declared row in EVERY mod census. #1198 closed the first recorded gap:
+-- crafting_preview is now a canonical surface distinct from cim_preview.
+M.SURFACE_CENSUS_GAPS = {}
 
 M.EDGE_CENSUS_GAPS = {}
 
