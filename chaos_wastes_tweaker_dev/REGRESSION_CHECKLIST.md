@@ -4,7 +4,17 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-12.
+Last updated: 2026-08-13.
+
+### injected Old Haunts gargoyle-objective observation - issue #1124
+
+| Field | Value |
+|---|---|
+| Symptom | On an Adventure-injected Old Haunts mission, the "Restore the Gargoyle Heads" objective may not expose all four heads or advance when a head is socketed; no runtime evidence currently distinguishes authored-unit, spawn, socket, and mission-flow failures. |
+| Engine boundary | Old Haunts authors four `LimitedItemTrackSpawner` units. `gargoyle_head_spawner_vs` resolves an empty pickup override to `gargoyle_head`, `spawn_item` retains the returned network unit, `ObjectiveSocketSystem` calls `socket_item`, and the level flow advances the manual `portals_survive` collect mission (required amount 4). The heads do not come from `pickup_settings`. |
+| Expected diagnostic | Only on injected `dlc_portals`, bounded raw `[ct:1124]` lines show four authored spawners, registered/active group state, four spawn attempts each confirmed as a ledger unit and valid `gargoyle_head` pickup extension/game-object id, four socket transitions, and objective progress 0/4 through completed 4/4. Every row says `mutation=false`. |
+| Detection | Offline `test_ct_gargoyle_objective_diag.lua` drives the production wrappers end-to-end and proves exact target gating before object reads, singleton/idempotent hooks, all-argument/all-return native pass-through, planted pre/post observation-fault isolation, truthful no-delta/incomplete-spawn accounting, behavioral 96/run + 512/process output caps that never suppress vanilla, and the current decompiled native contracts. `/ct_regression_test`: `issue1124_gargoyle_objective_diagnostic`. |
+| Test sequence | Keep lifecycle `not-started` until this diagnostic is deployed. Then load Old Haunts through Single Mission Loader, reach "Restore the Gargoyle Heads", locate and socket all four heads, and retain the console log plus the visible 0/4 -> 4/4 completion result. This is solo-first; do not invite a second tester until the native path is proven. |
 
 ### injected-mission lobby lookup safety - issue #1271
 

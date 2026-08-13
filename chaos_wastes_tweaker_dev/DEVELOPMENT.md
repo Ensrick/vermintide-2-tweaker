@@ -31,6 +31,41 @@ checks. `qa/decomposition_contracts.psd1` is the authoritative ceiling/owner
 registry, and the gate proves transitive reachability so a nested owner cannot
 exist as an orphan.
 
+## Old Haunts gargoyle-objective diagnostic (`_ct_diag_gargoyle1124.lua`) — issue #1124
+
+This development-only owner observes the native gargoyle-head objective on an
+Adventure-injected `dlc_portals` level. It is deliberately not a speculative
+pickup fix: the four objective heads come from authored
+`LimitedItemTrackSpawner` units, not from `pickup_settings` or the spread-pickup
+sampler. Native `gargoyle_head_spawner_vs` resolves an empty authored
+`pickup_name` to `gargoyle_head`, spawns that pickup through
+`UnitSpawner.spawn_network_unit`, and retains it in the spawner's item ledger.
+
+The owner installs six full, observation-only wrappers after injected-level
+identity is available: `LimitedItemTrackSystem.on_add_extension`,
+`register_group`, `activate_group`, `LimitedItemTrackSpawner.spawn_item`,
+`socket_item`, and `MissionSystem.flow_callback_update_mission`. Every wrapper
+calls vanilla exactly once outside `pcall` and forwards trailing arguments plus
+every return value. Pre-state snapshots are attempted only after the exact
+injected-`dlc_portals` gate passes; every pre/post diagnostic read is isolated
+behind `pcall`. It never changes a group, spawner, item, socket, mission, flow
+event, or caller-owned table. Raw output is capped at 96 records per run and 512
+per process without suppressing later vanilla calls.
+
+Raw `[ct:1124]` lines retain the authored template/group/final pickup, native
+group registration and activation, spawn attempts separately from confirmed
+ledger units and valid pickup-extension/network-id results, socket count, and
+`portals_survive` progress through completion.
+The stable `CT_GARGOYLE1124_OBSERVATION_ONLY_V1` marker and
+`issue1124_gargoyle_objective_diagnostic` runtime check prove installer and
+pickup-identity integrity; they do not claim an in-game pass. Offline
+`qa/lua/tests/test_ct_gargoyle_objective_diag.lua` drives the actual six
+wrappers through four authored heads, four valid spawns, four sockets, and
+objective 0/4 -> 4/4. It also plants pre-read faults and no-delta/incomplete
+spawn results, proves non-target calls perform no object reads, drives both
+output caps while vanilla continues, and locks idempotence, native pass-through,
+singleton hooks, and the current decompiled native path.
+
 ## Peer-manifest owner (`_ct_peer_manifest_owner.lua`) — issue #1159
 
 The development-only peer-manifest diagnostics are one bounded owner installed at
