@@ -31,16 +31,18 @@ jobs:
         with:
           persist-credentials: false
           # The live-card contract reads the exact deployed source commits
-          # named by the release manifest. Partial-clone fetches only the Lua
-          # text requested by git show/grep; full history does not hydrate the
-          # multi-gigabyte bundle blobs.
+          # named by the release manifest. Full history preserves that
+          # authority; the blob filter still excludes multi-gigabyte bundles.
           fetch-depth: 0
-          # Tracker guard reads GitHub state, not mod sources; blob:none keeps
-          # the checkout free of the ~7 GiB of bundle blobs (#540).
+          # Hydrate current active Lua sources in the checkout's initial pack.
+          # Most deployed blobs are shared with current source, so this avoids
+          # one promisor-network fetch per historical git show/grep (#750).
           filter: 'blob:none'
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
-            qa
-            tools
+            /qa/
+            /tools/
+            /*/scripts/mods/
 
       - name: Validate tracker lifecycle and pinned test cards
         shell: pwsh

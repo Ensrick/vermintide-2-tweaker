@@ -162,6 +162,116 @@ function Test-CiContract {
     return $errors
 }
 
+function Test-IssueLifecycleCheckoutContract {
+    param([string]$Workflow)
+    $errors = @()
+
+    foreach ($permission in @('contents', 'issues')) {
+        if ($Workflow -notmatch "(?m)^\s{2}${permission}:\s*read\s*\r?$") {
+            $errors += "issue lifecycle workflow requires ${permission}: read"
+        }
+    }
+    if ($Workflow -notmatch '(?m)^\s{4}timeout-minutes:\s*5\s*\r?$') {
+        $errors += "issue lifecycle workflow must retain its five-minute fail-closed ceiling"
+    }
+    $uses = [regex]::Matches($Workflow, '(?m)^\s*-?\s*uses:\s*([^\s#]+)')
+    foreach ($match in $uses) {
+        if ($match.Groups[1].Value -notmatch '@[0-9a-fA-F]{40}$') {
+            $errors += "issue lifecycle action is not pinned: $($match.Groups[1].Value)"
+        }
+    }
+
+    $lines = @($Workflow -split '\r?\n')
+    $checkoutIndexes = @()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^\s*(?:-\s*)?uses:\s*actions/checkout@[^\s#]+') {
+            $checkoutIndexes += $i
+        }
+    }
+    $checkoutStepLines = @()
+    if ($checkoutIndexes.Count -ne 1) {
+        $errors += "issue lifecycle workflow requires exactly one pinned checkout step"
+    } else {
+        $checkoutIndex = [int]$checkoutIndexes[0]
+        $checkoutIndent = $lines[$checkoutIndex].Length - $lines[$checkoutIndex].TrimStart().Length
+        $stepStart = $checkoutIndex
+        $stepIndent = $checkoutIndent
+        if ($lines[$checkoutIndex] -notmatch '^\s*-\s*uses:') {
+            for ($i = $checkoutIndex - 1; $i -ge 0; $i--) {
+                if ($lines[$i] -match '^(?<indent>\s*)-\s+') {
+                    $candidateIndent = $matches['indent'].Length
+                    if ($candidateIndent -lt $checkoutIndent) {
+                        $stepStart = $i
+                        $stepIndent = $candidateIndent
+                        break
+                    }
+                }
+            }
+        }
+        $stepEnd = $lines.Count
+        for ($i = $stepStart + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^(?<indent>\s*)-\s+' -and $matches['indent'].Length -eq $stepIndent) {
+                $stepEnd = $i
+                break
+            }
+        }
+        if ($stepEnd -gt $stepStart) {
+            $checkoutStepLines = @($lines[$stepStart..($stepEnd - 1)])
+        }
+    }
+    $checkoutStep = $checkoutStepLines -join "`n"
+
+    if ($checkoutStep -notmatch '(?m)^\s+persist-credentials:\s*false\s*$') {
+        $errors += "issue lifecycle checkout credentials must not persist"
+    }
+    if ($checkoutStep -notmatch '(?m)^\s+fetch-depth:\s*0\s*$') {
+        $errors += "issue lifecycle exact deployed-source validation requires full history"
+    }
+    if ($checkoutStep -notmatch '(?m)^\s+filter:\s*[''\"]?blob:none[''\"]?\s*$') {
+        $errors += "issue lifecycle checkout must retain the blob:none bundle exclusion"
+    }
+    if ($checkoutStep -notmatch '(?m)^\s+sparse-checkout-cone-mode:\s*false\s*$') {
+        $errors += "issue lifecycle checkout must use non-cone sparse patterns"
+    }
+
+    $sparseIndexes = @()
+    for ($i = 0; $i -lt $checkoutStepLines.Count; $i++) {
+        if ($checkoutStepLines[$i] -match '^\s+sparse-checkout:\s*\|\s*$') {
+            $sparseIndexes += $i
+        }
+    }
+    $actualPatterns = @()
+    if ($sparseIndexes.Count -eq 1) {
+        $sparseIndex = [int]$sparseIndexes[0]
+        $sparseIndent = $checkoutStepLines[$sparseIndex].Length - $checkoutStepLines[$sparseIndex].TrimStart().Length
+        for ($i = $sparseIndex + 1; $i -lt $checkoutStepLines.Count; $i++) {
+            $line = $checkoutStepLines[$i]
+            if ($line.Trim().Length -eq 0) { continue }
+            $lineIndent = $line.Length - $line.TrimStart().Length
+            if ($lineIndent -le $sparseIndent) { break }
+            $actualPatterns += $line.Trim()
+        }
+    }
+    $expectedPatterns = @('/qa/', '/tools/', '/*/scripts/mods/')
+    $patternsMatch = $actualPatterns.Count -eq $expectedPatterns.Count
+    if ($patternsMatch) {
+        for ($i = 0; $i -lt $expectedPatterns.Count; $i++) {
+            if ($actualPatterns[$i] -cne $expectedPatterns[$i]) {
+                $patternsMatch = $false
+                break
+            }
+        }
+    }
+    if (-not $patternsMatch) {
+        $errors += "issue lifecycle checkout sparse patterns must be the exact /qa/, /tools/, /*/scripts/mods/ allowlist"
+    }
+    if ($Workflow -notmatch 'check-lifecycle-cardinality\.ps1\s+-SelfTest' -or
+            $Workflow -notmatch 'check-lifecycle-cardinality\.ps1\s+-Repository') {
+        $errors += "issue lifecycle workflow must run both offline fixtures and the live guard"
+    }
+    return $errors
+}
+
 function Invoke-SelfTest {
     $goodWorkflow = @'
 on:
@@ -259,6 +369,34 @@ jobs:
     $good = @(Test-CiContract $goodWorkflow $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool)
     if ($good.Count -ne 0) { throw ("valid CI contract was rejected: " + ($good -join '; ')) }
 
+    $goodIssueLifecycleWorkflow = @'
+permissions:
+  contents: read
+  issues: read
+jobs:
+  tracker-guard:
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@1234567890123456789012345678901234567890
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          filter: 'blob:none'
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /qa/
+            /tools/
+            /*/scripts/mods/
+      - shell: pwsh
+        run: |
+          ./tools/github/check-lifecycle-cardinality.ps1 -SelfTest
+          ./tools/github/check-lifecycle-cardinality.ps1 -Repository '${{ github.repository }}'
+'@
+    $goodIssueLifecycle = @(Test-IssueLifecycleCheckoutContract $goodIssueLifecycleWorkflow)
+    if ($goodIssueLifecycle.Count -ne 0) {
+        throw ("valid issue lifecycle checkout was rejected: " + ($goodIssueLifecycle -join '; '))
+    }
+
     $badWorkflow = $goodWorkflow -replace '@1234567890123456789012345678901234567890', '@v4'
     $badWorkflow = $badWorkflow -replace '    branches: \[master\]', "    branches: [master]`n    paths:`n      - '**/*.lua'"
     $badTool = 'enforce_admins = $false; allow_force_pushes = $true; allow_deletions = $true'
@@ -269,6 +407,31 @@ jobs:
     if ($bad.Count -lt 4) { throw "planted CI/protection failures were not detected" }
     if (-not ($bad -match 'immutable')) { throw "mutable action pin was not detected" }
     if (-not ($bad -match 'path filters')) { throw "fragile push path filter was not detected" }
+
+    $badConeWorkflow = $goodIssueLifecycleWorkflow -replace '(?m)^\s+sparse-checkout-cone-mode:\s*false\s*\r?\n', ''
+    $badCone = @(Test-IssueLifecycleCheckoutContract $badConeWorkflow)
+    if (-not ($badCone -match 'non-cone')) {
+        throw "issue lifecycle cone-mode regression was not detected"
+    }
+
+    $badBundleWorkflow = $goodIssueLifecycleWorkflow -replace '(?m)^(\s+/\*/scripts/mods/\s*)$', "`$1`n            /*/bundleV2/"
+    $badBundle = @(Test-IssueLifecycleCheckoutContract $badBundleWorkflow)
+    if (-not ($badBundle -match 'exact .+ allowlist')) {
+        throw "issue lifecycle bundle hydration regression was not detected"
+    }
+
+    $badBroadWorkflow = $goodIssueLifecycleWorkflow -replace '(?m)^(\s+/\*/scripts/mods/\s*)$', "`$1`n            /*/"
+    $badBroad = @(Test-IssueLifecycleCheckoutContract $badBroadWorkflow)
+    if (-not ($badBroad -match 'exact .+ allowlist')) {
+        throw "issue lifecycle broad hydration regression was not detected"
+    }
+
+    $badOutsideWorkflow = $goodIssueLifecycleWorkflow -replace '(?m)^\s+/\*/scripts/mods/\s*$', '            /qa/fixtures/'
+    $badOutsideWorkflow += "`n            /*/scripts/mods/"
+    $badOutside = @(Test-IssueLifecycleCheckoutContract $badOutsideWorkflow)
+    if (-not ($badOutside -match 'exact .+ allowlist')) {
+        throw "issue lifecycle out-of-checkout hydration spoof was not detected"
+    }
     Write-Host "[check_ci_hardening -SelfTest] OK"
     return 0
 }
@@ -280,11 +443,12 @@ $workflowPath = Join-Path $root '.github\workflows\qa.yml'
 $trustedWorkflowPath = Join-Path $root '.github\workflows\stable-promotion-authorization.yml'
 $autoCloseAuthWorkflowPath = Join-Path $root '.github\workflows\pr-autoclose-authorization.yml'
 $autoCloseAuditWorkflowPath = Join-Path $root '.github\workflows\pr-autoclose-audit.yml'
+$issueLifecycleWorkflowPath = Join-Path $root '.github\workflows\issue-lifecycle.yml'
 $protectionPath = Join-Path $root 'tools\github\protect-master.ps1'
 if (-not (Test-Path $workflowPath) -or -not (Test-Path $trustedWorkflowPath) -or
         -not (Test-Path $autoCloseAuthWorkflowPath) -or -not (Test-Path $autoCloseAuditWorkflowPath) -or
-        -not (Test-Path $protectionPath)) {
-    Write-Host "[check_ci_hardening] ERROR - QA/trusted workflows or protection tool missing." -ForegroundColor Red
+        -not (Test-Path $issueLifecycleWorkflowPath) -or -not (Test-Path $protectionPath)) {
+    Write-Host "[check_ci_hardening] ERROR - QA/trusted/lifecycle workflows or protection tool missing." -ForegroundColor Red
     exit 2
 }
 
@@ -292,8 +456,10 @@ $workflow = [System.IO.File]::ReadAllText($workflowPath, [System.Text.Encoding]:
 $trustedWorkflow = [System.IO.File]::ReadAllText($trustedWorkflowPath, [System.Text.Encoding]::UTF8)
 $autoCloseAuthWorkflow = [System.IO.File]::ReadAllText($autoCloseAuthWorkflowPath, [System.Text.Encoding]::UTF8)
 $autoCloseAuditWorkflow = [System.IO.File]::ReadAllText($autoCloseAuditWorkflowPath, [System.Text.Encoding]::UTF8)
+$issueLifecycleWorkflow = [System.IO.File]::ReadAllText($issueLifecycleWorkflowPath, [System.Text.Encoding]::UTF8)
 $protection = [System.IO.File]::ReadAllText($protectionPath, [System.Text.Encoding]::UTF8)
 $errors = @(Test-CiContract $workflow $trustedWorkflow $autoCloseAuthWorkflow $autoCloseAuditWorkflow $protection)
+$errors += @(Test-IssueLifecycleCheckoutContract $issueLifecycleWorkflow)
 if ($errors.Count -gt 0) {
     Write-Host "[check_ci_hardening] ERRORS:" -ForegroundColor Red
     foreach ($errorMessage in $errors) { Write-Host "  X $errorMessage" -ForegroundColor Red }
