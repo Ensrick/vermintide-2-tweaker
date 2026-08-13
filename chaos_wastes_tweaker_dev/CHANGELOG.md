@@ -1,5 +1,18 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.340-dev (2026-08-13) -- restore starting-boon purchases (#1146) [verify-fix]
+
+- Accepts vanilla's boolean `false` sentinel for a non-discounted shrine offer
+  as a zero discount. The synthetic starting shrine now displays a numeric
+  price, keeps its purchase button enabled when affordable, and charges that
+  same price instead of rendering `-` and rejecting every boon.
+- Retains fail-closed handling for `true`, malformed discounts, missing rarity
+  costs, and malformed start-shrine settings. Normal later shrines still
+  delegate unchanged to vanilla.
+- Adds an engine-free end-to-end regression that passes the actual `false`
+  sentinel through card decoration, affordability, purchase, coin deduction,
+  and tracking, plus pure-policy boundary coverage.
+
 ## 0.7.339-dev (2026-08-12) -- lobby mission lookup crash guard (#1271) [untested]
 
 - Registers every injected Adventure permutation in both vanilla lookups built
