@@ -77,8 +77,30 @@
         @{ Dir = 'general_tweaker';            ModId = 'gt';                         WorkshopId = '3713619122'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'General Tweaker'; RootBundle = '73ac92d9c37dbb6c.mod_bundle' }
         @{ Dir = 'general_tweaker_dev';        ModId = 'gt_dev';                     WorkshopId = '3733367409'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'General Tweaker (Dev)'; RootBundle = 'e6ffaaca2a71199e.mod_bundle' }
         @{ Dir = 'gui_tweaker';                ModId = 'gut';                        WorkshopId = '3732144878'; Visibility = 'friends_only'; Stream = 'stable'; Public = $false; Name = 'GUI Tweaker'; RootBundle = 'ff654aa303c38f8c.mod_bundle' }
-        @{ Dir = 'gui_tweaker_dev';            ModId = 'gut_dev';                    WorkshopId = '3751024698'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'GUI Tweaker (Dev)'; RootBundle = '0e89c5285caab001.mod_bundle' }
-        @{ Dir = 'cosmetics_tweaker';          ModId = 'cosmetics_tweaker';          WorkshopId = '3715714222'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Cosmetics Tweaker'; RootBundle = '6448e4de51a26af1.mod_bundle' }
+        @{
+            Dir = 'gui_tweaker_dev'; ModId = 'gut_dev'; WorkshopId = '3751024698';
+            Visibility = 'friends_only'; Stream = 'dev'; Public = $false;
+            Name = 'GUI Tweaker (Dev)'; RootBundle = '0e89c5285caab001.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
+        @{
+            Dir = 'cosmetics_tweaker'; ModId = 'cosmetics_tweaker'; WorkshopId = '3715714222';
+            Visibility = 'public'; Stream = 'single'; Public = $true;
+            Name = 'Cosmetics Tweaker'; RootBundle = '6448e4de51a26af1.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{ Dir = 'dynamic_cosmetic_portraits'; ModId = 'dynamic_cosmetic_portraits'; WorkshopId = '3721036701'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Dynamic Cosmetic Portraits'; RootBundle = '4b0d338589a2926c.mod_bundle' }
         @{ Dir = 'career_tweaker';             ModId = 'crt';                        WorkshopId = '3716286199'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Career Tweaker'; RootBundle = '92ad046507348beb.mod_bundle' }
         @{ Dir = 'enemy_tweaker';              ModId = 'enemy_tweaker';              WorkshopId = '3716780252'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Enemy Tweaker'; RootBundle = '002586295f98ba25.mod_bundle' }
@@ -96,7 +118,18 @@
         }
         @{ Dir = 'character_dialogue';         ModId = 'character_dialogue';         WorkshopId = '3765055148'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Character Dialogue'; RootBundle = '0e14765f298dd165.mod_bundle' }
         @{ Dir = 'crafting_in_modded';         ModId = 'cim';                        WorkshopId = '3721038774'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'Crafting In Modded'; RootBundle = 'cfd4add911f06fa1.mod_bundle' }
-        @{ Dir = 'crafting_in_modded_dev';     ModId = 'cim_dev';                    WorkshopId = '3733366851'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'Crafting In Modded (Dev)'; RootBundle = '05f34d542fe9a8ef.mod_bundle' }
+        @{
+            Dir = 'crafting_in_modded_dev'; ModId = 'cim_dev'; WorkshopId = '3733366851';
+            Visibility = 'friends_only'; Stream = 'dev'; Public = $false;
+            Name = 'Crafting In Modded (Dev)'; RootBundle = '05f34d542fe9a8ef.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{
             Dir = 'event_tweaker'; ModId = 'event_tweaker'; WorkshopId = '3721290755';
             Visibility = 'public'; Stream = 'single'; Public = $true;

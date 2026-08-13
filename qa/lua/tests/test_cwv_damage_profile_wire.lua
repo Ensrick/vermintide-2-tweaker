@@ -93,6 +93,22 @@ return function(H, repo_root)
 		H.equal(body:find("pcall(pp.all_peers_have, pp)", 1, true), nil)
 	end)
 
+	H.test("CWV #1204 Deus identity install reads committed parity state", function()
+		local path = repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua"
+		local file = assert(io.open(path, "rb"))
+		local source = file:read("*a")
+		file:close()
+		local start = assert(source:find("local function _deus_exact_identity_allowed(parity)", 1, true))
+		local body_end = assert(source:find("local report = _om.deus_identity.install(", start, true))
+		local body = source:sub(start, body_end)
+		H.truthy(body:find("pcall(parity.applied_state, parity)", 1, true))
+		H.truthy(body:find('state == "enabled"', 1, true))
+		H.truthy(body:find("_deus_exact_identity_allowed(parity)", 1, true))
+		H.equal(body:find("parity.all_peers_have", 1, true), nil,
+			"the raw roster classifier must not authorize exact Deus identities")
+	end)
+
 	H.test("CWV #423 exact damage catalog pins its generation against late producers", function()
 		-- capture() finalizes the WHOLE cwv_* namespace, so every cwv row must
 		-- already carry a recorded donor; cwv_future_unmapped is exercised by

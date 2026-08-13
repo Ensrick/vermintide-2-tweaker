@@ -454,13 +454,16 @@ local _auto_registered = false
 -- remains that CWV row; borrowing only the vanilla generation contract keeps
 -- properties/traits valid without collapsing template, item_type, skin pool,
 -- or render units to def.base_weapon; #592 acquisition remains separately bounded.
+local function _deus_exact_identity_allowed(parity)
+	if not parity or type(parity.applied_state) ~= "function" then return false end
+	local ok, state = pcall(parity.applied_state, parity)
+	return ok and state == "enabled"
+end
+_om.deus_exact_identity_allowed = _deus_exact_identity_allowed
+
 _om.install_deus_identities = function(reason)
-	local exact_identity_allowed = false
 	local parity = mod._cwv_peer_parity
-	if parity and type(parity.all_peers_have) == "function" then
-		local ok, result = pcall(parity.all_peers_have, parity)
-		exact_identity_allowed = ok and result == true
-	end
+	local exact_identity_allowed = _deus_exact_identity_allowed(parity)
 	local report = _om.deus_identity.install(
 		_variant_definitions, ItemMasterList,
 		rawget(_G, "DeusStartingWeaponTypeMapping"),

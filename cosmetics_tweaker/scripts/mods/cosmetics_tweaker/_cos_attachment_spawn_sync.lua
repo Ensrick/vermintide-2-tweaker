@@ -302,7 +302,7 @@ function AttachmentSpawnSync.install(mod, deps)
                     wearer_peer, slot_name, cached.kind, cached.armoury_key, cached.vanilla_key, os.clock() + 5,
                 }
                 -- Vanilla runs UNPATCHED: the wearer's real hat shows THIS frame;
-                -- the LA override lands a frame or two later via _try_apply_by_peer.
+                -- the LA override lands a frame or two later via mod._la_reconcile.
                 return func(self, slot_name, item_data)
             end
         end

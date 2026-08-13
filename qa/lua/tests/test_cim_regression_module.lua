@@ -43,7 +43,11 @@ return function(H, repo_root)
 
         local noop = function() end
         local context = {
-            mod = {},
+            mod = {
+                _cim_weave_economy_source_anchor = noop,
+                _cim_accessory_property_source_anchor = noop,
+                _cim_forge_ui_owner = { apply_ui_polish = noop },
+            },
             rt_register = register,
             rt_src_read = noop,
             dbg = noop,
@@ -94,6 +98,29 @@ return function(H, repo_root)
         local ok, result = pcall(checks[1])
         H.truthy(ok, "registered checks did not close over the supplied mod object")
         H.equal(type(result), "string")
+    end)
+
+    H.test("CIM extracted source checks anchor their owning modules", function()
+        local entry = read_all(entry_path)
+        local source = read_all(module_path)
+
+        local weave_owner = read_all(mod_root .. "_cim_weave_economy.lua")
+        local accessory_owner = read_all(mod_root .. "_cim_accessory_property_runtime.lua")
+        local forge_owner = read_all(mod_root .. "_cim_forge_ui_owner.lua")
+
+        H.truthy(weave_owner:find("mod._cim_weave_economy_source_anchor", 1, true))
+        H.truthy(accessory_owner:find(
+            "mod._cim_accessory_property_source_anchor", 1, true))
+        H.truthy(forge_owner:find("state.exports.apply_ui_polish", 1, true))
+
+        H.truthy(source:find(
+            'pcall(debug.getinfo, _weave_economy_source_anchor, "S")', 1, true))
+        H.truthy(source:find(
+            'pcall(debug.getinfo, _accessory_property_source_anchor, "S")', 1, true))
+        H.truthy(source:find(
+            'pcall(debug.getinfo, _forge_ui_source_anchor, "S")', 1, true))
+        H.equal(source:find('pcall(debug.getinfo, _rt_register, "S")', 1, true), nil,
+            "no extracted source check may fall back to the entry-owned registrar")
     end)
 
     H.test("CIM regression checks never reload hook-owning modules", function()

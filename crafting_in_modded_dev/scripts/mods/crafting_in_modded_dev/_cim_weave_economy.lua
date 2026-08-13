@@ -4,10 +4,13 @@
 -- BackendInterfaceWeavesPlayFab read-hook order and delegates mutable forge
 -- state and property-cap policy through narrow injected functions. Installing
 -- twice is a no-op because VMF does not provide singleton hook registration.
+local function source_anchor() end
+
 return function(ctx)
     assert(type(ctx) == "table", "CIM weave economy requires context")
 
     local mod = assert(ctx.mod, "CIM weave economy requires mod")
+    mod._cim_weave_economy_source_anchor = source_anchor
     local is_active = assert(ctx.is_active,
         "CIM weave economy requires active-state accessor")
     local bubble_cap = assert(ctx.bubble_cap,

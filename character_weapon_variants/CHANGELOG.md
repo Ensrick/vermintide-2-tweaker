@@ -1,5 +1,26 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.513-dev (2026-08-13) -- committed Deus parity and exact Athanor preview identity (#1204/#1155) [verify-fix] [untested]
+
+- Exact CWV Chaos Wastes identities now install only when the shared peer gate's
+  committed state is `enabled`. The raw roster classifier could turn true up
+  to two seconds before the gate committed, briefly exposing custom identities
+  while the mixed-lobby fallback was still authoritative.
+- The existing bounded `[cwv:273]` receipt now reports the committed verdict.
+  Lua 5.1 coverage rejects any return to `all_peers_have()` at this sender.
+- Old Musket previews now distinguish CIM's Athanor from an ordinary illusion
+  browser. A full `HeroWindowWeaveProperties._create_item_previewer` hook marks
+  only its returned `LootItemUnitPreviewer`, preserves every trailing argument,
+  and the shared spawn owner resolves `cim_preview` only from that exact marker.
+  Generic loot previewers remain `illusion_browser`; no item or mod-presence
+  guess can relabel them.
+- The Phase-3 appearance adapter and executable census now implement
+  `cim_preview/preview_open`. Offline coverage executes the real wrapper,
+  verifies trailing-argument forwarding and strict instance isolation, and the
+  runtime `issue1155_old_musket_descriptor_reconciler` check requires both the
+  surface discriminator and implemented cell. A retained Athanor spawn emits
+  `[cwv:1155] family=old_musket surface=cim_preview edge=preview_open ... retained=true`.
+
 ## 0.1.512-dev (2026-08-12) -- restore the Old Musket material lifecycle (#474) [untested]
 
 - **Fix (#474 regression of #742): the Old Musket no longer reports a nonexistent custom package as loaded while its borrowed Handgun material is absent.** Its mod-bundled 1P and 3P unit paths now bridge `PackageManager.load`, `unload`, and `has_loaded` to the matching vanilla Empire Handgun material-owner packages while preserving each consumer's reference name, asynchronous completion callback, and priority. CIM/Athanor and hero/inventory previews therefore wait for the material before spawning, and world equip/stance/transition consumers share the same balanced lifecycle instead of producing an invisible unit or missing-material checkerboard.

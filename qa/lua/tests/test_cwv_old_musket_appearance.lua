@@ -137,6 +137,19 @@ return function(H, repo_root)
 		H.equal(next_descriptor.generation, descriptor.generation + 1)
 	end)
 
+	H.test("CWV #1155 CIM preview-open is a retained implemented adapter cell", function()
+		local pilot, unit = fixture()
+		H.equal(pilot.implemented_cells.cim_preview.preview_open, true)
+		local result = pilot.reconcile(unit, "cim_preview", "preview_open", {
+			backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
+		}, "ranged", {
+			unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
+		})
+		H.equal(result.ok, true)
+		H.equal(result.retained, true)
+		H.equal(result.fallback, nil)
+	end)
+
 	H.test("CWV #1155 Old Musket declares an adapter result for every surface-edge pair", function()
 		local pilot, unit = fixture()
 		for _, surface in ipairs(D.SURFACES) do

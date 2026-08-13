@@ -1,5 +1,19 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.332-dev (2026-08-13) -- award Damage Taken to the actual minimum (#1151) [verify-fix] [untested]
+
+- Vanilla initializes the end-score candidate at zero, then minimizes Damage
+  Taken against it, so every positive result loses to a nonexistent zero. A
+  post-vanilla adapter now recomputes only that row from accumulated player
+  scores; the least damage (including ties) receives the green circle and all
+  other statistics remain untouched.
+- Bounded `[gut:1151]` receipts expose each corrected minimum. Runtime and Lua
+  5.1 checks cover positive values, ties, a legitimate zero, malformed partial
+  data, and non-Damage-Taken isolation.
+- Clean builds now discard the exact hash-pinned SDK LUT-generator sidecar
+  before bundle parity and deployment; changed bytes still fail closed.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
+
 ## 0.2.331-dev (2026-08-09) -- debug alerts stay out of chat (#427)
 
 - The gut debug alert helper emitted nothing with mod logging off (mod:debug

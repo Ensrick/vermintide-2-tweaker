@@ -8,6 +8,31 @@ return function(H, repo_root)
 	local pose_policy = dofile(repo_root
 		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview_pose.lua")
 
+	local function install_menu_owner()
+		local hooks = {}
+		local om = {
+			old_musket_preview_pose = {
+				install = function() end,
+			},
+		}
+		local mod = {
+			hook = function(_, class_name, method_name, callback)
+				local key = class_name .. "." .. method_name
+				H.equal(hooks[key], nil, "duplicate menu-preview hook " .. key)
+				hooks[key] = callback
+			end,
+		}
+		local install = dofile(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_menu_preview_owner.lua")
+		install(mod, {
+			om = om, dbg = function() end, dbg_alert = function() end,
+			resolve_field = function() end, is_unit = function() return false end,
+			transform_unit = function() end, apply_cwv_hand_transform = function() end,
+			transform_map = {}, skin_transform_map = {}, crowbill_transform_by_unit = {},
+		})
+		return om, hooks
+	end
+
     H.test("Old Musket mode uses one event-driven state channel", function()
         -- The channel implementation lives in _cwv_old_musket_wire.lua
         -- (extracted 0.1.449-dev); the entry keeps the dofile + call sites.
@@ -72,8 +97,35 @@ return function(H, repo_root)
         H.truthy(hook:find('_om._old_musket_preview_texture_targets(', 1, true))
         H.truthy(hook:find('_om._old_musket_preview_descriptor(item)', 1, true))
 		H.truthy(hook:find('_om.old_musket_appearance.reconcile(unit,', 1, true))
-        H.truthy(hook:find('[cwv:617] Old Musket preview textures applied', 1, true))
-    end)
+		H.truthy(hook:find('[cwv:617] Old Musket preview textures applied', 1, true))
+	end)
+
+	H.test("Old Musket marks only the Athanor previewer returned by its constructor", function()
+		local om, hooks = install_menu_owner()
+		local callback = assert(hooks[
+			"HeroWindowWeaveProperties._create_item_previewer"])
+		local returned = {}
+		local self, viewport, item, activate_spin = {}, {}, {}, {}
+		local seen
+		local result = callback(function(...)
+			seen = { n = select("#", ...), ... }
+			return returned
+		end, self, viewport, item, activate_spin)
+		H.equal(result, returned)
+		H.equal(returned._cwv_cim_preview, true)
+		H.equal(seen.n, 4)
+		H.equal(seen[1], self)
+		H.equal(seen[2], viewport)
+		H.equal(seen[3], item)
+		H.equal(seen[4], activate_spin)
+		H.equal(om._cwv_loot_preview_surface(returned), "cim_preview")
+
+		local ordinary = {}
+		H.equal(ordinary._cwv_cim_preview, nil)
+		H.equal(om._cwv_loot_preview_surface(ordinary), "illusion_browser")
+		H.equal(om._cwv_loot_preview_surface({ _cwv_cim_preview = 1 }),
+			"illusion_browser")
+	end)
 
 	H.test("Old Musket real render call sites route through the shared resolver", function()
         -- issue 474: the recurring failure class was one render surface drifting
@@ -107,9 +159,13 @@ return function(H, repo_root)
 		H.truthy(source:find('_om.old_musket_preview_pose.install(mod, function(unit, _, mode, record)', 1, true))
 		H.truthy(source:find('[cwv:474/792] preview transform retained', 1, true))
 
-		-- (4) illusion browser (LootItemUnitPreviewer). CIM shares the class but
-		-- has no exact surface marker yet and is deliberately not claimed.
-		H.truthy(source:find('"illusion_browser", "preview_open"', 1, true))
+		-- (4) illusion browser and CIM share LootItemUnitPreviewer, but only the
+		-- instance returned by HeroWindowWeaveProperties gets the CIM marker.
+		H.truthy(source:find('local function _cwv_loot_preview_surface(previewer)', 1, true))
+		H.truthy(source:find('and "cim_preview" or "illusion_browser"', 1, true))
+		H.truthy(source:find('preview_surface, "preview_open", item, preview_mode', 1, true))
+		H.truthy(source:find('mod:hook("HeroWindowWeaveProperties", "_create_item_previewer"', 1, true))
+		H.truthy(source:find('local previewer = func(self, viewport_widget, item, ...)', 1, true))
         H.truthy(source:find('_om._old_musket_preview_descriptor(item)', 1, true))
 
 		-- (5) lobby and score are explicitly marked by TeamPreviewer, rather than

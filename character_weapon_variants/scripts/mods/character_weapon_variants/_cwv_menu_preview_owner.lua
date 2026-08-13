@@ -21,6 +21,9 @@
 --   * the two preview teardown edges (`HeroPreviewer._destroy_item_units_by_slot`
 --     and `LootItemUnitPreviewer._destroy_units`) that forget Crowbill transform
 --     state at the source-backed destruction point rather than by weak-key luck;
+--   * `HeroWindowWeaveProperties._create_item_previewer`, which marks ONLY the
+--     returned Athanor previewer so the shared LootItemUnitPreviewer consumer
+--     can distinguish CIM from an ordinary illusion browser;
 --   * the illusion browser / Athanor craft pane (`LootItemUnitPreviewer.spawn_units`):
 --     the #597 mod-unit fallback pre-pass, the issue 419 browser mesh-swap
 --     pre-pass, the def ladder, the unit transforms and the #617 Old Musket
@@ -45,15 +48,16 @@
 -- range before the move (proved with the block-depth scope probe over the
 -- pristine entry), so nothing in the entry can reach in here any more.
 --
--- Registers exactly seven hooks, each the mod's SOLE registration on its
+-- Registers exactly eight hooks, each the mod's SOLE registration on its
 -- (Class, method) pair: TeamPreviewer._spawn_hero,
 -- HeroWindowItemCustomization._setup_illusions, HeroPreviewer._spawn_item,
 -- MenuWorldPreviewer._spawn_item, HeroPreviewer._destroy_item_units_by_slot,
+-- HeroWindowWeaveProperties._create_item_previewer,
 -- LootItemUnitPreviewer._destroy_units and LootItemUnitPreviewer.spawn_units.
 -- VMF silently DROPS a duplicate registration on a pair, so re-adding any of
 -- these to the entry would shadow this owner rather than chain with it.
 -- `_om.old_musket_preview_pose.install(...)` below is a CALL into a module the
--- entry already loaded, not an eighth registration.
+-- entry already loaded, not another inline registration in this owner.
 --
 -- Load-time deps: only the ctx table plus the `_om` slots the entry populates
 -- in its module block (`_om.old_musket_preview_pose` is the sole one read at
@@ -93,6 +97,17 @@ local _apply_cwv_hand_transform = ctx.apply_cwv_hand_transform
 local _transform_map = ctx.transform_map
 local _skin_transform_map = ctx.skin_transform_map
 local _crowbill_transform_by_unit = ctx.crowbill_transform_by_unit
+
+-- #1155: LootItemUnitPreviewer is shared by ordinary illusion browsers and
+-- CIM's Athanor. HeroWindowWeaveProperties is the exact construction boundary
+-- for the latter, so a strict instance marker is stronger than guessing from
+-- item identity, packages, or whichever other mods happen to be installed.
+-- Generic previewers deliberately resolve to illusion_browser.
+local function _cwv_loot_preview_surface(previewer)
+	return previewer and previewer._cwv_cim_preview == true
+		and "cim_preview" or "illusion_browser"
+end
+_om._cwv_loot_preview_surface = _cwv_loot_preview_surface
 
 local function _find_preview_slot_info(self, item_name, spawn_data)
 	if not self._item_info_by_slot then return nil, nil end
@@ -336,6 +351,18 @@ _om.old_musket_preview_pose.install(mod, function(unit, _, mode, record)
 		cwv_key = "cwv_es_musket_old", skin = "cwv_es_musket_old_skin",
 	}, mode, { unit_name = _om.old_musket_preview.UNIT_3P })
 end, printf, _dbg)
+
+-- #1155 consolidated Athanor preview marker. Vanilla constructs and returns
+-- the LootItemUnitPreviewer here, then drives its package/spawn work later from
+-- post_update. A full wrapper can therefore mark the exact returned instance
+-- before LootItemUnitPreviewer.spawn_units fires. Never mark the class or infer
+-- CIM from a generic previewer's item.
+mod:hook("HeroWindowWeaveProperties", "_create_item_previewer",
+		function(func, self, viewport_widget, item, ...)
+	local previewer = func(self, viewport_widget, item, ...)
+	if previewer then previewer._cwv_cim_preview = true end
+	return previewer
+end)
 
 -- #604 TeamPreviewer identity bridge. Score rows preserve the peer in
 -- context.players_session_score even though LevelEndView._get_hero_from_score
@@ -585,19 +612,21 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 		end
 	end
 
-	-- #617: this shared previewer is CIM's Athanor craft-screen consumer as
-	-- well as the illusion browser. The custom .unit intentionally carries a
+	-- #617/#1155: this shared previewer is CIM's Athanor craft-screen consumer
+	-- as well as the illusion browser. The exact instance marker above keeps
+	-- those surfaces distinct. The custom .unit intentionally carries a
 	-- vanilla material shell, so its three authored textures must be rebound
 	-- after every spawn just as they are for owner equipment and HeroPreviewer.
 	-- The target planner rejects vanilla resource fallbacks before any write.
 	local musket_targets = _om._old_musket_preview_texture_targets(
 		preview_descriptor, units, spawn_data)
 	local preview_mode = preview_descriptor and preview_descriptor.mode or "ranged"
+	local preview_surface = _cwv_loot_preview_surface(self)
 	local applied = 0
 	for _, unit in ipairs(musket_targets) do
 		if _is_unit(unit) then
 			local result = _om.old_musket_appearance.reconcile(unit,
-				"illusion_browser", "preview_open", item, preview_mode,
+				preview_surface, "preview_open", item, preview_mode,
 				{ unit_name = _om.old_musket_preview.UNIT_3P })
 			if result and result.retained then applied = applied + 1 end
 		end

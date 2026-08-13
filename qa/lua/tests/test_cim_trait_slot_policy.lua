@@ -50,6 +50,31 @@ return function(H, repo_root)
         H.equal(ranged.melee_only, nil)
     end)
 
+    H.test("CIM #1122 independently detects unmapped boon-bearing families", function()
+        local traits = {
+            shared_boon = { crafting_disabled = true },
+            new_boon = { crafting_disabled = true },
+            adventure_trait = { crafting_disabled = false },
+        }
+        local combinations = {
+            deus_melee = { { "shared_boon" } },
+            z_new_family = { { "new_boon" } },
+            a_new_family = { { "shared_boon" } },
+            adventure_family = { { "adventure_trait" } },
+            malformed_family = { "new_boon", {}, { "missing_trait" } },
+        }
+        local missing = policy.unmapped_boon_categories(combinations, traits)
+        H.equal(#missing, 2)
+        H.equal(missing[1], "a_new_family")
+        H.equal(missing[2], "z_new_family")
+    end)
+
+    H.test("CIM #1122 census is total over malformed or absent live tables", function()
+        H.equal(#policy.unmapped_boon_categories(nil, {}), 0)
+        H.equal(#policy.unmapped_boon_categories({}, nil), 0)
+        H.equal(#policy.unmapped_boon_categories({ broken = false }, {}), 0)
+    end)
+
     H.test("CIM production reroll and Athanor paths thread exact slot identity", function()
         local function read(path)
             local f = assert(io.open(path, "rb"))

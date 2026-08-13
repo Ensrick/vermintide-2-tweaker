@@ -21,6 +21,10 @@ return function(context)
     local _OVERVIEW_DRAWN_FIELDS = context.overview_drawn_fields
     local _modded_loadout_load = context.modded_loadout_load
     local CIM_RPC_SCHEMA = context.rpc_schema
+    local _weave_economy_source_anchor = mod._cim_weave_economy_source_anchor
+    local _accessory_property_source_anchor = mod._cim_accessory_property_source_anchor
+    local _forge_ui_source_anchor = mod._cim_forge_ui_owner
+        and mod._cim_forge_ui_owner.apply_ui_polish
     local _rt_with_loadout_sandbox
 
 -- ============================================================
@@ -36,7 +40,10 @@ _rt_register("weave_talent_forge_level_guard_present", function()
     -- check fails if that hook is removed. The needle is assembled from two literals
     -- so this test's own source does not self-match. Degrades to a no-op when source
     -- introspection is unavailable (deploy/bundle paths).
-    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if type(_weave_economy_source_anchor) ~= "function" then
+        return "weave economy owner source anchor missing"
+    end
+    local ok, info = pcall(debug.getinfo, _weave_economy_source_anchor, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
@@ -219,9 +226,13 @@ _rt_register("weave_forge_hides_cost_readout", function()
     -- hook_safe on HeroWindowWeaveProperties._populate_menu_option_widget blanks
     -- content.price_text AND zeroes the separate price_icon alpha while
     -- _custom_forge_active. Source-pattern guard on THIS file (path via the
-    -- file-local _rt_register). Split needles so these lines can't self-match.
+    -- installer defined by the extracted adapter). Split needles so these lines
+    -- cannot self-match.
     -- No-op if the source is unreadable.
-    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if type(_accessory_property_source_anchor) ~= "function" then
+        return "accessory property owner source anchor missing"
+    end
+    local ok, info = pcall(debug.getinfo, _accessory_property_source_anchor, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
@@ -1334,7 +1345,10 @@ _rt_register("forge_tooltip_no_equipped_compare", function()
     end
     -- Forge not opened this session: source needle (io-safe #511; nil in retail
     -- sandbox => skip). Split needle so this line can't self-match.
-    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if type(_forge_ui_source_anchor) ~= "function" then
+        return "forge UI owner source anchor missing"
+    end
+    local ok, info = pcall(debug.getinfo, _forge_ui_source_anchor, "S")
     if not ok or type(info) ~= "table" or not info.source then return "skip: forge not opened; no source introspection" end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)
@@ -1679,6 +1693,11 @@ _rt_register("issue414_cw_traits_preserve_slot_family", function()
     local policy = mod._cim_trait_slot_policy
     if not (WT and WT.traits and WT.combinations and policy) then
         return "skip: WeaponTraits or slot policy not loaded"
+    end
+    local unmapped = policy.unmapped_boon_categories(WT.combinations, WT.traits)
+    if #unmapped > 0 then
+        return "slot policy omitted boon-bearing categor"
+            .. (#unmapped == 1 and "y " or "ies ") .. table.concat(unmapped, ",")
     end
     local expected = { melee = {}, ranged = {} }
     for category, pool in pairs(WT.combinations) do
