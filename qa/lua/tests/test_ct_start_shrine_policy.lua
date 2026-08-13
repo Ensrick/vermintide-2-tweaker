@@ -83,10 +83,74 @@ local function read(path)
         local costs = { shop = { power_ups = { rare = 200, exotic = 250 } } }
         H.equal(policy.shop_cost(costs, "rare", 0, 0), 0)
         H.equal(policy.shop_cost(costs, "rare", 0, 100), 200)
+        H.equal(policy.shop_cost(costs, "rare", false, 100), 200)
+        H.equal(policy.shop_cost(costs, "rare", nil, 100), 200)
         H.equal(policy.shop_cost(costs, "rare", 0, 200), 400)
         H.equal(policy.shop_cost(costs, "exotic", 0.5, 150), 188)
         H.equal(policy.shop_cost(costs, "missing", 0, 100), nil)
         H.equal(policy.shop_cost(costs, "rare", 2, 100), nil)
+        H.equal(policy.shop_cost(costs, "rare", true, 100), nil)
+    end)
+
+    H.test("CT #1146 vanilla false discount stays purchasable and renders a numeric price", function()
+        local runtime, hooks = load_runtime({
+            ct_start_shrine_cost_percent = 100,
+            ct_start_shrine_purchase_limit = 0,
+        })
+        local state = {
+            coins = 1000,
+            power_ups = {},
+            bought = {},
+            get_player_profile = function() return 1, 1 end,
+            get_player_soft_currency = function(self) return self.coins end,
+            set_player_soft_currency = function(self, _, _, value) self.coins = value end,
+            get_player_power_ups = function(self) return self.power_ups end,
+            set_player_power_ups = function(self, _, _, _, _, value) self.power_ups = value end,
+            get_bought_power_ups = function(self) return self.bought end,
+            set_bought_power_ups = function(self, value) self.bought = value end,
+            is_server = function() return true end,
+        }
+        local drc = {
+            _run_state = state,
+            get_current_node = function()
+                return { level = "dlc_morris_map", system_seeds = { blessings = 12 } }
+            end,
+            get_current_node_key = function() return "start" end,
+            get_run_id = function() return 1146 end,
+            get_own_peer_id = function() return "peer-a" end,
+            has_power_up = function() return false end,
+            _add_coin_tracking_entry = function(_, _, _, amount) state.tracked = amount end,
+        }
+        H.truthy(runtime.prepare(drc))
+
+        local view = {
+            _shop_type = "dlc_morris_map",
+            _deus_run_controller = drc,
+            _shop_items = { power_ups = {
+                {
+                    power_up = { name = "boon-a", rarity = "rare", client_id = 1 },
+                    discount = false,
+                    widget = { content = {
+                        price_text = "-",
+                        button_hotspot = { disable_button = false },
+                    } },
+                },
+            } },
+        }
+        runtime.decorate_shop(view)
+        H.equal(view._shop_items.power_ups[1].widget.content.price_text, "250")
+        H.equal(view._shop_items.power_ups[1].widget.content.button_hotspot.disable_button, false)
+
+        local cost_hook = assert(hooks["DeusShopView._get_power_up_costs"])
+        H.equal(cost_hook(function() return 250 end, view, "rare", false), 250)
+
+        local handled, bought, charged = runtime.try_buy(drc, "peer-a",
+            view._shop_items.power_ups[1].power_up, false)
+        H.equal(handled, true)
+        H.equal(bought, true)
+        H.equal(charged, 250)
+        H.equal(state.coins, 750)
+        H.equal(state.tracked, -250)
     end)
 
     H.test("CT #458 purchase ledger is isolated by run peer and local player", function()

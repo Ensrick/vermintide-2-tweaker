@@ -44,7 +44,14 @@ function M.shop_cost(cost_settings, rarity, discount, percent)
     local shop = type(cost_settings) == "table" and cost_settings.shop
     local costs = type(shop) == "table" and shop.power_ups
     local base = type(costs) == "table" and finite_number(costs[rarity])
-    discount = discount == nil and 0 or finite_number(discount)
+    -- DeusShopView uses boolean false, not nil or numeric zero, for every
+    -- ordinary non-discounted offer. Preserve that vanilla UI/wire contract at
+    -- this boundary; true and every other non-number remain invalid.
+    if discount == nil or discount == false then
+        discount = 0
+    else
+        discount = finite_number(discount)
+    end
     if not base or base < 0 or not discount or discount < 0 or discount > 1 then return nil end
 
     -- Match DeusRunController._try_buy_power_up exactly: discount is rounded
