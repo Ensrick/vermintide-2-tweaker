@@ -752,10 +752,11 @@ return function(H, repo_root)
         -- #1159 slice: a mod-bundled custom mesh has no sibling .package, no
         -- NetworkLookup.inventory_packages entry, no skeleton for the vanilla
         -- template's attachment links and no flow graph for weapon FX. The four
-        -- inline blocks that patched those gaps moved verbatim out of the entry
-        -- as ONE contiguous block. Each producer lives exactly ONCE, in the owner.
+        -- inline blocks that patched those gaps moved out of the entry as ONE
+        -- contiguous block. Each producer lives exactly ONCE, in the owner. The
+        -- former false-success package table is now a material-owner bridge.
         local owned = {
-            "local _LA_PATTERN_CUSTOM_PACKAGES = {",
+            "local _old_musket_package_bridge = mod:dofile(",
             "_om._husk_custom_bundle_unit = function(base_unit)",
             "_om._old_musket_transform_components = function(perspective, mode)",
             "_om.old_musket_appearance = _om.old_musket_appearance_policy.new({",
@@ -809,12 +810,16 @@ return function(H, repo_root)
             'mod:dofile("scripts/mods/character_weapon_variants/_cwv_custom_mesh_runtime")(mod, {'), 1,
             "entry installs the custom-mesh runtime owner exactly once")
 
-        -- The #474 stance channel is dofiled from INSIDE the moved block and has
-        -- to stay there: its `_om` exports must exist before the fire dispatch
+        -- The #474 stance channel and package bridge are dofiled from INSIDE the
+        -- moved block. The stance channel has to stay there: its `_om` exports
+        -- must exist before the fire dispatch
         -- above it runs and before the identity register far below routes into
-        -- them. That is the owner's ONLY nested load.
-        H.equal(count_plain(custom_mesh, "mod:dofile("), 1,
-            "custom-mesh owner performs exactly one nested load")
+        -- them. The bridge must also stay beside the sole PackageManager hooks.
+        H.equal(count_plain(custom_mesh, "mod:dofile("), 2,
+            "custom-mesh owner performs exactly two bounded nested loads")
+        H.equal(count_plain(custom_mesh,
+            '"scripts/mods/character_weapon_variants/_cwv_old_musket_package_bridge")'), 1,
+            "the package hooks consume the #474 material-owner bridge")
         H.equal(count_plain(custom_mesh,
             'mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_wire")(mod, { om = _om })'), 1,
             "the nested load is the #474 Old Musket stance channel")
