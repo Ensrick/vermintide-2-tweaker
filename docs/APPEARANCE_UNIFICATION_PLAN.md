@@ -22,9 +22,10 @@ explicit rather than inferred:
 2. **Per-mod, per-surface re-implementation.** CWV, cosmetics_tweaker, WT,
    WOC, and cim each resolve identity, hand, perspective, career, residency,
    and render path independently at each hook site. The shared geometry
-   primitive (`_lib_weapon_appearance.lua`, #420) landed but only CWV's
-   transform path consumes it; textures, cosmetics, WT, and ALL identity/
-   lifecycle logic remain forked (extraction-420 cutover steps 2-5 pending).
+   primitive (`_lib_weapon_appearance.lua`, #420) now owns ordinary transform
+   math for CWV, both WT streams, WOC, and the source-complete Cosmetics
+   adapter; material fallbacks and ALL identity/lifecycle logic remain
+   family-owned or forked.
 3. **Setter-success verification.** Fix validation has repeatedly asserted
    that a setter call succeeded rather than that the engine RETAINED the
    state (#660's documented false-positive: WOC logged target
@@ -62,7 +63,7 @@ explicit rather than inferred:
 | W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, currently 3,624 unsupported pairs of 4,624 (`docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-13 (#1157: surface-x-edge schema and six new surfaces; #1198: distinct crafting preview; #1197: all 17 surfaces required by contracts; wt_dev validated as a parity mirror) |
 | W1 | **Descriptor library + contract tests**: `_lib_appearance_descriptor.lua` (pure build/validate/fingerprint) + engine-free tests in `qa/lua/tests/`; CWV owns the first synchronized runtime copy. | 966+ suite green | DONE 2026-08-06 (#1155 pilot prerequisite) |
 | W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | source complete in CWV 0.1.513-dev with exact Athanor preview identity; Workshop deployment, solo proof, then co-op runtime proof pending |
-| W3 | **Extraction-420 cutover completion**: CWV textures, cosmetics transforms, cosmetics texture fallback, WT transforms (steps 2-5 of that doc). | per-step four-render-path regression + in-game verify | pending |
+| W3 | **Extraction-420 cutover completion**: shared transform ownership is source-complete across CWV, Cosmetics, both WT streams, and WOC; the remaining Cosmetics material/texture fallback belongs to the broader #660 migration. | per-step four-render-path regression + in-game verify | Cosmetics source candidate pending release/no-drift verification; material fallback pending under #660 |
 | W4 | **Remaining families**, one per change, closing their symptom issues as they migrate; #660's issue index burns down. | each family's cells green | pending |
 | W5 | **OOP completion**: ct_dev + cwv decomposition (last two god files), #727 logging sweep, doc reconciliation. | full QA green, per-mod module contracts documented | DONE 2026-08-12 (#1159: all 10 decomposition contracts complete; final CT Dev entry 1,498 nonblank lines, CWV entry 1,490) |
 

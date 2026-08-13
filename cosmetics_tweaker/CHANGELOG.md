@@ -1,5 +1,18 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.210-dev (2026-08-13) -- adopt the shared weapon-transform owner (#420)
+
+- Cosmetics now constructs one local `WeaponAppearance` instance before its
+  render adapter loads. Ordinary equipment, inventory-character preview, and
+  illusion-browser scale and grip-offset operations delegate to that shared
+  primitive instead of retaining private setter and additive-position math.
+- Cosmetics still owns item identity, career and hand selection, renderer,
+  hooks, and lifecycle policy. This change adds no sibling-mod dependency,
+  RPC, persistence write, or new engine hook.
+- Added an exact runtime ownership check, an appearance contract for supported
+  transform surfaces and replay edges, and adversarial Lua coverage that fails
+  if private scale or position setters return to the ordinary adapter.
+
 ## 0.9.209-dev (2026-08-13) -- declare the vanilla crafting-preview surface (#1198/#1197) [tooling]
 
 - Added `crafting_preview` to all eight appearance-family census matrices. The

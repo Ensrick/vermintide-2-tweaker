@@ -232,9 +232,11 @@ because native code has just replaced the engine-owned list.
 - Residency, path 1: the boot pass `_force_load_husk_override_units` already runs
   on the host, so owner residency IS covered; #415's residual absent-shield is the
   ranged-slot offhand-attach root, pending the disambiguating in-game test. → §4.5.
-- Texture, all paths: bespoke `Material.set_texture` copies (BANNED primitive —
-  §4.3 mandates `Unit.set_texture_for_materials`), no per-instance persistence,
-  `WA` not shared cross-mod (#227, #416, issue #420). → §4.3.
+- Texture, all paths: historical bespoke `Material.set_texture` copies are a
+  BANNED primitive (§4.3 mandates unit-local writes). #420 now gives CWV,
+  Cosmetics, WT, and WOC isolated instances of the shared transform primitive;
+  material fallback and per-instance lifecycle parity remain separate #660 work.
+  → §4.2 / §4.3.
 - Sync: husk resolves BASE `item_data` (#392). Husk display resolution
   (v0.1.377-dev, #474/#475, superseding the Phase C base+career-primary model)
   runs through ONE decision point (`_om._husk_resolve_display_def`) in this
@@ -575,7 +577,7 @@ an empty, unknown, red-placeholder, or custom-resource error is a failure.
 | #417 | Units/Transform | 1,3 | mesh swaps but transform silently skips (reg-gate fork) |
 | #418 | Residency | 2,3 | ref-string / guard duplicated — rename → silent base mesh |
 | #419 | Units | 4 | illusion browser previews base mesh (path-3 swap not mirrored) |
-| #420 | Texture | all | WA not shared; Material.set_texture banned-primitive copies |
+| #420 | Transform/Architecture | 1,3,4 | Shared primitive adopted by each original consumer; Cosmetics release/no-drift verification remains before closure, while material/lifecycle parity stays under #660 |
 | #617 | Texture | 4 | Old Musket custom unit spawned in Athanor/browser without its texture consumer |
 | #882 | Transform | 4 | CIM ranged properties preview uses the native centered picker position; the in-mission overview preserves the native primary/secondary viewport split even when both equipped items are melee |
 

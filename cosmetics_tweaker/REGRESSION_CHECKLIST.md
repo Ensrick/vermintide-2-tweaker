@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-26.
+Last updated: 2026-08-13.
 
 ---
 ## Athanor exact offhand preview ownership (#481)
@@ -34,10 +34,20 @@ Last updated: 2026-07-26.
 
 | Field | Value |
 |---|---|
-| Registry | `_cos_command_owner.lua` owns the lazy registry and `/cos_regression_test` runner, seeds `local_player_safe_network_lifecycle_609`, and preserves the three LA persistence maintenance commands. `_cos_runtime_checks.lua` installs exactly 60 late checks in historical order, from `cos_la_reconcile_and_pull_wired` through `mh_package_single_reference`, plus one `/verify_gk_set` command. The entry injects private dependencies explicitly. |
+| Registry | `_cos_command_owner.lua` owns the lazy registry and `/cos_regression_test` runner, seeds `local_player_safe_network_lifecycle_609`, and preserves the three LA persistence maintenance commands. `_cos_runtime_checks.lua` installs exactly 61 late checks in historical order, from `cos_la_reconcile_and_pull_wired` through `mh_package_single_reference`, plus one `/verify_gk_set` command. The entry injects private dependencies explicitly. |
 | Commands | `_cos_glow_probe.lua` owns six wielded-material probe commands and both bounded tick functions; `_cos_la_commands.lua` owns six LA diagnostic commands. Neither module owns a hook, RPC, or lifecycle callback. |
 | API | The later manual picker continues to consume the same `_wielded_units_for_probe` function through the glow module export. No command name, runtime-check name, registration order, or `mod._*` tick name changes. |
 | Detection | Offline `test_cos_runtime_modules.lua` executes all four installers under Lua 5.1, pins command/check counts, order, idempotence, exports, and proves the entry loads each owner once. Full suite tests concatenate `_cos_runtime_checks.lua` and `_cos_command_owner.lua` when asserting moved runtime signatures. |
+
+---
+## Shared ordinary weapon-transform owner (#420)
+
+| Field | Value |
+|---|---|
+| Owner | The entry loads its bundled `_lib_weapon_appearance.lua` once, constructs one Cosmetics-local instance, and installs that exact instance on `mod._cos` before `_cos_render.lua` loads. No sibling mod or shared runtime provider is required. |
+| Delegation | `_cos_render.lua` keeps unit-path, career, hand, renderer, and lifecycle decisions. Its ordinary one-shot scale and additive grip-offset channels pass plain descriptors to the shared instance; private scale/position setter math is forbidden in this adapter. LA unit scaling, TPE attachments, and durable animation-tick retention remain separate owners outside #420. |
+| Failure boundary | Malformed descriptors or rejected engine writes fail closed through `WeaponAppearance`; a narrowly proven unit-class compatibility adapter may preserve shared math ownership but may not restore private composition. |
+| Detection | Offline `test_shared_weapon_appearance.lua` proves loader order, both delegated channels, and adversarial rejection of restored private setters. `test_cos_runtime_modules.lua` pins the injected instance and malformed-contract failure. `/cos_regression_test` passes `issue420_shared_weapon_appearance_owner`. |
 
 ---
 ## Phase 5 preview-runtime owner boundary

@@ -64,6 +64,85 @@
 
     Contracts = @(
         @{
+            Id = 'cosmetics.issue420.shared-weapon-transform-owner'
+            Issue = 420
+            Claim = 'structural-only'
+            Owners = @(
+                'tools/shared_lib/_lib_weapon_appearance.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_render.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition='covered'; Evidence='the post-create equipment adapter delegates every live 1P hand unit through the shared scale/offset owner' }
+                        owner_3p = @{ Disposition='covered'; Evidence='the post-create equipment adapter delegates every live 3P hand unit through the same shared owner' }
+                        bot = @{ Disposition='covered'; Evidence='bot equipment follows the same GearUtils return adapter and unit-path transform policy' }
+                        husk = @{ Disposition='deferred'; Reason='remote husk equipment does not enter the Cosmetics scale/grip adapter and retains native transform' }
+                        inventory_preview = @{ Disposition='covered'; Evidence='the inventory-character preview spawn adapter calls the shared scale owner with resolved spawn-data unit paths' }
+                        illusion_browser = @{ Disposition='covered'; Evidence='the illusion-browser spawn adapter calls the same shared scale owner with resolved spawn-data unit paths' }
+                        cim_preview = @{ Disposition='deferred'; Reason='the Athanor forge preview is not a proven Cosmetics transform consumer' }
+                        crafting_preview = @{ Disposition='deferred'; Reason='the ordinary crafting bench has no proven Cosmetics transform adapter' }
+                        lobby = @{ Disposition='deferred'; Reason='Cosmetics has no weapon-transform adapter for the lobby presentation' }
+                        score_team = @{ Disposition='deferred'; Reason='the score-lineup owner paints outfit state but does not apply this weapon scale/grip concern' }
+                        hold_tab = @{ Disposition='not-applicable'; Reason='Hold-Tab renders 2D item cards rather than a weapon unit transform' }
+                        specials = @{ Disposition='deferred'; Reason='weapon-special transform retention has not been independently observed through this one-shot adapter' }
+                        remote_audio = @{ Disposition='not-applicable'; Reason='the transform owner does not alter remote audio presentation' }
+                        hud_panels = @{ Disposition='not-applicable'; Reason='career HUD panels do not render the weapon unit transform' }
+                        portraits = @{ Disposition='not-applicable'; Reason='portrait renderers do not render the weapon unit transform' }
+                        item_card_2d = @{ Disposition='not-applicable'; Reason='2D item cards consume icons rather than weapon unit transforms' }
+                        inventory_tooltip = @{ Disposition='not-applicable'; Reason='inventory tooltips consume text and icons rather than weapon unit transforms' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition='not-applicable'; Reason='the ordinary transform is derived from current item/unit data and stores no backend-instance payload' }
+                        initial_spawn = @{ Disposition='covered'; Evidence='each supported equipment or preview unit delegates immediately after its native spawn returns' }
+                        equip = @{ Disposition='covered'; Evidence='fresh equipment construction applies the resolved shared descriptor before the caller receives the result' }
+                        wield = @{ Disposition='deferred'; Reason='this concern has no separate retained-state wield reconciler for an already-spawned unit' }
+                        customize = @{ Disposition='covered'; Evidence='a customization preview replacement enters the illusion-browser spawn adapter and applies once to the new unit' }
+                        style_change = @{ Disposition='deferred'; Reason='combat-style reconstruction has not been independently observed through this Cosmetics adapter' }
+                        career_change = @{ Disposition='deferred'; Reason='career replacement is expected to construct new equipment but has no independent #420 observation' }
+                        mission_transition = @{ Disposition='covered'; Evidence='replacement mission equipment receives a fresh shared-owner application with no cross-world ledger reuse' }
+                        respawn = @{ Disposition='covered'; Evidence='replacement equipment units receive fresh weak-key ownership after respawn' }
+                        hot_join = @{ Disposition='deferred'; Reason='the remote husk surface is not implemented for this concern' }
+                        peer_ready = @{ Disposition='deferred'; Reason='there is no transform replication channel and the remote husk surface remains unsupported' }
+                        parity_ready = @{ Disposition='not-applicable'; Reason='this local presentation concern sends no numeric or semantic peer payload' }
+                        rejoin = @{ Disposition='deferred'; Reason='the remote husk surface is not implemented for this concern' }
+                        preview_open = @{ Disposition='covered'; Evidence='each supported preview spawn resolves and delegates its visible hand units' }
+                        preview_reopen = @{ Disposition='covered'; Evidence='replacement preview units receive independent weak-key ownership and one application' }
+                        lobby_score_create = @{ Disposition='deferred'; Reason='lobby and score weapon transforms remain unsupported surfaces' }
+                        mod_disable_restore = @{ Disposition='deferred'; Reason='already-spawned scaled units have no proven live restoration edge on mod disable' }
+                    }
+                    Tests = @(
+                        @{
+                            Path='qa/lua/tests/test_shared_weapon_appearance.lua'
+                            Names=@(
+                                '#420 Cosmetics ordinary transform adapter delegates to shared WeaponAppearance'
+                                '#420 Cosmetics adoption rejects private scale and position setters'
+                            )
+                            Surfaces=@('owner_1p','owner_3p','bot','inventory_preview','illusion_browser')
+                            ReplayEdges=@('initial_spawn','equip','customize','mission_transition','respawn','preview_open','preview_reopen')
+                        }
+                        @{
+                            Path='qa/lua/tests/test_cos_equipment_assembly.lua'
+                            Names=@('cos equipment assembly runs the MH embed before the vanilla spawn')
+                            Surfaces=@('owner_1p','owner_3p','bot')
+                            ReplayEdges=@('initial_spawn','equip','mission_transition','respawn')
+                        }
+                        @{
+                            Path='qa/lua/tests/test_cos_preview_runtime.lua'
+                            Names=@('Cosmetics preview runtime installs exact hooks once in stable order')
+                            Surfaces=@('inventory_preview','illusion_browser')
+                            ReplayEdges=@('customize','preview_open','preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'shared.issue749.borrowed-renderer-residency'
             Issue = 749
             Claim = 'structural-only'

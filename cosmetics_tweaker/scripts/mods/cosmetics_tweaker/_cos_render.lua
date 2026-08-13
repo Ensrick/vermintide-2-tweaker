@@ -12,12 +12,16 @@
 -- Split out of the god file in v0.9.78-dev Phase 2 OOP split; no behavior change.
 --
 -- Owned by: cosmetics_tweaker.lua entry point. Consumed via: mod:dofile.
--- Shared state: exports mod._cos.{is_unit, scale_units, offset_units,
--- apply_unit_path_scale_hand}; the render hooks (which stay in the entry) call
--- scale_units/offset_units/apply_unit_path_scale_hand via mod._cos.*, and the
--- entry aliases is_unit locally for glow. Reads nothing off mod._cos.
+-- Shared state: captures the entry-installed mod._cos.weapon_appearance and
+-- exports mod._cos.{is_unit, scale_units, offset_units,
+-- apply_unit_path_scale_hand}. Identity, hand, renderer, hook, and lifecycle
+-- ownership remain with Cosmetics; only one-shot transform math is delegated.
 
 local mod = get_mod("cosmetics_tweaker")
+local _WEAPON_APPEARANCE = mod._cos.weapon_appearance
+assert(type(_WEAPON_APPEARANCE) == "table"
+        and type(_WEAPON_APPEARANCE.apply) == "function",
+    "Cosmetics WeaponAppearance owner must be installed before _cos_render")
 
 -- ============================================================
 -- Weapon Visual Overrides
@@ -133,7 +137,8 @@ local function _resolve_render_unit_path(item_data, skin, hand_field)
     return item_data and item_data[hand_field] or nil
 end
 
--- Resolve a factor (function | {x,y,z} | number) into a Vector3 scale.
+-- Resolve a factor (function | {x,y,z} | number) into the shared primitive's
+-- plain-Lua {x,y,z} descriptor shape.
 -- Functions receive a `get(id)` accessor for live mod settings, so toggling
 -- a setting without re-spawning the unit is supported (next equip applies).
 -- Returns nil if the factor function returned nil (toggle off).
@@ -143,9 +148,9 @@ local function _resolve_factor(factor)
     end
     if not factor then return nil end
     if type(factor) == "table" then
-        return Vector3(factor[1], factor[2], factor[3])
+        return { factor[1], factor[2], factor[3] }
     end
-    return Vector3(factor, factor, factor)
+    return { factor, factor, factor }
 end
 
 -- Apply any matching unit-path scale to one hand's units. Pass nil for any
@@ -160,8 +165,13 @@ local function _apply_unit_path_scale_hand(unit_3p, unit_1p, path, hand_label)
                 and path:find(ov.pattern, 1, true) then
             local scale = _resolve_factor(ov.factor)
             if scale then
-                if unit_3p and _is_unit(unit_3p) then pcall(Unit.set_local_scale, unit_3p, 0, scale) end
-                if unit_1p and _is_unit(unit_1p) then pcall(Unit.set_local_scale, unit_1p, 0, scale) end
+                local descriptor = { scale = scale }
+                if unit_3p and _is_unit(unit_3p) then
+                    _WEAPON_APPEARANCE.apply(unit_3p, descriptor)
+                end
+                if unit_1p and _is_unit(unit_1p) then
+                    _WEAPON_APPEARANCE.apply(unit_1p, descriptor)
+                end
             end
         end
     end
@@ -187,12 +197,11 @@ local function _offset_units(slot_data, weapon_key, career_name)
     if not overrides then return end
     local offset = _resolve_for_career(overrides, career_name)
     if not offset then return end
-    local pos = Vector3(offset[1], offset[2], offset[3])
+    local descriptor = { offset = { offset[1], offset[2], offset[3] } }
     for _, field in ipairs({ "left_unit_1p", "right_unit_1p", "left_unit_3p", "right_unit_3p" }) do
         local unit = slot_data[field]
-        if unit then
-            local current = Unit.local_position(unit, 0)
-            pcall(Unit.set_local_position, unit, 0, current + pos)
+        if unit and _is_unit(unit) then
+            _WEAPON_APPEARANCE.apply(unit, descriptor)
         end
     end
 end

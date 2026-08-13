@@ -298,6 +298,81 @@ return function(H, repo_root)
         H.equal(#calls, 0)
     end)
 
+    local function read_repo(path)
+        local file = assert(io.open(repo_root .. path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
+
+    local function count_plain(source, needle)
+        local count, cursor = 0, 1
+        while true do
+            local index = source:find(needle, cursor, true)
+            if not index then return count end
+            count = count + 1
+            cursor = index + #needle
+        end
+    end
+
+    local function cosmetics_adoption_errors(entry, render)
+        local errors = {}
+        local function require_plain(source, needle, message)
+            if not source:find(needle, 1, true) then errors[#errors + 1] = message end
+        end
+        require_plain(entry,
+            '"scripts/mods/cosmetics_tweaker/_lib_weapon_appearance"',
+            "entry does not load the Cosmetics-local shared library")
+        require_plain(entry, "mod._cos.weapon_appearance = WEAPON_APPEARANCE",
+            "entry does not publish its one shared instance")
+        require_plain(render,
+            "local _WEAPON_APPEARANCE = mod._cos.weapon_appearance",
+            "ordinary render adapter does not capture the shared instance")
+        if count_plain(render, "_WEAPON_APPEARANCE.apply(") < 2 then
+            errors[#errors + 1] = "scale and offset channels are not both delegated"
+        end
+        for _, setter in ipairs({ "Unit.set_local_scale", "Unit.set_local_position" }) do
+            if render:find(setter, 1, true) then
+                errors[#errors + 1] = "ordinary render adapter restored private " .. setter
+            end
+        end
+        local publish = entry:find(
+            "mod._cos.weapon_appearance = WEAPON_APPEARANCE", 1, true)
+        local load_render = entry:find(
+            'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_render")', 1, true)
+        if not publish or not load_render or publish >= load_render then
+            errors[#errors + 1] = "shared instance is not installed before _cos_render"
+        end
+        return errors
+    end
+
+    H.test("#420 Cosmetics ordinary transform adapter delegates to shared WeaponAppearance", function()
+        local entry = read_repo(
+            "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+        local render = read_repo(
+            "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_render.lua")
+        local errors = cosmetics_adoption_errors(entry, render)
+        H.equal(#errors, 0, table.concat(errors, "; "))
+        H.truthy(render:find("local descriptor = { scale = scale }", 1, true))
+        H.truthy(render:find(
+            "local descriptor = { offset = { offset[1], offset[2], offset[3] } }",
+            1, true))
+    end)
+
+    H.test("#420 Cosmetics adoption rejects private scale and position setters", function()
+        local entry = read_repo(
+            "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+        local render = read_repo(
+            "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_render.lua")
+        for _, setter in ipairs({ "Unit.set_local_scale", "Unit.set_local_position" }) do
+            local adversarial = render .. "\n" .. setter .. "(unit, 0, value)\n"
+            local errors = cosmetics_adoption_errors(entry, adversarial)
+            H.truthy(#errors > 0, setter .. " regression was not rejected")
+            H.truthy(table.concat(errors, "; "):find(setter, 1, true),
+                setter .. " rejection did not identify the private owner")
+        end
+    end)
+
     H.test("shared WeaponAppearance consumer copies are byte-identical", function()
         local function read(path)
             local file = assert(io.open(path, "rb"))

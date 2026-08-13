@@ -284,8 +284,9 @@ return {
 		-- ================================================================
 		-- Bretonnian-sword scale ("thiccc") + grip-offset apply layer
 		-- owner 1p/3p + bot: unit-path-driven scale in GearUtils.create_equipment
-		--   via _cos_render.lua (_scale_units :174 / _apply_unit_path_scale_hand
-		--   :156-168), which fires for owner AND bot-owned units.
+		--   via _cos_render.lua, whose #420 adapter delegates one-shot transform
+		--   composition to the shared WeaponAppearance instance. The surrounding
+		--   equipment owner fires for owner AND bot-owned units.
 		-- husk: NOT applied -- husks spawn via SimpleHuskInventoryExtension /
 		--   spawn_inventory_unit, which the scale layer never touches; remote
 		--   husks render native scale.
