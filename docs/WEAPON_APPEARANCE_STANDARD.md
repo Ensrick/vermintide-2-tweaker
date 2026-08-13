@@ -675,7 +675,7 @@ The migrated contract is:
    and right/left model paths into one local descriptor. Its fingerprint is
    semantic and excludes the backend UUID, allowing another peer to prove the
    same result from its own registries.
-2. VMF transports only `{provider,item_key,base_item_key,skin_key,fingerprint}`.
+2. VMF transports only `{provider,item_key,base_item_key,skin_key,offhand_skin_key,fingerprint}`.
    It never transports unit paths and never indexes a vanilla `NetworkLookup`
    with a modded identifier. A peer without CWV receives only the existing
    vanilla base equipment/skin fallback.

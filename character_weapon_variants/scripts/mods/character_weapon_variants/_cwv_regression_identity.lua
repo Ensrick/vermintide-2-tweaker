@@ -649,11 +649,17 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
     end
     local apply_preview = mod._cwv_preview_meshswap_apply
     local plan_identity = _om._cwv_identity_payloads
-    local accept_identity = _om._cwv_accept_identity
+    local receive_identity = _om._cwv_receive_identity
     local resolve_identity = _om._cwv_identity_descriptor_for_peer
+    local lifecycle = _om._appearance_lifecycle
+    local rewield = mod._cwv_rewield
+    local husk_pre = _om._husk_adapter_pre
     if type(apply_preview) ~= "function" or type(plan_identity) ~= "function"
-            or type(accept_identity) ~= "function" or type(resolve_identity) ~= "function" then
-		return "#579 preview/semantic identity helpers are not installed"
+            or type(receive_identity) ~= "function" or type(resolve_identity) ~= "function"
+            or type(lifecycle) ~= "table" or type(lifecycle.clear_peer) ~= "function"
+            or type(rewield) ~= "table" or type(rewield.request_peer_rewield) ~= "function"
+            or type(husk_pre) ~= "function" then
+		return "#579 live identity receiver/per-hand husk adapter is not installed"
     end
     if not (mod._cwv_skin_wire_surfaces
             and mod._cwv_skin_wire_surfaces.vanilla_skin_replay_retired) then
@@ -726,44 +732,150 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
         -- channel is the only transport for the pair. It must reconstruct the SAME
         -- per-hand pair on the receiver; one model for two authored hands is the
         -- husk collapse the player reports.
-        local payloads = plan_identity({
-            slot_melee = {
-                item_data = { name = authored.base_weapon, cwv_key = target_key },
-                skin = right_skin,
-                left_skin = left_skin,
-            },
-            slot_ranged = { item_data = { name = "wh_crossbow" } },
-        })
+        local cosmetics = get_mod and get_mod("cosmetics_tweaker")
+        local provider_owner = cosmetics and cosmetics._cos
+        local real_provider = provider_owner and provider_owner.cwv_offhand_identity
+        if type(real_provider) ~= "function" then
+            return target_key .. " committed Cosmetics offhand identity provider is unavailable"
+        end
+        local backend_id = "rt579-instance-" .. target_key
+        local provider_had_raw = rawget(provider_owner, "cwv_offhand_identity") ~= nil
+        local provider_raw = rawget(provider_owner, "cwv_offhand_identity")
+        rawset(provider_owner, "cwv_offhand_identity", function(bid, item_type, hand_field)
+            if bid == backend_id and item_type == target_key
+                    and hand_field == "left_hand_unit" then
+                return left_skin, "rt579-committed"
+            end
+            return real_provider(bid, item_type, hand_field)
+        end)
+        local plan_ok, payloads = pcall(plan_identity, {
+                slot_melee = {
+                    item_data = {
+                        name = authored.base_weapon,
+                        cwv_key = target_key,
+                        backend_id = backend_id,
+                    },
+                    skin = right_skin,
+                },
+                slot_ranged = { item_data = { name = "wh_crossbow" } },
+            })
+        rawset(provider_owner, "cwv_offhand_identity",
+            provider_had_raw and provider_raw or nil)
+        if not plan_ok then
+            return target_key .. " semantic sender raised: " .. tostring(payloads)
+        end
         local payload
         for _, candidate in ipairs(payloads) do
             if candidate.slot == "slot_melee" then payload = candidate end
         end
         if not payload or payload.item_key ~= target_key
                 or payload.base_item_key ~= authored.base_weapon
-                or payload.skin_key ~= right_skin then
-            return target_key .. " semantic payload lost variant/base/skin identity"
+                or payload.skin_key ~= right_skin
+                or payload.offhand_skin_key ~= left_skin then
+            return target_key .. " semantic payload lost variant/base/per-hand skin identity"
         end
         local peer_id = "rt579-" .. target_key
-        local changed, accepted = accept_identity(peer_id,
-            _om.appearance_lifecycle_policy.SCHEMA, payload)
+        lifecycle:clear_peer(peer_id)
+
+        -- Drive the exact callback registered on cwv_item_identity, then the
+        -- exact adapter called by GearUtils.spawn_inventory_unit for EACH hand.
+        -- The old regression called lifecycle:accept directly and stopped at a
+        -- descriptor, so either live bridge could be disconnected while it
+        -- remained green.
+        local rewield_calls, ack_calls = {}, {}
+        local request_had_raw = rawget(rewield, "request_peer_rewield") ~= nil
+        local request_raw = rawget(rewield, "request_peer_rewield")
+        local send_had_raw = rawget(mod, "network_send") ~= nil
+        local send_raw = rawget(mod, "network_send")
+        local player_mgr = Managers and Managers.player
+        local old_owner = player_mgr and player_mgr.owner
+        local owner_had_raw = player_mgr and rawget(player_mgr, "owner") ~= nil
+        local old_owner_raw = player_mgr and rawget(player_mgr, "owner")
+        local fake_owner = {}
+        local item_units = {
+            skin = right_skin,
+            right_hand_unit = authored.right_hand_unit,
+            left_hand_unit = authored.left_hand_unit,
+        }
+        local suppress_right, suppress_left
+        local live_ok, live_err = pcall(function()
+            rawset(rewield, "request_peer_rewield", function(received_peer, received_slot)
+                rewield_calls[#rewield_calls + 1] = {
+                    peer = received_peer, slot = received_slot,
+                }
+                return true, "rt579-spy"
+            end)
+            rawset(mod, "network_send", function(_, channel, recipient, schema, ack)
+                ack_calls[#ack_calls + 1] = {
+                    channel = channel, recipient = recipient,
+                    schema = schema, payload = ack,
+                }
+                return true
+            end)
+            receive_identity(peer_id, _om.appearance_lifecycle_policy.SCHEMA, payload)
+            if not (player_mgr and type(old_owner) == "function") then
+                error("Managers.player:owner is unavailable")
+            end
+            rawset(player_mgr, "owner", function(self, unit)
+                if unit == fake_owner then return { peer_id = peer_id } end
+                return old_owner(self, unit)
+            end)
+            suppress_right = husk_pre("right", {}, item_units, "slot_melee",
+                { name = authored.base_weapon }, fake_owner)
+            suppress_left = husk_pre("left", {}, item_units, "slot_melee",
+                { name = authored.base_weapon }, fake_owner)
+        end)
+        rawset(rewield, "request_peer_rewield", request_had_raw and request_raw or nil)
+        rawset(mod, "network_send", send_had_raw and send_raw or nil)
+        if player_mgr then
+            rawset(player_mgr, "owner", owner_had_raw and old_owner_raw or nil)
+        end
+
         local descriptor = resolve_identity(peer_id, "slot_melee", authored.base_weapon)
-        if changed ~= true or not accepted or not descriptor then
-            return target_key .. " receiver did not reconstruct the pair at all"
+        if not live_ok then
+            lifecycle:clear_peer(peer_id)
+            return target_key .. " live receiver/husk adapter raised: " .. tostring(live_err)
+        end
+        if #ack_calls ~= 1 or ack_calls[1].channel ~= "cwv_item_identity"
+                or ack_calls[1].recipient ~= peer_id
+                or ack_calls[1].schema ~= _om.appearance_lifecycle_policy.SCHEMA then
+            lifecycle:clear_peer(peer_id)
+            return target_key .. " live receiver did not ACK the reconstructed pair exactly once"
+        end
+        if #rewield_calls ~= 1 or rewield_calls[1].peer ~= peer_id
+                or rewield_calls[1].slot ~= "slot_melee" then
+            lifecycle:clear_peer(peer_id)
+            return target_key .. " live receiver did not schedule one bounded slot re-wield"
+        end
+        if not descriptor then
+            lifecycle:clear_peer(peer_id)
+            return target_key .. " live receiver did not reconstruct the pair at all"
         end
         if descriptor.right_hand_unit ~= mesh_of[right_skin]
                 or descriptor.left_hand_unit ~= mesh_of[left_skin] then
+            lifecycle:clear_peer(peer_id)
             return string.format(
                 "%s husk pair collapsed to one model: reconstructed right=%s left=%s, authored right=%s left=%s",
                 target_key, tostring(descriptor.right_hand_unit),
                 tostring(descriptor.left_hand_unit), mesh_of[right_skin], mesh_of[left_skin])
         end
+        if suppress_right == true or suppress_left == true
+                or item_units.right_hand_unit ~= mesh_of[right_skin]
+                or item_units.left_hand_unit ~= mesh_of[left_skin] then
+            lifecycle:clear_peer(peer_id)
+            return string.format(
+                "%s live per-hand husk apply failed: suppress_right=%s suppress_left=%s right=%s left=%s",
+                target_key, tostring(suppress_right), tostring(suppress_left),
+                tostring(item_units.right_hand_unit), tostring(item_units.left_hand_unit))
+        end
+        lifecycle:clear_peer(peer_id)
         local def, reason = _om._husk_resolve_display_def(authored.base_weapon,
             target_key == "cwv_es_dual_axes" and "es_mercenary" or "wh_captain", right_skin)
         if not def or def.item_key ~= target_key or reason ~= "skin" then
             return right_skin .. " does not resolve to its target on the husk"
         end
     end
-end, { known_defect = 579 })
+end)
 
 _rt_register("issue416_483_transition_generated_skin_identity", function()
     local exact_skin = "cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1"

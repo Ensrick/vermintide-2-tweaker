@@ -2,7 +2,9 @@ return function(H, repo_root)
     local source = require("cwv_source").combined(repo_root)
 
     H.test("CWV remote identity is carried on bounded lifecycle edges", function()
-        H.truthy(source:find('mod:network_register("cwv_item_identity"', 1, true))
+        H.truthy(source:find('_om._cwv_receive_identity = function(sender_peer_id, schema, payload)', 1, true))
+        H.truthy(source:find('mod:network_register("cwv_item_identity", _om._cwv_receive_identity)', 1, true),
+            "the registered VMF callback and executable regression must share one live receiver")
         H.truthy(source:find('_send_identity_slots(slots, "game_object_initialized", true)', 1, true))
         -- #476 Defect B: the per-slot resync is a PARTIAL publish (trailing
         -- `true`) so the absent slot cannot emit an explicit native record.
@@ -35,6 +37,12 @@ return function(H, repo_root)
         H.truthy(source:find('display_name    = "Helmgart Watchsword"', 1, true))
         H.truthy(source:find('if _display_names[effective_item_type] == nil then', 1, true))
         H.truthy(source:find('issue396_imperial_longsword_identity_and_remote_husk', 1, true))
+    end)
+
+    H.test("CWV #579 is a live passing contract rather than an expected failure", function()
+        H.truthy(source:find('issue579_dual_axes_preview_and_husk_skin_continuity', 1, true))
+        H.equal(source:find('known_defect = 579', 1, true), nil,
+            "a repaired live bridge must not remain an XPASS failure")
     end)
 
     H.test("CWV #482 preserves legacy UUID identity without recrafting", function()

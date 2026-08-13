@@ -1,5 +1,24 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.516-dev (2026-08-13) -- transport exact Dual Axes hand identity (#579) [verify-fix]
+
+- Schema 3 of `cwv_item_identity` now carries separate primary and offhand skin
+  keys. Cosmetics supplies the offhand key through its exact-instance,
+  Apply-gated provider; CWV validates both keys against its own registered item
+  family, reconstructs unit paths locally, and includes both hands in the
+  descriptor fingerprint. Unit paths and numeric lookup IDs never cross the wire.
+- The VMF registration points at one named receiver boundary also executed by
+  `/cwv_regression_test`. The check drives a real generated Dual Axes payload
+  through receipt, exact-descriptor reconstruction, acknowledgement, and one
+  bounded remote re-wield instead of calling the lifecycle accept helper directly.
+- The same check then gives the reconstructed descriptor to the production
+  `GearUtils.spawn_inventory_unit` pre-adapter independently for the right and
+  left hands. It requires two distinct saved cosmetic meshes to survive into
+  the actual per-hand item-unit table for both Kruber and Saltzpyre variants.
+- Lua 5.1 coverage adds sender/receiver, foreign-family, wire-bounds, and
+  asymmetric live-adapter cases. Issue #579 is no longer an expected failure;
+  two-player role reversal remains required before calling the visual result fixed.
+
 ## 0.1.515-dev (2026-08-13) -- execute the remote-audio pre-RPC boundary (#398) [verify-fix]
 
 - Cross-character third-person animation remaps now pass through one explicit

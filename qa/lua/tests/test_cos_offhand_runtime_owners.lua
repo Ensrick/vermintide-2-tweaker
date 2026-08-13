@@ -49,7 +49,12 @@ return function(H, repo_root)
         }
         local owner = state_module.install(mod, {
             la_bridge = bridge,
-            la_persist = { get_saved_offhands = function() return saved or {} end },
+            la_persist = {
+                get_saved_offhands = function() return saved or {} end,
+                get_saved_offhands_for = function(id)
+                    return (saved or {})[id]
+                end,
+            },
             offhand_names = {
                 merge_unique = function(pool, candidate)
                     for _, value in ipairs(pool) do
@@ -117,6 +122,41 @@ return function(H, repo_root)
         H.equal(mod._dual_offhand_unit_allowed("dual", "right_hand_unit", "units/allowed"), false)
         H.equal(mod._dual_offhand_unit_allowed("dual", "left_hand_unit", "units/foreign"), false)
         H.equal(mod._dual_offhand_unit_allowed("dual", "left_hand_unit", "units/allowed"), true)
+    end)
+
+    H.test("cos #579 provider returns only a committed catalog-qualified hand skin", function()
+        local saved = {
+            ["bid-1"] = {
+                left_hand_unit = {
+                    vanilla_key = "cwv_es_dual_axes_skin_left",
+                    unit_path = "units/left",
+                },
+            },
+        }
+        local mod = state_fixture(saved)
+        mod._ensure_independent_dual_pool = function(item_type)
+            if item_type ~= "cwv_es_dual_axes" then return nil end
+            return {
+                left_hand_unit = {
+                    {
+                        source_skin_key = "cwv_es_dual_axes_skin_left",
+                        unit = "units/left",
+                    },
+                },
+            }
+        end
+        local skin, reason = mod._cos.cwv_offhand_identity(
+            "bid-1", "cwv_es_dual_axes", "left_hand_unit")
+        H.equal(skin, "cwv_es_dual_axes_skin_left")
+        H.equal(reason, "committed")
+        saved["bid-1"].left_hand_unit.unit_path = "units/foreign"
+        H.equal(mod._cos.cwv_offhand_identity(
+            "bid-1", "cwv_es_dual_axes", "left_hand_unit"), nil)
+        saved["bid-1"].left_hand_unit = nil
+        local absent, absent_reason = mod._cos.cwv_offhand_identity(
+            "bid-1", "cwv_es_dual_axes", "left_hand_unit")
+        H.equal(absent, nil)
+        H.equal(absent_reason, "follow_main")
     end)
 
     H.test("cos offhand apply refuses paint on a mismatched authored mesh", function()

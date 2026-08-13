@@ -1,12 +1,12 @@
 -- Bounded exact-appearance identity and lifecycle replay ledger (#660).
 --
 -- Only compact semantic identity crosses VMF: provider, exact item key, selected
--- skin key, vanilla base key, and the locally-derived descriptor fingerprint.
+-- primary/offhand skin keys, vanilla base key, and the locally-derived descriptor fingerprint.
 -- Unit paths never cross the wire and no modded identifier enters a vanilla
 -- NetworkLookup.  Receivers reconstruct from their own resident registries and
 -- fail closed when the same descriptor cannot be proven locally.
 local M = {
-    SCHEMA = 2,
+    SCHEMA = 3,
     ACK_SLOT = "cwv_identity_ack",
     REQUEST_SLOT = "cwv_identity_request",
     RETRY_INTERVAL = 0.5,
@@ -60,6 +60,7 @@ function M.new(opts)
                 item_key = descriptor.variant_key,
                 base_item_key = base_item_key,
                 skin_key = nonempty(descriptor.skin) or "",
+                offhand_skin_key = nonempty(descriptor.offhand_skin) or "",
                 fingerprint = descriptor.fingerprint,
             }
         end
@@ -71,6 +72,7 @@ function M.new(opts)
             item_key = "",
             base_item_key = base_item_key or "",
             skin_key = "",
+            offhand_skin_key = "",
             fingerprint = "",
         }
     end
@@ -99,7 +101,7 @@ function M.new(opts)
             if payload then
                 local signature = table.concat({
                     payload.provider, payload.item_key, payload.base_item_key,
-                    payload.skin_key, payload.fingerprint,
+                    payload.skin_key, payload.offhand_skin_key, payload.fingerprint,
                 }, "|")
                 local route = tostring(recipient) .. "|" .. slot_name
                 if force or self._sent[route] ~= signature then
@@ -286,7 +288,9 @@ function M.new(opts)
                     and descriptor.variant_key == payload.item_key
                     and descriptor.base_item_key == payload.base_item_key
                     and (descriptor.provider or "cwv") == payload.provider
-                    and (descriptor.skin or "") == payload.skin_key then
+                    and (descriptor.skin or "") == payload.skin_key
+                    and (descriptor.offhand_skin or "")
+                        == (payload.offhand_skin_key or "") then
                 next_state = {
                     kind = "exact",
                     base_item_key = descriptor.base_item_key,
