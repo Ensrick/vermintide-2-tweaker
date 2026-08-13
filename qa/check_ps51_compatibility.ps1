@@ -30,6 +30,7 @@ $ps51Targets = @(
     "qa/run_selftests.ps1",
     "tools/ship/ship.ps1",
     "tools/ship/claim.ps1",
+    "tools/ship/load-tag-resolution.ps1",
     "tools/ship/refresh-cards.ps1",
     "tools/github/protect-master.ps1"
 )
