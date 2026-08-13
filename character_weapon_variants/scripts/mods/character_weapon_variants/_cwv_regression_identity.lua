@@ -1140,6 +1140,18 @@ _rt_register("issue1155_old_musket_descriptor_reconciler", function()
 			or #descriptor.transform_3p.rotation ~= 4 then
 		return "descriptor lost a canonical pose channel"
 	end
+	local preview_surface = _om._cwv_loot_preview_surface
+	if type(preview_surface) ~= "function"
+			or preview_surface({ _cwv_cim_preview = true }) ~= "cim_preview"
+			or preview_surface({}) ~= "illusion_browser"
+			or preview_surface({ _cwv_cim_preview = false }) ~= "illusion_browser"
+			or preview_surface({ _cwv_cim_preview = 1 }) ~= "illusion_browser" then
+		return "Athanor preview marker does not preserve the generic browser boundary"
+	end
+	if not (pilot.implemented_cells.cim_preview
+			and pilot.implemented_cells.cim_preview.preview_open == true) then
+		return "Old Musket CIM preview-open adapter cell is not implemented"
+	end
 	for _, surface in ipairs(descriptor_lib.SURFACES or {}) do
 		if not pilot.unit_surfaces[surface] then
 			local result = pilot.reconcile({}, surface, "instance_load", {
@@ -2057,6 +2069,28 @@ _rt_register("issue399_outrider_husk_ammo_adapter", function()
         return "husk ammo adapter drive errored: " .. tostring(result)
     end
     return result
+end)
+
+_rt_register("issue1204_deus_identity_uses_committed_parity", function()
+	local allowed = _om.deus_exact_identity_allowed
+	if type(allowed) ~= "function" then
+		return "committed Deus identity parity gate is unavailable"
+	end
+	local function probe(state, classifier)
+		return allowed({
+			applied_state = function() return state end,
+			all_peers_have = function() return classifier end,
+		})
+	end
+	if not probe("enabled", false) then
+		return "committed enabled state did not permit exact Deus identities"
+	end
+	if probe("disabled", true) or probe("pending", true) or probe(nil, true) then
+		return "pre-commit peer classifier bypassed the committed Deus identity state"
+	end
+	if allowed({ applied_state = function() error("probe") end }) then
+		return "throwing committed-state accessor did not fail closed"
+	end
 end)
 
 end

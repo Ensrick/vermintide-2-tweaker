@@ -5,9 +5,11 @@
 -- the pure policy module; this adapter only bridges that policy to VT2 state.
 --
 -- Owned by: crafting_in_modded_dev.lua. Installs once during mod initialization.
+local function source_anchor() end
 
 return function(context)
     local mod = context.mod
+    mod._cim_accessory_property_source_anchor = source_anchor
     local policy = context.policy
     local is_custom_forge_active = context.is_custom_forge_active
 

@@ -16,7 +16,7 @@ line by line, as were `IngameUI.setup_views` / the DLC `ui_views` seam and
 grep-verified when written).
 
 **Dev/stable relationship.** This documents `gui_tweaker_dev` (`gut_dev`,
-MOD_VERSION `0.2.303-dev`, friends-only Workshop 3751024698), the ACTIVE working
+MOD_VERSION `0.2.332-dev`, friends-only Workshop 3751024698), the ACTIVE working
 stream. `gui_tweaker/` (`gut`, public-alpha Workshop 3732144878) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gut_dev`
@@ -279,6 +279,15 @@ the empty row [src: `:150-162`]. This mirrors Deus' explicit
 gated to an active Adventure `StateIngame` host. Storage is mission-local, keyed
 by the same stable `stats_id`, capped at 8 players x 64 paths, cleared on exit,
 and adds no RPC; progression/backend statistics are never copied.
+
+#1151 repairs vanilla's Damage Taken award at the accumulation seam.
+`EndViewStateScore._group_scores_by_player_and_topic` seeds `highscore` at zero,
+then computes `min(highscore, score)` for each positive damage value, so no
+ordinary player can become the row winner. `_gut_damage_taken_scoreboard.lua`
+post-hooks that method and replaces only the `damage_taken` row's candidate with
+the numeric minimum already present in `player_scores`; every other end-score row
+and the native renderer remain untouched. The adapter emits at most eight
+`[gut:1151]` receipts and adds no transport or persistence.
 
 ## What the engine will NOT let us do (dead ends, already paid for)
 

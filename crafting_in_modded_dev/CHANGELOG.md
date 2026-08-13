@@ -1,5 +1,23 @@
 # Crafting in Modded Changelog
 
+## 0.8.122-dev (2026-08-13) -- honest extracted-owner diagnostics (#1122, #1227) [verify-fix] [untested]
+
+- **Fix (#1227): three source-backed runtime checks now inspect the extracted
+  module that owns each behavior.** The weave talent-level guard, property cost
+  readout, and forge-tooltip owners publish one inert source anchor apiece;
+  none can silently scan the entry-owned regression registrar and report a
+  false failure after decomposition.
+- **Guard (#1122): the Chaos Wastes trait-family regression now has an
+  independent live oracle.** It scans `WeaponTraits` metadata for every
+  crafting-disabled boon family before consulting CIM's slot map, reports
+  sorted unmapped categories, and therefore cannot hide a newly added family
+  behind the same policy production uses.
+- Lua 5.1 fixtures cover all three owner anchors, a future unknown boon family,
+  ordinary Adventure traits, shared traits, malformed rows, and deterministic
+  ordering.
+- Clean builds now discard the exact hash-pinned SDK LUT-generator sidecar
+  before bundle parity and deployment; changed bytes still fail closed.
+
 ## 0.8.121-dev (2026-08-11) -- structural phase complete (#1159, #504, #2)
 
 - Completed the CIM Dev Phase 5 structural target: the entry is now 1,433

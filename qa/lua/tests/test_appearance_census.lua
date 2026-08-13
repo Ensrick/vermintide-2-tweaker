@@ -178,4 +178,17 @@ return function(H, repo_root)
 			end
 		end
 	end)
+
+	H.test("CWV Old Musket census implements only CIM preview-open", function()
+		local census = dofile(repo_root .. "/character_weapon_variants/scripts/mods/"
+			.. "character_weapon_variants/_cwv_appearance_census.lua")
+		local matrix, errors = D.expand_matrix(census.families.old_musket.matrix,
+			"character_weapon_variants.old_musket.matrix")
+		H.equal(#errors, 0, table.concat(errors, "\n"))
+		for _, edge in ipairs(D.EDGES) do
+			local expected = edge == "preview_open" and "implemented" or "unsupported"
+			H.equal(matrix.cim_preview[edge].state, expected,
+				"old_musket.cim_preview." .. edge)
+		end
+	end)
 end

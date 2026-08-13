@@ -4,7 +4,23 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-12.
+Last updated: 2026-08-13.
+
+## #1204 Deus identity uses committed parity
+
+- [ ] Restart both clients with CWV 0.1.513-dev, join the same modded-realm lobby, and start a Chaos Wastes expedition with at least one CWV weapon eligible as a starting weapon.
+- [ ] During peer arrival and the two-second parity settle window, the run either retains the resident vanilla fallback or commits the exact CWV Deus identity; no custom identity is installed before the gate reports `enabled`.
+- [ ] After commit, the CWV starting weapon retains its exact item/template/appearance and no unknown item, damage-profile, or package error appears on either peer.
+- [ ] `/cwv_regression_test` passes both `issue1204_deus_identity_uses_committed_parity` and `issue273_cwv_deus_identity_is_exact`.
+- [ ] `[cwv:273] deus_identity` remains bounded and reports `exact=true` only after committed parity.
+
+## #1155 Old Musket exact Athanor preview surface
+
+- [ ] With CWV 0.1.513-dev and CIM Dev loaded, open the Athanor properties pane and select Old Musket in ranged mode, then melee mode.
+- [ ] The authored mesh, textures, scale, position, and rotation remain visible after the preview finishes loading; no checkerboard, invisible unit, or vanilla Handgun replacement appears.
+- [ ] The log contains a bounded `[cwv:1155] family=old_musket surface=cim_preview edge=preview_open ... retained=true` receipt for the Athanor target.
+- [ ] Open the ordinary illusion browser as a control. Its receipt remains `surface=illusion_browser`; it is never relabeled as CIM.
+- [ ] `/cwv_regression_test` passes `issue1155_old_musket_descriptor_reconciler`, and offline `test_cwv_old_musket_presentation.lua`, `test_cwv_old_musket_appearance.lua`, and `test_appearance_census.lua` pass.
 
 ## #1273 Phased-bootstrap dependency transfer
 

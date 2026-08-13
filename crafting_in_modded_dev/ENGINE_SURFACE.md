@@ -10,7 +10,7 @@ the named `crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/*.lua`
 module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
 
 **Dev/stable relationship.** This documents `crafting_in_modded_dev` (`cim_dev`,
-MOD_VERSION `0.8.121-dev`, friends-only Workshop 3733366851), the ACTIVE working
+MOD_VERSION `0.8.122-dev`, friends-only Workshop 3733366851), the ACTIVE working
 stream. `crafting_in_modded/` (`cim`, public Workshop 3721038774) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action (`tools/promote/promote.ps1`), so
@@ -111,11 +111,14 @@ accessory overlay callback is republished onto each fresh panel before the
 idempotence guard, and the one draw hook resolves that current panel at call
 time, so a missing first-load panel can recover without retaining a stale one.
 
-The `/cim_regression_test` harness and four initialization-time contract checks
-remain in the entry; the 79-check late block lives in late-loaded
-`_cim_regression_checks.lua`. Its private installer receives accessors for
-reassigned entry-local stores; production hooks, flat `mod._cim_*` APIs, and
-the complete 83-check registration order are unchanged.
+The `/cim_regression_test` harness and initialization-time contract checks
+remain in the entry; the late block lives in `_cim_regression_checks.lua`.
+Source-reading checks resolve an anchor published by the owner module they
+inspect, never the entry-owned registrar (#1227), and fail if that ownership
+anchor is missing. The #414 slot-family check also runs an independent census
+over live `WeaponTraits.combinations` plus `traits[*].crafting_disabled`; any
+boon-bearing family absent from the explicit slot map fails deterministically
+before production filtering can hide the drift (#1122).
 
 `cim` is a **UI-heavy backend mod**: it makes the vanilla Keep crafting benches
 work in the modded realm (where the player has no crafting materials and the EAC

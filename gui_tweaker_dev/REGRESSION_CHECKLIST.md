@@ -159,6 +159,14 @@ If this candidate fails, use exactly one evidence-selected fallback:
 - [ ] Chaos Wastes, Weaves, Versus, clients, backend/progression statistics, and network traffic are untouched.
 - [ ] `/gut_regression_test` passes `issue437_adventure_scoreboard_retention`; offline scoreboard tests pass.
 
+## Damage Taken awards the lowest score (#1151)
+
+- [ ] Finish an Adventure mission with at least two heroes taking different, positive amounts of damage.
+- [ ] The lowest Damage Taken value receives the green circle; a zero-damage hero still wins when present, and equal minima may share credit.
+- [ ] Damage Dealt, kills, revives, and every other scoreboard winner remain unchanged.
+- [ ] `[gut:1151]` reports the repaired minimum and remains capped at eight records per process.
+- [ ] `/gut_regression_test` passes `issue1151_damage_taken_green_circle_minimum`; offline `test_gut_damage_taken_scoreboard.lua` passes.
+
 ## Scoreboard capability inventory (#272)
 
 - [ ] Solo first: enable **Expanded Scoreboard (Live + End Screen)** in an Adventure mission and hold Tab.
@@ -180,7 +188,7 @@ If this candidate fails, use exactly one evidence-selected fallback:
 
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md) for Tweaker: GUI dev.
 
-Last updated: 2026-07-17.
+Last updated: 2026-08-13.
 
 ## Floating damage numbers above the network maximum (#938)
 

@@ -106,13 +106,12 @@ function M.install(mod, ctx)
         -- 2026-07-03 21:15 retest): the old block called ONLY `_ensure_offhand_mesh`, which
         -- early-returns for any non-kind="unit" LA variant -- so a kind="texture" illusion
         -- (the breton shields in that retest get RECV but never a RE-SWAP) was never
-        -- re-painted and the whole walk logged nothing. Now we call `_try_apply_by_peer`
-        -- (re-paints the texture AND returns true only when the offhand is currently wielded)
-        -- and, only when it reports the offhand wielded, `_ensure_offhand_mesh` (re-swaps a
-        -- kind="unit" mesh; self-gated/no-op for kind="texture"). Gating the pulse on the
-        -- wield state avoids a wasteful melee<->ranged flicker on a husk holding a ranged
-        -- weapon and targets exactly the visible-revert case. Both self-gate (paint
-        -- idempotent; pulse per-owner 1.5s cooldown + 3-try cap); each (peer|armoury) is
+        -- re-painted and the whole walk logged nothing. The current path calls the
+        -- canonical `mod._la_reconcile` owner, which re-paints the texture and invokes
+        -- `_ensure_offhand_mesh` only when the offhand is currently wielded. Gating the
+        -- pulse on wield state avoids a wasteful melee<->ranged flicker on a husk holding
+        -- a ranged weapon and targets exactly the visible-revert case. Both stages
+        -- self-gate (paint idempotent; pulse per-owner 1.5s cooldown + 3-try cap); each (peer|armoury) is
         -- FROZEN once applied so there is no per-frame repaint. Two bounded diagnostics per
         -- window (armed + summary) so a silent no-op can never ship undetected again. No new
         -- hook/RPC/force-load; no World.destroy_unit.

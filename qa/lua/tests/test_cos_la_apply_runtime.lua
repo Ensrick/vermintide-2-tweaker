@@ -50,6 +50,11 @@ return function(H, repo_root)
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_husk_identity_runtime.lua")
     local husk_wield_runtime = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_husk_wield_runtime.lua")
+    local spawn_sync = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_attachment_spawn_sync.lua")
+    local scheduler = read(
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_update_scheduler.lua")
+    local development = read("cosmetics_tweaker/DEVELOPMENT.md")
     local owner_install =
         'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_apply_runtime").install(mod, {'
 
@@ -98,7 +103,6 @@ return function(H, repo_root)
     function()
         for _, needle in ipairs({
             "local function _apply_la_on_unit(",
-            "local function _try_apply_by_peer(",
             "local function _ensure_offhand_mesh(",
             "local _offhand_reswap_state = setmetatable(",
             "mod._la_native_pulse = function",
@@ -109,6 +113,16 @@ return function(H, repo_root)
             H.truthy(source:find(needle, 1, true), needle .. " missing from the owner")
             H.equal(entry:find(needle, 1, true), nil, needle .. " must not stay in the entry")
         end
+        H.equal(source:find("_try_apply_by_peer", 1, true), nil,
+            "issue #1241 dead apply wrapper or stale documentation returned")
+        H.equal(entry:find("_try_apply_by_peer", 1, true), nil,
+            "issue #1241 dead wrapper returned to the entry")
+        H.equal(spawn_sync:find("_try_apply_by_peer", 1, true), nil,
+            "issue #1241 stale spawn-sync documentation returned")
+        H.equal(scheduler:find("_try_apply_by_peer", 1, true), nil,
+            "issue #1241 stale scheduler documentation returned")
+        H.equal(development:find("carried across with no call site", 1, true), nil,
+            "authoritative module map must not describe the retired helper as live")
     end)
 
     H.test("cos la apply runtime leaves sibling hook owners alone", function()

@@ -20,6 +20,7 @@ local IMPLEMENTED_CELLS = {
 	husk = { equip = true, peer_ready = true },
 	inventory_preview = { preview_open = true },
 	illusion_browser = { preview_open = true },
+	cim_preview = { preview_open = true },
 	lobby = { preview_open = true },
 	score_team = { preview_open = true },
 }

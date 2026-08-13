@@ -4,7 +4,19 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-11.
+Last updated: 2026-08-13.
+
+### issue1122-1227-regression-instrument-ownership - live checks cannot hide drift
+
+| Field | Value |
+|---|---|
+| Symptom | Three extracted-source checks inspect the entry instead of their owning modules, while the CW-trait family check can stay green when a new boon-bearing category is absent from CIM's slot map. |
+| Root cause | The checks retained `_rt_register` as a source anchor after their hooks moved, and the slot oracle reused the same production mapping that it was meant to audit. |
+| Fix version(s) | cim_dev 0.8.122-dev (#1122, #1227) |
+| Category | SOLO / DIAGNOSTIC |
+| Repro | Restart the game, enter the Keep, enable Allow Chaos Wastes traits, and run `/cim_regression_test`. |
+| Expected post-fix | `weave_talent_forge_level_guard_present`, `weave_forge_hides_cost_readout`, `forge_tooltip_no_equipped_compare`, and `issue414_cw_traits_preserve_slot_family` all inspect their live owning surfaces and pass. A future boon-bearing combination without an explicit melee/ranged mapping fails with the sorted missing category names. |
+| Detection | Offline `test_cim_regression_module.lua` pins owner-local anchors and bans registrar fallback; `test_cim_trait_slot_policy.lua` drives unknown boon, ordinary Adventure, shared-trait, and malformed fixtures. |
 
 ### phase5-runtime-owners - structural completion remains behavior-neutral
 

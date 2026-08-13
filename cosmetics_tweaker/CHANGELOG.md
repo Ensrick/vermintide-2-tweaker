@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.208-dev (2026-08-13) -- retire dead LA apply wrapper (#1241) [tooling]
+
+- Removed the zero-caller `_try_apply_by_peer` wrapper and corrected the two
+  comments that still claimed transition/spawn replay used it. The live path
+  has used the canonical `mod._la_reconcile` owner since v0.9.70-dev.
+- Offline ownership coverage now requires the dead symbol and stale prose to
+  remain absent while retaining the actual reconcile/apply/mesh primitives.
+- Clean builds now discard the exact hash-pinned SDK LUT-generator sidecar
+  before bundle parity and deployment; changed bytes still fail closed.
+- VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
+
 ## 0.9.207-dev (2026-08-11) -- structural phase completed (#1159)
 
 ### Behavior-neutral extraction

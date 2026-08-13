@@ -369,14 +369,15 @@ return function(H, repo_root)
         for name in (identity .. "\n" .. render):gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 81)
+        H.equal(#names, 82)
         H.equal(names[1], "cwv_variant_flag_present")
         H.equal(names[37], "cwv_husk_transform_coverage")
         H.equal(names[38], "cwv_husk_stale_unit_and_postcondition")
         -- issue 399 appended the husk ammo-adapter drive as the last identity
         -- check, so the identity/render boundary moved one slot right.
         H.equal(names[39], "issue399_outrider_husk_ammo_adapter")
-        H.equal(names[40], "cwv_unit_bearing_variants_registered")
+        H.equal(names[40], "issue1204_deus_identity_uses_committed_parity")
+        H.equal(names[41], "cwv_unit_bearing_variants_registered")
         H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")
@@ -644,6 +645,7 @@ return function(H, repo_root)
             "local function _crowbill_def_from_spawn_data(spawn_data)",
             "local function _resolve_preview_def(self, item_name, spawn_data)",
             "local function _cwv_spawn_item_post(self, item_name, spawn_data)",
+			"local function _cwv_loot_preview_surface(previewer)",
             "local function _is_cwv_item(item)",
             "_om._crowbill_team_peer = function(profile_index, career_index, context)",
             "_om.old_musket_preview_pose.install(mod, function(unit, _, mode, record)",
@@ -655,7 +657,7 @@ return function(H, repo_root)
 
         -- Hook cardinality: VMF silently DROPS a duplicate registration on the
         -- same (Class, method), so a re-added entry copy would shadow this owner
-        -- rather than chain with it. Each of the seven moved pairs must appear
+        -- rather than chain with it. Each of the eight owned pairs must appear
         -- exactly once across the whole load chain, and never in the entry.
         local combined = require("cwv_source").combined(repo_root)
         local hooks = {
@@ -664,6 +666,7 @@ return function(H, repo_root)
             'mod:hook("HeroPreviewer", "_spawn_item"',
             'mod:hook("MenuWorldPreviewer", "_spawn_item"',
             'mod:hook("HeroPreviewer", "_destroy_item_units_by_slot"',
+			'mod:hook("HeroWindowWeaveProperties", "_create_item_previewer"',
             'mod:hook("LootItemUnitPreviewer", "_destroy_units"',
             'mod:hook("LootItemUnitPreviewer", "spawn_units"',
         }

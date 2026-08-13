@@ -34,10 +34,9 @@
 --   is written by BOTH `_ensure_offhand_mesh` (keyed by armoury_key) and
 --   `mod._la_native_pulse` (keyed "__native__"); splitting them would leave a
 --   shared mutable cooldown table on the entry serving two different owners.
---   `_apply_la_on_unit` is called by the reconcile path and by
---   `_try_apply_by_peer`, and `_ensure_offhand_mesh` is called by both
---   reconcile and the revert-side pulse. Nothing outside this file reads any
---   of the six locals declared here.
+--   `_apply_la_on_unit` and `_ensure_offhand_mesh` are called by the reconcile
+--   path, while `_ensure_offhand_mesh` also serves the revert-side pulse.
+--   Nothing outside this file reads any of the private locals declared here.
 --
 -- Extracted VERBATIM from cosmetics_tweaker.lua (entry lines 3131-3813 at
 -- 4e10b56f) with no behaviour change. NO original statement was modified: the
@@ -90,14 +89,6 @@
 --   `_cos_spawn_boundary` owns AttachmentUtils.create_attachment. This owner
 --   CALLS the guard through `mod.`, and calls the attachment extension's own
 --   `ext.create_attachment` method, which is a different engine seam.
---
--- DEAD-CODE NOTE (carried across unchanged, deliberately)
---   `_try_apply_by_peer` has no call site anywhere in the mod. The v0.9.66-dev
---   comment in mod.update that says "Now we call `_try_apply_by_peer`" was made
---   stale by v0.9.70-dev, which routed that walk through `mod._la_reconcile`
---   instead. It is moved verbatim rather than deleted: this slice is a pure
---   structural move, and removing a function is a behaviour question (however
---   small) that belongs in its own change with its own review.
 --
 -- Consumed via: one ordered install call at the former block position. Exports
 -- stay on `mod` (`_la_native_pulse`, `_la_restore_native_hat`,
@@ -524,12 +515,6 @@ function LaApplyRuntime.install(mod, deps)
 
         _dbg_alert("[cos_la_apply] unknown kind %s — ignored", tostring(kind))
         return false
-    end
-
-    local function _try_apply_by_peer(wearer_peer_id, slot_name, kind, armoury_key, vanilla_key)
-        local unit = _wearer_unit_for_peer(wearer_peer_id)
-        if not unit then return false end
-        return _apply_la_on_unit(unit, slot_name, kind, armoury_key, vanilla_key)
     end
 
     -- v0.9.64-dev (#233/#234): POST-SPAWN OFFHAND MESH RE-SWAP.

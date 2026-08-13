@@ -35,7 +35,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.331-dev"
+local MOD_VERSION = "0.2.332-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2315,6 +2315,21 @@ do
         end
     else
         printf("[gut:438] revive-scoreboard module failed: %s", tostring(api))
+    end
+end
+
+-- End-score Damage Taken green-circle attribution (#1151). Vanilla seeds the
+-- candidate at zero before taking a minimum, so positive values can never win.
+-- The adapter recomputes only that row after vanilla has appended each player.
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_damage_taken_scoreboard")
+    if ok and type(api) == "table" then
+        for _, check in ipairs(api.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        printf("[gut:1151] damage-taken scoreboard module failed: %s", tostring(api))
     end
 end
 
