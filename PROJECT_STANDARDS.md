@@ -2052,19 +2052,32 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   `## CURRENT LIVE TEST`, pin that comment, and unpin every older exact card.
   The newest exact card must be the one and only pinned exact card; a ready issue
   with an unpinned newest card or multiple pinned exact cards fails policy. It must
-  include `Build/banner:` with a semantic version and either `[mod:LOAD]` or a
-  clearly labeled exact versioned banner (for example,
-  `exact banner: [WOC] v0.1.42-dev loaded`), `Topology:`
+  include `Build/banner:` where every named build has an explicitly bound semantic
+  version and either `[mod:LOAD]` or a clearly labeled exact versioned banner (for
+  example, `exact banner: [WOC] v0.1.42-dev loaded`). Each build/version/tag pair
+  must match the latest deployed release manifest and its recorded exact source
+  commit; unbound sibling versions/tags and contradictory manifest IDs are invalid.
+  The card also needs `Topology:`
   (`Solo` or `Co-op`), numbered player-facing steps, and `Expected:`. Numbered
   steps use localized names players see in-game, never internal snake-case keys.
-  Exact player-entered slash commands are allowed when wrapped in backticks.
+  Exact player-entered slash commands are allowed when wrapped in backticks and
+  registered by the deployed source. When a `diagnostics-armed` card asks for log
+  evidence, its numbered steps or Expected line must name at least one stable
+  bounded receipt prefix emitted through `printf`, directly or through an approved
+  receipt helper, by that source.
   An incomplete newer card invalidates an older valid card; issue-body text and
   legacy method headings are not fallbacks.
   The authoritative, machine-checked definition of this format is
-  `tools/verify/lifecycle_method_policy.ps1`; `tools/ship/ship.ps1`,
+  `tools/verify/lifecycle_method_policy.ps1` together with
+  `tools/verify/live_test_contract.ps1`; `tools/ship/ship.ps1`,
   `tools/verify/generate_playtest.ps1`, and
   `tools/github/check-lifecycle-cardinality.ps1` all consume it. When prose here
-  and that script disagree, the script wins — fix the prose.
+  and those scripts disagree, the scripts win — fix the prose. The GitHub guard
+  resolves the latest release manifest and inspects its exact source commits with
+  blob-filtered full history. A visible legacy carry-forward entry lacking
+  `source_commit` may fall back to current source only when the current version
+  exactly equals its deployed manifest version; the contract reports every such
+  fallback.
 - **Solo first:** `coop-required` is valid only beside `diagnostics-armed` or
   `verify-fix`, with a `Topology: Co-op` current card whose `Solo status:` says
   the useful solo stage passed/completed or was exhausted. Do not add it while

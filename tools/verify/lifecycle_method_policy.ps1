@@ -9,6 +9,12 @@ $script:VtOpenLifecycleLabels = @('not-started', 'diagnostics-armed', 'verify-fi
 $script:VtReadyLifecycleLabels = @('diagnostics-armed', 'verify-fix')
 $script:VtInvalidOpenLifecycleLabels = @('Fixed', 'verify-fix-coop')
 
+$liveTestContractPolicy = Join-Path $PSScriptRoot 'live_test_contract.ps1'
+if (-not (Test-Path -LiteralPath $liveTestContractPolicy -PathType Leaf)) {
+    throw "Live-test deployed-source contract policy is missing: $liveTestContractPolicy"
+}
+. $liveTestContractPolicy
+
 function Get-VtLabelNames {
     param($Issue)
     return @($Issue.labels | ForEach-Object { [string]$_.name })
@@ -123,7 +129,7 @@ function Test-VtCardHasInternalKeys {
 }
 
 function Get-VtLiveTestCardSelection {
-    param($Comments, [switch]$RequirePinnedCard)
+    param($Comments, [switch]$RequirePinnedCard, $Contract, [switch]$RequirePrintfEvidence)
 
     $comment = Get-VtCurrentLiveTestComment $Comments
     $card = if ($comment) { [string]$comment.body } else { $null }
@@ -166,6 +172,9 @@ function Get-VtLiveTestCardSelection {
         if (Test-VtCardHasInternalKeys $card) {
             $errors.Add('internal-key-in-player-steps')
         }
+        foreach ($contractError in @(Get-VtCardContractErrors -Card $card -BuildBanner $build -Contract $Contract -RequirePrintfEvidence:$RequirePrintfEvidence)) {
+            $errors.Add($contractError)
+        }
         if ($topology -match '(?i)^Co-?op(?:\s|$)' -and $soloStatus -notmatch '(?i)\b(?:passed|complete|completed|exhausted)\b') {
             $errors.Add('coop-before-solo-passed-or-exhausted')
         }
@@ -188,7 +197,7 @@ function Get-VtLiveTestCardSelection {
 }
 
 function Get-VtOpenIssueLifecycleDecision {
-    param($Issue, [switch]$RequirePinnedCard)
+    param($Issue, [switch]$RequirePinnedCard, $Contract)
 
     $labels = @(Get-VtLabelNames $Issue)
     $lifecycle = @($labels | Where-Object { $script:VtOpenLifecycleLabels -contains $_ })
@@ -196,7 +205,8 @@ function Get-VtOpenIssueLifecycleDecision {
     $ready = @($lifecycle | Where-Object { $script:VtReadyLifecycleLabels -contains $_ })
     $blocked = $labels -contains 'blocked'
     $coop = $labels -contains 'coop-required'
-    $card = Get-VtLiveTestCardSelection -Comments $Issue.comments -RequirePinnedCard:$RequirePinnedCard
+    $card = Get-VtLiveTestCardSelection -Comments $Issue.comments -RequirePinnedCard:$RequirePinnedCard `
+        -Contract $Contract -RequirePrintfEvidence:($labels -contains 'diagnostics-armed')
     $errors = New-Object System.Collections.Generic.List[string]
 
     if ($lifecycle.Count -ne 1) { $errors.Add("lifecycle-count-$($lifecycle.Count)") }

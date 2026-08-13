@@ -91,6 +91,7 @@ try {
     & git -C $temp init -q
     & git -C $temp config user.email 'qa@example.invalid'
     & git -C $temp config user.name 'Publication QA'
+    & git -C $temp config core.autocrlf false
     & git -C $temp add .
     & git -C $temp commit -q -m 'commit-a'
     if ($LASTEXITCODE -ne 0) { throw 'Could not create publication commit fixture A.' }

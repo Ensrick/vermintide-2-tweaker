@@ -30,6 +30,11 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+          # The live-card contract reads the exact deployed source commits
+          # named by the release manifest. Partial-clone fetches only the Lua
+          # text requested by git show/grep; full history does not hydrate the
+          # multi-gigabyte bundle blobs.
+          fetch-depth: 0
           # Tracker guard reads GitHub state, not mod sources; blob:none keeps
           # the checkout free of the ~7 GiB of bundle blobs (#540).
           filter: 'blob:none'

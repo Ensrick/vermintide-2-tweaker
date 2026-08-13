@@ -94,6 +94,7 @@ if ($SelfTest) {
         & git -C $fixture init -q
         & git -C $fixture config user.email 'qa@example.invalid'
         & git -C $fixture config user.name 'VT2 QA'
+        & git -C $fixture config core.autocrlf false
         [System.IO.File]::WriteAllBytes((Join-Path $fixture '.gitattributes'),
             [Text.Encoding]::ASCII.GetBytes("*.mod text eol=lf`n"))
         $lf = [Text.Encoding]::ASCII.GetBytes("return { name = 'example' }`n")

@@ -362,7 +362,10 @@ function Invoke-VtBuildReceiptSelfTest {
             throw 'working raw bytes that Git checkout cannot reproduce passed BuildOnly preflight'
         }
         $crlfReceipt = New-VtBuildReceipt -Mod 'example_mod' -SourceMap $crlfMap -RootProof $cleanRoot
-        & git -C $tempRoot add example_mod/scripts/main.lua
+        # This fixture deliberately gives Git CRLF working bytes under an LF
+        # attribute. Suppress only the expected conversion advisory; the
+        # subsequent index/raw-byte assertions remain authoritative.
+        & git -C $tempRoot -c core.safecrlf=false add example_mod/scripts/main.lua
         $canonicalIndexMap = Get-VtBuildIndexSourceMap -RepoRoot $tempRoot -Mod 'example_mod'
         $canonicalIndexRoot = Get-VtBuildIndexRootProof -RepoRoot $tempRoot -Mod 'example_mod'
         $notReproducible = Test-VtBuildReceiptProof -Receipt $crlfReceipt -ExpectedMod 'example_mod' `
