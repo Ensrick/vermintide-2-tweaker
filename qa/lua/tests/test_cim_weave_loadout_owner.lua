@@ -37,6 +37,8 @@ return function(H, repo_root)
     local function load_owner()
         return assert(loadfile(root .. "_cim_weave_loadout_owner.lua"))()
     end
+    local temper_transaction = assert(loadfile(
+        root .. "_cim_temper_transaction.lua"))()
 
     -- Stand-in for the VMF mod object. Records every registration so hook
     -- cardinality and order can be asserted directly, and serves the two
@@ -79,6 +81,7 @@ return function(H, repo_root)
             get_forged_weapons = stores.get_forged_weapons or function() return {} end,
             get_amulet_dirty = stores.get_amulet_dirty or function() return { false, false, false } end,
             forge_save = stores.forge_save or function() end,
+            temper_transaction = stores.temper_transaction or temper_transaction,
         })
     end
 
@@ -270,6 +273,52 @@ return function(H, repo_root)
         H.equal(mod.settings_installs, 1)
     end)
 
+    H.test("CIM #1141 weapon writes remain draft-only until one Apply", function()
+        local mod = fake_mod()
+        local hooked = {}
+        function mod:hook(_, method, fn) hooked[method] = fn end
+        local store, saves = {}, 0
+        local item = {
+            rarity = "modded",
+            properties = {},
+            traits = { "old_trait" },
+        }
+        local persisted = {
+            properties = {},
+            traits = { "old_trait" },
+        }
+        local exports = install_owner(mod, {
+            is_active = function() return true end,
+            get_forge_item_props = function() return store end,
+            get_forged_weapons = function() return { bid = persisted } end,
+            forge_save = function() saves = saves + 1 end,
+        })
+
+        with_backend({
+            get_item_from_id = function(_, backend_id)
+                if backend_id == "bid" then return item end
+            end,
+        }, function()
+            hooked.set_loadout_trait(function() error("vanilla must not run") end,
+                {}, "es_mercenary", "weave_new_trait", 1, "bid")
+            H.deep_equal(item.traits, { "old_trait" })
+            H.deep_equal(persisted.traits, { "old_trait" })
+            H.equal(saves, 0)
+
+            local ok, changed = exports.apply_item_draft("es_mercenary", "bid")
+            H.truthy(ok)
+            H.truthy(changed)
+            H.deep_equal(item.traits, { "new_trait" })
+            H.deep_equal(persisted.traits, { "new_trait" })
+            H.equal(saves, 1)
+
+            ok, changed = exports.apply_item_draft("es_mercenary", "bid")
+            H.truthy(ok)
+            H.equal(changed, false)
+            H.equal(saves, 1)
+        end)
+    end)
+
     H.test("CIM weave-loadout owner install is idempotent", function()
         local mod = fake_mod()
         local install = load_owner()
@@ -280,6 +329,7 @@ return function(H, repo_root)
             get_forged_weapons = function() return {} end,
             get_amulet_dirty = function() return {} end,
             forge_save = function() end,
+            temper_transaction = temper_transaction,
         }
         local first = install(ctx)
         local second = install(ctx)
@@ -300,6 +350,7 @@ return function(H, repo_root)
                 get_forged_weapons = function() return {} end,
                 get_amulet_dirty = function() return {} end,
                 forge_save = function() end,
+                temper_transaction = temper_transaction,
             }
         end
         install(ctx_for(first_props, false))
@@ -320,15 +371,16 @@ return function(H, repo_root)
         }), false)
     end)
 
-    H.test("CIM weave-loadout owner exports exactly the four names the entry re-binds", function()
+    H.test("CIM weave-loadout owner exports its four math helpers and temper boundary", function()
         local mod = fake_mod()
         local exports = install_owner(mod)
         local names = {}
         for name in pairs(exports) do names[#names + 1] = name end
         table.sort(names)
         H.deep_equal(names, {
-            "bubble_cap", "cap_grid_property_arrays",
-            "store_property_slot", "value_for_bubbles",
+            "apply_item_draft", "bubble_cap", "cap_grid_property_arrays",
+            "discard_item_draft", "item_draft_payload", "store_property_slot",
+            "value_for_bubbles",
         })
         for _, name in ipairs(names) do
             H.equal(type(exports[name]), "function", name .. " must be callable")

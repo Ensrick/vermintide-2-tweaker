@@ -1,5 +1,21 @@
 # Crafting in Modded Changelog
 
+## 0.8.123-dev (2026-08-13) -- transactional Temper Item (#1141)
+
+- Weapon property and trait bubble clicks now edit a detached draft. They no
+  longer mutate the equipped item, its `CustomData`, or CIM persistence once per
+  click.
+- Temper Item shows **Apply** for an owned weapon and commits that exact instance
+  once. Repeated Apply with no changes is a bounded no-op; leaving the view
+  discards an uncommitted draft.
+- A default-rarity Blacksmith weapon remains immutable, shows **Craft**, and
+  mints one new modded item from the staged draft instead of trying to modify the
+  template.
+- The new idempotent `_cim_temper_runtime.lua` owns the three UI hooks, while the
+  engine-free transaction policy and Lua 5.1 tests cover classification, draft
+  isolation, deterministic trait order, one-write persistence, cancel, Apply,
+  and Craft. The composition entry is now 1,325 nonblank lines.
+
 ## 0.8.122-dev (2026-08-13) -- honest extracted-owner diagnostics (#1122, #1227) [verify-fix] [untested]
 
 - **Fix (#1227): three source-backed runtime checks now inspect the extracted

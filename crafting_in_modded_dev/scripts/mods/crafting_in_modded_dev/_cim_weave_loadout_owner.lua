@@ -62,9 +62,10 @@
 --
 -- PUBLIC SURFACE
 -- None. This owner publishes no `mod._cim_*` field; it registers ten hooks and
--- returns four functions the entry re-binds (bubble_cap, value_for_bubbles,
--- store_property_slot, cap_grid_property_arrays), which the late
--- `_cim_regression_checks` installer receives as its existing context keys.
+-- returns the four math helpers the entry re-binds plus a narrow three-function
+-- Temper Item draft boundary. The late `_cim_regression_checks` installer still
+-- receives the existing math keys; `_cim_temper_runtime` consumes the draft
+-- boundary without publishing flat `mod._cim_*` methods.
 --
 -- COMPOSES WITH, DOES NOT OVERLAP, THE OTHER cim OWNERS
 --   * `_cim_weave_economy` owns the 18 READ-ONLY progression/economy hooks
@@ -113,6 +114,8 @@ local function install(ctx)
         "CIM weave loadout owner requires the amulet dirty-flag accessor")
     state.forge_save = assert(ctx.forge_save,
         "CIM weave loadout owner requires the forge save writer")
+    state.temper_transaction = assert(ctx.temper_transaction,
+        "CIM weave loadout owner requires the temper transaction policy")
 
     -- mod:dofile is not a singleton. A second install would re-register all ten
     -- BackendInterfaceWeavesPlayFab hooks -- VMF drops the duplicates and warns,
@@ -628,46 +631,51 @@ local function install(ctx)
         end
     end
 
+    local function _forge_item_draft_payload(career_name, item_backend_id)
+        if not item_backend_id then return nil end
+        local data = _forge_seed_item(career_name, item_backend_id)
+        return state.temper_transaction.payload_from_grid(
+            data, _strip_weave, _value_for_bubbles)
+    end
+
+    local function _discard_item_draft(career_name, item_backend_id)
+        if not item_backend_id then return false end
+        local key = (career_name or "") .. "|" .. item_backend_id
+        local registry = _get_forge_item_props()
+        local existed = registry[key] ~= nil
+        registry[key] = nil
+        return existed
+    end
+
     local function _forge_apply_to_item(career_name, item_backend_id)
         if not item_backend_id then
             _forge_apply_to_amulet(career_name)
-            return
+            return true, false
         end
         local items_backend = Managers.backend:get_interface("items")
         local item = items_backend and items_backend:get_item_from_id(item_backend_id)
-        if not item then return end
+        if not item then return false, "item" end
 
-        local data = _forge_seed_item(career_name, item_backend_id)
-
-        local new_props = {}
-        for weave_key, slots in pairs(data.properties) do
-            local prop_key = _strip_weave(weave_key)
-            new_props[prop_key] = _value_for_bubbles(weave_key, #slots)
-        end
-        item.properties = new_props
-
-        local new_traits = {}
-        for weave_key, _ in pairs(data.traits) do
-            local trait_key = weave_key:gsub("^weave_", "")
-            new_traits[#new_traits + 1] = trait_key
-        end
-        item.traits = new_traits
+        local payload = _forge_item_draft_payload(career_name, item_backend_id)
+        if not payload then return false, "draft" end
 
         local cjson_mod = rawget(_G, "cjson")
-        if cjson_mod and item.CustomData then
-            item.CustomData.properties = cjson_mod.encode(new_props)
-            item.CustomData.traits = cjson_mod.encode(new_traits)
-        end
+        local encode = cjson_mod and cjson_mod.encode
+        local ok, changed = state.temper_transaction.apply_to_item(
+            item, payload, encode)
+        if not ok then return false, changed end
 
-        -- Persist edits to bubble grid back into our forged_weapons save entry.
+        -- One bounded persistence write at Apply, never one per bubble click.
         local saved = _get_forged_weapons()[item_backend_id]
-        if saved then
-            saved.properties = new_props
-            saved.traits = new_traits
-            saved.trait = new_traits[1]
+        if saved and changed then
+            local saved_payload = state.temper_transaction.copy_payload(payload)
+            saved.properties = saved_payload.properties
+            saved.traits = saved_payload.traits
+            saved.trait = saved_payload.traits[1]
             saved.external_traits = {}
             _forge_save()
         end
+        return true, changed
     end
 
     mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_properties", function(func, self, career_name, item_backend_id)
@@ -841,7 +849,7 @@ local function install(ctx)
                 pcall(mod._cim_autodump_property_array, "set_property", property_key, arr, cap, layer_size)
             end
             if not item_backend_id then _mark_amulet_property_dirty(slot_index) end
-            _forge_apply_to_item(career_name, item_backend_id)
+            if not item_backend_id then _forge_apply_to_item(career_name, nil) end
             return
         end
         return func(self, career_name, property_key, slot_index, item_backend_id)
@@ -866,7 +874,7 @@ local function install(ctx)
                 end
             end
             if not item_backend_id then _mark_amulet_property_dirty(slot_index) end
-            _forge_apply_to_item(career_name, item_backend_id)
+            if not item_backend_id then _forge_apply_to_item(career_name, nil) end
             return
         end
         return func(self, career_name, property_key, slot_index, item_backend_id)
@@ -880,7 +888,7 @@ local function install(ctx)
             local data = _forge_seed_item(career_name, item_backend_id)
             data.traits[trait_key] = slot_index
             if not item_backend_id then _mark_amulet_trait_dirty(slot_index) end
-            _forge_apply_to_item(career_name, item_backend_id)
+            if not item_backend_id then _forge_apply_to_item(career_name, nil) end
             return
         end
         return func(self, career_name, trait_key, slot_index, item_backend_id)
@@ -895,7 +903,7 @@ local function install(ctx)
             local removed_slot = data.traits[trait_key]
             data.traits[trait_key] = nil
             if not item_backend_id then _mark_amulet_trait_dirty(removed_slot) end
-            _forge_apply_to_item(career_name, item_backend_id)
+            if not item_backend_id then _forge_apply_to_item(career_name, nil) end
             return
         end
         return func(self, career_name, trait_key, item_backend_id)
@@ -940,6 +948,9 @@ local function install(ctx)
         value_for_bubbles = _value_for_bubbles,
         store_property_slot = _store_property_slot,
         cap_grid_property_arrays = _cap_grid_property_arrays,
+        item_draft_payload = _forge_item_draft_payload,
+        apply_item_draft = _forge_apply_to_item,
+        discard_item_draft = _discard_item_draft,
     }
     return state.exports
 end

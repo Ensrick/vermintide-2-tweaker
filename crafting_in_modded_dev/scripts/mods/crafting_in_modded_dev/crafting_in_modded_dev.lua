@@ -27,7 +27,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.122-dev"
+local MOD_VERSION = "0.8.123-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -69,6 +69,8 @@ if not _ok_rr then mod:error("Failed to load modded_rarities: %s", tostring(_err
 -- Keep it on `mod` so split modules consume the same singleton at runtime.
 mod._cim_synthetic_item_contract = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_synthetic_item_contract")
+mod._cim_temper_transaction = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_temper_transaction")
 -- issues 628/682/793: declare this entry's routed provider-gate surfaces at
 -- install time (gate calls re-register at run time; blacksmith_list/salvage
 -- register from their modules; cw_conversion stays unrouted -> self-report).
@@ -635,6 +637,7 @@ local _WEAVE_LOADOUT_OWNER = _install_weave_loadout_owner({
     get_forged_weapons = _forge_state.get_forged_weapons,
     get_amulet_dirty = function() return _amulet_dirty end,
     forge_save = _forge_save,
+    temper_transaction = mod._cim_temper_transaction,
 })
 -- Bind the forward-declared local `_cim_weave_economy`'s cost hook closes over.
 _bubble_cap = _WEAVE_LOADOUT_OWNER.bubble_cap
@@ -1295,50 +1298,6 @@ end)
 -- carry no `item_backend_id`); we read all three accessory slots and write
 -- back to all three on apply. (See _forge_seed_amulet below.)
 
--- --- Craft button (repurposed upgrade_button) ---
--- The properties window's upgrade_button is the most natural anchor for a
--- "Craft New" action. Hijack `_upgrade_magic_level` so pressing it instead
--- creates a new modded item with the player's current bubble-grid edits and
--- equips it in place of the existing item.
---
--- Vanilla's `_set_essence_upgrade_cost` (hero_window_weave_properties.lua:1856)
--- runs each refresh and sets:
---   * `button_content.title_text` = "Fully Upgraded" when `essence_amount` is
---     nil (it always is in modded — our weaves hooks return 0 essence).
---   * `disable_button = true` when `script_data["eac-untrusted"]` is true
---     (it always is in modded realm).
--- Post-hook to overwrite both so the button reads "CRAFT" and is clickable.
-mod:hook_safe("HeroWindowWeaveProperties", "_set_essence_upgrade_cost", function(self, essence_amount, can_afford, magic_cap_reached)
-    if not _custom_forge_active then return end
-    local widgets_by_name = self._widgets_by_name
-    local btn = widgets_by_name and widgets_by_name.upgrade_button
-    if not btn then return end
-
-    -- Issue #71 (Option A, 2026-06-17): the weapon (melee/ranged) editor's
-    -- CRAFT button was previously HIDDEN. Bubble-grid edits mutate the
-    -- in-editor item in place (via `_forge_apply_to_item`), and a brand-new
-    -- weapon was only mintable from the weapon-select pane — which crafts a
-    -- BLANK weapon (empty properties/traits). Users who set properties in the
-    -- editor and then expected a "craft" to produce a weapon WITH those
-    -- properties got a blank one (the reporter backed out to the weapon-select
-    -- pane and crafted there). Re-enable the button for weapons so
-    -- "set properties -> CRAFT" mints a new weapon carrying the current edits
-    -- (the `_upgrade_magic_level` hook below clones item.properties /
-    -- item.traits into the new craft, exactly like the amulet path).
-    local item = self:_selected_item()
-
-    if btn.content then btn.content.visible = true end
-    local label = item and "CRAFT" or "CRAFT MODDED ACCESSORIES"
-    btn.content.title_text = label
-    btn.content.button_hotspot.disable_button = false
-    if btn.style and btn.style.price_icon then btn.style.price_icon.color[1] = 0 end
-    if btn.style and btn.style.price_icon_disabled then btn.style.price_icon_disabled.color[1] = 0 end
-    -- Also clear the "not enough essence" warning that vanilla shows when cap
-    -- is reached — we don't use essence in modded.
-    local warn = widgets_by_name.upgrade_essence_warning
-    if warn and warn.content then warn.content.visible = false end
-end)
-
 -- Single-slot amulet craft helper. Clones the equipped item's current state
 -- (already mutated by `_forge_apply_to_amulet` on each bubble click) into a
 -- fresh modded item, registers it in cim's save layer, and equips it.
@@ -1401,94 +1360,15 @@ local function _cim_amulet_craft_one_slot(properties_win, slot_index, slot_name)
 end
 mod._cim_amulet_craft_one_slot = _cim_amulet_craft_one_slot
 
-mod:hook("HeroWindowWeaveProperties", "_upgrade_magic_level", function(func, self)
-    if not _custom_forge_active then return func(self) end
-
-    local item = self:_selected_item()
-    local item_data = item and item.data
-    local item_key = item_data and (item_data.key or item_data.name)
-
-    -- Issue #71 (Option A): weapons (melee/ranged) now fall through to the
-    -- mint-new path below. The editor's bubble-grid edits already mutated
-    -- item.properties / item.traits in place (via _forge_apply_to_item), so
-    -- cloning them into a fresh craft yields a new weapon carrying the current
-    -- edits — matching the "set properties then craft" mental model. (The
-    -- button was previously hidden for weapons and this branch early-returned.)
-
-    -- Amulet case: no selected_item. Clone all three equipped accessories via
-    -- the same shared single-slot helper used by the individual buttons. This
-    -- branch still runs if the
-    -- legacy `upgrade_button` somehow fires (e.g. gamepad activation while in
-    -- amulet view) — the 3 cim per-slot buttons supersede it visually but the
-    -- legacy path stays wired for compat.
-    if not item then
-        local crafted = _BULK_ACCESSORY_CRAFT.craft_all(function(slot_index, slot_name)
-            return _cim_amulet_craft_one_slot(self, slot_index, slot_name)
-        end)
-        if crafted == 0 then
-            mod:echo("[cim] No equipped accessories could be crafted")
-        end
-        return
-    end
-
-    if not item_key then
-        mod:echo("[cim] Craft: no selected item")
-        return
-    end
-
-    -- The bubble-grid `_forge_apply_to_item` already mutated `item.properties`
-    -- and `item.traits` in-place on each click, so the "current bubble state"
-    -- IS the item's current properties/traits. Clone them into the new craft.
-    local new_props = {}
-    if item.properties then
-        for k, v in pairs(item.properties) do new_props[k] = v end
-    end
-    local new_traits = {}
-    if item.traits then
-        for i, t in ipairs(item.traits) do new_traits[i] = t end
-    end
-
-    local new_backend_id = Application.guid()
-    local weapon_data = {
-        item_key = item_key,
-        properties = new_props,
-        traits = new_traits,
-        -- Honor the base_power_level setting (was hardcoded 300 — weapons ignored
-        -- the slider while the amulet path already read _cim_base_power). 2026-06-30.
-        power_level = (mod._cim_base_power and mod._cim_base_power()) or 300,
-        rarity = "modded",
-        via_mirror = true,
-    }
-
-    local injected, err = _athanor_inject_item(weapon_data, new_backend_id)
-    if not injected then
-        mod:warning("[cim] Craft failed: " .. tostring(err))
-        return
-    end
-
-    local registered, register_err = mod._cim_register_craft(new_backend_id, weapon_data)
-    if not registered then
-        Managers.backend:get_backend_mirror():remove_item(new_backend_id)
-        mod:warning("[cim] Craft persistence rejected: " .. tostring(register_err))
-        return
-    end
-
-    -- Craft only — see issue #12. Player equips from inventory.
-    local slot_name = self._params and self._params.selected_slot_name
-    local display = item_key
-    local master = rawget(ItemMasterList, item_key)
-    if master and master.display_name then
-        local lok, loc = pcall(Localize, master.display_name)
-        if lok and loc then display = loc end
-    end
-    mod:echo("[cim] Crafted new " .. tostring(slot_name and slot_name:gsub("^slot_", "") or "item")
-             .. ": " .. display .. " [promo] — equip from inventory")
-    -- v0.8.7-dev: audio feedback for the editor CRAFT button (the repurposed
-    -- upgrade_button). Our hook crafts + returns without the vanilla completion
-    -- sound, so this craft path was silent. _play_sound delegates to
-    -- _parent:play_sound (hero_window_weave_properties.lua:2838).
-    if self._play_sound then pcall(self._play_sound, self, "play_gui_craft_forge_button_completed") end
-end)
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_temper_runtime")({
+    mod = mod,
+    is_active = function() return _custom_forge_active end,
+    transaction = mod._cim_temper_transaction,
+    loadout = _WEAVE_LOADOUT_OWNER,
+    bulk_accessory_craft = _BULK_ACCESSORY_CRAFT,
+    craft_accessory = _cim_amulet_craft_one_slot,
+    inject_item = _athanor_inject_item,
+})
 
 -- Console commands let the user pick which slot the amulet click edits.
 -- Phase A.5 will replace these with on-screen buttons inside the editor.

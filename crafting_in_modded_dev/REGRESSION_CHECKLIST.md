@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-08-13.
 
+### issue1141-temper-transaction - item editing has one explicit commit boundary
+
+| Field | Value |
+|---|---|
+| Symptom | Bubble clicks immediately mutate an equipped weapon, while the button always says Craft and does nothing useful for a Blacksmith template. |
+| Root cause | CIM already held a detached weave-grid representation, but every set/remove hook copied it into the live item and save file; the button then cloned live state without classifying template versus owned instance. |
+| Fix version(s) | cim_dev 0.8.123-dev (#1141) |
+| Category | SOLO / TRANSACTION |
+| Repro | In the Keep, equip a crafted weapon, open CIM's Athanor, enter Temper Item, change one property and trait, back out, reopen, then repeat and press Apply. Repeat with a 5-power Blacksmith weapon. |
+| Expected post-fix | Backing out leaves the owned item unchanged. Apply modifies that exact owned instance once and does not add an inventory item. A Blacksmith template shows Craft, remains unchanged, and creates one new modded item carrying the staged choices. |
+| Detection | `test_cim_temper_transaction.lua` tests the pure policy; `test_cim_temper_runtime.lua` drives Apply/Craft routing and bounded hooks; `test_cim_weave_loadout_owner.lua` proves a weapon write remains draft-only until one Apply and persists only once. |
+
 ### issue1122-1227-regression-instrument-ownership - live checks cannot hide drift
 
 | Field | Value |
