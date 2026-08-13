@@ -2207,7 +2207,11 @@ un-mergeable.
 blocking step in `.github/workflows/qa.yml` and `.github/workflows/issue-lifecycle.yml`
 (contents:read + issues:read only). It pages open issues and fetches complete
 comment history only for ready issues through GraphQL so `IssueComment.isPinned`
-is authoritative. The GraphQL transport retries only recognized TLS, connection,
+is authoritative. Ready-issue comment connections are read in batches of at
+most 20 aliases per request; any connection beyond 100 comments remains
+cursor-paginated to completion. This preserves full pin evidence without the
+one-network-round-trip-per-issue timeout that recurred on 2026-08-13. The
+GraphQL transport retries only recognized TLS, connection,
 timeout, rate-limit, and HTTP 5xx failures on a bounded 2/5/10-second schedule;
 authentication, schema, and exhausted transport failures still fail closed. The
 offline self-test pins both classifications and the retry bound. The lightweight

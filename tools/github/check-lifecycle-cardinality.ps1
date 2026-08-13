@@ -218,6 +218,15 @@ function Invoke-SelfTest {
     if (Test-VtRetryableGitHubTransportError 'HTTP 401: Bad credentials') { throw 'authentication failure must fail immediately' }
     if (Test-VtRetryableGitHubTransportError 'GraphQL: Field does not exist') { throw 'permanent GraphQL error must fail immediately' }
     if (((1..5 | ForEach-Object { Get-VtGraphQlRetryDelaySeconds $_ }) -join ',') -ne '2,5,10,0,0') { throw 'retry schedule must remain bounded to three retries' }
+    $batchSpec = New-VtIssueCommentBatchQuerySpec -Owner 'owner' -Name 'repo' -Numbers @(579, 750) -AfterByNumber @{ '579'='cursor-579' }
+    if ($batchSpec.Query -notmatch [regex]::Escape('issue0: issue(number: $number0)')) { throw 'comment batch must alias the first issue' }
+    if ($batchSpec.Query -notmatch [regex]::Escape('issue1: issue(number: $number1)')) { throw 'comment batch must alias the second issue' }
+    if ([int]$batchSpec.Variables.number0 -ne 579 -or [string]$batchSpec.Variables.after0 -ne 'cursor-579') { throw 'comment batch must retain the first issue cursor' }
+    if ([int]$batchSpec.Variables.number1 -ne 750 -or $null -ne $batchSpec.Variables.after1) { throw 'comment batch must leave a first-page cursor null' }
+    if ([int]$batchSpec.AliasToNumber.issue0 -ne 579 -or [int]$batchSpec.AliasToNumber.issue1 -ne 750) { throw 'comment batch aliases must map back to exact issues' }
+    $batchCapRejected = $false
+    try { New-VtIssueCommentBatchQuerySpec -Owner 'owner' -Name 'repo' -Numbers @(1..21) | Out-Null } catch { $batchCapRejected = $true }
+    if (-not $batchCapRejected) { throw 'comment batch must reject more than 20 issues' }
     Write-Host '[check-lifecycle-cardinality -SelfTest] OK'
 }
 
@@ -262,31 +271,95 @@ function Invoke-VtGraphQl {
     return $payload.data
 }
 
-function Get-VtGitHubIssueComments {
-    param([string]$Owner, [string]$Name, [int]$Number)
+function New-VtIssueCommentBatchQuerySpec {
+    param(
+        [string]$Owner,
+        [string]$Name,
+        [int[]]$Numbers,
+        [hashtable]$AfterByNumber = @{}
+    )
 
-    $query = @'
-query($owner: String!, $name: String!, $number: Int!, $after: String) {
-  repository(owner: $owner, name: $name) {
-    issue(number: $number) {
-      comments(first: 100, after: $after) {
+    $ordered = @($Numbers | Select-Object -Unique)
+    if ($ordered.Count -eq 0) { throw 'Comment batch requires at least one issue number.' }
+    if ($ordered.Count -gt 20) { throw "Comment batch is capped at 20 issues; got $($ordered.Count)." }
+
+    $declarations = @('$owner: String!', '$name: String!')
+    $fields = @()
+    $variables = @{ owner=$Owner; name=$Name }
+    $aliasToNumber = @{}
+    for ($i = 0; $i -lt $ordered.Count; $i++) {
+        $number = [int]$ordered[$i]
+        if ($number -le 0) { throw "Invalid issue number in comment batch: $number." }
+        $numberVar = "number$i"
+        $afterVar = "after$i"
+        $alias = "issue$i"
+        $declarations += ('$' + $numberVar + ': Int!')
+        $declarations += ('$' + $afterVar + ': String')
+        $fields += @"
+    ${alias}: issue(number: `$$numberVar) {
+      number
+      comments(first: 100, after: `$$afterVar) {
         nodes { body createdAt isPinned }
         pageInfo { hasNextPage endCursor }
       }
     }
-  }
+"@
+        $variables[$numberVar] = $number
+        $key = [string]$number
+        $variables[$afterVar] = if ($AfterByNumber.ContainsKey($key)) { [string]$AfterByNumber[$key] } else { $null }
+        $aliasToNumber[$alias] = $number
+    }
+
+    $query = "query($($declarations -join ', ')) {`n  repository(owner: `$owner, name: `$name) {`n$($fields -join '')  }`n}"
+    return [pscustomobject][ordered]@{
+        Query = $query
+        Variables = $variables
+        AliasToNumber = $aliasToNumber
+    }
 }
-'@
-    $comments = @()
-    $after = $null
-    do {
-        $data = Invoke-VtGraphQl -Query $query -Variables @{ owner=$Owner; name=$Name; number=$Number; after=$after }
-        if (-not $data.repository.issue) { throw "GitHub issue #$Number was not found." }
-        $connection = $data.repository.issue.comments
-        $comments += @($connection.nodes)
-        $after = if ($connection.pageInfo.hasNextPage) { [string]$connection.pageInfo.endCursor } else { $null }
-    } while ($after)
-    return @($comments)
+
+function Get-VtGitHubIssueCommentsBatch {
+    param([string]$Owner, [string]$Name, [int[]]$Numbers)
+
+    $ordered = @($Numbers | Select-Object -Unique)
+    $commentsByNumber = @{}
+    foreach ($number in $ordered) { $commentsByNumber[[string]$number] = @() }
+
+    for ($offset = 0; $offset -lt $ordered.Count; $offset += 20) {
+        $last = [Math]::Min($offset + 19, $ordered.Count - 1)
+        $pending = @($ordered[$offset..$last])
+        $afterByNumber = @{}
+        while ($pending.Count -gt 0) {
+            $spec = New-VtIssueCommentBatchQuerySpec -Owner $Owner -Name $Name -Numbers $pending -AfterByNumber $afterByNumber
+            $data = Invoke-VtGraphQl -Query $spec.Query -Variables $spec.Variables
+            if (-not $data.repository) { throw "GitHub repository '$Owner/$Name' was not found." }
+
+            $next = @()
+            foreach ($alias in @($spec.AliasToNumber.Keys)) {
+                $number = [int]$spec.AliasToNumber[$alias]
+                $issue = $data.repository.$alias
+                if (-not $issue -or [int]$issue.number -ne $number) {
+                    throw "GitHub issue #$number was not found or was returned under the wrong batch alias."
+                }
+                $connection = $issue.comments
+                $key = [string]$number
+                $commentsByNumber[$key] = @($commentsByNumber[$key]) + @($connection.nodes)
+                if ($connection.pageInfo.hasNextPage) {
+                    $cursor = [string]$connection.pageInfo.endCursor
+                    if ([string]::IsNullOrWhiteSpace($cursor)) {
+                        throw "GitHub issue #$number reported another comments page without an end cursor."
+                    }
+                    $afterByNumber[$key] = $cursor
+                    $next += $number
+                }
+                else {
+                    [void]$afterByNumber.Remove($key)
+                }
+            }
+            $pending = @($next)
+        }
+    }
+    return $commentsByNumber
 }
 
 function Get-VtGitHubOpenIssues {
@@ -309,29 +382,37 @@ query($owner: String!, $name: String!, $after: String) {
   }
 }
 '@
-    $issues = @()
+    $issueNodes = @()
     $after = $null
     do {
         $data = Invoke-VtGraphQl -Query $query -Variables @{ owner=$owner; name=$name; after=$after }
         if (-not $data.repository) { throw "GitHub repository '$Repository' was not found." }
         $connection = $data.repository.issues
-        foreach ($node in @($connection.nodes)) {
-            if ([int]$node.labels.totalCount -gt 100) { throw "Issue #$($node.number) has more than 100 labels; refusing a partial lifecycle read." }
-            $labelNodes = @($node.labels.nodes)
-            $labelNames = @($labelNodes | ForEach-Object { [string]$_.name })
-            $comments = @()
-            if (@($labelNames | Where-Object { $script:VtReadyLifecycleLabels -contains $_ }).Count -gt 0) {
-                $comments = @(Get-VtGitHubIssueComments -Owner $owner -Name $name -Number ([int]$node.number))
-            }
-            $issues += [pscustomobject]@{
-                number = [int]$node.number
-                title = [string]$node.title
-                labels = $labelNodes
-                comments = $comments
-            }
-        }
+        $issueNodes += @($connection.nodes)
         $after = if ($connection.pageInfo.hasNextPage) { [string]$connection.pageInfo.endCursor } else { $null }
     } while ($after)
+
+    $readyNumbers = @()
+    foreach ($node in $issueNodes) {
+        if ([int]$node.labels.totalCount -gt 100) { throw "Issue #$($node.number) has more than 100 labels; refusing a partial lifecycle read." }
+        $labelNames = @($node.labels.nodes | ForEach-Object { [string]$_.name })
+        if (@($labelNames | Where-Object { $script:VtReadyLifecycleLabels -contains $_ }).Count -gt 0) {
+            $readyNumbers += [int]$node.number
+        }
+    }
+    $commentsByNumber = Get-VtGitHubIssueCommentsBatch -Owner $owner -Name $name -Numbers $readyNumbers
+
+    $issues = @()
+    foreach ($node in $issueNodes) {
+        $number = [int]$node.number
+        $key = [string]$number
+        $issues += [pscustomobject]@{
+            number = $number
+            title = [string]$node.title
+            labels = @($node.labels.nodes)
+            comments = if ($commentsByNumber.ContainsKey($key)) { @($commentsByNumber[$key]) } else { @() }
+        }
+    }
     return @($issues)
 }
 

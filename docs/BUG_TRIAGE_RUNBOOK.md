@@ -329,10 +329,12 @@ shipping. Agent publication is headless and opens no interactive window.
     `tools/github/check-lifecycle-cardinality.ps1` is a blocking step in
     `.github/workflows/qa.yml` (PRs AND master pushes) and
     `.github/workflows/issue-lifecycle.yml` (tracker events, manual, daily). It
-    pages EVERY open issue, so a single issue carrying `verify-fix` or
-    `diagnostics-armed` without exactly one correctly formatted pinned card
-    fails qa-gate for the whole repository - including PRs that never touched
-    that mod. It resolves the latest release manifest, inspects the recorded
+    pages EVERY open issue and reads ready-issue comment histories in bounded
+    GraphQL batches, cursor-paginating any history beyond 100 comments. A single
+    issue carrying `verify-fix` or `diagnostics-armed` without exactly one
+    correctly formatted pinned card therefore fails qa-gate for the whole
+    repository - including PRs that never touched that mod. It resolves the
+    latest release manifest, inspects the recorded
     source commits with a blob-filtered full Git history, and rejects stale
     versions, invented commands, missing diagnostic receipts, and contradictory
     manifests. Two visible legacy carry-forward entries without `source_commit`
