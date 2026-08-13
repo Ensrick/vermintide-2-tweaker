@@ -1091,6 +1091,19 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 	if type(policy) ~= "table" or type(policy.resource_mode) ~= "function" then
 		return "shared Old Musket resource-mode policy missing"
 	end
+	local package_bridge = _om._old_musket_package_bridge
+	if type(package_bridge) ~= "table"
+			or type(package_bridge.alias) ~= "function"
+			or type(package_bridge.load) ~= "function"
+			or type(package_bridge.unload) ~= "function"
+			or type(package_bridge.has_loaded) ~= "function" then
+		return "Old Musket material-owner package bridge missing"
+	end
+	if package_bridge.alias(policy.UNIT) ~= policy.NETWORK_PACKAGE_ALIAS_1P
+			or package_bridge.alias(policy.UNIT_3P) ~= policy.NETWORK_PACKAGE_ALIAS_3P
+			or package_bridge.alias(policy.NETWORK_PACKAGE_ALIAS_3P) ~= nil then
+		return "Old Musket package bridge does not preserve the exact 1P/3P donor boundary"
+	end
 	-- All three positive-identity forms a surface can hold (item key, skin key,
 	-- backend id) must resolve to the SAME custom unit plus a full stance
 	-- transform triplet from the ONE descriptor. A surface that resolves any of

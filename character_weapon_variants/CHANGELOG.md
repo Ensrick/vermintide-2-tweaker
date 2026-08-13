@@ -1,5 +1,10 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.512-dev (2026-08-12) -- restore the Old Musket material lifecycle (#474) [untested]
+
+- **Fix (#474 regression of #742): the Old Musket no longer reports a nonexistent custom package as loaded while its borrowed Handgun material is absent.** Its mod-bundled 1P and 3P unit paths now bridge `PackageManager.load`, `unload`, and `has_loaded` to the matching vanilla Empire Handgun material-owner packages while preserving each consumer's reference name, asynchronous completion callback, and priority. CIM/Athanor and hero/inventory previews therefore wait for the material before spawning, and world equip/stance/transition consumers share the same balanced lifecycle instead of producing an invisible unit or missing-material checkerboard.
+- Engine-free regression coverage executes the bridge through 1P, 3P, unrelated-package, callback, async/priority, reference, unload, and readiness paths. The existing canonical appearance postcondition remains fail-closed and continues to verify the spawned unit's actual material census before texture writes.
+
 ## 0.1.511-dev (2026-08-12) -- restore the companion-detector phase contract (#1273) [untested]
 
 - **Fix (#1273): CWV no longer aborts VMF initialization after the #1269 decomposition.** The diagnostic-only companion-mod detector moved into `_cwv_variant_bootstrap_owner.lua`, but `_cwv_commands_lifecycle.lua` was still handed an undefined entry-file value and called it immediately. The completed bootstrap now exports the detector with `_find_def` and `_give_variant`; the entry asserts that explicit return contract before installing later owners, and the lifecycle owner independently asserts its required callable dependency.

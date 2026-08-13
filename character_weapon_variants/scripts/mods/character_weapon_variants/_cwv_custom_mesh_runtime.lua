@@ -8,9 +8,9 @@
 -- attachment links, and no flow graph for the weapon FX its actions fire. Each
 -- of those gaps used to be patched by a separate inline block in the entry file;
 -- all of them moved here verbatim:
---   * the LA-pattern package shims - `_LA_PATTERN_CUSTOM_PACKAGES` plus the
---     PackageManager `load` / `unload` / `has_loaded` hooks that no-op or report
---     success for a path the master bundle already carries - and the #474
+--   * the Old Musket package bridge plus the PackageManager `load` / `unload` /
+--     `has_loaded` hooks that map its master-bundled unit paths onto the exact
+--     vanilla Handgun packages owning their borrowed materials - and the #474
 --     `_om._husk_custom_bundle_unit` predicate that lets the husk mesh re-key
 --     accept those same two paths (the vanilla-prefix residency gate from issue
 --     418 deliberately rejects them);
@@ -78,7 +78,7 @@
 -- `_om.weapon_appearance` (entry lines 58-98). The owner loads at the exact point
 -- the moved block ran, so those slots are as populated as they were before.
 --
--- The two file-scope locals in the moved range - `_LA_PATTERN_CUSTOM_PACKAGES`
+-- The two file-scope locals in the moved range - the custom-package table
 -- and `_orig_unit_has_node` - each had ZERO references outside it before the
 -- move, so nothing in the entry can reach in here any more. Removing them also
 -- buys back two slots against the entry chunk's Lua 5.1 200-local ceiling.
@@ -121,22 +121,24 @@ local _dbg_alert = ctx.dbg_alert
 -- the FP rendering shader baked in. See LA's utils/hooks.lua for the
 -- prior art that informed this pattern.
 --
--- The two hooks below intercept the engine's package_manager.load /
--- unload / has_loaded calls. When the engine tries to package-load our
--- custom unit path (which has no sibling .package file), we silently
--- no-op (load/unload) or report success (has_loaded). The unit data is
--- already in our master bundle via the unit-glob, so the engine can
--- still find it for World.spawn_unit + GearUtils linking.
+-- The three hooks below intercept the engine's package_manager.load /
+-- unload / has_loaded calls. The custom unit data is already in CWV's master
+-- bundle, but its .unit borrows a VANILLA material. Map the nonexistent custom
+-- unit package onto the exact Handgun package that owns that material while
+-- preserving PackageManager's caller reference and completion callback. That
+-- makes CIM/hero previews wait for real material readiness and keeps unloads
+-- balanced instead of reporting a false-success state (#474/#742).
 --
 -- v0.1.271-276 had this same crash; the early "fix" attempts (sibling
 -- packages, .mod packages list, etc.) all failed because the engine's
 -- global Application.resource_package only finds vanilla bundles. The
--- LA pattern avoids the lookup entirely by hooking before it runs.
+-- The safe form still avoids looking up a nonexistent package; it redirects
+-- that lifecycle to an engine-owned package which is globally discoverable.
 
-local _LA_PATTERN_CUSTOM_PACKAGES = {
-	["units/cwv_es_musket_custom/cwv_es_musket_custom"]    = true,
-	["units/cwv_es_musket_custom/cwv_es_musket_custom_3p"] = true,
-}
+local _old_musket_package_bridge = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_old_musket_package_bridge")
+	.new(_om.old_musket_preview)
+_om._old_musket_package_bridge = _old_musket_package_bridge
 
 -- (#474) Husk re-key residency arm for MOD-BUNDLED custom meshes. These units
 -- live in cwv's own master bundle (always resident while the mod is loaded);
@@ -149,23 +151,20 @@ local _LA_PATTERN_CUSTOM_PACKAGES = {
 -- "_3p" to whatever lands in item_units.
 _om._husk_custom_bundle_unit = function(base_unit)
 	if type(base_unit) ~= "string" or base_unit == "" then return false end
-	return _LA_PATTERN_CUSTOM_PACKAGES[base_unit] == true
-		and _LA_PATTERN_CUSTOM_PACKAGES[base_unit .. "_3p"] == true
+	return _old_musket_package_bridge.has_pair(base_unit)
 end
 
 mod:hook(PackageManager, "load", function(func, self, package_name, reference_name, callback, asynchronous, prioritize)
-	if _LA_PATTERN_CUSTOM_PACKAGES[package_name] then return end
-	return func(self, package_name, reference_name, callback, asynchronous, prioritize)
+	return _old_musket_package_bridge.load(func, self, package_name, reference_name,
+		callback, asynchronous, prioritize)
 end)
 
 mod:hook(PackageManager, "unload", function(func, self, package_name, reference_name)
-	if _LA_PATTERN_CUSTOM_PACKAGES[package_name] then return end
-	return func(self, package_name, reference_name)
+	return _old_musket_package_bridge.unload(func, self, package_name, reference_name)
 end)
 
 mod:hook(PackageManager, "has_loaded", function(func, self, package_name, reference_name)
-	if _LA_PATTERN_CUSTOM_PACKAGES[package_name] then return true end
-	return func(self, package_name, reference_name)
+	return _old_musket_package_bridge.has_loaded(func, self, package_name, reference_name)
 end)
 
 -- v0.1.287: register custom-mesh unit paths in NetworkLookup.inventory_packages.

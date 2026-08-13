@@ -3,6 +3,8 @@ return function(H, repo_root)
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua")
     local Cim = dofile(repo_root
         .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview_policy.lua")
+    local Bridge = dofile(repo_root
+        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_package_bridge.lua")
 
     local function registry(overrides)
         local ready = {
@@ -48,6 +50,58 @@ return function(H, repo_root)
         H.equal(#descriptor.textures, 3)
         H.equal(Musket.resource_mode(descriptor, registry()), "custom")
         H.equal(Cim.authored_mode(descriptor, Musket.resource_mode, registry()), "custom")
+    end)
+
+    H.test("CWV #474 bridges custom package lifecycle to the material owner", function()
+        local bridge = Bridge.new(Musket)
+        local calls = {}
+        local callback = function() calls.callback = true end
+        local manager = {}
+        local function next_call(self, package_name, reference_name, passed_callback,
+                asynchronous, prioritize)
+            calls.self = self
+            calls.package_name = package_name
+            calls.reference_name = reference_name
+            calls.passed_callback = passed_callback
+            calls.asynchronous = asynchronous
+            calls.prioritize = prioritize
+            return "forwarded", false
+        end
+
+        local first, second = bridge.load(next_call, manager, Musket.UNIT_3P,
+            "LootItemUnitPreviewer", callback, true, true)
+        H.equal(first, "forwarded")
+        H.equal(second, false)
+        H.equal(calls.self, manager)
+        H.equal(calls.package_name, Musket.NETWORK_PACKAGE_ALIAS_3P)
+        H.equal(calls.reference_name, "LootItemUnitPreviewer")
+        H.equal(calls.passed_callback, callback)
+        H.equal(calls.asynchronous, true)
+        H.equal(calls.prioritize, true)
+
+        calls = {}
+        H.equal(bridge.unload(next_call, manager, Musket.UNIT,
+            "SimpleInventoryExtension"), "forwarded")
+        H.equal(calls.package_name, Musket.NETWORK_PACKAGE_ALIAS_1P)
+        H.equal(calls.reference_name, "SimpleInventoryExtension")
+
+        calls = {}
+        H.equal(bridge.has_loaded(next_call, manager, Musket.UNIT_3P,
+            "HeroPreviewer"), "forwarded")
+        H.equal(calls.package_name, Musket.NETWORK_PACKAGE_ALIAS_3P)
+        H.equal(calls.reference_name, "HeroPreviewer")
+        H.equal(bridge.has_pair(Musket.UNIT), true)
+    end)
+
+    H.test("CWV #474 package bridge leaves unrelated packages byte-for-byte unchanged", function()
+        local bridge = Bridge.new(Musket)
+        local vanilla = "units/weapons/player/wpn_empire_sword_t1/wpn_empire_sword_t1"
+        local seen
+        local function next_call(_, package_name) seen = package_name return 19 end
+        H.equal(bridge.load(next_call, {}, vanilla, "ref", nil, false, false), 19)
+        H.equal(seen, vanilla)
+        H.equal(bridge.alias(vanilla), nil)
+        H.equal(bridge.is_custom(vanilla), false)
     end)
 
     H.test("CWV #474 recognizes CIM UUID items through the canonical cwv_key stamp", function()

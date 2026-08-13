@@ -2501,6 +2501,13 @@ across preview worlds, owner units, or remote husks.
 4. Audit every caller of the shared painter. #742 occurred in
    `SimpleHuskInventoryExtension._wield_slot` after #617 had fixed only the
    `LootItemUnitPreviewer` parent-material binding.
+5. For a unit embedded in a mod master bundle, inspect every material named by
+   its `.unit`. Unit residency does not make a borrowed vanilla material owner
+   resident. If `PackageManager.load(custom_unit_path)` is intercepted because
+   there is no sibling custom package, a no-op load plus an always-true
+   `has_loaded` is a false-success state: preview callbacks may spawn the mesh
+   before the donor package exists. CWV #474 reproduced this on owner 1P/3P,
+   inventory, and CIM/Athanor with material `#ID[b6d0945a]` unresolved.
 
 ### Fix template
 - Require both resource proof and a real-material census immediately before the
@@ -2510,6 +2517,12 @@ across preview worlds, owner units, or remote husks.
   bounded reason. Do not partially paint earlier meshes or retry per frame.
 - Keep package/RPC remediation separate. #491 fixes remote package collection;
   it does not prove a spawned material handle.
+- When a master-bundled custom unit borrows an engine-owned material, bridge the
+  nonexistent custom package path to the exact donor package in all three
+  `PackageManager` operations (`load`, `unload`, `has_loaded`). Preserve the
+  original reference name, callback, async mode, and priority so the engine's
+  readiness and reference-count contracts remain balanced. Do not report the
+  custom path loaded merely because its unit resource is resident.
 - Test one fully bound unit, zero/missing/null materials, a later mesh failing
   after an earlier valid mesh, throwing introspection, preview, remote husk,
   transition, hot join, and a mixed-mod fallback. CWV
