@@ -1,5 +1,10 @@
 # Verminious Dreams Lighting — Changelog
 
+## v1.0.19-dev - 2026-08-13 - #1287 clean artifact reconciliation
+
+- Rebuilt the unchanged lighting implementation from one clean, source-addressable commit so the Lua version, Workshop title, tracked root bundle, BuildOnly receipt, release manifest, and publication receipt identify the same artifact.
+- This is provenance-only reconciliation for issue #1287; no lighting profiles, settings, hooks, commands, or gameplay behavior changed.
+
 ## v1.0.18-dev - 2026-07-18 - complete stranded ship pipeline
 
 - No source change. The pipeline-state ladder (PROJECT_STANDARDS 11b) flagged this stream stranded: v1.0.14-dev through v1.0.17-dev landed in git (last upload was 2026-07-13, before the shared-lib debug helper and the localization rework) but were never built or uploaded. This build ships all of it. PC-B remote deploy skipped this invocation (-NoRemote): PC-B unreachable.

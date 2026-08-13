@@ -1,6 +1,6 @@
 local mod = get_mod("verminious_dreams_lighting_dev")
 
-local MOD_VERSION = "1.0.18-dev"
+local MOD_VERSION = "1.0.19-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- File-local (was a bare _G global pre-1.0.15-dev; issue 510 / issue 434 audit
 -- F7): read only at the bottom of this same chunk, so no _G or cross-file
