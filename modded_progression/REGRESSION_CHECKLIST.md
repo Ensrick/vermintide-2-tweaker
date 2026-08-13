@@ -4,9 +4,9 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-- [ ] #607: one ordinary official-realm chest/vault opening emits exactly one bounded `[mp:607] CAPTURE applied ... backend=observed-only` summary without changing the native opening.
-- [ ] #607: modded-realm navigation/open attempts add no capture; `/mp_loot_diag` contains at most 12 sanitized records and `/mp_loot_diag reset` clears only diagnostic evidence.
-- [ ] #607: `/mp_regression_test` passes `mp607_modded_loot_capture_is_bounded_and_realm_gated`; engine-free `test_mp_loot_diag.lua` passes.
+- [ ] #607: completing one ordinary modded Adventure mission emits bounded `[mp:607]` `end_level`, `pre_request`, and `local_ledger` events without the diagnostic adding a request or mutating loot; an EAC/API refusal emits `rejection` without requiring a successful `FunctionResult`.
+- [ ] #607: `/mp_loot_diag` reports `first_missing=local_container_award`, at most 12 sanitized events, no backend/player ids, and honest `award_capable=false` / `open_capable=false`; reset clears only diagnostic evidence.
+- [ ] #607: an existing ordinary mission chest opened through Spoils of War emits the bounded `open` flow; `/mp_regression_test` passes `issue607_local_loot_layer_diagnostic_contract`; engine-free `test_mp_loot_diag.lua` passes.
 
 - [ ] #577: one modded SM purchase debits local shillings once, grants/owns the exact item immediately and after restart, and never enqueues `PurchaseItem` or `storePurchaseMade`.
 - [ ] #577: repeat/double activation, stale price, owned item, insufficient funds, unavailable/DLC/platform/bundle offer, and failed persistence cannot double-spend or partially grant; official purchase remains vanilla.
@@ -17,10 +17,22 @@ Walk every entry below before any release that touches the relevant subsystem. P
 - [ ] #589: the modded login-reward button remains disabled and no caller reaches `claimStoreRewards`; `/mp_regression_test` passes both `mp589_store_login_claim_*` checks. Official-realm claim remains vanilla.
 - [ ] #573: modded `get_quests` exposes only MP-owned daily rows with empty weekly/event slices, and modded refresh never calls backend `update_quests`; official read/refresh delegates unchanged.
 
-Last updated: 2026-07-13.
+Last updated: 2026-08-13.
 
 ---
 ## Backend isolation
+
+### mp607-local-loot-layer-diagnostic - rejected requests must still name the first missing layer
+
+| Field | Value |
+|-------|-------|
+| Symptom | The prior diagnostic waited for `loot_chest_rewards_request_cb`, so the normal modded-realm EAC rejection produced no issue evidence and the live test was impossible. |
+| Root cause | Both mission rewards and chest openings enqueue EAC-challenged CloudScript before their success callbacks; backend success was incorrectly treated as the probe trigger. |
+| Fix version(s) | mp v0.2.35-dev diagnostics |
+| Category | INTEGRATION / DIAGNOSTIC |
+| Repro | Complete one ordinary Adventure mission in the modded realm, return through the result screens, run `/mp_loot_diag`, and inspect the newest log. |
+| Expected diagnostic | Mission entry, target request enqueue, local inventory census, and any EAC/API rejection are independently visible. The summary names `local_container_award` as the first unbuilt layer and claims no chest/item grant. |
+| Detection | `/mp_regression_test` passes `issue607_local_loot_layer_diagnostic_contract`; engine-free `test_mp_loot_diag.lua` locks request/rejection attribution, bounds, sanitization, local container census, one hook per seam, and behavioral delegation through the mission/enqueue/rejection wrappers. |
 
 ### mp-emporium-purchase-local — SM purchase must be one durable backend-free transaction
 
