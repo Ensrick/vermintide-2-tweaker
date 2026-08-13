@@ -66,6 +66,10 @@ no override); `[tbl]` = table-form hook against a plain table (nil-guarded).
 > `_cos_preview_runtime.lua`. The
 > "offhand mesh override + scale + LA paint + glow" work those rows describe now
 > reaches the scale/grip step via `mod._cos.{scale_units,offset_units,apply_unit_path_scale_hand}`.
+> #420 installs one Cosmetics-local copy of the shared `WeaponAppearance`
+> primitive before `_cos_render.lua` loads. That module delegates ordinary
+> one-shot scale/offset composition to the shared owner while Cosmetics retains
+> unit identity, hand, renderer, hook, and lifecycle decisions.
 
 > **v0.9.79-dev Phase 3 OOP split.** Two hook SITES moved from the entry to
 > `_cos_glow.lua` (those rows now name that file, not an entry line — match by

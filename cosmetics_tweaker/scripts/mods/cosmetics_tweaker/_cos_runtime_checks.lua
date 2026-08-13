@@ -29,6 +29,7 @@ function M.install(mod, rt_register, deps)
     local CUSTOM_ILLUSION_SYNC = deps.custom_illusion_sync
     local OFFHAND_PRELOAD_LIFECYCLE = deps.offhand_preload_lifecycle
     local MH_EMBED = deps.mh_embed
+    local WEAPON_APPEARANCE = deps.weapon_appearance
     local CWV_PEER_IDENTITY = deps.cwv_peer_identity
     local LA_INSTANCE_POLICY = deps.la_instance_policy
     local ISSUE704_PICKER_FAMILY = deps.issue704_picker_family
@@ -2151,6 +2152,18 @@ end)
 _rt_register("automatic_chat_diagnostics_log_only_570", function()
     if not GlowPicker.CHAT_DIAGNOSTICS_LOG_ONLY then
         return "glow-picker lifecycle diagnostics are not marked log-only"
+    end
+end)
+
+_rt_register("issue420_shared_weapon_appearance_owner", function()
+    if type(WEAPON_APPEARANCE) ~= "table"
+            or type(WEAPON_APPEARANCE.apply) ~= "function"
+            or type(WEAPON_APPEARANCE.apply_report) ~= "function" then
+        return "shared WeaponAppearance instance is missing its apply contract"
+    end
+    if type(mod._cos) ~= "table"
+            or mod._cos.weapon_appearance ~= WEAPON_APPEARANCE then
+        return "Cosmetics render namespace does not retain the shared instance"
     end
 end)
 

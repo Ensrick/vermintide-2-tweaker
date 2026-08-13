@@ -1,6 +1,7 @@
 local mod = get_mod("cosmetics_tweaker")
 local RESOURCE_RESIDENCY = mod:dofile(
     "scripts/mods/cosmetics_tweaker/_lib_resource_residency")
+local WEAPON_APPEARANCE = mod:dofile("scripts/mods/cosmetics_tweaker/_lib_weapon_appearance").new()
 
 -- #609: PlayerManager.local_player() calls Network.peer_id() directly and
 -- faults once the network backend has been torn down. Vanilla's guarded API
@@ -106,7 +107,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.209-dev"
+local MOD_VERSION = "0.9.210-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -349,6 +350,7 @@ end
 mod._cos = mod._cos or {}
 mod._cos.U = U
 mod._cos.LA_BRIDGE = LA_BRIDGE
+mod._cos.weapon_appearance = WEAPON_APPEARANCE
 mod._cos.encarmine_item_localization = CUSTOM_HATS.ITEM_LOCALIZATION
 mod._cos.gk_set_item_localization = GK_SET.ITEM_LOCALIZATION
 mod._cos.presentation_localization = mod._cos.presentation_localization or {}
@@ -371,10 +373,7 @@ assert(type(_cos_wire) == "table" and type(_cos_wire.install) == "function",
     "_cos_wire must return an installer")
 assert(_cos_wire.install(mod) == true, "_cos_wire safety hooks failed to install")
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_unlocks")
--- _cos_render has no load-time reads of other modules' exports and its own
--- exports (scale_units/offset_units/apply_unit_path_scale_hand/is_unit) are
--- consumed only at runtime inside the render hooks below, so its manifest
--- position is free; it sits here with the other _cos_* extractions.
+-- #420: the equipment/preview helpers capture the shared instance installed above.
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_render")
 -- _cos_glow consumes mod._cos.is_unit (exported by _cos_render), so it MUST be
 -- dofile'd AFTER _cos_render. Its own exports (apply_glow_override,
@@ -1568,6 +1567,7 @@ _cos_runtime_checks.install(mod, _rt_register, {
     custom_skin_keys = _custom_skin_keys,
     custom_illusion_sync = CUSTOM_ILLUSION_SYNC,
     offhand_preload_lifecycle = OFFHAND_PRELOAD_LIFECYCLE, mh_embed = MH_EMBED,
+    weapon_appearance = WEAPON_APPEARANCE,
     cwv_peer_identity = mod._cos_cwv_peer_identity,
     la_instance_policy = mod._la_instance_policy,
     modded_illusion_swap_owner = mod._cos_modded_illusion_swap_owner, active_skin = _cos_active_skin, offhand_selection = _offhand_selection, -- #25

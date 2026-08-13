@@ -12,9 +12,9 @@ Current ownership is not yet interchangeable:
 
 | Mod | Current owner | Transform behavior | Texture behavior |
 |---|---|---|---|
-| CWV | private `WA` in the entry file | absolute scale/position/rotation; weak-key guarded additive offset | two live `Material.set_texture` call clusters |
-| Cosmetics | entry helpers plus `_la_bridge.lua` | separate scale/offset implementations at each spawn surface | normal path uses `Unit.set_texture_for_materials`; mesh fallback still uses `Material.set_texture` |
-| WT | entry helpers and Hold-Pose module | career-scoped scale/offset plus specialized durable composition | no general variant-texture owner |
+| CWV | one local shared instance in `_cwv_weapon_transform_owner.lua` | shared absolute scale/position/rotation and weak-key guarded additive offset; family adapters retain identity/lifecycle policy | Old Musket uses its strict unit-local residency/paint owner |
+| Cosmetics | one entry-created local shared instance consumed by `_cos_render.lua` | ordinary one-shot scale/offset composition is shared; LA/TPE and any durable owners remain specialized | normal paths use unit-local writes; legacy texture fallbacks remain outside #420 |
+| WT beta/dev | one local shared instance per stream plus `_wt_transform_runtime.lua` | ordinary scale/offset composition is shared; Hold-Pose and durable rotation retain their measured-retention ownership | no general variant-texture owner |
 
 The hook surfaces also differ. Each consumer resolves identity, hand, perspective,
 career, residency, and render path before applying geometry. Those decisions do
@@ -23,8 +23,8 @@ not belong in the shared primitive and cannot be replaced safely in one bulk edi
 ## Landed migration boundary
 
 `tools/shared_lib/_lib_weapon_appearance.lua` is now the canonical primitive and
-has synchronized standalone copies in CWV, Cosmetics, and WT. It exports
-`new(optional_api)`; each consumer will construct one instance and keep its own
+has synchronized standalone copies in CWV, Cosmetics, both WT streams, and WOC.
+It exports `new(optional_api)`; each consumer constructs one instance and keeps its own
 weak-key offset ledger. The instance owns only:
 
 - absolute scale, position, and rotation;
@@ -36,11 +36,11 @@ weak-key offset ledger. The instance owns only:
 It deliberately does not resolve item/skin identity, units, hand, perspective,
 career, packages, ammo, network state, or render-path hooks. The API can be tested
 offline through dependency injection, while production defaults bind VT2 globals.
-CWV v0.1.405-dev was the first runtime consumer. It replaced only the private WA
-implementation and preserved CWV's existing resolver/caller surface and exported
-compatibility handles. Both WT streams now construct their own mod-local
-instances too. Cosmetics carries a synchronized copy but its runtime cutover is
-still pending. Identity, hand, perspective, render-path, and durable-retention
+CWV v0.1.405-dev was the first runtime consumer. Both WT streams and WOC now
+construct their own mod-local instances too. The #420 Cosmetics slice constructs
+one instance in its entry before `_cos_render.lua` loads and delegates that
+ordinary adapter's scale and additive-offset composition. Identity, hand,
+perspective, render-path, specialized LA/TPE behavior, and durable-retention
 policies remain with the owning mods.
 
 ## Loader proof
@@ -58,10 +58,13 @@ loads only its bundled copy after its own namespace exists. Therefore:
 1. **CWV geometry (landed v0.1.405-dev):** its private `WA` body now delegates to
    one `mod:dofile`; the existing `mod._cwv_weapon_appearance` compatibility
    handle and render-path resolution are unchanged.
-2. **CWV textures:** replace both musket `Material.set_texture` clusters with one
-   texture spec passed to `apply_textures`; test owner, husk, preview, and browser.
-3. **Cosmetics transforms:** move only fresh-spawn scale/offset helpers first.
-   Durable/persisted or LA hand-selection policy remains with Cosmetics.
+2. **CWV Old Musket textures (landed under #1155):** strict residency and
+   unit-material proof guard one unit-local texture owner across its implemented
+   owner, husk, and preview cells. This stricter family adapter supersedes the
+   original direct `apply_textures` cutover sketch.
+3. **Cosmetics transforms (source-complete; release pending):** ordinary
+   fresh-spawn scale/offset helpers delegate to the bundled shared instance.
+   Durable/persisted, LA, TPE, and hand-selection policy remains with Cosmetics.
 4. **Cosmetics texture fallback:** delete the mesh-material fallback only after
    the unit-local route is proven on every LA unit class. Never silently restore
    `Material.set_texture` as a compatibility fallback.
@@ -70,6 +73,8 @@ loads only its bundled copy after its own namespace exists. Therefore:
    per-frame and #569 canonical rotation composition stay outside the primitive:
    they own captured baselines and animation-tick retention, not one-shot math.
 
-Each cutover requires existing four-render-path regression coverage and an
-in-game verification label appropriate to that consumer. The architecture phase
-itself is repository-verifiable and must not claim the live banned calls are gone.
+The current #420 acceptance is the Cosmetics ordinary-transform cutover plus a
+regression that rejects restoring its private setters. The source boundary is
+repository-verifiable; visual no-drift still requires the released Cosmetics
+build. Broader material, texture-fallback, retained-state, and lifecycle parity
+remain under #660 rather than keeping #420 open after this adapter ships.

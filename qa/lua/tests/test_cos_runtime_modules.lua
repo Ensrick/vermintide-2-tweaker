@@ -118,6 +118,8 @@ return function(H, repo_root)
     H.test("Cosmetics runtime checks preserve order and command ownership", function()
         local mod, commands = command_mod()
         local checks = {}
+        local weapon_appearance = { apply = function() end, apply_report = function() end }
+        mod._cos = { weapon_appearance = weapon_appearance }
         local deps = {
             la_persist = {}, score_identity = {}, rpc_schema = 1,
             composite_icons = {}, custom_hats = {}, la_bridge = {}, gk_set = {},
@@ -126,6 +128,7 @@ return function(H, repo_root)
             offhand_names = {}, shield_pools_by_item_type = {}, dbg = function() end,
             dbg_alert = function() end, ui_dump = {}, custom_skin_keys = {},
             offhand_preload_lifecycle = {}, mh_embed = {},
+            weapon_appearance = weapon_appearance,
             la_instance_policy = {}, husk_identity = {},
             modded_illusion_swap_owner = {
                 hook_count = 8, owns_illusion_swap = function() return false end,
@@ -143,7 +146,7 @@ return function(H, repo_root)
         module.install(mod, function(name, fn)
             checks[#checks + 1] = { name = name, fn = fn }
         end, deps)
-        H.equal(#checks, 61)
+        H.equal(#checks, 62)
         H.equal(checks[1].name, "cos_la_reconcile_and_pull_wired")
         H.equal(checks[2].name, "cos_replay_reconciler_wired")
         -- #25: the cold-load contract must stay registered directly after the
@@ -168,6 +171,18 @@ return function(H, repo_root)
         H.truthy(score_identity_index)
         H.equal(score_replay_index, score_identity_index + 1,
             "score appearance replay must follow exact wearer identity")
+        local issue420
+        for _, check in ipairs(checks) do
+            if check.name == "issue420_shared_weapon_appearance_owner" then
+                issue420 = check
+            end
+        end
+        H.truthy(issue420)
+        H.equal(issue420.fn(), nil)
+        weapon_appearance.apply = nil
+        H.truthy(type(issue420.fn()) == "string",
+            "issue420 runtime check accepted a missing apply contract")
+        weapon_appearance.apply = function() end
         H.equal(checks[#checks].name, "mh_package_single_reference")
         H.equal(#commands, 1)
         H.equal(commands[1].name, "verify_gk_set")

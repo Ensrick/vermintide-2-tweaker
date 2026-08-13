@@ -25,9 +25,10 @@ map), `LA_BRIDGE`, `flush_log`, `skin_requires_unowned_dlc`, `custom_skin_keys`
 (shared with the wire-safety senders + regression suite), `custom_illusions` (shared
 with the offhand force-loader), and `apply_cosmetic_unlocks` (exported by the unlocks
 module for the entry's lifecycle callbacks). Phase 2 added `is_unit`, `scale_units`,
-`offset_units`, and `apply_unit_path_scale_hand` (exported by `_cos_render`): the render
-hooks in the entry call the apply helpers via `mod._cos.*`, and the entry keeps an
-`is_unit` alias injected into the offhand-apply and glow-probe owners. Phase 3 added
+`offset_units`, and `apply_unit_path_scale_hand` (exported by `_cos_render`). #420
+adds one entry-created `weapon_appearance` instance that `_cos_render` captures;
+the equipment and preview owners call the apply helpers via `mod._cos.*`, and the
+entry keeps an `is_unit` alias injected into the offhand-apply and glow-probe owners. Phase 3 added
 `apply_glow_override` and `glow_owner_peer_for_unit` (exported by `_cos_glow`): the same
 three render hooks call them via `mod._cos.*` for the per-equip glow paint. `_cos_glow`
 also owns the init of the `mod._glow_by_peer` per-peer cache and the
@@ -63,13 +64,13 @@ exactly once from the manifest.
 | `_cos_command_owner.lua` | Single #504 command-lifecycle owner. Owns the lazy regression registry and `/cos_regression_test` runner plus `/cos_persist_dump`, `/cos_persist_replay`, and `/cos_persist_clear`. Returns the register function consumed by `_cos_runtime_checks.lua`; repeated install is idempotent. It owns no hook, RPC, renderer, or lifecycle callback. |
 | `_cos_glow_editor_button.lua` | Idempotent #377/#504 contextual Edit Glow button owner. Owns family/open-state policy binding, enabled/selected styling, and widget construction. The host customization view retains position, input, and draw ownership; this module adds no hook, RPC, polling, persistence, or renderer mutation. |
 | `_cos_item_grid_presentation.lua` | Idempotent #377/#650/#795 item-grid and illusion-card presentation owner. Owns the single pre-`pass_data` `UIWidget.init` enrichment hook, the three existing `ItemGridUI` refresh hooks, weak live-surface registries, and the committed glow/composite refresh callback. It receives the existing policies and late-bound composed-appearance resolver; it adds no lifecycle callback, RPC, persistence, or appearance semantics. |
-| `_cos_runtime_checks.lua` | Registers the 60 late runtime checks in historical order plus the single `/verify_gk_set` command. Receives every entry-private table/helper through one explicit dependency table; closures remain lazy so live state is inspected only when the registry runs. It owns no hooks, RPCs, or lifecycle callback. |
+| `_cos_runtime_checks.lua` | Registers the 61 late runtime checks in historical order plus the single `/verify_gk_set` command. `issue420_shared_weapon_appearance_owner` proves the exact instance retained by `mod._cos` exposes the shared apply contract. Receives every entry-private table/helper through one explicit dependency table; closures remain lazy so live state is inspected only when the registry runs. It owns no hooks, RPCs, or lifecycle callback. |
 | `_cos_glow_probe.lua` | Owns `/glow_dump`, `/glow_probe`, `/glow_scan`, `/glow_scan_stop`, `/glow_restore`, `/la_shield_glow_probe`, both bounded scan tick functions, and the exported `wielded_units_for_probe` helper consumed by the later manual picker command. It receives only player-safety, unit-liveness, and log-flush helpers. |
 | `_cos_la_commands.lua` | Owns the read-only LA diagnostic commands `/la_dump`, `/la_trace`, `/la_force`, `/la_attach`, `/la_loadout`, and `/la_hats`. Captures the already-loaded bridge plus career/log helpers; no hook or lifecycle ownership. |
 | `_cos_diagnostics.lua` | Read-only dump/probe chat commands (`/flush_log`, `/dump_glows`, `/dump_skin_rarities`, `/dump_all_names`, `/check_vmf`, `/probe_hat`, `/probe_cosmetics`, `/cos_421_diag`). The #421 command reports custom-key catalog symmetry, the four wire-surface registrations, the pure substitution/restore proofs, and whether the live repro actually has a custom skin equipped. Reads `mod._cos.flush_log`; no exports. |
 | `_cos_illusions.lua` | Custom weapon-illusion + LA shield skin injection into `ItemMasterList`/`WeaponSkins`/`NetworkLookup` (`_custom_illusions`, `_la_shield_skin_specs`), the `get_unlocked_weapon_skins` unlock hook, the `_G.Localize` display-name hook. Populates `mod._cos.custom_skin_keys`; exports `mod._cos.custom_illusions`. |
 | `_cos_unlocks.lua` | Per-career cosmetic unlocks (`apply_cosmetic_unlocks` + `_CHARACTER_CAREERS`), Unlock-All portrait frames, vanilla-unobtainable cosmetic grants, the two `PlayFabMirrorAdventure` hooks, `/frames_status` + `/cosmetics_status`. Exports `mod._cos.apply_cosmetic_unlocks`. |
-| `_cos_render.lua` | Render-path weapon scale/grip apply layer (v0.9.78-dev Phase 2): the two visual-override data tables (`_unit_path_scale_overrides` + `_breton_sword_thiccc`, empty `_weapon_grip_offsets`) and the resolve/apply helpers (`_resolve_for_career`, `_resolve_render_unit_path`, `_resolve_factor`, `_apply_unit_path_scale_hand`, `_scale_units`, `_offset_units`), plus the `_is_unit` liveness primitive. Exports `mod._cos.{is_unit, scale_units, offset_units, apply_unit_path_scale_hand}`; reads nothing off `mod._cos`. The render HOOKS that drive these stay in the entry. |
+| `_cos_render.lua` | Render-path weapon scale/grip apply layer: the two visual-override data tables (`_unit_path_scale_overrides` + `_breton_sword_thiccc`, empty `_weapon_grip_offsets`) and the resolve/apply helpers (`_resolve_for_career`, `_resolve_render_unit_path`, `_resolve_factor`, `_apply_unit_path_scale_hand`, `_scale_units`, `_offset_units`), plus the `_is_unit` liveness primitive. #420 captures the one entry-installed Cosmetics-local `WeaponAppearance` instance and delegates ordinary one-shot scale/offset composition to it. Exports `mod._cos.{is_unit, scale_units, offset_units, apply_unit_path_scale_hand}`; identity, hand, renderer, hook, and lifecycle policy remain Cosmetics-owned in the equipment/preview owners. |
 | `_cos_glow.lua` | Weapon glow APPLY subsystem (v0.9.79-dev Phase 3): the `_COLOR_PRESETS` table, shader-variable maps, per-peer cache reads, `_apply_glow_override`, and the #650 descriptor-only `_apply_composed_shield_glow` adapter. Captures `mod._cos.is_unit`; owns the unit/backend cache and exports `mod._cos.{apply_glow_override, apply_composed_shield_glow, glow_owner_peer_for_unit}`. Render hooks and diagnostics remain in the entry; `_cos_glow_transport.lua` owns the RPC publisher/replay boundary. |
 | `_cos_glow_badge_policy.lua` | Pure #377 presentation policy: active committed-state classification, clamped rune RGB, deterministic intensity-weighted magic blend, and family-scoped manual-button availability. No engine globals, persistence writes, hooks, or networking. |
 | `_cos_la_option_icon_policy.lua` | Pure #923 target-qualified LA option policy. Creates immutable per-item-type option records, resolves only the exact live skin's provider icon, indexes restart restoration by item type + hand + Armoury key, and fails closed to the native icon. Provider icon names remain local and are never persisted or synchronized. |
@@ -197,9 +198,11 @@ their internals alone.
   Encarmine recipe lives in `tools/encarmine_asset_pipeline/README.md`.
 - **New weapon-model scale or grip-offset override** → `_cos_render.lua`. Add a
   `_unit_path_scale_overrides` entry (keyed by unit-path substring) or a
-  `_weapon_grip_offsets` entry (keyed by item name + career prefix); the render hooks
-  in the entry already call `mod._cos.scale_units` / `.offset_units` per equip, so no
-  new call site is needed. Need a liveness check? use `mod._cos.is_unit`.
+  `_weapon_grip_offsets` entry (keyed by item name + career prefix); the equipment
+  and preview owners already call `mod._cos.scale_units` / `.offset_units` at their
+  existing seams, so no new call site is needed. Transform composition stays behind
+  the captured shared primitive; do not restore private setters. Need a liveness
+  check? use `mod._cos.is_unit`.
 - **New glow color/shader-variable/preset or glow apply-path change** → `_cos_glow.lua`.
   Register a new variable in `_GLOW_VAR_BRIGHTNESS` (+ `_GLOW_GROUP_COLOR_SETTING` for a
   new component) per GLOW_SYSTEM §9; the three render hooks in the entry already call
