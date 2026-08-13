@@ -2468,10 +2468,12 @@ the renderer-thread stall can occur without a Lua exception.
    long-lived renderer and uses one `UIRenderer.begin_pass`/`end_pass`; WT's
    hold-pose tuner creates no preview world, unit, renderer, or package.
 3. Add bounded edge evidence outside the pass: presentation entry/exit,
-   renderer identity, selected tab, exact expanded subsection plus prior-frame
-   viewport visibility, `Window.has_focus()`, and draw begin/end balance. A
-   balanced Lua return before the dump points below the mod's pass; an unmatched
-   begin identifies a mod lifecycle boundary.
+   renderer identity, selected tab, exact expanded subsection,
+   `Window.has_focus()`, draw begin/end balance, and the post-pass visible-row
+   plus texture/font candidate set. Capture the resource set only after useful
+   first-draw/focus/tab/expansion edges. A balanced Lua return before the dump
+   points below the mod's pass; an unmatched begin identifies a mod lifecycle
+   boundary; the last completed resource set narrows a later native wait.
 4. Reproduce the same focus sequence in a vanilla view as a control. A shared
    signature shifts investigation toward the driver/engine path; a Mod Tweaker-
    only signature keeps the borrowed-pass owner in scope.
@@ -2481,6 +2483,8 @@ the renderer-thread stall can occur without a Lua exception.
   a focus state based only on temporal correlation. Those changes mask evidence
   and can create a second renderer owner.
 - Keep diagnostics automatic, issue-prefixed, edge-triggered, and hard-capped.
+  Do not walk widget passes on steady frames; arm one post-pass snapshot only
+  when a focus, tab, or expanded-subsection edge changes the submitted UI set.
   Remove them when the issue closes.
 - Change behavior only after the next trace identifies an imbalance or a
   source-backed engine contract. Cover balanced, unmatched, focus-edge, tab-

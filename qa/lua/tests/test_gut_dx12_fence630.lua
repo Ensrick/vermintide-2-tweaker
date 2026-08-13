@@ -127,6 +127,60 @@ return function(H, repo_root)
         H.equal(equipment_edges, 2)
     end)
 
+    H.test("#630 records the post-pass visible resource set only on useful edges", function()
+        local owner = {
+            _rows = {
+                {
+                    _setting_id = "weapon_toggle_a", _wtype = "checkbox",
+                    _middle_visible = true,
+                    content = { icon = "icon_weapon_a" },
+                    style = { label = { font_type = "hell_shark" } },
+                    element = { passes = {
+                        { pass_type = "texture", texture_id = "icon" },
+                        { pass_type = "text", style_id = "label", text_id = "label" },
+                    } },
+                },
+                {
+                    _setting_id = "hidden_weapon_toggle", _wtype = "checkbox",
+                    _middle_visible = false,
+                    content = { texture_id = "must_not_appear" },
+                    style = {}, element = { passes = { { pass_type = "texture" } } },
+                },
+                {
+                    _setting_id = "weapon_slider_b", _wtype = "numeric",
+                    _middle_visible = true,
+                    content = { nested = { tex = "icon_weapon_b" } },
+                    style = {}, element = { passes = {
+                        { pass_type = "texture_uv", content_id = "nested", texture_id = "tex" },
+                    } },
+                },
+            },
+        }
+        local rows, resources = Probe.visible_draw_signature(owner)
+        H.equal(rows, "weapon_toggle_a:checkbox,weapon_slider_b:numeric")
+        H.equal(resources, "font:hell_shark,texture:icon_weapon_a,texture:icon_weapon_b")
+
+        local lines = {}
+        local probe = Probe.new({ emit = function(line) lines[#lines + 1] = line end })
+        probe:enter({ presentation = "standalone" })
+        probe:before_draw({ owner = owner, focus = true, tab = "gut_equipment" })
+        probe:after_draw()
+        local after_first = #lines
+        probe:before_draw({ owner = owner, focus = true, tab = "gut_equipment" })
+        probe:after_draw()
+        H.equal(#lines, after_first, "steady frames must not emit resource evidence")
+        probe:before_draw({ owner = owner, focus = false, tab = "gut_equipment" })
+        probe:after_draw()
+
+        local text = table.concat(lines, "\n")
+        local evidence = 0
+        for _ in text:gmatch("frame_evidence") do evidence = evidence + 1 end
+        H.equal(evidence, 2, "first draw and focus edge each need one post-pass breadcrumb")
+        H.truthy(text:find("visible_rows=weapon_toggle_a:checkbox,weapon_slider_b:numeric", 1, true))
+        H.truthy(text:find("resource_candidates=font:hell_shark,texture:icon_weapon_a,texture:icon_weapon_b", 1, true))
+        H.equal(text:find("must_not_appear", 1, true), nil)
+    end)
+
     H.test("#630 is wired around both Mod Tweaker presentation passes", function()
         for _, name in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
             local file = assert(io.open(root .. name, "rb"))
