@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-08.
+Last updated: 2026-08-13.
 
 ---
 
@@ -20,6 +20,31 @@ Last updated: 2026-08-08.
 | Restart | After a full game restart, native rows retain their vanilla values. When GUT owns persisted modded rows, each cross-career row is restored independently; WT-alone never writes a cross-career item into PlayFab. |
 | Live core | Enable a genuine cross-career Slayer weapon first, then run `/verify_wt_loadout_cache reset`. Re-equip two distinct native melee weapons in rows I and II and the cross-career weapon in III. Starting on III, switch III -> I -> II -> III; run `/verify_wt_loadout_cache` once and require `CORE PASS`. Missing observations report `CORE NOT RUN`; cache bleed or a wrong route reports `FAIL`. |
 | Automated | Offline `test_wt_loadout_cache.lua` proves the immutable 83-weapon native catalog, legacy-cache reset, row isolation, add/delete shifting, and nonmutating all-row overlay. `/wt_regression_test`: `issue1190_loadout_cache_is_row_scoped` is the structural smoke check; it does not replace the armed live cycle. |
+
+---
+
+## #316 - Empire Longbow cross-career variable zoom
+
+| Field | Check |
+|---|---|
+| Candidate version | WT Dev 0.12.307-dev (public mirror 0.12.306-beta). |
+| Automated | `/wt_regression_test`: require the candidate check `issue316_empire_longbow_cross_career_variable_zoom` PASS; `issue316_kruber_longbow_zoom_contract` retains the already-shipped draw/presentation boundary as a negative invariant. Offline `test_wt_longbow_variable_zoom.lua` proves the exact action identity, six-career allow-list, authored thresholds, exclusions, one hook owner, and public/Dev policy identity. |
+| Owner zoom | Equip the Empire Longbow on Mercenary and Bounty Hunter at minimum. Aim and press action special repeatedly; each cycles the authored zoom levels. Huntsman is the native control and an unrelated bow is the negative item control. |
+| Supplementary probe | The bounded `[wt:316]` lifecycle rows may establish owner-camera timing. Their historical `visible_draw=unverified` field is not part of this candidate's Solo acceptance. |
+| Boundary | Owner camera state stays local and vanilla-owned. No shared action mutation, custom RPC, or new lookup row; topology is Solo. |
+
+---
+
+## #168 - Hold-Pose independent right/left controls
+
+| Field | Check |
+|---|---|
+| Candidate version | WT Dev 0.12.307-dev. |
+| Automated | `/wt_regression_test`: `issue168_hold_pose_independent_hands` requires the four distinct 1P/3P hand groups, rejects the retired single-hand selector, and executes different right/left nine-value plans. Offline `test_wt_hold_pose.lua` pins the same production seam and exact unit-to-plan routing. |
+| Third person | Enable the tuner. Give the right hand a visible position-only value and the left hand a distinct rotation plus non-uniform scale; apply and confirm neither hand inherits the other's values. Swap the patterns and repeat. |
+| First person | Enable First Person and repeat with separate `fp_rh` and `fp_lh` groups. Each local hand changes independently; Third Person remains on its own values. |
+| Reset/bypass | Toggle the master off and back on: saved values remain, while the captured baseline is restored during bypass. The existing global reset may reset both hands; no single-hand reset is claimed. |
+| Boundary | Local-player 1P/3P weapon roots only. Inventory preview, hero preview, bots, remote husks, score screens, and baked transforms remain excluded. |
 
 ---
 

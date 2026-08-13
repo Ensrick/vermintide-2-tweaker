@@ -26,6 +26,8 @@ function M.install(mod, _rt_register, deps)
     local _wt_skullsplitter_hand_policy = deps.skullsplitter_hand_policy
     local weapon_backend = deps.weapon_backend
     local _deepwood_runtime = deps.deepwood_runtime
+    local _wt_longbow_variable_zoom = deps.longbow_variable_zoom
+        or (mod._wt and mod._wt.longbow_variable_zoom)
     -- WT_DEV_OVERLAY_BEGIN:runtime-check-dependencies
     local _wt_dev_anim_picker = deps.dev_anim_picker
     local _wt_dev_hold_pose = deps.dev_hold_pose
@@ -1533,6 +1535,79 @@ function M.install(mod, _rt_register, deps)
         end
     end)
     -- WT_DEV_OVERLAY_BEGIN:hold-pose-regressions
+    _rt_register("issue168_hold_pose_independent_hands", function()
+        local build_tree = _wt_dev_hold_pose and _wt_dev_hold_pose.build_widget_tree
+        local build_plans = _wt_dev_hold_pose
+            and _wt_dev_hold_pose._independent_hand_plans
+        if type(build_tree) ~= "function" or type(build_plans) ~= "function" then
+            return "Hold-Pose independent-hand contract missing"
+        end
+
+        local function find_setting(node, wanted)
+            if type(node) ~= "table" then return nil end
+            if node.setting_id == wanted then return node end
+            for _, child in ipairs(node.sub_widgets or {}) do
+                local found = find_setting(child, wanted)
+                if found then return found end
+            end
+            return nil
+        end
+
+        local tree = build_tree()
+        local suffixes = {
+            "offset_x", "offset_y", "offset_z",
+            "rot_pitch", "rot_yaw", "rot_roll",
+            "scale_x", "scale_y", "scale_z",
+        }
+        for _, spec in ipairs({
+                { "wt_dev_hp_rh_group", "wt_dev_hp_rh_" },
+                { "wt_dev_hp_lh_group", "wt_dev_hp_lh_" },
+                { "wt_dev_hp_fp_rh_group", "wt_dev_hp_fp_rh_" },
+                { "wt_dev_hp_fp_lh_group", "wt_dev_hp_fp_lh_" },
+        }) do
+            local group = find_setting(tree, spec[1])
+            if not group then
+                return "independent hand group missing: " .. spec[1]
+            end
+            if type(group.sub_widgets) ~= "table" or #group.sub_widgets ~= 9 then
+                return "independent hand group is not an exact nine-value owner: " .. spec[1]
+            end
+            for i, suffix in ipairs(suffixes) do
+                if group.sub_widgets[i].setting_id ~= spec[2] .. suffix then
+                    return "hand group key crossed ownership: " .. spec[1]
+                end
+            end
+        end
+        if find_setting(tree, "wt_dev_hp_hand") then
+            return "legacy single-hand selector returned"
+        end
+
+        local reads = {}
+        local plans = build_plans("third_person", function(channel, hand)
+            reads[#reads + 1] = channel .. ":" .. hand
+            if hand == "right" then
+                return 0.25, 0, 0, 0, 0, 0, 1, 1, 1
+            end
+            return 0, 0, 0, 0, 17, 0, 0.5, 0.75, 1.25
+        end)
+        if reads[1] ~= "third_person:right" or reads[2] ~= "third_person:left"
+                or reads[3] ~= nil then
+            return "production plan owner did not read each hand exactly once"
+        end
+        if type(plans) ~= "table" or type(plans.right) ~= "table"
+                or type(plans.left) ~= "table" then
+            return "independent hand plans missing"
+        end
+        if not plans.right.position or plans.right.rotation or plans.right.scale
+                or plans.right.ox ~= 0.25 then
+            return "right-hand plan consumed left-hand values"
+        end
+        if plans.left.position or not plans.left.rotation or not plans.left.scale
+                or plans.left.yaw ~= 17 or plans.left.sx ~= 0.5 then
+            return "left-hand plan consumed right-hand values"
+        end
+    end)
+
     _rt_register("issue569_hold_pose_composition", function()
         local pose_contract = _wt_dev_hold_pose and _wt_dev_hold_pose._pose_contract
         local plan_values = _wt_dev_hold_pose and _wt_dev_hold_pose._component_plan_values
@@ -1687,6 +1762,69 @@ function M.install(mod, _rt_register, deps)
             return "zoom diagnostic is not capped at three attempts"
         end
         -- WT_DEV_OVERLAY_END:zoom-probe-bound-assertion
+    end)
+
+    _rt_register("issue316_empire_longbow_cross_career_variable_zoom", function()
+        local policy = _wt_longbow_variable_zoom
+        if not policy or type(policy.post_update) ~= "function" then
+            return "Empire Longbow variable-zoom owner missing"
+        end
+        if not rawget(_G, "Weapons") then return "skip: Weapons not loaded" end
+        local template = Weapons.longbow_empire_template
+        local aim = template and template.actions and template.actions.action_two
+            and template.actions.action_two.default
+        if not aim or not policy.is_registered(aim) then
+            return "exact Empire Longbow aim action not registered"
+        end
+        local expected = {
+            es_mercenary = true, es_knight = true, es_questingknight = true,
+            wh_captain = true, wh_bountyhunter = true, wh_zealot = true,
+        }
+        for career, enabled in pairs(policy.supported_careers or {}) do
+            if enabled and not expected[career] then
+                return "unexpected variable-zoom career " .. tostring(career)
+            end
+        end
+        for career in pairs(expected) do
+            if not policy.is_supported_item_career("es_longbow", career) then
+                return "supported variable-zoom career missing " .. career
+            end
+        end
+        for _, career in ipairs({ "es_huntsman", "wh_priest", "we_waywatcher" }) do
+            if policy.is_supported_item_career("es_longbow", career) then
+                return "native/excluded career gained variable zoom " .. career
+            end
+        end
+        if policy.is_supported_item_career("we_longbow", "es_mercenary") then
+            return "unrelated bow gained Empire Longbow variable zoom"
+        end
+
+        local switches, thresholds = 0, nil
+        local status = {
+            is_zooming = function() return true end,
+            switch_variable_zoom = function(_, value)
+                switches, thresholds = switches + 1, value
+            end,
+        }
+        local outcome = policy.post_update({
+            current_action = aim,
+            item_name = "es_longbow",
+            owner_unit = {},
+            -- Vanilla BuffExtension returns nil when the perk is absent.
+            buff_extension = { has_buff_perk = function() return nil end },
+        }, {
+            get_career_name = function() return "wh_bountyhunter" end,
+            get_extension = function(_, name)
+                if name == "status_system" then return status end
+                if name == "input_system" then
+                    return { get = function(_, input) return input == "action_three" end }
+                end
+            end,
+        })
+        if outcome ~= "switched" or switches ~= 1
+                or thresholds ~= aim.buffed_zoom_thresholds then
+            return "authored variable-zoom thresholds were not cycled exactly once"
+        end
     end)
 
     _rt_register("issue580_moonfire_saltzpyre_crossbow_3p_contract", function()

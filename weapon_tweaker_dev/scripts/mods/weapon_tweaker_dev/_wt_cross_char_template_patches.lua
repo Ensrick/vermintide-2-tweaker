@@ -453,8 +453,9 @@ end
 
 _apply_not_loaded_no_ammo_career_patches(_NOT_LOADED_NO_AMMO_CAREER_PATCHES)
 
--- Published for the entry's _wt_runtime_checks dependency table, which read
--- both of these as file-scope locals before the move. Same tables, same
--- identity: the runtime checks assert against the very catalog applied above.
+-- Publish the retained patch tables for the entry's runtime checks, preserving
+-- the exact catalog identities applied above. Install the Longbow child owner
+-- here because this module already owns cross-career template publication.
 mod._wt.wield_patches_module      = _WIELD_PATCHES_MODULE
 mod._wt.wield_anim_career_patches = _WIELD_ANIM_CAREER_3P_PATCHES
+mod._wt.longbow_variable_zoom = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_longbow_variable_zoom").install(mod, Weapons)

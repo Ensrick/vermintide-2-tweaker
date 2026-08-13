@@ -26,6 +26,8 @@ function M.install(mod, _rt_register, deps)
     local _wt_skullsplitter_hand_policy = deps.skullsplitter_hand_policy
     local weapon_backend = deps.weapon_backend
     local _deepwood_runtime = deps.deepwood_runtime
+    local _wt_longbow_variable_zoom = deps.longbow_variable_zoom
+        or (mod._wt and mod._wt.longbow_variable_zoom)
 
     -- ============================================================
     -- /regression_test checks (see scaffold near MOD_VERSION).
@@ -1504,6 +1506,69 @@ function M.install(mod, _rt_register, deps)
         if type(saltz) ~= "table" or saltz.draw_bow ~= "to_zoom"
                 or saltz.attack_shoot_fast ~= "attack_shoot" then
             return "Saltzpyre crossbow presentation remap drifted"
+        end
+    end)
+
+    _rt_register("issue316_empire_longbow_cross_career_variable_zoom", function()
+        local policy = _wt_longbow_variable_zoom
+        if not policy or type(policy.post_update) ~= "function" then
+            return "Empire Longbow variable-zoom owner missing"
+        end
+        if not rawget(_G, "Weapons") then return "skip: Weapons not loaded" end
+        local template = Weapons.longbow_empire_template
+        local aim = template and template.actions and template.actions.action_two
+            and template.actions.action_two.default
+        if not aim or not policy.is_registered(aim) then
+            return "exact Empire Longbow aim action not registered"
+        end
+        local expected = {
+            es_mercenary = true, es_knight = true, es_questingknight = true,
+            wh_captain = true, wh_bountyhunter = true, wh_zealot = true,
+        }
+        for career, enabled in pairs(policy.supported_careers or {}) do
+            if enabled and not expected[career] then
+                return "unexpected variable-zoom career " .. tostring(career)
+            end
+        end
+        for career in pairs(expected) do
+            if not policy.is_supported_item_career("es_longbow", career) then
+                return "supported variable-zoom career missing " .. career
+            end
+        end
+        for _, career in ipairs({ "es_huntsman", "wh_priest", "we_waywatcher" }) do
+            if policy.is_supported_item_career("es_longbow", career) then
+                return "native/excluded career gained variable zoom " .. career
+            end
+        end
+        if policy.is_supported_item_career("we_longbow", "es_mercenary") then
+            return "unrelated bow gained Empire Longbow variable zoom"
+        end
+
+        local switches, thresholds = 0, nil
+        local status = {
+            is_zooming = function() return true end,
+            switch_variable_zoom = function(_, value)
+                switches, thresholds = switches + 1, value
+            end,
+        }
+        local outcome = policy.post_update({
+            current_action = aim,
+            item_name = "es_longbow",
+            owner_unit = {},
+            -- Vanilla BuffExtension returns nil when the perk is absent.
+            buff_extension = { has_buff_perk = function() return nil end },
+        }, {
+            get_career_name = function() return "wh_bountyhunter" end,
+            get_extension = function(_, name)
+                if name == "status_system" then return status end
+                if name == "input_system" then
+                    return { get = function(_, input) return input == "action_three" end }
+                end
+            end,
+        })
+        if outcome ~= "switched" or switches ~= 1
+                or thresholds ~= aim.buffed_zoom_thresholds then
+            return "authored variable-zoom thresholds were not cycled exactly once"
         end
     end)
 

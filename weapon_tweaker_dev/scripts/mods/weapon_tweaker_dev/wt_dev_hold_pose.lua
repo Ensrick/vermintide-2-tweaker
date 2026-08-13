@@ -309,8 +309,27 @@ end
 local function _component_plan(channel, hand)
     return _component_plan_values(_read_sliders(channel, hand))
 end
+
+-- Build the two hand plans from two distinct value sets.  Keeping this as a
+-- pure seam makes #168's independence contract executable without relying on
+-- a menu selection or a live weapon unit.
+local function _independent_hand_plan_values(right_values, left_values)
+    return {
+        right = _component_plan_values(unpack(right_values, 1, 9)),
+        left = _component_plan_values(unpack(left_values, 1, 9)),
+    }
+end
+
+local function _independent_hand_plans(channel, read_values)
+    read_values = read_values or _read_sliders
+    return _independent_hand_plan_values(
+        { read_values(channel, "right") },
+        { read_values(channel, "left") })
+end
 M._component_plan = _component_plan
 M._component_plan_values = _component_plan_values
+M._independent_hand_plan_values = _independent_hand_plan_values
+M._independent_hand_plans = _independent_hand_plans
 M._pose_contract = {
     mode = "canonical_plus_delta",
     position_setter = "Unit.set_local_position",
@@ -364,10 +383,10 @@ end
 -- DEFER-TO-BAKED: with no cached dirty component, the identity sliders do not
 -- capture or write anything. A dirty component returning to zero restores its
 -- captured baseline exactly once, then becomes a no-op.
-local function _apply_pose_to(weapon_unit, channel, hand)
+local function _apply_pose_to(weapon_unit, channel, hand, plan)
     if not weapon_unit then return false end
     if not Unit.alive(weapon_unit) then return false end
-    local plan = _component_plan(channel, hand)
+    plan = plan or _component_plan(channel, hand)
     local channel_baselines = _pose_baselines[channel]
     local row = channel_baselines[weapon_unit]
     if not row and not plan.position and not plan.rotation and not plan.scale then return false end
@@ -514,11 +533,12 @@ end
 local function _apply_channel(channel)
     if not _channel_enabled(channel) then return false end
     local target_slot = mod:get("wt_dev_hp_target_slot") or "auto"
+    local plans = _independent_hand_plans(channel)
     local applied = false
     local u_r = select(1, _resolve_wielded(target_slot, "right", channel))
-    if u_r then applied = _apply_pose_to(u_r, channel, "right") or applied end
+    if u_r then applied = _apply_pose_to(u_r, channel, "right", plans.right) or applied end
     local u_l = select(1, _resolve_wielded(target_slot, "left", channel))
-    if u_l then applied = _apply_pose_to(u_l, channel, "left") or applied end
+    if u_l then applied = _apply_pose_to(u_l, channel, "left", plans.left) or applied end
     return applied
 end
 

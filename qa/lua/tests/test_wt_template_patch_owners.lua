@@ -249,17 +249,29 @@ return function(H, repo_root)
         end)
     end
 
-    H.test("dev keeps the #316 probe in its entry, public has no trace of it", function()
+    H.test("dev keeps bounded #316 probe edges while both streams share the gameplay owner", function()
         local dev_entry = read(STREAMS[2].dir .. STREAMS[2].entry)
         local public_entry = read(STREAMS[1].dir .. STREAMS[1].entry)
-        -- The probe overlay was interleaved inside the moved range. It stays in
-        -- the dev ENTRY (relocated to just after the new dofile) rather than
-        -- riding into the shared owner, so the owners stay parity-identical.
+        -- The start/finish probe overlay stays in the dev entry. Its post-update
+        -- observation is passed into the byte-shared gameplay owner so that
+        -- VMF still sees only one registration on that method.
         H.equal(count_plain(dev_entry, "-- WT_DEV_OVERLAY_BEGIN:longbow-live-probe-hooks"), 1)
         H.equal(count_plain(dev_entry, "-- WT_DEV_OVERLAY_END:longbow-live-probe-hooks"), 1)
-        H.equal(count_plain(dev_entry, 'mod:hook_safe("ActionAim"'), 3)
+        -- Start/finish remain diagnostic-only. The post-update pair moved to
+        -- the shared owner so VMF still sees exactly one registration there.
+        H.equal(count_plain(dev_entry, 'mod:hook_safe("ActionAim"'), 2)
         H.equal(count_plain(public_entry, "longbow-live-probe-hooks"), 0)
         H.equal(count_plain(public_entry, 'mod:hook_safe("ActionAim"'), 0)
+        local dev_templates = read(STREAMS[2].dir .. OWNERS.templates)
+        local public_templates = read(STREAMS[1].dir .. OWNERS.templates)
+        H.equal(count_plain(dev_templates,
+            '"scripts/mods/weapon_tweaker_dev/_wt_longbow_variable_zoom").install(mod, Weapons)'), 1)
+        H.equal(count_plain(public_templates,
+            '"scripts/mods/weapon_tweaker/_wt_longbow_variable_zoom").install(mod, Weapons)'), 1)
+        local dev_zoom = read(STREAMS[2].dir .. "_wt_longbow_variable_zoom.lua")
+        local public_zoom = read(STREAMS[1].dir .. "_wt_longbow_variable_zoom.lua")
+        H.equal(count_plain(dev_zoom, 'mod:hook_safe("ActionAim", "client_owner_post_update"'), 1)
+        H.equal(count_plain(public_zoom, 'mod:hook_safe("ActionAim", "client_owner_post_update"'), 1)
         for _, owner in ipairs({ OWNERS.templates, OWNERS.balance }) do
             -- Prose about ActionAim rode along inside a #316 provenance comment;
             -- what must never appear here is a registration or a probe print.

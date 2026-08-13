@@ -34,7 +34,7 @@
             State = 'complete'
             Entry = 'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'
             CeilingLines = 1328
-            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_character_safety.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_transform_runtime.lua', '_wt_weapon_balance_patches.lua')
+            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_character_safety.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_longbow_variable_zoom.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_transform_runtime.lua', '_wt_weapon_balance_patches.lua')
         }
         @{
             # Mirror of the row above; the 159-line difference is the explicit
@@ -43,7 +43,7 @@
             State = 'complete'
             Entry = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua'
             CeilingLines = 1487
-            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_character_safety.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_transform_runtime.lua', '_wt_weapon_balance_patches.lua')
+            RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_character_safety.lua', '_wt_cross_char_template_patches.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_longbow_variable_zoom.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_transform_runtime.lua', '_wt_weapon_balance_patches.lua')
         }
         @{
             Name = 'career_tweaker_balance'
