@@ -7,7 +7,7 @@ Every entry is the literal first argument of `mod:command("name", ...)` —
 typed in chat as `/<name>` directly (NO mod-id prefix; see CLAUDE.md "Lua
 Environment" section on the chat command syntax rule).
 
-**Snapshot date:** 2026-05-25 (lobby_tweaker retired -- its commands absorbed into gt as `/gt_lobby_*`; bt + gut / others not re-audited). Refresh after any mod adds/renames commands — grep `mod:command\(` across `**/*.lua` to
+**Snapshot date:** 2026-08-13 (lobby_tweaker retired -- its commands absorbed into gt as `/gt_lobby_*`; bt + gut / others not re-audited). Refresh after any mod adds/renames commands — grep `mod:command\(` across `**/*.lua` to
 regenerate.
 
 ---
@@ -40,7 +40,9 @@ they no longer run at startup or infer Working from static routing tables.
 god, no_enemies, clear_enemies, freezeai, unstuck, cloak, unkillable, inndmg, noclip, ai,
 --   (freezeai = dev-only, host-only: halt all enemy AI in place + pause new spawns, #303;
 --    also bound in the Dev Tools group keybind)
-infinite_ammo, stamina, gigapower, ultreset, pause, time_faster, time_slower,
+heal, infinite_ammo, stamina, gigapower, ultreset, pause, time_faster, time_slower,
+--   (heal = native host/client debug-heal route for the living local hero; fills
+--    permanent health and clears the wounded state, #1143)
 -- Level control / match flow:
 win, fail, restart, killbots, die, suicide, down, respawn, fix_sound, bottoggle, readyup, inn,
 --   (suicide/down = self kill / self knockdown for testing, #355; host- AND client-safe

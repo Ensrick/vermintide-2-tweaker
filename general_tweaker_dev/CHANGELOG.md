@@ -1,5 +1,28 @@
 # General Tweaker Changelog
 
+## 0.2.265-dev (2026-08-13) -- native host/client `/heal` command (#1143) [verify-fix]
+
+- Added `/heal` for developer testing. It restores the living local hero to
+  full permanent health and clears the wounded state through Vermintide 2's
+  native `DamageUtils.debug_heal` path; hosts call the server heal owner and
+  clients use the game's existing `rpc_request_heal` route.
+- The command does not write health, wounds, or network state itself, and it
+  does not revive a dead or disabled hero. Unsafe menu/loading states fail
+  closed through GT's shared network-readiness policy.
+- Added a two-second bounded postcondition observer. `[gt:1143] ... result=ok`
+  is printed only after full permanent health and cleared wound are visible;
+  an unobserved request reports `timeout` or `error` instead of a false pass.
+- Health, wound, and disabled-state reads fail closed. Receipts use the observed
+  post-heal maximum, preserve unavailable state as `unknown`, and never stop
+  reporting later explicit commands because of a session-wide log cap.
+- Game-state changes and mod disable cancel an outstanding confirmation so a
+  stale request cannot block `/heal` after a transition.
+- Native healing modifiers, immunity, or shared-health behavior can prevent the
+  postcondition; in those non-ordinary states the command honestly times out.
+- Verification is pending an in-game host/client run; offline coverage executes
+  the production command and update consumer across success, refusal, timeout,
+  and runtime-check cases.
+
 ## 0.2.264-dev (2026-08-04) -- regression runner: false-FAIL on healthy checks fixed (#1153, #1156) [untested]
 
 - `/gt_regression_test` scores a check by its FIRST return value: nil is PASS,

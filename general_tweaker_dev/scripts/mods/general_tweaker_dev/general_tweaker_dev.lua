@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.264-dev"
+local MOD_VERSION = "0.2.265-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -497,6 +497,7 @@ mod.on_game_state_changed = function(status, state_name)
     -- time) so a stale noclip setting from the previous mission doesn't
     -- re-arm before the player has a body to fly.
     if mod._gt_noclip_reset_active then mod._gt_noclip_reset_active() end
+    if mod._gt_dev_heal_reset then mod._gt_dev_heal_reset("game_state_changed") end
     if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
     if mod._gt_host_lag_comp_reset then mod._gt_host_lag_comp_reset() end
     -- AI takeover is a per-run intent — the saved state on the host doesn't
@@ -701,6 +702,7 @@ mod.on_disabled = function()
     -- Replicant Bots port: restore the snapshotted vanilla bot reaction-time
     -- table (the source mod's on_disabled was author-flagged broken).
     if mod._gt_restore_fast_reactions then mod._gt_restore_fast_reactions() end
+    if mod._gt_dev_heal_reset then mod._gt_dev_heal_reset("mod_disabled") end
     -- Unlike the older broad global mutations documented below, #304 owns a
     -- bounded per-extension snapshot and can unwind immediately.
     if mod._gt_restore_keep_dummy_collision then mod._gt_restore_keep_dummy_collision() end
@@ -1785,6 +1787,9 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_level_control")
 -- on_setting_changed branches + regression test. Registers its own `infinite_ammo`
 -- update consumer (the AI half stays in main's `ai_pending` consumer).
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_hacks")
+-- Issue #1143: /heal uses vanilla DamageUtils.debug_heal for host/client
+-- routing, then verifies health and wound state through the update registry.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_dev_heal")
 -- Creature Spawner (Aussiemon CreatureSpawner port). ~28 singleton hooks (keep-
 -- spawn ConflictDirector.update + a large AI/BT/nav crash-guard suite + breed
 -- package-loader overrides). Assigns mod._gt_cs_on_setting_changed /

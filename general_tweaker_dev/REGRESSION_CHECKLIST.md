@@ -4,7 +4,29 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-01.
+Last updated: 2026-08-13.
+
+## Developer heal command (#1143)
+
+- [ ] Damage and wound the local hero, then run `/heal` as host; permanent
+  health reaches the current maximum and the wound is cleared.
+- [ ] Repeat as a client; the same result arrives through the native
+  `rpc_request_heal` route without a custom GT network event.
+- [ ] A dead, knocked-down, grabbed, or otherwise disabled hero is not revived
+  or mutated, and a menu/loading-state invocation fails closed.
+- [ ] The console prints one bounded `[gt:1143] heal result=ok` line only after
+  both postconditions are visible. A rejected or unobserved request prints
+  `error`/`timeout`, never `ok`.
+- [ ] Missing, throwing, or non-boolean health/status accessors fail closed;
+  unavailable wound state is printed as `unknown`, never coerced to cleared.
+- [ ] A max-health change during confirmation is compared against the observed
+  post-heal maximum. Mod disable or a game-state change cancels the pending
+  request, and later explicit commands still emit receipts without a lifetime cap.
+- [ ] Test under ordinary healing conditions. Native immunity, modifiers, or a
+  shared health pool may prevent full health and should produce an honest timeout.
+- [ ] `/gt_regression_test` passes `issue1143_dev_heal_command`.
+- Detection: offline `test_gt_dev_heal.lua`; native seams documented in
+  `ENGINE_SURFACE.md` Surface 4c.
 
 ## Runtime regression module boundaries
 
