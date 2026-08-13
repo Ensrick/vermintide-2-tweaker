@@ -1,5 +1,19 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.334-dev (2026-08-13) -- capture the last DX12-bound UI resource set (#630) [diagnostics-armed]
+
+- The existing probe already proved five healthy Mod Tweaker runs returned a balanced Lua
+  renderer pass, so repeating the same begin/end test could not narrow the native
+  `D3D12RenderDevice::end_frame` timeout. It now records the exact visible Weapons rows and
+  their candidate texture/font resources immediately after a completed Lua pass on only the
+  first draw, focus, tab, or Weapons-expansion edge.
+- `[gut:630] frame_evidence` is still automatic and shares the existing 48-line process cap.
+  Steady frames allocate no resource snapshot and emit nothing. A recurrence can now identify
+  the last submitted UI set before the native fence wait; a healthy run proves the refinement
+  itself without being mistaken for a behavioral fix.
+- Lua 5.1 coverage locks nested texture resolution, invisible-row exclusion, edge-only output,
+  the hard cap, and both existing presentation call sites.
+
 ## 0.2.333-dev (2026-08-13) -- contain official loadouts during modded boot (#402) [verify-fix] [untested]
 
 - Added an early owner for all five destructive Adventure boot seams: official snapshot

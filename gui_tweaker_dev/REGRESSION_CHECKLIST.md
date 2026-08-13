@@ -101,8 +101,9 @@ If this candidate fails, use exactly one evidence-selected fallback:
 
 - [ ] Open Mod Tweaker in the keep, select Weapons, change window focus once, return, and close the menu normally.
 - [ ] `[gut:630]` reports `presentation=standalone`, the `gut_equipment` tab edge plus `equipment_state=...weapons:expanded-stored...`, `focus=false`/`focus=true` edges, and an exit summary with `balance=0`.
+- [ ] Each first-draw/focus/tab/Weapons-expansion edge is followed by one `frame_evidence` record naming the post-pass `visible_rows` and `resource_candidates`; steady frames emit no such record.
 - [ ] The issue probe emits no per-frame line; its process-wide output never exceeds 48 records.
-- [ ] If the native fence timeout recurs, retain the complete console log and matching dump. A final `first_draw_end`/balanced close edge versus a missing `after_draw` separates an engine-frame stall from an unmatched Mod Tweaker pass.
+- [ ] If the native fence timeout recurs, retain the complete console log and matching dump. The last `frame_evidence` identifies the UI set submitted before `D3D12RenderDevice::end_frame`; a missing draw end still identifies an unmatched Mod Tweaker pass.
 - [ ] Repeat the focus transition in a vanilla Hero/Inventory view as a control; do not add a renderer/focus workaround unless the two signatures establish the boundary.
 - [ ] `/gut_regression_test` passes `issue630_dx12_fence_probe`; offline `test_gut_dx12_fence630.lua` passes.
 
