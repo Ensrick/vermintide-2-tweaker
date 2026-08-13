@@ -76,6 +76,12 @@ if (-not (Test-Path -LiteralPath $lifecycleMethodPolicy -PathType Leaf)) {
 }
 . $lifecycleMethodPolicy
 
+$loadTagResolutionHelpers = Join-Path $PSScriptRoot 'load-tag-resolution.ps1'
+if (-not (Test-Path -LiteralPath $loadTagResolutionHelpers -PathType Leaf)) {
+    throw "Shared LOAD-tag resolver not found: $loadTagResolutionHelpers"
+}
+. $loadTagResolutionHelpers
+
 $launcherPathHelpers = Join-Path $PSScriptRoot '..\vmb-launcher-path.ps1'
 if (-not (Test-Path -LiteralPath $launcherPathHelpers -PathType Leaf)) {
     throw "Shared VMBLauncher path helpers not found: $launcherPathHelpers"
@@ -1286,6 +1292,15 @@ function Invoke-ShipSelfTest {
     Assert ($selfTxt.IndexOf('BUILD-ONLY COMPLETE') -ge 0) "build-only exits before deploy/upload/release handling"
     $mainDispatchPos = $selfTxt.LastIndexOf('if ($SelfTest) { exit (Invoke-ShipSelfTest) }')
     $canonicalShipSource = $selfTxt.Substring($mainDispatchPos)
+    $loadTagResolvePos = $selfTxt.IndexOf('$loadTagResolution = Get-VtLoadTagResolution -MainLuaPath $luaPath', $mainDispatchPos)
+    $statusLabelPos = $selfTxt.IndexOf('==> Status-labeling shipped issues', $mainDispatchPos)
+    $refreshLoadTagPos = $selfTxt.IndexOf('LoadTag     = "$loadTag"', $mainDispatchPos)
+    $refreshInvokePos = $selfTxt.IndexOf('& $refreshScript @refreshArgs', $mainDispatchPos)
+    Assert ($loadTagResolvePos -ge 0 -and $loadTagResolvePos -lt $statusLabelPos) "ship resolves the authoritative LOAD tag before lifecycle mutation"
+    Assert ($refreshLoadTagPos -gt $statusLabelPos -and $refreshLoadTagPos -lt $refreshInvokePos) "card refresher receives the previously resolved LOAD tag through named splatting"
+    $helperOwnedTag = Resolve-VtLoadTag -MainLuaText 'local MOD_VERSION = "0.8.124-dev"' `
+        -LuaTexts @('mod:echo("[cim:LOAD]")') -FallbackTag 'crafting_in_modded_dev'
+    Assert ($helperOwnedTag.Success -and $helperOwnedTag.LoadTag -eq 'cim' -and $helperOwnedTag.Source -eq 'lua-root') "ship resolver does not replace a helper-owned LOAD tag with its directory fallback"
     Assert ($canonicalShipSource.IndexOf('Invoke-WithBoundLauncherProjectRoot', [System.StringComparison]::Ordinal) -lt 0) "canonical ship never rewrites shared launcher settings"
     Assert ($canonicalShipSource.IndexOf('New-ShipPrivateLauncherSettings', [System.StringComparison]::Ordinal) -ge 0) "canonical ship creates one durable private launcher config"
     $initialAuthorizationPos = $selfTxt.IndexOf('publicationAuthorization = Get-LivePublicationAuthorization', $mainDispatchPos)
@@ -1403,17 +1418,23 @@ if (Test-Path $idCheck) {
 }
 
 $luaPath    = Join-Path $modDir "scripts\mods\$Mod\$Mod.lua"
+$luaRoot    = Split-Path $luaPath -Parent
 $modVersion = '(unknown)'
 # The in-game load line uses the mod's INTERNAL short id (e.g. "gut", "gt", "ct"),
-# which is not the directory name. Parse it from the lua's "[<id>:LOAD]" marker so
-# the restart-reminder tells the user the exact token to grep for. Fall back to the
-# dir name if no marker is present.
-$loadTag = $Mod
+# which is not the directory name. Prefer the main Lua marker; when bootstrapping
+# delegates its banner, resolve the one unique marker across the root Lua files.
+# Only a marker-free mod may retain the historical directory-name fallback.
+# This must stay before any issue lifecycle mutation. The actual refresher stays
+# after labeling because it deliberately inventories only ready-labeled cards.
+$loadTagResolution = Get-VtLoadTagResolution -MainLuaPath $luaPath -LuaRoot $luaRoot -FallbackTag $Mod
+if (-not $loadTagResolution.Success) {
+    Fail "Cannot resolve one runtime LOAD tag for '$Mod': $($loadTagResolution.Reason)."
+}
+$loadTag = $loadTagResolution.LoadTag
 $streamIdentity = $Mod
 if (Test-Path $luaPath) {
     $luaTxt = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
     if ($luaTxt -match 'MOD_VERSION\s*=\s*"([^"]+)"') { $modVersion = $matches[1] }
-    if ($luaTxt -match '\[(\w+):LOAD\]')              { $loadTag = $matches[1] }
 }
 if ($modVersion -eq '(unknown)') {
     Fail "No MOD_VERSION found in $luaPath."
@@ -2274,6 +2295,9 @@ catch {
 # streams: unlike step 6's lifecycle labels (applied when the dev build
 # shipped), version surfaces go stale on every upload, dev or stable. Like
 # step 6, this step NEVER fails the ship -- the upload already succeeded.
+# Keep the invocation after step 6: a newly promoted issue is not in the ready
+# inventory until labeling succeeds. LOAD-tag resolution and conflict handling
+# already ran before step 6, and this splat receives that exact resolved value.
 Write-Host ""
 Write-Host "==> Refreshing pinned live-test card versions (issue #1102)" -ForegroundColor Cyan
 $cardSummary = 'not run'

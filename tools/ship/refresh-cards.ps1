@@ -85,6 +85,13 @@ if (-not (Test-Path -LiteralPath $lifecycleMethodPolicy -PathType Leaf)) {
 }
 . $lifecycleMethodPolicy
 
+$loadTagResolutionHelpers = Join-Path $PSScriptRoot 'load-tag-resolution.ps1'
+if (-not (Test-Path -LiteralPath $loadTagResolutionHelpers -PathType Leaf)) {
+    Write-Host "refresh-cards: shared LOAD-tag resolver not found: $loadTagResolutionHelpers" -ForegroundColor Red
+    exit 2
+}
+. $loadTagResolutionHelpers
+
 # Loose semver: 3 segments, tolerated legacy 4th, optional release-track suffix.
 $script:VtSemverPattern = '\d+\.\d+\.\d+(?:\.\d+)?(?:-[A-Za-z0-9.]+)?'
 $script:VtAnchorTagPattern = '[A-Za-z][A-Za-z0-9_-]*'
@@ -178,28 +185,17 @@ function Get-VtStreamInventory {
         if (-not (Test-Path -LiteralPath $cfgPath -PathType Leaf) -or
             -not (Test-Path -LiteralPath $luaPath -PathType Leaf)) { continue }
         $cfg = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
-        $lua = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
         $publishedMatch = [regex]::Match($cfg, 'published_id[ \t]*=[ \t]*(\d+)L')
-        $loadMatch = [regex]::Match($lua, '\[([A-Za-z][A-Za-z0-9_-]*):LOAD\]')
-        if (-not $loadMatch.Success) {
-            $loadTags = @(
-                Get-ChildItem -LiteralPath $luaRoot -Filter '*.lua' -File |
-                ForEach-Object {
-                    $text = [System.IO.File]::ReadAllText($_.FullName, [System.Text.Encoding]::UTF8)
-                    [regex]::Matches($text, '\[([A-Za-z][A-Za-z0-9_-]*):LOAD\]') |
-                        ForEach-Object { $_.Groups[1].Value }
-                } |
-                Sort-Object -Unique
-            )
-            if ($loadTags.Count -eq 1) {
-                $loadMatch = [regex]::Match("[$($loadTags[0]):LOAD]", '\[([A-Za-z][A-Za-z0-9_-]*):LOAD\]')
-            }
+        $loadTagResolution = Get-VtLoadTagResolution -MainLuaPath $luaPath -LuaRoot $luaRoot
+        if (-not $loadTagResolution.Success) {
+            if ($loadTagResolution.Source -eq 'missing') { continue }
+            throw "LOAD-tag inventory conflict for '$name': $($loadTagResolution.Reason)"
         }
-        if (-not $publishedMatch.Success -or -not $loadMatch.Success) { continue }
+        if (-not $publishedMatch.Success) { continue }
         $rows += [pscustomobject]@{
             Directory = $name
             PublishedId = $publishedMatch.Groups[1].Value
-            LoadTag = $loadMatch.Groups[1].Value
+            LoadTag = $loadTagResolution.LoadTag
             Identity = Get-VtCfgStreamIdentity -CfgText $cfg -Directory $name
         }
     }
@@ -542,6 +538,84 @@ function Invoke-RefreshCardsSelfTest {
         $colour = if ($cond) { 'Green' } else { 'Red' }
         Write-Host ("  [{0}] {1}" -f $verdict, $desc) -ForegroundColor $colour
         if (-not $cond) { $script:__rcpass = $false }
+    }
+
+    $resolverFixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) `
+        ("vt2-load-tag-{0}" -f ([guid]::NewGuid().ToString('N')))
+    $resolverModName = 'crafting_in_modded_dev'
+    $resolverModRoot = Join-Path $resolverFixtureRoot $resolverModName
+    $resolverLuaRoot = Join-Path $resolverModRoot "scripts\mods\$resolverModName"
+    $resolverMain = Join-Path $resolverLuaRoot "$resolverModName.lua"
+    $resolverHelper = Join-Path $resolverLuaRoot '_cim_bootstrap_runtime.lua'
+    $resolverOtherHelper = Join-Path $resolverLuaRoot '_other_bootstrap_runtime.lua'
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    try {
+        New-Item -ItemType Directory -Path $resolverLuaRoot -Force | Out-Null
+        [System.IO.File]::WriteAllText(
+            (Join-Path $resolverModRoot 'itemV2.cfg'),
+            "title = `"Crafting in Modded v0.8.124-dev`"`r`npublished_id = 3733366851L`r`n",
+            $utf8NoBom
+        )
+        [System.IO.File]::WriteAllText($resolverMain, 'local MOD_VERSION = "0.8.124-dev"', $utf8NoBom)
+        [System.IO.File]::WriteAllText($resolverHelper, 'mod:echo("[cim:LOAD]")', $utf8NoBom)
+
+        $helperOnly = Get-VtLoadTagResolution -MainLuaPath $resolverMain `
+            -LuaRoot $resolverLuaRoot -FallbackTag $resolverModName
+        Assert ($helperOnly.Success -and $helperOnly.LoadTag -eq 'cim' -and $helperOnly.Source -eq 'lua-root') `
+            'helper-only CIM marker wins before the ship directory fallback'
+
+        $helperInventory = @(Get-VtStreamInventory -RepoRoot $resolverFixtureRoot)
+        Assert ($helperInventory.Count -eq 1 -and $helperInventory[0].Directory -eq $resolverModName -and
+            $helperInventory[0].LoadTag -eq 'cim') `
+            'card inventory consumes the shared helper-owned tag resolution'
+
+        [System.IO.File]::WriteAllText($resolverMain, 'mod:echo("[main:LOAD]")', $utf8NoBom)
+        [System.IO.File]::WriteAllText($resolverOtherHelper, 'mod:echo("[other:LOAD]")', $utf8NoBom)
+        $mainPreferred = Get-VtLoadTagResolution -MainLuaPath $resolverMain `
+            -LuaRoot $resolverLuaRoot -FallbackTag $resolverModName
+        Assert ($mainPreferred.Success -and $mainPreferred.LoadTag -eq 'main' -and $mainPreferred.Source -eq 'main') `
+            'one main marker remains authoritative over conflicting helper markers'
+
+        [System.IO.File]::WriteAllText($resolverMain, 'local MOD_VERSION = "0.8.124-dev"', $utf8NoBom)
+        $otherHelperItem = Get-Item -LiteralPath $resolverOtherHelper
+        $otherHelperItem.Attributes = $otherHelperItem.Attributes -bor [System.IO.FileAttributes]::Hidden
+        Assert (((Get-Item -LiteralPath $resolverOtherHelper -Force).Attributes -band
+            [System.IO.FileAttributes]::Hidden) -ne 0) `
+            'conflicting helper fixture carries the actual Windows Hidden attribute'
+        $conflictingHelpers = Get-VtLoadTagResolution -MainLuaPath $resolverMain `
+            -LuaRoot $resolverLuaRoot -FallbackTag $resolverModName
+        Assert (-not $conflictingHelpers.Success -and $conflictingHelpers.Source -eq 'root-conflict' -and
+            $conflictingHelpers.Candidates.Count -eq 2 -and
+            [string]::IsNullOrWhiteSpace($conflictingHelpers.LoadTag)) `
+            'hidden conflicting helper tags fail closed instead of selecting the directory fallback'
+
+        $inventoryConflict = $null
+        try { $null = @(Get-VtStreamInventory -RepoRoot $resolverFixtureRoot) }
+        catch { $inventoryConflict = $_.Exception.Message }
+        Assert ($inventoryConflict -match "LOAD-tag inventory conflict for 'crafting_in_modded_dev'" -and
+            $inventoryConflict -match 'cim, other') `
+            'card inventory surfaces a deterministic hidden-helper conflict'
+
+        [System.IO.File]::SetAttributes($resolverOtherHelper, [System.IO.FileAttributes]::Normal)
+        [System.IO.File]::WriteAllText($resolverOtherHelper, 'mod:echo("[CIM:LOAD]")', $utf8NoBom)
+        [System.IO.File]::SetAttributes($resolverOtherHelper, [System.IO.FileAttributes]::Hidden)
+        $caseConflict = Get-VtLoadTagResolution -MainLuaPath $resolverMain `
+            -LuaRoot $resolverLuaRoot -FallbackTag $resolverModName
+        Assert (-not $caseConflict.Success -and $caseConflict.Source -eq 'root-conflict' -and
+            $caseConflict.Candidates.Count -eq 2 -and $caseConflict.Candidates -ccontains 'cim' -and
+            $caseConflict.Candidates -ccontains 'CIM') `
+            'case-variant literal LOAD tags remain distinct and fail closed'
+
+        $markerFree = Resolve-VtLoadTag -MainLuaText 'local x = 1' `
+            -LuaTexts @('local y = 2') -FallbackTag 'marker_free_mod'
+        Assert ($markerFree.Success -and $markerFree.LoadTag -eq 'marker_free_mod' -and
+            $markerFree.Source -eq 'fallback') `
+            'marker-free ship streams retain the historical directory fallback'
+    }
+    finally {
+        if (Test-Path -LiteralPath $resolverFixtureRoot) {
+            Remove-Item -LiteralPath $resolverFixtureRoot -Recurse -Force
+        }
     }
 
     $singleCard = @'
