@@ -60,12 +60,12 @@ matrix per item family, and TODAY every cell is opt-in:
 |---|---|---|---|
 | W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, currently 3,353 unsupported pairs of 4,352 (`docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-04 (#1157: re-keyed to surface-x-edge cells, 6 surfaces added, wt_dev brought under validation) |
 | W1 | **Descriptor library + contract tests**: `_lib_appearance_descriptor.lua` (pure build/validate/fingerprint) + engine-free tests in `qa/lua/tests/`; CWV owns the first synchronized runtime copy. | 966+ suite green | DONE 2026-08-06 (#1155 pilot prerequisite) |
-| W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | source and Workshop deployment complete in CWV 0.1.495-dev; solo/co-op runtime proof pending |
+| W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | source and Workshop deployment complete; latest material-lifecycle repair is live in CWV 0.1.512-dev; solo proof, then co-op runtime proof, pending |
 | W3 | **Extraction-420 cutover completion**: CWV textures, cosmetics transforms, cosmetics texture fallback, WT transforms (steps 2-5 of that doc). | per-step four-render-path regression + in-game verify | pending |
 | W4 | **Remaining families**, one per change, closing their symptom issues as they migrate; #660's issue index burns down. | each family's cells green | pending |
-| W5 | **OOP completion**: ct_dev + cwv decomposition (last two god files), #727 logging sweep, doc reconciliation. | full QA green, per-mod module contracts documented | pending |
+| W5 | **OOP completion**: ct_dev + cwv decomposition (last two god files), #727 logging sweep, doc reconciliation. | full QA green, per-mod module contracts documented | DONE 2026-08-12 (#1159: all 10 decomposition contracts complete; final CT Dev entry 1,498 nonblank lines, CWV entry 1,490) |
 
-### W2 exact readiness (2026-08-06)
+### W2 exact readiness (updated 2026-08-13)
 
 The deployed `0.1.495-dev` Old Musket pilot declares all 128 surface-x-edge
 cells under one descriptor/reconciler contract. Eleven cells have runtime
@@ -82,11 +82,19 @@ classified or proven. Mission-transition and respawn cells also remain
 unsupported until directly observed, even when equipment recreation may route
 through the implemented equip edge.
 
-Phase 3 merged in PR #1165 and is an ancestor of the exact source deployed as
-CWV `0.1.495-dev`. The subsequent `0.1.496-dev` source change only extracts the
-ordered skin registries; it does not change the descriptor, reconciler, Old
-Musket adapters, or their implemented-cell set. The W2 gate remains open for
-the pinned solo test followed by the remote-husk co-op matrix.
+Phase 3 merged in PR #1165 and remains an ancestor of the current deployed
+source. PR #1275 repaired a package-lifecycle defect exposed by the live pilot:
+the custom Old Musket units are carried by CWV's master bundle but borrow the
+vanilla Handgun's first- and third-person materials. The old package shim
+reported the custom paths loaded without loading those donor packages, allowing
+preview and world spawns before their materials existed. CWV `0.1.512-dev` now
+bridges each custom path through the matching reference-counted donor-package
+lifecycle while preserving callbacks and caller reference names. Exact merged-
+master QA passed at `9d09865e18e8bccf941a73bf454d2f1f8fdf6ea5`, and Workshop
+item `3716869446` accepted manifest `4902287303108476249`. This strengthens the
+deployed pilot but does not satisfy its live gate: the pinned solo owner-surface
+test on #1155/#474 must pass first, followed by the remote-husk and bot co-op
+matrix.
 
 ## 3a. Single-vocabulary rule (#1158, 2026-08-08)
 
