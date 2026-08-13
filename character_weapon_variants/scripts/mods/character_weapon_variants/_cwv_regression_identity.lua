@@ -1408,25 +1408,30 @@ _rt_register("issue484_crafted_old_musket_identity", function()
 end)
 
 _rt_register("cwv_inherits_base_name", function()
-    -- Verify NO cwv_* entry has `entry.name` clobbered to the cwv key.
+    -- Verify every cwv entry preserves its exact authored vanilla base identity.
     -- Per `feedback_cwv_clone_name_clobber.md` — vanilla code (e.g.
     -- world_hero_previewer.lua:674) does `item_data = ItemMasterList[item.name]`
     -- for fallback lookups. Clobbering entry.name to def.item_key made the
     -- lookup return nil and equip path crashed in BackendUtils.get_item_units.
-    -- Must KEEP the inherited base name; mod uses `entry.cwv_variant` as the
-    -- discriminator instead. Allow `entry.name == nil` (cloned tables may
-    -- inherit via metamethod; only fail on the explicit cwv_-prefix clobber).
+    -- Must KEEP `entry.name == def.base_weapon`; native damage-source decoding
+    -- and fallback item lookups both consume that wire-safe base key. The mod
+    -- uses `entry.cwv_variant` as the discriminator instead. Nil is not an
+    -- inherited identity: table.clone makes an ordinary table and a missing
+    -- name would send no exact base identity at all.
     local entries, bail = _rt_iter_cwv_entries()
     if bail then return bail end
-    local clobbered = {}
+    local mismatched = {}
     for _, e in ipairs(entries) do
         local n = e.entry.name
-        if type(n) == "string" and n:sub(1, 4) == "cwv_" then
-            clobbered[#clobbered + 1] = string.format("%s (name=%s)", e.key, n)
+        if type(e.def.base_weapon) ~= "string" or n ~= e.def.base_weapon then
+            mismatched[#mismatched + 1] = string.format(
+                "%s (name=%s base=%s)", e.key, tostring(n),
+                tostring(e.def.base_weapon))
         end
     end
-    if #clobbered > 0 then
-        return "entry.name clobbered with cwv_ prefix on: " .. table.concat(clobbered, "; ")
+    if #mismatched > 0 then
+        return "entry.name must equal exact base_weapon on: "
+            .. table.concat(mismatched, "; ")
     end
 end)
 

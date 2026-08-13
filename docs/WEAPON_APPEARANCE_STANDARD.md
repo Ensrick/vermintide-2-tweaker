@@ -441,9 +441,12 @@ while resource existence checks precede unit/texture work at
 `gear_utils.lua:149`. None of those facts lets a global package check prove a
 spawned material handle or another renderer's material list.
 
-`qa/native_resource_contracts.psd1` is the full active-tree ratchet. Any new,
-moved, or removed native renderer boundary or V2 proof changes the exact census
-and blocks QA until its policy and evidence are reviewed.
+`qa/native_resource_contracts.psd1` is the full active-tree ratchet. It counts
+both native writer sites and the descriptor fields that make a synchronized
+shared texture writer reachable; adding `textures` to a consumer is therefore
+a reviewed boundary even when the shared library's call count is unchanged.
+Any new, moved, or removed native renderer boundary or V2 proof changes the
+exact census and blocks QA until its policy and evidence are reviewed.
 
 `_force_load_axe_shield_husk_units` is older and hand-authored, but current
 source and issue #280 history show that it serves a different crash floor: it

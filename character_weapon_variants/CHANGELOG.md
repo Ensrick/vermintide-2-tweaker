@@ -1,5 +1,16 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.514-dev (2026-08-13) -- pin the exact clone base identity (#1125) [untested]
+
+- `cwv_inherits_base_name` now requires every generated item clone's `name` to
+  equal its authored `base_weapon`. Nil and a different vanilla base both fail;
+  rejecting only a `cwv_` prefix could not prove the exact wire-safe identity
+  consumed by fallback item lookup and native damage-source decoding.
+- Engine-free coverage executes the shipped regression body with exact, nil,
+  wrong-base, and CWV-key fixtures. The native-resource census now also counts
+  particle calls and shared texture-writer descriptor reachability; those QA
+  changes are repository tooling and add no further CWV runtime behavior.
+
 ## 0.1.513-dev (2026-08-13) -- committed Deus parity and exact Athanor preview identity (#1204/#1155) [verify-fix] [untested]
 
 - Exact CWV Chaos Wastes identities now install only when the shared peer gate's

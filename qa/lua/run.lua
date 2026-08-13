@@ -403,6 +403,7 @@ local suites = {
     "test_gt_diagnostic_check_contract",
     "test_regression_runner_verdicts",
     "test_cwv_marker_check_contract",
+    "test_cwv_base_name_invariant",
     "test_ct_dormant_disable_checks",
     "test_et_boss_behavior",
     "test_gut_revive_scoreboard",

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-13 - Native resource census closes particle and reachability gaps (#1125)
+
+The full-tree census now covers native particle calls and every descriptor that
+makes a synchronized WeaponAppearance texture writer reachable. Exact Moonfire
+rows cite a source- and installed-bundle-derived package oracle. Character
+Weapon Variants 0.1.514-dev also requires each clone's `name` to equal its
+authored vanilla `base_weapon`, with nil and wrong-base planted failures.
+
 ## 2026-08-13 - Official loadouts remain read-only during modded boot (#402)
 
 Tweaker: GUI Dev 0.2.333-dev installs official-loadout containment before the rest of
