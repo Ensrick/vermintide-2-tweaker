@@ -344,6 +344,15 @@ with the prior native weapon. This is BUG_CLASSES class 73, not a renderer/husk 
    return. GUT's separate `native_loadouts` store remains outside this ownership boundary;
    any future convergence requires an explicit cross-mod API rather than mutating that
    store by assumption.
+7. **Athanor Temper Item owns one draft/commit transaction (#1141).** The ten
+   mutable weave-loadout hooks update `_forge_item_props`, which is presentation
+   state, not the equipped item. `_cim_temper_runtime.lua` commits through the
+   weave-loadout owner only when the contextual button is pressed. An owned
+   non-default item uses Apply and is mutated/persisted once; a default-rarity
+   Blacksmith row uses Craft and supplies the draft to a fresh CIM item without
+   mutating the template. Leaving the properties view drops the keyed draft.
+   Do not restore click-through mutation as a shortcut: it defeats cancel,
+   multiplies save work, and makes the button's semantic action unknowable.
 
 ### 5.3 cwv / cim crafted-item identity (issue #474 mechanism 3)
 

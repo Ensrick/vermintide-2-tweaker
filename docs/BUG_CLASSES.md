@@ -1698,6 +1698,15 @@ illusion. The wire payload must omit owner-local backend IDs and instead carry a
 wearer, active slot, illusion context, and validated glow components. Receivers
 cache by wearer and fail closed unless the spawned unit matches that context.
 
+This rule also applies to non-render editors. CIM issue #1141 already held a
+detached Athanor bubble-grid representation, but copied it into the live item and
+save file on every click. Its fix treats that grid as the draft, classifies the
+selected item before presenting the commit action, uses **Apply** for an owned
+instance, uses **Craft** for an immutable default-rarity Blacksmith template,
+and discards an uncommitted weapon draft on view exit. Test the mutation count,
+not merely the final values: zero writes before Apply, at most one persistence
+write at Apply, and no-op on a repeated unchanged Apply.
+
 The durable commit must also be independent of render/network liveness. A valid
 inventory Apply can carry an exact backend item and hand while `player_unit` is
 temporarily absent during a keep or mission transition. Persist that exact owner
