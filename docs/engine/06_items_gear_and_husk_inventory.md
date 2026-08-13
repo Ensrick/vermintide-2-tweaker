@@ -110,7 +110,7 @@ Every render surface calls this function: owner (`gear_utils.lua:10`), husk (`si
 ### 2.4 Preview surfaces
 
 - **Inventory character preview** (keep hero view): `MenuWorldPreviewer` instance. `equip_item` builds `spawn_data` from `get_item_units` (with the true backend_id + skin - full illusion resolution), loads packages, then `_spawn_item`/`_spawn_item_unit` spawn `World.spawn_unit(unit_name)` directly from the recipe. It does NOT route through GearUtils - the recipe (`spawn_data[i].unit_name`, `.unit_attachment_node_linking`, `.material_settings_name`) is the only mutation point (`world_hero_previewer.lua:697-733`).
-- **Illusion browser / crafting pane**: `LootItemUnitPreviewer._load_item_units` -> `spawn_units`; same get_item_units resolution (`:270`); spawn order left then right.
+- **Illusion browser / customization and CIM/Athanor panes**: `LootItemUnitPreviewer._load_item_units` -> `spawn_units`; same get_item_units resolution (`:270`); spawn order left then right. The ordinary vanilla forge layout does not instantiate this previewer and remains a distinct, unsupported census surface.
 - Both previewers append `_3p` to hand units - preview mannequins are 3P-style renders; 1P units never appear on any preview surface.
 
 ### 2.5 Skins / illusions identity flow

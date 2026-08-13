@@ -39,28 +39,18 @@ if (-not $ManifestPath) { $ManifestPath = Join-Path $PSScriptRoot 'appearance_co
 # mod file is rewritten. See the PROVENANCE note in the authority.
 $AUTHORITY_LUA = 'tools/shared_lib/_lib_appearance_name_authority.lua'
 
-# The required MINIMUM is the architecture boundary and stays declared HERE, not
-# derived from M.CELLS. If the manifest defined the boundary by itself, deleting
-# a required surface from both the vocabulary and every contract would still
-# pass. Deriving it from M.CELLS instead would silently turn every future census
-# surface into a mandatory rewrite of all twelve contracts.
-#
-# This list is the historical eleven, respelled. The six surfaces #1157 added to
-# the census (specials, remote_audio, hud_panels, portraits, item_card_2d,
-# inventory_tooltip) are ACCEPTED when a contract opts into them but are not yet
-# required; expanding the contracts to the full canonical sixteen is a coverage
-# change, not a naming change, and is tracked by ISSUE #1197.
-#
-# Known limit until #1197 lands: the authority resolves contract name -> census
-# name, so a canonical surface that NO contract mentions is legal here. Those
-# surfaces would otherwise be invisible to this registry, so a successful run
-# NAMES them (see the closing NOTE) rather than letting the silence pass for
-# coverage. The edge axis needs nothing: all eight canonical edges are already
-# refined by at least one contract edge.
+# The required set is the architecture boundary and stays declared HERE, not in
+# the manifest. If the manifest defined the boundary by itself, deleting a
+# surface from both its vocabulary and every contract would still pass. #1197
+# expands this explicit boundary to every canonical surface; the gate also
+# reverse-checks it against the live authority, so adding an eighteenth surface
+# cannot recreate the old contract -> census directional blind spot.
 $REQUIRED_SURFACES = @(
     'owner_1p', 'owner_3p', 'bot', 'husk',
     'inventory_preview', 'illusion_browser', 'cim_preview',
-    'crafting_preview', 'lobby', 'score_team', 'hold_tab'
+    'crafting_preview', 'lobby', 'score_team', 'hold_tab',
+    'specials', 'remote_audio', 'hud_panels', 'portraits',
+    'item_card_2d', 'inventory_tooltip'
 )
 $REQUIRED_REPLAY_EDGES = @(
     'instance_load', 'initial_spawn', 'equip', 'wield',
@@ -221,8 +211,16 @@ function Test-AppearanceManifest(
         }
     }
 
-    # Coverage: a manifest may add canonical surfaces beyond the minimum, but
-    # never drop one that is required.
+    # Coverage in both directions (#1197): the manifest cannot drop an explicit
+    # required surface, and the gate's explicit required set cannot lag behind
+    # the canonical descriptor authority.
+    foreach ($canonical in @($Authority['surface'].Keys |
+        Where-Object { $Authority['surface'][$_].Kind -eq 'canonical' } |
+        Sort-Object)) {
+        if ($RequiredSurfaces -notcontains $canonical) {
+            $errors.Add("required surface set omits canonical surface '$canonical'")
+        }
+    }
     foreach ($required in $RequiredSurfaces) {
         if ($surfaces -notcontains $required) {
             $errors.Add("SurfaceVocabulary omits canonical surface '$required'")
@@ -507,6 +505,30 @@ function Invoke-SelfTest {
             }
         }
 
+        # #1197 reverse-direction fixture: a descriptor surface that is absent
+        # from the gate's explicit required set must fail even when the manifest
+        # and every contract omit it together.
+        $expandedAuthority = @{ surface = @{}; edge = @{}; concern = @{} }
+        foreach ($axis in @('surface', 'edge', 'concern')) {
+            foreach ($name in $fixtureAuthority[$axis].Keys) {
+                $expandedAuthority[$axis][$name] = $fixtureAuthority[$axis][$name]
+            }
+        }
+        $expandedAuthority['surface']['unrepresented'] = [pscustomobject]@{
+            Kind = 'canonical'; Canonical = 'unrepresented'; Reason = ''
+        }
+        $reverseErrors = @(Test-AppearanceManifest (New-SelfTestManifest) $temp $expandedAuthority `
+            -RequiredSurfaces @('owner', 'preview') `
+            -RequiredReplayEdges @('equip', 'join') `
+            -RequiredConcerns @('unit_identity'))
+        $reverseNeedle = "required surface set omits canonical surface 'unrepresented'"
+        if (($reverseErrors -join "`n").IndexOf($reverseNeedle, [StringComparison]::Ordinal) -ge 0) {
+            if (-not $Quiet) { Write-Host '  [PASS] unrepresented canonical surface fails' -ForegroundColor Green }
+        } else {
+            Write-Host "  [FAIL] unrepresented canonical surface was accepted: $($reverseErrors -join '; ')" -ForegroundColor Red
+            $failed++
+        }
+
         # The fixture cases prove the RULES. This proves the gate is actually
         # plugged into the LIVE authority and that this script's own required
         # minimum still speaks its language: a self-test that only ever exercised
@@ -522,6 +544,13 @@ function Invoke-SelfTest {
             )) {
                 foreach ($message in @(Get-AuthorityNameErrors $pair.Names $pair.Axis $pair.Label $live)) {
                     $liveProblems.Add($message)
+                }
+            }
+            foreach ($canonical in @($live['surface'].Keys |
+                Where-Object { $live['surface'][$_].Kind -eq 'canonical' } |
+                Sort-Object)) {
+                if ($REQUIRED_SURFACES -notcontains $canonical) {
+                    $liveProblems.Add("required surface set omits canonical surface '$canonical'")
                 }
             }
             # Every spelling this gate used before the rename must stay recorded,
@@ -586,20 +615,6 @@ if ($failures.Count -gt 0) {
 }
 if (-not $Quiet) {
     $concernCount = @($manifest.Contracts | ForEach-Object { @($_.Concerns) }).Count
-    Write-Host "[check_appearance_contracts] OK - $(@($manifest.Contracts).Count) contract(s), $concernCount concern declaration(s); structural evidence only."
-
-    # Visibility, not enforcement (#1197). Name resolution only runs contract ->
-    # census, so a canonical surface no contract mentions is silently absent -
-    # exactly the "gap hides between the two vocabularies" shape this change
-    # exists to kill. Report it on every green run so the remaining coverage debt
-    # is stated rather than inferred. This never changes the exit code.
-    $declaredSurfaces = @($manifest.SurfaceVocabulary)
-    $unrepresented = @($authority['surface'].Keys |
-        Where-Object { $authority['surface'][$_].Kind -eq 'canonical' -and $declaredSurfaces -notcontains $_ } |
-        Sort-Object)
-    if ($unrepresented.Count -gt 0) {
-        Write-Host ("[check_appearance_contracts] NOTE - {0} canonical surface(s) have no contract representation (issue #1197): {1}" -f
-            $unrepresented.Count, ($unrepresented -join ', '))
-    }
+    Write-Host "[check_appearance_contracts] OK - $(@($manifest.Contracts).Count) contract(s), $concernCount concern declaration(s), $($REQUIRED_SURFACES.Count) canonical surface(s); structural evidence only."
 }
 exit 0

@@ -59,19 +59,19 @@ return function(H, repo_root)
 		end
 	end)
 
-	-- Two decisions the reconciliation made deliberately, pinned so a later
-	-- edit cannot quietly undo them.
-	H.test("crafting_preview stays a declared census gap, not a cim_preview alias", function()
+	-- #1198 made the ordinary crafting bench first-class without collapsing it
+	-- onto CIM's distinct Athanor preview surface.
+	H.test("crafting_preview is canonical and remains distinct from cim_preview", function()
 		local A = fresh()
 		H.equal(A.SURFACE_ALIASES.crafting_preview, nil,
 			"the vanilla crafting bench must not be aliased onto the CIM Athanor forge")
-		H.truthy(A.SURFACE_CENSUS_GAPS.crafting_preview,
-			"crafting_preview must be recorded as a census gap")
-		H.equal(A.SURFACE_CENSUS_GAPS.crafting_preview.issue, 1198,
-			"the census gap must keep its tracking issue cross-reference")
+		H.equal(A.SURFACE_CENSUS_GAPS.crafting_preview, nil,
+			"a canonical surface must not remain recorded as a census gap")
 		local resolved, kind = A.resolve_surface("crafting_preview", D)
-		H.equal(kind, "census-gap")
-		H.equal(resolved, nil, "a census gap has no canonical name yet, by design")
+		H.equal(kind, "canonical")
+		H.equal(resolved, "crafting_preview")
+		H.truthy(D.SURFACE_SET.cim_preview and D.SURFACE_SET.crafting_preview,
+			"the vanilla bench and CIM Athanor must remain separate canonical surfaces")
 	end)
 
 	H.test("finer contract edges refine a canonical edge and explain themselves", function()
@@ -132,6 +132,6 @@ return function(H, repo_root)
 		for _, concern in ipairs(A.CONCERNS) do
 			H.equal(by_axis.concern[concern], "contract-only")
 		end
-		H.equal(by_axis.surface.crafting_preview, "census-gap")
+		H.equal(by_axis.surface.crafting_preview, "canonical")
 	end)
 end

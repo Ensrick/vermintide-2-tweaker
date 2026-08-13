@@ -17,6 +17,7 @@
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='material_bind'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='texture'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='residency_proof'; Count=3; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
+        @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_appearance.lua'; Kind='texture_descriptor'; Count=2; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_old_musket_appearance.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_lib_weapon_appearance.lua'; Kind='texture'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_custom_hats.lua'; Kind='texture'; Count=3; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cos_custom_hats.lua' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_custom_hats.lua'; Kind='residency_proof'; Count=2; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
@@ -29,10 +30,17 @@
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded_anim.lua'; Kind='texture'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded_anim.lua'; Kind='residency_proof'; Count=2; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; Kind='material_bind'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
+        @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; Kind='particle'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; Kind='texture'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_material_hijack_embedded.lua'; Kind='residency_proof'; Count=3; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_weapon_appearance.lua'; Kind='texture'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; Kind='gui_lookup'; Count=1; Policy='exact-gui-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
+        # Fatshark's source names this effect in Morris buff and material-effect
+        # settings. The installed bundle census proves its particle resource is
+        # in the boot-loaded Morris DLC package (and redundantly the Moonfire 1P
+        # unit package), not the Moonfire 3P or Morris-ingame packages. Spawning
+        # is reached only from a live Moonfire projectile impact.
+        @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_moonfire_puff_runtime.lua'; Kind='particle'; Count=1; Policy='owned-world-existing'; Evidence='qa/lua/tests/fixtures/moonfire_native_resource_oracle.lua' }
         # #1159: the in-mission preview shading-environment re-point and the
         # residency proof that gates it moved verbatim out of the entry into the
         # HeroWindowItemCustomization view lifecycle owner. The boundary pair is
@@ -58,7 +66,9 @@
         @{ File='verminious_dreams_lighting_dev/scripts/mods/verminious_dreams_lighting_dev/verminious_dreams_lighting_dev.lua'; Kind='shading'; Count=4; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='verminious_dreams_lighting/scripts/mods/verminious_dreams_lighting/verminious_dreams_lighting.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_weapon_appearance.lua'; Kind='texture'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
+        @{ File='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_moonfire_aoe.lua'; Kind='particle'; Count=1; Policy='owned-world-existing'; Evidence='qa/lua/tests/fixtures/moonfire_native_resource_oracle.lua' }
         @{ File='weapon_tweaker/scripts/mods/weapon_tweaker/_lib_weapon_appearance.lua'; Kind='texture'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
+        @{ File='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_moonfire_aoe.lua'; Kind='particle'; Count=1; Policy='owned-world-existing'; Evidence='qa/lua/tests/fixtures/moonfire_native_resource_oracle.lua' }
         @{ File='weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_weapon_appearance.lua'; Kind='texture'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
         @{ File='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua'; Kind='material_bind'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_woc_blightreaper_pulse.lua' }
         @{ File='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua'; Kind='texture'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_woc_blightreaper_pulse.lua' }

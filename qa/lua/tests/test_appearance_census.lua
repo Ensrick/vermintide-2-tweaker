@@ -179,6 +179,43 @@ return function(H, repo_root)
 		end
 	end)
 
+	H.test("crafting preview is distinct and unsupported without a bench adapter", function()
+		H.equal(#D.CELLS, 17, "the canonical census must carry all 17 appearance surfaces")
+		H.truthy(D.SURFACE_SET.crafting_preview,
+			"the ordinary crafting bench must be a canonical census surface")
+		H.truthy(D.SURFACE_SET.cim_preview,
+			"the CIM Athanor must remain a separate canonical census surface")
+
+		for mod_name, rel in pairs(CENSUS_FILES) do
+			local census = dofile(repo_root .. "/" .. rel)
+			for family, decl in pairs(census.families) do
+				local matrix, errors = D.expand_matrix(decl.matrix,
+					mod_name .. "." .. family .. ".matrix")
+				H.equal(#errors, 0, table.concat(errors, "\n"))
+				for _, edge in ipairs(D.EDGES) do
+					H.equal(matrix.crafting_preview[edge].state, "unsupported",
+						mod_name .. "." .. family .. ".crafting_preview." .. edge)
+					H.truthy(type(matrix.crafting_preview[edge].note) == "string"
+						and #matrix.crafting_preview[edge].note > 0,
+						"unsupported crafting-preview pair must explain its fallback")
+				end
+			end
+		end
+
+		local woc = dofile(repo_root .. "/weapons_of_chaos/scripts/mods/"
+			.. "weapons_of_chaos/_woc_appearance_census.lua")
+		local matrix, errors = D.expand_matrix(woc.families.enemy_weapon_relic.matrix,
+			"weapons_of_chaos.enemy_weapon_relic.matrix")
+		H.equal(#errors, 0, table.concat(errors, "\n"))
+		H.equal(matrix.cim_preview.preview_open.state, "implemented",
+			"the Athanor adapter remains independently implemented")
+		H.equal(matrix.crafting_preview.preview_open.state, "unsupported",
+			"the generic preview hook must not be relabeled as the vanilla bench")
+		H.truthy(matrix.crafting_preview.preview_open.note:find(
+			"does not instantiate LootItemUnitPreviewer", 1, true) ~= nil,
+			"the unsupported bench row must preserve its exact source boundary")
+	end)
+
 	H.test("CWV Old Musket census implements only CIM preview-open", function()
 		local census = dofile(repo_root .. "/character_weapon_variants/scripts/mods/"
 			.. "character_weapon_variants/_cwv_appearance_census.lua")

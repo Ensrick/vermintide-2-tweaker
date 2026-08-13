@@ -25,6 +25,9 @@
 --   3. the six surfaces added by 1157 start unsupported unless concrete code
 --      evidence shows the family implements one. One exception earned
 --      evidence: cross_character_port owns hud_panels (388 overcharge).
+--   4. crafting_preview, added by 1198, starts unsupported for every family:
+--      wt has no ordinary crafting-bench adapter, and the bench cannot inherit
+--      inventory-preview support by inference.
 --
 -- TRUTHFULNESS: a pair is "implemented" ONLY where a wt code path actively
 -- produces (or, for 1P, actively preserves-by-design) the correct appearance,
@@ -36,7 +39,8 @@
 --
 -- wt's live appearance surface is the owner (1P/3P), bots, and the keep
 -- inventory previewer. It has NO adapter on the illusion browser, the
--- CIM/Athanor craft preview, the pre-mission lobby, the end-of-mission
+-- CIM/Athanor craft preview, the ordinary crafting-bench preview, the
+-- pre-mission lobby, the end-of-mission
 -- score/team previewer (only a crash-sanitize there), or the Hold-Tab
 -- scoreboard (icon-only surface; wt registers no custom weapon icon -
 -- cross-access weapons keep their authentic vanilla icon). No family restores
@@ -98,6 +102,7 @@ local DISABLE_ONLY_NOTES = { mod_disable_restore = FB_DISABLE }
 -- settings, and it is never replayed for a peer that joined late or for a
 -- wearer whose selection changed. Unsupported at every edge, on every family.
 local FB_HUSK = "wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660."
+local FB_CRAFTING = "wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660."
 
 local function base_matrix(fallbacks, overrides)
 	local m = {
@@ -108,6 +113,7 @@ local function base_matrix(fallbacks, overrides)
 		inventory_preview = row(IMPLEMENTED, nil, DISABLE_ONLY, DISABLE_ONLY_NOTES),
 		illusion_browser  = row(UNSUPPORTED, fallbacks.illusion_browser),
 		cim_preview       = row(UNSUPPORTED, fallbacks.cim_preview),
+		crafting_preview  = row(UNSUPPORTED, FB_CRAFTING),
 		lobby             = row(UNSUPPORTED, fallbacks.lobby),
 		score_team        = row(UNSUPPORTED, fallbacks.score_team),
 		hold_tab          = row(UNSUPPORTED, fallbacks.hold_tab),

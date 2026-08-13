@@ -1,5 +1,14 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.55-dev (2026-08-13) - declare the vanilla crafting-preview surface (#1198/#1197) [tooling]
+
+- Added the seventeenth `crafting_preview` surface to the Blightreaper census.
+  All eight replay edges remain explicitly unsupported: vanilla's ordinary
+  forge layout does not instantiate `LootItemUnitPreviewer`, so WOC's generic
+  item-preview hook is not evidence for this distinct bench surface.
+- This is inert census data consumed by offline QA. It changes no item,
+  transform, material, icon, crafting, or synchronization behavior.
+
 ## v0.1.54-dev (2026-08-12) - structural decomposition complete (#1159)
 
 - Extracted Blightreaper item construction, private Crowbill installation,
