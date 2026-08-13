@@ -117,6 +117,7 @@ local suites = {
     "test_wt_overcharge_presentation",
     "test_wt_bolt_staff_overcharge",
     "test_wt_longbow_zoom_probe",
+    "test_wt_longbow_variable_zoom",
     "test_wt_issue411_picker_source_coverage",
     "test_wt_issue748_picker_target_vocab",
     "test_wt_flamestorm_fx",

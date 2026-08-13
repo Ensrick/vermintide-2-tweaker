@@ -194,16 +194,16 @@
 | Negative control | Fire charged bolts before and after enabling the option. Their overcharge, damage, projectile behavior, and cadence remain vanilla. |
 | Authority | Owner-local scalar consumed at projectile fire; no RPC, custom lookup, or co-op verification required. |
 
-## #316 - Kruber Longbow draw animation on non-Huntsman careers
+## #316 - Empire Longbow cross-career variable zoom
 
 | Field | Check |
 |---|---|
-| Fixed version | WT 0.12.264-beta; the bounded owner-camera probe remains available in the friends-only development stream. |
-| Automated | `/wt_regression_test`: `issue316_kruber_longbow_zoom_contract` locks the vanilla `ActionAim` fingerprint, Mercenary/Foot Knight/Grail Knight native `draw_bow` handling, Huntsman exclusion, and Saltzpyre's crossbow presentation remap. The bounded lifecycle probe is development-stream-only. |
-| Co-op visual | With matching WT builds, equip Kruber's Longbow on Mercenary, Foot Knight, and Grail Knight. For each career, a second player observes partial draw, full draw/hold, release, return, weapon swap, and mission transition; reverse roles. Huntsman is the unchanged native control. |
-| Negative controls | First-person aim and camera zoom remain unchanged. Saltzpyre's non-Priest careers still use the Crossbow model and `to_zoom` presentation substitution. |
-| Log evidence | Public beta emits no issue-specific live probe rows. In the development stream, `[wt:316] ... remap=native_draw_bow` proves policy selection and camera rows deliberately report `visible_draw=unverified`; neither is accepted as proof that the owner or remote-husk clip visibly played. |
-| Authority | The fix uses WT's existing per-unit 3P event funnel for owner bodies and remote husks and adds no custom RPC. Visible remote playback still requires two-player verification, so `verify-fix-coop` is the sole verification label. |
+| Candidate version | WT 0.12.306-beta / WT Dev 0.12.307-dev. |
+| Automated | `/wt_regression_test`: `issue316_kruber_longbow_zoom_contract` retains the already-shipped native draw/presentation boundary as a negative invariant; `issue316_empire_longbow_cross_career_variable_zoom` executes the candidate's exact registered aim action, six-career allow-list, excluded careers/items, and authored threshold cycle. Offline `test_wt_longbow_variable_zoom.lua` also proves stable/Dev policy identity and one post-update hook owner. |
+| Owner zoom | Equip the Empire Longbow on Mercenary and Bounty Hunter at minimum. Aim and press action special repeatedly; both cycle through the action's authored zoom levels. Repeat on Foot Knight, Grail Knight, Witch Hunter Captain, and Zealot when practical. |
+| Negative controls | Huntsman retains vanilla perk ownership; Warrior Priest and Kerillian remain excluded. An unrelated bow on Mercenary does not gain the cycle. Saltzpyre's non-Priest careers retain the Crossbow model and `to_zoom` presentation substitution. |
+| Log evidence | Public beta relies on the named runtime checks. The development stream retains bounded `[wt:316]` aim lifecycle rows as supplementary owner-camera timing evidence; visible-draw output is historical and is not part of this candidate's solo acceptance. |
+| Authority | Zoom is owner-local through vanilla `GenericStatusExtension`. No custom RPC or shared-template mutation is added, so the verification topology is Solo. |
 
 ## #585 - Moonfire energy bar clears after ranged replacement
 

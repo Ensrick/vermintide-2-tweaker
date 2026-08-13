@@ -50,6 +50,58 @@ return function(H, repo_root)
 			"OFF bypasses all position, rotation, and scale changes while preserving every saved value.")
     end)
 
+    H.test("WT #168 Hold-Pose keeps right and left hand plans independent", function()
+        local tree = HoldPose.build_widget_tree()
+        local suffixes = {
+            "offset_x", "offset_y", "offset_z",
+            "rot_pitch", "rot_yaw", "rot_roll",
+            "scale_x", "scale_y", "scale_z",
+        }
+        for _, spec in ipairs({
+                { "wt_dev_hp_rh_group", "wt_dev_hp_rh_" },
+                { "wt_dev_hp_lh_group", "wt_dev_hp_lh_" },
+                { "wt_dev_hp_fp_rh_group", "wt_dev_hp_fp_rh_" },
+                { "wt_dev_hp_fp_lh_group", "wt_dev_hp_fp_lh_" },
+        }) do
+            local group = widget_by_id(tree, spec[1])
+            H.truthy(group, spec[1] .. " missing")
+            H.equal(#group.sub_widgets, 9)
+            for i, suffix in ipairs(suffixes) do
+                H.equal(group.sub_widgets[i].setting_id, spec[2] .. suffix)
+            end
+        end
+        H.equal(widget_by_id(tree, "wt_dev_hp_hand"), nil,
+            "legacy hand selector must not return")
+
+        local reads = {}
+        local plans = HoldPose._independent_hand_plans("third_person",
+            function(channel, hand)
+                reads[#reads + 1] = channel .. ":" .. hand
+                if hand == "right" then
+                    return 0.25, 0, 0, 0, 0, 0, 1, 1, 1
+                end
+                return 0, 0, 0, 0, 17, 0, 0.5, 0.75, 1.25
+            end)
+        H.deep_equal(reads, { "third_person:right", "third_person:left" })
+        H.equal(plans.right.position, true)
+        H.equal(plans.right.rotation, false)
+        H.equal(plans.right.scale, false)
+        H.equal(plans.right.ox, 0.25)
+        H.equal(plans.left.position, false)
+        H.equal(plans.left.rotation, true)
+        H.equal(plans.left.scale, true)
+        H.equal(plans.left.yaw, 17)
+        H.equal(plans.left.sx, 0.5)
+
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(source:find('_apply_pose_to(u_r, channel, "right", plans.right)', 1, true),
+            "right-hand unit is not driven by the right plan")
+        H.truthy(source:find('_apply_pose_to(u_l, channel, "left", plans.left)', 1, true),
+            "left-hand unit is not driven by the left plan")
+    end)
+
     H.test("WT #616 Hold-Pose scale plan is absolute and non-compounding", function()
         local contract = HoldPose._pose_contract
         H.equal(contract.scale_setter, "Unit.set_local_scale")

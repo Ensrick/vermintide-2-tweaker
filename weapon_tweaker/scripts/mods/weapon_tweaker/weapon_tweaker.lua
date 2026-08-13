@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.305-beta"
+local MOD_VERSION = "0.12.306-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -787,7 +787,6 @@ end)
 -- position: each patcher mutates Weapons.* at file scope, so the load position
 -- is what orders those writes against the rebalance rewrites further down.
 mod:dofile("scripts/mods/weapon_tweaker/_wt_cross_char_template_patches")
-
 -- Cross-character engine-fatal safety owner (#1159). It remains immediately
 -- after template mutation and before custom damage-profile registration.
 local _wt_cross_character_safety = mod:dofile(

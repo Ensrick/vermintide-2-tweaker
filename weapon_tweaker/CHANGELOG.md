@@ -1,5 +1,26 @@
 # Weapon Tweaker Changelog
 
+## 0.12.306-beta (2026-08-13) -- restore cross-career Empire Longbow variable zoom (#316) [verify-fix]
+
+- Restored the Empire Longbow's authored action-special zoom cycle for
+  Mercenary, Foot Knight, Grail Knight, Witch Hunter Captain, Bounty Hunter,
+  and Zealot. The owner-local adapter reuses the live aim action's native
+  `buffed_zoom_thresholds`; it does not mutate the shared weapon template,
+  grant a talent perk, or add a network message.
+- Kept Huntsman on vanilla ownership and excluded Warrior Priest, Kerillian,
+  unrelated bows, inactive aim, and unavailable extension states. Public and
+  development streams share one byte-identical policy and one
+  `ActionAim.client_owner_post_update` registration.
+- Added offline Lua coverage and the named in-game check
+  `issue316_empire_longbow_cross_career_variable_zoom`.
+
+### In-game verification
+
+Equip the Empire Longbow on at least Mercenary and Bounty Hunter, aim, and use
+action special repeatedly. Confirm each cycles the authored zoom levels; repeat
+on Huntsman as the unchanged native control and with an unrelated bow as the
+negative control. Run `/wt_regression_test` and require both #316 checks to pass.
+
 ## 0.12.305-beta (2026-08-13) -- declare the vanilla crafting-preview surface (#1198/#1197) [tooling]
 
 - Added `crafting_preview` to all four appearance-family census matrices. The

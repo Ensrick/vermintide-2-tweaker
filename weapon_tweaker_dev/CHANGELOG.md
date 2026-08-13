@@ -1,5 +1,24 @@
 # Weapon Tweaker Changelog
 
+## 0.12.307-dev (2026-08-13) -- restore Longbow zoom and prove independent Hold-Pose hands (#316/#168) [verify-fix]
+
+- Mirrored public 0.12.306-beta's exact owner-local Empire Longbow variable
+  zoom adapter, six-career allow-list, negative controls, offline coverage, and
+  named `issue316_empire_longbow_cross_career_variable_zoom` in-game check.
+- Made the Hold-Pose runtime construct separate right- and left-hand transform
+  plans before applying either weapon unit. Added the named
+  `issue168_hold_pose_independent_hands` check, which proves all four 1P/3P
+  hand groups exist, the retired single-hand selector stays absent, and
+  distinct nine-value plans cannot cross between hands.
+
+### In-game verification
+
+For #316, repeat the public Mercenary/Bounty Hunter zoom test and its native
+Huntsman/unrelated-bow controls. For #168, give right and left hands visibly
+different position/rotation/scale values in both Third Person and First Person,
+apply them, and confirm each hand follows only its own group. Run
+`/wt_regression_test` and require both named checks to pass.
+
 ## 0.12.306-dev (2026-08-13) -- declare the vanilla crafting-preview surface (#1198/#1197) [tooling]
 
 - Added `crafting_preview` to all four appearance-family census matrices. The

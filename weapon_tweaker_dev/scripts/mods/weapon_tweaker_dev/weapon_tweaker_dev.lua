@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.306-dev"
+local MOD_VERSION = "0.12.307-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -846,7 +846,7 @@ mod:hook_safe("ActionAim", "client_owner_start_action", function(self, new_actio
         tostring(record.fields.zoom_condition), tostring(record.fields.remap))
 end)
 
-mod:hook_safe("ActionAim", "client_owner_post_update", function(self, dt, t)
+mod._wt316_post_update_observer = function(self, dt, t)
     local record = _wt316_zoom_records[self]
     if not record then return end
     local status = self.owner_unit and ScriptUnit.has_extension(self.owner_unit, "status_system")
@@ -858,7 +858,7 @@ mod:hook_safe("ActionAim", "client_owner_post_update", function(self, dt, t)
         record.attempt, _wt316_zoom_probe.max_attempts, tostring(record.career),
         tostring(result.outcome), result.elapsed, tostring(result.zooming),
         tostring(result.zoom_mode), tostring(result.visible_draw))
-end)
+end
 
 mod:hook_safe("ActionAim", "finish", function(self, reason)
     local record = _wt316_zoom_records[self]
@@ -871,7 +871,6 @@ mod:hook_safe("ActionAim", "finish", function(self, reason)
         tostring(result.outcome), result.elapsed, tostring(result.reason))
 end)
 -- WT_DEV_OVERLAY_END:longbow-live-probe-hooks
-
 -- Cross-character engine-fatal safety owner (#1159). It remains immediately
 -- after template mutation and before custom damage-profile registration.
 local _wt_cross_character_safety = mod:dofile(
