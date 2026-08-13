@@ -429,37 +429,40 @@ end
 -- before its eventual Unit.animation_event call. Intercepting here is the only
 -- point where one substitution owns both local playback and remote replication.
 _om._cross_access_network_log_once = {}
-mod:hook("WeaponUnitExtension", "_play_3p_anim", function(func, self, event_3p, event, owner_unit, looping_event, anim_time_scale)
-	if owner_unit ~= _local_3p_body_unit() then
-		return func(self, event_3p, event, owner_unit, looping_event, anim_time_scale)
-	end
+_om.remote_audio_dispatch = _om.remote_audio_dispatch or mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_remote_audio_dispatch")
+
+_om._cross_access_observe_live = function(event_3p)
 	if _om.combat_styles and _om.combat_styles.observe_candidate_action then
 		_om.combat_styles:observe_candidate_action(
 			_cross_access_local_weapon_key, _cross_access_local_career, event_3p)
 	end
+end
+
+_om._cross_access_resolve_live = function(event_3p)
 	local target = _om.combat_styles and _om.combat_styles.remap_event
 		and _om.combat_styles:remap_event(_cross_access_local_style_item, nil,
 			_cross_access_local_career, event_3p)
-	target = target or _om._cross_access_target_event(
-		_cross_access_local_weapon_key, _cross_access_local_career, event_3p
-	)
-	if not target then
-		return func(self, event_3p, event, owner_unit, looping_event, anim_time_scale)
-	end
-	-- NetworkLookup has a strict missing-key metamethod. Validate with rawget so
-	-- a typo degrades to vanilla instead of crashing before the RPC is encoded.
-	local target_id = NetworkLookup and NetworkLookup.anims
+	return target or _om._cross_access_target_event(
+		_cross_access_local_weapon_key, _cross_access_local_career, event_3p)
+end
+
+_om._cross_access_lookup_anim = function(target)
+	return NetworkLookup and NetworkLookup.anims
 		and rawget(NetworkLookup.anims, target)
-	if not target_id then
-		local miss_key = tostring(_cross_access_local_weapon_key) .. ":" .. tostring(target)
-		if not _om._cross_access_network_log_once[miss_key] then
-			_om._cross_access_network_log_once[miss_key] = true
-			printf("[cwv:398] network remap declined: item=%s career=%s %s->%s target absent from NetworkLookup.anims",
-				tostring(_cross_access_local_weapon_key), tostring(_cross_access_local_career),
-				tostring(event_3p), tostring(target))
-		end
-		return func(self, event_3p, event, owner_unit, looping_event, anim_time_scale)
+end
+
+_om._cross_access_log_declined = function(event_3p, target)
+	local miss_key = tostring(_cross_access_local_weapon_key) .. ":" .. tostring(target)
+	if not _om._cross_access_network_log_once[miss_key] then
+		_om._cross_access_network_log_once[miss_key] = true
+		printf("[cwv:398] network remap declined: item=%s career=%s %s->%s target absent from NetworkLookup.anims",
+			tostring(_cross_access_local_weapon_key), tostring(_cross_access_local_career),
+			tostring(event_3p), tostring(target))
 	end
+end
+
+_om._cross_access_log_applied = function(event_3p, target, target_id)
 	local log_key = tostring(_cross_access_local_weapon_key) .. ":"
 		.. tostring(_cross_access_local_career) .. ":" .. tostring(event_3p)
 	if not _om._cross_access_network_log_once[log_key] then
@@ -468,7 +471,14 @@ mod:hook("WeaponUnitExtension", "_play_3p_anim", function(func, self, event_3p, 
 			tostring(_cross_access_local_weapon_key), tostring(_cross_access_local_career),
 			tostring(event_3p), tostring(target), tostring(target_id))
 	end
-	return func(self, target, event, owner_unit, looping_event, anim_time_scale)
+end
+
+mod:hook("WeaponUnitExtension", "_play_3p_anim", function(func, self, event_3p, event, owner_unit, looping_event, anim_time_scale)
+	return _om.remote_audio_dispatch.invoke(func, self, event_3p, event,
+		owner_unit, looping_event, anim_time_scale, _local_3p_body_unit(),
+		_om._cross_access_observe_live, _om._cross_access_resolve_live,
+		_om._cross_access_lookup_anim, _om._cross_access_log_applied,
+		_om._cross_access_log_declined)
 end)
 _cwv_networked_3p_remap_installed = true
 

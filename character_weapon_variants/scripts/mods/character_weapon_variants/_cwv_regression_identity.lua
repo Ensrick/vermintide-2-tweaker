@@ -1677,6 +1677,10 @@ _rt_register("issue398_cross_access_audio_uses_networked_receiver_event", functi
     if type(_om._cross_access_target_event) ~= "function" then
         return "cross-access receiver-event resolver missing"
     end
+    if type(_om.remote_audio_dispatch) ~= "table"
+            or type(_om.remote_audio_dispatch.invoke) ~= "function" then
+        return "cross-access pre-RPC dispatch boundary missing"
+    end
 
     local checked = 0
     local anims = rawget(_G, "NetworkLookup")
@@ -1702,6 +1706,51 @@ _rt_register("issue398_cross_access_audio_uses_networked_receiver_event", functi
     end
     if _om._cross_access_target_event("es_1h_sword", "es_mercenary", "attack_swing_left") ~= nil then
         return "network remap leaked to unrelated/native weapon"
+    end
+
+    -- Execute the SAME boundary as the live hook with a spy vanilla function.
+    -- This fails if the resolver remains correct but the wrapper stops handing
+    -- its receiver-native event to WeaponUnitExtension._play_3p_anim.
+    local owner = {}
+    local remote = {}
+    local delegated = {}
+    local function vanilla_spy(_, event_3p, event, got_owner, looping, scale)
+        delegated[#delegated + 1] = {
+            event_3p = event_3p, event = event, owner = got_owner,
+            looping = looping, scale = scale,
+        }
+        return "delegated", event_3p
+    end
+    local function resolve(source)
+        return _om._cross_access_target_event(
+            "dr_dual_wield_axes", "es_mercenary", source)
+    end
+    local function lookup(target)
+        return target == "attack_swing_heavy_right_diagonal" and 398 or nil
+    end
+
+    local status, passed = _om.remote_audio_dispatch.invoke(vanilla_spy, {},
+        "attack_swing_heavy_right", "attack_one", owner, true, 1.25,
+        owner, nil, resolve, lookup)
+    if status ~= "delegated" or passed ~= "attack_swing_heavy_right_diagonal"
+            or #delegated ~= 1 or delegated[1].owner ~= owner
+            or delegated[1].event ~= "attack_one" or delegated[1].looping ~= true
+            or delegated[1].scale ~= 1.25 then
+        return "pre-RPC dispatch did not delegate the receiver-native event and original call context"
+    end
+
+    _om.remote_audio_dispatch.invoke(vanilla_spy, {},
+        "attack_swing_heavy_right", "attack_one", remote, false, 1,
+        owner, nil, resolve, lookup)
+    if #delegated ~= 2 or delegated[2].event_3p ~= "attack_swing_heavy_right" then
+        return "pre-RPC dispatch changed a remote/native owner event"
+    end
+
+    _om.remote_audio_dispatch.invoke(vanilla_spy, {},
+        "attack_swing_heavy_right", "attack_one", owner, false, 1,
+        owner, nil, resolve, function() return nil end)
+    if #delegated ~= 3 or delegated[3].event_3p ~= "attack_swing_heavy_right" then
+        return "pre-RPC dispatch did not fail closed when the target lookup was absent"
     end
 end)
 
