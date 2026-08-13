@@ -22,18 +22,35 @@ return function(H, repo_root)
             disabled = options.disabled == true,
             dead = options.dead == true,
             knocked_down = options.knocked_down == true,
+            wounded_mode = options.wounded_mode or "normal",
+            disabled_mode = options.disabled_mode or "normal",
+            health_alive_mode = options.health_alive_mode or "normal",
         }
+        local function accessor(value_name, mode_name)
+            return function()
+                local mode = state[mode_name]
+                if mode == "throw" then error(mode_name .. " unavailable") end
+                if mode == "nonboolean" then return "unknown" end
+                return state[value_name]
+            end
+        end
         local health = {
             current_permanent_health = function() return state.current end,
             get_max_health = function() return state.maximum end,
-            is_alive = function() return state.health_alive end,
         }
+        if not options.health_alive_method_missing then
+            health.is_alive = accessor("health_alive", "health_alive_mode")
+        end
         local status = {
-            is_wounded = function() return state.wounded end,
-            is_disabled = function() return state.disabled end,
             is_dead = function() return state.dead end,
             is_knocked_down = function() return state.knocked_down end,
         }
+        if not options.wounded_method_missing then
+            status.is_wounded = accessor("wounded", "wounded_mode")
+        end
+        if not options.disabled_method_missing then
+            status.is_disabled = accessor("disabled", "disabled_mode")
+        end
         local mod = {
             dofile = function(_, path)
                 H.equal(path, "scripts/mods/general_tweaker_dev/_gt_network_readiness")
@@ -127,6 +144,7 @@ return function(H, repo_root)
             echoes = echoes,
             debug_calls = debug_calls,
             state = state,
+            reset = mod._gt_dev_heal_reset,
             restore = restore,
         }
     end
@@ -160,6 +178,19 @@ return function(H, repo_root)
         rt.restore()
     end)
 
+    H.test("GT #1143 confirms against the observed post-heal maximum", function()
+        local rt = load_runtime({ apply_immediately = false })
+        rt.commands.heal()
+        rt.state.maximum = 80
+        rt.state.current = 80
+        rt.state.wounded = false
+        rt.updates.gt1143_dev_heal_postcondition(0.1)
+        H.equal(#rt.prints, 1)
+        H.truthy(rt.prints[1]:find("result=ok", 1, true))
+        H.truthy(rt.prints[1]:find("after=80.00 max=80.00", 1, true))
+        rt.restore()
+    end)
+
     H.test("GT #1143 refuses missing or disabled local heroes before native healing", function()
         local missing = load_runtime({ no_player = true })
         missing.commands.heal()
@@ -175,6 +206,64 @@ return function(H, repo_root)
         disabled.restore()
     end)
 
+    H.test("GT #1143 fails closed when disabled state is unavailable", function()
+        local cases = {
+            { disabled_method_missing = true },
+            { disabled_mode = "throw" },
+            { disabled_mode = "nonboolean" },
+        }
+        for _, options in ipairs(cases) do
+            local rt = load_runtime(options)
+            rt.commands.heal()
+            H.equal(#rt.debug_calls, 0)
+            H.equal(#rt.prints, 1)
+            H.truthy(rt.prints[1]:find("status_state_unavailable", 1, true))
+            rt.restore()
+        end
+    end)
+
+    H.test("GT #1143 fails closed when health alive state is unavailable", function()
+        local cases = {
+            { health_alive_method_missing = true },
+            { health_alive_mode = "throw" },
+            { health_alive_mode = "nonboolean" },
+        }
+        for _, options in ipairs(cases) do
+            local rt = load_runtime(options)
+            rt.commands.heal()
+            H.equal(#rt.debug_calls, 0)
+            H.truthy(rt.prints[1]:find("health_alive_state_unavailable", 1, true))
+            rt.restore()
+        end
+    end)
+
+    H.test("GT #1143 never coerces unavailable wound state to cleared", function()
+        local cases = {
+            { wounded_method_missing = true },
+            { wounded_mode = "throw" },
+            { wounded_mode = "nonboolean" },
+        }
+        for _, options in ipairs(cases) do
+            local rt = load_runtime(options)
+            rt.commands.heal()
+            H.equal(#rt.debug_calls, 0)
+            H.equal(#rt.prints, 1)
+            H.truthy(rt.prints[1]:find("wound_state_unavailable", 1, true))
+            H.truthy(rt.prints[1]:find("wounded_after=unknown", 1, true))
+            rt.restore()
+        end
+
+        local post = load_runtime({ apply_immediately = false })
+        post.commands.heal()
+        post.state.current = post.state.maximum
+        post.state.wounded_mode = "nonboolean"
+        post.updates.gt1143_dev_heal_postcondition(2)
+        H.truthy(post.prints[1]:find("result=timeout", 1, true))
+        H.truthy(post.prints[1]:find("wounded_after=unknown", 1, true))
+        H.equal(post.prints[1]:find("result=ok", 1, true), nil)
+        post.restore()
+    end)
+
     H.test("GT #1143 times out without emitting a false success receipt", function()
         local rt = load_runtime({ apply_immediately = false })
         rt.commands.heal()
@@ -183,6 +272,51 @@ return function(H, repo_root)
         H.truthy(rt.prints[1]:find("result=timeout", 1, true))
         H.equal(rt.prints[1]:find("result=ok", 1, true), nil)
         rt.restore()
+    end)
+
+    H.test("GT #1143 emits receipts beyond the old session-wide cap", function()
+        local rt = load_runtime({})
+        for _ = 1, 12 do
+            rt.state.current = 25
+            rt.state.wounded = true
+            rt.commands.heal()
+            rt.updates.gt1143_dev_heal_postcondition(0.1)
+        end
+        H.equal(#rt.prints, 12)
+        H.truthy(rt.prints[12]:find("result=ok", 1, true))
+        H.truthy(rt.prints[12]:find("record=12", 1, true))
+        rt.restore()
+    end)
+
+    H.test("GT #1143 lifecycle reset terminates and releases a pending request", function()
+        local rt = load_runtime({ apply_immediately = false })
+        rt.commands.heal()
+        rt.reset("game_state_changed")
+        H.equal(#rt.prints, 1)
+        H.truthy(rt.prints[1]:find("result=error", 1, true))
+        H.truthy(rt.prints[1]:find("request_cancelled_game_state_changed", 1, true))
+        rt.reset("game_state_changed")
+        H.equal(#rt.prints, 1)
+
+        rt.commands.heal()
+        rt.state.current = rt.state.maximum
+        rt.state.wounded = false
+        rt.updates.gt1143_dev_heal_postcondition(0.1)
+        H.equal(#rt.prints, 2)
+        H.truthy(rt.prints[2]:find("result=ok", 1, true))
+        rt.restore()
+    end)
+
+    H.test("GT #1143 central lifecycle dispatchers cancel pending confirmation", function()
+        local path = repo_root
+            .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua"
+        local handle = assert(io.open(path, "rb"))
+        local source = handle:read("*a")
+        handle:close()
+        H.truthy(source:find(
+            'mod._gt_dev_heal_reset("game_state_changed")', 1, true))
+        H.truthy(source:find(
+            'mod._gt_dev_heal_reset("mod_disabled")', 1, true))
     end)
 
     H.test("GT #1143 runtime check fails closed when the native owner drifts", function()

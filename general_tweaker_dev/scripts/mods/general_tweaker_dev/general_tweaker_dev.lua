@@ -497,6 +497,7 @@ mod.on_game_state_changed = function(status, state_name)
     -- time) so a stale noclip setting from the previous mission doesn't
     -- re-arm before the player has a body to fly.
     if mod._gt_noclip_reset_active then mod._gt_noclip_reset_active() end
+    if mod._gt_dev_heal_reset then mod._gt_dev_heal_reset("game_state_changed") end
     if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
     if mod._gt_host_lag_comp_reset then mod._gt_host_lag_comp_reset() end
     -- AI takeover is a per-run intent — the saved state on the host doesn't
@@ -701,6 +702,7 @@ mod.on_disabled = function()
     -- Replicant Bots port: restore the snapshotted vanilla bot reaction-time
     -- table (the source mod's on_disabled was author-flagged broken).
     if mod._gt_restore_fast_reactions then mod._gt_restore_fast_reactions() end
+    if mod._gt_dev_heal_reset then mod._gt_dev_heal_reset("mod_disabled") end
     -- Unlike the older broad global mutations documented below, #304 owns a
     -- bounded per-extension snapshot and can unwind immediately.
     if mod._gt_restore_keep_dummy_collision then mod._gt_restore_keep_dummy_collision() end

@@ -12,6 +12,13 @@
 - Added a two-second bounded postcondition observer. `[gt:1143] ... result=ok`
   is printed only after full permanent health and cleared wound are visible;
   an unobserved request reports `timeout` or `error` instead of a false pass.
+- Health, wound, and disabled-state reads fail closed. Receipts use the observed
+  post-heal maximum, preserve unavailable state as `unknown`, and never stop
+  reporting later explicit commands because of a session-wide log cap.
+- Game-state changes and mod disable cancel an outstanding confirmation so a
+  stale request cannot block `/heal` after a transition.
+- Native healing modifiers, immunity, or shared-health behavior can prevent the
+  postcondition; in those non-ordinary states the command honestly times out.
 - Verification is pending an in-game host/client run; offline coverage executes
   the production command and update consumer across success, refusal, timeout,
   and runtime-check cases.

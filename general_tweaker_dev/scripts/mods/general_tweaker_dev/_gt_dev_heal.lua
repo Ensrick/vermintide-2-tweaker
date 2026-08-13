@@ -7,7 +7,6 @@ local NETWORK_READINESS = mod:dofile(
 -- This module never writes health or wound state directly, and it reports
 -- success only after the authoritative postcondition is visible locally.
 local TIMEOUT_SECONDS = 2
-local RECEIPT_LIMIT = 8
 local HEALTH_EPSILON = 0.01
 
 local pending
@@ -46,53 +45,65 @@ local function _unit_alive(unit)
     return ok and alive == true
 end
 
-local function _is_disabled(status)
+local function _disabled_state(status)
     local disabled, has_disabled = _call(status, "is_disabled")
-    local dead, has_dead = _call(status, "is_dead")
-    local knocked_down, has_knocked_down = _call(status, "is_knocked_down")
-    return (has_disabled and disabled == true)
-        or (has_dead and dead == true)
-        or (has_knocked_down and knocked_down == true)
+    if not has_disabled or type(disabled) ~= "boolean" then
+        return nil, false
+    end
+    return disabled, true
 end
 
 local function _snapshot(health, status)
     local current, current_ok = _call(health, "current_permanent_health")
     local maximum, maximum_ok = _call(health, "get_max_health")
     local wounded, wounded_ok = _call(status, "is_wounded")
-    if not current_ok or type(current) ~= "number"
-            or not maximum_ok or type(maximum) ~= "number"
-            or maximum <= 0 then
-        return nil
+    local snapshot = {}
+    if current_ok and type(current) == "number" then
+        snapshot.current = current
     end
-    return {
-        current = current,
-        maximum = maximum,
-        wounded = wounded_ok and wounded == true or false,
-    }
+    if maximum_ok and type(maximum) == "number" and maximum > 0 then
+        snapshot.maximum = maximum
+    end
+    if wounded_ok and type(wounded) == "boolean" then
+        snapshot.wounded = wounded
+    end
+    if snapshot.current == nil or snapshot.maximum == nil then
+        return snapshot, "health_state_unavailable"
+    end
+    if snapshot.wounded == nil then
+        return snapshot, "wound_state_unavailable"
+    end
+    return snapshot
 end
 
-local function _emit(result, record, after, wounded_after, elapsed, reason)
-    if receipt_count >= RECEIPT_LIMIT then return end
+local function _number(value)
+    return type(value) == "number" and string.format("%.2f", value) or "unknown"
+end
+
+local function _boolean(value)
+    return type(value) == "boolean" and tostring(value) or "unknown"
+end
+
+local function _emit(result, record, after, elapsed, reason)
     receipt_count = receipt_count + 1
     printf(
-        "[gt:1143] heal result=%s route=%s before=%.2f after=%.2f max=%.2f "
-            .. "wounded_before=%s wounded_after=%s elapsed=%.3f reason=%s record=%d/%d",
+        "[gt:1143] heal result=%s route=%s before=%s after=%s max=%s "
+            .. "wounded_before=%s wounded_after=%s elapsed=%.3f reason=%s record=%d",
         result,
         record and record.route or _route(),
-        record and record.before or -1,
-        after or -1,
-        record and record.maximum or -1,
-        tostring(record and record.wounded_before or false),
-        tostring(wounded_after == true),
+        _number(record and record.before),
+        _number(after and after.current),
+        _number(after and after.maximum),
+        _boolean(record and record.wounded_before),
+        _boolean(after and after.wounded),
         elapsed or 0,
         reason or "none",
-        receipt_count,
-        RECEIPT_LIMIT
+        receipt_count
     )
 end
 
 local function _reject(reason)
-    _emit("error", nil, nil, nil, 0, reason)
+    _emit("error", nil, nil, 0, reason)
     mod:echo("Heal unavailable: %s.", (reason:gsub("_", " ")))
 end
 
@@ -111,16 +122,28 @@ local function _request()
 
     local health = _extension(unit, "health_system")
     local status = _extension(unit, "status_system")
+    if not health or not status then
+        _reject("local_hero_extensions_unavailable")
+        return
+    end
     local health_alive, has_health_alive = _call(health, "is_alive")
-    if not health or not status or (has_health_alive and health_alive ~= true)
-            or _is_disabled(status) then
+    if not has_health_alive or type(health_alive) ~= "boolean" then
+        _reject("health_alive_state_unavailable")
+        return
+    end
+    local disabled, has_disabled = _disabled_state(status)
+    if not has_disabled then
+        _reject("status_state_unavailable")
+        return
+    end
+    if not health_alive or disabled then
         _reject("local_hero_disabled_or_dead")
         return
     end
 
-    local before = _snapshot(health, status)
-    if not before then
-        _reject("health_state_unavailable")
+    local before, snapshot_error = _snapshot(health, status)
+    if snapshot_error then
+        _reject(snapshot_error)
         return
     end
 
@@ -143,8 +166,7 @@ local function _request()
     local ok = pcall(native, unit, before.maximum)
     if not ok then
         local after = _snapshot(health, status)
-        _emit("error", record, after and after.current, after and after.wounded,
-            0, "native_debug_heal_error")
+        _emit("error", record, after, 0, "native_debug_heal_error")
         mod:echo("Heal failed before the game accepted the request.")
         return
     end
@@ -160,30 +182,42 @@ local function _update(dt)
     record.elapsed = record.elapsed + (type(dt) == "number" and dt or 0)
     if not _unit_alive(record.unit) then
         pending = nil
-        _emit("error", record, nil, nil, record.elapsed, "local_hero_no_longer_alive")
+        _emit("error", record, nil, record.elapsed, "local_hero_no_longer_alive")
         mod:echo("Heal failed because the local hero is no longer alive.")
         return
     end
 
-    local after = _snapshot(record.health, record.status)
-    if after and after.current >= record.maximum - HEALTH_EPSILON
-            and not after.wounded then
+    local after, snapshot_error = _snapshot(record.health, record.status)
+    if not snapshot_error
+            and after.current >= after.maximum - HEALTH_EPSILON
+            and after.wounded == false then
         pending = nil
-        _emit("ok", record, after.current, after.wounded, record.elapsed)
+        _emit("ok", record, after, record.elapsed)
         mod:echo("Healed to full permanent health.")
         return
     end
 
     if record.elapsed >= TIMEOUT_SECONDS then
         pending = nil
-        _emit("timeout", record, after and after.current,
-            after and after.wounded, record.elapsed, "postcondition_not_observed")
+        _emit("timeout", record, after, record.elapsed,
+            snapshot_error or "postcondition_not_observed")
         mod:echo("Heal was requested, but full health was not confirmed.")
     end
 end
 
+local function _reset(reason)
+    local record = pending
+    if not record then return end
+    pending = nil
+    local after = _snapshot(record.health, record.status)
+    _emit("error", record, after, record.elapsed,
+        "request_cancelled_" .. tostring(reason or "lifecycle_reset"))
+    mod:echo("Pending heal confirmation was cancelled by a lifecycle change.")
+end
+
 mod._gt_dev_heal_request = _request
 mod._gt_dev_heal_update = _update
+mod._gt_dev_heal_reset = _reset
 mod._gt_dev_heal_contract = {
     marker = "gt-1143-native-debug-heal",
     native_debug_heal = function()
@@ -210,6 +244,7 @@ mod._gt_rt_register("issue1143_dev_heal_command", function()
     end
     if type(mod._gt_dev_heal_request) ~= "function"
             or type(mod._gt_dev_heal_update) ~= "function"
+            or type(mod._gt_dev_heal_reset) ~= "function"
             or not contract.command_registered()
             or not contract.update_registered() then
         return "developer heal command/update wiring missing"

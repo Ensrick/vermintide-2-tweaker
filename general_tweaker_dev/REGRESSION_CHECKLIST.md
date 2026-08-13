@@ -17,6 +17,13 @@ Last updated: 2026-08-13.
 - [ ] The console prints one bounded `[gt:1143] heal result=ok` line only after
   both postconditions are visible. A rejected or unobserved request prints
   `error`/`timeout`, never `ok`.
+- [ ] Missing, throwing, or non-boolean health/status accessors fail closed;
+  unavailable wound state is printed as `unknown`, never coerced to cleared.
+- [ ] A max-health change during confirmation is compared against the observed
+  post-heal maximum. Mod disable or a game-state change cancels the pending
+  request, and later explicit commands still emit receipts without a lifetime cap.
+- [ ] Test under ordinary healing conditions. Native immunity, modifiers, or a
+  shared health pool may prevent full health and should produce an honest timeout.
 - [ ] `/gt_regression_test` passes `issue1143_dev_heal_command`.
 - Detection: offline `test_gt_dev_heal.lua`; native seams documented in
   `ENGINE_SURFACE.md` Surface 4c.
