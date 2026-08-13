@@ -61,6 +61,11 @@ same flag (`_gut_native_loadouts.lua:193-196`).
    which REPLACES gear with `character_starting_gear` and writes it back to read-only data
    (:3277-3344). This is the engine mechanism that turned leaked modded ids into the
    "Blacksmith greatsword" on official (issue #402 symptom).
+   In GUT Dev v0.2.333-dev, `_gut_official_loadout_boot_guard.lua` installs before the
+   remainder of the GUI entry point. In a modded Adventure session with an existing official
+   snapshot it imports rows with an empty verification set and suppresses both mutating
+   CloudScript request/response pairs. A genuinely absent official snapshot gets one vanilla
+   bootstrap; official and Versus sessions remain untouched.
 7. `mirror:ready()` = `_inventory_items and _num_items_to_load == 0` (:1789-1791). Only then
    does the manager create the interfaces (backend_manager_playfab.lua:404-421). Hence every
    mod hook on interface INSTANCES must install deferred (gut `_install_bu_capture`
@@ -224,6 +229,15 @@ work around (repo CLAUDE.md, Mod Directory).
   never sit in OFFICIAL characters_data (issue #402), and modded-side stores must never
   destructively sanitize "unresolvable right now" ids (gut burns 2026-07-02 #1/#2,
   `_gut_native_loadouts.lua:62-77`).
+- **The ordinary write chokepoint is not the boot chokepoint**: `_set_inital_career_data`
+  writes `_career_data` directly, `fix_career_data_request_cb` replaces the complete local
+  snapshot and writes it to read-only data, and `verify_career_loadouts_cb` writes returned
+  `characters_data` directly (base :1579-1659/:3292-3344; Adventure :90-119). Own their two
+  request methods too, because callback-only suppression cannot undo CloudScript mutation.
+- **`script_data["eac-untrusted"]` is not a stable nested-call realm authority**: CIM briefly
+  clears it to pass native customization UI checks. BackendManagerPlayFab records the actual
+  session realm once in `_metadata.realm` (:61-70); use that value first and fall back to the
+  script flag only before the manager exists.
 - **`_check_career_data` on a career missing from `_career_data` = deliberate crash dump**
   ("You will crash now", playfab_mirror_base.lua:3551-3598). Never remove career tables from
   the live mirror; gut serves reads instead of mutating.
@@ -258,8 +272,10 @@ work around (repo CLAUDE.md, Mod Directory).
 
 ### 5.1 gut native loadouts (`_gut_native_loadouts.lua`)
 
-The mirror-hook architecture is engine-correct (sole choke points verified in 2.3/2.5; the rt
-check pins all five write hooks, :1209-1224). Remaining friction:
+The ordinary mirror-write architecture is engine-correct, but it is only half the isolation
+surface. GUT Dev v0.2.333-dev adds an early boot owner and the runtime contract now pins ten
+concrete Adventure seams: five ordinary write methods and five boot request/writer methods.
+Remaining friction:
 
 1. **FIXED (gut_dev v0.2.217-dev, shipped 2026-07-12): official fallback no longer passes a
    STORE-space index to the official read.** Both `get_character_data` fallback sites route
@@ -268,13 +284,20 @@ check pins all five write hooks, :1209-1224). Remaining friction:
    slots only, last-resorts to `get_default_loadouts` row 1 (:1955-1966) before serving nil
    with a loud printf. rt check `native_loadouts_fallback_index_translation` pins the
    translation on a synthetic store row.
-2. **Career-nil `set_career_read_only_data` passes through in modded** (:711-714). That is
+2. **FIXED (gut_dev v0.2.333-dev): modded boot cannot repair official rows.** The early
+   `_gut_official_loadout_boot_guard` imports an existing official snapshot without checking
+   it against mod-mutated item registries, blocks `fixCareerData`, and blocks
+   `verifyCareerLoadouts` when a snapshot already exists. It consumes an already-in-flight
+   callback without applying its returned rows. A first-use account with no official snapshot
+   is allowed one paired vanilla bootstrap so the backend can initialize normally. The guard
+   reads `Managers.backend._metadata.realm` before the mutable EAC flag and is Adventure-only.
+3. **Career-nil `set_career_read_only_data` passes through in modded** (:711-714). That is
    the hero-attributes `career`/`bot_career` write (backend_interface_hero_attributes_playfab.lua:100-101),
    which lands in `_characters_data`, diffs dirty (playfab_mirror_base.lua:3435-3441) and
    pushes via the un-gated `updateHeroAttributes` (2.3). Values are benign (career selection),
    but if #402's isolation is meant to be absolute, capture these too (store
    `selected career` modded-side and no-op vanilla); at minimum document the exception.
-3. **Post-scrub commit is deterministic.** After at least one verified replacement is
+4. **Post-scrub commit is deterministic.** After at least one verified replacement is
    written, `/scrub_official_loadouts apply` calls `Managers.backend:commit(true, cb)`
    exactly once and reports both the returned commit id and callback status. Only the
    engine's `success` status is accepted as committed; `commit_error`, a missing mirror,
@@ -282,7 +305,7 @@ check pins all five write hooks, :1209-1224). Remaining friction:
    than false cloud success (`backend_manager_playfab.lua:933-937`;
    `playfab_mirror_base.lua:1842-1868, :2703-2753`). Report-only, clean, and zero-repair
    runs never request a commit.
-4. **Bot designation store vs engine local store**: gut skips the `PlayerData.loadout_selection`
+5. **Bot designation store vs engine local store**: gut skips the `PlayerData.loadout_selection`
    write and keeps `bot_index` modded-side (:765-794) - correct, since PlayerData is
    realm-shared. Keep the `refresh_bot_loadouts` overlay hook as the ONLY bot read path;
    vanilla also validates `has_loadout(career, bot_index)` (backend_interface_item_playfab.lua:143-146),

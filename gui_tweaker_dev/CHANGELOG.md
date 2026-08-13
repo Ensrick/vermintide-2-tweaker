@@ -1,5 +1,19 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.333-dev (2026-08-13) -- contain official loadouts during modded boot (#402) [verify-fix] [untested]
+
+- Added an early owner for all five destructive Adventure boot seams: official snapshot
+  verification, both `fixCareerData` request/response boundaries, and both
+  `verifyCareerLoadouts` request/response boundaries. Modded boot still imports the official
+  snapshot as a seed, but cannot classify it through mod-mutated item tables, request a repair,
+  or apply returned starting gear to `characters_data`.
+- Realm gating now prefers the backend manager's immutable session metadata over the mutable
+  `script_data["eac-untrusted"]` compatibility flag. CIM's brief UI-only flag override therefore
+  cannot make GUI Tweaker fall through to an official write.
+- `[gut:402]` receipts identify every suppressed boot boundary. Lua 5.1 and runtime checks cover
+  official/modded/Versus isolation, callback counters, continuation choice, early install order,
+  and the complete ten-seam ordinary-write plus boot contract.
+
 ## 0.2.332-dev (2026-08-13) -- award Damage Taken to the actual minimum (#1151) [verify-fix] [untested]
 
 - Vanilla initializes the end-score candidate at zero, then minimizes Damage

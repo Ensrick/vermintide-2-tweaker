@@ -1546,7 +1546,8 @@ end
 
 ## 36. Self-heal / seed-repair writes across the modded-official realm boundary (modded ids leak into the EAC-trusted store)
 
-**First seen:** 2026-07-06 (gut_dev #402; prevention proven + repair shipped v0.2.215-dev)
+**First seen:** 2026-07-06 (gut_dev #402; ordinary writes contained in v0.2.215-dev;
+boot-time containment completed in v0.2.333-dev)
 **Canonical Issue:** [#402](https://github.com/Ensrick/vermintide-2-tweaker/issues/402); regression window #375/#379/#387
 **Lives in:** any mod that mirrors an official/EAC-trusted backend into a separate modded store and has a repair/seed/self-heal path that reads or refills from official (gut native-loadouts; any future modded-progression mirror).
 
@@ -1555,17 +1556,19 @@ end
 - One path is spared (a separate index, e.g. gut's bot loadout), which misleads triage toward the wrong subsystem.
 
 ### Diagnosis pattern
-1. Every runtime write that can diverge official data from its mirror must funnel through ONE chokepoint (gut: `PlayFabMirrorBase.set_character_data`, which writes `_career_data` before delegating to `set_career_read_only_data`). Audit that the mod no-ops that chokepoint in the official realm.
+1. Separate **ordinary equip writes** from **boot-time replacement writers**. Ordinary loadout changes funnel through `set_character_data` and the adjacent selection/add/delete methods. Signin does not: `_set_inital_career_data` clears and rebuilds rows directly, `fix_career_data_request_cb` replaces them with starting gear, and `verify_career_loadouts_cb` writes returned `characters_data` directly. The two request methods must also be owned; suppressing only a callback is too late for a mutating CloudScript call.
 2. `slot_frame` (and other cosmetic slots) are ORDINARY loadout slots via `set_loadout_item -> set_character_data`, NOT hero attributes — a weapon-only guard misses them. Cover frame + cosmetic slots.
-3. The introduction is usually a NEW seed/repair/self-heal feature that reads/writes across the boundary; the corruption is residual pre-isolation data plus any un-gated write, not necessarily a live new write.
+3. Prefer the backend manager's session-stable `_metadata.realm` over mutable compatibility flags. CIM temporarily clears `script_data["eac-untrusted"]` while invoking native customization UI; a realm guard based only on that flag can fall through to official behavior inside the window.
+4. The introduction is usually a NEW seed/repair/self-heal feature that reads/writes across the boundary; the corruption is residual pre-isolation data plus any un-gated write, not necessarily a live new write.
 
 ### Fix template
-- Gate EVERY persist/set-through on `_in_modded_realm()`; block the write at the chokepoint in official and route to the modded store.
+- Gate every ordinary persist/set-through in the modded realm; capture it in the modded store and never mutate official `_career_data` / `characters_data`.
+- Install the boot owner at the beginning of mod evaluation. Import the official snapshot with an empty verification set, suppress Adventure `fixCareerData` and `verifyCareerLoadouts` requests/responses when a snapshot already exists, and permit exactly one vanilla verification bootstrap only when no official snapshot exists. Keep Versus and official sessions on vanilla behavior.
 - Ship an OFFICIAL-realm repair command (report-only default; apply replaces only already-broken slots with an owned resolvable id; refuses in the modded realm) covering weapons AND frame/cosmetic slots.
-- Regression: assert all official-write chokepoint methods stay hooked (`native_loadouts_official_write_chokepoint`) so a dropped hook re-opens the leak -> gate fails.
+- Regression: assert all five ordinary write seams plus all five boot request/writer seams stay hooked (`native_loadouts_official_write_chokepoint`) so a dropped boundary fails the gate.
 
 ### Related Issues / commits
-- gut_dev v0.2.215-dev (#402). Related: class 31 (wire safety — same "modded value must not reach a context that can't handle it" root, persistence axis vs wire axis); #174 (the original isolation this regression breached).
+- gut_dev v0.2.215-dev (ordinary writes) and v0.2.333-dev (boot request/writer containment), #402. Related: class 31 (wire safety — same "modded value must not reach a context that can't handle it" root, persistence axis vs wire axis); #174 (the original isolation this regression breached).
 
 ### Read-only mod-owned instance exception (#287)
 `Use non-modded loadouts` must not turn a receiver-local mod-owned equip into a snap-back loop. Preserve cosmetics and exact mod-owned backend instances in a modded-only overlay while leaving the official row untouched; do not classify by slot alone. For CWV the closed identity is `^cwv_.+_%d%d%d$`, covering native and CIM-crafted variant instances without accepting arbitrary official IDs. Reads and writes must share the same predicate, including whole-loadout preview reads. Choosing an ordinary weapon clears the mod-owned overlay value and falls through to official rather than persisting the attempted ordinary ID. Regression-test modded preservation and `MODE_OFF` official inertness together.

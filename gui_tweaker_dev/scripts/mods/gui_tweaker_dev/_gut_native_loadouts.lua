@@ -55,6 +55,8 @@ local WTTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_wt_loadout_tra
 local SelectedLoadoutTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_selected_loadout_trace_core")
 local BackendCommit = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_backend_commit")
 local ExitSnapshotCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_exit_snapshot_core")
+local BootGuard = mod._gut_official_loadout_boot_guard or
+    mod:dofile("scripts/mods/gui_tweaker_dev/_gut_official_loadout_boot_guard")
 
 local MARKER = "native_loadouts_v1"
 
@@ -273,8 +275,7 @@ end
 -- Realm detection + gate. Failsafe: any uncertainty => inert (official behavior).
 -- ------------------------------------------------------------------
 local function _in_modded_realm()
-    local sd = rawget(_G, "script_data")
-    return (sd and sd["eac-untrusted"]) and true or false
+    return BootGuard.in_modded_realm()
 end
 
 -- Tri-mode gate (2026-07-02 reorg: the store itself is INTRINSIC - no enable toggle):
@@ -1656,6 +1657,9 @@ M.HOOK_TARGETS = {
     { "HeroWindowLoadoutSelectionConsole", "_populate_context_menu_loadout" },  -- issue #372 preview crash guard
     { "BackendUtils", "set_loadout_item" },  -- TABLE-form, installed deferred (_install_bu_capture)
 }
+for _, target in ipairs(BootGuard.HOOK_TARGETS or {}) do
+    M.HOOK_TARGETS[#M.HOOK_TARGETS + 1] = target
+end
 
 M.rt_checks = {
     { name = "issue954_bot_loadout_snapshot", fn = function()
@@ -1820,19 +1824,22 @@ M.rt_checks = {
         end
     end },
     { name = "native_loadouts_official_write_chokepoint", fn = function()
-        -- issue #402: the SOLE runtime write that diverges official _career_data from its mirror
-        -- (and thus reaches the PlayFab cloud) is PlayFabMirrorBase.set_character_data -- it writes
-        -- _career_data at playfab_mirror_base.lua:1933 BEFORE delegating to set_career_read_only_data
-        -- at :1941, and both weapons AND the portrait FRAME (slot_frame) persist through it. Blocking
-        -- these five in modded is the COMPLETE isolation guarantee, so each MUST stay a hooked target
-        -- (a dropped hook would re-open the leak). Audit source: the two 2026-07-06 investigations.
+        -- issue #402: ordinary equips funnel through the five write methods below, but boot
+        -- also owns three direct official-data writers plus the two requests feeding them.
+        -- The complete containment contract is therefore all ten concrete Adventure seams.
         local want = { set_character_data = false, set_career_read_only_data = false,
-                       set_loadout_index = false, add_loadout = false, delete_loadout = false }
+                       set_loadout_index = false, add_loadout = false, delete_loadout = false,
+                       _set_inital_career_data = false, _fix_career_data = false,
+                       fix_career_data_request_cb = false, _verify_career_loadouts = false,
+                       verify_career_loadouts_cb = false }
         for _, t in ipairs(M.HOOK_TARGETS) do
             if t[1] == "PlayFabMirrorAdventure" and want[t[2]] ~= nil then want[t[2]] = true end
         end
         for method, present in pairs(want) do
-            if not present then return "official-write choke point not hooked: " .. method end
+            if not present then return "official write/boot boundary not hooked: " .. method end
+        end
+        if type(BootGuard.in_modded_realm) ~= "function" or type(BootGuard.active) ~= "function" then
+            return "official boot guard realm owner missing"
         end
     end },
     { name = "native_loadouts_hook_targets_unique", fn = function()
