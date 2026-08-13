@@ -9,23 +9,26 @@ names each engine seam, cites the vanilla behavior, and links out. Decompile
 paths are relative to `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`;
 `mp` line numbers are `modded_progression.lua` unless noted. `§N` =
 a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue. Grep-verified
-2026-07-13 against the decompile.
+2026-08-13 against the decompile.
 
-`mp` re-enables vanilla progression (XP, loot, currency, Okri's Challenges,
-Lohner's, keep crafting) in the modded realm, storing all state in VMF settings
-and never writing to the real PlayFab account. Its core architectural insight
+`mp` re-enables selected vanilla progression surfaces while the complete local
+mission-loot system remains unbuilt. Its target architecture covers XP, loot,
+currency, Okri's Challenges, Lohner's, and keep crafting in the modded realm,
+storing all owned state in VMF settings and never writing to the real PlayFab
+account. Its core architectural insight
 (`PLAN.md` "Core architectural insight") is that `script_data["eac-untrusted"]`
 is NOT one master gate: the PlayFab commit-suppression sites keep the real
 account safe and must stay live, while a separate set of UI sites merely grey out
 buttons and skip reward popups. `mp` therefore flips the flag to nil only inside
 a bracketed window around each vanilla UI/progression call, restores it on every
-exit path, and leaves the commit-suppression gate untouched. As of v0.2.24-dev,
+exit path, and leaves the commit-suppression gate untouched. As of v0.2.35-dev,
 simulated daily claims and Silver Shilling Emporium purchases have fully local
-backend interceptions; the remaining routes in `PLAN.md` are not yet wired.
+backend interceptions, and issue #607 has bounded layer diagnostics; the
+remaining routes in `PLAN.md` are not yet wired.
 
 ## Hook table
 
-29 registration sites, all `mod:hook` (full wrapper). `[hook]` =
+45 registration sites, all `mod:hook` (full wrapper). `[hook]` =
 full wrapper (can rewrite args/returns). Eight route through the shared
 `_with_eac_off` wrapper, one (`IngameUI.not_in_modded`) is a flat return-true
 override, and the remainder own local progression/read/claim boundaries. There are no
@@ -50,6 +53,33 @@ out below and shared by all eight of its callers.
 | `StoreLoginRewardsPopup._create_ui_elements` / `_claim_rewards` + `BackendInterfacePeddlerPlayFab.claim_login_rewards` [hooks] | Popup construction disables the button in modded play; `_claim_rewards` otherwise enters claiming state and calls the peddler method; that method enqueues authenticated `claimStoreRewards` [src: `store_login_rewards_popup.lua:41-59,181-216`; `backend_interface_peddler_playfab.lua:811-828`] | #589 fail-closed boundary: retain/reinforce the disabled UI, intercept direct activation, and reject every modded backend caller before enqueue; official realm is unchanged | Local mixed item/currency transaction is not armed; two runtime checks cover UI + request policy, and textual QA locks both hooks |
 | `HeroWindowItemCustomization._enable_craft_button` [hook] `:449` / `_update_state_craft_button` [hook] `:450` | Vanilla keep crafting bench: `_enable_craft_button` flips the `enable` arg false in modded (`:1878`); `_update_state_craft_button` sets the button-hotspot disable flag (`:1928`) [src: `scripts/ui/views/hero_view/windows/hero_window_item_customization.lua` per PLAN.md] | Re-enable the keep bench craft button so vanilla-cost crafting works (`:449`) | `_with_eac_off`; cim owns the Athanor sandbox, mp owns the keep bench (`docs/CROSS_MOD_ARCHITECTURE.md` Mod 4) |
 | `IngameUI.not_in_modded` [hook] `:454` | Returns `not script_data["eac-untrusted"]` - a generic "is this a trusted UI surface" query [src: `scripts/ui/views/ingame_ui.lua:381-382` verified] | Force-return true so generic UI surfaces treat the session as trusted (`:454`) | The ONLY hook that is a flat override, not an `_with_eac_off` bracket - it does not touch the global flag, so no commit-suppression exposure |
+
+### Bounded mission-loot layer diagnostics (issue 607)
+
+`_mp_loot_diag_runtime.lua` owns this complete adapter set; the entry point has
+one ordered installer call and no duplicate registration sites.
+
+| Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
+|---|---|---|---|
+| `BackendInterfaceLootPlayfab.generate_end_of_level_loot` [hook] | Builds the mission result request and enqueues `generateEndOfLevelLoot` with an EAC challenge [src: `backend_interface_loot_playfab.lua:153-191`] | Emit the mission-end entry and a post-enqueue census of MP's local inventory | Observation only; forwards every named argument plus trailing args and preserves the full return tuple |
+| `BackendInterfaceLootPlayfab.open_loot_chest` [hook] | Resolves the selected chest backend instance, builds `generateLootChestRewards`, and enqueues it [src: `backend_interface_loot_playfab.lua:27-47`] | Emit the Spoils of War entry and local container/use census | Never stores or prints the backend id; does not open or consume anything itself |
+| `PlayFabRequestQueue.enqueue` [hook] | Adds metadata, clones the request, and appends it to the local queue before EAC/network dispatch [src: `playfab_request_queue.lua:25-55`] | Attribute only `generateEndOfLevelLoot` and `generateLootChestRewards` at the last pre-network local seam | Calls vanilla exactly once, emits after obtaining the local numeric queue id, preserves the return tuple, and ignores every other request family |
+| `BackendManagerPlayFab.playfab_eac_error` / `.playfab_api_error` [hooks] | Convert EAC rejection or API failure into the backend error-dialog path [src: `backend_manager_playfab.lua:553-586`] | Attribute a rejection to the active target request and census the local ledger before vanilla error handling continues | Reads only the active request's function name and EAC state; raw backend error payloads and player ids are never retained |
+| `BackendInterfaceLootPlayfab.loot_chest_rewards_request_cb` [hook] | On success, grants returned items/unlocks, consumes the chest, updates `chest_inventory`, and exposes the completed poll [src: `backend_interface_loot_playfab.lua:49-150`] | Preserve the earlier bounded successful-result census as optional R&D evidence | Success is not required for diagnostic readiness; the callback delegates unchanged and remains bounded/sanitized |
+
+The derived result is deliberately capability-honest: after mission entry and
+native enqueue, `first_missing=local_container_award`, with
+`award_capable=false` and `open_capable=false`. Those values describe the
+current implementation boundary, not a fix. The runtime check
+`issue607_local_loot_layer_diagnostic_contract` and engine-free
+`test_mp_loot_diag.lua` lock request scope, rejection attribution, bounds,
+sanitization, local container census, one hook per seam, native delegation,
+trailing-argument forwarding, and nil-hole return preservation. All observer
+realm/context/store/persistence/logging work is pcall-contained outside the
+native call. Planted failures cover all six wrappers and first/middle/trailing
+nil returns; `pre_request` requires vanilla to return a finite positive numeric
+enqueue id. Observer-failure rows retain only their controlled stage and the
+fixed `observer_failed` reason, never raw exception text or identifiers.
 
 ### Vanilla Silver Shilling presentation and local refresh (issue 578; owner docs: `docs/engine/09`, `docs/engine/11`)
 
@@ -147,9 +177,11 @@ re-discover these.
   the UI gate AND the tracking gate must be un-gated (PLAN.md research #3).
 - **Loot-rolling probabilities are server-side and not in the Lua tree.** The
   chest-open / property-roll / trait-roll weight tables live in PlayFab
-  CloudScript, not `scripts/`. `mp` can only ship a hand-tuned local
-  approximation (VMF sliders) or dump PlayFab title-data at sign-in; it cannot
-  reproduce the official rolls exactly (PLAN.md research #6, "Risks").
+  CloudScript, not `scripts/`. Issue #607 explicitly rejects hand-tuned
+  approximations: its behavioral implementation remains unbuilt until the
+  rarity, eligibility, property/trait, power, DLC, and duplicate contracts are
+  source-backed. v0.2.35-dev diagnoses the first missing local layer without
+  depending on a successful callback (PLAN.md research #6).
 - **`crafting_recipes` / `CraftingData` are `dofile`-referenced but absent from
   the extracted source.** They must be dumped from the running game
   (`dofile + table.dump`) before the crafting-bench interception can be authored -

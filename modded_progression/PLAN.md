@@ -94,6 +94,35 @@ Mission ends
         backend_mirror:set_read_only_data(hero.."_experience", v, true)
 ```
 
+### Issue #607 diagnostic boundary (v0.2.35-dev)
+
+The complete local mission-container feature remains unbuilt. The earlier
+observation probe waited for `loot_chest_rewards_request_cb`, but that callback
+requires a successful `generateLootChestRewards` result and therefore cannot
+name a failure when the modded realm is rejected first. The current bounded
+diagnostic observes six existing local seams without changing them:
+
+1. `BackendInterfaceLootPlayfab.generate_end_of_level_loot` (mission reward entry),
+2. `PlayFabRequestQueue.enqueue` for the two loot CloudScript names,
+3. `BackendInterfaceLootPlayfab.open_loot_chest` (Spoils of War entry),
+4. `BackendManagerPlayFab.playfab_eac_error` / `playfab_api_error` (rejection),
+5. the optional native loot callback (successful-result R&D only), and
+6. MP's persisted `inventory` store (sanitized container/use census).
+
+Every observer read/write/log action is pcall-contained and cannot prevent or
+alter the native call or its complete Lua return tuple. Queue attribution is
+also evidence-gated: `pre_request` exists only when vanilla `enqueue` returns a
+finite positive numeric id; request arguments alone never prove acceptance.
+Observer-failure receipts use only a controlled stage and fixed
+`observer_failed` reason, never raw exception text or identifiers.
+
+One completed modded mission can therefore distinguish a missing mission-end
+call, a missing enqueue, and the current first unbuilt local layer
+(`local_container_award`) without any backend success. The diagnostic never
+adds a request or mutates loot state. `award_capable=false` and
+`open_capable=false` are explicit until those behavioral layers are actually
+implemented.
+
 ## Interception map
 
 | Action | PlayFab call to intercept | Mirror callback to replicate locally |
@@ -242,16 +271,17 @@ Confirmed server-side. Not in Lua source. Two paths forward:
 
 For v0.1.0: ship approximations. Refine after live testing.
 
-**Issue #607 decision (2026-07-14): approximations are no longer acceptable for
+**Issue #607 decision (2026-07-14; diagnostic corrected 2026-08-13): approximations are no longer acceptable for
 the mission-container feature.** The requested behavior requires source-backed
 rarity, eligibility, property/trait, power, DLC, and duplicate contracts. Client
 Lua proves the opening call is `generateLootChestRewards` CloudScript
 (`backend_interface_loot_playfab.lua:28-46`) and only consumes its returned item
 records (`:49-150`). Rarity tables are also delivered dynamically by backend
-read-only data (`playfab_mirror_base.lua:1084-1116`). MP v0.2.28-dev therefore
-ships bounded observation-only diagnostics for ordinary official openings; it
-does not generate approximate local equipment. The diagnostic must be retired
-before the behavioral feature ships.
+read-only data (`playfab_mirror_base.lua:1084-1116`). MP v0.2.35-dev therefore
+ships bounded modded-realm layer diagnostics at the local request/rejection and
+ledger seams; a successful backend callback is optional evidence, never a
+prerequisite. It does not generate approximate local equipment. The diagnostic
+must be retired before the behavioral feature ships.
 
 ## Items still gated on a runtime dump
 
@@ -282,7 +312,7 @@ Single intercept point covers all five craft pages.
 
 ## Risks
 
-- **Loot rolling probabilities are server-side** (item #6). Mitigation: sane local approximations, VMF tuning sliders, accept divergence from official.
+- **Loot rolling probabilities are server-side** (item #6). For #607, do not substitute hand-tuned approximations; keep the behavioral layer unbuilt until its rarity, eligibility, property/trait, power, DLC, and duplicate contracts are source-backed.
 - **Mirror surface is large.** ~30 distinct mutator methods. Each triggered from a local replacement needs commit-side verified blocked (already gated, but confirm during dev).
 - **Achievement progress tracking** — if `achievement_manager.lua:125,294` fully halts progress, un-gating the claim popup gets nothing until tracking is re-enabled (item #3).
 - **DLC ownership** — `dlc_ownership_request_cb` (playfab_mirror_base.lua:458) takes a different branch in modded. `_handle_owned_dlcs_data` populates `_owned_dlcs` from PlayFab result; DLC-locked items inherit. Should work as today, but verify.

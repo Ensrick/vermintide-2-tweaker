@@ -1,23 +1,38 @@
 -- Bounded, observation-only loot diagnostics for issue #607.
 --
--- The native chest roll is produced by PlayFab CloudScript, not Lua. This
--- helper records only the already-returned callback payload observed in the
--- MODDED realm; it never opens a chest, queues a request, or mutates backend
--- state. Official-realm observation is structurally impossible for this mod:
--- unapproved Workshop mods never load there (decompile
--- scripts/managers/mod/mod_manager.lua:275 passes
--- `not script_data["eac-untrusted"]` to Mod.start_scan, and the realm flag is
--- fixed at launch, foundation/scripts/util/application_parameter.lua:150), so
--- the capture gate requires eac_untrusted == true - the only realm where this
--- code can exist to observe loot delivery at all.
+-- The native mission award and chest roll are produced by PlayFab CloudScript,
+-- not Lua. A successful FunctionResult therefore cannot be the diagnostic's
+-- trigger in the modded realm: the request is normally rejected at the EAC
+-- boundary first. This pure helper owns the bounded event ledger used by the
+-- runtime adapters at mission-end, request enqueue, chest-open, backend
+-- rejection, callback success, and MP's local inventory seam. It never opens a
+-- chest, queues a request, grants an item, or mutates a backend mirror.
+--
+-- Owned by: _mp_loot_diag_runtime.lua. Consumed via: one mod:dofile installer.
 
 local M = {}
 
-M.SCHEMA = 1
+M.SCHEMA = 2
 M.MAX_RECORDS = 12
 M.MAX_ITEMS = 6
 M.MAX_RARITIES = 10
 M.ACTIVE = true -- retire by setting false once #607's contracts are captured
+M.LOCAL_CONTAINER_AWARD_IMPLEMENTED = false
+M.LOCAL_CONTAINER_OPEN_IMPLEMENTED = false
+
+M.EVENTS = {
+    end_level = true,
+    pre_request = true,
+    open = true,
+    rejection = true,
+    success = true,
+    local_ledger = true,
+}
+
+M.REQUEST_FLOWS = {
+    generateEndOfLevelLoot = "end_level",
+    generateLootChestRewards = "open",
+}
 
 -- Modded realm only (eac_untrusted == true), fail-closed on nil: the flag is
 -- always a boolean once application_parameter.lua:150 runs, so a nil here
@@ -25,6 +40,37 @@ M.ACTIVE = true -- retire by setting false once #607's contracts are captured
 function M.should_capture(eac_untrusted, active)
     if active == nil then active = M.ACTIVE end
     return active == true and eac_untrusted == true
+end
+
+function M.request_flow(request_name)
+    return M.REQUEST_FLOWS[request_name]
+end
+
+function M.is_target_request(request_name)
+    return M.request_flow(request_name) ~= nil
+end
+
+-- `PlayFabRequestQueue:enqueue` reports the request it actually accepted with a
+-- local numeric id. Do not infer acceptance from the request arguments alone:
+-- nil/zero/negative/string/non-finite return values are not enqueue evidence.
+function M.is_positive_request_id(value)
+    return type(value) == "number" and value == value
+        and value > 0 and value < math.huge
+end
+
+function M.active_request_name(request_queue)
+    local active = type(request_queue) == "table" and rawget(request_queue, "_active_entry") or nil
+    local request = type(active) == "table" and rawget(active, "request") or nil
+    local request_name = type(request) == "table" and rawget(request, "FunctionName") or nil
+    return M.is_target_request(request_name) and request_name or nil
+end
+
+function M.rejection_reason(request_queue)
+    local active = type(request_queue) == "table" and rawget(request_queue, "_active_entry") or nil
+    if type(active) == "table" and rawget(active, "eac_challenge_success") == true then
+        return "eac_failed_verification"
+    end
+    return "eac_unavailable"
 end
 
 local function bounded_string(value, limit)
@@ -100,9 +146,25 @@ local function normalize_record(source)
             has_skin = item.has_skin == true,
         }
     end
+    local event = bounded_string(source.event, 24)
+    if not M.EVENTS[event] then
+        -- Schema-1 rows were successful open callbacks and carried no event.
+        event = source.item_count ~= nil and "success" or "local_ledger"
+    end
+    local request_name = bounded_string(source.request_name, 48)
+    local flow = bounded_string(source.flow or M.request_flow(request_name), 24)
     return {
         serial = bounded_serial(source.serial),
         captured_at = math.max(0, math.floor(tonumber(source.captured_at) or 0)),
+        event = event,
+        flow = flow,
+        request_name = request_name,
+        request_id = bounded_serial(source.request_id),
+        reason = bounded_string(source.reason, 64),
+        backend = bounded_string(source.backend, 32),
+        won = source.won == true,
+        difficulty = bounded_string(source.difficulty, 32),
+        level_key = bounded_string(source.level_key, 64),
         chest_key = bounded_string(source.chest_key, 96),
         hero_name = bounded_string(source.hero_name, 48),
         game_mode = bounded_string(source.game_mode, 32),
@@ -117,6 +179,11 @@ local function normalize_record(source)
         new_weapon_poses = bounded_count(source.new_weapon_poses),
         consumed_remaining = tonumber(source.consumed_remaining),
         returned_chest_inventory = source.returned_chest_inventory == true,
+        local_items = bounded_count(source.local_items),
+        local_containers = bounded_count(source.local_containers),
+        local_container_uses = bounded_count(source.local_container_uses),
+        local_award_capable = source.local_award_capable == true,
+        local_open_capable = source.local_open_capable == true,
     }
 end
 
@@ -140,8 +207,67 @@ function M.is_mission_chest(chest_key)
         and chest_key:match("^loot_chest_0[1-4]_0[1-6]$") ~= nil
 end
 
-function M.capture(ledger, context, result, captured_at)
+function M.local_ledger_facts(inventory_store)
+    local facts = {
+        items = 0,
+        containers = 0,
+        container_uses = 0,
+        award_capable = M.LOCAL_CONTAINER_AWARD_IMPLEMENTED,
+        open_capable = M.LOCAL_CONTAINER_OPEN_IMPLEMENTED,
+    }
+    for _, item in pairs(type(inventory_store) == "table" and inventory_store or {}) do
+        if type(item) == "table" then
+            facts.items = facts.items + 1
+            local item_key = rawget(item, "ItemId")
+            if M.is_mission_chest(item_key) then
+                facts.containers = facts.containers + 1
+                local uses = tonumber(rawget(item, "RemainingUses"))
+                if uses == nil then uses = 1 end
+                facts.container_uses = facts.container_uses + math.max(0, math.floor(uses))
+            end
+        end
+    end
+    return facts
+end
+
+local function append_record(ledger, source)
     local next_ledger = M.normalize(ledger)
+    next_ledger.serial = next_ledger.serial + 1
+    source = type(source) == "table" and source or {}
+    source.serial = next_ledger.serial
+    local record = normalize_record(source)
+    next_ledger.records[#next_ledger.records + 1] = record
+    while #next_ledger.records > M.MAX_RECORDS do table.remove(next_ledger.records, 1) end
+    return next_ledger, record
+end
+
+function M.record(ledger, event, context, captured_at)
+    if M.EVENTS[event] ~= true then return nil, "unknown diagnostic event" end
+    context = type(context) == "table" and context or {}
+    return append_record(ledger, {
+        event = event,
+        captured_at = captured_at,
+        flow = context.flow,
+        request_name = context.request_name,
+        request_id = context.request_id,
+        reason = context.reason,
+        backend = context.backend,
+        won = context.won,
+        difficulty = context.difficulty,
+        level_key = context.level_key,
+        chest_key = context.chest_key,
+        hero_name = context.hero_name,
+        game_mode = context.game_mode,
+        amount = context.amount,
+        local_items = context.local_items,
+        local_containers = context.local_containers,
+        local_container_uses = context.local_container_uses,
+        local_award_capable = context.local_award_capable,
+        local_open_capable = context.local_open_capable,
+    })
+end
+
+function M.capture(ledger, context, result, captured_at)
     local function_result = type(result) == "table" and result.FunctionResult or nil
     if type(function_result) ~= "table" then return nil, "missing FunctionResult" end
 
@@ -151,12 +277,15 @@ function M.capture(ledger, context, result, captured_at)
         record_items[i] = summarize_item(items[i])
     end
 
-    next_ledger.serial = next_ledger.serial + 1
     local consumed = type(function_result.consumed_chest) == "table"
         and function_result.consumed_chest or {}
     local record = {
-        serial = next_ledger.serial,
+        event = "success",
         captured_at = math.max(0, math.floor(tonumber(captured_at) or 0)),
+        flow = "open",
+        request_name = "generateLootChestRewards",
+        reason = "callback_success",
+        backend = "native_callback",
         chest_key = bounded_string(context and context.chest_key, 96),
         hero_name = bounded_string(context and context.hero_name, 48),
         game_mode = bounded_string(context and context.game_mode, 32),
@@ -172,9 +301,45 @@ function M.capture(ledger, context, result, captured_at)
         consumed_remaining = tonumber(consumed.RemainingUses),
         returned_chest_inventory = function_result.chest_inventory ~= nil,
     }
-    next_ledger.records[#next_ledger.records + 1] = record
-    while #next_ledger.records > M.MAX_RECORDS do table.remove(next_ledger.records, 1) end
-    return next_ledger, record
+    return append_record(ledger, record)
+end
+
+function M.diagnose(ledger)
+    local normalized = M.normalize(ledger)
+    local saw_end_level = false
+    local saw_end_level_request = false
+    local saw_open = false
+    local saw_open_request = false
+    local saw_local_ledger = false
+    local latest_local_containers = 0
+
+    for _, record in ipairs(normalized.records) do
+        if record.event == "end_level" then saw_end_level = true end
+        if record.event == "open" then saw_open = true end
+        if record.event == "pre_request" and record.flow == "end_level" then
+            saw_end_level_request = true
+        elseif record.event == "pre_request" and record.flow == "open" then
+            saw_open_request = true
+        elseif record.event == "local_ledger" then
+            saw_local_ledger = true
+            latest_local_containers = record.local_containers
+        end
+    end
+
+    if saw_end_level then
+        if not saw_end_level_request then return "request_enqueue" end
+        if not M.LOCAL_CONTAINER_AWARD_IMPLEMENTED then return "local_container_award" end
+        if not saw_local_ledger then return "local_container_ledger" end
+        if latest_local_containers < 1 then return "local_container_persistence" end
+        if not M.LOCAL_CONTAINER_OPEN_IMPLEMENTED then return "local_chest_open" end
+        return "local_loot_roll"
+    end
+    if saw_open then
+        if not saw_open_request then return "open_request_enqueue" end
+        if not M.LOCAL_CONTAINER_OPEN_IMPLEMENTED then return "local_chest_open" end
+        return "local_loot_roll"
+    end
+    return "awaiting_mission_end"
 end
 
 function M.rarity_counts(record)
