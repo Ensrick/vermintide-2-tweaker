@@ -293,13 +293,17 @@ Run-Check "check_worktree_budget"             { & (Join-Path $here "check_worktr
 # when present (marks the upload column n/a in CI where it is absent), so it can
 # never fail the gate - pinned Advisory like check_in_progress. See CHECKS.md row 61.
 Run-Check "check_pipeline_state"              { & (Join-Path $here "check_pipeline_state.ps1")              -Quiet:$Quiet } -Policy 'Advisory'
+# Issue #1223: parse every active mod source with Luacheck's LuaJIT-compatible
+# grammar. This is independent of the advisory full Luacheck pass and remains
+# active under -Quick -SkipLua so a syntax error cannot reach a commit or ship.
+Run-Check "check_lua_parse"                    { & (Join-Path $here "check_lua_parse.ps1")                    -Quiet:$Quiet }
 # Pure Lua transformations run under the pinned, offline Lua 5.1 host runtime.
 # Keep this before the Quick return: it is deliberately part of both fast local
 # feedback and the full CI gate (issue #544).
 Run-Check "lua_unit_tests"                    { & (Join-Path $here "check_lua_unit_tests.ps1")               -Quiet:$Quiet }
 
 if ($Quick) {
-    Write-Host "Quick mode - Lua units passed; skipping localization, stale-docs, file-sizes, luacheck." -ForegroundColor DarkGray
+    Write-Host "Quick mode - Lua syntax and units passed; skipping localization, stale-docs, file-sizes, advisory luacheck." -ForegroundColor DarkGray
     Confirm-QAWorktreePurity
     Write-Summary
     exit $script:blockingExit

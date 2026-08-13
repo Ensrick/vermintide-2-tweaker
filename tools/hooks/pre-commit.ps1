@@ -24,7 +24,8 @@
 #      docs / asset commits don't need them.
 #   4. Run `qa/run_all.ps1 -Quick -SkipLua` (the -Quick always-run set: cfg +
 #      published-ids + version + unpack + widget-type + event-register +
-#      cross-mod-deps; skips slow luacheck and the full-pass scans CI runs).
+#      cross-mod-deps + the blocking LuaJIT-compatible syntax parse; skips the
+#      slow advisory luacheck analysis and the full-pass scans CI runs).
 #      Any non-zero exit blocks the commit.
 #   5. Run `tools/mod-lint/lint-mod.ps1`. Exit 2 (duplicate-hook errors)
 #      blocks the commit; exit 1 (warnings — forward-ref / late-local /
