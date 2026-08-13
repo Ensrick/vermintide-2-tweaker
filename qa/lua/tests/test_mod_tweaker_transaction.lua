@@ -4,6 +4,8 @@ return function(H, repo_root)
     local Transaction = assert(loadfile(module_path))()
     local DefaultReset = assert(loadfile(repo_root
         .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_default_reset.lua"))()
+    local SliderDragEdge = assert(loadfile(repo_root
+        .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_slider_drag_edge.lua"))()
 
     H.test("Mod Tweaker official reseed intent is scoped to WT and Cosmetics", function()
         H.equal(DefaultReset.affects_loadouts({ mod_id = "wt_dev" }), true)
@@ -269,6 +271,24 @@ return function(H, repo_root)
     end)
 
     H.test("Both Mod Tweaker views edge-latch slider release once", function()
+        local dragging, follow, released, modal = SliderDragEdge.step(false, true, true)
+        H.equal(dragging, true)
+        H.equal(follow, true)
+        H.equal(released, false)
+        H.equal(modal, true)
+
+        dragging, follow, released, modal = SliderDragEdge.step(dragging, false, false)
+        H.equal(dragging, false)
+        H.equal(follow, false)
+        H.equal(released, true)
+        H.equal(modal, true, "release frame remains modal")
+
+        dragging, follow, released, modal = SliderDragEdge.step(dragging, false, false)
+        H.equal(dragging, false)
+        H.equal(follow, false)
+        H.equal(released, false, "latched release cannot repeat the edge")
+        H.equal(modal, false)
+
         local paths = {
             "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_interaction.lua",
             "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state_interaction.lua",
@@ -279,12 +299,11 @@ return function(H, repo_root)
             file:close()
             H.equal(source:find("ths.is_held or ths.on_left_release", 1, true), nil,
                 paths[i] .. " must not drive drag math from the latched release flag")
-            H.truthy(source:find("if ths and ths.is_held and c.track_w then", 1, true),
-                paths[i] .. " must follow the cursor only while held")
-            H.truthy(source:find("row._dragging = true", 1, true)
-                and source:find("elseif row._dragging then", 1, true)
-                and source:find("row._dragging = false", 1, true),
-                paths[i] .. " must commit on the held-to-released edge")
+            H.truthy(source:find("deps.slider_drag_edge", 1, true)
+                and source:find("SliderDragEdge.step(", 1, true),
+                paths[i] .. " must consume the shared production edge helper")
+            H.truthy(source:find("SliderDragEdge.is_modal(", 1, true),
+                paths[i] .. " must keep the drag modal through release")
             H.truthy(source:find("self._slider_dragging = nil", 1, true)
                 and source:find(
                     "not (self._slider_dragging and row ~= self._slider_dragging)",
@@ -293,5 +312,12 @@ return function(H, repo_root)
             H.truthy(source:find("self._dd_block_until_press = true", 1, true),
                 paths[i] .. " must swallow the shared-node stale release")
         end
+
+        local contracts = assert(io.open(repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_contracts.lua", "rb"))
+        local contract_source = contracts:read("*a")
+        contracts:close()
+        H.truthy(contract_source:find('issue167_slider_release_edge', 1, true),
+            "the live regression command must execute the #167 edge sequence")
     end)
 end

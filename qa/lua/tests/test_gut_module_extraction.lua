@@ -95,6 +95,20 @@ return function(H, repo_root)
             "extracted scrollbar probe is absent")
     end)
 
+    H.test("GUT Dev slider edge policy has two explicit presentation consumers", function()
+        local stream = streams[2]
+        local view = read(stream.root .. "_mod_tweaker_view.lua")
+        local state = read(stream.root .. "_mod_tweaker_state.lua")
+        local name = stream.module_path .. "_mod_tweaker_slider_drag_edge"
+        H.equal(occurrences(view, name), 1, "standalone view must own one slider edge dependency")
+        H.equal(occurrences(state, name), 1, "keep state must own one slider edge dependency")
+
+        local policy = read(stream.root .. "_mod_tweaker_slider_drag_edge.lua")
+        H.truthy(policy:find("function M.step", 1, true), "slider edge step API missing")
+        H.truthy(policy:find("function M.is_modal", 1, true), "slider modal API missing")
+        H.truthy(policy:find("return M", 1, true), "slider edge policy is not exported")
+    end)
+
     H.test("GUT extracted modules remain hook and lifecycle neutral", function()
         for _, stream in ipairs(streams) do
             for _, name in ipairs({
@@ -111,6 +125,18 @@ return function(H, repo_root)
                 H.equal(source:find("function mod.on_", 1, true), nil, name .. " owns lifecycle")
             end
         end
+
+        local slider_edge = read(streams[2].root .. "_mod_tweaker_slider_drag_edge.lua")
+        H.equal(slider_edge:find("mod:hook(", 1, true), nil,
+            "_mod_tweaker_slider_drag_edge.lua owns an engine hook")
+        H.equal(slider_edge:find("mod:hook_safe(", 1, true), nil,
+            "_mod_tweaker_slider_drag_edge.lua owns a safe hook")
+        H.equal(slider_edge:find("mod:command(", 1, true), nil,
+            "_mod_tweaker_slider_drag_edge.lua owns a command")
+        H.equal(slider_edge:find("function mod.update", 1, true), nil,
+            "_mod_tweaker_slider_drag_edge.lua owns update")
+        H.equal(slider_edge:find("function mod.on_", 1, true), nil,
+            "_mod_tweaker_slider_drag_edge.lua owns lifecycle")
 
         local diagnostics = read(streams[2].root .. "_mod_tweaker_view_diagnostics.lua")
         H.equal(diagnostics:find("mod:hook(", 1, true), nil,

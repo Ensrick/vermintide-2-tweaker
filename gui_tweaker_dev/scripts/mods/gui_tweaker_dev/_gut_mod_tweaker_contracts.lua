@@ -50,6 +50,70 @@ _rt_register("issue630_dx12_fence_probe", function()
     end
 end)
 
+_rt_register("issue167_slider_release_edge", function()
+    local ok, Edge = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_mod_tweaker_slider_drag_edge")
+    if not ok or type(Edge) ~= "table" or type(Edge.step) ~= "function"
+        or type(Edge.is_modal) ~= "function" then
+        return "#167 slider drag edge owner unavailable"
+    end
+    if not Edge.is_modal(false, true) or not Edge.is_modal(true, false)
+        or Edge.is_modal(false, false) then
+        return "#167 slider modal boundary drifted"
+    end
+
+    local state = {
+        dragging = false,
+        block_until_press = false,
+        cursor_moves = 0,
+        commits = 0,
+        sounds = 0,
+        other_row_activations = 0,
+    }
+
+    local function frame(held, cursor_available, other_row_release)
+        local next_dragging, follow_cursor, released, modal =
+            Edge.step(state.dragging, held, cursor_available)
+        state.dragging = next_dragging
+        if follow_cursor then state.cursor_moves = state.cursor_moves + 1 end
+        if released then
+            state.block_until_press = true
+            state.commits = state.commits + 1
+            state.sounds = state.sounds + 1
+        end
+        if other_row_release and not modal and not state.block_until_press then
+            state.other_row_activations = state.other_row_activations + 1
+        end
+        return released, modal
+    end
+
+    local released, modal = frame(true, true, false)
+    if released or not modal or not state.dragging or state.cursor_moves ~= 1 then
+        return "#167 held frame did not begin one modal cursor-follow cycle"
+    end
+
+    released, modal = frame(false, false, true)
+    if not released or not modal or state.dragging or not state.block_until_press
+        or state.commits ~= 1 or state.sounds ~= 1 or state.cursor_moves ~= 1
+        or state.other_row_activations ~= 0 then
+        return "#167 first release did not commit/sound once while suppressing the other row"
+    end
+
+    released, modal = frame(false, false, true)
+    if released or modal or state.commits ~= 1 or state.sounds ~= 1
+        or state.cursor_moves ~= 1 or state.other_row_activations ~= 0 then
+        return "#167 latched release repeated work or escaped the fresh-press block"
+    end
+
+    state.block_until_press = false
+    frame(true, true, false)
+    frame(false, false, false)
+    if state.commits ~= 2 or state.sounds ~= 2 or state.cursor_moves ~= 2
+        or state.other_row_activations ~= 0 then
+        return "#167 second physical drag did not produce exactly one new edge"
+    end
+end)
+
 _rt_register("mod_tweaker_esc_entry_hook", function()
     local logic_class = rawget(_G, "IngameViewLayoutLogic")
     if not logic_class then return "IngameViewLayoutLogic global not present" end

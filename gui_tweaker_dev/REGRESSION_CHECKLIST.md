@@ -110,6 +110,7 @@ If this candidate fails, use exactly one evidence-selected fallback:
 ## Mod Tweaker module extraction / file-size gate
 
 - [ ] Standalone and HeroView Mod Tweaker open, draw, accept mouse/controller input, edit numeric values, search, switch profiles, Apply, and Default exactly as before.
+- [ ] Drag a slider in both presentations and release over its track and over another row. The value follows only while held, the first release commits and sounds once, stale release frames do nothing, and the other row stays inert. `/gut_regression_test` passes `issue167_slider_release_edge`; offline `test_mod_tweaker_transaction.lua` executes the same production helper.
 - [ ] Dialogue rows in dev still recycle, play/pause, report progress, and stop on view cleanup; stable contains no Dialogue dependency.
 - [ ] Each owner loads and installs its interaction/contracts module once; no extracted module owns an engine hook, command, or lifecycle callback.
 - [ ] `qa/check_file_sizes.ps1` reports no hard-limit error for the six GUI owner files; do not update `qa/baselines/file_sizes.json` for this split.

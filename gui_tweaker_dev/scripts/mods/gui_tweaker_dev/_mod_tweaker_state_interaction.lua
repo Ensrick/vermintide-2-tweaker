@@ -22,6 +22,8 @@ function M.install(HeroViewStateModTweaker, deps)
     local _cat_set = assert(deps.cat_set, "Mod Tweaker state interaction requires category setter")
     local _play_click = assert(deps.play_click, "Mod Tweaker state interaction requires click sound")
     local _play_hover = assert(deps.play_hover, "Mod Tweaker state interaction requires hover sound")
+    local SliderDragEdge = assert(deps.slider_drag_edge,
+        "Mod Tweaker state interaction requires slider drag edge")
 
 local _EDIT_MAX_LEN = 16
 
@@ -419,7 +421,8 @@ function HeroViewStateModTweaker:_handle_input(input_service)
     for i = 1, #self._rows do
         local r = self._rows[i]
         local cc = r.content
-        if (cc and cc.track_hs and cc.track_hs.is_held) or r._dragging then
+        if SliderDragEdge.is_modal(r._dragging,
+                cc and cc.track_hs and cc.track_hs.is_held) then
             self._slider_dragging = r
             break
         end
@@ -568,9 +571,12 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                 -- ~18KB config to clients — so firing it every drag frame floods the
                 -- network and crashes. One commit on release matches VMF's behaviour.
                 local ths = c.track_hs
-                if ths and ths.is_held and c.track_w then
-                    local cursor = input_service and input_service:get("cursor")
-                    if cursor then
+                local held = not not (ths and ths.is_held and c.track_w)
+                local cursor = held and input_service and input_service:get("cursor")
+                local next_dragging, follow_cursor, drag_released =
+                    SliderDragEdge.step(row._dragging, held, cursor ~= nil)
+                row._dragging = next_dragging
+                if follow_cursor then
                         local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
                         local cx = UIInverseScaleVectorToResolution(cursor)[1]
                         local frac = math.clamp((cx - (anchor[1] + (c.track_x or 0))) / math.max(1, c.track_w), 0, 1)
@@ -579,14 +585,11 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                         local m = (nd > 0) and (10 ^ nd) or 1
                         cur = math.floor(cur * m + 0.5) / m
                         moved = true
-                        row._dragging = true
-                    end
-                elseif row._dragging then
+                elseif drag_released then
                     -- (#167) is_held is the real edge. on_left_release remains
                     -- latched for several frames on this shared node, so using it
                     -- repeated both cursor math and the commit/click sound.
                     self._dd_block_until_press = true
-                    row._dragging = false
                     commit = true
                 end
                 if c.dec and (c.dec.on_release or c.dec.on_left_release) then cur = math.clamp(cur - (c.step or 1), c.min, c.max); moved = true; commit = true end

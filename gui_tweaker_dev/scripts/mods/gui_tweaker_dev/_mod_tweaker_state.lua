@@ -1959,5 +1959,7 @@ Interaction.install(HeroViewStateModTweaker, {
     cat_set = _cat_set,
     play_click = _play_click,
     play_hover = _play_hover,
+    slider_drag_edge = mod:dofile(
+        "scripts/mods/gui_tweaker_dev/_mod_tweaker_slider_drag_edge"),
 })
 return { class_name = "HeroViewStateModTweaker" }

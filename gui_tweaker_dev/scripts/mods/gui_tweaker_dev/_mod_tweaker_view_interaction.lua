@@ -29,6 +29,8 @@ function M.install(ModTweakerView, deps)
     local _play_click = assert(deps.play_click, "Mod Tweaker interaction requires click sound")
     local _play_hover = assert(deps.play_hover, "Mod Tweaker interaction requires hover sound")
     local _printf = assert(deps.printf, "Mod Tweaker interaction requires printf")
+    local SliderDragEdge = assert(deps.slider_drag_edge,
+        "Mod Tweaker interaction requires slider drag edge")
 
 local _EDIT_MAX_LEN = 16
 -- (#497) Max search query length (free text; the numeric editor's cap is _EDIT_MAX_LEN).
@@ -756,7 +758,11 @@ function ModTweakerView:_handle_input(input_service)
         -- is_held = mid-drag. r._dragging stays true THROUGH the release frame (the slider branch
         -- below clears it), so the modal also covers the RELEASE frame — that release was landing
         -- on a checkbox behind the cursor and toggling it.
-        if (cc and cc.track_hs and cc.track_hs.is_held) or r._dragging then self._slider_dragging = r; break end
+        if SliderDragEdge.is_modal(r._dragging,
+                cc and cc.track_hs and cc.track_hs.is_held) then
+            self._slider_dragging = r
+            break
+        end
     end
 
     -- Rows. Persist on change via _cat_set (routes to the real VMF mod object, or
@@ -1028,10 +1034,13 @@ function ModTweakerView:_handle_input(input_service)
                 -- ~18KB config to clients — so firing it every drag frame floods the
                 -- network and crashes. One commit on release matches VMF's behaviour.
                 local ths = c.track_hs
-                if ths and ths.is_held and c.track_w then
+                local held = not not (ths and ths.is_held and c.track_w)
+                local cursor = held and input_service and input_service:get("cursor")
+                local next_dragging, follow_cursor, drag_released =
+                    SliderDragEdge.step(row._dragging, held, cursor ~= nil)
+                row._dragging = next_dragging
+                if follow_cursor then
                     -- DRAG: follow the cursor ONLY while the LMB is HELD (visual; commit on release).
-                    local cursor = input_service and input_service:get("cursor")
-                    if cursor then
                         local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
                         local cx = UIInverseScaleVectorToResolution(cursor)[1]
                         local frac = math.clamp((cx - (anchor[1] + (c.track_x or 0))) / math.max(1, c.track_w), 0, 1)
@@ -1041,9 +1050,7 @@ function ModTweakerView:_handle_input(input_service)
                         -- entry paths use, so drag/arrow/type all land on identical grid points.
                         cur = _snap_and_clamp(c, cur)
                         moved = true
-                        row._dragging = true
-                    end
-                elseif row._dragging then
+                elseif drag_released then
                     -- (#167) DRAG ENDED (is_held dropped): commit + play the sound EXACTLY ONCE,
                     -- edge-latched. The old code keyed off on_left_release, which stays LATCHED on
                     -- the shared node for several frames -> it re-ran the cursor math (slider kept
@@ -1053,7 +1060,6 @@ function ModTweakerView:_handle_input(input_service)
                     -- release's still-LATCHED on_release on a checkbox behind the cursor can't toggle
                     -- it once the drag-modal disengages next frame (same latch class as dropdown #158).
                     self._dd_block_until_press = true
-                    row._dragging = false
                     commit = true; play_sound = true
                 end
                 -- (#152) Arrow step = ONE natural increment per click (1 for ints, 10^-dec),
