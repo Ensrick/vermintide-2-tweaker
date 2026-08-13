@@ -12,6 +12,13 @@
 |---|---|
 | `StatusUtils.set_in_vortex_network` | Server-authored Blightstorm status/RPC seam. Godmode rejects only the entering edge for a human player when the source positively owns the enemy `VortexExtension`, returning the native false result before status, RPC, and captured-player table writes. Exit cleanup, non-Godmode behavior, and Sister of the Thorn's separately registered `SummonedVortexExtension` remain vanilla. [src: `scripts/helpers/status_utils.lua:278-297`; `scripts/unit_extensions/ai_supplementary/vortex_extension.lua:615-631`; `scripts/settings/dlcs/woods/woods_common_settings.lua:174-184`] |
 
+## Godmode fly-overpowered boundary (#548, 0.2.266-dev)
+
+| Surface | Ownership and invariant |
+|---|---|
+| `StatusUtils.set_overpowered_network` | Server-authored status/RPC seam for both fly-swarm families. Halescourge's swarm/action missile enters with `slow_bomb`; Nurgloth's Drachenfels missile enters with `fly_bomb`. Godmode rejects only those two entering edges for the protected human, before the status mutation and client RPC, and only when `attacking_unit` positively owns the dedicated `OverpoweredBlobHealthExtension` targeting that human. This excludes generic overpowered-perk calls that also reuse `slow_bomb`. Godmode-off calls and every unrelated reason delegate unchanged. [src: `scripts/entity_system/systems/behaviour/nodes/chaos_sorcerer/bt_swarm_action.lua:71-76`; `scripts/settings/explosion_templates.lua:1308-1358`; `scripts/helpers/status_utils.lua:332-350`; `scripts/unit_extensions/default_player_unit/buffs/settings/buff_perk_functions.lua:5-16`] |
+| `OverpoweredBlobHealthExtension.destroy` | Exact cleanup owner for a blob whose #548 entry was rejected. The blob observes the absent status and schedules its own deletion; GT suppresses only that recorded instance's unqualified false cleanup so it cannot clear an unrelated overpowered state that entered in the interim. All unrecorded blob destruction delegates unchanged. [src: `scripts/unit_extensions/generic/overpowered_blob_health_extension.lua:16-33`] |
+
 ## Host-side melee latency compensation (#1034, 0.2.256-dev)
 
 | Surface | Ownership and invariant |
@@ -48,7 +55,7 @@ line; the remaining `[src:]` citations are carried from the cited `gt_dev`
 module comments, which cite the decompile in turn).
 
 **Dev/stable relationship.** This documents `general_tweaker_dev` (`gt_dev`,
-MOD_VERSION `0.2.258-dev`, friends-only Workshop 3733367409), the ACTIVE working
+MOD_VERSION `0.2.266-dev`, friends-only Workshop 3733367409), the ACTIVE working
 stream. `general_tweaker/` (`gt`, public Workshop 3713619122) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gt_dev`
@@ -432,7 +439,11 @@ sets `ignore_next_fall_damage`; and `GenericStateMachine.change_state` drops
 disabler-state transitions (disablers bypass the damage pipeline).
 `StatusUtils.set_in_vortex_network` separately rejects only the enemy
 Blightstorm entering edge before the status, RPC, and captured-player-table
-mutation. Because damage
+mutation. `StatusUtils.set_overpowered_network` rejects only authored fly-blob
+`slow_bomb` and `fly_bomb` entering edges for fly-swarm control loss; generic
+overpowered perks and unrelated reasons remain vanilla. Recorded blocked-blob
+cleanup is consumed separately so its reasonless false edge cannot clear a
+later unrelated state. Because damage
 to a player is resolved on the AUTHORITATIVE machine (the host for a client's
 unit), a client's local godmode flag is invisible to the host, so each peer
 broadcasts its state over the `gt_godmode_state` RPC keyed by peer_id with a

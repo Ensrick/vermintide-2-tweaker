@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.265-dev"
+local MOD_VERSION = "0.2.266-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1138,6 +1138,96 @@ mod:hook("BuffExtension", "add_buff", function(func, self, template_name, ...)
     return func(self, template_name, ...)
 end)
 mod._gt548_buff_probe_wired = true
+
+-- Issue #548 (fly-swarm control loss): Halescourge's swarm action and fly
+-- missile, plus Nurgloth's Drachenfels fly missile, bypass both the HP-damage
+-- and BuffExtension funnels. They enter GenericStatusExtension.overpowered at
+-- the server-only StatusUtils.set_overpowered_network seam with the authored
+-- reasons "slow_bomb" or "fly_bomb" [src: bt_swarm_action.lua:71-76;
+-- explosion_templates.lua:1308-1358; status_utils.lua:332-350]. Reject only
+-- those two ENTERING edges for a Godmode human. The exact rejected blob's
+-- unqualified destroy cleanup is consumed below; every unrelated exit, reason,
+-- and Godmode-off call remains vanilla [src:
+-- overpowered_blob_health_extension.lua:24-33].
+mod._gt548_fly_overpowered_policy = mod:dofile(
+    "scripts/mods/general_tweaker_dev/_gt_godmode_fly_policy")
+mod._gt548_should_block_fly_overpowered =
+    mod._gt548_fly_overpowered_policy.should_block_entry
+mod._gt548_seen_fly_overpowered_reasons = {}
+mod._gt548_blocked_fly_blobs = setmetatable({}, { __mode = "k" })
+mod._GT_548_GODMODE_FLY_MARKER = "gt-548-godmode-fly-overpowered-boundary"
+
+-- AiUtils.spawn_overpowering_blob has exactly three decompiled call sites and
+-- all three are the fly paths cited above [src: ai_utils.lua:627-657; repo-wide
+-- call-site census]. Buff-perk overpowered effects can reuse "slow_bomb" but
+-- pass the affected player as attacking_unit instead, so reason-only matching
+-- would overreach. Require positive ownership by the dedicated blob extension.
+local function _gt548_is_authored_fly_blob(attacking_unit, affected_unit)
+    local health_extension = attacking_unit and ALIVE[attacking_unit]
+        and ScriptUnit.has_extension(attacking_unit, "health_system")
+    return health_extension ~= nil
+        and health_extension.target_unit == affected_unit
+        and health_extension.bots_can_do_damage == true
+end
+mod._gt548_is_authored_fly_blob = _gt548_is_authored_fly_blob
+
+-- Singleton pre-flight: no other gt_dev hook owns either pair installed here.
+-- Keep entry at the shared server seam; GenericStatusExtension.set_overpowered
+-- would also catch unrelated local/RPC state. The exact rejected blob observes
+-- no overpowered status and deletes itself. Its destroy method would then issue
+-- an unqualified `false`, so the installer consumes cleanup only for the exact
+-- blocked blob; ordinary blobs and every other destroy call remain vanilla.
+mod._gt548_fly_runtime = mod:dofile(
+    "scripts/mods/general_tweaker_dev/_gt_godmode_fly_runtime")
+local _gt548_fly_installation = mod._gt548_fly_runtime.install(mod, {
+    blocked_blobs = mod._gt548_blocked_fly_blobs,
+    godmode_active = _gt_godmode_active,
+    is_authored_fly_blob = _gt548_is_authored_fly_blob,
+    log = printf,
+    policy = mod._gt548_fly_overpowered_policy,
+    seen_reasons = mod._gt548_seen_fly_overpowered_reasons,
+})
+mod._gt548_status_wrapper = _gt548_fly_installation.status_wrapper
+mod._gt548_destroy_wrapper = _gt548_fly_installation.destroy_wrapper
+mod._gt548_fly_overpowered_hook_wired =
+    type(mod._gt548_status_wrapper) == "function"
+mod._gt548_fly_blob_cleanup_hook_wired =
+    type(mod._gt548_destroy_wrapper) == "function"
+
+-- Keep-safe wiring verifier required by the repository fix doctrine. This
+-- checks the exact closed truth table and hook marker; the mission reproduction
+-- remains the authority for player-visible behavior.
+mod:command("verify_godmode_flies",
+    "Verify the Godmode fly-swarm control-loss gate",
+    function()
+        local policy = mod._gt548_should_block_fly_overpowered
+        local slow = type(policy) == "function"
+            and policy(true, true, "slow_bomb", true) == true
+        local fly = type(policy) == "function"
+            and policy(true, true, "fly_bomb", true) == true
+        local godmode_off = type(policy) == "function"
+            and policy(false, true, "slow_bomb", true) == false
+        local exit_forwarded = type(policy) == "function"
+            and policy(true, false, "fly_bomb", true) == false
+        local unrelated = type(policy) == "function"
+            and policy(true, true, "charged", true) == false
+        local non_blob = type(policy) == "function"
+            and policy(true, true, "slow_bomb", false) == false
+        local ok = slow and fly and godmode_off and exit_forwarded and unrelated
+            and non_blob
+            and mod._gt548_fly_overpowered_hook_wired == true
+            and mod._gt548_fly_blob_cleanup_hook_wired == true
+            and mod._GT_548_GODMODE_FLY_MARKER
+                == "gt-548-godmode-fly-overpowered-boundary"
+        local verdict = ok and "PASS" or "FAIL"
+
+        printf(
+            "[gt:548] verify fly overpowered gate result=%s slow=%s fly=%s godmode_off=%s exit=%s unrelated=%s non_blob=%s",
+            verdict, tostring(slow), tostring(fly), tostring(godmode_off),
+            tostring(exit_forwarded), tostring(unrelated), tostring(non_blob))
+        mod:echo("Godmode fly-swarm gate: " .. verdict
+            .. ". See the console log for the exact boundary checks.")
+    end)
 
 -- Block fall damage at the source on the local player when godmode is on.
 -- The server-side `add_damage_network` hook below covers the host-self case,
