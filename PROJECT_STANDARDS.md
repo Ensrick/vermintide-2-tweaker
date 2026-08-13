@@ -2055,16 +2055,35 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   include `Build/banner:` where every named build has an explicitly bound semantic
   version and either `[mod:LOAD]` or a clearly labeled exact versioned banner (for
   example, `exact banner: [WOC] v0.1.42-dev loaded`). Each build/version/tag pair
-  must match the latest deployed release manifest and its recorded exact source
-  commit; unbound sibling versions/tags and contradictory manifest IDs are invalid.
+  must match exactly one row in the latest deployed release manifest and its
+  recorded exact source commit; dirty, ambiguous, duplicate, and version-drifted
+  release identities fail closed. Unbound sibling versions/tags are invalid.
+  Workshop item/ManifestID coordinates are optional; if either is supplied, the
+  complete pair must be unique and its item must belong to the selected build.
   The card also needs `Topology:`
   (`Solo` or `Co-op`), numbered player-facing steps, and `Expected:`. Numbered
   steps use localized names players see in-game, never internal snake-case keys.
   Exact player-entered slash commands are allowed when wrapped in backticks and
   registered by the deployed source. When a `diagnostics-armed` card asks for log
-  evidence, its numbered steps or Expected line must name at least one stable
-  bounded receipt prefix emitted through `printf`, directly or through an approved
-  receipt helper, by that source.
+  evidence, its numbered steps or Expected line must name one exact stable
+  receipt prefix or field route emitted through raw engine `printf`, directly or
+  through a conservatively proven one-hop binding, by that source. A marker alone
+  is accepted as a stable prefix only when every exact deployed route in that
+  marker family is individually finite; one unbounded sibling invalidates the
+  family-wide claim. A later bare reference to "the `[marker]` line" resolves to
+  one exact route only when that same card quotes exactly one route for the
+  marker. A discriminating authored literal prefix may select a route subgroup
+  only when every selected exact route is finite. Each route is finite only
+  because it is a direct, loop-free emitter in an explicit command callback or
+  because an immutable deployed-tree override pins its literal emitter and guard
+  tokens. A command-owned receipt is valid only when the card runs that exact
+  owning command; another registered command cannot lend it reachability.
+  `goto` invalidates the simple loop-free proof, literal-false branches do not
+  register routes, and raw `printf` trust applies to the complete deployed
+  record: any source file that mutates the global or ambient-environment logger
+  invalidates it. Nearby prose, strings/comments, fake-printf names, and
+  marker-wide sibling emitters prove nothing. A native-chat disclaimer may
+  exclude a marker only when it does not also require that marker to appear.
   An incomplete newer card invalidates an older valid card; issue-body text and
   legacy method headings are not fallbacks.
   The authoritative, machine-checked definition of this format is
@@ -2073,11 +2092,16 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   `tools/verify/generate_playtest.ps1`, and
   `tools/github/check-lifecycle-cardinality.ps1` all consume it. When prose here
   and those scripts disagree, the scripts win — fix the prose. The GitHub guard
-  resolves the latest release manifest and inspects its exact source commits with
-  blob-filtered full history. A visible legacy carry-forward entry lacking
-  `source_commit` may fall back to current source only when the current version
-  exactly equals its deployed manifest version; the contract reports every such
-  fallback.
+  resolves the latest release manifest and tokenizes Lua from its exact immutable
+  source commits with blob-filtered full history. The two visible legacy
+  carry-forward rows lacking `source_commit` are bound to reviewed root/mod tree
+  object IDs; the working tree is never substituted. During the staged rollout,
+  the repository-wide guard reports deployed-source/card findings without adding
+  them to blocking lifecycle errors, so existing ready cards do not create a
+  release cliff. Canonical ship enforces that authority strictly before any new
+  ready-label transition, and `refresh-cards.ps1` enforces it before rewriting a
+  pinned card. Once the reported backlog is repaired, the global enforcement
+  switch may be enabled deliberately.
 - **Solo first:** `coop-required` is valid only beside `diagnostics-armed` or
   `verify-fix`, with a `Topology: Co-op` current card whose `Solo status:` says
   the useful solo stage passed/completed or was exhausted. Do not add it while

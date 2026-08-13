@@ -309,8 +309,9 @@ shipping. Agent publication is headless and opens no interactive window.
     - `Build/banner:` every named build has an explicitly bound semantic version
       plus either its backticked `[<id>:LOAD]` or a clearly labeled exact
       versioned banner (`[WOC] v0.1.42-dev loaded`). Every build/version/tag pair
-      must match the latest deployed release manifest and the exact source commit
-      recorded by that manifest. Do not append an unbound sibling version/tag.
+      must resolve to exactly one latest-release row and the exact immutable source
+      commit recorded by that row. Dirty, duplicate, ambiguous, or source-version
+      drift fails closed. Do not append an unbound sibling version/tag.
     - `**Topology:**` `Solo` or `Co-op` (solo first; `Co-op` needs a
       `Solo status:` line recording passed/completed/exhausted).
     - Numbered player-facing steps using the localized names players see
@@ -318,14 +319,26 @@ shipping. Agent publication is headless and opens no interactive window.
       exact player-entered slash command wrapped in backticks.
     - `**Expected:**` the observable in-game result. When a `diagnostics-armed`
       card asks for log evidence, the numbered steps or Expected line must name
-      at least one stable, bounded receipt prefix that the deployed source emits
-      through `printf`, directly or through an approved receipt helper. A
-      backticked slash command in the steps must be registered by that same
-      deployed source.
+      one exact stable receipt prefix or field route that the deployed source emits
+      through raw engine `printf`, directly or through a conservatively proven
+      one-hop binding. A marker alone is usable only when every exact deployed
+      route sharing it is individually finite; one unbounded sibling rejects the
+      family-wide claim. A later bare reference to the same line may reuse the
+      card's one exact route; a discriminating literal prefix may select several
+      routes only when all selected routes are finite. Each route must be finite
+      by direct, loop-free command-callback ownership or an immutable source-tree
+      override with literal emitter and guard-token anchors. `goto` is not a
+      loop-free proof, unreachable literal-false registrations do not count, and
+      any cross-file mutation of the global/environment `printf` binding rejects
+      raw-logger authority for the deployed record. A backticked slash command in
+      the steps must be registered by that same deployed source, and a
+      command-owned receipt must be paired with its exact owning command rather
+      than an unrelated registered command.
     - Workshop item IDs and manifest IDs are optional, but when supplied they
       must bind to a named build and cannot contradict each other.
     Issue-body text and older method headings never qualify as fallbacks.
-  - **This is CI-enforced, and it fails wide.**
+  - **The lifecycle grammar is CI-enforced and fails wide; deployed-source
+    authority is staged.**
     `tools/github/check-lifecycle-cardinality.ps1` is a blocking step in
     `.github/workflows/qa.yml` (PRs AND master pushes) and
     `.github/workflows/issue-lifecycle.yml` (tracker events, manual, daily). It
@@ -333,13 +346,16 @@ shipping. Agent publication is headless and opens no interactive window.
     GraphQL batches, cursor-paginating any history beyond 100 comments. A single
     issue carrying `verify-fix` or `diagnostics-armed` without exactly one
     correctly formatted pinned card therefore fails qa-gate for the whole
-    repository - including PRs that never touched that mod. It resolves the
-    latest release manifest, inspects the recorded
-    source commits with a blob-filtered full Git history, and rejects stale
-    versions, invented commands, missing diagnostic receipts, and contradictory
-    manifests. Two visible legacy carry-forward entries without `source_commit`
-    may use current source only when its version exactly equals the deployed
-    manifest version. Fix the card, do not retry the build.
+    repository - including PRs that never touched that mod. The stronger source
+    authority resolves the latest release manifest and tokenizes the recorded
+    immutable source commits with blob-filtered full history. Existing-card
+    findings (stale builds, invented commands, non-routes, unbounded receipts,
+    or inconsistent optional Workshop pairs) are report-only during backlog
+    repair. Canonical ship applies them strictly before a new ready label, and
+    the card refresher applies them strictly before a rewrite. The two legacy
+    rows without `source_commit` use reviewed Git tree pins, never current
+    working-tree text. Fix reported cards; do not weaken the scanner or retry
+    the build.
   - `gh issue edit <N> --remove-label not-started --add-label verify-fix` only
     when a **complete deployed fix** is runnable in-game now.
   - `gh issue edit <N> --remove-label not-started --add-label diagnostics-armed`

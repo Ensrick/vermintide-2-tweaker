@@ -1,391 +1,158 @@
-# Authoritative deployed-source contract for GitHub CURRENT LIVE TEST cards.
+# Compatibility entry point for the deployed CURRENT LIVE TEST source contract.
 #
-# The daily release manifest identifies the exact source commit deployed for
-# every Workshop item.  Read only the relevant Lua text from those commits so
-# a card cannot claim a current-master command or banner that has not actually
-# reached the Workshop yet.  This file is dot-sourced by the shared lifecycle
-# policy and is deliberately free of GitHub mutation.
+# Source discovery and finite-output proofs live in live_test_source_authority.ps1.
+# This wrapper preserves the public API merged in #1296 and owns the offline
+# adversarial fixture used by the lifecycle guard.
 
-$script:VtContractSemverPattern = '\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?'
-$script:VtContractTagPattern = '[A-Za-z][A-Za-z0-9_-]*'
-
-function Get-VtOrderedUniqueStrings {
-    param([object[]]$Values)
-    $seen = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
-    $result = @()
-    foreach ($value in @($Values)) {
-        $text = [string]$value
-        if ($seen.Add($text)) { $result += $text }
-    }
-    return @($result)
+$sourceAuthorityPath = Join-Path $PSScriptRoot 'live_test_source_authority.ps1'
+if (-not (Test-Path -LiteralPath $sourceAuthorityPath -PathType Leaf)) {
+    throw "Live-test source authority is missing: $sourceAuthorityPath"
 }
-
-function Invoke-VtContractGit {
-    param(
-        [string]$RepoRoot,
-        [string[]]$Arguments,
-        [switch]$AllowNoMatch
-    )
-
-    $output = @(& git -C $RepoRoot @Arguments 2>&1)
-    $code = $LASTEXITCODE
-    if ($code -ne 0 -and -not ($AllowNoMatch -and $code -eq 1)) {
-        throw "git $($Arguments -join ' ') failed ($code): $($output -join [Environment]::NewLine)"
-    }
-    return @($output | ForEach-Object { [string]$_ })
-}
+. $sourceAuthorityPath
 
 function Get-VtDeployedSourceContract {
+    [CmdletBinding()]
     param(
-        [string]$RepoRoot,
-        $ReleaseManifest
+        [Parameter(Mandatory=$true)][string]$RepoRoot,
+        [Parameter(Mandatory=$true)]$ReleaseManifest
     )
-
-    if ([string]::IsNullOrWhiteSpace($RepoRoot) -or
-        -not (Test-Path -LiteralPath $RepoRoot -PathType Container)) {
-        throw "Live-test contract RepoRoot is missing: '$RepoRoot'."
-    }
-    if (-not $ReleaseManifest -or "$($ReleaseManifest.manifest_schema)" -ne '2') {
-        throw 'Live-test contract requires a release manifest with manifest_schema=2.'
-    }
-
-    $inventoryPath = Join-Path $RepoRoot 'tools\mod-inventory.psd1'
-    if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
-        throw "Active mod inventory is missing: $inventoryPath"
-    }
-    $inventory = Import-PowerShellDataFile $inventoryPath
-    $entries = @()
-    $legacyFallbacks = @()
-    $commands = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
-    $receipts = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
-
-    foreach ($mod in @($inventory.Mods)) {
-        $workshopId = [string]$mod.WorkshopId
-        if ([string]::IsNullOrWhiteSpace($workshopId)) { continue }
-        $deployed = @($ReleaseManifest.mods | Where-Object { [string]$_.workshop_id -eq $workshopId })
-        if ($deployed.Count -ne 1) {
-            throw "Release manifest must contain exactly one entry for $($mod.Dir) Workshop item $workshopId; found $($deployed.Count)."
-        }
-        $deployed = $deployed[0]
-        $commit = [string]$deployed.source_commit
-        $version = [string]$deployed.version
-        $provenance = 'release-manifest-source-commit'
-        if ([string]::IsNullOrWhiteSpace($commit)) {
-            # Two old carry-forward entries predate manifest schema-2
-            # provenance. Their release version remains authoritative; bind
-            # the tag/command surface to current source only when that source
-            # declares the exact same version, and expose the fallback.
-            $commit = [string](@(Invoke-VtContractGit -RepoRoot $RepoRoot -Arguments @('rev-parse', 'HEAD'))[0])
-            $commit = $commit.Trim()
-            $provenance = 'release-version-current-source-fallback'
-            $legacyFallbacks += [string]$mod.Dir
-        }
-        elseif ($commit -notmatch '^[0-9a-f]{40}$') {
-            throw "Release manifest source_commit is invalid for $($mod.Dir): '$commit'."
-        }
-        if ($version -notmatch ('^' + $script:VtContractSemverPattern + '$')) {
-            throw "Release manifest version is invalid for $($mod.Dir): '$version'."
-        }
-
-        Invoke-VtContractGit -RepoRoot $RepoRoot -Arguments @('cat-file', '-e', "$commit^{commit}") | Out-Null
-        $mainPath = "$($mod.Dir)/scripts/mods/$($mod.Dir)/$($mod.Dir).lua"
-        $mainText = (Invoke-VtContractGit -RepoRoot $RepoRoot -Arguments @('show', "${commit}:$mainPath")) -join "`n"
-        $sourceVersion = [regex]::Match($mainText, 'MOD_VERSION\s*=\s*["'']([^"'']+)["'']').Groups[1].Value
-        if ($sourceVersion -ne $version) {
-            throw "Deployed version provenance drift for $($mod.Dir): manifest '$version', source commit '$sourceVersion'."
-        }
-
-        $sourceRoot = "$($mod.Dir)/scripts/mods/$($mod.Dir)"
-        $lines = @(Invoke-VtContractGit -RepoRoot $RepoRoot -AllowNoMatch -Arguments @(
-            'grep', '-h', '-I', '-A', '4',
-            '-e', ':LOAD]',
-            '-e', 'mod:command',
-            $commit, '--', $sourceRoot
-        ))
-        $printfLines = @(Invoke-VtContractGit -RepoRoot $RepoRoot -AllowNoMatch -Arguments @(
-            'grep', '-h', '-I', '-C', '6', '-e', 'printf',
-            $commit, '--', $sourceRoot
-        ))
-
-        $loadTags = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
-        $modCommands = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
-        $modReceipts = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
-        $identityText = $lines -join "`n"
-        foreach ($line in $lines) {
-            foreach ($match in [regex]::Matches($line, '\[(' + $script:VtContractTagPattern + '):LOAD\]')) {
-                [void]$loadTags.Add($match.Groups[1].Value)
-            }
-        }
-        foreach ($match in [regex]::Matches($identityText, 'mod:command\s*\(\s*["'']([^"'']+)["'']')) {
-            [void]$modCommands.Add($match.Groups[1].Value)
-            [void]$commands.Add($match.Groups[1].Value)
-        }
-        $printfText = $printfLines -join "`n"
-        foreach ($match in [regex]::Matches($printfText, '\[([A-Za-z][A-Za-z0-9_-]*(?::[A-Za-z0-9_-]+)?)\]')) {
-            if ($match.Groups[1].Value -notmatch '(?i):LOAD$') {
-                $prefix = "[$($match.Groups[1].Value)]"
-                [void]$modReceipts.Add($prefix)
-                [void]$receipts.Add($prefix)
-            }
-        }
-
-        # Some probes deliberately format through a tiny injected/helper
-        # function rather than calling printf at every observation site. Their
-        # exact routes are declared below and checked against this deployed
-        # commit; a stale marker or a severed printf adapter fails closed.
-        $receiptEvidence = @(
-            @{ Prefix='[WOC:633]'; WorkshopId='3753880932'; MarkerPath='_woc_blightreaper_audio.lua'; MarkerNeedle='[WOC:633]'; ProofPath='_woc_blightreaper_audio.lua'; ProofNeedle='pcall(printf_fn, format, ...)' },
-            @{ Prefix='[gut:630]'; WorkshopId='3751024698'; MarkerPath='_gut_dx12_fence630.lua'; MarkerNeedle='[gut:630]'; ProofPath='gui_tweaker_dev.lua'; ProofNeedle='emit = function(line) printf("%s", line) end' },
-            @{ Prefix='[cwv:343]'; WorkshopId='3716869446'; MarkerPath='_cwv_smoke_bomb_probe.lua'; MarkerNeedle='[cwv:343]'; ProofPath='_cwv_smoke_bomb_probe.lua'; ProofNeedle='pcall(printf, "%s", line)' },
-            @{ Prefix='[cwv:760]'; WorkshopId='3716869446'; MarkerPath='_cwv_outrider_animation.lua'; MarkerNeedle='[cwv:760]'; ProofPath='_cwv_core_templates.lua'; ProofNeedle='emit_evidence(printf' },
-            @{ Prefix='[gt:753]'; WorkshopId='3733367409'; MarkerPath='_gt_diag_disconnect_failure.lua'; MarkerNeedle='[gt:753]'; ProofPath='_gt_diag_disconnect_failure.lua'; ProofNeedle='pcall(engine_printf, "[gt:753] " .. fmt, ...)' },
-            @{ Prefix='[ct:132]'; WorkshopId='3733366926'; MarkerPath='_ct_diag_cursed_chest132.lua'; MarkerNeedle='[ct:132]'; ProofPath='_ct_diag_cursed_chest132.lua'; ProofNeedle='pcall(printf, fmt, ...)' },
-            @{ Prefix='[ct:349]'; WorkshopId='3733366926'; MarkerPath='_ct_diag_cursed_chest132.lua'; MarkerNeedle='[ct:349]'; ProofPath='_ct_diag_cursed_chest132.lua'; ProofNeedle='pcall(printf, fmt, ...)' },
-            @{ Prefix='[mp:607]'; WorkshopId='3730422873'; MarkerPath='_mp_loot_diag_runtime.lua'; MarkerNeedle='[mp:607]'; ProofPath='modded_progression.lua'; ProofNeedle='print_log = printf' }
-        )
-        foreach ($proof in @($receiptEvidence | Where-Object { $_.WorkshopId -eq $workshopId })) {
-            $markerPath = "$sourceRoot/$($proof.MarkerPath)"
-            $proofPath = "$sourceRoot/$($proof.ProofPath)"
-            $markerText = (Invoke-VtContractGit -RepoRoot $RepoRoot -Arguments @('show', "${commit}:$markerPath")) -join "`n"
-            $proofText = if ($proofPath -eq $markerPath) { $markerText } else {
-                (Invoke-VtContractGit -RepoRoot $RepoRoot -Arguments @('show', "${commit}:$proofPath")) -join "`n"
-            }
-            if ($markerText.IndexOf([string]$proof.MarkerNeedle, [System.StringComparison]::Ordinal) -lt 0 -or
-                $proofText.IndexOf([string]$proof.ProofNeedle, [System.StringComparison]::Ordinal) -lt 0) {
-                throw "Deployed printf receipt proof drifted for $($proof.Prefix) at $commit."
-            }
-            [void]$modReceipts.Add([string]$proof.Prefix)
-            [void]$receipts.Add([string]$proof.Prefix)
-        }
-        if ($loadTags.Count -eq 0) {
-            throw "Deployed source has no [tag:LOAD] marker for $($mod.Dir) at $commit."
-        }
-
-        $entries += [pscustomobject][ordered]@{
-            Directory = [string]$mod.Dir
-            ModId = [string]$mod.ModId
-            WorkshopId = $workshopId
-            Version = $version
-            SourceCommit = $commit
-            Provenance = $provenance
-            LoadTags = @($loadTags | Sort-Object)
-            Commands = @($modCommands | Sort-Object)
-            PrintfReceipts = @($modReceipts | Sort-Object)
-        }
-    }
-
-    return [pscustomobject][ordered]@{
-        ReleaseTag = [string]$ReleaseManifest.release_tag
-        PublishedAt = [string]$ReleaseManifest.published_at
-        Entries = @($entries)
-        Commands = @($commands | Sort-Object)
-        PrintfReceipts = @($receipts | Sort-Object)
-        LegacySourceFallbacks = @($legacyFallbacks | Sort-Object)
-    }
+    return Get-VtCardSourceAuthority -RepoRoot $RepoRoot -DeploymentManifest $ReleaseManifest
 }
 
-function Get-VtCardVersionAnchors {
-    param([string]$BuildBanner)
-
-    $pairs = @{}
-    if ([string]::IsNullOrWhiteSpace($BuildBanner)) { return @() }
-    $sem = $script:VtContractSemverPattern
-    $tag = $script:VtContractTagPattern
-    $patterns = @(
-        @{ Pattern=('\[(' + $tag + '):LOAD\]`?[ \t]*`?v?(' + $sem + ')'); Tag=1; Version=2 },
-        @{ Pattern=('v?(' + $sem + ')`?[ \t]*`?\[(' + $tag + '):LOAD\]'); Tag=2; Version=1 },
-        @{ Pattern=('\[(' + $tag + ')\][ \t]+v?(' + $sem + ')[ \t]+loaded'); Tag=1; Version=2 }
-    )
-    foreach ($spec in $patterns) {
-        foreach ($match in [regex]::Matches($BuildBanner, $spec.Pattern, 'IgnoreCase')) {
-            $tagValue = $match.Groups[$spec.Tag].Value
-            $versionValue = $match.Groups[$spec.Version].Value
-            $pairs[($tagValue.ToLowerInvariant() + '|' + $versionValue.ToLowerInvariant())] =
-                [pscustomobject]@{ Tag=$tagValue; Version=$versionValue }
-        }
-    }
-
-    # The template permits "vX, confirm [tag:LOAD]". After consuming every
-    # adjacent explicit pair, bind this loose form only when exactly one tag
-    # and one version remain. This supports a mixed card containing one exact
-    # banner plus one template-form banner without guessing among siblings.
-    $tags = @(Get-VtOrderedUniqueStrings @([regex]::Matches($BuildBanner, '\[(' + $tag + '):LOAD\]', 'IgnoreCase') |
-        ForEach-Object { $_.Groups[1].Value }))
-    $versions = @(Get-VtOrderedUniqueStrings @([regex]::Matches($BuildBanner, '(?i)\bv?(' + $sem + ')\b') |
-        ForEach-Object { $_.Groups[1].Value }))
-    $remainingTags = @($tags | Where-Object { $candidate=$_; @($pairs.Values | Where-Object { $_.Tag -ieq $candidate }).Count -eq 0 })
-    $remainingVersions = @($versions | Where-Object { $candidate=$_; @($pairs.Values | Where-Object { $_.Version -ieq $candidate }).Count -eq 0 })
-    if ($remainingTags.Count -eq 1 -and $remainingVersions.Count -eq 1) {
-        $pairs[($remainingTags[0].ToLowerInvariant() + '|' + $remainingVersions[0].ToLowerInvariant())] =
-            [pscustomobject]@{ Tag=$remainingTags[0]; Version=$remainingVersions[0] }
-    }
-    return @($pairs.Values)
-}
-
-function Get-VtCardExpectedEvidenceText {
-    param([string]$Card)
-
-    $result = @()
-    $inside = $false
-    foreach ($line in @($Card -split "`r?`n")) {
-        if (-not $inside) {
-            if ($line -match '(?i)^\s*\*\*Expected:\*\*\s*(.*)$') {
-                $inside = $true
-                $result += $matches[1]
-            }
-            continue
-        }
-        # Expected may legitimately span several paragraphs. Stop before
-        # provenance or historical prose so an obsolete marker cannot satisfy
-        # the current diagnostic receipt contract.
-        if ($line -match '(?i)^\s*(?:\*\*[A-Za-z][^*]*:\*\*|Note:|Supersedes:|Deployed floor:|\*\()') {
-            break
-        }
-        $result += $line
-    }
-    return ($result -join "`n").Trim()
-}
-
-function Get-VtCardContractErrors {
-    param(
-        [string]$Card,
-        [string]$BuildBanner,
-        $Contract,
-        [switch]$RequirePrintfEvidence
-    )
-
-    $errors = New-Object System.Collections.Generic.List[string]
-    if (-not $Contract) { return @() }
-    $pairs = @(Get-VtCardVersionAnchors $BuildBanner)
-    if ($pairs.Count -eq 0) {
-        $errors.Add('build-anchor-version-not-bound')
-    }
-
-    $matchedEntries = @()
-    foreach ($pair in $pairs) {
-        $matches = @($Contract.Entries | Where-Object {
-            @($_.LoadTags | Where-Object { $_ -ieq $pair.Tag }).Count -gt 0 -and
-            [string]$_.Version -ieq [string]$pair.Version
-        })
-        if ($matches.Count -eq 0) {
-            $errors.Add("undeployed-build-$($pair.Tag)-$($pair.Version)")
-        }
-        else {
-            $matchedEntries += $matches
-        }
-    }
-    $allTags = @(Get-VtOrderedUniqueStrings @([regex]::Matches($BuildBanner, '\[(' + $script:VtContractTagPattern + '):LOAD\]', 'IgnoreCase') |
-        ForEach-Object { $_.Groups[1].Value }))
-    $allVersions = @(Get-VtOrderedUniqueStrings @([regex]::Matches($BuildBanner, '(?i)\bv?(' + $script:VtContractSemverPattern + ')\b') |
-        ForEach-Object { $_.Groups[1].Value }))
-    foreach ($tag in $allTags) {
-        if (@($pairs | Where-Object { $_.Tag -ieq $tag }).Count -eq 0) {
-            $errors.Add("unbound-build-load-tag-$tag")
-        }
-    }
-    foreach ($version in $allVersions) {
-        if (@($pairs | Where-Object { $_.Version -ieq $version }).Count -eq 0) {
-            $errors.Add("unbound-build-version-$version")
-        }
-    }
-
-    $authoritativeLines = @($Card -split "`r?`n" | Where-Object {
-        $_ -match '(?i)^\s*\*\*(?:Build/banner|Workshop(?: receipts)?|Current deployed floor)\s*:\*\*'
-    })
-    $authoritativeText = $authoritativeLines -join "`n"
-    $workshopIds = @([regex]::Matches($authoritativeText, '(?i)(?:workshop[ \t]+)?item[ \t]+`?(\d{10})`?') |
-        ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
-    foreach ($workshopId in $workshopIds) {
-        if (@($matchedEntries | Where-Object { [string]$_.WorkshopId -eq $workshopId }).Count -eq 0) {
-            $errors.Add("workshop-item-not-bound-to-build-$workshopId")
-        }
-    }
-
-    $manifestByItem = @{}
-    foreach ($line in $authoritativeLines) {
-        if ($line -notmatch '(?i)manifest(?:id)?') { continue }
-        $items = @(Get-VtOrderedUniqueStrings @([regex]::Matches($line, '(?i)(?:workshop[ \t]+)?item[ \t]+`?(\d{10})`?') |
-            ForEach-Object { $_.Groups[1].Value }))
-        $manifests = @(Get-VtOrderedUniqueStrings @([regex]::Matches($line, '(?i)manifest(?:id)?[ \t]+`?(\d{6,})`?') |
-            ForEach-Object { $_.Groups[1].Value }))
-        if ($manifests.Count -eq 0) { continue }
-        if ($items.Count -eq 1) {
-            if (-not $manifestByItem.ContainsKey($items[0])) { $manifestByItem[$items[0]] = @() }
-            $manifestByItem[$items[0]] = @($manifestByItem[$items[0]]) + $manifests
-        }
-        elseif ($items.Count -ne $manifests.Count) {
-            $errors.Add('unscoped-manifest-id')
-        }
-        else {
-            for ($i = 0; $i -lt $items.Count; $i++) {
-                if (-not $manifestByItem.ContainsKey($items[$i])) { $manifestByItem[$items[$i]] = @() }
-                $manifestByItem[$items[$i]] = @($manifestByItem[$items[$i]]) + $manifests[$i]
-            }
-        }
-    }
-    foreach ($item in @($manifestByItem.Keys)) {
-        $distinct = @($manifestByItem[$item] | Sort-Object -Unique)
-        if ($distinct.Count -gt 1) { $errors.Add("contradictory-manifest-ids-$item") }
-    }
-
-    $registered = @($matchedEntries | ForEach-Object { @($_.Commands) } | Sort-Object -Unique)
-    foreach ($step in @(Get-VtNumberedStepText $Card)) {
-        foreach ($match in [regex]::Matches($step, '`/([A-Za-z][A-Za-z0-9_:-]+)(?:[ \t][^`]*)?`')) {
-            $command = $match.Groups[1].Value
-            if ($registered -notcontains $command) {
-                $errors.Add("unregistered-command-$command")
-            }
-        }
-    }
-
-    $evidenceText = (@(Get-VtNumberedStepText $Card) + @((Get-VtCardExpectedEvidenceText $Card))) -join "`n"
-    if ($RequirePrintfEvidence) {
-        $requestsLogEvidence = $evidenceText -match '(?i)\b(?:attach|retain|save|inspect|read|capture|check|grep)\b[^\r\n]{0,100}\b(?:log|row|trace|receipt|needle)s?\b' -or
-            $evidenceText -match '(?i)\b(?:log(?!\s+spam\b)|row|trace|receipt|needle)s?\b[^\r\n]{0,100}\b(?:contains?|carries|records?|reports?|classifies|identifies|appears?|shows?|verdict|result)\b' -or
-            $evidenceText -match '(?i)\bbounded\b[^\r\n]{0,60}\brows?\b'
-        $requestedReceipts = @([regex]::Matches($evidenceText, '\[([A-Za-z][A-Za-z0-9_-]*(?::[A-Za-z0-9_-]+)?)\]') |
-            ForEach-Object { "[$($_.Groups[1].Value)]" } |
-            Where-Object { $_ -notmatch '(?i):LOAD\]$' } |
-            Sort-Object -Unique)
-        if ($requestedReceipts.Count -eq 0 -and $requestsLogEvidence) {
-            $errors.Add('diagnostic-log-evidence-prefix-missing')
-        }
-        $boundReceipts = @($matchedEntries | ForEach-Object { @($_.PrintfReceipts) } | Sort-Object -Unique)
-        foreach ($receipt in $requestedReceipts) {
-            if (@($boundReceipts | Where-Object { $_ -ieq $receipt }).Count -eq 0) {
-                $errors.Add("requested-receipt-not-printf-$($receipt.Trim('[', ']'))")
-            }
-        }
-    }
-
-    return @($errors | Select-Object -Unique)
+function Assert-VtContractFixture {
+    param([bool]$Condition, [string]$Message)
+    if (-not $Condition) { throw $Message }
 }
 
 function Invoke-VtDeployedSourceContractSelfTest {
-    $tempBase = [System.IO.Path]::GetTempPath()
+    $tempBase = [IO.Path]::GetTempPath()
     $tmp = Join-Path $tempBase ('vt2-live-card-contract-' + [guid]::NewGuid().ToString('N'))
-    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $utf8 = New-Object Text.UTF8Encoding($false)
     try {
-        [void][System.IO.Directory]::CreateDirectory((Join-Path $tmp 'tools'))
+        [IO.Directory]::CreateDirectory((Join-Path $tmp 'tools\verify')) | Out-Null
         $luaRoot = Join-Path $tmp 'fixture_mod\scripts\mods\fixture_mod'
-        [void][System.IO.Directory]::CreateDirectory($luaRoot)
-        [System.IO.File]::WriteAllText((Join-Path $tmp 'tools\mod-inventory.psd1'), @'
+        [IO.Directory]::CreateDirectory($luaRoot) | Out-Null
+        [IO.File]::WriteAllText((Join-Path $tmp 'tools\mod-inventory.psd1'), @'
 @{ Mods = @(
-    @{ Dir='fixture_mod'; ModId='fixture'; WorkshopId='1234567890';
-       Visibility='friends_only'; Stream='single'; Public=$false;
-       Name='Fixture'; RootBundle='fixture.mod_bundle' }
+    @{ Dir='fixture_mod'; ModId='fixture'; WorkshopId='1234567890'; Name='Fixture' }
 ) }
 '@, $utf8)
-        [System.IO.File]::WriteAllText((Join-Path $luaRoot 'fixture_mod.lua'), @'
+        [IO.File]::WriteAllText((Join-Path $tmp 'tools\verify\live_test_contract_exceptions.psd1'), @'
+@{
+    LegacySourceTrees=@()
+    ReceiptRouteOverrides=@()
+    ReceiptFamilyOverrides=@()
+    ReceiptDiscoveryOverrides=@()
+}
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot 'fixture_mod.lua'), @'
 local MOD_VERSION = "1.2.3-dev"
+local banner_bait = "[bait:LOAD] v%s enabled fp=fake OK"
+local phantom_command = 'mod:command("phantom", "not registered", function() end)'
+local string_data = 'printf("[fx:string-data]")'
+local long_data = [=[printf("[fx:long-string]")]=]
+-- printf("[fx:comment]")
+local fakeprintf = function() end
+fakeprintf("[fx:fake]")
+mod.printf("[fx:member-call]")
 pcall(printf, "[fx:LOAD] v%s enabled fp=test OK", MOD_VERSION)
-mod:command(
-    "fx_probe",
-    "Fixture probe",
-    function()
-        pcall(printf,
-            "[fx:probe] status=OK")
+mod:command("fx_probe", "Fixture probe", function()
+    pcall(printf, "[fx:probe] status=OK")
+end)
+mod:command([=[fx_long_probe]=], [=[Long-bracket fixture probe]=], function()
+    pcall(printf, [=[[fx:long-argument] status=OK]=])
+end)
+mod:command("fx_other", "Unrelated fixture command", function() end)
+if false then
+    pcall(printf, "[dead:LOAD] v%s enabled fp=dead OK", MOD_VERSION)
+    mod:info("[dead] v%s loaded", MOD_VERSION)
+    mod:command("dead_probe", "Unreachable command", function()
+        printf("[dead:receipt] status=impossible")
     end)
+end
+mod:command("fx_goto", "Backward-goto fixture", function()
+    ::again::
+    printf("[fx:goto-cycle] status=unbounded")
+    goto again
+end)
+local function async_probe()
+    printf("[fx:async-command] status=OK")
+end
+mod:command("fx_async", "Audited helper fixture", function()
+    async_probe()
+end)
+mod:command("fx_bait", (function()
+    printf("[fx:unrelated-command-context]")
+    return "description"
+end)(), function() end)
+mod:command("fx_nested", "Nested callback fixture", function()
+    local function retained_callback()
+        printf("[fx:nested-command-function]")
+    end
+    mod._fixture_retained_callback = retained_callback
+end)
+mod:command("fx_loop", "Loop callback fixture", function()
+    while mod._fixture_loop do
+        printf("[fx:command-loop]")
+    end
+end)
+while mod._fixture_main_loop do
+    printf("[fx:main-loop]")
+end
+function mod.update()
+    printf("[fx:per-frame]")
+    printf("[cwv:491] view_tag=%s observed_unit=%s reason=%s retained=%s current=none other_player=none", "hero_1", "unit_1", "fixture", "true")
+end
+mod:dofile("scripts/mods/fixture_mod/_helper").install(mod, { log = printf })
+mod:dofile("scripts/mods/fixture_mod/_early").install(mod, { log = printf })
+pcall(mod.dofile, mod, "scripts/mods/fixture_mod/_pcall_helper")
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_helper.lua'), @'
+local M = {}
+printf("[fx:helper-top-level]")
+local emit = assert(deps.log)
+function M.install()
+    emit("[fx:alias-ok] status=%s", "OK")
+end
+return M
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_early.lua'), @'
+local M = {}
+early("[fx:alias-before-declaration]")
+local early = assert(deps.log)
+function M.install()
+    early("[fx:alias-after-ambiguous-declaration]")
+end
+return M
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_pcall_helper.lua'), @'
+printf("[fx:pcall-reachable] status=loaded")
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_shadow.lua'), @'
+local printf = mod.debug
+printf("[fx:shadow]")
+local reassigned = assert(deps.log)
+reassigned = mod.debug
+reassigned("[fx:reassigned]")
+local multi = assert(deps.log)
+local second = multi
+second("[fx:multi-hop]")
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_multi_shadow.lua'), @'
+local first, printf, third = nil, mod.debug, nil
+printf("[fx:multi-local-shadow]")
+for _, printf in pairs({}) do
+    printf("[fx:for-shadow]")
+end
+printf, third = mod.debug, nil
+printf("[fx:multi-assignment-shadow]")
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_unreachable.lua'), @'
+printf("[unreachable:LOAD] v%s enabled fp=dead OK", "1.2.3-dev")
+mod:info("[unreachable] v%s loaded", "1.2.3-dev")
+mod:command("unreachable_probe", "Unloaded command", function()
+    printf("[unreachable:receipt] status=impossible")
+end)
 '@, $utf8)
         & git -C $tmp init -q
         & git -C $tmp config user.email 'fixture@example.invalid'
@@ -395,43 +162,202 @@ mod:command(
         & git -C $tmp commit -q -m fixture
         if ($LASTEXITCODE -ne 0) { throw 'Could not commit deployed-source contract fixture.' }
         $commit = (& git -C $tmp rev-parse HEAD).Trim()
+        $fixtureModTree = (& git -C $tmp rev-parse "$commit`:fixture_mod/scripts/mods").Trim()
+        [IO.File]::WriteAllText((Join-Path $tmp 'tools\verify\live_test_contract_exceptions.psd1'), @"
+@{
+    LegacySourceTrees=@()
+    ReceiptFamilyOverrides=@()
+    ReceiptDiscoveryOverrides=@()
+    ReceiptRouteOverrides=@(
+        @{
+            ModId='fixture';ModTree='$fixtureModTree'
+            Source='fixture_mod/scripts/mods/fixture_mod/fixture_mod.lua'
+            Marker='[fx:async-command]';Signature='[fx:async-command] status=OK'
+            Bound='one helper call in each explicit /fx_async callback transaction'
+            ActionCommands=@('/fx_async')
+            EmitterAnchors=@(@{Tokens=@('printf','(','String:[fx:async-command] status=OK',')')})
+            GuardAnchors=@(
+                @{Tokens=@('local','function','async_probe','(',')')},
+                @{Tokens=@('mod',':','command','(','String:fx_async')},
+                @{Tokens=@('async_probe','(',')')}
+            )
+        }
+    )
+}
+"@, $utf8)
         $manifest = [pscustomobject]@{
             manifest_schema = 2
             release_tag = 'mods-fixture'
             published_at = '2026-08-13T00:00:00Z'
             mods = @([pscustomobject]@{
-                mod_id='fixture'; workshop_id='1234567890'; version='1.2.3-dev'; source_commit=$commit
+                mod_id='fixture'
+                friendly_name='Fixture'
+                workshop_id='1234567890'
+                version='1.2.3-dev'
+                source_commit=$commit
+                source_state='clean'
             })
         }
+
         $contract = Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest
-        if ($contract.Entries.Count -ne 1 -or $contract.Entries[0].LoadTags -notcontains 'fx') {
-            throw 'Fixture load-tag identity was not recovered.'
+        Assert-VtContractFixture (@($contract.Records).Count -eq 1) 'Fixture authority did not resolve exactly one record.'
+        $record = @($contract.Records)[0]
+        Assert-VtContractFixture (@($record.LoadRoutes.Marker) -contains '[fx:LOAD]') 'Literal LOAD route was not recovered.'
+        Assert-VtContractFixture (@($record.LoadRoutes.Marker) -notcontains '[bait:LOAD]') 'String-only LOAD bait was accepted.'
+        Assert-VtContractFixture (@($record.LoadRoutes.Marker) -notcontains '[dead:LOAD]') 'Literal-false LOAD route was accepted.'
+        Assert-VtContractFixture (@($record.LoadRoutes.Marker) -notcontains '[unreachable:LOAD]') 'Unloaded-document LOAD route was accepted.'
+        Assert-VtContractFixture (@($record.ExactBannerRoutes.Tag) -notcontains '[dead]') 'Literal-false exact banner was accepted.'
+        Assert-VtContractFixture (@($record.ExactBannerRoutes.Tag) -notcontains '[unreachable]') 'Unloaded-document exact banner was accepted.'
+        Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_probe') 'Exact command registration was not recovered.'
+        Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_long_probe') 'Long-bracket command argument was not recovered.'
+        Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains '/phantom') 'String-only phantom command was accepted.'
+        Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains '/dead_probe') 'Literal-false command registration was accepted.'
+        Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains '/unreachable_probe') 'Unloaded-document command registration was accepted.'
+
+        $routes = @($record.ReceiptRoutes)
+        Assert-VtContractFixture (@($routes.Signature) -contains '[fx:probe] status=OK') 'Direct printf receipt was not recovered.'
+        Assert-VtContractFixture (@($routes.Signature) -contains '[fx:long-argument] status=OK') 'Long-bracket printf argument was not recovered.'
+        Assert-VtContractFixture (@($routes | Where-Object { $_.Signature -eq '[fx:probe] status=OK' -and $_.Bound }).Count -eq 1) 'Explicit-command receipt was not bounded.'
+        Assert-VtContractFixture (@($routes | Where-Object {
+            $_.Signature -eq '[fx:probe] status=OK' -and @($_.ActionCommands) -contains '/fx_probe'
+        }).Count -eq 1) 'Explicit-command receipt was not bound to its exact action command.'
+        Assert-VtContractFixture (@($routes.Signature) -notcontains '[dead:receipt] status=impossible') 'Literal-false receipt route was accepted.'
+        Assert-VtContractFixture (@($routes.Signature) -notcontains '[unreachable:receipt] status=impossible') 'Unloaded-document receipt route was accepted.'
+        Assert-VtContractFixture (@($routes | Where-Object {
+            $_.Signature -eq '[fx:goto-cycle] status=unbounded' -and -not $_.Bound -and @($_.ActionCommands) -contains '/fx_goto'
+        }).Count -eq 1) 'Backward-goto command receipt was incorrectly certified loop-free.'
+        Assert-VtContractFixture (@($routes | Where-Object {
+            $_.Signature -eq '[fx:async-command] status=OK' -and $_.Bound -and @($_.ActionCommands) -contains '/fx_async' -and
+            [string]$_.BoundProof -like 'override:*'
+        }).Count -eq 1) 'Immutable async-helper override did not bind its exact action command.'
+        Assert-VtContractFixture (@($routes | Where-Object { $_.Signature -eq '[fx:per-frame]' -and -not $_.Bound }).Count -eq 1) 'Per-frame receipt was not rejected as unbounded.'
+        Assert-VtContractFixture (@($routes | Where-Object { $_.Signature -eq '[fx:helper-top-level]' -and -not $_.Bound }).Count -eq 1) 'Repeatable helper top-level receipt was accepted as module-lifetime bounded.'
+        Assert-VtContractFixture (@($routes | Where-Object { $_.Signature -eq '[fx:unrelated-command-context]' -and -not $_.Bound }).Count -eq 1) 'An unrelated function inside mod:command arguments was accepted as the command callback.'
+        Assert-VtContractFixture (@($routes | Where-Object { $_.Signature -eq '[fx:nested-command-function]' -and -not $_.Bound }).Count -eq 1) 'A retained function nested inside a command callback was accepted as the command callback itself.'
+        Assert-VtContractFixture (@($routes | Where-Object { $_.Signature -eq '[fx:command-loop]' -and -not $_.Bound }).Count -eq 1) 'A command-callback loop was accepted without an immutable finite-bound proof.'
+        Assert-VtContractFixture (@($routes | Where-Object { $_.Signature -eq '[fx:main-loop]' -and -not $_.Bound }).Count -eq 1) 'A framework-main loop was accepted without an immutable finite-bound proof.'
+        Assert-VtContractFixture (@($routes | Where-Object {
+            $_.Marker -eq '[cwv:491]' -and -not $_.Bound
+        }).Count -eq 1) 'Merged #491 fail-open regression: the per-frame receipt was not retained as unbounded.'
+        foreach ($forbidden in '[fx:string-data]','[fx:long-string]','[fx:comment]','[fx:fake]','[fx:member-call]','[fx:shadow]','[fx:multi-local-shadow]','[fx:for-shadow]','[fx:multi-assignment-shadow]','[fx:global-member-shadow]','[fx:global-rawset-shadow]','[fx:reassigned]','[fx:multi-hop]','[fx:alias-before-declaration]','[fx:alias-after-ambiguous-declaration]') {
+            Assert-VtContractFixture (@($routes.Signature) -notcontains $forbidden) "Phantom or ambiguous route was accepted: $forbidden"
         }
-        if ($contract.Commands -notcontains 'fx_probe') {
-            throw 'Fixture multiline command registration was not recovered.'
+        Assert-VtContractFixture (@($routes.Signature) -contains '[fx:alias-ok] status=%s') 'One-hop raw printf injection was not recovered.'
+        Assert-VtContractFixture (@($routes.Signature) -contains '[fx:pcall-reachable] status=loaded') 'Literal pcall(mod.dofile, mod, path) reachability was not recovered.'
+
+        $mutationCases=@(
+            '_G.printf = mod.debug',
+            '_G["printf"] = mod.debug',
+            'rawset(_G, "printf", mod.debug)',
+            'getfenv(0).printf = mod.debug',
+            'local env = getfenv(0); env.printf = mod.debug',
+            'rawset(getfenv(2), "printf", mod.debug)',
+            'setfenv(0, {})',
+            'debug.setfenv(0, {})',
+            'pcall(setfenv, 0, {})'
+        )
+        foreach($mutationCase in $mutationCases){
+            Assert-VtContractFixture (Test-VtLuaMutatesGlobalPrintf -Tokens @(Get-VtLuaTokens -Content $mutationCase)) "Global/environment printf mutation was not rejected: $mutationCase"
         }
-        if ($contract.PrintfReceipts -notcontains '[fx:probe]') {
-            throw 'Fixture multiline printf receipt was not recovered.'
+        foreach($safeCase in @(
+            'local bait = ''_G.printf = fake'' -- rawset(_G, "printf", fake)',
+            'local pf = rawget(_G, "printf")',
+            'local env = getfenv(M.dump)'
+        )){
+            Assert-VtContractFixture (-not(Test-VtLuaMutatesGlobalPrintf -Tokens @(Get-VtLuaTokens -Content $safeCase))) "Read-only/string global printf bait was rejected: $safeCase"
         }
+
+        # Cross-file trust is record-wide: a clean main document cannot lend
+        # raw printf authority when any sibling mutates the ambient logger.
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_global_shadow.lua'), @'
+rawset(_G, "printf", mod.debug)
+'@, $utf8)
+        & git -C $tmp add -- .
+        & git -C $tmp commit -q -m 'plant cross-file global printf mutation'
+        if($LASTEXITCODE -ne 0){throw 'Could not commit cross-file global printf fixture.'}
+        $mutatingCommit=(& git -C $tmp rev-parse HEAD).Trim()
+        $manifest.mods[0].source_commit=$mutatingCommit
+        $rejected=$false
+        try{Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest|Out-Null}
+        catch{$rejected=$_.Exception.Message -match 'mutates global/environment printf'}
+        Assert-VtContractFixture $rejected 'Cross-file global printf mutation did not reject the complete deployed record.'
+        $manifest.mods[0].source_commit=$commit
+
+        $manifest.mods[0].source_state = 'dirty'
+        $rejected = $false
+        try { Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest | Out-Null }
+        catch { $rejected = $_.Exception.Message -match 'source_state must be clean' }
+        Assert-VtContractFixture $rejected 'Dirty deployed source was accepted.'
+        $manifest.mods[0].source_state = 'clean'
+
         $manifest.mods[0].version = '1.2.4-dev'
         $rejected = $false
         try { Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest | Out-Null }
-        catch { $rejected = $_.Exception.Message -match 'provenance drift' }
-        if (-not $rejected) { throw 'Planted manifest/source version mismatch was accepted.' }
+        catch { $rejected = $_.Exception.Message -match 'MOD_VERSION drift' }
+        Assert-VtContractFixture $rejected 'Manifest/source version mismatch was accepted.'
+        $manifest.mods[0].version = '1.2.3-dev'
+
+        $manifest.mods += [pscustomobject]@{
+            mod_id='fixture'
+            friendly_name='Duplicate'
+            workshop_id='9999999999'
+            version='1.2.3-dev'
+            source_commit=$commit
+            source_state='clean'
+        }
+        $rejected = $false
+        try { Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest | Out-Null }
+        catch { $rejected = $_.Exception.Message -match 'duplicate mod_id' }
+        Assert-VtContractFixture $rejected 'Duplicate release mod_id was accepted.'
+
+        $exceptions = Import-PowerShellDataFile (Join-Path $PSScriptRoot 'live_test_contract_exceptions.psd1')
+        $requiredRoutes = @(
+            # Seven exact routes the superseding audit proved were legitimate
+            # false rejects in the merged marker-wide scanner.
+            @{ Marker='[gut:217]'; Signature='[gut:217] compendium tabs injected into HeroWindowPanelConsole definitions (Armory, Bestiary)' },
+            @{ Marker='[gut_dev:NATIVE_LOADOUTS]'; Signature='[gut_dev:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]' },
+            @{ Marker='[wt:661]'; Signature='[wt:661] wield-boundary item=%s career=%s template=%s result=%s trace=%d/%d' },
+            @{ Marker='[cos:373]'; Signature='[cos:373] receiver coverage OK: no magic/runed shield family gaps' },
+            @{ Marker='[cos:704]'; Signature='[cos:704] summary inspected=%d suspects=%d emitted=%d truncated=%s signature_truncated=%s signature_bytes=%d' },
+            @{ Marker='[cwv:343]'; Signature='[cwv:343] status=%s base=%s area=%s pool=%d/%.6f healthy=%s exact_z_scale=%s registration_quarantined=%s' },
+            @{ Marker='[crt:699]'; Signature='[crt:699] icon active=true subject=%s buff=%s role=%s template=%s expected=%s icon=%s atlas=%s atlas_id=%s widget=%s widget_icon=%s semantic_match=%s numb_collision=%s hud_widgets=%d hud_capacity=%d hidebuffs=%s hidden=%s priority=%s' },
+            # Current bounded routes surfaced by the independent merge audit.
+            @{ Marker='[ct:skull52]'; Signature='[ct:skull52] %s' },
+            @{ Marker='[gt:488]'; Signature='[gt:488] bot-hazard type=%s milestone=%s active_before=%d active_after=%d damage_in=%.3f damage_out=%.3f record=%d/%d' },
+            @{ Marker='[gt:488]'; Signature='[gt:488] ratling-shield state=%d/%d wielded=%s wielded_template=%s wielded_shield=%s melee_template=%s melee_shield=%s blocking=%s projectile_hit=%s victim_self=%s taking_cover=%s input=%s mutation=0' },
+            @{ Marker='[WOC:boss-catalog]'; Signature='[WOC:boss-catalog] facet=authored id=%s issue=%s stage=%s status=%s registration_enabled=%s required=%s missing=%s' },
+            @{ Marker='[cos:656]'; Signature='[cos:656] registered skin=%s donor=%s vanilla_geometry=true enabled=%s' },
+            @{ Marker='[cwv:760]'; Signature='[cwv:760] surface=%s career=%s event=%s result=%s source=%s evidence=%d/%d visual=unverified' }
+        )
+        foreach ($required in $requiredRoutes) {
+            $matches = @($exceptions.ReceiptRouteOverrides | Where-Object {
+                [string]$_.Marker -ceq [string]$required.Marker -and
+                [string]$_.Signature -ceq [string]$required.Signature -and
+                @($_.EmitterAnchors).Count -gt 0 -and @($_.GuardAnchors).Count -gt 0
+            })
+            Assert-VtContractFixture ($matches.Count -eq 1) "Exact prior false-reject route is not anchored: $($required.Marker)"
+        }
+        $unsafe491 = @(
+            @($exceptions.ReceiptRouteOverrides) +
+            @($exceptions.ReceiptFamilyOverrides) +
+            @($exceptions.ReceiptDiscoveryOverrides) |
+                Where-Object { [string]$_.Marker -ceq '[cwv:491]' }
+        )
+        Assert-VtContractFixture ($unsafe491.Count -eq 0) 'Known-unbounded [cwv:491] received an override.'
+
         Write-Host '[live-test-contract -SelfTest] OK'
     }
     finally {
-        $resolvedTemp = [System.IO.Path]::GetFullPath($tempBase).TrimEnd([char[]]@('\', '/'))
-        $resolvedTarget = [System.IO.Path]::GetFullPath($tmp)
-        if ($resolvedTarget.StartsWith($resolvedTemp + [System.IO.Path]::DirectorySeparatorChar,
-                [System.StringComparison]::OrdinalIgnoreCase) -and
-            [System.IO.Path]::GetFileName($resolvedTarget) -like 'vt2-live-card-contract-*' -and
-            [System.IO.Directory]::Exists($resolvedTarget)) {
-            foreach ($file in [System.IO.Directory]::EnumerateFiles($resolvedTarget, '*',
-                    [System.IO.SearchOption]::AllDirectories)) {
-                [System.IO.File]::SetAttributes($file, [System.IO.FileAttributes]::Normal)
+        $resolvedBase = [IO.Path]::GetFullPath($tempBase).TrimEnd([char[]]@('\', '/'))
+        $resolvedTarget = [IO.Path]::GetFullPath($tmp)
+        if ($resolvedTarget.StartsWith($resolvedBase + [IO.Path]::DirectorySeparatorChar,
+                [StringComparison]::OrdinalIgnoreCase) -and
+            [IO.Path]::GetFileName($resolvedTarget) -like 'vt2-live-card-contract-*' -and
+            [IO.Directory]::Exists($resolvedTarget)) {
+            foreach ($file in [IO.Directory]::EnumerateFiles($resolvedTarget, '*', [IO.SearchOption]::AllDirectories)) {
+                [IO.File]::SetAttributes($file, [IO.FileAttributes]::Normal)
             }
-            [System.IO.Directory]::Delete($resolvedTarget, $true)
+            [IO.Directory]::Delete($resolvedTarget, $true)
         }
     }
 }
