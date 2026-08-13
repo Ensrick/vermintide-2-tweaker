@@ -387,6 +387,7 @@ local suites = {
     "test_gt_godmode_ledge_policy",
     "test_gt_godmode_outgoing_policy",
     "test_gt_godmode_vortex_policy",
+    "test_gt_godmode_fly_policy",
     "test_gt_dev_heal",
     "test_gt_network_readiness",
     "test_gt_necro_keep_policy",
