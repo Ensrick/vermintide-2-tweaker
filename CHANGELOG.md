@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-13 - Official loadouts remain read-only during modded boot (#402)
+
+Tweaker: GUI Dev 0.2.333-dev installs official-loadout containment before the rest of
+the GUI entry point. Modded Adventure startup imports the official snapshot without
+destructive item verification and suppresses both CloudScript repair request/response
+pairs, while official and Versus sessions retain vanilla behavior.
+
 ## 2026-08-13 - Deepwood package retries preserve one reference (#282)
 
 Tweaker: Weapons 0.12.304-beta and Tweaker: Weapons Dev 0.12.305-dev now

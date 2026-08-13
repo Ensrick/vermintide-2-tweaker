@@ -1,4 +1,9 @@
 local mod = get_mod("gut_dev")
+-- #402 installs before the rest of the large GUI entry point so a signin callback cannot
+-- outrun official-loadout containment while the remaining modules are still evaluating.
+local _gut_official_loadout_boot_guard = mod:dofile(
+    "scripts/mods/gui_tweaker_dev/_gut_official_loadout_boot_guard")
+mod._gut_official_loadout_boot_guard = _gut_official_loadout_boot_guard
 -- #925: attach to the copied shared local-process presentation generation
 -- ledger. GUT publishes only when no inner provider (normally Cosmetics'
 -- existing BackendUtils hook) already published the same set_loadout action.
@@ -35,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.332-dev"
+local MOD_VERSION = "0.2.333-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
