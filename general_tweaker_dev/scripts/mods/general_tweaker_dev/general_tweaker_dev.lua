@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.264-dev"
+local MOD_VERSION = "0.2.265-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1785,6 +1785,9 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_level_control")
 -- on_setting_changed branches + regression test. Registers its own `infinite_ammo`
 -- update consumer (the AI half stays in main's `ai_pending` consumer).
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_hacks")
+-- Issue #1143: /heal uses vanilla DamageUtils.debug_heal for host/client
+-- routing, then verifies health and wound state through the update registry.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_dev_heal")
 -- Creature Spawner (Aussiemon CreatureSpawner port). ~28 singleton hooks (keep-
 -- spawn ConflictDirector.update + a large AI/BT/nav crash-guard suite + breed
 -- package-loader overrides). Assigns mod._gt_cs_on_setting_changed /
