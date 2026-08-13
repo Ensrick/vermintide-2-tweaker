@@ -217,7 +217,14 @@ function Remove-VtBuildReceiptFixtureTree {
 function Invoke-VtBuildReceiptSelfTest {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2 build receipt " + [guid]::NewGuid().ToString('N'))
     $passed = 0
+    # Hosted PR jobs export GITHUB_BASE_REF for the real checkout. The fixture
+    # below is an intentionally standalone repository with no origin remote, so
+    # inheriting that outer diff authority would make its generic local-context
+    # case attempt `origin/<base>...HEAD` instead of exercising the worktree
+    # path. Isolate the synthetic repository, then restore the caller exactly.
+    $savedGithubBaseRef = $env:GITHUB_BASE_REF
     try {
+        Remove-Item Env:GITHUB_BASE_REF -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path $tempRoot | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $tempRoot 'tools') | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $tempRoot 'example_mod\scripts') | Out-Null
@@ -566,6 +573,12 @@ function Invoke-VtBuildReceiptSelfTest {
         return 0
     }
     finally {
+        if ($null -eq $savedGithubBaseRef) {
+            Remove-Item Env:GITHUB_BASE_REF -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GITHUB_BASE_REF = $savedGithubBaseRef
+        }
         Remove-VtBuildReceiptFixtureTree -Path $tempRoot
     }
 }
