@@ -1,5 +1,18 @@
 # Crafting in Modded Changelog
 
+## 0.8.124-dev (2026-08-13) -- separate accessory label from upgrade arrow (#1117) [verify-fix]
+
+- The Athanor bulk-accessory state now suppresses the native upgrade arrow's
+  normal and disabled passes through their shared `content.icon` predicate, so
+  **Craft Modded Accessories** keeps the full centered text rectangle.
+- Returning the same widget to a weapon editor restores its exact native arrow
+  texture; an accessory -> weapon -> accessory Lua 5.1 regression covers both
+  transitions and all three native title offsets.
+- `/cim_regression_test` drives the live installed presentation owner and fails
+  if accessory centering or native-arrow restoration regresses.
+- In-game verification remains required for normal, hover, disabled, and click
+  states at 1920x1080 plus one UI-scaled or non-16:9 configuration.
+
 ## 0.8.123-dev (2026-08-13) -- transactional Temper Item (#1141)
 
 - Weapon property and trait bubble clicks now edit a detached draft. They no

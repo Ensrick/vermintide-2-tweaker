@@ -51,6 +51,7 @@ new module needs only its manifest dofile line + a row here.
 | `_cim_property_value_policy.lua` | Pure #244 symmetric conversion between absolute Athanor/Weave bubble values and normalized two-endpoint Adventure property storage. |
 | `_cim_accessory_property_policy.lua` + `_cim_accessory_property_runtime.lua` | Issue #959 category identity boundary. The pure policy owns layer-aware display counts, write admission, per-key and distinct-key capacity, removal, Clear planning, the bounded zero-mastery-costs table (array part = cap entries, integer reads up to cap*3 resolve to 0 so vanilla's global-use-count slot paint never nil-aborts), and the amulet re-seed append/clamp helper (sibling accessories sharing a property key merge instead of overwriting). The runtime adapter owns the four picker hooks while the entry's existing backend mutation hook consumes the same policy. Ordinary weapon editing retains native/global capacity semantics. |
 | `_cim_bulk_accessory_craft.lua` | Pure #1031/#1032 bulk-button policy. Attempts Charm, Necklace, and Trinket through the entry's established single-slot helper regardless of session dirty flags; returns only the successful count so one missing slot cannot suppress later crafts. |
+| `_cim_temper_runtime.lua` | Idempotent #1141 transaction adapter for the Athanor properties button and editor exit. It also owns #1117's widget-instance presentation transition: the accessory state suppresses the shared native arrow predicate and restores all centered title offsets, while weapon state restores the exact captured native icon. |
 | `_cim_template_catalog.lua` + `_cim_template_selector.lua` | Pure #524 standard Craft Item selector policy. Ordinary helper aliases collapse by stable `slot_type + item_type`; provider `cim_craft_family` is an explicit override; authored CWV keys remain exact and distinct. The catalog chooses a deterministic real row and the selector compacts/reconciles session rows by the same family identity. `_cim_synthetic_item_contract.lua` supplies exact key plus selector/instance role, and the final picker seam rejects crafted instances without deleting or merging their persistent inventory records. |
 | `_cim_keep_forge_interaction.lua` | Issue #624 data-registry adapter for `InteractionDefinitions.forge_access.client.can_interact`. Restores the native world-object interaction only for `eac-untrusted` sessions in a live hub, stores the original predicate once for reload safety, and leaves the native stop/prompt/controller flow untouched. |
 | `_cim_athanor_icon_policy.lua` | Pure #617 fail-closed resource policy for Athanor selector icons. Resolves the atlas material variant required by the widget's exact masked/saturated flags, proves it against the live top Gui, and substitutes only renderer-proven provider/base/vanilla fallbacks without mutating ItemMasterList. |
@@ -81,6 +82,10 @@ new module needs only its manifest dofile line + a row here.
   per-frame polish behavior** -> `_cim_forge_ui_owner.lua`. Keep its two hook
   registrations ordered and singular; read mutable entry state only through
   the injected call-time accessors.
+- **New Temper Item transaction or contextual upgrade-button state** ->
+  `_cim_temper_runtime.lua`. Preserve the exact captured native icon across
+  accessory/weapon transitions and keep engine-free state coverage in
+  `test_cim_temper_runtime.lua`.
 - **New Athanor trait/property category seed, native option, or freedom-toggle
   widening rule** -> `_cim_forge_picker_owner.lua`. Preserve its stable backup
   transaction and restore every temporary global category replacement at forge exit.

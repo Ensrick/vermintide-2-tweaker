@@ -1,5 +1,33 @@
 -- Runtime adapter for the Athanor Temper Item draft transaction (#1141).
 
+local function restore_default_offset(text_style)
+    local offset = text_style and text_style.offset
+    local default = text_style and text_style.default_offset
+    if not offset or not default then return end
+    for index = 1, 3 do offset[index] = default[index] end
+end
+
+local function set_accessory_button_presentation(button, accessory_mode)
+    local content = button.content
+    if not content then return end
+
+    -- The native icon/icon_disabled passes share content.icon. Preserve its
+    -- exact texture before suppressing both passes for #1117, then restore
+    -- it when this same widget returns to a weapon editor.
+    if content._cim_native_upgrade_icon == nil and content.icon ~= nil then
+        content._cim_native_upgrade_icon = content.icon
+    end
+    if accessory_mode then
+        content.icon = nil
+        local style = button.style
+        restore_default_offset(style and style.title_text)
+        restore_default_offset(style and style.title_text_disabled)
+        restore_default_offset(style and style.title_text_shadow)
+    elseif content._cim_native_upgrade_icon ~= nil then
+        content.icon = content._cim_native_upgrade_icon
+    end
+end
+
 local function install(ctx)
     assert(type(ctx) == "table", "CIM temper runtime requires context")
     local mod = assert(ctx.mod, "CIM temper runtime requires mod")
@@ -14,6 +42,7 @@ local function install(ctx)
     state.craft_accessory = assert(ctx.craft_accessory,
         "accessory craft callback required")
     state.inject_item = assert(ctx.inject_item, "item injector required")
+    state.set_accessory_button_presentation = set_accessory_button_presentation
 
     if state.installed then return state end
     state.installed = true
@@ -37,6 +66,7 @@ local function install(ctx)
             local label = not item and "CRAFT MODDED ACCESSORIES"
                 or action == "craft" and "CRAFT"
                 or "APPLY"
+            state.set_accessory_button_presentation(button, not item)
             if button.content then button.content.visible = true end
             button.content.title_text = label
             button.content.button_hotspot.disable_button = false

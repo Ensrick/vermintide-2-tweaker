@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-08-13.
 
+### issue1117-bulk-accessory-button-layout - long label does not share the upgrade arrow
+
+| Field | Value |
+|---|---|
+| Symptom | **Craft Modded Accessories** touches or overlaps the inherited up-arrow at the left of the Athanor upgrade button. |
+| Root cause | `UIWidgets.create_athanor_upgrade_button` renders both `icon` and `icon_disabled` when `content.icon` is present. CIM hid only the essence `price_icon` styles, leaving the fixed-left `athanor_icon_upgrade` passes eligible beside the longer label. |
+| Fix version(s) | cim_dev 0.8.124-dev (#1117) |
+| Category | SOLO / UI |
+| Repro | In the Keep, open CIM's Athanor and enter the Accessories editor. Observe the bulk button in normal, hover, disabled, and click states at 1920x1080, then repeat at one non-16:9 resolution or non-default UI scale. Open a weapon editor between the two accessory checks. |
+| Expected post-fix | The accessory button has centered **Craft Modded Accessories** text and no up-arrow in every state. The weapon button still has the native up-arrow after accessory -> weapon -> accessory transitions. |
+| Detection | `test_cim_temper_runtime.lua` drives the production safe hook through accessory -> weapon -> accessory state, proves the shared native icon predicate is nil only for accessories, and verifies all three title styles return to their native centered offsets. `/cim_regression_test` runs `issue1117_bulk_accessory_button_layout` against the installed owner. Visual state and scale coverage remains an in-game check. |
+
 ### issue1141-temper-transaction - item editing has one explicit commit boundary
 
 | Field | Value |

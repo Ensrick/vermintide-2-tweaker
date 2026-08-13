@@ -1483,6 +1483,34 @@ _rt_register("accessory_panel_module_loaded", function()
     end
 end)
 
+_rt_register("issue1117_bulk_accessory_button_layout", function()
+    local state = mod._cim_temper_runtime_state
+    local apply = state and state.set_accessory_button_presentation
+    if type(apply) ~= "function" then
+        return "#1117 Temper Item button-presentation owner is unavailable"
+    end
+    local button = {
+        content = { icon = "athanor_icon_upgrade" },
+        style = {
+            title_text = { offset = { -15, 1, 6 }, default_offset = { 20, 0, 6 } },
+            title_text_disabled = { offset = { -16, 1, 6 }, default_offset = { 20, 0, 6 } },
+            title_text_shadow = { offset = { -13, -1, 5 }, default_offset = { 22, -2, 5 } },
+        },
+    }
+    apply(button, true)
+    local style = button.style
+    if button.content.icon ~= nil
+            or style.title_text.offset[1] ~= 20
+            or style.title_text_disabled.offset[1] ~= 20
+            or style.title_text_shadow.offset[1] ~= 22 then
+        return "#1117 accessory state retained an arrow or non-centered title"
+    end
+    apply(button, false)
+    if button.content.icon ~= "athanor_icon_upgrade" then
+        return "#1117 weapon state did not restore the exact native arrow"
+    end
+end)
+
 _rt_register("accessory_panel_built_when_accessories_opened", function()
     -- State-witness: if the accessories (amulet) view drew this session, the
     -- panel's lazy _build() must have produced exactly NUM_BUTTONS widgets. nil
