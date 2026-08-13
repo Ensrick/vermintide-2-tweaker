@@ -1,5 +1,16 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.335-dev (2026-08-13) -- execute the slider-release edge contract (#167) [verify-fix]
+
+- Extracts the held-to-released transition already used by both Mod Tweaker
+  presentations into one pure production owner. Cursor following remains
+  held-only, the first release remains modal, and stale shared-node release
+  frames cannot repeat a commit or activate the row below the cursor.
+- Adds `issue167_slider_release_edge` to `/gut_regression_test`. The live check
+  executes a held frame, first release over another row, stale release, and a
+  second physical drag while counting cursor moves, commits, sounds, and
+  unintended row activations. Offline Lua 5.1 tests execute the same helper.
+
 ## 0.2.334-dev (2026-08-13) -- capture the last DX12-bound UI resource set (#630) [diagnostics-armed]
 
 - The existing probe already proved five healthy Mod Tweaker runs returned a balanced Lua
