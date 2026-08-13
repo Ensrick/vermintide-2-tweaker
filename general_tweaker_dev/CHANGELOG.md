@@ -1,5 +1,37 @@
 # General Tweaker Changelog
 
+## 0.2.266-dev (2026-08-13) -- Godmode blocks authored fly control loss (#548) [verify-fix]
+
+- The remaining fly-swarm failure did not use the HP-damage, disabler-state,
+  or curated buff funnels already protected by Godmode. Halescourge's swarm and
+  projectile enter the server-authored `overpowered` status with reason
+  `slow_bomb`; Nurgloth's Drachenfels projectile enters with `fly_bomb`.
+- Added one exact gate at `StatusUtils.set_overpowered_network`, before its
+  status mutation and client RPC. It rejects only an entering `slow_bomb` or
+  `fly_bomb` edge for a Godmode human when the attacking unit positively owns
+  the dedicated fly blob targeting that human. Generic overpowered perks also
+  reuse `slow_bomb`; those non-blob sources, Godmode off, and every unrelated
+  reason remain vanilla.
+- The existing overpowered blob lifecycle remains coherent: because the target
+  never enters the status, the blob schedules its own deletion. Only that
+  recorded blocked blob's later reasonless false cleanup is consumed, preventing
+  it from clearing an unrelated state that entered in the interim; all other
+  blob destruction remains vanilla.
+- Added a fail-safe, bounded first-hit receipt per authored reason, keep-safe
+  command `/verify_godmode_flies`, offline policy and installed-wrapper behavior
+  coverage in `test_gt_godmode_fly_policy`, and runtime check
+  `issue548_godmode_fly_overpowered_boundary`. The existing Troll Bile check
+  `issue548_godmode_stagger_and_debuff_probe` remains unchanged and must pass
+  beside it.
+
+1. Enable Godmode and reproduce Halescourge's swarm or fly projectile. The
+   player must not enter its control-loss state; the log records the first
+   blocked `slow_bomb` edge.
+2. Reproduce Nurgloth's fly projectile. The player must likewise keep control;
+   the log records the first blocked `fly_bomb` edge.
+3. Disable Godmode and confirm both attacks behave normally. Run
+   `/verify_godmode_flies` and `/gt_regression_test`; both #548 checks must pass.
+
 ## 0.2.265-dev (2026-08-13) -- native host/client `/heal` command (#1143) [verify-fix]
 
 - Added `/heal` for developer testing. It restores the living local hero to

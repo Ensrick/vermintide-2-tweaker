@@ -2194,6 +2194,45 @@ function M.install(mod, _rt_register, deps)
         if deny("heal_self", true) then return "godmode over-stripped a non-listed buff" end
     end)
 
+    _rt_register("issue548_godmode_fly_overpowered_boundary", function()
+        if mod._GT_548_GODMODE_FLY_MARKER
+                ~= "gt-548-godmode-fly-overpowered-boundary" then
+            return "#548 fly-overpowered boundary marker is absent"
+        end
+        if mod._gt548_fly_overpowered_hook_wired ~= true then
+            return "#548 StatusUtils fly-overpowered hook is not wired"
+        end
+        if mod._gt548_fly_blob_cleanup_hook_wired ~= true then
+            return "#548 blocked-blob cleanup ownership hook is not wired"
+        end
+        local policy = mod._gt548_should_block_fly_overpowered
+        if type(policy) ~= "function" then
+            return "#548 fly-overpowered policy is unavailable"
+        end
+        for _, reason in ipairs({ "slow_bomb", "fly_bomb" }) do
+            if not policy(true, true, reason, true) then
+                return "Godmode did not block authored fly reason " .. reason
+            end
+            if policy(false, true, reason, true) then
+                return "Godmode-off call was blocked for " .. reason
+            end
+            if policy(true, false, reason, true) then
+                return "fly cleanup/exit was blocked for " .. reason
+            end
+            if policy(true, true, reason, false) then
+                return "non-blob overpowered source was blocked for " .. reason
+            end
+        end
+        if policy(true, true, "charged", true) then
+            return "unrelated overpowered reason was broadened into #548"
+        end
+        if policy(1, true, "slow_bomb", true)
+                or policy(true, 1, "slow_bomb", true)
+                or policy(true, true, "slow_bomb", 1) then
+            return "#548 policy accepted non-boolean gate state"
+        end
+    end)
+
     _rt_register("issue380_downed_mood_swallow_complete", function()
         local moods = mod._gt_downed_moods
         if type(moods) ~= "table" then return "#380 downed-mood swallow set absent" end

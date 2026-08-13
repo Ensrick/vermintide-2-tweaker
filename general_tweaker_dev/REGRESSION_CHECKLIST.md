@@ -177,12 +177,15 @@ Last updated: 2026-08-13.
 
 ---
 
-## Godmode stagger and debuff trace (#548)
+## Godmode stagger, debuff, and fly boundary (#548)
 
 - [ ] With godmode enabled, direct boss/monster hits no longer launch the protected player.
-- [ ] Troll Bile and any remaining debuff reproduction emits unique `[gt:548]` template names automatically, capped at 24 records for the session.
-- [ ] With godmode disabled, ordinary hit stagger and buff application remain vanilla.
-- [ ] `/gt_regression_test` passes `issue548_godmode_stagger_and_debuff_probe`.
+- [ ] Troll Bile ground, Troll Bile face, and the generic slow volume do not apply; other observed buff templates remain untouched.
+- [ ] Halescourge's swarm and fly missile cannot place a Godmode player into control loss; the first blocked `slow_bomb` edge emits one `[gt:548] blocked fly overpowered` receipt.
+- [ ] Nurgloth's fly missile cannot place a Godmode player into control loss; the first blocked `fly_bomb` edge emits the corresponding receipt.
+- [ ] With godmode disabled, ordinary hit stagger, buff application, and both fly-swarm control-loss routes remain vanilla. Under Godmode, non-blob `slow_bomb` sources and unrelated overpowered reasons remain vanilla; only the cleanup belonging to a recorded blocked fly blob is consumed.
+- [ ] `/verify_godmode_flies` prints `PASS` for the exact closed truth table.
+- [ ] `/gt_regression_test` passes both `issue548_godmode_stagger_and_debuff_probe` and `issue548_godmode_fly_overpowered_boundary`.
 
 ---
 
