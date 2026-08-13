@@ -42,6 +42,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$transactionLeaseHelpers = Join-Path $repoRoot 'tools\ship\transaction-lease.ps1'
+if (-not (Test-Path -LiteralPath $transactionLeaseHelpers -PathType Leaf)) {
+    throw "Machine transaction lease helpers not found at $transactionLeaseHelpers."
+}
+. $transactionLeaseHelpers
 $launcherPathHelpers = Join-Path $repoRoot 'tools\vmb-launcher-path.ps1'
 if (-not (Test-Path -LiteralPath $launcherPathHelpers -PathType Leaf)) {
     throw "Shared VMBLauncher path helpers not found at $launcherPathHelpers."
@@ -117,6 +122,12 @@ Write-Host "VMBLauncher publication boundary: schema 3, exact commit blobs, lock
 # across lookup, carry-forward, immutable snapshot capture, and release-ID
 # mutation. An abandoned mutex is safe to take over because the next run reads
 # GitHub again rather than trusting predecessor state.
+$releaseTransactionMod = if (@($Mods).Count -eq 1) { "$($Mods[0])" } else { $null }
+$releaseTransactionLease = Enter-VmbMachineTransactionLease `
+    -Action 'publish-release' `
+    -Mod $releaseTransactionMod `
+    -ProjectRoot $repoRoot
+try {
 $releaseMutationMutex = $null
 $releaseMutationLockHeld = $false
 try {
@@ -690,4 +701,8 @@ finally {
         catch { Write-Warning "Could not release the GitHub release mutation mutex: $($_.Exception.Message)" }
     }
     if ($releaseMutationMutex) { $releaseMutationMutex.Dispose() }
+}
+}
+finally {
+    Exit-VmbMachineTransactionLease -Lease $releaseTransactionLease
 }

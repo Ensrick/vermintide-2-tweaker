@@ -29,6 +29,7 @@ if (-not (Test-Path -LiteralPath $buildOutputNormalizationHelpers -PathType Leaf
     throw "Build-output normalization policy not found: $buildOutputNormalizationHelpers"
 }
 . $buildOutputNormalizationHelpers
+. (Join-Path $repoRoot 'tools\ship\transaction-lease.ps1')
 
 function Compare-BundleRecordSets {
     param(
@@ -208,6 +209,10 @@ if (-not (Test-Path -LiteralPath $LauncherSettingsPath -PathType Leaf)) {
 }
 
 $tempSettings = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-vmb-settings-" + [guid]::NewGuid().ToString('N') + '.json')
+$rebuildTransactionLease = Enter-VmbMachineTransactionLease `
+    -Action 'reproducibility-build' `
+    -Mod $modFolder `
+    -ProjectRoot $CheckoutRoot
 try {
     $settings = [System.IO.File]::ReadAllText($LauncherSettingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
     $settings.ProjectRoot = $CheckoutRoot
@@ -240,4 +245,5 @@ try {
     exit 0
 } finally {
     if (Test-Path -LiteralPath $tempSettings) { Remove-Item -LiteralPath $tempSettings -Force }
+    Exit-VmbMachineTransactionLease -Lease $rebuildTransactionLease
 }

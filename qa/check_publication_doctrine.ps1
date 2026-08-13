@@ -150,7 +150,12 @@ foreach ($required in @(
     "Agent/headless publication is noninteractive.",
     "tools\ship\ship.ps1",
     "BuildOnly",
-    "exact live default-branch"
+    "exact live default-branch",
+    "Global\Ensrick.VMBLauncher.Transaction.v1",
+    "VMBLauncher 0.6.0",
+    "never rewrites shared launcher settings",
+    "Do not run a parallel retry",
+    "manually reset SDK ACLs"
 )) {
     if (-not $standards.Contains($required)) {
         $violations += "PROJECT_STANDARDS.md: missing canonical token: $required"

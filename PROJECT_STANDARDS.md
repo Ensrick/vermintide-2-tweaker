@@ -1095,6 +1095,29 @@ tooling defect: stop the transaction before publication and fix the launcher
 guard rather than hiding or dismissing the window. The launcher repository's
 `CLAUDE.md` owns its implementation and test split.
 
+**One machine-global transaction owns every mutation (issue #1180).** Both
+`ship.ps1 -BuildOnly` and the final ship acquire
+`Global\Ensrick.VMBLauncher.Transaction.v1` before the first settings, VMB, or
+filesystem mutation and retain it continuously through build, tracked parity,
+deploy, GitHub-release mutation, SDK staging/upload, Workshop verification,
+card refresh, and claim finalization. The lock order is machine transaction,
+then the publisher's GitHub-release mutex, then the launcher's legacy upload
+semaphore. VMBLauncher 0.6.0 plus `machine-transaction-lease-v1` and
+`crash-safe-upload-acl-journal-v1` is the minimum accepted publication
+boundary; 0.5.9 fails before release mutation.
+
+Canonical ship reads global launcher settings once for approved dependency
+discovery, then writes one durable, PID/start-identified private `--config`
+bound to the exact worktree. It never temporarily rewrites shared
+`%APPDATA%\VMBLauncher\settings.json`. A named kill-on-close Windows Job contains
+all mutating descendants. On hard owner death, a contender must observe the
+persisted job drained through bounded `ActiveProcesses` accounting (not Job
+signalling) before recovery or mutation; on ordinary release,
+authenticated residual descendants are terminated before unlocking. Do not run a parallel retry, manually reset SDK ACLs, delete owner/journal records, or
+weaken an ambiguous recovery failure. Only the exact journaled descriptor or
+exact legacy 0.5.9 launcher DENY recovery lane may repair staging ACLs.
+In short: canonical ship never rewrites shared launcher settings.
+
 **First-upload bootstrap is identity allocation, not a test release.** A
 reviewed `published_id = 0L` commit may use the constrained hosted bootstrap
 receipt so Steam can allocate one ID. After the launcher compare-and-swaps only
@@ -1634,13 +1657,15 @@ session's start.
    (`git cherry-pick --abort`, `git rebase --abort`, `git merge --abort`) and
    re-open the remaining work as a GitHub issue per §11, rather than parking the
    index in a conflicted state a later session inherits blind.
-2. **VMBLauncher `ProjectRoot` restored to the monorepo.** After any worktree
+2. **VMBLauncher `ProjectRoot` restored to the monorepo.** After any manual GUI
+   worktree
    retarget, point `ProjectRoot` back at the monorepo root. Never leave it pinned
    to a worktree whose branch has already merged: the `vt2-cim-promo` pin was
    left live after its branch merged, and only `ship.ps1`'s provenance gate
    caught it before a stale-tree ship went out. The provenance gate is the
    backstop, not the plan; restore the root yourself as part of closing the
-   worktree.
+   worktree. Canonical ship does not retarget this shared setting: it uses one
+   private exact-root `--config` and deletes it in `finally`.
 3. **Absorbed remote branches deleted.** Once a branch's PR merges, delete the
    remote branch in the same pass. 57 merged-but-undeleted branches accumulated;
    the dead branches bury the handful a session actually needs to reason about

@@ -9,7 +9,7 @@
 function Test-VmbLauncherPublicationCapabilityOutput {
     param(
         [string[]]$Lines,
-        [version]$MinimumVersion = ([version]'0.5.7')
+        [version]$MinimumVersion = ([version]'0.6.0')
     )
 
     $values = @{}
@@ -33,7 +33,9 @@ function Test-VmbLauncherPublicationCapabilityOutput {
         'hosted-publication-receipt-v3',
         'locked-upload-snapshot-v1',
         'git-commit-blob-snapshot-v1',
-        'constrained-first-upload-bootstrap-v1'
+        'constrained-first-upload-bootstrap-v1',
+        'machine-transaction-lease-v1',
+        'crash-safe-upload-acl-journal-v1'
     )) {
         if ($capabilities -notcontains $required) { $problems += "missing capability $required" }
     }
@@ -48,7 +50,7 @@ function Test-VmbLauncherPublicationCapabilityOutput {
 function Assert-VmbLauncherPublicationCapability {
     param(
         [string]$LauncherPath,
-        [version]$MinimumVersion = ([version]'0.5.7')
+        [version]$MinimumVersion = ([version]'0.6.0')
     )
 
     if (-not (Test-Path -LiteralPath $LauncherPath -PathType Leaf)) {
@@ -78,7 +80,7 @@ function Assert-VmbLauncherPublicationCapability {
         -Lines @($stdout -split "`r?`n") -MinimumVersion $MinimumVersion
     if (-not $verdict.Ok) {
         throw "VMBLauncher publication capability probe failed: $($verdict.Problems -join '; '). " +
-            'Land/install launcher 0.5.7 before the monorepo publication guard.'
+            'Land/install launcher 0.6.0 before the monorepo publication guard.'
     }
     return $verdict
 }
