@@ -306,14 +306,24 @@ shipping. Agent publication is headless and opens no interactive window.
     the REST API cannot do it, and an unpinned card is a policy failure even if
     its content is perfect. Required format (authoritative definition:
     `tools/verify/lifecycle_method_policy.ps1`):
-    - `Build/banner:` a semantic version plus either a backticked `[<id>:LOAD]`
-      or a clearly labeled exact versioned banner (`[WOC] v0.1.42-dev loaded`).
+    - `Build/banner:` every named build has an explicitly bound semantic version
+      plus either its backticked `[<id>:LOAD]` or a clearly labeled exact
+      versioned banner (`[WOC] v0.1.42-dev loaded`). Every build/version/tag pair
+      must match the latest deployed release manifest and the exact source commit
+      recorded by that manifest. Do not append an unbound sibling version/tag.
     - `**Topology:**` `Solo` or `Co-op` (solo first; `Co-op` needs a
       `Solo status:` line recording passed/completed/exhausted).
     - Numbered player-facing steps using the localized names players see
       in-game. NO snake_case internal identifiers - the only exception is an
       exact player-entered slash command wrapped in backticks.
-    - `**Expected:**` the observable in-game result.
+    - `**Expected:**` the observable in-game result. When a `diagnostics-armed`
+      card asks for log evidence, the numbered steps or Expected line must name
+      at least one stable, bounded receipt prefix that the deployed source emits
+      through `printf`, directly or through an approved receipt helper. A
+      backticked slash command in the steps must be registered by that same
+      deployed source.
+    - Workshop item IDs and manifest IDs are optional, but when supplied they
+      must bind to a named build and cannot contradict each other.
     Issue-body text and older method headings never qualify as fallbacks.
   - **This is CI-enforced, and it fails wide.**
     `tools/github/check-lifecycle-cardinality.ps1` is a blocking step in
@@ -322,7 +332,12 @@ shipping. Agent publication is headless and opens no interactive window.
     pages EVERY open issue, so a single issue carrying `verify-fix` or
     `diagnostics-armed` without exactly one correctly formatted pinned card
     fails qa-gate for the whole repository - including PRs that never touched
-    that mod. Fix the card, do not retry the build.
+    that mod. It resolves the latest release manifest, inspects the recorded
+    source commits with a blob-filtered full Git history, and rejects stale
+    versions, invented commands, missing diagnostic receipts, and contradictory
+    manifests. Two visible legacy carry-forward entries without `source_commit`
+    may use current source only when its version exactly equals the deployed
+    manifest version. Fix the card, do not retry the build.
   - `gh issue edit <N> --remove-label not-started --add-label verify-fix` only
     when a **complete deployed fix** is runnable in-game now.
   - `gh issue edit <N> --remove-label not-started --add-label diagnostics-armed`

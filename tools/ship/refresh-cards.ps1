@@ -173,13 +173,28 @@ function Get-VtStreamInventory {
     foreach ($directory in Get-ChildItem -LiteralPath $RepoRoot -Directory) {
         $name = $directory.Name
         $cfgPath = Join-Path $directory.FullName 'itemV2.cfg'
-        $luaPath = Join-Path $directory.FullName "scripts\mods\$name\$name.lua"
+        $luaRoot = Join-Path $directory.FullName "scripts\mods\$name"
+        $luaPath = Join-Path $luaRoot "$name.lua"
         if (-not (Test-Path -LiteralPath $cfgPath -PathType Leaf) -or
             -not (Test-Path -LiteralPath $luaPath -PathType Leaf)) { continue }
         $cfg = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
         $lua = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
         $publishedMatch = [regex]::Match($cfg, 'published_id[ \t]*=[ \t]*(\d+)L')
         $loadMatch = [regex]::Match($lua, '\[([A-Za-z][A-Za-z0-9_-]*):LOAD\]')
+        if (-not $loadMatch.Success) {
+            $loadTags = @(
+                Get-ChildItem -LiteralPath $luaRoot -Filter '*.lua' -File |
+                ForEach-Object {
+                    $text = [System.IO.File]::ReadAllText($_.FullName, [System.Text.Encoding]::UTF8)
+                    [regex]::Matches($text, '\[([A-Za-z][A-Za-z0-9_-]*):LOAD\]') |
+                        ForEach-Object { $_.Groups[1].Value }
+                } |
+                Sort-Object -Unique
+            )
+            if ($loadTags.Count -eq 1) {
+                $loadMatch = [regex]::Match("[$($loadTags[0]):LOAD]", '\[([A-Za-z][A-Za-z0-9_-]*):LOAD\]')
+            }
+        }
         if (-not $publishedMatch.Success -or -not $loadMatch.Success) { continue }
         $rows += [pscustomobject]@{
             Directory = $name
