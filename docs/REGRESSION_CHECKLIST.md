@@ -1168,6 +1168,19 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Expected post-fix | Claim; run `ship.ps1 -BuildOnly`; commit/push/PR/qa-gate/merge; then run canonical ship from clean live default HEAD. |
 | Detection | PC-A uses the hash-verified local deploy without restarting Steam; volunteer testers unsubscribe/resubscribe through the dev collection. Confirm the newest console log's `[<id>:LOAD]` version. |
 
+### buildonly-source-receipt - Dirty source and root must match (#1278)
+
+| Field | Value |
+|-------|-------|
+| Symptom | A PR stages final mod source beside a root bundle compiled from an earlier dirty snapshot; source/root atomicity passes because both files changed. |
+| Root cause | The generated root was opaque and BuildOnly did not record which runtime-input bytes it consumed. |
+| Mod(s) | all active VMB mods |
+| Fix version(s) | repository tooling 2026-08-13 |
+| Category | STATIC |
+| Repro | Run BuildOnly, then edit and stage one runtime source file without rebuilding while retaining the generated root and receipt. |
+| Expected post-fix | `check_build_receipts.ps1 -Staged` rejects a changed raw-byte/Git-blob map; rerunning canonical BuildOnly regenerates a matching deterministic receipt. In-build mutation and raw bytes that Git filters cannot reproduce also abort BuildOnly. After first-upload ID allocation, the old zero-ID receipt fails; BuildOnly must refresh it for the positive-ID cfg even when the root is byte-identical. Atomicity exempts only that exact `0L` to positive-ID cfg transition with unchanged version/title/other bytes. |
+| Detection | Blocking pre-commit and hosted Quick/full QA gate; `check_build_receipts.ps1 -SelfTest` covers dirty-pass, in-build drift, clean-equivalent raw-byte drift, direct root mutation, post-build edit, first-upload stale/refreshed receipt behavior, type change, global attributes, hidden/ignored inputs, stale pair, and optional-sidecar isolation. `check_release_bundle_atomicity.ps1 -SelfTest` rejects positive-to-positive ID, version, title, visibility, runtime, and newest-release expansions. Final clean tracked-bundle parity remains blocking. |
+
 ### feedback-deploy-vs-upload-distinction — Local deploy doesn't reach subscribers
 
 | Field | Value |

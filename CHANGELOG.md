@@ -14,6 +14,21 @@ retain the in-flight Deepwood Staff package latch across game-state changes.
 The corrected Lua fixture and runtime regression check enforce at most one
 `wt_deepwood_runtime` reference while the async load is pending.
 
+## 2026-08-13 - Exact BuildOnly source/root receipts (#1278)
+
+BuildOnly now fingerprints both the exact raw bytes Stingray consumes and every
+runtime input's Git-clean blob immediately before and after the clean compile.
+It rejects in-build source drift, bytes that Git cannot reproduce on checkout,
+hidden/ignored input omissions, and stale source/root pairs. The deterministic
+per-mod receipt binds that dual source map to the canonical root bundle blob and
+SHA-256; pre-commit, hosted QA, and final ship verify the same proof. Final
+clean-rebuild parity and optional normalized SDK-sidecar policy are unchanged.
+The mandatory first-upload ID-only reconciliation now has one exact atomicity
+lane: after a refreshed receipt binds `published_id = 0L` becoming one positive
+ID, an otherwise byte-identical cfg/version may retain a byte-identical root.
+Title, visibility, positive-to-positive ID, runtime, or release expansion still
+fails closed.
+
 ## 2026-08-12 - Chaos Wastes lobby mission lookup crash guard (#1271)
 
 Tweaker: Chaos Wastes Dev 0.7.339-dev registers injected Adventure mission

@@ -16,7 +16,10 @@
 #   2. Run `qa/check_release_bundle_atomicity.ps1 -Staged` on EVERY non-empty
 #      commit. Runtime/version/config/newest-release deltas without the exact
 #      owning root bundle are rejected before a source-only commit can land.
-#   3. Read `git diff --cached --name-only`. If no staged file matches
+#   3. Run `qa/check_build_receipts.ps1 -Staged` on EVERY non-empty commit.
+#      Exact staged runtime inputs and the root bundle must match the BuildOnly
+#      receipt; any source edit after BuildOnly is rejected until rebuilt.
+#   Then read `git diff --cached --name-only`. If no staged file matches
 #      `*.lua`, `*.cfg`, `*.ps1`, or `*.mod`, skip the remaining gates — pure
 #      docs / asset commits don't need them.
 #   4. Run `qa/run_all.ps1 -Quick -SkipLua` (the -Quick always-run set: cfg +
@@ -120,6 +123,23 @@ if (Test-Path $atomicityScript) {
         Write-Host "Commit the exact VMB root bundle with the releasable source, or split this into a docs/tests-only change." -ForegroundColor Yellow
         exit 1
     }
+}
+
+# --- Step 3: exact BuildOnly source/root receipt (every staged commit) ------
+$buildReceiptScript = Join-Path $repoRoot 'qa\check_build_receipts.ps1'
+if (-not (Test-Path -LiteralPath $buildReceiptScript -PathType Leaf)) {
+    Write-Host "[pre-commit] missing $buildReceiptScript -- cannot verify BuildOnly provenance; aborting commit." -ForegroundColor Red
+    exit 1
+}
+Write-Host "[pre-commit] step 3/7: qa/check_build_receipts.ps1 -Staged" -ForegroundColor Cyan
+$buildReceiptOut = & pwsh -NoProfile -File $buildReceiptScript -Staged 2>&1
+$buildReceiptExit = $LASTEXITCODE
+$buildReceiptOut | ForEach-Object { Write-Host $_ }
+if ($buildReceiptExit -ne 0) {
+    Write-Host ""
+    Write-Host "Pre-commit blocked by check_build_receipts (exit $buildReceiptExit)." -ForegroundColor Red
+    Write-Host "Re-run ship.ps1 -Mod <name> -BuildOnly after the final source edit, then stage source, root, and receipt together." -ForegroundColor Yellow
+    exit 1
 }
 
 $relevant = @($staged | Where-Object {

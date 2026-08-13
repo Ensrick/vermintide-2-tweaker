@@ -87,6 +87,31 @@
             ExpectedErrors = 1
         }
         @{
+            Name = 'validated first-upload id sync without root bundle'
+            Changes = @(@{ Path = 'example_mod/itemV2.cfg' })
+            TrustedBootstrapIdSyncs = @('example_mod')
+            ExpectedErrors = 0
+        }
+        @{
+            Name = 'validated first-upload id sync never exempts runtime'
+            Changes = @(
+                @{ Path = 'example_mod/itemV2.cfg' },
+                @{ Path = 'example_mod/scripts/mods/example_mod/example_mod.lua' }
+            )
+            TrustedBootstrapIdSyncs = @('example_mod')
+            ExpectedErrors = 1
+        }
+        @{
+            Name = 'validated first-upload id sync never exempts newest release identity'
+            Changes = @(
+                @{ Path = 'example_mod/itemV2.cfg' },
+                @{ Path = 'example_mod/CHANGELOG.md' }
+            )
+            TopReleaseChanged = @('example_mod')
+            TrustedBootstrapIdSyncs = @('example_mod')
+            ExpectedErrors = 1
+        }
+        @{
             Name = 'newest changelog release without root bundle'
             Changes = @(@{ Path = 'example_mod/CHANGELOG.md' })
             TopReleaseChanged = @('example_mod')
