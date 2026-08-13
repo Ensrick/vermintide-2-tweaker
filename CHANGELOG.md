@@ -1,12 +1,21 @@
 # Changelog
 
-## 2026-08-13 - Native resource census closes particle and reachability gaps (#1125)
+## 2026-08-13 - Appearance census reaches all seventeen surfaces (#1198/#1197/#1125)
 
-The full-tree census now covers native particle calls and every descriptor that
-makes a synchronized WeaponAppearance texture writer reachable. Exact Moonfire
-rows cite a source- and installed-bundle-derived package oracle. Character
-Weapon Variants 0.1.514-dev also requires each clone's `name` to equal its
-authored vanilla `base_weapon`, with nil and wrong-base planted failures.
+Character Weapon Variants 0.1.514-dev, Cosmetics Tweaker 0.9.209-dev, Weapon
+Tweaker 0.12.305-beta and 0.12.306-dev, and Weapons of Chaos 0.1.55-dev now
+declare the distinct vanilla `crafting_preview` surface. All 34 appearance
+families enumerate all 17 surfaces across all eight replay edges, and the
+contracts gate requires the same canonical set in both directions. The
+regenerated backlog records 3,624 unsupported pairs of 4,624 deduplicated
+declarations instead of hiding an ordinary-crafting-preview gap.
+
+The full-tree native-resource census also covers particle calls and every
+descriptor that makes a synchronized WeaponAppearance texture writer
+reachable. Exact Moonfire rows cite a source- and installed-bundle-derived
+package oracle. Character Weapon Variants additionally requires each clone's
+`name` to equal its authored vanilla `base_weapon`, with nil and wrong-base
+planted failures.
 
 ## 2026-08-13 - Official loadouts remain read-only during modded boot (#402)
 

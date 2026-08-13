@@ -26,9 +26,10 @@
 --      evidence shows the family implements one. One exception earned
 --      evidence: item_card_2d (_woc_inventory_icons.lua, wired at
 --      weapons_of_chaos.lua:217/:505/:551/:1276).
---   4. crafting_preview, added by 1198, is implemented only at preview_open:
---      the ordinary crafting item preview is a LootItemUnitPreviewer consumer,
---      but no other lifecycle edge is evidenced on that isolated surface.
+--   4. crafting_preview, added by 1198, starts unsupported on every edge.
+--      Vanilla's ordinary forge layout does not instantiate
+--      LootItemUnitPreviewer, so the generic item-preview hook is not evidence
+--      for this distinct bench surface.
 --
 -- TRUTHFULNESS: "implemented" ONLY where a WOC code path actively produces the
 -- appearance for that pair, with a file:line citation below. "implemented"
@@ -129,8 +130,7 @@ return {
 				illusion_browser  = row(IMPLEMENTED, nil, TRANSFORM_HOLES, TRANSFORM_HOLE_NOTES),
 				cim_preview       = row(IMPLEMENTED, nil, TRANSFORM_HOLES, TRANSFORM_HOLE_NOTES),
 				crafting_preview  = row(UNSUPPORTED,
-					"The ordinary crafting bench reaches the LootItemUnitPreviewer item-preview adapter only when that preview is constructed; unrelated lifecycle edges have no bench target and retain the resident cloned vanilla sword.",
-					{ preview_open = IMPLEMENTED }),
+					"Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198."),
 
 				-- FORCED unsupported (1157). The pre-1157 "implemented" for these
 				-- two came from the shared _spawn_item hook's own comment listing

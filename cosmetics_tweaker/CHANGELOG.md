@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.209-dev (2026-08-13) -- declare the vanilla crafting-preview surface (#1198/#1197) [tooling]
+
+- Added `crafting_preview` to all eight appearance-family census matrices. The
+  ordinary crafting bench remains explicitly unsupported with a vanilla
+  base-item fallback; its identity is not inferred from the customization
+  browser or CIM Athanor preview paths.
+- This is inert census data consumed by offline QA. It changes no Cosmetics
+  registration, mesh, material, transform, icon, or synchronization behavior.
+
 ## 0.9.208-dev (2026-08-13) -- retire dead LA apply wrapper (#1241) [tooling]
 
 - Removed the zero-caller `_try_apply_by_peer` wrapper and corrected the two

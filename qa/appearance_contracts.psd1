@@ -950,7 +950,7 @@
                         inventory_preview = @{ Disposition = 'covered'; Evidence = 'HeroPreviewer character-preview adapter consumes the same descriptor' }
                         illusion_browser = @{ Disposition = 'covered'; Evidence = 'LootItemUnitPreviewer item-preview adapter consumes the same descriptor' }
                         cim_preview = @{ Disposition = 'covered'; Evidence = 'Athanor reuses the LootItemUnitPreviewer item-preview adapter' }
-                        crafting_preview = @{ Disposition = 'covered'; Evidence = 'crafting item previews reuse the LootItemUnitPreviewer adapter' }
+                        crafting_preview = @{ Disposition = 'deferred'; Reason = 'the vanilla forge layout does not instantiate LootItemUnitPreviewer, so WOC has no proven bench-specific unit-transform adapter' }
                         lobby = @{ Disposition = 'covered'; Evidence = 'MenuWorldPreviewer character-preview adapter consumes the same descriptor' }
                         score_team = @{ Disposition = 'covered'; Evidence = 'score/end character preview reuses the HeroPreviewer/MenuWorldPreviewer adapter' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons, not a weapon unit transform' }

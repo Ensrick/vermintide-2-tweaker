@@ -16,9 +16,9 @@ same backlog counted twice and are excluded from the deduplicated totals below.
 
 ## Totals
 
-Deduplicated backlog: **3623 unsupported pairs** of 4624 declared (78.4%), across 34 families in 4 mods.
+Deduplicated backlog: **3624 unsupported pairs** of 4624 declared (78.4%), across 34 families in 4 mods.
 
-Including the wt_dev mirror: 4048 unsupported of 5168 declared.
+Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 
 ### Per mod
 
@@ -28,7 +28,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | cosmetics_tweaker | 8 | 1088 | 211 | 877 | 80.6% |
 | weapon_tweaker | 4 | 544 | 119 | 425 | 78.1% |
 | weapon_tweaker_dev (mirror) | 4 | 544 | 119 | 425 | 78.1% |
-| weapons_of_chaos | 1 | 136 | 48 | 88 | 64.7% |
+| weapons_of_chaos | 1 | 136 | 47 | 89 | 65.4% |
 
 ### Per surface (deduplicated: mirror excluded)
 
@@ -41,7 +41,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | inventory_preview | 272 | 173 | 99 | 36.4% |
 | illusion_browser | 272 | 125 | 147 | 54.0% |
 | cim_preview | 272 | 106 | 166 | 61.0% |
-| crafting_preview | 272 | 1 | 271 | 99.6% |
+| crafting_preview | 272 | 0 | 272 | 100.0% |
 | lobby | 272 | 11 | 261 | 96.0% |
 | score_team | 272 | 18 | 254 | 93.4% |
 | hold_tab | 272 | 0 | 272 | 100.0% |
@@ -60,7 +60,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | peer_ready | 578 | 168 | 410 | 70.9% |
 | equip | 578 | 189 | 389 | 67.3% |
 | customize | 578 | 171 | 407 | 70.4% |
-| preview_open | 578 | 186 | 392 | 67.8% |
+| preview_open | 578 | 185 | 393 | 68.0% |
 | mission_transition | 578 | 47 | 531 | 91.9% |
 | respawn | 578 | 60 | 518 | 89.6% |
 | mod_disable_restore | 578 | 0 | 578 | 100.0% |
@@ -1438,7 +1438,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | weapon_tweaker_dev | per_receiver_scale | No Athanor/CIM scale adapter; native scale renders. Safe. Tracked 660. |
 | weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
-### crafting_preview (303 unsupported pairs)
+### crafting_preview (304 unsupported pairs)
 
 #### crafting_preview x instance_load (38)
 
@@ -1481,7 +1481,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
-| weapons_of_chaos | enemy_weapon_relic | The ordinary crafting bench reaches the LootItemUnitPreviewer item-preview adapter only when that preview is constructed; unrelated lifecycle edges have no bench target and retain the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198. |
 
 #### crafting_preview x peer_ready (38)
 
@@ -1524,7 +1524,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
-| weapons_of_chaos | enemy_weapon_relic | The ordinary crafting bench reaches the LootItemUnitPreviewer item-preview adapter only when that preview is constructed; unrelated lifecycle edges have no bench target and retain the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198. |
 
 #### crafting_preview x equip (38)
 
@@ -1567,7 +1567,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
-| weapons_of_chaos | enemy_weapon_relic | The ordinary crafting bench reaches the LootItemUnitPreviewer item-preview adapter only when that preview is constructed; unrelated lifecycle edges have no bench target and retain the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198. |
 
 #### crafting_preview x customize (38)
 
@@ -1610,9 +1610,9 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
-| weapons_of_chaos | enemy_weapon_relic | The ordinary crafting bench reaches the LootItemUnitPreviewer item-preview adapter only when that preview is constructed; unrelated lifecycle edges have no bench target and retain the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198. |
 
-#### crafting_preview x preview_open (37)
+#### crafting_preview x preview_open (38)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -1653,6 +1653,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
+| weapons_of_chaos | enemy_weapon_relic | Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198. |
 
 #### crafting_preview x mission_transition (38)
 
@@ -1695,7 +1696,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
-| weapons_of_chaos | enemy_weapon_relic | The ordinary crafting bench reaches the LootItemUnitPreviewer item-preview adapter only when that preview is constructed; unrelated lifecycle edges have no bench target and retain the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198. |
 
 #### crafting_preview x respawn (38)
 
@@ -1738,7 +1739,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
-| weapons_of_chaos | enemy_weapon_relic | The ordinary crafting bench reaches the LootItemUnitPreviewer item-preview adapter only when that preview is constructed; unrelated lifecycle edges have no bench target and retain the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198. |
 
 #### crafting_preview x mod_disable_restore (38)
 
@@ -1781,7 +1782,7 @@ Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
-| weapons_of_chaos | enemy_weapon_relic | The ordinary crafting bench reaches the LootItemUnitPreviewer item-preview adapter only when that preview is constructed; unrelated lifecycle edges have no bench target and retain the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198. |
 
 ### lobby (293 unsupported pairs)
 
