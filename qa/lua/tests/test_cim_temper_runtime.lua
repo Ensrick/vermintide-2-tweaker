@@ -107,6 +107,56 @@ return function(H, repo_root)
         H.equal(label, "CRAFT")
     end)
 
+    H.test("CIM #1117 bulk accessory label suppresses and restores native arrow", function()
+        local mod = make_mod()
+        install(context(mod))
+        local selected = nil
+        local function text_style(offset, default_offset)
+            return { offset = offset, default_offset = default_offset }
+        end
+        local button = {
+            content = {
+                button_hotspot = {},
+                icon = "athanor_icon_upgrade",
+            },
+            style = {
+                title_text = text_style({ -15, 1, 6 }, { 20, 0, 6 }),
+                title_text_disabled = text_style({ -16, 1, 6 }, { 20, 0, 6 }),
+                title_text_shadow = text_style({ -13, -1, 5 }, { 22, -2, 5 }),
+                price_icon = { color = { 255 } },
+                price_icon_disabled = { color = { 255 } },
+            },
+        }
+        local window = {
+            _widgets_by_name = {
+                upgrade_button = button,
+                upgrade_essence_warning = { content = { visible = true } },
+            },
+            _selected_item = function()
+                if not selected then return nil, nil end
+                return { data = { key = "es_sword" } }, "selected-bid"
+            end,
+        }
+
+        with_globals({ rarity = "default", key = "es_sword" }, function()
+            mod.safe_hooks._set_essence_upgrade_cost(window)
+            H.equal(button.content.title_text, "CRAFT MODDED ACCESSORIES")
+            H.equal(button.content.icon, nil)
+            H.deep_equal(button.style.title_text.offset, { 20, 0, 6 })
+            H.deep_equal(button.style.title_text_disabled.offset, { 20, 0, 6 })
+            H.deep_equal(button.style.title_text_shadow.offset, { 22, -2, 5 })
+
+            selected = true
+            mod.safe_hooks._set_essence_upgrade_cost(window)
+            H.equal(button.content.title_text, "CRAFT")
+            H.equal(button.content.icon, "athanor_icon_upgrade")
+
+            selected = nil
+            mod.safe_hooks._set_essence_upgrade_cost(window)
+            H.equal(button.content.icon, nil)
+        end)
+    end)
+
     H.test("CIM #1141 leaving Temper Item discards only its keyed draft", function()
         local mod = make_mod()
         local seen = {}
