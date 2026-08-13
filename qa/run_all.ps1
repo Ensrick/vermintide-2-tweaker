@@ -13,6 +13,7 @@ param(
     [switch]$Quick,
     [switch]$FixStale,
     [switch]$SkipBundleAtomicity,
+    [switch]$SkipBuildReceipts,
     [switch]$SkipCustomUnitBundleReachability,
     [switch]$Quiet,
     [switch]$SelfTest
@@ -221,6 +222,18 @@ Run-Check "check_versions"                    { & (Join-Path $here "check_versio
 # In hosted PR QA the check also resolves origin/$GITHUB_BASE_REF...HEAD; the
 # workflow invokes that exact range explicitly before this policy-engine pass.
 Run-Check "check_diff_whitespace"             { & (Join-Path $here "check_diff_whitespace.ps1")             -Quiet:$Quiet }
+# Issue #1278: every newly generated canonical root carries a deterministic
+# receipt binding it to the exact dirty source snapshot that will be committed.
+# BuildOnly skips the stale pre-build receipt, then writes and validates the new
+# one before returning. Ordinary local/hosted QA remains fail-closed.
+if (-not $SkipBuildReceipts) {
+    Run-Check "check_build_receipts"           { & (Join-Path $here "check_build_receipts.ps1")               -Quiet:$Quiet }
+}
+elseif (-not $Quiet) {
+    Write-Host "===== check_build_receipts =====" -ForegroundColor Cyan
+    Write-Host "[check_build_receipts] SKIP - build-only pipeline fingerprints, generates, then validates the exact receipt." -ForegroundColor DarkYellow
+    Write-Host ""
+}
 # Issue #724: runtime/version/config/newest-release deltas must carry the
 # owning mod's exact root bundle in the same diff. This is diff-scoped and
 # blocking; docs/tests-only and bundle-only reconciliation changes pass.

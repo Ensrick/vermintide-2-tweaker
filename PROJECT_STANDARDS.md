@@ -1123,9 +1123,14 @@ reviewed `published_id = 0L` commit may use the constrained hosted bootstrap
 receipt so Steam can allocate one ID. After the launcher compare-and-swaps only
 that ID into the still-authorized cfg, `ship.ps1` must stop before lifecycle
 labeling and test-readiness output and must retain the machine-global claim.
-Commit the ID-only change, pass protected PR QA, merge, and run an ordinary
-canonical ship before releasing the claim. The provisional GitHub manifest's
-zero Workshop ID is not updater/test-ready evidence.
+Rerun canonical BuildOnly so the receipt binds the assigned-ID cfg, then commit
+the ID-only cfg and refreshed receipt, pass protected PR QA, merge, and run an
+ordinary canonical ship before releasing the claim. The root may remain
+byte-identical because `itemV2.cfg` is not compiled. The atomicity exception is
+limited to exactly `published_id = 0L` becoming one canonical positive ID with
+unchanged `MOD_VERSION`, title, and every other cfg byte; receipt validation is
+still mandatory. The provisional GitHub manifest's zero Workshop ID is not
+updater/test-ready evidence.
 
 **Daily GitHub release mutation is globally serialized.** Per-mod claims permit
 two different mods to ship concurrently, but their filtered publishers share
@@ -1159,14 +1164,39 @@ exempts a runtime source delta.
 This closes the PR #759/#765/#766/#767/#769 class where
 source/version/config merged first and its compiled artifact followed later.
 
-An exact `itemV2.cfg` title-only synchronization is the sole non-promotion
-metadata exception because VMB BuildOnly proves that Workshop config is not
-compiled into `bundleV2`. The checker accepts it only when the title line is
-the entire cfg diff, `MOD_VERSION` is unchanged from the merge base, and the
-new title is exactly `<unchanged base name> v<MOD_VERSION>`. Any description,
-visibility, content, `published_id`, runtime, or newest-release identity change
-still requires the canonical root bundle. This boundary was planted after WT
-0.12.292-beta failed closed before Workshop upload on 2026-08-06: both WT
+**Exact dirty-source BuildOnly receipt (issue #1278).** Every newly generated
+canonical root also carries `<mod>/.build-receipt.json`. Immediately before and
+after the clean BuildOnly compile, `ship.ps1` fingerprints the complete
+runtime-relevant input map as both the raw SHA-256 bytes Stingray consumes and
+the Git-clean blobs that a later `git add` will commit. The raw bytes must match
+the checkout bytes Git can materialize from those blobs; an EOL/filter-only
+difference therefore fails instead of producing an unrepeatable receipt. Any
+in-build source change aborts. Dot-prefixed and ignored compiler-visible inputs
+belong to the map because VMB passes the whole mod directory as Stingray's
+source directory. Only the exact bookkeeping file `.build-receipt.json` is
+excluded from its own map. The deterministic receipt binds that dual map to the
+canonical root bundle's Git blob and SHA-256; it has no timestamp or dirty
+commit id. Pre-commit validates the exact staged index, hosted QA validates the
+committed PR tree, and final ship validates the reviewed receipt against the
+fresh clean build before the existing tracked-bundle parity gate. A source edit
+after BuildOnly therefore requires another BuildOnly run. Root `.gitattributes`
+changes revalidate every receipt-bearing active mod because they can change
+checkout materialization globally. `bundleV2` contents, including optional
+exact-normalized SDK sidecars, are not source-map inputs; their separate
+count/normalization and final parity policies remain unchanged.
+
+Two exact `itemV2.cfg` non-promotion metadata exceptions exist because VMB
+BuildOnly proves that Workshop config is not compiled into `bundleV2`. For a
+title synchronization, the title line must be the entire cfg diff,
+`MOD_VERSION` must be unchanged from the merge base, and the new title must be
+exactly `<unchanged base name> v<MOD_VERSION>`. For the mandatory first-upload
+reconciliation, the sole cfg delta must be `published_id = 0L` becoming one
+canonical positive ID; `MOD_VERSION`, title, and every other cfg byte must stay
+unchanged, and a refreshed #1278 receipt must bind the assigned-ID cfg even when
+the rebuilt root remains byte-identical. Any description, visibility, content,
+other `published_id` transition, runtime, or newest-release identity change
+still requires the canonical root bundle. The title boundary was planted after
+WT 0.12.292-beta failed closed before Workshop upload on 2026-08-06: both WT
 BuildOnly roots reproduced byte-identically, while the reviewed cfg title was
 one version behind.
 
@@ -2433,6 +2463,7 @@ BEFORE shipping:
   - CHANGELOG entry written against that exact version
   - .mod descriptors are LF, root + bundleV2 (CRLF breaks the publication receipt)
   - Every changed mod BuildOnly'd before the commit (#724 atomicity)
+  - Each changed mod's .build-receipt.json matches staged source + root (#1278)
   - Source and bundle committed together, pushed, reviewed, hosted QA passed, and merged
   - Final ship runs from a clean checkout at the exact live default-branch HEAD
   - No forward-ref bugs (visually verify; future: luacheck)

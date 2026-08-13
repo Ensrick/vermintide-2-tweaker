@@ -314,7 +314,8 @@ fail-closed recovery gate.
 .\tools\ship\claim.ps1 -Mod <name>
 # bump MOD_VERSION to the CLAIMED number and write the newest CHANGELOG entry, make source changes
 .\tools\ship\ship.ps1 -Mod <name> -BuildOnly    # run for EVERY changed mod before committing
-# commit source + bundle together, push feature branch, pass hosted qa-gate, merge
+# commit source + bundle + deterministic .build-receipt.json together
+# push feature branch, pass hosted qa-gate, merge
 .\tools\ship\ship.ps1 -Mod <name>     # from clean exact default-branch HEAD
 ```
 
@@ -323,6 +324,12 @@ Claim BEFORE bumping: the broker owns the number and it can exceed master+1
 number"). If the change touches TWO mods, `-BuildOnly` BOTH before committing -
 `qa/check_release_bundle_atomicity.ps1` (issue #724) requires each mod's source
 change and its own root `.mod_bundle` in the same commit.
+BuildOnly also writes `<mod>/.build-receipt.json` (issue #1278), binding the
+canonical root SHA/blob to both the exact raw runtime bytes Stingray consumed
+and the Git-clean blobs staging must preserve. Raw bytes that the staged blobs
+cannot reproduce on checkout fail closed. Editing relevant source after
+BuildOnly invalidates the receipt; rerun BuildOnly instead of committing a stale
+source/root pair.
 
 The publishing invocation fails closed unless HEAD is the live default-branch commit, an associated PR merged that exact commit, hosted `qa-gate` completed successfully on it, the machine-global mod/version claim matches, and a clean build exactly reproduces every tracked `bundleV2` blob. It then runs separate deploy and upload actions and records authorization evidence in the GitHub release manifest. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled remote target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only.
 

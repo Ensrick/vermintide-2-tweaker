@@ -112,6 +112,12 @@ if (-not (Test-Path -LiteralPath $transactionLeaseHelpers -PathType Leaf)) {
 }
 . $transactionLeaseHelpers
 
+$buildReceiptHelpers = Join-Path $PSScriptRoot 'build-receipt.ps1'
+if (-not (Test-Path -LiteralPath $buildReceiptHelpers -PathType Leaf)) {
+    throw "Build receipt policy not found: $buildReceiptHelpers"
+}
+. $buildReceiptHelpers
+
 function Fail {
     param([string]$Message)
     Write-Host ""
@@ -1240,7 +1246,7 @@ function Invoke-ShipSelfTest {
     # its first build/deploy/upload action.
     $selfRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
     $selfTxt = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
-    $quickInvocation = '& $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -SkipCustomUnitBundleReachability:$BuildOnly -Quiet'
+    $quickInvocation = '& $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -SkipBuildReceipts:$BuildOnly -SkipCustomUnitBundleReachability:$BuildOnly -Quiet'
     $quickPos = $selfTxt.IndexOf($quickInvocation)
     $lintPos = $selfTxt.IndexOf('& $modLint $Mod -Quiet')
     $launcherCallMarker = 'Invoke-ShipLauncherNoWindow -FilePath $' + 'launcher'
@@ -1269,12 +1275,14 @@ function Invoke-ShipSelfTest {
     Assert ($selfTxt.IndexOf('-SkipGitHub is not permitted for Workshop publication') -ge 0) "Workshop publication cannot bypass provenance recording"
     Assert ($selfTxt -match '(?m)^\s*\[switch\]\$BuildOnly\b') "ship exposes the canonical hidden build-only path"
     Assert ($selfTxt.IndexOf('-SkipBundleAtomicity:$BuildOnly') -ge 0) "build-only preflight defers bundle atomicity until after generation"
+    Assert ($selfTxt.IndexOf('-SkipBuildReceipts:$BuildOnly') -ge 0) "build-only preflight defers stale receipt validation until after generation"
     Assert ($selfTxt.IndexOf('-SkipCustomUnitBundleReachability:$BuildOnly') -ge 0) "build-only preflight defers compiled custom-unit reachability until after generation"
     Assert ($selfTxt.IndexOf("promotion-status.ps1'", $mainDispatchPos) -ge 0) "every split-stream ship invokes the stranded-fix promotion report"
     Assert ($selfTxt.IndexOf('& $promotionStatus -Mod $Mod', $mainDispatchPos) -ge 0) "stranded-fix report is scoped to the exact ship target"
     Assert ($selfTxt.IndexOf('qa\check_custom_unit_bundle_reachability.ps1') -ge 0) "build-only runs custom-unit reachability after generation"
     Assert ($selfTxt.IndexOf("@('build', `$Mod, '--clean')") -ge 0) "build-only invokes VMBLauncher's clean build action"
     Assert ($selfTxt.IndexOf("'build-output-normalization.ps1'") -ge 0) "ship sources the shared build-output normalizer"
+    Assert ($selfTxt.IndexOf("'build-receipt.ps1'") -ge 0) "ship sources the exact dirty-source receipt policy"
     Assert ($selfTxt.IndexOf('BUILD-ONLY COMPLETE') -ge 0) "build-only exits before deploy/upload/release handling"
     $mainDispatchPos = $selfTxt.LastIndexOf('if ($SelfTest) { exit (Invoke-ShipSelfTest) }')
     $canonicalShipSource = $selfTxt.Substring($mainDispatchPos)
@@ -1283,8 +1291,11 @@ function Invoke-ShipSelfTest {
     $initialAuthorizationPos = $selfTxt.IndexOf('publicationAuthorization = Get-LivePublicationAuthorization', $mainDispatchPos)
     $cleanBuildPos = $selfTxt.IndexOf("launcherArgs = @('build', `$Mod, '--clean')", $mainDispatchPos)
     $buildNormalizationPos = $selfTxt.IndexOf('buildNormalization = Invoke-BuildOutputNormalization', $mainDispatchPos)
+    $sourceBeforePos = $selfTxt.IndexOf('buildSourceSnapshotBefore = Get-VtBuildWorkingSourceMap', $mainDispatchPos)
+    $sourceAfterPos = $selfTxt.IndexOf('buildSourceSnapshotAfter = Get-VtBuildWorkingSourceMap', $buildNormalizationPos)
+    $receiptWritePos = $selfTxt.IndexOf('Write-VtBuildReceipt', $buildNormalizationPos)
     $remoteExclusionGuardPos = $selfTxt.IndexOf('VMBLauncher remote deploy currently copies and verifies expected files', $buildNormalizationPos)
-    $buildOnlyPostGatePos = $selfTxt.IndexOf('if ($BuildOnly) {', $buildNormalizationPos)
+    $buildOnlyPostGatePos = $selfTxt.IndexOf("receiptGate = Join-Path `$repoRoot 'qa\check_build_receipts.ps1'", $buildNormalizationPos)
     $bundleParityPos = $selfTxt.IndexOf('bundleParity = Test-TrackedBundleParity', $mainDispatchPos)
     $deployActionPos = $selfTxt.IndexOf("deployArgs = @('deploy', `$Mod)", $mainDispatchPos)
     $finalAuthorizationPos = $selfTxt.LastIndexOf('publicationAuthorization = Get-LivePublicationAuthorization')
@@ -1292,6 +1303,8 @@ function Invoke-ShipSelfTest {
     $receiptHandoffPos = $selfTxt.IndexOf('-PublicationReceiptOutputPath $receiptPath', $mainDispatchPos)
     $uploadActionPos = $selfTxt.IndexOf("uploadArgs = @('upload', `$Mod)", $mainDispatchPos)
     Assert ($initialAuthorizationPos -ge 0 -and $initialAuthorizationPos -lt $cleanBuildPos) "publication authorization runs before the first build mutation"
+    Assert ($sourceBeforePos -ge 0 -and $sourceBeforePos -lt $cleanBuildPos -and $cleanBuildPos -lt $sourceAfterPos) "BuildOnly fingerprints runtime source immediately before and after the clean build"
+    Assert ($sourceAfterPos -lt $receiptWritePos -and $receiptWritePos -lt $buildOnlyPostGatePos) "BuildOnly writes the deterministic source/root receipt before post-build QA"
     Assert ($cleanBuildPos -lt $buildNormalizationPos -and $buildNormalizationPos -lt $buildOnlyPostGatePos -and $buildNormalizationPos -lt $bundleParityPos) "exact-hash normalization runs after clean build and before BuildOnly QA or final parity"
     Assert ($buildNormalizationPos -lt $remoteExclusionGuardPos -and $remoteExclusionGuardPos -lt $buildOnlyPostGatePos -and $selfTxt.IndexOf('Re-run with -NoRemote', $remoteExclusionGuardPos) -ge 0) "artifact-exclusion publications require -NoRemote before any deploy"
     Assert ($cleanBuildPos -lt $bundleParityPos -and $bundleParityPos -lt $deployActionPos) "clean build parity is proven before deploy"
@@ -1598,7 +1611,7 @@ if (-not (Test-Path $quickGate)) {
 
 Write-Host ""
 Write-Host "==> Headless preflight (fast QA + Lua 5.1 units)" -ForegroundColor Cyan
-& $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -SkipCustomUnitBundleReachability:$BuildOnly -Quiet
+& $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -SkipBuildReceipts:$BuildOnly -SkipCustomUnitBundleReachability:$BuildOnly -Quiet
 if ($LASTEXITCODE -ne 0) {
     Fail "Headless QA FAILED -- no build, deploy, or upload was attempted (issue #591)."
 }
@@ -1641,6 +1654,22 @@ if ($NoRemote)    { Write-Host "    --no-remote    : ON (skipping PC-B push)" }
 # separate actions so the freshly generated bundle can be proven byte-identical
 # to the reviewed commit before either publication surface is mutated.
 # ---------------------------------------------------------------------------
+try {
+    # Issue #1278: BuildOnly intentionally consumes dirty source. Bind the
+    # generated root to both the exact raw bytes consumed by Stingray and the
+    # Git blobs that a later `git add` will commit. Take this snapshot only after
+    # every pre-build gate has completed.
+    $buildSourceSnapshotBefore = Get-VtBuildWorkingSourceMap -RepoRoot $repoRoot -Mod $Mod
+    $sourceReproducibilityBefore = Test-VtBuildWorkingSourceReproducibility `
+        -SourceMap $buildSourceSnapshotBefore
+    if (-not $sourceReproducibilityBefore.Ok) {
+        throw ($sourceReproducibilityBefore.Problems -join '; ')
+    }
+}
+catch {
+    Fail "Cannot fingerprint BuildOnly source before the clean build: $($_.Exception.Message)"
+}
+
 $launcherArgs = @('build', $Mod, '--clean')
 $launcherArgs += @('--config', $launcherSettings)
 
@@ -1715,6 +1744,47 @@ catch {
     Fail $_.Exception.Message
 }
 
+try {
+    $buildSourceSnapshotAfter = Get-VtBuildWorkingSourceMap -RepoRoot $repoRoot -Mod $Mod
+    $sourceSnapshotComparison = Compare-VtBuildSourceMaps `
+        -Expected $buildSourceSnapshotBefore -Actual $buildSourceSnapshotAfter
+    if (-not $sourceSnapshotComparison.Ok) {
+        throw ("Runtime source changed while VMBLauncher was building: " +
+            ($sourceSnapshotComparison.Problems -join '; '))
+    }
+    $sourceReproducibilityAfter = Test-VtBuildWorkingSourceReproducibility `
+        -SourceMap $buildSourceSnapshotAfter
+    if (-not $sourceReproducibilityAfter.Ok) {
+        throw ($sourceReproducibilityAfter.Problems -join '; ')
+    }
+    $buildRootProof = Get-VtBuildWorkingRootProof -RepoRoot $repoRoot -Mod $Mod
+    $buildReceipt = New-VtBuildReceipt -Mod $Mod `
+        -SourceMap $buildSourceSnapshotAfter -RootProof $buildRootProof
+
+    if ($BuildOnly) {
+        $buildReceiptPath = Write-VtBuildReceipt -RepoRoot $repoRoot -Mod $Mod -Receipt $buildReceipt
+        Write-Host "  OK -- exact dirty-source receipt written: $buildReceiptPath" -ForegroundColor Green
+    }
+    else {
+        $buildReceiptPath = Get-VtBuildReceiptPath -RepoRoot $repoRoot -Mod $Mod
+        if (-not (Test-Path -LiteralPath $buildReceiptPath -PathType Leaf)) {
+            throw "Reviewed BuildOnly receipt is missing: $buildReceiptPath"
+        }
+        $reviewedReceiptText = [System.IO.File]::ReadAllText($buildReceiptPath, [System.Text.Encoding]::UTF8)
+        $reviewedReceipt = ConvertFrom-VtBuildReceiptJson -Json $reviewedReceiptText
+        $receiptProof = Test-VtBuildReceiptProof -Receipt $reviewedReceipt `
+            -ExpectedMod $Mod -SourceMap $buildSourceSnapshotAfter -RootProof $buildRootProof
+        if (-not $receiptProof.Ok) {
+            throw ("Reviewed BuildOnly receipt no longer matches the clean build: " +
+                ($receiptProof.Problems -join '; '))
+        }
+        Write-Host "  OK -- reviewed BuildOnly receipt matches exact source and rebuilt root." -ForegroundColor Green
+    }
+}
+catch {
+    Fail "$($_.Exception.Message). No deploy or upload was attempted. Re-run BuildOnly after the final source edit."
+}
+
 # VMBLauncher remote deploy currently copies and verifies expected files but
 # cannot remove or reject stale extras. Never claim PC-B was reconciled for a
 # mod whose canonical output intentionally excludes a previously emitted file.
@@ -1725,6 +1795,14 @@ if (-not $BuildOnly -and -not $NoRemote -and
 }
 
 if ($BuildOnly) {
+    $receiptGate = Join-Path $repoRoot 'qa\check_build_receipts.ps1'
+    if (-not (Test-Path -LiteralPath $receiptGate -PathType Leaf)) {
+        Fail "Post-build receipt gate not found: $receiptGate"
+    }
+    & $receiptGate -Mod $Mod -Quiet
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Build completed, but the generated receipt did not match the exact working source/root snapshot. No deploy or upload was attempted."
+    }
     $bundleGate = Join-Path $repoRoot 'qa\check_release_bundle_atomicity.ps1'
     if (-not (Test-Path -LiteralPath $bundleGate -PathType Leaf)) {
         Fail "Post-build bundle atomicity gate not found: $bundleGate"
@@ -1742,7 +1820,7 @@ if ($BuildOnly) {
         Fail "Build completed, but one or more custom unit resources are still absent from the compiled bundle. No deploy or upload was attempted."
     }
     Write-Host ""
-    Write-Host "BUILD-ONLY COMPLETE -- bundle generated; atomicity and custom-unit reachability verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
+    Write-Host "BUILD-ONLY COMPLETE -- bundle and exact source/root receipt generated; receipt, atomicity, and custom-unit reachability verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
     exit 0
 }
 

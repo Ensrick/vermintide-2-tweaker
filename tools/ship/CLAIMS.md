@@ -66,8 +66,10 @@ erase a same-version live claim.
 # 3. Build the tracked release artifact without deploying or publishing.
 .\tools\ship\ship.ps1 -Mod weapon_tweaker -BuildOnly
 
-# 4. Commit source + bundle together, push, open the PR, pass hosted qa-gate,
-#    and merge.
+# 4. Commit source + bundle + the generated .build-receipt.json together, push,
+#    open the PR, pass hosted qa-gate, and merge. Any relevant source edit after
+#    BuildOnly invalidates the receipt and requires another BuildOnly run. Raw
+#    working bytes must also be reproducible from the Git-clean staged blobs.
 
 # 5. From a clean worktree at the exact live default-branch commit, ship.
 #    ship.ps1 verifies the same live claim, merged PR, hosted qa-gate, and
@@ -85,9 +87,13 @@ erase a same-version live claim.
 First-upload bootstrap is the exception to automatic release. When the reviewed
 cfg carries `published_id = 0L`, the successful bootstrap writes only Steam's
 assigned ID, stops before lifecycle labeling/test-readiness output, and keeps
-the claim held. Commit that ID-only change, pass protected PR QA, merge, and run
-the ordinary canonical ship from the new live default HEAD. Releasing the claim
-earlier permits another clean worktree to create a second Workshop item.
+the claim held. Rerun canonical BuildOnly so the refreshed receipt binds the
+assigned-ID cfg, then commit the ID-only cfg and receipt, pass protected PR QA,
+merge, and run the ordinary canonical ship from the new live default HEAD. The
+root may remain byte-identical; the narrow atomicity exception accepts only
+`0L` to one positive ID with every other cfg byte and `MOD_VERSION` unchanged.
+Releasing the claim earlier permits another clean worktree to create a second
+Workshop item.
 
 Claim **before** bumping the source: the broker allocates from the current (not
 yet bumped) version. Re-running `claim.ps1 -Mod <name>` in the same session is
