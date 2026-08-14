@@ -4,8 +4,9 @@
 -- unit. The authored import exposes a separate named render node, so this owner
 -- captures that node's position once, resolves the canonical WA
 -- descriptor once, and re-applies only after a retained-pose comparison fails.
--- Preview worlds are event-driven and remain one-shot; gameplay 1P/3P units
--- are weak-tracked and never create network traffic.
+-- Preview worlds retain weak absolute targets and reapply only after concrete
+-- animation edges; gameplay 1P/3P units keep the measured repair loop. Neither
+-- path creates network traffic.
 local M = {}
 
 M.CONTRACT = {
@@ -17,7 +18,7 @@ M.CONTRACT = {
 	rotation = "absolute_euler_xyz",
 	write_mode = "atomic_local_pose",
 	gameplay = "retained_check_then_reapply",
-	preview = "one_shot",
+	preview = "weak_record_event_reapply",
 	transport = "none",
 }
 
@@ -39,6 +40,20 @@ end
 -- owner spawn (owner_unit_1p ~= nil, gear_utils.lua:201/:273) owes a 1P unit.
 function M.expects_first_person_unit(owner_unit_1p)
 	return owner_unit_1p ~= nil
+end
+
+function M.should_track_surface(surface)
+	return surface == "owner-spawn" or surface == "husk-spawn"
+		or surface == "character-preview" or surface == "item-preview"
+		or surface == "cim-preview" or surface == "lobby-preview"
+		or surface == "score-preview"
+end
+
+-- Gameplay units retain the measured repair loop. Preview records share the
+-- weak target store but replay only from concrete animation/identity events.
+function M.should_poll_record(record)
+	return type(record) == "table"
+		and (record.surface == "owner-spawn" or record.surface == "husk-spawn")
 end
 
 -- A non-identity hold-pose value is authored tuner ownership whether it was
@@ -204,9 +219,11 @@ function M.new(api)
 				records[unit] = nil
 			else
 				tracked = tracked + 1
+				local polled = type(api.should_poll) ~= "function"
+					or api.should_poll(record) == true
 				local yielded = type(api.should_yield) == "function"
 					and api.should_yield(record) == true
-				if not yielded then
+				if polled and not yielded then
 					local before = read(unit, record.node)
 					local retained = M.matches(before, record.target)
 					if not retained then
@@ -229,6 +246,36 @@ function M.new(api)
 			end
 		end
 		return applied, tracked
+	end
+
+	-- Preview animation/state edges are event driven. Keep their resolved
+	-- absolute target in the same weak record store as gameplay, but never add
+	-- them to the per-frame repair loop. The preview owner calls this only after
+	-- a concrete animation/identity edge; every call writes the stored absolute
+	-- pose and verifies the immediate readback instead of treating setter success
+	-- as retained state.
+	function owner:reapply(unit, edge)
+		local record = records[unit]
+		if not record then return false, "untracked" end
+		if not alive(unit) then
+			records[unit] = nil
+			return false, "dead"
+		end
+		local before = read(unit, record.node)
+		if type(api.apply) ~= "function" then return false, "apply-unavailable" end
+		local wrote, write_report = api.apply(unit, record.target.apply_spec)
+		record.write_report = write_report
+		local after = read(unit, record.node)
+		local retained = wrote == true and M.matches(after, record.target)
+		record.last_edge = edge
+		emit(retained and "event-retained" or "event-miss", record, before, after)
+		return retained, retained and "retained" or "readback-mismatch"
+	end
+
+	function owner:forget(unit)
+		if records[unit] == nil then return false end
+		records[unit] = nil
+		return true
 	end
 
 	function owner:clear()

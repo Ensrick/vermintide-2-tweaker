@@ -160,7 +160,7 @@ do
 	end
 end
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
-local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
+local _issue613 = mod:dofile("scripts/mods/weapons_of_chaos/_woc_issue613_preview_owner")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
 local _network_lookup = mod:dofile("scripts/mods/weapons_of_chaos/_lib_network_lookup")
 local _durable_transform_lib = mod:dofile(
@@ -357,9 +357,8 @@ local _transform_owner = _durable_transform_lib.new({
 	read = _unit_snapshot,
 	rotation_components = _rotation_components,
 	apply = function(unit, spec) return _weapon_appearance.apply(unit, spec) end,
-	should_track = function(surface)
-		return surface == "owner-spawn" or surface == "husk-spawn"
-	end,
+	should_track = _durable_transform_lib.should_track_surface,
+	should_poll = _durable_transform_lib.should_poll_record,
 	should_yield = _dev_tuner_claims,
 	diagnostic = function(kind, record, before, after)
 		if _transform_diag_budget <= 0 then return end
@@ -579,8 +578,6 @@ local function _ensure_appearance_aliases()
 	return installed
 end
 _ensure_appearance_aliases()
-_preview.install(_appearance, _wa)
-
 -- Original display reference (documentation only — do NOT reference at runtime):
 --   units/props/inn/hub_trophy/hub_trophy_bogenhafen
 -- The Bögenhafen keep-trophy diorama prop. Not runtime-loadable today; when a
@@ -706,14 +703,11 @@ end
 
 local _blightreaper_sync_seen = false
 local _remote_blightreaper = {}
-
-local _shared_relic_runtime = mod:dofile(
-	"scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime").new({
-		mod = mod, policy = _shared_relic_policy, backend_id = BACKEND_ID,
-		item_key = ITEM_KEY, remote_identity = _remote_blightreaper,
-		rt_register = _rt_register,
-	})
-
+local _shared_relic_runtime, _issue613_runtime = _issue613.install({
+	mod = mod, policy = _shared_relic_policy, preview_policy = _appearance,
+	preview_appearance = _wa, transform_owner = _transform_owner, backend_id = BACKEND_ID, item_key = ITEM_KEY,
+	remote_identity = _remote_blightreaper, rt_register = _rt_register,
+})
 _spirit_runtime = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_woc_spirit_runtime_owner").new({
 		mod = mod,
@@ -1312,9 +1306,12 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 			or durable.rotation ~= "absolute_euler_xyz"
 			or durable.write_mode ~= "atomic_local_pose"
 			or durable.gameplay ~= "retained_check_then_reapply"
-			or durable.preview ~= "one_shot" or durable.transport ~= "none" then
+			or durable.preview ~= "weak_record_event_reapply"
+			or durable.transport ~= "none" then
 		return "durable transform-retention contract drifted"
 	end
+	local issue613_error = _issue613_runtime:contract_error()
+	if issue613_error then return issue613_error end
 	local probe = { right_hand_unit = BASE_WEAPON, left_hand_unit = "unexpected" }
 	local same, changed = _appearance.canonicalize_item_units(probe, true)
 	if same ~= probe or changed ~= true or probe.right_hand_unit ~= HELD_UNIT

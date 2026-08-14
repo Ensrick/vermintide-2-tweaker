@@ -93,7 +93,7 @@
             State = 'complete'
             Entry = 'weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
             CeilingLines = 1390
-            RequiredModules = @('_woc_wire_policy.lua', '_woc_blightreaper_moveset.lua', '_woc_blightreaper_power.lua', '_woc_blightreaper_audio.lua', '_woc_blightreaper_pulse.lua', '_woc_blightreaper_spirits.lua', '_woc_cursed_rarity.lua', '_woc_attack_order.lua', '_woc_appearance_policy.lua', '_woc_mod_unit_preview.lua', '_woc_inventory_icons.lua', '_woc_relic_policy.lua', '_woc_relic_registration_owner.lua', '_woc_spirit_runtime_owner.lua')
+            RequiredModules = @('_woc_wire_policy.lua', '_woc_blightreaper_moveset.lua', '_woc_blightreaper_power.lua', '_woc_blightreaper_audio.lua', '_woc_blightreaper_pulse.lua', '_woc_blightreaper_spirits.lua', '_woc_cursed_rarity.lua', '_woc_attack_order.lua', '_woc_appearance_policy.lua', '_woc_issue613_preview_owner.lua', '_woc_mod_unit_preview.lua', '_woc_shared_relic_runtime.lua', '_woc_team_preview_identity.lua', '_woc_inventory_icons.lua', '_woc_relic_policy.lua', '_woc_relic_registration_owner.lua', '_woc_spirit_runtime_owner.lua')
         }
     )
 }

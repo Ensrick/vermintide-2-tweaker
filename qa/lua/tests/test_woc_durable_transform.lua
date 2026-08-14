@@ -18,7 +18,7 @@ return function(H, repo_root)
 		}
 	end
 
-	local function fixture(surface, should_yield)
+	local function fixture(surface, should_yield, track_preview)
 		local unit = {}
 		local live = true
 		local writes, events = 0, {}
@@ -59,6 +59,11 @@ return function(H, repo_root)
 			end,
 			should_track = function(value)
 				return value == "owner-spawn" or value == "husk-spawn"
+					or track_preview == true
+			end,
+			should_poll = function(record)
+				return record.surface == "owner-spawn"
+					or record.surface == "husk-spawn"
 			end,
 			should_yield = function() return should_yield == true end,
 			diagnostic = function(kind) events[#events + 1] = kind end,
@@ -178,7 +183,7 @@ return function(H, repo_root)
 		end
 	end)
 
-	H.test("WOC #613 tracks husks, prunes dead units, and leaves previews one-shot", function()
+	H.test("WOC #613 polls husks but retains preview targets for event replay", function()
 		local husk, unit, _, _, stomp, writes, _, kill = fixture("husk-spawn")
 		H.truthy(husk:apply(unit, transform_spec(), "3p", "husk-spawn"))
 		stomp()
@@ -190,13 +195,21 @@ return function(H, repo_root)
 		H.equal(husk:count(), 0)
 
 		local preview, preview_unit, _, _, preview_stomp, preview_writes =
-			fixture("character-preview")
+			fixture("character-preview", false, true)
 		H.truthy(preview:apply(preview_unit, transform_spec(), "3p", "character-preview"))
 		preview_stomp()
 		applied, tracked = preview:step()
 		H.equal(applied, 0)
-		H.equal(tracked, 0)
+		H.equal(tracked, 1)
 		H.equal(preview_writes(), 1)
+		local retained, reason = preview:reapply(
+			preview_unit, "preview-post-animation:trigger_pose_animation")
+		H.truthy(retained)
+		H.equal(reason, "retained")
+		H.equal(preview_writes(), 2)
+		H.equal(preview:forget(preview_unit), true)
+		H.equal(preview:count(), 0)
+		H.equal(preview:reapply(preview_unit, "late-edge"), false)
 	end)
 
 	H.test("WOC #613 yields to an intentional live dev-tuner edit", function()

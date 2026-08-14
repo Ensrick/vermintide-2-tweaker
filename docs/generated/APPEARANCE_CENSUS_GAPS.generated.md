@@ -16,9 +16,9 @@ same backlog counted twice and are excluded from the deduplicated totals below.
 
 ## Totals
 
-Deduplicated backlog: **3624 unsupported pairs** of 4624 declared (78.4%), across 34 families in 4 mods.
+Deduplicated backlog: **3610 unsupported pairs** of 4624 declared (78.1%), across 34 families in 4 mods.
 
-Including the wt_dev mirror: 4049 unsupported of 5168 declared.
+Including the wt_dev mirror: 4035 unsupported of 5168 declared.
 
 ### Per mod
 
@@ -28,7 +28,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | 8 | 1088 | 211 | 877 | 80.6% |
 | weapon_tweaker | 4 | 544 | 119 | 425 | 78.1% |
 | weapon_tweaker_dev (mirror) | 4 | 544 | 119 | 425 | 78.1% |
-| weapons_of_chaos | 1 | 136 | 47 | 89 | 65.4% |
+| weapons_of_chaos | 1 | 136 | 61 | 75 | 55.1% |
 
 ### Per surface (deduplicated: mirror excluded)
 
@@ -37,13 +37,13 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | owner_1p | 272 | 173 | 99 | 36.4% |
 | owner_3p | 272 | 183 | 89 | 32.7% |
 | bot | 272 | 146 | 126 | 46.3% |
-| husk | 272 | 28 | 244 | 89.7% |
+| husk | 272 | 30 | 242 | 89.0% |
 | inventory_preview | 272 | 173 | 99 | 36.4% |
 | illusion_browser | 272 | 125 | 147 | 54.0% |
 | cim_preview | 272 | 106 | 166 | 61.0% |
 | crafting_preview | 272 | 0 | 272 | 100.0% |
-| lobby | 272 | 11 | 261 | 96.0% |
-| score_team | 272 | 18 | 254 | 93.4% |
+| lobby | 272 | 17 | 255 | 93.8% |
+| score_team | 272 | 24 | 248 | 91.2% |
 | hold_tab | 272 | 0 | 272 | 100.0% |
 | specials | 272 | 4 | 268 | 98.5% |
 | remote_audio | 272 | 0 | 272 | 100.0% |
@@ -56,13 +56,13 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 
 | Edge | Pairs | Implemented | Unsupported | Unsupported % |
 |---|---:|---:|---:|---:|
-| instance_load | 578 | 180 | 398 | 68.9% |
-| peer_ready | 578 | 168 | 410 | 70.9% |
-| equip | 578 | 189 | 389 | 67.3% |
-| customize | 578 | 171 | 407 | 70.4% |
-| preview_open | 578 | 185 | 393 | 68.0% |
+| instance_load | 578 | 182 | 396 | 68.5% |
+| peer_ready | 578 | 171 | 407 | 70.4% |
+| equip | 578 | 191 | 387 | 67.0% |
+| customize | 578 | 174 | 404 | 69.9% |
+| preview_open | 578 | 187 | 391 | 67.6% |
 | mission_transition | 578 | 47 | 531 | 91.9% |
-| respawn | 578 | 60 | 518 | 89.6% |
+| respawn | 578 | 62 | 516 | 89.3% |
 | mod_disable_restore | 578 | 0 | 578 | 100.0% |
 
 ## Unsupported pairs, grouped by surface then edge
@@ -139,7 +139,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | character_weapon_variants | warpriest_hammers | The S3 bounded lifecycle reconciler is W2-pending: identity re-publishes across a mission transition but the transform/material/pose replay is feature-owned per surface, not a proven single-generation replay (416/483). Degrades to the resident vanilla base presentation. |
 | cosmetics_tweaker | la_hat_skin_clones | Hats have no first-person view; LA armor/body paint targets the 3P mesh only, 1P arms keep the net-safe vanilla base skin. Safe (vanilla). Tracked as the 1P-outfit gap, 629-class. |
 | cosmetics_tweaker | weapon_poses | Weapon poses are 3P-body inspect animations; the wearer's 1P view has no pose surface. Not applicable by surface. |
-| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on linked render node 0 is under active in-game verification, and a mission transition re-spawns every unit, so the transform replay across the transition is exactly the unproven case. Mesh identity still re-keys via the get_item_units canonical replay (:1449). Degrades to the authored mesh at its native pose. |
+| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on the named render node is still awaiting in-game visual verification, and a mission transition re-spawns every unit, so transform replay across the transition remains unproven. Mesh identity still re-keys through the get_item_units canonical replay. Degrades to the authored mesh at its native pose. |
 
 #### owner_1p x respawn (23)
 
@@ -210,7 +210,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
 | weapon_tweaker_dev | model_substitute_queue | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
 | weapon_tweaker_dev | per_receiver_scale | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
-| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
 ### owner_3p (93 unsupported pairs)
 
@@ -270,7 +270,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | character_weapon_variants | tuskgor_javelin | The S3 bounded lifecycle reconciler is W2-pending: identity re-publishes across a mission transition but the transform/material/pose replay is feature-owned per surface, not a proven single-generation replay (416/483). Degrades to the resident vanilla base presentation. |
 | character_weapon_variants | warpriest_hammers | The S3 bounded lifecycle reconciler is W2-pending: identity re-publishes across a mission transition but the transform/material/pose replay is feature-owned per surface, not a proven single-generation replay (416/483). Degrades to the resident vanilla base presentation. |
 | cosmetics_tweaker | weapon_poses | A pose is a transient local animation on the wielder's 3P body; it does not survive a mission transition and is not replayed. By design. |
-| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on linked render node 0 is under active in-game verification, and a mission transition re-spawns every unit, so the transform replay across the transition is exactly the unproven case. Mesh identity still re-keys via the get_item_units canonical replay (:1449). Degrades to the authored mesh at its native pose. |
+| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on the named render node is still awaiting in-game visual verification, and a mission transition re-spawns every unit, so transform replay across the transition remains unproven. Mesh identity still re-keys through the get_item_units canonical replay. Degrades to the authored mesh at its native pose. |
 
 #### owner_3p x respawn (22)
 
@@ -340,7 +340,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
 | weapon_tweaker_dev | model_substitute_queue | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
 | weapon_tweaker_dev | per_receiver_scale | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
-| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
 ### bot (130 unsupported pairs)
 
@@ -437,7 +437,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | la_hat_skin_clones | LA picks are per-peer human; bots share the owner peer with is_player_controlled=false and 698/513 fails closed (_cos_husk_identity.lua:53). Bots render the default-loadout vanilla cosmetic. Safe by design. |
 | cosmetics_tweaker | offhand_shield_swaps | Offhand picks are keyed to the human wearer's per-backend_id _offhand_selection; bots wield the default loadout with no selection and render the base offhand. Safe (vanilla). |
 | cosmetics_tweaker | weapon_poses | Bots have no social-wheel UI and never trigger a pose. Not applicable. |
-| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on linked render node 0 is under active in-game verification, and a mission transition re-spawns every unit, so the transform replay across the transition is exactly the unproven case. Mesh identity still re-keys via the get_item_units canonical replay (:1449). Degrades to the authored mesh at its native pose. |
+| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on the named render node is still awaiting in-game visual verification, and a mission transition re-spawns every unit, so transform replay across the transition remains unproven. Mesh identity still re-keys through the get_item_units canonical replay. Degrades to the authored mesh at its native pose. |
 
 #### bot x respawn (27)
 
@@ -512,9 +512,9 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
 | weapon_tweaker_dev | model_substitute_queue | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
 | weapon_tweaker_dev | per_receiver_scale | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
-| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
-### husk (276 unsupported pairs)
+### husk (274 unsupported pairs)
 
 #### husk x instance_load (32)
 
@@ -553,7 +553,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | model_substitute_queue | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 
-#### husk x peer_ready (37)
+#### husk x peer_ready (36)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -593,7 +593,6 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | Hot-join: _remote_blightreaper[peer] is published over the same-mod sideband when the wearer equips, so an observer that becomes ready afterwards has no entry to re-key from and is not sent one. Degrades to the resident cloned vanilla sword (wire safety). |
 
 #### husk x equip (30)
 
@@ -630,7 +629,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | model_substitute_queue | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 
-#### husk x customize (38)
+#### husk x customize (37)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -671,7 +670,6 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The Blightreaper itself is immutable (get_item_units forces the authored unit regardless of skin, :1455), but a customization-driven re-wield on the wearer does not re-publish the sideband entry, so an observer that missed the original publish stays un-re-keyed. Degrades to the resident cloned vanilla sword. |
 
 #### husk x preview_open (32)
 
@@ -751,7 +749,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on linked render node 0 is under active in-game verification, and a mission transition re-spawns every unit, so the transform replay across the transition is exactly the unproven case. Mesh identity still re-keys via the get_item_units canonical replay (:1449). Degrades to the authored mesh at its native pose. |
+| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on the named render node is still awaiting in-game visual verification, and a mission transition re-spawns every unit, so transform replay across the transition remains unproven. Mesh identity still re-keys through the get_item_units canonical replay. Degrades to the authored mesh at its native pose. |
 
 #### husk x respawn (31)
 
@@ -830,7 +828,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | wt ships no appearance replication channel: the husk path (weapon_tweaker.lua:1036 -> :1048-1059, mesh swap :1086-1089) is each observer re-deriving locally from the wielded item, so it holds only when that observer also runs wt with matching settings, and nothing is replayed on hot-join or after a wearer-side change. An observer without wt, or with different toggles, renders the authentic vanilla weapon. Safe (vanilla). Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
 ### inventory_preview (103 unsupported pairs)
 
@@ -904,7 +902,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | character_weapon_variants | warpriest_hammers | The S3 bounded lifecycle reconciler is W2-pending: identity re-publishes across a mission transition but the transform/material/pose replay is feature-owned per surface, not a proven single-generation replay (416/483). Degrades to the resident vanilla base presentation. |
 | cosmetics_tweaker | cosmetic_projectile_fx | Projectile impact FX has no inventory-preview surface. Not applicable. |
 | cosmetics_tweaker | weapon_poses | Poses are an in-world social-wheel action, not an inventory-preview surface. Not applicable. |
-| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on linked render node 0 is under active in-game verification, and a mission transition re-spawns every unit, so the transform replay across the transition is exactly the unproven case. Mesh identity still re-keys via the get_item_units canonical replay (:1449). Degrades to the authored mesh at its native pose. |
+| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on the named render node is still awaiting in-game visual verification, and a mission transition re-spawns every unit, so transform replay across the transition remains unproven. Mesh identity still re-keys through the get_item_units canonical replay. Degrades to the authored mesh at its native pose. |
 
 #### inventory_preview x respawn (23)
 
@@ -975,7 +973,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
 | weapon_tweaker_dev | model_substitute_queue | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
 | weapon_tweaker_dev | per_receiver_scale | mod.on_disabled (weapon_tweaker.lua:4029) reverts availability only; already-spawned units keep the applied remap/mesh/grip/scale until the next re-equip or mission reload, at which point the hooks no longer fire. Degrades to the resident vanilla presentation. |
-| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
 ### illusion_browser (179 unsupported pairs)
 
@@ -1114,7 +1112,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No illusion-browser transform adapter; grip/rotation offsets are not applied there. Renders at native grip (valid). Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No illusion-browser mesh-swap adapter; the source weapon mesh renders instead of the substitute. Safe (valid vanilla mesh). Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No illusion-browser scale adapter; the weapon renders at native scale there. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on linked render node 0 is under active in-game verification, and a mission transition re-spawns every unit, so the transform replay across the transition is exactly the unproven case. Mesh identity still re-keys via the get_item_units canonical replay (:1449). Degrades to the authored mesh at its native pose. |
+| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on the named render node is still awaiting in-game visual verification, and a mission transition re-spawns every unit, so transform replay across the transition remains unproven. Mesh identity still re-keys through the get_item_units canonical replay. Degrades to the authored mesh at its native pose. |
 
 #### illusion_browser x respawn (34)
 
@@ -1196,7 +1194,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No illusion-browser transform adapter; grip/rotation offsets are not applied there. Renders at native grip (valid). Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No illusion-browser mesh-swap adapter; the source weapon mesh renders instead of the substitute. Safe (valid vanilla mesh). Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No illusion-browser scale adapter; the weapon renders at native scale there. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
 ### cim_preview (198 unsupported pairs)
 
@@ -1351,7 +1349,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No Athanor/CIM mesh-swap adapter; the source weapon mesh renders. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No Athanor/CIM scale adapter; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on linked render node 0 is under active in-game verification, and a mission transition re-spawns every unit, so the transform replay across the transition is exactly the unproven case. Mesh identity still re-keys via the get_item_units canonical replay (:1449). Degrades to the authored mesh at its native pose. |
+| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on the named render node is still awaiting in-game visual verification, and a mission transition re-spawns every unit, so transform replay across the transition remains unproven. Mesh identity still re-keys through the get_item_units canonical replay. Degrades to the authored mesh at its native pose. |
 
 #### cim_preview x respawn (37)
 
@@ -1436,7 +1434,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No Athanor/CIM mesh-swap adapter; the source weapon mesh renders. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No Athanor/CIM scale adapter; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
 ### crafting_preview (304 unsupported pairs)
 
@@ -1784,9 +1782,9 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | per_receiver_scale | wt has no ordinary crafting-bench preview adapter; the bench is distinct from both the inventory previewer and CIM Athanor, so it retains the source weapon's authentic vanilla presentation. Safe (vanilla). Tracked 1198 / 660. |
 | weapons_of_chaos | enemy_weapon_relic | Vanilla's ordinary PC forge does not instantiate LootItemUnitPreviewer: its layout constructs only HeroWindowCrafting, HeroWindowInventory, and options (hero_window_layout.lua:72-78), and neither the crafting window nor any craft page creates that previewer. WOC therefore has no bench-specific spawned-unit adapter to transform. The generic item-preview hook is not evidence for this distinct surface; the bench retains its native card and tooltip presentation. Tracked 1198. |
 
-### lobby (293 unsupported pairs)
+### lobby (287 unsupported pairs)
 
-#### lobby x instance_load (36)
+#### lobby x instance_load (35)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -1825,9 +1823,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The lobby previewer shares HeroPreviewer/MenuWorldPreviewer._spawn_item (_woc_mod_unit_preview.lua:81-82), but WOC resolves no lobby wearer identity there and the surface has never been verified separately; a lobby row for a peer without WOC cannot re-key at all. Degrades to the resident cloned vanilla sword. Tracked 660. |
 
-#### lobby x peer_ready (38)
+#### lobby x peer_ready (37)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -1868,50 +1865,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The lobby previewer shares HeroPreviewer/MenuWorldPreviewer._spawn_item (_woc_mod_unit_preview.lua:81-82), but WOC resolves no lobby wearer identity there and the surface has never been verified separately; a lobby row for a peer without WOC cannot re-key at all. Degrades to the resident cloned vanilla sword. Tracked 660. |
 
-#### lobby x equip (36)
-
-| Mod | Family | Fallback note |
-|---|---|---|
-| character_weapon_variants | cudgel | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | dawi_maces | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | dual_axes | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | dual_maces | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | elven_sword_shield | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | empire_axe_shield | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | greataxe | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | imperial_crossbow | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | imperial_dual_swords | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | imperial_longsword | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | imperial_longsword_shield | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | maul | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | old_musket | The shared derived character preview adapter applies only when the lobby preview creates the exact slot; other edges preserve vanilla. |
-| character_weapon_variants | outrider_grenade_launcher | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | priest_greathammer | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | rapier | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | shortsword | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | sword_and_mace | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | tuskgor_javelin | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| character_weapon_variants | warpriest_hammers | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
-| cosmetics_tweaker | cosmetic_projectile_fx | Projectile FX has no lobby surface. Not applicable. |
-| cosmetics_tweaker | custom_weapon_illusions | No lobby-card previewer hook, and the wire-null means remote lobby husks show the base weapon anyway. Tracked as the lobby-preview gap / 233. |
-| cosmetics_tweaker | glow_overrides | No lobby-card previewer hook; the lobby portrait is 2D. Tracked 1147 (glow one-off on the lobby/score surfaces) and the lobby-preview gap. |
-| cosmetics_tweaker | la_hat_skin_clones | No lobby-card/portrait previewer hook. Co-located keep rendering rides the husk surface; the matchmaking lobby portrait keeps vanilla. Tracked as the lobby-preview gap, 629-class. |
-| cosmetics_tweaker | offhand_shield_swaps | No lobby-card previewer hook; co-located keep rendering rides the husk surface. Matchmaking lobby portrait keeps vanilla. Tracked as the lobby-preview gap. |
-| cosmetics_tweaker | weapon_model_scale_grip | No lobby-card previewer hook; the lobby portrait is 2D. Tracked as the lobby-preview gap. |
-| cosmetics_tweaker | weapon_poses | Poses have no lobby surface. Not applicable. |
-| weapon_tweaker | cross_character_port | No pre-mission lobby previewer adapter; lobby wield pose is the source template base stance, no crash. Tracked 660. |
-| weapon_tweaker | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
-| weapon_tweaker | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
-| weapon_tweaker | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
-| weapon_tweaker_dev | cross_character_port | No pre-mission lobby previewer adapter; lobby wield pose is the source template base stance, no crash. Tracked 660. |
-| weapon_tweaker_dev | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
-| weapon_tweaker_dev | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
-| weapon_tweaker_dev | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The lobby previewer shares HeroPreviewer/MenuWorldPreviewer._spawn_item (_woc_mod_unit_preview.lua:81-82), but WOC resolves no lobby wearer identity there and the surface has never been verified separately; a lobby row for a peer without WOC cannot re-key at all. Degrades to the resident cloned vanilla sword. Tracked 660. |
-
-#### lobby x customize (36)
+#### lobby x equip (35)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -1950,9 +1905,48 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The lobby previewer shares HeroPreviewer/MenuWorldPreviewer._spawn_item (_woc_mod_unit_preview.lua:81-82), but WOC resolves no lobby wearer identity there and the surface has never been verified separately; a lobby row for a peer without WOC cannot re-key at all. Degrades to the resident cloned vanilla sword. Tracked 660. |
 
-#### lobby x preview_open (35)
+#### lobby x customize (35)
+
+| Mod | Family | Fallback note |
+|---|---|---|
+| character_weapon_variants | cudgel | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | dawi_maces | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | dual_axes | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | dual_maces | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | elven_sword_shield | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | empire_axe_shield | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | greataxe | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | imperial_crossbow | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | imperial_dual_swords | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | imperial_longsword | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | imperial_longsword_shield | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | maul | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | old_musket | The shared derived character preview adapter applies only when the lobby preview creates the exact slot; other edges preserve vanilla. |
+| character_weapon_variants | outrider_grenade_launcher | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | priest_greathammer | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | rapier | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | shortsword | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | sword_and_mace | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | tuskgor_javelin | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| character_weapon_variants | warpriest_hammers | Transform rides the shared HeroPreviewer._spawn_item seam (:12256) but the mesh-swap pre-pass never fires on the lobby previewer and full lobby weapon parity is unverified; degrades to the data-level get_item_units mesh over the resident vanilla base (513). |
+| cosmetics_tweaker | cosmetic_projectile_fx | Projectile FX has no lobby surface. Not applicable. |
+| cosmetics_tweaker | custom_weapon_illusions | No lobby-card previewer hook, and the wire-null means remote lobby husks show the base weapon anyway. Tracked as the lobby-preview gap / 233. |
+| cosmetics_tweaker | glow_overrides | No lobby-card previewer hook; the lobby portrait is 2D. Tracked 1147 (glow one-off on the lobby/score surfaces) and the lobby-preview gap. |
+| cosmetics_tweaker | la_hat_skin_clones | No lobby-card/portrait previewer hook. Co-located keep rendering rides the husk surface; the matchmaking lobby portrait keeps vanilla. Tracked as the lobby-preview gap, 629-class. |
+| cosmetics_tweaker | offhand_shield_swaps | No lobby-card previewer hook; co-located keep rendering rides the husk surface. Matchmaking lobby portrait keeps vanilla. Tracked as the lobby-preview gap. |
+| cosmetics_tweaker | weapon_model_scale_grip | No lobby-card previewer hook; the lobby portrait is 2D. Tracked as the lobby-preview gap. |
+| cosmetics_tweaker | weapon_poses | Poses have no lobby surface. Not applicable. |
+| weapon_tweaker | cross_character_port | No pre-mission lobby previewer adapter; lobby wield pose is the source template base stance, no crash. Tracked 660. |
+| weapon_tweaker | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
+| weapon_tweaker | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
+| weapon_tweaker | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
+| weapon_tweaker_dev | cross_character_port | No pre-mission lobby previewer adapter; lobby wield pose is the source template base stance, no crash. Tracked 660. |
+| weapon_tweaker_dev | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
+| weapon_tweaker_dev | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
+| weapon_tweaker_dev | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
+
+#### lobby x preview_open (34)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -1990,7 +1984,6 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The lobby previewer shares HeroPreviewer/MenuWorldPreviewer._spawn_item (_woc_mod_unit_preview.lua:81-82), but WOC resolves no lobby wearer identity there and the surface has never been verified separately; a lobby row for a peer without WOC cannot re-key at all. Degrades to the resident cloned vanilla sword. Tracked 660. |
 
 #### lobby x mission_transition (37)
 
@@ -2032,9 +2025,9 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The lobby previewer shares HeroPreviewer/MenuWorldPreviewer._spawn_item (_woc_mod_unit_preview.lua:81-82), but WOC resolves no lobby wearer identity there and the surface has never been verified separately; a lobby row for a peer without WOC cannot re-key at all. Degrades to the resident cloned vanilla sword. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on the named render node is still awaiting in-game visual verification, and a mission transition re-spawns every unit, so transform replay across the transition remains unproven. Mesh identity still re-keys through the get_item_units canonical replay. Degrades to the authored mesh at its native pose. |
 
-#### lobby x respawn (37)
+#### lobby x respawn (36)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -2074,7 +2067,6 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The lobby previewer shares HeroPreviewer/MenuWorldPreviewer._spawn_item (_woc_mod_unit_preview.lua:81-82), but WOC resolves no lobby wearer identity there and the surface has never been verified separately; a lobby row for a peer without WOC cannot re-key at all. Degrades to the resident cloned vanilla sword. Tracked 660. |
 
 #### lobby x mod_disable_restore (38)
 
@@ -2117,11 +2109,11 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No lobby transform adapter; grip/rotation offsets not applied in lobby. Native grip; safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | No lobby mesh-swap adapter; the source weapon mesh renders in lobby. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No lobby scale adapter; native scale renders in lobby. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The lobby previewer shares HeroPreviewer/MenuWorldPreviewer._spawn_item (_woc_mod_unit_preview.lua:81-82), but WOC resolves no lobby wearer identity there and the surface has never been verified separately; a lobby row for a peer without WOC cannot re-key at all. Degrades to the resident cloned vanilla sword. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
-### score_team (286 unsupported pairs)
+### score_team (280 unsupported pairs)
 
-#### score_team x instance_load (35)
+#### score_team x instance_load (34)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -2159,9 +2151,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The end-of-mission lineup shares the same _spawn_item hook but WOC resolves no score-row wearer identity (no equivalent of the CWV crowbill score bridge), so a remote wearer's Blightreaper is not proven to render. Degrades to the resident cloned vanilla sword. Tracked 660 / 513-class. |
 
-#### score_team x peer_ready (37)
+#### score_team x peer_ready (36)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -2201,49 +2192,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The end-of-mission lineup shares the same _spawn_item hook but WOC resolves no score-row wearer identity (no equivalent of the CWV crowbill score bridge), so a remote wearer's Blightreaper is not proven to render. Degrades to the resident cloned vanilla sword. Tracked 660 / 513-class. |
 
-#### score_team x equip (35)
-
-| Mod | Family | Fallback note |
-|---|---|---|
-| character_weapon_variants | cudgel | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | dawi_maces | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | dual_axes | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | dual_maces | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | elven_sword_shield | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | empire_axe_shield | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | greataxe | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | imperial_crossbow | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | imperial_dual_swords | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | imperial_longsword | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | imperial_longsword_shield | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | maul | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | old_musket | The shared derived character preview adapter applies only when the score/team preview creates the exact slot; other edges preserve vanilla. |
-| character_weapon_variants | outrider_grenade_launcher | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | priest_greathammer | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | rapier | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | shortsword | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | sword_and_mace | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | tuskgor_javelin | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| character_weapon_variants | warpriest_hammers | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
-| cosmetics_tweaker | cosmetic_projectile_fx | Projectile FX has no score/team surface. Not applicable. |
-| cosmetics_tweaker | custom_weapon_illusions | Score apply is hat/armor only; ct_* illusions are wire-nulled and not applied on the score lineup. Tracked 513-class weapon-on-score gap / 233. |
-| cosmetics_tweaker | glow_overrides | Score apply is hat/armor only; weapon glow presets are not applied on the score lineup. Tracked 1147 and 513-class / 650. |
-| cosmetics_tweaker | offhand_shield_swaps | TeamPreviewer score apply covers slot_hat/slot_skin only (:5454,:5501); offhand/weapon meshes render the net-safe base on the score lineup. Tracked as the weapon-on-score gap, 513-class. |
-| cosmetics_tweaker | weapon_model_scale_grip | Score lineup weapons are not scaled (score apply is hat/armor only). Tracked 513-class weapon-on-score gap. |
-| cosmetics_tweaker | weapon_poses | Poses have no score/team surface. Not applicable. |
-| weapon_tweaker | cross_character_port | Only crash-sanitize on LevelEndView/TeamPreviewer (weapon_tweaker.lua:4351,:4393); no wield resolver (previewer unit has no career_system). Renders source base stance; safe. Tracked 660. |
-| weapon_tweaker | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
-| weapon_tweaker | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
-| weapon_tweaker | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
-| weapon_tweaker_dev | cross_character_port | Only crash-sanitize on LevelEndView/TeamPreviewer (weapon_tweaker.lua:4351,:4393); no wield resolver (previewer unit has no career_system). Renders source base stance; safe. Tracked 660. |
-| weapon_tweaker_dev | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
-| weapon_tweaker_dev | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
-| weapon_tweaker_dev | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The end-of-mission lineup shares the same _spawn_item hook but WOC resolves no score-row wearer identity (no equivalent of the CWV crowbill score bridge), so a remote wearer's Blightreaper is not proven to render. Degrades to the resident cloned vanilla sword. Tracked 660 / 513-class. |
-
-#### score_team x customize (35)
+#### score_team x equip (34)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -2281,9 +2231,47 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The end-of-mission lineup shares the same _spawn_item hook but WOC resolves no score-row wearer identity (no equivalent of the CWV crowbill score bridge), so a remote wearer's Blightreaper is not proven to render. Degrades to the resident cloned vanilla sword. Tracked 660 / 513-class. |
 
-#### score_team x preview_open (34)
+#### score_team x customize (34)
+
+| Mod | Family | Fallback note |
+|---|---|---|
+| character_weapon_variants | cudgel | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | dawi_maces | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | dual_axes | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | dual_maces | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | elven_sword_shield | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | empire_axe_shield | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | greataxe | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | imperial_crossbow | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | imperial_dual_swords | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | imperial_longsword | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | imperial_longsword_shield | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | maul | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | old_musket | The shared derived character preview adapter applies only when the score/team preview creates the exact slot; other edges preserve vanilla. |
+| character_weapon_variants | outrider_grenade_launcher | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | priest_greathammer | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | rapier | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | shortsword | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | sword_and_mace | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | tuskgor_javelin | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| character_weapon_variants | warpriest_hammers | End-of-mission TeamPreviewer reconstructs from the score snapshot; CWV weapon appearance is not wired to the score lineup (513 isolated wearer identity only); degrades to the resident vanilla base mesh. |
+| cosmetics_tweaker | cosmetic_projectile_fx | Projectile FX has no score/team surface. Not applicable. |
+| cosmetics_tweaker | custom_weapon_illusions | Score apply is hat/armor only; ct_* illusions are wire-nulled and not applied on the score lineup. Tracked 513-class weapon-on-score gap / 233. |
+| cosmetics_tweaker | glow_overrides | Score apply is hat/armor only; weapon glow presets are not applied on the score lineup. Tracked 1147 and 513-class / 650. |
+| cosmetics_tweaker | offhand_shield_swaps | TeamPreviewer score apply covers slot_hat/slot_skin only (:5454,:5501); offhand/weapon meshes render the net-safe base on the score lineup. Tracked as the weapon-on-score gap, 513-class. |
+| cosmetics_tweaker | weapon_model_scale_grip | Score lineup weapons are not scaled (score apply is hat/armor only). Tracked 513-class weapon-on-score gap. |
+| cosmetics_tweaker | weapon_poses | Poses have no score/team surface. Not applicable. |
+| weapon_tweaker | cross_character_port | Only crash-sanitize on LevelEndView/TeamPreviewer (weapon_tweaker.lua:4351,:4393); no wield resolver (previewer unit has no career_system). Renders source base stance; safe. Tracked 660. |
+| weapon_tweaker | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
+| weapon_tweaker | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
+| weapon_tweaker | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
+| weapon_tweaker_dev | cross_character_port | Only crash-sanitize on LevelEndView/TeamPreviewer (weapon_tweaker.lua:4351,:4393); no wield resolver (previewer unit has no career_system). Renders source base stance; safe. Tracked 660. |
+| weapon_tweaker_dev | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
+| weapon_tweaker_dev | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
+| weapon_tweaker_dev | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
+
+#### score_team x preview_open (33)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -2320,7 +2308,6 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The end-of-mission lineup shares the same _spawn_item hook but WOC resolves no score-row wearer identity (no equivalent of the CWV crowbill score bridge), so a remote wearer's Blightreaper is not proven to render. Degrades to the resident cloned vanilla sword. Tracked 660 / 513-class. |
 
 #### score_team x mission_transition (36)
 
@@ -2361,9 +2348,9 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The end-of-mission lineup shares the same _spawn_item hook but WOC resolves no score-row wearer identity (no equivalent of the CWV crowbill score bridge), so a remote wearer's Blightreaper is not proven to render. Degrades to the resident cloned vanilla sword. Tracked 660 / 513-class. |
+| weapons_of_chaos | enemy_weapon_relic | 712/613: retention of the authored pose on the named render node is still awaiting in-game visual verification, and a mission transition re-spawns every unit, so transform replay across the transition remains unproven. Mesh identity still re-keys through the get_item_units canonical replay. Degrades to the authored mesh at its native pose. |
 
-#### score_team x respawn (36)
+#### score_team x respawn (35)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -2402,7 +2389,6 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The end-of-mission lineup shares the same _spawn_item hook but WOC resolves no score-row wearer identity (no equivalent of the CWV crowbill score bridge), so a remote wearer's Blightreaper is not proven to render. Degrades to the resident cloned vanilla sword. Tracked 660 / 513-class. |
 
 #### score_team x mod_disable_restore (38)
 
@@ -2445,7 +2431,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | No transform application on the score/team previewer; weapon shows native grip. Safe. Tracked 660. |
 | weapon_tweaker_dev | model_substitute_queue | TeamPreviewer/LevelEndView hooks are crash-sanitize only; no mesh swap, so the source mesh renders on the score screen. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No scale application on the score/team previewer; native scale renders. Safe. Tracked 660. |
-| weapons_of_chaos | enemy_weapon_relic | The end-of-mission lineup shares the same _spawn_item hook but WOC resolves no score-row wearer identity (no equivalent of the CWV crowbill score bridge), so a remote wearer's Blightreaper is not proven to render. Degrades to the resident cloned vanilla sword. Tracked 660 / 513-class. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
 ### hold_tab (304 unsupported pairs)
 
@@ -2490,7 +2476,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | Icon-only surface; grip/rotation transforms have no icon effect. |
 | weapon_tweaker_dev | model_substitute_queue | Icon-only surface; mesh substitution has no icon effect; scoreboard shows the weapon's authentic vanilla icon. |
 | weapon_tweaker_dev | per_receiver_scale | Icon-only surface; per-receiver scale has no icon effect. |
-| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua:12-17); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua SAFE_RENDERERS); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
 
 #### hold_tab x peer_ready (38)
 
@@ -2533,7 +2519,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | Icon-only surface; grip/rotation transforms have no icon effect. |
 | weapon_tweaker_dev | model_substitute_queue | Icon-only surface; mesh substitution has no icon effect; scoreboard shows the weapon's authentic vanilla icon. |
 | weapon_tweaker_dev | per_receiver_scale | Icon-only surface; per-receiver scale has no icon effect. |
-| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua:12-17); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua SAFE_RENDERERS); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
 
 #### hold_tab x equip (38)
 
@@ -2576,7 +2562,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | Icon-only surface; grip/rotation transforms have no icon effect. |
 | weapon_tweaker_dev | model_substitute_queue | Icon-only surface; mesh substitution has no icon effect; scoreboard shows the weapon's authentic vanilla icon. |
 | weapon_tweaker_dev | per_receiver_scale | Icon-only surface; per-receiver scale has no icon effect. |
-| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua:12-17); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua SAFE_RENDERERS); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
 
 #### hold_tab x customize (38)
 
@@ -2619,7 +2605,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | Icon-only surface; grip/rotation transforms have no icon effect. |
 | weapon_tweaker_dev | model_substitute_queue | Icon-only surface; mesh substitution has no icon effect; scoreboard shows the weapon's authentic vanilla icon. |
 | weapon_tweaker_dev | per_receiver_scale | Icon-only surface; per-receiver scale has no icon effect. |
-| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua:12-17); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua SAFE_RENDERERS); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
 
 #### hold_tab x preview_open (38)
 
@@ -2662,7 +2648,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | Icon-only surface; grip/rotation transforms have no icon effect. |
 | weapon_tweaker_dev | model_substitute_queue | Icon-only surface; mesh substitution has no icon effect; scoreboard shows the weapon's authentic vanilla icon. |
 | weapon_tweaker_dev | per_receiver_scale | Icon-only surface; per-receiver scale has no icon effect. |
-| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua:12-17); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua SAFE_RENDERERS); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
 
 #### hold_tab x mission_transition (38)
 
@@ -2705,7 +2691,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | Icon-only surface; grip/rotation transforms have no icon effect. |
 | weapon_tweaker_dev | model_substitute_queue | Icon-only surface; mesh substitution has no icon effect; scoreboard shows the weapon's authentic vanilla icon. |
 | weapon_tweaker_dev | per_receiver_scale | Icon-only surface; per-receiver scale has no icon effect. |
-| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua:12-17); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua SAFE_RENDERERS); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
 
 #### hold_tab x respawn (38)
 
@@ -2748,7 +2734,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | Icon-only surface; grip/rotation transforms have no icon effect. |
 | weapon_tweaker_dev | model_substitute_queue | Icon-only surface; mesh substitution has no icon effect; scoreboard shows the weapon's authentic vanilla icon. |
 | weapon_tweaker_dev | per_receiver_scale | Icon-only surface; per-receiver scale has no icon effect. |
-| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua:12-17); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua SAFE_RENDERERS); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
 
 #### hold_tab x mod_disable_restore (38)
 
@@ -2791,7 +2777,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | Icon-only surface; grip/rotation transforms have no icon effect. |
 | weapon_tweaker_dev | model_substitute_queue | Icon-only surface; mesh substitution has no icon effect; scoreboard shows the weapon's authentic vanilla icon. |
 | weapon_tweaker_dev | per_receiver_scale | Icon-only surface; per-receiver scale has no icon effect. |
-| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua:12-17); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
+| weapons_of_chaos | enemy_weapon_relic | Custom icon icon_wpn_blightreaper is allow-listed to {ingame_ui, hero_view, loading_view, popup_manager} renderers (_woc_inventory_icons.lua SAFE_RENDERERS); any other renderer (incl. an unproven Hold-Tab scoreboard) fails closed to the resident cloned vanilla sword icon. Safe. Tracked 660. |
 
 ### specials (300 unsupported pairs)
 
@@ -3178,7 +3164,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | model_substitute_queue | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | per_receiver_scale | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
-| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it, :1592) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
+| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
 
 #### remote_audio x peer_ready (38)
 
@@ -3221,7 +3207,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | model_substitute_queue | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | per_receiver_scale | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
-| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it, :1592) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
+| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
 
 #### remote_audio x equip (38)
 
@@ -3264,7 +3250,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | model_substitute_queue | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | per_receiver_scale | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
-| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it, :1592) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
+| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
 
 #### remote_audio x customize (38)
 
@@ -3307,7 +3293,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | model_substitute_queue | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | per_receiver_scale | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
-| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it, :1592) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
+| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
 
 #### remote_audio x preview_open (38)
 
@@ -3350,7 +3336,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | model_substitute_queue | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | per_receiver_scale | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
-| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it, :1592) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
+| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
 
 #### remote_audio x mission_transition (38)
 
@@ -3393,7 +3379,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | model_substitute_queue | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | per_receiver_scale | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
-| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it, :1592) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
+| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
 
 #### remote_audio x respawn (38)
 
@@ -3436,7 +3422,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | model_substitute_queue | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | per_receiver_scale | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
-| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it, :1592) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
+| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
 
 #### remote_audio x mod_disable_restore (38)
 
@@ -3479,7 +3465,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | model_substitute_queue | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
 | weapon_tweaker_dev | per_receiver_scale | wt re-keys 3P animation and mesh but never re-keys weapon audio, so every peer (including the wearer's own observers) hears the source weapon's authentic vanilla cues. Correct by construction for cross-access; tracked 398 class. |
-| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it, :1592) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
+| weapons_of_chaos | enemy_weapon_relic | WOC owns authored audio for the relic (mod.on_disabled stops it) but publishes no audio identity to observers, and 747 is the open cross-mod diagnostic covering a Blightreaper carried alongside CWV and vanilla weapons. Remote peers hear the cloned vanilla sword cues. Safe (vanilla). Tracked 398 class / 747. |
 
 ### hud_panels (290 unsupported pairs)
 
@@ -4477,7 +4463,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | grip_hold_override | wt registers no custom weapon icon; cross-access weapons keep their authentic vanilla icon on the 2D item card. Correct by construction. Tracked 660 / 638 / 641. |
 | weapon_tweaker_dev | model_substitute_queue | wt registers no custom weapon icon; cross-access weapons keep their authentic vanilla icon on the 2D item card. Correct by construction. Tracked 660 / 638 / 641. |
 | weapon_tweaker_dev | per_receiver_scale | wt registers no custom weapon icon; cross-access weapons keep their authentic vanilla icon on the 2D item card. Correct by construction. Tracked 660 / 638 / 641. |
-| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
+| weapons_of_chaos | enemy_weapon_relic | mod.on_disabled clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
 ### inventory_tooltip (304 unsupported pairs)
 
