@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.516-dev"
+local MOD_VERSION = "0.1.517-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -56,7 +56,7 @@ local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear"); _om.javelin_gate = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_gate")
 _om.cross_slot_filter = mod:dofile("scripts/mods/character_weapon_variants/_cwv_cross_slot_filter")
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance"); _om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
-_om.identity_peer_pull = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_pull")
+_om.identity_peer_pull = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_pull"); _om.identity_peer_cleanup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_identity_peer_cleanup")
 _om.husk_transform_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_transform_policy"); _om.appearance_fade = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_fade")(mod, _om)
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe"); _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
 _om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_family"); _om.crowbill_hammer_mode = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_hammer_mode")
@@ -867,7 +867,7 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
 	-- strictly scoped context so the upstream hand-selection adapter can consume
 	-- the same exact remote descriptor as the later mesh/transform adapters.
 	_om._appearance_husk_wield_context = {
-		owner_unit_3p = self and self._unit,
+		owner_unit_3p = self and self._unit, player = self and self._player,
 		slot_name = slot_name,
 	}
 	if _om.combat_styles and _om.combat_styles.begin_husk_wield then
@@ -888,8 +888,7 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
 	local slot = equipment and equipment.slots and equipment.slots[slot_name]
 	local item_data = slot and slot.item_data
 	local descriptor = _om._husk_identity_descriptor
-		and _om._husk_identity_descriptor(self and self._unit, slot_name,
-			item_data and item_data.name)
+		and _om._husk_identity_descriptor(self and self._unit, slot_name, item_data and item_data.name, self and self._player)
 	local husk_wield, husk_reason = _om.outrider_animation.husk_event(
 		descriptor, self and self._career_name,
 		NetworkLookup and NetworkLookup.anims)

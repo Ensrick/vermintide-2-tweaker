@@ -369,15 +369,17 @@ return function(H, repo_root)
         for name in (identity .. "\n" .. render):gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 82)
+        H.equal(#names, 83)
         H.equal(names[1], "cwv_variant_flag_present")
-        H.equal(names[37], "cwv_husk_transform_coverage")
-        H.equal(names[38], "cwv_husk_stale_unit_and_postcondition")
+        H.equal(names[4], "issue914_peer_ready_identity_lifecycle")
+        H.equal(names[38], "cwv_husk_transform_coverage")
+        H.equal(names[39], "cwv_husk_stale_unit_and_postcondition")
         -- issue 399 appended the husk ammo-adapter drive as the last identity
-        -- check, so the identity/render boundary moved one slot right.
-        H.equal(names[39], "issue399_outrider_husk_ammo_adapter")
-        H.equal(names[40], "issue1204_deus_identity_uses_committed_parity")
-        H.equal(names[41], "cwv_unit_bearing_variants_registered")
+        -- check; #914 added one earlier identity check, so the identity/render
+        -- boundary now follows slot 41.
+        H.equal(names[40], "issue399_outrider_husk_ammo_adapter")
+        H.equal(names[41], "issue1204_deus_identity_uses_committed_parity")
+        H.equal(names[42], "cwv_unit_bearing_variants_registered")
         H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")
