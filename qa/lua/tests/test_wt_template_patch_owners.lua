@@ -1,14 +1,15 @@
 -- Boundary test for the #1159 template-patch owner extractions (wt + wt_dev).
 --
--- Engine-free. Asserts the structural contract of the split across BOTH streams
--- of the mirror pair: bare-dofile wiring at the former execution position for
--- both owners, the load-order facts that make the move behavior-neutral (the
--- NetworkLookup.damage_profiles append order is the wire index, and the
--- template patchers must still run before the rebalance rewrite of the same
--- brace template), entry-side absence of every moved file-scope local, the
--- accessor idioms the chunk boundary needs, the #210 career-scoped remap
--- contract, the #431 wire-safe fallback records, and exact public/dev parity of
--- both owners.
+-- Engine-free. Asserts the load-bearing structural contract of the split
+-- across BOTH streams of the mirror pair: bare-dofile wiring at the former
+-- execution position for both owners, the load-order facts that make the move
+-- behavior-neutral (the NetworkLookup.damage_profiles append order is the wire
+-- index, and the template patchers must still run before the rebalance rewrite
+-- of the same brace template), the #210 career-scoped remap contract, the #431
+-- wire-safe fallback records, hook/command cardinality, and exact public/dev
+-- parity of both owners. (#1308 retired the moved-local spelling lists and the
+-- whitespace-aligned accessor pins; the load-bearing entry-side absences live
+-- in qa/rt_textual_invariants.psd1.)
 return function(H, repo_root)
     local STREAMS = {
         {
@@ -101,107 +102,34 @@ return function(H, repo_root)
                 "rebalance owner must load before the moonfire owner")
         end)
 
-        H.test(stream.tag .. ": moved file-scope locals left the entry (template owner)", function()
-            for _, decl in ipairs({
-                "local _BRACE_REPEATER_BASE_WIELD_3P",
-                "local _BRACE_REPEATER_ANIM_REMAP_3P",
-                "local function _patch_brace_template_for_kruber",
-                "local _SP_LONGBOW_CROSSBOW_WIELD_3P",
-                "local _SALTZ_LONGBOW_CROSSBOW_ANIM_REMAP_3P",
-                "local function _patch_longbow_empire_template_for_saltzpyre",
-                "local _WE_LONGBOW_CROSSBOW_WIELD_3P",
-                "local function _patch_longbow_template_1_for_saltzpyre",
-                "local _WE_MOONFIRE_CROSSBOW_ANIM_REMAP_3P",
-                "local function _patch_moonfire_template_1_for_saltzpyre",
-                "local _WH_REPEATING_PISTOLS_REPEATING_HANDGUN_WIELD_3P",
-                "local function _patch_repeating_pistol_template_1_for_kruber",
-                "local _WIELD_PATCHES_MODULE",
-                "local _WIELD_ANIM_CAREER_3P_PATCHES",
-                "local function _apply_wield_anim_career_3p_patches",
-                "local _KRUBER_REPEATER_CAREERS",
-                "local _WH_REPEATER_CAREERS",
-                "local _NOT_LOADED_NO_AMMO_CAREER_PATCHES",
-                "local function _apply_not_loaded_no_ammo_career_patches",
-            }) do
-                H.equal(count_plain(templates, decl) > 0, true,
-                    decl .. " must be declared in the template owner")
-                H.equal(count_plain(entry, decl), 0, decl .. " must not remain in the entry")
-            end
-        end)
-
-        H.test(stream.tag .. ": moved file-scope locals left the entry (rebalance owner)", function()
-            for _, decl in ipairs({
-                "local function _wt_clone_shot_sniper_no_dropoff",
-                "local _AUTHENTIC_BRACE_PRIMARY_SPREAD_MULT",
-                "local _AUTHENTIC_BRACE_SECONDARY_SPREAD_MULT",
-                "local function _wt_scale_spread",
-                "local function _wt_clone_spread_wider",
-                "local function _wt_clone_brace_spread_wider",
-                "local function _wt_clone_pistol_special_spread_wider",
-                "local function _apply_authentic_brace_mode",
-                "local function _patch_kruber_1h_sword_push_combo_revert",
-            }) do
-                H.equal(count_plain(balance, decl), 1,
-                    decl .. " must be declared once in the rebalance owner")
-                H.equal(count_plain(entry, decl), 0, decl .. " must not remain in the entry")
-            end
-            -- The three toggle reads are the owner's only settings dependency.
-            for _, toggle in ipairs({
-                'mod:get("authentic_brace_of_pistols")',
-                'mod:get("wt_revert_1h_sword_push_combo")',
-                'mod:get("wt_priest_punch_buff")',
-            }) do
-                H.equal(count_plain(balance, toggle), 1, toggle .. " must live in the owner")
-                H.equal(count_plain(entry, toggle), 0, toggle .. " must not remain in the entry")
-            end
-        end)
-
-        H.test(stream.tag .. ": chunk-boundary accessors are the published values", function()
-            -- The moved lines closed over the entry's file-scope helpers. Each
-            -- owner must re-read the SAME published function/table, never invent
-            -- a private one.
-            H.equal(count_plain(templates, "local _dbg                = mod._wt.dbg"), 1)
-            H.equal(count_plain(templates, "local _dbg_alert          = mod._wt.dbg_alert"), 1)
-            H.equal(count_plain(templates,
-                "local _3p_template_remaps = mod._wt.three_p_template_remaps"), 1)
-            H.equal(count_plain(balance, "local _dbg = mod._wt.dbg"), 1)
-            -- ...and the entry must actually publish dbg_alert, which it did not
-            -- need to before this split.
-            H.equal(count_plain(entry, "mod._wt.dbg_alert         = _dbg_alert"), 1)
-            H.equal(count_plain(entry, "local function _dbg_alert("), 1)
-            -- The runtime-check dependency table used to read two entry locals
-            -- that now live in the owner; it must read them off the namespace.
-            H.equal(count_plain(templates,
-                "mod._wt.wield_patches_module      = _WIELD_PATCHES_MODULE"), 1)
-            H.equal(count_plain(templates,
-                "mod._wt.wield_anim_career_patches = _WIELD_ANIM_CAREER_3P_PATCHES"), 1)
-            H.equal(count_plain(entry,
-                "    wield_patches_module = mod._wt.wield_patches_module,"), 1)
-            H.equal(count_plain(entry,
-                "    wield_anim_career_patches = mod._wt.wield_anim_career_patches,"), 1)
-        end)
+        -- #1308: the exhaustive moved-file-scope-local lists and the
+        -- whitespace-aligned chunk-boundary accessor pins were retired as
+        -- spelling pins. The two entry-side absences that are load-bearing
+        -- (a re-declared damage-profile clone or template patcher would append
+        -- a duplicate NetworkLookup index / re-run outside the owner) are
+        -- locked by qa/rt_textual_invariants.psd1 (#431/#1159 rows).
 
         H.test(stream.tag .. ": #210 remaps stay career-scoped, never global mutation", function()
             -- The Empire and elf longbow crossbow remaps must register in the
             -- runtime funnel under a career prefix, with the native prefix
             -- explicitly opted out. Mutating the shared template for every
             -- career is exactly what broke Kruber's native draw_bow (#210).
-            for _, needle in ipairs({
-                "_3p_template_remaps.longbow_empire_template.wh_               = "
-                    .. "_SALTZ_LONGBOW_CROSSBOW_ANIM_REMAP_3P",
-                "_3p_template_remaps.longbow_empire_template.es_mercenary      = false",
-                "_3p_template_remaps.longbow_template_1.we_ = false",
-                "_3p_template_remaps.we_deus_01_template_1.we_ = false",
+            -- Lua patterns, not exact strings: the invariant is which keys are
+            -- written, never the alignment whitespace around the equals sign.
+            for _, pattern in ipairs({
+                "_3p_template_remaps%.longbow_empire_template%.wh_%s*=%s*_SALTZ_LONGBOW_CROSSBOW_ANIM_REMAP_3P",
+                "_3p_template_remaps%.longbow_empire_template%.es_mercenary%s*=%s*false",
+                "_3p_template_remaps%.longbow_template_1%.we_%s*=%s*false",
+                "_3p_template_remaps%.we_deus_01_template_1%.we_%s*=%s*false",
             }) do
-                H.equal(count_plain(templates, needle), 1, needle .. " must live in the owner")
-                H.equal(count_plain(entry, needle), 0, needle .. " must not remain in the entry")
+                H.truthy(templates:find(pattern), pattern .. " must live in the owner")
+                H.equal(entry:find(pattern), nil, pattern .. " must not remain in the entry")
             end
             -- 3P-only discipline: the owner writes career-keyed 3P wield fields
             -- and never a 1P field.
             H.equal(count_plain(templates, "tpl.wield_anim_career_3p") > 0, true)
-            -- Two mentions on the lazy-init line plus the per-career write.
-            H.equal(count_plain(templates, "tpl.wield_anim_not_loaded_career"), 3)
-            H.equal(count_plain(templates, "tpl.wield_anim_no_ammo_career"), 3)
+            H.equal(count_plain(templates, "tpl.wield_anim_not_loaded_career") > 0, true)
+            H.equal(count_plain(templates, "tpl.wield_anim_no_ammo_career") > 0, true)
             H.equal(count_plain(templates, "tpl.anim_event ="), 0)
             H.equal(count_plain(templates, "tpl.wield_anim ="), 0)
             H.equal(count_plain(templates, "tpl.state_machine"), 0)

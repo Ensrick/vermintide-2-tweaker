@@ -7,9 +7,12 @@ wounds, and pacing are shared host-authoritative simulation state.
 
 ## Behavior
 
-Each human chooses **Personal difficulty** under **Enemy Spawns**. `Auto` is the
-default and changes nothing. A selection at or below the real host difficulty
-also changes nothing. A higher selection applies this bounded approximation:
+Each human chooses **Personal difficulty** in the dedicated **Personal
+Handicap** category (#61 UX rework; formerly under Enemy Spawns — the
+`personal_difficulty` setting_id is unchanged, so saved values carry over).
+`Auto` is the default and changes nothing. A selection at or below the real
+host difficulty also changes nothing. A higher selection applies this bounded
+approximation:
 
 | Rank gap | Enemy damage to that player | That player's damage to enemies |
 |---:|---:|---:|
@@ -20,6 +23,21 @@ Only hostile-AI combat damage is in this slice. Friendly fire, self/environmenta
 damage, bots, pet damage, healing, stamina, attack speed, scoreboard adjustment,
 and spawn/health/AI changes remain vanilla. Those surfaces need independent
 design and should not be hidden behind a misleading “full difficulty” label.
+
+## Host allow gate (#61 UX rework)
+
+The same category carries **Allow personal handicaps** (`personal_handicap_allow`,
+checkbox, default **off**). It is read only on the host, at the damage
+chokepoint (`Policy.effective_preset` in `_et_personal_handicap_policy.lua`):
+
+- Gate **off** (default): every client-requested preset resolves to `off`;
+  clients play at plain lobby difficulty no matter what they request.
+- Gate **on**: the stored, sanitized per-peer request applies as before.
+- The host's **own** Personal difficulty is the host's own setting and is
+  never gated.
+- Requests received while the gate is off are stored but inert, so the host
+  can flip the gate mid-session and the handicap engages without a client
+  re-send. The RPC receive log line records `allow=` state per request.
 
 ## Authority and wire contract
 

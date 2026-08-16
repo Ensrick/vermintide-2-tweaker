@@ -56,7 +56,7 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_swaps` | breed/faction substitution + HordeSpawner hooks |
 | `_et_mimic` | per-system difficulty mimic |
 | `_et_roaming` | roaming size (SIP + recycler guard + ambient density + clone shim) |
-| `_et_skaven_warlord_breed` | #324 mod-added breed (MUST precede `_et_champion_warlord`) |
+| `_et_skaven_warlord_breed` | #324 mod-added breed (MUST precede `_et_champion_warlord`) + bounded `[et:324]` spawn diagnostics: AI/BT/target/nav/locomotion snapshot at spawn/+5s/+15s for up to 4 Warlord spawns per session, dispatched from the `_post_spawn_unit` seam and the lifecycle update owner |
 | `_et_champion_warlord` | champion/warlord pools + consolidated spawn hook + crash guards |
 | `_et_director_hooks` | ConflictDirector init/refresh re-apply chain |
 | `_et_event_size` | terror-event horde size scaling |
@@ -65,13 +65,14 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_patrol` | patrol formation size |
 | `_et_specials` | per-difficulty special spawns |
 | `_et_health_multiplier` | #369 host-authoritative final-spawn health scaling + bounded live rescale/replication |
-| `_et_lifecycle` | queued on_setting_changed / batch completion / update drain + on_enabled / on_disabled + BR bootstrap; sole `mod.update` owner also dispatches the bounded #450 boss monitor |
+| `_et_lifecycle` | queued on_setting_changed / batch completion / update drain + on_enabled / on_disabled + BR bootstrap; sole `mod.update` owner also dispatches the bounded #450 boss monitor and the #324 Warlord spawn-diagnostic samples |
 | `_et_commands` | chat commands (`/et_status`, `/verify_*`, dumps, `/et_reset`) |
 | `_et_boss_tweaks` | fly-disable duration; issue 275 probe |
 | `_et_boss_balance` | #450 reversible boss data toggles (health/armor/warp-lightning and Deathrattler's dual-gun rotation window; no hooks). Bodvarr is runtime breed `chaos_exalted_champion_warcamp`, never the unsuffixed source-family stem. |
 | `_et_boss_grudge` | #531 grudge-mark behavioral knobs (Skarrik Berserk / Bodvarr Crippling on Cata+ Adventure); single `hook_safe` on `ConflictDirector._post_spawn_unit`, applies vanilla CW grudge-mark buff templates host-side. Bodvarr maps to `chaos_exalted_champion_warcamp`; `_norsca` is the Skittergate champion. |
 | `_et_boss_behavior` | #450 runtime behavior adapter: Halescourge uses existing post-spawn/update owners for one package-aware Troll/Spawn; Skarrik composes the existing damage owner; one exact `BTStormfiendShootAction._fire_from_position_direction` hook halves Deathrattler-only ratling tracking. |
-| `_et_boss_ideas` | #451 read-only feasibility audit for proposed boss variants. Prints a bounded source/runtime inventory automatically at mod load; owns no spawn hook and never injects arena-coupled lord breeds. See `BOSS_IDEA_FEASIBILITY.md`. |
+| `_et_boss_ideas` | #451 feasibility audit + the greataxe Chosen prototype: eager `et_chosen_greataxe` registration (chaos_warrior clone, 2000 HP, `boss_staggers`, resident `warrior_axe` greataxe inventory) with the full breed-adding checklist and the residency-gated, host-only `/et_spawn_chosen` test command. Owns no spawn hook and never injects arena-coupled lord breeds. See `BOSS_IDEA_FEASIBILITY.md`. |
+| `_lib_network_lookup` | Byte-exact copy of `tools/shared_lib/_lib_network_lookup.lua` (#428 guard patterns); loaded by `_et_boss_ideas` for fail-closed NetworkLookup registration. Never edit here - edit the canonical copy and re-sync. |
 
 Where new code goes: the module whose "Owns" row it extends; a new subsystem gets a
 new `_et_<name>.lua` + one manifest line + a row here (same discipline as
