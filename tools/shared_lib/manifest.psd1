@@ -100,6 +100,7 @@
         @{
             Source = "_lib_network_lookup.lua"
             Consumers = @(
+                "enemy_tweaker/scripts/mods/enemy_tweaker/_lib_network_lookup.lua"
                 "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_network_lookup.lua"
             )
         }
