@@ -1,5 +1,34 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.342-dev (2026-08-15) -- Manann ready-state display + Adventure illusion preservation (#358, #917) [verify-fix]
+
+- **Manann's Tempest cooldown display: persistent ready state (#358).** The
+  owner-local display is now a two-state machine: while the 8s-cooldown rework
+  is on and a source is owned, an infinite active-buff icon shows the proc is
+  ready; an allowed proc swaps it for the existing eight-second cooldown icon;
+  expiry restores ready. Boon and trait keep fully independent icons and
+  timing. Rejected critical strikes never touch either display; toggle-off or
+  losing the source (boon removed, trait weapon unwielded) removes both. The
+  reconciler runs on the local player only, off the shared `mod.update`
+  dispatch (`[ct:issue358]` printf receipts). Runtime check
+  `issue358_manann_tempest_cooldown_display` extended to the ready templates,
+  ownership probes, and reconciler; offline
+  `test_ct_manann_cooldown_display.lua` adds 5 behavioral state-machine tests.
+  Refs #358, #357, #133.
+- **Preserve Weapon Illusions from Adventure Loadout (#917).** New default-OFF,
+  per-player toggle. At pilgrimage start each player's equipped Adventure
+  melee/ranged illusions are snapshotted locally (pre-vanilla in the single
+  merged `DeusMechanism._setup_run` hook); starter weapons, tempering, and
+  same-family swaps generated on that player's machine then keep the illusion,
+  applied only when the skin's `matching_item_key` equals the generated weapon
+  key - other families always roll vanilla. Upgrades carry the item's own
+  serialized `item.skin` (never the snapshot), so host-side projections of
+  other players' weapons and bot chest mirroring stay vanilla; no host-global
+  state. `[ct:issue917]` printf receipts on snapshot/apply. Runtime check
+  `issue917_adventure_illusion_preservation`; offline
+  `test_ct_adventure_illusions.lua` covers the wrong-family gate, snapshot
+  collisions, default-OFF, upgrade carry, and exclusion brackets. Refs #917.
+
 ## 0.7.341-dev (2026-08-13) -- Old Haunts gargoyle-objective diagnostic (#1124) [diagnostics-armed]
 
 - Adds a development-only, mutation-free ledger for the native Old Haunts

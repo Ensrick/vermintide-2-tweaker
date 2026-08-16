@@ -1463,6 +1463,14 @@ _rt_register("issue358_manann_tempest_cooldown_display", function()
     return mod._ct_bomb_cooldown_display.regression_check_manann(CT_RPC_SCHEMA)
 end)
 
+_rt_register("issue917_adventure_illusion_preservation", function()
+    local illusions = mod._ct_adventure_illusions
+    if type(illusions) ~= "table" or type(illusions.regression_check) ~= "function" then
+        return "mod._ct_adventure_illusions missing"
+    end
+    return illusions.regression_check()
+end)
+
 
 
 _rt_register("localization_format_safe", function()
