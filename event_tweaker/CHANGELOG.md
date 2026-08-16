@@ -1,5 +1,24 @@
 # Tweaker: Events — Changelog
 
+## 0.4.47-dev (2026-08-15) -- Shadow template clone-and-swap; modifier names and icons (#413, #1149) [verify-fix]
+
+- Adventure Shadow no longer touches the shared vanilla buff template at all
+  (#413): the -0.8 Ulgu damage-taken value (wind_settings.lua:1615-1669) lives
+  on a private clone that is swapped into `BuffTemplates` only for the
+  lifetime of an Adventure Shadow session and restored on stop, on mod
+  disable, and after developer reloads; third-party template replacements are
+  left untouched. Closes the 2026-08-03 audit residue; the #1123 Chaos Wastes
+  leak cannot regress by construction. Runtime check
+  `issue413_shadow_adventure_adapter` rewritten around the clone invariants.
+  Refs #413, #1123.
+- Modifier options and the Tab-hold preview no longer show raw mutator keys
+  (#1149, localization half): dynamically discovered modifiers use the game's
+  own localized names and descriptions, and every managed Cursed Adventure
+  curse resolves an in-game icon (template icon, else its Chaos god's theme
+  icon) on the preview panel. Runtime check
+  `issue1149_modifier_loc_icon_coverage`; new offline
+  `test_event_modifier_localization.lua`. Refs #1149.
+
 ## 0.4.46-dev (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
 
 - The shared peer-parity library installs as an atomic transaction: receiver

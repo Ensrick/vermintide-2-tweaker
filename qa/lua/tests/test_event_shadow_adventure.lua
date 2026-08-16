@@ -23,18 +23,127 @@ return function(H, repo_root)
         H.equal(Policy.ADVENTURE_DAMAGE_TAKEN, -0.8)
     end)
 
-    H.test("Event Tweaker Shadow multiplier is session-scoped, never a boot write", function()
-        -- Issue 1123: an unconditional load-time template write leaked damage
-        -- reduction into Chaos Wastes (mutator_curse_belakors_shadows shares
-        -- the buff), and -0.9 contradicted WindSettings.shadow (-0.8).
-        local runtime = read(repo_root
-            .. "/event_tweaker/scripts/mods/event_tweaker/_evt_shadow_adventure.lua")
-        H.equal(runtime:find("-0.9", 1, true), nil)
-        H.equal(runtime:find("sub_buff.multiplier = -", 1, true), nil)
-        H.truthy(runtime:find("shadow_sub_buff.multiplier = Policy.ADVENTURE_DAMAGE_TAKEN", 1, true))
-        H.truthy(runtime:find("shadow_sub_buff.multiplier = nil", 1, true))
-        H.truthy(runtime:find("_apply_adventure_multiplier()", 1, true))
-        H.truthy(runtime:find("_restore_vanilla_multiplier()", 1, true))
+    -- Issues 413 + 1123: load the REAL adapter module in a sandbox and drive
+    -- the in-game-reachable session transitions. The shared vanilla buff table
+    -- must never be mutated; the Adventure value lives on a private clone that
+    -- is swapped in per session and restored on stop / disable.
+    local adapter_path = repo_root
+        .. "/event_tweaker/scripts/mods/event_tweaker/_evt_shadow_adventure.lua"
+
+    local function build_sandbox()
+        local sub_buff = {
+            name = "mutator_shadow_damage_reduction",
+            stat_buff = "damage_taken",
+            wind_mutator = true,
+        }
+        local vanilla_template = { buffs = { sub_buff } }
+        local counters = { server_start = 0, server_stop = 0, client_stop = 0 }
+        local shadow_template = {
+            server = { stop_function = function()
+                counters.server_stop = counters.server_stop + 1
+            end },
+            client = { stop_function = function()
+                counters.client_stop = counters.client_stop + 1
+            end },
+            server_start_function = function()
+                counters.server_start = counters.server_start + 1
+            end,
+            server_update_function = function() end,
+            client_start_function = function() end,
+            client_update_function = function() end,
+            client_player_respawned_function = function() end,
+        }
+        local globals = {
+            MutatorTemplates = { shadow = shadow_template },
+            BuffTemplates = { mutator_shadow_damage_reduction = vanilla_template },
+        }
+        local state = { weave = false }
+        local mod = {
+            _evt = {
+                rt_register = function() end,
+                weave_wind_active = function() return state.weave end,
+                peer_feature_wire_safe = function() return true end,
+            },
+            dofile = function() error("peer-parity lib is out of scope offline") end,
+            echo = function() end,
+        }
+        local env = {
+            get_mod = function() return mod end,
+            require = function(path)
+                if path == "scripts/mods/event_tweaker/event_tweaker_shadow_policy" then
+                    return Policy
+                end
+                error("unexpected require: " .. tostring(path))
+            end,
+            _G = globals,
+            rawget = rawget, pairs = pairs, ipairs = ipairs, type = type,
+            tostring = tostring, pcall = pcall, printf = function() end,
+            string = string, table = table, math = math,
+            Vector3 = { distance_squared = function() return 0 end },
+            ScriptUnit = { has_extension = function() return nil end },
+            Unit = { alive = function() return false end },
+        }
+        local chunk = assert(loadfile(adapter_path))
+        setfenv(chunk, env)
+        chunk()
+        return {
+            mod = mod, state = state, counters = counters,
+            globals = globals, vanilla = vanilla_template, sub = sub_buff,
+            shadow = globals.MutatorTemplates.shadow,
+        }
+    end
+
+    H.test("Event Tweaker Shadow boot leaves the shared vanilla buff table untouched", function()
+        local sb = build_sandbox()
+        H.truthy(sb.globals.BuffTemplates.mutator_shadow_damage_reduction == sb.vanilla)
+        H.equal(sb.sub.multiplier, nil)
+    end)
+
+    H.test("Event Tweaker Shadow session swaps in a clone and restores vanilla on stop", function()
+        local sb = build_sandbox()
+        local data = {}
+        sb.shadow.server_start_function({}, data)
+        local live = sb.globals.BuffTemplates.mutator_shadow_damage_reduction
+        H.truthy(live ~= sb.vanilla)
+        H.truthy(live.buffs[1] ~= sb.sub)
+        H.equal(live.buffs[1].multiplier, Policy.ADVENTURE_DAMAGE_TAKEN)
+        H.equal(sb.sub.multiplier, nil)
+        sb.shadow.server.stop_function({}, data, false)
+        H.truthy(sb.globals.BuffTemplates.mutator_shadow_damage_reduction == sb.vanilla)
+        H.equal(sb.sub.multiplier, nil)
+        H.equal(sb.counters.server_stop, 1)
+    end)
+
+    H.test("Event Tweaker Shadow native Weave path delegates without swapping", function()
+        local sb = build_sandbox()
+        sb.state.weave = true
+        sb.shadow.server_start_function({}, {})
+        H.equal(sb.counters.server_start, 1)
+        H.truthy(sb.globals.BuffTemplates.mutator_shadow_damage_reduction == sb.vanilla)
+        H.equal(sb.sub.multiplier, nil)
+    end)
+
+    H.test("Event Tweaker Shadow restores vanilla when the mod is disabled mid-session", function()
+        local sb = build_sandbox()
+        local data = {}
+        sb.shadow.client_start_function({}, data)
+        H.truthy(sb.globals.BuffTemplates.mutator_shadow_damage_reduction ~= sb.vanilla)
+        H.equal(type(sb.mod.on_disabled), "function")
+        sb.mod.on_disabled()
+        H.truthy(sb.globals.BuffTemplates.mutator_shadow_damage_reduction == sb.vanilla)
+        H.equal(sb.sub.multiplier, nil)
+    end)
+
+    H.test("Event Tweaker Shadow never clobbers a third party's template replacement", function()
+        local sb = build_sandbox()
+        local data = {}
+        sb.shadow.server_start_function({}, data)
+        local foreign = { buffs = { { name = "mutator_shadow_damage_reduction" } } }
+        sb.globals.BuffTemplates.mutator_shadow_damage_reduction = foreign
+        sb.shadow.server.stop_function({}, data, false)
+        H.truthy(sb.globals.BuffTemplates.mutator_shadow_damage_reduction == foreign)
+        H.equal(sb.sub.multiplier, nil)
+        H.equal(sb.counters.server_stop, 1)
     end)
 
     H.test("Event Tweaker Shadow adapter never spawns weave-only assets", function()

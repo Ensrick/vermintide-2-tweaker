@@ -47,135 +47,135 @@ return {
     -- in-game confirmation of the wrapped fix, otherwise; the
     -- greedy-pickup item is brand-new (#297 item 8).
     gt_bot_behavior_improvements = { en = "Bot Behavior Improvements" },
-    gt_bot_behavior_improvements_tooltip = { en = "Provides multiple settings to edit functionality related to bot mechanics. Some settings include but aren't limited to: an improved revive system that allows bots to not only untie allies awaiting respawn but also prevent the game from ending if all connected players are dead, general improvements with survivability from certain mutators or environmental hazards, smarter methods to acquire and use items, among other settings. Host only." },
+    gt_bot_behavior_improvements_tooltip = { en = "Provides multiple settings to edit functionality related to bot mechanics. Some settings include but aren't limited to: an improved revive system that allows bots to not only untie allies awaiting respawn but also prevent the game from ending if all connected players are dead, general improvements with survivability from certain mutators or environmental hazards, and smarter methods to acquire and use items. Host only." },
 
     gt_bot_necro_potion_handoff = { en = "Necromancer Bots Can Pass Potions" },
     gt_bot_necro_potion_handoff_tooltip = { en = "Fixes an issue where a Necromancer bot is unable to pass a potion due to its invisible Icon of Death skull item breaking handoff logic." },
 
-    gt_bot_mission_fail_prevention = { en = "Alive Bots Prevent Automatic Mission Fail" },
+    gt_bot_mission_fail_prevention = { en = "Alive Bots Prevent Automatic Mission Failure" },
     gt_bot_mission_fail_prevention_tooltip = { en = "Typically, the mission fails when the host and every connected player is down, even if bots yet remain. Toggling this setting on prevents the mission from ending this way. Can be used alongside 'Bots Rescue Allies Awaiting Respawn' to get players back in the game in an authentic way." },
 
-    gt_bot_ledge_pullup = { en = "Bots pull themselves up from ledges" },
-    gt_bot_ledge_pullup_tooltip = { en = "A bot left hanging from a ledge climbs back up on its own after the delay below instead of waiting for a rescue." },
+    gt_bot_ledge_pullup = { en = "Bots Pull Themselves Up From Ledges" },
+    gt_bot_ledge_pullup_tooltip = { en = "A bot left hanging from a ledge climbs back up on its own after the set delay below." },
 
-    gt_bot_ledge_pullup_delay = { en = "Ledge pull-up delay (seconds)" },
-    gt_bot_ledge_pullup_delay_tooltip = { en = "How many seconds a bot hangs from a ledge before climbing back up; 0 makes the recovery instant." },
+    gt_bot_ledge_pullup_delay = { en = "Ledge Pull-Up Delay (in seconds)" },
+    gt_bot_ledge_pullup_delay_tooltip = { en = "Determines the amount of time a bot hangs from a ledge before climbing back up; 0 makes the recovery instant." },
 
-    gt_bot_ladder_unstick = { en = "Bots free themselves from ladders" },
-    gt_bot_ladder_unstick_tooltip = { en = "A bot wedged on a ladder teleports to a teammate after the delay below instead of staying stuck there." },
+    gt_bot_ladder_unstick = { en = "Bots Free Themselves From Ladders" },
+    gt_bot_ladder_unstick_tooltip = { en = "Bots teleport to the nearest player after the delay indicated below." },
 
-    gt_bot_ladder_unstick_delay = { en = "Ladder unstick delay (seconds)" },
-    gt_bot_ladder_unstick_delay_tooltip = { en = "How many seconds a bot may sit on a ladder before it teleports to a teammate. Values below 3 would trigger during normal climbs, so 3 is the minimum." },
+    gt_bot_ladder_unstick_delay = { en = "Bots Unstick From Ladder Delay (in seconds)" },
+    gt_bot_ladder_unstick_delay_tooltip = { en = "Determines how much time a bot may sit on a ladder before it teleports to a teammate. Values below 3 would trigger during normal climbs, so 3 is the minimum." },
 
-    gt_bot_instant_pickup = { en = "Bots instantly grab targeted items" },
+    gt_bot_instant_pickup = { en = "Bots Instantly Grab Items" },
     gt_bot_instant_pickup_tooltip = { en = "The pickup a bot is going for, including pinged items, is grabbed from where the bot stands instead of it walking all the way over." },
 
-    gt_bot_greedy_pickup = { en = "Bots collect items players leave behind" },
-    gt_bot_greedy_pickup_tooltip = { en = "Normally bots refuse to take potions, bombs, and healing while a nearby player has a free slot for them; with this on they collect such items anyway, then carry them and hand them over when asked or needed." },
+    gt_bot_greedy_pickup = { en = "Bots Aggressively Collect Nearby Passable Items" },
+    gt_bot_greedy_pickup_tooltip = { en = "Normally, bots refuse to obtain potion, bomb, and healing items while a nearby player has a free slot for them. This option allows them to go for items if they're nearby, reducing the need for micro-management from the players." },
 
-    gt_bot_smart_ale = { en = "Bots drink surplus Ranger ale" },
-    gt_bot_smart_ale_tooltip = { en = "Lets bots pick up and drink Bardin's Survival Ale only when every active teammate already has all three ale stacks and strictly more than half of the refreshed duration remains. Otherwise ale stays reserved for human players. Works only when you are the host." },
+    gt_bot_smart_ale = { en = "Bots Drink Surplus Ranger Ale" },
+    gt_bot_smart_ale_tooltip = { en = "Bots will now pick up and drink Bardin's Survival Ale only when every active teammate already has all three ale stacks and strictly more than half of the refreshed duration remains. Otherwise, ale stays reserved for human players. Host only." },
 
     -- #468: control WHEN a bot spends a heal on ITSELF (self-use timing only).
     -- Making a bot walk up and heal a teammate is the separate #523 heal-allies
     -- option below (which drives the game's own, dormant, heal-other bot action).
-    gt_bot_smart_self_heal = { en = "Smarter bot self-healing" },
-    gt_bot_smart_self_heal_tooltip = { en = "Decide for yourself when a bot spends healing on itself instead of the game's fixed rules, which drink a full Draught of Healing at 40 percent health and burn Medical Supplies at 20 percent even when a player could use them better. With this on, the three settings below take over. This only changes self-use timing; to make bots actually walk up and heal a teammate use the heal-allies option below, and carrying or handing items to players is the greedy-pickup option above. Works only when you are the host." },
+    gt_bot_smart_self_heal = { en = "Smarter Bot Self-Healing" },
+    gt_bot_smart_self_heal_tooltip = { en = "Normally, bots will drink a full Draught of Healing at 40 percent health and burn Medical Supplies at 20 percent. With this on, players can set their own amounts which determine when a bot may use their healing. The three settings below take over. This only changes self-use timing; to make bots actually walk up and heal a teammate, use the heal-allies option below. Carrying or handing items to players is the greedy-pickup option above. Host only." },
 
-    gt_bot_self_heal_pct = { en = "Bot self-heal health threshold (%%)" },
-    gt_bot_self_heal_pct_tooltip = { en = "A bot only heals itself once its health drops to this percentage or lower. Lower values make bots hold their healing longer (less waste); higher values make them heal sooner. Applies to both draughts and medical supplies, replacing the game's fixed 40 and 20 percent triggers." },
+    gt_bot_self_heal_pct = { en = "Bot Self-Heal Health Threshold" },
+    gt_bot_self_heal_pct_tooltip = { en = "A bot only heals itself once its health drops to this percentage or lower. Lower values make bots hold their healing longer. Higher values make them heal sooner. Applies to both Draughts and Medical Supplies, replacing the game's fixed 40 and 20 percent triggers." },
 
-    gt_bot_reserve_kits_for_players = { en = "Bots reserve medical supplies for players" },
-    gt_bot_reserve_kits_for_players_tooltip = { en = "Medical Supplies can heal a hurt teammate, so a bot holds onto them instead of using them on itself, unless it is wounded (grey health) or spare healing is lying around anyway. Draughts of Healing, which only heal the drinker, are not affected." },
+    gt_bot_reserve_kits_for_players = { en = "Bots Reserve Medical Supplies for Players" },
+    gt_bot_reserve_kits_for_players_tooltip = { en = "Medical Supplies can heal a hurt teammate, so a bot holds on to them instead of using them on itself. It may use them when wounded or spare healing is available. Draughts of Healing, which only heal the drinker, are not affected." },
 
-    gt_bot_ignore_surplus_selfuse = { en = "Bots don't top themselves off on spare healing" },
-    gt_bot_ignore_surplus_selfuse_tooltip = { en = "The game tells a bot to drink its healing when more healing items are lying around than players to use them, even at high health. With this on a bot ignores that prompt and keeps its healing until it actually needs it." },
+    gt_bot_ignore_surplus_selfuse = { en = "Bots Don't Top Themselves Off on Spare Healing" },
+    gt_bot_ignore_surplus_selfuse_tooltip = { en = "When there are extra healing items available nearby, the game normally allows the bot to use their healing item. When enabled, this setting prevents them from performing this action." },
 
-    gt_bot_heal_allies = { en = "Bots heal hurt allies with medical supplies" },
-    gt_bot_heal_allies_tooltip = { en = "When a bot is carrying Medical Supplies and no one needs reviving, it walks up to the most hurt eligible teammate and heals them, wounded (grey health) players first. It only heals when the coast is clear (no enemies right next to the target), and only humans, never other bots. Pairs with the reserve option above, which stops bots from spending the kit on themselves. Works only when you are the host." },
+    gt_bot_heal_allies = { en = "Bots Heal Hurt Allies With Medical Supplies" },
+    gt_bot_heal_allies_tooltip = { en = "When a bot is carrying Medical Supplies and no one needs reviving, it walks up to the most hurt eligible teammate and heals them, prioritizing wounded players. It only heals when the coast is clear (no enemies right next to the target), and only humans, never other bots. Pairs with the reserve option above, which stops bots from spending the kit on themselves. Host only." },
 
-    gt_bot_heal_allies_pct = { en = "Heal allies at or below health (%%)" },
-    gt_bot_heal_allies_pct_tooltip = { en = "A non-wounded teammate is eligible once their permanent (white) health reaches this percentage or lower. Set 0 to prevent bots from using kits on non-wounded allies. The wounded threshold below is separate." },
+    gt_bot_heal_allies_pct = { en = "Bot Heal Non-Wounded Allies Threshold" },
+    gt_bot_heal_allies_pct_tooltip = { en = "Affects non-wounded allies once their permanent (green) health reaches this percentage or lower. Set 0 to prevent bots from using kits on non-wounded allies. The wounded threshold below is separate." },
 
-    gt_bot_heal_wounded_allies_pct = { en = "Heal wounded allies at or below health (%%)" },
-    gt_bot_heal_wounded_allies_pct_tooltip = { en = "A wounded (grey-health) teammate is eligible once their permanent health reaches this percentage or lower. The default 100 makes every wounded teammate eligible; lower it if bots should wait." },
+    gt_bot_heal_wounded_allies_pct = { en = "Bot Heal Wounded Allies Threshold" },
+    gt_bot_heal_wounded_allies_pct_tooltip = { en = "Affects wounded allies once their permanent (green) health reaches this percentage or lower. The default 100 enables bots to heal any wounded ally regardless of health amount; lower it if you want bots to delay healing you." },
 
-    gt_bot_heal_allies_exclude_zealot = { en = "Do not heal non-wounded Zealots" },
+    gt_bot_heal_allies_exclude_zealot = { en = "Bots Don't Heal Non-Wounded Zealot Allies" },
     gt_bot_heal_allies_exclude_zealot_tooltip = { en = "Keep a non-wounded Zealot's permanent health low so the player can build temporary health. Wounded Zealots are controlled separately below." },
 
-    gt_bot_heal_wounded_zealot = { en = "Heal Zealot when wounded" },
+    gt_bot_heal_wounded_zealot = { en = "Bots Heal Wounded Zealot Allies" },
     gt_bot_heal_wounded_zealot_tooltip = { en = "Allow bots to spend Medical Supplies on a wounded Zealot when the wounded-health threshold is met. On by default because another knockdown would otherwise kill them." },
 
-    gt_bot_aid_priority = { en = "Bots prioritize reviving and rescuing" },
+    gt_bot_aid_priority = { en = "Bots Prioritize Reviving and Rescuing" },
     gt_bot_aid_priority_tooltip = { en = "Downed, hooked, and ledge-hanging allies always outrank following and other chores, so a bot commits to the revive or rescue and walks the whole way there." },
 
-    gt_bot_ignore_backward_gate = { en = "Bots go back for stragglers and past no-return points" },
-    gt_bot_ignore_backward_gate_tooltip = { en = "The game normally refuses to teleport or path a bot backward along the level, so a player who drops behind it is left alone until they catch up, and a bot shoved past a point of no return (over a ledge into the next area) stays stuck for the rest of the run. With this on that block is lifted: a lagging follow target still pulls the bot back, a teammate who goes down behind the bot is retried right away, and a bot that cannot walk back to the team teleports to regroup once it is genuinely stuck, and can do so again later in the run. Reviving and rescuing keep priority over merely catching up." },
+    gt_bot_ignore_backward_gate = { en = "Bots Return From No-Return Drops in Map Progression" },
+    gt_bot_ignore_backward_gate_tooltip = { en = "If a bot accidentally drops ahead of the team alone, it is unable to return, and a bot shoved past a drop (over a ledge into the next area) stays stuck for the rest of the run. Also, bots typically refuse to teleport or path to a player who lags behind while the rest of the team drops. With this on, that restriction is removed. A bot will still teleport to a player left behind the drop down, and bots may generally recover from falling past drops. A bot may prioritize reviving and rescuing over merely catching up." },
 
-    gt_bot_ironbreaker_revive_in_ult = { en = "Ironbreaker bots revive during their ult" },
-    gt_bot_ironbreaker_revive_in_ult_tooltip = { en = "The career skill no longer parks the bot in a blocking stance for its whole duration; the bot breaks off to revive or rescue an ally while the damage-reduction buff keeps running." },
+    gt_bot_ironbreaker_revive_in_ult = { en = "Ironbreaker Bots Revive During Impenetrable" },
+    gt_bot_ironbreaker_revive_in_ult_tooltip = { en = "When an Ironbreaker bot's career skill is active, they will no longer only stay within a blocking stance for the whole duration. Depending on the situation, the bot may break off from its stance to revive or rescue an ally. The damage reduction buff duration from Impenetrable should continue to be applied until it runs out as usual." },
 
     -- #469: bots ignore a curated set of hazard / mutator AOE they cannot path
     -- around. Host-side, bots only, humans never affected.
-    gt_bot_aoe_immunity = { en = "Bots ignore mutator and hazard AOE damage" },
-    gt_bot_aoe_immunity_tooltip = { en = "Bots take no damage from a hand-picked set of area hazards they cannot reliably path around: Weaves and Twitch lightning strikes, the Chaos Wastes Khorne skull curse and Tzeentch bolt-of-change curse, and oil-barrel ground fire. Only bots are affected, never human players, and only while you are the host. Boss slams, warpfire, gas, and thrown bombs are left alone on purpose so bots still react to them." },
+    gt_bot_aoe_immunity = { en = "Bots Ignore Mutator and Hazard AOE Damage" },
+    gt_bot_aoe_immunity_tooltip = { en = "Bots take no damage from certain sources of area hazards they cannot reliably avoid, such as Weaves and Twitch lightning strikes, the Chaos Wastes Khorne skull curse, Tzeentch bolt-of-change curse, and oil-barrel ground fire. Boss slams, warpfire, gas, and thrown bombs are left alone on purpose so bots still react to them. Only bots are affected. Host only." },
 
-    gt_bot_hazard_resistance = { en = "Bots build gas and warpfire resistance" },
-    gt_bot_hazard_resistance_tooltip = { en = "When a host-owned bot takes gas or warpfire damage, it gains one matching resistance stack for 2 seconds. Each active stack reduces subsequent damage of that type by 20%%, up to 5 stacks. Gas and warpfire stacks are independent; human players and other damage types are unchanged." },
+    gt_bot_hazard_resistance = { en = "Bots Build Gas and Warpfire Resistance" },
+    gt_bot_hazard_resistance_tooltip = { en = "When a host-owned bot takes gas or warpfire damage, it gains one matching resistance stack for 2 seconds. Each active stack reduces subsequent damage of that type by 20 percent, up to 5 stacks. Gas and warpfire stacks are independent; human players and other damage types are unchanged." },
 
     -- issue 448 (FIX 11): downed bot must not project the Morr's Protection aura.
-    gt_bot_no_downed_morrs_grant = { en = "Downed bots don't grant Morr's Protection" },
-    gt_bot_no_downed_morrs_grant_tooltip = { en = "The Chaos Wastes boon Morr's Protection makes downed allies near the carrier invulnerable, and the game keeps that aura running even while the carrier is downed itself. Two bots carrying it that go down near each other protect each other forever: they can't be finished, can't get up, and the run soft-locks. With this on, a bot stops granting the aura while it is knocked down and resumes the moment it is back up. Human carriers and standing bots are untouched. Host-side only." },
+    gt_bot_no_downed_morrs_grant = { en = "Downed Bots Don't Grant Morr's Protection" },
+    gt_bot_no_downed_morrs_grant_tooltip = { en = "The Chaos Wastes boon Morr's Protection makes downed allies near the carrier invulnerable, and the game keeps that aura running even while the carrier is downed as well. Two bots carrying the boon that go down near each other protect each other forever and can't be killed, which results in a potential soft-lock. With this on, a bot stops granting the aura while it is knocked down and resumes the moment it is back up. Human carriers and standing bots are untouched. Host only." },
 
     -- Bot follow mode dropdown (v0.2.152-dev) -- consolidates the previous
     -- gt_bot_split_among_players + gt_bot_follow_host checkboxes into one
     -- tri-state setting.
-    gt_bot_follow_mode = { en = "Bot follow mode" },
+    gt_bot_follow_mode = { en = "Bot Follow Mode" },
     gt_bot_follow_mode_tooltip = { en = "Three modes: Default (normal behavior), Follow Host (all bots stick to the host), or Split (one bot per human, host first). Bots still break off to revive or rescue an ally, and this only works when you are the host." },
     gt_bot_follow_mode_default     = { en = "Default" },
     gt_bot_follow_mode_follow_host = { en = "Follow Host" },
     gt_bot_follow_mode_split       = { en = "Split" },
 
     ai_takeover_enabled = { en = "Bot Takeover" },
-    ai_takeover_enabled_tooltip = { en = "Let a temporary bot drive your hero while your player identity and party slot remain reserved; turn this off to return through the native respawn flow. A normal bot yields its slot if needed. Supports Adventure, Chaos Wastes, and Weaves, but not a four-human party." },
+    ai_takeover_enabled_tooltip = { en = "A temporary bot drives your hero while your player identity and party slot remain reserved. Until you take action, you'll be placed in a dead spectator view. If the party has no free slot and no normal bot that can give one up, this feature won't take effect." },
 
     -- Replicant Bots ports (v0.2.131-dev). All host-side, default OFF, ported
     -- from the "Replicant Bots - Different Bots Experimental Branch" mod.
-    gt_bot_drink_potions_in_danger = { en = "Bots drink potions when in danger (Replicant)" },
+    gt_bot_drink_potions_in_danger = { en = "Bots Drink Potions While in Danger (Replicant)" },
     gt_bot_drink_potions_in_danger_tooltip = { en = "A bot drinks a potion it is carrying instead of hoarding it when danger is near. Expand this option to choose exactly which situations count as danger and how close enemies must be. Works only when you are the host." },
 
     -- #320 advanced conditions: what counts as "danger" for a bot to drink.
-    gt_bot_drink_range_m = { en = "Danger scan range (m)" },
+    gt_bot_drink_range_m = { en = "Danger Scan Range (in meters)" },
     gt_bot_drink_range_m_tooltip = { en = "How close an enemy must be to count toward the danger checks below. Larger values make bots drink earlier." },
 
-    gt_bot_drink_on_boss = { en = "Drink near a boss or lord" },
+    gt_bot_drink_on_boss = { en = "Drink Near a Boss or Lord" },
     gt_bot_drink_on_boss_tooltip = { en = "Drink when a monster, boss, or lord is in range (Rat Ogre, Chaos Spawn, Troll, Minotaur, Stormfiend, map bosses, etc.). On by default." },
 
-    gt_bot_drink_on_special = { en = "Drink near a special" },
-    gt_bot_drink_on_special_tooltip = { en = "Drink when a special enemy is in range (Gutter Runner, Packmaster, Blightstormer, Ratling Gunner, Warpfire Thrower, Leech, etc.). Off by default." },
+    gt_bot_drink_on_special = { en = "Drink Near a Special" },
+    gt_bot_drink_on_special_tooltip = { en = "Drink when a Special enemy is in range (Gutter Runner, Packmaster, Blightstormer, Ratling Gunner, Warpfire Thrower, Leech, etc.). Off by default." },
 
-    gt_bot_drink_on_patrol = { en = "Drink near an elite patrol" },
+    gt_bot_drink_on_patrol = { en = "Drink Near an Elite Patrol" },
     gt_bot_drink_on_patrol_tooltip = { en = "Drink when at least the set number of elites are in range at once (Stormvermin, Maulers, Savages). Tune the count below. On by default." },
 
-    gt_bot_drink_patrol_count = { en = "Elites needed for a patrol" },
+    gt_bot_drink_patrol_count = { en = "Elites Needed for a Patrol" },
     gt_bot_drink_patrol_count_tooltip = { en = "How many elites must be in range at once before it counts as a patrol worth a potion." },
 
-    gt_bot_drink_on_horde = { en = "Drink during a horde" },
+    gt_bot_drink_on_horde = { en = "Drink During a Horde" },
     gt_bot_drink_on_horde_tooltip = { en = "Drink when at least the set number of ordinary trash enemies are in range at once. Off by default." },
 
-    gt_bot_drink_horde_count = { en = "Enemies needed for a horde" },
+    gt_bot_drink_horde_count = { en = "Enemies Needed for a Horde" },
     gt_bot_drink_horde_count_tooltip = { en = "How many ordinary trash enemies must be in range at once before it counts as a horde worth a potion." },
 
-    gt_bot_rescue_awaiting = { en = "Bots rescue allies awaiting respawn" },
+    gt_bot_rescue_awaiting = { en = "Bots Rescue Allies Awaiting Respawn" },
     gt_bot_rescue_awaiting_tooltip = { en = "Vanilla bots ignore a teammate waiting to be rescued at a respawn point; this sends them to go free that ally. The nested options control how far bots may leave the team for a rescue. Works only when you are the host." },
 
-    gt_bot_rescue_awaiting_ignore_leash = { en = "Ignore follow leash for awaiting rescues" },
+    gt_bot_rescue_awaiting_ignore_leash = { en = "Ignore Follow Leash for Awaiting Rescues" },
     gt_bot_rescue_awaiting_ignore_leash_tooltip = { en = "On by default. Bots may cross the mission to rescue an awaiting teammate, matching this feature's existing behavior. Turn this off to apply either the normal follow leash or the custom rescue range below." },
 
-    gt_bot_rescue_awaiting_custom_range = { en = "Use a custom awaiting-rescue range" },
+    gt_bot_rescue_awaiting_custom_range = { en = "Use a Custom Awaiting-Rescue Range" },
     gt_bot_rescue_awaiting_custom_range_tooltip = { en = "When Ignore follow leash is off, use the dedicated range below instead of the current Follow snap-back distance. Off by default." },
 
-    gt_bot_rescue_awaiting_range_m = { en = "Custom awaiting-rescue range (meters)" },
+    gt_bot_rescue_awaiting_range_m = { en = "Custom Awaiting-Rescue Range (in meters)" },
     gt_bot_rescue_awaiting_range_m_tooltip = { en = "Maximum straight-line distance at which a bot may select an awaiting-rescue teammate when the custom range is enabled. Defaults to 40 meters and can be set from 10 to 100." },
 
     gt_no_bots = { en = "Disable Bots" },
@@ -184,32 +184,32 @@ return {
     gt_keep_dummy_no_collision = { en = "No Player Collision with Keep Dummies" },
     gt_keep_dummy_no_collision_tooltip = { en = "Lets your character walk through training dummies while you are in the keep. Dummies remain visible, targetable, and damageable. Local to your player and off by default." },
 
-    gt_bot_fast_reactions = { en = "Faster bot reactions (Replicant)" },
+    gt_bot_fast_reactions = { en = "Faster Bot Reactions (Replicant)" },
     gt_bot_fast_reactions_tooltip = { en = "Cuts bot reaction time to threats down to a fraction of a second. Works only when you are the host." },
 
     -- (gt_bot_follow_distance_enabled removed 2026-06-30 -- the slider below is now the sole control; 40 = off.)
-    gt_bot_follow_distance_m = { en = "Follow snap-back distance (meters)" },
+    gt_bot_follow_distance_m = { en = "Follow Snap-Back Distance (in meters)" },
     gt_bot_follow_distance_m_tooltip = { en = "How far a bot may fall behind before it snaps back to you; 40 (the maximum) does nothing, and lower values keep bots closer, with about 15 to 20 the practical limit. Works only when you are the host." },
 
     gt_improved_bot_combat = { en = "Improved Bot Combat" },
     gt_improved_bot_combat_tooltip = { en = "Bot teammates make smarter attack choices, ping the elite hitting them, stop chasing distant specials, ignore far-off gunners, do not over-focus bosses, and time abilities better for several careers. Works only when you are the host." },
-    gt_ibc_smarter_attacks = { en = "Smarter attack choices" },
+    gt_ibc_smarter_attacks = { en = "Smarter Attack Choices" },
     gt_ibc_smarter_attacks_tooltip = { en = "Prefer faster single-target attacks when safe and wider or penetrating attacks against crowds and armour." },
-    gt_ibc_ping_attackers = { en = "Ping attacking elites" },
+    gt_ibc_ping_attackers = { en = "Ping Attacking Elites" },
     gt_ibc_ping_attackers_tooltip = { en = "Bots ping a visible elite that is actively targeting them, with a bounded cooldown." },
-    gt_ibc_limit_special_chase = { en = "Limit special chasing" },
+    gt_ibc_limit_special_chase = { en = "Limit Special Chasing" },
     gt_ibc_limit_special_chase_tooltip = { en = "Stops bots committing to paths toward enemies beyond the configured chase distance." },
-    gt_ibc_special_chase_distance = { en = "Special chase distance (meters)" },
+    gt_ibc_special_chase_distance = { en = "Special Chase Distance (in meters)" },
     gt_ibc_special_chase_distance_tooltip = { en = "Maximum distance at which improved combat permits a bot to commit to chasing an enemy. The previous bundled value was approximately 7.1 meters." },
-    gt_ibc_ignore_distant_gunners = { en = "Ignore distant gunners" },
+    gt_ibc_ignore_distant_gunners = { en = "Ignore Distant Gunners" },
     gt_ibc_ignore_distant_gunners_tooltip = { en = "Only makes bots take cover when a ranged attacker and its target are within the configured distance." },
-    gt_ibc_gunner_cover_distance = { en = "Gunner cover distance (meters)" },
+    gt_ibc_gunner_cover_distance = { en = "Gunner Cover Distance (in meters)" },
     gt_ibc_gunner_cover_distance_tooltip = { en = "Maximum attacker-to-target distance for the improved line-of-fire cover response. The previous bundled value was approximately 11.8 meters." },
-    gt_ibc_limit_boss_focus = { en = "Limit boss over-focus" },
+    gt_ibc_limit_boss_focus = { en = "Limit Boss Over-Focus" },
     gt_ibc_limit_boss_focus_tooltip = { en = "Keeps non-boss urgent targets ahead of monsters and only adds a nearby boss when the bot is not occupied by a crowd." },
-    gt_ibc_boss_engage_distance = { en = "Boss engage distance (meters)" },
-    gt_ibc_boss_engage_distance_tooltip = { en = "Maximum distance at which improved combat adds a boss as an urgent target. The previous bundled value was 15 meters." },
-    gt_ibc_ability_timing = { en = "Smarter career ability timing" },
+    gt_ibc_boss_engage_distance = { en = "Boss Engage Distance (in meters)" },
+    gt_ibc_boss_engage_distance_tooltip = { en = "Maximum distance at which improved combat adds a boss as an urgent target." },
+    gt_ibc_ability_timing = { en = "Smarter Career Ability Timing" },
     gt_ibc_ability_timing_tooltip = { en = "Uses the existing improved timing heuristics for Mercenary, Huntsman, Handmaiden, Shade, Witch Hunter Captain, and Unchained bots." },
 
     -- ============================================================

@@ -19,6 +19,10 @@ return function(H, repo_root)
     local gate_path = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_javelin_gate.lua"
     local Pull = assert(loadfile(module_path))()
+    local Cleanup = assert(loadfile(repo_root
+        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_identity_peer_cleanup.lua"))()
+    local Resolver = assert(loadfile(repo_root
+        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_peer_resolver.lua"))()
 
     local POLICY = { MAX_REQUEST_GENERATION = 8, MAX_RETRY_ATTEMPTS = 5 }
 
@@ -154,6 +158,84 @@ return function(H, repo_root)
         H.equal(sent.force, true)
     end)
 
+	H.test("CWV #914 pre-ready reply does not consume the request generation", function()
+		local accepted, sent = 0, 0
+		local lifecycle = {
+			accept_request = function()
+				accepted = accepted + 1
+				return true
+			end,
+			track_delivery = function() return 1 end,
+		}
+		local owner = Pull.bind(lifecycle, function()
+			sent = sent + 1
+			return 1
+		end, POLICY, function() end)
+		local local_human = make_unit({ local_player = true }, false)
+		with_globals(engine_stubs(nil), function()
+			H.equal(owner.accept("peer-req", 1, { generation = 7 }), false)
+		end)
+		H.equal(accepted, 0, "pre-ready request generation must remain unconsumed")
+		H.equal(sent, 0)
+		with_globals(engine_stubs(local_human), function()
+			H.equal(owner.accept("peer-req", 1, { generation = 7 }), true)
+		end)
+		H.equal(accepted, 1, "same generation must be accepted after readiness")
+		H.equal(sent, 1)
+	end)
+
+	H.test("CWV #914 client human removal clears only the visible remote peer", function()
+		local hook, cleared, vanilla_calls = nil, {}, 0
+		local mod = {
+			hook = function(_, _, method, callback)
+				H.equal(method, "remove_player")
+				hook = callback
+			end,
+		}
+		local lifecycle = {
+			clear_peer = function(_, peer_id) cleared[#cleared + 1] = peer_id end,
+		}
+		local player_class = {}
+		H.equal(Cleanup.install(mod, lifecycle, player_class, Resolver,
+			function() end, function() return "local-peer" end), true)
+		H.truthy(hook)
+		local human = {
+			peer_id = "remote-peer",
+			is_player_controlled = function() return true end,
+		}
+		local bot = {
+			peer_id = "remote-peer",
+			is_player_controlled = function() return false end,
+		}
+		-- Model the REAL PlayerManager surface: players_at_peer exists and
+		-- returns the still-present human alongside the bot. Without the
+		-- local_player_id gate, a bot removal (lpid 2) would resolve to the
+		-- human through this fallback and wrongly clear the host's identity.
+		local manager = {
+			is_server = false,
+			player_from_peer_id = function(_, peer_id, local_id)
+				if peer_id == "remote-peer" and local_id == 1 then return human end
+				if local_id == 2 then return bot end
+			end,
+			players_at_peer = function(_, peer_id)
+				if peer_id == "remote-peer" then return { human, bot } end
+			end,
+		}
+		local function vanilla()
+			vanilla_calls = vanilla_calls + 1
+			return "r1", "r2", "r3", "r4"
+		end
+		local r1, r2, r3, r4 = hook(vanilla, manager, "remote-peer", 1)
+		H.equal(table.concat({ r1, r2, r3, r4 }, "|"), "r1|r2|r3|r4")
+		H.equal(cleared[1], "remote-peer")
+		hook(vanilla, manager, "remote-peer", 2)
+		hook(vanilla, manager, "local-peer", 1)
+		manager.is_server = true
+		hook(vanilla, manager, "remote-peer", 1)
+		H.equal(#cleared, 1, "bot/local/server removals must not clear client identity")
+		H.equal(vanilla_calls, 4, "cleanup must never suppress vanilla removal")
+	end)
+
     H.test("CWV #914 source locks: unit-derived locality and peer teardown wiring", function()
         local pull_source = read(module_path)
         H.truthy(pull_source:find("unit_is_local_human(unit)", 1, true),
@@ -170,5 +252,9 @@ return function(H, repo_root)
         H.truthy(gate_source:find("lifecycle.clear_peer", 1, true)
                 and gate_source:find("_appearance_lifecycle", 1, true),
             "appearance lifecycle clear_peer is not wired to peer teardown (#914)")
+		local main_source = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		H.truthy(main_source:find("player = self and self._player", 1, true),
+			"husk wield context must carry SimpleHuskInventoryExtension._player")
     end)
 end
