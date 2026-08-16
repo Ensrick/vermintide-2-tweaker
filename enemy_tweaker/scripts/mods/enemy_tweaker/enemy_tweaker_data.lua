@@ -401,13 +401,6 @@ return {
                 setting_id  = "enemy_spawns_group",
                 type        = "group",
                 sub_widgets = {
-                    {
-                        setting_id    = "personal_difficulty",
-                        type          = "dropdown",
-                        default_value = "off",
-                        tooltip       = "personal_difficulty_tooltip",
-                        options       = _personal_difficulty_options(),
-                    },
                     -- Difficulty Mimic: override the difficulty key used to
                     -- patch each Current* settings table independently of the
                     -- player's actual difficulty. Lets you play on Champion
@@ -498,6 +491,37 @@ return {
                             { text = "preset_mixed_factions",    value = "mixed_factions" },
                             { text = "preset_all_elites",        value = "all_elites" },
                         },
+                    },
+                },
+            },
+
+            -- ============================================================
+            -- PERSONAL HANDICAP (#61 UX rework, user-dictated category)
+            -- personal_difficulty MOVED here from the Enemy Spawns group;
+            -- setting_id unchanged so the saved value carries over (VMF
+            -- persistence is flat per mod, not per group). The allow gate is
+            -- read HOST-side at the damage chokepoint in
+            -- _et_personal_handicap.lua: a client's requested handicap is
+            -- ignored unless the HOST has personal_handicap_allow on.
+            -- Order is A-Z by English label, which also reads gate-first:
+            -- "Allow personal handicaps" then "Personal difficulty".
+            -- ============================================================
+            {
+                setting_id = "personal_handicap_group",
+                type       = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "personal_handicap_allow",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "personal_handicap_allow_tooltip",
+                    },
+                    {
+                        setting_id    = "personal_difficulty",
+                        type          = "dropdown",
+                        default_value = "off",
+                        tooltip       = "personal_difficulty_tooltip",
+                        options       = _personal_difficulty_options(),
                     },
                 },
             },

@@ -1,5 +1,27 @@
 # Enemy Tweaker Changelog
 
+## 0.7.56-dev (2026-08-16): #61 host handicap gate, #324 Warlord diagnostics, #451 Chosen prototype [verify-fix]
+
+- Personal Handicap category and host gate (#61): Personal difficulty moved
+  from Enemy Spawns into its own Personal Handicap category (same setting id,
+  saved values carry over) next to a new host-only "Allow personal handicaps"
+  checkbox, default off. Off ignores other players' requests (stored, inert,
+  engage live on toggle with no re-send); on honors the sanitized per-peer
+  request; the host's own handicap is never gated. Tooltips rewritten
+  player-facing. Extended `issue61_personal_handicap_authoritative`.
+- [diag] Skaven Warlord no-combat-AI instrumentation (#324): each spawned
+  Warlord logs one bounded `[et:324]` row at spawn/+5s/+15s (max 4 per
+  session) covering behavior-tree selection and identity, running leaf and
+  action, target/perception state, spawn-node flags, navigation and
+  locomotion state, and distance moved. New check `issue324_warlord_diag_armed`.
+- Greataxe Chosen prototype (#451): new breed `et_chosen_greataxe`, an eager
+  Chaos Warrior clone with 2000 health on every difficulty, monster stagger
+  policy, and the warrior's own resident two-handed greataxe; fail-closed
+  NetworkLookup wire registration via the shared `_lib_network_lookup` copy;
+  package alias to Chaos Warrior; residency-gated host command
+  `/et_spawn_chosen`. Every peer must have Enemy Tweaker installed. New check
+  `issue451_chosen_greataxe_prototype`.
+
 ## 0.7.55-dev (2026-08-15): #369 Enemy Stats category [verify-fix]
 
 - Restructured the menu per user direction (#369): the per-difficulty enemy

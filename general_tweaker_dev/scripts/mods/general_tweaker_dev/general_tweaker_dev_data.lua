@@ -1298,12 +1298,12 @@ local _data = {
                     { setting_id = "gt_solo_disable_ult_vo",             type = "checkbox", default_value = false, tooltip = "gt_solo_disable_ult_vo_tooltip" },
                     { setting_id = "gt_solo_draw_boss_spheres",          type = "checkbox", default_value = false, tooltip = "gt_solo_draw_boss_spheres_tooltip" },
                     -- Max Ragdolls -- single always-on slider (24 = vanilla default;
-                    -- up to 300 for a cinematic pile).
+                    -- up to 300 for a cinematic pile; 0 = no ragdolls at all, #332).
                     {
                         setting_id      = "gt_more_corpses_count",
                         type            = "numeric",
                         default_value   = 24,
-                        range           = { 1, 300 },
+                        range           = { 0, 300 },
                         decimals_number = 0,
                         tooltip         = "gt_more_corpses_count_tooltip",
                     },

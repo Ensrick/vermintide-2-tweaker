@@ -28,7 +28,10 @@ local _GT332_DIAG_CAP = 8
 local function _gt332_requested_cap(value)
     local count = tonumber(value) or 24
     count = math.floor(count + 0.5)
-    return math.max(1, math.min(count, 300))
+    -- #332 groundwork: 0 is a legal cap and means "retain nothing" (the old
+    -- math.max(1, ...) floor silently promoted a user's 0 to 1, so "off"
+    -- was unreachable without a separate toggle).
+    return math.max(0, math.min(count, 300))
 end
 
 local function _gt332_should_capture(is_server, is_dead_ai, requested_cap,
@@ -44,6 +47,8 @@ local function _gt332_should_capture(is_server, is_dead_ai, requested_cap,
         return false
     end
 
+    -- Live gate now that the clamp admits 0: Max Ragdolls 0 = fully off,
+    -- so a zero cap must refuse every capture (#332 groundwork).
     return _gt332_requested_cap(requested_cap) >= 1
 end
 
@@ -189,6 +194,41 @@ local function _gt332_capture(spawner, source_unit, go_id, route)
     return true
 end
 
+-- #332 groundwork (cap=1 corpse-linger): reconcile used to run only inside
+-- _gt332_capture, so an over-cap retained corpse could not leave until the
+-- NEXT death event arrived (RainReligion's cap=1 report: the dead model froze
+-- for a couple of seconds, i.e. until the next kill).  A bounded once-per-
+-- second tick prunes the retained FIFO against the CURRENT cap even when
+-- nothing else dies - this also empties the list promptly after the user
+-- lowers the slider (including to 0) mid-mission.  Cost when idle: two table
+-- reads per second; the consumer never touches the host (is_server bails).
+local _GT332_RECONCILE_PERIOD = 1
+local _gt332_reconcile_accum = 0
+local function _gt332_timer_reconcile(dt)
+    _gt332_reconcile_accum = _gt332_reconcile_accum + (tonumber(dt) or 0)
+    if _gt332_reconcile_accum < _GT332_RECONCILE_PERIOD then
+        return
+    end
+    _gt332_reconcile_accum = 0
+
+    local state = Managers and Managers.state
+    local spawner = state and state.unit_spawner
+    if not spawner or spawner.is_server then
+        return
+    end
+    local list = _gt332_retained_by_spawner[spawner]
+    if not list or #list == 0 then
+        return
+    end
+    _gt332_reconcile(spawner,
+        _gt332_requested_cap(mod:get("gt_more_corpses_count")))
+end
+mod._gt332_timer_reconcile = _gt332_timer_reconcile
+
+if type(mod._gt_register_update) == "function" then
+    mod._gt_register_update("gt332_client_corpse_reconcile", _gt332_timer_reconcile)
+end
+
 -- Duplicate-hook pre-flight (2026-07-19): repo-wide gt_dev grep found no other
 -- UnitSpawner.destroy_game_object_unit hook.  Keep this the singleton owner.
 mod:hook("UnitSpawner", "destroy_game_object_unit", function(func, self, go_id, owner_id)
@@ -234,6 +274,13 @@ if type(mod._gt_rt_register) == "function" then
         if mod._gt332_should_capture(false, false, 24,
                 true, true, false, true, false) then
             return "capture gate opened for a live (non-dead-AI) unit"
+        end
+        if mod._gt332_should_capture(false, true, 0,
+                true, true, false, true, false) then
+            return "capture gate opened at Max Ragdolls 0 (0 must retain nothing)"
+        end
+        if mod._gt332_requested_cap(0) ~= 0 then
+            return "cap clamp still promotes 0 to a positive cap"
         end
     end)
 end
