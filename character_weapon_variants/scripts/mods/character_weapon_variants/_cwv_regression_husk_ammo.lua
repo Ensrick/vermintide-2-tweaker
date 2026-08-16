@@ -296,4 +296,94 @@ _rt_register("issue1188_wt_native_trollhammer_keeps_ammo", function()
 	return result
 end)
 
+_rt_register("issue1320_outrider_projectile_unit_and_wire", function()
+	-- Issue #1320: the clone's sub_action.lookup_data was deep-copied from the
+	-- donor (weapons.lua stamps lookup_data at boot, before the clone exists),
+	-- so ProjectileSystem.spawn_player_projectile resolved the DONOR template
+	-- for the projectile UNIT and peers decoded donor husk data. Prove the
+	-- authored grenade unit resolves from the Outrider fire action, the NATIVE
+	-- Trollhammer stays untouched, and the registered NetworkLookup row is
+	-- reservation-stable (#423/#426 class).
+	local state = _om.outrider_projectile_wire
+	if type(state) ~= "table" then
+		return "#1320 outrider projectile wire owner is not installed"
+	end
+	local def = _find_def("cwv_es_outrider_grenade_launcher")
+	if not def then return nil end   -- variant removed; nothing to protect
+	local weapons = rawget(_G, "Weapons")
+	local nl = rawget(_G, "NetworkLookup")
+	local projectiles = rawget(_G, "Projectiles")
+	local projectile_units = rawget(_G, "ProjectileUnits")
+	if type(weapons) ~= "table" or type(nl) ~= "table" then
+		return "Weapons/NetworkLookup not loaded yet (run in-keep)"
+	end
+	local donor = rawget(weapons, "dr_deus_01_template_1")
+	local clone = rawget(weapons, def.template)
+	if type(donor) ~= "table" then return nil end   -- Outcast Engineer donor absent
+	if type(clone) ~= "table" then
+		return "#1320 Outrider clone template missing while its donor exists"
+	end
+	if state.registered ~= true then
+		return "#1320 wire registration failed closed: " .. tostring(state.reason)
+	end
+	-- (1) Every clone-private lookup_data row names the clone; shared vanilla
+	-- ActionTemplates tables were skipped, never written.
+	local wire_lib = mod:dofile(
+		"scripts/mods/character_weapon_variants/_cwv_outrider_projectile_wire")
+	local rows = wire_lib.plan_restamp(clone,
+		wire_lib.shared_action_set(rawget(_G, "ActionTemplates")))
+	if #rows == 0 then return "#1320 no clone-private lookup_data rows found" end
+	for _, row in ipairs(rows) do
+		if row.item_template_name ~= def.template then
+			return "#1320 a clone lookup_data row still names the donor: "
+				.. tostring(row.action_name) .. "." .. tostring(row.sub_action_name)
+		end
+	end
+	local shoot = clone.actions and clone.actions.action_one
+		and clone.actions.action_one.default
+	if type(shoot) ~= "table" or type(shoot.lookup_data) ~= "table"
+			or shoot.lookup_data.item_template_name ~= def.template then
+		return "#1320 the fire action's lookup_data does not resolve the clone template"
+	end
+	-- (2) The projectile UNIT resolved for the Outrider fire action is the
+	-- authored grenade, and its husk row is wire-resolvable on this peer.
+	local grenade_info = type(projectiles) == "table"
+		and rawget(projectiles, "cwv_outrider_grenade_projectile")
+	if type(grenade_info) ~= "table" or shoot.projectile_info ~= grenade_info then
+		return "#1320 the fire action does not point at the authored grenade projectile config"
+	end
+	local units_row = type(projectile_units) == "table"
+		and rawget(projectile_units, grenade_info.projectile_units_template)
+	if type(units_row) ~= "table" or type(units_row.projectile_unit_name) ~= "string" then
+		return "#1320 the grenade projectile units template is unresolvable"
+	end
+	local policy = _om.thrown_wire_policy
+	if type(policy) ~= "table" or type(policy.lookup_row_intact) ~= "function" then
+		return "#1320 thrown wire policy unavailable for lookup proofs"
+	end
+	if not policy.lookup_row_intact(nl.husks, units_row.projectile_unit_name) then
+		return "#1320 the grenade husk unit is not wire-resolvable on this peer"
+	end
+	-- (3) NATIVE Trollhammer untouched: donor rows keep the donor name and the
+	-- donor fire action keeps the torpedo config (#475 Invariant 1).
+	local donor_shoot = donor.actions and donor.actions.action_one
+		and donor.actions.action_one.default
+	if type(donor_shoot) ~= "table" or type(donor_shoot.lookup_data) ~= "table"
+			or donor_shoot.lookup_data.item_template_name ~= "dr_deus_01_template_1" then
+		return "#1320 the NATIVE Trollhammer's lookup_data was re-pointed"
+	end
+	if type(projectiles) == "table"
+			and donor_shoot.projectile_info ~= rawget(projectiles, "dr_deus_01") then
+		return "#1320 the NATIVE Trollhammer's projectile config drifted"
+	end
+	-- (4) Reservation-stable ids: the captured index still holds in BOTH
+	-- directions; an append-shift or half-pair here is the #423/#426 wire class.
+	if not policy.lookup_row_intact(nl.item_template_names, def.template) then
+		return "#1320 item_template_names row is not bidirectionally intact"
+	end
+	if rawget(nl.item_template_names, def.template) ~= state.lookup_index then
+		return "#1320 item_template_names id drifted from its captured reservation"
+	end
+end)
+
 end

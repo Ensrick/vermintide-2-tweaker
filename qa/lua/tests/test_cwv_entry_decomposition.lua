@@ -398,24 +398,29 @@ return function(H, repo_root)
                 :gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 87)
+        H.equal(#names, 89)
         H.equal(names[1], "cwv_variant_flag_present")
-        H.equal(names[4], "issue914_peer_ready_identity_lifecycle")
-        H.equal(names[16], "issue1108_primary_slot_musket_ammo_hud_contract")
-        H.equal(names[17], "issue273_cwv_deus_identity_is_exact")
-        H.equal(names[39], "cwv_husk_transform_coverage")
-        H.equal(names[40], "cwv_husk_stale_unit_and_postcondition")
+        -- #916 registered its style contract directly after the issue620 combat
+        -- style check it extends, shifting the later identity slots by one.
+        H.equal(names[3], "issue916_half_swording_combat_style_contract")
+        H.equal(names[5], "issue914_peer_ready_identity_lifecycle")
+        H.equal(names[17], "issue1108_primary_slot_musket_ammo_hud_contract")
+        H.equal(names[18], "issue273_cwv_deus_identity_is_exact")
+        H.equal(names[40], "cwv_husk_transform_coverage")
+        H.equal(names[41], "cwv_husk_stale_unit_and_postcondition")
         -- issue 399 appended the husk ammo-adapter drive as an identity check;
-        -- #914 and #1108 each added one earlier identity check. Slots 43-44 moved
-        -- OUT of the identity owner into _cwv_regression_husk_ammo when that file
-        -- crossed the section 2.1 hard limit; because the entry dofiles it between
-        -- its two siblings the slots themselves are unchanged, so this sequence is
-        -- the split's proof as well as the boundary's.
-        H.equal(names[41], "issue399_outrider_husk_ammo_adapter")
-        H.equal(names[42], "issue1204_deus_identity_uses_committed_parity")
-        H.equal(names[43], "issue1186_outrider_projectile_reads_cloned_tunes")
-        H.equal(names[44], "issue1188_wt_native_trollhammer_keeps_ammo")
-        H.equal(names[45], "cwv_unit_bearing_variants_registered")
+        -- #914 and #1108 each added one earlier identity check. The 1186/1188
+        -- slots moved OUT of the identity owner into _cwv_regression_husk_ammo
+        -- when that file crossed the section 2.1 hard limit; because the entry
+        -- dofiles it between its two siblings the relative sequence is the
+        -- split's proof as well as the boundary's. #1320 registers third in the
+        -- husk/ammo/projectile owner.
+        H.equal(names[42], "issue399_outrider_husk_ammo_adapter")
+        H.equal(names[43], "issue1204_deus_identity_uses_committed_parity")
+        H.equal(names[44], "issue1186_outrider_projectile_reads_cloned_tunes")
+        H.equal(names[45], "issue1188_wt_native_trollhammer_keeps_ammo")
+        H.equal(names[46], "issue1320_outrider_projectile_unit_and_wire")
+        H.equal(names[47], "cwv_unit_bearing_variants_registered")
         H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")
