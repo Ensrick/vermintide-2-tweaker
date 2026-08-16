@@ -163,6 +163,156 @@ return function(H, repo_root)
 		H.equal(reads, 2)
 	end)
 
+	H.test("CWV #747 crowbill runtime replays from retained state with readback proofs", function()
+		local old_unit, old_vector, old_quaternion = _G.Unit, _G.Vector3, _G.Quaternion
+		local ok, err = pcall(function()
+			local unit = {}
+			local state = { scale = { 1, 1, 1 }, position = { 0, 0, 0 },
+				rotation = { 0, 0, 0, 1 } }
+			_G.Unit = {
+				alive = function(value) return value == unit end,
+				has_node = function() return true end,
+				local_scale = function() return { state.scale[1], state.scale[2], state.scale[3] } end,
+				local_position = function() return { state.position[1], state.position[2], state.position[3] } end,
+				local_rotation = function() return { state.rotation[1], state.rotation[2],
+					state.rotation[3], state.rotation[4] } end,
+			}
+			_G.Vector3 = { to_elements = function(v) return v[1], v[2], v[3] end }
+			_G.Quaternion = { to_elements = function(q) return q[1], q[2], q[3], q[4] end }
+
+			local applies, foreign_calls, logs = {}, {}, {}
+			local appearance = setmetatable({
+				to_quaternion = function() return { 0, 0, 0, 1 } end,
+				apply = function(value, spec)
+					applies[#applies + 1] = { unit = value, node = spec.node,
+						scale = spec.scale, position = spec.position }
+					state.scale = { spec.scale[1], spec.scale[2], spec.scale[3] }
+					state.position = { spec.position[1], spec.position[2], spec.position[3] }
+					return true, { transform_mode = "atomic-local-pose" }
+				end,
+			}, { __index = function(_, key)
+				foreign_calls[#foreign_calls + 1] = key
+				return nil
+			end })
+
+			local runtime_lib = dofile(repo_root
+				.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_crowbill_transform_runtime.lua")
+			local runtime = runtime_lib.new({
+				om = {},
+				appearance = appearance,
+				durable_library = module,
+				relative_library = dofile(repo_root
+					.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_relative_scale.lua"),
+				evidence_library = dofile(repo_root
+					.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_transform_evidence.lua"),
+				emit = function(fmt, ...) logs[#logs + 1] = string.format(fmt, ...) end,
+			})
+			local function proofs(phase)
+				local count = 0
+				for _, line in ipairs(logs) do
+					if line:find("[cwv:747] retained-proof phase=" .. phase, 1, true) then
+						count = count + 1
+					end
+				end
+				return count
+			end
+
+			runtime.durable:track(unit, {
+				model_key = "imperial_05", unit_name = "unit/imperial",
+				surface = "remote_husk", perspective = "3p", hand = "right",
+				scale = { 2, 2, 2 },
+				position = { unbox = function() return { 0.1, 0.2, 0.3 } end },
+			})
+			-- Tick 1: drift from the native pose -> ONE atomic write, readback
+			-- retained. No per-channel setter (apply_scale/apply_position/...)
+			-- may be reached: that is the class-58 shape this migration removes.
+			local applied = runtime.durable:step()
+			H.equal(applied, 1)
+			H.equal(#applies, 1)
+			H.equal(applies[1].node, 0)
+			H.deep_equal(applies[1].scale, { 2, 2, 2 })
+			H.deep_equal(applies[1].position, { 0.1, 0.2, 0.3 })
+			H.equal(#foreign_calls, 0)
+			H.equal(proofs("initial-retained"), 1)
+
+			-- Tick 2: retained -> NO write, one bounded retention proof.
+			applied = runtime.durable:step()
+			H.equal(applied, 0)
+			H.equal(#applies, 1)
+			H.equal(proofs("next-frame-retained"), 1)
+
+			-- Anim-tick stomp -> measured drift, one repair write, one proof.
+			state.scale = { 1, 1, 1 }
+			applied = runtime.durable:step()
+			H.equal(applied, 1)
+			H.equal(#applies, 2)
+			H.equal(proofs("drift-repaired"), 1)
+
+			-- Settled again: quiet, no further writes or proof lines.
+			local before_logs = #logs
+			applied = runtime.durable:step()
+			H.equal(applied, 0)
+			H.equal(#applies, 2)
+			H.equal(#logs, before_logs)
+		end)
+		_G.Unit, _G.Vector3, _G.Quaternion = old_unit, old_vector, old_quaternion
+		if not ok then error(err) end
+	end)
+
+	H.test("CWV #747 crowbill runtime reports an unrepaired write as a miss, never a pass", function()
+		local old_unit, old_vector, old_quaternion = _G.Unit, _G.Vector3, _G.Quaternion
+		local ok, err = pcall(function()
+			local unit = {}
+			local state = { scale = { 1, 1, 1 }, position = { 0, 0, 0 },
+				rotation = { 0, 0, 0, 1 } }
+			_G.Unit = {
+				alive = function(value) return value == unit end,
+				has_node = function() return true end,
+				local_scale = function() return { state.scale[1], state.scale[2], state.scale[3] } end,
+				local_position = function() return { state.position[1], state.position[2], state.position[3] } end,
+				local_rotation = function() return { state.rotation[1], state.rotation[2],
+					state.rotation[3], state.rotation[4] } end,
+			}
+			_G.Vector3 = { to_elements = function(v) return v[1], v[2], v[3] end }
+			_G.Quaternion = { to_elements = function(q) return q[1], q[2], q[3], q[4] end }
+			local logs = {}
+			local runtime_lib = dofile(repo_root
+				.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_crowbill_transform_runtime.lua")
+			local runtime = runtime_lib.new({
+				om = {},
+				-- Setter-success lie: apply RETURNS true but retains nothing.
+				appearance = {
+					to_quaternion = function() return { 0, 0, 0, 1 } end,
+					apply = function() return true, { transform_mode = "per-channel-fallback" } end,
+				},
+				durable_library = module,
+				relative_library = dofile(repo_root
+					.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_relative_scale.lua"),
+				evidence_library = dofile(repo_root
+					.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_transform_evidence.lua"),
+				emit = function(fmt, ...) logs[#logs + 1] = string.format(fmt, ...) end,
+			})
+			runtime.durable:track(unit, {
+				model_key = "dawi_01", unit_name = "unit/dawi",
+				surface = "owner_3p", perspective = "3p", hand = "right",
+				scale = { 1.4, 1.4, 2 },
+			})
+			runtime.durable:step()
+			local miss = 0
+			for _, line in ipairs(logs) do
+				if line:find("[cwv:747] retained-proof phase=initial-miss", 1, true) then
+					miss = miss + 1
+				end
+				if line:find("phase=initial-retained", 1, true) then
+					error("a setter-success write must never read as retained")
+				end
+			end
+			H.equal(miss, 1)
+		end)
+		_G.Unit, _G.Vector3, _G.Quaternion = old_unit, old_vector, old_quaternion
+		if not ok then error(err) end
+	end)
+
 	H.test("CWV Crowbill evidence is dedicated bounded and keyed by model unit generation", function()
 		local evidence = dofile(repo_root
 			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_transform_evidence.lua")

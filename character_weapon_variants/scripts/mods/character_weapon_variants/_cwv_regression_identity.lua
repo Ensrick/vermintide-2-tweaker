@@ -72,10 +72,10 @@ _rt_register("issue620_per_instance_combat_styles", function()
 		return "Combat Style policy/runtime is not installed"
 	end
 	local expected = {
-		es_2h_sword = { "greatsword", "kerillian", "bretonnian" },
-		wh_2h_sword = { "greatsword", "kerillian", "bretonnian" },
-		es_bastard_sword = { "bretonnian", "greatsword", "kerillian" },
-		cwv_es_longsword = { "longsword", "bretonnian", "kerillian", "greatsword" },
+		es_2h_sword = { "greatsword", "kerillian", "bretonnian", "half_swording" },
+		wh_2h_sword = { "greatsword", "kerillian", "bretonnian", "half_swording" },
+		es_bastard_sword = { "bretonnian", "greatsword", "kerillian", "half_swording" },
+		cwv_es_longsword = { "longsword", "bretonnian", "kerillian", "greatsword", "half_swording" },
 		es_2h_hammer = { "kruber", "warrior_priest" },
 		es_2h_heavy_spear = { "hunter", "infantry" },
 		es_sword_shield = { "empire", "bretonnian" },
@@ -114,10 +114,10 @@ _rt_register("issue620_per_instance_combat_styles", function()
 			~= "attack_swing_left_diagonal" then
 		return "Saltzpyre Greatsword receiver animation remap drifted"
 	end
-	if runtime:moveset_indicator("es_bastard_sword", "greatsword") ~= "Moveset 2 / 3" then
+	if runtime:moveset_indicator("es_bastard_sword", "greatsword") ~= "Moveset 2 / 4" then
 		return "Bretonnian Longsword moveset indicator drifted"
 	end
-	if runtime:moveset_indicator("es_2h_sword", "bretonnian") ~= "Moveset 3 / 3" then
+	if runtime:moveset_indicator("es_2h_sword", "bretonnian") ~= "Moveset 3 / 4" then
 		return "Greatsword deduplicated moveset indicator drifted"
 	end
 	local bret_package = policy.package("es_2h_sword", "bretonnian")
@@ -183,6 +183,114 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	if not layout or layout.cog_offset[1] ~= 100 or layout.cog_offset[2] ~= 173
 			or layout.style_hitbox_offset[1] ~= 104 or layout.style_hitbox_offset[2] ~= 235 then
 		return "Combat Style console equipment-row layout drifted"
+	end
+end)
+
+_rt_register("issue916_half_swording_combat_style_contract", function()
+	-- #916: Half-Swording keeps the selected sword model rendering while the
+	-- action graph comes from maul_template (the burn-scrubbed Sienna
+	-- Morningstar clone). Pin family membership/order, maul_template selection,
+	-- the burn scrub staying clone-local, the authored brw_hammer resource,
+	-- presentation isolation, exact-instance persistence, and the wire edge.
+	local policy = _om.combat_style_policy
+	local runtime = _om.combat_styles
+	if type(policy) ~= "table" or type(runtime) ~= "table" then
+		return "Combat Style policy/runtime is not installed"
+	end
+	local weapons = rawget(_G, "Weapons")
+	if type(weapons) ~= "table" then return "Weapons not loaded yet (run in-keep)" end
+	local donor = rawget(weapons, "one_handed_hammer_wizard_template_1")
+	local maul = rawget(weapons, "maul_template")
+	if type(donor) ~= "table" then return nil end   -- Morningstar donor absent; nothing to protect
+	if type(maul) ~= "table" then
+		return "#916 maul_template is not registered while its donor exists"
+	end
+	local HALF_SWORDING_RESOURCE =
+		"units/beings/player/first_person_base/state_machines/melee/brw_hammer"
+	for _, item_key in ipairs({ "es_2h_sword", "wh_2h_sword", "es_bastard_sword",
+			"cwv_es_longsword", "cwv_es_longsword_blackguard" }) do
+		local _, _, _, member = policy.style(item_key)
+		if type(member) ~= "table" or member.order[#member.order] ~= "half_swording" then
+			return "#916 Half-Swording is not the appended ordinal for " .. item_key
+		end
+		if member.default == "half_swording" then
+			return "#916 Half-Swording must never displace a member default: " .. item_key
+		end
+		local package = policy.package(item_key, "half_swording")
+		if type(package) ~= "table" or package.template ~= "maul_template" then
+			return "#916 Half-Swording package does not select maul_template for " .. item_key
+		end
+		if package.resource ~= HALF_SWORDING_RESOURCE then
+			return "#916 Half-Swording resource is not the authored brw_hammer state machine"
+		end
+		if package.presentation ~= nil or package.remap_key ~= nil
+				or package.required_dlc ~= nil then
+			return "#916 Half-Swording leaked a presentation/remap/DLC gate for " .. item_key
+		end
+	end
+	-- The declared style resource must be the 1P graph the clone actually runs.
+	if maul.state_machine ~= HALF_SWORDING_RESOURCE then
+		return "#916 maul_template no longer runs the declared brw_hammer state machine"
+	end
+	local function find_profile(template, profile)
+		for _, action_group in pairs(template.actions or {}) do
+			if type(action_group) == "table" then
+				for _, sub_action in pairs(action_group) do
+					if type(sub_action) == "table"
+							and sub_action.damage_profile == profile then
+						return sub_action
+					end
+				end
+			end
+		end
+		return nil
+	end
+	-- Burn scrub is clone-local: no burn profile reachable from a sword, while
+	-- the untouched donor still carries it (proves no donor mutation).
+	if find_profile(maul, "medium_blunt_smiter_heavy") then
+		return "#916 the Maul burn scrub regressed: burn profile reachable from a sword"
+	end
+	if not find_profile(donor, "medium_blunt_smiter_heavy") then
+		return "#916 burn-scrub fixture stale: the donor lost its burn profile"
+	end
+	-- Presentation isolation: 3P body events stay inside the proven greathammer
+	-- vocabulary via anim_event_3p; spot-check the canonical heavy remap row.
+	local function find_event(template, event)
+		for _, action_group in pairs(template.actions or {}) do
+			if type(action_group) == "table" then
+				for _, sub_action in pairs(action_group) do
+					if type(sub_action) == "table" and sub_action.anim_event == event then
+						return sub_action
+					end
+				end
+			end
+		end
+		return nil
+	end
+	local heavy = find_event(maul, "attack_swing_heavy_down")
+	if not heavy or heavy.anim_event_3p ~= "attack_swing_heavy" then
+		return "#916 maul_template 3P heavy remap drifted from the greathammer vocabulary"
+	end
+	-- Exact-instance persistence: commits for a greatsword identity, fails
+	-- closed outside the family.
+	local store = policy.normalize_store(nil)
+	if policy.set(store, "issue916_identity", "es_2h_sword", "half_swording") ~= true
+			or store.items.issue916_identity ~= "half_swording" then
+		return "#916 Half-Swording does not persist per exact instance"
+	end
+	if select(1, policy.set(store, "issue916_leak", "es_2h_hammer", "half_swording")) ~= false then
+		return "#916 Half-Swording leaked outside the greatsword family"
+	end
+	-- Peer synchronization: the bounded wire accepts the new edge and the
+	-- identity rider stays under the shared cap.
+	if policy.valid_wire(policy.SCHEMA, "state", "slot_melee", "greatsword", "half_swording") ~= true then
+		return "#916 style wire rejects the Half-Swording edge"
+	end
+	if #("greatsword:half_swording") > policy.STYLE_RIDER_MAX then
+		return "#916 Half-Swording rider exceeds STYLE_RIDER_MAX"
+	end
+	if runtime:moveset_indicator("es_2h_sword", "half_swording") ~= "Moveset 4 / 4" then
+		return "#916 Half-Swording moveset ordinal drifted"
 	end
 end)
 

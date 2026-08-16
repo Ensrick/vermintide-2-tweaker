@@ -165,6 +165,7 @@ local suites = {
     "test_cwv_old_musket_preview",
     "test_cwv_outrider_model",
     "test_cwv_outrider_animation",
+    "test_cwv_outrider_projectile_wire",
     "test_cwv_old_musket_interrupt",
     "test_cwv_anim_picker",
     "test_cwv_acquisition",
