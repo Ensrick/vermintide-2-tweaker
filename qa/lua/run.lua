@@ -137,6 +137,7 @@ local suites = {
     "test_wt_hand_transform_policy",
     "test_wt_warrior_priest_coverage",
     "test_wt_dev_universal_availability",
+    "test_wt_issue183_kruber_ranged",
     "test_wt_cwv_ownership",
     "test_wt_cwv_independence",
     "test_wt_axe_shield_heavy_chain",

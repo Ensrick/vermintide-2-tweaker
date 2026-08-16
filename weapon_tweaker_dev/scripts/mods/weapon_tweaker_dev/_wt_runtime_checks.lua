@@ -1081,6 +1081,73 @@ function M.install(mod, _rt_register, deps)
         end
     end)
 
+    -- WT_DEV_OVERLAY_BEGIN:issue108-port-metadata-contract
+    _rt_register("issue108_dev_port_metadata_contract", function()
+        -- #108: execute the real wt_port_status tables (_REDIRECT_DISPLAY /
+        -- _MODEL_SUB mirrors) with the same assertions the offline twin
+        -- qa/lua/tests/test_wt_port_status.lua runs: baked redirects survive as
+        -- routing evidence, shipped model substitutes stay labelled, and the
+        -- lifecycle surface stays internal and untagged (#948 keeps every cell
+        -- "untested").
+        local status = mod._wt and mod._wt.port_status
+        if type(status) ~= "table" then return "#108 port status owner missing" end
+        local expected = {
+            { "redirect_target", "es_mercenary", "we_2h_axe", "Empire Greathammer" },
+            { "redirect_target", "es_knight", "we_dual_wield_daggers", "Empire Mace & Sword" },
+            { "redirect_target", "es_huntsman", "wh_flail_shield", "Empire Mace & Shield" },
+            { "redirect_target", "we_waywatcher", "dr_2h_pick", "Elf 2H Axe/Glaive" },
+            { "redirect_target", "we_shade", "es_dual_wield_hammer_sword", "Sword & Dagger" },
+            { "model_substitute", "es_mercenary", "wh_brace_of_pistols", "Repeater Handgun" },
+            { "model_substitute", "es_knight", "wh_repeating_pistols", "Repeater Handgun" },
+            { "model_substitute", "wh_captain", "es_longbow", "Crossbow" },
+            { "model_substitute", "wh_zealot", "we_longbow", "Crossbow" },
+            { "routing_state", "es_mercenary", "we_2h_axe", "wired" },
+            { "routing_state", "wh_captain", "es_longbow", "wired" },
+            { "routing_state", "es_mercenary", "wh_brace_of_pistols", "wired" },
+            { "routing_state", "es_mercenary", "es_1h_mace", "native" },
+            { "state", "es_mercenary", "we_2h_axe", "untested" },
+            { "state", "es_mercenary", "wh_brace_of_pistols", "untested" },
+            { "state", "es_mercenary", "es_1h_mace", "untested" },
+        }
+        for _, row in ipairs(expected) do
+            local fn = status[row[1]]
+            if type(fn) ~= "function" then return "#108 missing accessor " .. row[1] end
+            local got = fn(row[2], row[3])
+            if got ~= row[4] then
+                return string.format("#108 %s(%s, %s) = %s (want %s)",
+                    row[1], row[2], row[3], tostring(got), row[4])
+            end
+        end
+        if status.tag ~= nil or status.decorate_tag ~= nil then
+            return "#108 retired lifecycle tag surface returned"
+        end
+    end)
+    -- WT_DEV_OVERLAY_END:issue108-port-metadata-contract
+    -- WT_DEV_OVERLAY_BEGIN:issue183-kruber-ranged-contract
+    _rt_register("issue183_kruber_ranged_availability_contract", function()
+        -- #183: audit the complete Kruber ranged Availability surface against
+        -- the same runtime owners Mod Tweaker renders (unlock map, raw labels,
+        -- #611 master buckets, #108 port metadata). The audit body lives in
+        -- wt_universal_availability so the offline twin drives identical code.
+        if type(_wt_master_toggles) ~= "table" then
+            return "#183 master toggles module unavailable"
+        end
+        local policy = mod:dofile(
+            "scripts/mods/weapon_tweaker_dev/wt_universal_availability")
+        return policy.kruber_ranged_contract({
+            unlock_map = weapon_unlock_map,
+            loc_raw = mod._wt_loc_raw,
+            master_order_by_leaf = mod._wt_master_order_by_leaf,
+            master_children = mod._wt_master_children,
+            port_status = mod._wt and mod._wt.port_status,
+            parse_master_id = _wt_master_toggles.parse_master_id,
+            source_order_index = _wt_master_toggles.source_order_index,
+            source_char_of = function(child_id)
+                return _wt_master_toggles.source_char_of(mod, child_id)
+            end,
+        })
+    end)
+    -- WT_DEV_OVERLAY_END:issue183-kruber-ranged-contract
     _rt_register("issue445_rework_master_contract", function()
         if type(_wt_rework_master) ~= "table"
                 or type(_wt_rework_master.plan) ~= "function"
