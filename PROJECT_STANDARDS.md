@@ -2220,7 +2220,14 @@ authority, uses non-cone sparse patterns for `qa`, `tools`, and each current
 `*/scripts/mods/` tree, and therefore hydrates the commonly shared Lua blobs in
 the checkout pack instead of one lazy network fetch per historical
 `git show`/`git grep`. Bundle trees remain excluded, and the checker still reads
-the exact manifest-recorded commits rather than trusting current source. The
+the exact manifest-recorded commits rather than trusting current source. Blobs
+that still miss because source drifted after the recorded deploy are hydrated by
+the contract's batched promisor prefetch (one fetch per 200 missing objects,
+fail-open to the lazy path), and the guard prints per-phase timings
+(open-issues / release-manifest / deployed-contract / card-policy) so a
+cancelled run attributes its five-minute budget; the 2026-08-15 measured scan
+was ~70s against 296 open issues in a CI-shaped partial clone, versus the
+841-blob lazy-fetch storm that cancelled the 2026-08-13/15 scheduled runs. The
 lightweight lifecycle workflow runs on issue open/reopen/
 close and label/comment changes, manually, and daily. GitHub exposes comment
 pin state through GraphQL but no comment-pin workflow activity, so pin-only drift

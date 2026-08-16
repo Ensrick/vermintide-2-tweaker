@@ -35,6 +35,62 @@ function Invoke-VtContractGit {
     return @($output | ForEach-Object { [string]$_ })
 }
 
+function Invoke-VtContractDeployedBlobPrefetch {
+    param(
+        [string]$RepoRoot,
+        [object[]]$DeployedTrees
+    )
+
+    # In a blob:none partial clone (the dedicated lifecycle CI checkout and
+    # the qa.yml checkout), every deployed-tree blob absent from the local
+    # object store costs a promisor network fetch inside git show/grep. The
+    # 2026-08-13/15 scheduled guard runs exceeded their five-minute ceiling
+    # exactly there: 841 deployed blobs were missing under the old qa+tools
+    # sparse cone (#750). Enumerate the missing blobs across every deployed
+    # source tree first and hydrate them in a few batched fetches, mirroring
+    # git's own internal lazy-fetch invocation. Best-effort by design: on any
+    # failure the per-object lazy path remains the correctness fallback, only
+    # slower, so this warns instead of failing the guard.
+    $promisorOutput = @(& git -C $RepoRoot config --get remote.origin.promisor 2>&1)
+    if ($LASTEXITCODE -ne 0 -or ([string]$promisorOutput[0]).Trim() -cne 'true') { return }
+
+    $missing = New-Object System.Collections.Generic.List[string]
+    $seen = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($target in @($DeployedTrees)) {
+        $treeOutput = @(& git -C $RepoRoot rev-parse "$($target.Commit):$($target.Root)" 2>&1)
+        # A missing path or commit is reported authoritatively by the main
+        # contract pass; the prefetch silently skips it.
+        if ($LASTEXITCODE -ne 0 -or $treeOutput.Count -lt 1) { continue }
+        $treeId = ([string]$treeOutput[0]).Trim()
+        if ($treeId -notmatch '^[0-9a-f]{40,64}$') { continue }
+        # --missing=print lists absent objects as ?<oid> without lazy-fetching.
+        $objectLines = @(& git -C $RepoRoot rev-list --objects --missing=print $treeId 2>&1)
+        if ($LASTEXITCODE -ne 0) { continue }
+        foreach ($line in $objectLines) {
+            if ([string]$line -match '^\?([0-9a-f]{40,64})$' -and $seen.Add($matches[1])) {
+                $missing.Add($matches[1])
+            }
+        }
+    }
+    if ($missing.Count -eq 0) { return }
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $batches = 0
+    for ($offset = 0; $offset -lt $missing.Count; $offset += 200) {
+        $last = [Math]::Min($offset + 199, $missing.Count - 1)
+        $batch = @($missing[$offset..$last])
+        $fetchOutput = @(& git -C $RepoRoot -c fetch.negotiationAlgorithm=noop fetch origin --quiet `
+            --no-tags --no-write-fetch-head --recurse-submodules=no --filter=blob:none @batch 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Deployed-blob prefetch batch failed (exit $LASTEXITCODE); falling back to per-blob lazy fetches: $($fetchOutput -join ' ')"
+            return
+        }
+        $batches++
+    }
+    $stopwatch.Stop()
+    Write-Host "[live-test-contract] prefetched $($missing.Count) missing deployed-source blob(s) in $batches batched fetch(es), $([int]$stopwatch.Elapsed.TotalMilliseconds)ms"
+}
+
 function Get-VtDeployedSourceContract {
     param(
         [string]$RepoRoot,
@@ -54,6 +110,22 @@ function Get-VtDeployedSourceContract {
         throw "Active mod inventory is missing: $inventoryPath"
     }
     $inventory = Import-PowerShellDataFile $inventoryPath
+
+    $prefetchTargets = @()
+    foreach ($mod in @($inventory.Mods)) {
+        $workshopId = [string]$mod.WorkshopId
+        if ([string]::IsNullOrWhiteSpace($workshopId)) { continue }
+        $deployed = @($ReleaseManifest.mods | Where-Object { [string]$_.workshop_id -eq $workshopId })
+        if ($deployed.Count -ne 1) { continue }
+        $commit = [string]$deployed[0].source_commit
+        if ($commit -notmatch '^[0-9a-f]{40}$') { continue }
+        $prefetchTargets += [pscustomobject]@{
+            Commit = $commit
+            Root = "$($mod.Dir)/scripts/mods/$($mod.Dir)"
+        }
+    }
+    Invoke-VtContractDeployedBlobPrefetch -RepoRoot $RepoRoot -DeployedTrees $prefetchTargets
+
     $entries = @()
     $legacyFallbacks = @()
     $commands = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
@@ -418,6 +490,51 @@ mod:command(
         try { Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest | Out-Null }
         catch { $rejected = $_.Exception.Message -match 'provenance drift' }
         if (-not $rejected) { throw 'Planted manifest/source version mismatch was accepted.' }
+
+        # Regression proof for #750: in a blob:none partial clone (the shape of
+        # the dedicated lifecycle CI checkout) the contract must recover the
+        # deployed identity through the batched blob prefetch. GIT_NO_LAZY_FETCH
+        # forbids the per-object fallback on git >= 2.45, and the missing-object
+        # census proves hydration happened on every git version.
+        $manifest.mods[0].version = '1.2.3-dev'
+        & git -C $tmp config uploadpack.allowfilter true
+        & git -C $tmp config uploadpack.allowanysha1inwant true
+        $partial = Join-Path $tmp 'partial-clone'
+        $sourcePath = ($tmp -replace '\\', '/')
+        $sourceUrl = if ($sourcePath.StartsWith('/')) { "file://$sourcePath" } else { "file:///$sourcePath" }
+        $cloneOutput = @(& git clone --quiet --no-checkout --filter=blob:none $sourceUrl $partial 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw "Could not create partial-clone contract fixture: $($cloneOutput -join ' ')" }
+        & git -C $partial config core.longpaths true
+        # Hydrate everything except the deployed mod tree, so its Lua blobs are
+        # genuinely absent, exactly like historical deployed source in CI.
+        & git -C $partial sparse-checkout set --no-cone '/*' '!/fixture_mod/'
+        $checkoutOutput = @(& git -C $partial checkout --quiet 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw "Could not check out partial-clone contract fixture: $($checkoutOutput -join ' ')" }
+        $missingBefore = @(& git -C $partial rev-list --objects --missing=print HEAD 2>&1 |
+            Where-Object { [string]$_ -match '^\?[0-9a-f]{40,64}$' })
+        if ($missingBefore.Count -lt 1) { throw 'Partial-clone fixture left no deployed blob missing.' }
+        $previousNoLazyFetch = $env:GIT_NO_LAZY_FETCH
+        try {
+            $env:GIT_NO_LAZY_FETCH = '1'
+            $partialContract = Get-VtDeployedSourceContract -RepoRoot $partial -ReleaseManifest $manifest
+        }
+        finally {
+            if ($null -eq $previousNoLazyFetch) {
+                Remove-Item Env:GIT_NO_LAZY_FETCH -ErrorAction SilentlyContinue
+            }
+            else { $env:GIT_NO_LAZY_FETCH = $previousNoLazyFetch }
+        }
+        if ($partialContract.Entries.Count -ne 1 -or
+            $partialContract.Entries[0].LoadTags -notcontains 'fx' -or
+            $partialContract.Commands -notcontains 'fx_probe' -or
+            $partialContract.PrintfReceipts -notcontains '[fx:probe]') {
+            throw 'Partial-clone contract lost deployed identity through the batched prefetch.'
+        }
+        $missingAfter = @(& git -C $partial rev-list --objects --missing=print HEAD 2>&1 |
+            Where-Object { [string]$_ -match '^\?[0-9a-f]{40,64}$' })
+        if ($missingAfter.Count -ne 0) {
+            throw "Batched prefetch left $($missingAfter.Count) deployed blob(s) unhydrated."
+        }
         Write-Host '[live-test-contract -SelfTest] OK'
     }
     finally {
