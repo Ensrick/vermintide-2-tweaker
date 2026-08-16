@@ -52,13 +52,22 @@ local loc = {
     peer_parity_shadow_feature_label = en("Adventure Shadow"),
 
     -- Issue 626: dormant event missions are grouped separately from mutators.
-    cat_event_missions = en("Dormant Event Missions"),
+    cat_event_missions = en("Dormant and Hidden Missions"),
     event_mission_area_name = en("Events"),
-    event_mission_area_description = en("Special missions from Vermintide 2's past events. Enable the missions you want in Tweaker: Events."),
+    event_mission_area_description = en("Missions Vermintide 2 keeps off the Own Game map: its past seasonal events, and the Prologue. Enable the ones you want in Tweaker: Events."),
     mission_dlc_dwarf_fest = en("The Feast of Grimnir"),
     mission_dlc_dwarf_fest_tooltip = en("Show The Feast of Grimnir in Own Game under Events. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
     mission_dlc_celebrate_crawl = en("A Quiet Drink"),
     mission_dlc_celebrate_crawl_tooltip = en("Show A Quiet Drink in Own Game under Events. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
+    -- Issue 941: the Prologue is shown through a view-only copy. The game itself
+    -- refuses to run it with other players, so the tooltip states that up front
+    -- rather than letting a host discover it by having everyone disconnected.
+    mission_prologue = en("Prologue"),
+    -- Published into the game's own localization table so the mission panel has
+    -- something to show: LevelSettings.prologue ships no description_text.
+    mission_prologue_description = en("The tutorial that opens Vermintide 2. Ubersreik's dungeons, played solo as the escaping prisoner."),
+    mission_prologue_tooltip = en("Show the base game's Prologue in Own Game under Events, so you can replay the tutorial without starting a new save. Solo only: Vermintide 2 disconnects anyone who joins a Prologue session, so Event Tweaker refuses to start it while other players are in your lobby. You play as the tutorial's fixed hero, no mutators or event settings apply, and finishing it returns you to a fresh keep."),
+    event_mission_solo_only_blocked = en("[Events] The Prologue can only be played solo. Vermintide 2 disconnects anyone who joins a Prologue session, so leave or remove the other players in your lobby first."),
 
     -- Difficulty modifiers
     mut_no_ammo                    = en("No Ammo"),

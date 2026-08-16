@@ -100,6 +100,7 @@ local suites = {
     "test_ct_boon_preview_tooltip",
     "test_event_shadow_adventure",
     "test_event_modifier_localization",
+    "test_event_tzeentch_diagnostic",
     "test_gut_all_languages_diagnostics",
     "test_mod_tweaker_search",
     "test_mod_tweaker_numeric_editor",

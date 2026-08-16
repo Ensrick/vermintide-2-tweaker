@@ -11,6 +11,10 @@ return function(H, repo_root)
                 level_id = "dlc_celebrate_crawl", act = "act_celebrate",
                 packages = { "resource_packages/levels/dlcs/celebrate/crawl" },
             },
+            prologue = {
+                level_id = "prologue", act = "prologue", game_mode = "tutorial",
+                packages = { "resource_packages/levels/honduras/prologue" },
+            },
             control_level = {
                 level_id = "control_level", act = "act_1", packages = { "control" },
             },
@@ -20,10 +24,15 @@ return function(H, repo_root)
         return levels, areas, acts
     end
 
-    H.test("Event mission allowlist is closed to the two audited levels", function()
-        H.equal(#Missions.ALLOWLIST, 2)
+    H.test("Event mission allowlist is closed to the three audited levels", function()
+        H.equal(#Missions.ALLOWLIST, 3)
         H.equal(Missions.ALLOWLIST[1].id, "dlc_dwarf_fest")
         H.equal(Missions.ALLOWLIST[2].id, "dlc_celebrate_crawl")
+        H.equal(Missions.ALLOWLIST[3].id, "prologue")
+        H.equal(Missions.ALLOWLIST[1].projected, nil)
+        H.equal(Missions.ALLOWLIST[2].projected, nil)
+        H.equal(Missions.ALLOWLIST[3].projected, true)
+        H.equal(Missions.ALLOWLIST[3].solo_only, true)
     end)
 
     H.test("Event mission filter enables both missions and preserves a control act", function()
@@ -374,6 +383,188 @@ return function(H, repo_root)
         H.equal(#unlockable, 3)
         H.equal(#game_acts.act_celebrate, 2)
         H.equal(#map_acts, 2)
+    end)
+
+    H.test("Projected Prologue is shown through a copy that never touches the source", function()
+        local levels = fixtures()
+        local entry = Missions.entry_for("prologue")
+        local source = levels.prologue
+        local projected = Missions.project_level(source, entry)
+
+        H.equal(projected == source, false)
+        H.equal(projected.act, Missions.ACT_KEY)
+        H.equal(projected.level_id, "prologue")
+        H.equal(projected.game_mode, "tutorial")
+        H.equal(projected.packages, source.packages)
+        H.equal(projected.act_presentation_order, Missions.PROJECTED_PRESENTATION_ORDER)
+
+        H.equal(source.act, "prologue")
+        H.equal(source.act_presentation_order, nil)
+        H.equal(source.level_id, "prologue")
+    end)
+
+    H.test("A native allowlist entry is still passed through by identity", function()
+        local levels = fixtures()
+        local entry = Missions.entry_for("dlc_dwarf_fest")
+        H.equal(Missions.project_level(levels.dlc_dwarf_fest, entry), levels.dlc_dwarf_fest)
+        H.equal(Missions.project_level(nil, entry), nil)
+    end)
+
+    H.test("Projected Prologue keeps an inherited presentation order", function()
+        local entry = Missions.entry_for("prologue")
+        local source = {
+            level_id = "prologue", act = "prologue", game_mode = "tutorial",
+            act_presentation_order = 3, packages = { "pkg" },
+        }
+        H.equal(Missions.project_level(source, entry).act_presentation_order, 3)
+    end)
+
+    H.test("Enabling the Prologue adds the copy to the event act, not the source", function()
+        local levels = fixtures()
+        local out = Missions.filter_levels_by_act({}, levels, function(id)
+            return id == "mission_prologue"
+        end)
+        H.equal(#out.act_celebrate, 1)
+        H.equal(out.act_celebrate[1].level_id, "prologue")
+        H.equal(out.act_celebrate[1] == levels.prologue, false)
+        H.equal(out.act_celebrate[1].act, Missions.ACT_KEY)
+        H.equal(levels.prologue.act, "prologue")
+    end)
+
+    H.test("Event mission contract accepts the Prologue in its own act and game mode", function()
+        local levels, areas, acts = fixtures()
+        local ok = Missions.validate_contract(levels, areas, acts)
+        H.equal(ok, true)
+
+        local moved, moved_areas, moved_acts = fixtures()
+        moved.prologue.act = "act_celebrate"
+        local moved_ok, moved_problems = Missions.validate_contract(moved, moved_areas, moved_acts)
+        H.equal(moved_ok, false)
+        H.truthy(table.concat(moved_problems, ";"):find("LevelSettings.prologue.act mismatch", 1, true))
+
+        local retuned, retuned_areas, retuned_acts = fixtures()
+        retuned.prologue.game_mode = "adventure"
+        local retuned_ok, retuned_problems = Missions.validate_contract(retuned, retuned_areas, retuned_acts)
+        H.equal(retuned_ok, false)
+        H.truthy(table.concat(retuned_problems, ";"):find("LevelSettings.prologue.game_mode mismatch", 1, true))
+
+        local unpackaged, unpackaged_areas, unpackaged_acts = fixtures()
+        unpackaged.prologue.packages = {}
+        local unpackaged_ok, unpackaged_problems = Missions.validate_contract(
+            unpackaged, unpackaged_areas, unpackaged_acts)
+        H.equal(unpackaged_ok, false)
+        H.truthy(table.concat(unpackaged_problems, ";"):find("LevelSettings.prologue.packages empty", 1, true))
+    end)
+
+    H.test("Campaign registration never absorbs the projected Prologue", function()
+        local levels = fixtures()
+        local unlockable = { "control_level", "prologue" }
+        local game_acts = { act_1 = { "control_level" }, prologue = { "prologue" } }
+        local map_acts = { "act_1", "prologue" }
+        local appended = Missions.ensure_campaign_registration(levels, unlockable, game_acts, map_acts)
+
+        H.equal(table.concat(appended, ";"):find("prologue", 1, true), nil)
+        H.equal(#game_acts.act_celebrate, 2)
+        H.equal(#game_acts.prologue, 1)
+        H.equal(#unlockable, 4)
+        H.equal(levels.prologue.act, "prologue")
+    end)
+
+    H.test("Projected mission presentation never localizes a nil description", function()
+        local levels = fixtures()
+        local seen, calls = nil, 0
+        local applied, restored = Missions.run_presentation_info(function(view, level_id)
+            calls = calls + 1
+            H.equal(level_id, "prologue")
+            seen = levels.prologue.description_text
+        end, { surface = "view" }, "prologue", levels, "evt_level_description_prologue")
+
+        H.equal(calls, 1)
+        H.equal(applied, true)
+        H.equal(restored, true)
+        H.equal(seen, "evt_level_description_prologue")
+        H.equal(levels.prologue.description_text, nil)
+    end)
+
+    H.test("Projected mission presentation restores the source after a raising call", function()
+        local levels = fixtures()
+        local ok, err = pcall(Missions.run_presentation_info, function()
+            error("native presentation failed")
+        end, {}, "prologue", levels, "evt_level_description_prologue")
+
+        H.equal(ok, false)
+        H.truthy(tostring(err):find("native presentation failed", 1, true))
+        H.equal(levels.prologue.description_text, nil)
+    end)
+
+    H.test("Projected mission presentation stands aside for everything else", function()
+        local levels = fixtures()
+        local calls = 0
+        local function native() calls = calls + 1 end
+
+        local native_applied = Missions.run_presentation_info(
+            native, {}, "dlc_dwarf_fest", levels, "evt_level_description_prologue")
+        H.equal(native_applied, false)
+
+        local unselected = Missions.run_presentation_info(
+            native, {}, nil, levels, "evt_level_description_prologue")
+        H.equal(unselected, false)
+
+        local no_id = Missions.run_presentation_info(native, {}, "prologue", levels, nil)
+        H.equal(no_id, false)
+
+        levels.prologue.description_text = "already_localized"
+        local already = Missions.run_presentation_info(
+            native, {}, "prologue", levels, "evt_level_description_prologue")
+        H.equal(already, false)
+        H.equal(levels.prologue.description_text, "already_localized")
+        H.equal(calls, 4)
+    end)
+
+    H.test("Solo-only launch policy refuses a shared lobby and leaves others alone", function()
+        H.equal(Missions.is_solo_only("prologue"), true)
+        H.equal(Missions.is_solo_only("dlc_dwarf_fest"), false)
+        H.equal(Missions.is_solo_only("helmgart"), false)
+
+        H.equal(Missions.solo_launch_verdict("custom", "prologue", 1), "allow")
+        H.equal(Missions.solo_launch_verdict("adventure_mode", "prologue", 1), "allow")
+        H.equal(Missions.solo_launch_verdict("custom", "prologue", 2), "blocked_not_solo")
+        H.equal(Missions.solo_launch_verdict("custom", "prologue", 4), "blocked_not_solo")
+        H.equal(Missions.solo_launch_verdict("custom", "prologue", nil), "allow_unverified")
+
+        H.equal(Missions.solo_launch_verdict("custom", "dlc_dwarf_fest", 4), "not_managed")
+        H.equal(Missions.solo_launch_verdict("adventure", "prologue", 4), "not_managed")
+        H.equal(Missions.solo_launch_verdict("weave_quick_play", "prologue", 4), "not_managed")
+        H.equal(Missions.solo_launch_verdict("deed", "prologue", 4), "not_managed")
+        H.equal(Missions.solo_launch_verdict("custom", nil, 1), "not_managed")
+    end)
+
+    H.test("Solo-only search config is hardened onto the private host path", function()
+        local config = {
+            mission_id = "prologue", private_game = false, always_host = false,
+            quick_game = true, strict_matchmaking = true, dedicated_server = true,
+            difficulty = "normal",
+        }
+        local applied, proof = Missions.harden_search_config(config)
+        H.equal(applied, true)
+        H.equal(config.private_game, true)
+        H.equal(config.always_host, true)
+        H.equal(config.quick_game, false)
+        H.equal(config.strict_matchmaking, false)
+        H.equal(config.dedicated_server, false)
+        H.equal(config.join_method, "solo")
+        H.equal(config.difficulty, "normal")
+        H.equal(config.mission_id, "prologue")
+        H.truthy(proof:find("private_game=true", 1, true))
+        H.truthy(proof:find("always_host=true", 1, true))
+
+        local untouched = { mission_id = "dlc_dwarf_fest", private_game = false, quick_game = true }
+        H.equal(Missions.harden_search_config(untouched), false)
+        H.equal(untouched.private_game, false)
+        H.equal(untouched.quick_game, true)
+        H.equal(untouched.join_method, nil)
+        H.equal(Missions.harden_search_config(nil), false)
+        H.equal(Missions.harden_search_config({}), false)
     end)
 
     H.test("Campaign registration fallback never registers a malformed level", function()
