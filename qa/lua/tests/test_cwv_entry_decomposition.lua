@@ -32,6 +32,8 @@ return function(H, repo_root)
     local weapon_transform = read("_cwv_weapon_transform_owner.lua")
     local custom_mesh = read("_cwv_custom_mesh_runtime.lua")
     local equip_surface = read("_cwv_musket_equip_surface.lua")
+    local musket_runtime = read("_cwv_musket_runtime.lua")
+    local musket_ammo_hud = read("_cwv_musket_ammo_hud.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
     local render = read("_cwv_regression_render.lua")
@@ -364,20 +366,46 @@ return function(H, repo_root)
         H.truthy(lifecycle:find("_release_dual_weapon_fp_residency", 1, true))
     end)
 
+    H.test("CWV #1108 HUD owner loads once and installs after its ammo pool", function()
+        local hud_load = 'mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_ammo_hud")'
+        local runtime_load = 'mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_runtime")'
+        H.equal(count_plain(entry, hud_load), 0)
+        H.equal(count_plain(entry, runtime_load), 1)
+        H.equal(count_plain(musket_runtime, hud_load), 1)
+
+        local load_at = assert(musket_runtime:find(hud_load, 1, true))
+        local pool_at = assert(musket_runtime:find(
+            "musket_ammo_pool_policy.install", 1, true))
+        local hud_at = assert(musket_runtime:find(
+            "musket_ammo_hud_policy.install", 1, true))
+        H.truthy(load_at < pool_at and pool_at < hud_at)
+        H.equal(count_plain(musket_runtime, "musket_ammo_hud_policy.install"), 1)
+        H.equal(count_plain(entry, "musket_ammo_hud_policy.install"), 0)
+
+        H.equal(count_plain(musket_ammo_hud, '"EquipmentUI"'), 1)
+        H.equal(count_plain(musket_ammo_hud, '"GamePadEquipmentUI"'), 1)
+        H.equal(count_plain(musket_ammo_hud,
+            'mod:hook_safe(class_name, "_sync_player_equipment"'), 1)
+        H.equal(count_plain(musket_ammo_hud, "mod:hook("), 0)
+        H.equal(count_plain(musket_ammo_hud, "mod:network_"), 0)
+    end)
+
     H.test("CWV regression registration split preserves all checks and boundary", function()
         local names = {}
         for name in (identity .. "\n" .. render):gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 82)
+        H.equal(#names, 83)
         H.equal(names[1], "cwv_variant_flag_present")
-        H.equal(names[37], "cwv_husk_transform_coverage")
-        H.equal(names[38], "cwv_husk_stale_unit_and_postcondition")
+        H.equal(names[15], "issue1108_primary_slot_musket_ammo_hud_contract")
+        H.equal(names[16], "issue273_cwv_deus_identity_is_exact")
+        H.equal(names[38], "cwv_husk_transform_coverage")
+        H.equal(names[39], "cwv_husk_stale_unit_and_postcondition")
         -- issue 399 appended the husk ammo-adapter drive as the last identity
         -- check, so the identity/render boundary moved one slot right.
-        H.equal(names[39], "issue399_outrider_husk_ammo_adapter")
-        H.equal(names[40], "issue1204_deus_identity_uses_committed_parity")
-        H.equal(names[41], "cwv_unit_bearing_variants_registered")
+        H.equal(names[40], "issue399_outrider_husk_ammo_adapter")
+        H.equal(names[41], "issue1204_deus_identity_uses_committed_parity")
+        H.equal(names[42], "cwv_unit_bearing_variants_registered")
         H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")

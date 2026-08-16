@@ -33,6 +33,17 @@ Last updated: 2026-08-13.
 | Expected post-fix | CWV reaches normal initialization without a VMF `mod_script` error. `/cwv` reports the optional companion mods accurately in every combination. |
 | Detection | Offline decomposition coverage pins the producer export, validated entry binding, and lifecycle handoff; strict lint and the full Lua 5.1 suite pass. |
 
+## #1108 Primary-slot Old Musket ammo HUD
+
+| Field | Contract |
+|---|---|
+| Symptom | With Old Musket in the primary slot and an ordinary ranged weapon in the secondary slot, the HUD keeps showing the secondary weapon's ammunition while the ammo-bearing Musket is wielded. |
+| Root cause | Both native equipment HUD classes refresh ammunition only while iterating `slot_ranged`; the gameplay pool already has an authoritative `slot_melee` extension, but no presentation consumer selects it. |
+| Fix | `_cwv_musket_ammo_hud.lua` runs after native equipment synchronization and replaces the displayed count only when the wielded primary slot, pool owner/slot, effective template ammo hand, and exact live 1P ammo unit all agree. |
+| Repro | Equip Old Musket in the primary slot and a Handgun in the secondary slot. Spend a different number of rounds from each, wield and fire the Old Musket, switch between both weapons, toggle the Musket stance, then repeat with the controller HUD enabled. |
+| Expected post-fix | Desktop and controller counters follow the ammo-bearing Old Musket while it is wielded, then return to the secondary weapon's native count. A melee stance, non-Musket primary, dead/replaced extension, or mismatched hand never borrows the pool or retains a stale Musket count. |
+| Detection | `/cwv_regression_test` passes `issue1108_primary_slot_musket_ammo_hud_contract`; bounded `[cwv:1108]` engage/release receipts identify the live presentation edge. Offline tests execute both installed native callbacks and cover right/left hands, owner/spectator resolution, exact extension replacement/liveness, native-path rejections, and missing-dependency failure. |
+
 ## #932 Primary-slot Old Musket shared ammo
 
 | Field | Contract |
@@ -41,7 +52,7 @@ Last updated: 2026-08-13.
 | Root cause | The legacy set was process-global and copied one extension's `_available_ammo` to every member. It neither separated player owners nor stored a pool total, so two 10-round extensions still exposed only 10 reserve rounds. |
 | Fix | `_cwv_musket_ammo_pool.lua` owns reserve state by player and exact melee/ranged slot, keeps native one-round chambers, covers every source-proven reserve mutation, and adapts the public maximum without widening `_max_ammo`. |
 | Repro | Equip Old Musket only in the primary slot and fire/reload. Then equip a second Old Musket in the secondary slot, fire/reload from each, swap repeatedly, toggle both stances, take a partial ammo pickup, and replace one slot with a non-Musket. Run `/cwv_musket_ammo_diag` after each edge. |
-| Expected post-fix | One Musket shows 10 shared reserve; two show 20. Reloading either decrements the same reserve while each chamber remains independent. Swaps/stance changes grant no ammo, a pickup changes the pool once, replacing one Musket clamps capacity to 10, and another player's ammo never enters the pool. The native counter follows the currently wielded Musket. |
+| Expected post-fix | One Musket owns 10 shared reserve; two own 20. Reloading either decrements the same reserve while each chamber remains independent. Swaps/stance changes grant no ammo, a pickup changes the pool once, replacing one Musket clamps capacity to 10, and another player's ammo never enters the pool. HUD selection is the separate #1108 contract above. |
 | Detection | `/cwv_regression_test` passes `issue932_primary_slot_musket_ammo_pool_contract`; diagnostics show one owner per pool and `pool=reserve/capacity`; offline tests cover owner isolation, doubled capacity, consumption, replacement, unregister, pickup, and the no-`_max_ammo`-write invariant. |
 
 ## #798 Universal Crowbill hammer mode

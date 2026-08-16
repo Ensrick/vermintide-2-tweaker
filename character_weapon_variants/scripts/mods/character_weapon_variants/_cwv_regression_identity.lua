@@ -1022,6 +1022,54 @@ _rt_register("issue1107_melee_slot_reload_drains_reserve", function()
 	end
 end)
 
+_rt_register("issue1108_primary_slot_musket_ammo_hud_contract", function()
+	local adapter = _om.musket_ammo_hud
+	if type(adapter) ~= "table" or type(adapter.contract_error) ~= "function" then
+		return "Old Musket ammo HUD adapter is not installed"
+	end
+	local installed = adapter:contract_error()
+	if installed then return installed end
+
+	-- Execute the same engine-free selector used by both live post-sync hooks.
+	-- Merely counting the hooks cannot prove that ranged-only HUD selection was
+	-- replaced, so the positive fixture and every fail-closed edge live here.
+	local policy = _om.musket_ammo_hud_policy
+	if type(policy) ~= "table" or type(policy.select) ~= "function" then
+		return "Old Musket ammo HUD selector surface is missing"
+	end
+	local owner, ammo_unit = {}, {}
+	local extension = { unit = ammo_unit }
+	local item_data = { name = "es_handgun", backend_id = "cwv_es_musket_custom_001" }
+	local slot_data = { item_data = item_data, right_unit_1p = ammo_unit }
+	local equipment = { wielded_slot = "slot_melee", slots = { slot_melee = slot_data } }
+	local controller = {
+		extension_for = function(_, queried_owner, slot_name)
+			if queried_owner == owner and slot_name == "slot_melee" then
+				return extension
+			end
+		end,
+	}
+	local template = function() return { ammo_data = { ammo_hand = "right" } } end
+	local item, slot, selected = policy.select(controller, owner, equipment, template)
+	if item ~= item_data or slot ~= slot_data or selected ~= extension then
+		return "HUD selector did not pick the wielded primary-slot Musket extension"
+	end
+
+	equipment.wielded_slot = "slot_ranged"
+	if policy.select(controller, owner, equipment, template) ~= nil then
+		return "HUD selector overrode the ranged slot's native path"
+	end
+	equipment.wielded_slot = "slot_melee"
+	slot_data.right_unit_1p = {}
+	if policy.select(controller, owner, equipment, template) ~= nil then
+		return "HUD selector accepted a mismatched ammo-hand unit"
+	end
+	slot_data.right_unit_1p = ammo_unit
+	if policy.select(controller, owner, equipment, function() return {} end) ~= nil then
+		return "HUD selector accepted a template without ammunition"
+	end
+end)
+
 _rt_register("issue273_cwv_deus_identity_is_exact", function()
 	local report = _om.install_deus_identities("runtime_regression")
 	if #report.skipped > 0 then
