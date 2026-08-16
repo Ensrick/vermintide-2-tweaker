@@ -137,14 +137,6 @@ local function _build_difficulty_block(diff)
                 default_value = diff.max_same,
             },
             {
-                setting_id     = B.setting_key(diff.key, "health_multiplier"),
-                type           = "numeric",
-                tooltip        = B.setting_key(diff.key, "health_multiplier") .. "_tooltip",
-                range          = { 0.1, 5.0 },
-                default_value  = 1.0,
-                decimals_number = 1,
-            },
-            {
                 setting_id  = B.setting_key(diff.key, "weights_group"),
                 type        = "group",
                 sub_widgets = _build_diff_weights(diff.key),
@@ -169,6 +161,47 @@ local function _build_special_spawns_block()
         setting_id  = "special_spawns_group",
         type        = "group",
         sub_widgets = subs,
+    }
+end
+
+-- ============================================================
+-- Enemy Stats widget builders
+-- ============================================================
+
+-- #369 restructure (user direction): the per-difficulty enemy health
+-- multipliers moved OUT of the Special Spawns per-difficulty blocks into
+-- this dedicated top-level Enemy Stats category — the planned home for
+-- future per-stat adjustments (mass/stagger resistance, damage, speed).
+-- setting_ids are UNCHANGED (et_diff_<key>_health_multiplier) so persisted
+-- values survive the move; _et_health_multiplier.lua reads the same keys.
+local function _build_enemy_stats_health_widgets()
+    local out = {}
+    -- Deliberate order (NOT A→Z): one slider per difficulty, following the
+    -- difficulty ladder (Recruit → Cataclysm 3), matching B.DIFFICULTIES.
+    for _, diff in ipairs(B.DIFFICULTIES) do
+        out[#out + 1] = {
+            setting_id      = B.setting_key(diff.key, "health_multiplier"),
+            type            = "numeric",
+            tooltip         = B.setting_key(diff.key, "health_multiplier") .. "_tooltip",
+            range           = { 0.1, 5.0 },
+            default_value   = 1.0,
+            decimals_number = 1,
+        }
+    end
+    return out
+end
+
+local function _build_enemy_stats_block()
+    return {
+        setting_id  = "enemy_stats_group",
+        type        = "group",
+        sub_widgets = {
+            {
+                setting_id  = "enemy_stats_health_group",
+                type        = "group",
+                sub_widgets = _build_enemy_stats_health_widgets(),
+            },
+        },
     }
 end
 
@@ -394,6 +427,15 @@ return {
                     _build_special_spawns_block(),
                 },
             },
+
+            -- ============================================================
+            -- ENEMY STATS (#369 restructure)
+            -- Top-level home for per-difficulty enemy stat adjustments.
+            -- Currently: Health Multipliers (moved from the Special Spawns
+            -- per-difficulty blocks; setting_ids unchanged so saved values
+            -- carry over). Planned: mass (stagger resistance), damage, speed.
+            -- ============================================================
+            _build_enemy_stats_block(),
 
             -- ============================================================
             -- FACTION SUBSTITUTION (per-faction horde slot swap)
