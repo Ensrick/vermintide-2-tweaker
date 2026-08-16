@@ -238,4 +238,143 @@ return function(H, repo_root)
         H.equal(bypass:find('mod:set("wt_dev_hp_fp_', 1, true), nil,
             "bypass must not erase saved 1P values")
     end)
+
+    H.test("WT #1023 HUD focus follows the exact edited hand and channel", function()
+        local focus = HoldPose._hud_focus_for_setting
+        local channel, hand = focus(
+            "wt_dev_hp_fp_lh_offset_z", "third_person", "right")
+        H.equal(channel, "first_person")
+        H.equal(hand, "left")
+
+        channel, hand = focus("wt_dev_hp_rh_rot_pitch", channel, hand)
+        H.equal(channel, "third_person")
+        H.equal(hand, "right")
+
+        channel, hand = focus("wt_dev_hp_enable_1p", channel, hand)
+        H.equal(channel, "first_person")
+        H.equal(hand, "right")
+
+        channel, hand = focus("wt_dev_hp_target_slot", channel, hand)
+        H.equal(channel, "first_person")
+        H.equal(hand, "right")
+    end)
+
+    H.test("WT #1023 HUD formats the apply plan at stable player-facing precision", function()
+        local plan = HoldPose._component_plan_values(
+            0.12349, -0.2, 0, 12.34, -45.67, 180, 1, 1, 1)
+        local text = HoldPose._format_hud_text({
+            channel = "first_person",
+            hand = "left",
+            plan = plan,
+        })
+        H.equal(text,
+            "Hold Pose | First Person | Left Hand | Pos X +0.123  Y -0.200  Z +0.000 | Rot P +12.3  Y -45.7  R +180.0")
+        H.equal(HoldPose._format_hud_text(nil), nil)
+        H.equal(HoldPose._format_hud_text({}), nil)
+        local visible = HoldPose._hud_visible_values
+        H.equal(visible(true, true, true), true)
+        H.equal(visible(false, true, true), false)
+        H.equal(visible(true, false, true), false)
+        H.equal(visible(true, true, false), false)
+        H.equal(visible(1, true, true), false)
+    end)
+
+    H.test("WT #1023 live HUD row reads the apply plan, fails closed, owns one hook", function()
+        -- Reload the shipped module against a live-shaped harness: a settings
+        -- store, a hook recorder, and a resolvable wielded 3P unit.
+        local values, hooks, checks = {}, {}, {}
+        local mock = {
+            _wt = { rt_register = function(name, fn) checks[name] = fn end },
+            get = function(_, id) return values[id] end,
+            set = function(_, id, v) values[id] = v end,
+            hook_safe = function(_, class, method, fn)
+                hooks[#hooks + 1] = { class = class, method = method, fn = fn }
+            end,
+            command = function() end,
+            info = function() end,
+            echo = function() end,
+            warning = function() end,
+        }
+        local prior = { _G.get_mod, _G.Managers, _G.ScriptUnit, _G.Unit }
+        _G.get_mod = function() return mock end
+        local Live = dofile(path)
+        _G.get_mod = prior[1]
+
+        Live.install()
+        local hud_hooks = 0
+        local hud_fn
+        for _, hook in ipairs(hooks) do
+            if hook.class == "IngameHud" and hook.method == "update" then
+                hud_hooks = hud_hooks + 1
+                hud_fn = hook.fn
+            end
+        end
+        H.equal(hud_hooks, 1, "WT must own exactly one IngameHud update hook")
+        H.truthy(checks.issue1023_live_hold_pose_hud,
+            "named runtime check issue1023_live_hold_pose_hud must register")
+        H.equal(checks.issue1023_live_hold_pose_hud(), nil,
+            "the shipped runtime check must pass against the live module")
+
+        -- Fail-closed: master off => no row, and the hook is a harmless no-op
+        -- even with no engine UI stack present.
+        H.equal(Live._hud_snapshot(), nil)
+        hud_fn({}, 0.016)
+
+        -- Live-shaped state: master + 3P channel on, one live right-hand unit.
+        local unit = {}
+        _G.Managers = { player = {
+            local_player = function() return { player_unit = "punit" } end,
+        } }
+        _G.ScriptUnit = { has_extension = function()
+            return {
+                get_wielded_slot_name = function() return "slot_melee" end,
+                _equipment = {
+                    wielded_slot = "slot_melee",
+                    right_hand_wielded_unit_3p = unit,
+                    left_hand_wielded_unit = unit,
+                    slots = { slot_melee = { id = "secret_item_key_1023" } },
+                },
+            }
+        end }
+        _G.Unit = { alive = function(u) return u == unit end }
+        values.wt_dev_hp_enabled = true
+        values.wt_dev_hp_rh_offset_x = 0.123
+        values.wt_dev_hp_rh_rot_yaw = -45.67
+        values.wt_dev_hp_rh_scale_z = 1.5
+
+        Live.on_settings_batch_changed({ "wt_dev_hp_rh_offset_x" })
+        local snapshot = Live._hud_snapshot()
+        H.truthy(snapshot, "row must appear once master, channel, and unit resolve")
+        H.equal(snapshot.channel, "third_person")
+        H.equal(snapshot.hand, "right")
+        H.deep_equal(snapshot.plan, Live._component_plan("third_person", "right"),
+            "displayed values must be the exact normalized apply plan")
+        local text = Live._format_hud_text(snapshot)
+        H.truthy(text:find("Pos X +0.123", 1, true), "authored offset missing from row")
+        H.truthy(text:find("Y -45.7", 1, true), "authored yaw missing from row")
+        H.equal(text:find("secret_item_key_1023", 1, true), nil,
+            "HUD must not leak the internal item key")
+
+        -- Edits refresh focus through the real event handlers.
+        Live.on_setting_changed("wt_dev_hp_fp_lh_offset_x")
+        values.wt_dev_hp_enable_1p = true
+        local refocused = Live._hud_snapshot()
+        H.truthy(refocused)
+        H.equal(refocused.channel, "first_person")
+        H.equal(refocused.hand, "left")
+
+        -- Losing the unit or bypassing the tuner removes the row without
+        -- erasing any saved value.
+        _G.Unit.alive = function() return false end
+        Live.on_setting_changed("wt_dev_hp_rh_offset_x")
+        H.equal(Live._hud_snapshot(), nil, "row must drop with the live unit")
+        _G.Unit.alive = function(u) return u == unit end
+        values.wt_dev_hp_enabled = false
+        Live.on_setting_changed("wt_dev_hp_enabled")
+        H.equal(Live._hud_snapshot(), nil, "bypass must remove the row")
+        H.equal(values.wt_dev_hp_rh_offset_x, 0.123,
+            "bypass must preserve authored values")
+
+        _G.Managers, _G.ScriptUnit, _G.Unit = prior[2], prior[3], prior[4]
+    end)
 end

@@ -2069,6 +2069,74 @@ function M.install(mod, _rt_register, deps)
         end
     end)
 
+    _rt_register("issue943_fire_sword_heavy_contract", function()
+        local policy = deps.fire_sword_policy
+        if not policy then return "#943: fire sword policy dependency missing" end
+        local function fixture()
+            return { actions = { action_one = {
+                default = { allowed_chain_actions = {
+                    { action = "action_one", end_time = 0.3, input = "action_one_release", start_time = 0, sub_action = "light_attack_left" },
+                    { action = "action_one", input = "action_one_release", start_time = 0.5, sub_action = "heavy_attack_spell" },
+                    { blocker = true, end_time = 1.2, input = "action_one_hold", start_time = 0.3 },
+                    { action = "action_one", auto_chain = true, start_time = 1.2, sub_action = "heavy_attack_spell" },
+                } },
+                heavy_attack_spell = {
+                    anim_time_scale = 1.4, total_time = 1.5, hit_time = 0.35,
+                    damage_window_start = 0.2, damage_window_end = 0.25,
+                    buff_data = { { start_time = 0, end_time = 0.2 } },
+                    allowed_chain_actions = {
+                        { action = "action_one", end_time = 1.25, input = "action_one", start_time = 0.65, sub_action = "default_right_heavy" },
+                    },
+                },
+            } } }
+        end
+        local tpl, sibling = fixture(), fixture()
+        local weapons = { flaming_sword_template_1 = tpl }
+        local state = policy.new()
+        local chain = tpl.actions.action_one.default.allowed_chain_actions
+        local nova = tpl.actions.action_one.heavy_attack_spell
+        state:apply(true, false, weapons)
+        if chain[2].sub_action ~= "heavy_attack_left" or chain[4].sub_action ~= "heavy_attack_left"
+                or chain[1].sub_action ~= "light_attack_left" or nova.anim_time_scale ~= 1.4 then
+            return "#943: sweep-opener projection drifted (edges or nova timing)"
+        end
+        state:apply(true, true, weapons)
+        if chain[2].sub_action ~= "heavy_attack_left"
+                or math.abs(nova.anim_time_scale - 1.4 / 1.10) > 0.000001
+                or math.abs(nova.total_time - 1.65) > 0.000001
+                or math.abs(nova.allowed_chain_actions[1].start_time - 0.715) > 0.000001 then
+            return "#943: both-on composition drifted"
+        end
+        state:apply(false, false, weapons)
+        if chain[2].sub_action ~= "heavy_attack_spell" or chain[4].sub_action ~= "heavy_attack_spell"
+                or nova.anim_time_scale ~= 1.4 or nova.total_time ~= 1.5
+                or nova.buff_data[1].end_time ~= 0.2
+                or nova.allowed_chain_actions[1].start_time ~= 0.65 then
+            return "#943: toggle-off did not restore exact captured values"
+        end
+        if sibling.actions.action_one.default.allowed_chain_actions[2].sub_action ~= "heavy_attack_spell" then
+            return "#943: projection leaked across template identities"
+        end
+        local live = rawget(_G, "Weapons")
+        local live_tpl = live and rawget(live, policy.TEMPLATE)
+        local live_chain = live_tpl and live_tpl.actions and live_tpl.actions.action_one
+            and live_tpl.actions.action_one.default
+            and live_tpl.actions.action_one.default.allowed_chain_actions
+        if type(live_chain) ~= "table" then return "skip: Fire Sword template not loaded" end
+        local expected = mod:get(policy.SWEEP_OPENER_SETTING) == true
+            and policy.SWEEP_ACTION or policy.NOVA_ACTION
+        for i = 1, #live_chain do
+            local edge = live_chain[i]
+            if type(edge) == "table" and edge.action == "action_one"
+                    and (edge.auto_chain == true or edge.input == "action_one_release")
+                    and (edge.sub_action == policy.NOVA_ACTION or edge.sub_action == policy.SWEEP_ACTION)
+                    and edge.sub_action ~= expected then
+                return string.format("#943: live idle heavy edge %d targets %s, expected %s",
+                    i, tostring(edge.sub_action), expected)
+            end
+        end
+    end)
+
 end
 
 return M

@@ -116,6 +116,10 @@ mod:dofile("scripts/mods/weapon_tweaker/_safe_hook")
 
 local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_axe_balance")
 local _wt_axe_balance = _wt_axe_balance_policy.new()
+-- Fire Sword heavy-attack policy (#943): two default-off projections from one
+-- per-template-identity baseline (sweep opener + nova slowdown).
+local _wt_fire_sword_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_fire_sword")
+local _wt_fire_sword = _wt_fire_sword_policy.new()
 local _wt_grip_offset_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_grip_offset_policy")
 local _wt_skullsplitter_hand_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_skullsplitter_hand")
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
@@ -915,6 +919,7 @@ mod.on_game_state_changed = function(status, state_name)
     patch_career_actions_on_weapons()
     apply_trait_filters()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+    if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, false) end
     if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
     _wt_bolt_staff_overcharge_runtime.apply()
     -- Re-attempt the Necromancer FX force-load (idempotent). DLC ownership can be
@@ -958,6 +963,7 @@ mod.on_disabled = function()
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, true) end
+    if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, true) end
     if mod._wt374_revert_energy_data then mod._wt374_revert_energy_data() end
     clear_weapon_unlocks()
     clear_career_action_injections()
@@ -971,6 +977,7 @@ local _wt_rework_runtime = _wt_rework_master_runtime_module.new(
         if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
         _wt_bolt_staff_overcharge_runtime.apply()
         if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+        if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, false) end
     end)
 mod._wt.rework_master_runtime = _wt_rework_runtime
 
@@ -983,6 +990,7 @@ mod:dofile("scripts/mods/weapon_tweaker/_wt_settings_runtime").install({
     bolt_policy = _wt_bolt_staff_overcharge,
     bolt_runtime = _wt_bolt_staff_overcharge_runtime,
     balance_policy = _wt_axe_balance_policy,
+    fire_sword_policy = _wt_fire_sword_policy,
 })
 
 do
@@ -1058,6 +1066,34 @@ do
         end
     end
     mod._wt_apply_axe_balance(nil, false)
+end
+
+-- ============================================================
+-- Issue 943: Fire Sword heavy-attack projections
+-- ============================================================
+-- Bounded apply seam: load, state transitions, single-setting dispatch
+-- (_wt_settings_runtime), owner batches, and on_disabled all rerun the same
+-- baseline projection, so late/replaced templates re-capture per identity.
+do
+    mod._wt_apply_fire_sword = function(setting_id, force_off)
+        if type(Weapons) ~= "table" then return end
+        if setting_id
+                and setting_id ~= _wt_fire_sword_policy.SWEEP_OPENER_SETTING
+                and setting_id ~= _wt_fire_sword_policy.NOVA_SLOWDOWN_SETTING then
+            return
+        end
+        local function enabled(id)
+            return not force_off and mod:get(id) == true
+        end
+        local sweep_opener = enabled(_wt_fire_sword_policy.SWEEP_OPENER_SETTING)
+        local nova_slowdown = enabled(_wt_fire_sword_policy.NOVA_SLOWDOWN_SETTING)
+        local idle_edges, nova_actions = _wt_fire_sword:apply(
+            sweep_opener, nova_slowdown, Weapons)
+        pcall(printf,
+            "[wt:943] applied: sweep_opener=%s nova_slowdown=%s idle_edges=%d nova_actions=%d",
+            tostring(sweep_opener), tostring(nova_slowdown), idle_edges, nova_actions)
+    end
+    mod._wt_apply_fire_sword(nil, false)
 end
 
 -- ============================================================
@@ -1404,6 +1440,7 @@ local _wt_runtime_check_deps = {
     skullsplitter_hand_policy = _wt_skullsplitter_hand_policy,
     weapon_backend = weapon_backend,
     deepwood_runtime = _deepwood_runtime,
+    fire_sword_policy = _wt_fire_sword_policy,
 }
 _wt_runtime_checks.install(mod, _rt_register, _wt_runtime_check_deps)
 -- WT_PUBLIC_OVERLAY_BEGIN:public-beta-surface-regression

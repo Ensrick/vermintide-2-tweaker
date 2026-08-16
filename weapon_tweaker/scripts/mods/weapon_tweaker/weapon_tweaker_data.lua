@@ -1312,6 +1312,9 @@ local data = {
                     { setting_id = "wt_dual_axes_cleave", type = "checkbox", default_value = true },
                     { setting_id = "wt_dual_axes_light_crit", type = "checkbox", default_value = true },
                     { setting_id = "wt_executioner_light_headshot_bonus", type = "checkbox", default_value = false },
+                    -- Issue #943: independent Fire Sword heavy projections (both default off).
+                    { setting_id = "wt_fire_sword_nova_slowdown", type = "checkbox", default_value = false },
+                    { setting_id = "wt_fire_sword_sweep_opener", type = "checkbox", default_value = false },
                     { setting_id = "wt_greataxe_light_crit", type = "checkbox", default_value = true },
                     { setting_id = "wt_mace_sword_speed_nerf", type = "checkbox", default_value = false },
                     { setting_id = "wt_bolt_staff_primary_overcharge_reduction", type = "checkbox", default_value = false },
