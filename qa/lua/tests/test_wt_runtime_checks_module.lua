@@ -27,7 +27,7 @@ return function(H, repo_root)
 
     H.test("WT dev runtime-check extraction keeps only its marked overlay additions", function()
         local checks, commands = install(dev_root)
-        H.equal(#checks, 58)
+        H.equal(#checks, 60)
         H.equal(checks[1], "husk_extension_hooked")
         H.equal(checks[#checks], "wt_loc_raw_published")
         H.equal(#commands, 1)

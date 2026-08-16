@@ -649,5 +649,32 @@
     @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='WOC conversion rode 0.1.10-dev; runtime checks must stay marker-based.' }
     @{ mod='dynamic_cosmetic_portraits'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; needle='(?m)^(?!\s*--).*\bio\.open\s*\('; literal=$false; polarity='absent'; issueRef='#511'; note='dcp conversion rode 0.1.18-dev; runtime checks must stay marker-based.' }
 
+    # ============================ WOC #934 shared-relic lease ============================
+    # Source: the load-bearing rows of the retired ~100-line grep tail in
+    # qa/lua/tests/test_woc_shared_relic.lua (#1308). The behavioral halves stay
+    # executable in that suite; these are the genuinely textual invariants: the
+    # three lease RPC channels each register exactly once, the four native equip
+    # seams each hook exactly once (VMF silently drops a second hook on the same
+    # Class/method pair), and three forbidden tokens stay gone.
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='mod:network_register("woc_relic_lease_intent_v1"'; literal=$true; polarity='present'; maxCount=1; issueRef='#934'; note='the claim-intent RPC channel registers exactly once, in the runtime owner.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='mod:network_register("woc_relic_lease_state_v1"'; literal=$true; polarity='present'; maxCount=1; issueRef='#934'; note='the authority-snapshot RPC channel registers exactly once, in the runtime owner.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='mod:network_register("woc_relic_lease_query_v1"'; literal=$true; polarity='present'; maxCount=1; issueRef='#934'; note='the snapshot-query RPC channel registers exactly once, in the runtime owner.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='mod:hook(BackendUtils, "set_loadout_item"'; literal=$true; polarity='present'; maxCount=1; issueRef='#934'; note='the durable-equip denial gate hooks the BackendUtils seam exactly once.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='mod:hook("HeroViewStateOverview", "_set_loadout_item"'; literal=$true; polarity='present'; maxCount=1; issueRef='#934'; note='the native Hero caller ignores BackendUtils return values, so its own seam carries the same denial gate.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='mod:hook("SimpleInventoryExtension", "create_equipment_in_slot"'; literal=$true; polarity='present'; maxCount=1; issueRef='#934'; note='direct live equipment creation carries the same denial gate.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='mod:hook("KeepDecorationTrophyExtension", "_load_trophy"'; literal=$true; polarity='present'; maxCount=1; issueRef='#934'; note='the keep trophy substitution seam hooks exactly once.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='woc_blightreaper_identity'; literal=$true; polarity='absent'; issueRef='#934'; note='clients must have no independent render-identity write channel; identity is applied only from the host snapshot.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'; needle='woc_blightreaper_identity'; literal=$true; polarity='absent'; issueRef='#934'; note='the retired client-authored identity channel must not come back in the entry either.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='_lease_find_base_backend_id'; literal=$true; polarity='absent'; issueRef='#934'; note='a pre-equipped losing peer restores its exact prior item or fails closed; it never guesses an inventory fallback.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='"verified-live-sync"'; literal=$true; polarity='absent'; issueRef='#934'; note='a LoadoutUtils sync payload must never prove rollback completion; only exact backend readback does.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='"hub_trophy_empty"'; literal=$true; polarity='absent'; issueRef='#934'; note='trophy ids stay single-sourced in _woc_shared_relic.lua (policy); the runtime resolves them through policy.trophy_for.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'; needle='"hub_trophy_empty"'; literal=$true; polarity='absent'; issueRef='#934'; note='trophy ids stay single-sourced in the policy module; the entry never inlines one.' }
+
+    # #1308: the wt/wt_dev moved-local spelling lists left the offline suite;
+    # this is the one entry-side absence from those lists that is load-bearing
+    # for wt_dev and was not already pinned above (a re-declared template
+    # patcher in the entry would re-run the brace rewrite outside the owner).
+    @{ mod='wt_dev'; file='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua'; needle='local function _patch_brace_template_for_kruber'; literal=$true; polarity='absent'; issueRef='#1159'; note='mirror stream entry must stay free of the moved cross-character template patcher.' }
+
   )
 }

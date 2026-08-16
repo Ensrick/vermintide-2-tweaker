@@ -314,4 +314,126 @@ function M.receiver_census(census, receiver_key)
     return nil
 end
 
+-- Issue #183: named audit of the complete Kruber ranged Availability surface.
+-- Drives the SAME runtime owners Mod Tweaker renders: the expanded unlock map,
+-- the published raw labels (#159/#408), the #611 master-bucket maps built by
+-- _wt_master_toggles, and the #108 wt_port_status metadata mirror. The fixed
+-- source-group order is the #611 RainReligion amendment
+-- (Kruber/Bardin/Kerillian/Saltzpyre/Sienna) enforced via env.source_order_index.
+-- Pure: every collaborator arrives via `env`; returns nil when the contract
+-- holds, else one bounded failure string.
+function M.kruber_ranged_contract(env)
+    env = env or {}
+    local unlock_map = env.unlock_map
+    local loc_raw = env.loc_raw
+    local order_by_leaf = env.master_order_by_leaf
+    local master_children = env.master_children
+    local port_status = env.port_status
+    if type(unlock_map) ~= "table" then return "unlock map unavailable" end
+    if type(loc_raw) ~= "table" then return "raw localization unavailable" end
+    if type(order_by_leaf) ~= "table" or type(master_children) ~= "table" then
+        return "master bucket maps unavailable"
+    end
+    if type(port_status) ~= "table" then return "port status owner unavailable" end
+    local kruber_careers
+    for _, group in ipairs(M.receiver_groups) do
+        if group.key == "kruber" then kruber_careers = group.careers end
+    end
+    for _, career in ipairs(kruber_careers or {}) do
+        local leaf_id = "ranged_" .. career
+        local masters = order_by_leaf[leaf_id]
+        if type(masters) ~= "table" or #masters == 0 then
+            return leaf_id .. " has no source-character buckets"
+        end
+        local seen, seen_count, prior_rank = {}, 0, 0
+        for _, master_id in ipairs(masters) do
+            local mcareer, slot, src = env.parse_master_id(master_id)
+            if mcareer ~= career or slot ~= "ranged" then
+                return tostring(master_id) .. " escaped " .. leaf_id
+            end
+            local rank = env.source_order_index(src)
+            if not rank or rank <= prior_rank then
+                return leaf_id .. " breaks the fixed #611 source order at " .. tostring(src)
+            end
+            prior_rank = rank
+            local prior_label
+            for _, child_id in ipairs(master_children[master_id] or {}) do
+                local weapon_key = child_id:match("^unlock_" .. career .. "_(.+)$")
+                if not weapon_key then
+                    return tostring(child_id) .. " is not a " .. career .. " unlock row"
+                end
+                if M.weapon_slot[weapon_key] ~= "ranged" then
+                    return child_id .. " is not a ranged weapon row"
+                end
+                if seen[weapon_key] then return leaf_id .. " duplicates " .. weapon_key end
+                seen[weapon_key] = true
+                seen_count = seen_count + 1
+                local entry = loc_raw[child_id]
+                local label = type(entry) == "table" and entry.en
+                if type(label) ~= "string" or label == "" then
+                    return child_id .. " has no English display label"
+                end
+                if label == weapon_key or label == child_id or label:find("^%l%l_") then
+                    return child_id .. " leaks an internal key: " .. label
+                end
+                if label:find("[", 1, true) then
+                    return child_id .. " carries a retired lifecycle tag: " .. label
+                end
+                if env.source_char_of(child_id) ~= src then
+                    return child_id .. " sits in the wrong source group " .. tostring(src)
+                end
+                local lower = string.lower(label)
+                if prior_label and lower < prior_label then
+                    return leaf_id .. "/" .. src .. " is not alphabetical at " .. label
+                end
+                prior_label = lower
+                local redirect = port_status.redirect_target(career, weapon_key)
+                local substitute = port_status.model_substitute(career, weapon_key)
+                if redirect ~= nil and (type(redirect) ~= "string" or redirect == "") then
+                    return child_id .. " has a malformed redirect label"
+                end
+                if substitute ~= nil and (type(substitute) ~= "string" or substitute == "") then
+                    return child_id .. " has a malformed model-substitute label"
+                end
+                if port_status.routing_state(career, weapon_key) == "native"
+                        and (redirect or substitute) then
+                    return child_id .. " invents metadata for a native weapon"
+                end
+            end
+        end
+        local expected = 0
+        for _, weapon_key in ipairs(unlock_map[career] or {}) do
+            if M.weapon_slot[weapon_key] == "ranged" then
+                expected = expected + 1
+                if not seen[weapon_key] then
+                    return leaf_id .. " is missing " .. weapon_key
+                end
+            end
+        end
+        if expected == 0 then return leaf_id .. " has an empty unlock map" end
+        if seen_count ~= expected then
+            return leaf_id .. " renders rows outside the unlock map"
+        end
+    end
+    -- Concrete #108 anchors on the Kruber ranged surface: the shipped pistol
+    -- model substitutes and staff redirects must stay exact, and a native row
+    -- must stay bare.
+    local anchors = {
+        { "model_substitute", "wh_brace_of_pistols", "Repeater Handgun" },
+        { "model_substitute", "wh_repeating_pistols", "Repeater Handgun" },
+        { "redirect_target", "bw_skullstaff_beam", "Empire Greathammer" },
+        { "redirect_target", "bw_necromancy_staff", "Empire Greathammer" },
+        { "redirect_target", "es_handgun", nil },
+        { "model_substitute", "es_longbow", nil },
+    }
+    for _, row in ipairs(anchors) do
+        local got = port_status[row[1]]("es_mercenary", row[2])
+        if got ~= row[3] then
+            return "es_mercenary " .. row[2] .. " " .. row[1] .. " = " .. tostring(got)
+                .. " (want " .. tostring(row[3]) .. ")"
+        end
+    end
+    return nil
+end
+
 return M

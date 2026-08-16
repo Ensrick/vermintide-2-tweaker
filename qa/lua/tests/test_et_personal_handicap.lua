@@ -29,6 +29,20 @@ return function(H, repo_root)
         H.equal(Policy.scale_damage(0, 1.25), 0)
     end)
 
+    H.test("Enemy Tweaker host gate denies client handicaps unless allowed", function()
+        -- Gate off (the default): any client-requested preset resolves to off.
+        H.equal(Policy.effective_preset(false, false, "cataclysm"), "off")
+        H.equal(Policy.effective_preset(false, false, "hardest"), "off")
+        H.equal(Policy.effective_preset(false, nil, "cataclysm"), "off")
+        -- Gate on: the sanitized client preset passes through.
+        H.equal(Policy.effective_preset(false, true, "cataclysm"), "cataclysm")
+        H.equal(Policy.effective_preset(false, true, "not_a_preset"), "off")
+        -- The host's own preset is the host's own setting: never gated.
+        H.equal(Policy.effective_preset(true, false, "cataclysm"), "cataclysm")
+        H.equal(Policy.effective_preset(true, true, "hardest"), "hardest")
+        H.equal(Policy.effective_preset(true, false, "garbage"), "off")
+    end)
+
     H.test("Enemy Tweaker personal handicap uses authenticated host authority", function()
         local runtime = read(repo_root
             .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_personal_handicap.lua")
@@ -124,14 +138,27 @@ return function(H, repo_root)
             live_globadier, Policy.scale_damage), 50)
     end)
 
-    H.test("Enemy Tweaker personal handicap setting is explicit about bounded scope", function()
+    H.test("Enemy Tweaker personal handicap lives in a gated dedicated category", function()
         local data = read(repo_root
             .. "/enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker_data.lua")
         local loc = read(repo_root
             .. "/enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker_localization.lua")
+        H.truthy(data:find('setting_id%s*=%s*"personal_handicap_group"'),
+            "personal handicap category group missing from data file")
         H.truthy(data:find('setting_id%s*=%s*"personal_difficulty"'))
         H.truthy(data:find('default_value%s*=%s*"off"'))
-        H.truthy(loc:find("host must run the same Enemy Tweaker version", 1, true))
-        H.truthy(loc:find("does not change spawns", 1, true))
+        -- The host gate must exist and default OFF (hosts opt in).
+        local gate = data:match('setting_id%s*=%s*"personal_handicap_allow".-default_value%s*=%s*(%a+)')
+        H.equal(gate, "false", "personal_handicap_allow must default to false")
+        -- Every new player-facing string has a loc row.
+        for _, key in ipairs({
+            "personal_handicap_group",
+            "personal_handicap_allow",
+            "personal_handicap_allow_tooltip",
+            "personal_difficulty",
+            "personal_difficulty_tooltip",
+        }) do
+            H.truthy(loc:find(key .. "%s*=%s*{"), "missing loc row: " .. key)
+        end
     end)
 end

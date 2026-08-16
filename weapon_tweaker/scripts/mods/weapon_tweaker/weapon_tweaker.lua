@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.307-beta"
+local MOD_VERSION = "0.12.308-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -225,11 +225,12 @@ local function _migrate_legacy_debug_setting()
     -- future re-introduction of `debug` etc. doesn't pick up a stale
     -- truthy value from years ago. `mod:set(key, false)` is the
     -- safest cross-version write (some VMF builds treat `nil` as
-    -- "no change"). `enable_debug_logging` itself also removed v0.12.176-dev
-    -- (diagnostics now route through VMF channels — see CHANGELOG).
+    -- "no change"). #169: the retired `enable_debug_logging` key receives no
+    -- migration write at all; VMF-native logging owns diagnostics
+    -- (PROJECT_STANDARDS § 3.6), so touching the key here would itself be a
+    -- live executable use of it.
     mod:set("debug", false)
     mod:set("enable_weapon_debug_logging", false)
-    mod:set("enable_debug_logging", false)
     mod:set("wt_debug_migration_v1", true)
 end
 _migrate_legacy_debug_setting()

@@ -197,17 +197,34 @@ M.FAMILIES = {
 					wh_2h_sword = { remap_key = "kerillian_greatsword_to_saltz" },
 				},
 			},
+			-- #916 Half-Swording: the selected sword model keeps rendering while
+			-- the action graph comes from CWV's maul_template (the burn-scrubbed
+			-- one_handed_hammer_wizard_template_1 clone in _cwv_core_templates).
+			-- The donor 1P state machine is authored by vanilla at
+			-- 1h_hammers_wizard.lua:1520; maul_template already carries the
+			-- Kruber-safe two-handed linking, the closed-vocabulary 3P remap onto
+			-- the Kruber greathammer event set, and wield_anim_3p=to_2h_hammer.
+			-- Saltzpyre plays that same greathammer vocabulary natively (the
+			-- greathammer family offers wh_2h_hammer the kruber style with no
+			-- receiver), so no receiver remap or transform is required here.
+			half_swording = {
+				label = "Half-Swording Combat Style",
+				template = "maul_template",
+				resource = "units/beings/player/first_person_base/state_machines/melee/brw_hammer",
+			},
 		},
 		members = {
 			-- Imperial Longsword remains a persistence/migration style for
 			-- pre-#620 exact instances, but it shares the native Greatsword
 			-- action graph and therefore is not a second public moveset choice.
 			-- Keep Bretonnian third, matching the authored equipment ordinal.
-			es_2h_sword = { default = "greatsword", order = { "greatsword", "kerillian", "bretonnian" } },
-			wh_2h_sword = { default = "greatsword", order = { "greatsword", "kerillian", "bretonnian" } },
-			es_bastard_sword = { default = "bretonnian", order = { "bretonnian", "greatsword", "kerillian" } },
-			cwv_es_longsword = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword" } },
-			cwv_es_longsword_blackguard = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword" } },
+			-- #916: Half-Swording APPENDS after every existing ordinal so no
+			-- saved cycle position moves.
+			es_2h_sword = { default = "greatsword", order = { "greatsword", "kerillian", "bretonnian", "half_swording" } },
+			wh_2h_sword = { default = "greatsword", order = { "greatsword", "kerillian", "bretonnian", "half_swording" } },
+			es_bastard_sword = { default = "bretonnian", order = { "bretonnian", "greatsword", "kerillian", "half_swording" } },
+			cwv_es_longsword = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword", "half_swording" } },
+			cwv_es_longsword_blackguard = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword", "half_swording" } },
 		},
 	},
 	greathammer = {

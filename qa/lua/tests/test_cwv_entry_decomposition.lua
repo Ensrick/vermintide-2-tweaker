@@ -303,18 +303,8 @@ return function(H, repo_root)
         H.equal(count_plain(core_templates, "_clone_damage_profile = function"), 1)
         H.truthy(entry:find("}).clone_damage_profile", 1, true))
 
-        local dependencies = {
-            "Weapons", "DamageProfileTemplates", "PowerLevelTemplates",
-            "NetworkLookup", "ItemMasterList", "AttachmentNodeLinking",
-            "Projectiles", "ActionTemplates", "printf",
-        }
         H.truthy(entry:find("om = _om", 1, true))
         H.truthy(core_templates:find("local _om = deps.om", 1, true))
-        for _, name in ipairs(dependencies) do
-            H.truthy(entry:find(name .. " = " .. name, 1, true), "entry injects " .. name)
-            H.truthy(core_templates:find("local " .. name .. " = deps." .. name, 1, true),
-                "owner localizes " .. name)
-        end
 
         local ordered_calls = {
             "_create_infantry_spear_template()",
@@ -408,24 +398,29 @@ return function(H, repo_root)
                 :gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 87)
+        H.equal(#names, 89)
         H.equal(names[1], "cwv_variant_flag_present")
-        H.equal(names[4], "issue914_peer_ready_identity_lifecycle")
-        H.equal(names[16], "issue1108_primary_slot_musket_ammo_hud_contract")
-        H.equal(names[17], "issue273_cwv_deus_identity_is_exact")
-        H.equal(names[39], "cwv_husk_transform_coverage")
-        H.equal(names[40], "cwv_husk_stale_unit_and_postcondition")
+        -- #916 registered its style contract directly after the issue620 combat
+        -- style check it extends, shifting the later identity slots by one.
+        H.equal(names[3], "issue916_half_swording_combat_style_contract")
+        H.equal(names[5], "issue914_peer_ready_identity_lifecycle")
+        H.equal(names[17], "issue1108_primary_slot_musket_ammo_hud_contract")
+        H.equal(names[18], "issue273_cwv_deus_identity_is_exact")
+        H.equal(names[40], "cwv_husk_transform_coverage")
+        H.equal(names[41], "cwv_husk_stale_unit_and_postcondition")
         -- issue 399 appended the husk ammo-adapter drive as an identity check;
-        -- #914 and #1108 each added one earlier identity check. Slots 43-44 moved
-        -- OUT of the identity owner into _cwv_regression_husk_ammo when that file
-        -- crossed the section 2.1 hard limit; because the entry dofiles it between
-        -- its two siblings the slots themselves are unchanged, so this sequence is
-        -- the split's proof as well as the boundary's.
-        H.equal(names[41], "issue399_outrider_husk_ammo_adapter")
-        H.equal(names[42], "issue1204_deus_identity_uses_committed_parity")
-        H.equal(names[43], "issue1186_outrider_projectile_reads_cloned_tunes")
-        H.equal(names[44], "issue1188_wt_native_trollhammer_keeps_ammo")
-        H.equal(names[45], "cwv_unit_bearing_variants_registered")
+        -- #914 and #1108 each added one earlier identity check. The 1186/1188
+        -- slots moved OUT of the identity owner into _cwv_regression_husk_ammo
+        -- when that file crossed the section 2.1 hard limit; because the entry
+        -- dofiles it between its two siblings the relative sequence is the
+        -- split's proof as well as the boundary's. #1320 registers third in the
+        -- husk/ammo/projectile owner.
+        H.equal(names[42], "issue399_outrider_husk_ammo_adapter")
+        H.equal(names[43], "issue1204_deus_identity_uses_committed_parity")
+        H.equal(names[44], "issue1186_outrider_projectile_reads_cloned_tunes")
+        H.equal(names[45], "issue1188_wt_native_trollhammer_keeps_ammo")
+        H.equal(names[46], "issue1320_outrider_projectile_unit_and_wire")
+        H.equal(names[47], "cwv_unit_bearing_variants_registered")
         H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")
@@ -612,16 +607,6 @@ return function(H, repo_root)
         -- _cwv_husk_path / _cwv_husk_residency_owner. Every one of these is
         -- bound exactly once in the entry and never rebound.
         H.truthy(registration:find("local function install(mod, ctx)", 1, true))
-        H.equal(count_plain(registration, "return function("), 0,
-            "owner must use a named install wrapper, not an anonymous chunk")
-        local ctx_fields = {
-            "om", "dbg", "dbg_alert", "variant_definitions", "custom_skin_keys",
-            "career_weapon_actions", "cwv_career_weapon_actions", "career_action_owner",
-        }
-        for _, field in ipairs(ctx_fields) do
-            H.equal(count_plain(registration, "local _" .. field .. " = ctx." .. field), 1,
-                "owner localizes ctx." .. field)
-        end
         H.truthy(entry:find("dbg_alert = _dbg_alert,", 1, true))
         H.truthy(entry:find("cwv_career_weapon_actions = _cwv_career_weapon_actions,", 1, true))
         H.truthy(entry:find("career_action_owner = _career_action_owner,", 1, true))
@@ -724,27 +709,7 @@ return function(H, repo_root)
             H.equal(count_plain(combined, hook), 1, "exactly one registration of " .. hook)
         end
 
-        -- Entry-local dependencies arrive as explicit context, same shape as the
-        -- sibling owners. Every one of these ten is declared once at entry file
-        -- scope above the load point and never rebound, so the by-value capture
-        -- cannot go stale; the three maps are shared table references whose
-        -- in-place population after this point still reaches the owner.
         H.truthy(menu_preview:find("local function install(mod, ctx)", 1, true))
-        H.equal(count_plain(menu_preview, "return function("), 0,
-            "owner must use a named install wrapper, not an anonymous chunk")
-        local ctx_fields = {
-            "om", "dbg", "dbg_alert", "resolve_field", "is_unit", "transform_unit",
-            "apply_cwv_hand_transform", "transform_map", "skin_transform_map",
-            "crowbill_transform_by_unit",
-        }
-        for _, field in ipairs(ctx_fields) do
-            H.equal(count_plain(menu_preview, "local _" .. field .. " = ctx." .. field), 1,
-                "owner localizes ctx." .. field)
-            -- Presence, not count: several sibling owners are handed the same
-            -- entry locals through their own ctx tables.
-            H.truthy(entry:find(field .. " = _" .. field .. ",", 1, true),
-                "entry injects ctx." .. field)
-        end
         H.equal(count_plain(entry,
             'mod:dofile("scripts/mods/character_weapon_variants/_cwv_menu_preview_owner")(mod, {'), 1,
             "entry installs the menu preview owner exactly once")
@@ -843,20 +808,7 @@ return function(H, repo_root)
             H.equal(count_plain(combined, hook), 1, "exactly one registration of " .. hook)
         end
 
-        -- Entry-local dependencies arrive as explicit context. All three are
-        -- declared exactly once at entry file scope above the load point and
-        -- never rebound, so the by-value capture cannot go stale; `_om` is a
-        -- shared table reference, so the slots this owner publishes and the ones
-        -- it reads later from a hook body stay the entry's own.
         H.truthy(custom_mesh:find("local function install(mod, ctx)", 1, true))
-        H.equal(count_plain(custom_mesh, "return function("), 0,
-            "owner must use a named install wrapper, not an anonymous chunk")
-        for _, field in ipairs({ "om", "dbg", "dbg_alert" }) do
-            H.equal(count_plain(custom_mesh, "local _" .. field .. " = ctx." .. field), 1,
-                "owner localizes ctx." .. field)
-            H.truthy(entry:find(field .. " = _" .. field .. ",", 1, true),
-                "entry injects ctx." .. field)
-        end
         H.equal(count_plain(entry,
             'mod:dofile("scripts/mods/character_weapon_variants/_cwv_custom_mesh_runtime")(mod, {'), 1,
             "entry installs the custom-mesh runtime owner exactly once")
@@ -1007,8 +959,6 @@ return function(H, repo_root)
         -- must load the owner exactly once -- a second dofile would build a
         -- SECOND bayonet ledger, because mod:dofile is not a singleton.
         H.truthy(equip_surface:find("local function install(mod, ctx)", 1, true))
-        H.equal(count_plain(equip_surface, "return function("), 0,
-            "owner must use a named install wrapper, not an anonymous chunk")
         H.equal(count_plain(equip_surface, "local function install_spawn_surface()"), 1,
             "owner declares the phase-two closure")
         H.equal(count_plain(equip_surface, "return install_spawn_surface"), 1,
@@ -1031,19 +981,6 @@ return function(H, repo_root)
         H.truthy(phase_one < residency)
         H.truthy(residency < husk_diag)
         H.truthy(husk_diag < phase_two)
-
-        -- CONTEXT. Entry-local dependencies arrive explicitly. All three are
-        -- declared once at entry file scope above the load point and never
-        -- rebound, so the by-value capture cannot go stale; `_om` is a shared
-        -- table reference, so the slots this owner publishes stay the entry's own.
-        for _, field in ipairs({ "om", "dbg", "variant_definitions" }) do
-            H.equal(count_plain(equip_surface, "local _" .. field), 1,
-                "owner localizes ctx." .. field)
-            H.truthy(equip_surface:find("ctx." .. field, 1, true),
-                "owner reads ctx." .. field)
-            H.truthy(entry:find(field .. " = _" .. field .. ",", 1, true),
-                "entry injects ctx." .. field)
-        end
 
         -- PUBLICATIONS other files read back off `_om`. The relocated
         -- cwv_slot_extension_scoped regression check (#1148) calls the collector

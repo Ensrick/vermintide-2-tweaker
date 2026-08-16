@@ -146,7 +146,8 @@ return function(H, repo_root)
         module.install(mod, function(name, fn)
             checks[#checks + 1] = { name = name, fn = fn }
         end, deps)
-        H.equal(#checks, 62)
+        -- 62 -> 64: #696 prespawn-lease + #1147 surface-glow checks (2026-08-16).
+        H.equal(#checks, 64)
         H.equal(checks[1].name, "cos_la_reconcile_and_pull_wired")
         H.equal(checks[2].name, "cos_replay_reconciler_wired")
         -- #25: the cold-load contract must stay registered directly after the

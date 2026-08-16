@@ -130,6 +130,9 @@ mod.update = function(dt)
     -- dispatch keeps the single mod.update owner while monitoring the one live
     -- Halescourge unit for its Cataclysm half-health threshold.
     if ET.boss_behavior_update then ET.boss_behavior_update() end
+    -- #324 bounded Skaven Warlord spawn diagnostics: drives the +5s/+15s
+    -- samples for at most 4 instrumented spawns per session.
+    if ET.warlord_diag_update then ET.warlord_diag_update() end
 end
 
 ET.rt_register("issue560_settings_reapply_coalesced", function()
