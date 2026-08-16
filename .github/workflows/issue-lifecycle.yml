@@ -24,7 +24,10 @@ jobs:
   tracker-guard:
     if: ${{ github.event_name != 'issue_comment' || !github.event.issue.pull_request }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The blocking label/card grammar is fast. The staged report-only source
+    # audit may hydrate and tokenize historical Lua blobs from every deployed
+    # record; give that immutable audit a bounded but realistic window.
+    timeout-minutes: 20
     steps:
       - name: Checkout default-branch policy
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -34,9 +37,12 @@ jobs:
           # named by the release manifest. Full history preserves that
           # authority; the blob filter still excludes multi-gigabyte bundles.
           fetch-depth: 0
-          # Hydrate current active Lua sources in the checkout's initial pack.
-          # Most deployed blobs are shared with current source, so this avoids
-          # one promisor-network fetch per historical git show/grep (#750).
+          # Source authority hydrates only the immutable Lua blobs named by
+          # deployed commits; blob:none keeps unrelated ~7 GiB bundles out of
+          # the checkout while git archive fetches those exact objects (#540).
+          # The sparse patterns below also land current active Lua in the
+          # initial pack, and most deployed blobs are shared with it, so the
+          # authority's batched prefetch has little left to hydrate (#750).
           filter: 'blob:none'
           sparse-checkout-cone-mode: false
           sparse-checkout: |

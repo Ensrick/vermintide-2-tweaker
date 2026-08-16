@@ -68,6 +68,7 @@ param(
     [string]$StreamIdentity,
     [string]$NewManifest,
     [string]$Repository = 'Ensrick/vermintide-2-tweaker',
+    [string]$DeploymentManifestPath,
     [int]$MaxIssues = 100,
     [switch]$DryRun,
     [switch]$SelfTest
@@ -526,6 +527,26 @@ function Get-VtCardRefreshPlan {
     return $result
 }
 
+function Get-VtRefreshedCardAuthorityDecision {
+    param([string]$Body, $Authority)
+    if (-not $Authority) {
+        return [pscustomobject]@{
+            Valid = $false
+            Errors = @('live-card-authority-unavailable')
+        }
+    }
+    return Get-VtLiveTestCardSelection -Comments @([pscustomobject]@{ body = $Body }) `
+        -Authority $Authority -EnforceAuthority
+}
+
+function Test-VtRefreshManifestInputAllowed {
+    param([string]$Path, [bool]$IsDryRun)
+    # A local manifest is useful for offline/read-only rehearsal, but its bytes
+    # do not prove the current hosted release. Never let fixture input authorize
+    # a GitHub card mutation.
+    return [string]::IsNullOrWhiteSpace($Path) -or $IsDryRun
+}
+
 # ---------------------------------------------------------------------------
 # Offline self-test (qa convention: exit 0 = OK, exit 2 = regression). Pure
 # fixtures modeled on real pinned cards (#52 single-mod, #278/#918 multi-mod,
@@ -637,6 +658,29 @@ function Invoke-RefreshCardsSelfTest {
     Assert ($plan.NewBody -match 'manifest `999000111`') 'manifest token advanced with backticks preserved'
     Assert ($plan.NewBody -notmatch '3145935923988224185') 'stale manifest gone'
     Assert ($plan.NewBody -match '1\. Play the mission normally\.') 'step text untouched'
+
+    $refreshFixtureAuthority = [pscustomobject]@{ Records = @([pscustomobject]@{
+        ModId='ct_dev'; Version='0.7.320-dev'; WorkshopId='3733366926'
+        LoadRoutes=@([pscustomobject]@{Marker='[ct:LOAD]'})
+        ExactBannerRoutes=@(); CommandRoutes=@(); MenuSurfaces=@()
+        ReceiptRoutes=@([pscustomobject]@{
+            Marker='[ct:491]'; Signature='[ct:491] tick=%d'; Bound=$false
+        })
+    }) }
+    $refreshAuthorityDecision = Get-VtRefreshedCardAuthorityDecision -Body $plan.NewBody -Authority $refreshFixtureAuthority
+    Assert $refreshAuthorityDecision.Valid 'source-authoritative refreshed card may be written'
+    $unboundedRefresh = $plan.NewBody.Replace(
+        'The run completes without a crash on v0.7.320-dev.',
+        'Exactly one `[ct:491] tick=1` receipt appears.'
+    )
+    $unboundedRefreshDecision = Get-VtRefreshedCardAuthorityDecision -Body $unboundedRefresh -Authority $refreshFixtureAuthority
+    Assert (-not $unboundedRefreshDecision.Valid -and @($unboundedRefreshDecision.Errors | Where-Object {
+        $_ -like 'diagnostic-evidence-not-bounded:*'
+    }).Count -eq 1) 'refresher rejects a rewritten card whose exact receipt route is unbounded'
+    $missingRefreshAuthority = Get-VtRefreshedCardAuthorityDecision -Body $plan.NewBody
+    Assert (-not $missingRefreshAuthority.Valid -and $missingRefreshAuthority.Errors -contains 'live-card-authority-unavailable') 'refresher fails closed without deployed-source authority'
+    Assert (-not (Test-VtRefreshManifestInputAllowed -Path 'fixture-manifest.json' -IsDryRun $false)) 'local manifest cannot authorize a live card mutation'
+    Assert (Test-VtRefreshManifestInputAllowed -Path 'fixture-manifest.json' -IsDryRun $true) 'local manifest remains available for a read-only dry run'
 
     $second = Get-VtCardRefreshPlan -Body $plan.NewBody -PublishedId '3733366926' -NewVersion '0.7.320-dev' -LoadTag 'ct' -NewManifest '999000111'
     Assert ($second.Status -eq 'current') 'second pass is a no-op (idempotent)'
@@ -958,6 +1002,10 @@ if ([string]::IsNullOrWhiteSpace($PublishedId) -or [string]::IsNullOrWhiteSpace(
     Write-Host 'refresh-cards: -PublishedId, -NewVersion, -LoadTag, -ModDirectory, and -StreamIdentity are required (or use -SelfTest).' -ForegroundColor Red
     exit 2
 }
+if (-not (Test-VtRefreshManifestInputAllowed -Path $DeploymentManifestPath -IsDryRun ([bool]$DryRun))) {
+    Write-Host 'refresh-cards: -DeploymentManifestPath is fixture input and requires -DryRun; live mutations must use the hosted latest release.' -ForegroundColor Red
+    exit 2
+}
 if ($Repository -notmatch '^([^/]+)/([^/]+)$') {
     Write-Host "refresh-cards: Repository must be OWNER/NAME, got '$Repository'." -ForegroundColor Red
     exit 2
@@ -967,6 +1015,15 @@ $repoName = $Matches[2]
 $displayVersion = 'v' + $NewVersion.TrimStart('v', 'V')
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+try {
+    $deploymentManifest = Get-VtCardDeploymentManifest -Repository $Repository -ManifestJsonPath $DeploymentManifestPath
+    $sourceAuthority = Get-VtCardSourceAuthority -RepoRoot $repoRoot -DeploymentManifest $deploymentManifest
+    $liveTestAuthority = New-VtLiveTestCardAuthority -Source $sourceAuthority -DeploymentManifest $deploymentManifest
+}
+catch {
+    Write-Host ("refresh-cards: deployed live-test authority unavailable -- {0}" -f $_.Exception.Message) -ForegroundColor Red
+    exit 2
+}
 $streamInventory = @(Get-VtStreamInventory -RepoRoot $repoRoot)
 $currentStreams = @($streamInventory | Where-Object { $_.Directory -eq $ModDirectory })
 if ($currentStreams.Count -ne 1) {
@@ -1180,6 +1237,14 @@ try {
                     $summary['current']++
                 }
                 'refresh' {
+                    $authorityDecision = Get-VtRefreshedCardAuthorityDecision -Body $plan.NewBody -Authority $liveTestAuthority
+                    if (-not $authorityDecision.Valid) {
+                        Write-Host ("  ! {0}: skipped-unparseable -- refreshed card fails deployed-source authority: {1}" -f `
+                            $cardRef, (@($authorityDecision.Errors) -join ', ')) -ForegroundColor Yellow
+                        $summary['skipped-unparseable']++
+                        $exitCode = 1
+                        continue
+                    }
                     Write-Host ("  + {0}: refreshed [{1}] -- {2}" -f $cardRef, $plan.MatchedBy, ($plan.Changes -join '; ')) -ForegroundColor Green
                     Write-VtCardLineDiff -OldBody ([string]$card.body) -NewBody $plan.NewBody
                     if (-not $DryRun) {

@@ -7,7 +7,8 @@
 param(
     [string]$Repository = 'Ensrick/vermintide-2-tweaker',
     [string]$IssuesJsonPath,
-    [string]$ReleaseManifestPath,
+    [string]$DeploymentManifestPath,
+    [switch]$EnforceAuthority,
     [switch]$SelfTest
 )
 
@@ -15,10 +16,15 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repoRoot 'tools/verify/lifecycle_method_policy.ps1')
 
-function Get-LifecycleViolations($Issues, [switch]$RequirePinnedCard, $Contract) {
+# One decision pass serves both the blocking verdict and the report-only
+# authority findings. Evaluating each issue twice doubled the card-policy
+# phase for no new information, which the #750 timing evidence would then
+# have reported as an inflated policy budget.
+function Get-LifecycleDecisionReport($Issues, [switch]$RequirePinnedCard, $Authority, [switch]$EnforceAuthority) {
     $violations = @()
+    $findings = @()
     foreach ($issue in @($Issues)) {
-        $decision = Get-VtOpenIssueLifecycleDecision -Issue $issue -RequirePinnedCard:$RequirePinnedCard -Contract $Contract
+        $decision = Get-VtOpenIssueLifecycleDecision -Issue $issue -RequirePinnedCard:$RequirePinnedCard -Authority $Authority -EnforceAuthority:$EnforceAuthority
         if (-not $decision.Valid) {
             $violations += [PSCustomObject][ordered]@{
                 number = [int]$issue.number
@@ -27,8 +33,65 @@ function Get-LifecycleViolations($Issues, [switch]$RequirePinnedCard, $Contract)
                 errors = @($decision.Errors)
             }
         }
+        if ($decision.Ready -and @($decision.Advisories).Count -gt 0) {
+            $findings += [pscustomobject][ordered]@{
+                number = [int]$issue.number
+                title = [string]$issue.title
+                advisories = @($decision.Advisories)
+            }
+        }
     }
-    return @($violations)
+    return [pscustomobject]@{ Violations=@($violations); AuthorityFindings=@($findings) }
+}
+
+function Get-LifecycleViolations($Issues, [switch]$RequirePinnedCard, $Authority, [switch]$EnforceAuthority) {
+    $report = Get-LifecycleDecisionReport -Issues $Issues -RequirePinnedCard:$RequirePinnedCard -Authority $Authority -EnforceAuthority:$EnforceAuthority
+    return @($report.Violations)
+}
+
+function Get-LifecycleAuthorityFindings($Issues, [switch]$RequirePinnedCard, $Authority, [switch]$EnforceAuthority) {
+    $report = Get-LifecycleDecisionReport -Issues $Issues -RequirePinnedCard:$RequirePinnedCard -Authority $Authority -EnforceAuthority:$EnforceAuthority
+    return @($report.AuthorityFindings)
+}
+
+function Get-VtLifecycleAuthorityContext {
+    param(
+        [string]$RepoRoot,
+        [string]$Repository,
+        [string]$DeploymentManifestPath,
+        [switch]$EnforceAuthority
+    )
+    # The deployment-manifest fetch and the deployed-source index are the two
+    # network/git phases of authority acquisition, so they are measured here
+    # and surfaced to the caller's #750 timing line rather than re-fetched
+    # outside this function just to be timed.
+    $manifestSeconds = $null
+    $sourceSeconds = $null
+    $phaseTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        $deploymentManifest = Get-VtCardDeploymentManifest -Repository $Repository -ManifestJsonPath $DeploymentManifestPath
+        $manifestSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+        $phaseTimer.Restart()
+        $sourceAuthority = Get-VtCardSourceAuthority -RepoRoot $RepoRoot -DeploymentManifest $deploymentManifest
+        $sourceSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+        return [pscustomobject]@{
+            Authority = New-VtLiveTestCardAuthority -Source $sourceAuthority -DeploymentManifest $deploymentManifest
+            Error = $null
+            ManifestSeconds = [int]$manifestSeconds
+            SourceSeconds = [int]$sourceSeconds
+        }
+    }
+    catch {
+        if ($EnforceAuthority) { throw }
+        if ($null -eq $manifestSeconds) { $manifestSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds) }
+        elseif ($null -eq $sourceSeconds) { $sourceSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds) }
+        return [pscustomobject]@{
+            Authority = $null
+            Error = $_.Exception.Message
+            ManifestSeconds = [int]$manifestSeconds
+            SourceSeconds = [int]$sourceSeconds
+        }
+    }
 }
 
 function New-TestCard([string]$Topology = 'Solo', [string]$Steps = '1. Equip Kruber''s Mace in the Keep.', [string]$SoloStatus = '') {
@@ -54,73 +117,13 @@ function Get-VtGraphQlRetryDelaySeconds([int]$FailedAttempt) {
     }
 }
 
-function Invoke-VtGhReadWithRetry {
-    param([string[]]$Arguments)
-    $raw = $null
-    $exitCode = 0
-    for ($attempt = 1; $attempt -le 4; $attempt++) {
-        $oldPreference = $ErrorActionPreference
-        try {
-            $ErrorActionPreference = 'Continue'
-            $raw = & gh @Arguments 2>&1 | Out-String
-            $exitCode = $LASTEXITCODE
-        }
-        finally {
-            $ErrorActionPreference = $oldPreference
-        }
-        if ($exitCode -eq 0) { return $raw }
-        $delaySeconds = Get-VtGraphQlRetryDelaySeconds $attempt
-        if ($delaySeconds -le 0 -or -not (Test-VtRetryableGitHubTransportError $raw)) {
-            throw "gh $($Arguments -join ' ') failed (exit $exitCode, attempt $attempt/4): $raw"
-        }
-        Write-Warning "Transient GitHub transport failure (attempt $attempt/4); retrying in $delaySeconds second(s)."
-        Start-Sleep -Seconds $delaySeconds
-    }
-    throw "gh $($Arguments -join ' ') failed (exit $exitCode after 4 attempts): $raw"
-}
-
-function Get-VtLatestReleaseManifest {
-    param([string]$Repository, [string]$Path)
-
-    if ($Path) {
-        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-            throw "Release manifest fixture not found: $Path"
-        }
-        return (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
-    }
-
-    $releaseRaw = Invoke-VtGhReadWithRetry @('api', "repos/$Repository/releases/latest")
-    $release = $releaseRaw | ConvertFrom-Json
-    $assets = @($release.assets | Where-Object { [string]$_.name -eq 'manifest.json' })
-    if ($assets.Count -ne 1) {
-        throw "Latest release '$($release.tag_name)' must contain exactly one manifest.json asset; found $($assets.Count)."
-    }
-    $manifestRaw = Invoke-VtGhReadWithRetry @(
-        'api', [string]$assets[0].url,
-        '-H', 'Accept: application/octet-stream'
-    )
-    $manifest = $manifestRaw | ConvertFrom-Json
-    if ([string]$manifest.release_tag -ne [string]$release.tag_name) {
-        throw "Latest release tag '$($release.tag_name)' does not match manifest release_tag '$($manifest.release_tag)'."
-    }
-    return $manifest
-}
-
 function Invoke-SelfTest {
     Invoke-VtDeployedSourceContractSelfTest
-    $contract = [pscustomobject]@{
-        Entries = @(
-            [pscustomobject]@{ Directory='weapon_tweaker_dev'; ModId='wt_dev'; WorkshopId='3748824853'; Version='1.2.3-dev'; LoadTags=@('wt'); Commands=@('wt_probe'); PrintfReceipts=@('[wt:probe]') },
-            [pscustomobject]@{ Directory='weapons_of_chaos'; ModId='WOC'; WorkshopId='3753880932'; Version='0.1.42-dev'; LoadTags=@('WOC'); Commands=@('woc_pose_reset'); PrintfReceipts=@('[WOC:633]') }
-        )
-        Commands = @('woc_pose_reset', 'gt_regression_test', 'scrub_official_loadouts')
-        PrintfReceipts = @('[wt:probe]')
-    }
     $validSolo = New-TestCard
     $validExactBanner = "## CURRENT LIVE TEST`n`n**Build/banner:** exact banner: [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
     $unlabeledExactBanner = "## CURRENT LIVE TEST`n`n**Build/banner:** [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
     $unversionedExactBanner = "## CURRENT LIVE TEST`n`n**Build/banner:** v0.1.42-dev, exact banner: [WOC] loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
-    $validSlashCommand = New-TestCard -Steps '1. Run `/wt_probe` in chat and read the visible result.'
+    $validSlashCommand = New-TestCard -Steps "1. Run ``/woc_pose_reset`` in chat.`n2. Run ``/gt_regression_test`` when it finishes.`n3. Run ``/scrub_official_loadouts`` and read the result."
     $validCoop = New-TestCard -Topology 'Co-op (host and one client)' -SoloStatus 'Passed; remote rendering remains.' -Steps "1. Host equips Kruber's Mace.`n2. The joining player observes it."
     $fixture = @(
         [pscustomobject]@{ number=1; title='waiting'; labels=@(@{name='not-started'}); comments=@() },
@@ -160,27 +163,12 @@ function Invoke-SelfTest {
         ) },
         [pscustomobject]@{ number=21; title='pin state unavailable'; labels=@(@{name='verify-fix'}); comments=@(
             [pscustomobject]@{body=$validSolo; createdAt='2026-07-22T00:00:00Z'}
-        ) },
-        [pscustomobject]@{ number=22; title='undeployed build'; labels=@(@{name='verify-fix'}); comments=@((New-TestComment ($validSolo -replace '1\.2\.3-dev', '1.2.4-dev'))) },
-        [pscustomobject]@{ number=23; title='invented command'; labels=@(@{name='diagnostics-armed'}); comments=@((New-TestComment (New-TestCard -Steps '1. Run `/invented_probe` in chat.'))) },
-        [pscustomobject]@{ number=24; title='contradictory receipt'; labels=@(@{name='verify-fix'}); comments=@((New-TestComment ($validSolo + "`n**Workshop:** item ``3748824853``, manifest ``111111111`` `n**Current deployed floor:** item ``3748824853``, ManifestID ``222222222``"))) },
-        [pscustomobject]@{ number=25; title='printf receipt'; labels=@(@{name='diagnostics-armed'}); comments=@((New-TestComment ((New-TestCard -Steps '1. Run `/wt_probe` in chat.') -replace 'The selected weapon behaves normally\.', 'The log contains `[wt:probe]` once.'))) },
-        [pscustomobject]@{ number=26; title='non-printf receipt'; labels=@(@{name='diagnostics-armed'}); comments=@((New-TestComment ((New-TestCard -Steps '1. Run `/wt_probe` in chat.') -replace 'The selected weapon behaves normally\.', 'The log contains `[wt:missing]` once.'))) },
-        [pscustomobject]@{ number=27; title='wrong workshop binding'; labels=@(@{name='verify-fix'}); comments=@((New-TestComment ($validSolo -replace 'confirm `\[wt:LOAD\]`', 'confirm `[wt:LOAD]`; Workshop item `3753880932`'))) },
-        [pscustomobject]@{ number=28; title='ordered multi-mod receipts'; labels=@(@{name='verify-fix'}); comments=@((New-TestComment ((($validSolo -replace '(?m)(^\*\*Build/banner:\*\*.+)$', '$1; exact banner: [WOC] v0.1.42-dev loaded')) + "`n**Workshop receipts:** Weapon Tweaker item ``3748824853``, ManifestID ``999999999``; Weapons of Chaos item ``3753880932``, ManifestID ``111111111``"))) },
-        [pscustomobject]@{ number=29; title='historical receipt note ignored'; labels=@(@{name='diagnostics-armed'}); comments=@((New-TestComment (((New-TestCard -Steps '1. Run `/wt_probe` in chat.') -replace 'The selected weapon behaves normally\.', 'The log contains `[wt:probe]` once.') + "`n`nNote: the retired tag was `[wt:not_real]`."))) },
-        [pscustomobject]@{ number=30; title='unbound sibling version'; labels=@(@{name='verify-fix'}); comments=@((New-TestComment ($validSolo -replace 'confirm `\[wt:LOAD\]`', 'confirm `[wt:LOAD]`; public mirror v1.2.2-beta'))) },
-        [pscustomobject]@{ number=31; title='cross-build command'; labels=@(@{name='diagnostics-armed'}); comments=@((New-TestComment ((New-TestCard -Steps '1. Run `/woc_pose_reset` in chat.') -replace 'The selected weapon behaves normally\.', 'The log contains `[wt:probe]` once.'))) },
-        [pscustomobject]@{ number=32; title='missing diagnostic receipt prefix'; labels=@(@{name='diagnostics-armed'}); comments=@((New-TestComment ((New-TestCard -Steps '1. Run `/wt_probe` in chat.') -replace 'The selected weapon behaves normally\.', 'Inspect the log for the diagnostic result.'))) },
-        [pscustomobject]@{ number=33; title='cross-build receipt'; labels=@(@{name='diagnostics-armed'}); comments=@((New-TestComment ((New-TestCard -Steps '1. Run `/wt_probe` in chat.') -replace 'The selected weapon behaves normally\.', 'The log contains `[WOC:633]` once.'))) },
-        [pscustomobject]@{ number=34; title='wrong separate Workshop binding'; labels=@(@{name='verify-fix'}); comments=@((New-TestComment ($validSolo + "`n**Workshop:** item ``3753880932``"))) },
-        [pscustomobject]@{ number=35; title='continued expected receipt'; labels=@(@{name='diagnostics-armed'}); comments=@((New-TestComment (((New-TestCard -Steps '1. Run `/wt_probe` in chat.') -replace 'The selected weapon behaves normally\.', 'The visible probe completes.') + "`n`nThe log contains `[wt:probe]` once.`n`nDeployed floor: old `[wt:missing]`."))) },
-        [pscustomobject]@{ number=36; title='negative log assertion'; labels=@(@{name='diagnostics-armed'}); comments=@((New-TestComment ((New-TestCard -Steps '1. Inspect the visible overlay.') -replace 'The selected weapon behaves normally\.', 'The overlay remains stable without log spam.'))) }
+        ) }
     )
-    $violations = @(Get-LifecycleViolations -Issues $fixture -RequirePinnedCard -Contract $contract)
+    $violations = @(Get-LifecycleViolations -Issues $fixture -RequirePinnedCard)
     $bad = @($violations.number | Sort-Object)
-    if (($bad -join ',') -ne '4,5,6,7,9,10,11,12,13,15,16,18,19,21,22,23,24,26,27,30,31,32,33,34') { throw "unexpected violations: $($bad -join ',')" }
-    foreach ($ok in 1,2,3,8,14,17,20,25,28,29,35,36) {
+    if (($bad -join ',') -ne '4,5,6,7,9,10,11,12,13,15,16,18,19,21') { throw "unexpected violations: $($bad -join ',')" }
+    foreach ($ok in 1,2,3,8,14,17,20) {
         if ($bad -contains $ok) { throw "valid fixture #$ok rejected" }
     }
     $coop = @($violations | Where-Object number -eq 9)[0]
@@ -193,16 +181,116 @@ function Invoke-SelfTest {
     if ($doublePinned.errors -notcontains 'live-card-pinned-current-live-test-card-count-2') { throw 'one-pinned-card cardinality gate missing' }
     $unknownPin = @($violations | Where-Object number -eq 21)[0]
     if ($unknownPin.errors -notcontains 'live-card-current-live-test-card-pin-state-unavailable') { throw 'unknown pin-state gate missing' }
-    if (@($violations | Where-Object number -eq 22)[0].errors -notcontains 'live-card-undeployed-build-wt-1.2.4-dev') { throw 'deployed build gate missing' }
-    if (@($violations | Where-Object number -eq 23)[0].errors -notcontains 'live-card-unregistered-command-invented_probe') { throw 'registered command gate missing' }
-    if (@($violations | Where-Object number -eq 24)[0].errors -notcontains 'live-card-contradictory-manifest-ids-3748824853') { throw 'manifest contradiction gate missing' }
-    if (@($violations | Where-Object number -eq 26)[0].errors -notcontains 'live-card-requested-receipt-not-printf-wt:missing') { throw 'printf receipt gate missing' }
-    if (@($violations | Where-Object number -eq 27)[0].errors -notcontains 'live-card-workshop-item-not-bound-to-build-3753880932') { throw 'Workshop/build binding gate missing' }
-    if (@($violations | Where-Object number -eq 30)[0].errors -notcontains 'live-card-unbound-build-version-1.2.2-beta') { throw 'unbound build-version gate missing' }
-    if (@($violations | Where-Object number -eq 31)[0].errors -notcontains 'live-card-unregistered-command-woc_pose_reset') { throw 'cross-build command gate missing' }
-    if (@($violations | Where-Object number -eq 32)[0].errors -notcontains 'live-card-diagnostic-log-evidence-prefix-missing') { throw 'missing diagnostic receipt prefix gate missing' }
-    if (@($violations | Where-Object number -eq 33)[0].errors -notcontains 'live-card-requested-receipt-not-printf-WOC:633') { throw 'cross-build receipt gate missing' }
-    if (@($violations | Where-Object number -eq 34)[0].errors -notcontains 'live-card-workshop-item-not-bound-to-build-3753880932') { throw 'separate Workshop/build binding gate missing' }
+
+    # Planted authoritative-card fixtures. These are deliberately separate
+    # from the structural lifecycle fixtures above so the old parser tests do
+    # not silently become coupled to a made-up release.
+    $authority = [pscustomobject]@{
+        Records = @(
+            [pscustomobject]@{
+                ModId='wt_dev'; Version='1.2.3-dev'; WorkshopId='1111111111'
+                LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'})
+                ExactBannerRoutes=@([pscustomobject]@{Tag='[wt]'})
+                CommandRoutes=@(
+                    [pscustomobject]@{Command='/gt_regression_test'},
+                    [pscustomobject]@{Command='/other_probe'}
+                )
+                ReceiptRoutes=@(
+                    [pscustomobject]@{Marker='[gt:probe]';Signature='[gt:probe] result=%s';Bound=$true;ActionCommands=@('/gt_regression_test')},
+                    [pscustomobject]@{Marker='[gt:probe]';Signature='[gt:probe] other=%s';Bound=$false;ActionCommands=@('/gt_regression_test')},
+                    [pscustomobject]@{Marker='[gt:unbounded]';Signature='[gt:unbounded] tick=%d';Bound=$false},
+                    [pscustomobject]@{Marker='[gt:gap]';Signature='[gt:gap] RECEIVER-GAP skin=%s';Bound=$true},
+                    [pscustomobject]@{Marker='[gt:gap]';Signature='[gt:gap] RECEIVER-GAP +%d more';Bound=$true},
+                    [pscustomobject]@{Marker='[gt:vague]';Signature='[gt:vague] event started id=%s';Bound=$true},
+                    [pscustomobject]@{Marker='[gt:vague]';Signature='[gt:vague] event stopped id=%s';Bound=$true},
+                    [pscustomobject]@{Marker='[gt:single]';Signature='[gt:single] status=%s finite=true';Bound=$true}
+                )
+                MenuSurfaces=@('Registered Pickup Diagnostics')
+            },
+            [pscustomobject]@{
+                ModId='ct_dev'; Version='2.3.4-dev'; WorkshopId='2222222222'
+                LoadRoutes=@([pscustomobject]@{Marker='[ct:LOAD]'})
+                ExactBannerRoutes=@([pscustomobject]@{Tag='[ct]'})
+                CommandRoutes=@([pscustomobject]@{Command='/ct_probe'})
+                ReceiptRoutes=@([pscustomobject]@{Marker='[ct:only]';Signature='[ct:only] result=%s';Bound=$true})
+                MenuSurfaces=@('Chest Diagnostics')
+            }
+        )
+    }
+    $contractCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Run ``/gt_regression_test`` in chat.`n`n**Expected:** One bounded ``[gt:probe] result=ok`` receipt appears.`n`n**Workshop:** item ``1111111111``, manifest ``9000000001``."
+    function Assert-Contract([string]$Name, [string]$Card, [bool]$Valid, [string]$Error) {
+        $selection = Get-VtLiveTestCardSelection -Comments @([pscustomobject]@{body=$Card}) -Authority $authority -EnforceAuthority
+        if ($selection.Valid -ne $Valid) { throw "$Name validity mismatch: $($selection.Errors -join ', ')" }
+        if ($Error -and @($selection.Errors | Where-Object { $_ -like $Error }).Count -eq 0) {
+            throw "$Name missing expected error '$Error': $($selection.Errors -join ', ')"
+        }
+    }
+    Assert-Contract 'authoritative valid card' $contractCard $true $null
+    Assert-Contract 'source-backed exact banner' ($contractCard.Replace('v1.2.3-dev, confirm `[wt:LOAD]`', 'exact banner: `[wt] v1.2.3-dev loaded`')) $true $null
+    Assert-Contract 'nonexistent marker' ($contractCard.Replace('[wt:LOAD]', '[career_tweaker:LOAD]')) $false 'build-identity-not-deployed:*'
+    Assert-Contract 'stale deployed version' ($contractCard.Replace('v1.2.3-dev', 'v1.2.2-dev')) $false 'build-identity-not-deployed:*'
+    Assert-Contract 'stray semantic version' ($contractCard.Replace('confirm `[wt:LOAD]`','confirm `[wt:LOAD]`; unrelated v9.9.9-dev')) $false 'build-identity-not-parsable'
+    Assert-Contract 'command lacks exact backticks' ($contractCard.Replace('`/gt_regression_test`', '/gt_regression_test')) $false 'command-not-exactly-backticked:*'
+    Assert-Contract 'unknown exact command' ($contractCard.Replace('/gt_regression_test', '/invented_probe')) $false 'command-not-source-registered:*'
+    Assert-Contract 'receipt cannot borrow unrelated registered command' ($contractCard.Replace('/gt_regression_test', '/other_probe')) $false 'diagnostic-evidence-action-command-mismatch:*'
+    Assert-Contract 'wrong-case command is not exact' ($contractCard.Replace('/gt_regression_test', '/GT_REGRESSION_TEST')) $false 'command-not-source-registered:*'
+    Assert-Contract 'invented friendly diagnostic' ($contractCard.Replace('Run `/gt_regression_test` in chat.', 'Run **Closed-Chest Pickup Diagnostics**.')) $false 'diagnostic-surface-not-source-registered:*'
+    Assert-Contract 'click invented diagnostic' ($contractCard.Replace('Run `/gt_regression_test` in chat.', 'Click **Closed-Chest Pickup Diagnostics**.')) $false 'diagnostic-surface-not-source-registered:*'
+    Assert-Contract 'select unbolded invented diagnostic' ($contractCard.Replace('Run `/gt_regression_test` in chat.', 'Select Closed-Chest Pickup Diagnostics.')) $false 'diagnostic-surface-not-source-registered:*'
+    Assert-Contract 'valid command cannot hide invented diagnostic' ($contractCard.Replace('Run `/gt_regression_test` in chat.', 'Run `/gt_regression_test`, then click **Closed-Chest Pickup Diagnostics**.')) $false 'diagnostic-surface-not-source-registered:*'
+    $registeredMenuCard=$contractCard.Replace('Run `/gt_regression_test` in chat.', 'Run **Registered Pickup Diagnostics**.').Replace('[gt:probe] result=ok','[gt:single] status=ok finite=true')
+    Assert-Contract 'registered menu diagnostic with independent receipt' $registeredMenuCard $true $null
+    Assert-Contract 'command-owned receipt still requires its command' ($contractCard.Replace('Run `/gt_regression_test` in chat.', 'Run **Registered Pickup Diagnostics**.')) $false 'diagnostic-evidence-action-command-mismatch:*'
+    Assert-Contract 'payload coordinates may be omitted together' ($contractCard -replace '(?m)^\*\*Workshop:\*\*.+$','') $true $null
+    Assert-Contract 'Workshop item without ManifestID is incomplete' ($contractCard.Replace(', manifest `9000000001`','')) $false 'workshop-item-without-manifest:*'
+    Assert-Contract 'ManifestID without Workshop item is incomplete' ($contractCard.Replace('item `1111111111`, ','Manifest identity ')) $false 'manifest-without-workshop-item:*'
+    Assert-Contract 'same target distinct manifests' ($contractCard + "`nWorkshop item ``1111111111``, ManifestID ``9000000002``.") $false 'distinct-manifests-for-workshop-item:*'
+    Assert-Contract 'same target duplicate manifest' ($contractCard + "`nWorkshop item ``1111111111``, ManifestID ``9000000001``.") $false 'duplicate-workshop-manifest-pair:*'
+    Assert-Contract 'selected WT build cannot cite CT item' ($contractCard.Replace('1111111111','2222222222').Replace('9000000001','8000000001')) $false 'workshop-item-not-selected-build:*'
+    Assert-Contract 'single paired manifest remains advisory' ($contractCard.Replace('9000000001','9999999999')) $true $null
+    $multiTarget = $contractCard.Replace('v1.2.3-dev, confirm `[wt:LOAD]`', 'v1.2.3-dev, confirm `[wt:LOAD]`; v2.3.4-dev, confirm `[ct:LOAD]`') + "`nWorkshop item ``2222222222``, manifest ``8000000001``."
+    Assert-Contract 'distinct manifests for distinct targets' $multiTarget $true $null
+    Assert-Contract 'second selected build may omit payload coordinates' ($multiTarget -replace '(?m)^Workshop item `2222222222`.+$','') $true $null
+    Assert-Contract 'second selected build item-only coordinate is rejected' (($multiTarget -replace '(?m)^Workshop item `2222222222`.+$','Workshop item `2222222222`.')) $false 'workshop-item-without-manifest:*'
+    Assert-Contract 'conflicting trailing manifest' ($contractCard + "`nManifestID ``7000000001``.") $false 'distinct-manifests-for-workshop-item:*'
+    Assert-Contract 'non-printf diagnostic evidence' ($contractCard.Replace('[gt:probe]', '[gt:debug-only]')) $false 'diagnostic-evidence-not-in-selected-build:*'
+    Assert-Contract 'other selected-record evidence cannot leak' ($contractCard.Replace('[gt:probe]', '[ct:only]')) $false 'diagnostic-evidence-not-in-selected-build:*'
+    Assert-Contract 'marker-only evidence cannot hide an unbounded sibling' ($contractCard.Replace('[gt:probe] result=ok','[gt:probe]')) $false 'diagnostic-evidence-not-bounded:*'
+    Assert-Contract 'generic repeat inherits one exact route cited elsewhere' ($contractCard.Replace('receipt appears.','receipt appears; the `[gt:probe]` line appears once.')) $true $null
+    Assert-Contract 'qualified generic repeat inherits one exact route cited elsewhere' ($contractCard.Replace('receipt appears.','receipt appears; the `[gt:probe]` injection line appears once.')) $true $null
+    Assert-Contract 'qualified marker-wide row accepts one finite deployed route' ($contractCard.Replace('[gt:probe] result=ok','[gt:single] smoke-bomb diagnostic row')) $true $null
+    Assert-Contract 'sentence after marker-only span is not a route discriminator' ($contractCard.Replace('One bounded `[gt:probe] result=ok` receipt appears.','The bounded source receipt begins `[gt:single]`. This is only a local gate.')) $true $null
+    Assert-Contract 'qualified marker-wide row still exposes an unbounded sibling' ($contractCard.Replace('[gt:probe] result=ok','[gt:probe] smoke-bomb diagnostic row')) $false 'diagnostic-evidence-not-bounded:*'
+    Assert-Contract 'generic warning cannot borrow an exact sibling route' ($contractCard.Replace('receipt appears.','receipt appears; no `[gt:probe]` warnings appear.')) $false 'diagnostic-evidence-not-bounded:*'
+    Assert-Contract 'authored literal prefix selects a bounded route subgroup' ($contractCard.Replace('[gt:probe] result=ok','[gt:gap] RECEIVER-GAP')) $true $null
+    Assert-Contract 'vague shared prefix stays ambiguous' ($contractCard.Replace('[gt:probe] result=ok','[gt:vague] event')) $false 'diagnostic-evidence-signature-ambiguous:*'
+    Assert-Contract 'invented suffix cannot borrow a marker sibling' ($contractCard.Replace('[gt:probe] result=ok','[gt:probe] invented=ok')) $false 'diagnostic-evidence-signature-not-source-registered:*'
+    Assert-Contract 'card prose cannot bless unbounded printf evidence' ($contractCard.Replace('One bounded `[gt:probe] result=ok` receipt appears.', 'Exactly one bounded `[gt:unbounded] tick=1` receipt appears.')) $false 'diagnostic-evidence-not-bounded:*'
+    $nativeChat = $contractCard.Replace('One bounded `[gt:probe] result=ok` receipt appears.', 'A `[ct:chat-warning]` notice may appear; it is not a log line and its absence proves nothing, so do not use it as a pass condition.')
+    Assert-Contract 'explicit native-chat exception' $nativeChat $true $null
+    $contradictoryNativeChat = $contractCard.Replace('One bounded `[gt:probe] result=ok` receipt appears.', 'The `[ct:chat-warning]` notice must appear; it is not a log line and its absence proves nothing, so do not use it as a pass condition.')
+    Assert-Contract 'native-chat disclaimer cannot suppress a positive evidence requirement' $contradictoryNativeChat $false 'diagnostic-evidence-not-in-selected-build:*'
+    $nativeChatLeak = $contractCard.Replace('One bounded `[gt:probe] result=ok` receipt appears.', 'A `[ct:chat-warning]` notice may appear; it is not a log line and its absence proves nothing, so do not use it as a pass condition; `[bad:pass] must appear` must appear.')
+    Assert-Contract 'native-chat exception is marker scoped' $nativeChatLeak $false 'diagnostic-evidence-not-in-selected-build:*'
+    $auditOnlySelection=Get-VtLiveTestCardSelection -Comments @([pscustomobject]@{body=$contractCard.Replace('/gt_regression_test','/invented_probe')}) -Authority $authority
+    if(-not$auditOnlySelection.Valid -or $auditOnlySelection.AuthorityErrors -notcontains 'command-not-source-registered:/invented_probe' -or $auditOnlySelection.Advisories -notcontains 'command-not-source-registered:/invented_probe'){
+        throw 'report-only rollout failed to preserve a legacy card while exposing its strict authority defect'
+    }
+    $ambiguousAuthority=[pscustomobject]@{Records=@($authority.Records + [pscustomobject]@{
+        ModId='wt_clone';Version='1.2.3-dev';WorkshopId='3333333333'
+        LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'});ExactBannerRoutes=@();CommandRoutes=@();ReceiptRoutes=@();MenuSurfaces=@()
+    })}
+    $ambiguousSelection=Get-VtLiveTestCardSelection -Comments @([pscustomobject]@{body=$contractCard}) -Authority $ambiguousAuthority -EnforceAuthority
+    if($ambiguousSelection.Errors -notcontains 'build-identity-ambiguous:[wt:LOAD]@1.2.3-dev'){throw 'ambiguous build identity was accepted'}
+
+    $missingManifestPath=Join-Path ([IO.Path]::GetTempPath()) ('vt-missing-manifest-'+[guid]::NewGuid().ToString('N')+'.json')
+    $reportOnlyContext=Get-VtLifecycleAuthorityContext -RepoRoot $repoRoot -Repository 'fixture/fixture' -DeploymentManifestPath $missingManifestPath
+    if($reportOnlyContext.Authority -or [string]::IsNullOrWhiteSpace([string]$reportOnlyContext.Error)){
+        throw 'report-only authority acquisition did not preserve blocking lifecycle evaluation on authority failure'
+    }
+    $strictThrew=$false
+    try{Get-VtLifecycleAuthorityContext -RepoRoot $repoRoot -Repository 'fixture/fixture' -DeploymentManifestPath $missingManifestPath -EnforceAuthority|Out-Null}catch{$strictThrew=$true}
+    if(-not$strictThrew){throw 'strict authority acquisition failed open'}
 
     # IssuesJsonPath uses the same ConvertFrom-Json shape as this round-trip.
     # Keep isPinned in the serialized fixture so offline policy tests remain
@@ -211,7 +299,7 @@ function Invoke-SelfTest {
     # pipeline object, while PowerShell 7 enumerates it. Round-trip each issue
     # independently so the policy receives the same shape on both runtimes.
     $jsonFixture = @($fixture | ForEach-Object { $_ | ConvertTo-Json -Depth 8 | ConvertFrom-Json })
-    $jsonBad = @((Get-LifecycleViolations -Issues $jsonFixture -RequirePinnedCard -Contract $contract).number | Sort-Object)
+    $jsonBad = @((Get-LifecycleViolations -Issues $jsonFixture -RequirePinnedCard).number | Sort-Object)
     if (($jsonBad -join ',') -ne ($bad -join ',')) { throw "JSON fixture drift: $($jsonBad -join ',')" }
     if (-not (Test-VtRetryableGitHubTransportError 'tls: failed to verify certificate: x509: certificate signed by unknown authority')) { throw 'TLS trust failure must be retryable' }
     if (-not (Test-VtRetryableGitHubTransportError 'HTTP 503: Service Unavailable')) { throw 'GitHub 503 must be retryable' }
@@ -436,17 +524,35 @@ else {
 if ($IssuesJsonPath) { $issues = @($json | ConvertFrom-Json) }
 $openIssueSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
 $phaseTimer.Restart()
-$releaseManifest = Get-VtLatestReleaseManifest -Repository $Repository -Path $ReleaseManifestPath
-$manifestSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+# Authority acquisition subsumes the former release-manifest and deployed-
+# contract phases: it fetches the deployment manifest once and indexes the
+# deployed source from it. It reports both phase durations so the timing
+# line below keeps naming the same four phases without a second fetch.
+$authorityContext = Get-VtLifecycleAuthorityContext -RepoRoot $repoRoot -Repository $Repository `
+    -DeploymentManifestPath $DeploymentManifestPath -EnforceAuthority:$EnforceAuthority
+$manifestSeconds = [int]$authorityContext.ManifestSeconds
+$contractSeconds = [int]$authorityContext.SourceSeconds
+$authority = $authorityContext.Authority
+$authorityLoadError = $authorityContext.Error
+if ($authorityLoadError) {
+    Write-Host "[check-lifecycle-cardinality] AUTHORITY REPORT-ONLY UNAVAILABLE: $authorityLoadError"
+}
 $phaseTimer.Restart()
-$contract = Get-VtDeployedSourceContract -RepoRoot $repoRoot -ReleaseManifest $releaseManifest
-$contractSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
-$phaseTimer.Restart()
-$violations = @(Get-LifecycleViolations -Issues $issues -RequirePinnedCard -Contract $contract)
+$decisionReport = Get-LifecycleDecisionReport -Issues $issues -RequirePinnedCard -Authority $authority -EnforceAuthority:$EnforceAuthority
+$violations = @($decisionReport.Violations)
+$authorityFindings = @($decisionReport.AuthorityFindings)
 $policySeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
 Write-Host "[check-lifecycle-cardinality] timing: open-issues=${openIssueSeconds}s release-manifest=${manifestSeconds}s deployed-contract=${contractSeconds}s card-policy=${policySeconds}s total=$([int][math]::Round($totalTimer.Elapsed.TotalSeconds))s"
+if($authorityFindings.Count -gt 0){
+    $mode=if($EnforceAuthority){'STRICT PREVIEW'}else{'REPORT-ONLY ROLLOUT'}
+    Write-Host "[check-lifecycle-cardinality] AUTHORITY ${mode}: $($authorityFindings.Count) open issue(s) have deployed-card findings:"
+    foreach($finding in $authorityFindings){
+        Write-Host "  - issue #$($finding.number) - $($finding.advisories -join ', ') - '$($finding.title)'"
+    }
+}
 if ($violations.Count -eq 0) {
-    Write-Host "[check-lifecycle-cardinality] OK: all $($issues.Count) open issues satisfy lifecycle and live-test queue doctrine against deployed release $($contract.ReleaseTag)."
+    $suffix=if(-not$EnforceAuthority -and ($authorityFindings.Count -gt 0 -or $authorityLoadError)){' Strict deployed-source findings are report-only during the documented rollout.'}else{''}
+    Write-Host "[check-lifecycle-cardinality] OK: all $($issues.Count) open issues satisfy blocking lifecycle and live-test queue doctrine.$suffix"
     exit 0
 }
 
@@ -456,5 +562,5 @@ foreach ($violation in $violations) {
     if ($env:GITHUB_ACTIONS -eq 'true') { Write-Host "::error::$message" }
     Write-Host "  - $message"
 }
-Write-Host '[check-lifecycle-cardinality] Required: exactly one of not-started/diagnostics-armed/verify-fix. Ready states require exactly one pinned exact CURRENT LIVE TEST card, and it must be the newest exact card. Fixed and verify-fix-coop are invalid while open.'
+Write-Host '[check-lifecycle-cardinality] Required: exactly one of not-started/diagnostics-armed/verify-fix. Ready states require exactly one pinned exact CURRENT LIVE TEST card, and it must be the newest exact card. Fixed and verify-fix-coop are invalid while open. Pass -EnforceAuthority only after the report-only backlog is repaired.'
 exit 1

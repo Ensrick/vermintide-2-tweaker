@@ -780,7 +780,8 @@ function Get-ShipIssueTransitionDecision {
         [bool]$CoopRequired,
         [string[]]$RepositoryLabels,
         $Comments,
-        [string]$Body
+        [string]$Body,
+        $Authority
     )
 
     $effectiveLabels = @($Existing) + @($RepositoryLabels)
@@ -792,8 +793,14 @@ function Get-ShipIssueTransitionDecision {
         return @{ Ok = $false; Reason = 'blocked-issue-not-ready'; IsRepositoryOnly = $false }
     }
 
-    $selection = Get-VtLifecycleMethodSelection -Comments $Comments -Body $Body
-    if ($Requested -in @('diagnostics-armed', 'verify-fix') -and -not $selection.Valid) {
+    $readyRequested = $Requested -in @('diagnostics-armed', 'verify-fix')
+    if ($readyRequested -and -not $Authority) {
+        return @{ Ok = $false; Reason = 'live-card-authority-unavailable'; IsRepositoryOnly = $false }
+    }
+
+    $selection = Get-VtLifecycleMethodSelection -Comments $Comments -Body $Body `
+        -Authority $Authority -EnforceAuthority:$readyRequested
+    if ($readyRequested -and -not $selection.Valid) {
         return @{ Ok = $false; Reason = 'invalid-current-live-test-card'; Selection = $selection; IsRepositoryOnly = $false }
     }
 
@@ -939,29 +946,47 @@ function Invoke-ShipSelfTest {
     Assert (-not $removeStaleCoop.Want -and -not $removeStaleCoop.Add -and $removeStaleCoop.Remove) "leaving diagnostics removes stale coop-required qualifier"
 
     $combinedBody = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Equip Kruber's Mace in the Keep.`n`n**Expected:** Kruber's Mace behaves normally."
-    $combinedDiagnostic = Get-ShipIssueTransitionDecision -Existing @('diagnostics-armed', 'tooling') -Requested 'diagnostics-armed' -CoopRequired $false -RepositoryLabels @('tooling') -Comments @() -Body $combinedBody
+    $shipFixtureAuthority = [pscustomobject]@{ Records = @(
+        [pscustomobject]@{
+            ModId='wt_dev'; Version='1.2.3-dev'; WorkshopId='1111111111'
+            LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'})
+            ExactBannerRoutes=@(); CommandRoutes=@(); MenuSurfaces=@()
+            ReceiptRoutes=@([pscustomobject]@{
+                Marker='[gt:unbounded]'; Signature='[gt:unbounded] tick=%d'; Bound=$false
+            })
+        },
+        [pscustomobject]@{
+            ModId='woc'; Version='0.1.42-dev'; WorkshopId='2222222222'
+            LoadRoutes=@(); ExactBannerRoutes=@([pscustomobject]@{Tag='[WOC]'})
+            CommandRoutes=@(); MenuSurfaces=@(); ReceiptRoutes=@()
+        }
+    ) }
+    $combinedDiagnostic = Get-ShipIssueTransitionDecision -Existing @('diagnostics-armed', 'tooling') -Requested 'diagnostics-armed' -CoopRequired $false -RepositoryLabels @('tooling') -Comments @() -Body $combinedBody -Authority $shipFixtureAuthority
     Assert (-not $combinedDiagnostic.Ok -and $combinedDiagnostic.Reason -eq 'tooling-issue-not-auto-labeled') "ship never auto-labels tooling work"
 
-    $combinedVerifyBodyOnly = Get-ShipIssueTransitionDecision -Existing @('diagnostics-armed') -Requested 'verify-fix' -CoopRequired $false -Comments @() -Body $combinedBody
+    $combinedVerifyBodyOnly = Get-ShipIssueTransitionDecision -Existing @('diagnostics-armed') -Requested 'verify-fix' -CoopRequired $false -Comments @() -Body $combinedBody -Authority $shipFixtureAuthority
     Assert (-not $combinedVerifyBodyOnly.Ok -and $combinedVerifyBodyOnly.Reason -eq 'invalid-current-live-test-card') "live-test labels never accept an issue-body fallback"
+
+    $missingAuthorityDecision = Get-ShipIssueTransitionDecision -Existing @('not-started') -Requested 'verify-fix' -CoopRequired $false -Comments @([pscustomobject]@{ body = $combinedBody }) -Body ''
+    Assert (-not $missingAuthorityDecision.Ok -and $missingAuthorityDecision.Reason -eq 'live-card-authority-unavailable') "ready transitions fail closed when deployed-source authority is unavailable"
 
     $soloMethod = @([pscustomobject]@{ body = $combinedBody })
     $wocExactBannerCard = "## CURRENT LIVE TEST`n`n**Build/banner:** exact banner: [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper behaves normally."
-    $wocExactBannerDecision = Get-ShipIssueTransitionDecision -Existing @('not-started') -Requested 'verify-fix' -CoopRequired $false -Comments @([pscustomobject]@{ body = $wocExactBannerCard }) -Body ''
+    $wocExactBannerDecision = Get-ShipIssueTransitionDecision -Existing @('not-started') -Requested 'verify-fix' -CoopRequired $false -Comments @([pscustomobject]@{ body = $wocExactBannerCard }) -Body '' -Authority $shipFixtureAuthority
     Assert ($wocExactBannerDecision.Ok) "ship accepts a clearly labeled exact versioned runtime banner"
-    $combinedRepositoryCoop = Get-ShipIssueTransitionDecision -Existing @('verify-fix', 'tooling') -Requested 'verify-fix' -CoopRequired $false -RepositoryLabels @('tooling') -Comments $soloMethod -Body ''
+    $combinedRepositoryCoop = Get-ShipIssueTransitionDecision -Existing @('verify-fix', 'tooling') -Requested 'verify-fix' -CoopRequired $false -RepositoryLabels @('tooling') -Comments $soloMethod -Body '' -Authority $shipFixtureAuthority
     Assert (-not $combinedRepositoryCoop.Ok -and $combinedRepositoryCoop.Reason -eq 'tooling-issue-not-auto-labeled') "combined transition rejects repository-only live testing"
 
     $coopCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Co-op (host and one client)`n**Solo status:** Passed; remote view remains.`n`n1. Host equips Kruber's Mace.`n2. The joining player observes it.`n`n**Expected:** Both players see Kruber's Mace."
     $coopMethod = @([pscustomobject]@{ body = $coopCard })
-    $combinedPreserveCoop = Get-ShipIssueTransitionDecision -Existing @('verify-fix-coop') -Requested 'verify-fix' -CoopRequired $false -Comments $coopMethod -Body ''
+    $combinedPreserveCoop = Get-ShipIssueTransitionDecision -Existing @('verify-fix-coop') -Requested 'verify-fix' -CoopRequired $false -Comments $coopMethod -Body '' -Authority $shipFixtureAuthority
     Assert ($combinedPreserveCoop.Ok -and $combinedPreserveCoop.Edit.Target -eq 'verify-fix' -and $combinedPreserveCoop.CoopEdit.Want) "co-op card uses verify-fix plus coop-required and retires old lifecycle"
 
     $failedDiagnostic = @([pscustomobject]@{ body = $combinedBody.Replace("**Expected:**", "Verification still fails on the deployed build.`n`n**Expected:**") })
-    $combinedDowngrade = Get-ShipIssueTransitionDecision -Existing @('verify-fix') -Requested 'diagnostics-armed' -CoopRequired $false -Comments $failedDiagnostic -Body ''
+    $combinedDowngrade = Get-ShipIssueTransitionDecision -Existing @('verify-fix') -Requested 'diagnostics-armed' -CoopRequired $false -Comments $failedDiagnostic -Body '' -Authority $shipFixtureAuthority
     Assert ($combinedDowngrade.Ok -and $combinedDowngrade.Edit.Target -eq 'diagnostics-armed') "combined transition permits an evidenced failed-verification downgrade"
 
-    $existingCoopDiagnostic = Get-ShipIssueTransitionDecision -Existing @('diagnostics-armed', 'coop-required') -Requested 'diagnostics-armed' -CoopRequired $false -Comments $coopMethod -Body ''
+    $existingCoopDiagnostic = Get-ShipIssueTransitionDecision -Existing @('diagnostics-armed', 'coop-required') -Requested 'diagnostics-armed' -CoopRequired $false -Comments $coopMethod -Body '' -Authority $shipFixtureAuthority
     Assert ($existingCoopDiagnostic.Ok -and $existingCoopDiagnostic.CoopEdit.Want) "combined transition preserves an existing co-op diagnostic qualifier"
 
     $planL = Get-ShipLabelPlan -Header '## 0.12.204-dev - Localization: applied dev status-tag doctrine (#301)' -Entry 'refs #74 #108 as tag context'
@@ -971,8 +996,12 @@ function Invoke-ShipSelfTest {
     Assert ($planT.Skip -eq 'tooling-entry') "explicit tooling work is never auto-labeled"
     $planDocs = Get-ShipLabelPlan -Header '## 0.1.4-dev - #661 [docs] [verify-fix] lifecycle documentation' -Entry 'documentation work #661'
     Assert ($planDocs.Skip -eq 'tooling-entry') "docs work is never auto-labeled"
-    $runtimeDocumentation = Get-ShipIssueTransitionDecision -Existing @('bug', 'documentation', 'verify-fix', 'Tweaker: Weapons', 'CWV', 'cross-mod', '0-critical', 'WOC') -Requested 'verify-fix' -CoopRequired $false -RepositoryLabels @() -Comments $soloMethod -Body ''
+    $runtimeDocumentation = Get-ShipIssueTransitionDecision -Existing @('bug', 'documentation', 'verify-fix', 'Tweaker: Weapons', 'CWV', 'cross-mod', '0-critical', 'WOC') -Requested 'verify-fix' -CoopRequired $false -RepositoryLabels @() -Comments $soloMethod -Body '' -Authority $shipFixtureAuthority
     Assert ($runtimeDocumentation.Ok -and -not $runtimeDocumentation.IsRepositoryOnly) "#661-shaped runtime issue stays in the playtest route"
+
+    $unboundedCard = $combinedBody.Replace("Kruber's Mace behaves normally.", 'Exactly one `[gt:unbounded] tick=1` receipt appears.')
+    $unboundedDecision = Get-ShipIssueTransitionDecision -Existing @('not-started') -Requested 'verify-fix' -CoopRequired $false -Comments @([pscustomobject]@{ body = $unboundedCard }) -Body '' -Authority $shipFixtureAuthority
+    Assert (-not $unboundedDecision.Ok -and $unboundedDecision.Reason -eq 'invalid-current-live-test-card') "ship rejects a newly-ready card whose exact receipt route is unbounded"
 
     $missingIntent = Get-ShipLabelPlan -Header '## 0.1.4-dev - #603 partial implementation' -Entry 'partial work #603'
     Assert ($missingIntent.Skip -eq 'missing-lifecycle-marker') "unmarked work cannot receive an inferred verify lifecycle"
@@ -2116,6 +2145,20 @@ if ($isFirstUploadBootstrap) {
     exit 0
 }
 
+# Resolve immutable deployed-source authority before any tracker mutation.
+# A Workshop upload may already have succeeded, so failure here cannot roll it
+# back; it does, however, fail closed for every newly-ready label transition.
+$shipLiveTestAuthority = $null
+try {
+    $shipDeploymentManifest = Get-VtCardDeploymentManifest -Repository 'Ensrick/vermintide-2-tweaker'
+    $shipSourceAuthority = Get-VtCardSourceAuthority -RepoRoot $repoRoot -DeploymentManifest $shipDeploymentManifest
+    $shipLiveTestAuthority = New-VtLiveTestCardAuthority -Source $shipSourceAuthority -DeploymentManifest $shipDeploymentManifest
+    Write-Host ("  Deployed live-test authority: {0} immutable release record(s)." -f @($shipLiveTestAuthority.Records).Count) -ForegroundColor DarkGray
+}
+catch {
+    Write-Host ("  WARNING: deployed live-test authority unavailable ({0}); no issue may enter a ready lifecycle state." -f $_.Exception.Message) -ForegroundColor Yellow
+}
+
 # ---------------------------------------------------------------------------
 # Step 6: STATUS-LABEL the shipped issues (issue #326 mechanization)
 # ---------------------------------------------------------------------------
@@ -2217,10 +2260,11 @@ try {
                             }
                             $existing = @()
                             if ($meta.labels) { $existing = @($meta.labels | ForEach-Object { $_.name }) }
-                            $decision = Get-ShipIssueTransitionDecision -Existing $existing -Requested $statusLabel -CoopRequired ([bool]$plan.CoopRequired) -RepositoryLabels @($plan.RepositoryLabels) -Comments $meta.comments -Body ([string]$meta.body)
+                            $decision = Get-ShipIssueTransitionDecision -Existing $existing -Requested $statusLabel -CoopRequired ([bool]$plan.CoopRequired) -RepositoryLabels @($plan.RepositoryLabels) -Comments $meta.comments -Body ([string]$meta.body) -Authority $shipLiveTestAuthority
                             if (-not $decision.Ok) {
                                 $reasonText = switch ($decision.Reason) {
-                                    'invalid-current-live-test-card' { 'newest exact CURRENT LIVE TEST card is missing or invalid' }
+                                    'invalid-current-live-test-card' { 'newest exact CURRENT LIVE TEST card is missing or fails deployed-source authority' }
+                                    'live-card-authority-unavailable' { 'immutable deployed-source authority is unavailable' }
                                     'unevidenced-verify-downgrade' { 'verify-to-diagnostics downgrade lacks failed-verification evidence in the selected replacement method' }
                                     'tooling-issue-not-auto-labeled' { 'tooling/docs work never receives live-test labels from ship automation' }
                                     'blocked-issue-not-ready' { 'blocked issues must remain not-started and outside the live-test queue' }
