@@ -524,6 +524,18 @@ local data = {
                 },
             },
             -- ============================================================
+            -- Preserve Adventure Illusions (#917): top-level loose toggle like
+            -- Progressive Difficulty (a run-start snapshot, not one of the A-Z
+            -- groups). PER-PEER by design - see PER_PEER_SETTING_NAMES in
+            -- _ct_host_state_transport_owner.lua.
+            -- ============================================================
+            {
+                setting_id = "preserve_adventure_illusions",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "preserve_adventure_illusions_tooltip",
+            },
+            -- ============================================================
             -- Adventure Maps
             -- ============================================================
             {

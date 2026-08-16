@@ -66,6 +66,73 @@ function P.capture_slot_durable(slot_name, owned_by_items)
     return owned_by_items == true
 end
 
+-- Issue #375 audit fix (2026-08-15): vanilla marks exactly slot_necklace / slot_ring /
+-- slot_trinket_1 `unequippable = true` (inventory_settings.lua:43/52/61), so an EMPTY
+-- accessory slot in an otherwise-complete row is a legitimate player choice that is
+-- indistinguishable from data loss. The integrity/repair passes therefore NEVER refill
+-- these slots in place: deliberate unequips survive every seed/repair pass, and
+-- accessory values enter the store only when a FULL row is copied fresh from official
+-- (missing-row add, fresh seed, or the #1033 DEFAULT reseed).
+P.UNEQUIPPABLE_SLOTS = {
+    slot_necklace = true, slot_ring = true, slot_trinket_1 = true,
+}
+
+function P.is_unequippable_slot(slot_name)
+    return P.UNEQUIPPABLE_SLOTS[slot_name] == true
+end
+
+-- A store row is corrupt-partial when a slot vanilla can NEVER leave empty is missing:
+-- weapons fatal at spawn wield, and skin/hat/frame/pose always resolve to some item.
+-- A row missing only unequippable accessories is HEALTHY (deliberate unequip).
+function P.row_is_corrupt_partial(row, slot_names)
+    if type(row) ~= "table" or type(slot_names) ~= "table" then return true end
+    for i = 1, #slot_names do
+        local slot = slot_names[i]
+        if not P.UNEQUIPPABLE_SLOTS[slot] and row[slot] == nil then return true end
+    end
+    return false
+end
+
+-- One-time slot migration (#402): add the official value for any canonical slot an
+-- existing row never carried -- EXCEPT unequippable accessories (deliberate-empty).
+function P.repair_missing_loadout_slots(entry, official_rows, slot_names)
+    if type(entry) ~= "table" or type(entry.loadouts) ~= "table"
+        or type(official_rows) ~= "table" or type(slot_names) ~= "table" then
+        return 0
+    end
+    local repaired = 0
+    for i = 1, #official_rows do
+        local off_row = official_rows[i]
+        local st_row = entry.loadouts[i]
+        if type(off_row) == "table" and type(st_row) == "table" then
+            for s = 1, #slot_names do
+                local slot = slot_names[s]
+                if not P.UNEQUIPPABLE_SLOTS[slot]
+                    and st_row[slot] == nil and off_row[slot] ~= nil then
+                    st_row[slot] = off_row[slot]
+                    repaired = repaired + 1
+                end
+            end
+        end
+    end
+    return repaired
+end
+
+-- Corrupt-row refill (#375): copy every missing official key (slots, talents) into a
+-- row that carries the corruption signature -- EXCEPT unequippable accessory slots,
+-- which stay exactly as the player left them.
+function P.repair_corrupt_row(st_row, off_row)
+    if type(st_row) ~= "table" or type(off_row) ~= "table" then return 0 end
+    local filled = 0
+    for k, v in pairs(off_row) do
+        if st_row[k] == nil and not P.UNEQUIPPABLE_SLOTS[k] then
+            st_row[k] = v
+            filled = filled + 1
+        end
+    end
+    return filled
+end
+
 -- Issue #1033 x #954 reset boundary. A confirmed Equipment DEFAULT must wipe MODDED
 -- LOADOUT DATA: the saved loadout rows, the loadout selection, the seed/integrity
 -- markers (forcing a fresh official reseed), and the cosmetic overlay. The user's BOT

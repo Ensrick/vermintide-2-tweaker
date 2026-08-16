@@ -81,7 +81,7 @@ return function(mod, om)
 			local item_data = slot and slot.item_data
 			local descriptor = slot and om._husk_identity_descriptor
 				and om._husk_identity_descriptor(self and self._unit, slot_name,
-					item_data and item_data.name)
+					item_data and item_data.name, self and self._player)
 			if descriptor then M.husk_reapply(self, equipment) end
 			return result
 		end)

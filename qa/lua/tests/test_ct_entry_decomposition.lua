@@ -88,11 +88,18 @@ return function(H, repo_root)
     H.test("CT virtual source conserves registration cardinality", function()
         -- These are the exact pre-extraction entry counts. The expanded view
         -- inserts each completion owner at its real installer position.
-        H.equal(count_plain(expanded, "mod:hook("), 17)
-        H.equal(count_plain(expanded, "mod:hook_safe("), 5)
+        -- #917: the #53 _setup_run hook_safe in _ct_run_runtime_owner became
+        -- the single FULL DeusMechanism._setup_run hook (one hook per
+        -- (Class, method)) so the illusion snapshot can run pre-vanilla:
+        -- 17+1 hooks / 5-1 hook_safes, total conserved.
+        H.equal(count_plain(expanded, "mod:hook("), 18)
+        H.equal(count_plain(expanded, "mod:hook_safe("), 4)
         H.equal(count_plain(expanded, "mod:network_register("), 2)
         H.equal(count_plain(expanded, "_rt_register("), 24)
-        H.equal(count_plain(regression, "_rt_register("), 71)
+        -- 71 pre-extraction checks + issue917_adventure_illusion_preservation
+        -- (#917 added a NEW runtime check; cardinality is still conserved for
+        -- every extracted check).
+        H.equal(count_plain(regression, "_rt_register("), 72)
 
         H.equal(count_plain(owners.host, "_rt_register("), 4)
         H.equal(count_plain(owners.run, "_rt_register("), 0)

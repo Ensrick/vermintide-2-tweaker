@@ -37,6 +37,10 @@ local loc = {
     bots_pick_up_pilgrims_coins = { en = "Bots Automatically Pick Up Pilgrim's Coins" },
     bots_pick_up_pilgrims_coins_tooltip = { en = "Once per second, each living bot checks within 10 metres and uses the normal interaction on one Pilgrim's Coin. Bots do not touch other pickups, do not interrupt an interaction already in progress, and do not directly create or credit coins. Host-only." },
 
+    -- #917 Preserve Adventure Illusions (per-peer top-level toggle).
+    preserve_adventure_illusions = { en = "Preserve Weapon Illusions from Adventure Loadout" },
+    preserve_adventure_illusions_tooltip = { en = "At the start of a pilgrimage, remembers the illusions on your equipped Adventure melee and ranged weapons. Your starter weapons, weapon upgrades and same-family swaps then keep your illusion instead of rolling a random one; weapons from other families are untouched. Personal setting: each player keeps their own choice, and only your own weapons are affected." },
+
     -- #458 Buy Starting Boons (start-node shrine shop). Titles stay player-facing;
     -- (LOCALIZATION_STANDARD s13); tooltips are bodies (untagged). No literal % to escape.
     ct_buy_starting_boons = { en = "Buy Starting Boons" },

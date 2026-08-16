@@ -57,6 +57,11 @@ VMF widget caveats
 local mod = get_mod("wt_dev")
 
 local M = {}
+local UIRenderer = UIRenderer
+local UISceneGraph = UISceneGraph
+local Vector2 = Vector2
+local Vector3 = Vector3
+local UILayer = rawget(_G, "UILayer")
 
 -- Weak keys keep per-unit canonical snapshots only for the lifetime of each
 -- local weapon unit. The maps are channel-separated so 1P bypass/restore can
@@ -503,6 +508,54 @@ local function _setting_channel(setting_id)
 end
 M._setting_channel = _setting_channel
 
+-- The HUD follows the last hand/channel control the developer authored. There
+-- is no separate focus dropdown, so the overlay cannot drift away from the
+-- exact slider group whose setting event drives the apply path.
+local _hud_focus = { channel = "third_person", hand = "right" }
+
+local function _hud_focus_for_setting(setting_id, current_channel, current_hand)
+    local channel, hand
+    if type(setting_id) == "string" then
+        if setting_id:match("^wt_dev_hp_fp_rh_") then
+            channel, hand = "first_person", "right"
+        elseif setting_id:match("^wt_dev_hp_fp_lh_") then
+            channel, hand = "first_person", "left"
+        elseif setting_id:match("^wt_dev_hp_rh_") then
+            channel, hand = "third_person", "right"
+        elseif setting_id:match("^wt_dev_hp_lh_") then
+            channel, hand = "third_person", "left"
+        elseif setting_id == "wt_dev_hp_enable_1p" then
+            channel, hand = "first_person", current_hand
+        elseif setting_id == "wt_dev_hp_enable_3p" then
+            channel, hand = "third_person", current_hand
+        end
+    end
+    return channel or current_channel or "third_person",
+           hand or current_hand or "right"
+end
+M._hud_focus_for_setting = _hud_focus_for_setting
+
+local function _hud_visible_values(master_enabled, channel_enabled, unit_available)
+    return master_enabled == true
+       and channel_enabled == true
+       and unit_available == true
+end
+M._hud_visible_values = _hud_visible_values
+
+local function _format_hud_text(snapshot)
+    if type(snapshot) ~= "table" or type(snapshot.plan) ~= "table" then return nil end
+    local channel_label = snapshot.channel == "first_person"
+        and "First Person" or "Third Person"
+    local hand_label = snapshot.hand == "left" and "Left Hand" or "Right Hand"
+    local plan = snapshot.plan
+    return string.format(
+        "Hold Pose | %s | %s | Pos X %+.3f  Y %+.3f  Z %+.3f | Rot P %+.1f  Y %+.1f  R %+.1f",
+        channel_label, hand_label,
+        plan.ox or 0, plan.oy or 0, plan.oz or 0,
+        plan.pitch or 0, plan.yaw or 0, plan.roll or 0)
+end
+M._format_hud_text = _format_hud_text
+
 M._live_delivery_contract = {
     setting_dispatch = "channel_exact",
     immediate_apply = true,
@@ -547,6 +600,83 @@ local function _apply_pose_all()
     local applied_3p = _apply_channel("third_person")
     return applied_1p or applied_3p
 end
+
+-- Read the exact normalized plan consumed by `_apply_pose_to`, never a cached
+-- widget value. A live weapon unit is required so menu-only or stale state
+-- cannot leave the row visible after a transition.
+local function _hud_snapshot()
+    local channel = _hud_focus.channel
+    local hand = _hud_focus.hand
+    local enabled = _channel_enabled(channel)
+    local unit
+    if enabled then
+        local target_slot = mod:get("wt_dev_hp_target_slot") or "auto"
+        unit = select(1, _resolve_wielded(target_slot, hand, channel))
+    end
+    if not _hud_visible_values(
+            mod:get("wt_dev_hp_enabled") == true, enabled, unit ~= nil) then
+        return nil
+    end
+    return {
+        channel = channel,
+        hand = hand,
+        plan = _component_plan(channel, hand),
+    }
+end
+M._hud_snapshot = _hud_snapshot
+
+local _HUD_FONT = "materials/fonts/arial"
+local _HUD_FONT_SIZE = 17
+local _HUD_ROOT = {
+    root = {
+        scale = "hud_scale_fit",
+        position = { 0, 0, (UILayer and UILayer.hud) or 100 },
+        size = { 1920, 1080 },
+    },
+}
+local _hud_render_settings = { snap_pixel_positions = true }
+local _hud_scenegraph
+
+local function _draw_hold_pose_hud(self, dt)
+    local text = _format_hud_text(_hud_snapshot())
+    if not text then return end
+    if not (UIRenderer and UISceneGraph and Vector2 and Vector3) then return end
+
+    local context = self and self._ingame_ui_context
+    local renderer = context and context.ui_renderer
+        or (Managers.ui and Managers.ui._ingame_ui_context
+            and Managers.ui._ingame_ui_context.ui_top_renderer)
+    if not renderer then return end
+
+    local input = context and context.input_manager
+        and context.input_manager:get_service("ingame_menu")
+    if not _hud_scenegraph then
+        _hud_scenegraph = UISceneGraph.init_scenegraph(_HUD_ROOT)
+    end
+
+    local width = 1100
+    local ok, measured = pcall(
+        UIRenderer.text_size, renderer, text, _HUD_FONT, _HUD_FONT_SIZE)
+    if ok and type(measured) == "number" then width = measured end
+    width = math.min(width, 1840)
+    local text_x = math.floor((1920 - width) * 0.5)
+    local text_y = 1052
+    local pad_x, pad_y = 10, 4
+
+    UIRenderer.begin_pass(
+        renderer, _hud_scenegraph, input, dt, nil, _hud_render_settings)
+    UIRenderer.draw_rect(renderer,
+        Vector3(text_x - pad_x, text_y - pad_y, 997),
+        Vector2(width + pad_x * 2, _HUD_FONT_SIZE + pad_y * 2),
+        { 145, 8, 8, 8 })
+    UIRenderer.draw_text(renderer, text, _HUD_FONT, _HUD_FONT_SIZE, nil,
+        Vector3(text_x + 1, text_y - 1, 998), { 220, 0, 0, 0 })
+    UIRenderer.draw_text(renderer, text, _HUD_FONT, _HUD_FONT_SIZE, nil,
+        Vector3(text_x, text_y, 999), { 255, 235, 225, 190 })
+    UIRenderer.end_pass(renderer)
+end
+M._draw_hold_pose_hud = _draw_hold_pose_hud
+M._HUD_1023_MARKER = "wt-1023-live-hold-pose-hud"
 
 -- ---------------------------------------------------------------------------
 -- Dump command output
@@ -841,6 +971,13 @@ function M.install()
         _apply_pose_all()
     end)
 
+    -- WT owns one HUD update hook (repo grep 2026-08-15: no other IngameHud
+    -- hook in either wt stream). The row is read-only and dev-local; it
+    -- consumes the same component plan as `_apply_pose_to`.
+    mod:hook_safe("IngameHud", "update", function(self, dt, t)
+        _draw_hold_pose_hud(self, dt)
+    end)
+
     -- One-shot apply (works in keep too — useful when live-apply is off,
     -- or for re-asserting after a wield).
     mod:command("wt_dev_hp_apply",
@@ -917,10 +1054,36 @@ function M.install()
 
     mod:info("[wt_dev_hp] Dev: Weapon Hold Pose Tuner installed -- "
         .. "isolated 1P/3P channels with non-destructive bypass, live-apply per-frame, /wt_dev_hp_apply for one-shot, "
-        .. "/wt_dump_hold_pose to dump a snippet, /wt_dev_hp_reset to identity.")
+        .. "live HUD values, /wt_dump_hold_pose to dump a snippet, /wt_dev_hp_reset to identity.")
+
+    local register = mod._wt and mod._wt.rt_register
+    if register then
+        register("issue1023_live_hold_pose_hud", function()
+            if M._HUD_1023_MARKER ~= "wt-1023-live-hold-pose-hud" then
+                return "#1023: HUD marker missing"
+            end
+            if type(M._draw_hold_pose_hud) ~= "function"
+                    or type(M._hud_snapshot) ~= "function" then
+                return "#1023: HUD draw/snapshot consumer missing"
+            end
+            if _format_hud_text({
+                    channel = "first_person", hand = "left",
+                    plan = _component_plan_values(0, 0, 0, 0, 0, 0, 1, 1, 1),
+                }) == nil then
+                return "#1023: HUD formatter rejected a valid apply plan"
+            end
+            if _hud_visible_values(false, true, true)
+                    or _hud_visible_values(true, false, true)
+                    or _hud_visible_values(true, true, false) then
+                return "#1023: HUD fail-closed visibility gate drifted"
+            end
+        end)
+    end
 end
 
 function M.on_setting_changed(setting_id)
+    _hud_focus.channel, _hud_focus.hand = _hud_focus_for_setting(
+        setting_id, _hud_focus.channel, _hud_focus.hand)
     if setting_id == "wt_dev_hp_enabled" then
         if mod:get("wt_dev_hp_enabled") ~= true then
             local restored = _restore_cached_poses()
@@ -977,7 +1140,8 @@ function M.on_settings_batch_changed(setting_ids)
         if type(setting_ids[i]) == "string"
                 and setting_ids[i]:find("^wt_dev_hp_") then
             relevant = true
-            break
+            _hud_focus.channel, _hud_focus.hand = _hud_focus_for_setting(
+                setting_ids[i], _hud_focus.channel, _hud_focus.hand)
         end
     end
     if not relevant then return false end
