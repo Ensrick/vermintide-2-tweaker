@@ -247,6 +247,10 @@ function M.normalize_record(backend_id, input, master)
         rerolled_props_indices = copy_array(input.rerolled_props_indices),
         rerolled_trait_indices = copy_array(input.rerolled_trait_indices),
         custom_glow = input.custom_glow,
+        -- #1001: durable exact-instance favorite bit. Only `true` is carried
+        -- (false and nil both mean not-favorite), so foreign inputs that never
+        -- set it normalize to nil and round-trips cannot invent a mark.
+        favorite = input.favorite == true or nil,
     }
 end
 

@@ -206,6 +206,12 @@ if NL and NL.rarities and not rawget(NL.rarities, "promo") then
     rawset(t, "promo", idx)
 end
 
+-- #1001: exact-instance favorite persistence policy (pure capture/restore).
+-- Loaded before the forge state owner, which installs it with the live record
+-- store, persist function, and both engine seams.
+mod._cim_favorite_persistence = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_favorite_persistence")
+
 -- ============================================================
 -- Forge state owner (persistence + item creation)
 -- ============================================================
