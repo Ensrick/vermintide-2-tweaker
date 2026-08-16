@@ -22,7 +22,7 @@ return function(H, repo_root)
     end
 
     H.test("WT rework master owns the exact active tweak family", function()
-        H.equal(#policy.LEAF_IDS, 13)
+        H.equal(#policy.LEAF_IDS, 15)
         H.equal(#dev_policy.LEAF_IDS, #policy.LEAF_IDS)
         for i = 1, #policy.LEAF_IDS do
             H.equal(dev_policy.LEAF_IDS[i], policy.LEAF_IDS[i])

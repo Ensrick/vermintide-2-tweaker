@@ -1,5 +1,6 @@
 -- Issues #601/#621/#622/#623/#664: isolated Weapon Tweaks balance policies.
--- Engine-free; optional/late templates are discovered on every bounded apply.
+-- The policy half is engine-free and optional/late templates are discovered on
+-- every bounded apply; M.install is the one engine-facing seam.
 local M = {}
 
 M.GREATAXE_LIGHT_CRIT_SETTING = "wt_greataxe_light_crit"
@@ -355,6 +356,93 @@ function M.new()
         self.executioner_headshot_enabled = enabled and parity_allowed == true
         return count
     end
+    return state
+end
+
+-- Bounded apply seam, owned here so the entry stays a manifest
+-- (PROJECT_STANDARDS 2.2a rule 1). Holds the single policy instance and
+-- publishes `mod._wt_apply_axe_balance`, which load, state transitions,
+-- single-setting dispatch (_wt_settings_runtime), owner batches, the rework
+-- master callback, and on_disabled all rerun. Every custom profile this seam
+-- generates is registered into NetworkLookup.damage_profiles unconditionally
+-- (the #431 wire floor), independent of any toggle; the #431 parity beacon
+-- decides whether the toggled profiles may actually be assigned. Applies once
+-- at install, which is why the entry calls it at the manifest position that
+-- precedes the parity beacon dofile.
+function M.install(mod)
+    local state = M.new()
+    local function register_profile(name)
+        local lookup = NetworkLookup and NetworkLookup.damage_profiles
+        if type(name) ~= "string" or not lookup or rawget(lookup, name) then return end
+        local index = #lookup + 1
+        rawset(lookup, index, name)
+        rawset(lookup, name, index)
+    end
+    mod._wt_apply_axe_balance = function(setting_id, force_off)
+        if type(Weapons) ~= "table" then return end
+        local function enabled(id, default_on)
+            if force_off then return false end
+            local value = mod:get(id)
+            if value == nil then return default_on == true end
+            return value == true
+        end
+        if not setting_id or setting_id == M.GREATAXE_LIGHT_CRIT_SETTING then
+            state:apply_greataxe_crit(
+                enabled(M.GREATAXE_LIGHT_CRIT_SETTING, true), Weapons)
+        end
+        if not setting_id or setting_id == M.DUAL_AXES_LIGHT_CRIT_SETTING then
+            state:apply_dual_crit(
+                enabled(M.DUAL_AXES_LIGHT_CRIT_SETTING, true), Weapons)
+        end
+        if not setting_id or setting_id == M.DUAL_AXES_CLEAVE_SETTING then
+            if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
+                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
+                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
+                    and mod._wt431_profiles_allowed() == true
+                state:apply_dual_cleave(
+                    enabled(M.DUAL_AXES_CLEAVE_SETTING, true), Weapons,
+                    DamageProfileTemplates, PowerLevelTemplates,
+                    function(value) return table.clone(value, true) end, register_profile,
+                    mod._wt431_custom_profile_fallback, parity_allowed)
+            end
+        end
+        if not setting_id or setting_id == M.ONE_HAND_AXE_CLEAVE_SETTING then
+            if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
+                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
+                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
+                    and mod._wt431_profiles_allowed() == true
+                state:apply_one_hand_axe_cleave(
+                    enabled(M.ONE_HAND_AXE_CLEAVE_SETTING, false), Weapons,
+                    DamageProfileTemplates, PowerLevelTemplates,
+                    function(value) return table.clone(value, true) end, register_profile,
+                    mod._wt431_custom_profile_fallback, parity_allowed)
+            end
+        end
+        if not setting_id or setting_id == M.COG_HAMMER_HEAVY_SPEED_SETTING then
+            state:apply_cog_heavy_speed(
+                enabled(M.COG_HAMMER_HEAVY_SPEED_SETTING, false), Weapons)
+        end
+        if not setting_id or setting_id == M.MACE_SWORD_SPEED_SETTING then
+            state:apply_mace_sword_speed(
+                enabled(M.MACE_SWORD_SPEED_SETTING, false), Weapons)
+        end
+        if not setting_id or setting_id == M.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
+            if type(DamageProfileTemplates) == "table" then
+                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
+                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
+                    and mod._wt431_profiles_allowed() == true
+                local count = state:apply_executioner_light_headshot(
+                    enabled(M.EXECUTIONER_LIGHT_HEADSHOT_SETTING, false),
+                    Weapons, DamageProfileTemplates,
+                    function(value) return table.clone(value, true) end, register_profile,
+                    mod._wt431_custom_profile_fallback, parity_allowed)
+                pcall(printf, "[wt:664] applied: executioner_light_actions=%d enabled=%s parity=%s multiplier=%.2f",
+                    count, tostring(enabled(M.EXECUTIONER_LIGHT_HEADSHOT_SETTING, false)),
+                    tostring(parity_allowed), M.EXECUTIONER_HEADSHOT_MULT)
+            end
+        end
+    end
+    mod._wt_apply_axe_balance(nil, false)
     return state
 end
 

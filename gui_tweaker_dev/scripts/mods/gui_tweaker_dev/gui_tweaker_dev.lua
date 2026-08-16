@@ -40,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.335-dev"
+local MOD_VERSION = "0.2.336-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2071,6 +2071,23 @@ end)
 -- ._save_bot_equipment; gut's only HeroWindowLoadoutSelectionConsole hook is on
 -- ._show_context_menu in _gut_mission_inventory.lua). Inert in the official realm and in
 -- Versus. See _gut_native_loadouts.lua for the full isolation rationale.
+-- Post-DEFAULT active-career presentation reconcile (#1033): one bounded respawn /
+-- per-slot re-equip after reset_modded_loadouts' durable transaction, deferred to the
+-- next safe keep boundary when mission-side. MUST dofile BEFORE _gut_native_loadouts
+-- so mod._gut_reset_presentation is published when the reset owner's lazy lookup and
+-- rt check resolve. No engine hooks; chains mod.update (see module header).
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_reset_presentation")
+    if ok and type(api) == "table" then
+        for _, check in ipairs(api.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        _dbg_alert("[gut:1033] reset presentation module failed: %s", tostring(api))
+    end
+end
+
 local _gut_native_loadouts = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_native_loadouts")
 if type(_gut_native_loadouts) == "table" and type(_gut_native_loadouts.rt_checks) == "table" then
     for _, c in ipairs(_gut_native_loadouts.rt_checks) do

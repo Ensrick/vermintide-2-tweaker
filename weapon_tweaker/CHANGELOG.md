@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.307-beta (2026-08-15) -- Fire Sword heavy attack tweaks (#943) [verify-fix]
+
+- Two independent, default-off Weapon Tweaks for Sienna's Flame Sword, both
+  members of the [Ensrick] family master: **Sweep Opens Heavies** repoints
+  only the two idle `action_one.default` heavy entry edges (charged release
+  and auto-chain, 1h_swords_wizard.lua:37-41/:60-65) from the nova to the
+  horizontal sweep, preserving the alternation; **10% Slower Nova Heavy**
+  divides the nova's `anim_time_scale` by 1.10 and stretches its bounded
+  action-local clock (total_time, damage window, hit_time, movement-slow and
+  chain windows) so hit/damage/chain timing track the clip. Both project from
+  one immutable per-template-identity baseline captured before the first
+  write: applies never compound, off restores exact captured values, both-on
+  composes, replaced templates re-capture. Wire-safe attacker-local timing;
+  no parity gate. New module `_wt_fire_sword.lua`; runtime check
+  `issue943_fire_sword_heavy_contract`; offline `test_wt_fire_sword.lua`.
+  Receipt `[wt:943]`. Refs #943.
+
 ## 0.12.306-beta (2026-08-13) -- restore cross-career Empire Longbow variable zoom (#316) [verify-fix]
 
 - Restored the Empire Longbow's authored action-special zoom cycle for

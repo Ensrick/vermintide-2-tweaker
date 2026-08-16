@@ -1,5 +1,16 @@
 # Enemy Tweaker Changelog
 
+## 0.7.55-dev (2026-08-15): #369 Enemy Stats category [verify-fix]
+
+- Restructured the menu per user direction (#369): the per-difficulty enemy
+  health multipliers moved out of Enemy Spawns > Special Spawns into a new
+  top-level Enemy Stats category (Health Multipliers group, one slider per
+  difficulty, Recruit through Cataclysm 3), the future home for mass (stagger
+  resistance), damage, and speed adjustments. All setting ids are unchanged,
+  so saved multiplier values carry over automatically; scaling behavior is
+  untouched. New regression check `issue369_enemy_stats_category`; the old
+  string-pinned widget test is replaced by behavioral widget-tree tests.
+
 ## 0.7.54-dev (2026-07-19): #450 bounded boss balance controls [verify-fix]
 
 - Adds opt-in Halescourge Cataclysm+ attack scaling that caps Troll and Spawn

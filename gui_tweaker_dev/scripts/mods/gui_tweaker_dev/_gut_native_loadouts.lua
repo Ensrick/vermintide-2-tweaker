@@ -360,47 +360,24 @@ end
 -- Now: a one-time `_seeded` flag marks a fully-imported entry. A fresh career takes a
 -- full official snapshot. A pre-existing PARTIAL entry (no flag -- either a bare
 -- BU-capture entry or a store persisted by the buggy build) is REPAIRED once: every
--- official loadout row the store is missing is added, and any row that lost its weapons
--- (the corrupt-partial signature -- a legitimately edited loadout ALWAYS keeps both
--- weapon slots) has its missing gear refilled from official. Rows the player genuinely
--- edited (both weapons present) are left untouched, so deliberate jewelry unequips are
--- preserved. Raw field reads only (mirror._career_data / _career_loadouts) -- no
--- interface methods, so no get_item_from_id recursion (v0.2.173 burn).
+-- official loadout row the store is missing is added, and any row that lost a slot
+-- vanilla can never leave empty (the corrupt-partial signature -- weapons fatal at
+-- spawn wield, skin/hat/frame/pose always resolve to some item) has its missing
+-- values refilled from official. Rows missing ONLY unequippable accessory slots
+-- (slot_necklace/slot_ring/slot_trinket_1, inventory_settings.lua:43/52/61) are
+-- HEALTHY, and the repair passes never refill those slots in place -- a deliberate
+-- jewelry unequip is indistinguishable from loss, so it is always preserved (issue
+-- #375 audit fix 2026-08-15; the pure contract lives in Policy.row_is_corrupt_partial
+-- / repair_missing_loadout_slots / repair_corrupt_row). Raw field reads only
+-- (mirror._career_data / _career_loadouts) -- no interface methods, so no
+-- get_item_from_id recursion (v0.2.173 burn).
 -- ------------------------------------------------------------------
 local function _row_is_corrupt_partial(row)
-    -- A complete native loadout row owns EVERY loadout slot, not only melee/ranged.
-    -- issue #402 follow-up: the first repair pass only treated missing weapons as
-    -- partial corruption, so old rows could keep weapons while silently lacking
-    -- outfit/hat/frame/pose/accessory slots. Those missing visual/accessory slots
-    -- then looked like realm bleed or blank cosmetics. Keep this predicate aligned
-    -- with LOADOUT_SLOT_NAMES so the whole row is repaired as one contract.
-    if type(row) ~= "table" then return true end
-    for i = 1, #LOADOUT_SLOT_NAMES do
-        local slot = LOADOUT_SLOT_NAMES[i]
-        if row[slot] == nil then return true end
-    end
-    return false
+    return Policy.row_is_corrupt_partial(row, LOADOUT_SLOT_NAMES)
 end
 
 local function _repair_missing_loadout_slots(entry, official_rows)
-    if type(entry) ~= "table" or type(entry.loadouts) ~= "table" or type(official_rows) ~= "table" then
-        return 0
-    end
-    local repaired = 0
-    for i = 1, #official_rows do
-        local off_row = official_rows[i]
-        local st_row = entry.loadouts[i]
-        if type(off_row) == "table" and type(st_row) == "table" then
-            for s = 1, #LOADOUT_SLOT_NAMES do
-                local slot = LOADOUT_SLOT_NAMES[s]
-                if st_row[slot] == nil and off_row[slot] ~= nil then
-                    st_row[slot] = off_row[slot]
-                    repaired = repaired + 1
-                end
-            end
-        end
-    end
-    return repaired
+    return Policy.repair_missing_loadout_slots(entry, official_rows, LOADOUT_SLOT_NAMES)
 end
 
 local function _ensure_seeded(mirror, career_name, defer_persist)
@@ -434,9 +411,9 @@ local function _ensure_seeded(mirror, career_name, defer_persist)
             entry.loadouts[i] = _deepcopy(off_row)
             rows_added = rows_added + 1
         elseif _row_is_corrupt_partial(st_row) then
-            for k, v in pairs(off_row) do
-                if st_row[k] == nil then st_row[k] = v end
-            end
+            -- Refill every missing official key EXCEPT deliberately-emptiable
+            -- accessory slots (issue #375 audit fix; Policy.repair_corrupt_row).
+            Policy.repair_corrupt_row(st_row, off_row)
             rows_repaired = rows_repaired + 1
         end
     end
@@ -1214,6 +1191,13 @@ end)
 function M.reset_modded_loadouts(career_arg, source, echo_result)
     local store = _store()
     local overlay = _overlay()
+    -- Issue #1033 presentation half: capture the pre-reset backend truth for the
+    -- ACTIVE career (skin identity) BEFORE the clear, so the post-transaction
+    -- reconcile can decide respawn-vs-per-slot. Lazy namespace read -- the module
+    -- is dofile'd from the entry manifest; absent = persistence-only (old behavior).
+    local presentation = mod._gut_reset_presentation
+    local before_ctx = presentation and presentation.capture_before
+        and presentation.capture_before() or nil
     local cleared, explicit_found = Policy.clear_modded_loadouts(store, overlay, career_arg)
     if career_arg and career_arg ~= "" and not explicit_found then
         if echo_result then
@@ -1247,6 +1231,17 @@ function M.reset_modded_loadouts(career_arg, source, echo_result)
     end
     printf("[gut:1033] source=%s cleared=%d seeded=%d adventure_mirror=%s writes=2 dirtify=1",
         tostring(source or "command"), cleared, seeded, tostring(adventure and true or false))
+    -- Issue #1033 presentation half: ONE bounded active-career reconcile AFTER the
+    -- durable transaction (respawn on skin change, per-slot re-equip otherwise,
+    -- deferred to the next safe keep boundary when mission-side). Diff-based and
+    -- self-limiting: a reset that did not change the active career reconciles 0.
+    if presentation and presentation.reconcile then
+        if before_ctx and before_ctx.career_name then
+            local active_entry = store[before_ctx.career_name]
+            before_ctx.selected_row = active_entry and active_entry.selected_index or nil
+        end
+        pcall(presentation.reconcile, before_ctx, source or "command")
+    end
     return true, { cleared = cleared, seeded = seeded, mirror = adventure and true or false }
 end
 
@@ -1753,6 +1748,13 @@ M.rt_checks = {
     { name = "issue1033_default_official_reseed_wired", fn = function()
         if type(M.reset_modded_loadouts) ~= "function" then return "reset owner missing" end
         if type(mod._gut_reset_modded_loadouts) ~= "function" then return "view adapter missing" end
+        -- Presentation half (#1033): the reconcile owner must be published on the mod
+        -- namespace so the reset's lazy lookup resolves at runtime.
+        local presentation = mod._gut_reset_presentation
+        if type(presentation) ~= "table" or type(presentation.reconcile) ~= "function"
+            or type(presentation.capture_before) ~= "function" then
+            return "presentation reconcile owner not published (mod._gut_reset_presentation)"
+        end
         local store = { mercenary = {} }
         local overlay = { mercenary = {}, zealot = {} }
         local cleared = Policy.clear_modded_loadouts(store, overlay)
@@ -1905,9 +1907,9 @@ M.rt_checks = {
     end },
     { name = "native_loadouts_seed_repair_predicate", fn = function()
         -- issues #375/#402: the self-heal seed classifies a row as corrupt-partial when
-        -- ANY canonical loadout slot is missing. The old weapon-only predicate let a row
-        -- keep melee/ranged while losing outfit/hat/frame/pose/accessory state, which made
-        -- realm bleed look "mostly fixed" while visual slots still rotted invisibly.
+        -- a slot vanilla can never leave empty is missing. Unequippable accessory slots
+        -- (jewelry) are exempt everywhere: a deliberate unequip is indistinguishable
+        -- from loss, so the repair passes preserve it (#375 audit fix 2026-08-15).
         if type(_row_is_corrupt_partial) ~= "function" then return "_row_is_corrupt_partial missing" end
         if not _row_is_corrupt_partial(nil) then return "nil row must be corrupt-partial" end
         local full = {}
@@ -1917,7 +1919,12 @@ M.rt_checks = {
             local partial = {}
             for _, s in ipairs(LOADOUT_SLOT_NAMES) do partial[s] = "__rt_" .. s end
             partial[slot] = nil
-            if not _row_is_corrupt_partial(partial) then
+            local is_corrupt = _row_is_corrupt_partial(partial)
+            if Policy.is_unequippable_slot(slot) then
+                if is_corrupt then
+                    return "row missing deliberately-emptiable " .. slot .. " must stay HEALTHY"
+                end
+            elseif not is_corrupt then
                 return "row missing " .. slot .. " must be corrupt-partial"
             end
         end
@@ -1930,17 +1937,67 @@ M.rt_checks = {
                 slot_frame = "frame", slot_pose = "pose",
             },
         })
-        if fixed ~= 7 then return "slot migration repaired " .. tostring(fixed) .. " slots, expected 7" end
+        if fixed ~= 4 then return "slot migration repaired " .. tostring(fixed) .. " slots, expected 4 (jewelry exempt)" end
         if entry.loadouts[1].slot_melee ~= "m" or entry.loadouts[1].slot_ranged ~= "r" then
             return "slot migration clobbered existing weapons"
         end
         if entry.loadouts[1].slot_frame ~= "frame" or entry.loadouts[1].slot_skin ~= "skin" then
             return "slot migration did not fill visual slots"
         end
+        if entry.loadouts[1].slot_necklace ~= nil or entry.loadouts[1].slot_ring ~= nil
+            or entry.loadouts[1].slot_trinket_1 ~= nil then
+            return "slot migration refilled a deliberately-emptiable accessory slot"
+        end
         -- Every weapon slot must be a gear slot (repair reads gear from official).
         for slot in pairs(WEAPON_SLOT_SET) do
             if not GEAR_SLOT_SET[slot] then return "weapon slot not in gear set: " .. slot end
         end
+    end },
+    { name = "issue375_deliberate_empty_slots_preserved", fn = function()
+        -- #375 audit contradiction: the one-time _slot_integrity_v2 pass refilled
+        -- deliberately emptied accessory slots contrary to its own doctrine. Contract:
+        -- deliberately-emptied jewelry stays empty on EVERY repair path; genuinely
+        -- missing (never-emptiable) slots still repair.
+        local set = Policy.UNEQUIPPABLE_SLOTS
+        if type(set) ~= "table" or not (set.slot_necklace and set.slot_ring and set.slot_trinket_1) then
+            return "unequippable accessory set wrong"
+        end
+        for slot in pairs(set) do
+            if not GEAR_SLOT_SET[slot] then return "unequippable slot outside gear set: " .. slot end
+            if WEAPON_SLOT_SET[slot] then return "weapon slot marked unequippable: " .. slot end
+            if COSMETIC_SLOT_SET[slot] then return "cosmetic slot marked unequippable: " .. slot end
+        end
+        local official = {
+            slot_melee = "off_m", slot_ranged = "off_r", slot_skin = "off_skin",
+            slot_hat = "off_hat", slot_necklace = "off_neck", slot_ring = "off_ring",
+            slot_trinket_1 = "off_trink", slot_frame = "off_frame", slot_pose = "off_pose",
+            talents = "1,2,3,4,5,6",
+        }
+        -- Healthy row with a deliberate ring unequip: no path may refill it.
+        local edited = {}
+        for _, s in ipairs(LOADOUT_SLOT_NAMES) do edited[s] = "own_" .. s end
+        edited.slot_ring = nil
+        if Policy.row_is_corrupt_partial(edited, LOADOUT_SLOT_NAMES) then
+            return "deliberate ring unequip classified corrupt"
+        end
+        local entry = { loadouts = { edited } }
+        Policy.repair_missing_loadout_slots(entry, { official }, LOADOUT_SLOT_NAMES)
+        if edited.slot_ring ~= nil then return "migration refilled a deliberate ring unequip" end
+        -- Corrupt row (lost its melee): never-emptiable holes repair, jewelry holes do not.
+        local corrupt = { slot_ranged = "own_r", slot_necklace = nil, slot_hat = nil }
+        if not Policy.row_is_corrupt_partial(corrupt, LOADOUT_SLOT_NAMES) then
+            return "row missing slot_melee must be corrupt"
+        end
+        local filled = Policy.repair_corrupt_row(corrupt, official)
+        if corrupt.slot_melee ~= "off_m" or corrupt.slot_hat ~= "off_hat" then
+            return "corrupt-row refill skipped a genuinely-missing slot"
+        end
+        if corrupt.talents ~= "1,2,3,4,5,6" then return "corrupt-row refill dropped talents" end
+        if corrupt.slot_necklace ~= nil or corrupt.slot_ring ~= nil or corrupt.slot_trinket_1 ~= nil then
+            return "corrupt-row refill touched an accessory slot"
+        end
+        if corrupt.slot_ranged ~= "own_r" then return "corrupt-row refill clobbered an owned slot" end
+        if filled < 5 then return "corrupt-row refill count wrong: " .. tostring(filled) end
     end },
     { name = "issue402_official_scrub_all_slots", fn = function()
         -- issue #402: official repair must cover the SAME slot contract as the modded store,

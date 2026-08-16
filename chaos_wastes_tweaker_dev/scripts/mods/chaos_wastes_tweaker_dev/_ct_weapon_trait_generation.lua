@@ -357,7 +357,18 @@ return function(ctx)
             error(result, 2)
         end
         result = override_traits_in_result(result, gen_rarity)
-        return mod._ct_strip_banned_traits_from_result(result)
+        result = mod._ct_strip_banned_traits_from_result(result)
+        -- #917: LAST mutation on the detached result - reapply the local
+        -- player's preserved Adventure illusion. All gating (toggle, snapshot
+        -- family match via matching_item_key, upgrade carry-from-prior-item,
+        -- bot-mirror exclusion) lives inside the module; nil-safe when the
+        -- module is absent (isolated offline loads of this file).
+        local illusions = mod._ct_adventure_illusions
+        if illusions and illusions.apply_to_result then
+            result = illusions.apply_to_result(label, result,
+                label == "upgrade_item" and args and args[1] or nil)
+        end
+        return result
     end
 
     state.filtered_weapon_gen = _filtered_weapon_gen

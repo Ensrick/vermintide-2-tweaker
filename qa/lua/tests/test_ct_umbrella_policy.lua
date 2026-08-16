@@ -142,7 +142,10 @@ local function read(path)
         H.truthy(source:find("mod._ct_umbrella_policy.enabled", 1, true))
         H.truthy(source:find("mod._ct_strip_banned_traits_from_result", 1, true))
         H.truthy(source:find("result = override_traits_in_result", 1, true))
-        H.truthy(source:find("return mod._ct_strip_banned_traits_from_result(result)", 1, true))
+        -- #917 moved the strip from tail-return to assignment form so the
+        -- adventure-illusion reapply can run after it; the strip still gates
+        -- every generation path.
+        H.truthy(source:find("result = mod._ct_strip_banned_traits_from_result(result)", 1, true))
         H.truthy(source:find('mod:command("ct_umbrella_audit"', 1, true))
         H.truthy(source:find("mutation=false", 1, true))
         for _, field in ipairs({

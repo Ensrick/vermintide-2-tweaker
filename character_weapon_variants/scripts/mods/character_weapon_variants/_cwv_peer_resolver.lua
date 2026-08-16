@@ -34,6 +34,33 @@ local function controlled(player)
 	return local_player_id(player) == 1
 end
 
+function M.player_peer_id(player)
+	if type(player) ~= "table" then return nil end
+	if type(player.peer_id) == "string" and player.peer_id ~= "" then
+		return player.peer_id
+	end
+	if type(player.network_id) == "function" then
+		local ok, value = pcall(player.network_id, player)
+		if ok and type(value) == "string" and value ~= "" then return value end
+	end
+	return nil
+end
+
+-- SimpleHuskInventoryExtension.init receives the exact RemotePlayer before
+-- PlayerManager's unit-owner table is guaranteed to be populated. Prefer that
+-- spawn-local fact only when it is a human and does not point at a different
+-- unit; otherwise fall back to the ordinary manager lookup (#914).
+function M.husk_owner(player_manager, owner_unit, hinted_player)
+	if controlled(hinted_player) then
+		local hinted_unit = hinted_player.player_unit
+		if (hinted_unit == nil or hinted_unit == owner_unit)
+				and M.player_peer_id(hinted_player) then
+			return hinted_player, "husk_extension_player"
+		end
+	end
+	return M.owner(player_manager, owner_unit)
+end
+
 function M.owner(player_manager, owner_unit)
 	if type(player_manager) ~= "table" or type(player_manager.owner) ~= "function" then
 		return nil, "owner resolver unavailable"
