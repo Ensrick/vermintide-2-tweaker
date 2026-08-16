@@ -1,5 +1,21 @@
 # General Tweaker Changelog
 
+## 0.2.269-dev (2026-08-16) -- agent bridge Phase 1: live telemetry + clipboard probe (#1338) [untested]
+
+- New dev-only module `_gt_agent_bridge.lua` (never promoted): gives an
+  external Claude session live eyes on the running game via framed engine-printf
+  output. `/agent_arm [seconds]` starts a heartbeat line (state, level, player
+  position, hp) every N seconds; `/agent_disarm` stops it; `/agent_dump
+  <dotted.path> [depth]` serializes any `_G`-reachable value between
+  `[agent:dump:N] BEGIN/END` markers with an `[agent:d]` marker on every
+  payload line (interleave-proof); `/agent_probe_clipboard` reports whether
+  `Clipboard.get/put` round-trips in retail (the Phase 2 inbound-channel gate;
+  logs verdict + lengths only, never clipboard content). Command-only plus one
+  update-registry consumer; NO vanilla hooks. Desktop side:
+  `tools/agent-bridge/agent-bridge-watch.ps1` tails the console log into
+  `%APPDATA%\Fatshark\Vermintide 2\agent_bridge\` (stream.log, latest-hb.txt,
+  dump-N.txt) for file-based reading.
+
 ## 0.2.268-dev (2026-08-16) -- ragdoll 0 = off, reconcile timer, diag shapes (#332, #309, #169) [verify-fix]
 
 - Max Ragdolls now accepts 0 as fully off, and the corpse-cap reconcile runs

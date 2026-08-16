@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.268-dev"
+local MOD_VERSION = "0.2.269-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1806,6 +1806,11 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_disconnect_grace_diag")
 -- dev-only and read-only, with no recovery or network mutation.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_debug_probes")
+-- Issue #1338: Claude agent bridge Phase 1 (outbound telemetry + clipboard
+-- probe). DEV-ONLY, never promoted. Command-only + one update-registry
+-- consumer; no vanilla hooks. Framed printf output is consumed by
+-- tools/agent-bridge/agent-bridge-watch.ps1.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_agent_bridge")
 
 -- Console dump commands (level / glossary / cosmetics / items / hero-view) +
 -- the pickup Item Spawner. Both command-only, read-only/self-contained; no

@@ -67,6 +67,10 @@ gt_stat_hud_page,           -- select expanded HUD page: next, prev, or number (
 gt_stat_hud_metrics,        -- log bounded HUD sample/rebuild/format counters (#797)
 gt_lag_comp_status,         -- show queued/applied/block/dodge/stagger counters (#1034)
 gt_regression_test,         -- issue diagnostic + regression commands retain gt_ prefix
+-- Agent bridge (dev-only, #1338; framed printf consumed by tools/agent-bridge/):
+agent_arm, agent_disarm,    -- heartbeat telemetry on/off (optional period arg)
+agent_dump,                 -- serialize a _G-reachable value between BEGIN/END frames
+agent_probe_clipboard,      -- Phase 2 gate: is Clipboard.get/put live in retail?
 -- Host-side lobby controls (absorbed from lobby_tweaker; still lobby_-prefixed):
 lobby_reserve, lobby_unreserve, lobby_reservations,
 lobby_ignore, lobby_ignore_persist, lobby_unignore, lobby_ignored, lobby_ignore_last,
