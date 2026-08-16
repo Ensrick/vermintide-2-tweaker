@@ -1,5 +1,17 @@
 # Crafting in Modded Changelog
 
+## 0.8.126-dev (2026-08-16) -- crafted favorites survive restarts (#1001) [verify-fix]
+
+- Crafted weapons keep their favorite state across restarts (#1001): the
+  green-heart favorite mark on a CIM-crafted weapon (and its removal) now
+  survives quitting the game. Vanilla prunes favorite ids whose rows are
+  absent during the backend refresh, which always hit CIM's late-injected
+  synthetic items; each exact crafted instance now stores its own durable
+  favorite bit, re-applied only after that exact item is back in the
+  inventory. Two crafted copies of the same weapon keep independent states;
+  deleting or salvaging a craft clears its stored mark. New runtime check
+  `issue1001_favorite_persistence`; 7 offline tests. `[cim:1001]` receipts.
+
 ## 0.8.125-dev (2026-08-15) -- Athanor icon refusals name their gate (#481) [verify-fix]
 
 - Athanor icon-policy refusals now carry the refusing gate and material:

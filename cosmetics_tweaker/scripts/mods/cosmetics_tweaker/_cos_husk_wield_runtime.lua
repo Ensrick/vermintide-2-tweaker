@@ -233,6 +233,27 @@ function HuskWieldRuntime.install(mod, deps)
                         and equipment.slots[slot_name]
                     local item_data = slot_data and slot_data.item_data
                     local wielded_template = item_data and item_data.template
+                    -- #476: weapon-side entries a CWV wearer emits are keyed by
+                    -- the OWNER-LOCAL variant template/item_type; the husk's
+                    -- vanilla base template never equals them, so the re-drive
+                    -- below silently skipped this family on every switch-back.
+                    -- Resolve the wearer's exact variant once per wield
+                    -- (fail-closed: nil leaves the vanilla comparison as the
+                    -- only accepted identity; the apply gate downstream stays
+                    -- the safety authority either way).
+                    local cwv_cands
+                    do
+                        local peer_identity = mod._cos_cwv_peer_identity
+                        if wearer_peer and item_data and peer_identity
+                                and type(peer_identity.husk_variant_candidates)
+                                    == "function" then
+                            cwv_cands = peer_identity.husk_variant_candidates(
+                                get_mod("character_weapon_variants"),
+                                { wearer_peer = wearer_peer,
+                                    slot_name = slot_name },
+                                item_data)
+                        end
+                    end
                     for stored_key, entry in pairs(equips) do
                         if entry and entry.kind and entry.armoury_key then
                             local career_ok, career_reason =
@@ -257,8 +278,14 @@ function HuskWieldRuntime.install(mod, deps)
                                 should_apply = true
                             elseif entry.kind == "offhand"
                                     or entry.kind == "illusion" then
-                                should_apply = wielded_template
-                                    and stored_key == wielded_template
+                                should_apply = (wielded_template
+                                    and stored_key == wielded_template)
+                                    or (cwv_cands ~= nil
+                                        and (stored_key == cwv_cands.variant_key
+                                            or (cwv_cands.template ~= nil
+                                                and stored_key
+                                                    == cwv_cands.template)))
+                                    or false
                             end
                             if should_apply then
                                 state.dbg("[husk-wield-repaint] apply stored_key=%s kind=%s key=%s",
