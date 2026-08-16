@@ -152,6 +152,9 @@ local loc = {
     cos_unlock_weapon_poses = {
         en = "Unlock Heroic Weapon Poses",
     },
+    weapon_pose = {
+        en = "Weapon Pose",
+    },
     cos_unlock_weapon_poses_tooltip = {
         en = "Shows every authored heroic pose for the weapon you are holding on the social wheel in the modded realm. This does not grant or alter official backend ownership. Weapons without their own authored pose icons remain unchanged while compatibility diagnostics are collected.",
     },
