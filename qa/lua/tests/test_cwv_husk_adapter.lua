@@ -499,7 +499,7 @@ return function(H, repo_root)
         for _, marker in ipairs({
             "_om._husk_adapter_pre = function(hand, item_template, item_units, slot_name, item_data, owner_unit_3p)",
             "_om._husk_adapter_post = function(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p, v_a3p)",
-            "_om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name)",
+            "_om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name, item_units)",
             "_om._husk_apply_cwv_transform(hand, item_data, item_units, v_w3p, owner_unit_3p, slot_name)",
             "_om._husk_material_donor_ready = function(base_unit)",
             "_om._husk_lease_override = function(base_unit)",

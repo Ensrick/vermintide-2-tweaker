@@ -7,6 +7,16 @@ local function install(mod, ctx)
 	local _clone_damage_profile = assert(ctx.clone_damage_profile,
 		"cwv javelin owner requires clone_damage_profile")
 
+	-- (#1186) Renamed-clone projectile policy. This owner holds the mod's ONLY
+	-- PlayerProjectileUnitExtension.init registration (VMF drops a second hook on
+	-- the same (Class, method) pair), so every variant whose fired projectile has
+	-- to reach a renamed template rides that one handler. The decision itself is
+	-- engine-free and lives in its own module so the offline suite can drive it.
+	-- Published on `_om` rather than held as a chunk local: this chunk is near the
+	-- Lua 5.1 200-local ceiling (memory reference_cwv_lua_200_local_ceiling).
+	_om.projectile_tunes = mod:dofile(
+		"scripts/mods/character_weapon_variants/_cwv_projectile_tunes")
+
 	-- ============================================================
 	-- Tuskgor Javelin template (modified javelin_template)
 	-- 15 max ammo, no auto-catch reload, ammo pickups refill, 2x damage, 0.5x speed
@@ -433,6 +443,89 @@ local function install(mod, ctx)
 	-- at our cloned tuskgor_javelin_template's throw_charged sub-action. The
 	-- projectile then reads OUR fields for the rest of its lifecycle (impact
 	-- handling, link_pickup, pickup_settings, etc.).
+	-- (#1186) Runtime half of the renamed-clone arm. Everything here is a lazy
+	-- `_om` read so entry load order stays irrelevant: `_cwv_key_for_item`
+	-- (#482 ladder) and `_husk_skin_def` are both published after this owner.
+	--
+	-- OWNERSHIP LADDER for "which variant fired this projectile", strongest first:
+	--   1. the wielded slot's own item identity through the shared #482 ladder
+	--      (backend_id pattern, then the CIM/CWV stamps a crafted UUID instance
+	--      carries) -- this is the rung a CRAFTED variant needs and the one the
+	--      javelin block below never had;
+	--   2. the slot's wire SKIN through the canonical `<item_key>_` resolver, the
+	--      shape a curated/given instance arrives in.
+	-- Neither rung can answer for a native weapon, so a vanilla Trollhammer or
+	-- elf javelin resolves to nothing and the projectile keeps vanilla data.
+	_om._cwv_renamed_template_overrides = nil
+	_om._cwv_projectile_receipts = {}
+	_om._cwv_projectile_receipt_count = 0
+	-- Engine lookup kept behind its own named seam so the regression can drive
+	-- the applier below with a fixture slot instead of a live inventory.
+	_om._cwv_projectile_owner_slot = function(owner_unit)
+		local inv = owner_unit and ScriptUnit.has_extension(owner_unit, "inventory_system")
+		if not inv then return nil end
+		local equipment = inv.equipment and inv:equipment()
+		local slot_name = equipment and equipment.wielded_slot or "slot_ranged"
+		return inv.get_slot_data and inv:get_slot_data(slot_name) or nil
+	end
+	_om._cwv_apply_renamed_projectile_template = function(projectile, init_data)
+		local policy = _om.projectile_tunes
+		local catalog = _om.variant_catalog
+		local definitions = catalog and catalog.definitions
+		if not (policy and definitions and rawget(_G, "ItemMasterList")) then return 0 end
+		if not _om._cwv_renamed_template_overrides then
+			_om._cwv_renamed_template_overrides = policy.renamed_template_defs(
+				definitions, function(base)
+					local entry = rawget(ItemMasterList, base)
+					return type(entry) == "table" and entry.template or nil
+				end)
+		end
+		local slot_data = _om._cwv_projectile_owner_slot(init_data and init_data.owner_unit)
+		if not slot_data then return 0, "no_slot" end
+		local master = slot_data.master_item or slot_data.item_data
+		local backend_id = (master and master.backend_id) or slot_data.backend_id
+		local key = _om._cwv_key_for_item and _om._cwv_key_for_item(backend_id, master)
+		if not key and _om._husk_skin_def then
+			local skin_def = _om._husk_skin_def(slot_data.skin)
+			key = skin_def and skin_def.item_key or nil
+		end
+		local variant_base
+		for _, def in ipairs(definitions) do
+			if def.item_key == key then variant_base = def.base_weapon; break end
+		end
+		local action, reason = policy.resolve({
+			overrides = _om._cwv_renamed_template_overrides,
+			variant_key = key,
+			variant_base = variant_base,
+			item_name = init_data and init_data.item_name,
+			weapons = rawget(_G, "Weapons"),
+			lookup = projectile.action_lookup_data,
+			base_action = projectile._current_action,
+		})
+		if not action then return 0, reason end
+		local changed = policy.apply(projectile, action, function(name)
+			local lookup = NetworkLookup and NetworkLookup.damage_profiles
+			return lookup and rawget(lookup, name) or nil
+		end)
+		-- Bounded receipt: a projectile inits on EVERY shot, so key it by the
+		-- resolved shape and print each distinct one once.
+		local receipt = tostring(key) .. "|" .. tostring(reason) .. "|"
+			.. tostring(projectile.action_lookup_data and projectile.action_lookup_data.action_name)
+			.. "|" .. tostring(projectile.action_lookup_data and projectile.action_lookup_data.sub_action_name)
+		if not _om._cwv_projectile_receipts[receipt] and _om._cwv_projectile_receipt_count < 16 then
+			_om._cwv_projectile_receipts[receipt] = true
+			_om._cwv_projectile_receipt_count = _om._cwv_projectile_receipt_count + 1
+			pcall(printf,
+				"[cwv:1186] projectile re-pointed variant=%s base=%s clone=%s action=%s/%s fields=%d damage_profile=%s (%d/16)",
+				tostring(key), tostring(variant_base), tostring(reason),
+				tostring(projectile.action_lookup_data and projectile.action_lookup_data.action_name),
+				tostring(projectile.action_lookup_data and projectile.action_lookup_data.sub_action_name),
+				changed, tostring(action.impact_data and action.impact_data.damage_profile),
+				_om._cwv_projectile_receipt_count)
+		end
+		return changed, reason
+	end
+
 	-- Single init hook combining the v0.1.98 fix and the v0.1.96 diagnostic
 	-- trace. v0.1.99 had two separate `hook_safe` registrations on the same
 	-- method which silently never fired (VMF doesn't chain multiple hook_safe
@@ -446,7 +539,18 @@ local function install(mod, ctx)
 		_dbg("[cwv stick] PROJ INIT item=%s tmpl=%s action=%s sub=%s",
 			tostring(item), tostring(tmpl), tostring(action), tostring(sub))
 
-		-- 2) Post-fix: if this projectile belongs to one of our cwv javelin
+		-- 2) (#1186) Renamed-clone arm for EVERY variant that authored a template
+		--    under a new name. It runs ahead of the javelin-specific block below
+		--    so that block stays the LAST writer for its own weapon and its
+		--    v0.1.98 behavior is provably unchanged (both resolve the same
+		--    tuskgor_javelin_template sub-action; the writes are identical).
+		--    The variant this exists for is the Outrider Grenade Launcher, whose
+		--    0.65x damage-profile clone and grenade projectile_info never reached
+		--    the fired projectile: the engine re-resolves the DONOR template from
+		--    the base item key, and only the javelin family had an arm here.
+		pcall(_om._cwv_apply_renamed_projectile_template, self, extension_init_data)
+
+		-- 3) Post-fix: if this projectile belongs to one of our cwv javelin
 		--    variants, swap the action data references onto our cloned template.
 		--    Filter to javelin-class items only to avoid log spam on arrows/bolts.
 		if item ~= "we_javelin" then return end

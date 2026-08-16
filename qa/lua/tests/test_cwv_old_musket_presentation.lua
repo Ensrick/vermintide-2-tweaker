@@ -91,7 +91,11 @@ return function(H, repo_root)
 		H.truthy(policy_source:find('Unit.set_all_materials', 1, true))
 		H.truthy(source:find('_om._apply_old_musket_textures = _om.old_musket_preview.apply_textures', 1, true))
 
-        local hook_start = assert(source:find('mod:hook("LootItemUnitPreviewer", "spawn_units"', 1, true))
+        -- #419 named the wrapper body so the browser delivery contract is
+        -- executable; the LootItemUnitPreviewer.spawn_units registration now only
+        -- delegates to it, so the body is anchored by its own name.
+        local hook_start = assert(source:find(
+            '_om._cwv_browser_spawn_units = function(func, self, spawn_data)', 1, true))
         local hook_finish = assert(source:find('-- ============================================================\n-- Init', hook_start, true))
         local hook = source:sub(hook_start, hook_finish)
         H.truthy(hook:find('_om._old_musket_preview_texture_targets(', 1, true))

@@ -1138,6 +1138,105 @@ _rt_register("browser_meshswap_guards", function()
     end
 end)
 
+_rt_register("issue419_browser_prepass_precedes_vanilla_spawn", function()
+    -- Issue #419, re-review path 1. `browser_meshswap_guards` above proves the
+    -- NEGATIVE controls and the pure adapter, but it never carries a stamped
+    -- crafted instance through the production helper and never touches the
+    -- LootItemUnitPreviewer wrapper -- so deleting the pre-pass restored the
+    -- base-mesh-plus-variant-transform symptom while it stayed green. This
+    -- check drives both halves of the live contract.
+    local apply = mod._cwv_browser_meshswap_apply
+    local wrapper = mod._cwv_browser_spawn_units
+    if type(apply) ~= "function" then return "#419 browser mesh-swap helper missing" end
+    if type(wrapper) ~= "function" then
+        return "#419 browser spawn_units wrapper is not a named, drivable seam -- hook delivery is unprovable"
+    end
+    local iml = rawget(_G, "ItemMasterList")
+    if type(iml) ~= "table" then return "ItemMasterList not loaded yet (run in-keep)" end
+
+    -- GROUND TRUTH (#1156): the authored catalog picks the fixture -- a REGISTERED
+    -- variant that overrides its base's right hand. Never the resolver under test,
+    -- and never the collapsed base value the defect produces.
+    local def, base
+    for _, candidate in ipairs(_variant_definitions) do
+        if not candidate.skin_only and _registered_keys[candidate.item_key]
+                and type(candidate.right_hand_unit) == "string"
+                and not candidate.right_hand_unit:find("wpn_invisible_weapon", 1, true) then
+            local entry = rawget(iml, candidate.base_weapon)
+            if type(entry) == "table" and type(entry.right_hand_unit) == "string"
+                    and entry.right_hand_unit ~= candidate.right_hand_unit then
+                def, base = candidate, entry
+                break
+            end
+        end
+    end
+    if not def then
+        return "#419 no registered variant overrides its base right hand -- fixture cannot be built"
+    end
+    local BASE_3P = base.right_hand_unit .. "_3p"
+    local WANT_3P = def.right_hand_unit .. "_3p"
+
+    -- The exact shape the issue is about: an Athanor craft. Its backend_id is a
+    -- guid, so the #482 bid-pattern rung CANNOT match and identity survives only
+    -- through the mod_data stamp -- the rung `_load_item_units` kills by rebinding
+    -- item_data to the base master-list entry before asking for units.
+    local function crafted_item()
+        return {
+            backend_id = "rt419-3f9d5218-b649-4a59-bdb0-0ac51415ce46",
+            data = {
+                name = def.base_weapon,
+                key = def.base_weapon,
+                mod_data = { cwv_key = def.item_key },
+            },
+        }
+    end
+
+    -- Residency is a runtime fact the keep cannot supply for every variant, so
+    -- substitute the production spawn-target gate for the drive and restore it.
+    local saved_resolver = _om._preview_override_3p
+    local observed, result
+    local ok, err = pcall(function()
+        _om._preview_override_3p = function(unit) return unit .. "_3p" end
+
+        -- (a) the helper itself rewrites a stamped crafted instance.
+        local rows = { { unit_name = BASE_3P } }
+        apply(crafted_item(), rows)
+        if rows[1].unit_name ~= WANT_3P then
+            result = "#419 stamped crafted instance did not reach the variant mesh: got "
+                .. tostring(rows[1].unit_name)
+            return
+        end
+
+        -- (b) DELIVERY: the real wrapper must rewrite BEFORE vanilla reads the
+        -- recipe. The spy stands in for vanilla spawn_units and records what it
+        -- was actually handed; returning nil keeps the post-spawn transform pass
+        -- out of the drive (it needs live units).
+        local spy_saw
+        local spy = function(_, spawn_data)
+            spy_saw = spawn_data[1] and spawn_data[1].unit_name
+            return nil
+        end
+        wrapper(spy, { _item = crafted_item() }, { { unit_name = BASE_3P } })
+        if spy_saw ~= WANT_3P then
+            result = "#419 vanilla spawn_units received " .. tostring(spy_saw)
+                .. " -- the mesh-swap pre-pass did not run before the spawn"
+            return
+        end
+
+        -- (c) negative control through the SAME delivery path: a non-cwv item is
+        -- handed to vanilla untouched.
+        spy_saw = nil
+        wrapper(spy, { _item = { backend_id = "rt419-native", data = { name = def.base_weapon } } },
+            { { unit_name = BASE_3P } })
+        if spy_saw ~= BASE_3P then
+            result = "#419 native item was rewritten on the browser path: " .. tostring(spy_saw)
+        end
+    end)
+    _om._preview_override_3p = saved_resolver
+    if not ok then return "#419 browser delivery drive errored: " .. tostring(err) end
+    return result
+end)
+
 _rt_register("issue660_preview_descriptor_adapter_parity", function()
     local policy = _om.exact_appearance
     if type(policy) ~= "table" or type(policy.resolve_spawn_descriptor) ~= "function"

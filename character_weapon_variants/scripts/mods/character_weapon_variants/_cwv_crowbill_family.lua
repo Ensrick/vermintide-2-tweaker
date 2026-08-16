@@ -195,6 +195,23 @@ function M.alias_collected_packages(package_names)
     return package_names, replaced
 end
 
+-- (#719) Is this the BASE-form path of a usable model mesh that ships inside
+-- CWV's own master bundle? The husk admission arm asks exactly this before it
+-- will let a remote peer's weapon re-key onto a non-vanilla mesh: these units
+-- live outside `units/weapons/player/`, so the #418 residency resolver and the
+-- #476 lease both reject them by prefix and there is no other way in.
+-- Membership demands BOTH forms because vanilla `spawn_inventory_unit` appends
+-- "_3p" to whatever the caller passes.
+function M.is_bundled_unit(package_name)
+    if type(package_name) ~= "string" or package_name == "" then return false end
+    for _, model in ipairs(M.MODELS) do
+        if M.is_usable_model(model) and model.right_hand_unit == package_name then
+            return true
+        end
+    end
+    return false
+end
+
 function M.network_package_aliases()
     local result = {}
     for _, model in ipairs(M.MODELS) do

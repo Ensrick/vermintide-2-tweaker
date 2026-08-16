@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.518-dev"
+local MOD_VERSION = "0.1.519-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -1571,4 +1571,5 @@ local _cwv_regression_context = {
 	custom_skin_keys = _custom_skin_keys,
 }
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_identity")(mod, _cwv_regression_context)
+mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_husk_ammo")(mod, _cwv_regression_context)
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_render")(mod, _cwv_regression_context)

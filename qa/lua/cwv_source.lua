@@ -14,6 +14,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_husk_residency_owner.lua",
     "_cwv_custom_mesh_runtime.lua",
     "_cwv_javelin_runtime_owner.lua",
+    "_cwv_projectile_tunes.lua",
     "_cwv_rapier_runtime_owner.lua",
     "_cwv_variant_bootstrap_owner.lua",
     "_cwv_old_musket_wire.lua",
@@ -31,6 +32,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_menu_preview_owner.lua",
     "_cwv_commands_lifecycle.lua",
     "_cwv_regression_identity.lua",
+    "_cwv_regression_husk_ammo.lua",
     "_cwv_regression_render.lua",
 }
 

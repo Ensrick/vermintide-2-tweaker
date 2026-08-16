@@ -1,5 +1,37 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.519-dev (2026-08-16) -- Crowbill husk admission, Outrider tunes, ammo disjointness, browser contract (#719, #1186, #1188, #419) [verify-fix]
+
+- Remote players now see the authored Imperial and Dawi Crowbill models instead
+  of Sienna's Crowbill (#719). CWV's own bundled model meshes had no husk
+  admission path at all, so every observer kept the shadowed vanilla donor for
+  the whole mission. The new catalog-driven admission arm covers the Greataxe
+  models too; borrowed-material meshes (Old Musket) still fail closed on their
+  donor. `issue719_imperial_crowbill_remote_identity` is no longer an expected
+  failure.
+- The Outrider Grenade Launcher's fired grenade now uses its authored tunes
+  (#1186). A projectile re-resolves its own action from the base weapon, so a
+  variant with a renamed cloned template flew with the donor Trollhammer's
+  damage profile and projectile settings. The map is catalog-derived, so any
+  future renamed-template variant is covered on authoring day. Bounded
+  `[cwv:1186]` receipt. The projectile UNIT still resolves the donor mesh -
+  tracked separately as #1320. Runtime check
+  `issue1186_outrider_projectile_reads_cloned_tunes`.
+- A Trollhammer granted to Kruber by a Tweaker: Weapons unlock keeps its
+  torpedo on remote views (#1188). CWV's ammo strip read career membership
+  alone, which stops being reliable once that unlock puts Kruber careers on
+  the real weapon; the new native-pair discriminator engages only when the
+  pair is natively wieldable, and the Outrider still loses its inherited
+  torpedo whenever its identity is known. Bounded `[cwv:1188]` receipt;
+  `issue1188_wt_native_trollhammer_keeps_ammo` plus hardened
+  `issue399_outrider_husk_ammo_adapter` cases.
+- Illusion browser previews prove their own delivery order (#419): the
+  `LootItemUnitPreviewer.spawn_units` wrapper body is a named seam and the
+  regression drives an Athanor-crafted instance through it against a stand-in
+  engine spawn, so dropping the mesh-swap pre-pass fails
+  `issue419_browser_prepass_precedes_vanilla_spawn` instead of silently
+  restoring the base-mesh distortion.
+
 ## 0.1.518-dev (2026-08-15) -- peer-ready identity lifecycle + primary-slot musket ammo HUD (#914, #1108) [verify-fix]
 
 - The client-side `PlayerManager.remove_player` cleanup gate now treats only

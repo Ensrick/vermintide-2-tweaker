@@ -149,9 +149,31 @@ _om._old_musket_package_bridge = _old_musket_package_bridge
 -- second predicate to accept a skin-resolved custom mesh (the Old Musket).
 -- Requires BOTH the base and "_3p" forms whitelisted: the husk spawn appends
 -- "_3p" to whatever lands in item_units.
+-- (#719) SECOND admission arm, catalog-driven. The Greataxe (#597) and Crowbill
+-- (#604) model meshes are the same KIND of resource as the Old Musket's -- mod
+-- master-bundle units outside `units/weapons/player/` -- but they are
+-- self-contained: each `.unit` binds its OWN bundled `.material` and textures
+-- (units/cwv_crowbill/<model>/<model>.material), so they borrow nothing from a
+-- vanilla package and the Old Musket's alias bridge has no pair for them.
+-- Before this arm, `_husk_custom_bundle_unit` answered false for every one of
+-- them, `_om._resident_override_3p` rejected them on its vanilla-prefix gate
+-- (#418) and `_husk_lease_override` rejected them on the same prefix -- so no
+-- husk admission path existed at all and a remote peer kept the shadowed
+-- bw_1h_crowbill / dr_2h_axe donor for the whole mission (the #719 symptom:
+-- observers saw Sienna's Crowbill on Kruber's Imperial Crowbill).
+--
+-- Each family answers for its OWN authored model catalog (`is_bundled_unit`,
+-- derived from the same MODELS rows the package manifest ships), so a model
+-- added later is admitted the day it is authored and no key list lives here.
+_om._husk_bundled_model_families = { _om.greataxe, _om.crowbill_family }
+
 _om._husk_custom_bundle_unit = function(base_unit)
 	if type(base_unit) ~= "string" or base_unit == "" then return false end
-	return _old_musket_package_bridge.has_pair(base_unit)
+	if _old_musket_package_bridge.has_pair(base_unit) then return true end
+	for _, family in ipairs(_om._husk_bundled_model_families) do
+		if family.is_bundled_unit(base_unit) then return true end
+	end
+	return false
 end
 
 mod:hook(PackageManager, "load", function(func, self, package_name, reference_name, callback, asynchronous, prioritize)

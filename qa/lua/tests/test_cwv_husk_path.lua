@@ -96,12 +96,12 @@ return function(H, repo_root)
         -- site stays in the entry -- assert against combined entry + modules.
         local source = require("cwv_source").combined(repo_root)
         for _, marker in ipairs({
-            "_om._husk_strip_cwv_ammo = function(item_data, owner_unit_3p, ammo_unit_3p, slot_name)",
+            "_om._husk_strip_cwv_ammo = function(item_data, owner_unit_3p, ammo_unit_3p, slot_name, item_units)",
             "(1) exact identity descriptor -- authoritative when present.",
             'if edef.no_ammo_unit then why = "descriptor" else return false end',
-            "(2) skinless base+career fallback.",
+            "(2) skinless base+career fallback",
             "stripped inherited ammo 3P unit (base=%s career=%s via=%s)",
-            "_om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name)",
+            "_om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name, item_units)",
         }) do
             H.truthy(source:find(marker, 1, true), "missing #399 ammo-strip anchor: " .. marker)
         end

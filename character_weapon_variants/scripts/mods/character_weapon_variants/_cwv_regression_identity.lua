@@ -694,7 +694,32 @@ _rt_register("issue719_imperial_crowbill_remote_identity", function()
 			.. #inadmissible .. " model(s) (" .. table.concat(inadmissible, ", ")
 			.. "): neither a registered cwv custom-bundle unit nor leasable -- the peer keeps the bw_1h_crowbill donor"
 	end
-end, { known_defect = 719 })
+
+	-- POSTCONDITION 3: admission is not enough on its own -- the spawn floor the
+	-- husk actually consults must AGREE. `_husk_unit_spawnable` is what
+	-- `_husk_preselection_ready` and the re-key gate call, and a self-contained
+	-- bundle mesh declares no donor material, so it must clear that floor rather
+	-- than fail closed on a donor that does not exist.
+	local unspawnable = {}
+	for _, m in ipairs(family.usable_models and family.usable_models() or {}) do
+		if type(_om._husk_unit_spawnable) ~= "function"
+				or _om._husk_unit_spawnable(m.right_hand_unit) ~= true then
+			unspawnable[#unspawnable + 1] = m.key
+		end
+	end
+	if #unspawnable > 0 then
+		return "#719 husk spawn floor rejects the authored Crowbill mesh for "
+			.. #unspawnable .. " model(s) (" .. table.concat(unspawnable, ", ")
+			.. "): hand preselection defers and the peer keeps the bw_1h_crowbill donor"
+	end
+
+	-- The admission arm must stay SCOPED: a vanilla player mesh is owned by the
+	-- residency/lease arms, never by the custom-bundle arm, or the #418 force-load
+	-- reference contract collapses into "anything goes".
+	if _om._husk_custom_bundle_unit(family.PLACEHOLDER_UNIT) ~= false then
+		return "#719 custom-bundle admission leaked onto the vanilla bw_1h_crowbill donor mesh"
+	end
+end)
 
 _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
     local source_by_target = _om._dual_axes_source_by_skin
@@ -2272,11 +2297,25 @@ _rt_register("issue399_outrider_husk_ammo_adapter", function()
 
         -- (4/5) the #399 fix: a negative descriptor state is NOT evidence of a
         -- native wielder, so it falls through to the career-scoped fallback.
+        --
+        -- #1188: that fallback is career-scoped AND native-pair discriminated. If
+        -- weapon_tweaker's `unlock_es_huntsman_dr_deus_01` is enabled the pair is
+        -- natively wieldable right now, so the correct answer INVERTS -- a
+        -- skinless echo is then indistinguishable from a real Trollhammer and
+        -- must keep its torpedo. Assert whichever answer the live can_wield
+        -- makes correct rather than skipping.
+        local wt_unlocked = _om._husk_pair_native_now("dr_deus_01", "es_huntsman") == true
         for _, negative in ipairs({ "unavailable", "stale_base" }) do
             state, career_name = negative, "es_huntsman"
             units = fresh_units()
             pre("right", nil, units, "slot_ranged", { name = "dr_deus_01" }, owner)
-            if not ammo_cleared(units) then
+            if wt_unlocked then
+                if ammo_cleared(units) then
+                    return string.format(
+                        "descriptor state %s stripped a wt-granted NATIVE Trollhammer's torpedo -- #475 Invariant 1 (issue 1188)",
+                        negative)
+                end
+            elseif not ammo_cleared(units) then
                 return string.format(
                     "descriptor state %s still collapsed the ammo decision -- Outrider keeps the inherited torpedo on the husk (issue 399)",
                     negative)
@@ -2295,7 +2334,13 @@ _rt_register("issue399_outrider_husk_ammo_adapter", function()
         units = fresh_units()
         pre("right", nil, units, "slot_ranged", { name = "dr_deus_01" }, owner)
         _om._appearance_husk_wield_context = saved_ctx
-        if not ammo_cleared(units) then
+        -- Same #1188 inversion as (4/5): the deferred branch runs the ammo arm,
+        -- and that arm now discriminates a wt-granted native pair.
+        if wt_unlocked then
+            if ammo_cleared(units) then
+                return "deferred hand-selection branch stripped a wt-granted NATIVE Trollhammer's torpedo (issue 1188)"
+            end
+        elseif not ammo_cleared(units) then
             return "deferred hand-selection branch skipped the ammo-nil step -- torpedo survives the atomic preselection fallback (issue 399)"
         end
 
