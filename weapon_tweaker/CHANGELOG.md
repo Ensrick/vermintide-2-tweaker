@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.308-beta (2026-08-16) -- named availability contracts; retired-key cleanup (#108, #183, #169) [verify-fix]
+
+- `/wt_regression_test` gains `issue108_dev_port_metadata_contract` (redirect
+  display and model-substitution table integrity, executed against the real
+  tables) and `issue183_kruber_ranged_availability_contract` (live
+  availability rows derived from the same runtime owners Mod Tweaker
+  renders: missing/duplicate rows, unresolved keys, group order, alphabetical
+  names, redirect metadata, lifecycle-tag hygiene).
+- The retired `enable_debug_logging` migration write is removed from both
+  streams (#169).
+
 ## 0.12.307-beta (2026-08-15) -- Fire Sword heavy attack tweaks (#943) [verify-fix]
 
 - Two independent, default-off Weapon Tweaks for Sienna's Flame Sword, both
