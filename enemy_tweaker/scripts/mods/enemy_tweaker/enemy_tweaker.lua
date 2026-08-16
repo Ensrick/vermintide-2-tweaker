@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.55-dev"
+local MOD_VERSION = "0.7.56-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
