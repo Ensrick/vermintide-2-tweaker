@@ -1,5 +1,21 @@
 # Tweaker: Events — Changelog
 
+## 0.4.48-dev (2026-08-16) -- solo Prologue mission + Tzeentch client diagnostic (#941, #1309) [verify-fix]
+
+- The Prologue joins the event missions menu as a solo-only row (#941): a
+  view-only descriptor projects the tutorial into the mission list without
+  mutating the vanilla level settings; launch enforces solo and suppresses
+  matchmaking (vanilla disconnects clients from the Prologue by design), and
+  the boss-event mutator guards plus package residency validation cover the
+  tutorial mechanism. The mission-allowlist cardinality and descriptor
+  regressions track the new count.
+- [diag] CW Tzeentch Twins client diagnostic armed (#1309): bounded
+  `[et:1149t]` receipts (10 per-kill rows + one end-of-mission summary per
+  peer) log curse activation with its seed, per-kill roll and enqueue on the
+  host, and activation arrival plus observed split spawns on the client, so
+  one co-op run separates simulation from replication. New check
+  `issue1309_tzeentch_diag_armed`.
+
 ## 0.4.47-dev (2026-08-15) -- Shadow template clone-and-swap; modifier names and icons (#413, #1149) [verify-fix]
 
 - Adventure Shadow no longer touches the shared vanilla buff template at all
