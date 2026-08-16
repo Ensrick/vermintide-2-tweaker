@@ -3,6 +3,20 @@
 # Keep this file narrow and immutable-source-addressed. An exception is never
 # marker-wide permission for a card to invent evidence: deployed-tree, source,
 # literal signature, and concrete guard anchors all have to match.
+#
+# PIN REPOINTING (issue #1328): the ModTree/ModTrees values in the three
+# CONSUMED structures (ReceiptFamilyOverrides / ReceiptRouteOverrides /
+# ReceiptDiscoveryOverrides) are provenance, not policy - they name the exact
+# deployed <mod>/scripts/mods subtree the finite-output proof was audited
+# against. Every ship of a pinned mod therefore strands them. Step 5b of
+# tools/ship/ship.ps1 repoints the shipped mod's values to the new deployed
+# tree automatically after a confirmed upload (the per-override token anchors
+# still fail closed if the audited code itself changed, so the repoint never
+# grants an unreviewed proof). Ship cannot commit to master, so the rewrite is
+# left in the WORKING TREE and reported in the ship summary ("Pins" row); the
+# next PR to master carries it. LegacyMarkerFamilyModTrees (reviewer context)
+# and LegacySourceTrees (carried-forward promotion pins) are deliberately
+# NEVER rewritten by that step.
 
 @{
     # Immutable deployed subtrees for the complete-emitter family audits below.
