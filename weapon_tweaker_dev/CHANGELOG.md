@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.308-dev (2026-08-15) -- mirror 0.12.307-beta; live Hold-Pose HUD (#943, #1023) [verify-fix]
+
+- Runtime-parity mirror of public 0.12.307-beta (Fire Sword heavy attack
+  tweaks, #943; see the public changelog for the full entry).
+- Live Hold-Pose HUD row (#1023, dev only): one `IngameHud.update` post-hook,
+  the mod's only IngameHud hook, renders a single read-only bottom-center row
+  built from the same normalized `_component_plan(channel, hand)` the apply
+  path consumes, never cached widget values. Focus follows the last edited
+  first/third-person and right/left-hand control across single edits and
+  settings batches; visibility is fail-closed (master enabled AND focused
+  channel enabled AND live local-owner unit resolved). Stable precision
+  (+0.000 m / +0.1 deg); no internal item key rendered; local-only. Runtime
+  check `issue1023_live_hold_pose_hud`; behavioral offline coverage in
+  `test_wt_hold_pose.lua`. Refs #1023.
+
 ## 0.12.307-dev (2026-08-13) -- restore Longbow zoom and prove independent Hold-Pose hands (#316/#168) [verify-fix]
 
 - Mirrored public 0.12.306-beta's exact owner-local Empire Longbow variable

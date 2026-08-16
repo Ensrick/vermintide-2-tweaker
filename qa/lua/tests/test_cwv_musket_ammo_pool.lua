@@ -82,6 +82,31 @@ return function(H, repo_root)
 		H.equal(controller:reserve_for(ranged), nil)
 	end)
 
+	H.test("CWV #1108 exposes only the active exact owner-slot extension", function()
+		local alive = setmetatable({}, { __mode = "k" })
+		local controller = policy.new({ alive = function(unit) return alive[unit] == true end })
+		local owner, other_owner = {}, {}
+		local melee = extension(owner, "slot_melee")
+		alive[melee.unit] = true
+		H.truthy(controller:register(melee))
+		H.equal(controller:extension_for(owner, "slot_melee"), melee)
+		H.equal(controller:extension_for(owner, "slot_ranged"), nil)
+		H.equal(controller:extension_for(other_owner, "slot_melee"), nil)
+
+		local replacement = extension(owner, "slot_melee")
+		alive[replacement.unit] = true
+		H.truthy(controller:register(replacement))
+		H.equal(controller:extension_for(owner, "slot_melee"), replacement)
+		H.equal(controller:reserve_for(melee), nil, "replaced extension remained active")
+
+		alive[replacement.unit] = false
+		H.equal(controller:extension_for(owner, "slot_melee"), nil,
+			"dead extension was exposed to the HUD")
+		alive[replacement.unit] = true
+		H.truthy(controller:unregister_slot(owner, "slot_melee"))
+		H.equal(controller:extension_for(owner, "slot_melee"), nil)
+	end)
+
 	H.test("CWV #932 applies one ammo pickup transaction to the shared pool", function()
 		local controller = policy.new({ alive = function() return true end })
 		local owner = {}

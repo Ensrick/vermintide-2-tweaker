@@ -17,6 +17,8 @@ M.LEAF_IDS = {
     "wt_dual_axes_cleave",
     "wt_dual_axes_light_crit",
     "wt_executioner_light_headshot_bonus",
+    "wt_fire_sword_nova_slowdown",
+    "wt_fire_sword_sweep_opener",
     "wt_greataxe_light_crit",
     "wt_mace_sword_speed_nerf",
     "wt_one_hand_axe_cleave_nerf",

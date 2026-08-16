@@ -6,17 +6,19 @@
 -- old_musket_template_melee) together with their cloned damage profiles and
 -- NetworkLookup registrations, the special-key stance toggle plus its
 -- destroy/add/wield cycle, the ActionHandgun observation that mirrors the Old
--- Musket shot report to peers (#474), and the shared musket reserve-ammo pool
--- (#932). Extracted verbatim from the entry file; behavior is unchanged.
+-- Musket shot report to peers (#474), the shared musket reserve-ammo pool
+-- (#932), and the owner-local primary-slot ammo HUD adapter (#1108).
 --
 -- Exports (all on ctx.om, same names the entry published before the split):
--- musket_ammo_pool, _CWV_MUSKET_AMMO_EXTS, _CWV_RESERVE_PER_MUSKET,
+-- musket_ammo_pool, musket_ammo_hud, _CWV_MUSKET_AMMO_EXTS,
+-- _CWV_RESERVE_PER_MUSKET,
 -- _cwv_musket_pool_cap, _cwv_musket_register_ammo_ext,
 -- _cwv_musket_unregister_slot, _old_musket_remote_fire_event,
 -- _is_old_musket_ranged_action, _old_musket_shot_completed,
 -- _dispatch_old_musket_remote_fire, _old_musket_remote_fire_hook_installed.
 --
--- Registers exactly one hook: ActionHandgun.client_owner_post_update. The
+-- Registers ActionHandgun.client_owner_post_update plus one post-sync observer
+-- on each native equipment HUD. The
 -- consolidated BackendUtils.get_item_template hook that routes musket stance
 -- stays in the entry, beside the Crowbill and combat-style branches it shares.
 --
@@ -24,7 +26,8 @@
 -- already exist (this loads at the same point in the entry as before). Runtime
 -- deps resolved lazily through ctx.om: _cwv_key_for_item, _record_cwv_dp_source,
 -- _old_musket_record_and_publish, _old_musket_publish_fire,
--- musket_ammo_pool_policy, and mod._cwv_old_musket_interrupt.
+-- musket_ammo_pool_policy and mod._cwv_old_musket_interrupt. The HUD policy is
+-- loaded and installed here so the owner-local presentation seam stays here.
 --
 -- Named (not anonymous) so the offline forward-reference lint keeps treating the
 -- moved block as file-scope code: an anonymous `function(` wrapper makes every
@@ -1003,6 +1006,7 @@ end  -- end of do-block opened above _OLD_MUSKET_BAYONET_DAMAGE_MULT
 -- #932: the old global extension set could mix owners and merely copied one
 -- 10-round reserve, so two muskets never produced the promised 20-round pool.
 -- Keep native ammo extensions/chambers, but own reserve state per player+slot.
+_om.musket_ammo_hud_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_ammo_hud")
 _om.musket_ammo_pool = _om.musket_ammo_pool_policy.install(mod, {
 	reserve_per_musket = 10,
 	alive = function(unit) return unit and Unit.alive(unit) end,
@@ -1022,6 +1026,7 @@ end
 _om._cwv_musket_unregister_slot = function(owner, slot_name)
 	return _om.musket_ammo_pool:unregister_slot(owner, slot_name)
 end
+_om.musket_ammo_hud = _om.musket_ammo_hud_policy.install(mod, _om.musket_ammo_pool)
 
 end
 

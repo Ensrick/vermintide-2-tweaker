@@ -41,6 +41,10 @@ function M.install(c)
                 or setting_id == c.balance_policy.MACE_SWORD_SPEED_SETTING
                 or setting_id == c.balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
             mod._wt_apply_axe_balance(setting_id, false)
+        elseif c.fire_sword_policy
+                and (setting_id == c.fire_sword_policy.SWEEP_OPENER_SETTING
+                or setting_id == c.fire_sword_policy.NOVA_SLOWDOWN_SETTING) then
+            mod._wt_apply_fire_sword(setting_id, false)
         end
         c.rework_runtime:sync_for_leaf(setting_id)
     end
@@ -66,6 +70,7 @@ function M.install(c)
         if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
         c.bolt_runtime.apply()
         if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+        if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, false) end
         if c.extra_batch then c.extra_batch(setting_ids) end
         pcall(printf, "[wt:1002] settings=%d availability_applies=1 action_applies=1",
             type(setting_ids) == "table" and #setting_ids or 0)

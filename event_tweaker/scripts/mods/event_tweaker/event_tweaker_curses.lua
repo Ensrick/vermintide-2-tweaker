@@ -73,4 +73,33 @@ M.CURSE_TO_GOD = {
     curse_shadow_homing_skulls = "belakor",  curse_greed_pinata         = "slaanesh",
 }
 
+-- ============================================================
+-- Icon coverage (issue 1149 - options/preview modifier icons)
+-- ============================================================
+-- god -> the icon vanilla's own curse UI shows for that theme
+-- (DeusThemeSettings[theme].icon, deus_theme_settings.lua:19/42/62/85/102;
+-- consumed by deus_curse_ui.lua:106/144). Several managed curse templates
+-- carry NO per-template icon field (mutator_curse_corrupted_flesh.lua,
+-- mutator_curse_khorne_champions.lua, mutator_curse_greed_pinata.lua), so
+-- without this fallback their preview rows render name-only.
+M.GOD_ICONS = {
+    khorne   = "icon_khorne",
+    nurgle   = "icon_nurgle",
+    tzeentch = "icon_tzeentch",
+    slaanesh = "icon_slaanesh",
+    belakor  = "deus_icon_belakor",
+}
+
+-- Pure resolver (engine-free, offline-testable): prefer the template's own
+-- in-game icon, fall back to the curse's god-theme icon, else nil (the
+-- preview renders a name-only row - fonts are always resident).
+function M.icon_for(name, tmpl)
+    local icon = tmpl and tmpl.icon
+    if type(icon) == "string" and icon ~= "" then
+        return icon
+    end
+    local god = M.CURSE_TO_GOD[name]
+    return god and M.GOD_ICONS[god] or nil
+end
+
 return M

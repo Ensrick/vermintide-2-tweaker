@@ -1,5 +1,19 @@
 # Regression Checklist — weapon_tweaker
 
+## #943 - Fire Sword heavy attack tweaks
+
+| Field | Check |
+|---|---|
+| Candidate version | Pending ship (version assigned by the coordinator at claim time). |
+| Off state | With both settings off, every inspected `default` chain edge and every `heavy_attack_spell` timing value is numerically identical to vanilla, including after repeated on/off cycles. |
+| Sweep opener | Enable **Flame Sword: Sweep Opens Heavies** only. An idle charged heavy opens with the sweep, the follow-up heavy is the nova, and both keep vanilla timing. Lights, push, block, weapon special, and the tooltip comparison stay vanilla. |
+| Nova slowdown | Enable **Flame Sword: 10% Slower Nova Heavy** only. The nova stays the opener; its swing, hit, damage window, movement-slow window, and heavy continuation windows are all 10% longer with no cumulative drift across toggles or state transitions. |
+| Composition | Both on: sweep opens, nova follows, only the nova is slower. |
+| Isolation | Per-template-identity capture: a replaced/late template re-captures fresh vanilla values; no other Fire Sword action or other weapon changes. Wire-safe: sub_action re-route between vanilla names + attacker-local melee timing only. |
+| Automated | Offline `test_wt_fire_sword.lua`; `/wt_regression_test`: `issue943_fire_sword_heavy_contract` (fixture projection + live idle-edge audit). |
+
+---
+
 ## #1190 - loadout-row weapon isolation
 
 | Field | Check |
