@@ -33,6 +33,17 @@ Last updated: 2026-08-13.
 | Expected post-fix | CWV reaches normal initialization without a VMF `mod_script` error. `/cwv` reports the optional companion mods accurately in every combination. |
 | Detection | Offline decomposition coverage pins the producer export, validated entry binding, and lifecycle handoff; strict lint and the full Lua 5.1 suite pass. |
 
+## #1108 Primary-slot Old Musket ammo HUD
+
+| Field | Contract |
+|---|---|
+| Symptom | With Old Musket in the primary slot and an ordinary ranged weapon in the secondary slot, the HUD keeps showing the secondary weapon's ammunition while the ammo-bearing Musket is wielded. |
+| Root cause | Both native equipment HUD classes refresh ammunition only while iterating `slot_ranged`; the gameplay pool already has an authoritative `slot_melee` extension, but no presentation consumer selects it. |
+| Fix | `_cwv_musket_ammo_hud.lua` runs after native equipment synchronization and replaces the displayed count only when the wielded primary slot, pool owner/slot, effective template ammo hand, and exact live 1P ammo unit all agree. |
+| Repro | Equip Old Musket in the primary slot and a Handgun in the secondary slot. Spend a different number of rounds from each, wield and fire the Old Musket, switch between both weapons, toggle the Musket stance, then repeat with the controller HUD enabled. |
+| Expected post-fix | Desktop and controller counters follow the ammo-bearing Old Musket while it is wielded, then return to the secondary weapon's native count. A melee stance, non-Musket primary, dead/replaced extension, or mismatched hand never borrows the pool or retains a stale Musket count. |
+| Detection | `/cwv_regression_test` passes `issue1108_primary_slot_musket_ammo_hud_contract`; bounded `[cwv:1108]` engage/release receipts identify the live presentation edge. Offline tests execute both installed native callbacks and cover right/left hands, owner/spectator resolution, exact extension replacement/liveness, native-path rejections, and missing-dependency failure. |
+
 ## #932 Primary-slot Old Musket shared ammo
 
 | Field | Contract |
@@ -41,7 +52,7 @@ Last updated: 2026-08-13.
 | Root cause | The legacy set was process-global and copied one extension's `_available_ammo` to every member. It neither separated player owners nor stored a pool total, so two 10-round extensions still exposed only 10 reserve rounds. |
 | Fix | `_cwv_musket_ammo_pool.lua` owns reserve state by player and exact melee/ranged slot, keeps native one-round chambers, covers every source-proven reserve mutation, and adapts the public maximum without widening `_max_ammo`. |
 | Repro | Equip Old Musket only in the primary slot and fire/reload. Then equip a second Old Musket in the secondary slot, fire/reload from each, swap repeatedly, toggle both stances, take a partial ammo pickup, and replace one slot with a non-Musket. Run `/cwv_musket_ammo_diag` after each edge. |
-| Expected post-fix | One Musket shows 10 shared reserve; two show 20. Reloading either decrements the same reserve while each chamber remains independent. Swaps/stance changes grant no ammo, a pickup changes the pool once, replacing one Musket clamps capacity to 10, and another player's ammo never enters the pool. The native counter follows the currently wielded Musket. |
+| Expected post-fix | One Musket owns 10 shared reserve; two own 20. Reloading either decrements the same reserve while each chamber remains independent. Swaps/stance changes grant no ammo, a pickup changes the pool once, replacing one Musket clamps capacity to 10, and another player's ammo never enters the pool. HUD selection is the separate #1108 contract above. |
 | Detection | `/cwv_regression_test` passes `issue932_primary_slot_musket_ammo_pool_contract`; diagnostics show one owner per pool and `pool=reserve/capacity`; offline tests cover owner isolation, doubled capacity, consumption, replacement, unregister, pickup, and the no-`_max_ammo`-write invariant. |
 
 ## #798 Universal Crowbill hammer mode
@@ -108,6 +119,17 @@ Last updated: 2026-08-13.
 | Repro | Equip one skinned and one skinless CWV instance before another player joins. Observe owner 3P, bot, and remote husk in the Keep; enter a mission without re-equipping; swap to a native item sharing the same base and back; repeat as a hot join and with one peer lacking CWV. |
 | Expected post-fix | Owner, bot, and same-mod remote husk resolve the same exact item/base/skin/right/left fingerprint at spawn, wield, mission transition, and hot join. A hot-join owner retries only until the receiver acknowledges that exact peer/slot/fingerprint, with a hard eight-attempt bound and 0.5-second cadence. Explicit native or locally unavailable provider state preserves vanilla instead of falling through to base+career. Duplicate fingerprints do not rebuild twice. A peer lacking CWV receives no modded vanilla lookup ID and remains connected. Materials, glow, icons/names, score/Tab, and non-CWV provider adoption are not claimed by this slice. |
 | Detection | Offline `test_cwv_appearance_lifecycle.lua` proves the two-slot bound, coalescing, targeted replay, exact local reconstruction, native suppression, provider/schema/base drift, acknowledgement matching, cadence, exhaustion, and vanilla-wire safety; `test_cwv_remote_identity.lua` locks descriptor and acknowledgement routes. `/cwv_regression_test` passes `issue396_imperial_longsword_identity_and_remote_husk` and `issue660_world_identity_lifecycle_replay`. Paired logs correlate bounded `[cwv:660] lifecycle=... adapter=... descriptor=...` rows; an unchanged peer/slot/fingerprint sends at most eight times and stops immediately after matching acknowledgement. |
+
+---
+
+## #914 Peer-ready and transition identity recovery
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.518-dev (peer-ready request, husk-owner, client-cleanup, and bot-removal gate slice; co-op verification required) |
+| Repro | Two CWV players use one single-axis CWV appearance. Equip it before joining, hot join, enter an Adventure mission and return to the Keep, swap away/back, respawn, and reapply the same illusion. Repeat with host/client roles reversed. Distinct Dual Axes hand selections are tested separately under #579. |
+| Expected post-fix | The observer sees the same exact CWV model/illusion on first spawn and every listed lifecycle edge without requiring a manual cosmetic change. A request arriving before the replying inventory is ready remains eligible for the next bounded retry. Husk spawn can resolve the extension's validated human player before `PlayerManager:owner` is populated. Client removal clears only that remote human's exact transport routes; local, bot, server, and broadcast dedupe state remain untouched. |
+| Detection | Offline `test_cwv_identity_peer_pull.lua`, `test_cwv_peer_resolver.lua`, and `test_cwv_appearance_lifecycle.lua` execute the pre-ready retry, actual removal hook, validated spawn-local owner hint, and recipient-only dedupe reopening. `/cwv_regression_test` passes `issue914_peer_ready_identity_lifecycle`. Co-op logs contain bounded `[cwv:914]` peer-resolution/ready/cleanup receipts and the existing `[cwv:660]` delivery/ack receipts; no per-frame or unbounded resend traffic is permitted. |
 
 ---
 

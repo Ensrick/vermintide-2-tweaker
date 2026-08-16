@@ -138,6 +138,20 @@ function M.new(options)
 		return pool and pool.reserve or nil
 	end
 
+	-- Presentation consumers may resolve only the exact currently registered
+	-- extension for one owner+slot. A stale replacement or dead weapon unit is
+	-- never allowed to stand in for the live primary-slot Old Musket (#1108).
+	function controller:extension_for(owner, slot_name)
+		if not owner or not VALID_SLOTS[slot_name] then return nil end
+		local pool = self:_pool_for_owner(owner, false)
+		local record = pool and pool.slots[slot_name]
+		local ext = record and record.ext
+		if not ext or self.extensions[ext] ~= pool or not self._alive(ext.unit) then
+			return nil
+		end
+		return ext
+	end
+
 	function controller:begin_mutation(ext)
 		local pool = self:_active_record(ext)
 		if not pool then return nil end
@@ -250,6 +264,9 @@ function M.new(options)
 		if not self.hooks_installed then return "musket ammo controller hooks are not installed" end
 		if type(self.end_reload_drain) ~= "function" then
 			return "melee-slot reload reserve drain (#1107) is missing"
+		end
+		if type(self.extension_for) ~= "function" then
+			return "owner-slot extension selection (#1108) is missing"
 		end
 		if self.reserve_per_musket ~= 10 then return "Old Musket reserve contribution is not 10" end
 		if not VALID_SLOTS.slot_melee or not VALID_SLOTS.slot_ranged then

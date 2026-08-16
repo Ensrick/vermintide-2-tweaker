@@ -307,7 +307,7 @@ do
 		local exact, exact_state
 		if ctx and _om._husk_identity_descriptor then
 			exact, exact_state = _om._husk_identity_descriptor(
-				ctx.owner_unit_3p, ctx.slot_name, base_name)
+				ctx.owner_unit_3p, ctx.slot_name, base_name, ctx.player)
 		end
 		if exact_state == "exact" and exact then
 			if not _husk_preselection_ready(exact, exact.fingerprint or exact.variant_key) then
