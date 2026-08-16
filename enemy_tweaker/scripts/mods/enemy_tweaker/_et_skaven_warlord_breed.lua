@@ -383,3 +383,176 @@ do
     end)
     mod._et_warlord2_localize_hooked = true
 end
+
+-- ============================================================
+-- #324 diagnostics: "runs in place, no combat AI" spawn probe
+-- ============================================================
+-- July report: a spawned Skaven Warlord stands or runs in place with no combat
+-- AI. The breed publishes healthy-looking structure, so this bounded probe logs
+-- what the live AI actually selected. Per instrumented spawn it emits ONE
+-- [et:324] line at spawn, +5s, and +15s (max 4 spawns per session = max 12
+-- rows), capturing:
+--   * breed.behavior + whether the brain's tree is the tree the AI system
+--     serves for that name (AIBrain:init binds self._bt =
+--     ai_system:behavior_tree(tree_name), ai_brain.lua:70-72),
+--   * the running BT leaf, walked exactly like vanilla's debug-unit dump
+--     (extension._brain._bt:root() + current_running_child(blackboard) loop,
+--     ai_system.lua:952-957) plus AISimpleExtension.current_action_name
+--     (ai_simple_extension.lua:408),
+--   * blackboard.target_unit (+aliveness), confirmed_player_sighting
+--     (perception result consumed at ai_system.lua:884-887), is_passive, and
+--     the spawn/spawning_finished flags (BTSpawningAction only clears
+--     blackboard.spawn in leave, bt_spawning_action.lua:74-80 — a stuck spawn
+--     node is the classic "runs in place" shape),
+--   * nav/locomotion: navigation_extension._enabled + is_following_path()
+--     (ai_navigation_extension.lua:218-220, 380-381),
+--     locomotion_extension:current_velocity() (ai_locomotion_extension.lua:374),
+--     and distance moved from the spawn position.
+-- Host-side only by construction: the observe callback is dispatched from the
+-- singleton ConflictDirector._post_spawn_unit seam owned by _et_boss_grudge.lua
+-- (conflict_director.lua spawns are server-authoritative), which covers all
+-- three spawn paths (Creature Spawner, monster-pool swap, ct chest trial).
+-- The +5s/+15s samples ride the single mod.update owner in _et_lifecycle.lua
+-- via ET.warlord_diag_update.
+local ET = mod._et
+do
+    local DIAG_OFFSETS = { 5, 15 }   -- seconds after the spawn-time sample
+    local DIAG_MAX_UNITS = 4
+    local _tracked = {}              -- [i] = { unit=, t0=, spawn_pos=Vector3Box, next=1 }
+    local _units_instrumented = 0
+    local _cap_logged = false
+
+    local function _diag_log(fmt, ...)
+        if not pcall(printf, "[et:324] " .. fmt, ...) then
+            pcall(printf, "[et:324] (log format error: %s)", tostring(fmt))
+        end
+    end
+
+    local function _fmt_unit(u)
+        if u == nil then return "nil" end
+        local alive = Unit.alive(u)
+        return string.format("%s(alive=%s)", tostring(u), tostring(alive))
+    end
+
+    local function _snapshot(entry, label)
+        local unit = entry.unit
+        if not Unit.alive(unit) then
+            _diag_log("%s unit no longer alive (died/despawned) — sampling stops", label)
+            return false
+        end
+        local bb = rawget(_G, "BLACKBOARDS") and BLACKBOARDS[unit]
+        local ext = ScriptUnit.has_extension(unit, "ai_system")
+        if not bb or not ext then
+            _diag_log("%s blackboard=%s ai_extension=%s — AI never attached",
+                label, tostring(bb ~= nil), tostring(ext ~= nil))
+            return true
+        end
+        local breed = bb.breed
+        local behavior = breed and breed.behavior or "nil"
+        local brain = ext._brain
+        local bt = brain and brain._bt
+        local tree_match = "no_brain"
+        local entity_mgr = Managers.state and Managers.state.entity
+        local ai_system = entity_mgr and entity_mgr:system("ai_system")
+        if bt and ai_system and ai_system.behavior_tree then
+            local t_ok, expected = pcall(ai_system.behavior_tree, ai_system, behavior)
+            tree_match = tostring(t_ok and expected == bt)
+        end
+        local leaf_name = "unknown"
+        if bt then
+            local w_ok, name = pcall(function()
+                local leaf = bt:root()
+                while leaf and leaf.current_running_child and leaf:current_running_child(bb) do
+                    leaf = leaf:current_running_child(bb)
+                end
+                return leaf and leaf:id() or "none"
+            end)
+            if w_ok then leaf_name = tostring(name) end
+        end
+        local a_ok, action = pcall(ext.current_action_name, ext)
+        local nav = bb.navigation_extension
+        local nav_enabled, nav_following = "nil", "nil"
+        if nav then
+            nav_enabled = tostring(nav._enabled)
+            local n_ok, following = pcall(nav.is_following_path, nav)
+            nav_following = tostring(n_ok and following)
+        end
+        local speed = -1
+        local loco = bb.locomotion_extension
+        if loco then
+            local v_ok, vel = pcall(loco.current_velocity, loco)
+            if v_ok and vel then speed = Vector3.length(vel) end
+        end
+        local moved = -1
+        local p_ok, pos = pcall(Unit.local_position, unit, 0)
+        if p_ok and pos and entry.spawn_pos then
+            moved = Vector3.distance(pos, entry.spawn_pos:unbox())
+        end
+        _diag_log("%s behavior=%s tree_match=%s leaf=%s action=%s target=%s sighting=%s passive=%s spawnflag=%s spawn_done=%s nav_enabled=%s nav_following=%s speed=%.2f moved=%.2f",
+            label, tostring(behavior), tree_match, leaf_name,
+            tostring(a_ok and action), _fmt_unit(bb.target_unit),
+            tostring(bb.confirmed_player_sighting), tostring(bb.is_passive),
+            tostring(bb.spawn), tostring(bb.spawning_finished),
+            nav_enabled, nav_following, speed, moved)
+        return true
+    end
+
+    -- Dispatched from the _post_spawn_unit seam in _et_boss_grudge.lua (that
+    -- module checks type()=="function" at call time, so load order is safe).
+    ET.observe_warlord_diag_spawn = function(ai_unit, breed)
+        if not breed or breed.name ~= BREED_NAME then return end
+        if _units_instrumented >= DIAG_MAX_UNITS then
+            if not _cap_logged then
+                _cap_logged = true
+                _diag_log("instrumentation cap reached (%d spawns) — later spawns not sampled", DIAG_MAX_UNITS)
+            end
+            return
+        end
+        _units_instrumented = _units_instrumented + 1
+        local entry = { unit = ai_unit, t0 = os.clock(), next = 1 }
+        local p_ok, pos = pcall(Unit.local_position, ai_unit, 0)
+        if p_ok and pos then entry.spawn_pos = Vector3Box(pos) end
+        local n = _units_instrumented
+        pcall(_snapshot, entry, string.format("spawn#%d t=+0s", n))
+        entry.label_n = n
+        _tracked[#_tracked + 1] = entry
+    end
+
+    ET.warlord_diag_update = function()
+        for i = #_tracked, 1, -1 do
+            local entry = _tracked[i]
+            local due = entry.t0 + DIAG_OFFSETS[entry.next]
+            if os.clock() >= due then
+                local ok, keep = pcall(_snapshot, entry,
+                    string.format("spawn#%d t=+%ds", entry.label_n, DIAG_OFFSETS[entry.next]))
+                entry.next = entry.next + 1
+                if not ok or keep == false or entry.next > #DIAG_OFFSETS then
+                    table.remove(_tracked, i)
+                end
+            end
+        end
+    end
+
+    ET.rt_register("issue324_warlord_diag_armed", function()
+        if not mod._et_warlord2_ready then
+            return "et_skaven_warlord breed not registered — diagnostic has no subject"
+        end
+        if type(ET.observe_warlord_diag_spawn) ~= "function" then
+            return "spawn observer missing"
+        end
+        if type(ET.warlord_diag_update) ~= "function" then
+            return "timed-sample update driver missing"
+        end
+        local breed = rawget(_G, "Breeds") and Breeds[BREED_NAME]
+        if not breed or breed.behavior ~= "storm_vermin_champion" then
+            return "breed behavior drifted from storm_vermin_champion"
+        end
+    end)
+
+    if mod._et_warlord2_ready then
+        _diag_log("diagnostic armed: %s spawns sampled at +0/+5/+15s (cap %d per session)",
+            BREED_NAME, DIAG_MAX_UNITS)
+    else
+        _diag_log("diagnostic loaded but breed registration failed — nothing to sample this session")
+    end
+end

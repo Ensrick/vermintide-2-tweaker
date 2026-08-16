@@ -97,7 +97,7 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_boss_tweaks")          -- boss mechan
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_balance")         -- #450 per-boss balance toggles (health/armor/warp-lightning data mutations)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_grudge")          -- #531 grudge-mark behavioral knobs (Skarrik Berserk / Bodvarr Crippling, Cata+)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_behavior")        -- #450 Halescourge Cata+ half-health monster add
-mod:dofile("scripts/mods/enemy_tweaker/_et_boss_ideas")           -- #451 bounded source/runtime feasibility audit; no unsafe arena-breed injection
+mod:dofile("scripts/mods/enemy_tweaker/_et_boss_ideas")           -- #451 feasibility audit + greataxe Chosen prototype breed (test-only spawn command)
 mod:dofile("scripts/mods/enemy_tweaker/_et_special_variants")     -- #452 bounded premium-special asset audit; no breed/spawn mutation
 mod:dofile("scripts/mods/enemy_tweaker/_et_enemy_modifiers")      -- #453 bounded modifier/template/category audit; no application yet
 
