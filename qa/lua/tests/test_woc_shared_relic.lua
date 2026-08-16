@@ -1,16 +1,12 @@
 return function(H, repo_root)
 	local policy = dofile(repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic.lua")
-	local main_file = assert(io.open(repo_root
-		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua", "rb"))
-	local main_source = main_file:read("*a")
-	main_file:close()
-	local runtime_file = assert(io.open(repo_root
-		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua",
-		"rb"))
-	local runtime_source = runtime_file:read("*a")
-	runtime_file:close()
-	local contract_source = main_source .. "\n" .. runtime_source
+	-- The former ~100-line exact-string grep tail over the entry + runtime
+	-- sources was retired by #1308. Its load-bearing textual invariants (the
+	-- three lease RPC registrations, the four single-hook seams, and the
+	-- forbidden client-authored identity channel / fallback-guess / stale-sync
+	-- tokens) now live in qa/rt_textual_invariants.psd1 (mod='WOC'); everything
+	-- else in this file executes the real policy and runtime modules.
 	local runtime_module = dofile(repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua")
 
@@ -808,107 +804,5 @@ return function(H, repo_root)
 		cache["peer-a"] = { slot_melee = false }
 		policy.clear_identity_cache(cache)
 		H.equal(next(cache), nil)
-	end)
-
-	H.test("WOC #934 runtime uses same-mod authority and vanilla trophy ids", function()
-		H.truthy(contract_source:find(
-			'mod:network_register("woc_relic_lease_intent_v1"', 1, true))
-		H.truthy(contract_source:find(
-			'mod:network_register("woc_relic_lease_state_v1"', 1, true))
-		H.truthy(contract_source:find(
-			'mod:network_register("woc_relic_lease_query_v1"', 1, true))
-		H.equal(contract_source:find(
-			'mod:network_register("woc_blightreaper_identity"', 1, true), nil,
-			"clients must have no independent render-identity write channel")
-		H.equal(contract_source:find(
-			'mod.network_send, mod, "woc_blightreaper_identity"', 1, true), nil,
-			"loadout replay must not publish client-authored render identity")
-		H.truthy(contract_source:find(
-			'mod:hook(BackendUtils, "set_loadout_item"', 1, true))
-		H.truthy(contract_source:find(
-			'mod:hook("HeroViewStateOverview", "_set_loadout_item"', 1, true),
-			"the native Hero caller ignores BackendUtils return values")
-		H.truthy(contract_source:find(
-			'mod:hook("SimpleInventoryExtension", "create_equipment_in_slot"',
-			1, true), "direct live equipment creation needs the same denial gate")
-		H.truthy(contract_source:find(
-			'mod:hook("KeepDecorationTrophyExtension", "_load_trophy"', 1, true))
-		H.truthy(contract_source:find(
-			'_lease_on_local_identity(slot_name, is_blightreaper)', 1, true))
-		H.truthy(contract_source:find('_lease_is_local_human(player)', 1, true))
-		H.truthy(contract_source:find(
-			'local career = pending.career or _lease_local_career_name()',
-			1, true), "pre-equipped losing clients need an active-career rollback")
-		H.truthy(contract_source:find(
-			'local restored = _shared_relic_policy.rollback_verified(', 1, true),
-			"rollback state must require exact backend readback")
-		H.truthy(contract_source:find(
-			'local function _lease_recreate_exact_live(', 1, true),
-			"verified backend rollback must recreate the exact live item")
-		H.truthy(contract_source:find(
-			'local function _lease_empty_exact_relic_live(', 1, true),
-			"a pre-equipped loser without prior state must fail closed")
-		H.truthy(contract_source:find(
-			'local rollback_pending = is_local_human', 1, true),
-			"sync payloads must not publish intent while exact rollback is pending")
-		H.truthy(contract_source:find(
-			'type(player.local_player_id) == "function"', 1, true),
-			"local-human gating must support VT2's callable player API")
-		H.truthy(contract_source:find(
-			'type(player._local_player_id) == "number"', 1, true),
-			"local-human gating must support the retail backing field")
-		H.truthy(contract_source:find(
-			'_lease_apply_authoritative_remote_identity(', 1, true),
-			"render identity must be applied from the host snapshot")
-		H.truthy(contract_source:find(
-			'_shared_relic_policy.rollback_converged(', 1, true),
-			"release publication must require persisted and live convergence")
-		H.truthy(contract_source:find(
-			'local function _lease_live_read_verified(status)', 1, true),
-			"an unavailable live inventory must not masquerade as an empty slot")
-		H.equal(contract_source:find('"verified-live-sync"', 1, true), nil,
-			"a LoadoutUtils payload must never prove rollback completion")
-		H.truthy(contract_source:find(
-			'if is_local_human and not _relic_lease_rollback', 1, true),
-			"synchronous loadout sync must wait for rollback readback")
-		H.truthy(contract_source:find(
-			'local function _lease_seed_local_slots()', 1, true),
-			"every game-state session must rehydrate pre-equipped identity")
-		H.truthy(contract_source:find(
-			'pcall(BackendUtils.set_loadout_item,', 1, true))
-		H.truthy(contract_source:find(
-			'nil, career, slot_name)', 1, true),
-			"a pre-equipped loser must durably clear the persisted slot")
-		H.truthy(contract_source:find(
-			'_shared_relic_policy.rebuild_authority(', 1, true),
-			"host promotion must rebuild a fresh authority epoch")
-		H.truthy(contract_source:find(
-			'_lease_send_reassert_and_query(host)', 1, true),
-			"host migration must reassert before accepting an eager snapshot")
-		H.equal(contract_source:find("_lease_find_base_backend_id", 1, true), nil,
-			"pre-equipped rollback must not guess an inventory fallback")
-		H.truthy(contract_source:find(
-			'_lease_reset("game-state-exit:" .. tostring(state_name))', 1, true),
-			"lobby leases must not survive the owning game-state session")
-		H.truthy(contract_source:find(
-			'_relic_lease_state_active = false', 1, true),
-			"the public reset path must close the callback session")
-		H.truthy(contract_source:find(
-			'_shared_relic_runtime:on_enabled("mod-enabled")', 1, true),
-			"mod re-enable must open a fresh guarded lease session")
-		H.truthy(contract_source:find(
-			'_shared_relic_policy.clear_identity_cache(_remote_blightreaper)',
-			1, true), "remote identity may not survive a session reset")
-		H.equal(select(2, contract_source:gsub(
-			'_relic_trophy_extensions = setmetatable%(%{%}, %{%s*__mode = "k"%s*%}%)',
-			"")), 2, "trophy extensions must be declared and replaced at reset")
-		H.truthy(contract_source:find(
-			'_shared_relic_policy.disconnect_expired(', 1, true),
-			"disconnect cleanup must honor migration reservation")
-		H.truthy(contract_source:find('"hub_trophy_empty"', 1, true) == nil,
-			"trophy ids must remain single-sourced in the policy module")
-		H.equal(contract_source:find(
-			'mod:network_send, mod, "woc_relic_lease_query_v1", "server"',
-			1, true), nil)
 	end)
 end
