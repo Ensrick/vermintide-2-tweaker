@@ -31,6 +31,77 @@ return function(H, repo_root)
         end
     end)
 
+    H.test("CT ammo restore_plan reconciles local strays and networked deficit (issue 249 restore half)", function()
+        local cases = {
+            -- server_count, local_total, target -> remove_local, add_networked
+            { 0, 5, 5, 5, 5 },   -- post-strip local grants: replace all with networked
+            { 5, 5, 5, 0, 0 },   -- healthy networked state: no-op
+            { 0, 0, 5, 0, 5 },   -- nothing anywhere: full networked grant
+            { 3, 5, 5, 2, 2 },   -- mixed: strip strays, top up networked
+            { 5, 7, 5, 2, 0 },   -- server at target: drop local strays only
+            { 0, 0, 0, 0, 0 },   -- no boons: no-op
+            { 7, 7, 5, 0, 0 },   -- server above target: never negative adds
+            { nil, nil, nil, 0, 0 }, -- non-numbers coerce to zero, never error
+            { 0, 3, "x", 3, 0 }, -- bad target: strays still cleaned, no adds
+        }
+        for i, c in ipairs(cases) do
+            local rm, add = Core.restore_plan(c[1], c[2], c[3])
+            H.equal(rm, c[4], "case " .. i .. " remove_local")
+            H.equal(add, c[5], "case " .. i .. " add_networked")
+        end
+        H.equal(Core.RESTORE_MARKER, "ct249:parity_restore_stack_rebroadcast_v1")
+    end)
+
+    local rebroadcast_path = repo_root
+        .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
+        .. "_ct_stack_rebroadcast_owner.lua"
+    local rebroadcast_factory = assert(loadfile(rebroadcast_path))()
+
+    H.test("CT 249 rebroadcast owner registers on the parity beacon and its runtime check passes", function()
+        local registered = {}
+        local checks = {}
+        local mod_stub = {
+            _ct_ammo_guard_core = Core,
+            _ct_peer_parity = {
+                register_gated_feature = function(self, feature_id, spec)
+                    registered[feature_id] = spec
+                end,
+            },
+        }
+        rebroadcast_factory(mod_stub, {
+            rt_register = function(name, fn) checks[name] = fn end,
+        })
+        local spec = registered["ct249_stack_rebroadcast"]
+        H.truthy(spec, "gated feature not registered on the beacon")
+        H.equal(type(spec.on_enable), "function")
+        H.equal(spec.label, "ct_gated_boon_stack_resync")
+        H.equal(mod_stub._ct249_rebroadcast_wired, true)
+        H.equal(type(mod_stub._ct249_restore_rebroadcast), "function")
+        local check = checks["issue249_stack_rebroadcast_on_restore"]
+        H.truthy(check, "runtime regression check not registered")
+        H.equal(check(), nil, "runtime check should PASS in the wired configuration")
+        -- Outside the engine (no Managers) the enable callback must be a safe no-op.
+        local prev_managers = rawget(_G, "Managers")
+        Managers = nil
+        local ok = pcall(spec.on_enable)
+        Managers = prev_managers
+        H.equal(ok, true, "on_enable must not error without engine globals")
+    end)
+
+    H.test("CT 249 rebroadcast owner stays inert without a beacon (fail-safe)", function()
+        local checks = {}
+        local mod_stub = { _ct_ammo_guard_core = Core }
+        rebroadcast_factory(mod_stub, {
+            rt_register = function(name, fn) checks[name] = fn end,
+        })
+        H.equal(mod_stub._ct249_rebroadcast_wired, false)
+        local check = checks["issue249_stack_rebroadcast_on_restore"]
+        H.truthy(check, "runtime regression check not registered")
+        local err = check()
+        H.equal(type(err), "string", "runtime check must FAIL when the beacon was absent at load")
+        H.truthy(string.find(err, "beacon", 1, true), "failure message should name the beacon")
+    end)
+
     H.test("CT ammo clamp_value stays in [0, max] and reports change", function()
         local v, changed = Core.clamp_value(20, -4)
         H.equal(v, 0); H.equal(changed, true)

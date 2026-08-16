@@ -734,6 +734,7 @@ local function read(name)
             "_ct_progressive_elite_audit", "_ct_progressive_elite_policy",
             "_ct_regression", "_ct_replacement_compensation", "_ct_replacement_runtime",
             "_ct_resume_audit", "_ct_resume_policy", "_ct_spawn_eligibility_owner",
+            "_ct_stack_rebroadcast_owner",
             "_ct_start_shrine_policy", "_ct_start_shrine_runtime",
             "_ct_starting_coins_policy", "_ct_tab_collectibles_layout",
             "_ct_tab_panel_owner", "_ct_umbrella_policy", "_ct_weapon_trait_generation",

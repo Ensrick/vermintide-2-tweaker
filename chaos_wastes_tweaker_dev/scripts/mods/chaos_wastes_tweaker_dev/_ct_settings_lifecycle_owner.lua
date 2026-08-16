@@ -22,6 +22,12 @@ mod._ct_boon_registry = mod:dofile(
 mod._ct_meta_trait_boons = mod:dofile(
     "scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons")
 mod._ct_boon_runtime_context = nil
+-- issue 249: parity-restore stack re-broadcast. Registers a second gated
+-- feature on the beacon _ct_meta_trait_boons just installed, so this load
+-- position (directly after it, before the first gate tick) is load-bearing.
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_stack_rebroadcast_owner")(mod, {
+    rt_register = _rt_register,
+})
 
 -- Preserve the established forward-declared entry-chunk surfaces used by
 -- earlier hook closures. VMF invokes those closures only after module load.
