@@ -71,6 +71,30 @@ function OffhandApplyRuntime.install(mod, deps)
             world, unit, armoury_key, vanilla_skin, context)
     end
 
+    -- #1147: on the two previewer surfaces the PAINT success predicate is
+    -- POSTCONDITION-based, never call completion. The prior outcome reported
+    -- success on a mesh the previewer could not even name (PAINT
+    -- site=hero_previewer target_mesh=<no-unit_name> match=false outcome=true,
+    -- host+client logs 2026-08-03). After the paint call the mesh identity is
+    -- re-resolved: unnameable = unverified; a kind=unit variant must resolve
+    -- to its authored mesh. Diagnostics-only: the paint itself is unchanged.
+    local _PREVIEW_PAINT_CONTEXTS = { hero_previewer = true, loot_previewer = true }
+    local function _preview_paint_outcome(ok, u, armoury_key)
+        if not ok then return ok end
+        local actual = _unit_mesh_name(u)
+        if actual == "<no-unit_name>" or actual == "<not-unit>" then
+            return "ok-mesh-unverified"
+        end
+        local variant = _resolve_authored_offhand_variant(armoury_key)
+        if variant and variant.new_units then
+            local verified = actual == tostring(variant.new_units[1])
+                or (variant.new_units[2] ~= nil
+                    and actual == tostring(variant.new_units[2]))
+            return verified and "ok-mesh-verified" or "ok-mesh-mismatch"
+        end
+        return "ok-mesh-named"
+    end
+
     local function _apply_la_offhand_to_units(world, item_data, units, has_skin,
             backend_id_arg, context, proven_unit_paths)
         if not LA_BRIDGE.registered then
@@ -139,17 +163,22 @@ function OffhandApplyRuntime.install(mod, deps)
                         else
                             local ok = _apply_authored_offhand_to_unit(
                                 world, u, sel.la_armoury_key, sel.vanilla_skin, context)
-                            _dbg("[LA paint]   unit=%s ok=%s", tostring(u), tostring(ok))
+                            -- #1147: previewer surfaces report the verified
+                            -- postcondition, not bare call completion.
+                            local outcome = _PREVIEW_PAINT_CONTEXTS[context]
+                                and _preview_paint_outcome(ok, u, sel.la_armoury_key)
+                                or ok
+                            _dbg("[LA paint]   unit=%s ok=%s", tostring(u), tostring(outcome))
                             if PROBE then
                                 PROBE.emit("cos:sync",
                                     "offhand_gate/" .. tostring(context) .. "/"
                                         .. tostring(sel.la_armoury_key) .. "/" .. tostring(u),
                                     string.format("peer=local ctx=%s key=%s unit=%s decision=PAINT outcome=%s",
                                         tostring(context), tostring(sel.la_armoury_key),
-                                        tostring(u), tostring(ok)))
+                                        tostring(u), tostring(outcome)))
                             end
                             _trace_paint(context, context, bid, u,
-                                sel.la_armoury_key, ok)
+                                sel.la_armoury_key, outcome)
                         end
                     end
                 end

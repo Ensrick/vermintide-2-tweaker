@@ -49,6 +49,14 @@ local _DORMANT_EXPORTS = {
         return { held = 0, exact = 0, over = 0, missing = 0 }
     end,
     loaded_packages       = {},               -- #282: empty registry when dormant
+    -- #696: dormant embed owns no spawn seam, so no pre-spawn lease either --
+    -- the active MH copy owns material binding wholesale in that state.
+    prespawn_lease        = {
+        lease_all = function() return {}, "dormant" end,
+        observe_spawn = function() return nil end,
+        debug_state = function() return { attempted = {}, observed = {} } end,
+        dormant = true,
+    },
     dormant               = true,
 }
 if not mod then return _DORMANT_EXPORTS end
@@ -116,6 +124,54 @@ local mesh_has_matrerial  = Mesh.has_material   -- (sic — kept original spelli
 local mesh_material       = Mesh.material
 local material_set_texture = Material.set_texture
 local manager_package     = Managers.package
+
+-- #696 path 1: pre-spawn parent-package lease for the four LA units whose
+-- invariant MeshObject warnings (log #940) fire BEFORE the traced
+-- Unit.set_material brackets below. Leases queue at the all-mods-loaded edge
+-- (LA presence is unknowable at this dofile: LA loads AFTER us, see
+-- _la_prefix_embedded); the spawn hook observes residency per traced path.
+local PRESPAWN_LEASE = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_la_prespawn_lease").new({
+    package_manager = function()
+        local managers = rawget(_G, "Managers")
+        return type(managers) == "table" and managers.package or nil
+    end,
+    can_get = function(kind, path)
+        local application = rawget(_G, "Application")
+        if not (application and application.can_get) then return false end
+        return application.can_get(kind, path) and true or false
+    end,
+    has_loaded = function(pkg)
+        local managers = rawget(_G, "Managers")
+        local pm = type(managers) == "table" and managers.package or nil
+        if not (pm and type(pm.has_loaded) == "function") then return false end
+        return pm:has_loaded(pkg) and true or false
+    end,
+    la_present = function()
+        return get_mod("Loremasters-Armoury") ~= nil
+    end,
+    log = function(fmt, ...)
+        pcall(printf, fmt, ...)
+    end,
+})
+
+-- Wrap-chain (never overwrite) -- same pattern as _la_prefix_embedded.lua:168
+-- and _moreitemslibrary_embedded.lua:401. All mods are loaded here, so LA
+-- presence is decidable and the keep level has not spawned yet: this is the
+-- latest safe pre-spawn edge for the session leases.
+do
+    local _prev_on_all_mods_loaded = mod.on_all_mods_loaded
+    mod.on_all_mods_loaded = function(...)
+        if _prev_on_all_mods_loaded then
+            local ok, err = pcall(_prev_on_all_mods_loaded, ...)
+            if not ok then mod:warning("[mh_embed] prior on_all_mods_loaded errored: %s", tostring(err)) end
+        end
+        local ok, err = pcall(PRESPAWN_LEASE.lease_all)
+        if not ok then
+            pcall(printf, "[cos:696] pre-spawn lease_all errored: %s", tostring(err))
+        end
+    end
+end
 
 local _DEFAULT_TEX_DICT = {
     texture_map_59cd86b9 = "textures/default_normal",
@@ -572,6 +628,11 @@ end)
 -- the returned live unit. Cosmetics-owned optional headpieces fail closed at
 -- the narrower AttachmentUtils.create_attachment gate in cosmetics_tweaker.lua.
 mod:hook("UnitSpawner", "spawn_local_unit", function (func, self, unit_name, position, rotation, material)
+    -- #696: BEFORE delegating, record whether the traced LA unit's declared
+    -- vanilla parent packages are already resident (the pre-spawn lease's
+    -- success criterion). Bounded to one receipt per traced path; a no-op for
+    -- every other unit (single table lookup).
+    PRESPAWN_LEASE.observe_spawn(unit_name)
     local unit = func(self, unit_name, position, rotation, material)
     if not unit or not unit_alive(unit) then
         return unit
@@ -617,4 +678,5 @@ return {
     session_resident_paths = function() return _mh_lifecycle:held_paths() end,
     reference_summary     = function() return _mh_lifecycle:reference_summary() end,
     loaded_packages       = _mh_loaded_packages,
+    prespawn_lease        = PRESPAWN_LEASE,   -- #696 (runtime check + tests)
 }
