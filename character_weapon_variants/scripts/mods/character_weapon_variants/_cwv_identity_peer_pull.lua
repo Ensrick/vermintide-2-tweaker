@@ -7,6 +7,11 @@
 
 local M = {}
 
+function M.slots_ready(slots)
+	return type(slots) == "table"
+		and (slots.slot_melee ~= nil or slots.slot_ranged ~= nil)
+end
+
 local function local_slots()
 	local pm = Managers and Managers.player
 	if not (pm and pm.local_player) then return nil, nil end
@@ -20,7 +25,8 @@ local function local_slots()
 		local ok_equipment, current = pcall(inventory.equipment, inventory)
 		if ok_equipment and current then equipment = current end
 	end
-	return equipment and equipment.slots, unit
+	local slots = equipment and equipment.slots
+	return M.slots_ready(slots) and slots or nil, unit
 end
 
 -- #914: locality must be derived from the UNIT ITSELF at hook time. The pull
@@ -69,14 +75,23 @@ function M.bind(lifecycle, send_slots, policy, print_fn)
 	end
 
 	function owner.accept(sender_peer_id, schema, payload)
+		-- A request may arrive before this peer's local human inventory has any
+		-- real slots. Do not burn the sender generation in that window: the next
+		-- bounded retry must remain eligible after local initialization (#914).
+		local slots = local_slots()
+		if not slots then
+			pcall(print_fn,
+				"[cwv:914] lifecycle=peer_ready_reply peer=%s generation=%s ready=false accepted=false",
+				tostring(sender_peer_id), tostring(payload and payload.generation))
+			return false
+		end
 		if not lifecycle:accept_request(sender_peer_id, schema, payload) then
 			return false
 		end
-		local slots = local_slots()
-		local tracked = slots and lifecycle:track_delivery(sender_peer_id,
-			slots, "peer_ready_reply") or 0
-		local sent = slots and send_slots(slots,
-			"peer_ready_reply", true, sender_peer_id) or 0
+		local tracked = lifecycle:track_delivery(sender_peer_id,
+			slots, "peer_ready_reply")
+		local sent = send_slots(slots,
+			"peer_ready_reply", true, sender_peer_id)
 		pcall(print_fn,
 			"[cwv:401/914/660] lifecycle=peer_ready_reply peer=%s generation=%s slots=%d tracked=%d",
 			tostring(sender_peer_id), tostring(payload.generation), sent, tracked)

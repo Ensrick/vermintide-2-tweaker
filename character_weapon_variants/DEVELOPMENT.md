@@ -19,6 +19,12 @@ explicit engine-surface review:
   It receives every engine table it uses through an explicit dependency table,
   runs those constructors in their original order, and owns no hooks, commands,
   appearance, parity, or lifecycle behavior.
+- `_cwv_musket_runtime.lua` owns both Musket template families, their stance and
+  remote-fire behavior, and the install boundary for the Old Musket ammo pool.
+  `_cwv_musket_ammo_pool.lua` owns gameplay reserve state by exact player and
+  slot. `_cwv_musket_ammo_hud.lua` is its presentation-only consumer: it may
+  select an active exact extension for the two native HUDs, but may not mutate
+  ammo, add an update loop, or widen the network surface.
 - `_cwv_skin_registry.lua` owns base variant skin/combinations registration and
   the curated custom-illusion catalog. `_cwv_illusion_families.lua` immediately
   extends the returned `custom_skin_keys` table with the generated Spear,
@@ -72,6 +78,10 @@ load order should read the entry file directly.
   ordered skin owners. Never reorder a registrar or rebuild `custom_skin_keys`:
   the backend-unlock, appearance, wire-policy, and regression consumers retain
   the exact table returned by `_cwv_skin_registry.lua`.
+- Put Old Musket reserve mutations and owner/slot membership in
+  `_cwv_musket_ammo_pool.lua`; put only native counter selection in
+  `_cwv_musket_ammo_hud.lua`, installed from `_cwv_musket_runtime.lua` after the
+  pool exists. A HUD fix must never create a second ammo authority.
 
 ## Registration and acquisition contract
 
@@ -1205,6 +1215,25 @@ exact-instance selection after Cosmetics proves it still belongs to the exact
 CWV item/hand catalog. Unit paths remain local renderer data: the receiver
 reconstructs each hand from its own registries and rejects a missing, foreign,
 or fingerprint-mismatched identity.
+
+The peer-ready pull is also the recovery owner for mission transitions and
+hot-join initialization races (#914). A receiving request is accepted only
+after the local human inventory exposes at least one real melee or ranged slot;
+otherwise that generation remains unconsumed so the sender's existing bounded
+retry can succeed later. At husk spawn, `SimpleHuskInventoryExtension._player`
+is the earliest source-backed owner fact. The resolver accepts it only when it
+is a human, has a stable peer id, and does not point at a different unit, then
+falls back to `PlayerManager:owner` once that table is ready.
+
+Client departure cleanup is deliberately recipient-scoped. The
+`PlayerManager.remove_player` wrapper captures the remote human before vanilla
+removes it, skips the local peer/bots/server, and clears only that peer's remote
+state, request generation, pending deliveries, and `<peer>|<slot>` send
+signatures. It never clears shared `others|<slot>` signatures and never disables
+dedupe. Although vanilla also calls this seam during level transitions, this
+specific semantic cache is safe to retire because peer-ready pull reconstructs
+it from current slots; persistent Cosmetics state must still use the deferred
+class-24 cleanup pattern.
 
 The single most misdiagnosed CWV surface. A variant that looks and behaves
 perfectly for the LOCAL wielder and their BOTS can be invisible, wrong-mesh,

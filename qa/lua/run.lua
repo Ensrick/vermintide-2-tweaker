@@ -154,6 +154,7 @@ local suites = {
 	"test_cwv_old_musket_appearance",
     "test_cwv_cross_slot_filter",
     "test_cwv_musket_ammo_pool",
+    "test_cwv_musket_ammo_hud",
     "test_cwv_texture_residency",
     "test_cwv_old_musket_preview",
     "test_cwv_outrider_model",
