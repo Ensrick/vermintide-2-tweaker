@@ -27,7 +27,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.124-dev"
+local MOD_VERSION = "0.8.125-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
