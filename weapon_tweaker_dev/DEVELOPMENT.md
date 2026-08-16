@@ -783,7 +783,7 @@ parity gate enforces the remaining normalized runtime mirror.
 ### Issue #445 Weapon Tweaks family master
 
 `_wt_rework_master_policy.lua` is the engine-free source of truth for the exact
-13 active Weapon Tweaks, their `[Ensrick]` title prefix, and the nested
+15 active Weapon Tweaks, their `[Ensrick]` title prefix, and the nested
 `wt_rework_master_ensrick` control. A master click writes changed settings with
 notifications suppressed, then the entry dispatches each live-capable owner
 once. Restart-only template changes remain restart-only. Individual edits only
