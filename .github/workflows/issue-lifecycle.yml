@@ -34,17 +34,21 @@ jobs:
         with:
           persist-credentials: false
           # The live-card contract reads the exact deployed source commits
-          # named by the release manifest. Partial-clone fetches only the Lua
-          # text requested by git show/grep; full history does not hydrate the
-          # multi-gigabyte bundle blobs.
+          # named by the release manifest. Full history preserves that
+          # authority; the blob filter still excludes multi-gigabyte bundles.
           fetch-depth: 0
           # Source authority hydrates only the immutable Lua blobs named by
           # deployed commits; blob:none keeps unrelated ~7 GiB bundles out of
           # the checkout while git archive fetches those exact objects (#540).
+          # The sparse patterns below also land current active Lua in the
+          # initial pack, and most deployed blobs are shared with it, so the
+          # authority's batched prefetch has little left to hydrate (#750).
           filter: 'blob:none'
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
-            qa
-            tools
+            /qa/
+            /tools/
+            /*/scripts/mods/
 
       - name: Validate tracker lifecycle and pinned test cards
         shell: pwsh

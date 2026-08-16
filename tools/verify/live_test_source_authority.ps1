@@ -559,6 +559,62 @@ function Get-VtGitScalar {
     return $output.Trim()
 }
 
+function Invoke-VtContractDeployedBlobPrefetch {
+    param(
+        [string]$RepoRoot,
+        [object[]]$DeployedTrees
+    )
+
+    # In a blob:none partial clone (the dedicated lifecycle CI checkout and
+    # the qa.yml checkout), every deployed-tree blob absent from the local
+    # object store costs a promisor network fetch inside the per-mod archive
+    # transaction. The 2026-08-13/15 scheduled guard runs exceeded their
+    # five-minute ceiling exactly there: 841 deployed blobs were missing under
+    # the old qa+tools sparse cone (#750). Enumerate the missing blobs across
+    # every deployed source tree first and hydrate them in a few batched
+    # fetches, mirroring git's own internal lazy-fetch invocation. Best-effort
+    # by design: on any failure the per-object lazy path remains the
+    # correctness fallback, only slower, so this warns instead of failing.
+    $promisorOutput = @(& git -C $RepoRoot config --get remote.origin.promisor 2>&1)
+    if ($LASTEXITCODE -ne 0 -or ([string]$promisorOutput[0]).Trim() -cne 'true') { return }
+
+    $missing = New-Object System.Collections.Generic.List[string]
+    $seen = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($target in @($DeployedTrees)) {
+        $treeOutput = @(& git -C $RepoRoot rev-parse "$($target.Commit):$($target.Root)" 2>&1)
+        # A missing path or commit is reported authoritatively by the main
+        # authority pass; the prefetch silently skips it.
+        if ($LASTEXITCODE -ne 0 -or $treeOutput.Count -lt 1) { continue }
+        $treeId = ([string]$treeOutput[0]).Trim()
+        if ($treeId -notmatch '^[0-9a-f]{40,64}$') { continue }
+        # --missing=print lists absent objects as ?<oid> without lazy-fetching.
+        $objectLines = @(& git -C $RepoRoot rev-list --objects --missing=print $treeId 2>&1)
+        if ($LASTEXITCODE -ne 0) { continue }
+        foreach ($line in $objectLines) {
+            if ([string]$line -match '^\?([0-9a-f]{40,64})$' -and $seen.Add($matches[1])) {
+                $missing.Add($matches[1])
+            }
+        }
+    }
+    if ($missing.Count -eq 0) { return }
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $batches = 0
+    for ($offset = 0; $offset -lt $missing.Count; $offset += 200) {
+        $last = [Math]::Min($offset + 199, $missing.Count - 1)
+        $batch = @($missing[$offset..$last])
+        $fetchOutput = @(& git -C $RepoRoot -c fetch.negotiationAlgorithm=noop fetch origin --quiet `
+            --no-tags --no-write-fetch-head --recurse-submodules=no --filter=blob:none @batch 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Deployed-blob prefetch batch failed (exit $LASTEXITCODE); falling back to per-blob lazy fetches: $($fetchOutput -join ' ')"
+            return
+        }
+        $batches++
+    }
+    $stopwatch.Stop()
+    Write-Host "[live-test-contract] prefetched $($missing.Count) missing deployed-source blob(s) in $batches batched fetch(es), $([int]$stopwatch.Elapsed.TotalMilliseconds)ms"
+}
+
 function Get-VtDeployedLuaDocuments {
     param(
         [string]$RepoRoot,
@@ -568,6 +624,13 @@ function Get-VtDeployedLuaDocuments {
     )
     # One archive transaction is materially faster than launching `git show`
     # once per file, while still reading only immutable bytes from Treeish.
+    # Archive the deployed subtree itself rather than the commit with a
+    # pathspec: `git archive <commit> -- <path>` hydrates every blob in the
+    # commit before applying the pathspec, which in a blob:none clone drags
+    # the whole bundle tree over the network (#750). `--prefix` keeps the
+    # extracted entry paths identical to the pathspec form.
+    $archiveTreeish = "$Treeish`:$RelativeRoot"
+    $archivePrefix = ($RelativeRoot -replace '\\','/').TrimEnd('/') + '/'
     $temporaryRoot=Join-Path ([IO.Path]::GetTempPath()) ('vt-card-source-'+[guid]::NewGuid().ToString('N'))
     $archivePath=Join-Path $temporaryRoot 'source.tar'
     $extractRoot=Join-Path $temporaryRoot 'tree'
@@ -575,7 +638,7 @@ function Get-VtDeployedLuaDocuments {
     try{
         New-Item -ItemType Directory -Force -Path $extractRoot|Out-Null
         $previous=$ErrorActionPreference;$ErrorActionPreference='Continue'
-        try{$archiveOutput=& git -C $RepoRoot archive --format=tar --output=$archivePath $Treeish -- $RelativeRoot 2>&1|ForEach-Object{$_.ToString()}|Out-String;$archiveCode=$LASTEXITCODE}
+        try{$archiveOutput=& git -C $RepoRoot archive --format=tar --prefix=$archivePrefix --output=$archivePath $archiveTreeish 2>&1|ForEach-Object{$_.ToString()}|Out-String;$archiveCode=$LASTEXITCODE}
         finally{$ErrorActionPreference=$previous}
         if($archiveCode -ne 0){throw "Cannot archive deployed source '$Treeish`:$RelativeRoot': $($archiveOutput.Trim())"}
         $previous=$ErrorActionPreference;$ErrorActionPreference='Continue'
@@ -1420,6 +1483,28 @@ function Get-VtCardSourceAuthority {
         }
         $legacyByKey[$key]=$legacy
     }
+
+    # Hydrate every deployed Lua blob this pass will read in a few batched
+    # fetches before the per-mod archive transactions begin (#750). Targets are
+    # resolved leniently here; the record loop below is the authority on a
+    # malformed or unreachable deployed tree.
+    $prefetchTargets=@()
+    foreach($entry in @($inventory.Mods)){
+        $id=[string]$entry.ModId
+        if(-not$deployedById.ContainsKey($id)){continue}
+        $row=$deployedById[$id]
+        $treeish=[string]$row.source_commit
+        if([string]::IsNullOrWhiteSpace($treeish)){
+            $legacyKey=$id+"`n"+([string]$row.version)
+            if(-not$legacyByKey.ContainsKey($legacyKey)){continue}
+            $treeish=[string]$legacyByKey[$legacyKey].RootTree
+        }
+        $prefetchTargets+=[pscustomobject]@{
+            Commit=$treeish
+            Root=(([string]$entry.Dir).TrimEnd([char[]]'\/') -replace '\\','/') + '/scripts/mods'
+        }
+    }
+    Invoke-VtContractDeployedBlobPrefetch -RepoRoot $RepoRoot -DeployedTrees @($prefetchTargets)
 
     $records=New-Object System.Collections.Generic.List[object]
     $documentsByMod=@{}

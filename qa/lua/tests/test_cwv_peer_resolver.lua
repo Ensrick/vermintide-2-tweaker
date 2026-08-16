@@ -126,6 +126,37 @@ return function(H, repo_root)
 		H.equal(reason, "player unavailable")
 	end)
 
+	H.test("CWV #914 husk owner prefers validated extension player then falls back", function()
+		local owner_unit = {}
+		local other_unit = {}
+		local hinted = {
+			peer_id = "peer-hinted",
+			player_unit = nil,
+			is_player_controlled = function() return true end,
+		}
+		local fallback = {
+			peer_id = "peer-fallback",
+			player_unit = owner_unit,
+			is_player_controlled = function() return true end,
+		}
+		local manager = { owner = function() return fallback end }
+		local player, source = resolver.husk_owner(manager, owner_unit, hinted)
+		H.equal(player, hinted)
+		H.equal(source, "husk_extension_player")
+		H.equal(resolver.player_peer_id(player), "peer-hinted")
+
+		hinted.player_unit = other_unit
+		player, source = resolver.husk_owner(manager, owner_unit, hinted)
+		H.equal(player, fallback, "conflicting extension player must be rejected")
+		H.equal(source, "owner")
+
+		hinted.player_unit = nil
+		hinted.is_player_controlled = function() return false end
+		player, source = resolver.husk_owner(manager, owner_unit, hinted)
+		H.equal(player, fallback, "bot hint must be rejected")
+		H.equal(source, "owner")
+	end)
+
 	H.test("CWV peer identity paths contain no logical pcall multi-return collapse", function()
 		for _, relative in ipairs({
 			"character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",

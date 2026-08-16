@@ -65,6 +65,14 @@ local PER_PEER_SETTING_NAMES = {
     -- Curse/mission visual desync from this is tracked as a separate follow-up — likely
     -- needs a host→client graph snapshot RPC instead of toggle sync.
     inject_adventure_maps   = true,
+    -- #917 preserve_adventure_illusions STAYS per-peer: the snapshot/reapply
+    -- runs on the owning peer's machine against that peer's OWN Adventure
+    -- loadout and locally-generated deus items only (presentation carried to
+    -- other peers through vanilla weapon serialization). A host-synced value
+    -- would let the host gate another player's purely-local cosmetic choice
+    -- while providing no cross-peer consistency benefit - there is no shared
+    -- state to keep consistent (issue #917 "keep ownership per player").
+    preserve_adventure_illusions = true,
 }
 
 _collect_setting_ids = function()
@@ -226,6 +234,10 @@ mod.update = function(dt)
     -- since the tick + its pending table are defined later in this file (assigned at
     -- load, before any update tick fires).
     if mod._ct_chest_teleport_tick then mod._ct_chest_teleport_tick(dt) end
+    -- #358: Manann's Tempest ready-state reconciler (owner-local, 0.5s throttle
+    -- inside the tick). Assigned by _ct_bomb_cooldown_display.install() at entry
+    -- load, before any update tick fires; cheap field read when absent.
+    if mod._ct_manann_ready_tick then mod._ct_manann_ready_tick(dt) end
     -- #205: debounced host-settings re-sync. on_setting_changed marks the registry
     -- dirty + (re)arms this short countdown instead of broadcasting inline, so an
     -- Apply-button burst (the gut Mod Tweaker commits its whole staged batch at once ->

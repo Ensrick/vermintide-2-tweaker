@@ -511,6 +511,27 @@ return function(H, repo_root)
         H.equal(stored.fingerprint, d.fingerprint)
     end)
 
+	H.test("CWV #914 clear_peer retires targeted send dedupe but preserves broadcast", function()
+		local d = descriptor(nil)
+		local sends = {}
+		local lifecycle = Policy.new({
+			resolve_local = function() return d, "vanilla_base" end,
+			resolve_remote = function() return descriptor(nil) end,
+			send = function(recipient, _, payload)
+				sends[#sends + 1] = recipient .. "|" .. payload.slot
+				return true
+			end,
+		})
+		local slots = { slot_melee = {} }
+		H.equal(lifecycle:publish(slots, "first", "peer-a", false, true), 1)
+		H.equal(lifecycle:publish(slots, "deduped", "peer-a", false, true), 0)
+		H.equal(lifecycle:publish(slots, "broadcast", "others", false, true), 1)
+		lifecycle:clear_peer("peer-a")
+		H.equal(lifecycle:publish(slots, "target-rejoin", "peer-a", false, true), 1)
+		H.equal(lifecycle:publish(slots, "broadcast-still-deduped", "others", false, true), 0)
+		H.equal(#sends, 3)
+	end)
+
     H.test("CWV #604 skinless Dawi model survives exact remote reconstruction", function()
         local model = assert(CrowbillFamily.model_for_variant("cwv_dr_dawi_crowbill"))
         local function dawi_descriptor()

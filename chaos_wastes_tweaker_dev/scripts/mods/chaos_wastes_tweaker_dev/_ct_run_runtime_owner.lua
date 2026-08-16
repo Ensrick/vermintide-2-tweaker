@@ -201,6 +201,17 @@ mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_node_entry_owner")(mod, {
     rt_register = _rt_register,
 })
 
+-- #917: preserve Adventure weapon illusions in CW. Per-local-player snapshot at
+-- DeusMechanism._setup_run + compatibility-gated reapply from the
+-- _ct_weapon_trait_generation seam directly below (its only consumer), so the
+-- module installs at its seam's manifest position. Lives HERE and not in the
+-- entry because the entry is frozen at its 1498-line completion ceiling
+-- (test_ct_entry_decomposition) - same distributed-manifest precedent as the
+-- _ct_weapon_trait_generation / _ct_combat_hooks installs. On `mod` so the
+-- generation seam and _ct_regression resolve it late-bound and nil-safe.
+mod._ct_adventure_illusions = mod:dofile(
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_adventure_illusions")({ mod = mod })
+
 -- Weapon-trait pool mutation and the four generation hooks share one owner.
 -- Install here to preserve the original hook and regression-check order.
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_weapon_trait_generation")({
@@ -336,7 +347,21 @@ end)
 -- rpc_deus_setup_run handler). This is the canonical entry point for "the run
 -- starts" — capture run_seed + journey + dominant_god + with_belakor + mutators
 -- to confirm both peers run with identical args.
-mod:hook_safe("DeusMechanism", "_setup_run", function(self, run_id, run_seed, is_initial_setup, server_peer_id, difficulty, journey_name, dominant_god, with_belakor, mutators, boons)
+-- #917 merge: ONE hook per (Class, method) (VMF drops duplicates; mod-lint
+-- enforces it, see note (2) below), so this former hook_safe is now the single
+-- FULL hook carrying both jobs: the adventure-illusion snapshot runs BEFORE
+-- vanilla (which generates the starter weapons inside _setup_run,
+-- deus_mechanism.lua:1098/:1134), the #53 diagnostic keeps its original
+-- post-vanilla timing, and vanilla itself always runs with untouched args and
+-- preserved returns (guard-is-not-bail; nil-hole-safe capture).
+mod:hook("DeusMechanism", "_setup_run", function(func, self, run_id, run_seed, is_initial_setup, server_peer_id, difficulty, journey_name, dominant_god, with_belakor, mutators, boons, ...)
+    local illusions = mod._ct_adventure_illusions
+    if illusions and illusions.snapshot_now then
+        pcall(illusions.snapshot_now)
+    end
+
+    local n, results = _capture_returns(func(self, run_id, run_seed, is_initial_setup, server_peer_id, difficulty, journey_name, dominant_god, with_belakor, mutators, boons, ...))
+
     local is_server = Managers and Managers.player and Managers.player.is_server
     local m_count = (type(mutators) == "table") and #mutators or "?"
     local b_count = (type(boons) == "table") and #boons or "?"
@@ -345,6 +370,7 @@ mod:hook_safe("DeusMechanism", "_setup_run", function(self, run_id, run_seed, is
         tostring(journey_name), tostring(dominant_god), tostring(with_belakor),
         tostring(m_count), tostring(b_count),
         tostring(is_initial_setup), tostring(server_peer_id))
+    return unpack(results, 1, n)
 end)
 
 -- (2) [intentionally no separate setup_run hook] — the diagnostic graph-dump

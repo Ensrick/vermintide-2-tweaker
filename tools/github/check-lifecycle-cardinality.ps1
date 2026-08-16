@@ -16,8 +16,13 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repoRoot 'tools/verify/lifecycle_method_policy.ps1')
 
-function Get-LifecycleViolations($Issues, [switch]$RequirePinnedCard, $Authority, [switch]$EnforceAuthority) {
+# One decision pass serves both the blocking verdict and the report-only
+# authority findings. Evaluating each issue twice doubled the card-policy
+# phase for no new information, which the #750 timing evidence would then
+# have reported as an inflated policy budget.
+function Get-LifecycleDecisionReport($Issues, [switch]$RequirePinnedCard, $Authority, [switch]$EnforceAuthority) {
     $violations = @()
+    $findings = @()
     foreach ($issue in @($Issues)) {
         $decision = Get-VtOpenIssueLifecycleDecision -Issue $issue -RequirePinnedCard:$RequirePinnedCard -Authority $Authority -EnforceAuthority:$EnforceAuthority
         if (-not $decision.Valid) {
@@ -28,23 +33,25 @@ function Get-LifecycleViolations($Issues, [switch]$RequirePinnedCard, $Authority
                 errors = @($decision.Errors)
             }
         }
-    }
-    return @($violations)
-}
-
-function Get-LifecycleAuthorityFindings($Issues, [switch]$RequirePinnedCard, $Authority, [switch]$EnforceAuthority) {
-    $findings=@()
-    foreach($issue in @($Issues)){
-        $decision=Get-VtOpenIssueLifecycleDecision -Issue $issue -RequirePinnedCard:$RequirePinnedCard -Authority $Authority -EnforceAuthority:$EnforceAuthority
-        if($decision.Ready -and @($decision.Advisories).Count -gt 0){
+        if ($decision.Ready -and @($decision.Advisories).Count -gt 0) {
             $findings += [pscustomobject][ordered]@{
-                number=[int]$issue.number
-                title=[string]$issue.title
-                advisories=@($decision.Advisories)
+                number = [int]$issue.number
+                title = [string]$issue.title
+                advisories = @($decision.Advisories)
             }
         }
     }
-    return @($findings)
+    return [pscustomobject]@{ Violations=@($violations); AuthorityFindings=@($findings) }
+}
+
+function Get-LifecycleViolations($Issues, [switch]$RequirePinnedCard, $Authority, [switch]$EnforceAuthority) {
+    $report = Get-LifecycleDecisionReport -Issues $Issues -RequirePinnedCard:$RequirePinnedCard -Authority $Authority -EnforceAuthority:$EnforceAuthority
+    return @($report.Violations)
+}
+
+function Get-LifecycleAuthorityFindings($Issues, [switch]$RequirePinnedCard, $Authority, [switch]$EnforceAuthority) {
+    $report = Get-LifecycleDecisionReport -Issues $Issues -RequirePinnedCard:$RequirePinnedCard -Authority $Authority -EnforceAuthority:$EnforceAuthority
+    return @($report.AuthorityFindings)
 }
 
 function Get-VtLifecycleAuthorityContext {
@@ -54,17 +61,36 @@ function Get-VtLifecycleAuthorityContext {
         [string]$DeploymentManifestPath,
         [switch]$EnforceAuthority
     )
+    # The deployment-manifest fetch and the deployed-source index are the two
+    # network/git phases of authority acquisition, so they are measured here
+    # and surfaced to the caller's #750 timing line rather than re-fetched
+    # outside this function just to be timed.
+    $manifestSeconds = $null
+    $sourceSeconds = $null
+    $phaseTimer = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         $deploymentManifest = Get-VtCardDeploymentManifest -Repository $Repository -ManifestJsonPath $DeploymentManifestPath
+        $manifestSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+        $phaseTimer.Restart()
         $sourceAuthority = Get-VtCardSourceAuthority -RepoRoot $RepoRoot -DeploymentManifest $deploymentManifest
+        $sourceSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
         return [pscustomobject]@{
             Authority = New-VtLiveTestCardAuthority -Source $sourceAuthority -DeploymentManifest $deploymentManifest
             Error = $null
+            ManifestSeconds = [int]$manifestSeconds
+            SourceSeconds = [int]$sourceSeconds
         }
     }
     catch {
         if ($EnforceAuthority) { throw }
-        return [pscustomobject]@{ Authority=$null; Error=$_.Exception.Message }
+        if ($null -eq $manifestSeconds) { $manifestSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds) }
+        elseif ($null -eq $sourceSeconds) { $sourceSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds) }
+        return [pscustomobject]@{
+            Authority = $null
+            Error = $_.Exception.Message
+            ManifestSeconds = [int]$manifestSeconds
+            SourceSeconds = [int]$sourceSeconds
+        }
     }
 }
 
@@ -480,6 +506,13 @@ query($owner: String!, $name: String!, $after: String) {
 
 if ($SelfTest) { Invoke-SelfTest; exit 0 }
 
+# Per-phase wall-clock evidence against the workflow's five-minute ceiling.
+# The 2026-08-13/15 scheduled cancellations (#750) were unattributable because
+# the guard printed nothing between the offline fixtures and the final verdict;
+# a cancelled run now shows exactly which phase consumed the budget.
+$totalTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$phaseTimer = [System.Diagnostics.Stopwatch]::StartNew()
+
 if ($IssuesJsonPath) {
     $json = Get-Content -LiteralPath $IssuesJsonPath -Raw
 }
@@ -489,15 +522,27 @@ else {
 }
 
 if ($IssuesJsonPath) { $issues = @($json | ConvertFrom-Json) }
+$openIssueSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+$phaseTimer.Restart()
+# Authority acquisition subsumes the former release-manifest and deployed-
+# contract phases: it fetches the deployment manifest once and indexes the
+# deployed source from it. It reports both phase durations so the timing
+# line below keeps naming the same four phases without a second fetch.
 $authorityContext = Get-VtLifecycleAuthorityContext -RepoRoot $repoRoot -Repository $Repository `
     -DeploymentManifestPath $DeploymentManifestPath -EnforceAuthority:$EnforceAuthority
+$manifestSeconds = [int]$authorityContext.ManifestSeconds
+$contractSeconds = [int]$authorityContext.SourceSeconds
 $authority = $authorityContext.Authority
 $authorityLoadError = $authorityContext.Error
 if ($authorityLoadError) {
     Write-Host "[check-lifecycle-cardinality] AUTHORITY REPORT-ONLY UNAVAILABLE: $authorityLoadError"
 }
-$violations = @(Get-LifecycleViolations -Issues $issues -RequirePinnedCard -Authority $authority -EnforceAuthority:$EnforceAuthority)
-$authorityFindings=@(Get-LifecycleAuthorityFindings -Issues $issues -RequirePinnedCard -Authority $authority -EnforceAuthority:$EnforceAuthority)
+$phaseTimer.Restart()
+$decisionReport = Get-LifecycleDecisionReport -Issues $issues -RequirePinnedCard -Authority $authority -EnforceAuthority:$EnforceAuthority
+$violations = @($decisionReport.Violations)
+$authorityFindings = @($decisionReport.AuthorityFindings)
+$policySeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+Write-Host "[check-lifecycle-cardinality] timing: open-issues=${openIssueSeconds}s release-manifest=${manifestSeconds}s deployed-contract=${contractSeconds}s card-policy=${policySeconds}s total=$([int][math]::Round($totalTimer.Elapsed.TotalSeconds))s"
 if($authorityFindings.Count -gt 0){
     $mode=if($EnforceAuthority){'STRICT PREVIEW'}else{'REPORT-ONLY ROLLOUT'}
     Write-Host "[check-lifecycle-cardinality] AUTHORITY ${mode}: $($authorityFindings.Count) open issue(s) have deployed-card findings:"

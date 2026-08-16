@@ -146,11 +146,55 @@ local function register(Harness, repo_root)
         local data = read(wt_dir .. "/weapon_tweaker_data.lua")
         Harness.truthy(data:find('setting_id = "' .. policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING .. '"', 1, true),
             "widget for the executioner toggle must exist under the policy's id")
-        local source = read(wt_dir .. "/weapon_tweaker.lua")
-        Harness.truthy(source:find("_wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then", 1, true),
-            "on_setting_changed must dispatch the executioner setting to the balance apply")
-        Harness.truthy(source:find("[wt:664] applied:", 1, true),
-            "the #664 evidence printf must remain (proves enabled=/parity= at each apply)")
+        -- The bounded apply adapter moved out of the entry into its policy
+        -- owner (_wt_axe_balance.M.install), so drive it instead of grepping
+        -- the entry: the executioner setting id must reach exactly the
+        -- executioner apply, and the evidence printf must still carry the
+        -- enabled=/parity= pair that this issue was diagnosed from.
+        local arms = {
+            "apply_greataxe_crit", "apply_dual_crit", "apply_dual_cleave",
+            "apply_one_hand_axe_cleave", "apply_cog_heavy_speed",
+            "apply_mace_sword_speed", "apply_executioner_light_headshot",
+        }
+        local calls, logged = {}, {}
+        policy.new = function()
+            local spy = {}
+            for _, arm in ipairs(arms) do
+                spy[arm] = function() calls[#calls + 1] = arm return 0 end
+            end
+            return spy
+        end
+        local saved_weapons, saved_damage = Weapons, DamageProfileTemplates
+        local saved_power, saved_printf = PowerLevelTemplates, printf
+        Weapons, DamageProfileTemplates, PowerLevelTemplates = {}, {}, {}
+        printf = function(format, ...) logged[#logged + 1] = string.format(format, ...) end
+        local mod = { get = function() return false end }
+        local phase = {}
+        local ok, err = pcall(function()
+            policy.install(mod)
+            phase.install_arms = #calls
+            calls = {}
+            mod._wt_apply_axe_balance(policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING, false)
+            phase.targeted = calls
+        end)
+        Weapons, DamageProfileTemplates = saved_weapons, saved_damage
+        PowerLevelTemplates, printf = saved_power, saved_printf
+
+        Harness.truthy(ok, "installing the balance owner must not fault: " .. tostring(err))
+        Harness.equal(phase.install_arms, #arms,
+            "the load-time apply must still run every balance arm once")
+        Harness.equal(#phase.targeted, 1,
+            "the executioner setting id must dispatch to exactly one apply")
+        Harness.equal(phase.targeted[1], "apply_executioner_light_headshot",
+            "the executioner setting id must dispatch to the executioner apply")
+        local evidence
+        for _, line in ipairs(logged) do
+            if line:find("[wt:664] applied:", 1, true) then evidence = line end
+        end
+        Harness.truthy(evidence,
+            "the #664 evidence printf must still fire on every executioner apply")
+        Harness.truthy(evidence:find("enabled=", 1, true) and evidence:find("parity=", 1, true),
+            "the #664 evidence printf must keep reporting enabled= and parity=")
     end)
 end
 

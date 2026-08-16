@@ -354,7 +354,12 @@ shipping. Agent publication is headless and opens no interactive window.
     repair. Canonical ship applies them strictly before a new ready label, and
     the card refresher applies them strictly before a rewrite. The two legacy
     rows without `source_commit` use reviewed Git tree pins, never current
-    working-tree text. Fix reported cards; do not weaken the scanner or retry
+    working-tree text. The dedicated workflow's non-cone sparse checkout
+    includes `qa`, `tools`, and current `*/scripts/mods/` paths so shared Lua
+    blobs hydrate in the checkout pack rather than through repeated lazy
+    historical fetches; the authority batch-prefetches whatever deployed blobs
+    are still missing, and the guard logs per-phase timings against its
+    five-minute budget. Fix reported cards; do not weaken the scanner or retry
     the build.
   - `gh issue edit <N> --remove-label not-started --add-label verify-fix` only
     when a **complete deployed fix** is runnable in-game now.

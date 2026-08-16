@@ -173,6 +173,16 @@ local loc = {
     special_spawns_group = { en = "Special Spawns" },
 
     -- ============================================================
+    -- Enemy Stats
+    -- ============================================================
+    -- #369 restructure: per-difficulty health multipliers moved here from the
+    -- Special Spawns per-difficulty blocks. The per-difficulty slider rows
+    -- (label = difficulty name) are generated dynamically at the bottom of
+    -- this file; setting_ids unchanged.
+    enemy_stats_group        = { en = "Enemy Stats" },
+    enemy_stats_health_group = { en = "Health Multipliers" },
+
+    -- ============================================================
     -- Faction Substitution
     -- ============================================================
     faction_swap_group   = { en = "Faction Substitution" },
@@ -390,7 +400,9 @@ for _, diff in ipairs(B.DIFFICULTIES) do
     loc[B.setting_key(k, "max_same_tooltip")]   = {
         en = string.format("The most specials of the same type that can be alive at once on %s (normally %d).", diff.label, diff.max_same),
     }
-    loc[B.setting_key(k, "health_multiplier")] = { en = "Enemy health multiplier" }
+    -- #369: these rows render inside Enemy Stats > Health Multipliers (one
+    -- slider per difficulty), so the label is the difficulty name itself.
+    loc[B.setting_key(k, "health_multiplier")] = { en = "" .. diff.label }
     loc[B.setting_key(k, "health_multiplier") .. "_tooltip"] = {
         en = string.format("Scales hostile AI health on %s from 0.1x to 5.0x. Includes regular enemies, specials, monsters, and lords. The host applies changes to living enemies while preserving their current health percentage. 1.0 is vanilla.", diff.label),
     }

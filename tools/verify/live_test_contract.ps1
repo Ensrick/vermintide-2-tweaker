@@ -345,6 +345,52 @@ rawset(_G, "printf", mod.debug)
         )
         Assert-VtContractFixture ($unsafe491.Count -eq 0) 'Known-unbounded [cwv:491] received an override.'
 
+        # Regression proof for #750: in a blob:none partial clone (the shape of
+        # the dedicated lifecycle CI checkout) the authority must recover the
+        # deployed identity through the batched blob prefetch. GIT_NO_LAZY_FETCH
+        # forbids the per-object fallback on git >= 2.45, and the missing-object
+        # census proves hydration happened on every git version. The census is
+        # taken over the deployed subtree rather than the clone's HEAD, because
+        # the planted mutation commit above is deliberately not the deployed
+        # tree and its blobs are never prefetched.
+        $manifest.mods = @($manifest.mods[0])
+        & git -C $tmp config uploadpack.allowfilter true
+        & git -C $tmp config uploadpack.allowanysha1inwant true
+        $partial = Join-Path $tmp 'partial-clone'
+        $sourcePath = ($tmp -replace '\\', '/')
+        $sourceUrl = if ($sourcePath.StartsWith('/')) { "file://$sourcePath" } else { "file:///$sourcePath" }
+        $cloneOutput = @(& git clone --quiet --no-checkout --filter=blob:none $sourceUrl $partial 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw "Could not create partial-clone contract fixture: $($cloneOutput -join ' ')" }
+        & git -C $partial config core.longpaths true
+        # Hydrate everything except the deployed mod tree, so its Lua blobs are
+        # genuinely absent, exactly like historical deployed source in CI.
+        & git -C $partial sparse-checkout set --no-cone '/*' '!/fixture_mod/'
+        $checkoutOutput = @(& git -C $partial checkout --quiet 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw "Could not check out partial-clone contract fixture: $($checkoutOutput -join ' ')" }
+        $deployedTree = (& git -C $partial rev-parse "$commit`:fixture_mod/scripts/mods").Trim()
+        $missingBefore = @(& git -C $partial rev-list --objects --missing=print $deployedTree 2>&1 |
+            Where-Object { [string]$_ -match '^\?[0-9a-f]{40,64}$' })
+        Assert-VtContractFixture ($missingBefore.Count -ge 1) 'Partial-clone fixture left no deployed blob missing.'
+        $previousNoLazyFetch = $env:GIT_NO_LAZY_FETCH
+        try {
+            $env:GIT_NO_LAZY_FETCH = '1'
+            $partialContract = Get-VtDeployedSourceContract -RepoRoot $partial -ReleaseManifest $manifest
+        }
+        finally {
+            if ($null -eq $previousNoLazyFetch) {
+                Remove-Item Env:GIT_NO_LAZY_FETCH -ErrorAction SilentlyContinue
+            }
+            else { $env:GIT_NO_LAZY_FETCH = $previousNoLazyFetch }
+        }
+        $partialRecords = @($partialContract.Records)
+        Assert-VtContractFixture ($partialRecords.Count -eq 1) 'Partial-clone authority did not resolve exactly one record.'
+        Assert-VtContractFixture (@($partialRecords[0].LoadRoutes.Marker) -contains '[fx:LOAD]') 'Partial-clone authority lost the deployed LOAD route through the batched prefetch.'
+        Assert-VtContractFixture (@($partialRecords[0].CommandRoutes.Command) -contains '/fx_probe') 'Partial-clone authority lost the deployed command route through the batched prefetch.'
+        Assert-VtContractFixture (@($partialRecords[0].ReceiptRoutes.Signature) -contains '[fx:probe] status=OK') 'Partial-clone authority lost the deployed receipt route through the batched prefetch.'
+        $missingAfter = @(& git -C $partial rev-list --objects --missing=print $deployedTree 2>&1 |
+            Where-Object { [string]$_ -match '^\?[0-9a-f]{40,64}$' })
+        Assert-VtContractFixture ($missingAfter.Count -eq 0) "Batched prefetch left $($missingAfter.Count) deployed blob(s) unhydrated."
+
         Write-Host '[live-test-contract -SelfTest] OK'
     }
     finally {

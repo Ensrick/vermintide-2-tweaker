@@ -1,5 +1,28 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.336-dev (2026-08-15) -- DEFAULT refreshes the visible character; empty jewelry preserved (#1033, #375) [verify-fix]
+
+- Equipment DEFAULT now refreshes the visible character, not just the saved
+  rows (#1033): after the bounded reset transaction, one active-career
+  presentation reconcile re-equips only the live slots the reset changed
+  through the vanilla inventory/attachment extension paths, and a skin
+  ownership change requests exactly one vanilla profile respawn. Mission-side
+  the reset stays durable and the reconcile defers to the next safe keep
+  boundary, where a verify receipt proves the spawn consumed the reseeded
+  rows. Bounded `[gut:1033]` reconcile-before/equip/after/verify receipts.
+  New modules `_gut_reset_presentation.lua`/`_core.lua`; no new engine hooks.
+  Regression `issue1033_presentation_reconcile_plan` (+extended
+  `issue1033_default_official_reseed_wired`); offline
+  `test_gut_reset_presentation.lua`.
+- Deliberately emptied accessory slots now survive the loadout self-heal
+  (#375): the one-time `_slot_integrity_v2` repair refilled unequipped
+  necklace/ring/trinket slots from official, contradicting its own doctrine.
+  The corrupt-partial predicate and both repair passes now exempt exactly the
+  three vanilla-unequippable slots: empty jewelry is preserved everywhere,
+  while genuinely-missing weapons/skin/hat/frame/pose (and talents) still
+  repair. Regression `issue375_deliberate_empty_slots_preserved`; the old
+  exact-string row-integrity pins are replaced by behavioral tests.
+
 ## 0.2.335-dev (2026-08-13) -- execute the slider-release edge contract (#167) [verify-fix]
 
 - Extracts the held-to-released transition already used by both Mod Tweaker

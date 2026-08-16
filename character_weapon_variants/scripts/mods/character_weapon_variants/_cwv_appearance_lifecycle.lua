@@ -330,6 +330,14 @@ function M.new(opts)
         self._accepted_requests[peer_id] = nil
         if nonempty(peer_id) then
             local prefix = peer_id .. "|"
+			-- Only targeted routes belong to this peer. The broadcast
+			-- `others|slot` signatures remain valid and must not be globally
+			-- invalidated by one departure (#914).
+			for route in pairs(self._sent) do
+				if route:sub(1, #prefix) == prefix then
+					self._sent[route] = nil
+				end
+			end
             for route in pairs(self._deliveries) do
                 if route:sub(1, #prefix) == prefix then
                     self._deliveries[route] = nil
