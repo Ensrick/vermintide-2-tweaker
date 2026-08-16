@@ -8,4 +8,7 @@ return {
     cd_isolate_hotkey_tooltip = {
         en = "Mutes music and sound effects while leaving voice lines audible, so a line can be heard clearly without leaving the play area. Press again to restore your saved volumes.",
     },
+    cd_auto_isolation = {
+        en = "Isolate Audio During Playback",
+    },
 }
