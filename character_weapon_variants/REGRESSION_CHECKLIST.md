@@ -126,7 +126,7 @@ Last updated: 2026-08-13.
 
 | Field | Check |
 |---|---|
-| Fix version(s) | CWV v0.1.517-dev (peer-ready request, husk-owner, and client-cleanup slice; co-op verification required) |
+| Fix version(s) | CWV v0.1.518-dev (peer-ready request, husk-owner, client-cleanup, and bot-removal gate slice; co-op verification required) |
 | Repro | Two CWV players use one single-axis CWV appearance. Equip it before joining, hot join, enter an Adventure mission and return to the Keep, swap away/back, respawn, and reapply the same illusion. Repeat with host/client roles reversed. Distinct Dual Axes hand selections are tested separately under #579. |
 | Expected post-fix | The observer sees the same exact CWV model/illusion on first spawn and every listed lifecycle edge without requiring a manual cosmetic change. A request arriving before the replying inventory is ready remains eligible for the next bounded retry. Husk spawn can resolve the extension's validated human player before `PlayerManager:owner` is populated. Client removal clears only that remote human's exact transport routes; local, bot, server, and broadcast dedupe state remain untouched. |
 | Detection | Offline `test_cwv_identity_peer_pull.lua`, `test_cwv_peer_resolver.lua`, and `test_cwv_appearance_lifecycle.lua` execute the pre-ready retry, actual removal hook, validated spawn-local owner hint, and recipient-only dedupe reopening. `/cwv_regression_test` passes `issue914_peer_ready_identity_lifecycle`. Co-op logs contain bounded `[cwv:914]` peer-resolution/ready/cleanup receipts and the existing `[cwv:660]` delivery/ack receipts; no per-frame or unbounded resend traffic is permitted. |

@@ -1,7 +1,21 @@
 # Character Weapon Variants — Changelog
 
-## 0.1.517-dev (2026-08-13) -- close peer-ready identity lifecycle gaps (#914) [verify-fix]
+## 0.1.518-dev (2026-08-15) -- peer-ready identity lifecycle + primary-slot musket ammo HUD (#914, #1108) [verify-fix]
 
+- The client-side `PlayerManager.remove_player` cleanup gate now treats only
+  `local_player_id` 1 (or nil) as a removable human. The `players_at_peer`
+  fallback inside the peer resolver could resolve a departing host BOT to the
+  still-present host human and wipe that host's exact identity on every
+  established client mid-session; bot removals no longer touch identity state.
+  The peer-resolver unit test now models the real `players_at_peer` surface so
+  the bot case fails without the gate.
+- The HUD ammo counter now tracks a primary-slot (melee-slot) Old Musket. A
+  post-`_sync_player_equipment` adapter on both `EquipmentUI` and
+  `GamePadEquipmentUI` selects the musket's ammo extension through the #932
+  owner/slot controller with liveness and exact-registration guards, for the
+  local player and spectated targets. Edge-only `[cwv:1108]` receipts;
+  `/cwv_regression_test` adds `issue1108_primary_slot_musket_ammo_hud_contract`
+  asserting slot-selection behavior, not hook presence.
 - A request received before the local human inventory has a real melee or
   ranged slot no longer consumes that sender generation. The same bounded retry
   remains eligible once inventory initialization completes.
