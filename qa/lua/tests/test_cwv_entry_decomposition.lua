@@ -395,19 +395,21 @@ return function(H, repo_root)
         for name in (identity .. "\n" .. render):gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 84)
+        H.equal(#names, 87)
         H.equal(names[1], "cwv_variant_flag_present")
         H.equal(names[4], "issue914_peer_ready_identity_lifecycle")
         H.equal(names[16], "issue1108_primary_slot_musket_ammo_hud_contract")
         H.equal(names[17], "issue273_cwv_deus_identity_is_exact")
         H.equal(names[39], "cwv_husk_transform_coverage")
         H.equal(names[40], "cwv_husk_stale_unit_and_postcondition")
-        -- issue 399 appended the husk ammo-adapter drive as the last identity
-        -- check; #914 and #1108 each added one earlier identity check, so the
-        -- identity/render boundary now follows slot 42.
+        -- issue 399 appended the husk ammo-adapter drive as an identity check;
+        -- #914 and #1108 each added one earlier identity check, and #1186/#1188
+        -- appended two more, so the identity/render boundary now follows slot 44.
         H.equal(names[41], "issue399_outrider_husk_ammo_adapter")
         H.equal(names[42], "issue1204_deus_identity_uses_committed_parity")
-        H.equal(names[43], "cwv_unit_bearing_variants_registered")
+        H.equal(names[43], "issue1186_outrider_projectile_reads_cloned_tunes")
+        H.equal(names[44], "issue1188_wt_native_trollhammer_keeps_ammo")
+        H.equal(names[45], "cwv_unit_bearing_variants_registered")
         H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")

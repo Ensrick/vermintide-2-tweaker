@@ -694,7 +694,32 @@ _rt_register("issue719_imperial_crowbill_remote_identity", function()
 			.. #inadmissible .. " model(s) (" .. table.concat(inadmissible, ", ")
 			.. "): neither a registered cwv custom-bundle unit nor leasable -- the peer keeps the bw_1h_crowbill donor"
 	end
-end, { known_defect = 719 })
+
+	-- POSTCONDITION 3: admission is not enough on its own -- the spawn floor the
+	-- husk actually consults must AGREE. `_husk_unit_spawnable` is what
+	-- `_husk_preselection_ready` and the re-key gate call, and a self-contained
+	-- bundle mesh declares no donor material, so it must clear that floor rather
+	-- than fail closed on a donor that does not exist.
+	local unspawnable = {}
+	for _, m in ipairs(family.usable_models and family.usable_models() or {}) do
+		if type(_om._husk_unit_spawnable) ~= "function"
+				or _om._husk_unit_spawnable(m.right_hand_unit) ~= true then
+			unspawnable[#unspawnable + 1] = m.key
+		end
+	end
+	if #unspawnable > 0 then
+		return "#719 husk spawn floor rejects the authored Crowbill mesh for "
+			.. #unspawnable .. " model(s) (" .. table.concat(unspawnable, ", ")
+			.. "): hand preselection defers and the peer keeps the bw_1h_crowbill donor"
+	end
+
+	-- The admission arm must stay SCOPED: a vanilla player mesh is owned by the
+	-- residency/lease arms, never by the custom-bundle arm, or the #418 force-load
+	-- reference contract collapses into "anything goes".
+	if _om._husk_custom_bundle_unit(family.PLACEHOLDER_UNIT) ~= false then
+		return "#719 custom-bundle admission leaked onto the vanilla bw_1h_crowbill donor mesh"
+	end
+end)
 
 _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
     local source_by_target = _om._dual_axes_source_by_skin
@@ -2272,11 +2297,25 @@ _rt_register("issue399_outrider_husk_ammo_adapter", function()
 
         -- (4/5) the #399 fix: a negative descriptor state is NOT evidence of a
         -- native wielder, so it falls through to the career-scoped fallback.
+        --
+        -- #1188: that fallback is career-scoped AND native-pair discriminated. If
+        -- weapon_tweaker's `unlock_es_huntsman_dr_deus_01` is enabled the pair is
+        -- natively wieldable right now, so the correct answer INVERTS -- a
+        -- skinless echo is then indistinguishable from a real Trollhammer and
+        -- must keep its torpedo. Assert whichever answer the live can_wield
+        -- makes correct rather than skipping.
+        local wt_unlocked = _om._husk_pair_native_now("dr_deus_01", "es_huntsman") == true
         for _, negative in ipairs({ "unavailable", "stale_base" }) do
             state, career_name = negative, "es_huntsman"
             units = fresh_units()
             pre("right", nil, units, "slot_ranged", { name = "dr_deus_01" }, owner)
-            if not ammo_cleared(units) then
+            if wt_unlocked then
+                if ammo_cleared(units) then
+                    return string.format(
+                        "descriptor state %s stripped a wt-granted NATIVE Trollhammer's torpedo -- #475 Invariant 1 (issue 1188)",
+                        negative)
+                end
+            elseif not ammo_cleared(units) then
                 return string.format(
                     "descriptor state %s still collapsed the ammo decision -- Outrider keeps the inherited torpedo on the husk (issue 399)",
                     negative)
@@ -2295,7 +2334,13 @@ _rt_register("issue399_outrider_husk_ammo_adapter", function()
         units = fresh_units()
         pre("right", nil, units, "slot_ranged", { name = "dr_deus_01" }, owner)
         _om._appearance_husk_wield_context = saved_ctx
-        if not ammo_cleared(units) then
+        -- Same #1188 inversion as (4/5): the deferred branch runs the ammo arm,
+        -- and that arm now discriminates a wt-granted native pair.
+        if wt_unlocked then
+            if ammo_cleared(units) then
+                return "deferred hand-selection branch stripped a wt-granted NATIVE Trollhammer's torpedo (issue 1188)"
+            end
+        elseif not ammo_cleared(units) then
             return "deferred hand-selection branch skipped the ammo-nil step -- torpedo survives the atomic preselection fallback (issue 399)"
         end
 
@@ -2360,6 +2405,268 @@ _rt_register("issue1204_deus_identity_uses_committed_parity", function()
 	if allowed({ applied_state = function() error("probe") end }) then
 		return "throwing committed-state accessor did not fail closed"
 	end
+end)
+
+_rt_register("issue1186_outrider_projectile_reads_cloned_tunes", function()
+	-- Issue #1186: a projectile re-resolves its own action from
+	-- `ItemMasterList[item_name]`, and a CWV clone inherits the BASE key as its
+	-- `name` -- so a variant whose template was cloned under a NEW name flies with
+	-- donor data. Only the javelin family had an arm here; the Outrider Grenade
+	-- Launcher's 0.65x damage clone and grenade projectile_info never applied.
+	local policy = _om.projectile_tunes
+	local apply_arm = _om._cwv_apply_renamed_projectile_template
+	if type(policy) ~= "table" or type(policy.renamed_template_defs) ~= "function"
+			or type(policy.resolve) ~= "function" or type(policy.apply) ~= "function" then
+		return "#1186 renamed-clone projectile policy is not installed"
+	end
+	if type(apply_arm) ~= "function" or type(_om._cwv_projectile_owner_slot) ~= "function" then
+		return "#1186 projectile init arm / owner-slot seam is not installed"
+	end
+	local iml = rawget(_G, "ItemMasterList")
+	local weapons = rawget(_G, "Weapons")
+	if type(iml) ~= "table" or type(weapons) ~= "table" then
+		return "ItemMasterList/Weapons not loaded yet (run in-keep)"
+	end
+	local def = _find_def("cwv_es_outrider_grenade_launcher")
+	if not def then return nil end   -- variant removed; nothing to protect
+
+	-- GROUND TRUTH: the authored catalog + the two live templates, never the
+	-- resolver under test. If the clone ever stops differing from its donor the
+	-- fixture is meaningless, so prove the difference first.
+	local overrides = policy.renamed_template_defs(_variant_definitions, function(base)
+		local entry = rawget(iml, base)
+		return type(entry) == "table" and entry.template or nil
+	end)
+	if overrides[def.item_key] ~= def.template then
+		return "#1186 the Outrider's renamed clone is missing from the projectile override map"
+	end
+	if overrides.cwv_es_javelin == nil and _find_def("cwv_es_javelin") then
+		return "#1186 the javelin family fell out of the shared renamed-clone map"
+	end
+	local donor = rawget(weapons, "dr_deus_01_template_1")
+	local clone = rawget(weapons, def.template)
+	local donor_action = donor and donor.actions and donor.actions.action_one
+		and donor.actions.action_one.default
+	local clone_action = clone and clone.actions and clone.actions.action_one
+		and clone.actions.action_one.default
+	if type(donor_action) ~= "table" or type(clone_action) ~= "table" then
+		return "#1186 Outrider fixture stale: donor/clone action_one.default is gone (Outcast Engineer DLC?)"
+	end
+	if clone_action == donor_action or clone_action.speed == donor_action.speed then
+		return "#1186 the Outrider clone no longer tunes action_one.default -- nothing to deliver"
+	end
+	local clone_profile = clone_action.impact_data and clone_action.impact_data.damage_profile
+	if type(clone_profile) ~= "string" or clone_profile:sub(1, 4) ~= "cwv_" then
+		return "#1186 the Outrider clone lost its own damage profile -- the 0.65x tune is gone"
+	end
+
+	-- Drive the REAL init arm with a fixture wielded slot in the shape a crafted
+	-- (UUID backend_id) Outrider arrives in, and read the projectile back.
+	local saved_slot = _om._cwv_projectile_owner_slot
+	local projectile = {
+		action_lookup_data = {
+			item_template_name = "dr_deus_01_template_1",
+			action_name = "action_one",
+			sub_action_name = "default",
+		},
+		_current_action = donor_action,
+		_impact_data = donor_action.impact_data,
+		_impact_damage_profile_id = -1,
+		projectile_info = donor_action.projectile_info,
+	}
+	local result
+	local ok, err = pcall(function()
+		_om._cwv_projectile_owner_slot = function()
+			return {
+				id = "slot_ranged",
+				master_item = {
+					name = def.base_weapon,
+					backend_id = "rt1186-0231d6f6-9bda-4f34-b016-9b7c7c371c1c",
+					mod_data = { cwv_key = def.item_key },
+				},
+			}
+		end
+		local changed = apply_arm(projectile, {
+			item_name = def.base_weapon, owner_unit = { rt1186 = true },
+		})
+		if projectile._current_action ~= clone_action then
+			result = "#1186 the fired projectile still reads the donor action -- authored tunes never applied"
+			return
+		end
+		if projectile._impact_data ~= clone_action.impact_data then
+			result = "#1186 impact_data stayed on the donor profile (the 0.65x damage tune)"
+			return
+		end
+		local want_id = rawget(NetworkLookup.damage_profiles, clone_profile)
+		if want_id and projectile._impact_damage_profile_id ~= want_id then
+			result = "#1186 the wire damage-profile id still names the donor profile"
+			return
+		end
+		if not changed or changed < 3 then
+			result = "#1186 projectile re-point reported " .. tostring(changed)
+				.. " field writes -- the transfer collapsed"
+			return
+		end
+		-- Idempotent: a second pass over an already-re-pointed projectile is a
+		-- no-op, so a repeated init can never double-apply.
+		if apply_arm(projectile, {
+				item_name = def.base_weapon, owner_unit = { rt1186 = true },
+			}) ~= 0 then
+			result = "#1186 projectile re-point is not idempotent"
+			return
+		end
+		-- #475 Invariant 1 for the projectile path: a NATIVE Bardin Trollhammer
+		-- (no cwv identity on the slot) must keep every donor value.
+		_om._cwv_projectile_owner_slot = function()
+			return { id = "slot_ranged", master_item = { name = "dr_deus_01" } }
+		end
+		local native = {
+			action_lookup_data = projectile.action_lookup_data,
+			_current_action = donor_action,
+			_impact_data = donor_action.impact_data,
+		}
+		if apply_arm(native, { item_name = "dr_deus_01", owner_unit = { rt1186 = true } }) ~= 0
+				or native._current_action ~= donor_action then
+			result = "#1186 a native Trollhammer projectile was re-pointed at the CWV clone"
+		end
+	end)
+	_om._cwv_projectile_owner_slot = saved_slot
+	if not ok then return "#1186 projectile arm drive errored: " .. tostring(err) end
+	return result
+end)
+
+_rt_register("issue1188_wt_native_trollhammer_keeps_ammo", function()
+	-- Issue #1188: the husk ammo arms decided on `_no_ammo_careers_by_base`
+	-- membership alone. That set is only a CWV-positive signal while dr_deus_01's
+	-- can_wield stays disjoint from it, and weapon_tweaker's
+	-- `unlock_es_*_dr_deus_01` toggles delete that disjointness at runtime -- so a
+	-- wt-granted Kruber Trollhammer had its torpedo stripped on every remote view.
+	-- Driven against the LIVE can_wield the discriminator actually reads.
+	local admits = _om._husk_ammo_pair_admits
+	local pre, post = _om._husk_adapter_pre, _om._husk_adapter_post
+	if type(admits) ~= "function" then
+		return "#1188 shared ammo native-pair discriminator is not installed"
+	end
+	if type(pre) ~= "function" or type(post) ~= "function" then
+		return "#1188 husk adapter halves missing -- the ammo arms are unreachable"
+	end
+	local def = _find_def("cwv_es_outrider_grenade_launcher")
+	if not def then return nil end
+	local iml = rawget(_G, "ItemMasterList")
+	local base = iml and rawget(iml, "dr_deus_01")
+	if not (base and base.ammo_unit and type(base.can_wield) == "table") then
+		return "#1188 dr_deus_01 fixture is stale (no ammo_unit / can_wield)"
+	end
+	-- Prefer a career the pair is NOT already native for, so the disjoint
+	-- baseline is real. If weapon_tweaker has already unlocked every one of the
+	-- variant's careers the baseline is skipped and only the guard is asserted.
+	local strip_career, disjoint_now
+	for _, career in ipairs(def.careers or {}) do
+		if not _om._husk_pair_native_now("dr_deus_01", career) then
+			strip_career, disjoint_now = career, true
+			break
+		end
+	end
+	strip_career = strip_career or (def.careers and def.careers[1])
+	if type(strip_career) ~= "string" then
+		return "#1188 the Outrider def lists no careers -- fixture cannot be built"
+	end
+	local skin_key = def.item_key .. "_skin"
+
+	local saved_descriptor = _om._husk_identity_descriptor
+	local saved_career = _om._husk_career_name
+	local saved_rekey = _om._husk_rekey_units
+	local saved_template = _om._husk_template_for_spawn
+	local saved_transform = _om._husk_apply_cwv_transform
+	local saved_probe = _om._probe_579_hand_compare
+	local can_wield = base.can_wield
+	local unlocked_index
+
+	local owner, state, exact_descriptor = { rt1188 = true }, "none", nil
+	local function units(skin)
+		return {
+			right_hand_unit = def.right_hand_unit,
+			ammo_unit = base.ammo_unit,
+			ammo_unit_3p = base.ammo_unit_3p,
+			skin = skin,
+		}
+	end
+	local function cleared(u) return u.ammo_unit == nil and u.ammo_unit_3p == nil end
+
+	local result
+	local ok, err = pcall(function()
+		_om._husk_identity_descriptor = function() return exact_descriptor, state end
+		_om._husk_career_name = function() return strip_career end
+		_om._husk_rekey_units = function() return false end
+		_om._husk_template_for_spawn = function() return nil end
+		_om._husk_apply_cwv_transform = function() return nil end
+		_om._probe_579_hand_compare = function() return nil end
+
+		local u
+		-- (1) BASELINE, pair disjoint: the strip career is not in can_wield, so
+		-- career membership still decides and the Outrider keeps working. Skipped
+		-- only when weapon_tweaker has already unlocked every Outrider career, in
+		-- which case there is no disjoint pair left to baseline against.
+		if disjoint_now then
+			if select(1, admits("dr_deus_01", strip_career, nil)) ~= true then
+				result = "#1188 the disjoint pair stopped admitting the strip -- the Outrider lost its torpedo fix (#399)"
+				return
+			end
+			u = units(nil)
+			pre("right", nil, u, "slot_ranged", { name = "dr_deus_01" }, owner)
+			if not cleared(u) then
+				result = "#1188 the disjoint base+career fallback no longer clears the inherited torpedo (#399 regression)"
+				return
+			end
+			-- (2) Simulate the wt unlock on the LIVE table the lazy check reads.
+			unlocked_index = #can_wield + 1
+			can_wield[unlocked_index] = strip_career
+		end
+		local pair_admits, reason = admits("dr_deus_01", strip_career, nil)
+		if pair_admits ~= false or reason ~= "native_pair" then
+			result = "#1188 a wt-granted native pair still admitted the strip (reason=" .. tostring(reason) .. ")"
+			return
+		end
+		u = units(nil)
+		pre("right", nil, u, "slot_ranged", { name = "dr_deus_01" }, owner)
+		if cleared(u) then
+			result = "#1188 pre-spawn arm stripped a wt-granted NATIVE Trollhammer's torpedo (#475 Invariant 1)"
+			return
+		end
+		if post("right", { name = "dr_deus_01" }, u, "slot_ranged", owner, nil,
+				{ rt1188_ammo = true }) then
+			result = "#1188 post-spawn arm signalled a strip for a wt-granted native Trollhammer"
+			return
+		end
+
+		-- (3) The Outrider must survive that same unlock whenever CWV identity is
+		-- positive. A cwv skin names the variant regardless of can_wield...
+		if rawget(WeaponSkins and WeaponSkins.skins or {}, skin_key) then
+			u = units(skin_key)
+			pre("right", nil, u, "slot_ranged", { name = "dr_deus_01" }, owner)
+			if not cleared(u) then
+				result = "#1188 a cwv-skinned Outrider lost its ammo fix under the wt unlock"
+				return
+			end
+		end
+		-- ...and a proven exact descriptor decides ahead of the fallback entirely.
+		exact_descriptor, state = { variant_key = def.item_key,
+			base_item_key = "dr_deus_01" }, "exact"
+		u = units(nil)
+		pre("right", nil, u, "slot_ranged", { name = "dr_deus_01" }, owner)
+		if not cleared(u) then
+			result = "#1188 a proven Outrider descriptor lost its ammo fix under the wt unlock"
+		end
+	end)
+	if unlocked_index then can_wield[unlocked_index] = nil end
+	_om._husk_identity_descriptor = saved_descriptor
+	_om._husk_career_name = saved_career
+	_om._husk_rekey_units = saved_rekey
+	_om._husk_template_for_spawn = saved_template
+	_om._husk_apply_cwv_transform = saved_transform
+	_om._probe_579_hand_compare = saved_probe
+	if not ok then return "#1188 husk ammo discriminator drive errored: " .. tostring(err) end
+	return result
 end)
 
 end

@@ -451,6 +451,14 @@ do
 	_om._husk_unit_spawnable = function(base_unit)
 		if type(base_unit) ~= "string" or base_unit == "" then return false end
 		if _om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(base_unit) then
+			-- (#719) The donor gate is the ONLY variable for a mod-bundle mesh.
+			-- Unit residency is structural: these paths ship in CWV's master
+			-- package, which VMF loads with the mod, so this code cannot run while
+			-- they are absent -- and asking the global resource system about a
+			-- Workshop bundle path is exactly the lookup that does not answer
+			-- reliably. A mesh that borrows a VANILLA material (the Old Musket)
+			-- still fails closed on that material; a self-contained one (Greataxe /
+			-- Crowbill: own .material + textures) declares no donor and passes.
 			return _om._husk_material_donor_ready(base_unit)
 		end
 		local ready = _resource_ready("unit", base_unit .. "_3p")
@@ -569,6 +577,10 @@ do
 			--     base identity this wield and queue a bounded lease.
 			local admissible
 			if _om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(override) then
+				-- (#719) donor-material gate for a borrowed-material mesh (Old
+				-- Musket); a self-contained bundle mesh declares no donor and is
+				-- resident with the mod, so it is admitted outright. See the same
+				-- argument at the crash-floor predicate above.
 				admissible = _om._husk_material_donor_ready(override)
 			elseif _om._resident_override_3p and _om._resident_override_3p(override) then
 				admissible = _resource_ready("unit", override .. "_3p") ~= false
@@ -614,6 +626,62 @@ do
 		end
 	end
 
+	-- (#1188) NATIVE-PAIR DISCRIMINATOR shared by both ammo arms.
+	--
+	-- The base+career fallback is only a CWV-POSITIVE signal while the pair is
+	-- DISJOINT: `_no_ammo_careers_by_base.dr_deus_01` holds es_* careers because
+	-- vanilla dr_deus_01.can_wield admits dr_ironbreaker alone
+	-- (item_master_list_morris.lua:23-25). weapon_tweaker's
+	-- `unlock_es_{mercenary,huntsman,knight,questingknight}_dr_deus_01` toggles
+	-- (weapon_tweaker_data.lua:233/267/301/335, default false) insert those exact
+	-- careers into the LIVE can_wield, and the disjointness the strip rests on is
+	-- gone: a Kruber career can now hold the REAL Trollhammer, whose torpedo the
+	-- ammo arms were stripping on every remote view.
+	--
+	-- The mesh re-key already guards this class with `_husk_pair_native_now`
+	-- (:113) via `_husk_resolve_display_def`'s `native_pair` decline; the ammo
+	-- arms had no equivalent (#1188). Reusing the same lazy can_wield read keeps
+	-- mesh and ammo on ONE notion of "this pair is native right now".
+	--
+	-- Adding that guard NAIVELY would re-break the Outrider for the same user,
+	-- because a wt unlock makes the pair native for the CWV variant too. So the
+	-- discriminator only ENGAGES once the pair is native, and then demands
+	-- CWV-positive identity instead of career membership:
+	--   * pair NOT native (no wt unlock)  -> career membership decides, exactly as
+	--                                        before. Zero behavior change for the
+	--                                        overwhelmingly common configuration.
+	--   * pair native + cwv skin naming a no_ammo def for this base -> STRIP. A
+	--     skin in the `<item_key>_` namespace positively identifies the variant
+	--     regardless of can_wield -- the #474 lesson, arm 1 of the display
+	--     resolution order above.
+	--   * pair native, no such skin -> DECLINE. Indistinguishable from a genuine
+	--     wt-granted Trollhammer on the wire, and #475 Invariant 1 says a variant
+	--     degrading to its base is strictly better than corrupting a native
+	--     weapon. The exact identity descriptor (arm 1 of each ammo function,
+	--     evaluated BEFORE this helper) still strips a proven CWV instance, so a
+	--     wt-unlock user only sees the inherited torpedo while identity is absent.
+	-- Returns (admits, reason): reason is "base_career" | "skin" for an admit and
+	-- "no_base" | "career_miss" | "native_pair" for a decline, so each arm can
+	-- keep its own bounded diagnostic for the shape it cares about.
+	_om._husk_ammo_pair_admits = function(base_name, career, skin)
+		local careers = base_name and _no_ammo_careers_by_base[base_name]
+		if not careers then return false, "no_base" end
+		if not (career and careers[career]) then return false, "career_miss" end
+		if not _om._husk_pair_native_now(base_name, career) then
+			return true, "base_career"
+		end
+		local skin_def = _om._husk_skin_def and _om._husk_skin_def(skin) or nil
+		if skin_def and skin_def.no_ammo_unit == true
+				and skin_def.base_weapon == base_name then
+			return true, "skin"
+		end
+		_husk_log_once("1188_native_pair:" .. tostring(base_name) .. ":"
+				.. tostring(career) .. ":" .. tostring(skin),
+			"[cwv:1188] husk ammo strip DECLINED (native_pair): base=%s career=%s skin=%s -- the career can CURRENTLY wield the real ammo weapon (weapon_tweaker unlock), so career membership is no longer a CWV-positive signal; a proven descriptor or a cwv skin still strips",
+			tostring(base_name), tostring(career), tostring(skin))
+		return false, "native_pair"
+	end
+
 	-- Returns true if it stripped a torpedo/ammo unit (caller then nils its
 	-- returned ammo_unit_3p so the husk equipment stops tracking it).
 	--
@@ -649,12 +717,16 @@ do
 	--   * "exact"                 -> the resolved def decides (strip iff no_ammo_unit).
 	--   * "none"                  -> base+career fallback (unchanged).
 	-- Safety: `_no_ammo_careers_by_base` is career-scoped and the two contributing
-	-- bases are disjoint from their vanilla can_wield sets -- dr_deus_01 admits
+	-- bases are disjoint from their VANILLA can_wield sets -- dr_deus_01 admits
 	-- only dr_ironbreaker (item_master_list_morris.lua:23-25) and wh_fencing_sword
 	-- only wh_bountyhunter/wh_captain/wh_zealot
 	-- (item_master_list_exported.lua:7574-7578), while both no_ammo_unit defs list
-	-- es_* careers only. A real Bardin Trollhammer can never enter the strip set.
-	_om._husk_strip_cwv_ammo = function(item_data, owner_unit_3p, ammo_unit_3p, slot_name)
+	-- es_* careers only. That disjointness is what the fallback rests on, and
+	-- weapon_tweaker's unlock toggles can remove it at runtime -- so the fallback
+	-- runs through `_om._husk_ammo_pair_admits` (#1188), never a bare membership
+	-- test. A real Bardin Trollhammer can never enter the strip set; a wt-granted
+	-- Kruber Trollhammer can, and the discriminator is what keeps its torpedo.
+	_om._husk_strip_cwv_ammo = function(item_data, owner_unit_3p, ammo_unit_3p, slot_name, item_units)
 		if not (item_data and ammo_unit_3p) then return false end
 		local base_name = item_data.name
 		local why, career
@@ -679,23 +751,26 @@ do
 			-- base+career, mirroring the mesh re-key adapter so the two never disagree.
 		end
 		if not why then
-			-- (2) skinless base+career fallback.
-			local careers = base_name and _no_ammo_careers_by_base[base_name]
-			if not careers then return false end
+			-- (2) skinless base+career fallback, #1188 native-pair discriminated
+			-- through the shared `_husk_ammo_pair_admits` decision above.
 			career = (_om._husk_career_name or _husk_career_name)(owner_unit_3p)
-			if not (career and careers[career]) then
-				-- The base IS a no_ammo variant's base (careers table present), but
-				-- the wielder's career isn't in the strip set. Two possibilities: a
-				-- genuine native wielder of the real ammo weapon (correct no-strip),
-				-- or a husk career-lookup miss (career=nil) that WOULD have stripped.
-				-- Log once per (base, career) so a miss is visible in the paired log
-				-- instead of silently leaving the inherited torpedo attached.
-				_husk_log_once("ammo_career_miss:" .. tostring(base_name) .. ":" .. tostring(career),
-					"[cwv husk-ammo-strip] SKIP: base=%s is a no_ammo variant base but career=%s not in strip set -- native wielder OR husk career-lookup miss (issue 399 diag)",
-					tostring(base_name), tostring(career))
+			local admits, reason = _om._husk_ammo_pair_admits(base_name, career,
+				item_units and item_units.skin)
+			if not admits then
+				if reason == "career_miss" then
+					-- The base IS a no_ammo variant's base (careers table present), but
+					-- the wielder's career isn't in the strip set. Two possibilities: a
+					-- genuine native wielder of the real ammo weapon (correct no-strip),
+					-- or a husk career-lookup miss (career=nil) that WOULD have stripped.
+					-- Log once per (base, career) so a miss is visible in the paired log
+					-- instead of silently leaving the inherited torpedo attached.
+					_husk_log_once("ammo_career_miss:" .. tostring(base_name) .. ":" .. tostring(career),
+						"[cwv husk-ammo-strip] SKIP: base=%s is a no_ammo variant base but career=%s not in strip set -- native wielder OR husk career-lookup miss (issue 399 diag)",
+						tostring(base_name), tostring(career))
+				end
 				return false
 			end
-			why = "base_career"
+			why = reason
 		end
 
 		-- `_is_unit` is a typed predicate (userdata + Unit.alive, _cwv_peer_resolver
@@ -853,16 +928,24 @@ do
 			local career = _husk_career_name(owner_unit_3p)
 			local careers = _no_ammo_careers_by_base[base_name]
 			local in_strip_set = (career and careers[career]) and true or false
+			-- #1188: career membership alone no longer decides. Report the shared
+			-- discriminator's verdict beside it so a paired log distinguishes "in
+			-- the set but the pair is natively wieldable right now" (a wt unlock)
+			-- from a plain career miss.
+			local admits, admit_reason = _om._husk_ammo_pair_admits(base_name, career,
+				item_units and item_units.skin)
 			local iu_ammo = item_units and item_units.ammo_unit
 			local iu_ammo3p = item_units and item_units.ammo_unit_3p
 			_husk_log_once(
 				"probe279:" .. side .. ":" .. tostring(base_name) .. ":" .. tostring(hand)
 					.. ":" .. tostring(career) .. ":" .. tostring(iu_ammo ~= nil) .. ":" .. tostring(note),
 				"[cwv:279] spawn side=%s hand=%s base=%s bid=%s note=%s skin=%s career=%s in_strip_set=%s "
+					.. "pair_admits=%s pair_reason=%s "
 					.. "iu.right=%s iu.left=%s iu.ammo_unit=%s iu.ammo_unit_3p=%s vanilla_attached_ammo_3p=%s",
 				side, tostring(hand), tostring(base_name),
 				tostring(item_data and item_data.backend_id), tostring(note),
 				tostring(item_units and item_units.skin), tostring(career), tostring(in_strip_set),
+				tostring(admits), tostring(admit_reason),
 				tostring(item_units and item_units.right_hand_unit),
 				tostring(item_units and item_units.left_hand_unit),
 				tostring(iu_ammo), tostring(iu_ammo3p), tostring(ammo_unit_3p ~= nil))
@@ -1078,20 +1161,25 @@ do
 			end
 		end
 		if not why then
-			local careers = base_name and _no_ammo_careers_by_base[base_name]
-			if not careers then return false end
+			-- #1188: same shared native-pair discriminator as the post-spawn arm,
+			-- so the two ammo decisions can never disagree about a wt-granted
+			-- native Trollhammer sharing a career with the CWV Outrider.
 			local career = (_om._husk_career_name or _husk_career_name)(owner_unit_3p)
-			if not (career and careers[career]) then
-				-- Mirrors the post-spawn arm's SKIP needle so BOTH ammo arms are
-				-- diagnosable from one log. A career=nil line here is candidate B
-				-- of #399 (husk career-lookup miss); a real career that simply is
-				-- not in the strip set is the correct native-wielder no-op.
-				_husk_log_once("399_prenil_career_miss:" .. tostring(base_name) .. ":" .. tostring(career),
-					"[cwv husk-ammo-nil] SKIP: base=%s is a no_ammo variant base but career=%s not in strip set (state=%s) -- native wielder OR husk career-lookup miss (issue 399 diag)",
-					tostring(base_name), tostring(career), tostring(identity_state))
+			local admits, reason = _om._husk_ammo_pair_admits(base_name, career,
+				item_units.skin)
+			if not admits then
+				if reason == "career_miss" then
+					-- Mirrors the post-spawn arm's SKIP needle so BOTH ammo arms are
+					-- diagnosable from one log. A career=nil line here is candidate B
+					-- of #399 (husk career-lookup miss); a real career that simply is
+					-- not in the strip set is the correct native-wielder no-op.
+					_husk_log_once("399_prenil_career_miss:" .. tostring(base_name) .. ":" .. tostring(career),
+						"[cwv husk-ammo-nil] SKIP: base=%s is a no_ammo variant base but career=%s not in strip set (state=%s) -- native wielder OR husk career-lookup miss (issue 399 diag)",
+						tostring(base_name), tostring(career), tostring(identity_state))
+				end
 				return false
 			end
-			why = "base_career"
+			why = reason
 		end
 		item_units.ammo_unit = nil
 		item_units.ammo_unit_3p = nil
@@ -1244,7 +1332,7 @@ do
 	-- ammo_3p, weapon_1p, ammo_1p) -- only the 3P pair exists for husks.
 	_om._husk_adapter_post = function(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p, v_a3p)
 		local stripped = false
-		if _om._husk_strip_cwv_ammo and _om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name) then
+		if _om._husk_strip_cwv_ammo and _om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name, item_units) then
 			stripped = true
 		end
 		if _om._husk_apply_cwv_transform then

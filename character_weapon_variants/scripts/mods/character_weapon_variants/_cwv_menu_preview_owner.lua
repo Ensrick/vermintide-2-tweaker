@@ -539,7 +539,15 @@ end)
 -- bret-thinning hook to `mod:hook` for exactly this reason — the user
 -- remembered this when investigating why cwv scale wasn't applying in the
 -- cosmetic picker. Don't refactor back to `hook_safe`.
-mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data)
+-- (#419) The wrapper body is a NAMED function, not an anonymous hook closure.
+-- The regression that owns this issue has to prove ORDER -- that the mesh-swap
+-- pre-pass rewrites the recipe BEFORE vanilla `spawn_units` reads it -- and the
+-- only honest way to do that offline is to call the real wrapper with a spy in
+-- place of vanilla. Calling the hooked method itself would run the engine's
+-- World.spawn_unit. Naming the body makes the delivery contract executable:
+-- deleting the pre-pass call below makes the spy observe base units and the
+-- check fails, which the pure descriptor/adapter checks could not detect.
+_om._cwv_browser_spawn_units = function(func, self, spawn_data)
 	-- #597: when the mod-scoped custom resource is unexpectedly absent, the
 	-- package bridge records a vanilla fallback rather than letting this
 	-- preview path call World.spawn_unit on a missing custom unit.
@@ -638,6 +646,11 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	end
 
 	return units
+end
+mod._cwv_browser_spawn_units = _om._cwv_browser_spawn_units  -- #419 delivery-contract handle
+
+mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data)
+	return _om._cwv_browser_spawn_units(func, self, spawn_data)
 end)
 
 end
