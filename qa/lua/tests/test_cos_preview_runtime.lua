@@ -80,6 +80,13 @@ return function(H, repo_root)
                 return "active-backend"
             end,
             get_mod = function() end,
+            cim_preview = {
+                capture_load = function() return false end,
+                destroy = function() end,
+                surface = function() return "illusion_browser" end,
+                spawn = function() end,
+                update = function() end,
+            },
         }
         return mod, deps, registrations, function() return getter_calls end
     end
@@ -153,6 +160,13 @@ return function(H, repo_root)
                 return "fresh-backend"
             end,
             get_mod = function() end,
+            cim_preview = {
+                capture_load = function() return false end,
+                destroy = function() end,
+                surface = function() return "illusion_browser" end,
+                spawn = function() end,
+                update = function() end,
+            },
         }
         for key, value in pairs(deps) do
             H.truthy(fresh_deps[key] ~= value,
@@ -223,6 +237,7 @@ return function(H, repo_root)
             get_active_customization_backend_id =
                 "get_active_customization_backend_id",
             get_mod = "get_mod",
+            cim_preview = "cim_preview",
         }
         for dependency, field in pairs(dependency_fields) do
             H.equal(mod._cos_preview_runtime_state[field], fresh_deps[dependency],
@@ -262,6 +277,81 @@ return function(H, repo_root)
         }, {})
         H.equal(type(units), "table")
         H.equal(getter_calls(), 1)
+    end)
+
+    H.test("Cosmetics preview runtime routes CIM without generic LA scale", function()
+        local mod, deps, registrations, getter_calls = fixture()
+        local calls = { surface = 0, spawn = 0, scale = 0, paint = 0 }
+        deps.cim_preview = {
+            capture_load = function() return false end,
+            destroy = function() end,
+            surface = function(previewer)
+                calls.surface = calls.surface + 1
+                H.truthy(previewer._cim_preview_context)
+                return "cim_preview"
+            end,
+            spawn = function(previewer, spawn_data, units, world)
+                calls.spawn = calls.spawn + 1
+                H.equal(spawn_data[1].unit_name, "units/la_shield_3p")
+                H.equal(units[1], "unit")
+                H.equal(world, "world")
+            end,
+            update = function() end,
+        }
+        mod._cos.apply_unit_path_scale_hand = function()
+            calls.scale = calls.scale + 1
+        end
+        deps.apply_la_offhand_to_units = function()
+            calls.paint = calls.paint + 1
+        end
+        PreviewRuntime.install(mod, deps)
+        local callback = registrations[11].callback
+        local units = callback(function() return { "unit" } end, {
+            _cim_preview_context = { generation = 1 },
+            _background_world = "world",
+            _item = { data = {} },
+        }, { { unit_name = "units/la_shield_3p" } })
+        H.equal(units[1], "unit")
+        H.equal(calls.surface, 1)
+        H.equal(calls.spawn, 1)
+        H.equal(calls.scale, 0)
+        H.equal(calls.paint, 0)
+        -- CIM is exact-context-only: even glow binding must not consult the
+        -- generic customization identity fallback.
+        H.equal(getter_calls(), 0)
+    end)
+
+    H.test("Cosmetics preview runtime never falls from CIM into generic parent load", function()
+        local mod, deps, registrations = fixture()
+        deps.cim_preview.capture_load = function()
+            return false, "parent-lease-failed", true
+        end
+        PreviewRuntime.install(mod, deps)
+        local callback = registrations[9].callback
+        local native_calls = 0
+        local saved_application = rawget(_G, "Application")
+        _G.Application = {
+            can_get = function(kind, path)
+                H.equal(path, "units/la_shield_3p")
+                return kind == "unit"
+            end,
+        }
+        local previewer = { _packages_to_load = {}, _loaded_packages = {} }
+        local ok, err = pcall(callback, function()
+            native_calls = native_calls + 1
+        end, previewer, "units/la_shield_3p")
+        _G.Application = saved_application
+        if not ok then error(err, 0) end
+        H.equal(native_calls, 0)
+        H.equal(previewer._packages_to_load["units/la_shield_3p"], true)
+        H.equal(previewer._loaded_packages["units/la_shield_3p"], true)
+
+        ok, err = pcall(callback, function()
+            native_calls = native_calls + 1
+        end, previewer, nil)
+        if not ok then error(err, 0) end
+        H.equal(native_calls, 0,
+            "a malformed scoped package path must retain base without indexing nil")
     end)
 
     H.test("Cosmetics preview runtime stays below the cohesive-owner ceiling", function()

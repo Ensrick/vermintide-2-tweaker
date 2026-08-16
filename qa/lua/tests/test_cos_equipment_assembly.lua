@@ -123,7 +123,7 @@ return function(H, repo_root)
         -- reorder fails here instead of handing over nil.
         local at_owner = entry:find(owner_install, 1, true)
         for _, anchor in ipairs({
-            "local _apply_la_offhand_to_units =\n    _cos_offhand_apply_runtime.apply_la_offhand_to_units",
+            "local _apply_la_offhand_to_units = _cos_offhand_apply_runtime.apply_la_offhand_to_units",
             "_cos_resolve_composed_appearance =\n    _cos_item_presentation_runtime.resolve_composed_appearance",
             "local _la_equips_by_peer = {}",
             "local _get_offhand_options = _cos_offhand_state_runtime.get_offhand_options",
@@ -254,6 +254,10 @@ return function(H, repo_root)
         resolve_authored_offhand_variant = function()
             return { kind = "unit", new_units = { "units/la_shield", "units/la_shield_3p" } }, "authored"
         end,
+        cim_preview = {
+            resolve_scoped_identity = function() return nil, "not-cim", false end,
+            prepare_override = function() return false end,
+        },
         get_current_husk_wield = function() return entry_husk_wield end,
         get_active_customization_backend_id = function() return entry_active_bid end,
     }
@@ -334,6 +338,51 @@ return function(H, repo_root)
         local result = resolve({ left_hand_unit = "units/base_shield" })
         H.equal(result.left_hand_unit, "units/override_shield")
     end) end)
+
+    H.test("cos equipment assembly admits only exact CIM context", function()
+        with_engine(function()
+            seen_active_bid = {}
+            local prior_resolve = deps.cim_preview.resolve_scoped_identity
+            local prior_prepare = deps.cim_preview.prepare_override
+            -- The installed owner reads the injected table at action time.
+            deps.cim_preview.resolve_scoped_identity = function(item_data, backend_id, item_type, skin)
+                H.equal(item_data, ITEM)
+                H.equal(backend_id, "bid-A")
+                H.equal(item_type, "es_sword_shield")
+                H.equal(skin, "es_sword_shield_skin_01")
+                return { backend_id = "bid-A" }, "exact", true
+            end
+            local prepared = 0
+            deps.cim_preview.prepare_override = function(context, hand, selection,
+                    resolved_unit, ready, item_type)
+                prepared = prepared + 1
+                H.equal(context.backend_id, "bid-A")
+                H.equal(hand, "left_hand_unit")
+                H.equal(selection, offhand_selection["bid-A"].left_hand_unit)
+                H.equal(resolved_unit, "units/override_shield")
+                H.equal(ready, true)
+                H.equal(item_type, "es_sword_shield")
+                return true
+            end
+            local result = resolve({ left_hand_unit = "units/base_shield" })
+            H.equal(result.left_hand_unit, "units/override_shield")
+            H.equal(prepared, 1)
+            H.equal(#seen_active_bid, 0,
+                "exact CIM scope must not consult generic preview identity")
+
+            deps.cim_preview.resolve_scoped_identity = function()
+                return nil, "foreign-backend", true
+            end
+            result = resolve({ left_hand_unit = "units/base_shield" })
+            H.equal(result.left_hand_unit, "units/base_shield",
+                "foreign CIM identity must retain the resident base hand")
+            H.equal(prepared, 1)
+            H.equal(#seen_active_bid, 0,
+                "rejected CIM scope must not fall through to generic identity")
+            deps.cim_preview.resolve_scoped_identity = prior_resolve
+            deps.cim_preview.prepare_override = prior_prepare
+        end)
+    end)
 
     -- --------- accessor pair 1: the mutable customization backend id
     H.test("cos equipment assembly reads the customization backend id per call",

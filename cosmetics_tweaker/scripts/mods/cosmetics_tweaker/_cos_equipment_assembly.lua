@@ -124,6 +124,7 @@ function EquipmentAssembly.install(mod, deps)
     local _resolve_authored_offhand_mesh    = assert(deps.resolve_authored_offhand_mesh, "resolve_authored_offhand_mesh is required")
     local _resolve_authored_offhand_variant = assert(deps.resolve_authored_offhand_variant, "resolve_authored_offhand_variant is required")
     local _trace                            = assert(deps.trace, "trace is required")
+    local _cim_preview                      = assert(deps.cim_preview, "cim_preview is required")
 
     local _get_current_husk_wield = assert(deps.get_current_husk_wield,
         "get_current_husk_wield is required")
@@ -407,16 +408,28 @@ function EquipmentAssembly.install(mod, deps)
         -- id: the view-lifecycle owner and the offhand picker both write that
         -- entry local, so it is resolved per call at its original first-read
         -- point rather than captured once at install time.
-        local _active_customization_backend_id =
-            _get_active_customization_backend_id()
+            local cim_context, cim_identity, cim_scoped =
+                _cim_preview.resolve_scoped_identity(item_data,
+                    backend_id or (item_data and item_data.backend_id), item_type,
+                    skin)
+            local _active_customization_backend_id = not cim_scoped
+                and _get_active_customization_backend_id() or nil
             local active_preview_bid = not _current_husk_wield
                 and _active_customization_backend_id or nil
             local active_preview_item_type = not _current_husk_wield
                 and mod._active_customization_item_type or nil
-            local effective_backend_id, preview_identity =
-                mod._la_instance_policy.resolve_preview_backend_id(
-                    backend_id or (item_data and item_data.backend_id), item_type,
-                    active_preview_bid, active_preview_item_type)
+            local effective_backend_id, preview_identity
+            if cim_scoped then
+                -- A CIM scope must never borrow the customization view's
+                -- mutable family fallback. Exact identity or resident base.
+                effective_backend_id = cim_context and cim_context.backend_id or nil
+                preview_identity = cim_identity
+            else
+                effective_backend_id, preview_identity =
+                    mod._la_instance_policy.resolve_preview_backend_id(
+                        backend_id or (item_data and item_data.backend_id), item_type,
+                        active_preview_bid, active_preview_item_type)
+            end
             -- Pending-skin previews may use the exact active item only when the
             -- family matches. Husk rendering never consumes this local fallback.
             if not effective_backend_id and not _current_husk_wield then
@@ -507,7 +520,15 @@ function EquipmentAssembly.install(mod, deps)
                             tostring(variant and variant.new_units and variant.new_units[1]),
                             tostring(variant and variant.new_units and variant.new_units[2]),
                             (resolved_unit and resolved_ready) and "apply-override" or (resolved_unit and "SKIP(package-not-ready)" or "passthrough(no-mesh)"))
-                        if resolved_unit and resolved_ready then
+                        local apply_override = resolved_unit and resolved_ready
+                        if cim_context then
+                            apply_override = _cim_preview.prepare_override(
+                                cim_context, hand_field, opt, resolved_unit,
+                                resolved_ready, item_type)
+                        elseif cim_scoped then
+                            apply_override = false
+                        end
+                        if resolved_unit and apply_override then
                             result[hand_field] = resolved_unit
                         elseif resolved_unit then
                             _dbg("[offhand] SKIP override %s/%s -> %s (package not ready)",
