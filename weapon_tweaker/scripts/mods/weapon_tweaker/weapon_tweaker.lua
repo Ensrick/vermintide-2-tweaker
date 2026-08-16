@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.306-beta"
+local MOD_VERSION = "0.12.307-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -115,11 +115,9 @@ local CT_WT_ITEMMASTERLIST_RAWGET_MARKER_v0_12_73 = "wt-itemmasterlist-rawget-ha
 mod:dofile("scripts/mods/weapon_tweaker/_safe_hook")
 
 local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_axe_balance")
-local _wt_axe_balance = _wt_axe_balance_policy.new()
 -- Fire Sword heavy-attack policy (#943): two default-off projections from one
 -- per-template-identity baseline (sweep opener + nova slowdown).
 local _wt_fire_sword_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_fire_sword")
-local _wt_fire_sword = _wt_fire_sword_policy.new()
 local _wt_grip_offset_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_grip_offset_policy")
 local _wt_skullsplitter_hand_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_skullsplitter_hand")
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
@@ -993,108 +991,20 @@ mod:dofile("scripts/mods/weapon_tweaker/_wt_settings_runtime").install({
     fire_sword_policy = _wt_fire_sword_policy,
 })
 
-do
-    local function register_profile(name)
-        local lookup = NetworkLookup and NetworkLookup.damage_profiles
-        if type(name) ~= "string" or not lookup or rawget(lookup, name) then return end
-        local index = #lookup + 1
-        rawset(lookup, index, name)
-        rawset(lookup, name, index)
-    end
-    mod._wt_apply_axe_balance = function(setting_id, force_off)
-        if type(Weapons) ~= "table" then return end
-        local function enabled(id, default_on)
-            if force_off then return false end
-            local value = mod:get(id)
-            if value == nil then return default_on == true end
-            return value == true
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING then
-            _wt_axe_balance:apply_greataxe_crit(
-                enabled(_wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING, true), Weapons)
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING then
-            _wt_axe_balance:apply_dual_crit(
-                enabled(_wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING, true), Weapons)
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING then
-            if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
-                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
-                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
-                    and mod._wt431_profiles_allowed() == true
-                _wt_axe_balance:apply_dual_cleave(
-                    enabled(_wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING, true), Weapons,
-                    DamageProfileTemplates, PowerLevelTemplates,
-                    function(value) return table.clone(value, true) end, register_profile,
-                    mod._wt431_custom_profile_fallback, parity_allowed)
-            end
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING then
-            if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
-                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
-                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
-                    and mod._wt431_profiles_allowed() == true
-                _wt_axe_balance:apply_one_hand_axe_cleave(
-                    enabled(_wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING, false), Weapons,
-                    DamageProfileTemplates, PowerLevelTemplates,
-                    function(value) return table.clone(value, true) end, register_profile,
-                    mod._wt431_custom_profile_fallback, parity_allowed)
-            end
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING then
-            _wt_axe_balance:apply_cog_heavy_speed(
-                enabled(_wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING, false), Weapons)
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING then
-            _wt_axe_balance:apply_mace_sword_speed(
-                enabled(_wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING, false), Weapons)
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
-            if type(DamageProfileTemplates) == "table" then
-                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
-                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
-                    and mod._wt431_profiles_allowed() == true
-                local count = _wt_axe_balance:apply_executioner_light_headshot(
-                    enabled(_wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING, false),
-                    Weapons, DamageProfileTemplates,
-                    function(value) return table.clone(value, true) end, register_profile,
-                    mod._wt431_custom_profile_fallback, parity_allowed)
-                pcall(printf, "[wt:664] applied: executioner_light_actions=%d enabled=%s parity=%s multiplier=%.2f",
-                    count, tostring(enabled(_wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING, false)),
-                    tostring(parity_allowed), _wt_axe_balance_policy.EXECUTIONER_HEADSHOT_MULT)
-            end
-        end
-    end
-    mod._wt_apply_axe_balance(nil, false)
-end
+-- The #601/#621/#622/#623/#664 balance adapter (mod._wt_apply_axe_balance) is
+-- owned by _wt_axe_balance.lua. Installed HERE rather than at its manifest
+-- dofile above because install applies once, and that first apply must have
+-- registered every generated custom damage profile into NetworkLookup before
+-- the #431 parity beacon below reads the catalog.
+_wt_axe_balance_policy.install(mod)
 
 -- ============================================================
 -- Issue 943: Fire Sword heavy-attack projections
 -- ============================================================
--- Bounded apply seam: load, state transitions, single-setting dispatch
--- (_wt_settings_runtime), owner batches, and on_disabled all rerun the same
--- baseline projection, so late/replaced templates re-capture per identity.
-do
-    mod._wt_apply_fire_sword = function(setting_id, force_off)
-        if type(Weapons) ~= "table" then return end
-        if setting_id
-                and setting_id ~= _wt_fire_sword_policy.SWEEP_OPENER_SETTING
-                and setting_id ~= _wt_fire_sword_policy.NOVA_SLOWDOWN_SETTING then
-            return
-        end
-        local function enabled(id)
-            return not force_off and mod:get(id) == true
-        end
-        local sweep_opener = enabled(_wt_fire_sword_policy.SWEEP_OPENER_SETTING)
-        local nova_slowdown = enabled(_wt_fire_sword_policy.NOVA_SLOWDOWN_SETTING)
-        local idle_edges, nova_actions = _wt_fire_sword:apply(
-            sweep_opener, nova_slowdown, Weapons)
-        pcall(printf,
-            "[wt:943] applied: sweep_opener=%s nova_slowdown=%s idle_edges=%d nova_actions=%d",
-            tostring(sweep_opener), tostring(nova_slowdown), idle_edges, nova_actions)
-    end
-    mod._wt_apply_fire_sword(nil, false)
-end
+-- The bounded apply seam (mod._wt_apply_fire_sword) is owned by
+-- _wt_fire_sword.lua; installing here keeps the load-time apply at the exact
+-- manifest position the adapter used to occupy.
+_wt_fire_sword_policy.install(mod)
 
 -- ============================================================
 -- Issue 431: exact peer-catalog gate + unconditional wire floor

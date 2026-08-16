@@ -17,9 +17,10 @@
 -- push-combo revert) and (b) edits attacker-local melee timing only (same
 -- class as the #622/#623 speed nerfs) — no NetworkLookup key is touched.
 --
--- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile
--- (`mod._wt_apply_fire_sword` adapter; settings dispatch in
--- _wt_settings_runtime.lua; regression check in _wt_runtime_checks.lua).
+-- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile plus
+-- M.install(mod), which publishes the `mod._wt_apply_fire_sword` adapter from
+-- this file (settings dispatch in _wt_settings_runtime.lua; regression check
+-- in _wt_runtime_checks.lua).
 
 local M = {}
 
@@ -190,6 +191,36 @@ function M.new()
         return #baseline.edges, nova_count
     end
 
+    return state
+end
+
+-- Bounded apply seam, owned here so the entry stays a manifest
+-- (PROJECT_STANDARDS 2.2a rule 1). Holds the single policy instance and
+-- publishes `mod._wt_apply_fire_sword`, which load, state transitions,
+-- single-setting dispatch (_wt_settings_runtime), owner batches, and
+-- on_disabled all rerun against the same baseline projection, so late or
+-- replaced templates re-capture per identity. Applies once at install.
+function M.install(mod)
+    local state = M.new()
+    mod._wt_apply_fire_sword = function(setting_id, force_off)
+        if type(Weapons) ~= "table" then return end
+        if setting_id
+                and setting_id ~= M.SWEEP_OPENER_SETTING
+                and setting_id ~= M.NOVA_SLOWDOWN_SETTING then
+            return
+        end
+        local function enabled(id)
+            return not force_off and mod:get(id) == true
+        end
+        local sweep_opener = enabled(M.SWEEP_OPENER_SETTING)
+        local nova_slowdown = enabled(M.NOVA_SLOWDOWN_SETTING)
+        local idle_edges, nova_actions = state:apply(
+            sweep_opener, nova_slowdown, Weapons)
+        pcall(printf,
+            "[wt:943] applied: sweep_opener=%s nova_slowdown=%s idle_edges=%d nova_actions=%d",
+            tostring(sweep_opener), tostring(nova_slowdown), idle_edges, nova_actions)
+    end
+    mod._wt_apply_fire_sword(nil, false)
     return state
 end
 

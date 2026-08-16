@@ -246,4 +246,44 @@ return function(H, repo_root)
         H.equal(applied[3].setting_id, nil)
         H.equal(applied[3].force_off, false)
     end)
+
+    -- The adapter is owned by this module rather than the entry manifest
+    -- (PROJECT_STANDARDS 2.2a rule 1), so the install seam itself carries the
+    -- setting-id filter, the force_off revert, and the one load-time apply.
+    H.test("WT #943 install publishes the bounded adapter and applies once", function()
+        local template = fire_sword_template()
+        local pristine = clone(template)
+        local settings = { [policy.SWEEP_OPENER_SETTING] = true }
+        local saved_weapons, saved_printf = Weapons, printf
+        Weapons = { flaming_sword_template_1 = template }
+        printf = function() end
+        local mod = { get = function(_, id) return settings[id] == true end }
+        local ok, err = pcall(policy.install, mod)
+        Weapons, printf = saved_weapons, saved_printf
+
+        H.truthy(ok, "install must not fault: " .. tostring(err))
+        H.equal(type(mod._wt_apply_fire_sword), "function",
+            "install must publish the bounded adapter on the mod table")
+        local chain = template.actions.action_one.default.allowed_chain_actions
+        H.equal(chain[2].sub_action, "heavy_attack_left",
+            "install must apply once, without waiting for a state transition")
+        H.equal(chain[6].sub_action, "heavy_attack_left")
+
+        Weapons, printf = { flaming_sword_template_1 = template }, function() end
+        settings[policy.SWEEP_OPENER_SETTING] = false
+        mod._wt_apply_fire_sword("wt_unrelated_setting", false)
+        H.equal(chain[2].sub_action, "heavy_attack_left",
+            "an unrelated setting id must not reach the projection")
+        mod._wt_apply_fire_sword(policy.SWEEP_OPENER_SETTING, false)
+        H.equal(chain[2].sub_action, "heavy_attack_spell",
+            "the owned setting id must reach the projection")
+
+        settings[policy.SWEEP_OPENER_SETTING] = true
+        settings[policy.NOVA_SLOWDOWN_SETTING] = true
+        mod._wt_apply_fire_sword(nil, false)
+        mod._wt_apply_fire_sword(nil, true)
+        Weapons, printf = saved_weapons, saved_printf
+        H.deep_equal(template, pristine,
+            "force_off must restore the exact captured baseline")
+    end)
 end
