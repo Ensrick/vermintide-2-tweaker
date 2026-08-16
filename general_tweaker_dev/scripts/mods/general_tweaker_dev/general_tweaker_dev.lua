@@ -1931,6 +1931,10 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_motd")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_modded_manifest")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_failed_join_reveal")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_appearance_parity")
+-- Allow Duplicate Careers host-authority channel (#1150): host publishes its
+-- setting into lobby_data (gtw_dupc); the _gt_level_control.lua hook gates
+-- resolve it call-time via mod._gt_dupc_* (order-independent, fail closed).
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_duplicate_careers_parity")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_network_transmit_guard")
 -- Floating Damage Numbers migrated to gui_tweaker (gut) 2026-06-29; its old
 -- dofile/feed lines are gone and gt's damage hooks are pure godmode again.
