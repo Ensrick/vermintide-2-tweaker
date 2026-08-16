@@ -7,6 +7,9 @@
 [CmdletBinding()]
 param(
     [string]$Repository = "Ensrick/vermintide-2-tweaker",
+    # Optional local manifest.json fixture; production runs resolve the latest
+    # deployed GitHub release manifest through gh.
+    [string]$DeploymentManifestPath,
     [string]$OutputPath,
     [string]$MarkdownPath,
     # Minimum review slots per open issue. Every high-confidence relation is
@@ -19,6 +22,13 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repoRoot 'tools/verify/lifecycle_method_policy.ps1')
+
+# Deployed-source card authority for the report-only rollout (#1120). The
+# audit never enforces it: authority findings surface as advisories on each
+# ready row and never flip `clean`, so the legacy backlog census stays safe
+# while canonical ship fails closed on the same checks.
+$script:VtCardAuthority = $null
+$script:VtCardAuthorityError = $null
 
 $LifecycleLabels = @(
     "not-started",
@@ -94,7 +104,16 @@ function Get-TitleWordCount([string]$Title) {
 }
 
 function Get-IssueMethodSelection($Issue, [switch]$IncludeBody) {
-    return Get-VtLifecycleMethodSelection -Comments $Issue.comments -Body ([string]$Issue.body) -AllowBodyFallback:$IncludeBody
+    return Get-VtLifecycleMethodSelection -Comments $Issue.comments -Body ([string]$Issue.body) -AllowBodyFallback:$IncludeBody -Authority $script:VtCardAuthority
+}
+
+function Get-IssueAuthorityAdvisories($Issue) {
+    # Report-only deployed-source audit: advisories are surfaced for ready
+    # issues without an -EnforceAuthority pass, so nothing here can block.
+    if (-not $script:VtCardAuthority) { return @() }
+    $decision = Get-VtOpenIssueLifecycleDecision -Issue $Issue -Authority $script:VtCardAuthority
+    if (-not $decision.Ready) { return @() }
+    return @($decision.Advisories)
 }
 
 function Test-HasMethodAndExpected($Issue, [switch]$IncludeBody) {
@@ -116,7 +135,7 @@ function Get-IssueFindings($Issue) {
     $severities = @($labels | Where-Object { $SeverityLabels -contains $_ })
     $findings = New-Object System.Collections.Generic.List[string]
 
-    $decision = Get-VtOpenIssueLifecycleDecision $Issue
+    $decision = Get-VtOpenIssueLifecycleDecision -Issue $Issue -Authority $script:VtCardAuthority
     foreach ($error in @($decision.Errors)) { $findings.Add("lifecycle_$error") }
     if ($types.Count -ne 1) {
         $findings.Add("type_count_$($types.Count)")
@@ -629,6 +648,7 @@ function Invoke-Audit($Issues, $ClosedIssues = @()) {
     $processed = 0
     foreach ($issue in @($Issues | Sort-Object -Property number)) {
         $findings = @(Get-IssueFindings $issue)
+        $authorityAdvisories = @(Get-IssueAuthorityAdvisories $issue)
         $lessons = @(Get-ApplicableLessons $issue)
         $related = @(Get-RelatedClosedIssues $relationContext.open_profiles[[string]$issue.number] $relationContext)
         $rows += [PSCustomObject][ordered]@{
@@ -645,6 +665,9 @@ function Invoke-Audit($Issues, $ClosedIssues = @()) {
             related_closed_status = if ($related.Count -gt 0) { 'ranked-evidence-review' } else { 'no-evidence-backed-closed-match' }
             fallbacks = @(Get-EmpiricalFallbacks $issue)
             findings = $findings
+            # Deployed-source authority advisories are report-only (#1120):
+            # they never affect `clean` while the legacy backlog migrates.
+            authority_advisories = $authorityAdvisories
             clean = ($findings.Count -eq 0)
         }
         $processed++
@@ -658,6 +681,16 @@ function Invoke-Audit($Issues, $ClosedIssues = @()) {
         foreach ($name in @($finding)) {
             if (-not $counts.Contains($name)) { $counts[$name] = 0 }
             $counts[$name]++
+        }
+    }
+
+    $advisoryCounts = [ordered]@{}
+    foreach ($advisories in @($rows.authority_advisories)) {
+        # Member enumeration of all-empty array properties yields one $null.
+        foreach ($name in @($advisories)) {
+            if ([string]::IsNullOrEmpty($name)) { continue }
+            if (-not $advisoryCounts.Contains($name)) { $advisoryCounts[$name] = 0 }
+            $advisoryCounts[$name]++
         }
     }
 
@@ -676,6 +709,13 @@ function Invoke-Audit($Issues, $ClosedIssues = @()) {
         open_issue_count = $rows.Count
         closed_issue_count = @($ClosedIssues).Count
         clean_issue_count = @($rows | Where-Object { $_.clean }).Count
+        authority = [ordered]@{
+            available = [bool]$script:VtCardAuthority
+            error = $script:VtCardAuthorityError
+            record_count = if ($script:VtCardAuthority) { @($script:VtCardAuthority.Records).Count } else { 0 }
+            advisory_issue_count = @($rows | Where-Object { @($_.authority_advisories).Count -gt 0 }).Count
+            advisory_counts = $advisoryCounts
+        }
         open_issues_with_related_closed = @($rows | Where-Object { @($_.related_closed_issues).Count -gt 0 }).Count
         open_issues_without_related_closed = @($rows | Where-Object { @($_.related_closed_issues).Count -eq 0 }).Count
         high_confidence_relation_count = @($rows.related_closed_issues | ForEach-Object { @($_) } | Where-Object { $_.confidence -eq 'high' }).Count
@@ -923,16 +963,53 @@ function Invoke-SelfTest {
 
 function Invoke-StrictAuditSelfTest {
     $soloCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Equip Kruber's Mace in the Keep.`n`n**Expected:** Kruber's Mace remains visible."
+    $inventedCommandCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Run ``/invented_probe`` in chat.`n`n**Expected:** The probe output appears."
     $fixture = @(
         [pscustomobject]@{ number=1; title='Queued verification'; body='**Symptom:** weapon hidden'; url='u1'; labels=@(@{name='bug'},@{name='verify-fix'},@{name='2-moderate'}); comments=@(@{body=$soloCard}) },
         [pscustomobject]@{ number=2; title='Blocked work'; body='**Symptom:** no licensed asset'; url='u2'; labels=@(@{name='feature'},@{name='blocked'},@{name='not-started'},@{name='2-moderate'}); comments=@() },
-        [pscustomobject]@{ number=3; title='Retired lifecycle'; body='**Symptom:** old state'; url='u3'; labels=@(@{name='bug'},@{name='verify-fix-coop'},@{name='2-moderate'}); comments=@() }
+        [pscustomobject]@{ number=3; title='Retired lifecycle'; body='**Symptom:** old state'; url='u3'; labels=@(@{name='bug'},@{name='verify-fix-coop'},@{name='2-moderate'}); comments=@() },
+        [pscustomobject]@{ number=4; title='Invented probe command'; body='**Symptom:** probe unverified'; url='u4'; labels=@(@{name='bug'},@{name='verify-fix'},@{name='2-moderate'}); comments=@(@{body=$inventedCommandCard}) }
     )
+
+    # Pass 1: no deployed authority resolvable. The census still runs and
+    # reports that source advisories were not evaluated.
+    $script:VtCardAuthority = $null
     $result = Invoke-Audit $fixture @()
     if (-not $result.issues[0].clean) { throw 'valid CURRENT LIVE TEST issue rejected' }
     if (-not $result.issues[1].clean) { throw 'blocked not-started issue rejected' }
     if ($result.issues[2].clean -or @($result.issues[2].findings | Where-Object { $_ -like 'lifecycle_*verify-fix-coop*' }).Count -eq 0) {
         throw 'retired verify-fix-coop was accepted'
+    }
+    if ($result.authority.available) { throw 'authority reported available without a loaded authority' }
+    if (@($result.issues | Where-Object { @($_.authority_advisories).Count -gt 0 }).Count -ne 0) {
+        throw 'authority advisories were invented without a loaded authority'
+    }
+
+    # Pass 2: deployed fixture authority loaded. Source defects on ready
+    # cards surface as advisories and never flip `clean` (report-only #1120).
+    $script:VtCardAuthority = [pscustomobject]@{ Records = @(
+        [pscustomobject]@{
+            ModId='wt_dev'; Version='1.2.3-dev'; WorkshopId='1111111111'
+            LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'})
+            ExactBannerRoutes=@(); CommandRoutes=@(); MenuSurfaces=@(); ReceiptRoutes=@()
+        }
+    ) }
+    try {
+        $strictResult = Invoke-Audit $fixture @()
+        if (-not $strictResult.authority.available) { throw 'loaded authority not reported available' }
+        if (-not $strictResult.issues[0].clean) { throw 'authority pass rejected the valid registered-load-tag card' }
+        if (@($strictResult.issues[0].authority_advisories).Count -ne 0) { throw 'valid card gained spurious authority advisories' }
+        if (-not $strictResult.issues[3].clean) { throw 'report-only authority advisory flipped clean' }
+        if (@($strictResult.issues[3].authority_advisories) -notcontains 'live-card-command-not-source-registered:/invented_probe') {
+            throw 'invented slash command escaped the report-only source audit'
+        }
+        if ([int]$strictResult.authority.advisory_issue_count -ne 1) { throw 'authority advisory issue count drift' }
+        if ([int]$strictResult.authority.advisory_counts['live-card-command-not-source-registered:/invented_probe'] -ne 1) {
+            throw 'authority advisory histogram drift'
+        }
+    }
+    finally {
+        $script:VtCardAuthority = $null
     }
     Write-Host '[audit-open-issues -SelfTest] OK'
 }
@@ -944,6 +1021,19 @@ if ($SelfTest) {
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw "GitHub CLI (gh) is required."
+}
+
+# Report-only rollout (#1120): the census still runs when the deployed
+# authority cannot be resolved, but it says so loudly and records the error
+# in the report so a "clean" claim can never silently skip source checks.
+try {
+    $auditDeploymentManifest = Get-VtCardDeploymentManifest -Repository $Repository -ManifestJsonPath $DeploymentManifestPath
+    $auditSourceAuthority = Get-VtCardSourceAuthority -RepoRoot $repoRoot -DeploymentManifest $auditDeploymentManifest
+    $script:VtCardAuthority = New-VtLiveTestCardAuthority -Source $auditSourceAuthority -DeploymentManifest $auditDeploymentManifest
+    Write-Host "[audit-open-issues] deployed live-test authority: $(@($script:VtCardAuthority.Records).Count) immutable release record(s)"
+} catch {
+    $script:VtCardAuthorityError = $_.Exception.Message
+    Write-Warning "[audit-open-issues] deployed live-test authority unavailable; source advisories were NOT evaluated: $($script:VtCardAuthorityError)"
 }
 
 $json = & gh issue list --repo $Repository --state open --limit 1000 --json number,title,body,labels,comments,url,updatedAt
@@ -966,7 +1056,7 @@ if ($OutputPath) {
         (New-Object System.Text.UTF8Encoding($false))
     )
     Write-Host "[audit-open-issues] wrote $($report.open_issue_count) issues to $OutputPath"
-    Write-Host "[audit-open-issues] clean=$($report.clean_issue_count) findings=$($report.open_issue_count - $report.clean_issue_count)"
+    Write-Host "[audit-open-issues] clean=$($report.clean_issue_count) findings=$($report.open_issue_count - $report.clean_issue_count) authority_advisories=$($report.authority.advisory_issue_count)"
 } else {
     if (-not $MarkdownPath) { Write-Output $rendered }
 }
