@@ -252,6 +252,61 @@ _rt_register("issue786_peer_resolution_multi_return", function()
 	end
 end)
 
+_rt_register("issue914_peer_ready_identity_lifecycle", function()
+	local resolver = _om.peer_resolver
+	local pull = _om.identity_peer_pull
+	local policy = _om.appearance_lifecycle_policy
+	if type(resolver) ~= "table" or type(resolver.husk_owner) ~= "function"
+			or type(resolver.player_peer_id) ~= "function"
+			or type(pull) ~= "table" or type(pull.slots_ready) ~= "function"
+			or type(policy) ~= "table" or type(policy.new) ~= "function" then
+		return "#914 peer lifecycle owners are not installed"
+	end
+	if mod._cwv914_client_peer_cleanup_installed ~= true then
+		return "#914 client-visible PlayerManager cleanup hook is not installed"
+	end
+	if pull.slots_ready({}) or not pull.slots_ready({ slot_melee = {} }) then
+		return "#914 pre-ready slot gate drifted"
+	end
+	local hinted = {
+		peer_id = "issue914-peer",
+		is_player_controlled = function() return true end,
+	}
+	local owner, source = resolver.husk_owner({
+		owner = function() error("spawn owner table is not ready") end,
+	}, "issue914-unit", hinted)
+	if owner ~= hinted or source ~= "husk_extension_player"
+			or resolver.player_peer_id(owner) ~= "issue914-peer" then
+		return "#914 spawn-local husk player hint is not authoritative"
+	end
+
+	local sent = {}
+	local lifecycle = policy.new({
+		resolve_local = function()
+			return {
+				provider = "cwv", variant_key = "issue914-variant",
+				base_item_key = "issue914-base", fingerprint = "issue914-fp",
+			}, "issue914-base"
+		end,
+		resolve_remote = function() return nil, "unused" end,
+		send = function(recipient, _, payload)
+			sent[recipient .. "|" .. payload.slot] =
+				(sent[recipient .. "|" .. payload.slot] or 0) + 1
+			return true
+		end,
+	})
+	local slots = { slot_melee = {} }
+	lifecycle:publish(slots, "probe", "issue914-peer", false, true)
+	lifecycle:publish(slots, "probe", "others", false, true)
+	lifecycle:clear_peer("issue914-peer")
+	lifecycle:publish(slots, "probe", "issue914-peer", false, true)
+	lifecycle:publish(slots, "probe", "others", false, true)
+	if sent["issue914-peer|slot_melee"] ~= 2
+			or sent["others|slot_melee"] ~= 1 then
+		return "#914 peer cleanup did not reopen only the departed peer route"
+	end
+end)
+
 _rt_register("issue645_reciprocal_style_descriptors", function()
 	local policy = _om.combat_style_policy
 	local runtime = _om.combat_styles

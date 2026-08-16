@@ -1206,6 +1206,25 @@ CWV item/hand catalog. Unit paths remain local renderer data: the receiver
 reconstructs each hand from its own registries and rejects a missing, foreign,
 or fingerprint-mismatched identity.
 
+The peer-ready pull is also the recovery owner for mission transitions and
+hot-join initialization races (#914). A receiving request is accepted only
+after the local human inventory exposes at least one real melee or ranged slot;
+otherwise that generation remains unconsumed so the sender's existing bounded
+retry can succeed later. At husk spawn, `SimpleHuskInventoryExtension._player`
+is the earliest source-backed owner fact. The resolver accepts it only when it
+is a human, has a stable peer id, and does not point at a different unit, then
+falls back to `PlayerManager:owner` once that table is ready.
+
+Client departure cleanup is deliberately recipient-scoped. The
+`PlayerManager.remove_player` wrapper captures the remote human before vanilla
+removes it, skips the local peer/bots/server, and clears only that peer's remote
+state, request generation, pending deliveries, and `<peer>|<slot>` send
+signatures. It never clears shared `others|<slot>` signatures and never disables
+dedupe. Although vanilla also calls this seam during level transitions, this
+specific semantic cache is safe to retire because peer-ready pull reconstructs
+it from current slots; persistent Cosmetics state must still use the deferred
+class-24 cleanup pattern.
+
 The single most misdiagnosed CWV surface. A variant that looks and behaves
 perfectly for the LOCAL wielder and their BOTS can be invisible, wrong-mesh,
 wrong-scale, or carry an extra ammo mesh on a REMOTE player's screen (a

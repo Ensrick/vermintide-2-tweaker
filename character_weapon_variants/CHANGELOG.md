@@ -1,5 +1,25 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.517-dev (2026-08-13) -- close peer-ready identity lifecycle gaps (#914) [verify-fix]
+
+- A request received before the local human inventory has a real melee or
+  ranged slot no longer consumes that sender generation. The same bounded retry
+  remains eligible once inventory initialization completes.
+- Remote husk wield resolution now prefers the exact human player supplied to
+  `SimpleHuskInventoryExtension` during initialization, with strict human,
+  peer-id, and owner-unit validation before falling back to
+  `PlayerManager:owner`. This closes the spawn window where the manager owner
+  table is not ready yet.
+- Client-side `PlayerManager.remove_player` cleanup now retires only the departed
+  remote human's exact-identity, acknowledgement, delivery, and targeted dedupe
+  routes. Local players, bots, servers, and shared broadcast signatures remain
+  untouched; the bounded peer-ready pull reconstructs transition state.
+- Offline coverage drives the pre-ready retry, spawn-local owner hint, actual
+  removal hook, local/bot/server exclusions, return preservation, and targeted
+  dedupe reopening. `/cwv_regression_test` adds
+  `issue914_peer_ready_identity_lifecycle`; two-player reversed-role testing is
+  still required before the remote visual result can be called fixed.
+
 ## 0.1.516-dev (2026-08-13) -- transport exact Dual Axes hand identity (#579) [verify-fix]
 
 - Schema 3 of `cwv_item_identity` now carries separate primary and offhand skin
