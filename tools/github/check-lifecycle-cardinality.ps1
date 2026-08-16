@@ -418,6 +418,13 @@ query($owner: String!, $name: String!, $after: String) {
 
 if ($SelfTest) { Invoke-SelfTest; exit 0 }
 
+# Per-phase wall-clock evidence against the workflow's five-minute ceiling.
+# The 2026-08-13/15 scheduled cancellations (#750) were unattributable because
+# the guard printed nothing between the offline fixtures and the final verdict;
+# a cancelled run now shows exactly which phase consumed the budget.
+$totalTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$phaseTimer = [System.Diagnostics.Stopwatch]::StartNew()
+
 if ($IssuesJsonPath) {
     $json = Get-Content -LiteralPath $IssuesJsonPath -Raw
 }
@@ -427,9 +434,17 @@ else {
 }
 
 if ($IssuesJsonPath) { $issues = @($json | ConvertFrom-Json) }
+$openIssueSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+$phaseTimer.Restart()
 $releaseManifest = Get-VtLatestReleaseManifest -Repository $Repository -Path $ReleaseManifestPath
+$manifestSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+$phaseTimer.Restart()
 $contract = Get-VtDeployedSourceContract -RepoRoot $repoRoot -ReleaseManifest $releaseManifest
+$contractSeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+$phaseTimer.Restart()
 $violations = @(Get-LifecycleViolations -Issues $issues -RequirePinnedCard -Contract $contract)
+$policySeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
+Write-Host "[check-lifecycle-cardinality] timing: open-issues=${openIssueSeconds}s release-manifest=${manifestSeconds}s deployed-contract=${contractSeconds}s card-policy=${policySeconds}s total=$([int][math]::Round($totalTimer.Elapsed.TotalSeconds))s"
 if ($violations.Count -eq 0) {
     Write-Host "[check-lifecycle-cardinality] OK: all $($issues.Count) open issues satisfy lifecycle and live-test queue doctrine against deployed release $($contract.ReleaseTag)."
     exit 0
