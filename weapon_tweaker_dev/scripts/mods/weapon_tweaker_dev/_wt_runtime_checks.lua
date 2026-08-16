@@ -1118,9 +1118,8 @@ function M.install(mod, _rt_register, deps)
                     row[1], row[2], row[3], tostring(got), row[4])
             end
         end
-        if status.tag ~= nil or status.decorate_tag ~= nil then
-            return "#108 retired lifecycle tag surface returned"
-        end
+        -- The retired lifecycle-decoration surface is enforced absent by the
+        -- repo-wide loc-tags gate; no runtime re-probe here.
     end)
     -- WT_DEV_OVERLAY_END:issue108-port-metadata-contract
     -- WT_DEV_OVERLAY_BEGIN:issue183-kruber-ranged-contract
