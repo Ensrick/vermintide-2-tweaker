@@ -82,6 +82,7 @@ return function(context)
                 rerolled_props_indices = weapon.rerolled_props_indices,
                 rerolled_trait_indices = weapon.rerolled_trait_indices,
                 custom_glow = weapon.custom_glow,
+                favorite = weapon.favorite == true or nil,
             }
         end
         mod:set("forged_weapons", save_data)
@@ -114,6 +115,7 @@ return function(context)
                     rerolled_props_indices = weapon.rerolled_props_indices,
                     rerolled_trait_indices = weapon.rerolled_trait_indices,
                     custom_glow = weapon.custom_glow,
+                    favorite = weapon.favorite,
                 })
             if normalized then
                 partition_external_traits(normalized, weapon.external_traits)
@@ -377,6 +379,27 @@ return function(context)
     local create_item = mod:dofile(
         "scripts/mods/crafting_in_modded_dev/_cim_mil_entry_builder")
 
+    -- #1001: exact-instance favorite persistence. The policy module is loaded
+    -- from the entry manifest; this owner supplies the live record store, the
+    -- persist function, and both engine seams (ItemGridUI toggle capture,
+    -- post-_refresh restore). The record bit dies with the record inside
+    -- _cim_owned_deletion's transaction, so no extra deletion wiring exists.
+    local favorite_api
+    if type(mod._cim_favorite_persistence) == "table" then
+        favorite_api = mod._cim_favorite_persistence.install({
+            mod = mod,
+            rt_register = rt_register,
+            print_line = print_line,
+            records = function() return forged_weapons end,
+            persist = save,
+            managers = get_managers,
+            item_helper = get_item_helper,
+            item_grid_ui = "ItemGridUI",
+            backend_items = "BackendInterfaceItemPlayfab",
+        })
+        mod._cim_favorite_restore_all = favorite_api.restore_all
+    end
+
     local function inject_item(weapon_data, backend_id)
         if not detect_mil() then
             mod:echo("Forge: MoreItemsLibrary not found — install it from the Workshop")
@@ -425,6 +448,10 @@ return function(context)
         if athanor_inject_all then athanor_inject_all() end
         local restore_modded_loadout = get_restore_modded_loadout()
         if restore_modded_loadout then restore_modded_loadout() end
+        -- Belt-and-suspenders: the post-_refresh hook already restored after
+        -- each injection pass above; a direct sweep here is idempotent and
+        -- catches an interface rebuild that surfaced rows without a refresh.
+        if favorite_api then favorite_api.restore_all() end
         local count = 0
         for _ in pairs(forged_weapons) do count = count + 1 end
         mod:info("Forge: restored %d forged crafts", count)
