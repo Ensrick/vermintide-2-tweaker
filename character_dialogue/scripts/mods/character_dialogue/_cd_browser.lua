@@ -307,10 +307,15 @@ end
 
 -- Pure virtual-window planner used by the renderer and tests. Group headers are
 -- always part of the logical list; only the expanded group's rows are inserted.
-function Browser.window(groups, expanded, line_count, scroll_y, viewport_h, overscan)
+-- #998 `lead_rows` counts fixed control rows the renderer places ABOVE the
+-- first group header (the automatic-isolation toggle); they share the uniform
+-- row height so the scroll math stays exact. Omitted or 0 keeps the pre-#998
+-- planner byte-for-byte.
+function Browser.window(groups, expanded, line_count, scroll_y, viewport_h, overscan, lead_rows)
     scroll_y = math.max(0, tonumber(scroll_y) or 0)
     viewport_h = math.max(Browser.ROW_HEIGHT, tonumber(viewport_h) or (Browser.ROW_HEIGHT * 12))
     overscan = math.max(0, tonumber(overscan) or 2)
+    lead_rows = math.max(0, tonumber(lead_rows) or 0)
     local expanded_before, found = 0, false
     for i = 1, #(groups or {}) do
         local group = groups[i]
@@ -322,13 +327,13 @@ function Browser.window(groups, expanded, line_count, scroll_y, viewport_h, over
     line_count = found and math.max(0, tonumber(line_count) or 0) or 0
     local group_count = 0
     for i = 1, #(groups or {}) do if groups[i].count > 0 then group_count = group_count + 1 end end
-    local logical_count = group_count + line_count
+    local logical_count = lead_rows + group_count + line_count
     local first = math.max(1, math.floor(scroll_y / Browser.ROW_HEIGHT) + 1 - overscan)
     local visible = math.ceil(viewport_h / Browser.ROW_HEIGHT) + overscan * 2
     local last = math.min(logical_count, first + visible - 1)
     return {
         first = first, last = last, count = math.max(0, last - first + 1),
-        logical_count = logical_count, expanded_line_start = expanded_before + 2,
+        logical_count = logical_count, expanded_line_start = lead_rows + expanded_before + 2,
         content_height = logical_count * Browser.ROW_HEIGHT + 30,
     }
 end

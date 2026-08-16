@@ -47,6 +47,25 @@ end
 
 local function group_key(id) return "character_dialogue:" .. tostring(id) end
 
+-- #998 One fixed control row above the group list: the automatic-isolation
+-- Yes/No toggle. It lives in THIS custom renderer because normal VMF widgets
+-- do not render inside the Dialogue tab. Feature-detected so an older
+-- Character Dialogue api (v4, no isolation surface) renders exactly as before.
+local ISOLATION_ROW_ID = group_key("auto_isolation")
+
+local function isolation_lead(value)
+    return (value and value.get_auto_isolation and value.set_auto_isolation) and 1 or 0
+end
+
+local function toggle_isolation(view, row, value)
+    local next_value = not (value.get_auto_isolation() == true)
+    value.set_auto_isolation(next_value)
+    row.content.flag = value.get_auto_isolation() == true
+    view._dialogue_focus_id = ISOLATION_ROW_ID
+    view._dialogue_focus_sequence, view._dialogue_focus_control = row._dialogue_sequence, 1
+    printf("[gut:998] auto_isolation_click value=%s", tostring(row.content.flag))
+end
+
 -- Lua's `condition and value_if_true or value_if_false` idiom cannot represent
 -- false or nil in its true branch.  Keep these tri-state transitions explicit:
 -- #605 previously assigned `closing and nil or speaker`, which always resolved
@@ -94,8 +113,10 @@ function DialogueUI.build(view, category, defs)
             view._dialogue_expanded = nil
         end
     end
+    -- #998 the isolation toggle occupies logical row 1; groups shift down one.
+    local lead = isolation_lead(value)
     local window = value.browser_window(groups, expanded, line_count,
-        view._scroll_y or 0, view._visible_h or 680, 2)
+        view._scroll_y or 0, view._visible_h or 680, 2, lead)
     view._dialogue_virtual_first, view._dialogue_virtual_last = window.first, window.last
     view._dialogue_logical_count = window.logical_count
 
@@ -115,8 +136,8 @@ function DialogueUI.build(view, category, defs)
 
     local first_line_offset, last_line_offset
     if expanded_pos then
-        first_line_offset = math.max(0, window.first - expanded_pos - 1)
-        last_line_offset = math.min(line_count - 1, window.last - expanded_pos - 1)
+        first_line_offset = math.max(0, window.first - expanded_pos - lead - 1)
+        last_line_offset = math.min(line_count - 1, window.last - expanded_pos - lead - 1)
         if last_line_offset < first_line_offset then first_line_offset, last_line_offset = nil, nil end
     end
     local page, by_offset = {}, {}
@@ -130,10 +151,31 @@ function DialogueUI.build(view, category, defs)
     for sequence = window.first, window.last do
         local base = { 0, -10 - (sequence - 1) * (value.browser_row_height or 32), 0 }
         local line_offset
-        if expanded_pos and sequence > expanded_pos and sequence <= expanded_pos + line_count then
-            line_offset = sequence - expanded_pos - 1
+        if expanded_pos and sequence > expanded_pos + lead and sequence <= expanded_pos + lead + line_count then
+            line_offset = sequence - expanded_pos - lead - 1
         end
-        if line_offset ~= nil then
+        if sequence <= lead then
+            -- #998 automatic-isolation Yes/No control. create_checkbox draws a
+            -- 32px row top-aligned in the 48px slot; the planner spacing stays
+            -- uniform so scroll math is untouched.
+            local label = (value.auto_isolation_label and value.auto_isolation_label())
+                or "Isolate Audio During Playback"
+            local row = defs.create_checkbox(label, base, 0)
+            row.content.flag = value.get_auto_isolation() == true
+            row._is_dialogue_line = true -- routes clicks through DialogueUI.handle_row
+            row._dialogue_isolation = true
+            row._dialogue_row_id = ISOLATION_ROW_ID
+            row._dialogue_sequence = sequence
+            row._list_y = base[2]
+            row._category = category
+            local label_color = row.style and row.style.label and row.style.label.text_color
+            if label_color then
+                row._dialogue_base_label_color = { label_color[1], label_color[2], label_color[3], label_color[4] }
+            end
+            view._rows[#view._rows + 1] = row
+            visible_ids[#visible_ids + 1] = ISOLATION_ROW_ID
+            visible_sequences[#visible_sequences + 1] = sequence
+        elseif line_offset ~= nil then
             local item = by_offset[line_offset]
             if item then
                 -- #605 transcript rides INTO the row (inline preview) instead of
@@ -160,9 +202,9 @@ function DialogueUI.build(view, category, defs)
                 visible_sequences[#visible_sequences + 1] = sequence
             end
         else
-            local group_index = sequence
-            if expanded_pos and sequence > expanded_pos + line_count then
-                group_index = sequence - line_count
+            local group_index = sequence - lead
+            if expanded_pos and sequence > expanded_pos + lead + line_count then
+                group_index = sequence - lead - line_count
             end
             local group = visible_groups[group_index]
             if group then
@@ -189,11 +231,13 @@ function DialogueUI.build(view, category, defs)
         end
     end
 
-    if window.logical_count == 0 then
-        local base = { 0, -10, 0 }
+    if window.logical_count == lead then
+        -- Empty result set: the lead control row (when present) stays; the
+        -- notice appends beneath it instead of overwriting rows[1].
+        local base = { 0, -10 - lead * (value.browser_row_height or 32), 0 }
         local row = defs.create_section_title("No dialogue lines match this search", base, 0)
         row._readonly, row._list_y = true, base[2]
-        view._rows[1] = row
+        view._rows[#view._rows + 1] = row
     end
     view._content_h = window.content_height
     local target_sequence = view._dialogue_focus_target_sequence
@@ -278,6 +322,16 @@ function DialogueUI.handle_row(view, row)
         end
         return false
     end
+    if row._dialogue_isolation then
+        -- Whole row, left arrow, or right arrow: all one toggle, matching the
+        -- native ON/OFF stepper feel.
+        local down = released(content.hotspot) or released(content.dec) or released(content.inc)
+        if once(row, "isolation", down) then
+            toggle_isolation(view, row, value)
+            return true
+        end
+        return false
+    end
     if not row._is_dialogue_line then return false end
     if once(row, "state", released(content.state_hotspot)) then
         view._dialogue_focus_id = row._dialogue_row_id
@@ -329,7 +383,7 @@ function DialogueUI.handle_controller(view, input_service)
         end
     end
     if not focused_row then return false end
-    if focused_row._is_dialogue_line then
+    if focused_row._is_dialogue_line and not focused_row._dialogue_isolation then
         local control = view._dialogue_focus_control or 1
         if input_service:get("move_left", true) then
             view._dialogue_focus_control = math.max(1, control - 1); return true
@@ -339,7 +393,8 @@ function DialogueUI.handle_controller(view, input_service)
     end
     if input_service:get("confirm", true) then
         local value = api()
-        if focused_row._is_dialogue_group then toggle_group(view, focused_row, value, false)
+        if focused_row._dialogue_isolation then toggle_isolation(view, focused_row, value)
+        elseif focused_row._is_dialogue_group then toggle_group(view, focused_row, value, false)
         else activate_line(view, focused_row, value, view._dialogue_focus_control or 1) end
         return true
     end
@@ -355,6 +410,22 @@ function DialogueUI.refresh_row(row, view)
         if color then
             local base = row._dialogue_base_label_color or { 255, 255, 168, 0 }
             if selected then color[1], color[2], color[3], color[4] = 255, 255, 255, 255
+            else color[1], color[2], color[3], color[4] = base[1], base[2], base[3], base[4] end
+        end
+        return
+    end
+    if row._dialogue_isolation then
+        local value = api()
+        if value and value.get_auto_isolation then
+            -- Follow external flips too (/cd command surface, another session).
+            row.content.flag = value.get_auto_isolation() == true
+        end
+        local color = row.style and row.style.label and row.style.label.text_color
+        if color then
+            local base = row._dialogue_base_label_color or { 255, 255, 255, 255 }
+            -- Focused control renders gold, matching the line rows' focused
+            -- state/media treatment (they use 255,255,168,0 when selected).
+            if selected then color[1], color[2], color[3], color[4] = 255, 255, 168, 0
             else color[1], color[2], color[3], color[4] = base[1], base[2], base[3], base[4] end
         end
         return

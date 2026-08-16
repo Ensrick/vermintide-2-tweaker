@@ -232,6 +232,120 @@ return function(Harness, repo_root)
         Harness.equal(0, preview.progress(2, 0))
     end)
 
+    Harness.test("cd 998 isolation owners mute once and restore only on last release", function()
+        local empty = preview.isolation_new()
+        local one, act = preview.isolation_acquire(empty, preview.PREVIEW_OWNER)
+        Harness.equal("mute", act, "first owner in must mute")
+        Harness.truthy(one ~= empty, "membership change returns a new set")
+
+        local again, act_again = preview.isolation_acquire(one, preview.PREVIEW_OWNER)
+        Harness.equal("none", act_again)
+        Harness.equal(one, again, "re-acquire is identity: no phantom double-hold")
+
+        local both, act_manual = preview.isolation_acquire(one, preview.MANUAL_OWNER)
+        Harness.equal("none", act_manual, "second owner joins an existing mute silently")
+
+        local manual_only, act_release = preview.isolation_release(both, preview.PREVIEW_OWNER)
+        Harness.equal("none", act_release, "releasing one of two owners must NOT restore")
+        Harness.equal(true, manual_only[preview.MANUAL_OWNER],
+            "disabling the preview owner preserves manual ownership")
+
+        local none_left, act_last = preview.isolation_release(manual_only, preview.MANUAL_OWNER)
+        Harness.equal("restore", act_last, "last owner out restores the saved volumes")
+        Harness.equal(nil, next(none_left))
+
+        local same, act_absent = preview.isolation_release(none_left, preview.PREVIEW_OWNER)
+        Harness.equal("none", act_absent)
+        Harness.equal(none_left, same, "releasing a non-holder is identity: no double restore")
+    end)
+
+    Harness.test("cd 998 preview lifecycle edges never leak or flicker the mute", function()
+        -- Behavioral session simulator over the REAL policy: an engine stand-in
+        -- counts the mute/restore actions the runtime would apply to Wwise.
+        local function session()
+            local owners, counts = preview.isolation_new(), { mute = 0, restore = 0 }
+            local function apply(owner, edge)
+                if edge == "acquire" then
+                    local next_owners, action = preview.isolation_acquire(owners, owner)
+                    owners = next_owners
+                    if action == "mute" then counts.mute = counts.mute + 1 end
+                elseif edge == "release" then
+                    local next_owners, action = preview.isolation_release(owners, owner)
+                    owners = next_owners
+                    if action == "restore" then counts.restore = counts.restore + 1 end
+                end
+            end
+            return {
+                preview_event = function(event, auto)
+                    apply(preview.PREVIEW_OWNER, preview.isolation_edge(event, auto))
+                end,
+                manual = function(edge) apply(preview.MANUAL_OWNER, edge) end,
+                held = function() return next(owners) ~= nil end,
+                counts = counts,
+            }
+        end
+
+        -- Play then natural completion / manual stop: exactly one mute+restore.
+        local s = session()
+        s.preview_event("play", true)
+        s.preview_event("stop", true)
+        Harness.equal(1, s.counts.mute); Harness.equal(1, s.counts.restore)
+        Harness.equal(false, s.held(), "termination must leave no owner behind")
+
+        -- Pause and resume hold ownership: no volume flicker mid-session.
+        s = session()
+        s.preview_event("play", true)
+        s.preview_event("pause", true)
+        s.preview_event("resume", true)
+        Harness.equal(1, s.counts.mute); Harness.equal(0, s.counts.restore)
+        s.preview_event("stop", true)
+        Harness.equal(1, s.counts.restore)
+
+        -- Replacement holds the token across the swap: one mute total, and the
+        -- restore count stays zero until the real stop (no flicker, no leak).
+        s = session()
+        s.preview_event("play", true)
+        s.preview_event("replace", true)
+        Harness.equal(0, s.counts.restore, "replacement must not flicker restore->mute")
+        s.preview_event("play", true)
+        Harness.equal(1, s.counts.mute, "re-acquire after a held replace is not a second mute")
+        s.preview_event("stop", true)
+        Harness.equal(1, s.counts.restore)
+
+        -- A play attempt that dies after the replacement teardown releases.
+        s = session()
+        s.preview_event("play", true)
+        s.preview_event("replace", true)
+        s.preview_event("play_failed", true)
+        Harness.equal(1, s.counts.restore); Harness.equal(false, s.held())
+
+        -- Toggle disabled: playback drives no isolation at all.
+        s = session()
+        s.preview_event("play", false)
+        s.preview_event("stop", false)
+        Harness.equal(0, s.counts.mute); Harness.equal(0, s.counts.restore)
+
+        -- Disabling the toggle mid-session restores once; the later natural
+        -- stop must not double-restore.
+        s = session()
+        s.preview_event("play", true)
+        s.preview_event("disable", false)
+        Harness.equal(1, s.counts.restore)
+        s.preview_event("stop", false)
+        Harness.equal(1, s.counts.restore, "stop after disable must not restore twice")
+
+        -- Composition: manual isolation survives the whole preview session and
+        -- the disable edge; only the manual release restores.
+        s = session()
+        s.manual("acquire")
+        s.preview_event("play", true)
+        s.preview_event("disable", false)
+        s.preview_event("stop", false)
+        Harness.equal(0, s.counts.restore, "manual ownership must survive preview teardown")
+        s.manual("release")
+        Harness.equal(1, s.counts.mute); Harness.equal(1, s.counts.restore)
+    end)
+
     Harness.test("cd issue 881 maps only audited Morris dialogue to one bounded package", function()
         Harness.equal("resource_packages/dlcs/morris_ingame", residency.MORRIS_PACKAGE)
         Harness.equal("character_dialogue_preview", residency.REFERENCE)
@@ -423,6 +537,14 @@ return function(Harness, repo_root)
             create_section_title = function(text, base)
                 pop(base)
                 return { content = { label = text }, style = {} }
+            end,
+            -- #998 the automatic-isolation Yes/No control row.
+            create_checkbox = function(text, base)
+                pop(base)
+                return {
+                    content = { label = text, flag = false, hotspot = {}, dec = {}, inc = {} },
+                    style = { label = { text_color = { 255, 255, 255, 255 } } },
+                }
             end,
         }
     end
@@ -695,6 +817,124 @@ return function(Harness, repo_root)
             run_build(view, api)
             for i = 1, #view._rows do
                 Harness.equal(nil, view._rows[i]._tip_desc, "collapsed windows carry no transcript bindings")
+            end
+        end)
+    end)
+
+    -- ------------------------------------------------------------------
+    -- #998 automatic-isolation control row. Drives the REAL DialogueUI over
+    -- the REAL browser policy with an api v5 stand-in whose setter records
+    -- calls, so the Yes/No control's rendering, sequence shift, and click
+    -- semantics are exercised engine-free.
+    -- ------------------------------------------------------------------
+    local function make_isolation_api(entries)
+        local api = make_api(entries)
+        local store = { value = false, sets = 0 }
+        api.version = 5
+        api.get_auto_isolation = function() return store.value end
+        api.set_auto_isolation = function(v)
+            store.value = v == true
+            store.sets = store.sets + 1
+            return store.value
+        end
+        api.auto_isolation_label = function() return "Isolate Audio During Playback" end
+        return api, store
+    end
+
+    Harness.test("cd 998 window planner reserves lead control rows exactly", function()
+        local groups = browser.groups({ { "pes_one", "", "", "empire_soldier" } }, "")
+        local without = browser.window(groups, "kruber", 10, 0, 640, 2)
+        local with_lead = browser.window(groups, "kruber", 10, 0, 640, 2, 1)
+        Harness.equal(without.logical_count + 1, with_lead.logical_count)
+        Harness.equal(without.expanded_line_start + 1, with_lead.expanded_line_start)
+        Harness.equal(without.content_height + browser.ROW_HEIGHT, with_lead.content_height)
+        local legacy = browser.window(groups, "kruber", 10, 0, 640, 2, nil)
+        Harness.equal(without.logical_count, legacy.logical_count,
+            "an absent lead count keeps the pre-998 planner")
+    end)
+
+    Harness.test("cd 998 Dialogue tab renders one isolation control that drives the api", function()
+        local entries = make_entries(6)
+        local api, store = make_isolation_api(entries)
+        local saved_printf = rawget(_G, "printf")
+        _G.printf = function() end
+        local ok, err = pcall(function()
+            with_build_env(api, function()
+                local view = make_view()
+                view._dialogue_expanded = "pes_line"
+                run_build(view, api)
+
+                -- Row 1 is the control; the single group header lands at 2 and
+                -- the expanded lines shift down by the one lead row.
+                local control = view._rows[1]
+                Harness.equal(true, control._dialogue_isolation)
+                Harness.equal(false, control.content.flag, "control mirrors the stored No default")
+                Harness.equal(1, control._dialogue_sequence)
+                local header, line_rows = nil, 0
+                for i = 1, #view._rows do
+                    local row = view._rows[i]
+                    if row._is_dialogue_group then header = row end
+                    if row._is_dialogue_line and not row._dialogue_isolation then
+                        line_rows = line_rows + 1
+                        Harness.equal(entries[row._dialogue_sequence - 2][1], row._dialogue_event,
+                            "line rows must map through the lead-shifted sequence")
+                    end
+                end
+                Harness.truthy(header, "group header must render below the control")
+                Harness.equal(2, header._dialogue_sequence)
+                Harness.equal(6, line_rows)
+                Harness.equal(1 + 1 + 6, view._dialogue_logical_count)
+
+                -- Whole-row click toggles once per press (latched), persists
+                -- through the api, and reflects back into the control.
+                control.content.hotspot.on_release = true
+                Harness.equal(true, dialogue_ui.handle_row(view, control))
+                Harness.equal(1, store.sets)
+                Harness.equal(true, store.value)
+                Harness.equal(true, control.content.flag)
+                Harness.equal(false, dialogue_ui.handle_row(view, control),
+                    "a held press must not re-toggle")
+                Harness.equal(1, store.sets)
+                control.content.hotspot.on_release = nil
+                dialogue_ui.handle_row(view, control)
+                control.content.hotspot.on_release = true
+                Harness.equal(true, dialogue_ui.handle_row(view, control))
+                Harness.equal(false, store.value, "second press toggles back to No")
+
+                -- refresh_row follows external flips (command surface).
+                store.value = true
+                dialogue_ui.refresh_row(control, view)
+                Harness.equal(true, control.content.flag)
+
+                -- An empty search keeps the control and appends the notice.
+                store.value = false
+                view._search_str = "match_nothing_zzz"
+                view._dialogue_expanded = nil
+                run_build(view, api)
+                Harness.equal(true, view._rows[1]._dialogue_isolation,
+                    "empty result set must not evict the control row")
+                Harness.equal(true, view._rows[2]._readonly, "no-match notice appends beneath it")
+            end)
+        end)
+        _G.printf = saved_printf
+        if not ok then error(err, 0) end
+    end)
+
+    Harness.test("cd 998 api without the isolation surface renders the pre-998 tab", function()
+        local entries = make_entries(4)
+        local api = make_api(entries)
+        with_build_env(api, function()
+            local view = make_view()
+            view._dialogue_expanded = "pes_line"
+            run_build(view, api)
+            Harness.equal(nil, view._rows[1]._dialogue_isolation,
+                "a v4 api must not grow a control row")
+            Harness.equal(1 + 4, view._dialogue_logical_count)
+            for i = 1, #view._rows do
+                local row = view._rows[i]
+                if row._is_dialogue_line then
+                    Harness.equal(entries[row._dialogue_sequence - 1][1], row._dialogue_event)
+                end
             end
         end)
     end)
