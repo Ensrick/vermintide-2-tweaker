@@ -28,8 +28,15 @@ function M.install(mod, lifecycle, player_manager_class, peer_resolver, print_fn
 			local ok, value = pcall(current_peer_id)
 			if ok then local_peer = value end
 		end
+		-- Humans always occupy local-player id 1 at their peer; host bots ride
+		-- the host peer at ids 2..4 (game_object_destroyed_player removes them
+		-- on clients with their real local_player_id). Without this gate,
+		-- peer_player's players_at_peer fallback resolves a removed BOT to the
+		-- still-present host HUMAN and a mid-session bot replacement would wipe
+		-- the host's exact identity on every client (#914).
 		if self and self.is_server == false and type(peer_id) == "string"
-				and peer_id ~= "" and peer_id ~= local_peer then
+				and peer_id ~= "" and peer_id ~= local_peer
+				and (local_player_id == nil or local_player_id == 1) then
 			player = peer_resolver.peer_player(self, peer_id, local_player_id)
 		end
 		local r1, r2, r3, r4 = func(self, peer_id, local_player_id)

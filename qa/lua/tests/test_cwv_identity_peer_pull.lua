@@ -207,11 +207,18 @@ return function(H, repo_root)
 			peer_id = "remote-peer",
 			is_player_controlled = function() return false end,
 		}
+		-- Model the REAL PlayerManager surface: players_at_peer exists and
+		-- returns the still-present human alongside the bot. Without the
+		-- local_player_id gate, a bot removal (lpid 2) would resolve to the
+		-- human through this fallback and wrongly clear the host's identity.
 		local manager = {
 			is_server = false,
 			player_from_peer_id = function(_, peer_id, local_id)
 				if peer_id == "remote-peer" and local_id == 1 then return human end
 				if local_id == 2 then return bot end
+			end,
+			players_at_peer = function(_, peer_id)
+				if peer_id == "remote-peer" then return { human, bot } end
 			end,
 		}
 		local function vanilla()
