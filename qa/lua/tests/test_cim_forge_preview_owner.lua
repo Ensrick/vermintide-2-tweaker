@@ -2,6 +2,7 @@ return function(H, repo_root)
     local root = repo_root
         .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
     local owner_path = root .. "_cim_forge_preview_owner.lua"
+    local runtime_path = root .. "_cim_forge_preview.lua"
     local entry_path = root .. "crafting_in_modded_dev.lua"
 
     local function read(path)
@@ -56,6 +57,10 @@ return function(H, repo_root)
                 runtime_state.is_active = is_active
                 runtime_state.install_calls = (runtime_state.install_calls or 0) + 1
                 if runtime_state.installed then return true, "refreshed" end
+                target_mod:hook("HeroWindowWeaveForgeWeapons", "_create_item_previewer",
+                    function(func, self, ...)
+                        return func(self, ...)
+                    end)
                 target_mod:hook("HeroWindowWeaveProperties", "_create_item_previewer",
                     function(func, self, ...)
                         if runtime_state.is_active() then
@@ -126,13 +131,14 @@ return function(H, repo_root)
         H.deep_equal(order, {
             "LootItemUnitPreviewer._spawn_link_unit",
             "LootItemUnitPreviewer._load_item_units",
+            "HeroWindowWeaveForgeWeapons._create_item_previewer",
             "HeroWindowWeaveProperties._create_item_previewer",
             "LootItemUnitPreviewer.spawn_units",
             "LootItemUnitPreviewer.update",
         })
         H.equal(hooks["LootItemUnitPreviewer.update"].kind, "hook_safe")
         H.equal(install(), false)
-        H.equal(#order, 5)
+        H.equal(#order, 6)
         H.equal(runtime_state.install_calls, 2,
             "reload must refresh the installed preview dispatcher")
         H.equal(mod._cim_forge_preview_owner_installed, true)
@@ -140,7 +146,7 @@ return function(H, repo_root)
         H.equal(type(mod._cim_forge_authored_preview_mode), "function")
     end)
 
-    H.test("CIM forge preview owner reloads a distinct placement policy without a sixth hook", function()
+    H.test("CIM forge preview owner reloads a distinct placement policy without a seventh hook", function()
         local active = { value = true }
         local _, hooks, order, _, _, install = fixture(active)
         local first = {
@@ -159,9 +165,132 @@ return function(H, repo_root)
         H.equal(callback(function() return "native" end, {}), "first-policy")
 
         H.equal(install(second), false)
-        H.equal(#order, 5)
+        H.equal(#order, 6)
         H.equal(callback(function() return "native" end, {}), "second-policy",
             "the original installed callback must consume the refreshed policy")
+    end)
+
+    H.test("CIM exact preview context wraps all three real constructors", function()
+        local runtime = assert(loadfile(runtime_path))()
+        local hooks = {}
+        local active = { value = true }
+        local mod = {}
+        function mod:hook(class_name, method_name, callback)
+            local key = class_name .. "." .. method_name
+            H.equal(hooks[key], nil, "duplicate constructor hook " .. key)
+            hooks[key] = callback
+        end
+        local policy = {
+            properties_preview_position = function() return nil end,
+        }
+        local ok = runtime.install({
+            mod = mod,
+            policy = policy,
+            is_active = function() return active.value end,
+            unit_api = { alive = function() return false end },
+            vector3 = function() end,
+            vector3_box = function() end,
+            printf = function() end,
+        })
+        H.equal(ok, true)
+        H.equal(type(mod._cim_preview_context_current), "function")
+        H.equal(type(mod._cim_preview_context_for), "function")
+        hooks["HeroWindowWeaveForgeOverview._create_item_previewer"] =
+            function(func, self, ...)
+                return runtime.invoke_constructor(mod, "overview", func, self, ...)
+            end
+
+        local constructors = {
+            { key = "HeroWindowWeaveForgeOverview._create_item_previewer", kind = "overview" },
+            { key = "HeroWindowWeaveForgeWeapons._create_item_previewer", kind = "weapons" },
+            { key = "HeroWindowWeaveProperties._create_item_previewer", kind = "properties" },
+        }
+        for _, row in ipairs(constructors) do
+            local callback = assert(hooks[row.key])
+            local observed
+            local item = {
+                backend_id = "backend-" .. row.kind,
+                skin = "skin-" .. row.kind,
+                data = { key = "item-" .. row.kind, item_type = "melee" },
+            }
+            local previewer, hole, tail = callback(function(self, viewport, received, a, b)
+                H.equal(self, "window")
+                H.equal(viewport, "viewport")
+                H.equal(received, item)
+                H.equal(a, nil)
+                H.equal(b, "tail-arg")
+                observed = mod._cim_preview_context_current()
+                return {}, nil, "tail-return"
+            end, "window", "viewport", item, nil, "tail-arg")
+            H.equal(hole, nil)
+            H.equal(tail, "tail-return")
+            H.equal(observed.constructor, row.kind)
+            H.equal(observed.backend_id, item.backend_id)
+            H.equal(observed.item_key, item.data.key)
+            H.equal(observed.item_type, item.data.item_type)
+            H.equal(observed.skin, item.skin)
+            H.equal(observed.exact_backend_identity, true)
+            H.equal(mod._cim_preview_context_for(previewer), observed)
+            H.equal(mod._cim_preview_context_current(), nil)
+        end
+    end)
+
+    H.test("CIM preview context is stack-safe and clears after errors", function()
+        local runtime = assert(loadfile(runtime_path))()
+        local hooks = {}
+        local active = { value = true }
+        local mod = {}
+        function mod:hook(class_name, method_name, callback)
+            hooks[class_name .. "." .. method_name] = callback
+        end
+        runtime.install({
+            mod = mod,
+            policy = { properties_preview_position = function() return nil end },
+            is_active = function() return active.value end,
+            unit_api = { alive = function() return false end },
+            vector3 = function() end,
+            vector3_box = function() end,
+            printf = function() end,
+        })
+        hooks["HeroWindowWeaveForgeOverview._create_item_previewer"] =
+            function(func, self, ...)
+                return runtime.invoke_constructor(mod, "overview", func, self, ...)
+            end
+        local overview = assert(hooks[
+            "HeroWindowWeaveForgeOverview._create_item_previewer"])
+        local weapons = assert(hooks[
+            "HeroWindowWeaveForgeWeapons._create_item_previewer"])
+        local outer_item = { backend_id = "outer", data = { key = "outer", item_type = "melee" } }
+        local inner_item = { backend_id = "inner", data = { key = "inner", item_type = "ranged" } }
+        local outer_context
+        overview(function()
+            outer_context = mod._cim_preview_context_current()
+            local inner = weapons(function()
+                local current = mod._cim_preview_context_current()
+                H.equal(current.backend_id, "inner")
+                H.truthy(current.generation > outer_context.generation)
+                return {}
+            end, {}, {}, inner_item)
+            H.truthy(inner._cim_preview_context)
+            H.equal(mod._cim_preview_context_current(), outer_context)
+            return {}
+        end, {}, {}, outer_item)
+        H.equal(mod._cim_preview_context_current(), nil)
+
+        local raised, err = pcall(overview, function()
+            H.equal(mod._cim_preview_context_current().backend_id, "outer")
+            error("constructor-failure")
+        end, {}, {}, outer_item)
+        H.equal(raised, false)
+        H.truthy(tostring(err):find("constructor%-failure") ~= nil)
+        H.equal(mod._cim_preview_context_current(), nil)
+
+        active.value = false
+        local native = {}
+        local returned = overview(function() return native end, {}, {}, outer_item)
+        H.equal(returned, native)
+        H.equal(returned._cim_preview_context, nil)
+        H.equal(mod._cim_preview_context_current(), nil)
     end)
 
     H.test("CIM forge preview guard accepts package or resident unit and fails closed", function()
@@ -246,18 +375,38 @@ return function(H, repo_root)
         end,
         "optional decompiled vanilla source is unavailable")
 
-    local properties_path = "C:/Users/danjo/source/repos/Vermintide-2-Source-Code/"
-        .. "scripts/ui/views/hero_view/windows/weave_forge/"
-        .. "hero_window_weave_properties.lua"
-    local properties = read(properties_path)
-    H.test_if(properties ~= nil,
-        "CIM forge preview owner targets the decompiled properties constructor",
+    local windows_root = "C:/Users/danjo/source/repos/Vermintide-2-Source-Code/"
+        .. "scripts/ui/views/hero_view/windows/"
+    local constructor_sources = {
+        { "hero_window_weave_forge_overview.lua", "HeroWindowWeaveForgeOverview" },
+        { "hero_window_weave_forge_weapons.lua", "HeroWindowWeaveForgeWeapons" },
+        { "hero_window_weave_properties.lua", "HeroWindowWeaveProperties" },
+    }
+    local all_constructor_sources = true
+    for _, row in ipairs(constructor_sources) do
+        if read(windows_root .. row[1]) == nil then all_constructor_sources = false end
+    end
+    H.test_if(all_constructor_sources,
+        "CIM preview context targets all three decompiled Athanor constructors",
         function()
-            H.truthy(properties:find(
-                "HeroWindowWeaveProperties._create_item_previewer = function",
-                1, true))
-            H.truthy(properties:find("LootItemUnitPreviewer:new(item, preview_position",
-                1, true))
+            for _, row in ipairs(constructor_sources) do
+                local source = assert(read(windows_root .. row[1]))
+                H.truthy(source:find(
+                    row[2] .. "._create_item_previewer = function", 1, true))
+                H.truthy(source:find(
+                    "LootItemUnitPreviewer:new(item, preview_position", 1, true))
+            end
         end,
-        "optional decompiled vanilla properties source is unavailable")
+        "optional decompiled vanilla constructor sources are unavailable")
+
+    H.test("CIM Overview context composes with the sole mission-safety hook", function()
+        local runtime = assert(read(runtime_path))
+        local safety = assert(read(root .. "_cim_mission_forge_safety.lua"))
+        H.equal(count_plain(runtime,
+            'deps.mod:hook("HeroWindowWeaveForgeOverview", "_create_item_previewer"'), 0)
+        H.equal(count_plain(safety,
+            'mod:hook("HeroWindowWeaveForgeOverview", "_create_item_previewer"'), 1)
+        H.equal(count_plain(safety,
+            'preview_runtime.invoke_constructor(mod, "overview", func, self,'), 1)
+    end)
 end

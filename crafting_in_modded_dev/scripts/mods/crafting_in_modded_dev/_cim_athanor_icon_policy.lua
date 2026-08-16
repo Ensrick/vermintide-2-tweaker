@@ -59,17 +59,28 @@ end
 
 -- Proves resource closure against the exact Gui that will draw the icon.
 -- Gui.material is a lookup only; no bitmap is submitted on this path.
+--
+-- (#481) The third return names WHICH gate refused so the caller's bounded
+-- log can attribute a substituted/omitted row from the log alone. Unlike the
+-- Cosmetics paint gates, a refusal here has NO lease recovery on purpose: a
+-- Stingray Gui resolves materials only from the fixed list baked in at
+-- World.create_screen_gui() time (ui_renderer.lua:246-251, documented with
+-- evidence in _cim_mission_forge_safety.lua's HDR-widget block), so
+-- Managers.package:load cannot retro-add a material to the live renderer.
+-- The fallback chain below (provider fallback -> authored family icon ->
+-- placeholder) IS this surface's recovery path, and it re-proves on every
+-- list rebuild.
 function M.renderer_has_texture(renderer, texture_name, atlas_helper, gui_api, flags)
     local material_name = M.material_name(texture_name, atlas_helper, flags)
     if type(material_name) ~= "string" or material_name == "" then
-        return false, material_name
+        return false, material_name, "no-material-name"
     end
     if not RESIDENCY or type(RESIDENCY.gui_material_resident) ~= "function" then
-        return false, material_name
+        return false, material_name, "no-residency-contract"
     end
-    local ready = RESIDENCY.gui_material_resident(
+    local ready, reason = RESIDENCY.gui_material_resident(
         renderer, material_name, gui_api, nil, "cim_athanor_icon")
-    return ready == true, material_name
+    return ready == true, material_name, reason
 end
 
 local function _append_unique(values, seen, value)
@@ -126,11 +137,14 @@ function M.sanitize_layout(layout, args)
         local data = type(entry) == "table" and entry.item_data
         local icon = type(data) == "table" and data.inventory_icon
         report.total = report.total + 1
-        local ok, safe = pcall(has_texture, icon)
+        local ok, safe, material_name, refusal = pcall(has_texture, icon)
         if ok and safe then
             report.verified = report.verified + 1
             safe_layout[#safe_layout + 1] = entry
         else
+            -- (#481) Attribute the refusal so the caller's log names the gate.
+            local gate = ok and (refusal or "refused") or "probe-error"
+            local refused_material = ok and material_name or nil
             local replacement
             for _, candidate in ipairs(_fallback_candidates(
                 entry or {}, args.item_master_list, args.provider_resolve)) do
@@ -149,11 +163,13 @@ function M.sanitize_layout(layout, args)
                 report.fallback = report.fallback + 1
                 report.changes[#report.changes + 1] = {
                     key = entry.key, original = icon, replacement = replacement,
+                    gate = gate, material = refused_material,
                 }
             else
                 report.omitted = report.omitted + 1
                 report.changes[#report.changes + 1] = {
                     key = entry and entry.key, original = icon, replacement = nil,
+                    gate = gate, material = refused_material,
                 }
             end
         end

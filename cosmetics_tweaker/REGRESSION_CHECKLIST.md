@@ -11,12 +11,17 @@ Last updated: 2026-08-13.
 
 | Field | Value |
 |---|---|
-| Identity | An explicit backend ID wins. A pending-illusion preview with no ID may borrow the active customization item only when both normalized weapon families match; husks never borrow it. |
+| Producer | While CIM's custom forge is active, each real Athanor constructor (`HeroWindowWeaveForgeOverview`, `HeroWindowWeaveForgeWeapons`, and `HeroWindowWeaveProperties`) publishes the same `cim_preview_context_v1` table on a stack during synchronous unit resolution and on only its returned previewer. Nesting and errors restore/clear the stack before return or rethrow. |
+| Identity | The CIM surface requires the exact non-empty backend ID, item key, and resolved item type from that context. Backendless synthetic rows, foreign identity, malformed contracts, and stale generations retain base; they never borrow the active customization item. Ordinary illusion previews retain their existing generic fallback. |
 | Component | The saved hand record must match an authored key or unit path in that exact item type's current hand pool. LA and Purpure/Azure records cannot resolve through one another's item/pool. |
 | Target | `LootItemUnitPreviewer.spawn_units` pairs each returned unit with `spawn_data[i].unit_name`. Missing or mismatched evidence blocks authored paint even when runtime `unit_name` metadata is unreadable. |
+| Readiness | The exact 3P unit must already be resident. A unit-kind variant also requires its known parent material package to be globally loaded before a per-previewer reference is taken; the adapter itself never force-loads an absent parent. |
+| Recovery | Every fail-closed refusal (adapter `parent-not-loaded`/`unit-not-resident`/`parent-lease-failed`; paint `unit-materials`/`texture-set`) routes to `_cos_la_gate_recovery.lua`: a bounded `[cos:481] preview gate REFUSED` printf names the gate, and when the missing owner is the variant's declared vanilla parent (`units/weapons/player/...` only) ONE session-bounded `Managers.package:load` lease is queued so a later open resolves. LA-bundle owners are never leased (marker only). Donor recipe: cwv `_cwv_husk_path.lua` (#474). |
+| Reconcile | Material/texture application revalidates current selection ownership, generation, parent ref, unit residency, and unit liveness. Attempts and wall-clock window are bounded; timeout retains the compiled/base material. Destroy releases the exact refs and drops queued work; reopen cannot run a stale callback. Simultaneous previewers hold independent refs/jobs. |
+| Transform | `cim_preview` deliberately starts at native neutral scale pending visual proof and skips the generic customization 2.0 LA scale. An ordinary illusion preview still takes that scale path. |
 | Arbitration | An exact row-2 component owns the shield. The whole-skin Purpure/Azure fallback runs only when no independent component is selected, so two providers never paint one preview target. |
-| Scope | Preserve the overview's intentional melee/ranged previewers; do not destroy previews based on equal world-space pivots because each viewport owns a separate world. No new hook, RPC, or polling owner. |
-| Detection | Offline `test_cos_la_instance_policy.lua` and `test_cos_la_shield_parity.lua`; `/cos_regression_test` passes `issue481_athanor_exact_offhand_target`. |
+| Scope | Preserve the overview's intentional melee/ranged previewers; do not destroy previews based on equal world-space pivots because each viewport owns a separate world. The adapter adds no RPC, persistence, command, direct native setter, or independent polling owner. |
+| Detection | Offline `test_cim_forge_preview_owner.lua`, `test_cos_equipment_assembly.lua`, `test_cos_cim_preview.lua`, `test_cos_la_gate_recovery.lua`, and `test_cos_preview_runtime.lua` cover the producer/consumer transaction and refusal recovery. In-game verification still must prove exact offhand mesh/material on all three Athanor surfaces, first-open/reopen, simultaneous previewers, neutral transform, and resident base on timeout/missing identity. |
 
 ---
 ## CWV Sword+Mace picker-family census (#704)
@@ -55,9 +60,9 @@ Last updated: 2026-08-13.
 | Field | Value |
 |---|---|
 | Owner | `_cos_preview_runtime.lua` owns the exact 12-hook preview/score/package and adjacent authored-outfit attachment sequence. The entry installs it once after shared render helpers and before LA bridge initialization. |
-| Late binding | Mutable customization backend identity is read through the injected getter only when `LootItemUnitPreviewer.spawn_units` runs; engine tables are not snapshotted at install. All 16 injected LA/glow/score/helper dependencies refresh through one persistent holder before the reinstall guard, and callbacks read the current shared `mod._cos` consumer map. |
+| Late binding | Mutable customization backend identity is read through the injected getter only for an ordinary `LootItemUnitPreviewer.spawn_units` call; a CIM-marked preview never consults it. Engine tables are not snapshotted at install. All 17 injected LA/glow/score/CIM/helper dependencies refresh through one persistent holder before the reinstall guard, and callbacks read the current shared `mod._cos` consumer map. |
 | Stability | Repeated install returns and republishes the same exact two-key owner plus `mod._cos_score_peer_for_profile` without duplicate hooks. The 12 callbacks retain only the stable state holder; no RPC, command, persistence, husk hook, or update-loop owner moved. |
-| Detection | Offline `test_cos_preview_runtime.lua` pins ownership, hook kind/order/count, a distinct replacement `mod._cos` map, 16 distinct replacement dependencies, complete owner-export identity, fresh score/getter/policy consumption, action-time identity lookup, and the 1,500-line cohesive-owner ceiling. Aggregate tests continue to prove unchanged hook/RPC cardinality. |
+| Detection | Offline `test_cos_preview_runtime.lua` pins ownership, hook kind/order/count, a distinct replacement `mod._cos` map, 17 distinct replacement dependencies, complete owner-export identity, fresh score/getter/policy consumption, ordinary action-time identity lookup, CIM no-fallback/no-scale routing, and the 1,500-line cohesive-owner ceiling. Aggregate tests continue to prove unchanged hook/RPC cardinality. |
 
 ---
 ## Phase 5 news-feed safety owner boundary

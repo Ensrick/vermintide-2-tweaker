@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.125-dev (2026-08-15) -- Athanor icon refusals name their gate (#481) [verify-fix]
+
+- Athanor icon-policy refusals now carry the refusing gate and material:
+  `renderer_has_texture` returns the residency reason, change rows carry
+  `gate`/`material`, and a bounded `[cim:617] icon ... gate=... material=...`
+  printf identifies exactly which gate suppressed an icon. Deliberately NO
+  package lease on this surface: the Gui material list is fixed at
+  `create_screen_gui` time (ui_renderer.lua:246-251), so the fallback chain +
+  per-list-build re-proof remains the recovery. Pairs with cosmetics
+  0.9.212-dev's preview-gate recovery for the full #481 stack. Refs #481.
+
 ## 0.8.124-dev (2026-08-13) -- separate accessory label from upgrade arrow (#1117) [verify-fix]
 
 - The Athanor bulk-accessory state now suppresses the native upgrade arrow's
