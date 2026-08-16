@@ -334,6 +334,7 @@ local suites = {
     "test_ct_boon_pricing_audit",
     "test_ct_issue345_loc_status",
     "test_ct_manann_cooldown_display",
+    "test_ct_adventure_illusions",
     "test_ct_progressive_difficulty",
     "test_ct_replacement_compensation",
     "test_ct_weave_curse_policy",
