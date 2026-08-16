@@ -134,6 +134,86 @@ return function(H, repo_root)
         H.equal(report.omitted, 1)
     end)
 
+    H.test("icon refusals name the refusing gate for the bounded log (#481)", function()
+        -- Missing masked+saturated material: the resolution gate refuses
+        -- before any residency probe.
+        local atlas = {
+            has_atlas_settings_by_texture_name = function() return true end,
+            get_atlas_settings_by_texture_name = function()
+                return { material_name = "raw", masked_material_name = "raw_masked" }
+            end,
+        }
+        local safe, material, gate = Policy.renderer_has_texture(
+            { gui = {} }, "raw_icon", atlas, { material = function() end },
+            { masked = true, saturated = true })
+        H.equal(safe, false)
+        H.equal(material, nil)
+        H.equal(gate, "no-material-name")
+
+        -- Gui-local absence: the policy reports the residency contract's own
+        -- refusal reason for the exact renderer (behavioral parity with the
+        -- live contract, not a re-implementation).
+        local gui_api = { material = function(gui, name) return gui.materials[name] end }
+        local renderer = { gui = { materials = {} } }
+        local flat_atlas = {
+            has_atlas_settings_by_texture_name = function() return false end,
+            get_atlas_settings_by_texture_name = function() return nil end,
+        }
+        safe, material, gate = Policy.renderer_has_texture(
+            renderer, "plain_icon", flat_atlas, gui_api, {})
+        H.equal(safe, false)
+        H.equal(material, "plain_icon")
+        local expected_ok, expected_reason = Residency.gui_material_resident(
+            renderer, "plain_icon", gui_api, nil, "cim_athanor_icon")
+        H.equal(expected_ok, false)
+        H.equal(gate, expected_reason)
+        H.truthy(type(gate) == "string" and gate ~= "")
+
+        -- No residency contract installed: fresh module copy refuses closed
+        -- and says so.
+        local Bare = assert(loadfile(cim_root .. "_cim_athanor_icon_policy.lua"))()
+        safe, material, gate = Bare.renderer_has_texture(
+            renderer, "plain_icon", flat_atlas, gui_api, {})
+        H.equal(safe, false)
+        H.equal(gate, "no-residency-contract")
+    end)
+
+    H.test("sanitize_layout change rows carry gate attribution (#481)", function()
+        local rows = {
+            { key = "falls_back", item_data = {
+                inventory_icon = "bad_icon", slot_type = "melee",
+                cim_athanor_inventory_icon = "good_icon",
+            } },
+            { key = "omitted", item_data = {
+                inventory_icon = "bad_icon2", slot_type = "ranged",
+            } },
+            { key = "throws", item_data = {
+                inventory_icon = "boom_icon", slot_type = "melee",
+            } },
+        }
+        local result, report = Policy.sanitize_layout(rows, {
+            item_master_list = {},
+            has_texture = function(icon)
+                if icon == "boom_icon" then error("probe explosion") end
+                if icon == "good_icon" then return true, icon, "resident" end
+                return false, icon .. "_material", "gui_material_absent"
+            end,
+        })
+        H.equal(report.fallback, 1)
+        H.equal(report.omitted, 2)
+        H.equal(#result, 1)
+        local by_key = {}
+        for _, change in ipairs(report.changes) do by_key[change.key] = change end
+        H.equal(by_key.falls_back.gate, "gui_material_absent")
+        H.equal(by_key.falls_back.material, "bad_icon_material")
+        H.equal(by_key.falls_back.replacement, "good_icon")
+        H.equal(by_key.omitted.gate, "gui_material_absent")
+        H.equal(by_key.omitted.replacement, nil)
+        H.equal(by_key.throws.gate, "probe-error",
+            "a throwing probe is attributed, not silently omitted")
+        H.equal(by_key.throws.material, nil)
+    end)
+
     H.test("production probes exact Athanor top renderer before populate", function()
         local file = assert(io.open(cim_root .. "crafting_in_modded_dev.lua", "rb"))
         local source = file:read("*a")

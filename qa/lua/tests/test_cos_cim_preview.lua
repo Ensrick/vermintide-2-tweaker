@@ -71,7 +71,22 @@ return function(H, repo_root)
                 { la_armoury_key = "la-shield", unit = "units/la_shield" },
             },
         }
-        local calls = { applied = 0, contexts = {}, migrated = 0 }
+        local calls = { applied = 0, contexts = {}, migrated = 0, recoveries = {} }
+        local la_bridge = {
+            la_kind_unit_parent_packages = {
+                ["la-shield"] = "units/parent.package",
+            },
+        }
+        if options.gate_recovery ~= false then
+            la_bridge.gate_recovery = {
+                recover = function(gate, key, context, reason, allow_lease)
+                    calls.recoveries[#calls.recoveries + 1] = {
+                        gate = gate, key = key, context = context,
+                        reason = reason, allow_lease = allow_lease,
+                    }
+                end,
+            }
+        end
         local api = Module.new({
             get_mod = function(id)
                 if id == "cim_dev" then return cim_mod end
@@ -108,11 +123,7 @@ return function(H, repo_root)
                 return options.apply_ready ~= false
             end,
             is_unit = function(unit) return unit == "live-unit" end,
-            la_bridge = {
-                la_kind_unit_parent_packages = {
-                    ["la-shield"] = "units/parent.package",
-                },
-            },
+            la_bridge = la_bridge,
             now = function() return clock.value end,
             max_attempts = options.max_attempts or 3,
             retry_window = options.retry_window or 1,
@@ -247,6 +258,60 @@ return function(H, repo_root)
         H.equal(ok, false)
         H.equal(reason, "foreign-unit",
             "an authored unit pair cannot be rebound to a guessed path")
+    end)
+
+    H.test("Cosmetics CIM preview routes refusals to bounded gate recovery (#481)", function()
+        -- parent-not-loaded: the declared vanilla parent IS the missing owner;
+        -- the refusal stands (fail-closed) and recovery is asked to lease it.
+        local blocked, blocked_current, _, blocked_packages, _, _, blocked_calls =
+            fixture({ parent_loaded = false })
+        blocked_current.value = make_context(1)
+        local blocked_context = assert(blocked.resolve_scoped_identity(
+            ITEM, "bid-481", ITEM.item_type, ITEM.skin))
+        local ok, reason = blocked.prepare_override(blocked_context,
+            "left_hand_unit", { la_armoury_key = "la-shield" },
+            "units/la_shield", true, ITEM.item_type)
+        H.equal(ok, false)
+        H.equal(reason, "parent-not-loaded")
+        H.equal(blocked_packages.loads, 0,
+            "the adapter itself still never force-loads")
+        H.equal(#blocked_calls.recoveries, 1)
+        local recovery = blocked_calls.recoveries[1]
+        H.equal(recovery.gate, "parent-not-loaded")
+        H.equal(recovery.key, "la-shield")
+        H.equal(recovery.context, "cim_preview")
+        H.equal(recovery.allow_lease, nil,
+            "the declared parent owner is lease-eligible")
+
+        -- unit-not-resident: the missing owner is the LA bundle, never
+        -- lease-safe, so the recovery call must be marker-only.
+        local absent, absent_current, _, _, _, _, absent_calls =
+            fixture({ unit_resident = false })
+        absent_current.value = make_context(2)
+        local absent_context = assert(absent.resolve_scoped_identity(
+            ITEM, "bid-481", ITEM.item_type, ITEM.skin))
+        ok, reason = absent.prepare_override(absent_context,
+            "left_hand_unit", { la_armoury_key = "la-shield" },
+            "units/la_shield", true, ITEM.item_type)
+        H.equal(ok, false)
+        H.equal(reason, "unit-not-resident")
+        H.equal(#absent_calls.recoveries, 1)
+        H.equal(absent_calls.recoveries[1].gate, "unit-not-resident")
+        H.equal(absent_calls.recoveries[1].allow_lease, false,
+            "an LA-bundle owner must never be leased")
+
+        -- A la_bridge without the recovery owner degrades to plain refusal.
+        local bare, bare_current, _, bare_packages =
+            fixture({ parent_loaded = false, gate_recovery = false })
+        bare_current.value = make_context(3)
+        local bare_context = assert(bare.resolve_scoped_identity(
+            ITEM, "bid-481", ITEM.item_type, ITEM.skin))
+        ok, reason = bare.prepare_override(bare_context,
+            "left_hand_unit", { la_armoury_key = "la-shield" },
+            "units/la_shield", true, ITEM.item_type)
+        H.equal(ok, false)
+        H.equal(reason, "parent-not-loaded")
+        H.equal(bare_packages.loads, 0)
     end)
 
     H.test("Cosmetics CIM preview keeps malformed scopes off generic load", function()

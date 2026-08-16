@@ -84,6 +84,21 @@ function M.new(deps)
     local jobs = setmetatable({}, { __mode = "k" })
     local leases = setmetatable({}, { __mode = "k" })
 
+    -- (#481) Bounded-lease recovery for this adapter's own fail-closed
+    -- refusals. The refusal still stands for THIS attempt (the no-force-load
+    -- boundary above is unchanged inside the adapter); the shared recovery
+    -- owner in _la_bridge queues at most one lease of the declared vanilla
+    -- parent package per session so a LATER Athanor open resolves, and
+    -- printf-marks which gate refused. `allow_lease=false` gates name a
+    -- missing owner that is never lease-safe (LA's own bundle).
+    local function recover_refusal(gate, armoury_key, reason, allow_lease)
+        local recovery = type(la_bridge) == "table" and la_bridge.gate_recovery
+        if type(recovery) == "table" and type(recovery.recover) == "function" then
+            pcall(recovery.recover, gate, armoury_key, "cim_preview",
+                reason, allow_lease)
+        end
+    end
+
     local function current_context()
         -- CIM Dev is the sole producer of this exact contract. Stable CIM can
         -- adopt a distinct provider/version later without being guessed here.
@@ -203,6 +218,8 @@ function M.new(deps)
         end
         local path = preview_path(resolved_unit, variant)
         if not path or not unit_resident(path) then
+            recover_refusal("unit-not-resident", selection.la_armoury_key,
+                "unit-not-resident", false)
             return false, "unit-not-resident"
         end
         -- The generic equipment gate also requires the 1P unit. Athanor never
@@ -215,6 +232,10 @@ function M.new(deps)
                 and la_bridge.la_kind_unit_parent_packages[
                     selection.la_armoury_key] or nil
             if not nonempty(parent) or not package_loaded(parent) then
+                -- The declared vanilla parent is exactly the missing owner
+                -- here; the bounded recovery lease makes the next open pass.
+                recover_refusal("parent-not-loaded", selection.la_armoury_key,
+                    "parent-not-loaded")
                 return false, "parent-not-loaded"
             end
         end
@@ -290,9 +311,13 @@ function M.new(deps)
         for _, hand in pairs(record.hands) do
             if hand.unit_path == package_name then
                 if not unit_resident(package_name) then
+                    recover_refusal("unit-not-resident", hand.armoury_key,
+                        "unit-not-resident", false)
                     return false, "unit-not-resident", true
                 end
                 if not retain_parent(previewer, context, hand.parent_package) then
+                    recover_refusal("parent-lease-failed", hand.armoury_key,
+                        "parent-lease-failed")
                     return false, "parent-lease-failed", true
                 end
                 local application = get_application()

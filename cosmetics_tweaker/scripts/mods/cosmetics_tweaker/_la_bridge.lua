@@ -1304,6 +1304,26 @@ local function _probe_la_unit_materials(unit, armoury_key)
     mod:info("[LA probe %s] === end ===", tag)
 end
 
+-- (#481) Bounded-lease recovery for the fail-closed paint gates below. The
+-- gates keep refusing (fail-closed is correct); recovery queues ONE bounded
+-- lease of the refused variant's declared vanilla parent package so a LATER
+-- attempt resolves, and every refusal printf-marks WHICH gate refused. The
+-- owner map is la_kind_unit_parent_packages (resolved lazily: the map is
+-- declared later in this file). Full safety contract in the module header.
+local GATE_RECOVERY = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_la_gate_recovery").new({
+    owner_package = function(armoury_key)
+        return M.la_kind_unit_parent_packages
+            and M.la_kind_unit_parent_packages[armoury_key] or nil
+    end,
+    package_manager = function()
+        local managers = rawget(_G, "Managers")
+        return type(managers) == "table" and managers.package or nil
+    end,
+    log = _plog,
+})
+M.gate_recovery = GATE_RECOVERY
+
 -- v0.9.41-dev (#149): AV-safety precheck for painting a kind="unit" LA shield
 -- in the "ingame" / "network_husk" / exact "cim_preview" contexts.
 -- `Unit.set_texture_for_materials`
@@ -1326,6 +1346,10 @@ local function _kind_unit_paint_is_safe(unit, armoury_key, context)
     if not ok then
         _plog("#149 paint SKIP %s ctx=%s: unit material closure failed reason=%s count=%s",
             tostring(armoury_key), tostring(context), tostring(reason), tostring(count))
+        -- (#481) Null/unresolved materials on a kind="unit" mesh mean the
+        -- declared vanilla parent (mat_to_use donor) is not bound; leasing
+        -- that parent lets the next preview of this variant resolve.
+        GATE_RECOVERY.recover("unit-materials", armoury_key, context, reason)
         return false
     end
     return true
@@ -1463,6 +1487,10 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key, conte
     if not resident then
         _plog("#749 paint SKIP %s ctx=%s: atomic texture closure failed reason=%s",
             tostring(armoury_key), tostring(context), tostring(reason))
+        -- (#481) marker-only: the missing owner of a heraldry TEXTURE is LA's
+        -- own bundle, which is never lease-safe (allow_lease=false). The
+        -- vanilla parent package does not own these textures.
+        GATE_RECOVERY.recover("texture-set", armoury_key, context, reason, false)
         return false
     end
     for i = 1, #bindings do

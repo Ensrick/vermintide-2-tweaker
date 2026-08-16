@@ -753,8 +753,10 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
         icon_report.total, icon_report.verified, icon_report.fallback, icon_report.omitted)
     for i = 1, math.min(#icon_report.changes, 12) do
         local change = icon_report.changes[i]
-        printf("[cim:617] icon key=%s original=%s replacement=%s",
-            tostring(change.key), tostring(change.original), tostring(change.replacement))
+        -- (#481) gate= names which residency gate refused the original icon.
+        printf("[cim:617] icon key=%s original=%s replacement=%s gate=%s material=%s",
+            tostring(change.key), tostring(change.original), tostring(change.replacement),
+            tostring(change.gate), tostring(change.material))
     end
     if #icon_report.changes > 12 then
         printf("[cim:617] icon changes omitted_from_log=%d", #icon_report.changes - 12)
