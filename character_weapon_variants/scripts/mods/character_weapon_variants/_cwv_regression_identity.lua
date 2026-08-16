@@ -252,6 +252,61 @@ _rt_register("issue786_peer_resolution_multi_return", function()
 	end
 end)
 
+_rt_register("issue914_peer_ready_identity_lifecycle", function()
+	local resolver = _om.peer_resolver
+	local pull = _om.identity_peer_pull
+	local policy = _om.appearance_lifecycle_policy
+	if type(resolver) ~= "table" or type(resolver.husk_owner) ~= "function"
+			or type(resolver.player_peer_id) ~= "function"
+			or type(pull) ~= "table" or type(pull.slots_ready) ~= "function"
+			or type(policy) ~= "table" or type(policy.new) ~= "function" then
+		return "#914 peer lifecycle owners are not installed"
+	end
+	if mod._cwv914_client_peer_cleanup_installed ~= true then
+		return "#914 client-visible PlayerManager cleanup hook is not installed"
+	end
+	if pull.slots_ready({}) or not pull.slots_ready({ slot_melee = {} }) then
+		return "#914 pre-ready slot gate drifted"
+	end
+	local hinted = {
+		peer_id = "issue914-peer",
+		is_player_controlled = function() return true end,
+	}
+	local owner, source = resolver.husk_owner({
+		owner = function() error("spawn owner table is not ready") end,
+	}, "issue914-unit", hinted)
+	if owner ~= hinted or source ~= "husk_extension_player"
+			or resolver.player_peer_id(owner) ~= "issue914-peer" then
+		return "#914 spawn-local husk player hint is not authoritative"
+	end
+
+	local sent = {}
+	local lifecycle = policy.new({
+		resolve_local = function()
+			return {
+				provider = "cwv", variant_key = "issue914-variant",
+				base_item_key = "issue914-base", fingerprint = "issue914-fp",
+			}, "issue914-base"
+		end,
+		resolve_remote = function() return nil, "unused" end,
+		send = function(recipient, _, payload)
+			sent[recipient .. "|" .. payload.slot] =
+				(sent[recipient .. "|" .. payload.slot] or 0) + 1
+			return true
+		end,
+	})
+	local slots = { slot_melee = {} }
+	lifecycle:publish(slots, "probe", "issue914-peer", false, true)
+	lifecycle:publish(slots, "probe", "others", false, true)
+	lifecycle:clear_peer("issue914-peer")
+	lifecycle:publish(slots, "probe", "issue914-peer", false, true)
+	lifecycle:publish(slots, "probe", "others", false, true)
+	if sent["issue914-peer|slot_melee"] ~= 2
+			or sent["others|slot_melee"] ~= 1 then
+		return "#914 peer cleanup did not reopen only the departed peer route"
+	end
+end)
+
 _rt_register("issue645_reciprocal_style_descriptors", function()
 	local policy = _om.combat_style_policy
 	local runtime = _om.combat_styles
@@ -1019,6 +1074,54 @@ _rt_register("issue1107_melee_slot_reload_drains_reserve", function()
 	if c:reserve_for(rext) ~= 8 then
 		return string.format("pooled reserve %s after ranged reload (want 8)",
 			tostring(c:reserve_for(rext)))
+	end
+end)
+
+_rt_register("issue1108_primary_slot_musket_ammo_hud_contract", function()
+	local adapter = _om.musket_ammo_hud
+	if type(adapter) ~= "table" or type(adapter.contract_error) ~= "function" then
+		return "Old Musket ammo HUD adapter is not installed"
+	end
+	local installed = adapter:contract_error()
+	if installed then return installed end
+
+	-- Execute the same engine-free selector used by both live post-sync hooks.
+	-- Merely counting the hooks cannot prove that ranged-only HUD selection was
+	-- replaced, so the positive fixture and every fail-closed edge live here.
+	local policy = _om.musket_ammo_hud_policy
+	if type(policy) ~= "table" or type(policy.select) ~= "function" then
+		return "Old Musket ammo HUD selector surface is missing"
+	end
+	local owner, ammo_unit = {}, {}
+	local extension = { unit = ammo_unit }
+	local item_data = { name = "es_handgun", backend_id = "cwv_es_musket_custom_001" }
+	local slot_data = { item_data = item_data, right_unit_1p = ammo_unit }
+	local equipment = { wielded_slot = "slot_melee", slots = { slot_melee = slot_data } }
+	local controller = {
+		extension_for = function(_, queried_owner, slot_name)
+			if queried_owner == owner and slot_name == "slot_melee" then
+				return extension
+			end
+		end,
+	}
+	local template = function() return { ammo_data = { ammo_hand = "right" } } end
+	local item, slot, selected = policy.select(controller, owner, equipment, template)
+	if item ~= item_data or slot ~= slot_data or selected ~= extension then
+		return "HUD selector did not pick the wielded primary-slot Musket extension"
+	end
+
+	equipment.wielded_slot = "slot_ranged"
+	if policy.select(controller, owner, equipment, template) ~= nil then
+		return "HUD selector overrode the ranged slot's native path"
+	end
+	equipment.wielded_slot = "slot_melee"
+	slot_data.right_unit_1p = {}
+	if policy.select(controller, owner, equipment, template) ~= nil then
+		return "HUD selector accepted a mismatched ammo-hand unit"
+	end
+	slot_data.right_unit_1p = ammo_unit
+	if policy.select(controller, owner, equipment, function() return {} end) ~= nil then
+		return "HUD selector accepted a template without ammunition"
 	end
 end)
 

@@ -223,11 +223,27 @@ local function install(mod, ctx)
 			return def, state
 		end
 
-		_om._husk_identity_descriptor = function(owner_unit_3p, slot_name, base_name)
+		local _identity_peer_log_once = {}
+		_om._husk_identity_descriptor = function(owner_unit_3p, slot_name, base_name,
+				hinted_player)
 			if not owner_unit_3p then return nil, "none" end
-			local player
-			pcall(function() player = Managers.player:owner(owner_unit_3p) end)
-			local peer_id = player and (player.peer_id or (player.network_id and player:network_id()))
+			local wield_ctx = _om._appearance_husk_wield_context
+			if not hinted_player and wield_ctx
+					and wield_ctx.owner_unit_3p == owner_unit_3p then
+				hinted_player = wield_ctx.player
+			end
+			local player, source = _om.peer_resolver.husk_owner(
+				Managers and Managers.player, owner_unit_3p, hinted_player)
+			local peer_id = _om.peer_resolver.player_peer_id(player)
+			if not peer_id then
+				local log_key = tostring(owner_unit_3p) .. "|" .. tostring(slot_name)
+				if not _identity_peer_log_once[log_key] then
+					_identity_peer_log_once[log_key] = true
+					pcall(printf,
+						"[cwv:914] lifecycle=husk_wield adapter=peer_resolution slot=%s source=%s peer=none",
+						tostring(slot_name), tostring(source))
+				end
+			end
 			return lifecycle:descriptor(peer_id, slot_name, base_name)
 		end
 
@@ -248,6 +264,10 @@ local function install(mod, ctx)
 
 		local peer_pull = _om.identity_peer_pull.bind(lifecycle, _send_identity_slots, _om.appearance_lifecycle_policy, printf)
 		_om._cwv_request_peer_identities = peer_pull.request
+		_om.identity_peer_cleanup.install(mod, lifecycle,
+			rawget(_G, "PlayerManager"), _om.peer_resolver, printf, function()
+				return Network and Network.peer_id and Network.peer_id()
+			end)
 
 		-- Named live receiver boundary (#579).  The VMF registration and the
 		-- executable regression call this exact function, so a future refactor
