@@ -180,6 +180,13 @@ mod:hook_safe("ConflictDirector", "_post_spawn_unit", function(self, ai_unit, go
         _safe("enemy_modifier_prereqs:" .. tostring(breed.name),
             ET.observe_enemy_modifier_spawn, ai_unit, breed, optional_data)
     end
+    -- #324 shares the same singleton seam: bounded [et:324] AI/BT/nav snapshot
+    -- of each spawned Skaven Warlord (module loads earlier in the manifest, so
+    -- the callback exists before any spawn; exact-breed gated inside).
+    if type(ET.observe_warlord_diag_spawn) == "function" then
+        _safe("warlord_diag:" .. tostring(breed.name),
+            ET.observe_warlord_diag_spawn, ai_unit, breed)
+    end
     local cfg = _BY_BREED[breed.name]
     if not cfg then return end
     _safe("boss_grudge:" .. breed.name, _maybe_apply_grudge, ai_unit, optional_data, cfg)

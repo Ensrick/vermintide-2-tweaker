@@ -41,6 +41,33 @@ function M.grant_plan(is_server, wire_safe, num_existing, stacks_target)
     return "local", n
 end
 
+-- issue 249 (restore half, 2026-08-16): after a [ct:426] parity degrade/restore
+-- cycle the strip has broadcast removal of every server-controlled ct stack
+-- buff, and any grant made while degraded used the LOCAL host-only fail-safe
+-- path (grant_plan "local"). The restore callback re-injects only POOLS, so a
+-- client ends the cycle holding its boons with ZERO stacks and the host's
+-- num_existing (already at target from the local grants) makes every later
+-- grant_plan delta 0 - the client can never converge. Decide the reconcile for
+-- one (unit, stack template) on the host:
+--   server_count: stacks added through the server-controlled (replicated) path
+--                 and still tracked in BuffSystem.server_controlled_buffs.
+--   local_total:  total stacks on the host's buff extension (server + local).
+--   target:       capped stack target (current boon count).
+-- Returns (remove_local_n, add_networked_n): remove remove_local_n host-only
+-- stacks, then add add_networked_n through the server-controlled path so every
+-- peer converges on exactly `target` replicated stacks.
+M.RESTORE_MARKER = "ct249:parity_restore_stack_rebroadcast_v1"
+function M.restore_plan(server_count, local_total, target)
+    local sc = type(server_count) == "number" and server_count or 0
+    local lt = type(local_total) == "number" and local_total or 0
+    local tg = type(target) == "number" and target or 0
+    local remove_local = lt - sc
+    if remove_local < 0 then remove_local = 0 end
+    local add_networked = tg - sc
+    if add_networked < 0 then add_networked = 0 end
+    return remove_local, add_networked
+end
+
 -- issue 256: clamp a current-value ammo field into [0, max]. Pure kernel behind
 -- mod._ct_clamp_current_ammo_256 (the seam wrapper owns the printf).
 -- Returns (clamped_value, changed).

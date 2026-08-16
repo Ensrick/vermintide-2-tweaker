@@ -121,6 +121,12 @@ mod._gut_patch_camera_offset()
 
 mod._gut_apply_tp = function(enabled)
     _tp_enabled = enabled
+    -- (#209) camera-transition receipt: list the ledger's live screen-particle
+    -- ids at every 3P entry/exit. Resolved through the mod table because the
+    -- receipt helper is defined later in this file (call-time lookup).
+    if type(mod._gut209_transition_receipt) == "function" then
+        mod._gut209_transition_receipt(enabled and "entry" or "exit")
+    end
     if Development._hardcoded_dev_params then
         Development._hardcoded_dev_params.third_person_mode = enabled or nil
     end
@@ -139,9 +145,14 @@ end
 -- engine reinitializes the FP system. The extensions_ready hook below re-arms tp on
 -- the next player spawn if gut_tp_camera_enabled is on.
 mod._gut_tp_reset_enabled = function()
+    local was_tp = _tp_enabled
     _tp_enabled = false
     if Development._hardcoded_dev_params then
         Development._hardcoded_dev_params.third_person_mode = nil
+    end
+    -- (#209) forced-exit receipt on state change, only when 3P was live.
+    if was_tp and type(mod._gut209_transition_receipt) == "function" then
+        mod._gut209_transition_receipt("reset-exit")
     end
 end
 
@@ -177,10 +188,71 @@ end)
 -- view, so in the mod's 3P camera they still overlay the screen. Suppress while tp is active.
 -- Safe: BuffExtension._stop_screen_effect guards `if effect_id`, so a nil id is a no-op; the
 -- buff's continuous/deactivation tracking handles a nil effect_id.
-mod:hook("PlayerUnitFirstPerson", "create_screen_particles", function(func, self, ...)
-    if _tp_enabled then return nil end
-    return func(self, ...)
-end)
+--
+-- (#209 INSTRUMENT, diagnostics only) The documented remaining edge is a
+-- CONTINUOUS screen effect already active when ENTERING 3P: only new spawns
+-- are suppressed, and the first-person extension has no general registry of
+-- live screen-particle ids, so no universal sweep exists yet. To identify
+-- which owners survive entry, every hooked lifecycle event on the surface
+-- (create/stop_spawning/destroy_screen_particles,
+-- player_unit_first_person.lua:1073/:1081/:1089) prints ONE bounded
+-- [gut:209] row (effect name, callsite, particle id, camera mode; hard row
+-- cap in the ledger), and every 3P entry/exit prints a receipt listing the
+-- ledger's live ids. Ledger is pure + offline-tested
+-- (_gut_screen_particle_ledger.lua). BLIND SPOT (by design, documented in the
+-- ledger header): owners destroying via World.destroy_particles directly
+-- (overcharge decay, player_unit_overcharge_extension.lua:155-159) bypass the
+-- surface, so a listed id may already be dead - the receipt is evidence for
+-- picking owner-specific handling, not a claim of liveness. The hook
+-- callbacks are NAMED locals (registered once each; VMF drops a second hook
+-- on the same (Class, method) pair) so the issue209 runtime check executes
+-- the exact registered function objects against fake delegates.
+local _SPLedger = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_screen_particle_ledger")
+local _p209_state = _SPLedger.new()
+local _printf209 = rawget(_G, "printf") or function(fmt, ...) print(string.format(fmt, ...)) end
+
+-- Best-effort caller identification: first stack frame outside gut/VMF files.
+-- The retail sandbox may not expose `debug`; degrade to "?" (never throw).
+local function _p209_callsite()
+    local dbg = rawget(_G, "debug")
+    if not (dbg and dbg.getinfo) then return "?" end
+    for level = 3, 8 do
+        local ok, info = pcall(dbg.getinfo, level, "Sl")
+        if not ok or not info then break end
+        local src = tostring(info.short_src or info.source or "?")
+        if not src:find("gui_tweaker", 1, true) and not src:find("vmf", 1, true) then
+            return src .. ":" .. tostring(info.currentline)
+        end
+    end
+    return "?"
+end
+
+local function _p209_row(kind, effect, id)
+    local allowed, capped_now = _SPLedger.row_allowed(_p209_state)
+    if not allowed then return end
+    _printf209("[gut:209] %s | effect=%s id=%s tp=%s callsite=%s%s",
+        kind, tostring(effect), tostring(id), tostring(_tp_enabled), _p209_callsite(),
+        capped_now and " | ROW-CAP reached, further lifecycle rows suppressed" or "")
+end
+
+local function _p209_transition(kind)
+    _printf209("[gut:209] tp-%s | live=%s", kind, _SPLedger.snapshot(_p209_state))
+end
+mod._gut209_transition_receipt = _p209_transition
+
+local _cb209_create = function(func, self, name, pos, ...)
+    if _tp_enabled then
+        _p209_row("create-suppressed-3p", name, nil)
+        return nil
+    end
+    local id = func(self, name, pos, ...)
+    if id ~= nil then
+        _SPLedger.note_create(_p209_state, id, name)
+    end
+    _p209_row("create", name, id)
+    return id
+end
+mod:hook("PlayerUnitFirstPerson", "create_screen_particles", _cb209_create)
 
 -- (#216, crash GUID 0a41da66) The nil return above is NOT safe for every consumer, only
 -- for BuffExtension. Two vanilla paths crash on a nil id:
@@ -196,6 +268,19 @@ end)
 mod:hook("PlayerUnitOverchargeExtension", "_update_screen_effect", function(func, self, ...)
     if _tp_enabled then
         if self.onscreen_particles_id or self.critical_onscreen_particles_id then
+            -- (#209 instrument) these ids die inside the vanilla helper via
+            -- World.destroy_particles (player_unit_overcharge_extension.lua:
+            -- 155-159), bypassing the hooked destroy surface - report the
+            -- gut-initiated destroys to the ledger here so the receipt stays
+            -- honest for the overcharge owner.
+            if self.onscreen_particles_id then
+                _SPLedger.note_destroy(_p209_state, self.onscreen_particles_id)
+                _p209_row("destroy-overcharge-3p", "overcharge", self.onscreen_particles_id)
+            end
+            if self.critical_onscreen_particles_id then
+                _SPLedger.note_destroy(_p209_state, self.critical_onscreen_particles_id)
+                _p209_row("destroy-overcharge-3p", "overcharge_critical", self.critical_onscreen_particles_id)
+            end
             -- vanilla helper destroys and nils both id fields
             self:_destroy_all_screen_space_particles()
         end
@@ -203,14 +288,70 @@ mod:hook("PlayerUnitOverchargeExtension", "_update_screen_effect", function(func
     end
     return func(self, ...)
 end)
-mod:hook("PlayerUnitFirstPerson", "stop_spawning_screen_particles", function(func, self, id, ...)
+local _cb209_stop = function(func, self, id, ...)
     if id == nil then return end
+    local entry = _p209_state.live[id]
+    _SPLedger.note_stop(_p209_state, id)
+    _p209_row("stop-spawning", entry and entry.effect or "?", id)
     return func(self, id, ...)
-end)
-mod:hook("PlayerUnitFirstPerson", "destroy_screen_particles", function(func, self, id, ...)
+end
+mod:hook("PlayerUnitFirstPerson", "stop_spawning_screen_particles", _cb209_stop)
+local _cb209_destroy = function(func, self, id, ...)
     if id == nil then return end
+    local entry = _p209_state.live[id]
+    _SPLedger.note_destroy(_p209_state, id)
+    _p209_row("destroy", entry and entry.effect or "?", id)
     return func(self, id, ...)
-end)
+end
+mod:hook("PlayerUnitFirstPerson", "destroy_screen_particles", _cb209_destroy)
+
+-- (#209) Named runtime check: executes the CAPTURED lifecycle callbacks (the
+-- exact function objects registered above) against fake engine delegates and
+-- verifies ledger + suppression + the #216 nil-guards. Row budget and tp
+-- state are saved/restored so repeated regression runs cannot drain the
+-- in-mission diagnostic budget or flip the camera.
+if type(mod._gut_rt_register) == "function" then
+    mod._gut_rt_register("issue209_screen_particle_receipts", function()
+        local saved_tp = _tp_enabled
+        local saved_rows, saved_capped = _p209_state.rows, _p209_state.capped
+        local ok, err = pcall(function()
+            local calls = {}
+            local fake_self = {}
+            _tp_enabled = false
+            local id = _cb209_create(function(self, name, pos)
+                calls[#calls + 1] = "create:" .. tostring(name)
+                return 90209
+            end, fake_self, "fx/gut_rt209_probe", nil)
+            assert(id == 90209, "create passthrough lost the particle id")
+            assert(_p209_state.live[90209] ~= nil, "ledger missed the created id")
+            assert(_SPLedger.snapshot(_p209_state)
+                :find("90209=fx/gut_rt209_probe(live)", 1, true),
+                "snapshot does not list the live id")
+            _cb209_stop(function() calls[#calls + 1] = "stop" end, fake_self, 90209)
+            assert(_p209_state.live[90209].status == "stopped", "stop did not mark the id")
+            assert(calls[#calls] == "stop", "stop did not reach the engine delegate")
+            -- #216 nil-guards must keep refusing without engine calls.
+            _cb209_stop(function() calls[#calls + 1] = "stop-nil" end, fake_self, nil)
+            _cb209_destroy(function() calls[#calls + 1] = "destroy-nil" end, fake_self, nil)
+            assert(calls[#calls] == "stop", "nil-guard leaked a nil id to the engine")
+            _cb209_destroy(function() calls[#calls + 1] = "destroy" end, fake_self, 90209)
+            assert(_p209_state.live[90209] == nil, "destroy did not clear the ledger entry")
+            assert(calls[#calls] == "destroy", "destroy did not reach the engine delegate")
+            -- 3P suppression path never reaches the engine delegate.
+            _tp_enabled = true
+            local sid = _cb209_create(function()
+                calls[#calls + 1] = "create-3p"
+            end, fake_self, "fx/gut_rt209_probe2", nil)
+            assert(sid == nil, "3P create was not suppressed")
+            for i = 1, #calls do
+                assert(calls[i] ~= "create-3p", "3P create reached the engine delegate")
+            end
+        end)
+        _tp_enabled = saved_tp
+        _p209_state.rows, _p209_state.capped = saved_rows, saved_capped
+        if not ok then return tostring(err) end
+    end)
+end
 
 -- gut_tp_disable_zoom_in (issue #202). Aim zoom-in in 3P is driven PER-WEAPON: the
 -- weapon hands GenericStatusExtension a camera_name (zoom_in / increased_zoom_in /

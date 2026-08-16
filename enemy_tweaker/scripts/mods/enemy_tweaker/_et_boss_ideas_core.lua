@@ -10,6 +10,41 @@ M.CANDIDATES = {
     { id = "troll_chieftain", source_breed = "chaos_troll_chief", status = "arena_coupled" },
 }
 
+-- #451 first implementation slice: the greataxe Chosen prototype. Pure
+-- override policy applied to a DEEP COPY of the regular Chaos Warrior breed
+-- (never the vanilla table). The source breed's own inventory template
+-- "warrior_axe" already carries the two-handed chaos greataxe
+-- (ai_inventory_templates.lua:1499-1502 item_categories.axe =
+-- wpn_chaos_2h_axe_1/2; consumed at :1985-1992), so the greataxe contract is
+-- satisfied with zero new asset residency. Stagger policy is the monster gate
+-- breed.boss_staggers (damage_utils.lua:791-793 + 918-920: every stagger
+-- below explosion resolves to none), matching skaven_storm_vermin_champion
+-- (breed_skaven_storm_vermin_champion.lua:16) and chaos_troll
+-- (breed_chaos_troll.lua:61).
+M.CHOSEN = {
+    name = "et_chosen_greataxe",
+    source_breed = "chaos_warrior",
+    display_name_key = "et_chosen_greataxe_name",
+    display_name_en = "Chaos Chosen",
+    inventory_template = "warrior_axe",
+    max_health = 2000,
+    difficulty_count = 8,
+}
+
+-- Mutates and returns the supplied CLONE table. Engine-free: no global reads.
+function M.apply_chosen_overrides(breed, spec)
+    spec = spec or M.CHOSEN
+    if type(breed) ~= "table" then return nil, "breed_clone_missing" end
+    breed.name = spec.name
+    breed.display_name = spec.display_name_key
+    local health = {}
+    for i = 1, spec.difficulty_count do health[i] = spec.max_health end
+    breed.max_health = health
+    breed.boss_staggers = true
+    breed.default_inventory_template = spec.inventory_template
+    return breed
+end
+
 function M.inspect(context)
     context = type(context) == "table" and context or {}
     local breeds = type(context.breeds) == "table" and context.breeds or {}

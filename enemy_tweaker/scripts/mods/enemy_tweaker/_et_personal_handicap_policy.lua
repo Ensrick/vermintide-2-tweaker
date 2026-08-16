@@ -27,6 +27,18 @@ function M.sanitize_preset(value)
     return "off"
 end
 
+-- #61 host gate: the HOST decides whether OTHER players' requested handicaps
+-- apply at all ("Allow personal handicaps", default off). The host's own
+-- preset is the host's own setting and is never gated. Evaluated at the
+-- damage chokepoint, so toggling the gate mid-session takes effect on the
+-- next hit with no re-request round trip.
+function M.effective_preset(is_host_own_preset, host_allows_others, requested_preset)
+    requested_preset = M.sanitize_preset(requested_preset)
+    if is_host_own_preset then return requested_preset end
+    if not host_allows_others then return "off" end
+    return requested_preset
+end
+
 function M.factors(host_difficulty, requested_difficulty)
     requested_difficulty = M.sanitize_preset(requested_difficulty)
     local host_rank = M.RANKS[host_difficulty]

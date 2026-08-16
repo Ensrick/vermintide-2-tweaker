@@ -643,7 +643,7 @@ return {
     gt_solo_draw_boss_spheres = { en = "Draw boss-event spheres" },
     gt_solo_draw_boss_spheres_tooltip = { en = "Red wireframe markers appear at the boss and main-path event spots on the level, as a debug or streamer aid." },
     gt_more_corpses_count = { en = "Max Ragdolls" },
-    gt_more_corpses_count_tooltip = { en = "How many ragdolls and corpses stay on the ground before the game starts removing them. Vanilla is 24; raise it up to 300 for a more cinematic battlefield, though high values can strain slower machines." },
+    gt_more_corpses_count_tooltip = { en = "How many ragdolls and corpses stay on the ground before the game starts removing them. Vanilla is 24; raise it up to 300 for a more cinematic battlefield, though high values can strain slower machines. Set it to 0 to keep no ragdolls at all." },
     -- Melee Attack Warning (Issue #308). Client-side, cosmetic only.
     gt_melee_warning = { en = "Melee Attack Warning" },
     gt_melee_warning_tooltip = { en = "Fires a local cue when a nearby enemy starts a melee swing at you, so you can dodge a moment earlier under lag. Cosmetic only; hits are unchanged." },

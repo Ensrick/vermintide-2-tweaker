@@ -11,6 +11,11 @@ local HostilePolicy = ET.HealthMultiplierCore
 local UnitPolicy = ET.PersonalHandicapUnits
 local RPC = "et_personal_handicap"
 local SETTING = "personal_difficulty"
+-- #61 UX rework: host-authoritative gate over OTHER players' handicaps
+-- ("Allow personal handicaps", default off). Read HOST-side per application
+-- in _preset_for_player, so the host can toggle it live; the client keeps
+-- sending its request either way and the host simply ignores it while off.
+local ALLOW_SETTING = "personal_handicap_allow"
 local SEND_RETRIES = 3
 local SEND_INTERVAL = 0.75
 
@@ -64,9 +69,12 @@ end
 
 mod:network_register(RPC, function(sender_peer_id, schema, requested_preset)
     if not _is_server() or sender_peer_id == nil or schema ~= ET.rpc_schema then return end
+    -- Store even while the gate is off: the request stays inert until the host
+    -- turns "Allow personal handicaps" on, which then applies it with no
+    -- client re-send needed. _preset_for_player is the single gate reader.
     requested_by_peer[sender_peer_id] = Policy.sanitize_preset(requested_preset)
-    mod:info("[et:61] request peer=%s preset=%s", tostring(sender_peer_id),
-        tostring(requested_by_peer[sender_peer_id]))
+    mod:info("[et:61] request peer=%s preset=%s allow=%s", tostring(sender_peer_id),
+        tostring(requested_by_peer[sender_peer_id]), tostring(not not mod:get(ALLOW_SETTING)))
 end)
 
 local function _update()
@@ -90,9 +98,10 @@ end
 local function _preset_for_player(player)
     if not player or player.bot_player or not player.peer_id then return "off" end
     if player.peer_id == _local_peer_id() and _is_server() then
-        return Policy.sanitize_preset(mod:get(SETTING))
+        return Policy.effective_preset(true, false, mod:get(SETTING))
     end
-    return requested_by_peer[player.peer_id] or "off"
+    return Policy.effective_preset(false, not not mod:get(ALLOW_SETTING),
+        requested_by_peer[player.peer_id] or "off")
 end
 
 local function _host_difficulty()
@@ -182,6 +191,23 @@ ET.rt_register("issue61_personal_handicap_authoritative", function()
         return "Champion-to-Cataclysm policy drift"
     end
     if type(ET.personal_handicap_update) ~= "function" then return "update driver missing" end
+    -- #61 UX rework: the host gate must deny other players' presets while off,
+    -- honor them while on, and never gate the host's own preset.
+    if Policy.effective_preset(false, false, "cataclysm") ~= "off" then
+        return "gate off must deny a client preset"
+    end
+    if Policy.effective_preset(false, true, "cataclysm") ~= "cataclysm" then
+        return "gate on must honor a client preset"
+    end
+    if Policy.effective_preset(true, false, "cataclysm") ~= "cataclysm" then
+        return "host own preset must bypass the gate"
+    end
+    -- Live widget contract: the gate setting must exist and default to OFF
+    -- (mod:get returns the widget default when the user never touched it).
+    local allow = mod:get("personal_handicap_allow")
+    if allow ~= true and allow ~= false then
+        return "personal_handicap_allow widget missing (mod:get returned " .. tostring(allow) .. ")"
+    end
 end)
 
 ET.rt_register("issue640_personal_handicap_unit_lifetime", function()

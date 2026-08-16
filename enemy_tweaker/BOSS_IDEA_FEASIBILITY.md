@@ -35,6 +35,27 @@ contracts, and forces a new source audit if a game update removes one of the
 known arena-risk markers. Run `/et_boss_idea_audit` in a mission to collect the
 optional residency evidence.
 
+## Implemented: greataxe Chosen prototype (first slice)
+
+`_et_boss_ideas.lua` now eagerly registers `et_chosen_greataxe`, a deep copy of
+the regular `chaos_warrior` breed with the engine-free override policy in
+`_et_boss_ideas_core.lua` (`Core.apply_chosen_overrides`): 2000 HP on every
+difficulty, monster stagger gate `boss_staggers` (damage_utils.lua:791-793 -
+staggers below explosion resolve to none), display name "Chaos Chosen", and the
+source breed's own `warrior_axe` inventory - which already carries the
+two-handed chaos greataxe (ai_inventory_templates.lua:1499-1502), so no new
+asset residency is introduced. The full DEVELOPMENT.md breed-adding checklist
+is walked (threat value, per-breed statistics, NetworkLookup breeds +
+damage_sources via the shared `_lib_network_lookup` guards, package alias to
+chaos_warrior, dismemberment/hit-zone/race-set mirrors).
+
+Spawn surfaces: the host-only, residency-gated test command `/et_spawn_chosen`
+(refuses when the chaos_warrior package is not already resident on the
+mission) and gt's dynamic Creature Spawner. No monster-pool or trial
+integration; that waits on co-op verification. Constraint: every peer must
+have enemy_tweaker installed (NetworkLookup registration), same as the Skaven
+Warlord. Runtime contract: `issue451_chosen_greataxe_prototype`.
+
 ## Recommended implementation order
 
 1. Chosen Chaos Warrior with greataxe: smallest portable regular-AI prototype.
