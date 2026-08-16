@@ -1,5 +1,27 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.213-dev (2026-08-16) -- husk variant keys, pose regression net, Prologue mallet (#476, #485, #913) [verify-fix]
+
+- Imperial Sword and Shield picks now render on remote husks (#476). The
+  observer-side apply gate, both husk store reads, and the husk switch-back
+  repaint resolve the wearer's exact CWV variant key and its template through
+  the fingerprint-validated peer identity and retry the synced stores under
+  those owner-local keys. Fails closed to the vanilla family whenever the
+  identity is absent, stale, or unregistered, and never admits the shared base
+  template as a key (#514 class).
+- The heroic-pose regression check now executes the production catalog instead
+  of proving seams (#485): exact-parent completeness, deterministic order,
+  animation backing, invalid and cross-parent rejection, the three distinct
+  realm and setting decisions, the single bounded unsupported-weapon
+  diagnostic, no ownership-table writes, and the one-shot wheel rebuild on
+  option change. The offline suite drives the real gather module behaviorally.
+- Prologue Wooden Mallet (#913): the tutorial training mallet from the
+  Prologue is a selectable Great Hammer illusion for Kruber. Data-only
+  registration of the shipped vanilla unit with vanilla icons; equip
+  persistence and client wire handling follow the existing custom-illusion
+  path, and the unit package is declared on every peer through the existing
+  preload walk.
+
 ## 0.9.212-dev (2026-08-15) -- Athanor preview gate recovery + exact CIM preview adapter (#481) [verify-fix]
 
 - Loremaster's Armoury skins no longer silently vanish from Athanor previews
